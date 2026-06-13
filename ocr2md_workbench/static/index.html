@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OCR 标题标定</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/styles.css?v=20260613-3" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <button id="scanBtn">添加工作目录</button>
+      <button id="saveBtn">保存标定</button>
+      <button id="exportBtn">导出</button>
+      <button id="renumberBtn">生成序号</button>
+      <button id="setLocalNoBtn">设逻辑序号</button>
+      <button id="checkBtn">序号检查</button>
+      <button id="clearHistoryBtn">清空历史</button>
+      <div class="pane-toggles" aria-label="面板显示">
+        <button class="pane-toggle" data-pane-toggle="source" aria-pressed="true">源</button>
+        <button class="pane-toggle" data-pane-toggle="data" aria-pressed="true">数据</button>
+        <button class="pane-toggle" data-pane-toggle="preview" aria-pressed="true">预览</button>
+        <button class="pane-toggle" data-pane-toggle="console" aria-pressed="true">控制台</button>
+      </div>
+    </header>
+
+    <main class="workspace-layout">
+      <div class="workbench-main">
+        <section class="source-pane" data-pane="source">
+          <div class="pane-titlebar">
+            <strong>source</strong>
+            <button class="pane-hide" data-pane-hide="source" title="隐藏源面板">隐藏</button>
+          </div>
+          <div class="path-combo source-path-combo">
+            <input id="inputDir" class="path-input" placeholder="输入 OCR Markdown 目录" />
+            <button id="historyToggleBtn" class="history-toggle" title="选择历史目录">⌄</button>
+            <div id="dirHistoryMenu" class="history-menu" hidden></div>
+          </div>
+          <div class="project-card">
+            <div class="panel-head">
+              <strong id="projectTitle">目录</strong>
+              <span id="projectMeta" class="muted">未加载</span>
+            </div>
+            <div id="directoryTree" class="directory-tree"></div>
+          </div>
+
+          <section class="note-card">
+            <div class="panel-head">
+              <strong>注释</strong>
+            </div>
+            <textarea id="sideNoteInput" placeholder="记录当前标题的校对说明"></textarea>
+          </section>
+        </section>
+
+        <div id="mainSplitter" class="splitter vertical-splitter" title="拖拽调整左右面板"></div>
+
+        <section class="result-pane" data-pane="result">
+          <section class="data-panel" data-pane="data">
+            <div class="panel-head data-head">
+              <strong>数据表</strong>
+              <button class="pane-hide" data-pane-hide="data" title="隐藏数据表">隐藏</button>
+            </div>
+            <div class="table-tools">
+              <label><input id="onlyEnabled" type="checkbox" /> 仅有效</label>
+              <label><input id="hideDisabled" type="checkbox" checked /> 隐藏禁用</label>
+              <input id="filterText" placeholder="筛选标题/书名/状态" />
+              <span id="countInfo"></span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>index</th>
+                    <th>标题</th>
+                    <th>层级</th>
+                    <th>行号</th>
+                    <th>逻辑序号</th>
+                    <th>导出文件名</th>
+                    <th>状态</th>
+                    <th>源文件名</th>
+                  </tr>
+                </thead>
+                <tbody id="headingRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <div id="resultSplitter" class="splitter horizontal-splitter" title="拖拽调整数据表和预览"></div>
+
+          <section class="preview-panel" data-pane="preview">
+            <div class="context-head">
+              <div>
+                <strong id="contextTitle">预览窗</strong>
+                <div id="contextMeta" class="muted"></div>
+              </div>
+              <div class="panel-actions">
+                <button id="addTitleBtn">新增标题</button>
+                <button class="pane-hide" data-pane-hide="preview" title="隐藏预览窗">隐藏</button>
+              </div>
+            </div>
+            <div id="contextLines" class="context-lines"></div>
+          </section>
+        </section>
+      </div>
+
+      <div id="consoleSplitter" class="splitter horizontal-splitter console-splitter" title="拖拽调整控制台"></div>
+
+      <section class="console-panel" data-pane="console">
+        <div class="panel-head console-head">
+          <strong>控制台输出</strong>
+          <button class="pane-hide" data-pane-hide="console" title="隐藏控制台">隐藏</button>
+        </div>
+        <div id="consoleOutput" class="console-output"></div>
+      </section>
+    </main>
+
+    <dialog id="manualDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>新增标题</h2>
+        <label>
+          标题
+          <input id="manualTitle" required />
+        </label>
+        <label>
+          插入位置
+          <select id="manualPosition">
+            <option value="before">选中行之前</option>
+            <option value="after">选中行之后</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel">取消</button>
+          <button id="confirmManualBtn" value="default">添加</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="localNoDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>设置逻辑序号</h2>
+        <p id="localNoHint" class="dialog-hint"></p>
+        <label>
+          逻辑序号
+          <input id="localNoInput" required />
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel">取消</button>
+          <button id="confirmLocalNoBtn" value="default">应用</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js?v=20260613-3"></script>
+  </body>
+</html>
