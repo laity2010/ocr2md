@@ -5,16 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OCR 标题标定</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="/styles.css?v=20260613-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260616-16" />
   </head>
   <body>
     <header class="toolbar">
       <button id="scanBtn">添加工作目录</button>
       <button id="saveBtn">保存标定</button>
-      <button id="exportBtn">导出</button>
-      <button id="renumberBtn">生成序号</button>
-      <button id="setLocalNoBtn">设逻辑序号</button>
-      <button id="checkBtn">序号检查</button>
+      <button id="exportBtn" data-module-action="headings">导出</button>
+      <button id="renumberBtn" data-module-action="headings">生成序号</button>
+      <button id="setLocalNoBtn" data-module-action="headings">设逻辑序号</button>
+      <button id="setExportDirBtn" data-module-action="headings">设导出目录</button>
+      <button id="setAnnotationTypeBtn" data-module-action="annotations">设注释类型</button>
+      <button id="setAnnotationGroupBtn" data-module-action="annotations">设注释组</button>
+      <button id="bindAnnotationHeadingsBtn" data-module-action="annotations">绑定标题</button>
+      <button id="checkBtn" data-module-action="headings annotations">序号检查</button>
       <button id="clearHistoryBtn">清空历史</button>
       <div class="pane-toggles" aria-label="面板显示">
         <button class="pane-toggle" data-pane-toggle="source" aria-pressed="true">源</button>
@@ -44,12 +48,6 @@
             <div id="directoryTree" class="directory-tree"></div>
           </div>
 
-          <section class="note-card">
-            <div class="panel-head">
-              <strong>注释</strong>
-            </div>
-            <textarea id="sideNoteInput" placeholder="记录当前标题的校对说明"></textarea>
-          </section>
         </section>
 
         <div id="mainSplitter" class="splitter vertical-splitter" title="拖拽调整左右面板"></div>
@@ -64,6 +62,7 @@
               <label><input id="onlyEnabled" type="checkbox" /> 仅有效</label>
               <label><input id="hideDisabled" type="checkbox" checked /> 隐藏禁用</label>
               <input id="filterText" placeholder="筛选标题/书名/状态" />
+              <div id="sortControls" class="sort-controls" aria-label="多字段排序"></div>
               <span id="countInfo"></span>
             </div>
             <div class="table-wrap">
@@ -150,6 +149,55 @@
       </form>
     </dialog>
 
-    <script src="/app.js?v=20260613-3"></script>
+    <dialog id="exportDirDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>设置导出目录名</h2>
+        <p id="exportDirHint" class="dialog-hint"></p>
+        <label>
+          导出目录名
+          <input id="exportDirInput" />
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel">取消</button>
+          <button id="confirmExportDirBtn" value="default">应用</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="annotationTypeDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>设置注释类型</h2>
+        <p id="annotationTypeHint" class="dialog-hint"></p>
+        <label>
+          类型
+          <select id="annotationTypeInput">
+            <option value="引用">引用</option>
+            <option value="正文">正文</option>
+            <option value="排除">排除</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel">取消</button>
+          <button id="confirmAnnotationTypeBtn" value="default">应用</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="annotationGroupDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>设置注释组号</h2>
+        <p id="annotationGroupHint" class="dialog-hint"></p>
+        <label>
+          注释组号
+          <input id="annotationGroupInput" required />
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel">取消</button>
+          <button id="confirmAnnotationGroupBtn" value="default">应用</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js?v=20260616-16"></script>
   </body>
 </html>

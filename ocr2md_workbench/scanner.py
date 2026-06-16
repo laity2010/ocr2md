@@ -17,9 +17,19 @@ NUMERIC_TITLE_RE = re.compile(r"^\d{1,3}$")
 CHINESE_NUMERAL_RE = re.compile(r"^[一二三四五六七八九十百千万零〇两]{1,6}$")
 CHAPTER_RE = re.compile(r"^第\s*[\d一二三四五六七八九十百千万零〇两]+\s*[章节回部卷篇]\b")
 SHORT_MIXED_RE = re.compile(r"^[\w\u4e00-\u9fff《》：:，,、（）()\-\s]{1,32}$")
+ANNOTATION_BODY_RE = re.compile(
+    r"^\s*(?P<marker>[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]|\[\d{1,3}\]|［\d{1,3}］|\(\d{1,3}\)|（\d{1,3}）)\s*(?P<body>.*)$"
+)
+ANNOTATION_MARKER_RE = re.compile(
+    r"(?P<marker>[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]|\[\d{1,3}\]|［\d{1,3}］|\(\d{1,3}\)|（\d{1,3}）)"
+)
 
 KNOWN_SAMPLE_BOOKS = ("漫长的告别", "再见，吾爱", "长眠不醒")
 IGNORED_TITLE_TEXTS = {"目录", "目 录"}
+CIRCLED_NUMBER_MAP = {
+    char: str(idx)
+    for idx, char in enumerate("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳", start=1)
+}
 
 
 @dataclass
@@ -91,6 +101,10 @@ def scan_directory(input_dir: str | Path) -> dict[str, Any]:
 
     apply_sample_book_defaults(merged)
     recompute_statuses(merged)
+    annotations = merge_annotations(
+        scan_annotations(root, files, merged),
+        workspace.get("manifest", {}).get("annotations", []),
+    )
 
     return {
         "schema_version": 1,
@@ -98,6 +112,7 @@ def scan_directory(input_dir: str | Path) -> dict[str, Any]:
         "generated_at": now_iso(),
         "files": [str(path.relative_to(root)) for path in files],
         "headings": merged,
+        "annotations": annotations,
         "workspace_path": str(workspace_path(root)),
         "workspace_loaded": bool(workspace),
         "ui_state": workspace.get("ui_state", {}),
@@ -116,11 +131,18 @@ def save_manifest(payload: dict[str, Any]) -> dict[str, Any]:
         "saved_at": now_iso(),
         "files": payload.get("files", []),
         "headings": headings,
+        "annotations": payload.get("annotations", []),
     }
     path = manifest_path(root)
     path.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
     workspace = save_workspace(root, saved, payload.get("ui_state", {}))
-    return {"ok": True, "path": str(path), "workspace_path": str(workspace), "headings": headings}
+    return {
+        "ok": True,
+        "path": str(path),
+        "workspace_path": str(workspace),
+        "headings": headings,
+        "annotations": saved["annotations"],
+    }
 
 
 def save_workspace(root: Path, manifest: dict[str, Any], ui_state: dict[str, Any] | None = None) -> Path:
@@ -142,12 +164,7 @@ def update_workspace_ui_state(payload: dict[str, Any]) -> dict[str, Any]:
     if not root.exists() or not root.is_dir():
         raise ValueError(f"Input directory does not exist: {root}")
     workspace = load_workspace(root)
-    manifest = workspace.get("manifest") or load_manifest(root) or {
-        "schema_version": 1,
-        "input_dir": str(root),
-        "files": [str(path.relative_to(root)) for path in list_markdown_files(root)],
-        "headings": [],
-    }
+    manifest = workspace.get("manifest") or load_manifest(root) or scan_directory(root)
     path = save_workspace(root, manifest, payload.get("ui_state", {}))
     return {"ok": True, "workspace_path": str(path)}
 
@@ -193,43 +210,170 @@ def export_markdown(payload: dict[str, Any]) -> dict[str, Any]:
     ]
     boundaries.sort(key=lambda item: (file_index[str(item["source_file"])], int(item["line_no"])))
     heading_rewrites = build_heading_rewrites(headings)
+    annotation_refs_by_line, annotation_body_lines = build_annotation_export_transforms(payload.get("annotations", []))
 
-    export_by_key = build_export_name_map(enabled)
-    first_item_by_export_name: dict[str, dict[str, Any]] = {}
+    export_target_by_group = build_export_target_map(enabled)
+    first_item_by_export_target: dict[tuple[str, str], dict[str, Any]] = {}
+    export_target_by_heading_id: dict[str, tuple[str, str]] = {}
     for item in enabled:
-        first_item_by_export_name.setdefault(export_by_key[export_key(item)], item)
+        target = export_target_by_group[export_group_key(item)]
+        first_item_by_export_target.setdefault(target, item)
+        if item.get("id"):
+            export_target_by_heading_id[str(item["id"])] = target
 
-    chunks_by_name: dict[str, list[str]] = {}
-    for export_name, item in first_item_by_export_name.items():
-        next_boundary = next_export_boundary(item, boundaries, file_index, export_by_key, export_name)
-        chunk = slice_between(root, file_lines, file_index, item, next_boundary, heading_rewrites)
+    chunks_by_target: dict[tuple[str, str], list[str]] = {}
+    for (export_dir, export_name), item in first_item_by_export_target.items():
+        next_boundary = next_export_boundary(item, boundaries, file_index, export_group_key(item), export_target_by_group)
+        chunk = slice_between(
+            root,
+            file_lines,
+            file_index,
+            item,
+            next_boundary,
+            heading_rewrites,
+            annotation_refs_by_line,
+            annotation_body_lines,
+        )
         if item.get("kind") == "manual":
             level = int(item.get("level") or 2)
             level = min(6, max(1, level))
             chunk = f"{'#' * level} {item.get('title', '').strip()}\n\n{chunk}"
-        chunks_by_name.setdefault(export_name, []).append(chunk.rstrip() + "\n")
+        chunks_by_target.setdefault((export_dir, export_name), []).append(chunk.rstrip() + "\n")
+
+    append_annotation_bodies(chunks_by_target, payload.get("annotations", []), export_target_by_heading_id, file_index)
 
     output_dir = root / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
     clean_exported_markdown(output_dir)
     written: list[dict[str, Any]] = []
-    used_filenames: dict[str, int] = {}
-    for export_name, chunks in chunks_by_name.items():
+    used_filenames_by_dir: dict[str, dict[str, int]] = {}
+    for (export_dir, export_name), chunks in chunks_by_target.items():
+        target_dir = output_dir / sanitize_export_dir(export_dir) if export_dir else output_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        used_filenames = used_filenames_by_dir.setdefault(str(target_dir), {})
         filename = unique_filename(sanitize_filename(export_name) + ".md", used_filenames)
-        path = output_dir / filename
+        path = target_dir / filename
         content = "\n".join(chunk for chunk in chunks if chunk.strip()).rstrip() + "\n"
         path.write_text(content, encoding="utf-8")
-        written.append({"export_name": export_name, "file": filename, "path": str(path), "chars": len(content)})
+        written.append({
+            "export_dir": export_dir,
+            "export_name": export_name,
+            "file": filename,
+            "path": str(path),
+            "chars": len(content),
+        })
 
     return {"ok": True, "output_dir": str(output_dir), "count": len(written), "files": written, "headings": headings}
 
 
 def clean_exported_markdown(output_dir: Path) -> None:
-    for path in output_dir.glob("*.md"):
+    for path in output_dir.rglob("*.md"):
         if path.name == MANIFEST_NAME:
             continue
         if path.is_file():
             path.unlink()
+
+
+def export_dir_for_item(item: dict[str, Any]) -> str:
+    return str(item.get("export_dir") or "").strip()
+
+
+def export_target_for_item(item: dict[str, Any]) -> tuple[str, str]:
+    return (export_dir_for_item(item), export_name_for_item(item))
+
+
+def build_export_target_map(items: list[dict[str, Any]]) -> dict[str, tuple[str, str]]:
+    result: dict[str, tuple[str, str]] = {}
+    for item in items:
+        key = export_group_key(item)
+        if key not in result:
+            result[key] = export_target_for_item(item)
+    return result
+
+
+def export_group_key(item: dict[str, Any]) -> str:
+    explicit = str(item.get("export_name") or "").strip()
+    export_dir = export_dir_for_item(item)
+    if explicit:
+        return f"explicit:{export_dir}\0{explicit}"
+    return logic_key(item) or str(item.get("id") or "")
+
+
+def append_annotation_bodies(
+    chunks_by_target: dict[tuple[str, str], list[str]],
+    annotations: list[dict[str, Any]],
+    export_target_by_heading_id: dict[str, tuple[str, str]],
+    file_index: dict[str, int],
+) -> None:
+    ref_target_by_note_key: dict[tuple[str, str], tuple[str, str]] = {}
+    for item in annotations:
+        if not is_annotation_ref(item):
+            continue
+        note_key = annotation_note_key(item)
+        heading_id = str(item.get("heading_id") or "")
+        target = export_target_by_heading_id.get(heading_id)
+        if note_key and target:
+            ref_target_by_note_key.setdefault(note_key, target)
+
+    bodies_by_target: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in annotations:
+        if str(item.get("type") or "").strip() != "正文":
+            continue
+        heading_id = str(item.get("heading_id") or "")
+        target = ref_target_by_note_key.get(annotation_note_key(item)) or export_target_by_heading_id.get(heading_id)
+        if not target or target not in chunks_by_target:
+            continue
+        bodies_by_target.setdefault(target, []).append(item)
+
+    for target, items in bodies_by_target.items():
+        items.sort(
+            key=lambda item: (
+                file_index.get(str(item.get("source_file") or ""), 10**9),
+                int(item.get("line_no") or 0),
+                note_sort_key(str(item.get("note_no") or "")),
+            )
+        )
+        lines: list[str] = []
+        for item in items:
+            note_no = str(item.get("note_no") or "").strip()
+            content = strip_annotation_body_marker(str(item.get("content") or "").strip())
+            if not note_no or not content:
+                continue
+            lines.append(f"[^{note_no}]: {content}")
+        if lines:
+            chunks_by_target[target].append("\n".join(lines).rstrip() + "\n")
+
+
+def build_annotation_export_transforms(
+    annotations: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, int], list[dict[str, Any]]], set[tuple[str, int]]]:
+    refs_by_line: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    body_lines: set[tuple[str, int]] = set()
+    for item in annotations:
+        source_file = str(item.get("source_file") or "")
+        line_no = int(item.get("line_no") or 0)
+        if not source_file or not line_no:
+            continue
+        if is_annotation_ref(item):
+            refs_by_line.setdefault((source_file, line_no), []).append(item)
+        elif str(item.get("type") or "").strip() == "正文":
+            body_lines.add((source_file, line_no))
+    return refs_by_line, body_lines
+
+
+def is_annotation_ref(item: dict[str, Any]) -> bool:
+    return str(item.get("type") or "").strip() in {"引用", "应用"}
+
+
+def annotation_note_key(item: dict[str, Any]) -> tuple[str, str]:
+    return (str(item.get("group_no") or "").strip(), str(item.get("note_no") or "").strip())
+
+
+def strip_annotation_body_marker(content: str) -> str:
+    match = ANNOTATION_BODY_RE.match(content)
+    if match:
+        return match.group("body").strip()
+    return content.strip()
 
 
 def get_context(input_dir: str | Path, source_file: str, line_no: int, radius: int = 12) -> dict[str, Any]:
@@ -285,6 +429,9 @@ def build_export_name_map(items: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def export_name_for_item(item: dict[str, Any]) -> str:
+    explicit = str(item.get("export_name") or "").strip()
+    if explicit:
+        return explicit
     local_no = str(item.get("local_no") or "").strip()
     title = str(item.get("title") or "").strip()
     if local_no and title and normalize_export_part(local_no) == normalize_export_part(title):
@@ -311,15 +458,16 @@ def next_export_boundary(
     item: dict[str, Any],
     boundaries: list[dict[str, Any]],
     file_index: dict[str, int],
-    export_by_key: dict[str, str],
-    export_name: str,
+    export_group: str,
+    export_target_by_group: dict[str, tuple[str, str]],
 ) -> dict[str, Any] | None:
     current_pos = (file_index[str(item.get("source_file"))], int(item.get("line_no") or 0))
     for candidate in boundaries:
         candidate_pos = (file_index[str(candidate.get("source_file"))], int(candidate.get("line_no") or 0))
         if candidate_pos <= current_pos:
             continue
-        if candidate.get("enabled") and export_by_key.get(export_key(candidate)) == export_name:
+        candidate_group = export_group_key(candidate)
+        if candidate.get("enabled") and candidate_group == export_group and candidate_group in export_target_by_group:
             continue
         return candidate
     return None
@@ -332,6 +480,8 @@ def slice_between(
     start: dict[str, Any],
     end: dict[str, Any] | None,
     heading_rewrites: dict[tuple[str, int], str],
+    annotation_refs_by_line: dict[tuple[str, int], list[dict[str, Any]]],
+    annotation_body_lines: set[tuple[str, int]],
 ) -> str:
     start_file = str(start["source_file"])
     start_line = max(1, int(start["line_no"]))
@@ -348,7 +498,17 @@ def slice_between(
         from_line = start_line if source_file == start_file else 1
         to_line = (end_line - 1) if end_file == source_file and end_line is not None else len(lines)
         if to_line >= from_line:
-            chunks.append(render_source_slice(source_file, lines, from_line, to_line, heading_rewrites))
+            chunks.append(
+                render_source_slice(
+                    source_file,
+                    lines,
+                    from_line,
+                    to_line,
+                    heading_rewrites,
+                    annotation_refs_by_line,
+                    annotation_body_lines,
+                )
+            )
     return "".join(chunks)
 
 
@@ -358,17 +518,44 @@ def render_source_slice(
     from_line: int,
     to_line: int,
     heading_rewrites: dict[tuple[str, int], str],
+    annotation_refs_by_line: dict[tuple[str, int], list[dict[str, Any]]],
+    annotation_body_lines: set[tuple[str, int]],
 ) -> str:
     rendered: list[str] = []
     for line_no in range(from_line, to_line + 1):
+        if (source_file, line_no) in annotation_body_lines:
+            continue
         rewrite = heading_rewrites.get((source_file, line_no))
         if rewrite is not None:
             original = lines[line_no - 1]
             newline = "\n" if original.endswith("\n") else ""
             rendered.append(rewrite + newline)
         else:
-            rendered.append(lines[line_no - 1])
+            rendered.append(rewrite_annotation_refs(lines[line_no - 1], annotation_refs_by_line.get((source_file, line_no), [])))
     return "".join(rendered)
+
+
+def rewrite_annotation_refs(line: str, refs: list[dict[str, Any]]) -> str:
+    rewritten = line
+    for item in refs:
+        note_no = str(item.get("note_no") or "").strip()
+        if not note_no:
+            continue
+        replacement = f"[^{note_no}]"
+        marker = str(item.get("marker") or "").strip()
+        if marker and marker in rewritten:
+            rewritten = rewritten.replace(marker, replacement, 1)
+            continue
+        rewritten = replace_first_matching_annotation_marker(rewritten, note_no, replacement)
+    return rewritten
+
+
+def replace_first_matching_annotation_marker(line: str, note_no: str, replacement: str) -> str:
+    for match in ANNOTATION_MARKER_RE.finditer(line):
+        if normalize_note_no(match.group("marker")) != note_no:
+            continue
+        return line[: match.start()] + replacement + line[match.end() :]
+    return line
 
 
 def build_heading_rewrites(headings: list[dict[str, Any]]) -> dict[tuple[str, int], str]:
@@ -391,6 +578,10 @@ def sanitize_filename(name: str) -> str:
     cleaned = re.sub(r"[\\/:*?\"<>|]", "_", name).strip().strip(".")
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned[:120] or "untitled"
+
+
+def sanitize_export_dir(name: str) -> str:
+    return sanitize_filename(name)
 
 
 def unique_filename(filename: str, used: dict[str, int]) -> str:
@@ -450,6 +641,205 @@ def scan_file(root: Path, file_path: Path) -> list[HeadingCandidate]:
                 )
             )
     return candidates
+
+
+def scan_annotations(root: Path, files: list[Path], headings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    file_order = {str(path.relative_to(root)): idx for idx, path in enumerate(files)}
+    heading_ranges = build_heading_ranges(headings, file_order)
+    annotations: list[dict[str, Any]] = []
+
+    for file_path in files:
+        source_file = str(file_path.relative_to(root))
+        lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+        for idx, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if MARKDOWN_HEADING_RE.match(stripped):
+                continue
+            heading_id = heading_id_for_line(heading_ranges.get(source_file, []), idx)
+            for marker_index, match in enumerate(ANNOTATION_MARKER_RE.finditer(line)):
+                marker = match.group("marker")
+                note_no = normalize_note_no(marker)
+                annotations.append(
+                    {
+                        "id": stable_annotation_line_id(source_file, note_no, idx, marker_index),
+                        "note_no": note_no,
+                        "marker": marker,
+                        "type": "引用",
+                        "group_no": "",
+                        "content": stripped,
+                        "source_file": source_file,
+                        "line_no": idx,
+                        "heading_id": heading_id,
+                        "status": "待确认",
+                    }
+                )
+
+    return annotations
+
+
+def merge_annotations(scanned: list[dict[str, Any]], old: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    old_by_id = {str(item.get("id")): item for item in old if item.get("id")}
+    for item in scanned:
+        previous = old_by_id.get(str(item.get("id")))
+        if not previous:
+            continue
+        item["type"] = previous.get("type") or item.get("type") or "引用"
+        item["group_no"] = previous.get("group_no") or item.get("group_no") or ""
+        item["status"] = previous.get("status") or item.get("status") or "待确认"
+    return scanned
+
+
+def build_heading_ranges(headings: list[dict[str, Any]], file_order: dict[str, int]) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = {}
+    enabled = [
+        item
+        for item in headings
+        if item.get("enabled") and not item.get("missing") and item.get("source_file") in file_order and item.get("line_no")
+    ]
+    enabled.sort(key=lambda item: (file_order[str(item["source_file"])], int(item["line_no"])))
+    for item in enabled:
+        result.setdefault(str(item["source_file"]), []).append(item)
+    return result
+
+
+def collect_annotation_bodies(
+    source_file: str, lines: list[str], heading_ranges: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    bodies: list[dict[str, Any]] = []
+    idx = 0
+    while idx < len(lines):
+        line_no = idx + 1
+        line = lines[idx]
+        match = ANNOTATION_BODY_RE.match(line)
+        if not match:
+            idx += 1
+            continue
+        marker = match.group("marker")
+        body_lines = [match.group("body").strip()]
+        idx += 1
+        while idx < len(lines):
+            candidate = lines[idx]
+            stripped = candidate.strip()
+            if ANNOTATION_BODY_RE.match(candidate) or MARKDOWN_HEADING_RE.match(stripped):
+                break
+            body_lines.append(stripped)
+            idx += 1
+        body = "\n".join(line for line in body_lines).strip()
+        bodies.append(
+            {
+                "note_no": normalize_note_no(marker),
+                "marker": marker,
+                "body": body,
+                "source_file": source_file,
+                "line_no": line_no,
+                "heading_id": heading_id_for_line(heading_ranges, line_no),
+            }
+        )
+    return bodies
+
+
+def heading_id_for_line(heading_ranges: list[dict[str, Any]], line_no: int) -> str:
+    current = ""
+    for heading in heading_ranges:
+        if int(heading.get("line_no") or 0) > line_no:
+            break
+        current = str(heading.get("id") or "")
+    return current
+
+
+def normalize_note_no(marker: str) -> str:
+    marker = str(marker).strip()
+    if marker in CIRCLED_NUMBER_MAP:
+        return CIRCLED_NUMBER_MAP[marker]
+    digits = re.sub(r"\D", "", marker)
+    return str(int(digits)) if digits else marker
+
+
+def match_annotations(bodies: list[dict[str, Any]], refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    keys = sorted(
+        {
+            (item["source_file"], item.get("heading_id", ""), item["note_no"])
+            for item in bodies + refs
+        },
+        key=lambda key: (key[0], key[1], note_sort_key(key[2])),
+    )
+    annotations: list[dict[str, Any]] = []
+    for source_file, heading_id, note_no in keys:
+        group_bodies = [
+            item
+            for item in bodies
+            if item["source_file"] == source_file and item.get("heading_id", "") == heading_id and item["note_no"] == note_no
+        ]
+        group_refs = [
+            item
+            for item in refs
+            if item["source_file"] == source_file and item.get("heading_id", "") == heading_id and item["note_no"] == note_no
+        ]
+        max_len = max(len(group_bodies), len(group_refs), 1)
+        duplicate = len(group_bodies) > 1 or len(group_refs) > 1
+        for index in range(max_len):
+            body = group_bodies[min(index, len(group_bodies) - 1)] if group_bodies else None
+            ref = nearest_ref(group_refs, body, index) if group_refs else None
+            line_no = int(body["line_no"]) if body else 0
+            ref_line_no = int(ref["line_no"]) if ref else None
+            status = annotation_status(body, ref, duplicate)
+            marker = str((body or ref or {}).get("marker") or "")
+            annotations.append(
+                {
+                    "id": stable_annotation_id(source_file, note_no, heading_id, line_no, ref_line_no, index),
+                    "note_no": note_no,
+                    "marker": marker,
+                    "body": str(body.get("body") or "") if body else "",
+                    "ref_text": str(ref.get("text") or "") if ref else "",
+                    "source_file": source_file,
+                    "line_no": line_no or None,
+                    "ref_line_no": ref_line_no,
+                    "heading_id": heading_id,
+                    "status": status,
+                }
+            )
+    annotations.sort(key=lambda item: (item["source_file"], item.get("ref_line_no") or item.get("line_no") or 0, item["note_no"]))
+    return annotations
+
+
+def nearest_ref(refs: list[dict[str, Any]], body: dict[str, Any] | None, index: int) -> dict[str, Any] | None:
+    if not refs:
+        return None
+    if not body:
+        return refs[min(index, len(refs) - 1)]
+    return sorted(refs, key=lambda item: abs(int(item["line_no"]) - int(body["line_no"])))[0]
+
+
+def note_sort_key(value: str) -> tuple[int, int | str]:
+    text = str(value)
+    return (0, int(text)) if text.isdigit() else (1, text)
+
+
+def annotation_status(body: dict[str, Any] | None, ref: dict[str, Any] | None, duplicate: bool) -> str:
+    if duplicate:
+        return "疑似重复"
+    if body and ref:
+        return "正常"
+    if body and not ref:
+        return "未找到引用"
+    if ref and not body:
+        return "未找到正文"
+    return "待确认"
+
+
+def stable_annotation_id(
+    source_file: str, note_no: str, heading_id: str, line_no: int, ref_line_no: int | None, index: int
+) -> str:
+    digest = hashlib.sha1(
+        f"{source_file}:{heading_id}:{note_no}:{line_no}:{ref_line_no}:{index}".encode("utf-8")
+    ).hexdigest()[:16]
+    return f"a_{digest}"
+
+
+def stable_annotation_line_id(source_file: str, note_no: str, line_no: int, marker_index: int) -> str:
+    digest = hashlib.sha1(f"{source_file}:{note_no}:{line_no}:{marker_index}".encode("utf-8")).hexdigest()[:16]
+    return f"a_{digest}"
 
 
 def make_candidate(
@@ -550,6 +940,8 @@ def merge_candidate(candidate: dict[str, Any], old: dict[str, Any]) -> dict[str,
         "book_title",
         "level",
         "local_no",
+        "export_dir",
+        "export_name",
         "global_no",
         "title",
         "status",

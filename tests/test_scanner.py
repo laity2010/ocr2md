@@ -47,6 +47,8 @@ class ScannerTests(unittest.TestCase):
 
             manifest = scan_directory(root)
             manifest["headings"][0]["title"] = "New"
+            manifest["headings"][0]["export_dir"] = "Part A"
+            manifest["headings"][0]["export_name"] = "01 Custom"
             manifest["headings"].append(
                 {
                     "id": "m_test",
@@ -77,6 +79,8 @@ class ScannerTests(unittest.TestCase):
             rescanned = scan_directory(root)
             by_id = {item["id"]: item for item in rescanned["headings"]}
             self.assertEqual(rescanned["headings"][0]["title"], "New")
+            self.assertEqual(rescanned["headings"][0]["export_dir"], "Part A")
+            self.assertEqual(rescanned["headings"][0]["export_name"], "01 Custom")
             self.assertIn("m_test", by_id)
             self.assertEqual(by_id["m_test"]["title"], "Manual")
 
@@ -129,6 +133,65 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(workspace["manifest"]["headings"][0]["title"], "Preserved")
             self.assertEqual(workspace["ui_state"]["selected_id"], "h_test")
 
+    def test_scan_annotations_extracts_candidate_lines_as_references(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "\n".join(
+                    [
+                        "# Chapter",
+                        "正文有注释①，还有第二个[2]。",
+                        "",
+                        "① 第一条注释",
+                        "续行说明",
+                        "[2] 第二条注释",
+                        "",
+                        "## Next",
+                        "正文（1）。",
+                        "（1）第三条注释",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (root / "output").mkdir()
+            (root / "output" / "ignored.md").write_text("正文①\n① ignored", encoding="utf-8")
+
+            manifest = scan_directory(root)
+            annotations = manifest["annotations"]
+
+            self.assertEqual(len(annotations), 6)
+            self.assertEqual([item["note_no"] for item in annotations[:2]], ["1", "2"])
+            self.assertTrue(all(item["type"] == "引用" for item in annotations))
+            self.assertTrue(all(item["status"] == "待确认" for item in annotations))
+            self.assertEqual(annotations[0]["content"], "正文有注释①，还有第二个[2]。")
+            self.assertTrue(all(item["source_file"] == "book.md" for item in annotations))
+
+    def test_scan_annotations_preserves_saved_types(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "\n".join(
+                    [
+                        "# Chapter",
+                        "正文有引用① 和重复①。",
+                        "还有缺正文[2]。",
+                        "",
+                        "① 第一条注释",
+                        "③ 没有引用的注释",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = scan_directory(root)
+            manifest["annotations"][0]["type"] = "正文"
+            manifest["annotations"][0]["group_no"] = "A1"
+            save_manifest(manifest)
+
+            rescanned = scan_directory(root)
+            self.assertEqual(rescanned["annotations"][0]["type"], "正文")
+            self.assertEqual(rescanned["annotations"][0]["group_no"], "A1")
+
     def test_context_returns_line_window(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -148,11 +211,12 @@ class ScannerTests(unittest.TestCase):
                     [
                         "preface",
                         "## 01",
-                        "chapter one",
+                        "chapter one has note [1]",
                         "## subtitle",
                         "more one",
                         "## Second",
                         "chapter two",
+                        "[1] Annotated body",
                     ]
                 )
                 + "\n",
@@ -169,6 +233,8 @@ class ScannerTests(unittest.TestCase):
                         "book_title": "Book",
                         "level": 2,
                         "local_no": "01",
+                        "export_dir": "Part A",
+                        "export_name": "01 Custom",
                         "global_no": "001",
                         "title": "01",
                         "source_file": "book.md",
@@ -186,6 +252,8 @@ class ScannerTests(unittest.TestCase):
                         "book_title": "Book",
                         "level": 3,
                         "local_no": "01",
+                        "export_dir": "Part A",
+                        "export_name": "01 Custom",
                         "global_no": "001",
                         "title": "subtitle",
                         "source_file": "book.md",
@@ -214,22 +282,53 @@ class ScannerTests(unittest.TestCase):
                         "missing": False,
                     },
                 ],
+                "annotations": [
+                    {
+                        "id": "a_ref",
+                        "note_no": "1",
+                        "type": "引用",
+                        "group_no": "G1",
+                        "content": "chapter one has note [1]",
+                        "source_file": "book.md",
+                        "line_no": 3,
+                        "heading_id": "h1",
+                        "status": "正常",
+                    },
+                    {
+                        "id": "a_body",
+                        "note_no": "1",
+                        "type": "正文",
+                        "group_no": "G1",
+                        "content": "[1] Annotated body",
+                        "source_file": "book.md",
+                        "line_no": 8,
+                        "heading_id": "h1",
+                        "status": "正常",
+                    },
+                ],
             }
 
             result = export_markdown(manifest)
             output_dir = root / "output"
 
             self.assertEqual(result["count"], 2)
-            self.assertTrue((output_dir / "01.md").exists())
+            self.assertTrue((output_dir / "Part A" / "01 Custom.md").exists())
             self.assertTrue((output_dir / "02 Second.md").exists())
-            first_export = (output_dir / "01.md").read_text(encoding="utf-8")
+            first_export = (output_dir / "Part A" / "01 Custom.md").read_text(encoding="utf-8")
+            second_export = (output_dir / "02 Second.md").read_text(encoding="utf-8")
             self.assertIn("### subtitle", first_export)
             self.assertNotIn("\n## subtitle", first_export)
-            self.assertIn("chapter two", (output_dir / "02 Second.md").read_text(encoding="utf-8"))
+            self.assertIn("chapter one has note [^1]", first_export)
+            self.assertIn("[^1]: Annotated body", first_export)
+            self.assertNotIn("## 注释", first_export)
+            self.assertIn("chapter two", second_export)
+            self.assertNotIn("[1] Annotated body", second_export)
 
             (output_dir / "stale.md").write_text("old", encoding="utf-8")
+            (output_dir / "Part A" / "stale.md").write_text("old", encoding="utf-8")
             export_markdown(manifest)
             self.assertFalse((output_dir / "stale.md").exists())
+            self.assertFalse((output_dir / "Part A" / "stale.md").exists())
 
     def test_export_markdown_can_export_selected_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -283,7 +382,60 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result["count"], 1)
             self.assertFalse((root / "output" / "01.md").exists())
             self.assertTrue((root / "output" / "02.md").exists())
-            self.assertIn("two", (root / "output" / "02.md").read_text(encoding="utf-8"))
+
+    def test_export_markdown_uses_each_explicit_export_name_over_logic_no(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text("## A\nalpha\n## B\nbeta\n", encoding="utf-8")
+            manifest = {
+                "input_dir": str(root),
+                "files": ["book.md"],
+                "headings": [
+                    {
+                        "id": "h1",
+                        "enabled": True,
+                        "book_id": "b",
+                        "book_title": "Book",
+                        "level": 2,
+                        "local_no": "01",
+                        "export_name": "01 Alpha",
+                        "global_no": "001",
+                        "title": "A",
+                        "source_file": "book.md",
+                        "line_no": 1,
+                        "status": "正常",
+                        "kind": "markdown",
+                        "confidence": "high",
+                        "raw_text": "## A",
+                        "missing": False,
+                    },
+                    {
+                        "id": "h2",
+                        "enabled": True,
+                        "book_id": "b",
+                        "book_title": "Book",
+                        "level": 2,
+                        "local_no": "01",
+                        "export_name": "02 Beta",
+                        "global_no": "002",
+                        "title": "B",
+                        "source_file": "book.md",
+                        "line_no": 3,
+                        "status": "正常",
+                        "kind": "markdown",
+                        "confidence": "high",
+                        "raw_text": "## B",
+                        "missing": False,
+                    },
+                ],
+            }
+
+            result = export_markdown(manifest)
+
+            self.assertEqual(result["count"], 2)
+            self.assertTrue((root / "output" / "01 Alpha.md").exists())
+            self.assertTrue((root / "output" / "02 Beta.md").exists())
+            self.assertFalse((root / "output" / "01.md").exists())
 
     def test_export_ignores_disabled_markdown_boundaries(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
