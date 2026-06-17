@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 
 MANIFEST_NAME = "title_manifest.json"
@@ -23,6 +26,8 @@ ANNOTATION_BODY_RE = re.compile(
 ANNOTATION_MARKER_RE = re.compile(
     r"(?P<marker>[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]|\[\d{1,3}\]|［\d{1,3}］|\(\d{1,3}\)|（\d{1,3}）)"
 )
+MARKDOWN_IMAGE_RE = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<destination>[^)]*)\)")
+EXTERNAL_URL_RE = re.compile(r"^(?:https?:)?//", re.IGNORECASE)
 
 KNOWN_SAMPLE_BOOKS = ("漫长的告别", "再见，吾爱", "长眠不醒")
 IGNORED_TITLE_TEXTS = {"目录", "目 录"}
@@ -105,6 +110,11 @@ def scan_directory(input_dir: str | Path) -> dict[str, Any]:
         scan_annotations(root, files, merged),
         workspace.get("manifest", {}).get("annotations", []),
     )
+    imgs = merge_images(
+        scan_images(root, files),
+        workspace.get("manifest", {}).get("imgs", []),
+        root,
+    )
 
     return {
         "schema_version": 1,
@@ -113,6 +123,7 @@ def scan_directory(input_dir: str | Path) -> dict[str, Any]:
         "files": [str(path.relative_to(root)) for path in files],
         "headings": merged,
         "annotations": annotations,
+        "imgs": imgs,
         "workspace_path": str(workspace_path(root)),
         "workspace_loaded": bool(workspace),
         "ui_state": workspace.get("ui_state", {}),
@@ -132,6 +143,7 @@ def save_manifest(payload: dict[str, Any]) -> dict[str, Any]:
         "files": payload.get("files", []),
         "headings": headings,
         "annotations": payload.get("annotations", []),
+        "imgs": payload.get("imgs", []),
     }
     path = manifest_path(root)
     path.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -142,6 +154,7 @@ def save_manifest(payload: dict[str, Any]) -> dict[str, Any]:
         "workspace_path": str(workspace),
         "headings": headings,
         "annotations": saved["annotations"],
+        "imgs": saved["imgs"],
     }
 
 
@@ -211,6 +224,7 @@ def export_markdown(payload: dict[str, Any]) -> dict[str, Any]:
     boundaries.sort(key=lambda item: (file_index[str(item["source_file"])], int(item["line_no"])))
     heading_rewrites = build_heading_rewrites(headings)
     annotation_refs_by_line, annotation_body_lines = build_annotation_export_transforms(payload.get("annotations", []))
+    image_local_paths_by_line = build_image_local_path_transforms(root, payload.get("imgs", []))
 
     export_target_by_group = build_export_target_map(enabled)
     first_item_by_export_target: dict[tuple[str, str], dict[str, Any]] = {}
@@ -233,6 +247,7 @@ def export_markdown(payload: dict[str, Any]) -> dict[str, Any]:
             heading_rewrites,
             annotation_refs_by_line,
             annotation_body_lines,
+            image_local_paths_by_line,
         )
         if item.get("kind") == "manual":
             level = int(item.get("level") or 2)
@@ -264,6 +279,74 @@ def export_markdown(payload: dict[str, Any]) -> dict[str, Any]:
         })
 
     return {"ok": True, "output_dir": str(output_dir), "count": len(written), "files": written, "headings": headings}
+
+
+def download_images(payload: dict[str, Any]) -> dict[str, Any]:
+    root = Path(payload["input_dir"]).expanduser().resolve()
+    if not root.exists() or not root.is_dir():
+        raise ValueError(f"Input directory does not exist: {root}")
+
+    imgs = [dict(item) for item in payload.get("imgs", [])]
+    output_dir = root / "output" / "imgs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    used_filenames = {path.name: 1 for path in output_dir.iterdir() if path.is_file()}
+    selected_ids = {str(item_id) for item_id in payload.get("image_ids", [])}
+    results: list[dict[str, Any]] = []
+
+    for item in imgs:
+        if selected_ids and str(item.get("id") or "") not in selected_ids:
+            continue
+        url = absolute_image_url(str(item.get("url") or "").strip())
+        if not is_external_url(url):
+            item["download_status"] = "跳过"
+            item["download_error"] = "非外部图片链接"
+            results.append({"id": item.get("id"), "ok": False, "error": item["download_error"]})
+            continue
+
+        existing = str(item.get("local_path") or "").strip()
+        if existing and (root / existing).exists():
+            item["download_status"] = "已存在"
+            item["download_error"] = ""
+            results.append({"id": item.get("id"), "ok": True, "path": existing, "skipped": True})
+            continue
+
+        try:
+            data, content_type = fetch_image_bytes(url)
+            filename = image_download_filename(item, url, content_type, used_filenames)
+            path = output_dir / filename
+            path.write_bytes(data)
+            local_path = str(path.relative_to(root))
+            item["local_path"] = local_path
+            item["download_status"] = "已下载"
+            item["download_error"] = ""
+            results.append({"id": item.get("id"), "ok": True, "path": local_path})
+        except Exception as exc:  # noqa: BLE001
+            item["download_status"] = "失败"
+            item["download_error"] = str(exc)
+            results.append({"id": item.get("id"), "ok": False, "error": str(exc)})
+
+    manifest = {
+        "schema_version": payload.get("schema_version", 1),
+        "input_dir": str(root),
+        "generated_at": payload.get("generated_at"),
+        "files": payload.get("files", []),
+        "headings": payload.get("headings", []),
+        "annotations": payload.get("annotations", []),
+        "imgs": imgs,
+    }
+    save_workspace(root, manifest, payload.get("ui_state", {}))
+    ok_count = sum(1 for item in results if item.get("ok") and not item.get("skipped"))
+    skipped_count = sum(1 for item in results if item.get("ok") and item.get("skipped"))
+    failed_count = sum(1 for item in results if not item.get("ok"))
+    return {
+        "ok": failed_count == 0,
+        "output_dir": str(output_dir),
+        "imgs": imgs,
+        "results": results,
+        "downloaded": ok_count,
+        "skipped": skipped_count,
+        "failed": failed_count,
+    }
 
 
 def clean_exported_markdown(output_dir: Path) -> None:
@@ -482,6 +565,7 @@ def slice_between(
     heading_rewrites: dict[tuple[str, int], str],
     annotation_refs_by_line: dict[tuple[str, int], list[dict[str, Any]]],
     annotation_body_lines: set[tuple[str, int]],
+    image_local_paths_by_line: dict[tuple[str, int], dict[str, str]],
 ) -> str:
     start_file = str(start["source_file"])
     start_line = max(1, int(start["line_no"]))
@@ -507,6 +591,7 @@ def slice_between(
                     heading_rewrites,
                     annotation_refs_by_line,
                     annotation_body_lines,
+                    image_local_paths_by_line,
                 )
             )
     return "".join(chunks)
@@ -520,6 +605,7 @@ def render_source_slice(
     heading_rewrites: dict[tuple[str, int], str],
     annotation_refs_by_line: dict[tuple[str, int], list[dict[str, Any]]],
     annotation_body_lines: set[tuple[str, int]],
+    image_local_paths_by_line: dict[tuple[str, int], dict[str, str]],
 ) -> str:
     rendered: list[str] = []
     for line_no in range(from_line, to_line + 1):
@@ -531,8 +617,59 @@ def render_source_slice(
             newline = "\n" if original.endswith("\n") else ""
             rendered.append(rewrite + newline)
         else:
-            rendered.append(rewrite_annotation_refs(lines[line_no - 1], annotation_refs_by_line.get((source_file, line_no), [])))
+            line = rewrite_annotation_refs(lines[line_no - 1], annotation_refs_by_line.get((source_file, line_no), []))
+            line = rewrite_image_local_paths(line, image_local_paths_by_line.get((source_file, line_no), {}))
+            rendered.append(line)
     return "".join(rendered)
+
+
+def build_image_local_path_transforms(root: Path, imgs: list[dict[str, Any]]) -> dict[tuple[str, int], dict[str, str]]:
+    result: dict[tuple[str, int], dict[str, str]] = {}
+    for item in imgs:
+        source_file = str(item.get("source_file") or "")
+        line_no = int(item.get("line_no") or 0)
+        url = str(item.get("url") or "").strip()
+        local_path = str(item.get("local_path") or "").strip()
+        if not source_file or not line_no or not url or not local_path:
+            continue
+        if not (root / local_path).exists():
+            continue
+        result.setdefault((source_file, line_no), {})[url] = local_path
+    return result
+
+
+def rewrite_image_local_paths(line: str, local_paths_by_url: dict[str, str]) -> str:
+    if not local_paths_by_url:
+        return line
+
+    def replace(match: re.Match[str]) -> str:
+        destination = match.group("destination")
+        url, suffix = split_markdown_image_destination(destination)
+        local_path = local_paths_by_url.get(url)
+        if not local_path:
+            return match.group(0)
+        replacement = markdown_image_destination(local_path, suffix)
+        return f"![{match.group('alt')}]({replacement})"
+
+    return MARKDOWN_IMAGE_RE.sub(replace, line)
+
+
+def split_markdown_image_destination(destination: str) -> tuple[str, str]:
+    text = str(destination or "").strip()
+    if text.startswith("<"):
+        end = text.find(">")
+        if end != -1:
+            return text[1:end].strip(), text[end + 1 :].strip()
+    if not text:
+        return "", ""
+    parts = text.split(None, 1)
+    return parts[0].strip(), parts[1].strip() if len(parts) > 1 else ""
+
+
+def markdown_image_destination(local_path: str, suffix: str) -> str:
+    path = str(local_path).strip()
+    rendered_path = f"<{path}>" if re.search(r"\s", path) else path
+    return f"{rendered_path} {suffix}".strip() if suffix else rendered_path
 
 
 def rewrite_annotation_refs(line: str, refs: list[dict[str, Any]]) -> str:
@@ -676,6 +813,103 @@ def scan_annotations(root: Path, files: list[Path], headings: list[dict[str, Any
                 )
 
     return annotations
+
+
+def scan_images(root: Path, files: list[Path]) -> list[dict[str, Any]]:
+    imgs: list[dict[str, Any]] = []
+    for file_path in files:
+        source_file = str(file_path.relative_to(root))
+        lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for idx, line in enumerate(lines, start=1):
+            for match_index, match in enumerate(MARKDOWN_IMAGE_RE.finditer(line)):
+                url = markdown_image_url(match.group("destination"))
+                if not is_external_url(url):
+                    continue
+                alt = match.group("alt").strip()
+                imgs.append(
+                    {
+                        "id": stable_image_id(source_file, idx, match_index, url),
+                        "alt": alt,
+                        "url": url,
+                        "source_file": source_file,
+                        "line_no": idx,
+                        "content": line.strip(),
+                    }
+                )
+    return imgs
+
+
+def merge_images(scanned: list[dict[str, Any]], old: list[dict[str, Any]], root: Path) -> list[dict[str, Any]]:
+    old_by_id = {str(item.get("id")): item for item in old if item.get("id")}
+    for item in scanned:
+        previous = old_by_id.get(str(item.get("id")))
+        if not previous:
+            continue
+        local_path = str(previous.get("local_path") or "").strip()
+        if local_path and (root / local_path).exists():
+            item["local_path"] = local_path
+            item["download_status"] = previous.get("download_status") or "已下载"
+            item["download_error"] = previous.get("download_error") or ""
+    return scanned
+
+
+def markdown_image_url(destination: str) -> str:
+    text = str(destination or "").strip()
+    if text.startswith("<"):
+        end = text.find(">")
+        return text[1:end].strip() if end != -1 else text.strip("<>").strip()
+    return text.split(None, 1)[0].strip() if text else ""
+
+
+def is_external_url(url: str) -> bool:
+    return bool(EXTERNAL_URL_RE.match(str(url or "").strip()))
+
+
+def absolute_image_url(url: str) -> str:
+    text = str(url or "").strip()
+    if text.startswith("//"):
+        return f"https:{text}"
+    return text
+
+
+def fetch_image_bytes(url: str, limit: int = 50 * 1024 * 1024) -> tuple[bytes, str]:
+    request = Request(url, headers={"User-Agent": "ocr2md-workbench/0.1"})
+    with urlopen(request, timeout=30) as response:  # noqa: S310
+        content_type = response.headers.get_content_type() if response.headers else ""
+        data = response.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("图片超过 50MB 限制")
+    if not data:
+        raise ValueError("下载内容为空")
+    return data, content_type
+
+
+def image_download_filename(
+    item: dict[str, Any],
+    url: str,
+    content_type: str,
+    used_filenames: dict[str, int],
+) -> str:
+    parsed = urlparse(url)
+    url_name = Path(parsed.path).name
+    alt = str(item.get("alt") or "").strip()
+    fallback = f"image-{hashlib.sha1(url.encode('utf-8')).hexdigest()[:10]}"
+    raw_stem = Path(url_name).stem or alt or fallback
+    stem = sanitize_filename(raw_stem)
+    suffix = Path(url_name).suffix.lower()
+    if not suffix:
+        suffix = mimetypes.guess_extension(content_type or "") or ".img"
+    filename = f"{stem}{suffix}"
+    if filename not in used_filenames:
+        used_filenames[filename] = 1
+        return filename
+    used_filenames[filename] += 1
+    return f"{stem}-{used_filenames[filename]}{suffix}"
+
+
+def stable_image_id(source_file: str, line_no: int, match_index: int, url: str) -> str:
+    digest = hashlib.sha1(f"{source_file}:{line_no}:{match_index}:{url}".encode("utf-8")).hexdigest()[:16]
+    return f"img_{digest}"
 
 
 def merge_annotations(scanned: list[dict[str, Any]], old: list[dict[str, Any]]) -> list[dict[str, Any]]:

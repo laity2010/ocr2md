@@ -4,8 +4,16 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from ocr2md_workbench.scanner import export_markdown, get_context, save_manifest, scan_directory, update_workspace_ui_state
+from ocr2md_workbench.scanner import (
+    download_images,
+    export_markdown,
+    get_context,
+    save_manifest,
+    scan_directory,
+    update_workspace_ui_state,
+)
 
 
 class ScannerTests(unittest.TestCase):
@@ -191,6 +199,62 @@ class ScannerTests(unittest.TestCase):
             rescanned = scan_directory(root)
             self.assertEqual(rescanned["annotations"][0]["type"], "正文")
             self.assertEqual(rescanned["annotations"][0]["group_no"], "A1")
+
+    def test_scan_images_extracts_external_markdown_image_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "\n".join(
+                    [
+                        "# Chapter",
+                        "![cover](https://example.com/cover.png)",
+                        "inline ![diagram](//cdn.example.com/diagram.jpg \"Diagram\") text",
+                        "![local](images/local.png)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (root / "output").mkdir()
+            (root / "output" / "ignored.md").write_text(
+                "![ignored](https://example.com/ignored.png)",
+                encoding="utf-8",
+            )
+
+            manifest = scan_directory(root)
+            imgs = manifest["imgs"]
+
+            self.assertEqual(len(imgs), 2)
+            self.assertEqual(imgs[0]["alt"], "cover")
+            self.assertEqual(imgs[0]["url"], "https://example.com/cover.png")
+            self.assertEqual(imgs[0]["source_file"], "book.md")
+            self.assertEqual(imgs[0]["line_no"], 2)
+            self.assertEqual(imgs[1]["url"], "//cdn.example.com/diagram.jpg")
+
+    def test_download_images_writes_output_and_preserves_local_path_on_rescan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "# Chapter\n![cover](https://example.com/cover.png)\n",
+                encoding="utf-8",
+            )
+            manifest = scan_directory(root)
+
+            with patch(
+                "ocr2md_workbench.scanner.fetch_image_bytes",
+                return_value=(b"fake image bytes", "image/png"),
+            ):
+                result = download_images({**manifest, "image_ids": [manifest["imgs"][0]["id"]]})
+
+            self.assertEqual(result["downloaded"], 1)
+            local_path = result["imgs"][0]["local_path"]
+            self.assertEqual(local_path, "output/imgs/cover.png")
+            self.assertTrue((root / local_path).exists())
+
+            saved_manifest = dict(manifest)
+            saved_manifest["imgs"] = result["imgs"]
+            save_manifest(saved_manifest)
+            rescanned = scan_directory(root)
+            self.assertEqual(rescanned["imgs"][0]["local_path"], local_path)
 
     def test_context_returns_line_window(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -436,6 +500,66 @@ class ScannerTests(unittest.TestCase):
             self.assertTrue((root / "output" / "01 Alpha.md").exists())
             self.assertTrue((root / "output" / "02 Beta.md").exists())
             self.assertFalse((root / "output" / "01.md").exists())
+
+    def test_export_markdown_rewrites_downloaded_image_links_to_local_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "## Chapter\n"
+                "![cover](https://example.com/cover.png \"Cover\")\n"
+                "![remote](https://example.com/remote.png)\n",
+                encoding="utf-8",
+            )
+            (root / "output" / "imgs").mkdir(parents=True)
+            (root / "output" / "imgs" / "cover.png").write_bytes(b"image")
+            manifest = {
+                "input_dir": str(root),
+                "files": ["book.md"],
+                "headings": [
+                    {
+                        "id": "h1",
+                        "enabled": True,
+                        "book_id": "b",
+                        "book_title": "Book",
+                        "level": 2,
+                        "local_no": "01",
+                        "global_no": "001",
+                        "title": "Chapter",
+                        "source_file": "book.md",
+                        "line_no": 1,
+                        "status": "正常",
+                        "kind": "markdown",
+                        "confidence": "high",
+                        "raw_text": "## Chapter",
+                        "missing": False,
+                    },
+                ],
+                "imgs": [
+                    {
+                        "id": "img1",
+                        "alt": "cover",
+                        "url": "https://example.com/cover.png",
+                        "local_path": "output/imgs/cover.png",
+                        "source_file": "book.md",
+                        "line_no": 2,
+                        "content": "![cover](https://example.com/cover.png)",
+                    },
+                    {
+                        "id": "img2",
+                        "alt": "remote",
+                        "url": "https://example.com/remote.png",
+                        "source_file": "book.md",
+                        "line_no": 3,
+                        "content": "![remote](https://example.com/remote.png)",
+                    },
+                ],
+            }
+
+            export_markdown(manifest)
+
+            exported = (root / "output" / "01 Chapter.md").read_text(encoding="utf-8")
+            self.assertIn('![cover](output/imgs/cover.png "Cover")', exported)
+            self.assertIn("![remote](https://example.com/remote.png)", exported)
 
     def test_export_ignores_disabled_markdown_boundaries(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

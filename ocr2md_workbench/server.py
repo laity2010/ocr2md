@@ -9,7 +9,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .scanner import export_markdown, get_context, get_file_text, save_manifest, scan_directory, update_workspace_ui_state
+from .scanner import (
+    download_images,
+    export_markdown,
+    get_context,
+    get_file_text,
+    save_manifest,
+    scan_directory,
+    update_workspace_ui_state,
+)
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -48,6 +56,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/export":
             self.handle_export()
+            return
+        if parsed.path == "/api/download-images":
+            self.handle_download_images()
             return
         if parsed.path == "/api/workspace-state":
             self.handle_workspace_state()
@@ -125,6 +136,14 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             self.send_json(export_markdown(payload))
+        except Exception as exc:  # noqa: BLE001
+            self.send_json({"error": str(exc)}, status=400)
+
+    def handle_download_images(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            self.send_json(download_images(payload))
         except Exception as exc:  # noqa: BLE001
             self.send_json({"error": str(exc)}, status=400)
 

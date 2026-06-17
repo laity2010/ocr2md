@@ -683,6 +683,57 @@ tr.disabled-row {
   color: #718096;
 }
 
+.console-progress {
+  padding: 6px 0 7px;
+}
+
+.console-progress-head {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.console-progress-label {
+  color: var(--text);
+}
+
+.console-progress-count {
+  color: var(--muted);
+}
+
+.console-progress-track {
+  height: 8px;
+  margin: 5px 0 3px 80px;
+  overflow: hidden;
+  background: #1f2937;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.console-progress-bar {
+  height: 100%;
+  width: 0;
+  background: #2f80ed;
+  transition: width 160ms ease;
+}
+
+.console-progress.done .console-progress-bar {
+  background: var(--good);
+}
+
+.console-progress.failed .console-progress-bar {
+  background: var(--bad);
+}
+
+.console-progress-detail {
+  margin-left: 80px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .markdown-preview {
   max-width: 860px;
   margin: 0 auto;

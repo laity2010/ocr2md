@@ -5,6 +5,7 @@ const state = {
   anchorId: null,
   selectedAnnotationIds: new Set(),
   annotationAnchorId: null,
+  selectedImageId: null,
   selectedContextLine: null,
   scanning: false,
   activeSourceFile: "",
@@ -13,12 +14,14 @@ const state = {
   tableSort: {
     headings: { fields: [{ field: "index", direction: "asc" }] },
     annotations: { fields: [{ field: "index", direction: "asc" }] },
+    imgs: { fields: [{ field: "index", direction: "asc" }] },
   },
   openedWorkspaceDir: "",
   expandedTree: {
     files: true,
     titles: false,
     annotations: false,
+    imgs: false,
   },
 };
 
@@ -40,6 +43,7 @@ const el = {
   setAnnotationTypeBtn: document.querySelector("#setAnnotationTypeBtn"),
   setAnnotationGroupBtn: document.querySelector("#setAnnotationGroupBtn"),
   bindAnnotationHeadingsBtn: document.querySelector("#bindAnnotationHeadingsBtn"),
+  downloadImagesBtn: document.querySelector("#downloadImagesBtn"),
   checkBtn: document.querySelector("#checkBtn"),
   clearHistoryBtn: document.querySelector("#clearHistoryBtn"),
   historyToggleBtn: document.querySelector("#historyToggleBtn"),
@@ -96,6 +100,7 @@ el.setExportDirBtn.addEventListener("click", setSelectedExportDir);
 el.setAnnotationTypeBtn.addEventListener("click", setSelectedAnnotationType);
 el.setAnnotationGroupBtn.addEventListener("click", setSelectedAnnotationGroup);
 el.bindAnnotationHeadingsBtn.addEventListener("click", bindAnnotationHeadings);
+el.downloadImagesBtn.addEventListener("click", downloadImages);
 el.checkBtn.addEventListener("click", () => {
   recomputeStatuses();
   recomputeAnnotationStatuses();
@@ -155,6 +160,7 @@ async function scan() {
     }
     state.manifest = data;
     state.manifest.annotations = state.manifest.annotations || [];
+    state.manifest.imgs = state.manifest.imgs || [];
     state.openedWorkspaceDir = data.input_dir || dir;
     applyWorkspaceUiState(data.ui_state || {});
     addDirectoryHistory(data.input_dir);
@@ -170,7 +176,7 @@ async function scan() {
     if (state.selectedId) {
       await loadContext(currentHeading());
     }
-    setMessage(`${data.workspace_loaded ? "已读取工作空间" : "已添加工作目录"}：${data.files.length} 个 md，${data.headings.length} 个标题候选`);
+    setMessage(`${data.workspace_loaded ? "已读取工作空间" : "已添加工作目录"}：${data.files.length} 个 md，${data.headings.length} 个标题候选，${state.manifest.imgs.length} 个图片外链`);
   } finally {
     state.scanning = false;
     el.scanBtn.disabled = false;
@@ -233,6 +239,7 @@ async function save() {
   }
   state.manifest.headings = data.headings;
   state.manifest.annotations = data.annotations || state.manifest.annotations || [];
+  state.manifest.imgs = data.imgs || state.manifest.imgs || [];
   state.manifest.ui_state = collectWorkspaceUiState();
   renderTable();
   renderSideEditor();
@@ -261,12 +268,77 @@ async function exportMarkdown() {
     }
     state.manifest.headings = data.headings;
     state.manifest.annotations = data.annotations || state.manifest.annotations || [];
+    state.manifest.imgs = data.imgs || state.manifest.imgs || [];
     renderTable();
     renderSideEditor();
     setMessage(`已导出 ${data.count} 个文件到 ${data.output_dir}`);
   } finally {
     el.exportBtn.disabled = false;
   }
+}
+
+async function downloadImages() {
+  if (!state.manifest) {
+    setMessage("没有可下载的图片");
+    return;
+  }
+  if (state.activeDataView !== "imgs") {
+    setMessage("请先切换到图片表");
+    return;
+  }
+  const imgs = state.manifest.imgs || [];
+  if (!imgs.length) {
+    setMessage("没有图片外链可下载");
+    return;
+  }
+  state.manifest.ui_state = collectWorkspaceUiState();
+  setMessage("下载图片中...");
+  const progress = appendConsoleProgress("图片下载", imgs.length);
+  el.downloadImagesBtn.disabled = true;
+  let downloaded = 0;
+  let skipped = 0;
+  let failed = 0;
+  try {
+    for (let index = 0; index < imgs.length; index += 1) {
+      const item = state.manifest.imgs[index];
+      updateConsoleProgress(progress, index, imgs.length, `正在下载 ${index + 1}/${imgs.length} ${shortImageLabel(item)}`);
+      const payload = { ...state.manifest, image_ids: [item.id], ui_state: collectWorkspaceUiState() };
+      const data = await fetchJson("/api/download-images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (data.error) {
+        failed += 1;
+        markImageDownloadFailure(item.id, data.error);
+      } else {
+        state.manifest.imgs = data.imgs || state.manifest.imgs || [];
+        downloaded += data.downloaded || 0;
+        skipped += data.skipped || 0;
+        failed += data.failed || 0;
+      }
+      updateConsoleProgress(progress, index + 1, imgs.length, `已完成 ${index + 1}/${imgs.length}`);
+      renderTable();
+    }
+    renderTable();
+    renderDirectoryTree();
+    finishConsoleProgress(progress, failed ? "failed" : "done");
+    const message = `图片下载完成：新增 ${downloaded}，已存在 ${skipped}，失败 ${failed}`;
+    setMessage(message, Boolean(failed));
+  } finally {
+    el.downloadImagesBtn.disabled = false;
+  }
+}
+
+function markImageDownloadFailure(id, error) {
+  const item = (state.manifest.imgs || []).find((candidate) => candidate.id === id);
+  if (!item) return;
+  item.download_status = "失败";
+  item.download_error = error;
+}
+
+function shortImageLabel(item) {
+  return shortFile(item?.local_path || item?.url || item?.source_file || "");
 }
 
 function renderTable() {
@@ -278,6 +350,10 @@ function renderTable() {
   }
   if (state.activeDataView === "annotations") {
     renderAnnotationTable();
+    return;
+  }
+  if (state.activeDataView === "imgs") {
+    renderImageTable();
     return;
   }
   renderHeadingTable();
@@ -367,6 +443,40 @@ function renderAnnotationTable() {
   renderSideEditor();
 }
 
+function renderImageTable() {
+  const rows = sortedRows("imgs", filteredImages());
+  renderTableHeader("imgs", [
+    { field: "index", label: "index" },
+    { field: "line_no", label: "行号" },
+    { field: "alt", label: "alt" },
+    { field: "url", label: "URL" },
+    { field: "local_path", label: "本地路径" },
+    { field: "download_status", label: "状态" },
+    { field: "content", label: "原文" },
+    { field: "source_file", label: "源文件名" },
+  ]);
+  el.headingRows.innerHTML = "";
+  rows.forEach((item, index) => {
+    const tr = document.createElement("tr");
+    tr.dataset.id = item.id;
+    tr.className = state.selectedImageId === item.id ? "selected" : "";
+    tr.addEventListener("click", () => selectImage(item.id));
+    tr.innerHTML = `
+      <td>${index + 1}</td>
+      <td>${escapeHtml(item.line_no || "")}</td>
+      <td title="${escapeHtml(item.alt || "")}">${escapeHtml(item.alt || "")}</td>
+      <td title="${escapeHtml(item.url || "")}"><a href="${escapeAttribute(item.url || "")}" target="_blank" rel="noreferrer">${escapeHtml(item.url || "")}</a></td>
+      <td title="${escapeHtml(item.local_path || "")}">${escapeHtml(item.local_path || "")}</td>
+      <td class="${imageStatusClass(item)}" title="${escapeHtml(item.download_error || "")}">${escapeHtml(imageStatusText(item))}</td>
+      <td title="${escapeHtml(item.content || "")}">${escapeHtml(item.content || "")}</td>
+      <td title="${escapeHtml(item.source_file)}">${escapeHtml(shortFile(item.source_file))}</td>
+    `;
+    el.headingRows.appendChild(tr);
+  });
+  el.countInfo.textContent = `${rows.length}/${state.manifest.imgs?.length || 0}`;
+  renderSideEditor();
+}
+
 function renderTableHeader(scope, columns) {
   const headerRow = document.querySelector("thead tr");
   const sort = sortState(scope);
@@ -429,13 +539,16 @@ function renderProjectInfo() {
 }
 
 function currentModuleScope() {
-  return state.activeDataView === "annotations" ? "annotations" : "headings";
+  if (state.activeDataView === "annotations") return "annotations";
+  if (state.activeDataView === "imgs") return "imgs";
+  return "headings";
 }
 
 function currentModuleLabel() {
   if (state.activeDataView === "annotations") {
     return state.activeAnnotationGroup ? `注释组 ${state.activeAnnotationGroup}` : "注释";
   }
+  if (state.activeDataView === "imgs") return "图片";
   if (state.activeSourceFile) return `文件 ${shortFile(state.activeSourceFile)}`;
   return "标题";
 }
@@ -456,9 +569,14 @@ function isAnnotationModuleActive() {
   return state.activeDataView === "annotations" && !state.activeAnnotationGroup;
 }
 
+function isImageModuleActive() {
+  return state.activeDataView === "imgs";
+}
+
 function ensureSelectionAfterLoad() {
   const validIds = new Set((state.manifest?.headings || []).map((item) => item.id));
   const validAnnotationIds = new Set((state.manifest?.annotations || []).map((item) => item.id));
+  const validImageIds = new Set((state.manifest?.imgs || []).map((item) => item.id));
   state.selectedIds = new Set(Array.from(state.selectedIds).filter((id) => validIds.has(id)));
   state.selectedAnnotationIds = new Set(
     Array.from(state.selectedAnnotationIds).filter((id) => validAnnotationIds.has(id))
@@ -472,6 +590,10 @@ function ensureSelectionAfterLoad() {
     state.annotationAnchorId && validAnnotationIds.has(state.annotationAnchorId)
       ? state.annotationAnchorId
       : state.selectedAnnotationIds.values().next().value || null;
+  state.selectedImageId =
+    state.selectedImageId && validImageIds.has(state.selectedImageId)
+      ? state.selectedImageId
+      : state.manifest?.imgs?.[0]?.id || null;
 }
 
 function normalizeRestoredViewState() {
@@ -490,6 +612,9 @@ function normalizeRestoredViewState() {
       state.activeAnnotationGroup = "";
     }
   }
+  if (state.activeDataView === "imgs" && !(state.manifest.imgs || []).length) {
+    state.activeDataView = "headings";
+  }
 }
 
 function collectWorkspaceUiState() {
@@ -501,6 +626,7 @@ function collectWorkspaceUiState() {
     anchor_id: state.anchorId,
     selected_annotation_ids: Array.from(state.selectedAnnotationIds),
     annotation_anchor_id: state.annotationAnchorId,
+    selected_image_id: state.selectedImageId,
     selected_context_line: state.selectedContextLine,
     active_data_view: state.activeDataView,
     table_sort: state.tableSort,
@@ -529,8 +655,11 @@ function applyWorkspaceUiState(uiState) {
     Array.isArray(uiState.selected_annotation_ids) ? uiState.selected_annotation_ids : []
   );
   state.annotationAnchorId = uiState.annotation_anchor_id || null;
+  state.selectedImageId = uiState.selected_image_id || null;
   state.selectedContextLine = uiState.selected_context_line || null;
-  state.activeDataView = uiState.active_data_view === "annotations" ? "annotations" : "headings";
+  state.activeDataView = ["annotations", "imgs"].includes(uiState.active_data_view)
+    ? uiState.active_data_view
+    : "headings";
   state.tableSort = {
     ...state.tableSort,
     ...normalizeTableSort(uiState.table_sort || {}),
@@ -639,6 +768,18 @@ function renderDirectoryTree() {
   if (state.expandedTree.annotations) {
     renderAnnotationTreeNodes(2);
   }
+
+  el.directoryTree.appendChild(treeRow({
+    icon: state.expandedTree.imgs ? "▾" : "▸",
+    name: "图片",
+    title: "图片外部连接",
+    count: `${(state.manifest.imgs || []).length}`,
+    className: `folder clickable ${isImageModuleActive() ? "active" : ""} tree-indent-1`,
+    onClick: openImagesGroup,
+  }));
+  if (state.expandedTree.imgs) {
+    renderImageTreeNodes(2);
+  }
 }
 
 function toggleTreeGroup(group) {
@@ -661,6 +802,17 @@ function openTitlesGroup() {
 function openAnnotationsGroup() {
   state.expandedTree.annotations = true;
   state.activeDataView = "annotations";
+  state.activeSourceFile = "";
+  state.activeAnnotationGroup = "";
+  el.filterText.value = "";
+  renderDirectoryTree();
+  renderTable();
+  scheduleWorkspaceStateSave();
+}
+
+function openImagesGroup() {
+  state.expandedTree.imgs = true;
+  state.activeDataView = "imgs";
   state.activeSourceFile = "";
   state.activeAnnotationGroup = "";
   el.filterText.value = "";
@@ -742,6 +894,30 @@ function renderAnnotationTreeNodes(depth) {
     icon: "※",
     name: `${annotations.length} 个注释候选`,
     title: "注释候选总数",
+    count: "",
+    className: `summary tree-indent-${Math.min(depth, 4)}`,
+  }));
+}
+
+function renderImageTreeNodes(depth) {
+  const imgs = state.manifest?.imgs || [];
+  const byFile = new Map();
+  for (const item of imgs) {
+    byFile.set(item.source_file, (byFile.get(item.source_file) || 0) + 1);
+  }
+  for (const [file, count] of Array.from(byFile.entries()).sort((a, b) => a[0].localeCompare(b[0], "zh-Hans-CN"))) {
+    el.directoryTree.appendChild(treeRow({
+      icon: "img",
+      name: shortFile(file),
+      title: file,
+      count: String(count),
+      className: `summary tree-indent-${Math.min(depth, 4)}`,
+    }));
+  }
+  el.directoryTree.appendChild(treeRow({
+    icon: "※",
+    name: `${imgs.length} 个图片外链`,
+    title: "图片外链总数",
     count: "",
     className: `summary tree-indent-${Math.min(depth, 4)}`,
   }));
@@ -889,7 +1065,7 @@ function sortState(scope) {
 
 function normalizeTableSort(saved) {
   const result = {};
-  for (const scope of ["headings", "annotations"]) {
+  for (const scope of ["headings", "annotations", "imgs"]) {
     result[scope] = normalizeSortEntry(scope, saved[scope]);
   }
   return result;
@@ -913,9 +1089,13 @@ function normalizeSortEntry(scope, item = {}) {
 }
 
 function validSortFields(scope) {
-  return scope === "annotations"
-    ? new Set(["index", "group_no", "note_no", "type", "line_no", "content", "heading_export_name", "status", "source_file"])
-    : new Set(["index", "title", "level", "line_no", "local_no", "export_dir", "export_name", "status", "source_file"]);
+  if (scope === "annotations") {
+    return new Set(["index", "group_no", "note_no", "type", "line_no", "content", "heading_export_name", "status", "source_file"]);
+  }
+  if (scope === "imgs") {
+    return new Set(["index", "line_no", "alt", "url", "local_path", "download_status", "content", "source_file"]);
+  }
+  return new Set(["index", "title", "level", "line_no", "local_no", "export_dir", "export_name", "status", "source_file"]);
 }
 
 function changeSort(scope, field) {
@@ -1026,6 +1206,18 @@ function filteredAnnotations() {
   }).sort(compareAnnotations);
 }
 
+function filteredImages() {
+  const text = el.filterText.value.trim().toLowerCase();
+  const imgs = state.manifest.imgs || [];
+  return imgs.filter((item) => {
+    if (!text) return true;
+    return [item.alt, item.url, item.local_path, item.download_status, item.download_error, item.content, item.source_file]
+      .join(" ")
+      .toLowerCase()
+      .includes(text);
+  });
+}
+
 function compareAnnotations(a, b) {
   if (!state.activeAnnotationGroup) {
     return (
@@ -1051,6 +1243,18 @@ function annotationTypeOrder(type) {
   if (type === "正文") return 1;
   if (type === "排除") return 2;
   return 3;
+}
+
+function imageStatusText(item) {
+  if (item.download_status) return item.download_status;
+  return item.local_path ? "已下载" : "";
+}
+
+function imageStatusClass(item) {
+  const status = imageStatusText(item);
+  if (status === "已下载" || status === "已存在") return "status-normal";
+  if (status === "失败") return "status-bad";
+  return status ? "status-warn" : "";
 }
 
 function isAnnotationRef(item) {
@@ -1114,6 +1318,15 @@ async function selectAnnotation(id, event = null) {
   renderTable();
   scheduleWorkspaceStateSave();
   await loadAnnotationContext(item);
+}
+
+async function selectImage(id) {
+  const item = state.manifest?.imgs?.find((candidate) => candidate.id === id);
+  if (!item) return;
+  state.selectedImageId = id;
+  renderTable();
+  scheduleWorkspaceStateSave();
+  await loadImageContext(item);
 }
 
 function applyAnnotationSelection(id, event = null) {
@@ -1255,6 +1468,27 @@ async function loadFilePreview(sourceFile) {
 async function loadAnnotationContext(item) {
   const targetLine = Number(item.line_no || 1);
   el.contextTitle.textContent = `注释 ${item.note_no || ""} ${item.type || "引用"}`.trim();
+  el.contextMeta.textContent = `${item.source_file}:${targetLine}`;
+  const data = await fetchJson(
+    `/api/file?dir=${encodeURIComponent(state.manifest.input_dir)}&file=${encodeURIComponent(item.source_file)}&line=${encodeURIComponent(targetLine)}`
+  );
+  if (data.error) {
+    el.contextLines.textContent = data.error;
+    return;
+  }
+  state.selectedContextLine = targetLine;
+  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine);
+  wirePreviewBlocks();
+  selectPreviewLine(targetLine);
+  el.contextLines.querySelector(".md-block.selected")?.scrollIntoView({
+    block: "center",
+    inline: "nearest",
+  });
+}
+
+async function loadImageContext(item) {
+  const targetLine = Number(item.line_no || 1);
+  el.contextTitle.textContent = item.alt ? `图片 ${item.alt}` : "图片外链";
   el.contextMeta.textContent = `${item.source_file}:${targetLine}`;
   const data = await fetchJson(
     `/api/file?dir=${encodeURIComponent(state.manifest.input_dir)}&file=${encodeURIComponent(item.source_file)}&line=${encodeURIComponent(targetLine)}`
@@ -2002,6 +2236,44 @@ function appendConsoleLine(text, isError = false) {
   line.innerHTML = `<span class="console-time">${escapeHtml(time)}</span><span>${escapeHtml(text)}</span>`;
   el.consoleOutput.appendChild(line);
   el.consoleOutput.scrollTop = el.consoleOutput.scrollHeight;
+}
+
+function appendConsoleProgress(label, total) {
+  if (!el.consoleOutput) return null;
+  const row = document.createElement("div");
+  row.className = "console-progress";
+  const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  row.innerHTML = `
+    <div class="console-progress-head">
+      <span class="console-time">${escapeHtml(time)}</span>
+      <span class="console-progress-label">${escapeHtml(label)}</span>
+      <span class="console-progress-count">0/${escapeHtml(total)}</span>
+    </div>
+    <div class="console-progress-track">
+      <div class="console-progress-bar" style="width: 0%"></div>
+    </div>
+    <div class="console-progress-detail"></div>
+  `;
+  el.consoleOutput.appendChild(row);
+  el.consoleOutput.scrollTop = el.consoleOutput.scrollHeight;
+  return row;
+}
+
+function updateConsoleProgress(row, done, total, detail = "") {
+  if (!row) return;
+  const safeTotal = Math.max(1, Number(total || 0));
+  const safeDone = Math.min(safeTotal, Math.max(0, Number(done || 0)));
+  const percent = Math.round((safeDone / safeTotal) * 100);
+  row.querySelector(".console-progress-count").textContent = `${safeDone}/${total}`;
+  row.querySelector(".console-progress-bar").style.width = `${percent}%`;
+  row.querySelector(".console-progress-detail").textContent = detail;
+  el.consoleOutput.scrollTop = el.consoleOutput.scrollHeight;
+}
+
+function finishConsoleProgress(row, status) {
+  if (!row) return;
+  row.classList.toggle("done", status === "done");
+  row.classList.toggle("failed", status === "failed");
 }
 
 function loadDirectoryHistory() {
