@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OCR 标题标定</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="/styles.css?v=20260617-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260618-2" />
   </head>
   <body>
     <header class="toolbar">
@@ -19,6 +19,7 @@
       <button id="setAnnotationGroupBtn" data-module-action="annotations">设注释组</button>
       <button id="bindAnnotationHeadingsBtn" data-module-action="annotations">绑定标题</button>
       <button id="downloadImagesBtn" data-module-action="imgs">下载图片</button>
+      <button id="setIllegalBreakConfidenceBtn" data-module-action="illegal_breaks">设置信度</button>
       <button id="checkBtn" data-module-action="headings annotations">序号检查</button>
       <button id="clearHistoryBtn">清空历史</button>
       <div class="pane-toggles" aria-label="面板显示">
@@ -199,6 +200,24 @@
       </form>
     </dialog>
 
-    <script src="/app.js?v=20260617-3"></script>
+    <dialog id="illegalBreakConfidenceDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>设置断行置信度</h2>
+        <p id="illegalBreakConfidenceHint" class="dialog-hint"></p>
+        <label>
+          置信度
+          <select id="illegalBreakConfidenceInput">
+            <option value="高">高</option>
+            <option value="低">低</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel">取消</button>
+          <button id="confirmIllegalBreakConfidenceBtn" value="default">应用</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js?v=20260618-2"></script>
   </body>
 </html>

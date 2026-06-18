@@ -28,6 +28,13 @@ ANNOTATION_MARKER_RE = re.compile(
 )
 MARKDOWN_IMAGE_RE = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<destination>[^)]*)\)")
 EXTERNAL_URL_RE = re.compile(r"^(?:https?:)?//", re.IGNORECASE)
+MARKDOWN_LIST_RE = re.compile(r"^\s*(?:[-+*]|\d+[.)]|[一二三四五六七八九十]+[、.])\s+")
+MARKDOWN_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,}|\${2,})")
+MARKDOWN_TABLE_DIVIDER_RE = re.compile(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$")
+ANNOTATION_LINE_RE = re.compile(
+    r"^\s*(?:[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]|\[\d{1,3}\]|［\d{1,3}］|\(\d{1,3}\)|（\d{1,3}）)\s*"
+)
+NATURAL_LINE_END_RE = re.compile(r"""(?:[。！？!?；;：:…]|[.!?])["'”’」』】）》）]*$""")
 
 KNOWN_SAMPLE_BOOKS = ("漫长的告别", "再见，吾爱", "长眠不醒")
 IGNORED_TITLE_TEXTS = {"目录", "目 录"}
@@ -115,6 +122,10 @@ def scan_directory(input_dir: str | Path) -> dict[str, Any]:
         workspace.get("manifest", {}).get("imgs", []),
         root,
     )
+    illegal_breaks = merge_illegal_breaks(
+        scan_illegal_line_breaks(root, files),
+        workspace.get("manifest", {}).get("illegal_breaks", []),
+    )
 
     return {
         "schema_version": 1,
@@ -124,6 +135,7 @@ def scan_directory(input_dir: str | Path) -> dict[str, Any]:
         "headings": merged,
         "annotations": annotations,
         "imgs": imgs,
+        "illegal_breaks": illegal_breaks,
         "workspace_path": str(workspace_path(root)),
         "workspace_loaded": bool(workspace),
         "ui_state": workspace.get("ui_state", {}),
@@ -144,6 +156,7 @@ def save_manifest(payload: dict[str, Any]) -> dict[str, Any]:
         "headings": headings,
         "annotations": payload.get("annotations", []),
         "imgs": payload.get("imgs", []),
+        "illegal_breaks": payload.get("illegal_breaks", []),
     }
     path = manifest_path(root)
     path.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -155,6 +168,7 @@ def save_manifest(payload: dict[str, Any]) -> dict[str, Any]:
         "headings": headings,
         "annotations": saved["annotations"],
         "imgs": saved["imgs"],
+        "illegal_breaks": saved["illegal_breaks"],
     }
 
 
@@ -225,6 +239,7 @@ def export_markdown(payload: dict[str, Any]) -> dict[str, Any]:
     heading_rewrites = build_heading_rewrites(headings)
     annotation_refs_by_line, annotation_body_lines = build_annotation_export_transforms(payload.get("annotations", []))
     image_local_paths_by_line = build_image_local_path_transforms(root, payload.get("imgs", []))
+    illegal_breaks_by_line = build_illegal_break_export_transforms(payload.get("illegal_breaks", []))
 
     export_target_by_group = build_export_target_map(enabled)
     first_item_by_export_target: dict[tuple[str, str], dict[str, Any]] = {}
@@ -248,6 +263,7 @@ def export_markdown(payload: dict[str, Any]) -> dict[str, Any]:
             annotation_refs_by_line,
             annotation_body_lines,
             image_local_paths_by_line,
+            illegal_breaks_by_line,
         )
         if item.get("kind") == "manual":
             level = int(item.get("level") or 2)
@@ -333,6 +349,7 @@ def download_images(payload: dict[str, Any]) -> dict[str, Any]:
         "headings": payload.get("headings", []),
         "annotations": payload.get("annotations", []),
         "imgs": imgs,
+        "illegal_breaks": payload.get("illegal_breaks", []),
     }
     save_workspace(root, manifest, payload.get("ui_state", {}))
     ok_count = sum(1 for item in results if item.get("ok") and not item.get("skipped"))
@@ -566,6 +583,7 @@ def slice_between(
     annotation_refs_by_line: dict[tuple[str, int], list[dict[str, Any]]],
     annotation_body_lines: set[tuple[str, int]],
     image_local_paths_by_line: dict[tuple[str, int], dict[str, str]],
+    illegal_breaks_by_line: dict[tuple[str, int], int],
 ) -> str:
     start_file = str(start["source_file"])
     start_line = max(1, int(start["line_no"]))
@@ -592,6 +610,7 @@ def slice_between(
                     annotation_refs_by_line,
                     annotation_body_lines,
                     image_local_paths_by_line,
+                    illegal_breaks_by_line,
                 )
             )
     return "".join(chunks)
@@ -606,21 +625,90 @@ def render_source_slice(
     annotation_refs_by_line: dict[tuple[str, int], list[dict[str, Any]]],
     annotation_body_lines: set[tuple[str, int]],
     image_local_paths_by_line: dict[tuple[str, int], dict[str, str]],
+    illegal_breaks_by_line: dict[tuple[str, int], int],
 ) -> str:
     rendered: list[str] = []
-    for line_no in range(from_line, to_line + 1):
+    line_no = from_line
+    while line_no <= to_line:
         if (source_file, line_no) in annotation_body_lines:
+            line_no += 1
             continue
-        rewrite = heading_rewrites.get((source_file, line_no))
-        if rewrite is not None:
-            original = lines[line_no - 1]
-            newline = "\n" if original.endswith("\n") else ""
-            rendered.append(rewrite + newline)
-        else:
-            line = rewrite_annotation_refs(lines[line_no - 1], annotation_refs_by_line.get((source_file, line_no), []))
-            line = rewrite_image_local_paths(line, image_local_paths_by_line.get((source_file, line_no), {}))
-            rendered.append(line)
+        next_line_no = illegal_breaks_by_line.get((source_file, line_no))
+        if next_line_no and next_line_no <= to_line:
+            current = render_export_line(
+                source_file,
+                line_no,
+                lines,
+                heading_rewrites,
+                annotation_refs_by_line,
+                image_local_paths_by_line,
+            )
+            following = render_export_line(
+                source_file,
+                next_line_no,
+                lines,
+                heading_rewrites,
+                annotation_refs_by_line,
+                image_local_paths_by_line,
+            )
+            rendered.append(join_illegal_break_lines(current, following))
+            line_no = next_line_no + 1
+            continue
+        rendered.append(
+            render_export_line(
+                source_file,
+                line_no,
+                lines,
+                heading_rewrites,
+                annotation_refs_by_line,
+                image_local_paths_by_line,
+            )
+        )
+        line_no += 1
     return "".join(rendered)
+
+
+def render_export_line(
+    source_file: str,
+    line_no: int,
+    lines: list[str],
+    heading_rewrites: dict[tuple[str, int], str],
+    annotation_refs_by_line: dict[tuple[str, int], list[dict[str, Any]]],
+    image_local_paths_by_line: dict[tuple[str, int], dict[str, str]],
+) -> str:
+    rewrite = heading_rewrites.get((source_file, line_no))
+    if rewrite is not None:
+        original = lines[line_no - 1]
+        newline = "\n" if original.endswith("\n") else ""
+        return rewrite + newline
+    line = rewrite_annotation_refs(lines[line_no - 1], annotation_refs_by_line.get((source_file, line_no), []))
+    return rewrite_image_local_paths(line, image_local_paths_by_line.get((source_file, line_no), {}))
+
+
+def build_illegal_break_export_transforms(illegal_breaks: list[dict[str, Any]]) -> dict[tuple[str, int], int]:
+    result: dict[tuple[str, int], int] = {}
+    for item in illegal_breaks:
+        if str(item.get("confidence") or "").strip() != "高":
+            continue
+        source_file = str(item.get("source_file") or "")
+        line_no = int(item.get("line_no") or 0)
+        next_line_no = int(item.get("next_line_no") or 0)
+        if source_file and line_no > 0 and next_line_no > line_no:
+            result[(source_file, line_no)] = next_line_no
+    return result
+
+
+def join_illegal_break_lines(current: str, following: str) -> str:
+    current_text = current.rstrip("\r\n")
+    following_text = following.lstrip()
+    following_newline = "\n" if following.endswith(("\n", "\r")) else ""
+    following_text = following_text.rstrip("\r\n")
+    separator = (
+        " "
+        if re.search(r"[A-Za-z0-9]$", current_text) and re.match(r"^[A-Za-z0-9]", following_text)
+        else ""
+    )
+    return f"{current_text}{separator}{following_text}{following_newline}"
 
 
 def build_image_local_path_transforms(root: Path, imgs: list[dict[str, Any]]) -> dict[tuple[str, int], dict[str, str]]:
@@ -837,6 +925,146 @@ def scan_images(root: Path, files: list[Path]) -> list[dict[str, Any]]:
                     }
                 )
     return imgs
+
+
+def scan_illegal_line_breaks(root: Path, files: list[Path]) -> list[dict[str, Any]]:
+    breaks: list[dict[str, Any]] = []
+    for file_path in files:
+        source_file = str(file_path.relative_to(root))
+        lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        fenced_lines = markdown_fenced_line_numbers(lines)
+        for current_idx in range(len(lines) - 1):
+            next_idx = next_illegal_break_line_index(lines, current_idx)
+            if next_idx is None:
+                continue
+            line_no = current_idx + 1
+            next_line_no = next_idx + 1
+            current = lines[current_idx]
+            following = lines[next_idx]
+            if line_no in fenced_lines or next_line_no in fenced_lines:
+                continue
+            if not is_illegal_line_break(lines, current_idx, next_idx):
+                continue
+            blank_gap = next_idx - current_idx - 1
+            confidence = illegal_break_confidence(current, following)
+            if confidence != "高":
+                continue
+            breaks.append(
+                {
+                    "id": stable_illegal_break_id(source_file, line_no, current, following),
+                    "source_file": source_file,
+                    "line_no": line_no,
+                    "next_line_no": next_line_no,
+                    "before": current.strip(),
+                    "after": following.strip(),
+                    "reason": (
+                        "正文被空行错误分段，上一行未自然结束"
+                        if blank_gap
+                        else "相邻正文行之间缺少段落分隔，上一行未自然结束"
+                    ),
+                    "confidence": confidence,
+                }
+            )
+    return breaks
+
+
+def merge_illegal_breaks(scanned: list[dict[str, Any]], old: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    old_by_id = {str(item.get("id")): item for item in old if item.get("id")}
+    for item in scanned:
+        previous = old_by_id.get(str(item.get("id")))
+        if not previous:
+            continue
+        confidence = str(previous.get("confidence") or "").strip()
+        if confidence in {"高", "低"}:
+            item["confidence"] = confidence
+    return scanned
+
+
+def next_illegal_break_line_index(lines: list[str], current_idx: int) -> int | None:
+    direct_idx = current_idx + 1
+    if direct_idx >= len(lines):
+        return None
+    if lines[direct_idx].strip():
+        return direct_idx
+    after_blank_idx = direct_idx + 1
+    if after_blank_idx < len(lines) and lines[after_blank_idx].strip():
+        return after_blank_idx
+    return None
+
+
+def markdown_fenced_line_numbers(lines: list[str]) -> set[int]:
+    fenced: set[int] = set()
+    fence_token = ""
+    fence_length = 0
+    for line_no, line in enumerate(lines, start=1):
+        match = MARKDOWN_FENCE_RE.match(line)
+        if fence_token:
+            fenced.add(line_no)
+            if match and match.group(1)[0] == fence_token and len(match.group(1)) >= fence_length:
+                fence_token = ""
+                fence_length = 0
+            continue
+        if match:
+            fence_token = match.group(1)[0]
+            fence_length = len(match.group(1))
+            fenced.add(line_no)
+    return fenced
+
+
+def is_illegal_line_break(lines: list[str], current_idx: int, next_idx: int) -> bool:
+    current = lines[current_idx]
+    following = lines[next_idx]
+    current_text = current.strip()
+    following_text = following.strip()
+    if not current_text or not following_text:
+        return False
+    if current.endswith(("  ", "\\")):
+        return False
+    if is_markdown_structural_line(current) or is_markdown_structural_line(following):
+        return False
+    if is_plain_heading_candidate(lines, current_idx) or is_plain_heading_candidate(lines, next_idx):
+        return False
+    if NATURAL_LINE_END_RE.search(current_text):
+        return False
+    return True
+
+
+def is_markdown_structural_line(line: str) -> bool:
+    text = line.strip()
+    if not text:
+        return True
+    if MARKDOWN_HEADING_RE.match(text) or MARKDOWN_FENCE_RE.match(text):
+        return True
+    if MARKDOWN_LIST_RE.match(line) or text.startswith((">", "|", "<!--")):
+        return True
+    if MARKDOWN_TABLE_DIVIDER_RE.match(text):
+        return True
+    if re.match(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$", line):
+        return True
+    if re.match(r"^\s{4,}\S", line) or re.match(r"^\s*\[[^\]]+\]:\s+\S", line):
+        return True
+    if ANNOTATION_LINE_RE.match(line) or re.fullmatch(r"!\[[^\]]*]\([^)]*\)", text):
+        return True
+    if re.match(r"^\s*</?[A-Za-z][^>]*>\s*$", line):
+        return True
+    return False
+
+
+def illegal_break_confidence(current: str, following: str) -> str:
+    current_text = current.strip()
+    following_text = following.strip()
+    if re.search(r"[\u4e00-\u9fff，、]$", current_text) and re.match(r"^[\u4e00-\u9fff“‘（(]", following_text):
+        return "高"
+    if re.search(r"[A-Za-z0-9,]$", current_text) and re.match(r"^[a-z0-9]", following_text):
+        return "高"
+    return "中"
+
+
+def stable_illegal_break_id(source_file: str, line_no: int, current: str, following: str) -> str:
+    digest = hashlib.sha1(
+        f"{source_file}:{line_no}:{current.strip()}:{following.strip()}".encode("utf-8")
+    ).hexdigest()[:16]
+    return f"br_{digest}"
 
 
 def merge_images(scanned: list[dict[str, Any]], old: list[dict[str, Any]], root: Path) -> list[dict[str, Any]]:

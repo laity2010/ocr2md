@@ -6,6 +6,9 @@ const state = {
   selectedAnnotationIds: new Set(),
   annotationAnchorId: null,
   selectedImageId: null,
+  selectedIllegalBreakId: null,
+  selectedIllegalBreakIds: new Set(),
+  illegalBreakAnchorId: null,
   selectedContextLine: null,
   scanning: false,
   activeSourceFile: "",
@@ -15,6 +18,7 @@ const state = {
     headings: { fields: [{ field: "index", direction: "asc" }] },
     annotations: { fields: [{ field: "index", direction: "asc" }] },
     imgs: { fields: [{ field: "index", direction: "asc" }] },
+    illegal_breaks: { fields: [{ field: "source_file", direction: "asc" }, { field: "line_no", direction: "asc" }] },
   },
   openedWorkspaceDir: "",
   expandedTree: {
@@ -22,6 +26,7 @@ const state = {
     titles: false,
     annotations: false,
     imgs: false,
+    illegal_breaks: false,
   },
 };
 
@@ -44,6 +49,7 @@ const el = {
   setAnnotationGroupBtn: document.querySelector("#setAnnotationGroupBtn"),
   bindAnnotationHeadingsBtn: document.querySelector("#bindAnnotationHeadingsBtn"),
   downloadImagesBtn: document.querySelector("#downloadImagesBtn"),
+  setIllegalBreakConfidenceBtn: document.querySelector("#setIllegalBreakConfidenceBtn"),
   checkBtn: document.querySelector("#checkBtn"),
   clearHistoryBtn: document.querySelector("#clearHistoryBtn"),
   historyToggleBtn: document.querySelector("#historyToggleBtn"),
@@ -89,6 +95,10 @@ const el = {
   annotationGroupHint: document.querySelector("#annotationGroupHint"),
   annotationGroupInput: document.querySelector("#annotationGroupInput"),
   confirmAnnotationGroupBtn: document.querySelector("#confirmAnnotationGroupBtn"),
+  illegalBreakConfidenceDialog: document.querySelector("#illegalBreakConfidenceDialog"),
+  illegalBreakConfidenceHint: document.querySelector("#illegalBreakConfidenceHint"),
+  illegalBreakConfidenceInput: document.querySelector("#illegalBreakConfidenceInput"),
+  confirmIllegalBreakConfidenceBtn: document.querySelector("#confirmIllegalBreakConfidenceBtn"),
 };
 
 el.scanBtn.addEventListener("click", chooseAndScanDirectory);
@@ -101,6 +111,7 @@ el.setAnnotationTypeBtn.addEventListener("click", setSelectedAnnotationType);
 el.setAnnotationGroupBtn.addEventListener("click", setSelectedAnnotationGroup);
 el.bindAnnotationHeadingsBtn.addEventListener("click", bindAnnotationHeadings);
 el.downloadImagesBtn.addEventListener("click", downloadImages);
+el.setIllegalBreakConfidenceBtn.addEventListener("click", setSelectedIllegalBreakConfidence);
 el.checkBtn.addEventListener("click", () => {
   recomputeStatuses();
   recomputeAnnotationStatuses();
@@ -125,6 +136,7 @@ el.confirmLocalNoBtn.addEventListener("click", applySelectedLocalNo);
 el.confirmExportDirBtn.addEventListener("click", applySelectedExportDir);
 el.confirmAnnotationTypeBtn.addEventListener("click", applySelectedAnnotationType);
 el.confirmAnnotationGroupBtn.addEventListener("click", applySelectedAnnotationGroup);
+el.confirmIllegalBreakConfidenceBtn.addEventListener("click", applySelectedIllegalBreakConfidence);
 
 initPaneLayout();
 initColumnWidths();
@@ -161,6 +173,7 @@ async function scan() {
     state.manifest = data;
     state.manifest.annotations = state.manifest.annotations || [];
     state.manifest.imgs = state.manifest.imgs || [];
+    state.manifest.illegal_breaks = state.manifest.illegal_breaks || [];
     state.openedWorkspaceDir = data.input_dir || dir;
     applyWorkspaceUiState(data.ui_state || {});
     addDirectoryHistory(data.input_dir);
@@ -176,7 +189,7 @@ async function scan() {
     if (state.selectedId) {
       await loadContext(currentHeading());
     }
-    setMessage(`${data.workspace_loaded ? "已读取工作空间" : "已添加工作目录"}：${data.files.length} 个 md，${data.headings.length} 个标题候选，${state.manifest.imgs.length} 个图片外链`);
+    setMessage(`${data.workspace_loaded ? "已读取工作空间" : "已添加工作目录"}：${data.files.length} 个 md，${data.headings.length} 个标题候选，${state.manifest.imgs.length} 个图片外链，${highConfidenceIllegalBreaks().length} 个高置信度非法断行`);
   } finally {
     state.scanning = false;
     el.scanBtn.disabled = false;
@@ -240,6 +253,7 @@ async function save() {
   state.manifest.headings = data.headings;
   state.manifest.annotations = data.annotations || state.manifest.annotations || [];
   state.manifest.imgs = data.imgs || state.manifest.imgs || [];
+  state.manifest.illegal_breaks = data.illegal_breaks || state.manifest.illegal_breaks || [];
   state.manifest.ui_state = collectWorkspaceUiState();
   renderTable();
   renderSideEditor();
@@ -354,6 +368,10 @@ function renderTable() {
   }
   if (state.activeDataView === "imgs") {
     renderImageTable();
+    return;
+  }
+  if (state.activeDataView === "illegal_breaks") {
+    renderIllegalBreakTable();
     return;
   }
   renderHeadingTable();
@@ -477,6 +495,38 @@ function renderImageTable() {
   renderSideEditor();
 }
 
+function renderIllegalBreakTable() {
+  const rows = sortedRows("illegal_breaks", filteredIllegalBreaks());
+  renderTableHeader("illegal_breaks", [
+    { field: "index", label: "index" },
+    { field: "line_no", label: "断行位置" },
+    { field: "before", label: "上一行" },
+    { field: "after", label: "下一行" },
+    { field: "confidence", label: "置信度" },
+    { field: "reason", label: "判定原因" },
+    { field: "source_file", label: "源文件名" },
+  ]);
+  el.headingRows.innerHTML = "";
+  rows.forEach((item, index) => {
+    const tr = document.createElement("tr");
+    tr.dataset.id = item.id;
+    tr.className = state.selectedIllegalBreakIds.has(item.id) ? "selected" : "";
+    tr.addEventListener("click", (event) => selectIllegalBreak(item.id, event));
+    tr.innerHTML = `
+      <td>${index + 1}</td>
+      <td>${escapeHtml(`${item.line_no || ""} → ${item.next_line_no || ""}`)}</td>
+      <td title="${escapeHtml(item.before || "")}">${escapeHtml(item.before || "")}</td>
+      <td title="${escapeHtml(item.after || "")}">${escapeHtml(item.after || "")}</td>
+      <td class="${item.confidence === "高" ? "status-bad" : "status-warn"}">${escapeHtml(item.confidence || "")}</td>
+      <td title="${escapeHtml(item.reason || "")}">${escapeHtml(item.reason || "")}</td>
+      <td title="${escapeHtml(item.source_file)}">${escapeHtml(shortFile(item.source_file))}</td>
+    `;
+    el.headingRows.appendChild(tr);
+  });
+  el.countInfo.textContent = `${rows.length}/${highConfidenceIllegalBreaks().length}`;
+  renderSideEditor();
+}
+
 function renderTableHeader(scope, columns) {
   const headerRow = document.querySelector("thead tr");
   const sort = sortState(scope);
@@ -541,6 +591,7 @@ function renderProjectInfo() {
 function currentModuleScope() {
   if (state.activeDataView === "annotations") return "annotations";
   if (state.activeDataView === "imgs") return "imgs";
+  if (state.activeDataView === "illegal_breaks") return "illegal_breaks";
   return "headings";
 }
 
@@ -549,6 +600,7 @@ function currentModuleLabel() {
     return state.activeAnnotationGroup ? `注释组 ${state.activeAnnotationGroup}` : "注释";
   }
   if (state.activeDataView === "imgs") return "图片";
+  if (state.activeDataView === "illegal_breaks") return "非法断行";
   if (state.activeSourceFile) return `文件 ${shortFile(state.activeSourceFile)}`;
   return "标题";
 }
@@ -573,10 +625,15 @@ function isImageModuleActive() {
   return state.activeDataView === "imgs";
 }
 
+function isIllegalBreakModuleActive() {
+  return state.activeDataView === "illegal_breaks";
+}
+
 function ensureSelectionAfterLoad() {
   const validIds = new Set((state.manifest?.headings || []).map((item) => item.id));
   const validAnnotationIds = new Set((state.manifest?.annotations || []).map((item) => item.id));
   const validImageIds = new Set((state.manifest?.imgs || []).map((item) => item.id));
+  const validIllegalBreakIds = new Set((state.manifest?.illegal_breaks || []).map((item) => item.id));
   state.selectedIds = new Set(Array.from(state.selectedIds).filter((id) => validIds.has(id)));
   state.selectedAnnotationIds = new Set(
     Array.from(state.selectedAnnotationIds).filter((id) => validAnnotationIds.has(id))
@@ -594,6 +651,18 @@ function ensureSelectionAfterLoad() {
     state.selectedImageId && validImageIds.has(state.selectedImageId)
       ? state.selectedImageId
       : state.manifest?.imgs?.[0]?.id || null;
+  state.selectedIllegalBreakId =
+    state.selectedIllegalBreakId && validIllegalBreakIds.has(state.selectedIllegalBreakId)
+      ? state.selectedIllegalBreakId
+      : highConfidenceIllegalBreaks()[0]?.id || null;
+  state.selectedIllegalBreakIds = new Set(
+    Array.from(state.selectedIllegalBreakIds).filter((id) => validIllegalBreakIds.has(id))
+  );
+  if (state.selectedIllegalBreakId) state.selectedIllegalBreakIds.add(state.selectedIllegalBreakId);
+  state.illegalBreakAnchorId =
+    state.illegalBreakAnchorId && validIllegalBreakIds.has(state.illegalBreakAnchorId)
+      ? state.illegalBreakAnchorId
+      : state.selectedIllegalBreakId;
 }
 
 function normalizeRestoredViewState() {
@@ -615,6 +684,9 @@ function normalizeRestoredViewState() {
   if (state.activeDataView === "imgs" && !(state.manifest.imgs || []).length) {
     state.activeDataView = "headings";
   }
+  if (state.activeDataView === "illegal_breaks" && !(state.manifest.illegal_breaks || []).length) {
+    state.activeDataView = "headings";
+  }
 }
 
 function collectWorkspaceUiState() {
@@ -627,6 +699,9 @@ function collectWorkspaceUiState() {
     selected_annotation_ids: Array.from(state.selectedAnnotationIds),
     annotation_anchor_id: state.annotationAnchorId,
     selected_image_id: state.selectedImageId,
+    selected_illegal_break_id: state.selectedIllegalBreakId,
+    selected_illegal_break_ids: Array.from(state.selectedIllegalBreakIds),
+    illegal_break_anchor_id: state.illegalBreakAnchorId,
     selected_context_line: state.selectedContextLine,
     active_data_view: state.activeDataView,
     table_sort: state.tableSort,
@@ -656,8 +731,13 @@ function applyWorkspaceUiState(uiState) {
   );
   state.annotationAnchorId = uiState.annotation_anchor_id || null;
   state.selectedImageId = uiState.selected_image_id || null;
+  state.selectedIllegalBreakId = uiState.selected_illegal_break_id || null;
+  state.selectedIllegalBreakIds = new Set(
+    Array.isArray(uiState.selected_illegal_break_ids) ? uiState.selected_illegal_break_ids : []
+  );
+  state.illegalBreakAnchorId = uiState.illegal_break_anchor_id || state.selectedIllegalBreakId;
   state.selectedContextLine = uiState.selected_context_line || null;
-  state.activeDataView = ["annotations", "imgs"].includes(uiState.active_data_view)
+  state.activeDataView = ["annotations", "imgs", "illegal_breaks"].includes(uiState.active_data_view)
     ? uiState.active_data_view
     : "headings";
   state.tableSort = {
@@ -780,6 +860,18 @@ function renderDirectoryTree() {
   if (state.expandedTree.imgs) {
     renderImageTreeNodes(2);
   }
+
+  el.directoryTree.appendChild(treeRow({
+    icon: state.expandedTree.illegal_breaks ? "▾" : "▸",
+    name: "非法断行",
+    title: "疑似由 OCR 或排版造成的非法断行",
+    count: `${highConfidenceIllegalBreaks().length}`,
+    className: `folder clickable ${isIllegalBreakModuleActive() ? "active" : ""} tree-indent-1`,
+    onClick: openIllegalBreaksGroup,
+  }));
+  if (state.expandedTree.illegal_breaks) {
+    renderIllegalBreakTreeNodes(2);
+  }
 }
 
 function toggleTreeGroup(group) {
@@ -813,6 +905,17 @@ function openAnnotationsGroup() {
 function openImagesGroup() {
   state.expandedTree.imgs = true;
   state.activeDataView = "imgs";
+  state.activeSourceFile = "";
+  state.activeAnnotationGroup = "";
+  el.filterText.value = "";
+  renderDirectoryTree();
+  renderTable();
+  scheduleWorkspaceStateSave();
+}
+
+function openIllegalBreaksGroup() {
+  state.expandedTree.illegal_breaks = true;
+  state.activeDataView = "illegal_breaks";
   state.activeSourceFile = "";
   state.activeAnnotationGroup = "";
   el.filterText.value = "";
@@ -918,6 +1021,30 @@ function renderImageTreeNodes(depth) {
     icon: "※",
     name: `${imgs.length} 个图片外链`,
     title: "图片外链总数",
+    count: "",
+    className: `summary tree-indent-${Math.min(depth, 4)}`,
+  }));
+}
+
+function renderIllegalBreakTreeNodes(depth) {
+  const breaks = highConfidenceIllegalBreaks();
+  const byFile = new Map();
+  for (const item of breaks) {
+    byFile.set(item.source_file, (byFile.get(item.source_file) || 0) + 1);
+  }
+  for (const [file, count] of Array.from(byFile.entries()).sort((a, b) => a[0].localeCompare(b[0], "zh-Hans-CN"))) {
+    el.directoryTree.appendChild(treeRow({
+      icon: "↵",
+      name: shortFile(file),
+      title: file,
+      count: String(count),
+      className: `summary tree-indent-${Math.min(depth, 4)}`,
+    }));
+  }
+  el.directoryTree.appendChild(treeRow({
+    icon: "※",
+    name: `${breaks.length} 个断行候选`,
+    title: "非法断行候选总数",
     count: "",
     className: `summary tree-indent-${Math.min(depth, 4)}`,
   }));
@@ -1065,7 +1192,7 @@ function sortState(scope) {
 
 function normalizeTableSort(saved) {
   const result = {};
-  for (const scope of ["headings", "annotations", "imgs"]) {
+  for (const scope of ["headings", "annotations", "imgs", "illegal_breaks"]) {
     result[scope] = normalizeSortEntry(scope, saved[scope]);
   }
   return result;
@@ -1094,6 +1221,9 @@ function validSortFields(scope) {
   }
   if (scope === "imgs") {
     return new Set(["index", "line_no", "alt", "url", "local_path", "download_status", "content", "source_file"]);
+  }
+  if (scope === "illegal_breaks") {
+    return new Set(["index", "line_no", "before", "after", "confidence", "reason", "source_file"]);
   }
   return new Set(["index", "title", "level", "line_no", "local_no", "export_dir", "export_name", "status", "source_file"]);
 }
@@ -1218,6 +1348,22 @@ function filteredImages() {
   });
 }
 
+function filteredIllegalBreaks() {
+  const text = el.filterText.value.trim().toLowerCase();
+  const breaks = highConfidenceIllegalBreaks();
+  return breaks.filter((item) => {
+    if (!text) return true;
+    return [item.before, item.after, item.reason, item.confidence, item.source_file]
+      .join(" ")
+      .toLowerCase()
+      .includes(text);
+  });
+}
+
+function highConfidenceIllegalBreaks() {
+  return (state.manifest?.illegal_breaks || []).filter((item) => item.confidence === "高");
+}
+
 function compareAnnotations(a, b) {
   if (!state.activeAnnotationGroup) {
     return (
@@ -1327,6 +1473,46 @@ async function selectImage(id) {
   renderTable();
   scheduleWorkspaceStateSave();
   await loadImageContext(item);
+}
+
+async function selectIllegalBreak(id, event = null) {
+  const item = state.manifest?.illegal_breaks?.find((candidate) => candidate.id === id);
+  if (!item) return;
+  applyIllegalBreakSelection(id, event);
+  state.selectedIllegalBreakId = id;
+  renderTable();
+  scheduleWorkspaceStateSave();
+  await loadIllegalBreakContext(item);
+}
+
+function applyIllegalBreakSelection(id, event = null) {
+  const isRange = Boolean(event?.shiftKey);
+  const isToggle = Boolean(event?.metaKey || event?.ctrlKey);
+  const visibleIds = filteredIllegalBreaks().map((item) => item.id);
+
+  if (isRange && state.illegalBreakAnchorId) {
+    const anchorIndex = visibleIds.indexOf(state.illegalBreakAnchorId);
+    const currentIndex = visibleIds.indexOf(id);
+    if (anchorIndex !== -1 && currentIndex !== -1) {
+      const start = Math.min(anchorIndex, currentIndex);
+      const end = Math.max(anchorIndex, currentIndex);
+      const rangeIds = visibleIds.slice(start, end + 1);
+      state.selectedIllegalBreakIds = isToggle
+        ? new Set([...state.selectedIllegalBreakIds, ...rangeIds])
+        : new Set(rangeIds);
+    } else {
+      state.selectedIllegalBreakIds = new Set([id]);
+    }
+  } else if (isToggle) {
+    if (state.selectedIllegalBreakIds.has(id) && state.selectedIllegalBreakIds.size > 1) {
+      state.selectedIllegalBreakIds.delete(id);
+    } else {
+      state.selectedIllegalBreakIds.add(id);
+    }
+  } else {
+    state.selectedIllegalBreakIds = new Set([id]);
+  }
+  state.illegalBreakAnchorId = id;
 }
 
 function applyAnnotationSelection(id, event = null) {
@@ -1490,6 +1676,27 @@ async function loadImageContext(item) {
   const targetLine = Number(item.line_no || 1);
   el.contextTitle.textContent = item.alt ? `图片 ${item.alt}` : "图片外链";
   el.contextMeta.textContent = `${item.source_file}:${targetLine}`;
+  const data = await fetchJson(
+    `/api/file?dir=${encodeURIComponent(state.manifest.input_dir)}&file=${encodeURIComponent(item.source_file)}&line=${encodeURIComponent(targetLine)}`
+  );
+  if (data.error) {
+    el.contextLines.textContent = data.error;
+    return;
+  }
+  state.selectedContextLine = targetLine;
+  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine);
+  wirePreviewBlocks();
+  selectPreviewLine(targetLine);
+  el.contextLines.querySelector(".md-block.selected")?.scrollIntoView({
+    block: "center",
+    inline: "nearest",
+  });
+}
+
+async function loadIllegalBreakContext(item) {
+  const targetLine = Number(item.line_no || 1);
+  el.contextTitle.textContent = "非法断行";
+  el.contextMeta.textContent = `${item.source_file}:${targetLine} → ${item.next_line_no || targetLine + 1}`;
   const data = await fetchJson(
     `/api/file?dir=${encodeURIComponent(state.manifest.input_dir)}&file=${encodeURIComponent(item.source_file)}&line=${encodeURIComponent(targetLine)}`
   );
@@ -1686,6 +1893,54 @@ function applySelectedExportDir(event) {
   renderSideEditor();
   scheduleWorkspaceStateSave();
   setMessage(exportDir ? `已将 ${selectedItems.length} 行导出目录名设为 ${exportDir}` : `已清空 ${selectedItems.length} 行导出目录名`);
+}
+
+function setSelectedIllegalBreakConfidence() {
+  if (!state.manifest) {
+    setMessage("没有可编辑的非法断行");
+    return;
+  }
+  if (state.activeDataView !== "illegal_breaks") {
+    setMessage("请先切换到非法断行表");
+    return;
+  }
+  const selectedItems = state.manifest.illegal_breaks.filter((item) =>
+    state.selectedIllegalBreakIds.has(item.id)
+  );
+  if (!selectedItems.length) {
+    setMessage("请先选择断行行");
+    return;
+  }
+  const currentValues = [...new Set(selectedItems.map((item) => item.confidence || "高"))];
+  el.illegalBreakConfidenceHint.textContent = `将为 ${selectedItems.length} 行设置同一个置信度。低置信度行将不再显示。`;
+  el.illegalBreakConfidenceInput.value = currentValues.length === 1 ? currentValues[0] : "高";
+  el.illegalBreakConfidenceDialog.showModal();
+}
+
+function applySelectedIllegalBreakConfidence(event) {
+  event.preventDefault();
+  const selectedItems = state.manifest?.illegal_breaks.filter((item) =>
+    state.selectedIllegalBreakIds.has(item.id)
+  ) || [];
+  if (!selectedItems.length) {
+    setMessage("请先选择断行行", true);
+    el.illegalBreakConfidenceDialog.close();
+    return;
+  }
+  const confidence = el.illegalBreakConfidenceInput.value === "低" ? "低" : "高";
+  for (const item of selectedItems) item.confidence = confidence;
+  if (confidence === "低") {
+    for (const item of selectedItems) state.selectedIllegalBreakIds.delete(item.id);
+    state.selectedIllegalBreakId = state.selectedIllegalBreakIds.values().next().value
+      || highConfidenceIllegalBreaks()[0]?.id
+      || null;
+    state.illegalBreakAnchorId = state.selectedIllegalBreakId;
+  }
+  el.illegalBreakConfidenceDialog.close();
+  renderDirectoryTree();
+  renderTable();
+  scheduleWorkspaceStateSave();
+  setMessage(`已将 ${selectedItems.length} 行置信度设为${confidence}${confidence === "低" ? "，并从当前列表隐藏" : ""}`);
 }
 
 function setSelectedAnnotationType() {

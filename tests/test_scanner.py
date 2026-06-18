@@ -230,6 +230,73 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(imgs[0]["line_no"], 2)
             self.assertEqual(imgs[1]["url"], "//cdn.example.com/diagram.jpg")
 
+    def test_scan_illegal_line_breaks_finds_prose_and_skips_markdown_structures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "\n".join(
+                    [
+                        "# Chapter",
+                        "",
+                        "这是一句被错误",
+                        "拆成两行的正文。",
+                        "",
+                        "这是一句长度明显超过标题候选限制而不会被识别成纯文本标题的正文内容，也被错误",
+                        "",
+                        "分成了两个段落。",
+                        "",
+                        "这是完整的一句。",
+                        "这是新的句子。",
+                        "",
+                        "- 列表项目",
+                        "- 第二项",
+                        "",
+                        "```text",
+                        "code without punctuation",
+                        "still code",
+                        "```",
+                        "",
+                        "$$",
+                        "x + y",
+                        "= z",
+                        "$$",
+                        "",
+                        "English text continues",
+                        "on the next line.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = scan_directory(root)
+            breaks = manifest["illegal_breaks"]
+
+            self.assertEqual(
+                [(item["line_no"], item["next_line_no"]) for item in breaks],
+                [(3, 4), (6, 8), (26, 27)],
+            )
+            self.assertEqual(breaks[0]["source_file"], "book.md")
+            self.assertEqual(breaks[0]["before"], "这是一句被错误")
+            self.assertEqual(breaks[0]["after"], "拆成两行的正文。")
+            self.assertEqual(breaks[1]["reason"], "正文被空行错误分段，上一行未自然结束")
+            self.assertTrue(all(item["confidence"] == "高" for item in breaks))
+
+    def test_scan_illegal_line_breaks_preserves_saved_confidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "这是一句长度明显超过标题候选限制而且包含很多正文内容并在句子中途被错误\n\n拆成两个段落的正文。\n",
+                encoding="utf-8",
+            )
+
+            manifest = scan_directory(root)
+            self.assertEqual(len(manifest["illegal_breaks"]), 1)
+            manifest["illegal_breaks"][0]["confidence"] = "低"
+            save_manifest(manifest)
+
+            rescanned = scan_directory(root)
+            self.assertEqual(rescanned["illegal_breaks"][0]["confidence"], "低")
+
     def test_download_images_writes_output_and_preserves_local_path_on_rescan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -446,6 +513,77 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result["count"], 1)
             self.assertFalse((root / "output" / "01.md").exists())
             self.assertTrue((root / "output" / "02.md").exists())
+
+    def test_export_markdown_fixes_high_confidence_illegal_breaks_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book.md").write_text(
+                "## 01\n"
+                "他抬起头说我没\n"
+                "\n"
+                "开枪打任何人。\n"
+                "English text continues\n"
+                "on the next line.\n"
+                "这条保持\n"
+                "\n"
+                "原样。\n",
+                encoding="utf-8",
+            )
+            manifest = {
+                "input_dir": str(root),
+                "files": ["book.md"],
+                "headings": [
+                    {
+                        "id": "h1",
+                        "enabled": True,
+                        "book_id": "b",
+                        "book_title": "Book",
+                        "level": 2,
+                        "local_no": "01",
+                        "global_no": "001",
+                        "title": "01",
+                        "source_file": "book.md",
+                        "line_no": 1,
+                        "status": "正常",
+                        "kind": "markdown",
+                        "confidence": "high",
+                        "raw_text": "## 01",
+                        "missing": False,
+                    }
+                ],
+                "annotations": [],
+                "imgs": [],
+                "illegal_breaks": [
+                    {
+                        "id": "br_cn",
+                        "source_file": "book.md",
+                        "line_no": 2,
+                        "next_line_no": 4,
+                        "confidence": "高",
+                    },
+                    {
+                        "id": "br_en",
+                        "source_file": "book.md",
+                        "line_no": 5,
+                        "next_line_no": 6,
+                        "confidence": "高",
+                    },
+                    {
+                        "id": "br_low",
+                        "source_file": "book.md",
+                        "line_no": 7,
+                        "next_line_no": 9,
+                        "confidence": "低",
+                    },
+                ],
+            }
+
+            export_markdown(manifest)
+            exported = (root / "output" / "01.md").read_text(encoding="utf-8")
+
+            self.assertIn("他抬起头说我没开枪打任何人。", exported)
+            self.assertIn("English text continues on the next line.", exported)
+            self.assertIn("这条保持\n\n原样。", exported)
 
     def test_export_markdown_uses_each_explicit_export_name_over_logic_no(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
