@@ -4,6 +4,7 @@ import hashlib
 import json
 import mimetypes
 import re
+import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,8 @@ from urllib.request import Request, urlopen
 
 
 MANIFEST_NAME = "title_manifest.json"
+TRANSLATION_MANIFEST_NAME = "translation_manifest.json"
+TRANSLATION_WORKSPACE_NAME = "translation-workspace"
 WORKSPACE_NAME = "md-workspace"
 
 MARKDOWN_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -31,10 +34,40 @@ EXTERNAL_URL_RE = re.compile(r"^(?:https?:)?//", re.IGNORECASE)
 MARKDOWN_LIST_RE = re.compile(r"^\s*(?:[-+*]|\d+[.)]|[一二三四五六七八九十]+[、.])\s+")
 MARKDOWN_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,}|\${2,})")
 MARKDOWN_TABLE_DIVIDER_RE = re.compile(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$")
+MARKDOWN_FOOTNOTE_DEF_RE = re.compile(r"^\[\^(?P<label>[^\]]+)]:\s*(?P<body>.*)$")
+MARKDOWN_FOOTNOTE_PREFIX_RE = re.compile(r"^\[\^[^\]]+][：:]\s*")
+MARKDOWN_OBSIDIAN_IMAGE_RE = re.compile(r"!\[\[[^\]]+]]")
+HTML_TABLE_RE = re.compile(r"<table\b", re.IGNORECASE)
+OBSIDIAN_CALLOUT_RE = re.compile(r"^(?P<prefix>\[![^\]]+][+-]?\s*)(?P<title>.*)$", re.IGNORECASE)
+FIGURE_TITLE_RE = re.compile(r"^(?:Figure|Fig\.)\s*\d+", re.IGNORECASE)
+TABLE_TITLE_RE = re.compile(r"^(?:Table|Exhibit)\s*\d*", re.IGNORECASE)
+PANEL_TITLE_RE = re.compile(r"^[A-Z]\.\s+")
+NOTES_RE = re.compile(r"^Notes?:", re.IGNORECASE)
 ANNOTATION_LINE_RE = re.compile(
     r"^\s*(?:[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]|\[\d{1,3}\]|［\d{1,3}］|\(\d{1,3}\)|（\d{1,3}）)\s*"
 )
 NATURAL_LINE_END_RE = re.compile(r"""(?:[。！？!?；;：:…]|[.!?])["'”’」』】）》）]*$""")
+NON_TRANSLATABLE_BLOCK_TYPES = {"图片", "公式", "表格", "YAML 元数据", "代码", "列表", "嵌套块"}
+TRANSLATABLE_STRUCTURAL_TYPES = {"图题", "图注", "表题", "表注", "引文"}
+SENTENCE_SPLIT_BLOCK_TYPES = {"文本", "图注", "表注", "注释正文", "引文"}
+FIGURE_STRUCTURAL_TYPES = {"图题", "图注", "图片"}
+TABLE_STRUCTURAL_TYPES = {"表题", "表注", "表格"}
+CHINESE_SENTENCE_END_RE = re.compile(r"[。！？；][\"'”’」』】）》）]*")
+NUMBERED_LABEL_SENTENCE_RE = re.compile(r"^\s*(?:Table|Figure|Fig\.|Exhibit)\s*\d+[A-Za-z]?\.\s*$", re.IGNORECASE)
+SENTENCE_TRAILING_SPACE_RE = re.compile(r"\s*$")
+SENTENCE_LEADING_SPACE_RE = re.compile(r"^\s*")
+INLINE_PROTECTION_PATTERNS = [
+    re.compile(r"!\[\[[^\]]+]]"),
+    re.compile(r"\[\[[^\]]+]]"),
+    re.compile(r"!\[[^\]]*]\([^)]*\)"),
+    re.compile(r"\[[^\]]+]\([^)]*\)"),
+    re.compile(r"`[^`]+`"),
+    re.compile(r"\\\([^)]*\\\)"),
+    re.compile(r"\$[^$\n]+\$"),
+    re.compile(r"<eq\b[^>]*>.*?</eq>", re.IGNORECASE),
+    re.compile(r"\[\^[^\]]+]"),
+    re.compile(r"https?://[^\s<>)]+", re.IGNORECASE),
+]
 
 KNOWN_SAMPLE_BOOKS = ("漫长的告别", "再见，吾爱", "长眠不醒")
 IGNORED_TITLE_TEXTS = {"目录", "目 录"}
@@ -42,6 +75,8 @@ CIRCLED_NUMBER_MAP = {
     char: str(idx)
     for idx, char in enumerate("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳", start=1)
 }
+_PYSBD_SEGMENTER: Any | None = None
+_PYSBD_AVAILABLE: bool | None = None
 
 
 @dataclass
@@ -72,6 +107,49 @@ def manifest_path(input_dir: Path) -> Path:
 
 def workspace_path(input_dir: Path) -> Path:
     return input_dir / WORKSPACE_NAME
+
+
+def translation_manifest_path(input_dir: Path) -> Path:
+    return translation_source_dir(input_dir) / TRANSLATION_MANIFEST_NAME
+
+
+def translation_workspace_path(input_dir: Path) -> Path:
+    return translation_source_dir(input_dir) / TRANSLATION_WORKSPACE_NAME
+
+
+def translation_source_dir(input_dir: Path) -> Path:
+    output_dir = input_dir / "output"
+    if output_dir.exists() and output_dir.is_dir() and has_translation_markdown_files(output_dir):
+        return output_dir
+    return input_dir
+
+
+def has_translation_markdown_files(directory: Path) -> bool:
+    for path in directory.rglob("*.md"):
+        rel_parts = path.relative_to(directory).parts
+        if not is_ignored_translation_path(rel_parts):
+            return True
+    return False
+
+
+def is_ignored_translation_path(rel_parts: tuple[str, ...]) -> bool:
+    return not rel_parts or rel_parts[0] in {"imgs", "output_translated"}
+
+
+def normalize_translation_input_root(input_dir: str | Path) -> Path:
+    text = str(input_dir)
+    for marker in ("/Users/", "/private/", "/var/", "/Volumes/"):
+        first = text.find(marker)
+        if first == -1:
+            continue
+        second = text.find(marker, first + len(marker))
+        if second != -1:
+            text = text[second:]
+            break
+    root = Path(text).expanduser().resolve()
+    if root.name == "output":
+        return root.parent
+    return root
 
 
 def scan_directory(input_dir: str | Path) -> dict[str, Any]:
@@ -194,6 +272,118 @@ def update_workspace_ui_state(payload: dict[str, Any]) -> dict[str, Any]:
     manifest = workspace.get("manifest") or load_manifest(root) or scan_directory(root)
     path = save_workspace(root, manifest, payload.get("ui_state", {}))
     return {"ok": True, "workspace_path": str(path)}
+
+
+def scan_translation(input_dir: str | Path) -> dict[str, Any]:
+    root = normalize_translation_input_root(input_dir)
+    if not root.exists() or not root.is_dir():
+        raise ValueError(f"Input directory does not exist: {root}")
+    output_dir = translation_source_dir(root)
+    old = load_translation_workspace(root) or load_translation_manifest(root)
+    old_by_id = {item.get("id"): item for item in old.get("segments", []) if item.get("id")}
+    files = list_translation_markdown_files(root)
+    segments: list[dict[str, Any]] = []
+    for file_path in files:
+        segments.extend(scan_translation_file(output_dir, file_path, old_by_id))
+    payload = {
+        "schema_version": 1,
+        "kind": "ocr2md-translation-workspace",
+        "input_dir": str(root),
+        "output_dir": str(output_dir),
+        "generated_at": now_iso(),
+        "files": [str(path.relative_to(output_dir)) for path in files],
+        "segments": segments,
+        "workspace_path": str(translation_workspace_path(root)),
+        "manifest_path": str(translation_manifest_path(root)),
+        "workspace_loaded": bool(old),
+        "ui_state": old.get("ui_state", {}),
+    }
+    return payload
+
+
+def save_translation(payload: dict[str, Any]) -> dict[str, Any]:
+    root = normalize_translation_input_root(payload["input_dir"])
+    if not root.exists() or not root.is_dir():
+        raise ValueError(f"Input directory does not exist: {root}")
+    output_dir = translation_source_dir(root)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    saved = {
+        "schema_version": 1,
+        "kind": "ocr2md-translation-workspace",
+        "input_dir": str(root),
+        "output_dir": str(output_dir),
+        "saved_at": now_iso(),
+        "files": payload.get("files", []),
+        "segments": payload.get("segments", []),
+    }
+    manifest = translation_manifest_path(root)
+    manifest.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
+    workspace_payload = {**saved, "ui_state": payload.get("ui_state", {})}
+    workspace = translation_workspace_path(root)
+    workspace.write_text(json.dumps(workspace_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {
+        "ok": True,
+        "path": str(manifest),
+        "workspace_path": str(workspace),
+        "segments": saved["segments"],
+    }
+
+
+def export_translation(payload: dict[str, Any]) -> dict[str, Any]:
+    root = normalize_translation_input_root(payload["input_dir"])
+    output_dir = translation_source_dir(root)
+    target_root = root / "output_translated"
+    if not output_dir.exists():
+        raise ValueError(f"Output directory does not exist: {output_dir}")
+    segments_by_file: dict[str, dict[int, list[dict[str, Any]]]] = {}
+    for item in payload.get("segments", []):
+        source_file = str(item.get("source_file") or "")
+        start_line = int(item.get("line_no") or 0)
+        if not source_file or start_line <= 0:
+            continue
+        segments_by_file.setdefault(source_file, {}).setdefault(start_line, []).append(item)
+    files = [output_dir / str(path) for path in payload.get("files", [])]
+    if not files:
+        files = list_translation_markdown_files(root)
+    clean_translation_variant_dirs(target_root)
+    written: list[dict[str, Any]] = []
+    for source_path in files:
+        if not source_path.exists() or not source_path.is_file():
+            continue
+        source_file = str(source_path.relative_to(output_dir))
+        lines = source_path.read_text(encoding="utf-8").splitlines()
+        variants = {
+            "org": render_translation_variant_file(lines, segments_by_file.get(source_file, {}), source_file, "org"),
+            "trans": render_translation_variant_file(lines, segments_by_file.get(source_file, {}), source_file, "trans"),
+            "cross:trans2org": render_translation_variant_file(lines, segments_by_file.get(source_file, {}), source_file, "cross:trans2org"),
+            "cross:org2trans": render_translation_variant_file(lines, segments_by_file.get(source_file, {}), source_file, "cross:org2trans"),
+        }
+        for variant, variant_lines in variants.items():
+            target = translation_variant_target_path(target_root, variant, source_file)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            content = "\n".join(variant_lines) + "\n"
+            target.write_text(content, encoding="utf-8")
+            written.append({"source_file": source_file, "variant": variant, "path": str(target), "chars": len(content)})
+    save_translation(payload)
+    return {"ok": True, "output_dir": str(target_root), "count": len(files), "files": written}
+
+
+def translation_variant_target_path(target_root: Path, variant: str, source_file: str) -> Path:
+    if not variant.startswith("cross:"):
+        return target_root / variant / source_file
+    direction = variant.split(":", 1)[1]
+    source_path = Path(source_file)
+    return target_root / "cross" / source_path.with_name(f"{direction} {source_path.name}")
+
+
+def clean_translation_variant_dirs(target_root: Path) -> None:
+    for variant in ("org", "trans", "cross"):
+        path = target_root / variant
+        if path.exists() and path.is_dir():
+            shutil.rmtree(path)
+    if target_root.exists() and target_root.is_dir():
+        for path in target_root.glob("*.md"):
+            path.unlink()
 
 
 def export_markdown(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1393,6 +1583,1395 @@ def load_workspace(root: Path) -> dict[str, Any]:
         "manifest": manifest,
         "ui_state": ui_state if isinstance(ui_state, dict) else {},
     }
+
+
+def load_translation_manifest(root: Path) -> dict[str, Any]:
+    path = translation_manifest_path(root)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def load_translation_workspace(root: Path) -> dict[str, Any]:
+    path = translation_workspace_path(root)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    if payload.get("kind") != "ocr2md-translation-workspace":
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def list_translation_markdown_files(root: Path) -> list[Path]:
+    output_dir = translation_source_dir(root)
+    if not output_dir.exists() or not output_dir.is_dir():
+        return []
+    files: list[Path] = []
+    for path in output_dir.rglob("*.md"):
+        rel_parts = path.relative_to(output_dir).parts
+        if is_ignored_translation_path(rel_parts):
+            continue
+        files.append(path)
+    return sorted(files, key=lambda path: str(path.relative_to(output_dir)))
+
+
+def scan_translation_file(
+    output_dir: Path,
+    file_path: Path,
+    old_by_id: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    source_file = str(file_path.relative_to(output_dir))
+    lines = file_path.read_text(encoding="utf-8").splitlines()
+    blocks = markdown_translation_blocks(lines)
+    segments: list[dict[str, Any]] = []
+    paragraph_no = 1
+    block_no = 1
+    block_no_by_group: dict[tuple[Any, ...], int] = {}
+    sentence_no_by_group: dict[tuple[Any, ...], int] = {}
+    current_heading = ""
+    for block in blocks:
+        if block["type"] == "heading":
+            current_heading = block["text"]
+            block_type = "标题"
+        elif block["type"] == "paragraph":
+            block_type = "文本"
+        else:
+            block_type = block["type"]
+        text = str(block["text"])
+        group_key = translation_block_group_key(block)
+        if group_key in block_no_by_group:
+            item_block_no = block_no_by_group[group_key]
+        else:
+            item_block_no = block_no
+            block_no_by_group[group_key] = item_block_no
+            block_no += 1
+        if block_type in SENTENCE_SPLIT_BLOCK_TYPES:
+            for sentence in split_translation_block_sentences(block_type, text, block.get("metadata", {})):
+                sentence_no = sentence_no_by_group.get(group_key, 0) + 1
+                sentence_no_by_group[group_key] = sentence_no
+                sentence_source = str(sentence["text"])
+                protected_source, inline_placeholders = protect_inline_nontranslatable(sentence_source)
+                metadata = {
+                    **(block.get("metadata", {}) if isinstance(block.get("metadata"), dict) else {}),
+                    "sentence_engine": sentence["engine"],
+                }
+                if inline_placeholders:
+                    metadata["source_unprotected"] = sentence_source
+                    metadata["inline_placeholders"] = inline_placeholders
+                item_id = stable_translation_sentence_id(
+                    source_file,
+                    int(block["start_line"]),
+                    item_block_no,
+                    sentence_no,
+                    sentence_source,
+                )
+                segments.append(
+                    translation_segment_item(
+                        old_by_id,
+                        item_id,
+                        source_file,
+                        current_heading,
+                        paragraph_no if block_type == "文本" else "",
+                        item_block_no,
+                        block_type,
+                        int(block["start_line"]),
+                        int(block["end_line"]),
+                        protected_source,
+                        metadata,
+                        sentence_no=sentence_no,
+                        sentence_start=int(sentence["start"]),
+                        sentence_end=int(sentence["end"]),
+                    )
+                )
+            if block_type == "文本":
+                paragraph_no += 1
+            continue
+        item_id = stable_translation_id(source_file, int(block["start_line"]), text)
+        segments.append(
+            translation_segment_item(
+                old_by_id,
+                item_id,
+                source_file,
+                current_heading,
+                "",
+                item_block_no,
+                block_type,
+                int(block["start_line"]),
+                int(block["end_line"]),
+                text,
+                block.get("metadata", {}),
+            )
+        )
+    return segments
+
+
+def split_translation_block_sentences(
+    block_type: str,
+    text: str,
+    metadata: dict[str, Any],
+) -> list[dict[str, Any]]:
+    marker = ""
+    body = text
+    body_offset = 0
+    if block_type == "注释正文" and MARKDOWN_FOOTNOTE_DEF_RE.match(text.strip()):
+        marker = str(metadata.get("footnote_marker") or "")
+        if marker and text.startswith(marker):
+            body = text[len(marker):]
+            leading = SENTENCE_LEADING_SPACE_RE.match(body).group(0) if SENTENCE_LEADING_SPACE_RE.match(body) else ""
+            marker = f"{marker}{leading}"
+            body_offset = len(marker)
+            body = text[body_offset:]
+    sentences = split_sentences_with_offsets(body)
+    if marker and sentences:
+        sentences[0] = {
+            **sentences[0],
+            "text": f"{marker}{sentences[0]['text']}",
+            "start": 0,
+            "end": body_offset + int(sentences[0]["end"]),
+        }
+        for index in range(1, len(sentences)):
+            sentences[index] = {
+                **sentences[index],
+                "start": body_offset + int(sentences[index]["start"]),
+                "end": body_offset + int(sentences[index]["end"]),
+            }
+    return sentences
+
+
+def translation_segment_item(
+    old_by_id: dict[str, dict[str, Any]],
+    item_id: str,
+    source_file: str,
+    current_heading: str,
+    paragraph_no: int | str,
+    item_block_no: int,
+    block_type: str,
+    start_line: int,
+    end_line: int,
+    text: str,
+    metadata: dict[str, Any],
+    sentence_no: int | str = "",
+    sentence_start: int | str = "",
+    sentence_end: int | str = "",
+) -> dict[str, Any]:
+    old = old_by_id.get(item_id, {})
+    translation = str(old.get("translation") or "")
+    status = str(old.get("status") or "")
+    if not status:
+        if translation.strip():
+            status = "已翻译"
+        elif block_type in NON_TRANSLATABLE_BLOCK_TYPES and not block_has_translatable_text({"metadata": metadata}):
+            status = "不翻译"
+        else:
+            status = "未翻译"
+    return {
+        "id": item_id,
+        "source_file": source_file,
+        "heading": current_heading,
+        "paragraph_no": paragraph_no,
+        "block_no": item_block_no,
+        "block_type": block_type,
+        "sentence_no": sentence_no,
+        "sentence_start": sentence_start,
+        "sentence_end": sentence_end,
+        "line_no": start_line,
+        "end_line_no": end_line,
+        "source": text,
+        "translation": translation,
+        "status": status,
+        "metadata": metadata,
+    }
+
+
+def markdown_translation_blocks(lines: list[str]) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    paragraph: list[tuple[int, str]] = []
+    paragraph_start = 0
+    last_media_kind = ""
+    in_frontmatter = bool(lines and lines[0].strip() == "---")
+    frontmatter_start = 1 if in_frontmatter else 0
+
+    def flush_paragraph(end_line: int) -> None:
+        nonlocal paragraph, paragraph_start
+        if not paragraph:
+            return
+        metadata = {
+            "composite_start": paragraph_start,
+            "composite_end": end_line,
+            "composite_type": "文本",
+        }
+        for line_no, text in paragraph:
+            blocks.append({
+                "type": "paragraph",
+                "start_line": line_no,
+                "end_line": line_no,
+                "text": text,
+                "metadata": metadata,
+            })
+        paragraph = []
+        paragraph_start = 0
+
+    index = 1
+    while index <= len(lines):
+        line = lines[index - 1].rstrip("\n")
+        stripped = line.strip()
+
+        if in_frontmatter:
+            blocks.append({
+                "type": "YAML 元数据",
+                "start_line": index,
+                "end_line": index,
+                "text": line,
+                "metadata": {
+                    "composite_start": frontmatter_start,
+                    "composite_type": "YAML 元数据",
+                },
+            })
+            if index > 1 and stripped == "---":
+                in_frontmatter = False
+                for block in reversed(blocks):
+                    if block["type"] != "YAML 元数据":
+                        break
+                    block["metadata"]["composite_end"] = index
+            index += 1
+            continue
+
+        if is_math_fence(stripped):
+            flush_paragraph(index - 1)
+            fenced_blocks, index = collect_fenced_line_blocks(lines, index, "公式")
+            blocks.extend(fenced_blocks)
+            continue
+
+        if is_code_fence(stripped):
+            flush_paragraph(index - 1)
+            fenced_blocks, index = collect_fenced_line_blocks(lines, index, "代码")
+            blocks.extend(fenced_blocks)
+            continue
+
+        heading = MARKDOWN_HEADING_RE.match(line)
+        if heading:
+            flush_paragraph(index - 1)
+            level = len(heading.group(1))
+            blocks.append({
+                "type": "heading",
+                "start_line": index,
+                "end_line": index,
+                "text": heading.group(2).strip(),
+                "metadata": {"heading_level": level, "heading_prefix": "#" * level},
+            })
+            last_media_kind = ""
+            index += 1
+            continue
+
+        if not stripped:
+            flush_paragraph(index - 1)
+            last_media_kind = ""
+            index += 1
+            continue
+
+        if MARKDOWN_FOOTNOTE_DEF_RE.match(stripped):
+            flush_paragraph(index - 1)
+            footnote_blocks, index = collect_footnote_blocks(lines, index)
+            blocks.extend(footnote_blocks)
+            last_media_kind = ""
+            continue
+
+        structural = translation_structure_block(line, last_media_kind)
+        if structural:
+            flush_paragraph(index - 1)
+            if structural["type"] in {"列表", "未知"}:
+                blocks.append({
+                    **structural,
+                    "start_line": index,
+                    "end_line": index,
+                })
+                index += 1
+                continue
+            composite_blocks, index = collect_composite_structure_block(lines, index, structural, last_media_kind)
+            blocks.extend(composite_blocks)
+            composite_type = str(composite_blocks[0].get("metadata", {}).get("composite_type") or "") if composite_blocks else ""
+            if composite_type == "图片":
+                last_media_kind = "figure"
+            elif composite_type == "表格":
+                last_media_kind = "table"
+            else:
+                last_media_kind = ""
+            continue
+
+        if last_media_kind in {"figure", "table"}:
+            flush_paragraph(index - 1)
+            blocks.append({
+                "type": "表注" if last_media_kind == "table" else "图注",
+                "start_line": index,
+                "end_line": index,
+                "text": stripped,
+                "metadata": {},
+            })
+            index += 1
+            continue
+
+        if not paragraph:
+            paragraph_start = index
+        paragraph.append((index, line))
+        last_media_kind = ""
+        index += 1
+    flush_paragraph(len(lines))
+    return blocks
+
+
+def skip_frontmatter(lines: list[str]) -> int:
+    if not lines or lines[0].strip() != "---":
+        return 1
+    for index in range(2, len(lines) + 1):
+        if lines[index - 1].strip() == "---":
+            return index + 1
+    return 1
+
+
+def is_math_fence(stripped: str) -> bool:
+    return stripped == "$$" or stripped == r"\["
+
+
+def is_code_fence(stripped: str) -> bool:
+    return bool(re.match(r"^(`{3,}|~{3,})", stripped))
+
+
+def collect_fenced_line_blocks(lines: list[str], start_index: int, block_type: str) -> tuple[list[dict[str, Any]], int]:
+    opening = lines[start_index - 1].strip()
+    if opening == "$$":
+        closing = "$$"
+    elif opening == r"\[":
+        closing = r"\]"
+    else:
+        closing = opening[:3]
+    collected: list[tuple[int, str]] = []
+    index = start_index
+    while index <= len(lines):
+        line = lines[index - 1].rstrip("\n")
+        collected.append((index, line))
+        if index > start_index and line.strip().startswith(closing):
+            break
+        index += 1
+    end_line = min(index, len(lines))
+    metadata = {
+        "composite_start": start_index,
+        "composite_end": end_line,
+        "composite_type": block_type,
+    }
+    return [
+        {
+            "type": block_type,
+            "start_line": line_no,
+            "end_line": line_no,
+            "text": text,
+            "metadata": metadata,
+        }
+        for line_no, text in collected
+    ], end_line + 1
+
+
+def collect_footnote_blocks(lines: list[str], start_index: int) -> tuple[list[dict[str, Any]], int]:
+    first = lines[start_index - 1].rstrip("\n")
+    match = MARKDOWN_FOOTNOTE_DEF_RE.match(first.strip())
+    label = match.group("label") if match else ""
+    collected = [(start_index, first)]
+    index = start_index + 1
+    while index <= len(lines):
+        line = lines[index - 1].rstrip("\n")
+        stripped = line.strip()
+        if not stripped:
+            break
+        if MARKDOWN_HEADING_RE.match(line) or MARKDOWN_FOOTNOTE_DEF_RE.match(stripped):
+            break
+        if not re.match(r"^\s{2,}\S", line):
+            break
+        collected.append((index, line))
+        index += 1
+    metadata = {
+        "composite_start": start_index,
+        "composite_end": index - 1,
+        "composite_type": "注释正文",
+        "footnote_label": label,
+        "footnote_marker": f"[^{label}]:" if label else "",
+    }
+    return [
+        {
+            "type": "注释正文",
+            "start_line": line_no,
+            "end_line": line_no,
+            "text": text,
+            "metadata": metadata,
+        }
+        for line_no, text in collected
+    ], index
+
+
+def collect_composite_structure_block(
+    lines: list[str],
+    start_index: int,
+    first: dict[str, Any],
+    last_media_kind: str,
+) -> tuple[list[dict[str, Any]], int]:
+    components = [structure_component(first, start_index)]
+    types = {str(first["type"])}
+    media_kind = structure_media_kind(str(first["type"])) or last_media_kind
+    index = start_index + 1
+
+    while index <= len(lines):
+        line = lines[index - 1].rstrip("\n")
+        stripped = line.strip()
+        if (
+            not stripped
+            or MARKDOWN_HEADING_RE.match(line)
+            or MARKDOWN_FOOTNOTE_DEF_RE.match(stripped)
+            or is_math_fence(stripped)
+            or is_code_fence(stripped)
+        ):
+            break
+        structural = translation_structure_block(line, media_kind)
+        if structural:
+            if not is_compatible_composite_part(structural, media_kind):
+                break
+            if structural["type"] != "structure":
+                components.append(structure_component(structural, index))
+                types.add(str(structural["type"]))
+                media_kind = structure_media_kind(str(structural["type"])) or media_kind
+            index += 1
+            continue
+        if media_kind not in {"figure", "table", "nested"}:
+            break
+        component_type = inferred_plain_component_type(media_kind, components)
+        quote_prefix, quote_text = strip_markdown_quote_prefix(line.lstrip())
+        text = quote_text if quote_prefix else line
+        metadata = {"quote_prefix": quote_prefix} if quote_prefix else {}
+        components.append({"type": component_type, "line_no": index, "text": text, "metadata": metadata})
+        types.add(component_type)
+        index += 1
+
+    block_type = composite_block_type(types)
+    metadata = {
+        "composite_start": start_index,
+        "composite_end": index - 1,
+        "composite_type": block_type,
+        "components": components,
+    }
+    blocks = [
+        {
+            "type": component["type"],
+            "start_line": component["line_no"],
+            "end_line": component["line_no"],
+            "text": component["text"],
+            "metadata": {
+                **metadata,
+                **(component.get("metadata") if isinstance(component.get("metadata"), dict) else {}),
+                "component_type": component["type"],
+                "has_translatable_text": component["type"] in TRANSLATABLE_STRUCTURAL_TYPES,
+            },
+        }
+        for component in components
+    ]
+    return blocks, index
+
+
+def structure_component(block: dict[str, Any], line_no: int) -> dict[str, Any]:
+    return {
+        "type": str(block.get("type") or ""),
+        "line_no": line_no,
+        "text": str(block.get("text") or ""),
+        "metadata": block.get("metadata", {}),
+    }
+
+
+def structure_media_kind(block_type: str) -> str:
+    if block_type == "嵌套块":
+        return "nested"
+    if block_type in FIGURE_STRUCTURAL_TYPES:
+        return "figure"
+    if block_type in TABLE_STRUCTURAL_TYPES:
+        return "table"
+    return ""
+
+
+def is_compatible_composite_part(block: dict[str, Any], media_kind: str) -> bool:
+    block_type = str(block.get("type") or "")
+    if block_type == "嵌套块":
+        return True
+    if block_type == "图片":
+        return media_kind in {"", "figure", "table", "nested"}
+    if block_type in FIGURE_STRUCTURAL_TYPES:
+        return media_kind in {"", "figure", "nested"}
+    if block_type in TABLE_STRUCTURAL_TYPES:
+        return media_kind in {"", "table", "figure", "nested"}
+    return False
+
+
+def inferred_plain_component_type(media_kind: str, components: list[dict[str, Any]]) -> str:
+    last_type = str(components[-1].get("type") or "") if components else ""
+    component_types = {str(component.get("type") or "") for component in components}
+    if media_kind == "figure":
+        if last_type == "图题":
+            return "图片"
+        return "图注" if "图片" in component_types else "图片"
+    if media_kind == "table":
+        if last_type == "表题":
+            return "表格"
+        return "表注" if "表格" in component_types else "表格"
+    if media_kind == "nested":
+        return "引文"
+    return "文本"
+
+
+def composite_block_type(types: set[str]) -> str:
+    if types & TABLE_STRUCTURAL_TYPES:
+        return "表格"
+    if "图片" in types or types & FIGURE_STRUCTURAL_TYPES:
+        return "图片"
+    if "嵌套块" in types and len(types) > 1:
+        return "结构"
+    if len(types) == 1:
+        return next(iter(types))
+    return "结构"
+
+
+def block_has_translatable_text(block: dict[str, Any]) -> bool:
+    metadata = block.get("metadata") if isinstance(block.get("metadata"), dict) else {}
+    return bool(metadata.get("has_translatable_text"))
+
+
+def translation_block_group_key(block: dict[str, Any]) -> tuple[Any, ...]:
+    metadata = block.get("metadata") if isinstance(block.get("metadata"), dict) else {}
+    composite_start = metadata.get("composite_start")
+    if composite_start:
+        return ("composite", int(composite_start))
+    return ("line", int(block["start_line"]))
+
+
+def translation_structure_block(line: str, last_media_kind: str) -> dict[str, Any] | None:
+    stripped = line.strip()
+    quote_prefix, quote_text = strip_markdown_quote_prefix(line.lstrip())
+    body = quote_text.strip() if quote_prefix else stripped
+    body_text = quote_text if quote_prefix else stripped
+    metadata = {"quote_prefix": quote_prefix} if quote_prefix else {}
+
+    callout = OBSIDIAN_CALLOUT_RE.match(body)
+    if quote_prefix and not body:
+        return {"type": "嵌套块", "text": stripped, "metadata": metadata}
+    if callout:
+        return {
+            "type": "表题",
+            "text": callout.group("title").strip() or body,
+            "metadata": {**metadata, "callout_prefix": callout.group("prefix")},
+        }
+    if MARKDOWN_IMAGE_RE.fullmatch(body) or MARKDOWN_OBSIDIAN_IMAGE_RE.fullmatch(body):
+        return {"type": "图片", "text": body, "metadata": metadata}
+    if HTML_TABLE_RE.search(body) or MARKDOWN_TABLE_DIVIDER_RE.match(body) or body.startswith("|"):
+        return {"type": "表格", "text": body, "metadata": metadata}
+    if FIGURE_TITLE_RE.match(body) or PANEL_TITLE_RE.match(body):
+        return {"type": "图题", "text": body, "metadata": metadata}
+    if TABLE_TITLE_RE.match(body):
+        return {"type": "表题", "text": body, "metadata": metadata}
+    if NOTES_RE.match(body):
+        block_type = "表注" if last_media_kind == "table" else "图注"
+        return {"type": block_type, "text": body_text, "metadata": metadata}
+    if quote_prefix and body:
+        if last_media_kind == "figure":
+            return {"type": "图题", "text": body, "metadata": metadata}
+        if last_media_kind == "table":
+            return {"type": "表题", "text": body, "metadata": metadata}
+        return {"type": "引文", "text": body, "metadata": metadata}
+    if MARKDOWN_LIST_RE.match(line):
+        return {"type": "列表", "text": stripped, "metadata": metadata}
+    return None
+
+
+def strip_markdown_quote_prefix(value: str) -> tuple[str, str]:
+    match = re.match(r"^(?P<prefix>>+\s?)(?P<body>.*)$", value)
+    if not match:
+        return "", value
+    return match.group("prefix"), match.group("body")
+
+
+def stable_translation_id(source_file: str, line_no: int, text: str) -> str:
+    digest = hashlib.sha1(f"{source_file}\0{line_no}\0{text}".encode("utf-8")).hexdigest()[:16]
+    return f"tr_{digest}"
+
+
+def stable_translation_sentence_id(source_file: str, line_no: int, block_no: int, sentence_no: int, text: str) -> str:
+    digest = hashlib.sha1(
+        f"{source_file}\0{line_no}\0{block_no}\0{sentence_no}\0{text}".encode("utf-8")
+    ).hexdigest()[:16]
+    return f"tr_{digest}"
+
+
+def protect_inline_nontranslatable(text: str) -> tuple[str, list[dict[str, str]]]:
+    spans = inline_protection_spans(text)
+    if not spans:
+        return text, []
+    pieces: list[str] = []
+    placeholders: list[dict[str, str]] = []
+    cursor = 0
+    for index, (start, end) in enumerate(spans, start=1):
+        placeholder = f"{{NT{index}}}"
+        pieces.append(text[cursor:start])
+        pieces.append(placeholder)
+        placeholders.append({"placeholder": placeholder, "text": text[start:end]})
+        cursor = end
+    pieces.append(text[cursor:])
+    return "".join(pieces), placeholders
+
+
+def inline_protection_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    for pattern in INLINE_PROTECTION_PATTERNS:
+        for match in pattern.finditer(text):
+            start, end = match.span()
+            if start == end or is_footnote_definition_marker(text, start, end):
+                continue
+            if any(start < used_end and end > used_start for used_start, used_end in spans):
+                continue
+            spans.append((start, end))
+    return sorted(spans)
+
+
+def is_footnote_definition_marker(text: str, start: int, end: int) -> bool:
+    return start == 0 and text.startswith("[^", start) and end < len(text) and text[end] == ":"
+
+
+def sentence_original_source(item: dict[str, Any]) -> str:
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    original = metadata.get("source_unprotected")
+    if isinstance(original, str):
+        return original
+    return restore_inline_placeholders(str(item.get("source") or ""), metadata.get("inline_placeholders"))
+
+
+def restore_inline_placeholders(text: str, placeholders: Any) -> str:
+    if not isinstance(placeholders, list):
+        return text
+    restored = text
+    for item in placeholders:
+        if not isinstance(item, dict):
+            continue
+        placeholder = str(item.get("placeholder") or "")
+        replacement = str(item.get("text") or "")
+        if placeholder:
+            restored = restored.replace(placeholder, replacement)
+    return restored
+
+
+def split_sentences_with_offsets(text: str) -> list[dict[str, Any]]:
+    if not text:
+        return [{"text": text, "start": 0, "end": 0, "engine": sentence_engine_name(False)}]
+    raw_segments, uses_pysbd = pysbd_segments(text)
+    pieces = map_sentence_segments_to_offsets(text, raw_segments)
+    if not pieces:
+        pieces = fallback_sentence_offsets(text)
+        uses_pysbd = False
+    refined: list[dict[str, Any]] = []
+    for piece in pieces:
+        refined.extend(split_sentence_piece_offsets(text, int(piece["start"]), int(piece["end"]), uses_pysbd))
+    return refined or [{"text": text, "start": 0, "end": len(text), "engine": sentence_engine_name(uses_pysbd)}]
+
+
+def pysbd_segments(text: str) -> tuple[list[str], bool]:
+    global _PYSBD_AVAILABLE, _PYSBD_SEGMENTER
+    if _PYSBD_AVAILABLE is False:
+        return fallback_sentence_texts(text), False
+    try:
+        if _PYSBD_SEGMENTER is None:
+            import pysbd
+
+            _PYSBD_SEGMENTER = pysbd.Segmenter(language="en", clean=False)
+        _PYSBD_AVAILABLE = True
+        segments = merge_numbered_label_sentence_segments([str(segment) for segment in _PYSBD_SEGMENTER.segment(text) if str(segment)])
+        return segments or fallback_sentence_texts(text), True
+    except Exception:
+        _PYSBD_AVAILABLE = False
+        return fallback_sentence_texts(text), False
+
+
+def merge_numbered_label_sentence_segments(segments: list[str]) -> list[str]:
+    merged: list[str] = []
+    index = 0
+    while index < len(segments):
+        segment = segments[index]
+        if index + 1 < len(segments) and NUMBERED_LABEL_SENTENCE_RE.match(segment):
+            merged.append(segment + segments[index + 1])
+            index += 2
+            continue
+        merged.append(segment)
+        index += 1
+    return merged
+
+
+def map_sentence_segments_to_offsets(text: str, segments: list[str]) -> list[dict[str, Any]]:
+    offsets: list[dict[str, Any]] = []
+    cursor = 0
+    for segment in segments:
+        start = text.find(segment, cursor)
+        if start < 0:
+            return []
+        end = start + len(segment)
+        offsets.append({"start": start, "end": end})
+        cursor = end
+    if not offsets:
+        return []
+    if offsets[0]["start"] > 0:
+        offsets[0]["start"] = 0
+    if offsets[-1]["end"] < len(text):
+        offsets[-1]["end"] = len(text)
+    for index in range(1, len(offsets)):
+        if offsets[index - 1]["end"] < offsets[index]["start"]:
+            offsets[index]["start"] = offsets[index - 1]["end"]
+    return offsets
+
+
+def split_sentence_piece_offsets(text: str, start: int, end: int, uses_pysbd: bool) -> list[dict[str, Any]]:
+    piece = text[start:end]
+    boundaries = sentence_piece_boundary_offsets(piece)
+    if not boundaries:
+        return [{"text": piece, "start": start, "end": end, "engine": sentence_engine_name(uses_pysbd)}]
+    offsets: list[dict[str, Any]] = []
+    cursor = 0
+    for part_end in boundaries:
+        if part_end > cursor:
+            offsets.append({
+                "text": piece[cursor:part_end],
+                "start": start + cursor,
+                "end": start + part_end,
+                "engine": sentence_engine_name(uses_pysbd),
+            })
+        cursor = part_end
+    if cursor < len(piece):
+        offsets.append({
+            "text": piece[cursor:],
+            "start": start + cursor,
+            "end": end,
+            "engine": sentence_engine_name(uses_pysbd),
+        })
+    return offsets
+
+
+def sentence_piece_boundary_offsets(piece: str) -> list[int]:
+    boundaries: list[int] = []
+    index = 0
+    while index < len(piece):
+        char = piece[index]
+        if char in "。！？；!?;":
+            end = consume_sentence_closers(piece, index + 1)
+            boundaries.append(end)
+            index = end
+            continue
+        if char == "." and is_fallback_period_boundary(piece, index):
+            end = consume_sentence_closers(piece, index + 1)
+            boundaries.append(end)
+            index = end
+            continue
+        index += 1
+    return [boundary for boundary in boundaries if boundary < len(piece)]
+
+
+def consume_sentence_closers(text: str, index: int) -> int:
+    while index < len(text) and text[index] in "\"'”’」』】）》）)]}":
+        index += 1
+    while index < len(text) and text[index].isspace():
+        index += 1
+    return index
+
+
+def fallback_sentence_texts(text: str) -> list[str]:
+    return [item["text"] for item in fallback_sentence_offsets(text)]
+
+
+def fallback_sentence_offsets(text: str) -> list[dict[str, Any]]:
+    offsets: list[dict[str, Any]] = []
+    cursor = 0
+    index = 0
+    while index < len(text):
+        if text[index] in "。！？；!?;":
+            end = index + 1
+            while end < len(text) and text[end] in "\"'”’」』】）》）":
+                end += 1
+            offsets.append({"text": text[cursor:end], "start": cursor, "end": end, "engine": "fallback"})
+            cursor = end
+        elif text[index] == "." and is_fallback_period_boundary(text, index):
+            end = index + 1
+            while end < len(text) and text[end] in "\"'”’)]}":
+                end += 1
+            offsets.append({"text": text[cursor:end], "start": cursor, "end": end, "engine": "fallback"})
+            cursor = end
+        index += 1
+    if cursor < len(text):
+        offsets.append({"text": text[cursor:], "start": cursor, "end": len(text), "engine": "fallback"})
+    return offsets or [{"text": text, "start": 0, "end": len(text), "engine": "fallback"}]
+
+
+def is_fallback_period_boundary(text: str, index: int) -> bool:
+    before = text[max(0, index - 8):index + 1]
+    if re.search(r"\b(?:U\.S|Fig|Mr|Mrs|Dr|Prof|Inc|Ltd|vs|e\.g|i\.e)\.$", before, re.IGNORECASE):
+        return False
+    label_start = max(0, index - 24)
+    if NUMBERED_LABEL_SENTENCE_RE.match(text[label_start:index + 1].lstrip()):
+        return False
+    if index > 0 and index + 1 < len(text) and text[index - 1].isdigit() and text[index + 1].isdigit():
+        return False
+    return index + 1 == len(text) or text[index + 1].isspace()
+
+
+def sentence_engine_name(uses_pysbd: bool) -> str:
+    return "pysbd" if uses_pysbd else "fallback"
+
+
+def render_translated_file(
+    lines: list[str],
+    segments_by_line: dict[int, list[dict[str, Any]]],
+    source_file: str = "",
+) -> list[str]:
+    validate_translation_segments_against_source(lines, segments_by_line, source_file)
+    rendered: list[str] = []
+    previous_group: tuple[str, Any] | None = None
+    for index, original_line in enumerate(lines, start=1):
+        if not original_line.strip():
+            continue
+        items = sorted_translation_line_items(segments_by_line.get(index, []))
+        if items:
+            if is_sentence_line(items):
+                block_lines = [render_sentence_line(items)]
+            else:
+                item = items[0]
+                translation = str(item.get("translation") or "").strip()
+                if translation:
+                    block_lines = render_translation_block(item, translation)
+                else:
+                    block_lines = [original_line]
+            group = ("block", items[0].get("block_no") or index)
+        else:
+            block_lines = [original_line]
+            group = ("line", index)
+        if previous_group is not None and group != previous_group:
+            while rendered and rendered[-1] == "":
+                rendered.pop()
+            rendered.append("")
+        rendered.extend(block_lines)
+        previous_group = group
+    while rendered and rendered[-1] == "":
+        if len(rendered) >= 2 and rendered[-2] == "<br>":
+            break
+        rendered.pop()
+    return rendered
+
+
+def render_translation_variant_file(
+    lines: list[str],
+    segments_by_line: dict[int, list[dict[str, Any]]],
+    source_file: str,
+    variant: str,
+) -> list[str]:
+    validate_translation_segments_against_source(lines, segments_by_line, source_file)
+    rendered: list[str] = []
+    previous_group: tuple[str, Any] | None = None
+    previous_item: dict[str, Any] | None = None
+    pending_lines: list[str] = []
+    pending_original_lines: list[str] = []
+
+    def flush_pending() -> None:
+        nonlocal pending_lines, pending_original_lines, previous_item
+        if not pending_lines:
+            return
+        if previous_item and previous_item.get("block_type") == "YAML 元数据":
+            pass
+        elif previous_item and is_sentence_id_block(previous_item):
+            pass
+        elif is_cross_variant(variant) and previous_item and is_cross_inline_original_block(previous_item):
+            pending_lines = render_cross_inline_original_block(
+                pending_lines,
+                pending_original_lines,
+                obsidian_block_id(previous_item, "cross"),
+                cross_direction(variant),
+            )
+        elif is_cross_variant(variant) and previous_item:
+            pending_lines = append_cross_reference_to_lines(
+                pending_lines,
+                source_file,
+                obsidian_block_id(previous_item, "cross"),
+                needs_nested_block_id_separator(previous_item, pending_lines),
+                cross_link_target_variant(variant),
+            )
+        elif previous_item:
+            pending_lines = append_block_id_to_lines(
+                pending_lines,
+                obsidian_block_id(previous_item, variant),
+                needs_nested_block_id_separator(previous_item, pending_lines),
+            )
+        if previous_item and should_append_block_break(previous_item, variant):
+            pending_lines = append_block_break_line(pending_lines)
+        rendered.extend(pending_lines)
+        pending_lines = []
+        pending_original_lines = []
+
+    for index, original_line in enumerate(lines, start=1):
+        if not original_line.strip():
+            continue
+        items = sorted_translation_line_items(segments_by_line.get(index, []))
+        if items:
+            if is_cross_variant(variant):
+                block_lines = render_cross_block_lines(original_line, items, source_file, variant)
+                original_block_lines = render_cross_counterpart_block_lines(original_line, items, variant)
+            elif is_sentence_line(items) and is_sentence_id_block(items[0]):
+                block_lines = render_sentence_variant_lines_with_ids(items, variant)
+                original_block_lines = []
+            elif is_sentence_line(items):
+                block_lines = [render_sentence_line(items, variant=variant)]
+                original_block_lines = []
+            else:
+                block_lines = render_non_sentence_variant_lines(original_line, items[0], variant)
+                if is_sentence_id_block(items[0]):
+                    block_lines = append_block_sentence_id_to_lines(block_lines, items[0], sentence_no=1)
+                original_block_lines = []
+            group = ("block", items[0].get("block_no") or index)
+            group_item = items[0]
+        else:
+            block_lines = [original_line]
+            original_block_lines = []
+            group = ("line", index)
+            group_item = {
+                "id": "",
+                "source_file": source_file,
+                "line_no": index,
+                "block_no": f"line-{index}",
+            }
+        if previous_group is not None and group != previous_group:
+            flush_pending()
+            while rendered and rendered[-1] == "":
+                rendered.pop()
+            rendered.append("")
+        pending_lines.extend(block_lines)
+        if is_cross_variant(variant) and group_item and is_cross_inline_original_block(group_item):
+            pending_original_lines.extend(original_block_lines or [original_line])
+        previous_group = group
+        previous_item = group_item
+    flush_pending()
+    while rendered and rendered[-1] == "":
+        if len(rendered) >= 2 and rendered[-2] == "<br>":
+            break
+        rendered.pop()
+    return rendered
+
+
+def is_cross_variant(variant: str) -> bool:
+    return variant.startswith("cross")
+
+
+def cross_direction(variant: str) -> str:
+    return variant.split(":", 1)[1] if ":" in variant else "trans2org"
+
+
+def cross_link_target_variant(variant: str) -> str:
+    return "trans" if cross_direction(variant) == "org2trans" else "org"
+
+
+def render_cross_block_lines(original_line: str, items: list[dict[str, Any]], source_file: str, variant: str) -> list[str]:
+    direction = cross_direction(variant)
+    primary_variant = "org" if direction == "org2trans" else "trans"
+    target_variant = cross_link_target_variant(variant)
+    if is_sentence_line(items) and is_sentence_id_block(items[0]):
+        lines: list[str] = []
+        for item in items:
+            if lines and lines[-1] != "":
+                lines.append("")
+            sentence_no = int(item.get("sentence_no") or 1)
+            sentence_id = obsidian_sentence_id(item, sentence_no)
+            lines.extend(
+                render_cross_linked_unit(
+                    [render_single_sentence_line(item, variant=primary_variant)],
+                    item,
+                    source_file,
+                    sentence_id,
+                    target_variant,
+                )
+            )
+        return lines
+    if is_sentence_line(items):
+        return [render_sentence_line(items, variant=primary_variant)]
+    item = items[0]
+    if item.get("block_type") == "YAML 元数据":
+        return [original_line]
+    if is_sentence_id_block(item):
+        sentence_id = obsidian_sentence_id(item, 1)
+        return render_cross_linked_unit(
+            render_non_sentence_variant_lines(original_line, item, primary_variant),
+            item,
+            source_file,
+            sentence_id,
+            target_variant,
+        )
+    return render_non_sentence_variant_lines(original_line, item, primary_variant)
+
+
+def render_cross_counterpart_block_lines(original_line: str, items: list[dict[str, Any]], variant: str) -> list[str]:
+    target_variant = cross_link_target_variant(variant)
+    if is_sentence_line(items):
+        return [render_sentence_line(items, variant=target_variant)]
+    if target_variant == "org":
+        return [original_line]
+    return render_non_sentence_variant_lines(original_line, items[0], target_variant)
+
+
+def is_cross_inline_original_block(item: dict[str, Any]) -> bool:
+    return item.get("block_type") == "注释正文"
+
+
+def render_cross_inline_original_block(
+    translated_lines: list[str],
+    original_lines: list[str],
+    block_id: str,
+    direction: str,
+) -> list[str]:
+    if direction == "org2trans":
+        primary = normalize_cross_footnote_original_lines(translated_lines)
+        counterpart = normalize_cross_footnote_translation_lines(original_lines)
+        result = primary
+        if counterpart:
+            result.append(f"<br>{strip_footnote_prefix(counterpart[0])}")
+            result.extend(counterpart[1:])
+    else:
+        primary = normalize_cross_footnote_translation_lines(translated_lines)
+        counterpart = normalize_cross_footnote_original_lines(original_lines)
+        result = primary
+        if counterpart:
+            result.append(f"<br>{strip_footnote_prefix(counterpart[0])}")
+            result.extend(counterpart[1:])
+    return append_block_id_to_lines(result, block_id)
+
+
+def normalize_cross_footnote_translation_lines(lines: list[str]) -> list[str]:
+    if not lines:
+        return []
+    result = list(lines)
+    match = MARKDOWN_FOOTNOTE_PREFIX_RE.match(result[0])
+    if not match:
+        return result
+    marker = result[0][: match.end()].rstrip()
+    body = strip_footnote_prefix(result[0][match.end():])
+    result[0] = f"{marker} {body}".rstrip()
+    return result
+
+
+def normalize_cross_footnote_original_lines(lines: list[str]) -> list[str]:
+    if not lines:
+        return []
+    return list(lines)
+
+
+def strip_footnote_prefix(text: str) -> str:
+    return MARKDOWN_FOOTNOTE_PREFIX_RE.sub("", text, count=1)
+
+
+def normalize_footnote_definition_text(text: str, marker: str) -> str:
+    body = strip_footnote_prefix(text.strip())
+    return f"{marker} {body}".rstrip()
+
+
+def render_cross_linked_unit(
+    content_lines: list[str],
+    item: dict[str, Any],
+    source_file: str,
+    anchor_id: str,
+    target_variant: str,
+) -> list[str]:
+    return append_cross_reference_to_lines(content_lines, source_file, anchor_id, target_variant=target_variant)
+
+
+def append_cross_reference_to_lines(
+    content_lines: list[str],
+    source_file: str,
+    anchor_id: str,
+    nested_separator: bool = False,
+    target_variant: str = "org",
+) -> list[str]:
+    lines = append_block_id_to_lines(content_lines, anchor_id, nested_separator)
+    return [
+        *lines,
+        "",
+        ">[! ds]-",
+        f">![[{obsidian_link_target(source_file, target_variant)}#^{anchor_id}]]",
+    ]
+
+
+def obsidian_link_target(source_file: str, target_variant: str) -> str:
+    path = Path(source_file)
+    if path.suffix.lower() == ".md":
+        path = path.with_suffix("")
+    return f"output_translated/{target_variant}/{path.as_posix()}"
+
+
+def render_non_sentence_variant_lines(original_line: str, item: dict[str, Any], variant: str) -> list[str]:
+    if variant == "org":
+        return [original_line]
+    translation = str(item.get("translation") or "").strip()
+    if translation:
+        return render_translation_block(item, translation)
+    return [original_line]
+
+
+def validate_translation_segments_against_source(
+    lines: list[str],
+    segments_by_line: dict[int, list[dict[str, Any]]],
+    source_file: str = "",
+) -> None:
+    for line_no, items in sorted(segments_by_line.items()):
+        if line_no < 1 or line_no > len(lines):
+            location = f"{source_file}:{line_no}" if source_file else f"line {line_no}"
+            raise ValueError(f"Translation table line is outside the source file: {location}")
+        expected = lines[line_no - 1]
+        sorted_items = sorted_translation_line_items(items)
+        if is_sentence_line(sorted_items):
+            actual = restore_source_line_from_translation_segment({
+                **sorted_items[0],
+                "source": "".join(sentence_original_source(item) for item in sorted_items),
+            })
+        else:
+            actual = restore_source_line_from_translation_segment(sorted_items[0])
+        if actual != expected and actual.rstrip() != expected.rstrip():
+            location = f"{source_file}:{line_no}" if source_file else f"line {line_no}"
+            raise ValueError(
+                "Translation table source does not match source markdown at "
+                f"{location}: expected {expected!r}, got {actual!r}"
+            )
+
+
+def sorted_translation_line_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: (
+            int(item.get("sentence_start") or 0),
+            int(item.get("sentence_no") or 0),
+            str(item.get("id") or ""),
+        ),
+    )
+
+
+def is_sentence_line(items: list[dict[str, Any]]) -> bool:
+    return bool(items) and all(item.get("block_type") in SENTENCE_SPLIT_BLOCK_TYPES and item.get("sentence_no") for item in items)
+
+
+def is_sentence_id_block(item: dict[str, Any]) -> bool:
+    return item.get("block_type") in {"文本", "标题"}
+
+
+def render_sentence_line(
+    items: list[dict[str, Any]],
+    variant: str = "trans",
+) -> str:
+    pieces: list[str] = []
+    has_translation = False
+    for item in items:
+        source = sentence_original_source(item)
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        translation = str(item.get("translation") or "").strip()
+        if variant == "org":
+            piece = source
+        elif translation:
+            has_translation = True
+            translation = normalize_translation_line_prefix(translation, metadata)
+            translated = sentence_translation_with_original_spacing(source, translation)
+            piece = restore_inline_placeholders(translated, metadata.get("inline_placeholders"))
+        else:
+            piece = source
+        pieces.append(piece)
+    rendered = "".join(pieces)
+    first = items[0]
+    metadata = first.get("metadata") if isinstance(first.get("metadata"), dict) else {}
+    marker = str(metadata.get("footnote_marker") or "")
+    first_source = sentence_original_source(first)
+    is_footnote_definition_line = first_source.startswith(marker)
+    if first.get("block_type") == "注释正文" and marker and is_footnote_definition_line and has_translation:
+        rendered = normalize_footnote_definition_text(rendered, marker)
+    return restore_source_line_from_translation_segment({**first, "source": rendered})
+
+
+def render_sentence_variant_lines_with_ids(items: list[dict[str, Any]], variant: str) -> list[str]:
+    lines: list[str] = []
+    for item in items:
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(
+            append_block_sentence_id_to_lines(
+                [render_single_sentence_line(item, variant=variant)],
+                item,
+                int(item.get("sentence_no") or 1),
+            )
+        )
+    return lines
+
+
+def render_single_sentence_line(item: dict[str, Any], variant: str = "trans") -> str:
+    source = sentence_original_source(item)
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    translation = str(item.get("translation") or "").strip()
+    if variant == "org":
+        piece = source
+    elif translation:
+        translation = normalize_translation_line_prefix(translation, metadata)
+        translated = sentence_translation_with_original_spacing(source, translation)
+        piece = restore_inline_placeholders(translated, metadata.get("inline_placeholders"))
+    else:
+        piece = source
+    return restore_source_line_from_translation_segment({**item, "source": piece.strip()})
+
+
+def should_append_block_break(item: dict[str, Any], variant: str = "") -> bool:
+    block_type = item.get("block_type")
+    if is_cross_variant(variant):
+        return block_type != "YAML 元数据"
+    return block_type != "文本" and block_type != "YAML 元数据"
+
+
+def append_block_break_line(lines: list[str]) -> list[str]:
+    if "<br>" in lines[-2:]:
+        return lines
+    return [*lines, "", "<br>", ""]
+
+
+def append_block_sentence_id_to_lines(lines: list[str], item: dict[str, Any], sentence_no: int) -> list[str]:
+    result = list(lines)
+    for index in range(len(result) - 1, -1, -1):
+        if result[index].strip():
+            return insert_block_id_after_line(result, index, obsidian_sentence_id(item, sentence_no))
+    return result
+
+
+def append_cross_block_ids(lines: list[str], item: dict[str, Any]) -> list[str]:
+    if not lines:
+        return lines
+    result = list(lines)
+    nonempty = [index for index, line in enumerate(result) if line.strip()]
+    if not nonempty:
+        return result
+    if len(nonempty) == 1:
+        return insert_block_id_after_line(result, nonempty[-1], obsidian_block_id(item, "cross-org"))
+    result = insert_block_id_after_line(result, nonempty[-1], obsidian_block_id(item, "cross-trans"))
+    result = insert_block_id_after_line(result, nonempty[-2], obsidian_block_id(item, "cross-org"))
+    return result
+
+
+def append_block_id_to_lines(lines: list[str], block_id: str, nested_separator: bool = False) -> list[str]:
+    result = list(lines)
+    for index in range(len(result) - 1, -1, -1):
+        if result[index].strip():
+            if nested_separator and result[index].strip() != ">":
+                result = insert_line_after(result, index, ">")
+                index += 1
+            return insert_block_id_after_line(result, index, block_id)
+    return result
+
+
+def insert_line_after(lines: list[str], index: int, value: str) -> list[str]:
+    if index + 1 < len(lines) and lines[index + 1].strip() == value:
+        return lines
+    return [*lines[: index + 1], value, *lines[index + 1:]]
+
+
+def insert_block_id_after_line(lines: list[str], index: int, block_id: str) -> list[str]:
+    marker = f"^{block_id}"
+    if index + 1 < len(lines) and lines[index + 1].strip() == marker:
+        return lines
+    return [*lines[: index + 1], marker, *lines[index + 1:]]
+
+
+def needs_nested_block_id_separator(item: dict[str, Any], lines: list[str]) -> bool:
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    if item.get("block_type") == "嵌套块" or metadata.get("quote_prefix"):
+        return True
+    return any(line.lstrip().startswith(">") for line in lines)
+
+
+def obsidian_block_id(item: dict[str, Any], variant: str) -> str:
+    block_key = str(item.get("block_no") or item.get("line_no") or "")
+    normalized = re.sub(r"[^A-Za-z0-9-]+", "-", block_key).strip("-")
+    if not normalized:
+        normalized = str(item.get("line_no") or "0")
+    return f"bid-{normalized}"
+
+
+def obsidian_sentence_id(item: dict[str, Any], sentence_no: int) -> str:
+    block_key = str(item.get("block_no") or item.get("line_no") or "")
+    normalized_block = re.sub(r"[^A-Za-z0-9-]+", "-", block_key).strip("-")
+    if not normalized_block:
+        normalized_block = str(item.get("line_no") or "0")
+    normalized_sentence = re.sub(r"[^A-Za-z0-9-]+", "-", str(sentence_no)).strip("-") or "1"
+    return f"sid-{normalized_block}-{normalized_sentence}"
+
+
+def sentence_translation_with_original_spacing(source: str, translation: str) -> str:
+    leading = SENTENCE_LEADING_SPACE_RE.match(source).group(0) if SENTENCE_LEADING_SPACE_RE.match(source) else ""
+    trailing = SENTENCE_TRAILING_SPACE_RE.search(source).group(0) if SENTENCE_TRAILING_SPACE_RE.search(source) else ""
+    return f"{leading}{translation}{trailing}"
+
+
+def normalize_translation_line_prefix(translation: str, metadata: dict[str, Any]) -> str:
+    value = translation.strip()
+    quote_prefix = str(metadata.get("quote_prefix") or "")
+    callout_prefix = str(metadata.get("callout_prefix") or "")
+    if quote_prefix:
+        value = re.sub(r"^>+\s?", "", value)
+    if callout_prefix and value.startswith(callout_prefix):
+        value = value[len(callout_prefix):].lstrip()
+    return value
+
+
+def restore_source_line_from_translation_segment(item: dict[str, Any]) -> str:
+    source = str(item.get("source") or "")
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    if item.get("block_type") == "标题" and not MARKDOWN_HEADING_RE.match(source):
+        prefix = str(metadata.get("heading_prefix") or "")
+        if not prefix:
+            level = int(metadata.get("heading_level") or 0)
+            prefix = "#" * level if 1 <= level <= 6 else "#"
+        return f"{prefix} {source}"
+    quote_prefix = str(metadata.get("quote_prefix") or "")
+    callout_prefix = str(metadata.get("callout_prefix") or "")
+    if callout_prefix and not source.startswith(callout_prefix):
+        source = f"{callout_prefix}{source}"
+    if quote_prefix and not source.lstrip().startswith(">"):
+        return f"{quote_prefix}{source}" if source else quote_prefix.rstrip()
+    return source
+
+
+def render_translation_block(item: dict[str, Any], translation: str) -> list[str]:
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    translation = normalize_translation_line_prefix(translation, metadata)
+    lines = translation.splitlines()
+    if item.get("block_type") == "标题" and lines:
+        first = lines[0].strip()
+        if MARKDOWN_HEADING_RE.match(first):
+            return lines
+        prefix = str(metadata.get("heading_prefix") or "")
+        if not prefix:
+            level = int(metadata.get("heading_level") or 0)
+            prefix = "#" * level if 1 <= level <= 6 else "#"
+        return [f"{prefix} {first}", *lines[1:]]
+    if item.get("block_type") == "注释正文" and lines:
+        first = lines[0].strip()
+        if MARKDOWN_FOOTNOTE_DEF_RE.match(first):
+            return lines
+        marker = str(metadata.get("footnote_marker") or "")
+        if marker:
+            return [f"{marker} {first}", *lines[1:]]
+    quote_prefix = str(metadata.get("quote_prefix") or "")
+    callout_prefix = str(metadata.get("callout_prefix") or "")
+    if callout_prefix and lines and not lines[0].startswith(callout_prefix):
+        lines = [f"{callout_prefix}{lines[0].strip()}", *lines[1:]]
+    if quote_prefix and lines and not lines[0].lstrip().startswith(">"):
+        return [f"{quote_prefix}{line}" if line else quote_prefix.rstrip() for line in lines]
+    return lines
 
 
 def merge_candidate(candidate: dict[str, Any], old: dict[str, Any]) -> dict[str, Any]:

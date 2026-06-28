@@ -9,16 +9,39 @@ const state = {
   selectedIllegalBreakId: null,
   selectedIllegalBreakIds: new Set(),
   illegalBreakAnchorId: null,
+  translationManifest: null,
+  selectedTranslationId: null,
+  selectedTranslationIds: new Set(),
+  translationAnchorId: null,
+  activeTranslationFile: "",
   selectedContextLine: null,
   scanning: false,
+  translating: false,
   activeSourceFile: "",
   activeAnnotationGroup: "",
+  activeWorkspaceTab: "ocr",
   activeDataView: "headings",
+  translationSettingsOpen: false,
+  translationSettings: {
+    service: "DeepL",
+    hasApiKey: false,
+    maskedApiKey: "",
+    endpointMode: "",
+    apiKeyInput: "",
+    apiKeyDirty: false,
+    saveStatus: "",
+    testText: "This is a test sentence.",
+    testResult: "",
+    testError: "",
+    testing: false,
+  },
+  illegalBreakConfidenceFilter: "high",
   tableSort: {
     headings: { fields: [{ field: "index", direction: "asc" }] },
     annotations: { fields: [{ field: "index", direction: "asc" }] },
     imgs: { fields: [{ field: "index", direction: "asc" }] },
     illegal_breaks: { fields: [{ field: "source_file", direction: "asc" }, { field: "line_no", direction: "asc" }] },
+    translations: { fields: [{ field: "source_file", direction: "asc" }, { field: "block_no", direction: "asc" }] },
   },
   openedWorkspaceDir: "",
   expandedTree: {
@@ -27,6 +50,7 @@ const state = {
     annotations: false,
     imgs: false,
     illegal_breaks: false,
+    translations: false,
   },
 };
 
@@ -36,6 +60,31 @@ const lastWorkspaceDirKey = "ocr2md.lastWorkspaceDir.v1";
 const paneLayoutStorageKey = "ocr2md.paneLayout.v1";
 const minColumnWidths = [48, 120, 48, 54, 72, 140, 140, 88, 140];
 let workspaceStateTimer = null;
+let translationSettingsSaveTimer = null;
+const mdRenderer = window.markdownit
+  ? window.markdownit({
+      html: true,
+      linkify: true,
+      typographer: true,
+      breaks: false,
+    })
+  : null;
+if (mdRenderer) {
+  installMarkdownMath(mdRenderer);
+  const defaultLinkOpen =
+    mdRenderer.renderer.rules.link_open ||
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+  mdRenderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const targetIndex = token.attrIndex("target");
+    if (targetIndex < 0) token.attrPush(["target", "_blank"]);
+    else token.attrs[targetIndex][1] = "_blank";
+    const relIndex = token.attrIndex("rel");
+    if (relIndex < 0) token.attrPush(["rel", "noreferrer"]);
+    else token.attrs[relIndex][1] = "noreferrer";
+    return defaultLinkOpen(tokens, idx, options, env, self);
+  };
+}
 
 const el = {
   inputDir: document.querySelector("#inputDir"),
@@ -50,6 +99,12 @@ const el = {
   bindAnnotationHeadingsBtn: document.querySelector("#bindAnnotationHeadingsBtn"),
   downloadImagesBtn: document.querySelector("#downloadImagesBtn"),
   setIllegalBreakConfidenceBtn: document.querySelector("#setIllegalBreakConfidenceBtn"),
+  scanTranslationBtn: document.querySelector("#scanTranslationBtn"),
+  saveTranslationBtn: document.querySelector("#saveTranslationBtn"),
+  runTranslationBtn: document.querySelector("#runTranslationBtn"),
+  exportTranslationBtn: document.querySelector("#exportTranslationBtn"),
+  setTranslationStatusBtn: document.querySelector("#setTranslationStatusBtn"),
+  translationServiceSettingsBtn: document.querySelector("#translationServiceSettingsBtn"),
   checkBtn: document.querySelector("#checkBtn"),
   clearHistoryBtn: document.querySelector("#clearHistoryBtn"),
   historyToggleBtn: document.querySelector("#historyToggleBtn"),
@@ -57,12 +112,16 @@ const el = {
   dirHistoryMenu: document.querySelector("#dirHistoryMenu"),
   onlyEnabled: document.querySelector("#onlyEnabled"),
   hideDisabled: document.querySelector("#hideDisabled"),
+  illegalBreakConfidenceFilter: document.querySelector("#illegalBreakConfidenceFilter"),
+  illegalBreakConfidenceFilterBtns: document.querySelectorAll("[data-confidence-filter]"),
   filterText: document.querySelector("#filterText"),
   sortControls: document.querySelector("#sortControls"),
   countInfo: document.querySelector("#countInfo"),
+  sourcePaneTitle: document.querySelector("#sourcePaneTitle"),
   headingRows: document.querySelector("#headingRows"),
   projectTitle: document.querySelector("#projectTitle"),
   projectMeta: document.querySelector("#projectMeta"),
+  workspaceTabBtns: document.querySelectorAll("[data-workspace-tab]"),
   directoryTree: document.querySelector("#directoryTree"),
   mainSplitter: document.querySelector("#mainSplitter"),
   resultSplitter: document.querySelector("#resultSplitter"),
@@ -99,6 +158,10 @@ const el = {
   illegalBreakConfidenceHint: document.querySelector("#illegalBreakConfidenceHint"),
   illegalBreakConfidenceInput: document.querySelector("#illegalBreakConfidenceInput"),
   confirmIllegalBreakConfidenceBtn: document.querySelector("#confirmIllegalBreakConfidenceBtn"),
+  translationStatusDialog: document.querySelector("#translationStatusDialog"),
+  translationStatusHint: document.querySelector("#translationStatusHint"),
+  translationStatusInput: document.querySelector("#translationStatusInput"),
+  confirmTranslationStatusBtn: document.querySelector("#confirmTranslationStatusBtn"),
 };
 
 el.scanBtn.addEventListener("click", chooseAndScanDirectory);
@@ -112,6 +175,12 @@ el.setAnnotationGroupBtn.addEventListener("click", setSelectedAnnotationGroup);
 el.bindAnnotationHeadingsBtn.addEventListener("click", bindAnnotationHeadings);
 el.downloadImagesBtn.addEventListener("click", downloadImages);
 el.setIllegalBreakConfidenceBtn.addEventListener("click", setSelectedIllegalBreakConfidence);
+el.scanTranslationBtn.addEventListener("click", () => scanTranslationFiles(true));
+el.saveTranslationBtn.addEventListener("click", saveTranslation);
+el.runTranslationBtn.addEventListener("click", runTranslation);
+el.exportTranslationBtn.addEventListener("click", exportTranslation);
+el.setTranslationStatusBtn.addEventListener("click", setSelectedTranslationStatus);
+el.translationServiceSettingsBtn.addEventListener("click", openTranslationServiceSettings);
 el.checkBtn.addEventListener("click", () => {
   recomputeStatuses();
   recomputeAnnotationStatuses();
@@ -122,8 +191,14 @@ el.checkBtn.addEventListener("click", () => {
 el.clearHistoryBtn.addEventListener("click", clearDirectoryHistory);
 el.historyToggleBtn.addEventListener("click", toggleDirectoryHistory);
 document.addEventListener("click", closeDirectoryHistoryOnOutsideClick);
+el.workspaceTabBtns.forEach((button) => {
+  button.addEventListener("click", () => setWorkspaceTab(button.dataset.workspaceTab));
+});
 el.onlyEnabled.addEventListener("change", renderTable);
 el.hideDisabled.addEventListener("change", renderTable);
+el.illegalBreakConfidenceFilterBtns.forEach((button) => {
+  button.addEventListener("click", () => setIllegalBreakConfidenceFilter(button.dataset.confidenceFilter));
+});
 el.filterText.addEventListener("input", () => {
   renderDirectoryTree();
   renderTable();
@@ -137,6 +212,7 @@ el.confirmExportDirBtn.addEventListener("click", applySelectedExportDir);
 el.confirmAnnotationTypeBtn.addEventListener("click", applySelectedAnnotationType);
 el.confirmAnnotationGroupBtn.addEventListener("click", applySelectedAnnotationGroup);
 el.confirmIllegalBreakConfidenceBtn.addEventListener("click", applySelectedIllegalBreakConfidence);
+el.confirmTranslationStatusBtn.addEventListener("click", applySelectedTranslationStatus);
 
 initPaneLayout();
 initColumnWidths();
@@ -155,12 +231,12 @@ if (initialDir) {
 
 async function scan() {
   if (state.scanning) return;
-  const dir = resolveInputDirectory(el.inputDir.value.trim());
+  const dir = resolveInputDirectory(el.inputDir.value.trim(), state.activeWorkspaceTab);
   if (!dir) {
     setMessage("请输入目录");
     return;
   }
-  el.inputDir.value = dir;
+  el.inputDir.value = displaySourcePathForTab(dir, state.activeWorkspaceTab);
   state.scanning = true;
   el.scanBtn.disabled = true;
   setMessage("扫描中...");
@@ -182,6 +258,8 @@ async function scan() {
     normalizeRestoredViewState();
     recomputeStatuses();
     recomputeAnnotationStatuses();
+    await scanTranslationFiles(false);
+    syncDisplayedSourcePath();
     renderProjectInfo();
     renderDirectoryTree();
     renderTable();
@@ -189,7 +267,7 @@ async function scan() {
     if (state.selectedId) {
       await loadContext(currentHeading());
     }
-    setMessage(`${data.workspace_loaded ? "已读取工作空间" : "已添加工作目录"}：${data.files.length} 个 md，${data.headings.length} 个标题候选，${state.manifest.imgs.length} 个图片外链，${highConfidenceIllegalBreaks().length} 个高置信度非法断行`);
+    setMessage(`${data.workspace_loaded ? "已读取工作空间" : "已添加工作目录"}：${data.files.length} 个 md，${data.headings.length} 个标题候选，${state.manifest.imgs.length} 个图片外链，${highConfidenceIllegalBreaks().length} 个高置信度非法断行，${state.translationManifest?.segments?.length || 0} 个翻译文本块`);
   } finally {
     state.scanning = false;
     el.scanBtn.disabled = false;
@@ -214,6 +292,7 @@ async function chooseAndScanDirectory() {
       setMessage("没有选择目录", true);
       return;
     }
+    state.translationManifest = null;
     el.inputDir.value = data.path;
     await scan();
   } finally {
@@ -224,12 +303,29 @@ async function chooseAndScanDirectory() {
 function resolveInputDirectory(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) return "";
+  const normalized = trimmed.replace(/\/+$/, "");
+  const repaired = repairDuplicatedAbsolutePath(normalized);
+  if (repaired !== normalized) return resolveInputDirectory(repaired);
+  if (state.activeWorkspaceTab === "translation" && normalized.endsWith("/output")) {
+    return normalized.slice(0, -"/output".length) || "/";
+  }
   const history = loadDirectoryHistory();
   const exact = history.find((dir) => dir === trimmed);
   if (exact) return exact;
   const prefixMatches = history.filter((dir) => dir.startsWith(trimmed));
   if (prefixMatches.length === 1) return prefixMatches[0];
   return trimmed;
+}
+
+function repairDuplicatedAbsolutePath(path) {
+  const text = String(path || "");
+  for (const marker of ["/Users/", "/private/", "/var/", "/Volumes/"]) {
+    const first = text.indexOf(marker);
+    if (first === -1) continue;
+    const second = text.indexOf(marker, first + marker.length);
+    if (second !== -1) return text.slice(second);
+  }
+  return text;
 }
 
 async function save() {
@@ -288,6 +384,162 @@ async function exportMarkdown() {
     setMessage(`已导出 ${data.count} 个文件到 ${data.output_dir}`);
   } finally {
     el.exportBtn.disabled = false;
+  }
+}
+
+async function scanTranslationFiles(showMessage = true) {
+  if (!state.manifest?.input_dir) return;
+  if (showMessage) setMessage("扫描导出文件中...");
+  const data = await fetchJson(`/api/translation/scan?dir=${encodeURIComponent(state.manifest.input_dir)}`);
+  if (data.error) {
+    if (showMessage) setMessage(data.error, true);
+    state.translationManifest = {
+      input_dir: state.manifest.input_dir,
+      files: [],
+      segments: [],
+      ui_state: {},
+    };
+    return;
+  }
+  state.translationManifest = data;
+  state.translationManifest.segments = state.translationManifest.segments || [];
+  applyTranslationUiState(data.ui_state || {});
+  ensureTranslationSelection();
+  renderDirectoryTree();
+  if (state.activeDataView === "translations") renderTable();
+  if (showMessage) {
+    setMessage(`已扫描 ${data.files.length} 个导出文件，${data.segments.length} 个翻译文本块`);
+  }
+}
+
+async function saveTranslation() {
+  if (!state.translationManifest) {
+    setMessage("没有可保存的翻译数据");
+    return;
+  }
+  state.translationManifest.ui_state = collectTranslationUiState();
+  setMessage("保存翻译中...");
+  const data = await fetchJson("/api/translation/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state.translationManifest),
+  });
+  if (data.error) {
+    setMessage(data.error, true);
+    return;
+  }
+  state.translationManifest.segments = data.segments || state.translationManifest.segments || [];
+  setMessage(`已保存翻译工作空间：${data.workspace_path || data.path}`);
+}
+
+async function runTranslation() {
+  if (!state.translationManifest) {
+    setMessage("没有可翻译的数据");
+    return;
+  }
+  if (state.translating) {
+    setMessage("翻译正在执行中");
+    return;
+  }
+  const rows = filteredTranslations().filter((item) => shouldAutoTranslateRow(item));
+  if (!rows.length) {
+    setMessage("当前数据表没有未翻译行");
+    return;
+  }
+  state.translating = true;
+  setMessage(`开始翻译 ${rows.length} 行`);
+  const progress = appendConsoleProgress("执行翻译", rows.length);
+  let success = 0;
+  let failed = 0;
+  for (let index = 0; index < rows.length; index += 1) {
+    const item = rows[index];
+    updateConsoleProgress(
+      progress,
+      index,
+      rows.length,
+      `成功 ${success}/${rows.length}，失败 ${failed}，正在翻译 ${index + 1}/${rows.length} ${shortFile(item.source_file || "")}:${item.line_no || ""}`
+    );
+    const data = await fetchJson("/api/translation/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service: state.translationSettings.service || "DeepL",
+        text: translationSourceTextForService(item),
+      }),
+    });
+    if (data.error) {
+      failed += 1;
+      appendConsoleLine(`翻译失败 ${shortFile(item.source_file || "")}:${item.line_no || ""} 句号 ${item.sentence_no || "-"}：${data.error}`, true);
+    } else {
+      item.translation = normalizeTranslationTextForRow(item, data.translated_text || "");
+      item.status = item.translation ? "已翻译" : "未翻译";
+      if (item.translation) success += 1;
+      else failed += 1;
+    }
+    updateConsoleProgress(progress, index + 1, rows.length, `成功 ${success}/${rows.length}，失败 ${failed}`);
+    if (index % 5 === 4) {
+      renderTable();
+    }
+  }
+  state.translating = false;
+  renderTable();
+  await saveTranslation();
+  finishConsoleProgress(progress, failed ? "failed" : "done");
+  setMessage(`翻译完成：成功 ${success}/${rows.length}，失败 ${failed}`, Boolean(failed));
+}
+
+function shouldAutoTranslateRow(item) {
+  const status = String(item.status || "未翻译");
+  if (status !== "未翻译") return false;
+  if (String(item.translation || "").trim()) return false;
+  if (status === "不翻译") return false;
+  if (!String(item.source || "").trim()) return false;
+  return true;
+}
+
+function translationSourceTextForService(item) {
+  return String(item.source || "");
+}
+
+function normalizeTranslationTextForRow(item, text) {
+  let value = String(text || "").trim();
+  const metadata = item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const quotePrefix = String(metadata.quote_prefix || "");
+  const calloutPrefix = String(metadata.callout_prefix || "");
+  if (quotePrefix) {
+    value = stripLeadingQuotePrefix(value);
+  }
+  if (calloutPrefix && value.startsWith(calloutPrefix)) {
+    value = value.slice(calloutPrefix.length).trimStart();
+  }
+  return value;
+}
+
+function stripLeadingQuotePrefix(value) {
+  return String(value || "").replace(/^>+\s?/, "");
+}
+
+async function exportTranslation() {
+  if (!state.translationManifest) {
+    setMessage("没有可导出的翻译数据");
+    return;
+  }
+  setMessage("导出译文中...");
+  el.exportTranslationBtn.disabled = true;
+  try {
+    state.translationManifest.ui_state = collectTranslationUiState();
+    const data = await fetchJson("/api/translation/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state.translationManifest),
+    });
+    if (data.error) {
+      setMessage(data.error, true);
+      return;
+    }
+    setMessage(`已导出 ${data.count} 个译文文件到 ${data.output_dir}`);
+  } finally {
+    el.exportTranslationBtn.disabled = false;
   }
 }
 
@@ -356,6 +608,7 @@ function shortImageLabel(item) {
 }
 
 function renderTable() {
+  updateTableToolVisibility();
   if (!state.manifest) {
     el.headingRows.innerHTML = "";
     el.countInfo.textContent = "";
@@ -372,6 +625,10 @@ function renderTable() {
   }
   if (state.activeDataView === "illegal_breaks") {
     renderIllegalBreakTable();
+    return;
+  }
+  if (state.activeDataView === "translations") {
+    renderTranslationTable();
     return;
   }
   renderHeadingTable();
@@ -497,6 +754,7 @@ function renderImageTable() {
 
 function renderIllegalBreakTable() {
   const rows = sortedRows("illegal_breaks", filteredIllegalBreaks());
+  renderIllegalBreakConfidenceFilter();
   renderTableHeader("illegal_breaks", [
     { field: "index", label: "index" },
     { field: "line_no", label: "断行位置" },
@@ -523,8 +781,72 @@ function renderIllegalBreakTable() {
     `;
     el.headingRows.appendChild(tr);
   });
-  el.countInfo.textContent = `${rows.length}/${highConfidenceIllegalBreaks().length}`;
+  el.countInfo.textContent = `${rows.length}/${illegalBreaksForConfidenceFilter().length}`;
   renderSideEditor();
+}
+
+function renderTranslationTable() {
+  const rows = sortedRows("translations", filteredTranslations());
+  renderTableHeader("translations", [
+    { field: "line_no", label: "行号" },
+    { field: "source", label: "原文" },
+    { field: "translation", label: "译文" },
+    { field: "sentence_no", label: "句号" },
+    { field: "block_no", label: "块号" },
+    { field: "block_type", label: "块类型" },
+    { field: "heading", label: "块章节" },
+    { field: "source_file", label: "源文件" },
+    { field: "status", label: "状态" },
+  ]);
+  el.headingRows.innerHTML = "";
+  rows.forEach((item, index) => {
+    const tr = document.createElement("tr");
+    tr.dataset.id = item.id;
+    tr.className = state.selectedTranslationIds.has(item.id) ? "selected" : "";
+    tr.addEventListener("click", (event) => selectTranslation(item.id, event));
+    tr.innerHTML = `
+      <td>${escapeHtml(item.line_no || "")}</td>
+      <td title="${escapeHtml(translationSourceText(item))}">${escapeHtml(translationSourceText(item))}</td>
+      <td></td>
+      <td>${escapeHtml(item.sentence_no || "")}</td>
+      <td>${escapeHtml(translationBlockNo(item) || "")}</td>
+      <td>${escapeHtml(translationBlockType(item))}</td>
+      <td title="${escapeHtml(item.heading || "")}">${escapeHtml(item.heading || "")}</td>
+      <td title="${escapeHtml(item.source_file || "")}">${escapeHtml(shortFile(item.source_file || ""))}</td>
+      <td class="${translationStatusClass(item.status)}">${escapeHtml(item.status || "未翻译")}</td>
+    `;
+    tr.children[2].appendChild(translationInput(item));
+    el.headingRows.appendChild(tr);
+  });
+  el.countInfo.textContent = `${rows.length}/${state.translationManifest?.segments?.length || 0}`;
+  renderSideEditor();
+}
+
+function translationBlockType(item) {
+  return item.block_type || "文本";
+}
+
+function translationBlockNo(item) {
+  return item.block_no || item.paragraph_no || "";
+}
+
+function translationSourceText(item) {
+  let source = String(item?.source || "");
+  const metadata = item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const sentenceNo = Number(item?.sentence_no || 0);
+  const isSentenceContinuation = sentenceNo > 1;
+  if (isSentenceContinuation) {
+    return source;
+  }
+  const calloutPrefix = String(metadata.callout_prefix || "");
+  if (calloutPrefix && !source.startsWith(calloutPrefix)) {
+    source = `${calloutPrefix}${source}`;
+  }
+  const quotePrefix = String(metadata.quote_prefix || "");
+  if (quotePrefix && !source.trimStart().startsWith(">")) {
+    return source ? `${quotePrefix}${source}` : quotePrefix.trimEnd();
+  }
+  return source;
 }
 
 function renderTableHeader(scope, columns) {
@@ -578,20 +900,48 @@ function renderProjectInfo() {
   if (!state.manifest) {
     el.projectTitle.textContent = "目录";
     el.projectMeta.textContent = "未加载";
+    if (el.sourcePaneTitle) el.sourcePaneTitle.textContent = "source";
     updateModuleActions();
     return;
   }
-  const inputDir = state.manifest.input_dir || "";
-  const dirName = inputDir.split("/").filter(Boolean).pop() || "source";
+  const sourcePath = currentDisplayedSourcePath();
+  const dirName = sourcePath.split("/").filter(Boolean).pop() || "source";
   el.projectTitle.textContent = dirName;
-  el.projectMeta.textContent = `${state.manifest.files.length} files · ${currentModuleLabel()}`;
+  el.projectMeta.textContent = `${currentSourceMeta()} · ${currentModuleLabel()}`;
+  if (el.sourcePaneTitle) {
+    el.sourcePaneTitle.textContent = state.activeWorkspaceTab === "translation" ? "translation source" : "source";
+  }
   updateModuleActions();
+}
+
+function currentSourceMeta() {
+  if (state.activeWorkspaceTab === "translation") {
+    return `${state.translationManifest?.files?.length || 0} exported files`;
+  }
+  return `${state.manifest?.files?.length || 0} files`;
+}
+
+function updateTableToolVisibility() {
+  if (!el.illegalBreakConfidenceFilter) return;
+  el.illegalBreakConfidenceFilter.hidden = state.activeDataView !== "illegal_breaks";
+}
+
+function renderIllegalBreakConfidenceFilter() {
+  const counts = illegalBreakConfidenceCounts();
+  for (const button of el.illegalBreakConfidenceFilterBtns) {
+    const filter = button.dataset.confidenceFilter || "high";
+    const label = filter === "high" ? "高" : filter === "low" ? "低" : "全部";
+    const count = filter === "high" ? counts.high : filter === "low" ? counts.low : counts.all;
+    button.textContent = `${label} ${count}`;
+    button.setAttribute("aria-pressed", String(state.illegalBreakConfidenceFilter === filter));
+  }
 }
 
 function currentModuleScope() {
   if (state.activeDataView === "annotations") return "annotations";
   if (state.activeDataView === "imgs") return "imgs";
   if (state.activeDataView === "illegal_breaks") return "illegal_breaks";
+  if (state.activeDataView === "translations") return "translations";
   return "headings";
 }
 
@@ -601,6 +951,7 @@ function currentModuleLabel() {
   }
   if (state.activeDataView === "imgs") return "图片";
   if (state.activeDataView === "illegal_breaks") return "非法断行";
+  if (state.activeDataView === "translations") return "翻译";
   if (state.activeSourceFile) return `文件 ${shortFile(state.activeSourceFile)}`;
   return "标题";
 }
@@ -611,6 +962,7 @@ function updateModuleActions() {
     const scopes = String(button.dataset.moduleAction || "").split(/\s+/).filter(Boolean);
     button.hidden = !state.manifest || !scopes.includes(scope);
   }
+  if (el.addTitleBtn) el.addTitleBtn.hidden = scope !== "headings";
 }
 
 function isTitleModuleActive() {
@@ -627,6 +979,10 @@ function isImageModuleActive() {
 
 function isIllegalBreakModuleActive() {
   return state.activeDataView === "illegal_breaks";
+}
+
+function isTranslationModuleActive() {
+  return state.activeDataView === "translations";
 }
 
 function ensureSelectionAfterLoad() {
@@ -663,6 +1019,8 @@ function ensureSelectionAfterLoad() {
     state.illegalBreakAnchorId && validIllegalBreakIds.has(state.illegalBreakAnchorId)
       ? state.illegalBreakAnchorId
       : state.selectedIllegalBreakId;
+  syncIllegalBreakSelectionToVisible();
+  ensureTranslationSelection();
 }
 
 function normalizeRestoredViewState() {
@@ -702,8 +1060,14 @@ function collectWorkspaceUiState() {
     selected_illegal_break_id: state.selectedIllegalBreakId,
     selected_illegal_break_ids: Array.from(state.selectedIllegalBreakIds),
     illegal_break_anchor_id: state.illegalBreakAnchorId,
+    selected_translation_id: state.selectedTranslationId,
+    selected_translation_ids: Array.from(state.selectedTranslationIds),
+    translation_anchor_id: state.translationAnchorId,
+    active_translation_file: state.activeTranslationFile,
     selected_context_line: state.selectedContextLine,
+    active_workspace_tab: state.activeWorkspaceTab,
     active_data_view: state.activeDataView,
+    illegal_break_confidence_filter: state.illegalBreakConfidenceFilter,
     table_sort: state.tableSort,
     filters: {
       only_enabled: el.onlyEnabled.checked,
@@ -736,10 +1100,22 @@ function applyWorkspaceUiState(uiState) {
     Array.isArray(uiState.selected_illegal_break_ids) ? uiState.selected_illegal_break_ids : []
   );
   state.illegalBreakAnchorId = uiState.illegal_break_anchor_id || state.selectedIllegalBreakId;
+  state.selectedTranslationId = uiState.selected_translation_id || null;
+  state.selectedTranslationIds = new Set(
+    Array.isArray(uiState.selected_translation_ids) ? uiState.selected_translation_ids : []
+  );
+  state.translationAnchorId = uiState.translation_anchor_id || state.selectedTranslationId;
+  state.activeTranslationFile = String(uiState.active_translation_file || "");
   state.selectedContextLine = uiState.selected_context_line || null;
-  state.activeDataView = ["annotations", "imgs", "illegal_breaks"].includes(uiState.active_data_view)
+  state.activeWorkspaceTab = uiState.active_workspace_tab === "translation" ? "translation" : "ocr";
+  state.activeDataView = ["annotations", "imgs", "illegal_breaks", "translations"].includes(uiState.active_data_view)
     ? uiState.active_data_view
     : "headings";
+  if (state.activeDataView === "translations") state.activeWorkspaceTab = "translation";
+  if (state.activeWorkspaceTab === "translation") state.activeDataView = "translations";
+  state.illegalBreakConfidenceFilter = ["high", "low", "all"].includes(uiState.illegal_break_confidence_filter)
+    ? uiState.illegal_break_confidence_filter
+    : "high";
   state.tableSort = {
     ...state.tableSort,
     ...normalizeTableSort(uiState.table_sort || {}),
@@ -750,6 +1126,37 @@ function applyWorkspaceUiState(uiState) {
   };
   if (uiState.layout) applyPaneLayout(uiState.layout);
   if (uiState.columns) applyColumnWidths(uiState.columns);
+}
+
+function collectTranslationUiState() {
+  return {
+    active_data_view: state.activeDataView,
+    selected_translation_id: state.selectedTranslationId,
+    selected_translation_ids: Array.from(state.selectedTranslationIds),
+    translation_anchor_id: state.translationAnchorId,
+    active_translation_file: state.activeTranslationFile,
+    filters: { text: el.filterText.value },
+    table_sort: state.tableSort,
+  };
+}
+
+function applyTranslationUiState(uiState) {
+  if (uiState.selected_translation_id && !state.selectedTranslationId) {
+    state.selectedTranslationId = uiState.selected_translation_id;
+  }
+  if (!state.selectedTranslationIds.size && Array.isArray(uiState.selected_translation_ids)) {
+    state.selectedTranslationIds = new Set(uiState.selected_translation_ids);
+  }
+  if (uiState.translation_anchor_id && !state.translationAnchorId) {
+    state.translationAnchorId = uiState.translation_anchor_id;
+  }
+  if (uiState.active_translation_file && !state.activeTranslationFile) {
+    state.activeTranslationFile = String(uiState.active_translation_file);
+  }
+  state.tableSort = {
+    ...state.tableSort,
+    ...normalizeTableSort(uiState.table_sort || {}),
+  };
 }
 
 function currentPaneLayout() {
@@ -795,23 +1202,33 @@ function applyColumnWidths(widths) {
 function renderDirectoryTree() {
   if (!el.directoryTree) return;
   renderProjectInfo();
+  renderWorkspaceTabs();
   if (!state.manifest) {
     el.directoryTree.innerHTML = '<div class="tree-empty">扫描后显示输入目录和源文件</div>';
     return;
   }
 
-  const inputDir = state.manifest.input_dir || "";
-  const rootName = inputDir.split("/").filter(Boolean).pop() || "source";
+  const sourcePath = currentDisplayedSourcePath();
+  const rootName = sourcePath.split("/").filter(Boolean).pop() || "source";
   el.directoryTree.innerHTML = "";
   el.directoryTree.appendChild(treeRow({
     icon: "▾",
     name: rootName,
-    title: inputDir,
+    title: sourcePath,
     count: "",
     className: "root clickable",
-    onClick: () => clearSourceFilter(),
+    onClick: () => state.activeWorkspaceTab === "translation" ? openTranslationsGroup() : clearSourceFilter(),
   }));
 
+  if (state.activeWorkspaceTab === "translation") {
+    renderTranslationModuleTree();
+    return;
+  }
+
+  renderOcrModuleTree();
+}
+
+function renderOcrModuleTree() {
   el.directoryTree.appendChild(treeRow({
     icon: state.expandedTree.files ? "▾" : "▸",
     name: "files",
@@ -865,7 +1282,7 @@ function renderDirectoryTree() {
     icon: state.expandedTree.illegal_breaks ? "▾" : "▸",
     name: "非法断行",
     title: "疑似由 OCR 或排版造成的非法断行",
-    count: `${highConfidenceIllegalBreaks().length}`,
+    count: `${highConfidenceIllegalBreaks().length}/${(state.manifest.illegal_breaks || []).length}`,
     className: `folder clickable ${isIllegalBreakModuleActive() ? "active" : ""} tree-indent-1`,
     onClick: openIllegalBreaksGroup,
   }));
@@ -874,13 +1291,73 @@ function renderDirectoryTree() {
   }
 }
 
+function renderTranslationModuleTree() {
+  el.directoryTree.appendChild(treeRow({
+    icon: state.expandedTree.translations ? "▾" : "▸",
+    name: "翻译",
+    title: "针对 output 内已清洗导出文件的翻译模块",
+    count: `${state.translationManifest?.segments?.length || 0}`,
+    className: `folder clickable ${isTranslationModuleActive() ? "active" : ""} tree-indent-1`,
+    onClick: openTranslationsGroup,
+  }));
+  if (state.expandedTree.translations) {
+    renderTranslationTreeNodes(2);
+  }
+}
+
+function renderWorkspaceTabs() {
+  for (const button of el.workspaceTabBtns) {
+    const active = button.dataset.workspaceTab === state.activeWorkspaceTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  syncDisplayedSourcePath();
+}
+
+function currentDisplayedSourcePath() {
+  return displaySourcePathForTab(state.manifest?.input_dir || el.inputDir.value.trim(), state.activeWorkspaceTab);
+}
+
+function displaySourcePathForTab(inputDir, tab) {
+  const root = String(inputDir || "").replace(/\/+$/, "");
+  if (!root) return "";
+  if (tab === "translation") {
+    const manifestInput = String(state.translationManifest?.input_dir || "").replace(/\/+$/, "");
+    if (manifestInput === root && state.translationManifest?.output_dir) {
+      return state.translationManifest.output_dir;
+    }
+    return `${root}/output`;
+  }
+  return root;
+}
+
+function syncDisplayedSourcePath() {
+  if (!state.manifest?.input_dir) return;
+  el.inputDir.value = currentDisplayedSourcePath();
+  el.inputDir.placeholder = state.activeWorkspaceTab === "translation"
+    ? "输入已导出 Markdown 的 output 目录"
+    : "输入 OCR Markdown 目录";
+}
+
 function toggleTreeGroup(group) {
   state.expandedTree[group] = !state.expandedTree[group];
   renderDirectoryTree();
   scheduleWorkspaceStateSave();
 }
 
+function setWorkspaceTab(tab) {
+  const nextTab = tab === "translation" ? "translation" : "ocr";
+  if (state.activeWorkspaceTab === nextTab) return;
+  state.activeWorkspaceTab = nextTab;
+  if (nextTab === "translation") {
+    openTranslationsGroup();
+    return;
+  }
+  openTitlesGroup();
+}
+
 function openTitlesGroup() {
+  state.activeWorkspaceTab = "ocr";
   state.expandedTree.titles = true;
   state.activeDataView = "headings";
   state.activeSourceFile = "";
@@ -892,6 +1369,7 @@ function openTitlesGroup() {
 }
 
 function openAnnotationsGroup() {
+  state.activeWorkspaceTab = "ocr";
   state.expandedTree.annotations = true;
   state.activeDataView = "annotations";
   state.activeSourceFile = "";
@@ -903,6 +1381,7 @@ function openAnnotationsGroup() {
 }
 
 function openImagesGroup() {
+  state.activeWorkspaceTab = "ocr";
   state.expandedTree.imgs = true;
   state.activeDataView = "imgs";
   state.activeSourceFile = "";
@@ -914,6 +1393,7 @@ function openImagesGroup() {
 }
 
 function openIllegalBreaksGroup() {
+  state.activeWorkspaceTab = "ocr";
   state.expandedTree.illegal_breaks = true;
   state.activeDataView = "illegal_breaks";
   state.activeSourceFile = "";
@@ -922,6 +1402,22 @@ function openIllegalBreaksGroup() {
   renderDirectoryTree();
   renderTable();
   scheduleWorkspaceStateSave();
+}
+
+function openTranslationsGroup() {
+  state.activeWorkspaceTab = "translation";
+  state.expandedTree.translations = true;
+  state.activeDataView = "translations";
+  state.activeSourceFile = "";
+  state.activeAnnotationGroup = "";
+  state.activeTranslationFile = "";
+  el.filterText.value = "";
+  ensureTranslationSelection();
+  renderDirectoryTree();
+  renderTable();
+  scheduleWorkspaceStateSave();
+  const item = currentTranslation();
+  if (item) loadTranslationContext(item);
 }
 
 function buildFileTree(files) {
@@ -1027,7 +1523,7 @@ function renderImageTreeNodes(depth) {
 }
 
 function renderIllegalBreakTreeNodes(depth) {
-  const breaks = highConfidenceIllegalBreaks();
+  const breaks = illegalBreaksForConfidenceFilter();
   const byFile = new Map();
   for (const item of breaks) {
     byFile.set(item.source_file, (byFile.get(item.source_file) || 0) + 1);
@@ -1043,11 +1539,52 @@ function renderIllegalBreakTreeNodes(depth) {
   }
   el.directoryTree.appendChild(treeRow({
     icon: "※",
-    name: `${breaks.length} 个断行候选`,
-    title: "非法断行候选总数",
+    name: `${breaks.length} 个${illegalBreakConfidenceFilterLabel()}断行候选`,
+    title: `${illegalBreakConfidenceFilterLabel()}断行候选总数`,
     count: "",
     className: `summary tree-indent-${Math.min(depth, 4)}`,
   }));
+}
+
+function renderTranslationTreeNodes(depth) {
+  const segments = state.translationManifest?.segments || [];
+  const byFile = new Map();
+  for (const item of segments) {
+    byFile.set(item.source_file, (byFile.get(item.source_file) || 0) + 1);
+  }
+  for (const [file, count] of Array.from(byFile.entries()).sort((a, b) => a[0].localeCompare(b[0], "zh-Hans-CN"))) {
+    el.directoryTree.appendChild(treeRow({
+      icon: "tr",
+      name: shortFile(file),
+      title: file,
+      count: String(count),
+      className: `summary clickable ${state.activeTranslationFile === file ? "active" : ""} tree-indent-${Math.min(depth, 4)}`,
+      onClick: () => openTranslationFile(file),
+    }));
+  }
+  el.directoryTree.appendChild(treeRow({
+    icon: "※",
+    name: `${segments.length} 个文本块`,
+    title: "翻译文本块总数",
+    count: "",
+    className: `summary tree-indent-${Math.min(depth, 4)}`,
+  }));
+}
+
+function openTranslationFile(file) {
+  state.activeWorkspaceTab = "translation";
+  state.activeDataView = "translations";
+  state.activeTranslationFile = file;
+  el.filterText.value = "";
+  const rows = filteredTranslations();
+  const first = rows[0] || null;
+  state.selectedTranslationId = first?.id || null;
+  state.selectedTranslationIds = first ? new Set([first.id]) : new Set();
+  state.translationAnchorId = state.selectedTranslationId;
+  renderDirectoryTree();
+  renderTable();
+  scheduleWorkspaceStateSave();
+  if (first) loadTranslationContext(first);
 }
 
 function annotationGroups() {
@@ -1104,6 +1641,7 @@ function headingCountForFile(file) {
 }
 
 function toggleSourceFilter(file) {
+  state.activeWorkspaceTab = "ocr";
   state.activeSourceFile = state.activeSourceFile === file ? "" : file;
   state.activeDataView = "headings";
   state.activeAnnotationGroup = "";
@@ -1115,6 +1653,7 @@ function toggleSourceFilter(file) {
 
 async function openSourceFile(file) {
   if (!state.manifest || !file) return;
+  state.activeWorkspaceTab = "ocr";
   state.activeSourceFile = file;
   state.activeDataView = "headings";
   state.activeAnnotationGroup = "";
@@ -1126,6 +1665,7 @@ async function openSourceFile(file) {
 }
 
 function clearSourceFilter() {
+  state.activeWorkspaceTab = "ocr";
   state.activeSourceFile = "";
   state.activeAnnotationGroup = "";
   el.filterText.value = "";
@@ -1192,7 +1732,7 @@ function sortState(scope) {
 
 function normalizeTableSort(saved) {
   const result = {};
-  for (const scope of ["headings", "annotations", "imgs", "illegal_breaks"]) {
+  for (const scope of ["headings", "annotations", "imgs", "illegal_breaks", "translations"]) {
     result[scope] = normalizeSortEntry(scope, saved[scope]);
   }
   return result;
@@ -1224,6 +1764,9 @@ function validSortFields(scope) {
   }
   if (scope === "illegal_breaks") {
     return new Set(["index", "line_no", "before", "after", "confidence", "reason", "source_file"]);
+  }
+  if (scope === "translations") {
+    return new Set(["index", "source_file", "block_type", "heading", "block_no", "sentence_no", "paragraph_no", "line_no", "source", "translation", "status"]);
   }
   return new Set(["index", "title", "level", "line_no", "local_no", "export_dir", "export_name", "status", "source_file"]);
 }
@@ -1278,6 +1821,7 @@ function sortValue(scope, item, field, index) {
   if (scope === "annotations" && field === "type") return annotationTypeOrder(item.type);
   if (scope === "annotations" && field === "heading_export_name") return annotationHeadingExportName(item);
   if (field === "status") return statusSortValue(item.status);
+  if (scope === "translations" && (field === "block_no" || field === "sentence_no" || field === "paragraph_no")) return Number(item[field] || 0);
   if (field === "note_no" || field === "local_no") return noteSortValue(item[field]);
   if (field === "level" || field === "line_no") return Number(item[field] || 0);
   return item[field] ?? "";
@@ -1350,7 +1894,7 @@ function filteredImages() {
 
 function filteredIllegalBreaks() {
   const text = el.filterText.value.trim().toLowerCase();
-  const breaks = highConfidenceIllegalBreaks();
+  const breaks = illegalBreaksForConfidenceFilter();
   return breaks.filter((item) => {
     if (!text) return true;
     return [item.before, item.after, item.reason, item.confidence, item.source_file]
@@ -1360,8 +1904,87 @@ function filteredIllegalBreaks() {
   });
 }
 
+function filteredTranslations() {
+  const text = el.filterText.value.trim().toLowerCase();
+  const segments = state.translationManifest?.segments || [];
+  return segments.filter((item) => {
+    if (state.activeTranslationFile && item.source_file !== state.activeTranslationFile) return false;
+    if (!text) return true;
+    return [item.source_file, translationBlockType(item), item.heading, item.source, item.translation, item.status]
+      .join(" ")
+      .toLowerCase()
+      .includes(text);
+  });
+}
+
+function ensureTranslationSelection() {
+  const validIds = new Set((state.translationManifest?.segments || []).map((item) => item.id));
+  state.selectedTranslationIds = new Set(
+    Array.from(state.selectedTranslationIds).filter((id) => validIds.has(id))
+  );
+  if (!state.selectedTranslationId || !validIds.has(state.selectedTranslationId)) {
+    state.selectedTranslationId = state.selectedTranslationIds.values().next().value
+      || state.translationManifest?.segments?.[0]?.id
+      || null;
+  }
+  if (state.selectedTranslationId) state.selectedTranslationIds.add(state.selectedTranslationId);
+  state.translationAnchorId =
+    state.translationAnchorId && validIds.has(state.translationAnchorId)
+      ? state.translationAnchorId
+      : state.selectedTranslationId;
+}
+
 function highConfidenceIllegalBreaks() {
   return (state.manifest?.illegal_breaks || []).filter((item) => item.confidence === "高");
+}
+
+function lowConfidenceIllegalBreaks() {
+  return (state.manifest?.illegal_breaks || []).filter((item) => item.confidence === "低");
+}
+
+function illegalBreaksForConfidenceFilter() {
+  if (state.illegalBreakConfidenceFilter === "low") return lowConfidenceIllegalBreaks();
+  if (state.illegalBreakConfidenceFilter === "all") return state.manifest?.illegal_breaks || [];
+  return highConfidenceIllegalBreaks();
+}
+
+function illegalBreakConfidenceCounts() {
+  const high = highConfidenceIllegalBreaks().length;
+  const low = lowConfidenceIllegalBreaks().length;
+  return { high, low, all: high + low };
+}
+
+function illegalBreakConfidenceFilterLabel() {
+  if (state.illegalBreakConfidenceFilter === "low") return "低置信度";
+  if (state.illegalBreakConfidenceFilter === "all") return "全部";
+  return "高置信度";
+}
+
+function setIllegalBreakConfidenceFilter(filter) {
+  const normalized = ["high", "low", "all"].includes(filter) ? filter : "high";
+  if (state.illegalBreakConfidenceFilter === normalized) return;
+  state.illegalBreakConfidenceFilter = normalized;
+  syncIllegalBreakSelectionToVisible();
+  renderDirectoryTree();
+  renderTable();
+  scheduleWorkspaceStateSave();
+}
+
+function syncIllegalBreakSelectionToVisible() {
+  const visibleIds = new Set(illegalBreaksForConfidenceFilter().map((item) => item.id));
+  state.selectedIllegalBreakIds = new Set(
+    Array.from(state.selectedIllegalBreakIds).filter((id) => visibleIds.has(id))
+  );
+  if (!state.selectedIllegalBreakId || !visibleIds.has(state.selectedIllegalBreakId)) {
+    state.selectedIllegalBreakId = state.selectedIllegalBreakIds.values().next().value
+      || illegalBreaksForConfidenceFilter()[0]?.id
+      || null;
+  }
+  if (state.selectedIllegalBreakId) state.selectedIllegalBreakIds.add(state.selectedIllegalBreakId);
+  state.illegalBreakAnchorId =
+    state.illegalBreakAnchorId && visibleIds.has(state.illegalBreakAnchorId)
+      ? state.illegalBreakAnchorId
+      : state.selectedIllegalBreakId;
 }
 
 function compareAnnotations(a, b) {
@@ -1485,6 +2108,16 @@ async function selectIllegalBreak(id, event = null) {
   await loadIllegalBreakContext(item);
 }
 
+async function selectTranslation(id, event = null) {
+  const item = state.translationManifest?.segments?.find((candidate) => candidate.id === id);
+  if (!item) return;
+  applyTranslationSelection(id, event);
+  state.selectedTranslationId = id;
+  renderTable();
+  scheduleWorkspaceStateSave();
+  await loadTranslationContext(item);
+}
+
 function applyIllegalBreakSelection(id, event = null) {
   const isRange = Boolean(event?.shiftKey);
   const isToggle = Boolean(event?.metaKey || event?.ctrlKey);
@@ -1547,6 +2180,36 @@ function applyAnnotationSelection(id, event = null) {
     state.selectedAnnotationIds = new Set([id]);
     state.annotationAnchorId = id;
   }
+}
+
+function applyTranslationSelection(id, event = null) {
+  const isRange = Boolean(event?.shiftKey);
+  const isToggle = Boolean(event?.metaKey || event?.ctrlKey);
+  const visibleIds = filteredTranslations().map((item) => item.id);
+
+  if (isRange && state.translationAnchorId) {
+    const anchorIndex = visibleIds.indexOf(state.translationAnchorId);
+    const currentIndex = visibleIds.indexOf(id);
+    if (anchorIndex !== -1 && currentIndex !== -1) {
+      const start = Math.min(anchorIndex, currentIndex);
+      const end = Math.max(anchorIndex, currentIndex);
+      const rangeIds = visibleIds.slice(start, end + 1);
+      state.selectedTranslationIds = isToggle
+        ? new Set([...state.selectedTranslationIds, ...rangeIds])
+        : new Set(rangeIds);
+    } else {
+      state.selectedTranslationIds = new Set([id]);
+    }
+  } else if (isToggle) {
+    if (state.selectedTranslationIds.has(id) && state.selectedTranslationIds.size > 1) {
+      state.selectedTranslationIds.delete(id);
+    } else {
+      state.selectedTranslationIds.add(id);
+    }
+  } else {
+    state.selectedTranslationIds = new Set([id]);
+  }
+  state.translationAnchorId = id;
 }
 
 async function selectHeading(id, event = null) {
@@ -1624,7 +2287,7 @@ async function loadContext(item) {
     return;
   }
   state.selectedContextLine = item.line_no;
-  el.contextLines.innerHTML = renderMarkdown(data.text, item.line_no);
+  el.contextLines.innerHTML = renderMarkdown(data.text, item.line_no, previewAssetContext(state.manifest.input_dir, item.source_file));
   wirePreviewBlocks();
   selectPreviewLine(item.line_no);
   el.contextLines.querySelector(".md-block.selected")?.scrollIntoView({
@@ -1645,7 +2308,7 @@ async function loadFilePreview(sourceFile) {
     return;
   }
   state.selectedContextLine = 1;
-  el.contextLines.innerHTML = renderMarkdown(data.text, 1);
+  el.contextLines.innerHTML = renderMarkdown(data.text, 1, previewAssetContext(state.manifest.input_dir, sourceFile));
   wirePreviewBlocks();
   selectPreviewLine(1);
   el.contextLines.scrollTop = 0;
@@ -1663,7 +2326,7 @@ async function loadAnnotationContext(item) {
     return;
   }
   state.selectedContextLine = targetLine;
-  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine);
+  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine, previewAssetContext(state.manifest.input_dir, item.source_file));
   wirePreviewBlocks();
   selectPreviewLine(targetLine);
   el.contextLines.querySelector(".md-block.selected")?.scrollIntoView({
@@ -1684,7 +2347,7 @@ async function loadImageContext(item) {
     return;
   }
   state.selectedContextLine = targetLine;
-  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine);
+  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine, previewAssetContext(state.manifest.input_dir, item.source_file));
   wirePreviewBlocks();
   selectPreviewLine(targetLine);
   el.contextLines.querySelector(".md-block.selected")?.scrollIntoView({
@@ -1705,12 +2368,219 @@ async function loadIllegalBreakContext(item) {
     return;
   }
   state.selectedContextLine = targetLine;
-  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine);
+  el.contextLines.innerHTML = renderMarkdown(data.text, targetLine, previewAssetContext(state.manifest.input_dir, item.source_file));
   wirePreviewBlocks();
   selectPreviewLine(targetLine);
   el.contextLines.querySelector(".md-block.selected")?.scrollIntoView({
     block: "center",
     inline: "nearest",
+  });
+}
+
+async function loadTranslationContext(item) {
+  state.translationSettingsOpen = false;
+  const targetLine = Number(item.line_no || 1);
+  el.contextTitle.textContent = `翻译${translationBlockType(item)} ${translationBlockNo(item) || ""}`.trim();
+  el.contextMeta.textContent = `${item.source_file}:${targetLine}`;
+  const data = await fetchJson(
+    `/api/file?dir=${encodeURIComponent(translationSourceDirectory())}&file=${encodeURIComponent(item.source_file)}&line=${encodeURIComponent(targetLine)}`
+  );
+  if (data.error) {
+    el.contextLines.textContent = data.error;
+    return;
+  }
+  state.selectedContextLine = targetLine;
+  el.contextLines.innerHTML = `${renderMarkdown(
+    data.text,
+    targetLine,
+    previewAssetContext(translationSourceDirectory(), item.source_file)
+  )}${renderTranslationEditor(item)}`;
+  wirePreviewBlocks();
+  wireTranslationEditor(item.id);
+  selectPreviewLine(targetLine);
+  el.contextLines.querySelector(".md-block.selected")?.scrollIntoView({
+    block: "center",
+    inline: "nearest",
+  });
+}
+
+async function openTranslationServiceSettings() {
+  state.translationSettingsOpen = true;
+  el.contextTitle.textContent = "翻译服务设置";
+  el.contextMeta.textContent = "DeepL";
+  el.contextLines.innerHTML = renderTranslationServiceSettings();
+  wireTranslationServiceSettings();
+  const data = await fetchJson("/api/translation/settings");
+  if (data.error) {
+    state.translationSettings.saveStatus = `读取失败：${data.error}`;
+    renderTranslationServiceSettingsIntoContext();
+    return;
+  }
+  state.translationSettings.service = data.service || "DeepL";
+  state.translationSettings.hasApiKey = Boolean(data.has_api_key);
+  state.translationSettings.maskedApiKey = data.masked_api_key || "";
+  state.translationSettings.endpointMode = data.endpoint_mode || "";
+  state.translationSettings.apiKeyInput = "";
+  state.translationSettings.apiKeyDirty = false;
+  state.translationSettings.saveStatus = state.translationSettings.hasApiKey
+    ? `已保存：${state.translationSettings.maskedApiKey}`
+    : "未保存 API key";
+  renderTranslationServiceSettingsIntoContext();
+}
+
+function renderTranslationServiceSettingsIntoContext() {
+  if (!state.translationSettingsOpen) return;
+  el.contextLines.innerHTML = renderTranslationServiceSettings();
+  wireTranslationServiceSettings();
+}
+
+function renderTranslationServiceSettings() {
+  const settings = state.translationSettings;
+  const keyHint = settings.hasApiKey
+    ? `已保存 ${settings.maskedApiKey}`
+    : "未保存 API key";
+  const endpointText = settings.endpointMode ? `当前端点：DeepL ${settings.endpointMode}` : "当前端点：保存 API key 后自动判断";
+  const statusClass = settings.saveStatus.includes("失败") || settings.saveStatus.includes("错误") ? "status-bad" : "muted";
+  return `
+    <section class="translation-service-settings">
+      <div class="settings-grid">
+        <label>
+          <span>翻译服务</span>
+          <select data-translation-service>
+            <option value="DeepL" ${settings.service === "DeepL" ? "selected" : ""}>DeepL</option>
+          </select>
+        </label>
+        <label>
+          <span>API key</span>
+          <div class="api-key-row">
+            <input data-translation-api-key type="password" autocomplete="off" placeholder="${escapeAttribute(keyHint)}" value="${escapeAttribute(settings.apiKeyInput)}" />
+            <button type="button" data-toggle-api-key>显示</button>
+          </div>
+        </label>
+      </div>
+      <div class="settings-status ${statusClass}">${escapeHtml(settings.saveStatus || keyHint)}</div>
+      <div class="settings-status muted">${escapeHtml(endpointText)}</div>
+      <div class="translation-test-panel">
+        <label>
+          <span>测试句子</span>
+          <textarea data-translation-test-text>${escapeHtml(settings.testText)}</textarea>
+        </label>
+        <button type="button" data-translation-test ${settings.testing ? "disabled" : ""}>${settings.testing ? "测试中" : "测试"}</button>
+      </div>
+      ${settings.testResult ? `<div class="translation-test-result">${escapeHtml(settings.testResult)}</div>` : ""}
+      ${settings.testError ? `<div class="translation-test-error">${escapeHtml(settings.testError)}</div>` : ""}
+    </section>
+  `;
+}
+
+function wireTranslationServiceSettings() {
+  const service = el.contextLines.querySelector("[data-translation-service]");
+  const apiKey = el.contextLines.querySelector("[data-translation-api-key]");
+  const toggleApiKey = el.contextLines.querySelector("[data-toggle-api-key]");
+  const testText = el.contextLines.querySelector("[data-translation-test-text]");
+  const testButton = el.contextLines.querySelector("[data-translation-test]");
+  service?.addEventListener("change", () => {
+    state.translationSettings.service = service.value || "DeepL";
+    scheduleTranslationSettingsSave(false);
+  });
+  apiKey?.addEventListener("input", () => {
+    state.translationSettings.apiKeyInput = apiKey.value;
+    state.translationSettings.apiKeyDirty = true;
+    scheduleTranslationSettingsSave(true);
+  });
+  toggleApiKey?.addEventListener("click", () => {
+    if (!apiKey) return;
+    apiKey.type = apiKey.type === "password" ? "text" : "password";
+    toggleApiKey.textContent = apiKey.type === "password" ? "显示" : "隐藏";
+  });
+  testText?.addEventListener("input", () => {
+    state.translationSettings.testText = testText.value;
+  });
+  testButton?.addEventListener("click", testTranslationService);
+}
+
+function scheduleTranslationSettingsSave(includeApiKey) {
+  state.translationSettings.saveStatus = "保存中...";
+  window.clearTimeout(translationSettingsSaveTimer);
+  translationSettingsSaveTimer = window.setTimeout(() => saveTranslationServiceSettings(includeApiKey), 500);
+}
+
+async function saveTranslationServiceSettings(includeApiKey) {
+  const settings = state.translationSettings;
+  const payload = { service: settings.service || "DeepL" };
+  if (includeApiKey || settings.apiKeyDirty) payload.api_key = settings.apiKeyInput;
+  const data = await fetchJson("/api/translation/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (data.error) {
+    settings.saveStatus = `保存失败：${data.error}`;
+    renderTranslationServiceSettingsIntoContext();
+    return;
+  }
+  settings.service = data.service || "DeepL";
+  settings.hasApiKey = Boolean(data.has_api_key);
+  settings.maskedApiKey = data.masked_api_key || "";
+  settings.endpointMode = data.endpoint_mode || "";
+  settings.apiKeyInput = "";
+  settings.apiKeyDirty = false;
+  settings.saveStatus = settings.hasApiKey ? `已保存：${settings.maskedApiKey}` : "未保存 API key";
+  renderTranslationServiceSettingsIntoContext();
+}
+
+async function testTranslationService() {
+  const settings = state.translationSettings;
+  window.clearTimeout(translationSettingsSaveTimer);
+  if (settings.apiKeyDirty) await saveTranslationServiceSettings(true);
+  settings.testing = true;
+  settings.testResult = "";
+  settings.testError = "";
+  renderTranslationServiceSettingsIntoContext();
+  const data = await fetchJson("/api/translation/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      service: settings.service || "DeepL",
+      text: settings.testText || "This is a test sentence.",
+    }),
+  });
+  settings.testing = false;
+  if (data.error) {
+    settings.testError = data.error;
+  } else {
+    settings.testResult = data.translated_text || "";
+  }
+  renderTranslationServiceSettingsIntoContext();
+}
+
+function renderTranslationEditor(item) {
+  return `
+    <section class="translation-editor" data-translation-editor="${escapeAttribute(item.id)}">
+      <div class="translation-editor-head">
+        <strong>译文</strong>
+        <span class="${translationStatusClass(item.status)}">${escapeHtml(item.status || "未翻译")}</span>
+      </div>
+      <div class="translation-source">${escapeHtml(translationSourceText(item))}</div>
+      <textarea data-translation-text>${escapeHtml(item.translation || "")}</textarea>
+    </section>
+  `;
+}
+
+function wireTranslationEditor(id) {
+  const editor = el.contextLines.querySelector(`[data-translation-editor="${CSS.escape(id)}"]`);
+  const textarea = editor?.querySelector("[data-translation-text]");
+  if (!textarea) return;
+  textarea.addEventListener("input", () => {
+    const item = state.translationManifest?.segments?.find((candidate) => candidate.id === id);
+    if (!item) return;
+    item.translation = textarea.value.trim();
+    if (item.translation.trim() && item.status === "未翻译") item.status = "已翻译";
+    if (!item.translation.trim() && item.status === "已翻译") item.status = "未翻译";
+    renderTable();
+  });
+  textarea.addEventListener("change", () => {
+    saveTranslation();
   });
 }
 
@@ -1722,6 +2592,7 @@ function wirePreviewBlocks() {
       state.selectedContextLine = line;
       el.contextLines.querySelectorAll(".md-block").forEach((node) => node.classList.remove("selected"));
       block.classList.add("selected");
+      syncTranslationTableToPreviewBlock(block);
     });
   });
 }
@@ -1735,6 +2606,42 @@ function selectPreviewLine(lineNo) {
       .sort((a, b) => Number(b.dataset.line) - Number(a.dataset.line))[0];
   }
   selected?.classList.add("selected");
+}
+
+function syncTranslationTableToPreviewBlock(block) {
+  if (state.activeWorkspaceTab !== "translation" || state.activeDataView !== "translations") return;
+  const activeItem = currentTranslation();
+  const sourceFile = activeItem?.source_file || state.activeTranslationFile || "";
+  if (!sourceFile) return;
+  const startLine = Number(block.dataset.line || 0);
+  const endLine = Number(block.dataset.endLine || startLine);
+  if (!startLine) return;
+  const segments = state.translationManifest?.segments || [];
+  const direct = segments.filter((item) =>
+    item.source_file === sourceFile
+    && Number(item.line_no || 0) >= startLine
+    && Number(item.line_no || 0) <= endLine
+  );
+  if (!direct.length) return;
+  const blockNo = direct[0].block_no || "";
+  const selected = blockNo
+    ? segments.filter((item) => item.source_file === sourceFile && item.block_no === blockNo)
+    : direct;
+  if (!selected.length) return;
+  state.activeTranslationFile = sourceFile;
+  state.selectedTranslationId = selected[0].id;
+  state.selectedTranslationIds = new Set(selected.map((item) => item.id));
+  state.translationAnchorId = state.selectedTranslationId;
+  renderTable();
+  scrollSelectedTranslationRowIntoView();
+  renderSideEditor();
+  scheduleWorkspaceStateSave();
+}
+
+function scrollSelectedTranslationRowIntoView() {
+  if (!state.selectedTranslationId) return;
+  const row = el.headingRows.querySelector(`tr[data-id="${CSS.escape(state.selectedTranslationId)}"]`);
+  row?.scrollIntoView({ block: "center", inline: "nearest" });
 }
 
 function openManualDialog() {
@@ -1912,7 +2819,7 @@ function setSelectedIllegalBreakConfidence() {
     return;
   }
   const currentValues = [...new Set(selectedItems.map((item) => item.confidence || "高"))];
-  el.illegalBreakConfidenceHint.textContent = `将为 ${selectedItems.length} 行设置同一个置信度。低置信度行将不再显示。`;
+  el.illegalBreakConfidenceHint.textContent = `将为 ${selectedItems.length} 行设置同一个置信度。可通过表格上方筛选重新查看。`;
   el.illegalBreakConfidenceInput.value = currentValues.length === 1 ? currentValues[0] : "高";
   el.illegalBreakConfidenceDialog.showModal();
 }
@@ -1929,18 +2836,12 @@ function applySelectedIllegalBreakConfidence(event) {
   }
   const confidence = el.illegalBreakConfidenceInput.value === "低" ? "低" : "高";
   for (const item of selectedItems) item.confidence = confidence;
-  if (confidence === "低") {
-    for (const item of selectedItems) state.selectedIllegalBreakIds.delete(item.id);
-    state.selectedIllegalBreakId = state.selectedIllegalBreakIds.values().next().value
-      || highConfidenceIllegalBreaks()[0]?.id
-      || null;
-    state.illegalBreakAnchorId = state.selectedIllegalBreakId;
-  }
+  syncIllegalBreakSelectionToVisible();
   el.illegalBreakConfidenceDialog.close();
   renderDirectoryTree();
   renderTable();
   scheduleWorkspaceStateSave();
-  setMessage(`已将 ${selectedItems.length} 行置信度设为${confidence}${confidence === "低" ? "，并从当前列表隐藏" : ""}`);
+  setMessage(`已将 ${selectedItems.length} 行置信度设为${confidence}`);
 }
 
 function setSelectedAnnotationType() {
@@ -2258,6 +3159,50 @@ function currentHeading() {
   return state.manifest?.headings.find((item) => item.id === state.selectedId);
 }
 
+function currentTranslation() {
+  return state.translationManifest?.segments?.find((item) => item.id === state.selectedTranslationId);
+}
+
+function translationSourceDirectory() {
+  return state.translationManifest?.output_dir || displaySourcePathForTab(state.manifest?.input_dir || "", "translation");
+}
+
+function setSelectedTranslationStatus() {
+  if (state.activeDataView !== "translations") {
+    setMessage("请先切换到翻译表");
+    return;
+  }
+  const selectedItems = state.translationManifest?.segments.filter((item) =>
+    state.selectedTranslationIds.has(item.id)
+  ) || [];
+  if (!selectedItems.length) {
+    setMessage("请先选择翻译文本块");
+    return;
+  }
+  const currentValues = [...new Set(selectedItems.map((item) => item.status || "未翻译"))];
+  el.translationStatusHint.textContent = `将为 ${selectedItems.length} 个文本块设置同一个状态。`;
+  el.translationStatusInput.value = currentValues.length === 1 ? currentValues[0] : "需校对";
+  el.translationStatusDialog.showModal();
+}
+
+function applySelectedTranslationStatus(event) {
+  event.preventDefault();
+  const selectedItems = state.translationManifest?.segments.filter((item) =>
+    state.selectedTranslationIds.has(item.id)
+  ) || [];
+  if (!selectedItems.length) {
+    setMessage("请先选择翻译文本块", true);
+    el.translationStatusDialog.close();
+    return;
+  }
+  const status = el.translationStatusInput.value || "未翻译";
+  for (const item of selectedItems) item.status = status;
+  el.translationStatusDialog.close();
+  renderTable();
+  scheduleWorkspaceStateSave();
+  setMessage(`已将 ${selectedItems.length} 个文本块状态设为 ${status}`);
+}
+
 function checkbox(item, field) {
   const input = document.createElement("input");
   input.type = "checkbox";
@@ -2297,11 +3242,34 @@ function numberInput(item, field, min, max) {
   return input;
 }
 
+function translationInput(item) {
+  const input = document.createElement("input");
+  input.value = item.translation || "";
+  input.addEventListener("click", (event) => {
+    event.stopPropagation();
+    selectTranslation(item.id, event);
+  });
+  input.addEventListener("change", () => {
+    item.translation = input.value.trim();
+    if (item.translation && item.status === "未翻译") item.status = "已翻译";
+    if (!item.translation && item.status === "已翻译") item.status = "未翻译";
+    renderTable();
+    scheduleWorkspaceStateSave();
+  });
+  return input;
+}
+
 function statusClass(status) {
   if (status === "正常" || status === "手动新增") return "status-normal";
   if (status === "已禁用") return "";
   if ((status || "").includes("重复") || (status || "").includes("漏号")) return "status-bad";
   return "status-warn";
+}
+
+function translationStatusClass(status) {
+  if (status === "已确认" || status === "已翻译") return "status-normal";
+  if (status === "需校对") return "status-warn";
+  return "";
 }
 
 async function fetchJson(url, options = {}) {
@@ -2345,130 +3313,372 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
-function renderMarkdown(text, targetLine) {
+function renderMarkdown(text, targetLine, assetContext = null) {
   const lines = String(text || "").split(/\r?\n/);
-  const html = [];
-  let paragraph = [];
-  let paragraphStart = 1;
-  let listItems = [];
-  let listStart = 1;
-  let inCode = false;
-  let codeLines = [];
-  let codeStart = 1;
+  const html = markdownBlocks(lines).map((block) => renderMarkdownBlock(block, assetContext)).join("\n");
+  return `<article class="markdown-preview" data-target-line="${targetLine}">${html}</article>`;
+}
 
-  const flushParagraph = () => {
-    if (!paragraph.length) return;
-    html.push(
-      `<p class="md-block" data-line="${paragraphStart}">${paragraph.map(renderInline).join("<br>")}</p>`
-    );
-    paragraph = [];
+function markdownBlocks(lines) {
+  const blocks = [];
+  let current = [];
+  let currentKind = "";
+  let startLine = 1;
+  let inFence = false;
+
+  const flush = (endLine) => {
+    if (!current.length) return;
+    blocks.push({ startLine, endLine, text: current.join("\n") });
+    current = [];
+    currentKind = "";
   };
 
-  const flushList = () => {
-    if (!listItems.length) return;
-    html.push(`<ul class="md-block" data-line="${listStart}">${listItems.join("")}</ul>`);
-    listItems = [];
-  };
-
-  const flushCode = (endLine) => {
-    html.push(
-      `<pre class="md-block" data-line="${codeStart}"><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`
-    );
-    codeLines = [];
-    inCode = false;
-  };
-
-  lines.forEach((rawLine, idx) => {
-    const lineNo = idx + 1;
-    const line = rawLine;
+  lines.forEach((line, index) => {
+    const lineNo = index + 1;
     const trimmed = line.trim();
+    const fence = /^(```|~~~)/.test(trimmed);
+    if (!current.length && trimmed) startLine = lineNo;
 
-    if (trimmed.startsWith("```")) {
-      flushParagraph();
-      flushList();
-      if (inCode) {
-        flushCode(lineNo);
-      } else {
-        inCode = true;
-        codeStart = lineNo;
-        codeLines = [];
-      }
+    if (fence) {
+      if (!current.length) startLine = lineNo;
+      currentKind = "fence";
+      current.push(line);
+      inFence = !inFence;
+      if (!inFence) flush(lineNo);
       return;
     }
 
-    if (inCode) {
-      codeLines.push(line);
+    if (inFence) {
+      current.push(line);
       return;
     }
 
     if (!trimmed) {
-      flushParagraph();
-      flushList();
+      flush(lineNo - 1);
       return;
     }
 
-    const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-    if (heading) {
-      flushParagraph();
-      flushList();
-      const level = heading[1].length;
-      html.push(
-        `<h${level} class="md-block" data-line="${lineNo}">${renderInline(heading[2])}</h${level}>`
-      );
-      return;
+    const kind = markdownLineKind(line);
+    if (startsNewMarkdownBlock(kind, currentKind) && current.length) {
+      flush(lineNo - 1);
+      startLine = lineNo;
     }
-
-    const image = /^!\[([^\]]*)\]\(([^)]+)\)\s*$/.exec(trimmed);
-    if (image) {
-      flushParagraph();
-      flushList();
-      html.push(
-        `<figure class="md-block" data-line="${lineNo}"><img src="${escapeAttribute(image[2])}" alt="${escapeAttribute(image[1])}" loading="lazy"><figcaption>${escapeHtml(image[1])}</figcaption></figure>`
-      );
-      return;
-    }
-
-    const quote = /^>\s?(.*)$/.exec(line);
-    if (quote) {
-      flushParagraph();
-      flushList();
-      html.push(`<blockquote class="md-block" data-line="${lineNo}">${renderInline(quote[1])}</blockquote>`);
-      return;
-    }
-
-    const list = /^\s*[-*+]\s+(.+)$/.exec(line);
-    if (list) {
-      flushParagraph();
-      if (!listItems.length) listStart = lineNo;
-      listItems.push(`<li data-line="${lineNo}">${renderInline(list[1])}</li>`);
-      return;
-    }
-
-    const ordered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
-    if (ordered) {
-      flushParagraph();
-      flushList();
-      html.push(`<p class="md-block" data-line="${lineNo}">${renderInline(line)}</p>`);
-      return;
-    }
-
-    if (!paragraph.length) paragraphStart = lineNo;
-    paragraph.push(line);
+    if (!currentKind) currentKind = kind;
+    current.push(line);
   });
 
-  if (inCode) flushCode(lines.length);
-  flushParagraph();
-  flushList();
-
-  return `<article class="markdown-preview" data-target-line="${targetLine}">${html.join("\n")}</article>`;
+  flush(lines.length);
+  return blocks;
 }
 
-function renderInline(value) {
-  return escapeHtml(value)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+function markdownLineKind(line) {
+  if (isHtmlTableLine(line)) return "html_table";
+  if (/^(#{1,6})\s+/.test(line)) return "heading";
+  if (/^\s{0,3}(?:[-+*]\s+|\d+[.)]\s+)/.test(line)) return "list";
+  if (/^\s{0,3}>\s?/.test(line)) return "quote";
+  if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return "hr";
+  if (isMarkdownTableLine(line)) return "table";
+  if (/^\s{0,3}!\[[^\]]*]\([^)]*\)\s*$/.test(line)) return "image";
+  return "paragraph";
+}
+
+function isHtmlTableLine(line) {
+  return /<\/?(table|thead|tbody|tfoot|tr|th|td|caption|colgroup|col)\b/i.test(String(line || ""));
+}
+
+function isMarkdownTableLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.includes("|")) return false;
+  if (/^\|/.test(trimmed)) return true;
+  if (/^:?-{3,}:?(\s*\|\s*:?-{3,}:?)+\s*\|?$/.test(trimmed)) return true;
+  return /^[^|]+?\s+\|\s+[^|]+/.test(trimmed);
+}
+
+function startsNewMarkdownBlock(kind, currentKind) {
+  if (!currentKind) return false;
+  if (["heading", "hr", "image"].includes(kind)) return true;
+  if (currentKind === "paragraph" && kind !== "paragraph") return true;
+  if (currentKind !== "paragraph" && kind === "paragraph") return true;
+  if (["list", "quote", "table", "html_table"].includes(kind) && currentKind !== kind) return true;
+  return false;
+}
+
+function renderMarkdownBlock(block, assetContext) {
+  const prepared = preprocessObsidianMarkdown(block.text);
+  const rendered = mdRenderer ? mdRenderer.render(prepared) : `<p>${escapeHtml(prepared)}</p>`;
+  const clean = sanitizeMarkdownHtml(rendered, assetContext);
+  return `<section class="md-block" data-line="${block.startLine}" data-end-line="${block.endLine}">${clean}</section>`;
+}
+
+function previewAssetContext(rootDir, sourceFile) {
+  return {
+    rootDir: String(rootDir || ""),
+    sourceFile: String(sourceFile || ""),
+  };
+}
+
+function preprocessObsidianMarkdown(value) {
+  return String(value || "")
+    .replace(/!\[\[([^\]]+)]]/g, (_match, target) => {
+      const cleanTarget = String(target || "").trim();
+      const [path, alias] = cleanTarget.split("|");
+      const alt = alias || path.split("/").pop() || path;
+      return `![${alt}](${encodeMarkdownDestination(path)})`;
+    })
+    .replace(/!\[([^\]]*)]\(([^)\n]+)\)/g, (_match, alt, destination) => {
+      return `![${alt}](${encodeMarkdownDestination(destination)})`;
+    });
+}
+
+function encodeMarkdownDestination(destination) {
+  const value = String(destination || "").trim();
+  if (!value || /^<.*>$/.test(value)) return value;
+  return encodeURI(value).replace(/[()]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function sanitizeMarkdownHtml(html, assetContext = null) {
+  const clean = window.DOMPurify ? window.DOMPurify.sanitize(html, {
+    ADD_ATTR: ["target", "rel"],
+  }) : html;
+  return processPreviewHtml(clean, assetContext);
+}
+
+function processPreviewHtml(html, assetContext) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  rewritePreviewAssetUrls(template.content, assetContext);
+  if (window.katex && /(\$|\\\(|\\\[)/.test(template.innerHTML)) {
+    replaceMathTextNodes(template.content);
+  }
+  return template.innerHTML;
+}
+
+function rewritePreviewAssetUrls(root, assetContext) {
+  if (!assetContext?.rootDir) return;
+  root.querySelectorAll("img[src]").forEach((image) => {
+    const src = image.getAttribute("src") || "";
+    const rewritten = previewAssetUrl(src, assetContext);
+    if (rewritten) image.setAttribute("src", rewritten);
+  });
+}
+
+function previewAssetUrl(src, assetContext) {
+  const value = String(src || "").trim();
+  if (!value || isExternalPreviewAsset(value)) return "";
+  const params = new URLSearchParams({
+    dir: assetContext.rootDir,
+    file: assetContext.sourceFile || "",
+    src: value,
+  });
+  return `/api/asset?${params.toString()}`;
+}
+
+function isExternalPreviewAsset(src) {
+  return /^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/api\/)/i.test(src) && !src.startsWith("file:");
+}
+
+function replaceMathTextNodes(root) {
+  const children = Array.from(root.childNodes);
+  for (const child of children) {
+    if (child.nodeType === 3) {
+      replaceMathTextNode(child);
+      continue;
+    }
+    if (child.nodeType !== 1 || shouldSkipMathText(child)) continue;
+    replaceMathTextNodes(child);
+  }
+}
+
+function shouldSkipMathText(element) {
+  return Boolean(element.closest("code, pre, script, style, .katex"));
+}
+
+function replaceMathTextNode(node) {
+  const parts = splitLatexText(node.nodeValue || "");
+  if (!parts.some((part) => part.math)) return;
+  const fragment = document.createDocumentFragment();
+  for (const part of parts) {
+    if (!part.math) {
+      fragment.appendChild(document.createTextNode(part.text));
+      continue;
+    }
+    const template = document.createElement("template");
+    template.innerHTML = renderLatex(part.text, part.display);
+    fragment.appendChild(template.content.cloneNode(true));
+  }
+  node.parentNode.replaceChild(fragment, node);
+}
+
+function splitLatexText(text) {
+  const parts = [];
+  let index = 0;
+  while (index < text.length) {
+    const next = nextLatexStart(text, index);
+    if (!next) {
+      parts.push({ text: text.slice(index), math: false });
+      break;
+    }
+    if (next.index > index) parts.push({ text: text.slice(index, next.index), math: false });
+    const close = findLatexDelimiter(text, next.contentStart, next.close);
+    if (close < 0) {
+      parts.push({ text: text.slice(next.index), math: false });
+      break;
+    }
+    const content = text.slice(next.contentStart, close);
+    if (content.trim()) parts.push({ text: content, math: true, display: next.display });
+    else parts.push({ text: text.slice(next.index, close + next.close.length), math: false });
+    index = close + next.close.length;
+  }
+  return parts.filter((part) => part.text);
+}
+
+function nextLatexStart(text, from) {
+  for (let index = from; index < text.length; index += 1) {
+    if (text[index] === "$" && !isEscapedDelimiter(text, index)) {
+      if (text[index + 1] === "$") {
+        return { index, contentStart: index + 2, close: "$$", display: true };
+      }
+      if (!/\s/.test(text[index + 1] || "")) {
+        return { index, contentStart: index + 1, close: "$", display: false };
+      }
+    }
+    if (text.slice(index, index + 2) === "\\(" && !isEscapedDelimiter(text, index)) {
+      return { index, contentStart: index + 2, close: "\\)", display: false };
+    }
+    if (text.slice(index, index + 2) === "\\[" && !isEscapedDelimiter(text, index)) {
+      return { index, contentStart: index + 2, close: "\\]", display: true };
+    }
+  }
+  return null;
+}
+
+function installMarkdownMath(md) {
+  md.inline.ruler.before("escape", "math_inline", mathInlineRule);
+  md.block.ruler.before("fence", "math_block", mathBlockRule, {
+    alt: ["paragraph", "reference", "blockquote", "list"],
+  });
+  md.renderer.rules.math_inline = (tokens, idx) =>
+    renderLatex(tokens[idx].content, tokens[idx].markup === "$$");
+  md.renderer.rules.math_block = (tokens, idx) => `${renderLatex(tokens[idx].content, true)}\n`;
+}
+
+function mathInlineRule(state, silent) {
+  const start = state.pos;
+  const src = state.src;
+  const marker = src[start];
+  let closeMarker = "";
+  let contentStart = start + 1;
+
+  if (marker === "$") {
+    if (src[start + 1] === "$") {
+      closeMarker = "$$";
+      contentStart = start + 2;
+    } else {
+      if (/\s/.test(src[start + 1] || "")) return false;
+      closeMarker = "$";
+    }
+  } else if (src.slice(start, start + 2) === "\\(") {
+    closeMarker = "\\)";
+    contentStart = start + 2;
+  } else {
+    return false;
+  }
+
+  const close = findLatexDelimiter(src, contentStart, closeMarker);
+  if (close < 0) return false;
+  const content = src.slice(contentStart, close);
+  if (!content.trim()) return false;
+  if (closeMarker === "$" && /\s/.test(src[close - 1] || "")) return false;
+  if (!silent) {
+    const token = state.push("math_inline", "math", 0);
+    token.content = content;
+    token.markup = marker === "$" ? closeMarker : "\\(";
+  }
+  state.pos = close + closeMarker.length;
+  return true;
+}
+
+function mathBlockRule(state, startLine, endLine, silent) {
+  const start = state.bMarks[startLine] + state.tShift[startLine];
+  const max = state.eMarks[startLine];
+  const firstLine = state.src.slice(start, max).trim();
+  let open = "";
+  let close = "";
+  if (firstLine.startsWith("$$")) {
+    open = "$$";
+    close = "$$";
+  } else if (firstLine.startsWith("\\[")) {
+    open = "\\[";
+    close = "\\]";
+  } else {
+    return false;
+  }
+  if (silent) return true;
+
+  const firstContent = firstLine.slice(open.length);
+  const lines = [];
+  let nextLine = startLine;
+  const sameLineClose = findLatexDelimiter(firstContent, 0, close);
+  if (sameLineClose >= 0) {
+    lines.push(firstContent.slice(0, sameLineClose));
+  } else {
+    if (firstContent) lines.push(firstContent);
+    for (nextLine = startLine + 1; nextLine < endLine; nextLine += 1) {
+      const lineStart = state.bMarks[nextLine] + state.tShift[nextLine];
+      const lineMax = state.eMarks[nextLine];
+      const line = state.src.slice(lineStart, lineMax);
+      const closeIndex = findLatexDelimiter(line, 0, close);
+      if (closeIndex >= 0) {
+        lines.push(line.slice(0, closeIndex));
+        break;
+      }
+      lines.push(line);
+    }
+    if (nextLine >= endLine) return false;
+  }
+
+  const token = state.push("math_block", "math", 0);
+  token.block = true;
+  token.content = lines.join("\n").trim();
+  token.map = [startLine, nextLine + 1];
+  token.markup = open;
+  state.line = nextLine + 1;
+  return true;
+}
+
+function findLatexDelimiter(src, start, delimiter) {
+  let index = start;
+  while (index < src.length) {
+    const found = src.indexOf(delimiter, index);
+    if (found < 0) return -1;
+    if (!isEscapedDelimiter(src, found)) return found;
+    index = found + delimiter.length;
+  }
+  return -1;
+}
+
+function isEscapedDelimiter(src, index) {
+  let slashCount = 0;
+  for (let pos = index - 1; pos >= 0 && src[pos] === "\\"; pos -= 1) slashCount += 1;
+  return slashCount % 2 === 1;
+}
+
+function renderLatex(content, displayMode) {
+  if (!window.katex) {
+    const escaped = escapeHtml(content);
+    return displayMode ? `<pre><code>${escaped}</code></pre>` : `<code>${escaped}</code>`;
+  }
+  try {
+    return window.katex.renderToString(content, {
+      displayMode,
+      throwOnError: false,
+      strict: false,
+      output: "html",
+    });
+  } catch (_error) {
+    const escaped = escapeHtml(content);
+    return displayMode ? `<pre><code>${escaped}</code></pre>` : `<code>${escaped}</code>`;
+  }
 }
 
 function escapeAttribute(value) {

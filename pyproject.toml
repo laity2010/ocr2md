@@ -3,7 +3,9 @@ name = "ocr2md"
 version = "0.1.0"
 description = "Local OCR Markdown heading annotation workbench."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "pysbd>=0.3.4",
+]
 
 [project.scripts]
 ocr2md-workbench = "ocr2md_workbench.server:main"
