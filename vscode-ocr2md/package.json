@@ -1,0 +1,92 @@
+{
+  "name": "ocr2md",
+  "displayName": "ocr2md",
+  "description": "Prototype VS Code extension for confirming OCR Markdown footnote refs and bodies.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*",
+    "onView:ocr2md.directory",
+    "onView:ocr2md.regex",
+    "onCommand:ocr2md.refreshFiles",
+    "onCommand:ocr2md.pickFolder",
+    "onCommand:ocr2md.openMarkdownFile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ocr2md.refreshFiles",
+        "title": "ocr2md: Refresh Markdown Files"
+      },
+      {
+        "command": "ocr2md.pickFolder",
+        "title": "ocr2md: Select Workspace Folder"
+      },
+      {
+        "command": "ocr2md.openMarkdownFile",
+        "title": "ocr2md: Open Markdown File"
+      },
+      {
+        "command": "ocr2md.installMarkdownPreviewStyles",
+        "title": "ocr2md: Install Markdown Preview Heading Styles"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ocr2md",
+          "title": "ocr2md",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ocr2md": [
+        {
+          "id": "ocr2md.directory",
+          "name": "目录"
+        },
+        {
+          "id": "ocr2md.regex",
+          "name": "正则搜索",
+          "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "ocr2md.refreshFiles",
+          "when": "view == ocr2md.directory",
+          "group": "navigation"
+        },
+        {
+          "command": "ocr2md.pickFolder",
+          "when": "view == ocr2md.directory",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "cspell-lib": "^8.19.4",
+    "sentence-splitter": "^5.0.1"
+  }
+}

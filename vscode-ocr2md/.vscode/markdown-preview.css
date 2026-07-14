@@ -1,0 +1,40 @@
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Inter", sans-serif;
+  line-height: 1.7;
+  padding: 16px 28px;
+}
+
+h1 {
+  color: #ff5c57;
+  font-size: 2.2em;
+  border-bottom: 3px solid #ff5c57;
+  padding-bottom: 0.25em;
+}
+
+h2 {
+  color: #ff9f43;
+  font-size: 1.8em;
+  border-bottom: 1px solid #d0d7de;
+  padding-bottom: 0.2em;
+}
+
+h3 {
+  color: #feca57;
+  font-size: 1.45em;
+}
+
+h4 {
+  color: #9ccc65;
+  font-size: 1.25em;
+}
+
+h5 {
+  color: #55c6a9;
+  font-size: 1.1em;
+}
+
+h6 {
+  color: #d77bbf;
+  font-size: 1em;
+  font-weight: 700;
+}
