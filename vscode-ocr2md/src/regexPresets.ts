@@ -24,6 +24,12 @@ export const REGEX_PRESETS: RegexPreset[] = [
     description: "匹配形如 <sup>1</sup> 的脚注引用。",
   },
   {
+    id: "annotation-ref-and-body",
+    label: "注释引用 + 正文",
+    pattern: "<sup>(\\d+)</sup>\n---\n^\\s*\\d+\\.\\s+.+",
+    description: "用分隔行同时扫描 HTML 数字上标引用和数字注释正文。",
+  },
+  {
     id: "numbered-note-line",
     label: "数字注释行",
     pattern: "^\\s*\\d+\\.\\s+.+",
@@ -96,3 +102,20 @@ export const REGEX_PRESETS: RegexPreset[] = [
     description: "匹配 http/https 链接。",
   },
 ];
+
+/** Defaults and demonstrations used by each regular-expression data-table module. */
+export const MODULE_REGEX_PRESETS: Record<string, RegexPreset[]> = {
+  "未分类": REGEX_PRESETS,
+  "注释": REGEX_PRESETS.filter((preset) => ["html-sup", "numeric-sup-footnote", "annotation-ref-and-body", "numbered-note-line", "markdown-footnote-ref", "markdown-footnote-body"].includes(preset.id)),
+  "标题": REGEX_PRESETS.filter((preset) => preset.id === "markdown-heading"),
+  "图片": REGEX_PRESETS.filter((preset) => ["markdown-image", "markdown-external-image", "url"].includes(preset.id)),
+  "非法断行": REGEX_PRESETS.filter((preset) => preset.id.startsWith("ocr-")),
+};
+
+export const MODULE_REGEX_DEFAULTS: Record<string, string> = {
+  "未分类": "^\\d+\\.\\s+.+",
+  "注释": "<sup>(\\d+)</sup>\n---\n^\\s*\\d+\\.\\s+.+",
+  "标题": "^#{1,6}\\s+.+",
+  "图片": "!\\[[^\\]]*\\]\\(https?://[^\\s)]+\\)",
+  "非法断行": "\\b(?:about|and|or|the|a|an|of|to|in|for|with|by|from)\\b[ \\t]*\\r?\\n[ \\t\\r\\n]*(?:\\d+|[a-z])",
+};

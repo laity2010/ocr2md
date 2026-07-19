@@ -11,8 +11,8 @@ import {
   scanRegexMatches,
   scanSuspiciousSup,
 } from "./scanner";
-import { REGEX_PRESETS } from "./regexPresets";
-import type { Candidate, FileEntry, FootnotePair, PairStatus, SidebarState, SourceRange, TranslationProtectedToken } from "./types";
+import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS, REGEX_PRESETS } from "./regexPresets";
+import type { AnnotationPair, Candidate, FileEntry, FootnotePair, PairStatus, RegexPreset, SidebarState, SourceRange, TranslationProtectedToken } from "./types";
 
 const readonlyScheme = "ocr2md-readonly";
 
@@ -58,7 +58,14 @@ class Ocr2mdApp implements vscode.Disposable {
   private selectedFile: FileEntry | undefined;
   private selectedFileText = "";
   private searchPattern = "";
+  private regexScopeDirectory = "";
+  private regexScopeWorkspaceRoot: string | undefined;
+  private regexIncludeSubdirectories = false;
+  private regexSearchVersion = 0;
+  private readonly moduleRegexPatterns: Record<string, string> = { ...MODULE_REGEX_DEFAULTS };
+  private moduleScanVersion = 0;
   private readonlyUri: vscode.Uri | undefined;
+  private workingCopyUri: vscode.Uri | undefined;
   private previewEditable = false;
   private searchMatches: Candidate[] = [];
   private searchTableRows: Candidate[] = [];
@@ -70,10 +77,13 @@ class Ocr2mdApp implements vscode.Disposable {
   private translationTestResult: TranslationTestResult | undefined;
   private translationProgress: TranslationProgress | undefined;
   private failedTranslationBlockIndexes = new Set<number>();
+  private selectedCandidate: Candidate | undefined;
+  private selectedPairId: string | undefined;
   private refs: Candidate[] = [];
   private bodies: Candidate[] = [];
   private suspicious: Candidate[] = [];
   private pairs: FootnotePair[] = [];
+  private annotationPairs: AnnotationPair[] = [];
   private readonly singleDecoration: vscode.TextEditorDecorationType;
   private readonly refDecoration: vscode.TextEditorDecorationType;
   private readonly bodyDecoration: vscode.TextEditorDecorationType;
@@ -125,6 +135,7 @@ class Ocr2mdApp implements vscode.Disposable {
       vscode.commands.registerCommand("ocr2md.pickFolder", () => this.pickWorkspaceFolder()),
       vscode.commands.registerCommand("ocr2md.openMarkdownFile", (filePath: string) => this.selectFile(filePath)),
       vscode.commands.registerCommand("ocr2md.installMarkdownPreviewStyles", () => this.installMarkdownPreviewStyles()),
+      vscode.commands.registerCommand("ocr2md.addCurrentLineToModule", () => this.addCurrentLineToModule()),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.refreshFiles()),
       vscode.workspace.onDidSaveTextDocument((document) => this.handleSavedTextDocument(document)),
       this.singleDecoration,
@@ -149,12 +160,27 @@ class Ocr2mdApp implements vscode.Disposable {
       previewEditable: this.previewEditable,
       files: this.files,
       searchPattern: this.searchPattern,
+      regexScopeDirectory: this.regexScopeDirectory || workspaceLabel,
+      regexIncludeSubdirectories: this.regexIncludeSubdirectories,
       searchMatches: this.searchMatches,
+      searchTableRows: this.searchTableRows,
+      sentenceRows: this.sentenceRows,
+      moduleRegexPatterns: this.moduleRegexPatterns,
+      moduleRegexPresets: MODULE_REGEX_PRESETS,
+      selectedCandidate: this.selectedCandidate,
+      selectedPairId: this.selectedPairId,
+      postOcrCleanMode: this.postOcrCleanMode,
+      imageDownloadProgress: this.imageDownloadProgress,
+      deeplConfigured: this.deeplConfigured,
+      translationTestResult: this.translationTestResult,
+      translationProgress: this.translationProgress,
+      failedTranslationBlockIndexes: [...this.failedTranslationBlockIndexes],
       regexPresets: REGEX_PRESETS,
       refs: this.refs,
       bodies: this.bodies,
       suspicious: this.suspicious,
       pairs: this.pairs,
+      annotationPairs: this.annotationPairs,
     };
   }
 
@@ -185,15 +211,25 @@ class Ocr2mdApp implements vscode.Disposable {
       case "regexChanged":
         if (typeof message.pattern === "string") {
           this.searchPattern = message.pattern;
-          if (this.selectedFile) {
-            this.scanSearchMatches();
-          } else {
-            this.regexProvider.update();
-          }
+          await this.scanSearchMatches();
+        }
+        break;
+      case "regexScopeChanged":
+        if (typeof message.regexScopeDirectory === "string") {
+          this.regexScopeDirectory = message.regexScopeDirectory;
+        }
+        if (typeof message.regexIncludeSubdirectories === "boolean") {
+          this.regexIncludeSubdirectories = message.regexIncludeSubdirectories;
+        }
+        await this.scanSearchMatches();
+        break;
+      case "scanModuleRegex":
+        if (typeof message.moduleName === "string" && typeof message.pattern === "string") {
+          await this.scanModuleRegex(message.moduleName, message.pattern, message.regexScopeDirectory, message.regexIncludeSubdirectories);
         }
         break;
       case "addSearchResultsToTable":
-        this.addSearchResultsToTable();
+        await this.addSearchResultsToTable();
         break;
       case "scanIllegalLineBreaks":
         this.scanIllegalLineBreaks();
@@ -203,6 +239,12 @@ class Ocr2mdApp implements vscode.Disposable {
         break;
       case "exportCorrectedMarkdown":
         await this.exportCorrectedMarkdown();
+        break;
+      case "openCorrectedWorkingCopy":
+        await this.openCorrectedWorkingCopy();
+        break;
+      case "syncWorkingCopyCorrections":
+        await this.syncWorkingCopyCorrections();
         break;
       case "scanBodies":
         this.scanBodies();
@@ -222,6 +264,9 @@ class Ocr2mdApp implements vscode.Disposable {
           this.updateCandidateStatus(message.id, "异常");
         }
         break;
+      default:
+        await this.handlePairMessage(message);
+        break;
     }
   }
 
@@ -229,9 +274,18 @@ class Ocr2mdApp implements vscode.Disposable {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       this.files = [];
+      this.regexScopeDirectory = "";
+      this.regexScopeWorkspaceRoot = undefined;
+      this.regexIncludeSubdirectories = false;
       this.directoryProvider.refresh();
       this.regexProvider.update();
       return;
+    }
+
+    if (this.regexScopeWorkspaceRoot !== workspaceFolder.uri.fsPath) {
+      this.regexScopeWorkspaceRoot = workspaceFolder.uri.fsPath;
+      this.regexScopeDirectory = workspaceFolder.uri.fsPath;
+      this.regexIncludeSubdirectories = false;
     }
 
     const uris = await vscode.workspace.findFiles(
@@ -251,7 +305,17 @@ class Ocr2mdApp implements vscode.Disposable {
   }
 
   private async pickWorkspaceFolder() {
-    await vscode.commands.executeCommand("vscode.openFolder");
+    const selection = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "打开工作目录",
+      title: "选择包含 OCR Markdown 文件的工作目录",
+    });
+    if (!selection?.[0]) {
+      return;
+    }
+    await vscode.commands.executeCommand("vscode.openFolder", selection[0], false);
   }
 
   private async installMarkdownPreviewStyles(options: { silent?: boolean } = {}) {
@@ -286,21 +350,27 @@ class Ocr2mdApp implements vscode.Disposable {
     }
   }
 
-  private async selectFile(filePath: string) {
+  private async selectFile(filePath: string, options: { preserveTable?: boolean } = {}) {
     const file = this.files.find((entry) => entry.path === filePath) ?? {
       label: path.basename(filePath),
       path: filePath,
     };
 
     this.selectedFile = file;
+    this.workingCopyUri = undefined;
     await this.reloadSelectedFileText();
-    this.searchMatches = scanRegexMatches(this.selectedFileText, this.searchPattern);
-    this.postOcrCleanMode = isOcrCorrectedMarkdown(this.selectedFileText);
+    await this.scanSearchMatches();
+    if (!options.preserveTable) {
+      this.postOcrCleanMode = isOcrCorrectedMarkdown(this.selectedFileText);
+    }
     this.deeplConfigured = Boolean(await this.context.secrets.get("ocr2md.deeplApiKey"));
-    const loadedSidecar = this.postOcrCleanMode ? undefined : await this.loadAnnotationSidecar(file);
-    this.searchTableRows = this.postOcrCleanMode ? scanTextBlocks(this.selectedFileText) : loadedSidecar?.rows ?? [];
-    this.sentenceRows = [];
-    if (this.postOcrCleanMode) {
+    const loadedSidecar = options.preserveTable || this.postOcrCleanMode ? undefined : await this.loadAnnotationSidecar(file);
+    if (!options.preserveTable) {
+      this.searchTableRows = this.postOcrCleanMode ? scanTextBlocks(this.selectedFileText) : loadedSidecar?.rows ?? [];
+      this.annotationPairs = this.postOcrCleanMode ? [] : loadedSidecar?.annotationPairs ?? [];
+      this.sentenceRows = [];
+    }
+    if (this.postOcrCleanMode && !options.preserveTable) {
       const restoredTranslations = await this.loadTranslationSidecar(file);
       if (restoredTranslations.rows.length) {
         this.restoreSavedTranslations(restoredTranslations.rows);
@@ -309,7 +379,7 @@ class Ocr2mdApp implements vscode.Disposable {
         void vscode.window.showWarningMessage(`ocr2md 翻译加载失败：${restoredTranslations.error}`);
       }
     }
-    this.searchTableActive = this.postOcrCleanMode || this.searchTableRows.length > 0;
+    this.searchTableActive = options.preserveTable ? this.searchTableActive : this.postOcrCleanMode || this.searchTableRows.length > 0;
     this.refs = [];
     this.bodies = [];
     this.suspicious = [];
@@ -344,7 +414,7 @@ class Ocr2mdApp implements vscode.Disposable {
     }
 
     await this.reloadSelectedFileText();
-    this.searchMatches = scanRegexMatches(this.selectedFileText, this.searchPattern);
+    await this.scanSearchMatches();
 
     if (this.postOcrCleanMode) {
       this.searchTableRows = scanTextBlocks(this.selectedFileText);
@@ -403,14 +473,10 @@ class Ocr2mdApp implements vscode.Disposable {
 
   private async ensureDefaultEditorLayout() {
     await vscode.commands.executeCommand("vscode.setEditorLayout", {
-      orientation: 0,
+      orientation: 1,
       groups: [
-        {
-          size: 0.6,
-          orientation: 1,
-          groups: [{ size: 0.56 }, { size: 0.44 }],
-        },
-        { size: 0.4 },
+        { size: 0.56 },
+        { size: 0.44 },
       ],
     });
   }
@@ -461,6 +527,180 @@ class Ocr2mdApp implements vscode.Disposable {
     }
   }
 
+  private async openCorrectedWorkingCopy() {
+    if (!this.selectedFile) {
+      void vscode.window.showWarningMessage("请先选择一个 Markdown 文件。");
+      return;
+    }
+
+    const file = this.selectedFile;
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file.path)) ?? vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      void vscode.window.showWarningMessage("请先打开工作区。");
+      return;
+    }
+
+    const workingDirectory = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "working");
+    this.workingCopyUri = this.workingCopyUriForFile(file, workspaceFolder);
+
+    let result: { text: string; applied: number; skipped: string[] } | undefined;
+    try {
+      await vscode.workspace.fs.stat(this.workingCopyUri);
+    } catch {
+      result = this.buildCorrectedWorkingCopy();
+      if (!result) return;
+      await vscode.workspace.fs.createDirectory(workingDirectory);
+      await vscode.workspace.fs.writeFile(this.workingCopyUri, Buffer.from(result.text, "utf8"));
+    }
+
+    const document = await vscode.workspace.openTextDocument(this.workingCopyUri);
+    const editor = await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Two, preserveFocus: false });
+    this.applyHeadingDecorations(editor);
+    const message = result
+      ? `已创建可编辑订正工作稿：应用 ${result.applied} 项，待确认 ${result.skipped.length} 项；原始文件未修改。`
+      : "已打开现有可编辑订正工作稿；原始文件未修改。";
+    void vscode.window.showInformationMessage(message);
+  }
+
+  private workingCopyUriForFile(file: FileEntry, workspaceFolder: vscode.WorkspaceFolder): vscode.Uri {
+    const sourceStem = path.basename(file.path, path.extname(file.path));
+    const relativePath = path.relative(workspaceFolder.uri.fsPath, file.path).replace(/[\\/]/g, "__");
+    return vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "working", `${relativePath || sourceStem}.working.md`);
+  }
+
+  private async syncWorkingCopyCorrections() {
+    if (!this.selectedFile) {
+      void vscode.window.showWarningMessage("请先选择一个 Markdown 文件。");
+      return;
+    }
+    const file = this.selectedFile;
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file.path)) ?? vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      void vscode.window.showWarningMessage("请先打开工作区。");
+      return;
+    }
+    const workingUri = this.workingCopyUri ?? this.workingCopyUriForFile(file, workspaceFolder);
+    let workingText: string;
+    try {
+      workingText = Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8");
+    } catch {
+      void vscode.window.showWarningMessage("尚未找到订正工作稿。请先点击“打开订正工作稿”。");
+      return;
+    }
+    const workingSourceLines = mapWorkingLinesToSourceLines(this.selectedFileText, workingText);
+
+    // Compare body occurrences rather than only unique keys. A correction may
+    // legitimately add another body with the same number or even the same text.
+    const originalBodyCounts = new Map<string, number>();
+    for (const body of extractAnnotationBodies(this.selectedFileText)) {
+      const key = annotationBodyKey(body);
+      originalBodyCounts.set(key, (originalBodyCounts.get(key) ?? 0) + 1);
+    }
+    const originalRefCounts = new Map<string, number>();
+    for (const ref of extractAnnotationRefs(this.selectedFileText)) {
+      originalRefCounts.set(ref.number, (originalRefCounts.get(ref.number) ?? 0) + 1);
+    }
+    const existingWorkingBodyRows = new Map(
+      this.searchTableRows
+        .filter((row) => row.isWorkingCorrection && row.workingCopyPath === workingUri.fsPath && row.lineType === "注释正文")
+        .map((row) => [annotationBodyKey({
+          number: row.annotationNumber ?? annotationNumberFromText(row.raw, row.lineType) ?? "",
+          content: row.raw.replace(/^\s*(?:\[\^\d+\]:|\d+\.|\(\d+\))\s+/, ""),
+        }), row]),
+    );
+    const existingWorkingRefRows = new Map(
+      this.searchTableRows
+        .filter((row) => row.isWorkingCorrection && row.workingCopyPath === workingUri.fsPath && row.lineType === "注释引用")
+        .map((row) => [`${row.annotationNumber ?? annotationNumberFromText(row.raw, row.lineType) ?? ""}\u0000${row.range.line}\u0000${row.range.start}`, row]),
+    );
+    const imported = new Map<string, Candidate>();
+    const workingBodies = extractAnnotationBodies(workingText);
+    const workingBodyCounts = new Map<string, number>();
+    for (const body of workingBodies) {
+      const bodyKey = annotationBodyKey(body);
+      const occurrence = (workingBodyCounts.get(bodyKey) ?? 0) + 1;
+      workingBodyCounts.set(bodyKey, occurrence);
+      if (occurrence <= (originalBodyCounts.get(bodyKey) ?? 0)) {
+        continue;
+      }
+      const correctionKey = `${bodyKey}\u0000${occurrence}`;
+      const existing = existingWorkingBodyRows.get(correctionKey) ?? existingWorkingBodyRows.get(bodyKey);
+      imported.set(`body\u0000${correctionKey}`, {
+        id: existing?.id ?? `working-annotation-${encodeURIComponent(file.path)}-${body.number}-${body.line}-${occurrence}`,
+        kind: "regex",
+        label: body.number,
+        raw: body.text,
+        preview: body.text,
+        regexSource: "工作稿人工补充",
+        annotationNumber: body.number,
+        isWorkingCorrection: true,
+        workingCopyPath: workingUri.fsPath,
+        sourceLine: workingSourceLines[body.line] ?? body.line,
+        range: { line: body.line, start: 0, end: body.text.length },
+        typeLabel: "注释",
+        lineType: "注释正文",
+        // Keep the original source as the pairing identity. Navigation uses
+        // workingCopyPath so clicking this row opens the editable work file.
+        sourcePath: file.path,
+        sourceLabel: `工作稿修正：${file.label}`,
+        status: "候选",
+      });
+    }
+
+    const workingRefs = extractAnnotationRefs(workingText);
+    const workingRefCounts = new Map<string, number>();
+    let importedRefCount = 0;
+    for (const ref of workingRefs) {
+      const occurrence = (workingRefCounts.get(ref.number) ?? 0) + 1;
+      workingRefCounts.set(ref.number, occurrence);
+      if (occurrence <= (originalRefCounts.get(ref.number) ?? 0)) {
+        continue;
+      }
+      const locationKey = `${ref.number}\u0000${ref.line}\u0000${ref.start}`;
+      const existing = existingWorkingRefRows.get(locationKey);
+      imported.set(`ref\u0000${locationKey}`, {
+        id: existing?.id ?? `working-annotation-ref-${encodeURIComponent(file.path)}-${ref.number}-${ref.line}-${ref.start}`,
+        kind: "regex",
+        label: ref.number,
+        raw: ref.text,
+        preview: ref.preview,
+        regexSource: "工作稿人工补充",
+        annotationNumber: ref.number,
+        isWorkingCorrection: true,
+        workingCopyPath: workingUri.fsPath,
+        sourceLine: workingSourceLines[ref.line] ?? ref.line,
+        range: { line: ref.line, start: ref.start, end: ref.end },
+        typeLabel: "注释",
+        lineType: "注释引用",
+        sourcePath: file.path,
+        sourceLabel: `工作稿修正：${file.label}`,
+        status: "候选",
+      });
+      importedRefCount += 1;
+    }
+
+    const retained = this.searchTableRows.filter((row) => !(row.isWorkingCorrection && row.workingCopyPath === workingUri.fsPath));
+    this.searchTableRows = [...retained, ...imported.values()].sort(compareCandidatesByPosition);
+    this.searchTableActive = this.searchTableRows.length > 0;
+    this.workingCopyUri = workingUri;
+    this.updatePairPanel();
+    const importedBodyCount = imported.size - importedRefCount;
+    const message = `工作稿检测到引用 ${workingRefs.length} 条、正文 ${workingBodies.length} 条；已同步新增引用 ${importedRefCount} 条、正文 ${importedBodyCount} 条。`;
+    if (imported.size) {
+      void vscode.window.showInformationMessage(message);
+    } else {
+      void vscode.window.showWarningMessage(`${message} 请确认新增引用使用 <sup>n</sup>、<sup>(n)</sup> 或 [^n]，新增正文以 [^n]:、n.、(n) 或（n）开头，并已保存工作稿。`);
+    }
+  }
+
+  private buildCorrectedWorkingCopy(): { text: string; applied: number; skipped: string[] } | undefined {
+    if (!this.selectedFile) {
+      return undefined;
+    }
+    const sourceRows = this.searchTableRows.filter((row) => !row.sourcePath || row.sourcePath === this.selectedFile!.path);
+    return applyMarkdownCorrections(this.selectedFileText, sourceRows);
+  }
+
   private scanRefs() {
     if (!this.ensureFileSelected()) {
       return;
@@ -471,19 +711,171 @@ class Ocr2mdApp implements vscode.Disposable {
     this.rebuildPairs();
   }
 
-  private scanSearchMatches() {
-    this.searchMatches = scanRegexMatches(this.selectedFileText, this.searchPattern);
+  private async scanSearchMatches() {
+    const searchVersion = ++this.regexSearchVersion;
+    const pattern = this.searchPattern;
+    if (!pattern.trim()) {
+      this.searchMatches = [];
+      this.regexProvider.updateSearchResults();
+      return;
+    }
+
+    const matches = await this.scanRegexMatchesInScope(pattern, this.regexScopeDirectory, this.regexIncludeSubdirectories);
+    if (searchVersion !== this.regexSearchVersion) {
+      return;
+    }
+    this.searchMatches = matches;
     this.regexProvider.updateSearchResults();
   }
 
-  private addSearchResultsToTable() {
-    if (!this.ensureFileSelected()) {
+  private async scanRegexMatchesInScope(pattern: string, scopeDirectoryValue: string, includeSubdirectories: boolean): Promise<Candidate[]> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder || !pattern.trim()) {
+      return [];
+    }
+
+    const workspaceRoot = path.resolve(workspaceFolder.uri.fsPath);
+    const requestedScope = scopeDirectoryValue.trim() || workspaceRoot;
+    const scopeDirectory = path.resolve(requestedScope);
+
+    let files: vscode.Uri[];
+    try {
+      files = await vscode.workspace.findFiles(
+        new vscode.RelativePattern(vscode.Uri.file(scopeDirectory), includeSubdirectories ? "**/*.md" : "*.md"),
+        "{**/.git/**,**/node_modules/**,**/out/**,**/dist/**}",
+        500,
+      );
+    } catch {
+      files = [];
+    }
+
+    const scanned = await Promise.all(files.map(async (uri) => {
+      try {
+        const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+        return scanRegexMatches(text, pattern).map((candidate, index) => ({
+          ...candidate,
+          id: `regex-${encodeURIComponent(uri.fsPath)}-${candidate.range.line}-${candidate.range.start}-${index}`,
+          sourcePath: uri.fsPath,
+          sourceLabel: path.relative(workspaceRoot, uri.fsPath) || path.basename(uri.fsPath),
+        }));
+      } catch {
+        return [] as Candidate[];
+      }
+    }));
+
+    return scanned.flat();
+  }
+
+  private async scanModuleRegex(moduleName: string, pattern: string, scopeDirectory?: string, includeSubdirectories?: boolean) {
+    if (!(moduleName in MODULE_REGEX_DEFAULTS)) {
+      return;
+    }
+    const scanVersion = ++this.moduleScanVersion;
+    this.moduleRegexPatterns[moduleName] = pattern;
+    if (scopeDirectory !== undefined) {
+      this.regexScopeDirectory = scopeDirectory;
+    }
+    if (includeSubdirectories !== undefined) {
+      this.regexIncludeSubdirectories = includeSubdirectories;
+    }
+    const patterns = splitModuleRegexPatterns(pattern);
+    if (!patterns.length) {
+      return;
+    }
+    const scopedMatchGroups = await Promise.all(patterns.map(async (singlePattern) =>
+      (await this.scanRegexMatchesInScope(
+        singlePattern,
+        scopeDirectory ?? this.regexScopeDirectory,
+        includeSubdirectories ?? this.regexIncludeSubdirectories,
+      )).map((candidate) => ({ ...candidate, regexSource: singlePattern })),
+    ));
+    const scopedMatches = scopedMatchGroups.flat();
+    // Typing in the exploratory regex field can issue scans in quick
+    // succession. Ignore a slower, older scan instead of overwriting newer
+    // results and focus state.
+    if (scanVersion !== this.moduleScanVersion) {
+      return;
+    }
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const selectedFile = this.selectedFile;
+    const selectedFileMatches = selectedFile
+      ? patterns.flatMap((singlePattern) => scanRegexMatches(this.selectedFileText, singlePattern).map((candidate) => ({ ...candidate, regexSource: singlePattern }))).map((candidate, index) => ({
+          ...candidate,
+          id: `regex-${encodeURIComponent(selectedFile.path)}-${candidate.range.line}-${candidate.range.start}-${index}`,
+          sourcePath: selectedFile.path,
+          sourceLabel: workspaceRoot
+            ? path.relative(workspaceRoot, selectedFile.path) || path.basename(selectedFile.path)
+            : path.basename(selectedFile.path),
+        }))
+      : [];
+    // 未分类 is a live exploration result set, not an accumulating bucket.
+    // Remove its previous candidates before adding exact matches for the new
+    // pattern. Rows already assigned to a real module remain untouched.
+    const retainedRows = moduleName === "未分类"
+      ? this.searchTableRows.filter((candidate) => (candidate.typeLabel ?? "未分类") !== "未分类")
+      : this.searchTableRows;
+    // Existing unclassified rows still help dedicated module scans promote
+    // candidates without requiring another directory walk.
+    const tableMatches = moduleName === "未分类"
+      ? []
+      : this.searchTableRows.filter((candidate) =>
+          (candidate.typeLabel ?? "未分类") === "未分类" && patterns.some((singlePattern) => regexMatchesCandidate(candidate, singlePattern)),
+        );
+    const matches = [...scopedMatches, ...selectedFileMatches, ...tableMatches];
+    const existing = new Map(retainedRows.map((candidate) => [tableRowKey(candidate), candidate]));
+    for (const candidate of matches) {
+      const key = tableRowKey(candidate);
+      const existingRow = existing.get(key);
+      if (existingRow) {
+        // A directory-wide generic scan initially places rows in 未分类. When a
+        // module rule later recognizes one, promote it into that module. Rows
+        // already classified by the user in another module remain untouched.
+        if ((existingRow.typeLabel ?? "未分类") === "未分类" || existingRow.typeLabel === moduleName) {
+          existing.set(key, {
+            ...existingRow,
+            typeLabel: moduleName,
+            lineType: existingRow.lineType ?? defaultLineTypeForModule(moduleName, candidate.raw),
+            regexSource: existingRow.regexSource ?? candidate.regexSource,
+            annotationNumber: existingRow.annotationNumber || annotationNumberFromText(candidate.raw, defaultLineTypeForModule(moduleName, candidate.raw)),
+          });
+        }
+        continue;
+      }
+      existing.set(key, {
+        ...candidate,
+        id: `table-${key}`,
+        typeLabel: moduleName,
+        lineType: defaultLineTypeForModule(moduleName, candidate.raw),
+        annotationNumber: annotationNumberFromText(candidate.raw, defaultLineTypeForModule(moduleName, candidate.raw)),
+      });
+    }
+    this.searchTableRows = [...existing.values()].sort(compareCandidatesByPosition);
+    this.searchTableActive = true;
+    this.regexProvider.updateSearchResults();
+    this.updatePairPanel(undefined, undefined, true);
+  }
+
+  private async addSearchResultsToTable() {
+    if (!this.selectedFile) {
+      const firstResult = this.searchMatches.find((candidate) => candidate.sourcePath);
+      if (!firstResult?.sourcePath) {
+        void vscode.window.showWarningMessage("没有可加入数据表的正则搜索结果。");
+        return;
+      }
+      await this.selectFile(firstResult.sourcePath);
+    }
+
+    if (!this.selectedFile) {
       return;
     }
 
     const existingByKey = new Map(this.searchTableRows.map((candidate) => [tableRowKey(candidate), candidate]));
     const mergedRows = [...this.searchTableRows];
 
+    if (!this.searchMatches.length) {
+      void vscode.window.showInformationMessage("没有可加入数据表的正则搜索结果。");
+      return;
+    }
     for (const candidate of this.searchMatches) {
       const key = tableRowKey(candidate);
       if (existingByKey.has(key)) {
@@ -499,6 +891,10 @@ class Ocr2mdApp implements vscode.Disposable {
     }
 
     this.searchTableRows = mergedRows.sort((left, right) => {
+      const sourceOrder = (left.sourceLabel ?? "").localeCompare(right.sourceLabel ?? "");
+      if (sourceOrder !== 0) {
+        return sourceOrder;
+      }
       if (left.range.line !== right.range.line) {
         return left.range.line - right.range.line;
       }
@@ -514,6 +910,70 @@ class Ocr2mdApp implements vscode.Disposable {
     }
     this.searchMatches = scanIllegalLineBreakCandidates(this.selectedFileText);
     this.regexProvider.updateSearchResults();
+  }
+
+  private async addCurrentLineToModule() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.languageId !== "markdown" || editor.document.uri.scheme !== "file") {
+      void vscode.window.showWarningMessage("请先在 Markdown 源码编辑器中定位到要标定的行。");
+      return;
+    }
+
+    const moduleName = await vscode.window.showQuickPick(
+      ["未分类", "注释", "标题", "图片", "非法断行"],
+      { placeHolder: "将当前行加入哪个 ocr2md 模块？" },
+    );
+    if (!moduleName) {
+      return;
+    }
+
+    const sourcePath = editor.document.uri.fsPath;
+    if (this.selectedFile?.path !== sourcePath) {
+      await this.selectFile(sourcePath, { preserveTable: this.searchTableRows.length > 0 });
+    }
+
+    let lineNumber = editor.selection.active.line;
+    // Right-clicking near an end-of-line can place VS Code's caret on the next
+    // blank line. For line annotation, use the preceding content line instead.
+    while (lineNumber > 0 && !editor.document.lineAt(lineNumber).text.trim()) {
+      lineNumber -= 1;
+    }
+    const line = editor.document.lineAt(lineNumber);
+    const linePreview = line.text.trimStart();
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const candidate: Candidate = {
+      id: "",
+      kind: "regex",
+      label: linePreview.trim() || `L${line.lineNumber + 1}`,
+      raw: line.text,
+      preview: linePreview,
+      range: { line: line.lineNumber, start: 0, end: line.text.length },
+      sourcePath,
+      sourceLabel: workspaceRoot ? path.relative(workspaceRoot, sourcePath) || path.basename(sourcePath) : path.basename(sourcePath),
+      typeLabel: moduleName,
+      lineType: defaultLineTypeForModule(moduleName, line.text) ?? (moduleName === "注释" ? "注释引用" : undefined),
+      annotationNumber: moduleName === "注释"
+        ? annotationNumberFromText(line.text, defaultLineTypeForModule(moduleName, line.text))
+        : undefined,
+      status: "候选",
+    };
+    const key = tableRowKey(candidate);
+    candidate.id = `table-${key}`;
+    const index = this.searchTableRows.findIndex((row) => tableRowKey(row) === key);
+    if (index >= 0) {
+      this.searchTableRows[index] = {
+        ...this.searchTableRows[index],
+        typeLabel: moduleName,
+        lineType: candidate.lineType ?? this.searchTableRows[index].lineType,
+        annotationNumber: candidate.annotationNumber || this.searchTableRows[index].annotationNumber,
+      };
+    } else {
+      this.searchTableRows.push(candidate);
+      this.searchTableRows.sort(compareCandidatesByPosition);
+    }
+    this.searchTableActive = true;
+    this.updatePairPanel(candidate, undefined, true);
+    void vscode.window.showInformationMessage(`已将第 ${line.lineNumber + 1} 行加入“${moduleName}”模块。`);
   }
 
   private setSearchRowsType(ids: string[], typeLabel: string) {
@@ -535,6 +995,9 @@ class Ocr2mdApp implements vscode.Disposable {
         // The table displays this as the default already. Persist it as well so
         // future sidecar loads and exports do not lose the intended ref type.
         lineType: typeLabel === "注释" ? candidate.lineType ?? "注释引用" : candidate.lineType,
+        annotationNumber: typeLabel === "注释"
+          ? candidate.annotationNumber || annotationNumberFromText(candidate.raw, candidate.lineType ?? "注释引用")
+          : candidate.annotationNumber,
       };
     });
     this.updatePairPanel();
@@ -547,11 +1010,27 @@ class Ocr2mdApp implements vscode.Disposable {
         .filter((candidate) => selectedIds.has(candidate.id) && candidate.typeLabel === "拼写检查")
         .map((candidate) => spellingKey(candidate.raw)),
     );
-    this.searchTableRows = this.searchTableRows.map((candidate) =>
-      selectedIds.has(candidate.id) || (candidate.typeLabel === "拼写检查" && selectedSpellings.has(spellingKey(candidate.raw)))
-        ? { ...candidate, lineType }
-        : candidate,
-    );
+    if (lineType === "忽略" || lineType === "ignore") {
+      this.searchTableRows = this.searchTableRows.filter(
+        (candidate) =>
+          !selectedIds.has(candidate.id) &&
+          !(candidate.typeLabel === "拼写检查" && selectedSpellings.has(spellingKey(candidate.raw))),
+      );
+      this.searchTableActive = this.searchTableRows.length > 0;
+      this.updatePairPanel();
+      return;
+    }
+    this.searchTableRows = this.searchTableRows.map((candidate) => {
+      const applies = selectedIds.has(candidate.id) || (candidate.typeLabel === "拼写检查" && selectedSpellings.has(spellingKey(candidate.raw)));
+      if (!applies) return candidate;
+      return {
+        ...candidate,
+        lineType,
+        annotationNumber: candidate.typeLabel === "注释"
+          ? annotationNumberFromText(candidate.raw, lineType) ?? candidate.annotationNumber
+          : candidate.annotationNumber,
+      };
+    });
     this.updatePairPanel();
   }
 
@@ -560,6 +1039,14 @@ class Ocr2mdApp implements vscode.Disposable {
     this.searchTableRows = this.searchTableRows.map((candidate) =>
       selectedIds.has(candidate.id) ? { ...candidate, chapterFile } : candidate,
     );
+    this.updatePairPanel();
+  }
+
+  private setSearchRowsChapterFiles(chapterFiles: Record<string, string>) {
+    this.searchTableRows = this.searchTableRows.map((candidate) => {
+      const chapterFile = chapterFiles[candidate.id];
+      return chapterFile === undefined ? candidate : { ...candidate, chapterFile };
+    });
     this.updatePairPanel();
   }
 
@@ -648,22 +1135,23 @@ class Ocr2mdApp implements vscode.Disposable {
     }
   }
 
-  private async reloadAnnotationsFromSidecar() {
-    if (!this.selectedFile) {
-      void vscode.window.showWarningMessage("请先选择一个 Markdown 文件。");
-      return;
-    }
+  private async reloadAnnotationsFromSidecar(options: { silent?: boolean } = {}) {
     const loaded = await this.loadAnnotationSidecar(this.selectedFile);
     if (!loaded.loaded) {
-      void vscode.window.showWarningMessage(loaded.error ? `标定恢复失败：${loaded.error}` : "尚未找到保存的标定文件。");
+      if (!options.silent) {
+        void vscode.window.showWarningMessage(loaded.error ? `标定恢复失败：${loaded.error}` : "尚未找到保存的标定文件。");
+      }
       return;
     }
     const transientSpellingRows = this.searchTableRows.filter((candidate) => candidate.typeLabel === "拼写检查");
     const restoredKeys = new Set(loaded.rows.map(tableRowKey));
     this.searchTableRows = [...loaded.rows, ...transientSpellingRows.filter((row) => !restoredKeys.has(tableRowKey(row)))].sort(compareCandidatesByPosition);
+    this.annotationPairs = loaded.annotationPairs;
     this.searchTableActive = this.searchTableRows.length > 0;
     this.updatePairPanel(undefined, undefined, true);
-    void vscode.window.showInformationMessage(`ocr2md 已恢复 ${loaded.rows.length} 条保存标定。`);
+    if (!options.silent) {
+      void vscode.window.showInformationMessage(`ocr2md 已恢复 ${loaded.rows.length} 条保存标定。`);
+    }
   }
 
   private async downloadImageRows(ids: string[]) {
@@ -807,19 +1295,39 @@ class Ocr2mdApp implements vscode.Disposable {
         localPath: candidate.localPath,
         suggestions: candidate.suggestions,
         replacement: candidate.replacement,
+        // Older table rows may not have stored source metadata. Persist the
+        // current file in that case so a workspace-level reload remains
+        // navigable after switching source documents.
+        sourcePath: candidate.sourcePath ?? this.selectedFile!.path,
+        sourceLabel: candidate.sourceLabel ?? path.basename(candidate.sourcePath ?? this.selectedFile!.path),
         label: candidate.label,
         raw: candidate.raw,
         preview: candidate.preview,
+        regexSource: candidate.regexSource,
+        annotationNumber: candidate.annotationNumber,
+        isWorkingCorrection: candidate.isWorkingCorrection,
+        workingCopyPath: candidate.workingCopyPath,
+        sourceLine: candidate.sourceLine,
         line: candidate.range.line,
         start: candidate.range.start,
         endLine: candidate.range.endLine,
         end: candidate.range.end,
       })),
+      annotationPairs: this.annotationPairs,
     };
     const uri = annotationSidecarUri(this.selectedFile);
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(this.selectedFile.path)) ?? vscode.workspace.workspaceFolders?.[0];
+    const workspaceSidecarUri = workspaceFolder
+      ? vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "annotations.json")
+      : undefined;
     try {
       await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(sidecar, null, 2), "utf8"));
-      void vscode.window.showInformationMessage(`ocr2md 标定已保存：${path.basename(uri.fsPath)}`);
+      if (workspaceSidecarUri) {
+        await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(workspaceFolder!.uri, ".ocr2md"));
+        await vscode.workspace.fs.writeFile(workspaceSidecarUri, Buffer.from(JSON.stringify(sidecar, null, 2), "utf8"));
+      }
+      const savedLocation = workspaceSidecarUri ? `${path.basename(uri.fsPath)} 和 .ocr2md/annotations.json` : path.basename(uri.fsPath);
+      void vscode.window.showInformationMessage(`ocr2md 标定已保存：${savedLocation}`);
     } catch (error) {
       void vscode.window.showErrorMessage(`ocr2md 标定保存失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -846,7 +1354,7 @@ class Ocr2mdApp implements vscode.Disposable {
       const sourceLines = sourceText.split(/\r?\n/);
       const chapters = buildChapterOutputSegments(this.searchTableRows, sourceLines.length);
       if (!chapters.length) {
-        void vscode.window.showWarningMessage("请先在“标题”模块选择标题行，并通过“设置章节序号”为至少一个章节设置章节文件。");
+        void vscode.window.showWarningMessage("请先在“标题”模块选择标题行，并通过“设置章节文件”为至少一个章节设置章节文件。");
         return;
       }
 
@@ -881,45 +1389,94 @@ class Ocr2mdApp implements vscode.Disposable {
     }
   }
 
-  private async loadAnnotationSidecar(file: FileEntry): Promise<{ rows: Candidate[]; loaded: boolean; error?: string }> {
-    const uri = annotationSidecarUri(file);
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      const payload = JSON.parse(Buffer.from(bytes).toString("utf8")) as AnnotationSidecar;
-      if (payload.schemaVersion !== 1 || !Array.isArray(payload.rows)) {
-        return { rows: [], loaded: false, error: "sidecar schema 不匹配" };
+  private async loadAnnotationSidecar(file?: FileEntry): Promise<{ rows: Candidate[]; annotationPairs: AnnotationPair[]; loaded: boolean; error?: string }> {
+    const workspaceFolder = file
+      ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file.path)) ?? vscode.workspace.workspaceFolders?.[0]
+      : vscode.workspace.workspaceFolders?.[0];
+    const workspaceSidecarUri = workspaceFolder
+      ? vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "annotations.json")
+      : undefined;
+    // Prefer the workspace table because module rows can originate from many
+    // files. Fall back to legacy per-Markdown sidecars for existing projects.
+    const uris = [workspaceSidecarUri, file ? annotationSidecarUri(file) : undefined].filter((uri): uri is vscode.Uri => Boolean(uri));
+    const mapRows = (payload: AnnotationSidecar): Candidate[] => payload.rows.map((row) => ({
+      id: row.id,
+      kind: row.kind ?? "regex",
+      label: row.label,
+            raw: row.raw,
+            preview: row.preview,
+            regexSource: row.regexSource,
+            annotationNumber: row.annotationNumber || annotationNumberFromText(row.raw, row.lineType),
+            isWorkingCorrection: row.isWorkingCorrection,
+            workingCopyPath: row.workingCopyPath,
+            sourceLine: row.sourceLine,
+      typeLabel: row.typeLabel ?? "未分类",
+      lineType: row.lineType,
+      chapterFile: row.chapterFile,
+      localPath: row.localPath,
+      suggestions: row.suggestions,
+      replacement: row.replacement,
+      sourcePath: row.sourcePath ?? payload.sourceFile ?? file?.path,
+      sourceLabel: row.sourceLabel ?? path.basename(row.sourcePath ?? payload.sourceFile ?? file?.path ?? ""),
+      range: {
+        line: row.line,
+        start: row.start,
+        endLine: row.endLine,
+        end: row.end,
+      },
+      status: "候选",
+    }));
+    let lastError: string | undefined;
+    for (const uri of uris) {
+      try {
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        const payload = JSON.parse(Buffer.from(bytes).toString("utf8")) as AnnotationSidecar;
+        if (payload.schemaVersion !== 1 || !Array.isArray(payload.rows)) {
+          lastError = "sidecar schema 不匹配";
+          continue;
+        }
+        return {
+          loaded: true,
+          rows: mapRows(payload),
+          annotationPairs: Array.isArray(payload.annotationPairs) ? payload.annotationPairs : [],
+        };
+      } catch (error) {
+        const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : "";
+        if (code !== "FileNotFound" && code !== "ENOENT") {
+          lastError = error instanceof Error ? error.message : String(error);
+        }
       }
-
-      return {
-        loaded: true,
-        rows: payload.rows.map((row) => ({
-        id: row.id,
-        kind: row.kind ?? "regex",
-        label: row.label,
-        raw: row.raw,
-        preview: row.preview,
-        typeLabel: row.typeLabel ?? "未分类",
-        lineType: row.lineType,
-        chapterFile: row.chapterFile,
-        localPath: row.localPath,
-        suggestions: row.suggestions,
-        replacement: row.replacement,
-        range: {
-          line: row.line,
-          start: row.start,
-          endLine: row.endLine,
-          end: row.end,
-        },
-        status: "候选",
-        })),
-      };
-    } catch (error) {
-      const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : "";
-      if (code === "FileNotFound" || code === "ENOENT") {
-        return { rows: [], loaded: false };
-      }
-      return { rows: [], loaded: false, error: error instanceof Error ? error.message : String(error) };
     }
+
+    // Migration for annotations saved before the workspace-level table was
+    // introduced. Old sidecars may belong to another source file because the
+    // table can contain rows from the whole directory.
+    if (workspaceFolder) {
+      try {
+        const legacyUris = await vscode.workspace.findFiles("**/*.md.ocr2md.json", "**/{node_modules,.git}/**");
+        const merged = new Map<string, Candidate>();
+        for (const legacyUri of legacyUris) {
+          try {
+            const payload = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(legacyUri)).toString("utf8")) as AnnotationSidecar;
+            if (payload.schemaVersion !== 1 || !Array.isArray(payload.rows)) {
+              continue;
+            }
+            for (const row of mapRows(payload)) {
+              merged.set(tableRowKey(row), row);
+            }
+          } catch {
+            // A malformed legacy sidecar must not prevent the remaining saved
+            // annotations from being restored.
+          }
+        }
+        if (merged.size) {
+          return { rows: [...merged.values()].sort(compareCandidatesByPosition), annotationPairs: [], loaded: true };
+        }
+      } catch (error) {
+        lastError ??= error instanceof Error ? error.message : String(error);
+      }
+    }
+    return { rows: [], annotationPairs: [], loaded: false, error: lastError };
   }
 
   private scanBodies() {
@@ -956,7 +1513,12 @@ class Ocr2mdApp implements vscode.Disposable {
       return;
     }
 
-    await this.revealRanges({ single: candidate.range, target: candidate.range });
+    if (candidate.workingCopyPath) {
+      await this.revealWorkingCopyCandidate(candidate);
+    } else {
+      await this.openCandidateSource(candidate);
+      await this.revealRanges({ single: candidate.range, target: candidate.range });
+    }
     this.updatePairPanel(candidate);
   }
 
@@ -965,8 +1527,29 @@ class Ocr2mdApp implements vscode.Disposable {
     if (!candidate) {
       return;
     }
-    // Only reveal the native source editor. Do not reload or scroll the Markdown preview pane.
-    await this.revealRanges({ single: candidate.range, target: candidate.range });
+    if (candidate.workingCopyPath) {
+      await this.revealWorkingCopyCandidate(candidate);
+    } else {
+      await this.openCandidateSource(candidate);
+      // Only reveal the native source editor. Do not reload or scroll the Markdown preview pane.
+      await this.revealRanges({ single: candidate.range, target: candidate.range });
+    }
+  }
+
+  private async revealWorkingCopyCandidate(candidate: Candidate) {
+    if (!candidate.workingCopyPath) return;
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(candidate.workingCopyPath));
+    const editor = await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Two, preserveFocus: false });
+    const range = toVsCodeRange(candidate.range);
+    editor.selection = new vscode.Selection(range.start, range.end);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    this.applyHeadingDecorations(editor);
+  }
+
+  private async openCandidateSource(candidate: Candidate) {
+    if (candidate.sourcePath && candidate.sourcePath !== this.selectedFile?.path) {
+      await this.selectFile(candidate.sourcePath, { preserveTable: true });
+    }
   }
 
   private updateCandidateStatus(candidateId: string, status: "已拒绝" | "异常") {
@@ -1231,14 +1814,29 @@ class Ocr2mdApp implements vscode.Disposable {
           this.setSearchRowsType(message.ids, message.typeLabel);
         }
         break;
+      case "scanModuleRegex":
+        if (typeof message.moduleName === "string" && typeof message.pattern === "string") {
+          await this.scanModuleRegex(message.moduleName, message.pattern, message.regexScopeDirectory, message.regexIncludeSubdirectories);
+        }
+        break;
       case "setRowsLineType":
         if (Array.isArray(message.ids) && typeof message.lineType === "string") {
           this.setSearchRowsLineType(message.ids, message.lineType);
         }
         break;
+      case "confirmAnnotationPairs":
+        if (Array.isArray(message.ids)) {
+          this.confirmAnnotationPairs(message.ids);
+        }
+        break;
       case "setRowsChapterFile":
         if (Array.isArray(message.ids) && typeof message.chapterFile === "string") {
           this.setSearchRowsChapterFile(message.ids, message.chapterFile);
+        }
+        break;
+      case "setRowsChapterFiles":
+        if (message.chapterFiles && typeof message.chapterFiles === "object") {
+          this.setSearchRowsChapterFiles(message.chapterFiles);
         }
         break;
       case "setSpellReplacement":
@@ -1278,7 +1876,7 @@ class Ocr2mdApp implements vscode.Disposable {
         }
         break;
       case "reloadAnnotations":
-        await this.reloadAnnotationsFromSidecar();
+        await this.reloadAnnotationsFromSidecar({ silent: message.silent === true });
         break;
       case "downloadImages":
         if (Array.isArray(message.ids)) {
@@ -1398,57 +1996,138 @@ class Ocr2mdApp implements vscode.Disposable {
   }
 
   private isPreviewDocument(uri: vscode.Uri): boolean {
-    return uri.scheme === readonlyScheme || (!!this.selectedFile && uri.fsPath === this.selectedFile.path);
+    return uri.scheme === readonlyScheme || uri.toString() === this.workingCopyUri?.toString() || (!!this.selectedFile && uri.fsPath === this.selectedFile.path);
   }
 
-  private updatePairPanel(selectedCandidate?: Candidate, selectedPairId?: string, reveal = false) {
-    if (!this.selectedFile) {
-      this.pairPanel?.dispose();
-      this.pairPanel = undefined;
-      return;
+  private rebuildAnnotationPairs() {
+    const previousById = new Map(this.annotationPairs.map((pair) => [pair.id, pair]));
+    const refsByNumber = new Map<string, Candidate[]>();
+    const bodies: Candidate[] = [];
+    const sourcePathFor = (row: Candidate) => row.sourcePath ?? this.selectedFile?.path ?? "";
+    const annotationRows = this.searchTableRows.filter((row) => row.typeLabel === "注释" && row.lineType !== "忽略");
+    const sourcePaths = [...new Set(annotationRows.map(sourcePathFor))].sort((left, right) =>
+      path.basename(left).localeCompare(path.basename(right), "zh-CN", { numeric: true }) || left.localeCompare(right),
+    );
+    const sourceOrder = new Map(sourcePaths.map((sourcePath, index) => [sourcePath, index + 1]));
+    const logicalLineFor = (row: Candidate) => row.sourceLine ?? row.range.line;
+    const displayPairIdFor = (sourcePath: string, anchor: Candidate) =>
+      `${String(sourceOrder.get(sourcePath) ?? 1).padStart(3, "0")}-${String(logicalLineFor(anchor) + 1).padStart(6, "0")}`;
+    const compareGlobalPosition = (left: Candidate, right: Candidate) =>
+      (sourceOrder.get(sourcePathFor(left)) ?? Number.MAX_SAFE_INTEGER) -
+        (sourceOrder.get(sourcePathFor(right)) ?? Number.MAX_SAFE_INTEGER) ||
+      logicalLineFor(left) - logicalLineFor(right) ||
+      left.range.start - right.range.start;
+    const pairIdFor = (sourcePath: string, number: string, ref?: Candidate, body?: Candidate) =>
+      `annotation-pair-${encodeURIComponent(sourcePath)}-${number}-${ref?.id ?? "missing-ref"}-${body?.id ?? "missing-body"}`;
+
+    for (const row of annotationRows) {
+      const number = annotationNumberForRow(row);
+      if (!number) continue;
+      if (row.lineType === "注释正文") {
+        bodies.push(row);
+        continue;
+      }
+      if (row.lineType !== "注释引用") continue;
+      const refs = refsByNumber.get(number) ?? [];
+      refs.push(row);
+      refsByNumber.set(number, refs);
     }
 
-    if (!this.pairPanel) {
-      this.pairPanel = vscode.window.createWebviewPanel(
-        "ocr2mdPairs",
-        "ocr2md 数据表",
-        vscode.ViewColumn.Three,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true,
-        },
-      );
-      this.pairPanel.onDidDispose(() => {
-        this.pairPanel = undefined;
+    refsByNumber.forEach((refs) => refs.sort(compareGlobalPosition));
+    const pairs: AnnotationPair[] = [];
+    for (const body of bodies.sort(compareGlobalPosition)) {
+      const number = annotationNumberForRow(body);
+      if (!number) continue;
+      const refs = refsByNumber.get(number) ?? [];
+      let chosenIndex = -1;
+      for (let index = refs.length - 1; index >= 0; index -= 1) {
+        if (compareGlobalPosition(refs[index], body) < 0) {
+          chosenIndex = index;
+          break;
+        }
+      }
+      const ref = chosenIndex >= 0 ? refs.splice(chosenIndex, 1)[0] : undefined;
+      const sourcePath = sourcePathFor(ref ?? body);
+      const id = pairIdFor(sourcePath, number, ref, body);
+      const previous = previousById.get(id);
+      pairs.push({
+        id,
+        pairId: displayPairIdFor(sourcePath, ref ?? body),
+        sourcePath,
+        number,
+        refCandidateId: ref?.id,
+        bodyCandidateId: body.id,
+        status: ref ? (previous?.status === "已确认" || previous?.status === "异常" ? previous.status : "自动匹配") : "待补引用",
+        confidence: ref ? (body.isWorkingCorrection ? "medium" : "high") : "low",
+        bodyOrigin: body.isWorkingCorrection ? "工作稿人工补充" : "原文",
       });
-      this.pairPanel.webview.onDidReceiveMessage((message: WebviewMessage) => this.handlePairMessage(message));
     }
 
-    this.pairPanel.title = this.postOcrCleanMode ? "ocr2md 文本块" : "ocr2md 数据表";
-
-    if (reveal) {
-      this.pairPanel.reveal(vscode.ViewColumn.Three, false);
+    for (const refs of refsByNumber.values()) {
+      for (const ref of refs) {
+        const number = annotationNumberForRow(ref);
+        if (!number) continue;
+        const sourcePath = sourcePathFor(ref);
+        const id = pairIdFor(sourcePath, number, ref);
+        const previous = previousById.get(id);
+        pairs.push({
+          id,
+          pairId: displayPairIdFor(sourcePath, ref),
+          sourcePath,
+          number,
+          refCandidateId: ref.id,
+          status: previous?.status === "异常" ? "异常" : "待补正文",
+          confidence: "low",
+          bodyOrigin: "原文",
+        });
+      }
     }
+    const candidatesById = new Map(annotationRows.map((row) => [row.id, row]));
+    const pairsByBaseId = new Map<string, AnnotationPair[]>();
+    for (const pair of pairs) {
+      const sameBase = pairsByBaseId.get(pair.pairId) ?? [];
+      sameBase.push(pair);
+      pairsByBaseId.set(pair.pairId, sameBase);
+    }
+    for (const [baseId, sameBasePairs] of pairsByBaseId) {
+      if (sameBasePairs.length < 2) continue;
+      sameBasePairs
+        .sort((left, right) => {
+          const leftAnchor = candidatesById.get(left.refCandidateId ?? left.bodyCandidateId ?? "");
+          const rightAnchor = candidatesById.get(right.refCandidateId ?? right.bodyCandidateId ?? "");
+          return Number(left.number) - Number(right.number) || (leftAnchor?.range.start ?? 0) - (rightAnchor?.range.start ?? 0);
+        })
+        .forEach((pair, index) => {
+          pair.pairId = `${baseId}-${String(index + 1).padStart(2, "0")}`;
+        });
+    }
+    this.annotationPairs = pairs.sort((left, right) => left.pairId.localeCompare(right.pairId, "zh-CN", { numeric: true }));
+  }
 
-    const selectedPair =
-      selectedPairId ??
-      (selectedCandidate?.kind === "ref" || selectedCandidate?.kind === "body"
-        ? `pair-${selectedCandidate.label}`
-        : undefined);
-    this.pairPanel.webview.html = renderPairHtml({
-      file: this.selectedFile,
-      searchTableActive: this.searchTableActive,
-      postOcrCleanMode: this.postOcrCleanMode,
-      searchRows: this.postOcrCleanMode ? [...this.searchTableRows, ...this.sentenceRows] : this.searchTableRows,
-      imageDownloadProgress: this.imageDownloadProgress,
-      deeplConfigured: this.deeplConfigured,
-      translationTestResult: this.translationTestResult,
-      translationProgress: this.translationProgress,
-      failedTranslationBlockIndexes: [...this.failedTranslationBlockIndexes],
-      pairs: this.pairs,
-      selectedCandidate,
-      selectedPairId: selectedPair,
+  private confirmAnnotationPairs(candidateIds: string[]) {
+    const selected = new Set(candidateIds);
+    let confirmed = 0;
+    this.annotationPairs = this.annotationPairs.map((pair) => {
+      if (!pair.refCandidateId || !pair.bodyCandidateId || (!selected.has(pair.refCandidateId) && !selected.has(pair.bodyCandidateId))) {
+        return pair;
+      }
+      confirmed += 1;
+      return { ...pair, status: "已确认", confidence: "high" };
     });
+    void vscode.window.showInformationMessage(confirmed ? `已确认 ${confirmed} 组注释配对。` : "所选行中没有可确认的完整注释 Pair。");
+    this.updatePairPanel();
+  }
+
+  private updatePairPanel(selectedCandidate?: Candidate, selectedPairId?: string, _reveal = false) {
+    // The data-table workbench lives in the left ocr2md WebviewView. Dispose a
+    // panel left over from earlier versions instead of opening a right editor.
+    this.pairPanel?.dispose();
+    this.pairPanel = undefined;
+    this.selectedCandidate = selectedCandidate;
+    this.selectedPairId = selectedPairId ??
+      (selectedCandidate?.kind === "ref" || selectedCandidate?.kind === "body" ? `pair-${selectedCandidate.label}` : undefined);
+    this.rebuildAnnotationPairs();
+    this.regexProvider.update();
   }
 }
 
@@ -1489,7 +2168,7 @@ class Ocr2mdDirectoryProvider implements vscode.TreeDataProvider<Ocr2mdDirectory
     const workspaceFolder = this.getWorkspaceFolder();
     if (!workspaceFolder) {
       return [
-        new Ocr2mdDirectoryItem("未选择工作区", "empty", vscode.TreeItemCollapsibleState.None, {
+        new Ocr2mdDirectoryItem("选择工作目录...", "empty", vscode.TreeItemCollapsibleState.None, {
           command: "ocr2md.pickFolder",
           title: "选择工作文件夹",
         }),
@@ -1513,7 +2192,13 @@ class Ocr2mdDirectoryProvider implements vscode.TreeDataProvider<Ocr2mdDirectory
         }),
       );
     }
-    return [root];
+    return [
+      root,
+      new Ocr2mdDirectoryItem("打开其他工作目录...", "empty", vscode.TreeItemCollapsibleState.None, {
+        command: "ocr2md.pickFolder",
+        title: "打开其他工作目录",
+      }),
+    ];
   }
 }
 
@@ -1764,10 +2449,7 @@ class Ocr2mdRegexProvider implements vscode.WebviewViewProvider {
   }
 
   updateSearchResults() {
-    void this.view?.webview.postMessage({
-      command: "searchResultsUpdated",
-      state: this.getState(),
-    });
+    this.update();
   }
 }
 
@@ -1777,15 +2459,20 @@ interface WebviewMessage {
   ids?: string[];
   path?: string;
   pattern?: string;
+  moduleName?: string;
+  regexScopeDirectory?: string;
+  regexIncludeSubdirectories?: boolean;
   typeLabel?: string;
   lineType?: string;
   chapterFile?: string;
+  chapterFiles?: Record<string, string>;
   localPath?: string;
   suggestions?: string[];
   replacement?: string;
   translation?: string;
   apiKey?: string;
   text?: string;
+  silent?: boolean;
   previewEditable?: boolean;
 }
 
@@ -1794,6 +2481,7 @@ interface AnnotationSidecar {
   sourceFile: string;
   savedAt: string;
   rows: AnnotationSidecarRow[];
+  annotationPairs?: AnnotationPair[];
 }
 
 interface AnnotationSidecarRow {
@@ -1805,9 +2493,16 @@ interface AnnotationSidecarRow {
   localPath?: string;
   suggestions?: string[];
   replacement?: string;
+  sourcePath?: string;
+  sourceLabel?: string;
   label: string;
   raw: string;
   preview: string;
+  regexSource?: string;
+  annotationNumber?: string;
+  isWorkingCorrection?: boolean;
+  workingCopyPath?: string;
+  sourceLine?: number;
   line: number;
   start: number;
   endLine?: number;
@@ -1867,7 +2562,7 @@ function toTranslationSidecarRow(sentence: Candidate): TranslationSidecarRow {
 }
 
 function tableRowKey(candidate: Candidate): string {
-  return `${candidate.range.line}:${candidate.range.start}:${candidate.range.endLine ?? candidate.range.line}:${candidate.range.end}:${candidate.raw}`;
+  return `${candidate.sourcePath ?? ""}:${candidate.range.line}:${candidate.range.start}:${candidate.range.endLine ?? candidate.range.line}:${candidate.range.end}:${candidate.raw}`;
 }
 
 function spellingKey(word: string): string {
@@ -2330,7 +3025,42 @@ function textOffsetAtPosition(text: string, line: number, character: number): nu
 }
 
 function compareCandidatesByPosition(left: Candidate, right: Candidate): number {
-  return left.range.line - right.range.line || left.range.start - right.range.start || left.raw.localeCompare(right.raw);
+  return (left.sourceLabel ?? "").localeCompare(right.sourceLabel ?? "") || left.range.line - right.range.line || left.range.start - right.range.start || left.raw.localeCompare(right.raw);
+}
+
+function defaultLineTypeForModule(moduleName: string, raw: string): string | undefined {
+  if (moduleName === "注释") {
+    if (/<sup>\s*\(?\s*\d+\s*\)?\s*<\/sup>|\[\^\d+\](?!:)/i.test(raw)) {
+      return "注释引用";
+    }
+    if (/^\s*(?:\d+\.\s+|\(\d+\)(?:\s|$)|\[\^\d+\]:\s+)/.test(raw)) {
+      return "注释正文";
+    }
+    return "注释引用";
+  }
+  if (moduleName === "标题") {
+    const match = /^(#{1,6})\s+/.exec(raw);
+    return match ? ["一级", "二级", "三级", "四级", "五级", "六级"][match[1].length - 1] : "非标题";
+  }
+  if (moduleName === "图片") return "图片引用";
+  if (moduleName === "非法断行") return "断行候选";
+  return undefined;
+}
+
+function splitModuleRegexPatterns(input: string): string[] {
+  return input
+    .split(/^\s*---\s*$/m)
+    .map((pattern) => pattern.trim())
+    .filter(Boolean);
+}
+
+function regexMatchesCandidate(candidate: Candidate, pattern: string): boolean {
+  try {
+    const regex = new RegExp(pattern, "gm");
+    return regex.test(candidate.raw);
+  } catch {
+    return false;
+  }
 }
 
 interface ChapterOutputSegment {
@@ -2441,7 +3171,7 @@ function applyMarkdownCorrections(sourceText: string, rows: Candidate[]): { text
   // These edits preserve line count, so the stored line positions remain valid
   // until the final pass that joins confirmed illegal line breaks.
   for (const row of rows) {
-    if (row.typeLabel === "拼写检查") {
+    if (row.typeLabel === "拼写检查" || row.isWorkingCorrection) {
       continue;
     }
     const normalizedRow = withDefaultLineType(row);
@@ -2579,11 +3309,11 @@ function normalizeAnnotationLine(line: string, row: Candidate): string | undefin
     return undefined;
   }
   if (row.lineType === "注释引用") {
-    const supPattern = new RegExp(`<sup>\\s*${escapeRegex(annotationNumber)}\\s*</sup>`, "i");
+    const supPattern = new RegExp(`<sup>\\s*\\(?\\s*${escapeRegex(annotationNumber)}\\s*\\)?\\s*</sup>`, "i");
     return supPattern.test(line) ? line.replace(supPattern, `[^${annotationNumber}]`) : undefined;
   }
   if (row.lineType === "注释正文") {
-    const bodyPattern = new RegExp(`^(\\s*)${escapeRegex(annotationNumber)}\\.\\s+(.+)$`);
+    const bodyPattern = new RegExp(`^(\\s*)(?:${escapeRegex(annotationNumber)}\\.|\\(${escapeRegex(annotationNumber)}\\)|\\[\\^${escapeRegex(annotationNumber)}\\]:)\\s+(.+)$`);
     const match = line.match(bodyPattern);
     return match ? `${match[1]}[^${annotationNumber}]: ${match[2]}` : undefined;
   }
@@ -2601,8 +3331,10 @@ function withDefaultLineType(row: Candidate): Candidate {
 function resolveAnnotationLineIndex(lines: string[], row: Candidate): number {
   const expectedNumber = annotationNumberForRow(row);
   const expectedPattern = row.lineType === "注释引用"
-    ? expectedNumber ? new RegExp(`<sup>\\s*${escapeRegex(expectedNumber)}\\s*</sup>`, "i") : /<sup>\s*\d+\s*<\/sup>/i
-    : expectedNumber ? new RegExp(`^\\s*${escapeRegex(expectedNumber)}\\.\\s+`) : /^\s*\d+\.\s+/;
+    ? expectedNumber ? new RegExp(`<sup>\\s*\\(?\\s*${escapeRegex(expectedNumber)}\\s*\\)?\\s*</sup>`, "i") : /<sup>\s*\(?\s*\d+\s*\)?\s*<\/sup>/i
+    : expectedNumber
+      ? new RegExp(`^\\s*(?:${escapeRegex(expectedNumber)}\\.|\\(${escapeRegex(expectedNumber)}\\)|\\[\\^${escapeRegex(expectedNumber)}\\]:)\\s+`)
+      : /^\s*(?:\d+\.|\(\d+\)|\[\^\d+\]:)\s+/;
 
   if (row.range.line >= 0 && row.range.line < lines.length && expectedPattern.test(lines[row.range.line])) {
     return row.range.line;
@@ -2621,23 +3353,107 @@ function resolveAnnotationLineIndex(lines: string[], row: Candidate): number {
 }
 
 function annotationNumberForRow(row: Candidate, line?: string): string | undefined {
-  const supMatch = /<sup>\s*(\d+)\s*<\/sup>/i.exec(row.raw);
-  if (supMatch) {
-    return supMatch[1];
-  }
-  const bodyMatch = /^\s*(\d+)\.(?:\s|$)/.exec(row.raw);
-  if (bodyMatch) {
-    return bodyMatch[1];
-  }
+  if (row.annotationNumber) return row.annotationNumber;
+  const fromRaw = annotationNumberFromText(row.raw, row.lineType);
+  if (fromRaw) return fromRaw;
   if (/^\d+$/.test(row.label)) {
     return row.label;
   }
-  const lineSupMatch = line ? /<sup>\s*(\d+)\s*<\/sup>/i.exec(line) : undefined;
-  if (lineSupMatch) {
-    return lineSupMatch[1];
+  return line ? annotationNumberFromText(line, row.lineType) : undefined;
+}
+
+function annotationNumberFromText(text: string, lineType?: string): string | undefined {
+  const bodyMatch = /^\s*(?:\[\^(\d+)\]:|(\d+)\.|\((\d+)\))(?:\s|$)/.exec(text);
+  if (lineType === "注释正文" && bodyMatch) {
+    return bodyMatch[1] ?? bodyMatch[2] ?? bodyMatch[3];
   }
-  const lineBodyMatch = line ? /^\s*(\d+)\.\s+/.exec(line) : undefined;
-  return lineBodyMatch?.[1];
+  const refMatch = /<sup>\s*\(?\s*(\d+)\s*\)?\s*<\/sup>|\[\^(\d+)\](?!:)/i.exec(text);
+  if (refMatch) {
+    return refMatch[1] ?? refMatch[2];
+  }
+  return bodyMatch?.[1] ?? bodyMatch?.[2] ?? bodyMatch?.[3];
+}
+
+function mapWorkingLinesToSourceLines(sourceText: string, workingText: string): number[] {
+  const sourceLines = sourceText.split(/\r?\n/);
+  const workingLines = workingText.split(/\r?\n/);
+  const normalize = (line: string) => line
+    .replace(/<sup>\s*\(?\s*\d+\s*\)?\s*<\/sup>|\[\^\d+\](?!:)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sourcePositions = new Map<string, number[]>();
+  const workingCounts = new Map<string, number>();
+  sourceLines.forEach((line, index) => {
+    const key = normalize(line);
+    if (!key) return;
+    const positions = sourcePositions.get(key) ?? [];
+    positions.push(index);
+    sourcePositions.set(key, positions);
+  });
+  workingLines.forEach((line) => {
+    const key = normalize(line);
+    if (key) workingCounts.set(key, (workingCounts.get(key) ?? 0) + 1);
+  });
+
+  const anchors: Array<{ working: number; source: number }> = [{ working: -1, source: -1 }];
+  let lastSource = -1;
+  workingLines.forEach((line, working) => {
+    const key = normalize(line);
+    const positions = sourcePositions.get(key);
+    if (!key || positions?.length !== 1 || workingCounts.get(key) !== 1 || positions[0] <= lastSource) return;
+    anchors.push({ working, source: positions[0] });
+    lastSource = positions[0];
+  });
+  anchors.push({ working: workingLines.length, source: sourceLines.length });
+
+  const result = new Array<number>(workingLines.length);
+  for (let anchorIndex = 0; anchorIndex < anchors.length - 1; anchorIndex += 1) {
+    const previous = anchors[anchorIndex];
+    const next = anchors[anchorIndex + 1];
+    for (let working = previous.working + 1; working < next.working; working += 1) {
+      const projected = previous.source + (working - previous.working);
+      result[working] = Math.max(0, Math.min(next.source, projected));
+    }
+    if (next.working < workingLines.length) {
+      result[next.working] = next.source;
+    }
+  }
+  return result;
+}
+
+function extractAnnotationRefs(text: string): Array<{ number: string; text: string; preview: string; line: number; start: number; end: number }> {
+  return text.split(/\r?\n/).flatMap((line, lineIndex) => {
+    const refs: Array<{ number: string; text: string; preview: string; line: number; start: number; end: number }> = [];
+    const pattern = /<sup>\s*\(?\s*(\d+)\s*\)?\s*<\/sup>|\[\^(\d+)\](?!:)/gi;
+    for (const match of line.matchAll(pattern)) {
+      const number = match[1] ?? match[2];
+      if (!number || match.index === undefined) continue;
+      refs.push({
+        number,
+        text: match[0],
+        preview: line,
+        line: lineIndex,
+        start: match.index,
+        end: match.index + match[0].length,
+      });
+    }
+    return refs;
+  });
+}
+
+function extractAnnotationBodies(text: string): Array<{ number: string; content: string; text: string; line: number }> {
+  return text.split(/\r?\n/).flatMap((line, lineIndex) => {
+    // Working copies often use block quotes or full-width Chinese parentheses
+    // for manually added notes; accept those variants without treating normal
+    // inline parenthetical prose as an annotation body.
+    const match = /^\s*(?:>\s*)?(?:\[\^(\d+)\]:|(\d+)\.|[\(（](\d+)[\)）])\s+(.+)$/.exec(line);
+    const number = match?.[1] ?? match?.[2] ?? match?.[3];
+    return number ? [{ number, content: match?.[4] ?? "", text: line, line: lineIndex }] : [];
+  });
+}
+
+function annotationBodyKey(body: { number: string; content: string }): string {
+  return `${body.number}\u0000${body.content.replace(/\s+/g, " ").trim()}`;
 }
 
 function replaceExactText(line: string, source: string, replacement: string): string | undefined {
@@ -2707,6 +3523,27 @@ h6 {
 }
 
 function renderSidebarHtml(state: SidebarState): string {
+  return renderPairHtml({
+    file: state.selectedFile ?? { label: "未选择文件", path: "" },
+    searchTableActive: true,
+    postOcrCleanMode: state.postOcrCleanMode,
+    searchRows: state.postOcrCleanMode ? [...state.searchTableRows, ...state.sentenceRows] : state.searchTableRows,
+    imageDownloadProgress: state.imageDownloadProgress,
+    deeplConfigured: state.deeplConfigured,
+    translationTestResult: state.translationTestResult,
+    translationProgress: state.translationProgress,
+    failedTranslationBlockIndexes: state.failedTranslationBlockIndexes,
+    regexScopeDirectory: state.regexScopeDirectory,
+    regexIncludeSubdirectories: state.regexIncludeSubdirectories,
+    moduleRegexPatterns: state.moduleRegexPatterns,
+    moduleRegexPresets: state.moduleRegexPresets,
+    pairs: state.pairs,
+    annotationPairs: state.annotationPairs,
+    selectedCandidate: state.selectedCandidate,
+    selectedPairId: state.selectedPairId,
+  });
+
+  /* Legacy compact sidebar markup retained below temporarily for reference. */
   const stateJson = escapeScriptJson(state);
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -2722,6 +3559,9 @@ function renderSidebarHtml(state: SidebarState): string {
     let state = ${stateJson};
     const app = document.getElementById("app");
     let regexTimer;
+    const sidebarViewState = vscode.getState?.() || {};
+    const TABLE_MODULES = ["未分类", "注释", "标题", "图片", "非法断行", "拼写检查"];
+    let activeTableModule = TABLE_MODULES.includes(sidebarViewState.activeTableModule) ? sidebarViewState.activeTableModule : "未分类";
 
     function post(command, payload = {}) {
       vscode.postMessage({ command, ...payload });
@@ -2743,7 +3583,7 @@ function renderSidebarHtml(state: SidebarState): string {
         return;
       }
       state = event.data.state;
-      updateSearchResults();
+      updateSidebarModuleTable();
     });
 
     function render() {
@@ -2756,7 +3596,7 @@ function renderSidebarHtml(state: SidebarState): string {
           checkboxRow("预览文档可编辑", state.previewEditable, (checked) => post("setPreviewEditable", { previewEditable: checked })),
           hasWorkspace ? button("启用 Markdown 预览标题颜色", () => post("installMarkdownPreviewStyles")) : null,
           button("刷新", () => post("refreshFiles")),
-          !hasWorkspace ? button("选择工作文件夹", () => post("pickFolder"), "primary") : null,
+          button(hasWorkspace ? "打开其他工作目录" : "选择工作文件夹", () => post("pickFolder"), "primary"),
           !hasWorkspace ? text("请先选择包含 OCR Markdown 文件的目录") : null,
         ]),
       );
@@ -2765,36 +3605,174 @@ function renderSidebarHtml(state: SidebarState): string {
 
       if (!selectedFile) {
         app.append(section("搜索", [
-          text("请先在上方“目录”中选择一个 Markdown 文件。"),
+          text("未选择当前文件；选择目录中的 Markdown 文件后即可标定。"),
         ]));
-        return;
       }
 
-      app.append(searchPanel());
-      app.append(actionBar());
-      app.append(resultSlot("search-results"));
-      updateSearchResults();
+      app.append(sidebarModuleWorkspace());
     }
 
-    function updateSearchResults() {
-      const slot = document.getElementById("search-results");
+    function updateSidebarModuleTable() {
+      const slot = document.getElementById("sidebar-module-table");
       if (!slot) {
         return;
       }
       slot.innerHTML = "";
-      slot.append(resultGroup("搜索结果", state.searchMatches, "regex"));
-      const meta = document.getElementById("search-meta");
-      if (meta) {
-        const isIllegalBreakScan = state.searchMatches.some((candidate) => candidate.typeLabel === "非法断行");
-        meta.textContent = isIllegalBreakScan
-          ? "发现 " + state.searchMatches.length + " 个非法断行候选。候选不会修改原文，请加入数据表后人工确认。"
-          : "匹配 " + state.searchMatches.length + " 处。正则只做通用候选搜索，不影响下方注释 Pair。";
+      slot.append(sidebarModuleRows());
+    }
+
+    function sidebarModuleWorkspace() {
+      const sectionElement = document.createElement("section");
+      sectionElement.className = "sidebar-module-workspace";
+      const tabs = document.createElement("div");
+      tabs.className = "sidebar-module-tabs";
+      TABLE_MODULES.forEach((moduleName) => {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = moduleName === activeTableModule ? "sidebar-module-tab active" : "sidebar-module-tab";
+        const count = state.searchTableRows.filter((row) => (row.typeLabel || "未分类") === moduleName).length;
+        tab.textContent = moduleName + " (" + count + ")";
+        tab.addEventListener("click", () => {
+          activeTableModule = moduleName;
+          vscode.setState?.({ activeTableModule });
+          render();
+          scanSidebarModule();
+        });
+        tabs.append(tab);
+      });
+      sectionElement.append(tabs, sidebarModuleRegexPanel());
+      const slot = document.createElement("div");
+      slot.id = "sidebar-module-table";
+      slot.append(sidebarModuleRows());
+      sectionElement.append(slot);
+      return sectionElement;
+    }
+
+    function scanSidebarModule() {
+      if (activeTableModule === "拼写检查") {
+        return;
       }
+      const pattern = state.moduleRegexPatterns?.[activeTableModule] || "";
+      if (!pattern.trim()) {
+        return;
+      }
+      post("scanModuleRegex", {
+        moduleName: activeTableModule,
+        pattern,
+        regexScopeDirectory: state.regexScopeDirectory,
+        regexIncludeSubdirectories: state.regexIncludeSubdirectories,
+      });
+    }
+
+    function sidebarModuleRegexPanel() {
+      const element = document.createElement("div");
+      element.className = "sidebar-module-regex";
+      if (activeTableModule === "拼写检查") {
+        element.textContent = "拼写检查使用 CSpell 扫描，请在右侧数据表执行“扫描拼写”。";
+        return element;
+      }
+      const scope = document.createElement("input");
+      scope.value = state.regexScopeDirectory;
+      scope.placeholder = "作用目录";
+      const pattern = document.createElement("input");
+      pattern.value = state.moduleRegexPatterns?.[activeTableModule] || "";
+      pattern.placeholder = "输入正则表达式";
+      pattern.spellcheck = false;
+      const include = document.createElement("input");
+      include.type = "checkbox";
+      include.checked = state.regexIncludeSubdirectories;
+      const includeLabel = document.createElement("label");
+      includeLabel.className = "checkbox-row";
+      includeLabel.append(include, document.createTextNode("包括子目录"));
+      let timer;
+      const scan = () => post("scanModuleRegex", {
+        moduleName: activeTableModule,
+        pattern: pattern.value,
+        regexScopeDirectory: scope.value,
+        regexIncludeSubdirectories: include.checked,
+      });
+      const defer = () => { clearTimeout(timer); timer = setTimeout(scan, 300); };
+      scope.addEventListener("input", defer);
+      pattern.addEventListener("input", defer);
+      include.addEventListener("change", scan);
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = activeTableModule + "正则演示和语法";
+      const presets = document.createElement("div");
+      presets.className = "sidebar-preset-list";
+      (state.moduleRegexPresets?.[activeTableModule] || []).forEach((preset) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = preset.label + " · " + preset.pattern;
+        button.addEventListener("click", () => {
+          pattern.value = preset.pattern;
+          details.open = false;
+          scan();
+        });
+        presets.append(button);
+      });
+      details.append(summary, presets);
+      element.append(scope, pattern, includeLabel, details);
+      return element;
+    }
+
+    function sidebarModuleRows() {
+      const rows = state.searchTableRows
+        .filter((row) => (row.typeLabel || "未分类") === activeTableModule)
+        .slice()
+        .sort((left, right) => String(left.sourceLabel || "").localeCompare(String(right.sourceLabel || "")) || left.range.line - right.range.line);
+      const table = document.createElement("div");
+      table.className = "sidebar-data-table";
+      table.innerHTML = "<div class='sidebar-data-head'><span>#</span><span>源文件</span><span>匹配</span><span>行号</span></div>";
+      if (!rows.length) {
+        table.append(emptyLine("暂无匹配。输入正则或从演示中选择规则。"));
+        return table;
+      }
+      rows.forEach((candidate, index) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "sidebar-data-row";
+        row.title = candidate.preview || candidate.raw;
+        row.innerHTML = "<span>" + (index + 1) + "</span><span>" + escapeHtml(candidate.sourceLabel || "当前文件") + "</span><code>" + escapeHtml(candidate.raw) + "</code><span>L" + (candidate.range.line + 1) + "</span>";
+        row.addEventListener("click", () => post("showCandidate", { id: candidate.id }));
+        table.append(row);
+      });
+      return table;
     }
 
     function searchPanel() {
       const element = document.createElement("section");
       element.className = "search-panel";
+
+      const scopeInput = document.createElement("input");
+      scopeInput.className = "scope-input";
+      scopeInput.value = state.regexScopeDirectory;
+      scopeInput.placeholder = "作用目录（默认当前工作目录）";
+      scopeInput.title = "仅扫描该目录中的 Markdown 文件";
+
+      let scopeTimer;
+      const postScope = () => post("regexScopeChanged", {
+        regexScopeDirectory: scopeInput.value,
+        regexIncludeSubdirectories: includeSubdirectories.checked,
+      });
+      scopeInput.addEventListener("input", () => {
+        clearTimeout(scopeTimer);
+        scopeTimer = setTimeout(postScope, 350);
+      });
+      scopeInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          clearTimeout(scopeTimer);
+          postScope();
+        }
+      });
+
+      const includeSubdirectories = document.createElement("input");
+      includeSubdirectories.type = "checkbox";
+      includeSubdirectories.checked = state.regexIncludeSubdirectories;
+      includeSubdirectories.addEventListener("change", postScope);
+      const scopeCheckbox = document.createElement("label");
+      scopeCheckbox.className = "checkbox-row scope-checkbox";
+      scopeCheckbox.append(includeSubdirectories, document.createTextNode("包括子目录"));
 
       const inputRow = document.createElement("div");
       inputRow.className = "search-input-row";
@@ -2829,7 +3807,7 @@ function renderSidebarHtml(state: SidebarState): string {
       meta.className = "search-meta";
       meta.textContent = "匹配 " + state.searchMatches.length + " 处。正则只做通用候选搜索，不影响下方注释 Pair。";
 
-      element.append(inputRow, presetDropdown(), meta);
+      element.append(scopeInput, scopeCheckbox, inputRow, presetDropdown(), meta);
       return element;
     }
 
@@ -2900,6 +3878,7 @@ function renderSidebarHtml(state: SidebarState): string {
         + "<span class='line-no'>L" + (candidate.range.line + 1) + "</span>"
         + "<span class='result-body'><span class='result-raw'>" + escapeHtml(candidate.raw) + "</span>"
         + "<span class='result-preview'>" + escapeHtml(candidate.preview || "") + "</span>"
+        + (candidate.sourceLabel ? "<span class='source-file'>" + escapeHtml(candidate.sourceLabel) + "</span>" : "")
         + (candidate.reason ? "<span class='reason'>" + escapeHtml(candidate.reason) + "</span>" : "")
         + "</span>";
       return row;
@@ -3040,7 +4019,12 @@ function renderPairHtml(input: {
   translationTestResult?: TranslationTestResult;
   translationProgress?: TranslationProgress;
   failedTranslationBlockIndexes: number[];
+  regexScopeDirectory: string;
+  regexIncludeSubdirectories: boolean;
+  moduleRegexPatterns: Record<string, string>;
+  moduleRegexPresets: Record<string, RegexPreset[]>;
   pairs: FootnotePair[];
+  annotationPairs: AnnotationPair[];
   selectedCandidate?: Candidate;
   selectedPairId?: string;
 }): string {
@@ -3064,7 +4048,7 @@ function renderPairHtml(input: {
     .compact-grid {
       border: 1px solid var(--vscode-panel-border);
       border-radius: 6px;
-      min-width: 980px;
+      min-width: 1160px;
     }
     .table-scroll {
       max-height: calc(100vh - 230px);
@@ -3073,6 +4057,13 @@ function renderPairHtml(input: {
       scrollbar-gutter: stable;
     }
     .text-block-table { min-width: 840px; table-layout: fixed; }
+    .text-block-table th {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--vscode-sideBarSectionHeader-background);
+      color: var(--vscode-descriptionForeground);
+    }
     .text-block-table th:nth-child(1) { width: 56px; }
     .text-block-table th:nth-child(2) { width: 130px; }
     .text-block-table th:nth-child(4), .text-block-table th:nth-child(5) { width: 84px; }
@@ -3111,28 +4102,28 @@ function renderPairHtml(input: {
     .text-block-type-select option { color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); }
     .compact-row {
       display: grid;
-      grid-template-columns: 34px 48px minmax(90px, 0.7fr) minmax(220px, 2fr) 80px 150px 76px;
+      grid-template-columns: 34px 48px minmax(140px, 0.8fr) minmax(90px, 0.7fr) minmax(220px, 2fr) 80px 150px 76px;
       align-items: center;
       gap: 8px;
       min-height: 34px;
       padding: 4px 8px;
       border-bottom: 1px solid var(--vscode-panel-border);
     }
-    .compact-grid.annotation-grid { min-width: 1120px; }
+    .compact-grid.annotation-grid { min-width: 1380px; }
     .compact-row.annotation-row {
-      grid-template-columns: 34px 48px 86px minmax(130px, 0.8fr) 80px 150px minmax(280px, 2fr);
+      grid-template-columns: 34px 48px 110px 86px 80px minmax(160px, 0.9fr) minmax(280px, 2fr) 150px minmax(140px, 0.8fr);
     }
-    .compact-grid.title-grid { min-width: 1320px; }
+    .compact-grid.title-grid { min-width: 940px; }
     .compact-row.title-row {
-      grid-template-columns: 34px 48px minmax(130px, 0.8fr) minmax(260px, 1.8fr) 80px 130px minmax(220px, 1fr) 76px;
+      grid-template-columns: 34px minmax(150px, 0.9fr) 80px minmax(180px, 1.5fr) 130px minmax(180px, 1fr);
     }
-    .compact-grid.image-grid { min-width: 1420px; }
+    .compact-grid.image-grid { min-width: 1560px; }
     .compact-row.image-row {
-      grid-template-columns: 34px 48px minmax(130px, 0.8fr) minmax(240px, 1.4fr) 80px 130px minmax(300px, 1.4fr) 76px;
+      grid-template-columns: 34px 48px minmax(140px, 0.8fr) minmax(130px, 0.8fr) minmax(240px, 1.4fr) 80px 130px minmax(300px, 1.4fr) 76px;
     }
-    .compact-grid.spell-grid { min-width: 1280px; }
+    .compact-grid.spell-grid { min-width: 1420px; }
     .compact-row.spell-row {
-      grid-template-columns: 34px 48px 130px minmax(110px, 0.6fr) minmax(160px, 1fr) minmax(260px, 1.7fr) 80px 76px;
+      grid-template-columns: 34px 48px minmax(140px, 0.8fr) 130px minmax(110px, 0.6fr) minmax(160px, 1fr) minmax(260px, 1.7fr) 80px 76px;
     }
     .spell-replacement-input {
       width: 100%;
@@ -3144,6 +4135,12 @@ function renderPairHtml(input: {
       padding: 3px 5px;
     }
     .compact-row:last-child { border-bottom: 0; }
+    .source-file-cell {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--vscode-descriptionForeground);
+    }
     .compact-row:not(.compact-head) { cursor: pointer; }
     .compact-row:not(.compact-head):hover { background: var(--vscode-list-hoverBackground); }
     .compact-row.selected { background: var(--vscode-list-activeSelectionBackground); }
@@ -3155,6 +4152,20 @@ function renderPairHtml(input: {
     .compact-row.annotation-unmatched:hover { background: rgba(244, 67, 54, 0.26); }
     .compact-row.annotation-matched {
       box-shadow: inset 3px 0 0 rgba(46, 204, 113, 0.85);
+    }
+    .compact-row.working-correction {
+      background: rgba(66, 165, 245, 0.16);
+      box-shadow: inset 4px 0 0 rgba(66, 165, 245, 0.95);
+      outline: 1px solid rgba(66, 165, 245, 0.55);
+      outline-offset: -1px;
+    }
+    .compact-row.working-correction:hover { background: rgba(66, 165, 245, 0.25); }
+    .annotation-pair-status {
+      display: block;
+      margin-top: 3px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      white-space: nowrap;
     }
     .compact-row.title-mismatch {
       background: rgba(255, 159, 67, 0.18);
@@ -3178,6 +4189,9 @@ function renderPairHtml(input: {
       color: var(--vscode-descriptionForeground);
     }
     .compact-head {
+      position: sticky;
+      top: 0;
+      z-index: 5;
       color: var(--vscode-descriptionForeground);
       background: var(--vscode-sideBarSectionHeader-background);
       font-weight: 600;
@@ -3276,6 +4290,28 @@ function renderPairHtml(input: {
       margin: 10px 0;
       color: var(--vscode-descriptionForeground);
     }
+    .module-regex-panel {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr) auto auto;
+      gap: 6px;
+      align-items: center;
+      margin: 8px 0;
+    }
+    .module-regex-panel input, .module-regex-panel textarea { min-width: 0; }
+    .module-regex-panel textarea {
+      min-height: 54px;
+      resize: vertical;
+      box-sizing: border-box;
+      color: var(--vscode-input-foreground);
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      padding: 5px 7px;
+      font: inherit;
+    }
+    .module-regex-panel details { grid-column: 1 / -1; }
+    .module-regex-panel .checkbox-row { width: auto; margin: 0; white-space: nowrap; }
+    .module-regex-presets { display: grid; gap: 4px; padding: 6px 0 2px; }
+    .module-regex-presets button { width: 100%; text-align: left; }
     .type-select {
       color: var(--vscode-dropdown-foreground);
       background: var(--vscode-dropdown-background);
@@ -3335,6 +4371,16 @@ function renderPairHtml(input: {
     const state = ${stateJson};
     const app = document.getElementById("app");
     const postOcrCleanMode = state.postOcrCleanMode === true;
+    const annotationPairsByCandidateId = new Map();
+    const annotationPairSortOrder = new Map();
+    (state.annotationPairs || []).forEach((pair) => {
+      if (pair.refCandidateId) annotationPairsByCandidateId.set(pair.refCandidateId, pair);
+      if (pair.bodyCandidateId) annotationPairsByCandidateId.set(pair.bodyCandidateId, pair);
+    });
+    (state.annotationPairs || []).forEach((pair, pairIndex) => {
+      if (pair.refCandidateId) annotationPairSortOrder.set(pair.refCandidateId, pairIndex * 2);
+      if (pair.bodyCandidateId) annotationPairSortOrder.set(pair.bodyCandidateId, pairIndex * 2 + 1);
+    });
     const TEXT_BLOCK_TYPES = [
       "标题", "正文", "注释正文", "latex", "合成块",
       "合成.标记", "合成.图片", "合成.文本", "合成.callout", "合成.html",
@@ -3355,10 +4401,11 @@ function renderPairHtml(input: {
       { key: "line", label: "行号" },
       { key: "typeLabel", label: "模块" },
     ];
-    const selectedRowIds = new Set();
+    const persistedViewState = vscode.getState?.() || {};
+    const selectedRowIds = new Set(Array.isArray(persistedViewState.selectedRowIds) ? persistedViewState.selectedRowIds : []);
     const rowById = new Map();
     const checkboxById = new Map();
-    const persistedViewState = vscode.getState?.() || {};
+    const moduleRegexConfigs = persistedViewState.moduleRegexConfigs || {};
     const sortRules = Array.isArray(persistedViewState.sortRules) ? persistedViewState.sortRules : [];
     let sortRulesConfigured = persistedViewState.sortRulesConfigured === true;
     if (postOcrCleanMode && !sortRulesConfigured) {
@@ -3370,9 +4417,19 @@ function renderPairHtml(input: {
     let activeModule = MODULES.includes(persistedViewState.activeModule)
       ? persistedViewState.activeModule
       : (postOcrCleanMode ? "文本块" : "未分类");
+    if (!postOcrCleanMode && activeModule === "标题" && !sortRulesConfigured) {
+      sortRules.splice(0, sortRules.length, { key: "sourceLabel", direction: "asc" }, { key: "line", direction: "asc" });
+    }
+    if (!postOcrCleanMode && activeModule === "注释" && !sortRulesConfigured) {
+      sortRules.splice(0, sortRules.length,
+        { key: "annotationPairOrder", direction: "asc" },
+        { key: "line", direction: "asc" },
+      );
+    }
     let annotationAutoMatch = persistedViewState.annotationAutoMatch === true;
     let lastSelectedIndex = -1;
     let focusState = persistedViewState.focusState || null;
+    let workingRowId = typeof persistedViewState.workingRowId === "string" ? persistedViewState.workingRowId : null;
     let tableScrollState = persistedViewState.tableScrollState || null;
     let imageDownloadProgress = state.imageDownloadProgress || null;
     let imageDownloadRunning = imageDownloadProgress?.phase === "downloading";
@@ -3394,7 +4451,15 @@ function renderPairHtml(input: {
     });
 
     function post(command, payload = {}) {
-      captureTableContext();
+      // Explicit refreshes should start at the first result. Keep the current
+      // table position only for in-place edits such as changing a row type.
+      const resetsTablePosition = ["refreshFiles", "reloadAnnotations", "scanSpelling"].includes(command);
+      if (resetsTablePosition) {
+        tableScrollState = { top: 0, left: 0 };
+        focusState = null;
+      } else {
+        captureTableContext();
+      }
       persistViewState();
       vscode.postMessage({ command, ...payload });
     }
@@ -3406,7 +4471,10 @@ function renderPairHtml(input: {
         sortRulesConfigured,
         annotationAutoMatch,
         focusState,
+        selectedRowIds: Array.from(selectedRowIds),
+        workingRowId,
         tableScrollState,
+        moduleRegexConfigs,
       });
     }
 
@@ -3433,6 +4501,9 @@ function renderPairHtml(input: {
           tableScroll.scrollTop = tableScrollState.top || 0;
           tableScroll.scrollLeft = tableScrollState.left || 0;
         }
+        if (workingRowId) {
+          document.querySelector('[data-row-id="' + CSS.escape(workingRowId) + '"]')?.scrollIntoView({ block: "nearest" });
+        }
         if (!focusState) {
           return;
         }
@@ -3456,8 +4527,17 @@ function renderPairHtml(input: {
         ? (postOcrCleanMode ? "清洗后文本块数据表" : "搜索结果数据表")
         : "注释配对表格";
       app.append(title, text(state.file.label));
+      if (!state.file.path) {
+        app.append(
+          smallButton("打开工作目录", () => post("pickFolder"), "primary"),
+          text("请在上方目录中选择 Markdown 文件；模块数据表结构会保持可见。"),
+        );
+      }
 
-      if (state.searchTableActive) {
+      // Regular OCR files always use the module data-table work surface. The
+      // legacy footnote-pair screen remains available only before this table was
+      // introduced for a post-OCR document.
+      if (state.searchTableActive || !postOcrCleanMode) {
         app.append(stickyControls());
         if (postOcrCleanMode && activeModule === "翻译设置") {
           app.append(translationSettingsPanel());
@@ -3466,7 +4546,9 @@ function renderPairHtml(input: {
         }
         const rows = rowsForModule(activeModule);
         const sortedRows = getSortedRows(rows);
-        app.append(rows.length ? tableScroll(searchTable(sortedRows)) : text("当前模块为空。"));
+        // Keep the module table and its column headers visible even before a rule
+        // produces candidates, so changing regex never makes the work surface vanish.
+        app.append(tableScroll(searchTable(sortedRows)));
         restoreTableContext();
         return;
       }
@@ -3560,29 +4642,30 @@ function renderPairHtml(input: {
             : "compact-row compact-head";
       if (isAnnotationModule) {
         head.append(
-          plainHead("选"),
+          selectAllHead(rows),
           plainHead("#"),
+          sortHead("PairID", "pairId"),
           sortHead("注释号", "annotationNumber"),
-          sortHead("匹配", "raw"),
           sortHead("行号", "line"),
-          sortHead("行类型", "lineType"),
+          sortHead("正则", "regexSource"),
           sortHead("预览", "preview"),
+          sortHead("行类型", "lineType"),
+          sortHead("源文件", "sourceLabel"),
         );
       } else if (isTitleModule) {
         head.append(
-          plainHead("选"),
-          plainHead("#"),
-          sortHead("匹配", "raw"),
-          sortHead("预览", "preview"),
+          selectAllHead(rows),
+          sortHead("源文件", "sourceLabel"),
           sortHead("行号", "line"),
+          sortHead("匹配", "raw"),
           sortHead("行类型", "lineType"),
           sortHead("章节文件", "chapterFile"),
-          plainHead("操作"),
         );
       } else if (isImageModule) {
         head.append(
-          plainHead("选"),
+          selectAllHead(rows),
           plainHead("#"),
+          sortHead("源文件", "sourceLabel"),
           sortHead("匹配", "raw"),
           sortHead("预览", "preview"),
           sortHead("行号", "line"),
@@ -3592,8 +4675,9 @@ function renderPairHtml(input: {
         );
       } else if (isSpellModule) {
         head.append(
-          plainHead("选"),
+          selectAllHead(rows),
           plainHead("#"),
+          sortHead("源文件", "sourceLabel"),
           sortHead("状态", "lineType"),
           sortHead("原词", "raw"),
           sortHead("建议替换", "replacement"),
@@ -3603,8 +4687,9 @@ function renderPairHtml(input: {
         );
       } else {
         head.append(
-          plainHead("选"),
+          selectAllHead(rows),
           plainHead("#"),
+          sortHead("源文件", "sourceLabel"),
           sortHead("匹配", "raw"),
           sortHead("预览", "preview"),
           sortHead("行号", "line"),
@@ -3623,38 +4708,41 @@ function renderPairHtml(input: {
           isImageModule ? "image-row" : "",
           isSpellModule ? "spell-row" : "",
           isSpellModule ? spellModifiedClass(candidate) : "",
+          candidate.isWorkingCorrection ? "working-correction" : "",
           titleMismatchClass(candidate),
           selectedRowIds.has(candidate.id) ? "selected" : "",
           matchClass,
         ].filter(Boolean).join(" ");
         row.dataset.rowId = candidate.id;
         rowById.set(candidate.id, row);
+        const sourceLabel = candidate.sourceLabel || "当前文件";
         const preview = truncateText(candidate.preview || "", 256);
         if (isAnnotationModule) {
           row.innerHTML = \`
             <span></span>
             <span>\${index + 1}</span>
+            <code class="compact-hit">\${escapeHtml(annotationPairId(candidate))}</code>
             <span>\${escapeHtml(annotationNumber(candidate) || "未识别")}</span>
-            <code class="compact-hit" title="\${escapeHtml(candidate.raw)}">\${escapeHtml(candidate.raw)}</code>
             <span>\${candidate.range.line + 1}</span>
-            <span class="line-type-cell"></span>
+            <code class="compact-hit" title="\${escapeHtml(annotationRegexSource(candidate))}">\${escapeHtml(annotationRegexSource(candidate))}</code>
             <span class="compact-preview" title="\${escapeHtml(candidate.preview || "")}">\${escapeHtml(preview)}</span>
+            <span class="line-type-cell"></span>
+            <span class="source-file-cell" title="\${escapeHtml(candidate.sourcePath || sourceLabel)}">\${escapeHtml(sourceLabel)}</span>
           \`;
         } else if (isTitleModule) {
           row.innerHTML = \`
             <span></span>
-            <span>\${index + 1}</span>
-            <code class="compact-hit" title="\${escapeHtml(candidate.raw)}">\${escapeHtml(candidate.raw)}</code>
-            <span class="compact-preview" title="\${escapeHtml(candidate.preview || "")}">\${escapeHtml(preview)}</span>
+            <span class="source-file-cell" title="\${escapeHtml(candidate.sourcePath || sourceLabel)}">\${escapeHtml(sourceLabel)}</span>
             <span>\${candidate.range.line + 1}</span>
+            <code class="compact-hit" title="\${escapeHtml(candidate.preview || candidate.raw)}">\${escapeHtml(truncateText(candidate.preview || candidate.raw, 256))}</code>
             <span class="line-type-cell"></span>
             <span title="\${escapeHtml(candidate.chapterFile || "")}">\${escapeHtml(candidate.chapterFile || "")}</span>
-            <span class="row-actions-cell"></span>
           \`;
         } else if (isImageModule) {
           row.innerHTML = \`
             <span></span>
             <span>\${index + 1}</span>
+            <span class="source-file-cell" title="\${escapeHtml(candidate.sourcePath || sourceLabel)}">\${escapeHtml(sourceLabel)}</span>
             <code class="compact-hit" title="\${escapeHtml(candidate.raw)}">\${escapeHtml(candidate.raw)}</code>
             <span class="compact-preview" title="\${escapeHtml(candidate.preview || "")}">\${escapeHtml(preview)}</span>
             <span>\${candidate.range.line + 1}</span>
@@ -3666,6 +4754,7 @@ function renderPairHtml(input: {
           row.innerHTML = \`
             <span></span>
             <span>\${index + 1}</span>
+            <span class="source-file-cell" title="\${escapeHtml(candidate.sourcePath || sourceLabel)}">\${escapeHtml(sourceLabel)}</span>
             <span class="line-type-cell"></span>
             <code class="compact-hit" title="\${escapeHtml(candidate.raw)}">\${escapeHtml(candidate.raw)}</code>
             <span class="spell-replacement-cell"></span>
@@ -3677,6 +4766,7 @@ function renderPairHtml(input: {
           row.innerHTML = \`
             <span></span>
             <span>\${index + 1}</span>
+            <span class="source-file-cell" title="\${escapeHtml(candidate.sourcePath || sourceLabel)}">\${escapeHtml(sourceLabel)}</span>
             <code class="compact-hit" title="\${escapeHtml(candidate.raw)}">\${escapeHtml(candidate.raw)}</code>
             <span class="compact-preview" title="\${escapeHtml(candidate.preview || "")}">\${escapeHtml(preview)}</span>
             <span>\${candidate.range.line + 1}</span>
@@ -3708,7 +4798,15 @@ function renderPairHtml(input: {
         });
         typeSelect.dataset.focusId = candidate.id;
         typeSelect.dataset.focusControl = "lineType";
+        typeSelect.addEventListener("focus", () => { workingRowId = candidate.id; });
         typeHolder.append(typeSelect);
+        if (isAnnotationModule) {
+          const pair = annotationPairsByCandidateId.get(candidate.id);
+          const pairStatus = document.createElement("span");
+          pairStatus.className = "annotation-pair-status";
+          pairStatus.textContent = pair ? "Pair " + pair.number + " · " + pair.status + " · " + pair.confidence : "未进入 Pair";
+          typeHolder.append(pairStatus);
+        }
 
         if (isSpellModule) {
           const replacementHolder = row.querySelector(".spell-replacement-cell");
@@ -3729,6 +4827,7 @@ function renderPairHtml(input: {
             suggestionList.append(option);
           });
           replacementInput.addEventListener("click", (event) => event.stopPropagation());
+          replacementInput.addEventListener("focus", () => { workingRowId = candidate.id; });
           replacementInput.addEventListener("change", () => post("setSpellReplacement", { id: candidate.id, replacement: replacementInput.value }));
           replacementHolder.append(replacementInput, suggestionList);
         }
@@ -3737,14 +4836,17 @@ function renderPairHtml(input: {
         const previewCell = row.querySelector(".compact-preview");
         hitCell.addEventListener("click", (event) => {
           event.stopPropagation();
+          workingRowId = candidate.id;
           post(isSpellModule ? "locateSourceCandidate" : "selectCandidate", { id: candidate.id });
         });
-        previewCell.addEventListener("click", (event) => {
+        previewCell?.addEventListener("click", (event) => {
           event.stopPropagation();
+          workingRowId = candidate.id;
           post("selectCandidate", { id: candidate.id });
         });
 
         row.addEventListener("click", (event) => {
+          workingRowId = candidate.id;
           if (event.shiftKey && lastSelectedIndex >= 0) {
             selectRange(rows, lastSelectedIndex, index, true);
             lastSelectedIndex = index;
@@ -3757,9 +4859,13 @@ function renderPairHtml(input: {
             return;
           }
         });
-        if (!isAnnotationModule) {
+        if (!isAnnotationModule && !isTitleModule) {
           const actions = row.querySelector(".row-actions-cell");
-          actions.append(smallButton("定位", (event) => { event.stopPropagation(); post("selectCandidate", { id: candidate.id }); }));
+          actions.append(smallButton("定位", (event) => {
+            event.stopPropagation();
+            workingRowId = candidate.id;
+            post("selectCandidate", { id: candidate.id });
+          }));
         }
         grid.append(row);
       });
@@ -3781,6 +4887,7 @@ function renderPairHtml(input: {
       const body = table.querySelector("tbody");
       rows.forEach((candidate, index) => {
         const row = document.createElement("tr");
+        row.dataset.rowId = candidate.id;
         row.innerHTML = "<td>" + textBlockNumber(candidate) + "</td><td class='text-block-type'></td><td class='text-block-content'></td><td>" + (candidate.range.line + 1) + "</td><td>" + ((candidate.range.endLine ?? candidate.range.line) + 1) + "</td>";
         const typeSelect = document.createElement("select");
         typeSelect.className = "text-block-type-select";
@@ -3792,10 +4899,14 @@ function renderPairHtml(input: {
           typeSelect.append(option);
         });
         typeSelect.addEventListener("click", (event) => event.stopPropagation());
+        typeSelect.addEventListener("focus", () => { workingRowId = candidate.id; });
         typeSelect.addEventListener("change", () => post("setRowsLineType", { ids: [candidate.id], lineType: typeSelect.value }));
         row.querySelector(".text-block-type").append(typeSelect);
         row.querySelector(".text-block-content").textContent = truncateText(candidate.preview || candidate.raw, 256);
-        row.addEventListener("click", () => post("locateSourceCandidate", { id: candidate.id }));
+        row.addEventListener("click", () => {
+          workingRowId = candidate.id;
+          post("locateSourceCandidate", { id: candidate.id });
+        });
         body.append(row);
       });
       return table;
@@ -3818,6 +4929,7 @@ function renderPairHtml(input: {
       const body = table.querySelector("tbody");
       rows.forEach((candidate) => {
         const row = document.createElement("tr");
+        row.dataset.rowId = candidate.id;
         row.innerHTML = "<td>" + sentenceDisplayId(candidate) + "</td><td>" + textBlockNumber(candidate) + "</td><td class='text-block-content sentence-translation-source'></td><td class='sentence-translation-cell'></td><td class='text-block-content sentence-restored-result'></td><td>" + (candidate.range.line + 1) + "</td><td>" + ((candidate.range.endLine ?? candidate.range.line) + 1) + "</td>";
         row.querySelector(".sentence-translation-source").textContent = truncateText(candidate.translationText || candidate.raw, 256);
         row.querySelector(".sentence-restored-result").textContent = truncateText(candidate.restoredTranslation || "", 256);
@@ -3826,9 +4938,13 @@ function renderPairHtml(input: {
         translationInput.value = candidate.translation || "";
         translationInput.placeholder = "粘贴翻译引擎返回的译文";
         translationInput.addEventListener("click", (event) => event.stopPropagation());
+        translationInput.addEventListener("focus", () => { workingRowId = candidate.id; });
         translationInput.addEventListener("change", () => post("setSentenceTranslation", { id: candidate.id, translation: translationInput.value }));
         row.querySelector(".sentence-translation-cell").append(translationInput);
-        row.addEventListener("click", () => post("locateSourceCandidate", { id: candidate.id }));
+        row.addEventListener("click", () => {
+          workingRowId = candidate.id;
+          post("locateSourceCandidate", { id: candidate.id });
+        });
         body.append(row);
       });
       return table;
@@ -3910,7 +5026,7 @@ function renderPairHtml(input: {
           controls.append(translationProgressElement(), text("文本块按两个及以上连续换行分隔；翻译按块请求、按分句 ID 回填，源码不会修改。"));
         }
       } else {
-        controls.append(moduleTabs(), moduleWorkPanel(), tableToolbar());
+        controls.append(moduleTabs(), moduleRegexPanel(), moduleWorkPanel(), tableToolbar());
       }
       return controls;
     }
@@ -3959,12 +5075,155 @@ function renderPairHtml(input: {
           activeModule = moduleName;
           selectedRowIds.clear();
           lastSelectedIndex = -1;
+          workingRowId = null;
+          if (moduleName === "标题" && !sortRulesConfigured) {
+            sortRules.splice(0, sortRules.length, { key: "sourceLabel", direction: "asc" }, { key: "line", direction: "asc" });
+          }
+          if (moduleName === "注释" && !sortRulesConfigured) {
+            sortRules.splice(0, sortRules.length,
+              { key: "annotationPairOrder", direction: "asc" },
+              { key: "line", direction: "asc" },
+            );
+          }
           persistViewState();
           render();
+          if (moduleName === "注释") {
+            post("reloadAnnotations", { silent: true });
+          } else if (hasModuleRegex(moduleName)) {
+            queueModuleRegexScan();
+          }
         });
         tabs.append(tab);
       });
       return tabs;
+    }
+
+    function hasModuleRegex(moduleName) {
+      return !postOcrCleanMode && moduleName !== "拼写检查" && state.moduleRegexPresets?.[moduleName];
+    }
+
+    function currentModuleRegexConfig() {
+      const saved = moduleRegexConfigs[activeModule] || {};
+      return {
+        regexScopeDirectory: saved.regexScopeDirectory ?? state.regexScopeDirectory,
+        regexIncludeSubdirectories: saved.regexIncludeSubdirectories ?? state.regexIncludeSubdirectories,
+        pattern: saved.pattern ?? state.moduleRegexPatterns?.[activeModule] ?? "",
+      };
+    }
+
+    function queueModuleRegexScan() {
+      if (!hasModuleRegex(activeModule)) {
+        return;
+      }
+      const config = currentModuleRegexConfig();
+      if (!config.pattern.trim()) {
+        return;
+      }
+      post("scanModuleRegex", { moduleName: activeModule, ...config });
+    }
+
+    function moduleRegexPanel() {
+      if (!hasModuleRegex(activeModule)) {
+        return document.createDocumentFragment();
+      }
+      const config = currentModuleRegexConfig();
+      const panel = document.createElement("div");
+      panel.className = "module-regex-panel";
+      const scopeInput = document.createElement("input");
+      scopeInput.value = config.regexScopeDirectory;
+      scopeInput.placeholder = "作用目录";
+      scopeInput.title = "扫描该目录中的 Markdown 文件";
+      scopeInput.dataset.focusId = "module-regex-" + activeModule;
+      scopeInput.dataset.focusControl = "scope";
+
+      const patternInput = document.createElement("textarea");
+      patternInput.value = config.pattern;
+      patternInput.placeholder = "输入正则；多条规则用独立一行 --- 分隔";
+      patternInput.spellcheck = false;
+      patternInput.dataset.focusId = "module-regex-" + activeModule;
+      patternInput.dataset.focusControl = "pattern";
+
+      const include = document.createElement("input");
+      include.type = "checkbox";
+      include.checked = config.regexIncludeSubdirectories;
+      const includeLabel = document.createElement("label");
+      includeLabel.className = "checkbox-row";
+      includeLabel.append(include, document.createTextNode("包括子目录"));
+
+      const rememberDraft = () => {
+        moduleRegexConfigs[activeModule] = {
+          regexScopeDirectory: scopeInput.value,
+          regexIncludeSubdirectories: include.checked,
+          pattern: patternInput.value,
+        };
+        persistViewState();
+      };
+      const scan = () => {
+        const next = {
+          regexScopeDirectory: scopeInput.value,
+          regexIncludeSubdirectories: include.checked,
+          pattern: patternInput.value,
+        };
+        moduleRegexConfigs[activeModule] = next;
+        persistViewState();
+        if (!next.pattern.trim()) {
+          captureTableContext();
+          render();
+          return;
+        }
+        post("scanModuleRegex", { moduleName: activeModule, ...next });
+      };
+      let timer;
+      const scheduleExplorationScan = () => {
+        rememberDraft();
+        clearTimeout(timer);
+        timer = setTimeout(scan, 120);
+      };
+      // 未分类 behaves like VS Code search: update the table while typing.
+      // scanModuleRegex preserves focus/selection so its full table refresh
+      // does not interrupt composition in the input.
+      if (activeModule === "未分类") {
+        scopeInput.addEventListener("input", scheduleExplorationScan);
+        patternInput.addEventListener("input", scheduleExplorationScan);
+      } else {
+        scopeInput.addEventListener("input", rememberDraft);
+        patternInput.addEventListener("input", rememberDraft);
+      }
+      scopeInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          clearTimeout(timer);
+          scan();
+        }
+      });
+      patternInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          clearTimeout(timer);
+          scan();
+        }
+      });
+      include.addEventListener("change", scan);
+      const applyButton = smallButton("应用正则", scan, "primary");
+
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = activeModule + "正则演示和语法（多条规则以 --- 分隔）";
+      const presets = document.createElement("div");
+      presets.className = "module-regex-presets";
+      (state.moduleRegexPresets[activeModule] || []).forEach((preset) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.textContent = preset.label + "  " + preset.pattern + " · " + preset.description;
+        item.addEventListener("click", () => {
+          patternInput.value = preset.pattern;
+          details.open = false;
+          scan();
+        });
+        presets.append(item);
+      });
+      details.append(summary, presets);
+      panel.append(scopeInput, patternInput, includeLabel, applyButton, details);
+      return panel;
     }
 
     function moduleWorkPanel() {
@@ -3975,7 +5234,7 @@ function renderPairHtml(input: {
       const detail = document.createElement("span");
       detail.textContent = " · " + moduleWorkText(activeModule);
       panel.append(title, detail);
-      if (activeModule === "注释" && annotationAutoMatch) {
+      if (activeModule === "注释") {
         const summary = document.createElement("span");
         summary.className = "match-summary";
         summary.textContent = annotationMatchSummary();
@@ -3986,19 +5245,19 @@ function renderPairHtml(input: {
 
     function moduleWorkText(moduleName) {
       if (moduleName === "未分类") {
-        return "多选行后通过分类下拉分配到目标模块。";
+        return "探索模块：在这里试验任意正则；命中行先保留为未分类，再由人工分配到目标模块。";
       }
       if (moduleName === "注释") {
-        return "用于 footnote ref/body 的后续配对确认。";
+        return "专用模块：选择注释正则后，命中行直接进入本表，用于 footnote ref/body 的后续配对确认。";
       }
       if (moduleName === "标题") {
-        return "用于后续标题层级确认。行类型与原文标题层级不一致时会着色提示，但不会修改源文件。";
+        return "专用模块：选择标题正则后，命中行直接进入本表。行类型与原文标题层级不一致时会着色提示，但不会修改源文件。";
       }
       if (moduleName === "图片") {
-        return "用于后续图片引用和说明检查。";
+        return "专用模块：选择图片正则后，命中行直接进入本表，用于后续图片引用和说明检查。";
       }
       if (moduleName === "非法断行") {
-        return "用于后续断行异常确认。";
+        return "专用模块：选择断行正则后，命中行直接进入本表，用于后续断行异常确认。";
       }
       if (moduleName === "拼写检查") {
         return "使用 CSpell 扫描英文拼写候选；仅“已确认”的替换会写入章节输出，源文件不会修改。";
@@ -4051,7 +5310,30 @@ function renderPairHtml(input: {
     }
 
     function rowsForModule(moduleName) {
-      return state.searchRows.filter((row) => rowModule(row) === moduleName);
+      const moduleRows = state.searchRows.filter((row) => rowModule(row) === moduleName);
+      if (moduleName !== "未分类") {
+        return moduleRows;
+      }
+
+      // 未分类 is the exploratory regex surface: keep only the rows matched
+      // by the regex currently shown above this table.
+      const patterns = splitRegexInput(currentModuleRegexConfig().pattern);
+      if (!patterns.length) {
+        return [];
+      }
+      try {
+        const regexes = patterns.map((pattern) => new RegExp(pattern, "m"));
+        return moduleRows.filter((row) => regexes.some((regex) => regex.test(String(row.raw || row.preview || ""))));
+      } catch {
+        return [];
+      }
+    }
+
+    function splitRegexInput(input) {
+      return String(input || "")
+        .split(/^\\s*---\\s*$/m)
+        .map((pattern) => pattern.trim())
+        .filter(Boolean);
     }
 
     function moduleCount(moduleName) {
@@ -4101,63 +5383,86 @@ function renderPairHtml(input: {
 
     function annotationMatchSummary() {
       const match = annotationMatchInfo();
-      return "匹配 " + match.matchedPairCount + " 组 / 未匹配 " + match.unmatchedIds.size + " 行";
+      return "引用 " + match.refCount + " / 正文 " + match.bodyCount + " / 可配对 " + match.matchedPairCount + " 组 / 未匹配 " + match.unmatchedIds.size + " 行";
     }
 
     function annotationMatchInfo() {
-      const refs = new Map();
-      const bodies = new Map();
       const unmatchedIds = new Set();
       const matchedIds = new Set();
+      let refCount = 0;
+      let bodyCount = 0;
       const rows = rowsForModule("注释");
+      const visibleIds = new Set(rows.map((row) => row.id));
 
       rows.forEach((row) => {
-        const number = annotationNumber(row);
-        if (!number) {
-          unmatchedIds.add(row.id);
-          return;
-        }
         const lineType = row.lineType || "注释引用";
-        const bucket = lineType === "注释正文" ? bodies : refs;
-        const list = bucket.get(number) || [];
-        list.push(row);
-        bucket.set(number, list);
+        if (lineType === "注释正文") {
+          bodyCount += 1;
+        } else if (lineType === "注释引用") {
+          refCount += 1;
+        }
+        unmatchedIds.add(row.id);
       });
 
-      const numbers = new Set([...refs.keys(), ...bodies.keys()]);
-      numbers.forEach((number) => {
-        const refRows = refs.get(number) || [];
-        const bodyRows = bodies.get(number) || [];
-        if (refRows.length && bodyRows.length) {
-          refRows.forEach((row) => matchedIds.add(row.id));
-          bodyRows.forEach((row) => matchedIds.add(row.id));
-          return;
-        }
-        refRows.forEach((row) => unmatchedIds.add(row.id));
-        bodyRows.forEach((row) => unmatchedIds.add(row.id));
+      (state.annotationPairs || []).forEach((pair) => {
+        if (!pair.refCandidateId || !pair.bodyCandidateId) return;
+        if (!visibleIds.has(pair.refCandidateId) || !visibleIds.has(pair.bodyCandidateId)) return;
+        matchedIds.add(pair.refCandidateId);
+        matchedIds.add(pair.bodyCandidateId);
+        unmatchedIds.delete(pair.refCandidateId);
+        unmatchedIds.delete(pair.bodyCandidateId);
       });
 
       return {
         matchedIds,
         unmatchedIds,
-        matchedPairCount: [...numbers].filter((number) => refs.has(number) && bodies.has(number)).length,
+        refCount,
+        bodyCount,
+        matchedPairCount: Math.floor(matchedIds.size / 2),
       };
     }
 
+    function annotationSourceKey(candidate) {
+      return String(candidate.sourcePath || candidate.sourceLabel || "当前文件");
+    }
+
     function annotationNumber(candidate) {
+      const storedNumber = String(candidate.annotationNumber ?? "").trim();
+      if (storedNumber) {
+        return storedNumber;
+      }
       const raw = String(candidate.raw || "");
       const preview = String(candidate.preview || "");
       const textValue = raw || preview;
       const lineType = candidate.lineType || "注释引用";
       if (lineType === "注释正文") {
-        const bodyMatch = textValue.match(/^\\s*(\\d+)\\.\\s+/) || preview.match(/^\\s*(\\d+)\\.\\s+/);
-        return bodyMatch?.[1] || "";
+        const bodyMatch = textValue.match(/^\\s*(?:\\[\\^(\\d+)\\]:|(\\d+)\\.|\\((\\d+)\\))(?:\\s|$)/) || preview.match(/^\\s*(?:\\[\\^(\\d+)\\]:|(\\d+)\\.|\\((\\d+)\\))(?:\\s|$)/);
+        return bodyMatch?.[1] || bodyMatch?.[2] || bodyMatch?.[3] || "";
       }
       const refMatch =
-        textValue.match(/<(?:sup|sub)>\\s*(\\d+)\\s*<\\/(?:sup|sub)>/i) ||
-        preview.match(/<(?:sup|sub)>\\s*(\\d+)\\s*<\\/(?:sup|sub)>/i) ||
+        textValue.match(/<sup>\\s*\\(?\\s*(\\d+)\\s*\\)?\\s*<\\/sup>|\\[\\^(\\d+)\\](?!:)/i) ||
+        preview.match(/<sup>\\s*\\(?\\s*(\\d+)\\s*\\)?\\s*<\\/sup>|\\[\\^(\\d+)\\](?!:)/i) ||
         textValue.match(/^\\s*(\\d+)\\s*$/);
-      return refMatch?.[1] || "";
+      if (refMatch) {
+        return refMatch[1] || refMatch[2] || "";
+      }
+      // Keep the number visible even when an existing body row was previously
+      // assigned the wrong line type and has not yet been manually corrected.
+      const bodyMatch = textValue.match(/^\\s*(?:\\[\\^(\\d+)\\]:|(\\d+)\\.|\\((\\d+)\\))(?:\\s|$)/) || preview.match(/^\\s*(?:\\[\\^(\\d+)\\]:|(\\d+)\\.|\\((\\d+)\\))(?:\\s|$)/);
+      return bodyMatch?.[1] || bodyMatch?.[2] || bodyMatch?.[3] || "";
+    }
+
+    function annotationRegexSource(candidate) {
+      if (candidate.regexSource) {
+        return candidate.regexSource;
+      }
+      return (candidate.lineType || "注释引用") === "注释正文"
+        ? "^\\s*\\d+\\.\\s+.+"
+        : "<sup>(\\d+)</sup>";
+    }
+
+    function annotationPairId(candidate) {
+      return annotationPairsByCandidateId.get(candidate.id)?.pairId || "未匹配";
     }
 
     function titleLineType(candidate) {
@@ -4179,6 +5484,51 @@ function renderPairHtml(input: {
       const element = document.createElement("span");
       element.textContent = label;
       return element;
+    }
+
+    function selectAllHead(rows) {
+      const cell = document.createElement("span");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "table-select-all";
+      const selectedCount = rows.filter((row) => selectedRowIds.has(row.id)).length;
+      checkbox.checked = rows.length > 0 && selectedCount === rows.length;
+      checkbox.indeterminate = selectedCount > 0 && selectedCount < rows.length;
+      checkbox.title = "全选或取消当前表格中的行";
+      checkbox.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (checkbox.checked) {
+          rows.forEach((row) => setRowSelection(row.id, true));
+          workingRowId = rows.at(-1)?.id || null;
+          return;
+        }
+        selectedRowIds.clear();
+        workingRowId = null;
+        checkboxById.forEach((rowCheckbox) => { rowCheckbox.checked = false; });
+        rowById.forEach((row) => row.classList.remove("selected"));
+        updateSelectedCount();
+        updateSelectAllCheckbox();
+      });
+      cell.append(checkbox);
+      return cell;
+    }
+
+    function updateSelectedCount() {
+      const count = document.getElementById("selected-count");
+      if (count) {
+        count.textContent = "已选 " + selectedRowIds.size;
+      }
+    }
+
+    function updateSelectAllCheckbox() {
+      const checkbox = document.querySelector(".table-select-all");
+      if (!checkbox) {
+        return;
+      }
+      const visibleIds = Array.from(checkboxById.keys());
+      const selectedCount = visibleIds.filter((id) => selectedRowIds.has(id)).length;
+      checkbox.checked = visibleIds.length > 0 && selectedCount === visibleIds.length;
+      checkbox.indeterminate = selectedCount > 0 && selectedCount < visibleIds.length;
     }
 
     function sortHead(label, key) {
@@ -4274,6 +5624,21 @@ function renderPairHtml(input: {
         const number = annotationNumber(candidate);
         return number ? Number(number) : Number.MAX_SAFE_INTEGER;
       }
+      if (key === "annotationPairOrder") {
+        return annotationPairSortOrder.get(candidate.id) ?? Number.MAX_SAFE_INTEGER;
+      }
+      if (key === "pairId") {
+        return annotationPairSortOrder.get(candidate.id) ?? Number.MAX_SAFE_INTEGER;
+      }
+      if (key === "annotationRole") {
+        return candidate.lineType === "注释引用" ? 0 : candidate.lineType === "注释正文" ? 1 : 2;
+      }
+      if (key === "sourcePath") {
+        return candidate.sourcePath || "";
+      }
+      if (key === "regexSource") {
+        return annotationRegexSource(candidate);
+      }
       if (key === "lineType") {
         return moduleActionConfig().value(candidate);
       }
@@ -4329,13 +5694,26 @@ function renderPairHtml(input: {
         activeModule === "注释"
           ? smallButton(annotationAutoMatch ? "刷新匹配" : "自动匹配", () => {
               annotationAutoMatch = true;
-              sortRules.splice(0, sortRules.length, { key: "annotationNumber", direction: "asc" }, { key: "line", direction: "asc" });
+              sortRulesConfigured = false;
+              sortRules.splice(0, sortRules.length,
+                { key: "annotationPairOrder", direction: "asc" },
+                { key: "line", direction: "asc" },
+              );
               persistViewState();
-              render();
+            render();
+          })
+          : null,
+        activeModule === "注释"
+          ? smallButton("同步工作稿修正", () => post("syncWorkingCopyCorrections"))
+          : null,
+        activeModule === "注释"
+          ? smallButton("确认所选配对", () => {
+              const ids = Array.from(selectedRowIds);
+              if (ids.length) post("confirmAnnotationPairs", { ids });
             })
           : null,
         activeModule === "标题"
-          ? smallButton("设置章节序号", () => setSelectedTitleChapterFile())
+          ? smallButton("设置章节文件", () => setSelectedTitleChapterFile())
           : null,
         activeModule === "图片"
           ? smallButton(imageDownloadRunning ? "正在下载" : "下载图片", () => downloadSelectedImages())
@@ -4359,6 +5737,7 @@ function renderPairHtml(input: {
           post("setRowsType", { ids, typeLabel: "ignore" });
         }),
         smallButton("保存标定", () => post("saveAnnotations")),
+        smallButton("打开订正工作稿", () => post("openCorrectedWorkingCopy")),
         smallButton("输出订正文件", () => post("exportCorrectedMarkdown"), "primary"),
       ].filter(Boolean));
       return toolbar;
@@ -4444,18 +5823,38 @@ function renderPairHtml(input: {
       openChapterNumberModal(selectedRows);
     }
 
-    function applyChapterNumber(selectedRows, chapterNumber) {
+    function applyChapterFiles(selectedRows, chapterNumber, sequence) {
       const trimmedNumber = chapterNumber.trim();
-      const firstTitle = titleTextForChapterFile(selectedRows[0]);
-      const chapterFile = trimmedNumber + " " + firstTitle + ".md";
-      post("setRowsChapterFile", {
-        ids: selectedRows.map((row) => row.id),
-        chapterFile,
+      // The modal owns DOM focus at this point. Restore the selected work row
+      // after the table redraw instead of reviving an unrelated old control.
+      focusState = null;
+      // The chapter assignment is complete once submitted. Clear the batch
+      // selection while retaining the last selected work row for redraw.
+      selectedRowIds.clear();
+      workingRowId = selectedRows.at(-1)?.id || workingRowId;
+      lastSelectedIndex = -1;
+      if (!sequence) {
+        const chapterFile = trimmedNumber + " " + titleTextForChapterFile(selectedRows[0]) + ".md";
+        post("setRowsChapterFile", {
+          ids: selectedRows.map((row) => row.id),
+          chapterFile,
+        });
+        return;
+      }
+
+      const numberWidth = trimmedNumber.length;
+      const startingNumber = Number.parseInt(trimmedNumber, 10);
+      const chapterFiles = {};
+      selectedRows.forEach((row, index) => {
+        const sequenceNumber = String(startingNumber + index).padStart(numberWidth, "0");
+        chapterFiles[row.id] = sequenceNumber + " " + titleTextForChapterFile(row) + ".md";
       });
+      post("setRowsChapterFiles", { chapterFiles });
     }
 
     function openChapterNumberModal(selectedRows) {
       closeModal();
+      const recommendedStart = recommendedChapterStartNumber();
 
       const backdrop = document.createElement("div");
       backdrop.className = "modal-backdrop";
@@ -4463,32 +5862,43 @@ function renderPairHtml(input: {
       const modal = document.createElement("div");
       modal.className = "modal";
       const title = document.createElement("h2");
-      title.textContent = "设置章节序号";
+      title.textContent = "设置章节文件";
       const description = document.createElement("p");
-      description.textContent = "将 " + selectedRows.length + " 行设置为同一个章节文件。";
+      description.textContent = "统一序号会将 " + selectedRows.length + " 行归入同一个章节文件；依次递增会为每个标题创建独立章节文件。";
+      const mode = document.createElement("select");
+      mode.className = "type-select";
+      mode.innerHTML = "<option value='same'>统一序号</option><option value='sequence'>从起始序号依次递增</option>";
       const input = document.createElement("input");
       input.type = "text";
-      input.placeholder = "例如 00 或 0002";
+      input.placeholder = "推荐起始编号：" + recommendedStart + "（可修改）";
+      input.inputMode = "numeric";
       input.autocomplete = "off";
       const preview = document.createElement("p");
       const actions = document.createElement("div");
       actions.className = "modal-actions";
       const cancel = button("取消", () => closeModal());
       const confirm = button("确认", () => {
-        const value = input.value.trim();
-        if (!value) {
+        const value = input.value.trim() || recommendedStart;
+        if (!/^\\d+$/.test(value)) {
           input.focus();
           return;
         }
-        applyChapterNumber(selectedRows, value);
+        applyChapterFiles(selectedRows, value, mode.value === "sequence");
         closeModal();
       }, "primary");
 
       const updatePreview = () => {
-        const value = input.value.trim() || "00";
-        preview.textContent = "章节文件：" + value + " " + titleTextForChapterFile(selectedRows[0]) + ".md";
+        const value = input.value.trim() || recommendedStart;
+        if (mode.value === "same") {
+          preview.textContent = "章节文件：" + value + " " + titleTextForChapterFile(selectedRows[0]) + ".md（全部选中行）";
+          return;
+        }
+        const first = value;
+        const last = String(Number.parseInt(value, 10) + selectedRows.length - 1).padStart(value.length, "0");
+        preview.textContent = "章节文件：" + first + " " + titleTextForChapterFile(selectedRows[0]) + ".md；...；" + last + " " + titleTextForChapterFile(selectedRows[selectedRows.length - 1]) + ".md";
       };
       input.addEventListener("input", updatePreview);
+      mode.addEventListener("change", updatePreview);
       input.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -4506,11 +5916,25 @@ function renderPairHtml(input: {
       });
 
       actions.append(cancel, confirm);
-      modal.append(title, description, input, preview, actions);
+      modal.append(title, description, mode, input, preview, actions);
       backdrop.append(modal);
       document.body.append(backdrop);
       updatePreview();
       setTimeout(() => input.focus(), 0);
+    }
+
+    function recommendedChapterStartNumber() {
+      let highest = -1;
+      let width = 2;
+      rowsForModule("标题").forEach((row) => {
+        const match = /^(\\d+)\\s+/.exec(String(row.chapterFile || "").trim());
+        if (!match) {
+          return;
+        }
+        highest = Math.max(highest, Number.parseInt(match[1], 10));
+        width = Math.max(width, match[1].length);
+      });
+      return String(highest + 1).padStart(width, "0");
     }
 
     function closeModal() {
@@ -4584,8 +6008,12 @@ function renderPairHtml(input: {
     function setRowSelection(id, selected) {
       if (selected) {
         selectedRowIds.add(id);
+        workingRowId = id;
       } else {
         selectedRowIds.delete(id);
+        if (workingRowId === id) {
+          workingRowId = Array.from(selectedRowIds).at(-1) || null;
+        }
       }
       const row = rowById.get(id);
       row?.classList.toggle("selected", selected);
@@ -4593,10 +6021,8 @@ function renderPairHtml(input: {
       if (checkbox) {
         checkbox.checked = selected;
       }
-      const count = document.getElementById("selected-count");
-      if (count) {
-        count.textContent = "已选 " + selectedRowIds.size;
-      }
+      updateSelectedCount();
+      updateSelectAllCheckbox();
     }
 
     function truncateText(value, maxLength) {
@@ -4801,6 +6227,22 @@ function baseCss(): string {
     }
     input:focus { border-color: var(--vscode-focusBorder); }
     .search-panel { padding-top: 10px; }
+    .sidebar-module-workspace { min-width: 0; }
+    .sidebar-module-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 8px 0; }
+    .sidebar-module-tab { width: auto; margin: 0; padding: 4px 6px; font-size: 11px; }
+    .sidebar-module-tab.active { outline: 1px solid var(--vscode-focusBorder); background: var(--vscode-list-activeSelectionBackground); }
+    .sidebar-module-regex { display: grid; gap: 5px; margin-bottom: 8px; }
+    .sidebar-module-regex .checkbox-row { margin: 0; font-size: 11px; }
+    .sidebar-preset-list { display: grid; gap: 3px; padding: 6px 0; }
+    .sidebar-preset-list button { margin: 0; padding: 4px 6px; font-size: 11px; }
+    .sidebar-data-table { border-top: 1px solid var(--vscode-panel-border); max-height: 46vh; overflow: auto; }
+    .sidebar-data-head, .sidebar-data-row { display: grid; grid-template-columns: 28px minmax(70px, 0.9fr) minmax(90px, 1.6fr) 38px; gap: 5px; align-items: center; }
+    .sidebar-data-head { position: sticky; top: 0; z-index: 1; padding: 5px 2px; color: var(--vscode-descriptionForeground); background: var(--vscode-editor-background); font-size: 11px; font-weight: 600; }
+    .sidebar-data-row { width: 100%; margin: 0; padding: 5px 2px; border-radius: 0; background: transparent; font-size: 11px; }
+    .sidebar-data-row span, .sidebar-data-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sidebar-data-row code { color: var(--vscode-textPreformat-foreground); font-family: var(--vscode-editor-font-family); }
+    .scope-input { margin: 0 0 2px; font-family: var(--vscode-editor-font-family); }
+    .scope-checkbox { margin: 4px 0 8px; font-size: 12px; }
     .search-input-row { display: grid; grid-template-columns: 1fr auto; gap: 4px; align-items: stretch; }
     .search-input { font-family: var(--vscode-editor-font-family); }
     .icon-toggle {

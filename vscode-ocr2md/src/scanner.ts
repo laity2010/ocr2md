@@ -33,12 +33,21 @@ export function scanRegexMatches(text: string, pattern: string): Candidate[] {
   const lineStarts = lineStartOffsets(text);
   regex.lastIndex = 0;
   for (const match of text.matchAll(regex)) {
-    const raw = match[0];
+    let raw = match[0];
     if (!raw) {
       continue;
     }
 
-    const startOffset = match.index ?? 0;
+    // A line-anchored pattern beginning with \s* may consume the preceding
+    // blank line because \s also matches newlines. Candidates should start at
+    // the actual matched content so their line number and preview remain useful.
+    const leadingNewlines = /^(?:\r\n|\r|\n)+/.exec(raw)?.[0] ?? "";
+    raw = raw.slice(leadingNewlines.length);
+    if (!raw) {
+      continue;
+    }
+
+    const startOffset = (match.index ?? 0) + leadingNewlines.length;
     const start = positionAtOffset(lineStarts, startOffset);
     const end = positionAtOffset(lineStarts, startOffset + raw.length);
     matches.push({

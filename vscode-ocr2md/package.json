@@ -16,7 +16,8 @@
     "onView:ocr2md.regex",
     "onCommand:ocr2md.refreshFiles",
     "onCommand:ocr2md.pickFolder",
-    "onCommand:ocr2md.openMarkdownFile"
+    "onCommand:ocr2md.openMarkdownFile",
+    "onCommand:ocr2md.addCurrentLineToModule"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -36,6 +37,10 @@
       {
         "command": "ocr2md.installMarkdownPreviewStyles",
         "title": "ocr2md: Install Markdown Preview Heading Styles"
+      },
+      {
+        "command": "ocr2md.addCurrentLineToModule",
+        "title": "ocr2md: 将当前行加入模块数据表"
       }
     ],
     "viewsContainers": {
@@ -71,6 +76,13 @@
           "command": "ocr2md.pickFolder",
           "when": "view == ocr2md.directory",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ocr2md.addCurrentLineToModule",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "navigation@9"
         }
       ]
     }
