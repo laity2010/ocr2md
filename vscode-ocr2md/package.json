@@ -17,10 +17,16 @@
     "onCommand:ocr2md.refreshFiles",
     "onCommand:ocr2md.pickFolder",
     "onCommand:ocr2md.openMarkdownFile",
-    "onCommand:ocr2md.addCurrentLineToModule"
+    "onCommand:ocr2md.addCurrentLineToModule",
+    "onCommand:ocr2md.openWorkingCopyHere",
+    "onCommand:ocr2md.deleteMarkdownFile",
+    "onCommand:ocr2md.addToTranslation"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "markdown.previewStyles": [
+      "./media/ocr2md-markdown-preview.css"
+    ],
     "commands": [
       {
         "command": "ocr2md.refreshFiles",
@@ -41,6 +47,18 @@
       {
         "command": "ocr2md.addCurrentLineToModule",
         "title": "ocr2md: 将当前行加入模块数据表"
+      },
+      {
+        "command": "ocr2md.openWorkingCopyHere",
+        "title": "ocr2md:打开此处工作稿"
+      },
+      {
+        "command": "ocr2md.deleteMarkdownFile",
+        "title": "删除文件"
+      },
+      {
+        "command": "ocr2md.addToTranslation",
+        "title": "添加到翻译"
       }
     ],
     "viewsContainers": {
@@ -78,17 +96,35 @@
           "group": "navigation"
         }
       ],
+      "view/item/context": [
+        {
+          "command": "ocr2md.deleteMarkdownFile",
+          "when": "view == ocr2md.directory && viewItem == file",
+          "group": "navigation@9"
+        },
+        {
+          "command": "ocr2md.addToTranslation",
+          "when": "view == ocr2md.directory && (viewItem == file || viewItem == folder)",
+          "group": "navigation@8"
+        }
+      ],
       "editor/context": [
         {
           "command": "ocr2md.addCurrentLineToModule",
           "when": "editorLangId == markdown && resourceScheme == file",
           "group": "navigation@9"
+        },
+        {
+          "command": "ocr2md.openWorkingCopyHere",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "navigation@8"
         }
       ]
     }
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "test": "npm run compile && node ./out/sentenceSegmentation.test.js && node ./out/translationExport.test.js",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile"
   },

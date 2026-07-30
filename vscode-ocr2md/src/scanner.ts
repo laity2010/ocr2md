@@ -167,7 +167,7 @@ function illegalBreakScore(current: string, next: string): { value: number; reas
   return { value, reasons };
 }
 
-function isMarkdownStructuralLine(line: string): boolean {
+export function isMarkdownStructuralLine(line: string): boolean {
   const trimmed = line.trim();
   return /^(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||```|~~~)/.test(trimmed);
 }

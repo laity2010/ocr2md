@@ -1,5 +1,7 @@
 import type { RegexPreset } from "./types";
 
+const OCR_CROSS_LINE_PATTERN = "(?:\\b(?:about|and|or|the|a|an|of|to|in|for|with|by|from)\\b[ \\t]*\\r?\\n(?:[ \\t]*\\r?\\n)?[ \\t]*(?:\\d+|[a-z])|\\b[A-Za-z]{2,}[ \\t]*\\r?\\n(?:[ \\t]*\\r?\\n)?[ \\t]*\\d+[A-Za-z]\\b)";
+
 // 常用正则样式集中维护在这里。
 // 要手动增加样式，只需要向 REGEX_PRESETS 追加一项：
 // { id: "unique-id", label: "显示名称", pattern: "正则表达式", description: "用途说明" }
@@ -68,8 +70,8 @@ export const REGEX_PRESETS: RegexPreset[] = [
   {
     id: "ocr-illegal-line-break-cross-line",
     label: "OCR 非法断行（跨行续句）",
-    pattern: "\\b(?:about|and|or|the|a|an|of|to|in|for|with|by|from)\\b[ \\t]*\\r?\\n[ \\t\\r\\n]*(?:\\d+|[a-z])",
-    description: "匹配英文行末未完结连接词或介词，且下一行以数字或小写字母继续的跨行片段，例如 about 后换行接 3 percentage。",
+    pattern: OCR_CROSS_LINE_PATTERN,
+    description: "匹配英文行末未完结连接词/介词，或空行后以 13F 这类数字字母标识符继续的跨行片段。",
   },
   {
     id: "ocr-suspected-illegal-line-break-cjk",
@@ -117,5 +119,5 @@ export const MODULE_REGEX_DEFAULTS: Record<string, string> = {
   "注释": "<sup>(\\d+)</sup>\n---\n^\\s*\\d+\\.\\s+.+",
   "标题": "^#{1,6}\\s+.+",
   "图片": "!\\[[^\\]]*\\]\\(https?://[^\\s)]+\\)",
-  "非法断行": "\\b(?:about|and|or|the|a|an|of|to|in|for|with|by|from)\\b[ \\t]*\\r?\\n[ \\t\\r\\n]*(?:\\d+|[a-z])",
+  "非法断行": OCR_CROSS_LINE_PATTERN,
 };

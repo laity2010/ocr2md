@@ -121,7 +121,15 @@ export interface SidebarState {
   imageDownloadProgress?: { phase: "downloading" | "complete"; completed: number; total: number; current?: string; failed?: number; lastError?: string };
   deeplConfigured: boolean;
   translationTestResult?: { success: boolean; message: string };
-  translationProgress?: { phase: "translating" | "complete"; completed: number; total: number; current?: string; failed?: number; lastError?: string };
+  translationProgress?: {
+    phase: "translating" | "exporting" | "complete";
+    operation?: "translation" | "export";
+    completed: number;
+    total: number;
+    current?: string;
+    failed?: number;
+    lastError?: string;
+  };
   failedTranslationBlockIndexes: number[];
   regexPresets: RegexPreset[];
   refs: Candidate[];
