@@ -1,105 +1,52 @@
 # ocr2md
 
-`ocr2md` 是一个本地运行的 OCR Markdown 校对、标定和结构化导出工作台。它不会修改源 Markdown，而是保存人工标定，并在导出阶段生成修正后的章节文件。
+`ocr2md` 是一个专用于 OCR Markdown 标定的 VS Code 扩展。项目仅保留四个工作模块：
 
-## 功能
+- **章节定界**：合并序列 Markdown、维护定界工作稿，并按一级标题导出章节。
+- **章节标题**：在章节工作稿中检查和调整标题层级，显示相对导出基线的增删改。
+- **注释**：扫描注释引用与正文、配对确认，并维护订正工作稿。
+- **图片**：扫描图片标题、链接、文本和 HTML，支持下载外部图片。
 
-### 标题
+各模块的数据表统一支持 `已删除` 软标记。被标记的记录会保留用于审计，但不会参与订正、配对、导出或图片下载。
 
-- 扫描 Markdown 标题和疑似纯文本标题
-- 修改标题文本、层级和逻辑序号
-- 批量设置导出目录名
-- 指定导出文件名并按标题边界拆分章节
-- 在原文位置手动新增标题
+数据表固定为 `多选`、`行号`、`行类型`、`预览` 四列。单击“行号”“行类型”或“预览”可设为主排序；按住 `Shift` 再单击其他列可追加多列排序，箭头后的数字表示排序优先级。章节文件、注释 Pair 与图片本地路径显示在预览单元格内。
 
-### 注释
+## 工作目录树
 
-- 提取注释引用候选
-- 标定引用、正文或排除类型
-- 设置注释组并绑定对应标题
-- 导出为 Markdown 脚注：引用使用 `[^注释号]`，正文追加为 `[^注释号]: 正文`
-
-### 图片
-
-- 提取 Markdown 中的外部图片链接
-- 下载图片到 `output/imgs/`
-- 导出时将已下载图片的外部链接替换为本地路径
-
-### 非法断行
-
-- 检测 OCR 或排版造成的疑似非法断行
-- 支持多选设置高、低置信度
-- 可按高、低或全部候选筛选和复查
-- 导出时只合并高置信度断行，低置信度保持原样
-
-### 翻译
-
-- 独立处理 `output/**/*.md` 中已经清洗导出的 Markdown
-- 按空行切分正文文本块，层级标题即使没有前后空行也作为独立文本块
-- 数据表覆盖文件中的非空内容行，并标记 `YAML 元数据`、标题、文本、列表、图片、图题、图注、表题、表格、表注、公式、代码、分隔和注释正文等类型
-- 用于合法切分文本块的空行不显示在数据表中；列表、图片源、代码、公式等结构行默认标为不翻译，但仍保留
-- 支持编辑译文、批量设置状态、保存翻译工作区
-- 导出 `org` 原文、`trans` 译文、`cross` 交叉三套 Markdown 到 `output_translated/`，不覆盖清洗后的中文章节文件
-
-### 工作区
-
-- 扫描输入目录下的 `.md` 文件，自动排除 `output/`
-- 支持表格筛选、三字段排序和多选批量操作
-- 保存当前模块、筛选、排序、选择和面板布局
-- 在预览窗中定位原文，在控制台查看扫描、下载和导出进度
-
-## 运行
-
-使用 Python 3.11 或更高版本。当前工作区推荐使用共享环境：
-
-```bash
-/Users/daisor/Documents/Github/.venvs/py313/bin/python -m ocr2md_workbench.server
-```
-
-打开页面后，在顶部输入 OCR Markdown 目录并点击“扫描”。
-
-也可以启动时指定目录：
-
-```bash
-/Users/daisor/Documents/Github/.venvs/py313/bin/python -m ocr2md_workbench.server "/path/to/input"
-```
-
-默认地址为 [http://localhost:8765/](http://localhost:8765/)。
-
-## 输出
-
-工作目录内会生成：
+侧栏目录按处理状态显示为固定工作流树，而不是把 Markdown 文件平铺：
 
 ```text
-source/
-├── md-workspace
-├── output/
-│   ├── title_manifest.json
-│   ├── translation_manifest.json
-│   ├── translation-workspace
-│   ├── imgs/
-│   └── 导出的章节文件.md
-└── output_translated/
-    ├── org/
-    │   └── 原文章节文件.md
-    ├── trans/
-    │   └── 译文章节文件.md
-    ├── cross/
-    │   └── 交叉章节文件.md
+工作目录
+├── ocr
+│   └── 未带章节定界 YAML 标记的原始序列 Markdown
+└── chapters
+    └── 章节文件
+        ├── 标题
+        ├── 注释
+        └── 图片
 ```
 
-- `md-workspace`：完整标定数据和界面状态
-- `output/title_manifest.json`：可读的标定清单
-- `output/translation-workspace`：翻译文本块、译文和翻译界面状态
-- `output/imgs/`：下载后的图片
-- `output/**/*.md`：按标题设置拆分并完成注释、图片和断行修正的 Markdown
-- `output_translated/org/**/*.md`：按 `output/` 结构生成的原文 Markdown，普通文本按句输出 `^sid-块号-句号` 并用一个空行分隔句子，标题和嵌套块、注释正文等结构块在 ID 后输出 `空行 + <br> + 空行`；嵌套块的 ID 前先输出独立 `>` 行
-- `output_translated/trans/**/*.md`：按 `output/` 结构生成的译文 Markdown，普通文本按句输出 `^sid-块号-句号` 并用一个空行分隔句子，标题和嵌套块、注释正文等结构块在 ID 后输出 `空行 + <br> + 空行`；嵌套块的 ID 前先输出独立 `>` 行
-- `output_translated/cross/**/trans2org 原文件名.md`：译文对照原文，标题和普通正文逐句用 `>[! ds]-` callout 加 `>![[...#^sid]]` 嵌入预览到 `output_translated/org` 中相同 `^sid` 的原文位置；嵌套块、图表注等非正文内容按同一个 `block_no` 整体用 `^bid` 交叉对照，嵌套块的 ID 前先输出独立 `>` 行；注释正文直接输出 `译文 + <br>原文 + ^bid`，避免注释块嵌入无法渲染；块分隔使用 `空行 + <br> + 空行`
-- `output_translated/cross/**/org2trans 原文件名.md`：原文对照译文，标题和普通正文逐句用 `>[! ds]-` callout 加 `>![[...#^sid]]` 嵌入预览到 `output_translated/trans` 中相同 `^sid` 的译文位置；注释正文直接输出 `原文 + <br>译文 + ^bid`
+- Markdown 开头的 YAML 没有 `ocr2md_chapter_split: true` 时，文件归入 `ocr`，并按自然序参与合并。
+- 旧版输出目录 `output/` 与 `output_chapters/` 不参与新工作流扫描，也不会被删除。
+- “创建/打开定界工作稿”将 `ocr` 中的序列文件拼接为工作目录根层的 `.ocr2md-merged.working.md`。
+- “导出章节”将结果写入 `工作目录/chapters/`，并写入 `ocr2md_chapter_split: true` 等章节定界 properties。
+- 点击 `chapters/章节文件/标题`、`注释` 或 `图片`，数据表会切换到对应模块，并且只处理该章节文件。
 
-## 测试
+## 开发运行
 
 ```bash
-/Users/daisor/Documents/Github/.venvs/py313/bin/python -m unittest discover -s tests
+npm install
+npm test
+code .
 ```
+
+在 VS Code 中按 `F5` 启动扩展开发宿主，然后打开包含 Markdown 文件的目录。
+
+## 数据与输出
+
+- `.ocr2md/`：模块基线、工作稿和标定 sidecar。
+- `.ocr2md-merged.working.md`：章节定界合并工作稿。
+- `chapters/`：章节定界导出的章节文件。
+- `imgs/`：图片模块下载的本地图片。
+
+源 Markdown 不会因为数据表中的 `已删除` 标记而被删除。

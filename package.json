@@ -1,7 +1,8 @@
 {
   "name": "ocr2md",
+  "private": true,
   "displayName": "ocr2md",
-  "description": "Prototype VS Code extension for confirming OCR Markdown footnote refs and bodies.",
+  "description": "VS Code extension for OCR Markdown chapter boundaries, headings, annotations, and images.",
   "version": "0.0.1",
   "publisher": "local",
   "engines": {
@@ -18,12 +19,9 @@
     "onCommand:ocr2md.pickFolder",
     "onCommand:ocr2md.openMarkdownFile",
     "onCommand:ocr2md.addCurrentLineToModule",
-    "onCommand:ocr2md.openWorkingCopyHere",
     "onCommand:ocr2md.openChapterBoundaryWork",
     "onCommand:ocr2md.openChapterWorkingCopy",
-    "onCommand:ocr2md.exportChapterBoundaryChapters",
-    "onCommand:ocr2md.deleteMarkdownFile",
-    "onCommand:ocr2md.addToTranslation"
+    "onCommand:ocr2md.exportChapterBoundaryChapters"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -44,16 +42,8 @@
         "title": "ocr2md: Open Markdown File"
       },
       {
-        "command": "ocr2md.installMarkdownPreviewStyles",
-        "title": "ocr2md: Install Markdown Preview Heading Styles"
-      },
-      {
         "command": "ocr2md.addCurrentLineToModule",
         "title": "ocr2md: 将当前行加入到数据表"
-      },
-      {
-        "command": "ocr2md.openWorkingCopyHere",
-        "title": "ocr2md:打开此处工作稿"
       },
       {
         "command": "ocr2md.openChapterBoundaryWork",
@@ -66,14 +56,6 @@
       {
         "command": "ocr2md.exportChapterBoundaryChapters",
         "title": "ocr2md: 导出章节定界文件"
-      },
-      {
-        "command": "ocr2md.deleteMarkdownFile",
-        "title": "删除文件"
-      },
-      {
-        "command": "ocr2md.addToTranslation",
-        "title": "添加到翻译"
       }
     ],
     "viewsContainers": {
@@ -93,7 +75,7 @@
         },
         {
           "id": "ocr2md.regex",
-          "name": "正则搜索",
+          "name": "标定模块",
           "type": "webview"
         }
       ]
@@ -111,35 +93,18 @@
           "group": "navigation"
         }
       ],
-      "view/item/context": [
-        {
-          "command": "ocr2md.deleteMarkdownFile",
-          "when": "view == ocr2md.directory && viewItem == file",
-          "group": "navigation@9"
-        },
-        {
-          "command": "ocr2md.addToTranslation",
-          "when": "view == ocr2md.directory && (viewItem == file || viewItem == folder)",
-          "group": "navigation@8"
-        }
-      ],
       "editor/context": [
         {
           "command": "ocr2md.addCurrentLineToModule",
           "when": "editorLangId == markdown && resourceScheme == file",
           "group": "navigation@9"
-        },
-        {
-          "command": "ocr2md.openWorkingCopyHere",
-          "when": "editorLangId == markdown && resourceScheme == file",
-          "group": "navigation@8"
         }
       ]
     }
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "test": "npm run compile && node ./out/sentenceSegmentation.test.js && node ./out/translationExport.test.js && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js",
+    "test": "npm run compile && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js && node ./out/scanner.test.js && node ./out/workspaceFiles.test.js && node ./out/webview.test.js",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile"
   },
@@ -149,8 +114,6 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "cspell-lib": "^8.19.4",
-    "diff": "^9.0.0",
-    "sentence-splitter": "^5.0.1"
+    "diff": "^9.0.0"
   }
 }
