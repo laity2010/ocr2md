@@ -50,6 +50,18 @@ export const REGEX_PRESETS: RegexPreset[] = [
     description: "匹配 [^1]: body 这类 Markdown 脚注定义。",
   },
   {
+    id: "star-footnote-ref",
+    label: "星号注释引用",
+    pattern: "\\[\\*(\\d+)\\]",
+    description: "匹配 [*4] 这类星号注释引用。",
+  },
+  {
+    id: "star-footnote-body",
+    label: "星号注释正文",
+    pattern: "^\\s*\\*(\\d+)\\s+.+$",
+    description: "匹配 *4 ... 这类星号注释正文。",
+  },
+  {
     id: "html-sub",
     label: "HTML 下标",
     pattern: "<sub>.*?</sub>",
@@ -108,7 +120,7 @@ export const REGEX_PRESETS: RegexPreset[] = [
 /** Defaults and demonstrations used by each regular-expression data-table module. */
 export const MODULE_REGEX_PRESETS: Record<string, RegexPreset[]> = {
   "未分类": REGEX_PRESETS,
-  "注释": REGEX_PRESETS.filter((preset) => ["html-sup", "numeric-sup-footnote", "annotation-ref-and-body", "numbered-note-line", "markdown-footnote-ref", "markdown-footnote-body"].includes(preset.id)),
+  "注释": REGEX_PRESETS.filter((preset) => ["html-sup", "numeric-sup-footnote", "annotation-ref-and-body", "numbered-note-line", "markdown-footnote-ref", "markdown-footnote-body", "star-footnote-ref", "star-footnote-body"].includes(preset.id)),
   "标题": REGEX_PRESETS.filter((preset) => preset.id === "markdown-heading"),
   "图片": REGEX_PRESETS.filter((preset) => ["markdown-image", "markdown-external-image", "url"].includes(preset.id)),
   "非法断行": REGEX_PRESETS.filter((preset) => preset.id.startsWith("ocr-")),
@@ -116,7 +128,7 @@ export const MODULE_REGEX_PRESETS: Record<string, RegexPreset[]> = {
 
 export const MODULE_REGEX_DEFAULTS: Record<string, string> = {
   "未分类": "^\\d+\\.\\s+.+",
-  "注释": "<sup>(\\d+)</sup>\n---\n^\\s*\\d+\\.\\s+.+",
+  "注释": "<sup>(\\d+)</sup>\n---\n^\\s*\\d+\\.\\s+.+\n---\n\\[\\*(\\d+)\\]\n---\n^\\s*\\*(\\d+)\\s+.+$",
   "标题": "^#{1,6}\\s+.+",
   "图片": "!\\[[^\\]]*\\]\\(https?://[^\\s)]+\\)",
   "非法断行": OCR_CROSS_LINE_PATTERN,

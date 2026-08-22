@@ -4,6 +4,7 @@ import * as https from "https";
 import * as fs from "fs";
 import * as path from "path";
 import * as tls from "tls";
+import { createHash, randomUUID } from "crypto";
 import * as vscode from "vscode";
 import {
   buildFootnotePairs,
@@ -21,6 +22,18 @@ import {
   type ObsidianStructureRole,
   type ObsidianTranslationUnit,
 } from "./translationExport";
+import {
+  buildChapterBoundarySegments,
+  mergeSequenceMarkdown,
+  scanChapterBoundaryLines,
+  type MergeInputText,
+} from "./chapterBoundary";
+import {
+  activeCandidates,
+  DELETED_LINE_TYPE,
+  isDeletedCandidate,
+  markCandidatesDeleted,
+} from "./candidateLifecycle";
 import type { AnnotationPair, Candidate, FileEntry, FootnotePair, PairStatus, RegexPreset, SidebarState, SourceRange, TranslationProtectedToken } from "./types";
 
 const readonlyScheme = "ocr2md-readonly";
@@ -77,6 +90,13 @@ class Ocr2mdApp implements vscode.Disposable {
   private moduleScanVersion = 0;
   private readonlyUri: vscode.Uri | undefined;
   private workingCopyUri: vscode.Uri | undefined;
+  private chapterBoundaryWorkingUri: vscode.Uri | undefined;
+  /** Per-source editable draft used by the lightweight chapter-block module. */
+  private chapterWorkingUri: vscode.Uri | undefined;
+  /** Baselines for editable chapter exports, retained for the current session. */
+  private readonly chapterOutputBaselines = new Map<string, string>();
+  private activeWorkbenchModule = "未分类";
+  private chapterSectionScopePath: string | undefined;
   private previewEditable = false;
   private searchMatches: Candidate[] = [];
   private searchTableRows: Candidate[] = [];
@@ -91,6 +111,7 @@ class Ocr2mdApp implements vscode.Disposable {
   private translationProgress: TranslationProgress | undefined;
   private failedTranslationBlockIndexes = new Set<number>();
   private selectedCandidate: Candidate | undefined;
+  private pendingTableFocusId: string | undefined;
   private selectedPairId: string | undefined;
   private refs: Candidate[] = [];
   private bodies: Candidate[] = [];
@@ -154,13 +175,24 @@ class Ocr2mdApp implements vscode.Disposable {
       vscode.commands.registerCommand("ocr2md.refreshFiles", () => this.refreshFiles()),
       vscode.commands.registerCommand("ocr2md.pickFolder", () => this.pickWorkspaceFolder()),
       vscode.commands.registerCommand("ocr2md.openMarkdownFile", (filePath: string) => this.selectFile(filePath)),
+      vscode.commands.registerCommand("ocr2md.openChapterSection", (filePath: string, moduleName: string) =>
+        this.openChapterSection(filePath, moduleName),
+      ),
       vscode.commands.registerCommand("ocr2md.installMarkdownPreviewStyles", () => this.installMarkdownPreviewStyles()),
       vscode.commands.registerCommand("ocr2md.addCurrentLineToModule", () => this.addCurrentLineToModule()),
       vscode.commands.registerCommand("ocr2md.openWorkingCopyHere", () => this.openWorkingCopyAtCurrentLine()),
+      vscode.commands.registerCommand("ocr2md.openChapterBoundaryWork", () => this.openChapterBoundaryWork()),
+      vscode.commands.registerCommand("ocr2md.openChapterWorkingCopy", () => this.openChapterWorkingCopy()),
+      vscode.commands.registerCommand("ocr2md.exportChapterBoundaryChapters", () => this.exportChapterBoundaryChapters()),
       vscode.commands.registerCommand("ocr2md.deleteMarkdownFile", (item: Ocr2mdDirectoryItem) => this.deleteMarkdownFile(item)),
       vscode.commands.registerCommand("ocr2md.addToTranslation", (item: Ocr2mdDirectoryItem) => this.addToTranslation(item)),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.initializeWorkspace()),
       vscode.workspace.onDidSaveTextDocument((document) => this.handleSavedTextDocument(document)),
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (editor && editor.document.uri.scheme === "file" && this.isChapterOutputPath(editor.document.uri.fsPath)) {
+          void this.makeActiveChapterEditorWriteable();
+        }
+      }),
       this.singleDecoration,
       this.refDecoration,
       this.bodyDecoration,
@@ -191,20 +223,29 @@ class Ocr2mdApp implements vscode.Disposable {
 
   private getSidebarState(): SidebarState {
     const workspaceLabel = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "未选择";
+    const pendingTableFocusId = this.pendingTableFocusId;
+    this.pendingTableFocusId = undefined;
     return {
       workspaceLabel,
       selectedFile: this.selectedFile,
+      chapterSectionScopePath: this.chapterSectionScopePath,
       previewEditable: this.previewEditable,
       files: this.files,
       searchPattern: this.searchPattern,
       regexScopeDirectory: this.regexScopeDirectory || workspaceLabel,
       regexIncludeSubdirectories: this.regexIncludeSubdirectories,
       searchMatches: this.searchMatches,
-      searchTableRows: this.searchTableRows,
+      searchTableRows: this.searchTableRows.map((row) => ({
+        ...row,
+        rowId: row.rowId ?? row.id,
+        atomId: row.atomId ?? row.rowId ?? row.id,
+        lineType: row.typeLabel === "图片" ? normalizeImageLineType(row.raw, row.lineType) : row.lineType,
+      })),
       sentenceRows: this.sentenceRows,
       moduleRegexPatterns: this.moduleRegexPatterns,
       moduleRegexPresets: MODULE_REGEX_PRESETS,
       selectedCandidate: this.selectedCandidate,
+      pendingTableFocusId,
       selectedPairId: this.selectedPairId,
       postOcrCleanMode: this.postOcrCleanMode,
       imageDownloadProgress: this.imageDownloadProgress,
@@ -232,6 +273,11 @@ class Ocr2mdApp implements vscode.Disposable {
       case "selectFile":
         if (typeof message.path === "string") {
           await this.selectFile(message.path);
+        }
+        break;
+      case "setActiveModule":
+        if (typeof message.moduleName === "string") {
+          this.activeWorkbenchModule = message.moduleName;
         }
         break;
       case "setPreviewEditable":
@@ -277,11 +323,25 @@ class Ocr2mdApp implements vscode.Disposable {
       case "exportCorrectedMarkdown":
         await this.exportCorrectedMarkdown();
         break;
+      case "exportChapterBoundaryChapters":
+        await this.exportChapterBoundaryChapters();
+        break;
       case "openCorrectedWorkingCopy":
         await this.openCorrectedWorkingCopy();
         break;
       case "syncWorkingCopyCorrections":
         await this.syncWorkingCopyCorrections();
+        break;
+      case "openChapterBoundaryWork":
+        await this.openChapterBoundaryWork();
+        break;
+      case "openChapterWorkingCopy":
+        await this.openChapterWorkingCopy();
+        break;
+      case "showWarning":
+        if (typeof message.message === "string") {
+          void vscode.window.showWarningMessage(message.message);
+        }
         break;
       case "scanBodies":
         this.scanBodies();
@@ -327,7 +387,7 @@ class Ocr2mdApp implements vscode.Disposable {
 
     const uris = await vscode.workspace.findFiles(
       new vscode.RelativePattern(workspaceFolder, "**/*.md"),
-      "{**/.git/**,**/node_modules/**,**/out/**,**/dist/**}",
+      "{**/.git/**,**/.ocr2md/**,**/node_modules/**,**/out/**,**/dist/**}",
       500,
     );
 
@@ -465,6 +525,9 @@ class Ocr2mdApp implements vscode.Disposable {
   }
 
   private async selectFile(filePath: string, options: { preserveTable?: boolean } = {}) {
+    if (this.chapterSectionScopePath && path.resolve(this.chapterSectionScopePath) !== path.resolve(filePath)) {
+      this.chapterSectionScopePath = undefined;
+    }
     const file = this.files.find((entry) => entry.path === filePath) ?? {
       label: path.basename(filePath),
       path: filePath,
@@ -472,10 +535,13 @@ class Ocr2mdApp implements vscode.Disposable {
 
     this.selectedFile = file;
     this.workingCopyUri = undefined;
+    this.chapterWorkingUri = undefined;
     await this.reloadSelectedFileText();
     await this.scanSearchMatches();
     if (!options.preserveTable) {
-      this.postOcrCleanMode = isOcrCorrectedMarkdown(this.selectedFileText);
+      this.postOcrCleanMode = this.chapterBoundaryWorkingUri?.fsPath === file.path
+        ? false
+        : isOcrCorrectedMarkdown(this.selectedFileText);
     }
     this.deeplConfigured = Boolean(await this.context.secrets.get("ocr2md.deeplApiKey"));
     const loadedSidecar = options.preserveTable || this.postOcrCleanMode ? undefined : await this.loadAnnotationSidecar(file);
@@ -513,6 +579,11 @@ class Ocr2mdApp implements vscode.Disposable {
     await this.ensureDefaultEditorLayout();
     await this.openSelectedFilePreview();
     await this.openMarkdownPreviewPane();
+    if (this.isChapterOutputPath(file.path)) {
+      await this.refreshChapterOutputRows(vscode.Uri.file(file.path));
+    } else if (this.activeWorkbenchModule === "章节标题") {
+      await this.openChapterWorkingCopy({ silent: true });
+    }
     this.directoryProvider.refresh();
     this.regexProvider.update();
     this.updatePairPanel(undefined, undefined, this.searchTableActive);
@@ -526,12 +597,50 @@ class Ocr2mdApp implements vscode.Disposable {
   }
 
   private async handleSavedTextDocument(document: vscode.TextDocument) {
+    const savedPath = document.uri.fsPath;
+    const savedText = document.getText();
+    this.searchTableRows = this.searchTableRows.map((row) =>
+      row.workingCopyPath === savedPath || row.sourcePath === savedPath
+        ? reanchorCandidateToText(row, savedText)
+        : row,
+    );
+
+    if (this.chapterWorkingUri?.fsPath === document.uri.fsPath) {
+      await this.refreshChapterWorkingRows();
+      return;
+    }
+
+    // Chapter exports are editable deliverables. They may be edited from an
+    // already open tab rather than selected again through the ocr2md tree, so
+    // handle their save before requiring them to be the selected source file.
+    if (this.isChapterOutputPath(document.uri.fsPath)) {
+      if (this.selectedFile?.path === document.uri.fsPath) {
+        await this.reloadSelectedFileText();
+        await this.scanSearchMatches();
+      }
+      await this.refreshChapterOutputRows(document.uri);
+      if (
+        this.selectedFile?.path === document.uri.fsPath
+        && this.chapterSectionScopePath === document.uri.fsPath
+        && (this.activeWorkbenchModule === "注释" || this.activeWorkbenchModule === "图片")
+      ) {
+        await this.scanCurrentChapterSectionModule(this.activeWorkbenchModule);
+      }
+      return;
+    }
+
     if (!this.selectedFile || document.uri.fsPath !== this.selectedFile.path) {
       return;
     }
 
+    const previousSelectedText = this.selectedFileText;
     await this.reloadSelectedFileText();
     await this.scanSearchMatches();
+
+    if (this.chapterBoundaryWorkingUri?.fsPath === document.uri.fsPath) {
+      await this.refreshChapterBoundaryRows();
+      return;
+    }
 
     if (this.postOcrCleanMode) {
       this.searchTableRows = scanTextBlocks(this.selectedFileText);
@@ -558,6 +667,526 @@ class Ocr2mdApp implements vscode.Disposable {
     vscode.window.visibleTextEditors
       .filter((editor) => this.isPreviewDocument(editor.document.uri))
       .forEach((editor) => this.applyHeadingDecorations(editor));
+  }
+
+  /**
+   * Create one editable chapter draft for the Markdown file selected in the
+   * directory tree. This is intentionally separate from the directory-wide
+   * chapter-boundary draft.
+   */
+  private async openChapterWorkingCopy(options: { silent?: boolean } = {}) {
+    const file = this.selectedFile;
+    if (!file) {
+      if (!options.silent) {
+        void vscode.window.showWarningMessage("请先在目录中选择一个 Markdown 文件。");
+      }
+      return;
+    }
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file.path)) ?? vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      if (!options.silent) {
+        void vscode.window.showWarningMessage("请先打开工作区。");
+      }
+      return;
+    }
+
+    // Files in chapters/ are already the editable chapter work products. Do
+    // not clone them to chapter-working/, which would replace their diff rows
+    // with ordinary block rows and hide their change colouring.
+    if (this.isChapterOutputPath(file.path)) {
+      await this.refreshChapterOutputRows(vscode.Uri.file(file.path));
+      if (!options.silent) {
+        void vscode.window.showInformationMessage(`章节文件已作为工作稿打开：${path.basename(file.path)}`);
+      }
+      return;
+    }
+
+    const workingUri = this.chapterWorkingCopyUriForFile(file, workspaceFolder);
+    try {
+      await vscode.workspace.fs.stat(workingUri);
+    } catch {
+      const directory = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "chapter-working");
+      await vscode.workspace.fs.createDirectory(directory);
+      // Preserve all source text; normalize only line endings so blank-line
+      // delimiters have one unambiguous representation in the work draft.
+      await vscode.workspace.fs.writeFile(workingUri, Buffer.from(this.selectedFileText.replace(/\r\n?/g, "\n"), "utf8"));
+    }
+
+    this.chapterWorkingUri = workingUri;
+    await this.refreshChapterWorkingRows();
+    const document = await vscode.workspace.openTextDocument(workingUri);
+    const editor = await this.showDocumentInRightPane(document);
+    this.applyHeadingDecorations(editor);
+    if (!options.silent) {
+      void vscode.window.showInformationMessage(`章节工作稿已就绪：${path.basename(workingUri.fsPath)}`);
+    }
+  }
+
+  private async openChapterSection(filePath: string, moduleName: string) {
+    this.chapterSectionScopePath = filePath;
+    await this.selectFile(filePath);
+    this.activeWorkbenchModule = moduleName;
+    if (moduleName === "注释" || moduleName === "图片") {
+      await this.scanCurrentChapterSectionModule(moduleName);
+    }
+    this.regexProvider.update();
+    await this.regexProvider.postMessage({ command: "activateModule", moduleName });
+  }
+
+  private async scanCurrentChapterSectionModule(moduleName: "注释" | "图片") {
+    const file = this.selectedFile;
+    if (!file || file.path !== this.chapterSectionScopePath) return;
+    const previousRows = this.searchTableRows
+      .filter((row) => row.typeLabel === moduleName && row.sourcePath === file.path)
+      .map((row) => reanchorCandidateToText(row, this.selectedFileText));
+    const patterns = splitModuleRegexPatterns(this.moduleRegexPatterns[moduleName] ?? "");
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const matches = patterns.flatMap((singlePattern, patternIndex) =>
+      scanRegexMatches(this.selectedFileText, singlePattern).map((candidate, index) => {
+        const lineType = defaultLineTypeForModule(moduleName, candidate.raw);
+        return {
+          ...candidate,
+          id: `chapter-section-${moduleName}-${encodeURIComponent(file.path)}-${patternIndex}-${candidate.range.line}-${candidate.range.start}-${index}`,
+          regexSource: singlePattern,
+          annotationNumber: moduleName === "注释"
+            ? annotationNumberFromText(candidate.raw, lineType)
+            : undefined,
+          typeLabel: moduleName,
+          lineType,
+          sourcePath: file.path,
+          sourceLabel: workspaceRoot
+            ? path.relative(workspaceRoot, file.path) || path.basename(file.path)
+            : path.basename(file.path),
+          workingCopyPath: file.path,
+        } satisfies Candidate;
+      }),
+    );
+    const manualRows = previousRows.filter((row) => row.isWorkingCorrection);
+    const mergedMatches = new Map<string, Candidate>(matches.map((row) => [tableRowKey(row), row]));
+    for (const manualRow of manualRows) {
+      const key = tableRowKey(manualRow);
+      const scannedRow = mergedMatches.get(key);
+      mergedMatches.set(key, scannedRow
+        ? {
+          ...scannedRow,
+          ...manualRow,
+          regexSource: scannedRow.regexSource ?? manualRow.regexSource,
+          isWorkingCorrection: true,
+          chapterBoundaryState: "modified",
+        }
+        : manualRow);
+    }
+    const stableRows = reconcileStableCandidateRows(
+      previousRows,
+      [...mergedMatches.values()],
+      this.selectedFileText,
+      `${moduleName}-${candidateAnchorHash(file.path)}`,
+      true,
+    );
+    this.searchTableRows = [
+      ...this.searchTableRows.filter((row) => !(row.typeLabel === moduleName && row.sourcePath === file.path)),
+      ...stableRows,
+    ].sort(compareCandidatesByPosition);
+    this.searchTableActive = true;
+    this.updatePairPanel(undefined, undefined, true);
+  }
+
+  private chapterWorkingCopyUriForFile(file: FileEntry, workspaceFolder: vscode.WorkspaceFolder): vscode.Uri {
+    const sourceStem = path.basename(file.path, path.extname(file.path));
+    const relativePath = path.relative(workspaceFolder.uri.fsPath, file.path).replace(/[\\/]/g, "__");
+    return vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "chapter-working", `${relativePath || sourceStem}.chapter.working.md`);
+  }
+
+  private isChapterOutputPath(filePath: string): boolean {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)) ?? vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) return false;
+    const chaptersDirectory = path.join(workspaceFolder.uri.fsPath, "chapters") + path.sep;
+    return path.resolve(filePath).startsWith(path.resolve(chaptersDirectory));
+  }
+
+  private chapterOutputBaselineUri(workspaceFolder: vscode.WorkspaceFolder, outputUri: vscode.Uri): vscode.Uri {
+    const relative = path.relative(workspaceFolder.uri.fsPath, outputUri.fsPath).replace(/[\\/]/g, "__");
+    return vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "chapter-output-baselines", `${relative}.baseline.md`);
+  }
+
+  /**
+   * Chapters are editable deliverables. Their baseline is the exact export that
+   * was produced by the module, so direct edits are shown as added/modified/
+   * deleted rows without treating the original OCR files as mutable.
+   */
+  private async refreshChapterOutputRows(outputUri: vscode.Uri) {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(outputUri) ?? vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder || !(await workspaceFileExists(outputUri))) return;
+
+    const current = Buffer.from(await vscode.workspace.fs.readFile(outputUri)).toString("utf8");
+    const baselineUri = this.chapterOutputBaselineUri(workspaceFolder, outputUri);
+    // The durable export snapshot is the fixed comparison baseline. Never
+    // replace it with the previous editor save, otherwise cumulative edits
+    // disappear from the table after a second save.
+    let baseline: string | undefined;
+    if (await workspaceFileExists(baselineUri)) {
+      baseline = Buffer.from(await vscode.workspace.fs.readFile(baselineUri)).toString("utf8");
+    }
+    baseline ??= this.chapterOutputBaselines.get(outputUri.fsPath);
+    if (baseline === undefined) {
+      baseline = await this.deriveChapterOutputBaseline(workspaceFolder, current);
+    }
+    // Existing chapter exports from before baseline tracking are accepted as a
+    // clean starting point. Later saves are compared against this session's
+    // baseline and all new exports create a durable on-disk baseline.
+    baseline ??= current;
+    this.chapterOutputBaselines.set(outputUri.fsPath, baseline);
+
+    const lines = current.replace(/\r\n?/g, "\n").split("\n");
+    const changes = scanChapterBoundaryLines(baseline, current);
+    const currentChanges = changes.filter((entry) => entry.state !== "deleted");
+    const deletedChanges = changes.filter((entry) => entry.state === "deleted");
+    const statePriority = { heading: 0, added: 1, modified: 2 } as const;
+    const previousRows = this.searchTableRows.filter((row) =>
+      (row.typeLabel === "章节标题" || row.typeLabel === "章节")
+      && (row.workingCopyPath === outputUri.fsPath || row.sourcePath === outputUri.fsPath),
+    );
+    let rows: Candidate[] = scanTextBlocks(current).map((candidate) => {
+      const endLine = candidate.range.endLine ?? candidate.range.line;
+      const matchingChanges = currentChanges.filter((entry) =>
+        entry.line >= candidate.range.line && entry.line <= endLine,
+      );
+      const change = matchingChanges.reduce<typeof matchingChanges[number] | undefined>((selected, entry) => {
+        if (!selected || statePriority[entry.state as keyof typeof statePriority] > statePriority[selected.state as keyof typeof statePriority]) {
+          return entry;
+        }
+        return selected;
+      }, undefined);
+      return {
+        ...candidate,
+        id: `chapter-output-${encodeURIComponent(outputUri.fsPath)}-${candidate.id}`,
+        preview: candidate.raw.slice(0, 255),
+        baselinePreview: change?.baselineText,
+        chapterBoundaryState: change?.state ?? "heading",
+        typeLabel: "章节标题",
+        lineType: chapterLineTypeForCandidate(candidate),
+        workingCopyPath: outputUri.fsPath,
+        sourcePath: outputUri.fsPath,
+        sourceLabel: path.relative(workspaceFolder.uri.fsPath, outputUri.fsPath),
+      } satisfies Candidate;
+    });
+    rows = reconcileStableCandidateRows(
+      previousRows.filter((row) => row.chapterBoundaryState !== "deleted"),
+      rows,
+      current,
+      `chapter-${candidateAnchorHash(outputUri.fsPath)}`,
+    );
+    // Deleted text has no current block. Keep it as a separate red tombstone
+    // so a reviewer can see that it existed in the exported chapter baseline.
+    rows.push(...deletedChanges.map((entry) => ({
+      id: `chapter-output-${encodeURIComponent(outputUri.fsPath)}-${entry.id}`,
+      kind: "regex" as const,
+      label: entry.baselineText?.trim() || `L${entry.line + 1}`,
+      raw: entry.baselineText ?? "",
+      preview: (entry.baselineText ?? "").slice(0, 255),
+      baselinePreview: entry.baselineText,
+      chapterBoundaryState: "deleted" as const,
+      range: { line: Math.max(0, Math.min(entry.line, Math.max(0, lines.length - 1))), start: 0, end: 0 },
+      typeLabel: "章节标题",
+      lineType: "非标题",
+      workingCopyPath: outputUri.fsPath,
+      sourcePath: outputUri.fsPath,
+      sourceLabel: path.relative(workspaceFolder.uri.fsPath, outputUri.fsPath),
+      status: "候选" as const,
+    } satisfies Candidate)));
+    this.searchTableRows = [
+      ...this.searchTableRows.filter((row) => row.typeLabel !== "章节标题" && row.typeLabel !== "章节"),
+      ...rows,
+    ].sort(compareCandidatesByPosition);
+    this.searchTableActive = true;
+    this.regexProvider.update();
+    this.updatePairPanel(undefined, undefined, true);
+  }
+
+  /**
+   * Legacy chapter exports predate dedicated snapshots. For a uniquely named
+   * heading, the merged work draft remains a reliable source of its original
+   * Markdown level and lets us surface a direct chapter-file level edit.
+   */
+  private async deriveChapterOutputBaseline(
+    workspaceFolder: vscode.WorkspaceFolder,
+    current: string,
+  ): Promise<string | undefined> {
+    const mergedUri = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md-merged.working.md");
+    const headingsByTitle = (texts: string[]) => {
+      const result = new Map<string, string[]>();
+      for (const text of texts) {
+        for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
+          const match = /^ {0,3}#{1,6}\s+(.+?)\s*$/.exec(line);
+          if (!match) continue;
+          const title = match[1].trim();
+          result.set(title, [...(result.get(title) ?? []), line]);
+        }
+      }
+      return result;
+    };
+
+    // A legacy chapter export may predate its own baseline snapshot. Prefer
+    // the immutable sequence sources in that case: the merged work draft can
+    // already contain the same editorial level change and therefore cannot
+    // reveal it. The merged draft remains a fallback for directories where
+    // the original sequence is no longer available.
+    const sourceInputs = await this.readChapterBoundarySequenceInputs(workspaceFolder, mergedUri.fsPath);
+    const sourceByTitle = headingsByTitle(sourceInputs.map((input) => input.text));
+    const mergedByTitle = (await workspaceFileExists(mergedUri))
+      ? headingsByTitle([Buffer.from(await vscode.workspace.fs.readFile(mergedUri)).toString("utf8")])
+      : new Map<string, string[]>();
+
+    let changed = false;
+    const baselineLines = current.replace(/\r\n?/g, "\n").split("\n").map((line) => {
+      const match = /^ {0,3}#{1,6}\s+(.+?)\s*$/.exec(line);
+      if (!match) return line;
+      const title = match[1].trim();
+      const sourceCandidates = sourceByTitle.get(title) ?? [];
+      const candidates = sourceCandidates.length === 1
+        ? sourceCandidates
+        : mergedByTitle.get(title) ?? [];
+      if (candidates.length !== 1 || candidates[0] === line) return line;
+      changed = true;
+      return candidates[0];
+    });
+    return changed ? baselineLines.join("\n") : undefined;
+  }
+
+  private async refreshChapterWorkingRows() {
+    const workingUri = this.chapterWorkingUri;
+    if (!workingUri || !(await workspaceFileExists(workingUri))) {
+      return;
+    }
+    const text = Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8");
+    // Block IDs remain stable while a block stays at the same span. Preserve a
+    // reviewer-selected line type across a normal work-draft rescan.
+    const previousLineTypes = new Map(
+      this.searchTableRows
+        .filter((row) => row.typeLabel === "章节标题")
+        .map((row) => [row.id, row.lineType]),
+    );
+    const previousRows = this.searchTableRows.filter((row) =>
+      (row.typeLabel === "章节标题" || row.typeLabel === "章节")
+      && (row.workingCopyPath === workingUri.fsPath || row.sourcePath === workingUri.fsPath),
+    );
+    const rows = reconcileStableCandidateRows(previousRows, scanTextBlocks(text).map((candidate) => ({
+      ...candidate,
+      id: `chapter-block-${candidate.id}`,
+      typeLabel: "章节标题",
+      lineType: previousLineTypes.get(`chapter-block-${candidate.id}`) ?? chapterLineTypeForCandidate(candidate),
+      preview: candidate.raw.slice(0, 255),
+      workingCopyPath: workingUri.fsPath,
+      sourcePath: workingUri.fsPath,
+      sourceLabel: path.basename(workingUri.fsPath),
+    })), text, `chapter-${candidateAnchorHash(workingUri.fsPath)}`);
+    this.searchTableRows = [
+      ...this.searchTableRows.filter((row) => row.typeLabel !== "章节标题" && row.typeLabel !== "章节"),
+      ...rows,
+    ].sort(compareCandidatesByPosition);
+    this.searchTableActive = true;
+    this.regexProvider.update();
+    this.updatePairPanel(undefined, undefined, true);
+  }
+
+  private async openChapterBoundaryWork() {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      void vscode.window.showWarningMessage("请先打开包含序列 Markdown 文件的工作目录。");
+      return;
+    }
+
+    const workingUri = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md-merged.working.md");
+    const boundaryDirectory = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "chapter-boundary");
+    const baselineUri = vscode.Uri.joinPath(boundaryDirectory, "baseline.md");
+    const legacyBaselineBackupUri = vscode.Uri.joinPath(boundaryDirectory, "baseline.v1.backup.md");
+    const manifestUri = vscode.Uri.joinPath(boundaryDirectory, "manifest.json");
+    const sequenceInputs = await this.readChapterBoundarySequenceInputs(workspaceFolder, workingUri.fsPath);
+    const workingExists = await workspaceFileExists(workingUri);
+    if (!sequenceInputs.length && !workingExists) {
+      void vscode.window.showWarningMessage("工作目录根层没有可合并的序列 Markdown 文件。");
+      return;
+    }
+
+    await vscode.workspace.fs.createDirectory(boundaryDirectory);
+    if (!workingExists) {
+      const mergedText = mergeSequenceMarkdown(sequenceInputs);
+      await vscode.workspace.fs.writeFile(workingUri, Buffer.from(mergedText, "utf8"));
+    }
+    const workingText = Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8");
+    const baselineExists = await workspaceFileExists(baselineUri);
+    const manifest = await readChapterBoundaryManifest(manifestUri);
+    const needsBaselineMigration = baselineExists
+      && (manifest?.schemaVersion ?? 0) < 2;
+    if (needsBaselineMigration && !(await workspaceFileExists(legacyBaselineBackupUri))) {
+      await vscode.workspace.fs.writeFile(
+        legacyBaselineBackupUri,
+        await vscode.workspace.fs.readFile(baselineUri),
+      );
+    }
+    if (!baselineExists || needsBaselineMigration) {
+      // The baseline represents the moment this module takes ownership of the
+      // existing working document. Historical differences from an older merge
+      // must not be reported as edits made in the chapter-boundary workflow.
+      await vscode.workspace.fs.writeFile(baselineUri, Buffer.from(workingText, "utf8"));
+    }
+    if (!manifest || manifest.schemaVersion < 2) {
+      const now = new Date().toISOString();
+      await vscode.workspace.fs.writeFile(manifestUri, Buffer.from(JSON.stringify({
+        schemaVersion: 2,
+        createdAt: manifest?.createdAt ?? now,
+        baselineCreatedAt: now,
+        baselineOrigin: "working-copy-at-activation",
+        workingFile: workingUri.fsPath,
+        sourceFiles: sequenceInputs.map((input) => input.path),
+      }, null, 2), "utf8"));
+    }
+
+    this.chapterBoundaryWorkingUri = workingUri;
+    await this.refreshFiles();
+    if (this.selectedFile?.path !== workingUri.fsPath) {
+      await this.selectFile(workingUri.fsPath);
+    }
+    await this.refreshChapterBoundaryRows();
+    const document = await vscode.workspace.openTextDocument(workingUri);
+    const editor = await this.showDocumentInRightPane(document);
+    this.applyHeadingDecorations(editor);
+    void vscode.window.showInformationMessage(`章节定界工作稿已就绪：${path.basename(workingUri.fsPath)}`);
+  }
+
+  private async readChapterBoundarySequenceInputs(
+    workspaceFolder: vscode.WorkspaceFolder,
+    workingPath: string,
+  ): Promise<MergeInputText[]> {
+    const entries = await vscode.workspace.fs.readDirectory(workspaceFolder.uri);
+    const markdownNames = entries
+      .filter(([name, type]) =>
+        type === vscode.FileType.File
+        && name.toLowerCase().endsWith(".md")
+        && !name.startsWith(".")
+        && !name.endsWith(".working.md")
+        && path.resolve(path.join(workspaceFolder.uri.fsPath, name)) !== path.resolve(workingPath)
+      )
+      .map(([name]) => name)
+      .sort((left, right) => left.localeCompare(right, "zh-CN", { numeric: true, sensitivity: "base" }));
+    const inputs: MergeInputText[] = [];
+    for (const name of markdownNames) {
+      const uri = vscode.Uri.joinPath(workspaceFolder.uri, name);
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      inputs.push({ path: uri.fsPath, text: Buffer.from(bytes).toString("utf8") });
+    }
+    return inputs;
+  }
+
+  private async refreshChapterBoundaryRows() {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workingUri = this.chapterBoundaryWorkingUri;
+    if (!workspaceFolder || !workingUri) return;
+    const baselineUri = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "chapter-boundary", "baseline.md");
+    if (!(await workspaceFileExists(baselineUri)) || !(await workspaceFileExists(workingUri))) return;
+    const [baselineBytes, workingBytes] = await Promise.all([
+      vscode.workspace.fs.readFile(baselineUri),
+      vscode.workspace.fs.readFile(workingUri),
+    ]);
+    const baseline = Buffer.from(baselineBytes).toString("utf8");
+    const current = Buffer.from(workingBytes).toString("utf8");
+    const previousChapterFiles = new Map(
+      this.searchTableRows
+        .filter((row) => row.typeLabel === "章节定界" && row.chapterFile)
+        .map((row) => [row.id, row.chapterFile!]),
+    );
+    const currentLines = current.replace(/\r\n?/g, "\n").split("\n");
+    const boundaryRows: Candidate[] = scanChapterBoundaryLines(baseline, current).map((entry) => {
+      const displayText = entry.text || entry.baselineText || "";
+      const isHeading = /^ {0,3}#(?!#)(?:\s+|$)/.test(entry.text);
+      const currentLineText = currentLines[entry.line] ?? "";
+      return {
+        id: entry.id,
+        kind: "regex",
+        label: displayText.trim() || `L${entry.line + 1}`,
+        raw: displayText,
+        preview: displayText.slice(0, 255),
+        baselinePreview: entry.baselineText,
+        chapterBoundaryState: entry.state,
+        range: {
+          line: Math.max(0, Math.min(entry.line, Math.max(0, currentLines.length - 1))),
+          start: 0,
+          end: entry.state === "deleted" ? 0 : Math.min(entry.text.length, currentLineText.length),
+        },
+        typeLabel: "章节定界",
+        lineType: isHeading ? "1 级标题" : chapterBoundaryStateLabel(entry.state),
+        chapterFile: previousChapterFiles.get(entry.id),
+        isWorkingCorrection: false,
+        workingCopyPath: workingUri.fsPath,
+        sourcePath: workingUri.fsPath,
+        sourceLabel: path.basename(workingUri.fsPath),
+        status: "候选",
+      };
+    });
+    this.searchTableRows = [
+      ...this.searchTableRows.filter((row) => row.typeLabel !== "章节定界"),
+      ...boundaryRows,
+    ].sort(compareCandidatesByPosition);
+    this.searchTableActive = true;
+    this.selectedFileText = current;
+    this.regexProvider.update();
+    this.updatePairPanel(undefined, undefined, true);
+  }
+
+  private async exportChapterBoundaryChapters() {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workingUri = this.chapterBoundaryWorkingUri;
+    if (!workspaceFolder || !workingUri || !(await workspaceFileExists(workingUri))) {
+      void vscode.window.showWarningMessage("请先在“章节定界”模块创建或打开合并工作稿。");
+      return;
+    }
+
+    try {
+      await this.refreshChapterBoundaryRows();
+      const chapterStarts = this.searchTableRows
+        .filter((row) =>
+          row.typeLabel === "章节定界"
+          && row.lineType === "1 级标题"
+          && row.chapterFile?.trim(),
+        )
+        .map((row) => ({
+          line: row.range.line,
+          chapterFile: outputChapterFileName(row.chapterFile!),
+        }));
+      if (!chapterStarts.length) {
+        void vscode.window.showWarningMessage("请先为至少一个“1 级标题”设置章节文件。");
+        return;
+      }
+
+      const workingText = Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8");
+      const lines = workingText.replace(/\r\n?/g, "\n").split("\n");
+      const segments = buildChapterBoundarySegments(chapterStarts, lines.length);
+      const outputDirectory = vscode.Uri.joinPath(workspaceFolder.uri, "chapters");
+      const baselineDirectory = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "chapter-output-baselines");
+      await vscode.workspace.fs.createDirectory(outputDirectory);
+      await vscode.workspace.fs.createDirectory(baselineDirectory);
+      const timestamp = formatLocalIsoTimestamp(new Date());
+      for (const segment of segments) {
+        const markdown = lines.slice(segment.startLine, segment.endLine).join("\n");
+        const outputText = withChapterSplitFrontMatter(
+          markdown,
+          timestamp,
+          segment.chapterFile,
+          path.basename(workingUri.fsPath),
+        );
+        const outputUri = vscode.Uri.joinPath(outputDirectory, segment.chapterFile);
+        await vscode.workspace.fs.writeFile(outputUri, Buffer.from(outputText, "utf8"));
+        await vscode.workspace.fs.writeFile(
+          this.chapterOutputBaselineUri(workspaceFolder, outputUri),
+          Buffer.from(outputText, "utf8"),
+        );
+        this.chapterOutputBaselines.set(outputUri.fsPath, outputText);
+      }
+      await this.refreshFiles();
+      void vscode.window.showInformationMessage(`ocr2md 已导出 ${segments.length} 个章节文件到 chapters/。`);
+    } catch (error) {
+      void vscode.window.showErrorMessage(`ocr2md 章节导出失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private async reloadSelectedFileText() {
@@ -605,18 +1234,29 @@ class Ocr2mdApp implements vscode.Disposable {
 
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(this.selectedFile.path));
     const editor = await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.One });
-    await this.applySourceEditMode();
+    // A generated chapter is the editable review artifact. It must not inherit
+    // the read-only switch used for original OCR source previews.
+    await this.applySourceEditMode(this.previewEditable || this.isChapterOutputPath(this.selectedFile.path));
     this.applyHeadingDecorations(editor);
   }
 
-  private async applySourceEditMode() {
-    const command = this.previewEditable
-      ? "workbench.action.files.resetActiveEditorReadonlyInSession"
+  private async applySourceEditMode(editable = this.previewEditable) {
+    const command = editable
+      ? "workbench.action.files.setActiveEditorWriteableInSession"
       : "workbench.action.files.setActiveEditorReadonlyInSession";
     try {
       await vscode.commands.executeCommand(command);
     } catch {
       // Older VS Code builds may not expose the per-editor readonly command.
+    }
+  }
+
+  /** Force a generated chapter to be editable even if a prior session marked it read-only. */
+  private async makeActiveChapterEditorWriteable() {
+    try {
+      await vscode.commands.executeCommand("workbench.action.files.setActiveEditorWriteableInSession");
+    } catch {
+      // Keep the normal editor behavior on older VS Code builds without this command.
     }
   }
 
@@ -898,7 +1538,9 @@ class Ocr2mdApp implements vscode.Disposable {
       return undefined;
     }
     const annotationRows = this.searchTableRows.filter((row) =>
-      row.typeLabel === "注释" && (!row.sourcePath || row.sourcePath === this.selectedFile!.path)
+      row.typeLabel === "注释"
+      && !isDeletedCandidate(row)
+      && (!row.sourcePath || row.sourcePath === this.selectedFile!.path)
     );
     return applyMarkdownCorrections(this.selectedFileText, annotationRows);
   }
@@ -984,13 +1626,18 @@ class Ocr2mdApp implements vscode.Disposable {
     if (!patterns.length) {
       return;
     }
-    const scopedMatchGroups = await Promise.all(patterns.map(async (singlePattern) =>
-      (await this.scanRegexMatchesInScope(
-        singlePattern,
-        scopeDirectory ?? this.regexScopeDirectory,
-        includeSubdirectories ?? this.regexIncludeSubdirectories,
-      )).map((candidate) => ({ ...candidate, regexSource: singlePattern })),
-    ));
+    const exactChapterScope = (moduleName === "注释" || moduleName === "图片")
+      && this.chapterSectionScopePath
+      && this.selectedFile?.path === this.chapterSectionScopePath;
+    const scopedMatchGroups = exactChapterScope
+      ? []
+      : await Promise.all(patterns.map(async (singlePattern) =>
+          (await this.scanRegexMatchesInScope(
+            singlePattern,
+            scopeDirectory ?? this.regexScopeDirectory,
+            includeSubdirectories ?? this.regexIncludeSubdirectories,
+          )).map((candidate) => ({ ...candidate, regexSource: singlePattern })),
+        ));
     const scopedMatches = scopedMatchGroups.flat();
     // Typing in the exploratory regex field can issue scans in quick
     // succession. Ignore a slower, older scan instead of overwriting newer
@@ -1021,7 +1668,9 @@ class Ocr2mdApp implements vscode.Disposable {
     const tableMatches = moduleName === "未分类"
       ? []
       : this.searchTableRows.filter((candidate) =>
-          (candidate.typeLabel ?? "未分类") === "未分类" && patterns.some((singlePattern) => regexMatchesCandidate(candidate, singlePattern)),
+          (candidate.typeLabel ?? "未分类") === "未分类"
+          && (!exactChapterScope || candidate.sourcePath === this.chapterSectionScopePath)
+          && patterns.some((singlePattern) => regexMatchesCandidate(candidate, singlePattern)),
         );
     const matches = await this.excludeStructuralModuleMatches(
       moduleName,
@@ -1186,17 +1835,21 @@ class Ocr2mdApp implements vscode.Disposable {
       return;
     }
 
-    const moduleName = await vscode.window.showQuickPick(
-      ["未分类", "注释", "标题", "图片", "非法断行"],
-      { placeHolder: "将当前行加入哪个 ocr2md 模块？" },
-    );
-    if (!moduleName) {
+    const moduleName = this.activeWorkbenchModule;
+    if (["分句", "翻译设置"].includes(moduleName)) {
+      void vscode.window.showWarningMessage(`“${moduleName}”不是可直接加入行的数据表，请先切换到目标模块。`);
       return;
     }
 
-    const sourcePath = editor.document.uri.fsPath;
-    if (this.selectedFile?.path !== sourcePath) {
-      await this.selectFile(sourcePath, { preserveTable: this.searchTableRows.length > 0 });
+    const editorPath = editor.document.uri.fsPath;
+    const scopedTablePath = (moduleName === "图片" || moduleName === "注释")
+      ? this.chapterSectionScopePath
+      : undefined;
+    // A chapter module owns rows by the chapter file selected in the tree,
+    // while location still points at the actual document used for annotation.
+    const sourcePath = scopedTablePath ?? editorPath;
+    if (!scopedTablePath && this.selectedFile?.path !== editorPath) {
+      await this.selectFile(editorPath, { preserveTable: this.searchTableRows.length > 0 });
     }
 
     let lineNumber = editor.selection.active.line;
@@ -1208,6 +1861,12 @@ class Ocr2mdApp implements vscode.Disposable {
     const line = editor.document.lineAt(lineNumber);
     const linePreview = line.text.trimStart();
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const inferredLineType = moduleName === "章节标题"
+      ? chapterLineTypeForCandidate({ raw: line.text } as Candidate)
+      : moduleName === "章节定界"
+        ? (/^ {0,3}#(?!#)(?:\s+|$)/.test(line.text) ? "1 级标题" : "修改")
+        : defaultLineTypeForModule(moduleName, line.text)
+          ?? (moduleName === "注释" ? "注释引用" : undefined);
     const candidate: Candidate = {
       id: "",
       kind: "regex",
@@ -1218,34 +1877,51 @@ class Ocr2mdApp implements vscode.Disposable {
       sourcePath,
       sourceLabel: workspaceRoot ? path.relative(workspaceRoot, sourcePath) || path.basename(sourcePath) : path.basename(sourcePath),
       typeLabel: moduleName,
-      lineType: defaultLineTypeForModule(moduleName, line.text) ?? (moduleName === "注释" ? "注释引用" : undefined),
+      lineType: inferredLineType,
       annotationNumber: moduleName === "注释"
-        ? annotationNumberFromText(line.text, defaultLineTypeForModule(moduleName, line.text))
+        ? annotationNumberFromText(line.text, inferredLineType)
         : undefined,
+      isWorkingCorrection: true,
+      workingCopyPath: editorPath,
+      chapterBoundaryState: "modified",
       status: "候选",
     };
     const key = tableRowKey(candidate);
     this.deletedSidecarRowKeys.delete(key);
     candidate.id = `table-${key}`;
     const index = this.searchTableRows.findIndex((row) => tableRowKey(row) === key);
+    let tableCandidate: Candidate;
     if (index >= 0) {
       this.searchTableRows[index] = {
         ...this.searchTableRows[index],
         typeLabel: moduleName,
         lineType: candidate.lineType ?? this.searchTableRows[index].lineType,
         annotationNumber: candidate.annotationNumber || this.searchTableRows[index].annotationNumber,
+        isWorkingCorrection: true,
+        workingCopyPath: editorPath,
+        chapterBoundaryState: "modified",
       };
+      tableCandidate = this.searchTableRows[index];
     } else {
       this.searchTableRows.push(candidate);
       this.searchTableRows.sort(compareCandidatesByPosition);
+      tableCandidate = candidate;
     }
     this.searchTableActive = true;
-    this.updatePairPanel(candidate, undefined, true);
-    void vscode.window.showInformationMessage(`已将第 ${line.lineNumber + 1} 行加入“${moduleName}”模块。`);
+    this.pendingTableFocusId = tableCandidate.id;
+    this.updatePairPanel(tableCandidate, undefined, true);
+    await this.regexProvider.postMessage({ command: "focusTableRow", id: tableCandidate.id });
+    void vscode.window.showInformationMessage(`已将第 ${line.lineNumber + 1} 行加入当前“${moduleName}”数据表，并标记为变动行。`);
   }
 
   private setSearchRowsType(ids: string[], typeLabel: string) {
     const selectedIds = new Set(ids);
+    if (typeLabel === DELETED_LINE_TYPE) {
+      this.searchTableRows = markCandidatesDeleted(this.searchTableRows, selectedIds);
+      this.rebuildAnnotationPairs();
+      this.updatePairPanel();
+      return;
+    }
     if (typeLabel === "ignore") {
       const selectedSpellings = new Set(
         this.searchTableRows
@@ -1273,22 +1949,41 @@ class Ocr2mdApp implements vscode.Disposable {
       if (!selectedIds.has(candidate.id)) {
         return candidate;
       }
+      const nextLineType = isDeletedCandidate(candidate)
+        ? defaultLineTypeForModule(typeLabel, candidate.raw)
+        : typeLabel === "注释" ? candidate.lineType ?? "注释引用" : candidate.lineType;
       return {
         ...candidate,
         typeLabel,
         // The table displays this as the default already. Persist it as well so
         // future sidecar loads and exports do not lose the intended ref type.
-        lineType: typeLabel === "注释" ? candidate.lineType ?? "注释引用" : candidate.lineType,
+        lineType: nextLineType,
         annotationNumber: typeLabel === "注释"
-          ? candidate.annotationNumber || annotationNumberFromText(candidate.raw, candidate.lineType ?? "注释引用")
+          ? candidate.annotationNumber || annotationNumberFromText(candidate.raw, nextLineType ?? "注释引用")
           : candidate.annotationNumber,
       };
     });
     this.updatePairPanel();
   }
 
-  private setSearchRowsLineType(ids: string[], lineType: string) {
+  private async setSearchRowsLineType(ids: string[], lineType: string) {
     const selectedIds = new Set(ids);
+    if (lineType === DELETED_LINE_TYPE) {
+      this.searchTableRows = markCandidatesDeleted(this.searchTableRows, selectedIds);
+      this.rebuildAnnotationPairs();
+      this.updatePairPanel();
+      return;
+    }
+    const selectedChapterRows = this.searchTableRows.filter((candidate) =>
+      selectedIds.has(candidate.id)
+      && candidate.typeLabel === "章节标题"
+      && candidate.workingCopyPath,
+    );
+    if (selectedChapterRows.length && /^(?:[1-6] 级标题|非标题)$/.test(lineType)) {
+      if (!(await this.applyChapterHeadingLineType(selectedChapterRows, lineType))) {
+        return;
+      }
+    }
     const selectedSpellings = new Set(
       this.searchTableRows
         .filter((candidate) => selectedIds.has(candidate.id) && candidate.typeLabel === "拼写检查")
@@ -1325,6 +2020,50 @@ class Ocr2mdApp implements vscode.Disposable {
     this.updatePairPanel();
   }
 
+  /** Apply a chapter-table heading level directly to its editable Markdown file. */
+  private async applyChapterHeadingLineType(rows: Candidate[], lineType: string): Promise<boolean> {
+    const rowsByPath = new Map<string, Candidate[]>();
+    for (const row of rows) {
+      if (!row.workingCopyPath) continue;
+      rowsByPath.set(row.workingCopyPath, [...(rowsByPath.get(row.workingCopyPath) ?? []), row]);
+    }
+
+    for (const [workingPath, fileRows] of rowsByPath) {
+      const uri = vscode.Uri.file(workingPath);
+      const document = await vscode.workspace.openTextDocument(uri);
+      const edit = new vscode.WorkspaceEdit();
+      let editCount = 0;
+      for (const row of fileRows) {
+        if (row.range.line < 0 || row.range.line >= document.lineCount) continue;
+        const sourceLine = document.lineAt(row.range.line);
+        const current = sourceLine.text;
+        const withoutHeading = current.replace(/^ {0,3}#{1,6}(?:\s+|$)/, "");
+        const levelMatch = /^([1-6]) 级标题$/.exec(lineType);
+        const replacement = levelMatch
+          ? `${"#".repeat(Number(levelMatch[1]))} ${withoutHeading}`
+          : withoutHeading;
+        if (replacement === current) continue;
+        edit.replace(uri, sourceLine.range, replacement);
+        editCount += 1;
+      }
+      if (!editCount) continue;
+      if (!(await vscode.workspace.applyEdit(edit))) {
+        void vscode.window.showErrorMessage(`章节标题修改失败：${path.basename(workingPath)}`);
+        return false;
+      }
+      if (!(await document.save())) {
+        void vscode.window.showErrorMessage(`章节标题保存失败：${path.basename(workingPath)}`);
+        return false;
+      }
+      if (this.isChapterOutputPath(workingPath)) {
+        await this.refreshChapterOutputRows(uri);
+      } else if (this.chapterWorkingUri?.fsPath === workingPath) {
+        await this.refreshChapterWorkingRows();
+      }
+    }
+    return true;
+  }
+
   private setSearchRowsChapterFile(ids: string[], chapterFile: string) {
     const selectedIds = new Set(ids);
     this.searchTableRows = this.searchTableRows.map((candidate) =>
@@ -1344,7 +2083,9 @@ class Ocr2mdApp implements vscode.Disposable {
   private assignAnnotationsToChapterFiles(options: { silent?: boolean } = {}) {
     this.rebuildAnnotationPairs();
     const titleRows = this.searchTableRows
-      .filter((row) => row.typeLabel === "标题" && row.chapterFile?.trim() && row.sourcePath)
+      .filter((row) =>
+        row.typeLabel === "标题" && !isDeletedCandidate(row) && row.chapterFile?.trim() && row.sourcePath
+      )
       .sort(compareCandidatesByGlobalPosition);
     if (!titleRows.length) {
       if (!options.silent) {
@@ -1533,8 +2274,12 @@ class Ocr2mdApp implements vscode.Disposable {
     this.deletedSidecarRowKeys.clear();
     this.searchTableActive = this.searchTableRows.length > 0;
     this.updatePairPanel(undefined, undefined, true);
-    const hasConfiguredTitles = this.searchTableRows.some((row) => row.typeLabel === "标题" && row.chapterFile?.trim());
-    const annotationRows = this.searchTableRows.filter((row) => row.typeLabel === "注释");
+    const hasConfiguredTitles = this.searchTableRows.some((row) =>
+      row.typeLabel === "标题" && !isDeletedCandidate(row) && row.chapterFile?.trim()
+    );
+    const annotationRows = this.searchTableRows.filter((row) =>
+      row.typeLabel === "注释" && !isDeletedCandidate(row)
+    );
     if (
       hasConfiguredTitles &&
       annotationRows.length > 0 &&
@@ -1558,7 +2303,9 @@ class Ocr2mdApp implements vscode.Disposable {
     }
 
     const selectedIds = new Set(ids);
-    const rows = this.searchTableRows.filter((candidate) => selectedIds.has(candidate.id));
+    const rows = this.searchTableRows.filter((candidate) =>
+      selectedIds.has(candidate.id) && !isDeletedCandidate(candidate)
+    );
     if (!rows.length) {
       return;
     }
@@ -1716,47 +2463,58 @@ class Ocr2mdApp implements vscode.Disposable {
         mergedRows.set(key, candidate);
       }
     }
-    const rowsToSave = [...mergedRows.values()].sort(compareCandidatesByPosition);
+    const rowsToSave = [...mergedRows.values()]
+      .map((candidate) => candidate.typeLabel === "图片"
+        ? { ...candidate, lineType: normalizeImageLineType(candidate.raw, candidate.lineType) }
+        : candidate)
+      .sort(compareCandidatesByPosition);
     const annotationPairsToSave = currentModuleNames.has("注释")
       ? this.annotationPairs
       : previouslySaved.annotationPairs;
-    const sidecar = {
+    const savedAt = new Date().toISOString();
+    const normalizedRows: AnnotationSidecarRow[] = rowsToSave.map((candidate) => ({
+      id: candidate.id,
+      rowId: candidate.rowId ?? candidate.id,
+      atomId: candidate.atomId ?? candidate.rowId ?? candidate.id,
+      anchorTextHash: candidate.anchorTextHash,
+      anchorPreviousHash: candidate.anchorPreviousHash,
+      anchorNextHash: candidate.anchorNextHash,
+      kind: candidate.kind,
+      typeLabel: candidate.typeLabel ?? "未分类",
+      lineType: candidate.lineType,
+      chapterFile: candidate.chapterFile,
+      localPath: candidate.localPath,
+      suggestions: candidate.suggestions,
+      replacement: candidate.typeLabel === "拼写检查" && candidate.replacement
+        ? normalizeSpellingReplacement(candidate.replacement)
+        : candidate.replacement,
+      // Older table rows may not have stored source metadata. Persist the
+      // current file in that case so a workspace-level reload remains
+      // navigable after switching source documents.
+      sourcePath: candidate.sourcePath ?? this.selectedFile?.path,
+      sourceLabel: candidate.sourceLabel ?? path.basename(candidate.sourcePath ?? this.selectedFile?.path ?? ""),
+      label: candidate.label,
+      raw: candidate.raw,
+      preview: candidate.preview,
+      regexSource: candidate.regexSource,
+      annotationNumber: candidate.annotationNumber,
+      isWorkingCorrection: candidate.isWorkingCorrection,
+      workingCopyPath: candidate.workingCopyPath,
+      sourceLine: candidate.sourceLine,
+      line: candidate.range.line,
+      start: candidate.range.start,
+      endLine: candidate.range.endLine,
+      end: candidate.range.end,
+    }));
+    const ignoredSpellings = [...this.ignoredSpellingKeys].sort((left, right) => left.localeCompare(right, "en"));
+    const sidecar: AnnotationSidecar = {
       schemaVersion: 1,
       sourceFile: this.selectedFile?.path ?? workspaceFolder.uri.fsPath,
-      savedAt: new Date().toISOString(),
-      rows: rowsToSave.map((candidate) => ({
-        id: candidate.id,
-        kind: candidate.kind,
-        typeLabel: candidate.typeLabel ?? "未分类",
-        lineType: candidate.lineType,
-        chapterFile: candidate.chapterFile,
-        localPath: candidate.localPath,
-        suggestions: candidate.suggestions,
-        replacement: candidate.typeLabel === "拼写检查" && candidate.replacement
-          ? normalizeSpellingReplacement(candidate.replacement)
-          : candidate.replacement,
-        // Older table rows may not have stored source metadata. Persist the
-        // current file in that case so a workspace-level reload remains
-        // navigable after switching source documents.
-        sourcePath: candidate.sourcePath ?? this.selectedFile?.path,
-        sourceLabel: candidate.sourceLabel ?? path.basename(candidate.sourcePath ?? this.selectedFile?.path ?? ""),
-        label: candidate.label,
-        raw: candidate.raw,
-        preview: candidate.preview,
-        regexSource: candidate.regexSource,
-        annotationNumber: candidate.annotationNumber,
-        isWorkingCorrection: candidate.isWorkingCorrection,
-        workingCopyPath: candidate.workingCopyPath,
-        sourceLine: candidate.sourceLine,
-        line: candidate.range.line,
-        start: candidate.range.start,
-        endLine: candidate.range.endLine,
-        end: candidate.range.end,
-      })),
+      savedAt,
+      rows: normalizedRows,
       annotationPairs: annotationPairsToSave,
-      ignoredSpellings: [...this.ignoredSpellingKeys].sort((left, right) => left.localeCompare(right, "en")),
+      ignoredSpellings,
     };
-    const fileSidecarUri = this.selectedFile ? annotationSidecarUri(this.selectedFile) : undefined;
     const workspaceSidecarUri = vscode.Uri.joinPath(workspaceFolder.uri, ".ocr2md", "annotations.json");
     try {
       const encodedSidecar = Buffer.from(JSON.stringify(sidecar, null, 2), "utf8");
@@ -1771,18 +2529,45 @@ class Ocr2mdApp implements vscode.Disposable {
         // The first save has no workspace sidecar to back up.
       }
       await vscode.workspace.fs.writeFile(workspaceSidecarUri, encodedSidecar);
-      if (fileSidecarUri) {
-        await vscode.workspace.fs.writeFile(fileSidecarUri, encodedSidecar);
+
+      const candidateSourceById = new Map(normalizedRows.map((row) => [row.id, row.sourcePath]));
+      const markedSourcePaths = new Set(
+        normalizedRows
+          .map((row) => row.sourcePath)
+          .filter((sourcePath): sourcePath is string => Boolean(sourcePath)),
+      );
+      if (this.selectedFile?.path) {
+        markedSourcePaths.add(this.selectedFile.path);
+      }
+      let savedFileCount = 0;
+      for (const sourcePath of [...markedSourcePaths].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))) {
+        const fileRows = normalizedRows.filter((row) => row.sourcePath === sourcePath);
+        const filePairs = annotationPairsToSave.filter((pair) =>
+          candidateSourceById.get(pair.refCandidateId ?? "") === sourcePath
+          || candidateSourceById.get(pair.bodyCandidateId ?? "") === sourcePath,
+        );
+        const fileSidecar: AnnotationSidecar = {
+          schemaVersion: 1,
+          sourceFile: sourcePath,
+          savedAt,
+          rows: fileRows,
+          annotationPairs: filePairs,
+          ignoredSpellings,
+        };
+        await vscode.workspace.fs.writeFile(
+          annotationSidecarUri({ label: path.basename(sourcePath), path: sourcePath }),
+          Buffer.from(JSON.stringify(fileSidecar, null, 2), "utf8"),
+        );
+        savedFileCount += 1;
       }
       this.searchTableRows = rowsToSave;
       this.annotationPairs = annotationPairsToSave;
       this.searchTableActive = this.searchTableRows.length > 0;
       this.deletedSidecarRowKeys.clear();
       this.updatePairPanel(undefined, undefined, true);
-      const savedLocation = fileSidecarUri
-        ? `${path.basename(fileSidecarUri.fsPath)} 和 .ocr2md/annotations.json`
-        : ".ocr2md/annotations.json";
-      void vscode.window.showInformationMessage(`ocr2md 标定已保存：${savedLocation}`);
+      void vscode.window.showInformationMessage(
+        `ocr2md 标定已全部保存：${savedFileCount} 份文件配置及 .ocr2md/annotations.json`,
+      );
     } catch (error) {
       void vscode.window.showErrorMessage(`ocr2md 标定保存失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1805,7 +2590,12 @@ class Ocr2mdApp implements vscode.Disposable {
 
     try {
       this.rebuildAnnotationPairs();
-      const configuredTitles = this.searchTableRows.filter((row) =>
+      const activeRows = activeCandidates(this.searchTableRows);
+      if (!activeRows.length) {
+        void vscode.window.showWarningMessage("数据表没有有效标定行，无法生成订正输出。");
+        return;
+      }
+      const configuredTitles = activeRows.filter((row) =>
         row.typeLabel === "标题" && row.chapterFile?.trim() && row.sourcePath
       );
       const sourcePaths = [...new Set(configuredTitles.map((row) => row.sourcePath!))].sort(compareSourcePaths);
@@ -1818,7 +2608,7 @@ class Ocr2mdApp implements vscode.Disposable {
         sourceLines.push(...lines);
         if (index < sourcePaths.length - 1) sourceLines.push("");
       }
-      const globalRows = this.searchTableRows.flatMap((row) => {
+      const globalRows = activeRows.flatMap((row) => {
         const sourcePath = row.sourcePath ?? this.selectedFile?.path;
         const offset = sourcePath ? sourceOffsets.get(sourcePath) : undefined;
         return offset === undefined ? [] : [shiftCandidateToGlobalSource(row, offset)];
@@ -1831,8 +2621,8 @@ class Ocr2mdApp implements vscode.Disposable {
 
       const unassignedPairs = this.annotationPairs.filter((pair) => {
         if (!pair.refCandidateId || !pair.bodyCandidateId) return true;
-        const ref = this.searchTableRows.find((row) => row.id === pair.refCandidateId);
-        const body = this.searchTableRows.find((row) => row.id === pair.bodyCandidateId);
+        const ref = activeRows.find((row) => row.id === pair.refCandidateId);
+        const body = activeRows.find((row) => row.id === pair.bodyCandidateId);
         return !ref?.chapterFile || ref.chapterFile !== body?.chapterFile;
       });
       if (unassignedPairs.length) {
@@ -1846,7 +2636,7 @@ class Ocr2mdApp implements vscode.Disposable {
       const outputDirectory = vscode.Uri.joinPath(workspaceFolder.uri, "output");
       await vscode.workspace.fs.createDirectory(outputDirectory);
       const outputTimestamp = formatLocalIsoTimestamp(new Date());
-      const confirmedSpellingPolicies = this.searchTableRows.filter((row) =>
+      const confirmedSpellingPolicies = activeRows.filter((row) =>
         row.typeLabel === "拼写检查" && row.lineType === "已确认" && row.raw && row.replacement?.trim()
       );
       let applied = relocation.applied + workingRefResult.applied;
@@ -1911,7 +2701,12 @@ class Ocr2mdApp implements vscode.Disposable {
           .map(spellingKey),
       );
       return payload.rows.map((row) => ({
-        id: row.id,
+        id: row.rowId ?? row.id,
+        rowId: row.rowId ?? row.id,
+        atomId: row.atomId ?? row.rowId ?? row.id,
+        anchorTextHash: row.anchorTextHash,
+        anchorPreviousHash: row.anchorPreviousHash,
+        anchorNextHash: row.anchorNextHash,
         kind: row.kind ?? "regex",
         label: row.label,
         raw: row.raw,
@@ -2063,11 +2858,36 @@ class Ocr2mdApp implements vscode.Disposable {
   private async revealWorkingCopyCandidate(candidate: Candidate) {
     if (!candidate.workingCopyPath) return;
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(candidate.workingCopyPath));
-    const editor = await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Two, preserveFocus: false });
-    const range = toVsCodeRange(candidate.range);
+    const relocated = reanchorCandidateToText(candidate, document.getText());
+    const identity = candidate.rowId ?? candidate.id;
+    this.searchTableRows = this.searchTableRows.map((row) =>
+      (row.rowId ?? row.id) === identity ? relocated : row,
+    );
+    const editor = await this.showDocumentInRightPane(document);
+    const range = toVsCodeRange(relocated.range);
     editor.selection = new vscode.Selection(range.start, range.end);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
     this.applyHeadingDecorations(editor);
+  }
+
+  /** Reuse the right-hand source editor so table navigation never creates tabs. */
+  private async showDocumentInRightPane(document: vscode.TextDocument): Promise<vscode.TextEditor> {
+    const sameDocument = (editor: vscode.TextEditor) => editor.document.uri.toString() === document.uri.toString();
+    const existing = vscode.window.visibleTextEditors.find(
+      (editor) => sameDocument(editor) && editor.viewColumn === vscode.ViewColumn.Two,
+    ) ?? vscode.window.visibleTextEditors.find(sameDocument);
+    if (existing) {
+      return vscode.window.showTextDocument(existing.document, {
+        preview: false,
+        viewColumn: existing.viewColumn,
+        preserveFocus: false,
+      });
+    }
+    return vscode.window.showTextDocument(document, {
+      preview: false,
+      viewColumn: vscode.ViewColumn.Two,
+      preserveFocus: false,
+    });
   }
 
   private async openCandidateSource(candidate: Candidate) {
@@ -2255,7 +3075,8 @@ class Ocr2mdApp implements vscode.Disposable {
       return;
     }
 
-    const eligibleBlocks = this.searchTableRows.filter(isTranslatableTextBlock);
+    const activeRows = activeCandidates(this.searchTableRows);
+    const eligibleBlocks = activeRows.filter(isTranslatableTextBlock);
     const generatedSentences = scanSentencesInTextBlocks(eligibleBlocks);
     const existingById = new Map(this.sentenceRows.map((row) => [row.id, row]));
     const currentSentences = generatedSentences.map((row) => {
@@ -2267,7 +3088,7 @@ class Ocr2mdApp implements vscode.Disposable {
     this.sentenceRows = currentSentences;
 
     const output = translationExportPaths(this.selectedFile);
-    const units = buildObsidianTranslationUnits(this.selectedFileText, this.searchTableRows, currentSentences);
+    const units = buildObsidianTranslationUnits(this.selectedFileText, activeRows, currentSentences);
     const bundle = renderObsidianTranslationBundle({
       units,
       sourceLinkTarget: output.sourceLinkTarget,
@@ -2449,7 +3270,7 @@ class Ocr2mdApp implements vscode.Disposable {
         break;
       case "setRowsLineType":
         if (Array.isArray(message.ids) && typeof message.lineType === "string") {
-          this.setSearchRowsLineType(message.ids, message.lineType);
+          await this.setSearchRowsLineType(message.ids, message.lineType);
         }
         break;
       case "confirmAnnotationPairs":
@@ -2523,6 +3344,9 @@ class Ocr2mdApp implements vscode.Disposable {
         break;
       case "exportCorrectedMarkdown":
         await this.exportCorrectedMarkdown();
+        break;
+      case "exportChapterBoundaryChapters":
+        await this.exportChapterBoundaryChapters();
         break;
       case "locateRef":
         if (typeof message.id === "string") {
@@ -2631,7 +3455,10 @@ class Ocr2mdApp implements vscode.Disposable {
   }
 
   private isPreviewDocument(uri: vscode.Uri): boolean {
-    return uri.scheme === readonlyScheme || uri.toString() === this.workingCopyUri?.toString() || (!!this.selectedFile && uri.fsPath === this.selectedFile.path);
+    return uri.scheme === readonlyScheme
+      || uri.toString() === this.workingCopyUri?.toString()
+      || uri.toString() === this.chapterWorkingUri?.toString()
+      || (!!this.selectedFile && uri.fsPath === this.selectedFile.path);
   }
 
   private rebuildAnnotationPairs() {
@@ -2655,7 +3482,9 @@ class Ocr2mdApp implements vscode.Disposable {
     const refsByNumber = new Map<string, Candidate[]>();
     const bodies: Candidate[] = [];
     const sourcePathFor = (row: Candidate) => row.sourcePath ?? this.selectedFile?.path ?? "";
-    const annotationRows = this.searchTableRows.filter((row) => row.typeLabel === "注释" && row.lineType !== "忽略");
+    const annotationRows = this.searchTableRows.filter((row) =>
+      row.typeLabel === "注释" && row.lineType !== "忽略" && !isDeletedCandidate(row)
+    );
     const sourcePaths = [...new Set(annotationRows.map(sourcePathFor))].sort((left, right) =>
       path.basename(left).localeCompare(path.basename(right), "zh-CN", { numeric: true }) || left.localeCompare(right),
     );
@@ -2847,9 +3676,13 @@ class Ocr2mdDirectoryProvider implements vscode.TreeDataProvider<Ocr2mdDirectory
       return element.children;
     }
 
+    const allFiles = this.getFiles();
+    const chaptersDirectory = path.join(workspaceFolder.uri.fsPath, "chapters");
+    const chapterFiles = allFiles.filter((file) => isSameOrChildPath(chaptersDirectory, file.path));
+    const sourceFiles = allFiles.filter((file) => !isSameOrChildPath(chaptersDirectory, file.path));
     const root = buildDirectoryTree(
       workspaceFolder.name.toUpperCase(),
-      this.getFiles(),
+      sourceFiles,
       this.getSelectedFilePath(),
       workspaceFolder.uri.fsPath,
     );
@@ -2862,12 +3695,30 @@ class Ocr2mdDirectoryProvider implements vscode.TreeDataProvider<Ocr2mdDirectory
       );
     }
     const translationRoot = buildTranslationTree(
-      this.getFiles(),
+      sourceFiles,
       this.getTranslationNodePaths(),
       this.getSelectedFilePath(),
     );
+    const chaptersRoot = buildDirectoryTree(
+      "chapters",
+      chapterFiles.map((file) => ({
+        ...file,
+        label: path.relative(chaptersDirectory, file.path),
+      })),
+      this.getSelectedFilePath(),
+      chaptersDirectory,
+    );
+    addChapterSectionNodes(chaptersRoot);
+    if (!chaptersRoot.children.length) {
+      chaptersRoot.children.push(new Ocr2mdDirectoryItem(
+        "暂无章节文件",
+        "empty",
+        vscode.TreeItemCollapsibleState.None,
+      ));
+    }
     return [
       root,
+      chaptersRoot,
       translationRoot,
       new Ocr2mdDirectoryItem("打开其他工作目录...", "empty", vscode.TreeItemCollapsibleState.None, {
         command: "ocr2md.pickFolder",
@@ -2882,7 +3733,7 @@ class Ocr2mdDirectoryItem extends vscode.TreeItem {
 
   constructor(
     label: string,
-    readonly kind: "folder" | "file" | "translationRoot" | "translationFolder" | "translationFile" | "empty",
+    readonly kind: "folder" | "file" | "chapterSection" | "translationRoot" | "translationFolder" | "translationFile" | "empty",
     collapsibleState: vscode.TreeItemCollapsibleState,
     command?: vscode.Command,
     readonly filePath?: string,
@@ -2896,10 +3747,41 @@ class Ocr2mdDirectoryItem extends vscode.TreeItem {
         ? new vscode.ThemeIcon("folder")
         : kind === "file" || kind === "translationFile"
           ? new vscode.ThemeIcon("markdown")
+          : kind === "chapterSection"
+            ? new vscode.ThemeIcon("symbol-structure")
           : kind === "translationRoot"
             ? new vscode.ThemeIcon("globe")
           : new vscode.ThemeIcon("info");
   }
+}
+
+function addChapterSectionNodes(item: Ocr2mdDirectoryItem) {
+  if (item.kind === "file" && item.filePath) {
+    item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+    const sections: Array<[string, string, string]> = [
+      ["章节标题", "章节标题", "symbol-class"],
+      ["注释及引用", "注释", "references"],
+      ["图片", "图片", "file-media"],
+    ];
+    sections.forEach(([label, moduleName, icon]) => {
+      const child = new Ocr2mdDirectoryItem(
+        label,
+        "chapterSection",
+        vscode.TreeItemCollapsibleState.None,
+        {
+          command: "ocr2md.openChapterSection",
+          title: `打开${label}`,
+          arguments: [item.filePath, moduleName],
+        },
+        item.filePath,
+        item.filePath,
+      );
+      child.iconPath = new vscode.ThemeIcon(icon);
+      item.children.push(child);
+    });
+    return;
+  }
+  item.children.forEach(addChapterSectionNodes);
 }
 
 function buildDirectoryTree(
@@ -3307,6 +4189,39 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+async function workspaceFileExists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+interface ChapterBoundaryManifest {
+  schemaVersion: number;
+  createdAt?: string;
+}
+
+async function readChapterBoundaryManifest(uri: vscode.Uri): Promise<ChapterBoundaryManifest | undefined> {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as Partial<ChapterBoundaryManifest>;
+    return typeof value.schemaVersion === "number"
+      ? { schemaVersion: value.schemaVersion, createdAt: value.createdAt }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function chapterBoundaryStateLabel(state: "heading" | "added" | "modified" | "deleted"): string {
+  if (state === "added") return "新增";
+  if (state === "modified") return "修改";
+  if (state === "deleted") return "删除";
+  return "1 级标题";
+}
+
 class Ocr2mdRegexProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
 
@@ -3345,6 +4260,7 @@ class Ocr2mdRegexProvider implements vscode.WebviewViewProvider {
 
 interface WebviewMessage {
   command?: string;
+  message?: string;
   id?: string;
   ids?: string[];
   path?: string;
@@ -3377,6 +4293,11 @@ interface AnnotationSidecar {
 
 interface AnnotationSidecarRow {
   id: string;
+  rowId?: string;
+  atomId?: string;
+  anchorTextHash?: string;
+  anchorPreviousHash?: string;
+  anchorNextHash?: string;
   kind?: Candidate["kind"];
   typeLabel?: string;
   lineType?: string;
@@ -3683,6 +4604,131 @@ function tableRowKey(candidate: Candidate): string {
   return `${candidate.sourcePath ?? ""}:${candidate.range.line}:${candidate.range.start}:${candidate.range.endLine ?? candidate.range.line}:${candidate.range.end}:${candidate.raw}`;
 }
 
+function candidateAnchorHash(value: string): string {
+  return createHash("sha256")
+    .update(value.replace(/\r\n?/g, "\n").trim().replace(/[ \t]+/g, " "))
+    .digest("hex")
+    .slice(0, 20);
+}
+
+function candidateSemanticKey(candidate: Candidate): string {
+  const normalized = candidate.raw.replace(/\r\n?/g, "\n").trim().replace(/[ \t]+/g, " ");
+  const heading = /^#{1,6}\s+(.+)$/.exec(normalized);
+  return candidateAnchorHash(heading ? `heading:${heading[1].trim()}` : normalized);
+}
+
+function neighboringNonEmptyLine(lines: string[], from: number, direction: -1 | 1): string | undefined {
+  for (let index = from; index >= 0 && index < lines.length; index += direction) {
+    if (lines[index].trim()) return lines[index];
+  }
+  return undefined;
+}
+
+function withCandidateAnchors(candidate: Candidate, text: string): Candidate {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const endLine = candidate.range.endLine ?? candidate.range.line;
+  const previous = neighboringNonEmptyLine(lines, candidate.range.line - 1, -1);
+  const next = neighboringNonEmptyLine(lines, endLine + 1, 1);
+  return {
+    ...candidate,
+    rowId: candidate.rowId ?? candidate.id,
+    atomId: candidate.atomId ?? candidate.rowId ?? candidate.id,
+    anchorTextHash: candidateAnchorHash(candidate.raw),
+    anchorPreviousHash: previous === undefined ? undefined : candidateAnchorHash(previous),
+    anchorNextHash: next === undefined ? undefined : candidateAnchorHash(next),
+  };
+}
+
+function reanchorCandidateToText(candidate: Candidate, text: string): Candidate {
+  if (!candidate.raw) return withCandidateAnchors(candidate, text);
+  const normalizedText = text.replace(/\r\n?/g, "\n");
+  const occurrences: number[] = [];
+  for (let offset = normalizedText.indexOf(candidate.raw); offset >= 0; offset = normalizedText.indexOf(candidate.raw, offset + Math.max(1, candidate.raw.length))) {
+    occurrences.push(offset);
+  }
+  if (!occurrences.length) return withCandidateAnchors(candidate, normalizedText);
+
+  const expectedOffset = textOffsetAtPosition(normalizedText, candidate.range.line, candidate.range.start);
+  let selectedOffset = occurrences[0];
+  let selectedScore = Number.NEGATIVE_INFINITY;
+  for (const offset of occurrences) {
+    const start = positionAtTextOffset(normalizedText, offset);
+    const end = positionAtTextOffset(normalizedText, offset + candidate.raw.length);
+    const probe = withCandidateAnchors({ ...candidate, range: { line: start.line, start: start.character, endLine: end.line, end: end.character } }, normalizedText);
+    const contextScore = (candidate.anchorPreviousHash && probe.anchorPreviousHash === candidate.anchorPreviousHash ? 100000 : 0)
+      + (candidate.anchorNextHash && probe.anchorNextHash === candidate.anchorNextHash ? 100000 : 0);
+    const score = contextScore - Math.abs(offset - expectedOffset);
+    if (score > selectedScore) {
+      selectedScore = score;
+      selectedOffset = offset;
+    }
+  }
+  const start = positionAtTextOffset(normalizedText, selectedOffset);
+  const end = positionAtTextOffset(normalizedText, selectedOffset + candidate.raw.length);
+  return withCandidateAnchors({
+    ...candidate,
+    range: { line: start.line, start: start.character, endLine: end.line, end: end.character },
+  }, normalizedText);
+}
+
+function reconcileStableCandidateRows(
+  previousRows: Candidate[],
+  nextRows: Candidate[],
+  text: string,
+  namespace: string,
+  preserveLineType = false,
+): Candidate[] {
+  const previous = previousRows.map((row) => row.anchorTextHash
+    ? { ...row, rowId: row.rowId ?? row.id, atomId: row.atomId ?? row.rowId ?? row.id }
+    : withCandidateAnchors(row, text));
+  const next = nextRows.map((row) => withCandidateAnchors(row, text));
+  const unmatched = new Set(previous.map((_, index) => index));
+  const assignments = new Map<number, number>();
+  const assignPass = (matches: (old: Candidate, candidate: Candidate) => boolean) => {
+    next.forEach((candidate, nextIndex) => {
+      if (assignments.has(nextIndex)) return;
+      const matchIndex = [...unmatched]
+        .filter((index) => matches(previous[index], candidate))
+        .sort((left, right) =>
+          Math.abs(previous[left].range.line - candidate.range.line) - Math.abs(previous[right].range.line - candidate.range.line),
+        )[0];
+      if (matchIndex === undefined) return;
+      unmatched.delete(matchIndex);
+      assignments.set(nextIndex, matchIndex);
+    });
+  };
+  // Reserve unchanged atoms first so an inserted neighbor cannot steal their
+  // identity during the looser semantic/context passes.
+  assignPass((old, candidate) => old.anchorTextHash === candidate.anchorTextHash);
+  assignPass((old, candidate) => candidateSemanticKey(old) === candidateSemanticKey(candidate));
+  assignPass((old, candidate) => Boolean(
+    (candidate.anchorPreviousHash && old.anchorPreviousHash === candidate.anchorPreviousHash)
+    || (candidate.anchorNextHash && old.anchorNextHash === candidate.anchorNextHash),
+  ));
+
+  return next.map((candidate, nextIndex) => {
+    const matchIndex = assignments.get(nextIndex);
+    if (matchIndex !== undefined) {
+      const old = previous[matchIndex];
+      const rowId = old.rowId ?? old.id;
+      return {
+        ...candidate,
+        id: rowId,
+        rowId,
+        atomId: old.atomId ?? rowId,
+        chapterFile: candidate.chapterFile ?? old.chapterFile,
+        localPath: candidate.localPath ?? old.localPath,
+        lineType: isDeletedCandidate(old)
+          ? DELETED_LINE_TYPE
+          : preserveLineType ? old.lineType ?? candidate.lineType : candidate.lineType,
+      };
+    }
+    const atomId = `atom-${namespace}-${randomUUID()}`;
+    const rowId = `row-${namespace}-${randomUUID()}`;
+    return { ...candidate, id: rowId, rowId, atomId };
+  });
+}
+
 function spellingKey(word: string): string {
   return word.trim().toLocaleLowerCase("en");
 }
@@ -3711,6 +4757,27 @@ function isOcrCorrectedMarkdown(text: string): boolean {
   return lines
     .slice(1, closingIndex + 1)
     .some((line) => /^\s*ocr2md_corrected\s*:\s*(?:true|"true"|'true')\s*(?:#.*)?$/i.test(line));
+}
+
+function chapterLineTypeForCandidate(candidate: Candidate): string {
+  const raw = candidate.raw.trim();
+  const heading = /^(#{1,6})\s+/.exec(raw);
+  if (heading) {
+    return `${heading[1].length} 级标题`;
+  }
+  if (candidate.lineType === "合成.图片" || /!\[[^\]]*\]\([^)]*\)|!\[\[[^\]]+\]\]|<img\b/i.test(raw)) {
+    return "图像";
+  }
+  if (candidate.lineType === "注释正文" || /^\s*(?:\[\^\d+\]:|\d+\.|\(\d+\))\s+/.test(raw)) {
+    return "注释正文";
+  }
+  if (/<sup>\s*\(?\s*\d+\s*\)?\s*<\/sup>|\[\^\d+\](?!:)/i.test(raw)) {
+    return "注释引用";
+  }
+  if (candidate.lineType?.startsWith("latex") || /^(?:\$\$|\\\[|\\begin\{|\\\()/.test(raw)) {
+    return "LaTeX";
+  }
+  return "非标题";
 }
 
 function scanTextBlocks(text: string): Candidate[] {
@@ -4203,10 +5270,10 @@ function compareCandidatesByGlobalPosition(left: Candidate, right: Candidate): n
 
 function defaultLineTypeForModule(moduleName: string, raw: string): string | undefined {
   if (moduleName === "注释") {
-    if (/<sup>\s*\(?\s*\d+\s*\)?\s*<\/sup>|\[\^\d+\](?!:)/i.test(raw)) {
+    if (/<sup>\s*\(?\s*\d+\s*\)?\s*<\/sup>|\[\^\d+\](?!:)|\[\*\d+\]/i.test(raw)) {
       return "注释引用";
     }
-    if (/^\s*(?:\d+\.\s+|\(\d+\)(?:\s|$)|\[\^\d+\]:\s+)/.test(raw)) {
+    if (/^\s*(?:\d+\.\s+|\(\d+\)(?:\s|$)|\[\^\d+\]:\s+|\*\d+(?:\s|$))/.test(raw)) {
       return "注释正文";
     }
     return "注释引用";
@@ -4215,9 +5282,22 @@ function defaultLineTypeForModule(moduleName: string, raw: string): string | und
     const match = /^(#{1,6})\s+/.exec(raw);
     return match ? ["一级", "二级", "三级", "四级", "五级", "六级"][match[1].length - 1] : "非标题";
   }
-  if (moduleName === "图片") return "图片引用";
+  if (moduleName === "图片") return normalizeImageLineType(raw);
   if (moduleName === "非法断行") return "断行候选";
   return undefined;
+}
+
+function normalizeImageLineType(raw: string, lineType?: string): string {
+  if (lineType === DELETED_LINE_TYPE) return DELETED_LINE_TYPE;
+  if (["图片标题", "图片链接", "图片文本", "图片HTML"].includes(lineType ?? "")) {
+    return lineType as string;
+  }
+  if (lineType === "图片引用") return "图片链接";
+  if (lineType === "图片说明" || lineType === "图片正文") return "图片文本";
+  if (/<\s*(?:img|picture|figure|source)\b/i.test(raw)) return "图片HTML";
+  if (/!\[[^\]]*\]\([^\)]+\)|!\[\[[^\]]+\]\]/.test(raw)) return "图片链接";
+  if (/^\s*(?:#{1,6}\s*)?(?:figure|fig\.?|图)\s*(?:\d|[IVXLCDM])/i.test(raw)) return "图片标题";
+  return "图片文本";
 }
 
 function splitModuleRegexPatterns(input: string): string[] {
@@ -4245,7 +5325,7 @@ interface ChapterOutputSegment {
 function buildChapterOutputSegments(rows: Candidate[], lineCount: number): ChapterOutputSegment[] {
   const chapterStarts = new Map<string, number>();
   for (const row of rows) {
-    if (row.typeLabel !== "标题" || !row.chapterFile?.trim()) {
+    if (isDeletedCandidate(row) || row.typeLabel !== "标题" || !row.chapterFile?.trim()) {
       continue;
     }
     const fileName = outputChapterFileName(row.chapterFile);
@@ -4458,6 +5538,47 @@ function withOcrCorrectionFrontMatter(markdown: string, outputTimestamp: string)
   return ["---", ...frontMatter, lines[endIndex], ...lines.slice(endIndex + 1)].join("\n");
 }
 
+function withChapterSplitFrontMatter(
+  markdown: string,
+  outputTimestamp: string,
+  chapterFile: string,
+  workingFile: string,
+): string {
+  const normalized = markdown.replace(/^\uFEFF/, "");
+  const lines = normalized.split("\n");
+  const hasFrontMatter = lines[0]?.trim() === "---";
+  const upsertedFields = [
+    ["ocr2md_chapter_split", "true"],
+    ["ocr2md_chapter_split_at", JSON.stringify(outputTimestamp)],
+    ["ocr2md_chapter_file", JSON.stringify(chapterFile)],
+    ["ocr2md_chapter_source", JSON.stringify(workingFile)],
+  ] as const;
+  if (!hasFrontMatter) {
+    return [
+      "---",
+      ...upsertedFields.map(([key, value]) => `${key}: ${value}`),
+      "---",
+      "",
+      normalized,
+    ].join("\n");
+  }
+
+  const closingOffset = lines.slice(1).findIndex((line) => /^(?:---|\.\.\.)\s*$/.test(line.trim()));
+  if (closingOffset < 0) {
+    // Preserve malformed user YAML verbatim and still attach a valid chapter
+    // marker instead of attempting to parse or repair it.
+    return withChapterSplitFrontMatter(`\n${normalized}`, outputTimestamp, chapterFile, workingFile);
+  }
+  const closingIndex = closingOffset + 1;
+  const frontMatter = lines.slice(1, closingIndex);
+  for (const [key, value] of upsertedFields) {
+    const index = frontMatter.findIndex((line) => new RegExp(`^${escapeRegex(key)}\\s*:`).test(line));
+    if (index >= 0) frontMatter[index] = `${key}: ${value}`;
+    else frontMatter.push(`${key}: ${value}`);
+  }
+  return ["---", ...frontMatter, lines[closingIndex], ...lines.slice(closingIndex + 1)].join("\n");
+}
+
 function formatLocalIsoTimestamp(date: Date): string {
   const pad = (value: number, width = 2) => String(value).padStart(width, "0");
   const offsetMinutes = -date.getTimezoneOffset();
@@ -4474,17 +5595,19 @@ function applyMarkdownCorrections(
   rows: Candidate[],
   spellingPolicies: Candidate[] = rows,
 ): { text: string; applied: number; skipped: string[] } {
+  const activeRows = activeCandidates(rows);
+  const activeSpellingPolicies = activeCandidates(spellingPolicies);
   const lines = sourceText.split(/\r?\n/);
   const skipped: string[] = [];
   let applied = 0;
 
-  const spellingResult = applyConfirmedSpellingCorrections(lines, spellingPolicies);
+  const spellingResult = applyConfirmedSpellingCorrections(lines, activeSpellingPolicies);
   applied += spellingResult.applied;
   skipped.push(...spellingResult.skipped);
 
   // These edits preserve line count, so the stored line positions remain valid
   // until the final pass that joins confirmed illegal line breaks.
-  for (const row of rows) {
+  for (const row of activeRows) {
     if (row.typeLabel === "拼写检查" || row.isWorkingCorrection) {
       continue;
     }
@@ -4541,7 +5664,7 @@ function applyMarkdownCorrections(
     }
   }
 
-  const confirmedBreaks = rows
+  const confirmedBreaks = activeRows
     .filter((row) => row.typeLabel === "非法断行" && row.lineType === "需要合并" && row.range.endLine !== undefined)
     .sort((left, right) => (right.range.line - left.range.line) || ((right.range.endLine ?? 0) - (left.range.endLine ?? 0)));
   let previouslyMergedStart = Number.POSITIVE_INFINITY;
@@ -4764,15 +5887,15 @@ function annotationNumberForRow(row: Candidate, line?: string): string | undefin
 }
 
 function annotationNumberFromText(text: string, lineType?: string): string | undefined {
-  const bodyMatch = /^\s*(?:\[\^(\d+)\]:|(\d+)\.|\((\d+)\))(?:\s|$)/.exec(text);
+  const bodyMatch = /^\s*(?:\[\^(\d+)\]:|(\d+)\.|\((\d+)\)|\*(\d+))(?:\s|$)/.exec(text);
   if (lineType === "注释正文" && bodyMatch) {
-    return bodyMatch[1] ?? bodyMatch[2] ?? bodyMatch[3];
+    return bodyMatch[1] ?? bodyMatch[2] ?? bodyMatch[3] ?? bodyMatch[4];
   }
-  const refMatch = /<sup>\s*\(?\s*(\d+)\s*\)?\s*<\/sup>|\[\^(\d+)\](?!:)/i.exec(text);
+  const refMatch = /<sup>\s*\(?\s*(\d+)\s*\)?\s*<\/sup>|\[\^(\d+)\](?!:)|\[\*(\d+)\]/i.exec(text);
   if (refMatch) {
-    return refMatch[1] ?? refMatch[2];
+    return refMatch[1] ?? refMatch[2] ?? refMatch[3];
   }
-  return bodyMatch?.[1] ?? bodyMatch?.[2] ?? bodyMatch?.[3];
+  return bodyMatch?.[1] ?? bodyMatch?.[2] ?? bodyMatch?.[3] ?? bodyMatch?.[4];
 }
 
 function mapWorkingLinesToSourceLines(sourceText: string, workingText: string): number[] {
@@ -4863,9 +5986,9 @@ function findWorkingLineForSourceLine(sourceText: string, workingText: string, s
 function extractAnnotationRefs(text: string): Array<{ number: string; text: string; preview: string; line: number; start: number; end: number }> {
   return text.split(/\r?\n/).flatMap((line, lineIndex) => {
     const refs: Array<{ number: string; text: string; preview: string; line: number; start: number; end: number }> = [];
-    const pattern = /<sup>\s*\(?\s*(\d+)\s*\)?\s*<\/sup>|\[\^(\d+)\](?!:)/gi;
+    const pattern = /<sup>\s*\(?\s*(\d+)\s*\)?\s*<\/sup>|\[\^(\d+)\](?!:)|\[\*(\d+)\]/gi;
     for (const match of line.matchAll(pattern)) {
-      const number = match[1] ?? match[2];
+      const number = match[1] ?? match[2] ?? match[3];
       if (!number || match.index === undefined) continue;
       refs.push({
         number,
@@ -4885,9 +6008,9 @@ function extractAnnotationBodies(text: string): Array<{ number: string; content:
     // Working copies often use block quotes or full-width Chinese parentheses
     // for manually added notes; accept those variants without treating normal
     // inline parenthetical prose as an annotation body.
-    const match = /^\s*(?:>\s*)?(?:\[\^(\d+)\]:|(\d+)\.|[\(（](\d+)[\)）])\s+(.+)$/.exec(line);
-    const number = match?.[1] ?? match?.[2] ?? match?.[3];
-    return number ? [{ number, content: match?.[4] ?? "", text: line, line: lineIndex }] : [];
+    const match = /^\s*(?:>\s*)?(?:\[\^(\d+)\]:|(\d+)\.|[\(（](\d+)[\)）]|\*(\d+))\s+(.+)$/.exec(line);
+    const number = match?.[1] ?? match?.[2] ?? match?.[3] ?? match?.[4];
+    return number ? [{ number, content: match?.[5] ?? "", text: line, line: lineIndex }] : [];
   });
 }
 
@@ -4931,6 +6054,7 @@ function escapeRegex(value: string): string {
 function renderSidebarHtml(state: SidebarState): string {
   return renderPairHtml({
     file: state.selectedFile ?? { label: "未选择文件", path: "" },
+    chapterSectionScopePath: state.chapterSectionScopePath,
     searchTableActive: true,
     postOcrCleanMode: state.postOcrCleanMode,
     searchRows: state.postOcrCleanMode ? [...state.searchTableRows, ...state.sentenceRows] : state.searchTableRows,
@@ -4946,6 +6070,7 @@ function renderSidebarHtml(state: SidebarState): string {
     pairs: state.pairs,
     annotationPairs: state.annotationPairs,
     selectedCandidate: state.selectedCandidate,
+    pendingTableFocusId: state.pendingTableFocusId,
     selectedPairId: state.selectedPairId,
   });
 
@@ -5417,6 +6542,7 @@ function renderSidebarHtml(state: SidebarState): string {
 
 function renderPairHtml(input: {
   file: FileEntry;
+  chapterSectionScopePath?: string;
   searchTableActive: boolean;
   postOcrCleanMode: boolean;
   searchRows: Candidate[];
@@ -5432,6 +6558,7 @@ function renderPairHtml(input: {
   pairs: FootnotePair[];
   annotationPairs: AnnotationPair[];
   selectedCandidate?: Candidate;
+  pendingTableFocusId?: string;
   selectedPairId?: string;
 }): string {
   const stateJson = escapeScriptJson(input);
@@ -5473,6 +6600,40 @@ function renderPairHtml(input: {
     .text-block-table th:nth-child(1) { width: 56px; }
     .text-block-table th:nth-child(2) { width: 130px; }
     .text-block-table th:nth-child(4), .text-block-table th:nth-child(5) { width: 84px; }
+    .chapter-block-table { min-width: 560px; }
+    .chapter-block-table th:nth-child(1), .chapter-block-table td:nth-child(1) { width: 30px; padding-left: 4px; padding-right: 4px; }
+    .chapter-block-table th:nth-child(2), .chapter-block-table td:nth-child(2) { width: 54px; padding-left: 5px; padding-right: 5px; white-space: nowrap; }
+    .chapter-title-table th:nth-child(3), .chapter-title-table td:nth-child(3) { width: 64px; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
+    .chapter-title-table th:nth-child(4), .chapter-title-table td:nth-child(4),
+    .chapter-image-table th:nth-child(3), .chapter-image-table td:nth-child(3) { width: 102px; padding-left: 4px; padding-right: 4px; }
+    .chapter-image-table th:nth-child(5), .chapter-image-table td:nth-child(5) { width: 260px; }
+    .chapter-block-table .text-block-type-select { width: 94px; }
+    .chapter-block-table th { position: sticky; }
+    .chapter-block-table .column-resizer {
+      position: absolute;
+      top: 0;
+      right: -3px;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none;
+      z-index: 8;
+    }
+    .chapter-block-table .column-resizer:hover,
+    .chapter-block-table .column-resizer.dragging { background: var(--vscode-focusBorder); }
+    .chapter-block-table tr.chapter-block-added td { background: rgba(72, 184, 255, 0.14); }
+    .chapter-block-table tr.chapter-block-modified td { background: rgba(255, 193, 7, 0.14); }
+    .chapter-block-table tr.chapter-block-deleted td { background: rgba(244, 67, 54, 0.18); }
+    .chapter-block-table tr.chapter-block-added td:first-child { box-shadow: inset 3px 0 0 rgba(72, 184, 255, 0.9); }
+    .chapter-block-table tr.chapter-block-modified td:first-child { box-shadow: inset 3px 0 0 rgba(255, 193, 7, 0.9); }
+    .chapter-block-table tr.chapter-block-deleted td:first-child { box-shadow: inset 3px 0 0 rgba(244, 67, 54, 0.95); }
+    .chapter-block-table tr.working-correction td { background: rgba(66, 165, 245, 0.16); }
+    .chapter-block-table tr.working-correction td:first-child { box-shadow: inset 3px 0 0 rgba(66, 165, 245, 0.95); }
+    .chapter-block-table tr.soft-deleted-row td {
+      opacity: 0.58;
+      background: rgba(128, 128, 128, 0.12);
+    }
+    .chapter-block-table tr.soft-deleted-row .text-block-content { text-decoration: line-through; }
     .sentence-table { min-width: 1760px; width: 1760px; }
     .sentence-table th:nth-child(1), .sentence-table td:nth-child(1) { width: 76px; }
     .sentence-table th:nth-child(2), .sentence-table td:nth-child(2) { width: 76px; }
@@ -5523,6 +6684,22 @@ function renderPairHtml(input: {
     .compact-row.title-row {
       grid-template-columns: 34px minmax(150px, 0.9fr) 80px minmax(180px, 1.5fr) 130px minmax(180px, 1fr);
     }
+    .compact-grid.chapter-boundary-grid { min-width: 980px; }
+    .compact-row.chapter-boundary-row {
+      grid-template-columns: 34px 90px 130px minmax(420px, 1fr) minmax(220px, 0.8fr);
+    }
+    .compact-row.chapter-boundary-added {
+      background: rgba(72, 184, 255, 0.14);
+      box-shadow: inset 3px 0 0 rgba(72, 184, 255, 0.9);
+    }
+    .compact-row.chapter-boundary-modified {
+      background: rgba(255, 193, 7, 0.12);
+      box-shadow: inset 3px 0 0 rgba(255, 193, 7, 0.9);
+    }
+    .compact-row.chapter-boundary-deleted {
+      background: rgba(244, 67, 54, 0.18);
+      box-shadow: inset 3px 0 0 rgba(244, 67, 54, 0.95);
+    }
     .compact-grid.image-grid { min-width: 1560px; }
     .compact-row.image-row {
       grid-template-columns: 34px 48px minmax(140px, 0.8fr) minmax(130px, 0.8fr) minmax(240px, 1.4fr) 80px 130px minmax(300px, 1.4fr) 76px;
@@ -5570,6 +6747,13 @@ function renderPairHtml(input: {
       outline-offset: -1px;
     }
     .compact-row.working-correction:hover { background: rgba(66, 165, 245, 0.25); }
+    .compact-row.soft-deleted-row {
+      opacity: 0.58;
+      background: rgba(128, 128, 128, 0.12);
+      box-shadow: inset 4px 0 0 rgba(128, 128, 128, 0.85);
+    }
+    .compact-row.soft-deleted-row .compact-hit,
+    .compact-row.soft-deleted-row .compact-preview { text-decoration: line-through; }
     .annotation-pair-status {
       display: block;
       margin-top: 3px;
@@ -5801,19 +6985,31 @@ function renderPairHtml(input: {
       if (pair.refCandidateId) annotationPairSortOrder.set(pair.refCandidateId, pairIndex * 2);
       if (pair.bodyCandidateId) annotationPairSortOrder.set(pair.bodyCandidateId, pairIndex * 2 + 1);
     });
+    const DELETED_LINE_TYPE = "已删除";
     const TEXT_BLOCK_TYPES = [
       "标题", "正文", "注释正文", "latex", "合成块",
       "合成.标记", "合成.图片", "合成.文本", "合成.callout", "合成.html",
-      "latex.标记", "latex.代码",
+      "latex.标记", "latex.代码", DELETED_LINE_TYPE,
     ];
-    const MODULES = postOcrCleanMode ? ["文本块", "分句", "翻译设置"] : ["未分类", "注释", "标题", "图片", "非法断行", "拼写检查"];
-    const TYPE_OPTIONS = [...MODULES, "ignore"];
+    const CHAPTER_LINE_TYPES = [
+      "1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题",
+      "非标题", "图像", "注释正文", "注释引用", "LaTeX", DELETED_LINE_TYPE,
+    ];
+    // Modules are a stable work surface. A corrected document enables the
+    // text/translation modules but must never hide annotation, heading, image,
+    // line-break, or spelling modules.
+    const MODULES = [
+      "未分类", "章节定界", "章节标题", "注释", "标题", "图片", "非法断行", "拼写检查",
+      "文本块", "分句", "翻译设置",
+    ];
+    const TYPE_OPTIONS = [...MODULES, DELETED_LINE_TYPE, "ignore"];
     const MODULE_LINE_TYPES = {
-      "注释": ["注释引用", "注释正文", "忽略"],
-      "标题": ["一级", "二级", "三级", "四级", "五级", "六级", "非标题"],
-      "图片": ["图片引用", "图片说明", "图片正文"],
-      "非法断行": ["断行候选", "需要合并", "单行订正", "保留断行"],
-      "拼写检查": ["待确认", "已确认", "忽略", "latex"],
+      "章节定界": ["1 级标题", "新增", "修改", "删除", DELETED_LINE_TYPE],
+      "注释": ["注释引用", "注释正文", "忽略", DELETED_LINE_TYPE],
+      "标题": ["一级", "二级", "三级", "四级", "五级", "六级", "非标题", DELETED_LINE_TYPE],
+      "图片": ["图片标题", "图片链接", "图片文本", "图片HTML", DELETED_LINE_TYPE],
+      "非法断行": ["断行候选", "需要合并", "单行订正", "保留断行", DELETED_LINE_TYPE],
+      "拼写检查": ["待确认", "已确认", "忽略", "latex", DELETED_LINE_TYPE],
     };
     const SORT_COLUMNS = [
       { key: "raw", label: "匹配" },
@@ -5835,12 +7031,22 @@ function renderPairHtml(input: {
       // User-authored illegal-break expressions are left untouched.
       savedIllegalBreakRegex.pattern = state.moduleRegexPatterns?.["非法断行"] || savedIllegalBreakRegex.pattern;
     }
-    let activeModule = MODULES.includes(persistedViewState.activeModule)
-      ? persistedViewState.activeModule
+    const persistedActiveModule = persistedViewState.activeModule === "章节"
+      ? "章节标题"
+      : persistedViewState.activeModule;
+    let activeModule = MODULES.includes(persistedActiveModule)
+      ? persistedActiveModule
       : (postOcrCleanMode ? "文本块" : "未分类");
     const sortStatesByModule = persistedViewState.sortStatesByModule || {};
+    const imageSortStateVersion = 1;
+    if (Number(persistedViewState.imageSortStateVersion) < imageSortStateVersion) {
+      delete sortStatesByModule["图片"];
+    }
     const savedModuleSortState = sortStatesByModule[activeModule];
-    const canMigrateLegacySort = !savedModuleSortState && !postOcrCleanMode;
+    const chapterColumnWidths = persistedViewState.chapterColumnWidths && typeof persistedViewState.chapterColumnWidths === "object"
+      ? { ...persistedViewState.chapterColumnWidths }
+      : {};
+    const canMigrateLegacySort = !savedModuleSortState && !postOcrCleanMode && activeModule !== "图片";
     const sortRules = Array.isArray(savedModuleSortState?.rules)
       ? savedModuleSortState.rules.map((rule) => ({ ...rule }))
       : canMigrateLegacySort && Array.isArray(persistedViewState.sortRules)
@@ -5858,6 +7064,16 @@ function renderPairHtml(input: {
       annotationMatchSortInitialized = true;
     }
     let annotationAutoMatch = persistedViewState.annotationAutoMatch === true;
+    const chapterBlockFilterOptions = ["标题+增删改", "全部", "各级标题", "图片", "注释及引用"];
+    const chapterBlockFilterStateVersion = 2;
+    let chapterBlockFilter = Number(persistedViewState.chapterBlockFilterStateVersion) >= chapterBlockFilterStateVersion
+      && chapterBlockFilterOptions.includes(persistedViewState.chapterBlockFilter)
+      ? persistedViewState.chapterBlockFilter
+      : "标题+增删改";
+    const imageBlockFilterOptions = ["图片link+增删改行", "全部", "图片link", "增删改行"];
+    let imageBlockFilter = imageBlockFilterOptions.includes(persistedViewState.imageBlockFilter)
+      ? persistedViewState.imageBlockFilter
+      : "图片link+增删改行";
     let lastSelectedIndex = -1;
     let focusState = persistedViewState.focusState || null;
     let workingRowId = typeof persistedViewState.workingRowId === "string" ? persistedViewState.workingRowId : null;
@@ -5868,10 +7084,26 @@ function renderPairHtml(input: {
     let translationRunning = translationProgress?.phase === "translating" || translationProgress?.phase === "exporting";
 
     window.addEventListener("message", (event) => {
+      if (event.data?.command === "activateModule" && MODULES.includes(event.data.moduleName)) {
+        storeCurrentModuleSortState();
+        activeModule = event.data.moduleName;
+        loadModuleSortState(activeModule);
+        selectedRowIds.clear();
+        lastSelectedIndex = -1;
+        workingRowId = null;
+        persistViewState();
+        render();
+        vscode.postMessage({ command: "setActiveModule", moduleName: activeModule });
+        return;
+      }
       if (event.data?.command === "imageDownloadProgress") {
         imageDownloadProgress = event.data.progress || null;
         imageDownloadRunning = imageDownloadProgress?.phase === "downloading";
         updateImageDownloadProgress();
+        return;
+      }
+      if (event.data?.command === "focusTableRow" && typeof event.data.id === "string") {
+        focusTableRow(event.data.id);
         return;
       }
       if (event.data?.command === "translationProgress") {
@@ -5895,6 +7127,17 @@ function renderPairHtml(input: {
       vscode.postMessage({ command, ...payload });
     }
 
+    function focusTableRow(id) {
+      workingRowId = id;
+      requestAnimationFrame(() => {
+        const row = document.querySelector('[data-row-id="' + CSS.escape(id) + '"]');
+        if (row) {
+          row.classList.add("selected");
+          row.scrollIntoView({ block: "center", inline: "nearest" });
+        }
+      });
+    }
+
     function persistViewState() {
       storeCurrentModuleSortState();
       vscode.setState?.({
@@ -5905,11 +7148,16 @@ function renderPairHtml(input: {
         annotationMatchSortInitialized,
         annotationAutoMatch,
         annotationOnlyUnmatched,
+        chapterBlockFilter,
+        chapterBlockFilterStateVersion,
+        imageBlockFilter,
+        imageSortStateVersion,
         focusState,
         selectedRowIds: Array.from(selectedRowIds),
         workingRowId,
         tableScrollState,
         moduleRegexConfigs,
+        chapterColumnWidths,
       });
     }
 
@@ -5940,6 +7188,18 @@ function renderPairHtml(input: {
       }
       if (!postOcrCleanMode && moduleName === "标题") {
         sortRules.push({ key: "sourceLabel", direction: "asc" }, { key: "line", direction: "asc" });
+        return;
+      }
+      if (moduleName === "章节定界") {
+        sortRules.push({ key: "line", direction: "asc" });
+        return;
+      }
+      if (moduleName === "章节标题") {
+        sortRules.push({ key: "line", direction: "asc" });
+        return;
+      }
+      if (moduleName === "图片") {
+        sortRules.push({ key: "line", direction: "asc" });
         return;
       }
       if (!postOcrCleanMode && moduleName === "注释") {
@@ -6028,7 +7288,9 @@ function renderPairHtml(input: {
       // Regular OCR files always use the module data-table work surface. The
       // legacy footnote-pair screen remains available only before this table was
       // introduced for a post-OCR document.
-      if (state.searchTableActive || !postOcrCleanMode) {
+      // The module work surface is now the primary UI. Keep it visible even
+      // while a newly selected file has not produced rows yet.
+      if (state.searchTableActive || state.file.path || !postOcrCleanMode || activeModule === "章节定界" || activeModule === "章节标题") {
         app.append(stickyControls());
         if (postOcrCleanMode && activeModule === "翻译设置") {
           app.append(translationSettingsPanel());
@@ -6105,18 +7367,24 @@ function renderPairHtml(input: {
     }
 
     function searchTable(rows) {
-      if (postOcrCleanMode) {
+      if (activeModule === "章节标题" || activeModule === "图片") {
+        return chapterFileModuleTable(rows, activeModule);
+      }
+      if (postOcrCleanMode && activeModule !== "章节定界") {
         return activeModule === "分句" ? sentenceTable(rows) : textBlockTable(rows);
       }
       rowById.clear();
       checkboxById.clear();
       const isAnnotationModule = activeModule === "注释";
+      const isChapterBoundaryModule = activeModule === "章节定界";
       const isTitleModule = activeModule === "标题";
       const isImageModule = activeModule === "图片";
       const isIllegalBreakModule = activeModule === "非法断行";
       const isSpellModule = activeModule === "拼写检查";
       const grid = document.createElement("div");
-      grid.className = isAnnotationModule
+      grid.className = isChapterBoundaryModule
+        ? "compact-grid chapter-boundary-grid"
+        : isAnnotationModule
         ? "compact-grid annotation-grid"
         : isTitleModule
           ? "compact-grid title-grid"
@@ -6128,7 +7396,9 @@ function renderPairHtml(input: {
               ? "compact-grid spell-grid"
             : "compact-grid";
       const head = document.createElement("div");
-      head.className = isAnnotationModule
+      head.className = isChapterBoundaryModule
+        ? "compact-row chapter-boundary-row compact-head"
+        : isAnnotationModule
         ? "compact-row annotation-row compact-head"
         : isTitleModule
           ? "compact-row title-row compact-head"
@@ -6139,7 +7409,15 @@ function renderPairHtml(input: {
             : isSpellModule
               ? "compact-row spell-row compact-head"
             : "compact-row compact-head";
-      if (isAnnotationModule) {
+      if (isChapterBoundaryModule) {
+        head.append(
+          selectAllHead(rows),
+          sortHead("行号", "line"),
+          sortHead("行类型", "lineType"),
+          sortHead("行预览", "preview"),
+          sortHead("章节文件", "chapterFile"),
+        );
+      } else if (isAnnotationModule) {
         head.append(
           selectAllHead(rows),
           plainHead("#"),
@@ -6215,6 +7493,8 @@ function renderPairHtml(input: {
         const matchClass = annotationAutoMatch ? annotationMatchClass(candidate) : "";
         row.className = [
           "compact-row",
+          isChapterBoundaryModule ? "chapter-boundary-row" : "",
+          isChapterBoundaryModule ? "chapter-boundary-" + (candidate.chapterBoundaryState || "heading") : "",
           isAnnotationModule ? "annotation-row" : "",
           isTitleModule ? "title-row" : "",
           isImageModule ? "image-row" : "",
@@ -6223,6 +7503,7 @@ function renderPairHtml(input: {
           isSpellModule ? spellModifiedClass(candidate) : "",
           isIllegalBreakModule ? illegalBreakModifiedClass(candidate) : "",
           candidate.isWorkingCorrection ? "working-correction" : "",
+          candidate.lineType === DELETED_LINE_TYPE ? "soft-deleted-row" : "",
           titleMismatchClass(candidate),
           selectedRowIds.has(candidate.id) ? "selected" : "",
           matchClass,
@@ -6230,8 +7511,16 @@ function renderPairHtml(input: {
         row.dataset.rowId = candidate.id;
         rowById.set(candidate.id, row);
         const sourceLabel = candidate.sourceLabel || "当前文件";
-        const preview = truncateText(candidate.preview || "", 256);
-        if (isAnnotationModule) {
+        const preview = truncateText(candidate.preview || "", isChapterBoundaryModule ? 255 : 256);
+        if (isChapterBoundaryModule) {
+          row.innerHTML = \`
+            <span></span>
+            <span class="line-number-cell" title="定位到第 \${candidate.range.line + 1} 行">\${candidate.range.line + 1}</span>
+            <span class="line-type-cell"></span>
+            <span class="compact-hit" title="\${escapeHtml(candidate.baselinePreview ? "原文：" + candidate.baselinePreview + "\\n当前：" + candidate.raw : candidate.raw)}">\${escapeHtml(preview)}</span>
+            <span title="\${escapeHtml(candidate.chapterFile || "")}">\${escapeHtml(candidate.chapterFile || "")}</span>
+          \`;
+        } else if (isAnnotationModule) {
           row.innerHTML = \`
             <span></span>
             <span>\${index + 1}</span>
@@ -6318,15 +7607,19 @@ function renderPairHtml(input: {
         checkboxHolder.append(checkbox);
 
         const typeHolder = row.querySelector(".line-type-cell");
-        const action = moduleActionConfig();
-        const typeSelect = optionSelect(action.value(candidate), action.options, (value, event) => {
-          event.stopPropagation();
-          post(action.command, { ids: [candidate.id], [action.payloadKey]: value });
-        });
-        typeSelect.dataset.focusId = candidate.id;
-        typeSelect.dataset.focusControl = "lineType";
-        typeSelect.addEventListener("focus", () => { workingRowId = candidate.id; });
-        typeHolder.append(typeSelect);
+        if (isChapterBoundaryModule) {
+          typeHolder.textContent = candidate.lineType || "";
+        } else {
+          const action = moduleActionConfig();
+          const typeSelect = optionSelect(action.value(candidate), action.options, (value, event) => {
+            event.stopPropagation();
+            post(action.command, { ids: [candidate.id], [action.payloadKey]: value });
+          });
+          typeSelect.dataset.focusId = candidate.id;
+          typeSelect.dataset.focusControl = "lineType";
+          typeSelect.addEventListener("focus", () => { workingRowId = candidate.id; });
+          typeHolder.append(typeSelect);
+        }
         if (isAnnotationModule) {
           const pair = annotationPairsByCandidateId.get(candidate.id);
           const pairStatus = document.createElement("span");
@@ -6404,7 +7697,7 @@ function renderPairHtml(input: {
             return;
           }
         });
-        if (!isAnnotationModule && !isTitleModule) {
+        if (!isChapterBoundaryModule && !isAnnotationModule && !isTitleModule) {
           const actions = row.querySelector(".row-actions-cell");
           actions.append(smallButton("定位", (event) => {
             event.stopPropagation();
@@ -6415,6 +7708,201 @@ function renderPairHtml(input: {
         grid.append(row);
       });
       return grid;
+    }
+
+    function chapterFileModuleTable(rows, moduleName) {
+      const isImageTable = moduleName === "图片";
+      const visibleRows = isImageTable
+        ? rows.filter((candidate) => imageBlockMatchesFilter(candidate))
+        : rows.filter((candidate) => chapterBlockMatchesFilter(candidate));
+      rowById.clear();
+      checkboxById.clear();
+      const table = document.createElement("table");
+      table.className = "text-block-table chapter-block-table " + (isImageTable ? "chapter-image-table" : "chapter-title-table");
+      const columnKeys = isImageTable
+        ? ["select", "line", "type", "preview", "localPath"]
+        : ["select", "line", "state", "type", "preview"];
+      const defaultWidths = isImageTable ? [30, 54, 102, 360, 260] : [30, 54, 64, 102, 360];
+      const columnGroup = document.createElement("colgroup");
+      const columns = columnKeys.map((key, index) => {
+        const column = document.createElement("col");
+        const width = Number(chapterColumnWidths[key]);
+        column.style.width = (Number.isFinite(width) && width > 20 ? width : defaultWidths[index]) + "px";
+        columnGroup.append(column);
+        return column;
+      });
+      table.innerHTML = isImageTable
+        ? "<thead><tr><th>选</th><th>行号</th><th>行类型</th><th>预览</th><th>本地路径</th></tr></thead><tbody></tbody>"
+        : "<thead><tr><th>选</th><th>行号</th><th>状态</th><th>行类型</th><th>预览</th></tr></thead><tbody></tbody>";
+      table.prepend(columnGroup);
+      const headerCells = Array.from(table.querySelectorAll("thead th"));
+      headerCells[0].replaceChildren(selectAllHead(visibleRows));
+      const sortableHeaders = isImageTable
+        ? [null, ["行号", "line"], ["行类型", "lineType"], ["预览", "preview"], ["本地路径", "localPath"]]
+        : [null, ["行号", "line"], ["状态", "chapterBoundaryState"], ["行类型", "lineType"], ["预览", "preview"]];
+      sortableHeaders.forEach((definition, index) => {
+        if (definition) {
+          headerCells[index].replaceChildren(sortHead(definition[0], definition[1]));
+        }
+      });
+      headerCells.forEach((header, index) => {
+        const resizer = document.createElement("span");
+        resizer.className = "column-resizer";
+        resizer.title = "拖动调整列宽";
+        resizer.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const startX = event.clientX;
+          const startWidth = columns[index].getBoundingClientRect().width;
+          resizer.classList.add("dragging");
+          const onMove = (moveEvent) => {
+            const nextWidth = Math.max(index === 0 ? 26 : 44, Math.round(startWidth + moveEvent.clientX - startX));
+            columns[index].style.width = nextWidth + "px";
+            chapterColumnWidths[columnKeys[index]] = nextWidth;
+          };
+          const onUp = () => {
+            resizer.classList.remove("dragging");
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            persistViewState();
+          };
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+        });
+        header.append(resizer);
+      });
+      const body = table.querySelector("tbody");
+      const lineTypes = isImageTable ? MODULE_LINE_TYPES["图片"] : CHAPTER_LINE_TYPES;
+      visibleRows.forEach((candidate, index) => {
+        const row = document.createElement("tr");
+        if (candidate.chapterBoundaryState && candidate.chapterBoundaryState !== "heading") {
+          row.classList.add("chapter-block-" + candidate.chapterBoundaryState);
+        }
+        if (candidate.isWorkingCorrection) {
+          row.classList.add("working-correction");
+        }
+        if (candidate.lineType === DELETED_LINE_TYPE) {
+          row.classList.add("soft-deleted-row");
+        }
+        row.dataset.rowId = candidate.id;
+        const stateLabel = candidate.chapterBoundaryState === "added"
+          ? "新增"
+          : candidate.chapterBoundaryState === "modified"
+            ? "修改"
+            : candidate.chapterBoundaryState === "deleted"
+              ? "删除"
+              : "一致";
+        row.innerHTML = isImageTable
+          ? "<td class='chapter-block-select'></td><td>" + (candidate.range.line + 1) + "</td><td class='chapter-block-type'></td><td class='text-block-content'></td><td class='chapter-image-local-path'></td>"
+          : "<td class='chapter-block-select'></td><td>" + (candidate.range.line + 1) + "</td><td class='chapter-block-state'>" + stateLabel + "</td><td class='chapter-block-type'></td><td class='text-block-content'></td>";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = selectedRowIds.has(candidate.id);
+        rowById.set(candidate.id, row);
+        checkboxById.set(candidate.id, checkbox);
+        checkbox.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (event.shiftKey && lastSelectedIndex >= 0) {
+            selectRange(visibleRows, lastSelectedIndex, index, checkbox.checked);
+          } else {
+            setRowSelection(candidate.id, checkbox.checked);
+          }
+          lastSelectedIndex = index;
+          persistViewState();
+          render();
+        });
+        row.querySelector(".chapter-block-select").append(checkbox);
+        const typeSelect = document.createElement("select");
+        typeSelect.className = "text-block-type-select";
+        const legacyImageLineTypes = {
+          "图片引用": "图片链接",
+          "图片说明": "图片文本",
+          "图片正文": "图片文本",
+        };
+        const normalizedCandidateLineType = isImageTable
+          ? (legacyImageLineTypes[candidate.lineType] || candidate.lineType)
+          : candidate.lineType;
+        const currentType = lineTypes.includes(normalizedCandidateLineType)
+          ? normalizedCandidateLineType
+          : (isImageTable ? "图片文本" : "非标题");
+        lineTypes.forEach((lineType) => {
+          const option = document.createElement("option");
+          option.value = lineType;
+          option.textContent = lineType;
+          option.selected = lineType === currentType;
+          typeSelect.append(option);
+        });
+        typeSelect.addEventListener("click", (event) => event.stopPropagation());
+        typeSelect.addEventListener("focus", () => { workingRowId = candidate.id; });
+        typeSelect.addEventListener("change", () => {
+          workingRowId = candidate.id;
+          const ids = selectedRowIds.has(candidate.id) && selectedRowIds.size > 0
+            ? Array.from(selectedRowIds)
+            : [candidate.id];
+          captureTableContext();
+          selectedRowIds.clear();
+          lastSelectedIndex = -1;
+          persistViewState();
+          post("setRowsLineType", { ids, lineType: typeSelect.value });
+        });
+        row.querySelector(".chapter-block-type").append(typeSelect);
+        const previewCell = row.querySelector(".text-block-content");
+        previewCell.textContent = truncateText(candidate.preview || candidate.raw, 255);
+        if (candidate.baselinePreview) {
+          previewCell.title = "基准内容：\\n" + candidate.baselinePreview;
+        }
+        if (isImageTable) {
+          const localPathCell = row.querySelector(".chapter-image-local-path");
+          localPathCell.textContent = candidate.localPath || "";
+          localPathCell.title = candidate.localPath || "";
+        }
+        row.addEventListener("click", () => {
+          workingRowId = candidate.id;
+          post("locateSourceCandidate", { id: candidate.id });
+        });
+        body.append(row);
+      });
+      return table;
+    }
+
+    function chapterBlockMatchesFilter(candidate) {
+      if (chapterBlockFilter === "全部") {
+        return true;
+      }
+      const raw = String(candidate.raw || "");
+      const isHeading = /^[1-6] 级标题$/.test(String(candidate.lineType || ""))
+        || /^\\s{0,3}#{1,6}\\s+/.test(raw);
+      if (chapterBlockFilter === "标题+增删改") {
+        return isHeading || ["added", "modified", "deleted"].includes(candidate.chapterBoundaryState);
+      }
+      if (chapterBlockFilter === "各级标题") {
+        return isHeading;
+      }
+      if (chapterBlockFilter === "图片") {
+        return candidate.lineType === "合成.图片" || /!\\[[^\\]]*\\]\\([^\\)]+\\)|!\\[\\[[^\\]]+\\]\\]/.test(raw);
+      }
+      return candidate.lineType === "注释正文"
+        || /^\\s*(?:\\[\\^\\d+\\]:|\\(?\\d+\\)?[\\.、]\\s+)/.test(raw)
+        || /<sup>[^<]+<\\/sup>/i.test(raw);
+    }
+
+    function imageBlockMatchesFilter(candidate) {
+      if (imageBlockFilter === "全部") {
+        return true;
+      }
+      const raw = String(candidate.raw || candidate.preview || "");
+      const isImageLink = candidate.lineType === "图片链接" || candidate.lineType === "图片引用"
+        || /!\\[[^\\]]*\\]\\([^\\)]+\\)|!\\[\\[[^\\]]+\\]\\]/.test(raw);
+      const isChanged = candidate.isWorkingCorrection === true
+        || candidate.lineType === DELETED_LINE_TYPE
+        || ["added", "modified", "deleted"].includes(candidate.chapterBoundaryState);
+      if (imageBlockFilter === "图片link") {
+        return isImageLink;
+      }
+      if (imageBlockFilter === "增删改行") {
+        return isChanged;
+      }
+      return isImageLink || isChanged;
     }
 
     function textBlockTable(rows) {
@@ -6432,6 +7920,9 @@ function renderPairHtml(input: {
       const body = table.querySelector("tbody");
       rows.forEach((candidate, index) => {
         const row = document.createElement("tr");
+        if (candidate.lineType === DELETED_LINE_TYPE) {
+          row.classList.add("soft-deleted-row");
+        }
         row.dataset.rowId = candidate.id;
         row.innerHTML = "<td>" + textBlockNumber(candidate) + "</td><td class='text-block-type'></td><td class='text-block-content'></td><td>" + (candidate.range.line + 1) + "</td><td>" + ((candidate.range.endLine ?? candidate.range.line) + 1) + "</td>";
         const typeSelect = document.createElement("select");
@@ -6548,8 +8039,12 @@ function renderPairHtml(input: {
     function stickyControls() {
       const controls = document.createElement("div");
       controls.className = "sticky-controls";
-      if (postOcrCleanMode) {
-        controls.append(moduleTabs());
+      // Module tabs are always present. Individual modules may have no rows,
+      // but that must not switch the UI back to the legacy pair-only screen.
+      controls.append(moduleTabs());
+      const isPostOcrToolModule = postOcrCleanMode
+        && ["文本块", "分句", "翻译设置"].includes(activeModule);
+      if (isPostOcrToolModule) {
         if (activeModule === "文本块") {
           const splitButton = smallButton("分句全部可处理块", () => post("splitSentences"));
           splitButton.title = "仅处理正文、注释正文和合成.文本；源文件不会修改。";
@@ -6579,7 +8074,7 @@ function renderPairHtml(input: {
           );
         }
       } else {
-        controls.append(moduleTabs(), moduleRegexPanel(), moduleWorkPanel(), tableToolbar());
+        controls.append(moduleRegexPanel(), moduleWorkPanel(), tableToolbar());
       }
       return controls;
     }
@@ -6652,7 +8147,12 @@ function renderPairHtml(input: {
           workingRowId = null;
           persistViewState();
           render();
-          if (moduleName === "注释") {
+          post("setActiveModule", { moduleName });
+          if (moduleName === "章节定界") {
+            post("openChapterBoundaryWork");
+          } else if (moduleName === "章节标题") {
+            post("openChapterWorkingCopy");
+          } else if (moduleName === "注释") {
             post("reloadAnnotations", { silent: true });
           } else if (hasModuleRegex(moduleName)) {
             queueModuleRegexScan();
@@ -6664,7 +8164,11 @@ function renderPairHtml(input: {
     }
 
     function hasModuleRegex(moduleName) {
-      return !postOcrCleanMode && moduleName !== "拼写检查" && state.moduleRegexPresets?.[moduleName];
+      return !postOcrCleanMode
+        && moduleName !== "章节定界"
+        && moduleName !== "章节标题"
+        && moduleName !== "拼写检查"
+        && state.moduleRegexPresets?.[moduleName];
     }
 
     function currentModuleRegexConfig() {
@@ -6812,6 +8316,12 @@ function renderPairHtml(input: {
       if (moduleName === "未分类") {
         return "探索模块：在这里试验任意正则；命中行先保留为未分类，再由人工分配到目标模块。";
       }
+      if (moduleName === "章节定界") {
+        return "按文件名顺序合并工作目录根层的序列 Markdown；仅显示 1 级标题和相对初始合并基线的增删改行。";
+      }
+      if (moduleName === "章节标题") {
+        return "按目录中当前选定的 Markdown 创建独立工作稿；两个及以上连续换行分割文本块，点击行可在右侧工作稿定位。";
+      }
       if (moduleName === "注释") {
         return "专用模块：选择注释正则后，命中行直接进入本表，用于 footnote ref/body 的后续配对确认。";
       }
@@ -6819,7 +8329,7 @@ function renderPairHtml(input: {
         return "专用模块：选择标题正则后，命中行直接进入本表。行类型与原文标题层级不一致时会着色提示，但不会修改源文件。";
       }
       if (moduleName === "图片") {
-        return "专用模块：选择图片正则后，命中行直接进入本表，用于后续图片引用和说明检查。";
+        return "专用模块：选择图片正则后，命中行直接进入本表，用于图片标题、链接、文本和 HTML 检查。";
       }
       if (moduleName === "非法断行") {
         return "专用模块：选择断行正则后，命中行直接进入本表，用于后续断行异常确认。";
@@ -6883,7 +8393,10 @@ function renderPairHtml(input: {
     }
 
     function rowsForModule(moduleName) {
-      const moduleRows = state.searchRows.filter((row) => rowModule(row) === moduleName);
+      let moduleRows = state.searchRows.filter((row) => rowModule(row) === moduleName);
+      if ((moduleName === "注释" || moduleName === "图片") && state.chapterSectionScopePath) {
+        moduleRows = moduleRows.filter((row) => row.sourcePath === state.chapterSectionScopePath);
+      }
       if (moduleName !== "未分类") {
         return moduleRows;
       }
@@ -7270,6 +8783,73 @@ function renderPairHtml(input: {
     function tableToolbar() {
       const toolbar = document.createElement("div");
       toolbar.className = "table-toolbar";
+      if (activeModule === "章节标题") {
+        const filter = document.createElement("select");
+        filter.className = "type-select";
+        chapterBlockFilterOptions.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          option.selected = value === chapterBlockFilter;
+          filter.append(option);
+        });
+        filter.title = "过滤章节工作稿中的块内容";
+        filter.addEventListener("change", () => {
+          captureTableContext();
+          chapterBlockFilter = filter.value;
+          persistViewState();
+          render();
+        });
+        const count = document.createElement("span");
+        count.id = "selected-count";
+        count.textContent = "已选 " + selectedRowIds.size;
+        toolbar.append(
+          text("过滤"),
+          filter,
+          count,
+          text("勾选多行后，修改任一已选行的行类型即可批量应用。"),
+          smallButton("创建 / 打开章节工作稿", () => post("openChapterWorkingCopy"), "primary"),
+          text("工作稿保存后会自动重扫；原始 Markdown 不会修改。"),
+        );
+        return toolbar;
+      }
+      if (activeModule === "图片") {
+        const filter = document.createElement("select");
+        filter.className = "type-select";
+        imageBlockFilterOptions.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          option.selected = value === imageBlockFilter;
+          filter.append(option);
+        });
+        filter.title = "过滤当前章节中的图片链接和变动行";
+        filter.addEventListener("change", () => {
+          captureTableContext();
+          imageBlockFilter = filter.value;
+          persistViewState();
+          render();
+        });
+        const count = document.createElement("span");
+        count.id = "selected-count";
+        count.textContent = "已选 " + selectedRowIds.size;
+        const downloadButton = smallButton(
+          imageDownloadRunning ? "正在下载" : "下载所选图片",
+          () => downloadSelectedImages(),
+          "primary",
+        );
+        downloadButton.disabled = imageDownloadRunning;
+        toolbar.append(
+          text("过滤"),
+          filter,
+          count,
+          text("勾选多行后，修改任一已选行的行类型即可批量应用。"),
+          downloadButton,
+          imageDownloadProgressElement(),
+          smallButton("保存标定", () => post("saveAnnotations")),
+        );
+        return toolbar;
+      }
       const count = document.createElement("span");
       count.id = "selected-count";
       count.textContent = "已选 0";
@@ -7283,8 +8863,8 @@ function renderPairHtml(input: {
       });
       toolbar.append(...[
         count,
-        text(action.toolbarLabel),
-        select,
+        activeModule === "章节定界" ? null : text(action.toolbarLabel),
+        activeModule === "章节定界" ? null : select,
         activeModule === "注释"
           ? smallButton(annotationAutoMatch ? "刷新匹配" : "自动匹配", () => {
               annotationAutoMatch = true;
@@ -7312,6 +8892,15 @@ function renderPairHtml(input: {
         activeModule === "注释"
           ? smallButton("分配到章节文件", () => post("assignAnnotationsToChapters"))
           : null,
+        activeModule === "章节定界"
+          ? smallButton("创建 / 打开合并工作稿", () => post("openChapterBoundaryWork"), "primary")
+          : null,
+        activeModule === "章节定界"
+          ? smallButton("设置章节文件", () => setSelectedChapterBoundaryFile())
+          : null,
+        activeModule === "章节定界"
+          ? smallButton("导出章节文件", () => post("exportChapterBoundaryChapters"), "primary")
+          : null,
         activeModule === "标题"
           ? smallButton("设置章节文件", () => setSelectedTitleChapterFile())
           : null,
@@ -7331,8 +8920,8 @@ function renderPairHtml(input: {
               if (ids.length) post("addSpellTermsToWhitelist", { ids });
             })
           : null,
-        smallButton("重新加载标定", () => post("reloadAnnotations")),
-        smallButton("忽略所选", () => {
+        activeModule === "章节定界" ? null : smallButton("重新加载标定", () => post("reloadAnnotations")),
+        activeModule === "章节定界" ? null : smallButton("忽略所选", () => {
           const ids = Array.from(selectedRowIds);
           if (!ids.length) {
             return;
@@ -7340,8 +8929,8 @@ function renderPairHtml(input: {
           post("setRowsType", { ids, typeLabel: "ignore" });
         }),
         smallButton("保存标定", () => post("saveAnnotations")),
-        smallButton("打开订正工作稿", () => post("openCorrectedWorkingCopy")),
-        smallButton("输出订正文件", () => post("exportCorrectedMarkdown"), "primary"),
+        activeModule === "章节定界" ? null : smallButton("打开订正工作稿", () => post("openCorrectedWorkingCopy")),
+        activeModule === "章节定界" ? null : smallButton("输出订正文件", () => post("exportCorrectedMarkdown"), "primary"),
       ].filter(Boolean));
       return toolbar;
     }
@@ -7407,9 +8996,11 @@ function renderPairHtml(input: {
         renderImageDownloadProgress(element);
       }
       const toolbarButton = Array.from(document.querySelectorAll(".table-toolbar button"))
-        .find((button) => button.textContent === "下载图片" || button.textContent === "正在下载");
+        .find((button) => ["下载图片", "下载所选图片", "正在下载"].includes(button.textContent));
       if (toolbarButton) {
-        toolbarButton.textContent = imageDownloadRunning ? "正在下载" : "下载图片";
+        toolbarButton.textContent = imageDownloadRunning
+          ? "正在下载"
+          : (state.chapterSectionScopePath ? "下载所选图片" : "下载图片");
         toolbarButton.disabled = imageDownloadRunning;
       }
     }
@@ -7441,6 +9032,18 @@ function renderPairHtml(input: {
         return;
       }
 
+      openChapterNumberModal(selectedRows);
+    }
+
+    function setSelectedChapterBoundaryFile() {
+      const sortedRows = getSortedRows(rowsForModule("章节定界"));
+      const selectedRows = sortedRows.filter((row) =>
+        selectedRowIds.has(row.id) && row.lineType === "1 级标题"
+      );
+      if (!selectedRows.length) {
+        post("showWarning", { message: "请先勾选至少一个 1 级标题行。" });
+        return;
+      }
       openChapterNumberModal(selectedRows);
     }
 
@@ -7603,7 +9206,7 @@ function renderPairHtml(input: {
     function recommendedChapterStartNumber() {
       let highest = -1;
       let width = 2;
-      rowsForModule("标题").forEach((row) => {
+      rowsForModule(activeModule === "章节定界" ? "章节定界" : "标题").forEach((row) => {
         const match = /^(\\d+)\\s+/.exec(String(row.chapterFile || "").trim());
         if (!match) {
           return;
@@ -7654,11 +9257,11 @@ function renderPairHtml(input: {
           defaultValue: "注释",
           command: "setRowsType",
           payloadKey: "typeLabel",
-          value: (candidate) => rowModule(candidate),
+          value: (candidate) => candidate.lineType === DELETED_LINE_TYPE ? DELETED_LINE_TYPE : rowModule(candidate),
         };
       }
 
-      const options = MODULE_LINE_TYPES[activeModule] || ["候选"];
+      const options = MODULE_LINE_TYPES[activeModule] || ["候选", DELETED_LINE_TYPE];
       return {
         header: "行类型",
         sortKey: "lineType",
@@ -7805,8 +9408,15 @@ function renderPairHtml(input: {
         .replace(/'/g, "&#039;");
     }
 
+    post("setActiveModule", { moduleName: activeModule });
+    if (activeModule === "章节标题" && state.file.path) {
+      post("openChapterWorkingCopy");
+    }
     try {
       render();
+      if (state.pendingTableFocusId) {
+        focusTableRow(state.pendingTableFocusId);
+      }
     } catch (error) {
       app.insertAdjacentHTML("afterbegin", "<div class='card'><strong>数据表渲染错误：</strong> " + escapeHtml(error?.message || String(error)) + "</div>");
     }

@@ -18,6 +18,14 @@ export interface TranslationProtectedToken {
 
 export interface Candidate {
   id: string;
+  /** Stable table-row identity. Unlike range.line, this survives text edits. */
+  rowId?: string;
+  /** Stable Markdown atom identity shared by location/relink operations. */
+  atomId?: string;
+  /** Content and neighboring-line fingerprints used to relocate this row. */
+  anchorTextHash?: string;
+  anchorPreviousHash?: string;
+  anchorNextHash?: string;
   kind: CandidateKind;
   label: string;
   raw: string;
@@ -42,6 +50,10 @@ export interface Candidate {
   /** Source text-block candidate ID for sentence candidates. */
   parentBlockId?: string;
   chapterFile?: string;
+  /** Derived line state in the merged chapter-boundary working document. */
+  chapterBoundaryState?: "heading" | "added" | "modified" | "deleted";
+  /** Previous line text for a modified or deleted chapter-boundary row. */
+  baselinePreview?: string;
   localPath?: string;
   suggestions?: string[];
   replacement?: string;
@@ -105,6 +117,8 @@ export interface RegexPreset {
 export interface SidebarState {
   workspaceLabel: string;
   selectedFile?: FileEntry;
+  /** Exact chapters/*.md selected through a chapter section tree node. */
+  chapterSectionScopePath?: string;
   previewEditable: boolean;
   files: FileEntry[];
   searchPattern: string;
@@ -116,6 +130,8 @@ export interface SidebarState {
   moduleRegexPatterns: Record<string, string>;
   moduleRegexPresets: Record<string, RegexPreset[]>;
   selectedCandidate?: Candidate;
+  /** One-shot row reveal requested by an extension-side table mutation. */
+  pendingTableFocusId?: string;
   selectedPairId?: string;
   postOcrCleanMode: boolean;
   imageDownloadProgress?: { phase: "downloading" | "complete"; completed: number; total: number; current?: string; failed?: number; lastError?: string };

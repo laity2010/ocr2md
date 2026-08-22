@@ -19,6 +19,9 @@
     "onCommand:ocr2md.openMarkdownFile",
     "onCommand:ocr2md.addCurrentLineToModule",
     "onCommand:ocr2md.openWorkingCopyHere",
+    "onCommand:ocr2md.openChapterBoundaryWork",
+    "onCommand:ocr2md.openChapterWorkingCopy",
+    "onCommand:ocr2md.exportChapterBoundaryChapters",
     "onCommand:ocr2md.deleteMarkdownFile",
     "onCommand:ocr2md.addToTranslation"
   ],
@@ -46,11 +49,23 @@
       },
       {
         "command": "ocr2md.addCurrentLineToModule",
-        "title": "ocr2md: 将当前行加入模块数据表"
+        "title": "ocr2md: 将当前行加入到数据表"
       },
       {
         "command": "ocr2md.openWorkingCopyHere",
         "title": "ocr2md:打开此处工作稿"
+      },
+      {
+        "command": "ocr2md.openChapterBoundaryWork",
+        "title": "ocr2md: 创建或打开章节定界工作稿"
+      },
+      {
+        "command": "ocr2md.openChapterWorkingCopy",
+        "title": "ocr2md: 创建或打开章节工作稿"
+      },
+      {
+        "command": "ocr2md.exportChapterBoundaryChapters",
+        "title": "ocr2md: 导出章节定界文件"
       },
       {
         "command": "ocr2md.deleteMarkdownFile",
@@ -124,7 +139,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "test": "npm run compile && node ./out/sentenceSegmentation.test.js && node ./out/translationExport.test.js",
+    "test": "npm run compile && node ./out/sentenceSegmentation.test.js && node ./out/translationExport.test.js && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile"
   },
@@ -135,6 +150,7 @@
   },
   "dependencies": {
     "cspell-lib": "^8.19.4",
+    "diff": "^9.0.0",
     "sentence-splitter": "^5.0.1"
   }
 }
