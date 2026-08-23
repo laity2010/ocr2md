@@ -133,6 +133,10 @@ export function renderSidebar(state: SidebarState): string {
     }
     const scrollByModule = persisted.scrollByModule && typeof persisted.scrollByModule === "object" ? persisted.scrollByModule : {};
     let focusTarget = persisted.focus && typeof persisted.focus.rowId === "string" ? persisted.focus : undefined;
+    let webviewIsActive = document.hasFocus();
+    window.addEventListener("pointerdown", () => { webviewIsActive = true; });
+    window.addEventListener("focusin", () => { webviewIsActive = true; });
+    window.addEventListener("focusout", () => { webviewIsActive = document.hasFocus(); });
     const collator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
     const app = document.getElementById("app");
     const post = (command, payload = {}) => vscode.postMessage({ command, ...payload });
@@ -174,7 +178,7 @@ export function renderSidebar(state: SidebarState): string {
     }
 
     function restoreFocus() {
-      if (!focusTarget || !document.hasFocus()) return;
+      if (!focusTarget || !webviewIsActive) return;
       const selector = '[data-row-id="' + cssEscape(focusTarget.rowId) + '"][data-field="' + cssEscape(focusTarget.field) + '"]';
       const node = document.querySelector(selector);
       if (node && node.focus) node.focus({ preventScroll: true });
