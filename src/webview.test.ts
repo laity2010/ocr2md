@@ -46,9 +46,13 @@ assert.ok(
   html.includes('if (state.activeModule === "章节定界" && CHAPTER_BOUNDARY_EXTRA_COLUMNS.includes("章节文件"))'),
   "chapter file column must be gated to the chapter boundary module",
 );
-assert.ok(html.includes("分配章节文件"), "chapter boundary must expose assign-chapter-file action");
+assert.ok(html.includes("设置章节文件"), "chapter boundary must expose the chapter-file dialog");
+assert.ok(html.includes("统一序号"), "chapter-file dialog must support same-number assignment");
+assert.ok(html.includes("从起始序号依次递增"), "chapter-file dialog must support sequential assignment");
+assert.ok(html.includes("整体偏移"), "chapter-file dialog must support number offset");
+assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-file dialog must run from selected level-one headings");
 assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
-assert.ok(html.includes('postKeepView("setChapterFile", { ids: [...selected], chapterFile: fileInput.value }'), "assign chapter file must apply to the current multi-select");
+assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
 for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+增删改行", "图片相关+增删改行"]) {
   assert.ok(html.includes(defaultFilter), `missing default module filter: ${defaultFilter}`);
 }

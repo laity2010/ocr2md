@@ -17,6 +17,7 @@ import {
   buildAnnotationPairs,
   extractAnnotationNumber,
 } from "./annotation";
+import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign";
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
@@ -204,6 +205,20 @@ class Ocr2mdExtension implements vscode.Disposable {
             ? message.ids.filter((id): id is string => typeof id === "string")
             : (typeof message.id === "string" ? [message.id] : []);
           if (ids.length) this.setChapterFile(ids, message.chapterFile);
+        }
+        break;
+      case "assignChapterFiles":
+        if (typeof message.mode === "string" && typeof message.value === "string" && Array.isArray(message.ids)) {
+          this.assignSelectedChapterFiles(
+            message.ids.filter((id): id is string => typeof id === "string"),
+            message.mode,
+            message.value,
+          );
+        }
+        break;
+      case "showWarning":
+        if (typeof message.message === "string" && message.message.trim()) {
+          void vscode.window.showWarningMessage(message.message);
         }
         break;
       case "matchAnnotationPairs":
@@ -479,6 +494,23 @@ class Ocr2mdExtension implements vscode.Disposable {
     const chapterFile = value.trim();
     const selected = new Set(ids);
     this.rows = this.rows.map((row) => selected.has(row.id) ? { ...row, chapterFile } : row);
+    this.update();
+  }
+
+  private assignSelectedChapterFiles(ids: string[], mode: string, value: string) {
+    const selected = new Set(ids);
+    const rows = this.rows.filter((row) =>
+      selected.has(row.id) && row.typeLabel === "章节定界" && row.lineType === "1 级标题");
+    const result = assignChapterFiles({
+      mode: mode as ChapterAssignMode,
+      value,
+      rows: rows.map((row) => ({ id: row.id, raw: row.raw, chapterFile: row.chapterFile })),
+    });
+    if (!result.ok) {
+      void vscode.window.showWarningMessage(result.error);
+      return;
+    }
+    this.rows = this.rows.map((row) => result.files[row.id] !== undefined ? { ...row, chapterFile: result.files[row.id] } : row);
     this.update();
   }
 
@@ -1261,6 +1293,9 @@ interface WebviewMessage {
   ids?: string[];
   id?: string;
   lineType?: string;
+  mode?: string;
+  value?: string;
+  message?: string;
   chapterFile?: string;
   annotationNumber?: string;
 }

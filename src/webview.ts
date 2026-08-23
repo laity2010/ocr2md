@@ -64,6 +64,25 @@ export function renderSidebar(state: SidebarState): string {
     .pair-status.matched { color: var(--vscode-testing-iconPassed, #89d185); }
     .empty { padding: 24px; text-align: center; color: var(--vscode-descriptionForeground); }
     .progress { color: var(--vscode-descriptionForeground); }
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding-top: 72px; background: rgba(0, 0, 0, 0.45);
+    }
+    .modal {
+      width: min(420px, calc(100vw - 32px));
+      border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 14px;
+      color: var(--vscode-foreground); background: var(--vscode-editor-background);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    .modal h2 { margin-top: 0; font-size: 14px; }
+    .modal p { margin: 6px 0; color: var(--vscode-descriptionForeground); }
+    .modal input, .modal select {
+      width: 100%; box-sizing: border-box; margin: 8px 0 12px; padding: 6px 8px;
+      color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+    }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
   </style>
 </head>
 <body>
@@ -282,6 +301,160 @@ export function renderSidebar(state: SidebarState): string {
       return selected.has(fallbackId) && selected.size ? [...selected] : [fallbackId];
     }
 
+    function selectedLevelOneHeadings() {
+      return sortedRows(rowsForModule()).filter((row) => selected.has(row.id) && row.lineType === "1 级标题");
+    }
+
+    function titleTextForChapterFile(candidate) {
+      const source = String(candidate.raw || candidate.preview || "").trim();
+      return source
+        .replace(/^#{1,6}\\s+/, "")
+        .replace(/<sup\\b[^>]*>[\\s\\S]*?<\\/sup>/gi, "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/\\.md$/i, "")
+        .replace(/[/\\\\:*?"<>|]/g, " ")
+        .replace(/\\s+/g, " ")
+        .trim() || "未命名章节";
+    }
+
+    function chapterFileParts(candidate) {
+      const match = /^(\\d+)\\s+(.+?)(?:\\.md)?$/i.exec(String(candidate.chapterFile || "").trim());
+      if (!match) return null;
+      return { number: Number.parseInt(match[1], 10), width: match[1].length, title: match[2].replace(/\\.md$/i, "").trim() };
+    }
+
+    function recommendedChapterStartNumber() {
+      let highest = -1;
+      let width = 2;
+      for (const row of rowsForModule()) {
+        const match = /^(\\d+)\\s+/.exec(String(row.chapterFile || "").trim());
+        if (!match) continue;
+        highest = Math.max(highest, Number.parseInt(match[1], 10));
+        width = Math.max(width, match[1].length);
+      }
+      if (highest < 0) return "01";
+      return String(highest + 1).padStart(width, "0");
+    }
+
+    function closeChapterFileModal() {
+      document.getElementById("chapter-number-modal")?.remove();
+    }
+
+    function setSelectedChapterBoundaryFile() {
+      const selectedRows = selectedLevelOneHeadings();
+      if (!selectedRows.length) {
+        post("showWarning", { message: "请先勾选至少一个 1 级标题行。" });
+        return;
+      }
+      closeChapterFileModal();
+      const recommendedStart = recommendedChapterStartNumber();
+      const backdrop = document.createElement("div");
+      backdrop.className = "modal-backdrop";
+      backdrop.id = "chapter-number-modal";
+      const modal = document.createElement("div");
+      modal.className = "modal";
+      const title = el("h2", "设置章节文件");
+      const description = el("p", "统一序号会归入同一章节；依次递增会创建独立章节；整体偏移会在现有章节序号上统一加减。");
+      const mode = document.createElement("select");
+      mode.append(new Option("统一序号", "same"), new Option("从起始序号依次递增", "sequence"), new Option("整体偏移", "offset"));
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "推荐起始编号：" + recommendedStart + "（可修改）";
+      input.inputMode = "numeric";
+      input.autocomplete = "off";
+      const preview = el("p", "");
+      const actions = el("div", undefined, "modal-actions");
+      const confirm = button("确认", () => {
+        input.setCustomValidity("");
+        const isOffset = mode.value === "offset";
+        const value = input.value.trim() || (isOffset ? "" : recommendedStart);
+        if (isOffset && !/^[+-]\\d+$/.test(value)) {
+          input.setCustomValidity("请输入 +数字 或 -数字，例如 +2、-3。");
+          input.reportValidity();
+          input.focus();
+          return;
+        }
+        if (!isOffset && !/^\\d+$/.test(value)) {
+          input.setCustomValidity("请输入数字章节序号。");
+          input.reportValidity();
+          input.focus();
+          return;
+        }
+        if (isOffset) {
+          const offset = Number.parseInt(value, 10);
+          const invalid = selectedRows.some((row) => {
+            const current = chapterFileParts(row);
+            return !current || current.number + offset < 0;
+          });
+          if (invalid) {
+            input.setCustomValidity("所选行必须已有数字章节序号，且偏移后序号不能小于 0。");
+            input.reportValidity();
+            input.focus();
+            return;
+          }
+        }
+        closeChapterFileModal();
+        postKeepView("assignChapterFiles", {
+          ids: selectedRows.map((row) => row.id),
+          mode: mode.value,
+          value,
+        }, { clearSelection: true });
+      }, "primary");
+      const updatePreview = () => {
+        input.setCustomValidity("");
+        const isOffset = mode.value === "offset";
+        input.placeholder = isOffset
+          ? "+数字代表输出序号整体增加；-数字代表输出序号整体减少"
+          : "推荐起始编号：" + recommendedStart + "（可修改）";
+        input.inputMode = isOffset ? "text" : "numeric";
+        const value = input.value.trim() || (isOffset ? "" : recommendedStart);
+        if (mode.value === "same") {
+          preview.textContent = "章节文件：" + value + " " + titleTextForChapterFile(selectedRows[0]) + ".md（全部选中行）";
+          return;
+        }
+        if (isOffset) {
+          if (!/^[+-]\\d+$/.test(value)) {
+            preview.textContent = "请输入整体偏移量，例如 +2 或 -3。";
+            return;
+          }
+          const offset = Number.parseInt(value, 10);
+          const first = chapterFileParts(selectedRows[0]);
+          const last = chapterFileParts(selectedRows[selectedRows.length - 1]);
+          if (!first || !last || first.number + offset < 0 || last.number + offset < 0) {
+            preview.textContent = "所选标题需要已有有效章节序号，且偏移后不能小于 0。";
+            return;
+          }
+          const firstNumber = String(first.number + offset).padStart(first.width, "0");
+          const lastNumber = String(last.number + offset).padStart(last.width, "0");
+          preview.textContent = "章节文件：" + firstNumber + " " + first.title + ".md；...；" + lastNumber + " " + last.title + ".md";
+          return;
+        }
+        const last = String(Number.parseInt(value, 10) + selectedRows.length - 1).padStart(value.length, "0");
+        preview.textContent = "章节文件：" + value + " " + titleTextForChapterFile(selectedRows[0]) + ".md；...；" + last + " " + titleTextForChapterFile(selectedRows[selectedRows.length - 1]) + ".md";
+      };
+      input.addEventListener("input", updatePreview);
+      mode.addEventListener("change", updatePreview);
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          confirm.click();
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeChapterFileModal();
+        }
+      });
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) closeChapterFileModal();
+      });
+      actions.append(button("取消", () => closeChapterFileModal()), confirm);
+      modal.append(title, description, mode, input, preview, actions);
+      backdrop.append(modal);
+      document.body.append(backdrop);
+      updatePreview();
+      setTimeout(() => input.focus(), 0);
+    }
+
     function render() {
       captureScroll();
       app.replaceChildren();
@@ -331,6 +504,7 @@ export function renderSidebar(state: SidebarState): string {
       if (state.activeModule === "章节定界") {
         toolbar.append(
           button("创建/打开定界工作稿", () => postKeepView("openChapterBoundaryWork"), "primary"),
+          button("设置章节文件", () => setSelectedChapterBoundaryFile()),
           button("导出章节", () => postKeepView("exportChapterBoundaryChapters")),
           button("保存标定", () => postKeepView("saveAnnotations")),
         );
@@ -403,19 +577,6 @@ export function renderSidebar(state: SidebarState): string {
           postKeepView("setRowsLineType", { ids: [...selected], lineType: select.value }, { clearSelection: true });
         }),
       );
-      if (state.activeModule === "章节定界") {
-        const fileInput = document.createElement("input");
-        fileInput.className = "chapter-file";
-        fileInput.placeholder = "章节名称";
-        fileInput.title = "分配给所选记录的章节目录名，例如 12 Valuation";
-        bar.append(
-          fileInput,
-          button("分配章节文件", () => {
-            if (!selected.size) return;
-            postKeepView("setChapterFile", { ids: [...selected], chapterFile: fileInput.value }, { clearSelection: true });
-          }, "primary"),
-        );
-      }
       return bar;
     }
 
