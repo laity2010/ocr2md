@@ -3,7 +3,7 @@
 `ocr2md` 是一个专用于 OCR Markdown 标定的 VS Code 扩展。项目仅保留四个工作模块：
 
 - **章节定界**：合并序列 Markdown、维护定界工作稿，并按一级标题导出章节。
-- **章节标题**：在章节工作稿中检查和调整标题层级，显示相对导出基线的增删改。
+- **章节标题**：在章节工作稿中检查和调整标题层级，显示相对 `chapters/` 原件的增删改。
 - **注释**：扫描注释引用与正文、配对确认，并维护订正工作稿。
 - **图片**：扫描图片标题、链接、文本和 HTML，支持下载外部图片。
 
@@ -29,8 +29,8 @@
 - Markdown 开头的 YAML 没有 `ocr2md_chapter_split: true` 时，文件归入 `ocr`，并按自然序参与合并。
 - 旧版输出目录 `output/` 与 `output_chapters/` 不参与新工作流扫描，也不会被删除。
 - “创建/打开定界工作稿”将 `ocr` 中的序列文件拼接为工作目录根层的 `.ocr2md-merged.working.md`。
-- “导出章节”将结果写入 `工作目录/chapters/`，并写入 `ocr2md_chapter_split: true` 等章节定界 properties。
-- 点击 `chapters/章节文件/标题`、`注释` 或 `图片`，数据表会切换到对应模块，并且只处理该章节文件。
+- “导出章节”将结果写入 `工作目录/chapters/`，作为该章只读原件，并写入 `ocr2md_chapter_split: true` 等章节定界 properties。
+- 点击 `chapters/章节文件/标题`、`注释` 或 `图片`，打开该章工作稿；数据表只处理这一章，增删改相对 `chapters/` 原件比较。
 
 ## 开发运行
 
@@ -46,7 +46,8 @@ code .
 
 - `.ocr2md/`：模块基线、工作稿和标定 sidecar。
 - `.ocr2md-merged.working.md`：章节定界合并工作稿。
-- `chapters/`：章节定界导出的章节文件。
+- `chapters/`：章节定界导出的章节原件，用作比较基准。
+- `.ocr2md/chapter-working/`：章节工作稿；标题层级、注释和图片相关改动写在这里。
 - `imgs/`：图片模块下载的本地图片。
 
 源 Markdown 不会因为数据表中的 `已删除` 标记而被删除。
