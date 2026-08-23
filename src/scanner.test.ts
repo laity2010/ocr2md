@@ -63,4 +63,34 @@ assert.deepStrictEqual(
   ],
 );
 
+const tableDoc = [
+  "Before",
+  "<table>",
+  "<tr><td>A</td></tr>",
+  "<tr>",
+  "<td>B</td>",
+  "</tr>",
+  "</table>",
+  "After",
+  "![image](https://example.com/a.jpg)",
+].join("\n");
+const tableRows = scanEmbedLines(tableDoc);
+assert.strictEqual(tableRows.length, 2, "a multi-line table must stay one embed HTML row");
+assert.strictEqual(tableRows[0].lineType, "嵌入HTML");
+assert.strictEqual(tableRows[0].range.line, 1);
+assert.strictEqual(tableRows[0].range.endLine, 6);
+assert.ok(tableRows[0].raw.startsWith("<table>"));
+assert.ok(tableRows[0].raw.endsWith("</table>"));
+assert.strictEqual(tableRows[1].lineType, "嵌入链接");
+assert.strictEqual(tableRows[1].range.line, 8);
+
+const tableThenHeading = [
+  "<table>",
+  "<tr><td>cell</td></tr>",
+  "# Next chapter",
+].join("\n");
+const unclosed = scanEmbedLines(tableThenHeading);
+assert.strictEqual(unclosed.length, 1);
+assert.strictEqual(unclosed[0].range.endLine, 1);
+
 console.log("scanner tests passed");

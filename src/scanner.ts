@@ -1,10 +1,15 @@
-import type { Candidate } from "./types";
+import type { Candidate, SourceRange } from "./types";
 
 export type EmbedLineType = "内嵌标题" | "嵌入链接" | "嵌入HTML" | "嵌入文本";
 
 const HTML_TAG_RE = /<\s*\/?\s*[a-zA-Z][a-zA-Z0-9-]*(?:\s|\/|>)/;
 const IMAGE_LINK_RE = /!\[[^\]]*\]\([^)]+\)|!\[\[[^\]]+\]\]/;
 const EMBED_TITLE_RE = /^\s*(?:#{1,6}\s*)?(?:figure|fig\.?|图)\s*(?:\d|[IVXLCDM])/i;
+const HEADING_RE = /^ {0,3}#{1,6}(?:\s|$)/;
+const VOID_HTML_TAGS = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
+]);
+const TABLE_INNER_TAGS = new Set(["thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col"]);
 
 export function detectEmbedLineType(raw: string): Exclude<EmbedLineType, "嵌入文本"> | undefined {
   if (HTML_TAG_RE.test(raw)) return "嵌入HTML";
@@ -13,49 +18,117 @@ export function detectEmbedLineType(raw: string): Exclude<EmbedLineType, "嵌入
   return undefined;
 }
 
-/** Split a consecutive-text block into one embed row per matching line. */
-export function embedRowsFromBlock(block: Candidate): Candidate[] {
-  const lines = block.raw.replace(/\r\n?/g, "\n").split("\n");
-  const start = block.range.line;
-  const rows: Candidate[] = [];
-  lines.forEach((line, offset) => {
-    const lineType = detectEmbedLineType(line);
-    if (!lineType) return;
-    rows.push({
-      ...block,
-      raw: line,
-      preview: line.slice(0, 255),
-      label: line.trim(),
-      typeLabel: "嵌入块",
-      lineType,
-      chapterBoundaryState: undefined,
-      baselinePreview: undefined,
-      range: { line: start + offset, start: 0, end: line.length },
-    });
-  });
-  return rows;
+export function embedRangeContains(outer: SourceRange, inner: SourceRange): boolean {
+  const outerEnd = outer.endLine ?? outer.line;
+  const innerEnd = inner.endLine ?? inner.line;
+  return inner.line >= outer.line && innerEnd <= outerEnd;
 }
 
-/** Identify every image link and HTML line in a chapter file. */
+/** Split a consecutive-text block into embed rows, keeping HTML tables intact. */
+export function embedRowsFromBlock(block: Candidate): Candidate[] {
+  return collectEmbedRows(block.raw.replace(/\r\n?/g, "\n").split("\n"), block.range.line).map((row) => ({
+    ...block,
+    ...row,
+    typeLabel: "嵌入块",
+    chapterBoundaryState: undefined,
+    baselinePreview: undefined,
+  }));
+}
+
+/** Identify every image link and HTML block in a chapter file. */
 export function scanEmbedLines(text: string): Candidate[] {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  return collectEmbedRows(text.replace(/\r\n?/g, "\n").split("\n"), 0);
+}
+
+function collectEmbedRows(lines: string[], lineOffset: number): Candidate[] {
   const rows: Candidate[] = [];
-  lines.forEach((line, lineNumber) => {
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
     const lineType = detectEmbedLineType(line);
-    if (!lineType) return;
+    if (!lineType) {
+      index += 1;
+      continue;
+    }
+    const end = lineType === "嵌入HTML" ? findHtmlBlockEnd(lines, index) : index;
+    const raw = lines.slice(index, end + 1).join("\n");
+    const startLine = lineOffset + index;
+    const endLine = lineOffset + end;
     rows.push({
-      id: `embed-${lineNumber}`,
+      id: `embed-${startLine}`,
       kind: "regex",
-      label: line.trim(),
-      raw: line,
-      preview: line.slice(0, 255),
-      range: { line: lineNumber, start: 0, end: line.length },
+      label: line.trim() || `L${startLine + 1}`,
+      raw,
+      preview: raw.replace(/\r?\n/g, " ⏎ ").trim().slice(0, 255),
+      range: {
+        line: startLine,
+        start: 0,
+        endLine: endLine === startLine ? undefined : endLine,
+        end: lines[end].length,
+      },
       typeLabel: "嵌入块",
       lineType,
       status: "候选",
     });
-  });
+    index = end + 1;
+  }
   return rows;
+}
+
+function findHtmlBlockEnd(lines: string[], start: number): number {
+  const tag = firstHtmlTag(lines[start]);
+  if (!tag) return start;
+  if (tag.selfClosing || VOID_HTML_TAGS.has(tag.name)) return start;
+  if (TABLE_INNER_TAGS.has(tag.name)) return htmlRunEnd(lines, start, TABLE_INNER_TAGS);
+  const depthOnLine = htmlTagDepthDelta(lines[start], tag.name);
+  if (tag.closing || depthOnLine <= 0) return start;
+  let depth = depthOnLine;
+  let end = start;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (isHtmlBlockHardStop(lines[index]) && !HTML_TAG_RE.test(lines[index])) return end;
+    depth += htmlTagDepthDelta(lines[index], tag.name);
+    end = index;
+    if (depth <= 0) return index;
+  }
+  return end;
+}
+
+function htmlRunEnd(lines: string[], start: number, innerTags?: Set<string>): number {
+  let end = start;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isHtmlBlockHardStop(line) && !HTML_TAG_RE.test(line)) break;
+    const tag = firstHtmlTag(line);
+    if (innerTags && tag && !innerTags.has(tag.name) && tag.name !== "table") break;
+    if (!HTML_TAG_RE.test(line) && line.trim() && !innerTags) break;
+    end = index;
+  }
+  return end;
+}
+
+function isHtmlBlockHardStop(line: string): boolean {
+  return HEADING_RE.test(line) || Boolean(EMBED_TITLE_RE.test(line) && !HTML_TAG_RE.test(line));
+}
+
+function firstHtmlTag(line: string): { name: string; closing: boolean; selfClosing: boolean } | undefined {
+  const match = /<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9-]*)\b([^>]*)>/.exec(line);
+  if (!match) return undefined;
+  return {
+    name: match[2].toLowerCase(),
+    closing: Boolean(match[1]),
+    selfClosing: /\/\s*$/.test(match[3]) || VOID_HTML_TAGS.has(match[2].toLowerCase()),
+  };
+}
+
+function htmlTagDepthDelta(line: string, tagName: string): number {
+  const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const openRe = new RegExp(`<\\s*${escaped}\\b[^>]*>`, "gi");
+  const closeRe = new RegExp(`<\\s*/\\s*${escaped}\\s*>`, "gi");
+  const selfRe = new RegExp(`<\\s*${escaped}\\b[^>]*/>`, "gi");
+  const opens = line.match(openRe)?.length ?? 0;
+  const closes = line.match(closeRe)?.length ?? 0;
+  const selfs = line.match(selfRe)?.length ?? 0;
+  return opens - selfs - closes;
 }
 
 export function scanRegexMatches(text: string, pattern: string): Candidate[] {

@@ -31,7 +31,7 @@ import {
   locateCandidate,
   reconcileRows,
 } from "./rowIdentity";
-import { detectEmbedLineType, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
+import { detectEmbedLineType, embedRangeContains, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
 import type {
   AnnotationPair,
   Candidate,
@@ -393,6 +393,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     for (const pattern of patterns) {
       for (const candidate of scanRegexMatches(text, pattern)) {
+        if (moduleName === "嵌入块" && scannedEmbeds.some((block) => embedRangeContains(block.range, candidate.range))) continue;
         const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(candidate.raw) : undefined;
         const row: Candidate = {
           ...candidate,
