@@ -105,20 +105,21 @@ export function reconcileRows(previous: Candidate[], scanned: Candidate[], docum
   assignGroups((row) => `raw:${row.raw}`);
   assignGroups(legacyPositionKey);
 
-  const result = scan.map((row, index) => merged[index] ?? row);
+  const scannedResult = scan.map((row, index) => merged[index] ?? row);
+  const extras: Candidate[] = [];
   prev.forEach((old, index) => {
     if (usedPrev.has(index)) return;
     if (isDeletedCandidate(old)
       || old.isWorkingCorrection
       || ["added", "modified", "deleted"].includes(old.chapterBoundaryState ?? "")) {
-      result.push(old);
+      extras.push(old);
     }
   });
-  const ordered = result.sort((left, right) =>
+  const relocatedExtras = documentText ? relocateRows(extras, documentText) : extras;
+  return [...scannedResult, ...relocatedExtras].sort((left, right) =>
     left.range.line - right.range.line
     || left.range.start - right.range.start
     || left.raw.localeCompare(right.raw));
-  return documentText ? relocateRows(ordered, documentText) : ordered;
 }
 
 export function relocateRows(rows: Candidate[], documentText: string): Candidate[] {
@@ -397,6 +398,7 @@ function nextChangeState(previous: Candidate, scanned: Candidate): Candidate["ch
 function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
   return {
     ...scanned,
+    rangeUntrusted: undefined,
     id: previous.id,
     rowId: previous.rowId ?? previous.id,
     atomId: previous.atomId ?? scanned.atomId,
@@ -436,7 +438,8 @@ function neighborKey(row: Candidate): string | undefined {
   return `slot:${row.anchorPreviousHash}\0${row.anchorNextHash}\0${row.range.start}`;
 }
 
-function legacyPositionKey(row: Candidate): string {
+function legacyPositionKey(row: Candidate): string | undefined {
+  if (row.rangeUntrusted) return undefined;
   return `legacy:${row.range.line}\0${row.range.start}\0${row.raw}`;
 }
 

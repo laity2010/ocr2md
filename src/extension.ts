@@ -6,9 +6,7 @@ import * as vscode from "vscode";
 import {
   applyChangeState,
   buildChapterBoundarySegments,
-  mapLinesAfterEdit,
   mergeSequenceMarkdown,
-  remapRangeLines,
   scanChapterBoundaryLines,
   type MergeInputText,
 } from "./chapterBoundary";
@@ -32,7 +30,9 @@ import {
   reconcileRows,
   relocateRows,
 } from "./rowIdentity";
-import { detectEmbedLineType, embedRowsFromBlock, mergeEmbedScan, scanRegexMatches } from "./scanner";
+import { splitBlankLineBlocks } from "./atoms";
+import { detectEmbedLineType, mergeEmbedScan, scanRegexMatches } from "./scanner";
+import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
 import type {
   AnnotationPair,
   Candidate,
@@ -40,7 +40,6 @@ import type {
   ImageDownloadProgress,
   ModuleName,
   SidebarState,
-  SourceRange,
 } from "./types";
 import { renderSidebar } from "./webview";
 import {
@@ -149,7 +148,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       }),
       vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
-          this.noteWorkingCopyEdit(event.document);
+          this.pendingWorkingCopyRescan = true;
+          this.scheduleWorkingCopyReindex(event.document);
           return;
         }
         this.scheduleHeadingDecorations(event.document);
@@ -247,7 +247,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         await this.saveSidecar();
         break;
       case "reloadAnnotations":
-        await this.reloadSidecar();
+        await this.reloadSidecar({ reindex: true });
         break;
     }
   }
@@ -295,7 +295,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     this.rows = [];
     this.annotationPairs = [];
-    await this.reloadSidecar({ silent: true });
+    await this.reloadSidecar({ silent: true, reindex: false });
     if (requestedModule === "章节标题" || (!requestedModule && this.selectedFile.kind === "chapter")) {
       this.activeModule = "章节标题";
       if (!this.chapterWorkingUri && workspace) {
@@ -305,15 +305,12 @@ class Ocr2mdExtension implements vscode.Disposable {
         editorUri = ensured.workingUri;
       }
       this.chapterWorkingUri = this.chapterWorkingUri ?? editorUri;
-      await this.refreshChapterTitleRows(this.chapterWorkingUri);
+      await this.reindexChapterWorkingCopy(this.selectedFileText);
     } else if (requestedModule === "注释" || requestedModule === "嵌入块") {
       this.activeModule = requestedModule;
-      if (requestedModule === "嵌入块" && this.chapterWorkingUri) {
-        await this.refreshChapterTitleRows(this.chapterWorkingUri, { writeMarker: false });
-      }
-      await this.scanCurrentModule(requestedModule);
-    } else if (this.activeModule === "注释" || this.activeModule === "嵌入块") {
-      await this.scanCurrentModule(this.activeModule);
+      await this.reindexChapterWorkingCopy(this.selectedFileText);
+    } else if (this.activeModule === "注释" || this.activeModule === "嵌入块" || this.activeModule === "章节标题") {
+      await this.reindexChapterWorkingCopy(this.selectedFileText);
     }
     await this.showDocumentPair(editorUri, { preserveFocus: true });
     this.directoryProvider.refresh();
@@ -332,10 +329,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     } else if (moduleName === "章节标题") {
       if (this.selectedFile) await this.openChapterWorkingCopy({ silent: true });
     } else if (this.selectedFile) {
-      if (moduleName === "嵌入块" && this.chapterWorkingUri) {
-        await this.refreshChapterTitleRows(this.chapterWorkingUri, { writeMarker: false });
-      }
-      await this.scanCurrentModule(moduleName);
+      await this.reindexChapterWorkingCopy(this.selectedFileText);
     }
     this.directoryProvider.refresh();
     this.update();
@@ -470,56 +464,50 @@ class Ocr2mdExtension implements vscode.Disposable {
     return this.isWorkingCopyEditorActive();
   }
 
-  private shiftWorkingCopyRows(current: string) {
-    if (this.selectedFileText === current) return;
-    const lineMap = mapLinesAfterEdit(this.selectedFileText, current);
-    this.rows = this.rows.map((row) => remapRangeLines(row, lineMap));
-    this.selectedFileText = current;
-  }
-
-  private noteWorkingCopyEdit(document: vscode.TextDocument) {
-    this.shiftWorkingCopyRows(document.getText());
-    this.pendingWorkingCopyRescan = true;
-    this.scheduleWorkingCopyPaint();
-  }
-
-  private scheduleWorkingCopyPaint() {
+  private scheduleWorkingCopyReindex(document: vscode.TextDocument) {
     if (this.workingCopyPaintTimer) clearTimeout(this.workingCopyPaintTimer);
     this.workingCopyPaintTimer = setTimeout(() => {
       this.workingCopyPaintTimer = undefined;
-      void this.paintWorkingCopyLineNumbers();
+      void this.syncTableToWorkingCopy(document.uri, document.getText(), { writeMarker: false });
     }, 300);
   }
 
-  private async paintWorkingCopyLineNumbers() {
-    this.rows = await this.applyWorkingCopyDiff(this.rows, this.selectedFileText);
-    this.update();
-  }
-
-  private flushWorkingCopyLineShift() {
+  private async reindexChapterWorkingCopy(text: string, options: { writeMarker?: boolean; silent?: boolean } = {}) {
     const uri = this.chapterWorkingUri;
-    if (!uri) return;
-    const document = vscode.workspace.textDocuments.find((item) => item.uri.fsPath === uri.fsPath);
-    if (document) this.shiftWorkingCopyRows(document.getText());
+    if (!uri) {
+      if (this.activeModule === "注释" || this.activeModule === "嵌入块") {
+        await this.scanCurrentModule(this.activeModule, { silent: options.silent });
+      }
+      return;
+    }
+    await this.syncTableToWorkingCopy(uri, text, { writeMarker: options.writeMarker, silent: options.silent });
   }
 
-  private async syncTableToWorkingCopy(uri: vscode.Uri, current: string, options: { writeMarker?: boolean } = {}) {
+  private async syncTableToWorkingCopy(
+    uri: vscode.Uri,
+    current: string,
+    options: { writeMarker?: boolean; silent?: boolean } = {},
+  ) {
     if (this.workingCopyPaintTimer) {
       clearTimeout(this.workingCopyPaintTimer);
       this.workingCopyPaintTimer = undefined;
     }
-    this.shiftWorkingCopyRows(current);
+    this.selectedFileText = current;
     await this.refreshChapterTitleRows(uri, {
       writeMarker: Boolean(options.writeMarker),
       currentText: current,
       silent: true,
     });
-    if (this.activeModule === "注释" || this.activeModule === "嵌入块") {
-      await this.scanCurrentModule(this.activeModule, { silent: true });
-    }
+    await this.scanModuleText(
+      "注释",
+      current,
+      uri.fsPath,
+      this.selectedFile?.path,
+      { silent: true },
+    );
     this.rows = await this.applyWorkingCopyDiff(this.rows, current);
     this.pendingWorkingCopyRescan = false;
-    this.update();
+    if (!options.silent) this.update();
   }
 
   private async syncWorkingCopyTable(document: vscode.TextDocument) {
@@ -689,7 +677,10 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async locateRow(id: string) {
-    this.flushWorkingCopyLineShift();
+    if (this.pendingWorkingCopyRescan && this.chapterWorkingUri) {
+      const open = vscode.workspace.textDocuments.find((item) => item.uri.fsPath === this.chapterWorkingUri?.fsPath);
+      if (open) await this.syncTableToWorkingCopy(open.uri, open.getText(), { writeMarker: false });
+    }
     const row = this.rows.find((candidate) => candidate.id === id);
     const target = this.modulePreviewPaths.get(this.activeModule)
       ?? row?.workingCopyPath
@@ -702,9 +693,6 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     const editor = await this.showDocumentPair(vscode.Uri.file(target));
     const document = editor.document;
-    if (this.chapterWorkingUri && document.uri.fsPath === this.chapterWorkingUri.fsPath) {
-      this.shiftWorkingCopyRows(document.getText());
-    }
     const current = this.rows.find((candidate) => candidate.id === id) ?? row;
     const located = locateCandidate(document.getText(), current);
     if (!located) {
@@ -811,7 +799,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.modulePreviewPaths.set("注释", ensured.workingUri.fsPath);
     this.modulePreviewPaths.set("嵌入块", ensured.workingUri.fsPath);
     this.activeModule = "章节标题";
-    await this.refreshChapterTitleRows(ensured.workingUri);
+    await this.reindexChapterWorkingCopy(ensured.workingText, { silent: options.silent });
     await this.showDocumentPair(ensured.workingUri);
   }
 
@@ -877,10 +865,27 @@ class Ocr2mdExtension implements vscode.Disposable {
     const changes = scanChapterBoundaryLines(chapterDiffBaseline(baseline, current), current);
     const currentChanges = changes.filter((entry) => entry.state !== "deleted");
     const sourcePath = originalPath ?? uri.fsPath;
-    const blocks = scanChapterBlocks(current, uri.fsPath, workspace?.uri.fsPath, sourcePath).map((row) => {
-      const endLine = row.range.endLine ?? row.range.line;
-      const change = currentChanges.find((entry) => entry.line >= row.range.line && entry.line <= endLine);
-      return { ...row, chapterBoundaryState: change?.state ?? "heading", baselinePreview: change?.baselineText };
+    const sourceLabel = workspace ? path.relative(workspace.uri.fsPath, sourcePath) : path.basename(sourcePath);
+    const blocks = splitBlankLineBlocks(current).map((block) => {
+      const endLine = block.range.endLine ?? block.range.line;
+      const change = currentChanges.find((entry) => entry.line >= block.range.line && entry.line <= endLine);
+      const heading = /^ {0,3}(#{1,6})(?:\s+|$)/.exec(block.raw.split("\n")[0] ?? "");
+      return {
+        id: `chapter-block-${candidateHash(`${sourcePath}\0${block.range.line}\0${block.raw}`)}`,
+        kind: "regex" as const,
+        label: block.raw.split("\n")[0]?.trim() || `L${block.range.line + 1}`,
+        raw: block.raw,
+        preview: block.raw.slice(0, 255),
+        range: block.range,
+        typeLabel: "章节标题" as const,
+        lineType: heading ? `${heading[1].length} 级标题` : "非标题",
+        workingCopyPath: uri.fsPath,
+        sourcePath,
+        sourceLabel,
+        status: "候选" as const,
+        chapterBoundaryState: change?.state ?? "heading" as const,
+        baselinePreview: change?.baselineText,
+      };
     });
     const identityContext = { sourcePath };
     const titleBlocks = attachScanIdentities(
@@ -889,7 +894,13 @@ class Ocr2mdExtension implements vscode.Disposable {
       { moduleName: "章节标题", ...identityContext },
     );
     const imageBlocks = attachScanIdentities(
-      blocks.flatMap((row) => embedRowsFromBlock(row)),
+      mergeEmbedScan(current, splitPatterns(this.moduleRegexPatterns["嵌入块"] ?? "")).map((row) => ({
+        ...row,
+        typeLabel: "嵌入块" as const,
+        workingCopyPath: uri.fsPath,
+        sourcePath,
+        sourceLabel,
+      })),
       current,
       { moduleName: "嵌入块", ...identityContext },
     );
@@ -994,7 +1005,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.activeModule = "章节定界";
     this.selectedFile = { label: path.basename(workingUri.fsPath), path: workingUri.fsPath, kind: "working" };
     this.selectedFileText = workingText;
-    await this.reloadSidecar({ silent: true });
+    await this.reloadSidecar({ silent: true, reindex: false });
     await this.refreshChapterBoundaryRows();
     await this.showDocumentPair(workingUri);
   }
@@ -1099,7 +1110,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     void vscode.window.showInformationMessage(`已导出 ${segments.length} 个章节到 chapters/章节名称/。`);
   }
 
-  private async reloadSidecar(options: { silent?: boolean } = {}) {
+  private async reloadSidecar(options: { silent?: boolean; reindex?: boolean } = {}) {
     const file = this.selectedFile;
     const workspace = file ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file.path)) ?? vscode.workspace.workspaceFolders?.[0] : undefined;
     if (!file || !workspace) return;
@@ -1113,14 +1124,18 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (!sidecarPath) return;
     const uri = vscode.Uri.file(sidecarPath);
     try {
-      const sidecar = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8")) as AnnotationSidecar;
-      const loaded = (sidecar.rows ?? []).map(fromSidecarRow).filter((row) =>
-        isModuleName(row.typeLabel) && rowBelongsToChapter(row, file.path, this.chapterWorkingUri?.fsPath ?? file.path)
-      );
-      this.rows = loaded.sort(compareRows);
-      this.annotationPairs = (sidecar.annotationPairs ?? []).filter((pair) => pair.sourcePath === file.path);
-      this.rebuildAnnotationPairs();
-      if (!options.silent) void vscode.window.showInformationMessage(`已恢复 ${loaded.length} 条标定。`);
+      const parsed = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8"));
+      const loaded = candidatesFromSidecar(parsed);
+      this.rows = loaded.rows.filter((row) =>
+        row.typeLabel && rowBelongsToChapter(row, file.path, this.chapterWorkingUri?.fsPath ?? file.path)
+      ).sort(compareRows);
+      this.annotationPairs = (loaded.annotationPairs ?? []).filter((pair) => pair.sourcePath === file.path);
+      if (options.reindex !== false && this.chapterWorkingUri) {
+        await this.reindexChapterWorkingCopy(this.selectedFileText, { silent: true });
+      } else {
+        this.rebuildAnnotationPairs();
+      }
+      if (!options.silent) void vscode.window.showInformationMessage(`已恢复 ${this.rows.length} 条标定。`);
       this.update();
     } catch (error) {
       void vscode.window.showErrorMessage(`标定恢复失败：${error instanceof Error ? error.message : String(error)}`);
@@ -1133,13 +1148,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (!file || !workspace) return;
     const sidecarPath = chapterSidecarPath(file.path);
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(sidecarPath)));
-    const sidecar: AnnotationSidecar = {
-      schemaVersion: 3,
-      sourceFile: file.path,
-      savedAt: new Date().toISOString(),
-      rows: this.rows.map(toSidecarRow),
-      annotationPairs: this.annotationPairs,
-    };
+    const sidecar = serializeSidecar(file.path, this.rows, this.annotationPairs);
     await vscode.workspace.fs.writeFile(vscode.Uri.file(sidecarPath), Buffer.from(JSON.stringify(sidecar, null, 2), "utf8"));
     void vscode.window.showInformationMessage(`已保存 ${this.rows.length} 条标定。`);
   }
@@ -1326,89 +1335,6 @@ interface WebviewMessage {
   message?: string;
   chapterFile?: string;
   annotationNumber?: string;
-}
-
-interface AnnotationSidecar {
-  schemaVersion: number;
-  sourceFile: string;
-  savedAt: string;
-  rows: SidecarRow[];
-  annotationPairs: AnnotationPair[];
-}
-
-interface SidecarRow extends Omit<Candidate, "range"> {
-  range?: SourceRange;
-  line?: number;
-  start?: number;
-  endLine?: number;
-  end?: number;
-}
-
-const LEGACY_MODULE_NAMES: Record<string, ModuleName> = { "图片": "嵌入块" };
-const LEGACY_LINE_TYPES: Record<string, string> = {
-  "图片标题": "内嵌标题",
-  "图片链接": "嵌入链接",
-  "图片HTML": "嵌入HTML",
-  "图片文本": "嵌入文本",
-};
-
-function fromSidecarRow(row: SidecarRow): Candidate {
-  const typeLabel = row.typeLabel ? LEGACY_MODULE_NAMES[row.typeLabel] ?? row.typeLabel : row.typeLabel;
-  const lineType = row.lineType ? LEGACY_LINE_TYPES[row.lineType] ?? row.lineType : row.lineType;
-  return {
-    ...row,
-    kind: row.kind ?? "regex",
-    label: row.label ?? row.raw ?? "",
-    raw: row.raw ?? "",
-    preview: row.preview ?? row.raw ?? "",
-    typeLabel,
-    lineType,
-    range: row.range ?? {
-      line: row.line ?? 0,
-      start: row.start ?? 0,
-      endLine: row.endLine,
-      end: row.end ?? 0,
-    },
-  };
-}
-
-function toSidecarRow(row: Candidate): SidecarRow {
-  const { range, ...rest } = row;
-  return { ...rest, line: range.line, start: range.start, endLine: range.endLine, end: range.end };
-}
-
-function scanChapterBlocks(text: string, workingPath: string, workspaceRoot?: string, sourcePath?: string): Candidate[] {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  const identityPath = sourcePath ?? workingPath;
-  const rows: Candidate[] = [];
-  let start = 0;
-  while (start < lines.length) {
-    while (start < lines.length && !lines[start].trim()) start += 1;
-    if (start >= lines.length) break;
-    let end = start;
-    while (end + 1 < lines.length && lines[end + 1].trim()) end += 1;
-    const raw = lines.slice(start, end + 1).join("\n");
-    const match = /^ {0,3}(#{1,6})(?:\s+|$)/.exec(lines[start]);
-    const lineType = match ? `${match[1].length} 级标题` : "非标题";
-    const id = `chapter-block-${candidateHash(`${identityPath}\0${start}\0${raw}`)}`;
-    rows.push({
-      id,
-      rowId: id,
-      kind: "regex",
-      label: lines[start].trim(),
-      raw,
-      preview: raw.slice(0, 255),
-      range: { line: start, start: 0, endLine: end, end: lines[end].length },
-      typeLabel: "章节标题",
-      lineType,
-      workingCopyPath: workingPath,
-      sourcePath: identityPath,
-      sourceLabel: workspaceRoot ? path.relative(workspaceRoot, identityPath) : path.basename(identityPath),
-      status: "候选",
-    });
-    start = end + 1;
-  }
-  return rows;
 }
 
 function nearestMatchingLine(text: string, lineText: string, hint: number): number {

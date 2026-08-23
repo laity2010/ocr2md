@@ -58,5 +58,6 @@ code .
 - `.ocr2md/`：章节定界合并基线等扩展内部数据。
 - `.ocr2md-merged.working.md`：章节定界合并工作稿。
 - `chapters/章节名称/`：该章内容工作目录。含定界原文件、工作稿、工作表 sidecar、`imgs/` 图片及其他章节文件；有工作稿改动时原文件 YAML 含 `ocr2md_chapter_changed: true`。
+- 工作稿 Markdown 是正文真源。sidecar JSON 只存 `atomId` 标定（行类型、注释号、章节文件等），不能单独还原正文。数据表先扫描工作稿得到当前块，再按 `atomId` 接上标定；行号始终来自工作稿当前位置。
 
 源 Markdown 不会因为数据表中的 `已删除` 标记而被删除。

@@ -25,6 +25,8 @@ export interface Candidate {
   workingCopyPath?: string;
   sourceLine?: number;
   range: SourceRange;
+  /** Sidecar calibration loaded before rescan; line numbers are not identity. */
+  rangeUntrusted?: boolean;
   typeLabel?: ModuleName;
   lineType?: string;
   chapterFile?: string;
