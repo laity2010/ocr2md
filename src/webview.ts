@@ -84,6 +84,11 @@ export function renderSidebar(state: SidebarState): string {
       : [];
     let sortRules = restoredSortRules.length ? restoredSortRules : [{ key: "line", direction: "asc" }];
     const moduleFilters = { ...(persisted.moduleFilters || {}) };
+    if (Array.isArray(persisted.selectedIds)) {
+      for (const id of persisted.selectedIds) selected.add(id);
+    }
+    const scrollByModule = persisted.scrollByModule && typeof persisted.scrollByModule === "object" ? persisted.scrollByModule : {};
+    let focusTarget = persisted.focus && typeof persisted.focus.rowId === "string" ? persisted.focus : undefined;
     const collator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
     const app = document.getElementById("app");
     const post = (command, payload = {}) => vscode.postMessage({ command, ...payload });
@@ -100,7 +105,64 @@ export function renderSidebar(state: SidebarState): string {
     };
 
     function persistViewState() {
-      vscode.setState({ ...persisted, sortRules, moduleFilters });
+      persisted.sortRules = sortRules;
+      persisted.moduleFilters = moduleFilters;
+      persisted.selectedIds = [...selected];
+      persisted.scrollByModule = scrollByModule;
+      persisted.focus = focusTarget;
+      vscode.setState(persisted);
+    }
+
+    function captureScroll() {
+      const wrap = document.querySelector(".table-wrap");
+      if (!wrap) return;
+      scrollByModule[state.activeModule] = { top: wrap.scrollTop, left: wrap.scrollLeft };
+    }
+
+    function restoreScroll() {
+      const wrap = document.querySelector(".table-wrap");
+      if (!wrap) return;
+      const saved = scrollByModule[state.activeModule] || { top: 0, left: 0 };
+      wrap.scrollTop = saved.top || 0;
+      wrap.scrollLeft = saved.left || 0;
+    }
+
+    function restoreFocus() {
+      if (!focusTarget) return;
+      const selector = '[data-row-id="' + cssEscape(focusTarget.rowId) + '"][data-field="' + cssEscape(focusTarget.field) + '"]';
+      const node = document.querySelector(selector);
+      if (node && node.focus) node.focus({ preventScroll: true });
+    }
+
+    function cssEscape(value) {
+      return window.CSS && CSS.escape ? CSS.escape(String(value)) : String(value).replace(/["\\\\]/g, "\\\\$&");
+    }
+
+    function rememberFocus(rowId, field) {
+      focusTarget = { rowId, field };
+    }
+
+    function postKeepView(command, payload, options) {
+      captureScroll();
+      if (options && options.clearSelection) {
+        selected.clear();
+        focusTarget = undefined;
+      }
+      persistViewState();
+      post(command, payload);
+    }
+
+    function syncSelectionChrome() {
+      persistViewState();
+      const count = document.getElementById("selected-count");
+      if (count) count.textContent = "已选 " + selected.size;
+      const boxes = [...document.querySelectorAll("input.row-check")];
+      const visibleIds = boxes.map((box) => box.getAttribute("data-row-id"));
+      const selectAll = document.getElementById("select-all");
+      if (selectAll) {
+        selectAll.checked = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+        selectAll.indeterminate = visibleIds.some((id) => selected.has(id)) && !selectAll.checked;
+      }
     }
 
     function rowWasChanged(row, moduleName) {
@@ -184,11 +246,12 @@ export function renderSidebar(state: SidebarState): string {
     }
 
     function render() {
+      captureScroll();
       app.replaceChildren();
       const tabs = el("div", undefined, "tabs");
       for (const moduleName of MODULES) {
         const count = state.rows.filter((row) => row.typeLabel === moduleName).length;
-        const tab = button(moduleName + " (" + count + ")", () => post("setActiveModule", { moduleName }), "tab");
+        const tab = button(moduleName + " (" + count + ")", () => postKeepView("setActiveModule", { moduleName }), "tab");
         if (moduleName === state.activeModule) tab.classList.add("active");
         tabs.append(tab);
       }
@@ -201,6 +264,10 @@ export function renderSidebar(state: SidebarState): string {
       if (FILTER_OPTIONS[state.activeModule]) app.append(filterToolbar());
       app.append(bulkToolbar());
       app.append(rowTable(rowsForModule()));
+      requestAnimationFrame(() => {
+        restoreScroll();
+        restoreFocus();
+      });
     }
 
     function filterToolbar() {
@@ -212,6 +279,7 @@ export function renderSidebar(state: SidebarState): string {
       select.addEventListener("change", () => {
         moduleFilters[state.activeModule] = select.value;
         selected.clear();
+        focusTarget = undefined;
         persistViewState();
         render();
       });
@@ -223,31 +291,31 @@ export function renderSidebar(state: SidebarState): string {
       const toolbar = el("div", undefined, "toolbar");
       if (state.activeModule === "章节定界") {
         toolbar.append(
-          button("创建/打开定界工作稿", () => post("openChapterBoundaryWork"), "primary"),
-          button("导出章节", () => post("exportChapterBoundaryChapters")),
-          button("保存标定", () => post("saveAnnotations")),
+          button("创建/打开定界工作稿", () => postKeepView("openChapterBoundaryWork"), "primary"),
+          button("导出章节", () => postKeepView("exportChapterBoundaryChapters")),
+          button("保存标定", () => postKeepView("saveAnnotations")),
         );
       } else if (state.activeModule === "章节标题") {
         toolbar.append(
-          button("创建/打开章节工作稿", () => post("openChapterWorkingCopy"), "primary"),
-          button("保存标定", () => post("saveAnnotations")),
-          button("重新加载标定", () => post("reloadAnnotations")),
+          button("创建/打开章节工作稿", () => postKeepView("openChapterWorkingCopy"), "primary"),
+          button("保存标定", () => postKeepView("saveAnnotations")),
+          button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
       } else if (state.activeModule === "注释") {
         toolbar.append(
-          button("打开注释订正工作稿", () => post("openAnnotationWorkingCopy")),
-          button("确认所选 Pair", () => post("confirmAnnotationPairs", { ids: [...selected] })),
-          button("保存标定", () => post("saveAnnotations"), "primary"),
-          button("重新加载标定", () => post("reloadAnnotations")),
+          button("打开注释订正工作稿", () => postKeepView("openAnnotationWorkingCopy")),
+          button("确认所选 Pair", () => postKeepView("confirmAnnotationPairs", { ids: [...selected] })),
+          button("保存标定", () => postKeepView("saveAnnotations"), "primary"),
+          button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
       } else {
         const running = state.imageDownloadProgress?.phase === "downloading";
-        const download = button(running ? "正在下载" : "下载所选图片", () => post("downloadImages", { ids: [...selected] }));
+        const download = button(running ? "正在下载" : "下载所选图片", () => postKeepView("downloadImages", { ids: [...selected] }));
         download.disabled = running;
         toolbar.append(
           download,
-          button("保存标定", () => post("saveAnnotations"), "primary"),
-          button("重新加载标定", () => post("reloadAnnotations")),
+          button("保存标定", () => postKeepView("saveAnnotations"), "primary"),
+          button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
         if (state.imageDownloadProgress) {
           toolbar.append(el("span", state.imageDownloadProgress.current || (state.imageDownloadProgress.completed + "/" + state.imageDownloadProgress.total), "progress"));
@@ -266,7 +334,7 @@ export function renderSidebar(state: SidebarState): string {
       const textarea = document.createElement("textarea");
       textarea.value = state.moduleRegexPatterns[state.activeModule] || "";
       preset.addEventListener("change", () => { if (preset.value) textarea.value = preset.value; });
-      controls.append(preset, button("应用正则", () => post("scanModule", { moduleName: state.activeModule, pattern: textarea.value }), "primary"));
+      controls.append(preset, button("应用正则", () => postKeepView("scanModule", { moduleName: state.activeModule, pattern: textarea.value }), "primary"));
       card.append(controls, textarea);
       return card;
     }
@@ -275,12 +343,14 @@ export function renderSidebar(state: SidebarState): string {
       const bar = el("div", undefined, "bulk");
       const select = document.createElement("select");
       for (const value of LINE_TYPES[state.activeModule]) select.append(new Option(value, value));
+      const count = el("span", "已选 " + selected.size);
+      count.id = "selected-count";
       bar.append(
-        el("span", "已选 " + selected.size),
+        count,
         select,
         button("应用到所选", () => {
           if (!selected.size) return;
-          post("setRowsLineType", { ids: [...selected], lineType: select.value });
+          postKeepView("setRowsLineType", { ids: [...selected], lineType: select.value }, { clearSelection: true });
         }),
       );
       return bar;
@@ -288,6 +358,10 @@ export function renderSidebar(state: SidebarState): string {
 
     function rowTable(rows) {
       const wrap = el("div", undefined, "table-wrap");
+      wrap.addEventListener("scroll", () => {
+        scrollByModule[state.activeModule] = { top: wrap.scrollTop, left: wrap.scrollLeft };
+        persistViewState();
+      }, { passive: true });
       if (!rows.length) {
         wrap.append(el("div", "当前模块没有记录。", "empty"));
         return wrap;
@@ -299,13 +373,17 @@ export function renderSidebar(state: SidebarState): string {
       const selectAll = document.createElement("input");
       const visibleIds = rows.map((row) => row.id);
       selectAll.type = "checkbox";
+      selectAll.id = "select-all";
       selectAll.title = "多选当前表格全部记录";
       selectAll.setAttribute("aria-label", "多选当前表格全部记录");
       selectAll.checked = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
       selectAll.indeterminate = visibleIds.some((id) => selected.has(id)) && !selectAll.checked;
       selectAll.addEventListener("change", () => {
         for (const id of visibleIds) selectAll.checked ? selected.add(id) : selected.delete(id);
-        render();
+        for (const box of document.querySelectorAll("input.row-check")) {
+          box.checked = selected.has(box.getAttribute("data-row-id"));
+        }
+        syncSelectionChrome();
       });
       selectCell.append(selectAll, document.createTextNode(" 多选"));
       headRow.append(
@@ -337,11 +415,15 @@ export function renderSidebar(state: SidebarState): string {
       const checkCell = document.createElement("td");
       const check = document.createElement("input");
       check.type = "checkbox";
+      check.className = "row-check";
       check.checked = selected.has(candidate.id);
+      check.setAttribute("data-row-id", candidate.id);
+      check.setAttribute("data-field", "check");
       check.addEventListener("click", (event) => event.stopPropagation());
+      check.addEventListener("focus", () => rememberFocus(candidate.id, "check"));
       check.addEventListener("change", () => {
         if (check.checked) selected.add(candidate.id); else selected.delete(candidate.id);
-        render();
+        syncSelectionChrome();
       });
       checkCell.append(check);
       row.append(checkCell, el("td", String(candidate.range.line + 1)));
@@ -349,9 +431,14 @@ export function renderSidebar(state: SidebarState): string {
       const typeCell = document.createElement("td");
       const typeSelect = document.createElement("select");
       typeSelect.className = "line-type";
+      typeSelect.setAttribute("data-row-id", candidate.id);
+      typeSelect.setAttribute("data-field", "lineType");
       for (const value of LINE_TYPES[state.activeModule]) typeSelect.append(new Option(value, value, false, value === candidate.lineType));
       typeSelect.addEventListener("click", (event) => event.stopPropagation());
-      typeSelect.addEventListener("change", () => post("setRowsLineType", { ids: selectedIds(candidate.id), lineType: typeSelect.value }));
+      typeSelect.addEventListener("focus", () => rememberFocus(candidate.id, "lineType"));
+      typeSelect.addEventListener("change", () => {
+        postKeepView("setRowsLineType", { ids: selectedIds(candidate.id), lineType: typeSelect.value }, { clearSelection: true });
+      });
       typeCell.append(typeSelect);
       const previewCell = el("td", undefined, "preview");
       previewCell.append(el("div", previewText(candidate), "preview-content"));
@@ -363,8 +450,11 @@ export function renderSidebar(state: SidebarState): string {
         input.className = "chapter-file";
         input.value = candidate.chapterFile || "";
         input.placeholder = "例如 11 Chapter.md";
+        input.setAttribute("data-row-id", candidate.id);
+        input.setAttribute("data-field", "chapterFile");
         input.addEventListener("click", (event) => event.stopPropagation());
-        input.addEventListener("change", () => post("setChapterFile", { id: candidate.id, chapterFile: input.value }));
+        input.addEventListener("focus", () => rememberFocus(candidate.id, "chapterFile"));
+        input.addEventListener("change", () => postKeepView("setChapterFile", { id: candidate.id, chapterFile: input.value }));
         detail.append(el("span", "章节文件"), input);
         previewCell.append(detail);
       }
