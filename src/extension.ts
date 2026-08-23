@@ -103,7 +103,6 @@ class Ocr2mdExtension implements vscode.Disposable {
     vscode.window.createTextEditorDecorationType({ color, fontWeight: "bold" })
   );
   private headingDecorationTimer: ReturnType<typeof setTimeout> | undefined;
-  private workingCopySyncTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingWorkingCopyRescan = false;
   private imageDownloadProgress: ImageDownloadProgress | undefined;
   private readonly chapterDecorations: ChapterChangeDecorationProvider;
@@ -142,7 +141,10 @@ class Ocr2mdExtension implements vscode.Disposable {
       vscode.commands.registerCommand("ocr2md.exportChapterBoundaryChapters", () => this.exportChapterBoundaryChapters()),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.refreshFiles()),
       vscode.workspace.onDidSaveTextDocument((document) => this.handleSavedDocument(document)),
-      vscode.window.onDidChangeVisibleTextEditors((editors) => editors.forEach((editor) => this.applyHeadingDecorations(editor))),
+      vscode.window.onDidChangeVisibleTextEditors((editors) => {
+        if (this.isWorkingCopyEditorActive()) return;
+        editors.forEach((editor) => this.applyHeadingDecorations(editor));
+      }),
       vscode.window.onDidChangeActiveTextEditor(() => {
         if (this.pendingWorkingCopyRescan && !this.shouldDeferWorkingCopyUi()) {
           const uri = this.chapterWorkingUri;
@@ -153,8 +155,11 @@ class Ocr2mdExtension implements vscode.Disposable {
         }
       }),
       vscode.workspace.onDidChangeTextDocument((event) => {
+        if (event.document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
+          this.pendingWorkingCopyRescan = true;
+          return;
+        }
         this.scheduleHeadingDecorations(event.document);
-        this.scheduleWorkingCopySync(event.document);
       }),
     );
     void this.refreshFiles();
@@ -162,7 +167,6 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   dispose() {
     if (this.headingDecorationTimer) clearTimeout(this.headingDecorationTimer);
-    if (this.workingCopySyncTimer) clearTimeout(this.workingCopySyncTimer);
     this.disposables.forEach((disposable) => disposable.dispose());
   }
 
@@ -350,6 +354,10 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     if (document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
+      if (this.isWorkingCopyEditorActive()) {
+        this.pendingWorkingCopyRescan = true;
+        return;
+      }
       await this.syncTableToWorkingCopy(document.uri, document.getText(), { writeMarker: true });
       return;
     }
@@ -463,22 +471,12 @@ class Ocr2mdExtension implements vscode.Disposable {
     return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
   }
 
-  private scheduleWorkingCopySync(document: vscode.TextDocument) {
-    if (document.uri.fsPath !== this.chapterWorkingUri?.fsPath) return;
-    this.shiftWorkingCopyRows(document.getText());
-    if (this.shouldDeferWorkingCopyUi()) {
-      this.pendingWorkingCopyRescan = true;
-      return;
-    }
-    if (this.workingCopySyncTimer) clearTimeout(this.workingCopySyncTimer);
-    this.workingCopySyncTimer = setTimeout(() => {
-      void this.syncWorkingCopyTable(document);
-    }, 200);
+  private isWorkingCopyEditorActive(): boolean {
+    return Boolean(this.chapterWorkingUri && vscode.window.activeTextEditor?.document.uri.fsPath === this.chapterWorkingUri.fsPath);
   }
 
   private shouldDeferWorkingCopyUi(): boolean {
-    const active = vscode.window.activeTextEditor;
-    if (this.chapterWorkingUri && active?.document.uri.fsPath === this.chapterWorkingUri.fsPath) return true;
+    if (this.isWorkingCopyEditorActive()) return true;
     const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
     return Boolean(tab && isMarkdownPreviewTab(tab));
   }
