@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { applyChangeState, buildChapterBoundarySegments, mergeSequenceMarkdown, scanChapterBoundaryLines } from "./chapterBoundary";
+import { applyChangeState, buildChapterBoundarySegments, mapLinesAfterEdit, mergeSequenceMarkdown, remapRangeLines, scanChapterBoundaryLines } from "./chapterBoundary";
 
 assert.strictEqual(
   mergeSequenceMarkdown([
@@ -30,6 +30,12 @@ assert.deepStrictEqual(addedHeading.map((row) => [row.state, row.text]), [["adde
 const afterInsert = scanChapterBoundaryLines("a\nb\nc\n", "a\nNEW\nb\nc\n");
 assert.strictEqual(applyChangeState({ range: { line: 1, start: 0, end: 3 }, chapterBoundaryState: undefined }, afterInsert).chapterBoundaryState, "added");
 assert.strictEqual(applyChangeState({ range: { line: 2, start: 0, end: 1 }, chapterBoundaryState: undefined }, afterInsert).chapterBoundaryState, "heading");
+
+const shifted = mapLinesAfterEdit("a\nb\nc\n", "a\nNEW\nb\nc\n");
+assert.strictEqual(shifted.get(0), 0);
+assert.strictEqual(shifted.get(1), 2);
+assert.strictEqual(shifted.get(2), 3);
+assert.strictEqual(remapRangeLines({ range: { line: 1, endLine: 1 } }, shifted).range.line, 2);
 
 const unchangedHeadingLevels = [
   "# Level 1",

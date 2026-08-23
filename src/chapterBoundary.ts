@@ -75,6 +75,49 @@ export function applyChangeState<T extends {
   return { ...row, chapterBoundaryState: change.state, baselinePreview: change.baselineText };
 }
 
+/** Map previous working-copy line numbers onto the current document after an edit. */
+export function mapLinesAfterEdit(previousText: string, currentText: string): Map<number, number> {
+  const mapping = new Map<number, number>();
+  const changes = diffLines(previousText, currentText);
+  let oldLine = 0;
+  let newLine = 0;
+  for (let index = 0; index < changes.length; index += 1) {
+    const part = changes[index];
+    if (!part.added && !part.removed) {
+      const lines = splitPartLines(part.value);
+      lines.forEach((_, offset) => mapping.set(oldLine + offset, newLine + offset));
+      oldLine += lines.length;
+      newLine += lines.length;
+      continue;
+    }
+    if (part.removed && changes[index + 1]?.added) {
+      const removed = splitPartLines(part.value);
+      const added = splitPartLines(changes[index + 1].value);
+      const paired = Math.min(removed.length, added.length);
+      for (let offset = 0; offset < paired; offset += 1) mapping.set(oldLine + offset, newLine + offset);
+      oldLine += removed.length;
+      newLine += added.length;
+      index += 1;
+      continue;
+    }
+    const lines = splitPartLines(part.value);
+    if (part.added) newLine += lines.length;
+    else oldLine += lines.length;
+  }
+  return mapping;
+}
+
+export function remapRangeLines<T extends { range: { line: number; endLine?: number }; chapterBoundaryState?: ChapterBoundaryState }>(
+  row: T,
+  lineMap: Map<number, number>,
+): T {
+  if (row.chapterBoundaryState === "deleted") return row;
+  const line = lineMap.get(row.range.line);
+  if (line === undefined) return row;
+  const endLine = row.range.endLine === undefined ? undefined : lineMap.get(row.range.endLine) ?? line;
+  return { ...row, range: { ...row.range, line, endLine } };
+}
+
 /**
  * Convert the ordered level-one heading assignments into contiguous chapter
  * ranges. Reusing a chapter filename after another chapter would create a

@@ -65,7 +65,7 @@ export function attachScanIdentities(
   });
 }
 
-export function reconcileRows(previous: Candidate[], scanned: Candidate[]): Candidate[] {
+export function reconcileRows(previous: Candidate[], scanned: Candidate[], documentText?: string): Candidate[] {
   const prev = previous.map(ensureTextHash);
   const scan = scanned.map(ensureTextHash);
   const usedPrev = new Set<number>();
@@ -113,10 +113,11 @@ export function reconcileRows(previous: Candidate[], scanned: Candidate[]): Cand
       result.push(old);
     }
   });
-  return result.sort((left, right) =>
+  const ordered = result.sort((left, right) =>
     left.range.line - right.range.line
     || left.range.start - right.range.start
     || left.raw.localeCompare(right.raw));
+  return documentText ? relocateRows(ordered, documentText) : ordered;
 }
 
 export function relocateRows(rows: Candidate[], documentText: string): Candidate[] {

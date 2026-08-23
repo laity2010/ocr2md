@@ -6,7 +6,9 @@ import * as vscode from "vscode";
 import {
   applyChangeState,
   buildChapterBoundarySegments,
+  mapLinesAfterEdit,
   mergeSequenceMarkdown,
+  remapRangeLines,
   scanChapterBoundaryLines,
   type MergeInputText,
 } from "./chapterBoundary";
@@ -306,8 +308,9 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     if (document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
-      this.selectedFileText = document.getText();
-      await this.refreshChapterTitleRows(document.uri, { currentText: this.selectedFileText });
+      const current = document.getText();
+      this.shiftWorkingCopyRows(current);
+      await this.refreshChapterTitleRows(document.uri, { currentText: current });
       if (this.activeModule === "注释" || this.activeModule === "图片") {
         await this.scanCurrentModule(this.activeModule);
       }
@@ -361,10 +364,10 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     const scanned = attachScanIdentities([...unique.values()], text, { moduleName, sourcePath: source });
     const previous = this.rows.filter((row) => row.typeLabel === moduleName && row.sourcePath === source);
-    let reconciled = reconcileRows(previous, scanned);
+    let reconciled = reconcileRows(previous, scanned, text);
     if (moduleName === "图片") {
       const present = new Set(reconciled.map((row) => row.id));
-      reconciled = [...reconciled, ...previous.filter((row) => !present.has(row.id))];
+      reconciled = [...reconciled, ...relocateRows(previous.filter((row) => !present.has(row.id)), text)];
       reconciled = await this.applyWorkingCopyDiff(reconciled, text);
     }
     this.rows = [
@@ -407,11 +410,17 @@ class Ocr2mdExtension implements vscode.Disposable {
     }, 200);
   }
 
+  private shiftWorkingCopyRows(current: string) {
+    if (this.selectedFileText === current) return;
+    const lineMap = mapLinesAfterEdit(this.selectedFileText, current);
+    this.rows = this.rows.map((row) => remapRangeLines(row, lineMap));
+    this.selectedFileText = current;
+  }
+
   private async syncWorkingCopyTable(document: vscode.TextDocument) {
     if (document.uri.fsPath !== this.chapterWorkingUri?.fsPath) return;
     const current = document.getText();
-    this.selectedFileText = current;
-    this.rows = relocateRows(this.rows, current);
+    this.shiftWorkingCopyRows(current);
     await this.refreshChapterTitleRows(document.uri, { writeMarker: false, currentText: current });
     if (this.activeModule === "注释" || this.activeModule === "图片") {
       await this.scanCurrentModule(this.activeModule);
@@ -734,8 +743,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       current,
       { moduleName: "图片", ...identityContext },
     );
-    const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks);
-    const imageRows = reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks);
+    const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks, current);
+    const imageRows = reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current);
     const lines = current.replace(/\r\n?/g, "\n").split("\n");
     for (const entry of changes.filter((candidate) => candidate.state === "deleted")) {
       const raw = entry.baselineText ?? "";
