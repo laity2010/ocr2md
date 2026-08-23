@@ -9,6 +9,29 @@ export function detectImageLineType(raw: string): ImageLineType | undefined {
   return undefined;
 }
 
+/** Split a consecutive-text block into one image row per matching line. */
+export function imageRowsFromBlock(block: Candidate): Candidate[] {
+  const lines = block.raw.replace(/\r\n?/g, "\n").split("\n");
+  const start = block.range.line;
+  const rows: Candidate[] = [];
+  lines.forEach((line, offset) => {
+    const lineType = detectImageLineType(line);
+    if (!lineType) return;
+    rows.push({
+      ...block,
+      raw: line,
+      preview: line.slice(0, 255),
+      label: line.trim(),
+      typeLabel: "图片",
+      lineType,
+      chapterBoundaryState: undefined,
+      baselinePreview: undefined,
+      range: { line: start + offset, start: 0, end: line.length },
+    });
+  });
+  return rows;
+}
+
 export function scanRegexMatches(text: string, pattern: string): Candidate[] {
   if (!pattern.trim()) return [];
   let regex: RegExp;

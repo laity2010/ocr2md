@@ -28,9 +28,8 @@ import {
   attachScanIdentities,
   locateCandidate,
   reconcileRows,
-  relocateRows,
 } from "./rowIdentity";
-import { detectImageLineType, scanRegexMatches } from "./scanner";
+import { detectImageLineType, imageRowsFromBlock, scanRegexMatches } from "./scanner";
 import type {
   AnnotationPair,
   Candidate,
@@ -367,7 +366,9 @@ class Ocr2mdExtension implements vscode.Disposable {
     let reconciled = reconcileRows(previous, scanned, text);
     if (moduleName === "图片") {
       const present = new Set(reconciled.map((row) => row.id));
-      reconciled = [...reconciled, ...relocateRows(previous.filter((row) => !present.has(row.id)), text)];
+      const extras = previous.filter((row) =>
+        !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
+      reconciled = dedupeImageRows([...reconciled, ...extras]);
       reconciled = await this.applyWorkingCopyDiff(reconciled, text);
     }
     this.rows = [
@@ -736,15 +737,13 @@ class Ocr2mdExtension implements vscode.Disposable {
       { moduleName: "章节标题", ...identityContext },
     );
     const imageBlocks = attachScanIdentities(
-      blocks.flatMap((row) => {
-        const lineType = detectImageLineType(row.raw);
-        return lineType ? [{ ...row, typeLabel: "图片" as const, lineType }] : [];
-      }),
+      blocks.flatMap((row) => imageRowsFromBlock(row)),
       current,
       { moduleName: "图片", ...identityContext },
     );
     const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks, current);
-    const imageRows = reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current);
+    const imageRows = reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current)
+      .map((row) => applyChangeState(row, changes));
     const lines = current.replace(/\r\n?/g, "\n").split("\n");
     for (const entry of changes.filter((candidate) => candidate.state === "deleted")) {
       const raw = entry.baselineText ?? "";
@@ -1244,6 +1243,21 @@ function scanChapterBlocks(text: string, workingPath: string, workspaceRoot?: st
 function rowBelongsToChapter(row: Candidate, originalPath: string | undefined, workingPath: string): boolean {
   if (row.sourcePath === workingPath || row.workingCopyPath === workingPath) return true;
   return Boolean(originalPath) && (row.sourcePath === originalPath || row.workingCopyPath === originalPath);
+}
+
+function dedupeImageRows(rows: Candidate[]): Candidate[] {
+  const deleted = rows.filter((row) => row.chapterBoundaryState === "deleted");
+  const live = rows
+    .filter((row) => row.chapterBoundaryState !== "deleted")
+    .sort((left, right) => left.range.line - right.range.line || left.raw.length - right.raw.length);
+  const kept: Candidate[] = [];
+  for (const row of live) {
+    const duplicate = kept.some((other) =>
+      other.range.line === row.range.line
+      && (other.raw === row.raw || other.raw.includes(row.raw) || row.raw.includes(other.raw)));
+    if (!duplicate) kept.push(row);
+  }
+  return [...deleted, ...kept];
 }
 
 function applyAnnotationCorrections(text: string, rows: Candidate[]): string {
