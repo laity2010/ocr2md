@@ -48,6 +48,7 @@ export function renderSidebar(state: SidebarState): string {
     .sort-header { display: inline-flex; gap: 5px; align-items: center; padding: 0; border: 0; color: inherit; background: transparent; font-weight: inherit; }
     .check-column { width: 54px; }
     .line-column { width: 92px; }
+    .number-column { width: 118px; }
     .line-type { min-width: 118px; }
     .chapter-file { width: 210px; }
     .annotation-number { width: 88px; }
@@ -85,12 +86,23 @@ export function renderSidebar(state: SidebarState): string {
       "注释": "注释及引用+增删改行",
       "图片": "图片相关+增删改行",
     };
+    const DEFAULT_SORT_RULES = {
+      "注释": [{ key: "number", direction: "asc" }, { key: "line", direction: "asc" }],
+    };
     const selected = new Set();
     const persisted = vscode.getState() || {};
-    const restoredSortRules = Array.isArray(persisted.sortRules)
-      ? persisted.sortRules.filter((rule) => ["line", "lineType", "preview", "number"].includes(rule.key) && ["asc", "desc"].includes(rule.direction))
-      : [];
-    let sortRules = restoredSortRules.length ? restoredSortRules : [{ key: "line", direction: "asc" }];
+    const allowedSortKeys = ["line", "lineType", "preview", "number"];
+    function sanitizeSortRules(rules) {
+      return Array.isArray(rules)
+        ? rules.filter((rule) => allowedSortKeys.includes(rule.key) && ["asc", "desc"].includes(rule.direction))
+        : [];
+    }
+    function defaultSortRules(moduleName) {
+      return DEFAULT_SORT_RULES[moduleName] || [{ key: "line", direction: "asc" }];
+    }
+    const sortRulesByModule = persisted.sortRulesByModule && typeof persisted.sortRulesByModule === "object" ? persisted.sortRulesByModule : {};
+    let sortRules = sanitizeSortRules(sortRulesByModule[state.activeModule]);
+    if (!sortRules.length) sortRules = defaultSortRules(state.activeModule);
     const moduleFilters = { ...(persisted.moduleFilters || {}) };
     if (Array.isArray(persisted.selectedIds)) {
       for (const id of persisted.selectedIds) selected.add(id);
@@ -113,7 +125,9 @@ export function renderSidebar(state: SidebarState): string {
     };
 
     function persistViewState() {
+      sortRulesByModule[state.activeModule] = sortRules;
       persisted.sortRules = sortRules;
+      persisted.sortRulesByModule = sortRulesByModule;
       persisted.moduleFilters = moduleFilters;
       persisted.selectedIds = [...selected];
       persisted.scrollByModule = scrollByModule;
@@ -323,7 +337,7 @@ export function renderSidebar(state: SidebarState): string {
         toolbar.append(
           button("打开注释订正工作稿", () => postKeepView("openAnnotationWorkingCopy")),
           button("匹配注释对", () => {
-            sortRules = [{ key: "number", direction: "asc" }, { key: "lineType", direction: "asc" }];
+            sortRules = defaultSortRules("注释");
             postKeepView("matchAnnotationPairs");
           }, "primary"),
           button("保存标定", () => postKeepView("saveAnnotations")),
@@ -414,9 +428,9 @@ export function renderSidebar(state: SidebarState): string {
         syncSelectionChrome();
       });
       selectCell.append(selectAll, document.createTextNode(" 多选"));
+      headRow.append(selectCell, sortableHeader("行号", "line", "line-column"));
+      if (state.activeModule === "注释") headRow.append(sortableHeader("注释号", "number", "number-column"));
       headRow.append(
-        selectCell,
-        sortableHeader("行号", "line", "line-column"),
         sortableHeader("行类型", "lineType"),
         sortableHeader("预览", "preview"),
       );
@@ -459,6 +473,21 @@ export function renderSidebar(state: SidebarState): string {
       });
       checkCell.append(check);
       row.append(checkCell, el("td", String(candidate.range.line + 1)));
+      if (state.activeModule === "注释") {
+        const numberCell = document.createElement("td");
+        const numberInput = document.createElement("input");
+        numberInput.className = "annotation-number" + (missingNumber ? " missing" : "");
+        numberInput.value = candidate.annotationNumber || "";
+        numberInput.placeholder = missingNumber ? "手工输入注释号" : "注释号";
+        numberInput.title = missingNumber ? "未能提取注释号，请手工输入" : "注释号";
+        numberInput.setAttribute("data-row-id", candidate.id);
+        numberInput.setAttribute("data-field", "annotationNumber");
+        numberInput.addEventListener("click", (event) => event.stopPropagation());
+        numberInput.addEventListener("focus", () => rememberFocus(candidate.id, "annotationNumber"));
+        numberInput.addEventListener("change", () => postKeepView("setAnnotationNumber", { id: candidate.id, annotationNumber: numberInput.value }));
+        numberCell.append(numberInput);
+        row.append(numberCell);
+      }
 
       const typeCell = document.createElement("td");
       const typeSelect = document.createElement("select");
@@ -491,26 +520,13 @@ export function renderSidebar(state: SidebarState): string {
         previewCell.append(detail);
       }
       if (state.activeModule === "注释") {
-        const detail = el("div", undefined, "preview-detail");
-        const numberInput = document.createElement("input");
-        numberInput.className = "annotation-number" + (missingNumber ? " missing" : "");
-        numberInput.value = candidate.annotationNumber || "";
-        numberInput.placeholder = missingNumber ? "手工输入注释号" : "注释号";
-        numberInput.title = missingNumber ? "未能提取注释号，请手工输入" : "注释号";
-        numberInput.setAttribute("data-row-id", candidate.id);
-        numberInput.setAttribute("data-field", "annotationNumber");
-        numberInput.addEventListener("click", (event) => event.stopPropagation());
-        numberInput.addEventListener("focus", () => rememberFocus(candidate.id, "annotationNumber"));
-        numberInput.addEventListener("change", () => postKeepView("setAnnotationNumber", { id: candidate.id, annotationNumber: numberInput.value }));
         const status = pair
           ? pair.pairId + " · " + pair.status
           : (missingNumber ? "未配对，请输入注释号" : "未配对");
         const statusClass = missingNumber || (pair && (pair.status === "待补引用" || pair.status === "待补正文"))
           ? "pair-status missing"
           : pair ? "pair-status matched" : "pair-status";
-        const statusNode = el("div", status, statusClass);
-        detail.append(el("span", "注释号"), numberInput, statusNode);
-        previewCell.append(detail);
+        previewCell.append(el("div", status, statusClass + " preview-detail"));
       }
       if (state.activeModule === "图片" && candidate.localPath) {
         previewCell.append(el("div", "本地路径：" + candidate.localPath, "preview-detail"));

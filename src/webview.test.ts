@@ -27,9 +27,14 @@ for (const column of TABLE_COLUMNS) {
 assert.ok(html.includes("event.shiftKey"), "multi-column sorting gesture is missing");
 assert.ok(html.includes("Shift+单击可追加多列排序"), "multi-column sorting guidance is missing");
 assert.ok(
-  html.includes('restoredSortRules.length ? restoredSortRules : [{ key: "line", direction: "asc" }]'),
+  html.includes('return DEFAULT_SORT_RULES[moduleName] || [{ key: "line", direction: "asc" }]'),
   "default line ascending sort is missing",
 );
+assert.ok(
+  html.includes('"注释": [{ key: "number", direction: "asc" }, { key: "line", direction: "asc" }]'),
+  "annotation module default sort must be number then line",
+);
+assert.ok(html.includes('sortableHeader("注释号", "number", "number-column")'), "annotation number column is missing");
 for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+增删改行", "图片相关+增删改行"]) {
   assert.ok(html.includes(defaultFilter), `missing default module filter: ${defaultFilter}`);
 }
