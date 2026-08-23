@@ -403,7 +403,6 @@ class Ocr2mdExtension implements vscode.Disposable {
     for (const pattern of patterns) {
       for (const match of scanRegexMatches(text, pattern)) {
         const embedNumber = moduleName === "嵌入块" ? embedNumberAtLine(text, match.range.line) : undefined;
-        if (moduleName === "嵌入块" && embedNumber === undefined) continue;
         const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(match.raw) : undefined;
         const row: Candidate = {
           ...match,

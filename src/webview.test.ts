@@ -55,7 +55,7 @@ assert.ok(html.includes("整体偏移"), "chapter-file dialog must support numbe
 assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-file dialog must run from selected level-one headings");
 assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
 assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
-assert.ok(html.includes('"嵌入块": ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"'), "embed module line types");
+assert.ok(html.includes('"嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"'), "embed module line types");
 assert.ok(
   html.includes('if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号"))'),
   "embed number column must be gated to the embed module",

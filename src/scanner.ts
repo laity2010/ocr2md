@@ -1,6 +1,6 @@
 import type { Candidate, SourceRange } from "./types";
 
-export type EmbedLineType = "内嵌标题" | "嵌入链接" | "嵌入HTML" | "嵌入文本";
+export type EmbedLineType = "嵌入块首" | "内嵌标题" | "嵌入链接" | "嵌入HTML" | "嵌入文本";
 
 const HTML_TAG_RE = /<\s*\/?\s*[a-zA-Z][a-zA-Z0-9-]*(?:\s|\/|>)/;
 const IMAGE_LINK_RE = /!\[[^\]]*\]\([^)]+\)|!\[\[[^\]]+\]\]/;
@@ -12,6 +12,7 @@ const VOID_HTML_TAGS = new Set([
 const TABLE_INNER_TAGS = new Set(["thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col"]);
 
 export function detectEmbedLineType(raw: string): Exclude<EmbedLineType, "嵌入文本"> | undefined {
+  if (isEmbedBlockStart(raw)) return "嵌入块首";
   if (HTML_TAG_RE.test(raw)) return "嵌入HTML";
   if (IMAGE_LINK_RE.test(raw)) return "嵌入链接";
   if (EMBED_TITLE_RE.test(raw)) return "内嵌标题";
@@ -53,9 +54,7 @@ export function findEmbedRegions(lines: string[]): EmbedRegion[] {
       contentEnd = index;
       index += 1;
     }
-    if (contentEnd >= contentStart) {
-      regions.push({ number: regions.length + 1, markerLine, contentStart, contentEnd });
-    }
+    regions.push({ number: regions.length + 1, markerLine, contentStart, contentEnd });
     while (index < lines.length && lines[index].trim() === "") index += 1;
   }
   return regions;
@@ -80,24 +79,37 @@ export function scanEmbedLines(text: string): Candidate[] {
 
 export function embedNumberAtLine(text: string, line: number): number | undefined {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  return findEmbedRegions(lines).find((region) => line >= region.contentStart && line <= region.contentEnd)?.number;
+  return findEmbedRegions(lines).find((region) =>
+    line === region.markerLine || (line >= region.contentStart && line <= region.contentEnd)
+  )?.number;
+}
+
+function numberAt(regions: EmbedRegion[], line: number, lineOffset: number): number | undefined {
+  const absolute = line;
+  return regions.find((region) => {
+    const marker = lineOffset + region.markerLine;
+    const start = lineOffset + region.contentStart;
+    const end = lineOffset + region.contentEnd;
+    return absolute === marker || (absolute >= start && absolute <= end);
+  })?.number;
 }
 
 function scanEmbedFromLines(lines: string[], lineOffset: number): Candidate[] {
+  const regions = findEmbedRegions(lines);
+  const collected = collectEmbedRows(lines, lineOffset);
+  const covered = new Set<number>();
   const rows: Candidate[] = [];
-  for (const region of findEmbedRegions(lines)) {
-    const inner = lines.slice(region.contentStart, region.contentEnd + 1);
-    const collected = collectEmbedRows(inner, lineOffset + region.contentStart);
-    const covered = new Set<number>();
-    for (const row of collected) {
-      const start = row.range.line;
-      const end = row.range.endLine ?? row.range.line;
-      for (let line = start; line <= end; line += 1) covered.add(line);
-      rows.push({ ...row, embedNumber: region.number });
-    }
-    for (let offset = 0; offset < inner.length; offset += 1) {
-      const line = inner[offset];
-      const absolute = lineOffset + region.contentStart + offset;
+  for (const row of collected) {
+    const start = row.range.line;
+    const end = row.range.endLine ?? row.range.line;
+    for (let line = start; line <= end; line += 1) covered.add(line);
+    rows.push({ ...row, embedNumber: numberAt(regions, start, lineOffset) });
+  }
+  for (const region of regions) {
+    if (region.contentEnd < region.contentStart) continue;
+    for (let index = region.contentStart; index <= region.contentEnd; index += 1) {
+      const absolute = lineOffset + index;
+      const line = lines[index];
       if (covered.has(absolute) || !line.trim()) continue;
       rows.push({
         id: `embed-${absolute}`,
@@ -107,7 +119,7 @@ function scanEmbedFromLines(lines: string[], lineOffset: number): Candidate[] {
         preview: line.slice(0, 255),
         range: { line: absolute, start: 0, end: line.length },
         typeLabel: "嵌入块",
-        lineType: detectEmbedLineType(line) ?? "嵌入文本",
+        lineType: "嵌入文本",
         embedNumber: region.number,
         status: "候选",
       });

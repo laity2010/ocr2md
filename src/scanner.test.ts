@@ -23,6 +23,7 @@ const images = scanRegexMatches(markdown, "!\\[[^\\]]*\\]\\(https?://[^\\s)]+\\)
 assert.strictEqual(images.length, 1);
 assert.strictEqual(images[0].range.line, 4);
 
+assert.strictEqual(detectEmbedLineType(">"), "嵌入块首");
 assert.strictEqual(detectEmbedLineType("FIGURE 11.3 | Valuation Challenges"), "内嵌标题");
 assert.strictEqual(detectEmbedLineType("![image](https://example.com/a.jpg)"), "嵌入链接");
 assert.strictEqual(detectEmbedLineType("![[local.png]]"), "嵌入链接");
@@ -31,7 +32,10 @@ assert.strictEqual(detectEmbedLineType('<div class="callout">note</div>'), "嵌�
 assert.strictEqual(detectEmbedLineType("<https://example.com/a.jpg>"), undefined);
 assert.strictEqual(detectEmbedLineType("Ordinary paragraph"), undefined);
 
-assert.deepStrictEqual(scanEmbedLines("FIGURE 1.1 | Title\n![image](https://cdn.example/a.jpg)\n").map((row) => row.lineType), []);
+assert.deepStrictEqual(
+  scanEmbedLines("FIGURE 1.1 | Title\n![image](https://cdn.example/a.jpg)\n").map((row) => row.lineType),
+  ["内嵌标题", "嵌入链接"],
+);
 
 const figureBlock: Candidate = {
   id: "block",
@@ -44,6 +48,7 @@ const figureBlock: Candidate = {
 };
 const split = embedRowsFromBlock(figureBlock);
 assert.deepStrictEqual(split.map((row) => [row.range.line, row.lineType, row.embedNumber]), [
+  [91, "嵌入块首", 1],
   [92, "内嵌标题", 1],
   [93, "嵌入链接", 1],
 ]);
@@ -60,6 +65,7 @@ const chapter = [
 assert.deepStrictEqual(
   scanEmbedLines(chapter).map((row) => [row.range.line, row.lineType, row.embedNumber]),
   [
+    [1, "嵌入块首", 1],
     [2, "内嵌标题", 1],
     [3, "嵌入链接", 1],
     [4, "嵌入HTML", 1],
@@ -80,13 +86,14 @@ const tableDoc = [
   "![image](https://example.com/a.jpg)",
 ].join("\n");
 const tableRows = scanEmbedLines(tableDoc);
-assert.strictEqual(tableRows.length, 1, "a table inside a > block is one embed HTML row");
-assert.strictEqual(tableRows[0].lineType, "嵌入HTML");
-assert.strictEqual(tableRows[0].embedNumber, 1);
-assert.strictEqual(tableRows[0].range.line, 2);
-assert.strictEqual(tableRows[0].range.endLine, 7);
-assert.ok(tableRows[0].raw.startsWith("<table>"));
-assert.ok(tableRows[0].raw.endsWith("</table>"));
+assert.deepStrictEqual(tableRows.map((row) => [row.lineType, row.embedNumber, row.range.line]), [
+  ["嵌入块首", 1, 1],
+  ["嵌入HTML", 1, 2],
+  ["嵌入链接", undefined, 10],
+]);
+assert.strictEqual(tableRows[1].range.endLine, 7);
+assert.ok(tableRows[1].raw.startsWith("<table>"));
+assert.ok(tableRows[1].raw.endsWith("</table>"));
 
 const numbered = [
   ">",
@@ -98,13 +105,15 @@ const numbered = [
   "",
 ].join("\n");
 assert.deepStrictEqual(
-  findEmbedRegions(numbered.split("\n")).map((region) => [region.number, region.contentStart, region.contentEnd]),
-  [[1, 1, 1], [2, 4, 5]],
+  findEmbedRegions(numbered.split("\n")).map((region) => [region.number, region.markerLine, region.contentStart, region.contentEnd]),
+  [[1, 0, 1, 1], [2, 3, 4, 5]],
 );
 assert.deepStrictEqual(
   scanEmbedLines(numbered).map((row) => [row.embedNumber, row.lineType]),
   [
+    [1, "嵌入块首"],
     [1, "嵌入链接"],
+    [2, "嵌入块首"],
     [2, "嵌入文本"],
     [2, "嵌入链接"],
   ],

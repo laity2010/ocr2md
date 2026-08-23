@@ -100,7 +100,7 @@ export function renderSidebar(state: SidebarState): string {
       "章节定界": ["1 级标题", "新增", "修改", "删除", DELETED],
       "章节标题": ["1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题", "非标题", DELETED],
       "注释": ["注释引用", "注释正文", "忽略", DELETED],
-      "嵌入块": ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本", DELETED],
+      "嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本", DELETED],
     };
     const FILTER_OPTIONS = {
       "章节标题": ["层级标题行+增删改行", "全部", "层级标题行", "增删改行"],
@@ -230,7 +230,7 @@ export function renderSidebar(state: SidebarState): string {
       const changed = rowWasChanged(row, moduleName);
       const heading = /^[1-6] 级标题$/.test(row.lineType || "");
       const annotation = ["注释引用", "注释正文"].includes(row.lineType || "");
-      const embed = ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"].includes(row.lineType || "");
+      const embed = ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"].includes(row.lineType || "");
       if (filter === "增删改行") return changed;
       if (filter === "层级标题行") return heading;
       if (filter === "注释及引用") return annotation;
