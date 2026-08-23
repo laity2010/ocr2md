@@ -37,27 +37,23 @@ export function isEmbedBlockStart(line: string): boolean {
   return line.trim() === ">";
 }
 
-/** Embed blocks run from `>` until two or more consecutive newlines. */
+/** Embed blocks run from a `>` line through every following line until the next `>`. */
 export function findEmbedRegions(lines: string[]): EmbedRegion[] {
-  const regions: EmbedRegion[] = [];
-  let index = 0;
-  while (index < lines.length) {
-    if (!isEmbedBlockStart(lines[index])) {
-      index += 1;
-      continue;
-    }
-    const markerLine = index;
-    const contentStart = index + 1;
-    let contentEnd = contentStart - 1;
-    index = contentStart;
-    while (index < lines.length && lines[index].trim() !== "") {
-      contentEnd = index;
-      index += 1;
-    }
-    regions.push({ number: regions.length + 1, markerLine, contentStart, contentEnd });
-    while (index < lines.length && lines[index].trim() === "") index += 1;
+  const markers: number[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (isEmbedBlockStart(lines[index])) markers.push(index);
   }
-  return regions;
+  return markers.map((markerLine, index) => {
+    const stop = markers[index + 1] ?? lines.length;
+    const contentStart = markerLine + 1;
+    const last = stop - 1;
+    return {
+      number: index + 1,
+      markerLine,
+      contentStart,
+      contentEnd: last >= contentStart ? last : contentStart - 1,
+    };
+  });
 }
 
 /** Split a consecutive-text block into embed rows inside `>` regions. */

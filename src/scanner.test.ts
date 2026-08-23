@@ -78,6 +78,7 @@ assert.deepStrictEqual(
     [2, "内嵌标题", 1],
     [3, "嵌入链接", 1],
     [4, "嵌入HTML", 1],
+    [6, "嵌入文本", 1],
   ],
 );
 
@@ -98,7 +99,8 @@ const tableRows = scanEmbedLines(tableDoc);
 assert.deepStrictEqual(tableRows.map((row) => [row.lineType, row.embedNumber, row.range.line]), [
   ["嵌入块首", 1, 1],
   ["嵌入HTML", 1, 2],
-  ["嵌入链接", undefined, 10],
+  ["嵌入文本", 1, 9],
+  ["嵌入链接", 1, 10],
 ]);
 assert.strictEqual(tableRows[1].range.endLine, 7);
 assert.ok(tableRows[1].raw.startsWith("<table>"));
@@ -115,7 +117,7 @@ const numbered = [
 ].join("\n");
 assert.deepStrictEqual(
   findEmbedRegions(numbered.split("\n")).map((region) => [region.number, region.markerLine, region.contentStart, region.contentEnd]),
-  [[1, 0, 1, 1], [2, 3, 4, 5]],
+  [[1, 0, 1, 2], [2, 3, 4, 6]],
 );
 assert.deepStrictEqual(
   scanEmbedLines(numbered).map((row) => [row.embedNumber, row.lineType]),
@@ -150,7 +152,7 @@ const merged = mergeEmbedScan(wideTable, [tagFragmentPattern, "!\\[[^\\]]*\\]\\(
 assert.deepStrictEqual(merged.map((row) => [row.lineType, row.embedNumber]), [
   ["嵌入块首", 1],
   ["嵌入HTML", 1],
-  ["嵌入链接", undefined],
+  ["嵌入链接", 1],
 ]);
 assert.ok(!merged.some((row) => isHtmlTagFragment(row.raw)));
 
@@ -171,7 +173,31 @@ assert.deepStrictEqual(
   [
     [2, "嵌入块首", 1],
     [3, "内嵌标题", 1],
-    [5, "嵌入链接", undefined],
+    [5, "嵌入链接", 1],
+  ],
+);
+
+const untilNextMarker = [
+  ">",
+  "FIGURE 1.1 | One",
+  "",
+  "![one](https://example.com/1.jpg)",
+  "caption after image",
+  "",
+  ">",
+  "FIGURE 1.2 | Two",
+  "![two](https://example.com/2.jpg)",
+].join("\n");
+assert.deepStrictEqual(
+  scanEmbedLines(untilNextMarker).map((row) => [row.range.line, row.lineType, row.embedNumber]),
+  [
+    [0, "嵌入块首", 1],
+    [1, "内嵌标题", 1],
+    [3, "嵌入链接", 1],
+    [4, "嵌入文本", 1],
+    [6, "嵌入块首", 2],
+    [7, "内嵌标题", 2],
+    [8, "嵌入链接", 2],
   ],
 );
 
