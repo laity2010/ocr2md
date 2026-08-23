@@ -751,7 +751,7 @@ export function renderSidebar(state: SidebarState): string {
         } else if (candidate.imageDownloadStatus === "failed") {
           previewCell.append(el("div", "下载失败：" + (candidate.imageDownloadError || "未知错误"), "preview-detail"));
         } else if (candidate.localPath) {
-          previewCell.append(el("div", "本地路径：" + candidate.localPath, "preview-detail"));
+          previewCell.append(el("div", "导出：" + candidate.localPath, "preview-detail"));
         }
       }
       previewCell.addEventListener("click", () => post("locateRow", { id: candidate.id }));

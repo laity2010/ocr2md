@@ -23,6 +23,17 @@ assert.strictEqual(
   "![[imgs/a.jpg]]",
 );
 
+assert.strictEqual(
+  obsidianImage(row({
+    id: "local-img",
+    raw: "![alt text](image.png)",
+    typeLabel: "嵌入块",
+    lineType: "嵌入链接",
+    localPath: "imgs/image-20260823-192853-355.png",
+  })),
+  "![[imgs/image-20260823-192853-355.png]]",
+);
+
 const simple = [
   row({ id: "m", raw: ">", typeLabel: "嵌入块", lineType: "嵌入块首", embedNumber: 1, range: { line: 0, start: 0, end: 1 } }),
   row({ id: "t", raw: "FIGURE 1.1 | Title", typeLabel: "嵌入块", lineType: "内嵌标题", embedNumber: 1, range: { line: 1, start: 0, end: 18 } }),
@@ -84,6 +95,39 @@ assert.ok(bothBlock.includes(">>[! ]- HTML"));
 assert.ok(bothBlock.includes(">><table><tr><td>A</td></tr></table>"));
 assert.ok(bothBlock.includes("><embed id=03></embed>"));
 assert.ok(bothBlock.includes("![[imgs/a.jpg]]"));
+
+const withEmbedText = [
+  row({ id: "m5", raw: ">", typeLabel: "嵌入块", lineType: "嵌入块首", embedNumber: 5, range: { line: 0, start: 0, end: 1 } }),
+  row({ id: "t5", raw: "FIGURE 14.4 | Excess Returns around Earnings Announcements", typeLabel: "嵌入块", lineType: "内嵌标题", embedNumber: 5, range: { line: 1, start: 0, end: 57 } }),
+  row({
+    id: "i5",
+    raw: "![image](https://cdn.example/a.jpg)",
+    typeLabel: "嵌入块",
+    lineType: "嵌入链接",
+    embedNumber: 5,
+    localPath: "imgs/xxx.jpg",
+    range: { line: 2, start: 0, end: 34 },
+  }),
+  row({
+    id: "text5",
+    raw: "Source: D. Craig Nichols and James Whalen",
+    typeLabel: "嵌入块",
+    lineType: "嵌入文本",
+    embedNumber: 5,
+    range: { line: 3, start: 0, end: 40 },
+  }),
+];
+assert.strictEqual(
+  formatEmbed(groupEmbeds(withEmbedText)[0]),
+  [
+    ">",
+    "FIGURE 14.4 | Excess Returns around Earnings Announcements",
+    "![[imgs/xxx.jpg]]",
+    ">",
+    "Source: D. Craig Nichols and James Whalen",
+    "><embed id=05></embed>",
+  ].join("\n"),
+);
 
 const source = [
   "## Heading",

@@ -32,8 +32,20 @@ import {
 } from "./rowIdentity";
 import { splitBlankLineBlocks } from "./atoms";
 import { exportByCalibration } from "./calibrationExport";
-import { extractImageUrl, safeImageName, shouldDownloadImage } from "./imageDownload";
-import { applyEmbedNumbers, detectEmbedLineType, mergeEmbedScan, scanRegexMatches } from "./scanner";
+import {
+  extractImageUrl,
+  extractLocalImagePath,
+  safeImageName,
+  shouldDownloadImage,
+  timestampedImageName,
+} from "./imageDownload";
+import {
+  applyEmbedNumbers,
+  detectEmbedLineType,
+  excludeRowsOverlappingEmbeds,
+  mergeEmbedScan,
+  scanRegexMatches,
+} from "./scanner";
 import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
 import type {
   AnnotationPair,
@@ -478,6 +490,10 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (this.workingCopyPaintTimer) clearTimeout(this.workingCopyPaintTimer);
     this.workingCopyPaintTimer = setTimeout(() => {
       this.workingCopyPaintTimer = undefined;
+      if (this.shouldDeferWorkingCopyUi()) {
+        this.pendingWorkingCopyRescan = true;
+        return;
+      }
       void this.syncTableToWorkingCopy(document.uri, document.getText(), { writeMarker: false });
     }, 300);
   }
@@ -516,6 +532,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       { silent: true },
     );
     this.rows = await this.applyWorkingCopyDiff(this.rows, current);
+    await this.planLocalImageExportPaths(uri);
     this.pendingWorkingCopyRescan = false;
     if (!options.silent) this.update();
   }
@@ -848,6 +865,58 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.rows = this.rows.map((candidate) => candidate.id === id ? { ...candidate, ...patch } : candidate);
   }
 
+  private async planLocalImageExportPaths(working: vscode.Uri) {
+    const sourceDirectory = path.dirname(working.fsPath);
+    const patches = new Map<string, string>();
+    for (const row of activeCandidates(this.rows)) {
+      if (row.typeLabel !== "嵌入块" || row.lineType !== "嵌入链接" || row.localPath) continue;
+      const localReference = extractLocalImagePath(row.raw);
+      if (!localReference) continue;
+      const sourcePath = path.isAbsolute(localReference)
+        ? localReference
+        : path.resolve(sourceDirectory, localReference);
+      try {
+        const stat = await vscode.workspace.fs.stat(vscode.Uri.file(sourcePath));
+        patches.set(row.id, `${CHAPTER_IMAGE_DIRECTORY}/${timestampedImageName(sourcePath, stat.mtime)}`);
+      } catch {
+        // Leave unresolved local images unchanged so the source remains inspectable.
+      }
+    }
+    if (!patches.size) return;
+    this.rows = this.rows.map((row) => {
+      const localPath = patches.get(row.id);
+      return localPath ? { ...row, localPath } : row;
+    });
+  }
+
+  private async copyLocalImagesForExport(working: vscode.Uri) {
+    const file = this.selectedFile;
+    if (!file) return;
+    await this.planLocalImageExportPaths(working);
+    const sourceDirectory = path.dirname(working.fsPath);
+    const chapterDirectory = path.dirname(file.path);
+    const imageDirectory = vscode.Uri.file(chapterImageDirectory(file.path));
+    await vscode.workspace.fs.createDirectory(imageDirectory);
+    for (const row of activeCandidates(this.rows)) {
+      if (row.typeLabel !== "嵌入块" || row.lineType !== "嵌入链接") continue;
+      const localReference = extractLocalImagePath(row.raw);
+      if (!localReference || !row.localPath) continue;
+      const sourcePath = path.isAbsolute(localReference)
+        ? localReference
+        : path.resolve(sourceDirectory, localReference);
+      const sourceUri = vscode.Uri.file(sourcePath);
+      if (!(await exists(sourceUri))) {
+        throw new Error(`本地图片不存在：${localReference}`);
+      }
+      const targetUri = vscode.Uri.file(path.resolve(chapterDirectory, row.localPath));
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(targetUri.fsPath)));
+      if (sourceUri.fsPath !== targetUri.fsPath) {
+        await vscode.workspace.fs.copy(sourceUri, targetUri, { overwrite: true });
+      }
+    }
+    await this.saveSidecar({ silent: true });
+  }
+
   private async exportCalibratedChapter() {
     const file = this.selectedFile;
     const working = this.chapterWorkingUri;
@@ -856,6 +925,12 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     await this.reindexChapterWorkingCopy(await this.readWorkingText(working), { silent: true });
+    try {
+      await this.copyLocalImagesForExport(working);
+    } catch (error) {
+      void vscode.window.showErrorMessage(`本地图片导出失败：${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
     const markdown = exportByCalibration(this.selectedFileText, this.rows);
     const directory = vscode.Uri.file(chapterCalibrationOutputDirectory(file.path));
     const outputUri = vscode.Uri.joinPath(directory, `${path.parse(file.path).name}.md`);
@@ -1020,10 +1095,11 @@ class Ocr2mdExtension implements vscode.Disposable {
       (imageLineType ? imageRows : titleRows).push(deleted);
     }
     imageRows = applyEmbedNumbers(imageRows, current);
+    const cleanedTitleRows = excludeRowsOverlappingEmbeds(titleRows, imageRows);
     this.rows = [
       ...this.rows.filter((row) => row.typeLabel !== "章节标题"
         && !(row.typeLabel === "嵌入块" && rowBelongsToChapter(row, originalPath, uri.fsPath))),
-      ...titleRows,
+      ...cleanedTitleRows,
       ...imageRows,
     ].sort(compareRows);
     if (options.writeMarker !== false && workspace && originalPath && isChapterOutputPath(workspace.uri.fsPath, originalPath)) {

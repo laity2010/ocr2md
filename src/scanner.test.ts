@@ -4,6 +4,7 @@ import {
   applyEmbedNumbers,
   detectEmbedLineType,
   embedRowsFromBlock,
+  excludeRowsOverlappingEmbeds,
   findEmbedRegions,
   isHtmlTagFragment,
   mergeEmbedScan,
@@ -64,6 +65,22 @@ assert.deepStrictEqual(split.map((row) => [row.range.line, row.lineType, row.emb
   [92, "内嵌标题", 1],
   [93, "嵌入链接", 1],
 ]);
+assert.deepStrictEqual(
+  excludeRowsOverlappingEmbeds(
+    [{ ...figureBlock, lineType: "非标题", chapterBoundaryState: "modified" }],
+    split,
+  ),
+  [],
+  "stale chapter-title rows inside a live embed block must be removed",
+);
+assert.strictEqual(
+  excludeRowsOverlappingEmbeds(
+    [{ ...figureBlock, lineType: "非标题", chapterBoundaryState: "deleted" }],
+    split,
+  ).length,
+  1,
+  "deleted chapter-title rows must remain for audit",
+);
 
 const chapter = [
   "Intro text",

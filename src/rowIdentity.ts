@@ -402,7 +402,9 @@ function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
     id: previous.id,
     rowId: previous.rowId ?? previous.id,
     atomId: previous.atomId ?? scanned.atomId,
-    lineType: previous.lineType ?? scanned.lineType,
+    lineType: scanned.typeLabel === "章节标题"
+      ? scanned.lineType
+      : previous.lineType ?? scanned.lineType,
     chapterFile: previous.chapterFile ?? scanned.chapterFile,
     localPath: previous.localPath ?? scanned.localPath,
     imageDownloadStatus: previous.imageDownloadStatus ?? scanned.imageDownloadStatus,

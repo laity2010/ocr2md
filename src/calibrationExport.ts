@@ -83,6 +83,10 @@ export function formatEmbed(group: EmbedExportGroup): string {
   const id = String(group.number).padStart(2, "0");
   const title = embedTitle(group.rows);
   const images = group.rows.filter((row) => row.lineType === "嵌入链接").map(obsidianImage);
+  const texts = group.rows
+    .filter((row) => row.lineType === "嵌入文本")
+    .map((row) => row.raw.trim())
+    .filter(Boolean);
   const table = group.rows.find((row) => row.lineType === "HTML表");
   const html = group.rows.find((row) => row.lineType === "嵌入HTML");
   const tableSrc = table ? compactHtml(table.raw) : undefined;
@@ -97,6 +101,10 @@ export function formatEmbed(group: EmbedExportGroup): string {
     lines.push(`>${tableSrc}`);
   } else if (extraHtml) {
     lines.push(`>${extraHtml}`);
+  }
+  for (const text of texts) {
+    lines.push(">");
+    lines.push(text);
   }
   lines.push(`><embed id=${id}></embed>`);
   return lines.join("\n");

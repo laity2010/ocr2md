@@ -32,6 +32,22 @@ export function embedRangeContains(outer: SourceRange, inner: SourceRange): bool
   return inner.line >= outer.line && innerEnd <= outerEnd;
 }
 
+export function excludeRowsOverlappingEmbeds(rows: Candidate[], embedRows: Candidate[]): Candidate[] {
+  const liveEmbedRanges = embedRows
+    .filter((row) => row.chapterBoundaryState !== "deleted")
+    .map((row) => row.range);
+  return rows.filter((row) => {
+    if (row.chapterBoundaryState === "deleted") return true;
+    return !liveEmbedRanges.some((range) => rangesOverlap(row.range, range));
+  });
+}
+
+function rangesOverlap(left: SourceRange, right: SourceRange): boolean {
+  const leftEnd = left.endLine ?? left.line;
+  const rightEnd = right.endLine ?? right.line;
+  return left.line <= rightEnd && right.line <= leftEnd;
+}
+
 export interface EmbedRegion {
   number: number;
   markerLine: number;

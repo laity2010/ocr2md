@@ -59,6 +59,7 @@ assert.ok(html.includes('"嵌入块": ["嵌入块首", "内嵌标题", "嵌入�
 assert.ok(html.includes("下载图片到本地"), "embed module must download all images, not only the selection");
 assert.ok(html.includes("按标定导出"), "chapter modules must export by calibration");
 assert.ok(html.includes('postKeepView("exportByCalibration")'), "calibration export must post exportByCalibration");
+assert.ok(html.includes('"导出：" + candidate.localPath'), "embed preview must show the exact export path for local images");
 assert.ok(!html.includes("下载所选图片"), "selected-only image download must be removed");
 assert.ok(
   html.includes('if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号"))'),

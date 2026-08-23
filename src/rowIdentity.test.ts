@@ -96,6 +96,27 @@ assert.strictEqual(afterPromote[0].id, headingRows[0].id);
 assert.strictEqual(afterPromote[0].raw, "## Title");
 assert.strictEqual(afterPromote[0].lineType, "2 级标题");
 
+const demotedDoc = ["#### Title", "body"].join("\n");
+const demotedRows = attachScanIdentities(
+  [candidate("#### Title", 0, { typeLabel: "章节标题", lineType: "4 级标题" })],
+  demotedDoc,
+  { moduleName: "章节标题", sourcePath: context.sourcePath },
+);
+const staleHeading = [{ ...promotedRows[0], lineType: "2 级标题" }];
+const afterDemote = reconcileRows(staleHeading, demotedRows);
+assert.strictEqual(afterDemote[0].raw, "#### Title");
+assert.strictEqual(afterDemote[0].lineType, "4 级标题", "chapter heading type must follow the current working Markdown");
+
+const annotationDoc = "Text<sup>1</sup>";
+const annotationScanned = attachScanIdentities(
+  [candidate(annotationDoc, 0, { typeLabel: "注释", lineType: "注释引用" })],
+  annotationDoc,
+  { moduleName: "注释", sourcePath: context.sourcePath },
+);
+const manuallyClassifiedAnnotation = [{ ...annotationScanned[0], lineType: "注释正文" }];
+const afterAnnotationRescan = reconcileRows(manuallyClassifiedAnnotation, annotationScanned);
+assert.strictEqual(afterAnnotationRescan[0].lineType, "注释正文", "non-heading manual classifications must survive rescans");
+
 const legacy: Candidate[] = [{
   id: "legacy-line-2",
   kind: "regex",
