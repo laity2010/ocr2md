@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { isDeletedCandidate } from "./candidateLifecycle";
+import { isEmbedBlockStart } from "./scanner";
 import type { Candidate, ModuleName, SourceRange } from "./types";
 
 export const FILE_START_ANCHOR = "anchor:file-start";
@@ -131,10 +132,14 @@ export function relocateRows(rows: Candidate[], documentText: string): Candidate
 export function locateCandidate(documentText: string, candidate: Candidate): SourceRange | undefined {
   const lines = splitDocumentLines(documentText);
   const stored = matchAtStoredLine(lines, candidate);
-  if (stored) return stored;
+  if (stored && rangeFitsCandidate(lines, stored, candidate)) return stored;
+
+  const shifted = shiftOffEmbedMarker(lines, candidate);
+  if (shifted) return shifted;
 
   const raw = candidate.raw ?? "";
-  const hits = !shouldSkipGlobalRawSearch(raw) && raw ? findRawHits(documentText, raw) : [];
+  const hits = (!shouldSkipGlobalRawSearch(raw) && raw ? findRawHits(documentText, raw) : [])
+    .filter((hit) => rangeFitsCandidate(lines, hit, candidate));
   if (hits.length) {
     hits.sort((left, right) => {
       const score = scoreHit(lines, candidate, right) - scoreHit(lines, candidate, left);
@@ -145,28 +150,68 @@ export function locateCandidate(documentText: string, candidate: Candidate): Sou
   }
 
   const slot = findNeighborSlot(lines, candidate);
-  if (slot) return slot;
+  if (slot && rangeFitsCandidate(lines, slot, candidate)) return slot;
 
   if (candidate.lineType === "嵌入块首") {
     const markers = lines
       .map((text, line) => ({ text, line }))
-      .filter((entry) => entry.text.trim() === ">");
+      .filter((entry) => isEmbedBlockStart(entry.text));
     if (markers.length) {
       markers.sort((left, right) => Math.abs(left.line - candidate.range.line) - Math.abs(right.line - candidate.range.line));
       return { line: markers[0].line, start: 0, end: markers[0].text.length };
     }
   }
 
+  const unique = uniqueMatchingLine(lines, candidate);
+  if (unique) return unique;
+
   if (candidate.range.line >= 0 && candidate.range.line < lines.length) {
     const line = lines[candidate.range.line];
-    const first = raw.split("\n")[0];
-    if (first && line.includes(first)) {
-      const start = Math.max(0, line.indexOf(first));
-      return { line: candidate.range.line, start, end: start + first.length, endLine: storedEndLine(candidate, lines.length) };
+    if (lineHoldsRow(line, candidate)) {
+      const first = (raw.split("\n")[0] ?? "").trim();
+      const start = first ? Math.max(0, line.indexOf(first)) : 0;
+      return { line: candidate.range.line, start, end: start + (first.length || line.length) };
     }
-    if (line === raw) return { line: candidate.range.line, start: 0, end: line.length };
   }
   return undefined;
+}
+
+function lineHoldsRow(lineText: string, candidate: Candidate): boolean {
+  if (candidate.lineType === "嵌入块首") return isEmbedBlockStart(lineText);
+  if (isEmbedBlockStart(lineText)) return false;
+  const first = (candidate.raw ?? "").split("\n")[0]?.trim();
+  if (!first) return false;
+  const line = lineText.trim();
+  return line === first || line.includes(first) || first.includes(line);
+}
+
+function rangeFitsCandidate(lines: string[], range: SourceRange, candidate: Candidate): boolean {
+  const text = lines[range.line];
+  return text !== undefined && lineHoldsRow(text, candidate);
+}
+
+/** Inserting `>` above a figure parks the old 内嵌标题 on the marker; snap it to the next line. */
+function shiftOffEmbedMarker(lines: string[], candidate: Candidate): SourceRange | undefined {
+  if (candidate.lineType === "嵌入块首") return undefined;
+  const at = candidate.range.line;
+  if (at < 0 || at >= lines.length || !isEmbedBlockStart(lines[at])) return undefined;
+  const next = at + 1;
+  if (next >= lines.length || !lineHoldsRow(lines[next], candidate)) return undefined;
+  return { line: next, start: 0, end: lines[next].length };
+}
+
+function uniqueMatchingLine(lines: string[], candidate: Candidate): SourceRange | undefined {
+  if (candidate.lineType === "嵌入块首") return undefined;
+  const distinctive = ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"].includes(candidate.lineType ?? "");
+  const first = (candidate.raw ?? "").split("\n")[0]?.trim();
+  if (!distinctive || !first || first.length <= 1) return undefined;
+  const matches = lines
+    .map((text, line) => ({ text, line }))
+    .filter((entry) => lineHoldsRow(entry.text, candidate));
+  if (!matches.length) return undefined;
+  matches.sort((left, right) => Math.abs(left.line - candidate.range.line) - Math.abs(right.line - candidate.range.line));
+  const line = matches[0].line;
+  return { line, start: 0, end: lines[line].length };
 }
 
 function storedEndLine(candidate: Candidate, lineCount: number): number | undefined {
@@ -180,9 +225,10 @@ function matchAtStoredLine(lines: string[], candidate: Candidate): SourceRange |
   const line = candidate.range.line;
   if (line < 0 || line >= lines.length) return undefined;
   const text = lines[line];
-  if (candidate.lineType === "嵌入块首" && text.trim() === ">") {
+  if (candidate.lineType === "嵌入块首" && isEmbedBlockStart(text)) {
     return { line, start: 0, end: text.length };
   }
+  if (isEmbedBlockStart(text) && candidate.lineType !== "嵌入块首") return undefined;
   const raw = candidate.raw ?? "";
   if (!raw.includes("\n")) return undefined;
   const first = raw.split("\n")[0];

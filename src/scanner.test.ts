@@ -158,4 +158,21 @@ assert.ok(!MODULE_REGEX_DEFAULTS["嵌入块"].includes(tagFragmentPattern));
 assert.ok(EMBED_REGEX_PRESETS.some((preset) => preset.id === "html-embed"));
 assert.ok(!MODULE_REGEX_DEFAULTS["嵌入块"].includes(EMBED_REGEX_PRESETS.find((preset) => preset.id === "html-embed")!.pattern));
 
+const insertedMarker = [
+  "In sum, as can be seen in figure 12.1.",
+  "",
+  ">",
+  "FIGURE 12.1 | Valuation Challenges—Mature Businesses",
+  "",
+  "![image](https://example.com/a.jpg)",
+].join("\n");
+assert.deepStrictEqual(
+  mergeEmbedScan(insertedMarker, ["!\\[[^\\]]*\\]\\([^)]*\\)"]).map((row) => [row.range.line, row.lineType, row.embedNumber]),
+  [
+    [2, "嵌入块首", 1],
+    [3, "内嵌标题", 1],
+    [5, "嵌入链接", undefined],
+  ],
+);
+
 console.log("scanner tests passed");

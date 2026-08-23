@@ -130,6 +130,57 @@ const gtDoc = ["<table>", ">", "<tr><td>x</td></tr>", "</table>"].join("\n");
 const gtRow = candidate(">", 1, { typeLabel: "嵌入块", lineType: "嵌入块首" });
 assert.strictEqual(locateCandidate(gtDoc, gtRow)?.line, 1, "embed block start must locate the > line, not a tag");
 
+const figureCaption = "FIGURE 12.1 | Valuation Challenges—Mature Businesses";
+const figureBeforeMarker = [
+  "In sum, as can be seen in figure 12.1.",
+  "",
+  figureCaption,
+  "",
+  "![image](https://example.com/a.jpg)",
+].join("\n");
+const figureAfterMarker = [
+  "In sum, as can be seen in figure 12.1.",
+  "",
+  ">",
+  figureCaption,
+  "",
+  "![image](https://example.com/a.jpg)",
+].join("\n");
+const staleTitle = candidate(figureCaption, 2, {
+  typeLabel: "嵌入块",
+  lineType: "内嵌标题",
+});
+assert.strictEqual(
+  locateCandidate(figureAfterMarker, staleTitle)?.line,
+  3,
+  "内嵌标题 parked on an inserted > must move to the next line",
+);
+const previousTitle = attachScanIdentities(
+  [staleTitle],
+  figureBeforeMarker,
+  { moduleName: "嵌入块", sourcePath: context.sourcePath },
+);
+previousTitle[0].range = { ...previousTitle[0].range, line: 2, end: 1 };
+const markerAndTitle = reconcileRows(
+  previousTitle,
+  attachScanIdentities(
+    [
+      candidate(">", 2, { typeLabel: "嵌入块", lineType: "嵌入块首" }),
+      candidate(figureCaption, 3, { typeLabel: "嵌入块", lineType: "内嵌标题" }),
+    ],
+    figureAfterMarker,
+    { moduleName: "嵌入块", sourcePath: context.sourcePath },
+  ),
+  figureAfterMarker,
+);
+assert.deepStrictEqual(
+  [...new Set(markerAndTitle.map((row) => row.range.line))].sort((left, right) => left - right),
+  markerAndTitle.map((row) => row.range.line).sort((left, right) => left - right),
+  "嵌入块首 and 内嵌标题 must not share a line number",
+);
+assert.strictEqual(markerAndTitle.find((row) => row.lineType === "嵌入块首")?.range.line, 2);
+assert.strictEqual(markerAndTitle.find((row) => row.lineType === "内嵌标题")?.range.line, 3);
+
 const tdDoc = ["<table>", ...Array.from({ length: 40 }, () => "<tr><td>x</td></tr>"), "</table>"].join("\n");
 const tdRow = candidate("<td>", 10, { typeLabel: "嵌入块", lineType: "嵌入HTML" });
 assert.strictEqual(locateCandidate(tdDoc, tdRow)?.line, 10, "short HTML tags must not global-search every <td>");

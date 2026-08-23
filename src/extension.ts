@@ -30,6 +30,7 @@ import {
   attachScanIdentities,
   locateCandidate,
   reconcileRows,
+  relocateRows,
 } from "./rowIdentity";
 import { detectEmbedLineType, embedRowsFromBlock, mergeEmbedScan, scanRegexMatches } from "./scanner";
 import type {
@@ -426,7 +427,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       const present = new Set(reconciled.map((row) => row.id));
       const extras = previous.filter((row) =>
         !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
-      reconciled = dedupeImageRows([...reconciled, ...extras]);
+      reconciled = dedupeImageRows([...reconciled, ...relocateRows(extras, text)], text);
     }
     this.rows = [
       ...this.rows.filter((row) => !(row.typeLabel === moduleName && row.sourcePath === source)),
@@ -863,8 +864,11 @@ class Ocr2mdExtension implements vscode.Disposable {
       { moduleName: "嵌入块", ...identityContext },
     );
     const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks, current);
-    const imageRows = reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current)
-      .map((row) => applyChangeState(row, changes));
+    const imageRows = dedupeImageRows(
+      reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current)
+        .map((row) => applyChangeState(row, changes)),
+      current,
+    );
     const lines = current.replace(/\r\n?/g, "\n").split("\n");
     for (const entry of changes.filter((candidate) => candidate.state === "deleted")) {
       const raw = entry.baselineText ?? "";
@@ -1398,19 +1402,26 @@ function rowBelongsToChapter(row: Candidate, originalPath: string | undefined, w
   return Boolean(originalPath) && (row.sourcePath === originalPath || row.workingCopyPath === originalPath);
 }
 
-function dedupeImageRows(rows: Candidate[]): Candidate[] {
+function dedupeImageRows(rows: Candidate[], text?: string): Candidate[] {
   const deleted = rows.filter((row) => row.chapterBoundaryState === "deleted");
-  const live = rows
-    .filter((row) => row.chapterBoundaryState !== "deleted")
-    .sort((left, right) => left.range.line - right.range.line || left.raw.length - right.raw.length);
-  const kept: Candidate[] = [];
+  const live = rows.filter((row) => row.chapterBoundaryState !== "deleted");
+  const lines = text ? text.replace(/\r\n?/g, "\n").split("\n") : undefined;
+  const score = (row: Candidate): number => {
+    const lineText = lines?.[row.range.line];
+    if (lineText === undefined) return 0;
+    const raw = (row.raw ?? "").split("\n")[0]?.trim() ?? "";
+    if (lineText === row.raw) return 5;
+    if (lineText.trim() === raw) return 4;
+    if (detectEmbedLineType(lineText) === row.lineType) return 3;
+    if (raw && lineText.includes(raw)) return 2;
+    return 0;
+  };
+  const byLine = new Map<number, Candidate>();
   for (const row of live) {
-    const duplicate = kept.some((other) =>
-      other.range.line === row.range.line
-      && (other.raw === row.raw || other.raw.includes(row.raw) || row.raw.includes(other.raw)));
-    if (!duplicate) kept.push(row);
+    const existing = byLine.get(row.range.line);
+    if (!existing || score(row) > score(existing)) byLine.set(row.range.line, row);
   }
-  return [...deleted, ...kept];
+  return [...deleted, ...byLine.values()].sort(compareRows);
 }
 
 function applyAnnotationCorrections(text: string, rows: Candidate[]): string {
