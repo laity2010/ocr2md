@@ -61,6 +61,15 @@ assert.strictEqual(shifted.get(1), 2);
 assert.strictEqual(shifted.get(2), 3);
 assert.strictEqual(remapRangeLines({ range: { line: 1, endLine: 1 } }, shifted).range.line, 2);
 
+const beforeMarker = "para\n\nFIGURE 12.1 | Title\n";
+const afterMarker = "para\n\n>\nFIGURE 12.1 | Title\n";
+const afterSecondInsert = "INTRO\npara\n\n>\nFIGURE 12.1 | Title\n";
+let figureRow = { range: { line: 2, endLine: 2 } };
+figureRow = remapRangeLines(figureRow, mapLinesAfterEdit(beforeMarker, afterMarker));
+assert.strictEqual(figureRow.range.line, 3, "inserting > above a figure must bump the table line");
+figureRow = remapRangeLines(figureRow, mapLinesAfterEdit(afterMarker, afterSecondInsert));
+assert.strictEqual(figureRow.range.line, 4, "later inserts must keep shifting from the already-remapped line");
+
 const unchangedHeadingLevels = [
   "# Level 1",
   "## Level 2",

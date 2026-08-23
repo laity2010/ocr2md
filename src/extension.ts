@@ -99,6 +99,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     vscode.window.createTextEditorDecorationType({ color, fontWeight: "bold" })
   );
   private headingDecorationTimer: ReturnType<typeof setTimeout> | undefined;
+  private workingCopyPaintTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingWorkingCopyRescan = false;
   private imageDownloadProgress: ImageDownloadProgress | undefined;
   private readonly chapterDecorations: ChapterChangeDecorationProvider;
@@ -148,7 +149,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       }),
       vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
-          this.pendingWorkingCopyRescan = true;
+          this.noteWorkingCopyEdit(event.document);
           return;
         }
         this.scheduleHeadingDecorations(event.document);
@@ -159,6 +160,7 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   dispose() {
     if (this.headingDecorationTimer) clearTimeout(this.headingDecorationTimer);
+    if (this.workingCopyPaintTimer) clearTimeout(this.workingCopyPaintTimer);
     this.disposables.forEach((disposable) => disposable.dispose());
   }
 
@@ -346,10 +348,6 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     if (document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
-      if (this.isWorkingCopyEditorActive()) {
-        this.pendingWorkingCopyRescan = true;
-        return;
-      }
       await this.syncTableToWorkingCopy(document.uri, document.getText(), { writeMarker: true });
       return;
     }
@@ -479,11 +477,40 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.selectedFileText = current;
   }
 
+  private noteWorkingCopyEdit(document: vscode.TextDocument) {
+    this.shiftWorkingCopyRows(document.getText());
+    this.pendingWorkingCopyRescan = true;
+    this.scheduleWorkingCopyPaint();
+  }
+
+  private scheduleWorkingCopyPaint() {
+    if (this.workingCopyPaintTimer) clearTimeout(this.workingCopyPaintTimer);
+    this.workingCopyPaintTimer = setTimeout(() => {
+      this.workingCopyPaintTimer = undefined;
+      void this.paintWorkingCopyLineNumbers();
+    }, 300);
+  }
+
+  private async paintWorkingCopyLineNumbers() {
+    this.rows = await this.applyWorkingCopyDiff(this.rows, this.selectedFileText);
+    this.update();
+  }
+
+  private flushWorkingCopyLineShift() {
+    const uri = this.chapterWorkingUri;
+    if (!uri) return;
+    const document = vscode.workspace.textDocuments.find((item) => item.uri.fsPath === uri.fsPath);
+    if (document) this.shiftWorkingCopyRows(document.getText());
+  }
+
   private async syncTableToWorkingCopy(uri: vscode.Uri, current: string, options: { writeMarker?: boolean } = {}) {
+    if (this.workingCopyPaintTimer) {
+      clearTimeout(this.workingCopyPaintTimer);
+      this.workingCopyPaintTimer = undefined;
+    }
     this.shiftWorkingCopyRows(current);
-    const deferUi = this.shouldDeferWorkingCopyUi();
     await this.refreshChapterTitleRows(uri, {
-      writeMarker: Boolean(options.writeMarker) && !deferUi,
+      writeMarker: Boolean(options.writeMarker),
       currentText: current,
       silent: true,
     });
@@ -491,10 +518,6 @@ class Ocr2mdExtension implements vscode.Disposable {
       await this.scanCurrentModule(this.activeModule, { silent: true });
     }
     this.rows = await this.applyWorkingCopyDiff(this.rows, current);
-    if (deferUi) {
-      this.pendingWorkingCopyRescan = true;
-      return;
-    }
     this.pendingWorkingCopyRescan = false;
     this.update();
   }
@@ -666,6 +689,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async locateRow(id: string) {
+    this.flushWorkingCopyLineShift();
     const row = this.rows.find((candidate) => candidate.id === id);
     const target = this.modulePreviewPaths.get(this.activeModule)
       ?? row?.workingCopyPath
@@ -678,7 +702,11 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     const editor = await this.showDocumentPair(vscode.Uri.file(target));
     const document = editor.document;
-    const located = locateCandidate(document.getText(), row);
+    if (this.chapterWorkingUri && document.uri.fsPath === this.chapterWorkingUri.fsPath) {
+      this.shiftWorkingCopyRows(document.getText());
+    }
+    const current = this.rows.find((candidate) => candidate.id === id) ?? row;
+    const located = locateCandidate(document.getText(), current);
     if (!located) {
       void vscode.window.showWarningMessage("无法在当前文档中定位该行。");
       return;
@@ -690,7 +718,8 @@ class Ocr2mdExtension implements vscode.Disposable {
     const range = new vscode.Range(startLine, start, endLine, end);
     editor.selection = new vscode.Selection(range.start, range.end);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-    this.rows = this.rows.map((candidate) => candidate.id === row.id ? { ...candidate, range: located } : candidate);
+    this.rows = this.rows.map((candidate) => candidate.id === current.id ? { ...candidate, range: located } : candidate);
+    this.update();
   }
 
   private async showDocumentPair(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<vscode.TextEditor> {
