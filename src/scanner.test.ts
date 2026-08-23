@@ -39,6 +39,8 @@ assert.strictEqual(detectEmbedLineType("![image](https://example.com/a.jpg)"), "
 assert.strictEqual(detectEmbedLineType("![[local.png]]"), "嵌入链接");
 assert.strictEqual(detectEmbedLineType('<figure><img src="a.jpg"></figure>'), "嵌入HTML");
 assert.strictEqual(detectEmbedLineType('<div class="callout">note</div>'), "嵌入HTML");
+assert.strictEqual(detectEmbedLineType("<table><tr><td>A</td></tr></table>"), "HTML表");
+assert.strictEqual(detectEmbedLineType("<tr><td>A</td></tr>"), "HTML表");
 assert.strictEqual(detectEmbedLineType("<https://example.com/a.jpg>"), undefined);
 assert.strictEqual(detectEmbedLineType("Ordinary paragraph"), undefined);
 
@@ -98,7 +100,7 @@ const tableDoc = [
 const tableRows = scanEmbedLines(tableDoc);
 assert.deepStrictEqual(tableRows.map((row) => [row.lineType, row.embedNumber, row.range.line]), [
   ["嵌入块首", 1, 1],
-  ["嵌入HTML", 1, 2],
+  ["HTML表", 1, 2],
   ["嵌入链接", 1, 10],
 ]);
 assert.strictEqual(tableRows[1].range.endLine, 7);
@@ -150,7 +152,7 @@ assert.ok(exploded.length > 200, "legacy html-embed regex matches every tag");
 const merged = mergeEmbedScan(wideTable, [tagFragmentPattern, "!\\[[^\\]]*\\]\\([^)]*\\)"]);
 assert.deepStrictEqual(merged.map((row) => [row.lineType, row.embedNumber]), [
   ["嵌入块首", 1],
-  ["嵌入HTML", 1],
+  ["HTML表", 1],
   ["嵌入链接", 1],
 ]);
 assert.ok(!merged.some((row) => isHtmlTagFragment(row.raw)));

@@ -231,7 +231,7 @@ function shiftOffEmbedMarker(lines: string[], candidate: Candidate): SourceRange
 
 function uniqueMatchingLine(lines: string[], candidate: Candidate): SourceRange | undefined {
   if (candidate.lineType === "嵌入块首") return undefined;
-  const distinctive = ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"].includes(candidate.lineType ?? "");
+  const distinctive = ["内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本"].includes(candidate.lineType ?? "");
   const first = (candidate.raw ?? "").split("\n")[0]?.trim();
   if (!distinctive || !first || first.length <= 1) return undefined;
   const matches = lines

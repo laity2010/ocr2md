@@ -1,6 +1,6 @@
 import type { Candidate, SourceRange } from "./types";
 
-export type EmbedLineType = "嵌入块首" | "内嵌标题" | "嵌入链接" | "嵌入HTML" | "嵌入文本";
+export type EmbedLineType = "嵌入块首" | "内嵌标题" | "嵌入链接" | "嵌入HTML" | "HTML表" | "嵌入文本";
 
 const HTML_TAG_RE = /<\s*\/?\s*[a-zA-Z][a-zA-Z0-9-]*(?:\s|\/|>)/;
 const IMAGE_LINK_RE = /!\[[^\]]*\]\([^)]+\)|!\[\[[^\]]+\]\]/;
@@ -13,10 +13,17 @@ const TABLE_INNER_TAGS = new Set(["thead", "tbody", "tfoot", "tr", "td", "th", "
 
 export function detectEmbedLineType(raw: string): Exclude<EmbedLineType, "嵌入文本"> | undefined {
   if (isEmbedBlockStart(raw)) return "嵌入块首";
+  if (isHtmlTableMarkup(raw)) return "HTML表";
   if (HTML_TAG_RE.test(raw)) return "嵌入HTML";
   if (IMAGE_LINK_RE.test(raw)) return "嵌入链接";
   if (EMBED_TITLE_RE.test(raw)) return "内嵌标题";
   return undefined;
+}
+
+function isHtmlTableMarkup(raw: string): boolean {
+  if (/<\s*table\b/i.test(raw)) return true;
+  const tag = firstHtmlTag(raw.split("\n")[0] ?? "");
+  return Boolean(tag && TABLE_INNER_TAGS.has(tag.name));
 }
 
 export function embedRangeContains(outer: SourceRange, inner: SourceRange): boolean {
@@ -214,13 +221,14 @@ function collectEmbedRows(lines: string[], lineOffset: number): Candidate[] {
   let index = 0;
   while (index < lines.length) {
     const line = lines[index];
-    const lineType = detectEmbedLineType(line);
+    let lineType = detectEmbedLineType(line);
     if (!lineType) {
       index += 1;
       continue;
     }
-    const end = lineType === "嵌入HTML" ? findHtmlBlockEnd(lines, index) : index;
+    const end = lineType === "嵌入HTML" || lineType === "HTML表" ? findHtmlBlockEnd(lines, index) : index;
     const raw = lines.slice(index, end + 1).join("\n");
+    if (isHtmlTableMarkup(raw)) lineType = "HTML表";
     const startLine = lineOffset + index;
     const endLine = lineOffset + end;
     rows.push({
