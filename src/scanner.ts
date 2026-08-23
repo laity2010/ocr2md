@@ -110,8 +110,28 @@ export function mergeEmbedScan(text: string, patterns: string[]): Candidate[] {
       unique.set(keyOf(row), row);
     }
   }
-  return [...unique.values()].sort((left, right) =>
-    left.range.line - right.range.line || left.range.start - right.range.start);
+  return applyEmbedNumbers(
+    [...unique.values()].sort((left, right) =>
+      left.range.line - right.range.line || left.range.start - right.range.start),
+    text,
+  );
+}
+
+/** Derive 序号 from the current working copy: each `>` and the lines after it share one number until the next `>`. */
+export function applyEmbedNumbers<T extends { range: { line: number }; typeLabel?: string; embedNumber?: number }>(
+  rows: T[],
+  text: string,
+): T[] {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const regions = findEmbedRegions(lines);
+  return rows.map((row) => {
+    if (row.typeLabel && row.typeLabel !== "嵌入块") return row;
+    const line = row.range.line;
+    const embedNumber = regions.find((region) =>
+      line === region.markerLine || (line >= region.contentStart && line <= region.contentEnd)
+    )?.number;
+    return { ...row, embedNumber };
+  });
 }
 
 export function embedNumberAtLine(text: string, line: number): number | undefined {

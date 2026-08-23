@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import { EMBED_REGEX_PRESETS, MODULE_REGEX_DEFAULTS } from "./regexPresets";
 import {
+  applyEmbedNumbers,
   detectEmbedLineType,
   embedRowsFromBlock,
   findEmbedRegions,
@@ -199,6 +200,14 @@ assert.deepStrictEqual(
     [7, "内嵌标题", 2],
     [8, "嵌入链接", 2],
   ],
+);
+assert.deepStrictEqual(
+  applyEmbedNumbers(
+    scanEmbedLines(untilNextMarker).map((row) => ({ ...row, embedNumber: undefined })),
+    untilNextMarker,
+  ).filter((row) => row.lineType === "嵌入块首").map((row) => row.embedNumber),
+  [1, 2],
+  "each > 嵌入块首 keeps its own 序号, including 2",
 );
 
 console.log("scanner tests passed");

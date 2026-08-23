@@ -31,7 +31,7 @@ import {
   relocateRows,
 } from "./rowIdentity";
 import { splitBlankLineBlocks } from "./atoms";
-import { detectEmbedLineType, mergeEmbedScan, scanRegexMatches } from "./scanner";
+import { applyEmbedNumbers, detectEmbedLineType, mergeEmbedScan, scanRegexMatches } from "./scanner";
 import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
 import type {
   AnnotationPair,
@@ -419,7 +419,10 @@ class Ocr2mdExtension implements vscode.Disposable {
       const present = new Set(reconciled.map((row) => row.id));
       const extras = previous.filter((row) =>
         !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
-      reconciled = dedupeImageRows([...reconciled, ...relocateRows(extras, text)], text);
+      reconciled = applyEmbedNumbers(
+        dedupeImageRows([...reconciled, ...relocateRows(extras, text)], text),
+        text,
+      );
     }
     this.rows = [
       ...this.rows.filter((row) => !(row.typeLabel === moduleName && row.sourcePath === source)),
@@ -905,9 +908,12 @@ class Ocr2mdExtension implements vscode.Disposable {
       { moduleName: "嵌入块", ...identityContext },
     );
     const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks, current);
-    const imageRows = dedupeImageRows(
-      reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current)
-        .map((row) => applyChangeState(row, changes)),
+    let imageRows = applyEmbedNumbers(
+      dedupeImageRows(
+        reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current)
+          .map((row) => applyChangeState(row, changes)),
+        current,
+      ),
       current,
     );
     const lines = current.replace(/\r\n?/g, "\n").split("\n");
@@ -932,6 +938,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       }, current, { moduleName: imageLineType ? "嵌入块" : "章节标题", sourcePath });
       (imageLineType ? imageRows : titleRows).push(deleted);
     }
+    imageRows = applyEmbedNumbers(imageRows, current);
     this.rows = [
       ...this.rows.filter((row) => row.typeLabel !== "章节标题"
         && !(row.typeLabel === "嵌入块" && rowBelongsToChapter(row, originalPath, uri.fsPath))),

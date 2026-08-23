@@ -683,7 +683,7 @@ export function renderSidebar(state: SidebarState): string {
       checkCell.append(check);
       row.append(checkCell, el("td", String(candidate.range.line + 1)));
       if (state.activeModule === "嵌入块") {
-        row.append(el("td", candidate.embedNumber ? String(candidate.embedNumber) : ""));
+        row.append(el("td", candidate.embedNumber == null ? "" : String(candidate.embedNumber)));
       }
       if (state.activeModule === "注释") {
         const numberCell = document.createElement("td");
