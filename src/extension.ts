@@ -693,6 +693,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     const range = new vscode.Range(startLine, start, endLine, end);
     editor.selection = new vscode.Selection(range.start, range.end);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    await this.scrollSourcePreview(document, startLine, document.lineAt(startLine).text);
     this.rows = this.rows.map((candidate) => candidate.id === row.id ? { ...candidate, range: located } : candidate);
   }
 
@@ -743,7 +744,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       SOURCE_PREVIEW_VIEW_TYPE,
       "预览",
       { viewColumn: vscode.ViewColumn.Two, preserveFocus: true },
-      { enableScripts: false, retainContextWhenHidden: true, localResourceRoots: roots },
+      { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: roots },
     );
     this.sourcePreview.onDidDispose(() => {
       this.sourcePreview = undefined;
@@ -763,21 +764,60 @@ class Ocr2mdExtension implements vscode.Disposable {
       body = `<pre>${escapeHtml(document.getText())}</pre>`;
     }
     const base = webview.asWebviewUri(vscode.Uri.joinPath(document.uri, "..")).toString();
+    const nonce = randomUUID();
     this.sourcePreview.webview.html = `<!doctype html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <base href="${escapeHtml(base)}/">
   <style>
     body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 12px 16px; }
     img { max-width: 100%; }
     table { border-collapse: collapse; }
     th, td { border: 1px solid var(--vscode-panel-border); padding: 4px 8px; }
+    .ocr2md-locate { outline: 2px solid var(--vscode-focusBorder); }
   </style>
 </head>
-<body>${body}</body>
+<body>${body}
+<script nonce="${nonce}">
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (!data || data.command !== "scrollToLine") return;
+    const snippet = String(data.snippet || "").trim();
+    document.querySelectorAll(".ocr2md-locate").forEach((node) => node.classList.remove("ocr2md-locate"));
+    if (snippet) {
+      const nodes = Array.from(document.body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,td,th,pre,blockquote"));
+      const hit = nodes.find((node) => (node.textContent || "").replace(/\\s+/g, " ").includes(snippet));
+      if (hit) {
+        hit.classList.add("ocr2md-locate");
+        hit.scrollIntoView({ block: "center" });
+        return;
+      }
+    }
+    const line = Number(data.line) || 0;
+    const lineCount = Math.max(Number(data.lineCount) || 1, 1);
+    const max = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0);
+    window.scrollTo(0, max * (line / Math.max(lineCount - 1, 1)));
+  });
+</script>
+</body>
 </html>`;
   }
+
+  private async scrollSourcePreview(document: vscode.TextDocument, line: number, snippet?: string): Promise<void> {
+    if (!this.sourcePreview) return;
+    this.sourcePreview.reveal(vscode.ViewColumn.Two, true);
+    await delay(50);
+    void this.sourcePreview.webview.postMessage({
+      command: "scrollToLine",
+      line,
+      lineCount: document.lineCount,
+      snippet: String(snippet || "").replace(/\s+/g, " ").trim().slice(0, 80),
+    });
+  }
+
+
 
   private scheduleHeadingDecorations(document: vscode.TextDocument) {
     if (document.languageId !== "markdown") return;
@@ -1370,6 +1410,10 @@ function sourcePreviewGroup(): vscode.TabGroup | undefined {
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function sourceViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
