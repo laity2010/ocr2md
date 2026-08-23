@@ -20,6 +20,7 @@ export interface Candidate {
   preview: string;
   regexSource?: string;
   annotationNumber?: string;
+  annotationNumberSource?: "extracted" | "manual";
   isWorkingCorrection?: boolean;
   workingCopyPath?: string;
   sourceLine?: number;
@@ -80,4 +81,10 @@ export interface SidebarState {
   moduleRegexPatterns: Record<string, string>;
   moduleRegexPresets: Record<string, RegexPreset[]>;
   imageDownloadProgress?: ImageDownloadProgress;
+  annotationMatchSummary?: {
+    paired: number;
+    missingRef: number;
+    missingBody: number;
+    missingNumber: number;
+  };
 }

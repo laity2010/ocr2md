@@ -257,6 +257,12 @@ function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
     chapterFile: previous.chapterFile ?? scanned.chapterFile,
     localPath: previous.localPath ?? scanned.localPath,
     isWorkingCorrection: previous.isWorkingCorrection,
+    annotationNumber: previous.annotationNumberSource === "manual"
+      ? previous.annotationNumber
+      : scanned.annotationNumber ?? previous.annotationNumber,
+    annotationNumberSource: previous.annotationNumberSource === "manual"
+      ? "manual"
+      : scanned.annotationNumberSource ?? previous.annotationNumberSource,
   };
 }
 

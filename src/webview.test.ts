@@ -44,6 +44,10 @@ assert.ok(
   html.includes('previewCell.addEventListener("click", () => post("locateRow", { id: candidate.id }))'),
   "preview navigation must be attached to the preview cell",
 );
+assert.ok(html.includes("匹配注释对"), "annotation matching action is missing");
+assert.ok(!html.includes("确认所选 Pair"), "old pair confirmation label must be removed");
+assert.ok(html.includes("手工输入注释号"), "missing annotation number must prompt for manual input");
+assert.ok(html.includes("tr.missing-number"), "rows without annotation numbers must be highlighted");
 assert.ok(html.includes("function restoreScroll()"), "table scroll must be restored after rerender");
 assert.ok(html.includes("function restoreFocus()"), "row focus must be restored after rerender");
 assert.ok(html.includes("persisted.selectedIds"), "multi-select must survive host webview reloads");

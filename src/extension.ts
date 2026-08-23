@@ -10,6 +10,11 @@ import {
   type MergeInputText,
 } from "./chapterBoundary";
 import {
+  annotationMatchSummary,
+  buildAnnotationPairs,
+  extractAnnotationNumber,
+} from "./annotation";
+import {
   activeCandidates,
   DELETED_LINE_TYPE,
   markCandidatesDeleted,
@@ -136,6 +141,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       moduleRegexPatterns: this.moduleRegexPatterns,
       moduleRegexPresets: MODULE_REGEX_PRESETS,
       imageDownloadProgress: this.imageDownloadProgress,
+      annotationMatchSummary: annotationMatchSummary(this.rows, this.annotationPairs),
     };
   }
 
@@ -174,8 +180,13 @@ class Ocr2mdExtension implements vscode.Disposable {
           this.update();
         }
         break;
-      case "confirmAnnotationPairs":
-        if (Array.isArray(message.ids)) this.confirmAnnotationPairs(message.ids);
+      case "matchAnnotationPairs":
+        this.matchAnnotationPairs();
+        break;
+      case "setAnnotationNumber":
+        if (typeof message.id === "string" && typeof message.annotationNumber === "string") {
+          this.setAnnotationNumber(message.id, message.annotationNumber);
+        }
         break;
       case "locateRow":
         if (typeof message.id === "string") await this.locateRow(message.id);
@@ -314,12 +325,14 @@ class Ocr2mdExtension implements vscode.Disposable {
     const unique = new Map<string, Candidate>();
     for (const pattern of patterns) {
       for (const candidate of scanRegexMatches(text, pattern)) {
+        const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(candidate.raw) : undefined;
         const row: Candidate = {
           ...candidate,
           typeLabel: moduleName,
           lineType: defaultLineType(moduleName, candidate.raw),
           regexSource: pattern,
-          annotationNumber: moduleName === "注释" ? annotationNumber(candidate.raw) : undefined,
+          annotationNumber: extractedNumber,
+          annotationNumberSource: extractedNumber ? "extracted" : undefined,
           sourcePath: source,
           sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
           workingCopyPath: workingPath,
@@ -379,48 +392,25 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private rebuildAnnotationPairs() {
-    const previous = new Map(this.annotationPairs.map((pair) => [pair.id, pair.status]));
-    const groups = new Map<string, { sourcePath: string; number: string; refs: Candidate[]; bodies: Candidate[] }>();
-    for (const row of activeCandidates(this.rows).filter((candidate) => candidate.typeLabel === "注释" && candidate.lineType !== "忽略")) {
-      const number = row.annotationNumber ?? annotationNumber(row.raw);
-      if (!number) continue;
-      const sourcePath = row.sourcePath ?? this.selectedFile?.path ?? "";
-      const key = `${sourcePath}\0${number}`;
-      const group = groups.get(key) ?? { sourcePath, number, refs: [], bodies: [] };
-      if (row.lineType === "注释正文") group.bodies.push(row);
-      else group.refs.push(row);
-      groups.set(key, group);
-    }
-    const pairs: AnnotationPair[] = [];
-    for (const group of groups.values()) {
-      group.refs.sort(compareRows);
-      group.bodies.sort(compareRows);
-      const length = Math.max(group.refs.length, group.bodies.length);
-      for (let index = 0; index < length; index += 1) {
-        const ref = group.refs[index];
-        const body = group.bodies[index];
-        const id = `annotation-${candidateHash(`${group.sourcePath}\0${group.number}\0${index}`)}`;
-        pairs.push({
-          id,
-          pairId: `${group.number}-${String(index + 1).padStart(2, "0")}`,
-          sourcePath: group.sourcePath,
-          number: group.number,
-          refCandidateId: ref?.id,
-          bodyCandidateId: body?.id,
-          status: previous.get(id) === "已确认" ? "已确认" : ref && body ? "自动匹配" : ref ? "待补正文" : "待补引用",
-        });
-      }
-    }
-    this.annotationPairs = pairs.sort((left, right) => left.pairId.localeCompare(right.pairId, "zh-CN", { numeric: true }));
+    this.rows = this.rows.map((row) => {
+      if (row.typeLabel !== "注释" || row.annotationNumberSource === "manual") return row;
+      const extracted = extractAnnotationNumber(row.raw);
+      return extracted ? { ...row, annotationNumber: extracted, annotationNumberSource: "extracted" } : row;
+    });
+    this.annotationPairs = buildAnnotationPairs(this.rows, this.annotationPairs);
   }
 
-  private confirmAnnotationPairs(ids: string[]) {
-    const selected = new Set(ids);
-    this.annotationPairs = this.annotationPairs.map((pair) =>
-      (pair.refCandidateId && selected.has(pair.refCandidateId)) || (pair.bodyCandidateId && selected.has(pair.bodyCandidateId))
-        ? { ...pair, status: "已确认" }
-        : pair,
-    );
+  private matchAnnotationPairs() {
+    this.rebuildAnnotationPairs();
+    this.update();
+  }
+
+  private setAnnotationNumber(id: string, value: string) {
+    const annotationNumber = value.trim();
+    this.rows = this.rows.map((row) => row.id === id
+      ? { ...row, annotationNumber: annotationNumber || undefined, annotationNumberSource: "manual" }
+      : row);
+    this.rebuildAnnotationPairs();
     this.update();
   }
 
@@ -451,6 +441,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     const moduleName = this.activeModule;
     const sourcePath = this.selectedFile?.path ?? editor.document.uri.fsPath;
     const manualId = `manual-${randomUUID()}`;
+    const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(line.text) : undefined;
     const attached = attachLineIdentity({
       id: manualId,
       kind: "regex",
@@ -460,7 +451,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       range: { line: line.lineNumber, start: 0, end: line.text.length },
       typeLabel: moduleName,
       lineType: defaultLineType(moduleName, line.text),
-      annotationNumber: moduleName === "注释" ? annotationNumber(line.text) : undefined,
+      annotationNumber: extractedNumber,
+      annotationNumberSource: extractedNumber ? "extracted" : undefined,
       isWorkingCorrection: true,
       workingCopyPath: editor.document.uri.fsPath,
       sourcePath,
@@ -1099,6 +1091,7 @@ interface WebviewMessage {
   id?: string;
   lineType?: string;
   chapterFile?: string;
+  annotationNumber?: string;
 }
 
 interface AnnotationSidecar {
@@ -1184,7 +1177,7 @@ function applyAnnotationCorrections(text: string, rows: Candidate[]): string {
     const lineNumber = located?.line;
     if (lineNumber === undefined || lines[lineNumber] === undefined) continue;
     const line = lines[lineNumber];
-    const number = row.annotationNumber ?? annotationNumber(row.raw);
+    const number = row.annotationNumber ?? extractAnnotationNumber(row.raw);
     if (!number) continue;
     if (row.lineType === "注释引用") {
       const pattern = new RegExp(`<sup>\\s*\\(?\\s*${escapeRegex(number)}\\s*\\)?\\s*</sup>|\\[\\*${escapeRegex(number)}\\]`, "i");
@@ -1206,13 +1199,6 @@ function defaultLineType(moduleName: ModuleName, raw: string): string {
     return /^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/.test(raw) ? "注释正文" : "注释引用";
   }
   return detectImageLineType(raw) ?? "图片文本";
-}
-
-function annotationNumber(text: string): string | undefined {
-  return /<sup>\s*\(?\s*(\d+)\s*\)?\s*<\/sup>/i.exec(text)?.[1]
-    ?? /\[\^(\d+)\](?!:)/.exec(text)?.[1]
-    ?? /\[\*(\d+)\]/.exec(text)?.[1]
-    ?? /^\s*(?:\[\^(\d+)\]:|(\d+)\.|\*(\d+))\s+/.exec(text)?.slice(1).find(Boolean);
 }
 
 function candidatePositionKey(row: Candidate): string {

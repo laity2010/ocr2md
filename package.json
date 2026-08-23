@@ -104,7 +104,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "test": "npm run compile && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js && node ./out/rowIdentity.test.js && node ./out/scanner.test.js && node ./out/workspaceFiles.test.js && node ./out/webview.test.js",
+    "test": "npm run compile && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js && node ./out/rowIdentity.test.js && node ./out/annotation.test.js && node ./out/scanner.test.js && node ./out/workspaceFiles.test.js && node ./out/webview.test.js",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile"
   },
