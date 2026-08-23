@@ -131,6 +131,24 @@ assert.strictEqual(fileStart.anchorPreviousHash, hashText(FILE_START_ANCHOR));
 const fileEnd = attachLineIdentity(candidate("gamma", 3), original, context);
 assert.strictEqual(fileEnd.anchorNextHash, hashText(FILE_END_ANCHOR));
 
+const imageDoc = "![image](https://example.com/a.jpg)";
+const scannedImage = scan(imageDoc, [["![image](https://example.com/a.jpg)", 0]], "图片");
+scannedImage[0].chapterBoundaryState = "heading";
+const manualImage = {
+  ...scannedImage[0],
+  id: "manual-288",
+  isWorkingCorrection: true,
+  chapterBoundaryState: "added" as const,
+};
+const afterManualAdd = reconcileRows([manualImage], scannedImage, imageDoc);
+assert.strictEqual(afterManualAdd[0].id, "manual-288");
+assert.strictEqual(afterManualAdd[0].isWorkingCorrection, true);
+assert.strictEqual(
+  afterManualAdd[0].chapterBoundaryState,
+  "added",
+  "right-click add from original must keep 新增 coloring after rescan",
+);
+
 const working = originalRows[1];
 assert.ok(!working.rowId?.includes("\0"));
 assert.notStrictEqual(working.rowId, `row-${working.range.line}`);

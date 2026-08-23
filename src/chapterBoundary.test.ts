@@ -31,6 +31,30 @@ const afterInsert = scanChapterBoundaryLines("a\nb\nc\n", "a\nNEW\nb\nc\n");
 assert.strictEqual(applyChangeState({ range: { line: 1, start: 0, end: 3 }, chapterBoundaryState: undefined }, afterInsert).chapterBoundaryState, "added");
 assert.strictEqual(applyChangeState({ range: { line: 2, start: 0, end: 1 }, chapterBoundaryState: undefined }, afterInsert).chapterBoundaryState, "heading");
 
+const unchanged = scanChapterBoundaryLines("keep\n", "keep\n");
+assert.strictEqual(
+  applyChangeState({
+    range: { line: 0, start: 0, end: 4 },
+    chapterBoundaryState: "added" as const,
+    isWorkingCorrection: true,
+  }, unchanged).chapterBoundaryState,
+  "added",
+  "manual add from original must stay added even when the line already exists in the original",
+);
+assert.strictEqual(
+  applyChangeState({ range: { line: 0, start: 0, end: 4 }, chapterBoundaryState: "added" as const }, unchanged).chapterBoundaryState,
+  "heading",
+);
+const edited = scanChapterBoundaryLines("keep\n", "kept\n");
+assert.strictEqual(
+  applyChangeState({
+    range: { line: 0, start: 0, end: 4 },
+    chapterBoundaryState: "added" as const,
+    isWorkingCorrection: true,
+  }, edited).chapterBoundaryState,
+  "modified",
+);
+
 const shifted = mapLinesAfterEdit("a\nb\nc\n", "a\nNEW\nb\nc\n");
 assert.strictEqual(shifted.get(0), 0);
 assert.strictEqual(shifted.get(1), 2);

@@ -256,6 +256,14 @@ function ensureTextHash(row: Candidate): Candidate {
   return row.anchorTextHash ? row : { ...row, anchorTextHash: hashText(row.raw) };
 }
 
+function nextChangeState(previous: Candidate, scanned: Candidate): Candidate["chapterBoundaryState"] {
+  const next = scanned.chapterBoundaryState ?? previous.chapterBoundaryState;
+  if (previous.isWorkingCorrection && previous.chapterBoundaryState === "added" && (next === undefined || next === "heading")) {
+    return "added";
+  }
+  return next;
+}
+
 function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
   return {
     ...scanned,
@@ -266,7 +274,7 @@ function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
     chapterFile: previous.chapterFile ?? scanned.chapterFile,
     localPath: previous.localPath ?? scanned.localPath,
     isWorkingCorrection: previous.isWorkingCorrection,
-    chapterBoundaryState: scanned.chapterBoundaryState ?? previous.chapterBoundaryState,
+    chapterBoundaryState: nextChangeState(previous, scanned),
     baselinePreview: scanned.baselinePreview ?? previous.baselinePreview,
     annotationNumber: previous.annotationNumberSource === "manual"
       ? previous.annotationNumber

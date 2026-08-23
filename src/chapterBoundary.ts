@@ -66,12 +66,18 @@ export function applyChangeState<T extends {
   range: { line: number; endLine?: number };
   chapterBoundaryState?: ChapterBoundaryState;
   baselinePreview?: string;
+  isWorkingCorrection?: boolean;
 }>(row: T, changes: ChapterBoundaryLine[]): T {
   if (row.chapterBoundaryState === "deleted") return row;
   const endLine = row.range.endLine ?? row.range.line;
   const change = changes.find((entry) =>
     entry.state !== "deleted" && entry.line >= row.range.line && entry.line <= endLine);
-  if (!change) return { ...row, chapterBoundaryState: "heading" as const, baselinePreview: undefined };
+  if (!change) {
+    if (row.isWorkingCorrection && row.chapterBoundaryState === "added") {
+      return { ...row, baselinePreview: undefined };
+    }
+    return { ...row, chapterBoundaryState: "heading" as const, baselinePreview: undefined };
+  }
   return { ...row, chapterBoundaryState: change.state, baselinePreview: change.baselineText };
 }
 

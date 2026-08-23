@@ -20,6 +20,7 @@ import {
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
+  isDeletedCandidate,
   markCandidatesDeleted,
 } from "./candidateLifecycle";
 import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS } from "./regexPresets";
@@ -532,31 +533,49 @@ class Ocr2mdExtension implements vscode.Disposable {
   private async addCurrentLine() {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.languageId !== "markdown") return;
-    const line = editor.document.lineAt(editor.selection.active.line);
     const moduleName = this.activeModule;
     const sourcePath = this.selectedFile?.path ?? editor.document.uri.fsPath;
-    const manualId = `manual-${randomUUID()}`;
-    const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(line.text) : undefined;
-    const attached = attachLineIdentity({
-      id: manualId,
-      kind: "regex",
-      label: line.text.trim(),
-      raw: line.text,
-      preview: line.text,
-      range: { line: line.lineNumber, start: 0, end: line.text.length },
-      typeLabel: moduleName,
-      lineType: defaultLineType(moduleName, line.text),
-      annotationNumber: extractedNumber,
-      annotationNumberSource: extractedNumber ? "extracted" : undefined,
-      isWorkingCorrection: true,
-      workingCopyPath: editor.document.uri.fsPath,
-      sourcePath,
-      sourceLabel: path.basename(sourcePath),
-      status: "候选",
-    }, editor.document.getText(), { moduleName, sourcePath });
-    const row: Candidate = { ...attached, id: manualId, isWorkingCorrection: true };
-    this.rows = [...this.rows, row].sort(compareRows);
-    this.modulePreviewPaths.set(moduleName, editor.document.uri.fsPath);
+    const workingPath = this.chapterWorkingUri?.fsPath ?? editor.document.uri.fsPath;
+    const hintLine = editor.selection.active.line;
+    const lineText = editor.document.lineAt(hintLine).text;
+    const documentText = workingPath === editor.document.uri.fsPath
+      ? editor.document.getText()
+      : await this.readWorkingText(vscode.Uri.file(workingPath));
+    const lineNumber = nearestMatchingLine(documentText, lineText, hintLine);
+    const existing = this.rows.find((row) =>
+      row.typeLabel === moduleName
+      && !isDeletedCandidate(row)
+      && row.raw === lineText
+      && rowBelongsToChapter(row, sourcePath, workingPath));
+    if (existing) {
+      this.rows = this.rows.map((row) => row.id === existing.id
+        ? { ...row, isWorkingCorrection: true, chapterBoundaryState: "added" as const, range: { ...row.range, line: lineNumber } }
+        : row);
+    } else {
+      const manualId = `manual-${randomUUID()}`;
+      const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(lineText) : undefined;
+      const attached = attachLineIdentity({
+        id: manualId,
+        kind: "regex",
+        label: lineText.trim(),
+        raw: lineText,
+        preview: lineText,
+        range: { line: lineNumber, start: 0, end: lineText.length },
+        typeLabel: moduleName,
+        lineType: moduleName === "章节定界" ? "新增" : defaultLineType(moduleName, lineText),
+        annotationNumber: extractedNumber,
+        annotationNumberSource: extractedNumber ? "extracted" : undefined,
+        isWorkingCorrection: true,
+        chapterBoundaryState: "added",
+        workingCopyPath: workingPath,
+        sourcePath,
+        sourceLabel: path.basename(sourcePath),
+        status: "候选",
+      }, documentText, { moduleName, sourcePath });
+      this.rows = [...this.rows, { ...attached, id: manualId, isWorkingCorrection: true, chapterBoundaryState: "added" as const }].sort(compareRows);
+    }
+    this.modulePreviewPaths.set(moduleName, workingPath);
+    this.rows = await this.applyWorkingCopyDiff(this.rows, documentText);
     this.rebuildAnnotationPairs();
     this.update();
   }
@@ -1291,6 +1310,22 @@ function scanChapterBlocks(text: string, workingPath: string, workspaceRoot?: st
     start = end + 1;
   }
   return rows;
+}
+
+function nearestMatchingLine(text: string, lineText: string, hint: number): number {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  if (lines[hint] === lineText) return hint;
+  let best = hint;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index] !== lineText) continue;
+    const distance = Math.abs(index - hint);
+    if (distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 function rowBelongsToChapter(row: Candidate, originalPath: string | undefined, workingPath: string): boolean {
