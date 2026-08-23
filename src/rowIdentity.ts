@@ -122,11 +122,39 @@ export function reconcileRows(previous: Candidate[], scanned: Candidate[], docum
 }
 
 export function relocateRows(rows: Candidate[], documentText: string): Candidate[] {
-  return rows.map((row) => {
+  const lines = splitDocumentLines(documentText);
+  const claimed = new Set<number>();
+  const relocated: Array<Candidate | undefined> = new Array(rows.length);
+
+  rows.forEach((row, index) => {
+    if (row.chapterBoundaryState === "deleted" || row.lineType !== "嵌入块首") return;
+    const at = row.range.line;
+    if (at < 0 || at >= lines.length || !isEmbedBlockStart(lines[at]) || claimed.has(at)) return;
+    claimed.add(at);
+    relocated[index] = { ...row, range: { line: at, start: 0, end: lines[at].length } };
+  });
+
+  return rows.map((row, index) => {
+    if (relocated[index]) return relocated[index]!;
     if (row.chapterBoundaryState === "deleted") return row;
+    if (row.lineType === "嵌入块首") {
+      const located = nearestUnclaimedMarker(lines, row.range.line, claimed);
+      if (!located) return row;
+      claimed.add(located.line);
+      return { ...row, range: located };
+    }
     const located = locateCandidate(documentText, row);
     return located ? { ...row, range: located } : row;
   });
+}
+
+function nearestUnclaimedMarker(lines: string[], hint: number, claimed: ReadonlySet<number>): SourceRange | undefined {
+  const markers = lines
+    .map((text, line) => ({ text, line }))
+    .filter((entry) => isEmbedBlockStart(entry.text) && !claimed.has(entry.line));
+  if (!markers.length) return undefined;
+  markers.sort((left, right) => Math.abs(left.line - hint) - Math.abs(right.line - hint));
+  return { line: markers[0].line, start: 0, end: markers[0].text.length };
 }
 
 export function locateCandidate(documentText: string, candidate: Candidate): SourceRange | undefined {

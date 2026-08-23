@@ -16,3 +16,16 @@ export function markCandidatesDeleted(rows: Candidate[], ids: ReadonlySet<string
 export function activeCandidates(rows: Candidate[]): Candidate[] {
   return rows.filter((candidate) => !isDeletedCandidate(candidate));
 }
+
+/** Reuse a manual-add row only when it is already the same source line. */
+export function findReusableManualRow(
+  rows: Candidate[],
+  spec: { typeLabel: string; raw: string; line: number; belongs: (row: Candidate) => boolean },
+): Candidate | undefined {
+  return rows.find((row) =>
+    row.typeLabel === spec.typeLabel
+    && !isDeletedCandidate(row)
+    && row.raw === spec.raw
+    && row.range.line === spec.line
+    && spec.belongs(row));
+}

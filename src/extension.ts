@@ -21,7 +21,7 @@ import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign"
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
-  isDeletedCandidate,
+  findReusableManualRow,
   markCandidatesDeleted,
 } from "./candidateLifecycle";
 import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS } from "./regexPresets";
@@ -626,11 +626,12 @@ class Ocr2mdExtension implements vscode.Disposable {
       ? editor.document.getText()
       : await this.readWorkingText(vscode.Uri.file(workingPath));
     const lineNumber = nearestMatchingLine(documentText, lineText, hintLine);
-    const existing = this.rows.find((row) =>
-      row.typeLabel === moduleName
-      && !isDeletedCandidate(row)
-      && row.raw === lineText
-      && rowBelongsToChapter(row, sourcePath, workingPath));
+    const existing = findReusableManualRow(this.rows, {
+      typeLabel: moduleName,
+      raw: lineText,
+      line: lineNumber,
+      belongs: (row) => rowBelongsToChapter(row, sourcePath, workingPath),
+    });
     if (existing) {
       this.rows = this.rows.map((row) => row.id === existing.id
         ? { ...row, isWorkingCorrection: true, chapterBoundaryState: "added" as const, range: { ...row.range, line: lineNumber } }

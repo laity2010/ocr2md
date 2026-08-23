@@ -2,6 +2,7 @@ import * as assert from "assert";
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
+  findReusableManualRow,
   isDeletedCandidate,
   markCandidatesDeleted,
 } from "./candidateLifecycle";
@@ -38,5 +39,31 @@ assert.strictEqual(marked[0].raw, rows[0].raw);
 assert.strictEqual(marked[1].lineType, "内嵌标题");
 assert.strictEqual(isDeletedCandidate(marked[0]), true);
 assert.deepStrictEqual(activeCandidates(marked).map((row) => row.id), ["new-row"]);
+
+const firstMarker: Candidate = {
+  id: "gt-1",
+  kind: "regex",
+  label: ">",
+  raw: ">",
+  preview: ">",
+  range: { line: 2, start: 0, end: 1 },
+  typeLabel: "嵌入块",
+  lineType: "嵌入块首",
+};
+const secondMarker = { ...firstMarker, id: "gt-2", range: { line: 10, start: 0, end: 1 } };
+const belongs = () => true;
+assert.strictEqual(
+  findReusableManualRow([firstMarker], { typeLabel: "嵌入块", raw: ">", line: 2, belongs })?.id,
+  "gt-1",
+);
+assert.strictEqual(
+  findReusableManualRow([firstMarker], { typeLabel: "嵌入块", raw: ">", line: 10, belongs }),
+  undefined,
+  "a second > line must add a new 嵌入块首, not reuse the first",
+);
+assert.strictEqual(
+  findReusableManualRow([firstMarker, secondMarker], { typeLabel: "嵌入块", raw: ">", line: 10, belongs })?.id,
+  "gt-2",
+);
 
 console.log("candidateLifecycle tests passed");

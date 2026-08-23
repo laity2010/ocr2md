@@ -181,6 +181,18 @@ assert.deepStrictEqual(
 assert.strictEqual(markerAndTitle.find((row) => row.lineType === "嵌入块首")?.range.line, 2);
 assert.strictEqual(markerAndTitle.find((row) => row.lineType === "内嵌标题")?.range.line, 3);
 
+const twoMarkersDoc = ["head", ">", "FIGURE 1.1 | A", "", ">", "FIGURE 1.2 | B"].join("\n");
+const collapsedMarkers = [
+  candidate(">", 1, { typeLabel: "嵌入块", lineType: "嵌入块首" }),
+  candidate(">", 1, { typeLabel: "嵌入块", lineType: "嵌入块首" }),
+];
+const splitMarkers = relocateRows(collapsedMarkers, twoMarkersDoc);
+assert.deepStrictEqual(
+  splitMarkers.map((row) => row.range.line).sort((left, right) => left - right),
+  [1, 4],
+  "each 嵌入块首 must occupy a different > line",
+);
+
 const tdDoc = ["<table>", ...Array.from({ length: 40 }, () => "<tr><td>x</td></tr>"), "</table>"].join("\n");
 const tdRow = candidate("<td>", 10, { typeLabel: "嵌入块", lineType: "嵌入HTML" });
 assert.strictEqual(locateCandidate(tdDoc, tdRow)?.line, 10, "short HTML tags must not global-search every <td>");
