@@ -62,6 +62,19 @@ export function scanChapterBoundaryLines(baseline: string, current: string): Cha
   return rows.sort((left, right) => left.line - right.line || stateOrder(left.state) - stateOrder(right.state));
 }
 
+export function applyChangeState<T extends {
+  range: { line: number; endLine?: number };
+  chapterBoundaryState?: ChapterBoundaryState;
+  baselinePreview?: string;
+}>(row: T, changes: ChapterBoundaryLine[]): T {
+  if (row.chapterBoundaryState === "deleted") return row;
+  const endLine = row.range.endLine ?? row.range.line;
+  const change = changes.find((entry) =>
+    entry.state !== "deleted" && entry.line >= row.range.line && entry.line <= endLine);
+  if (!change) return { ...row, chapterBoundaryState: "heading" as const, baselinePreview: undefined };
+  return { ...row, chapterBoundaryState: change.state, baselinePreview: change.baselineText };
+}
+
 /**
  * Convert the ordered level-one heading assignments into contiguous chapter
  * ranges. Reusing a chapter filename after another chapter would create a

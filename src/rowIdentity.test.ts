@@ -7,6 +7,7 @@ import {
   hashText,
   locateCandidate,
   reconcileRows,
+  relocateRows,
 } from "./rowIdentity";
 import type { Candidate, ModuleName } from "./types";
 
@@ -113,6 +114,9 @@ const locatedAfterInsert = locateCandidate(inserted, originalRows[1]);
 assert.ok(locatedAfterInsert);
 assert.strictEqual(locatedAfterInsert?.line, 3);
 assert.strictEqual(locatedAfterInsert?.start, 0);
+
+const relocated = relocateRows(originalRows, inserted);
+assert.deepStrictEqual(relocated.map((row) => [row.raw, row.range.line]), [["alpha", 2], ["beta", 3], ["gamma", 4]]);
 
 const firstSame = locateCandidate(duplicatesShifted, duplicateRows[0]);
 const secondSame = locateCandidate(duplicatesShifted, duplicateRows[1]);

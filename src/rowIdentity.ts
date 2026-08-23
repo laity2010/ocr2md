@@ -119,6 +119,14 @@ export function reconcileRows(previous: Candidate[], scanned: Candidate[]): Cand
     || left.raw.localeCompare(right.raw));
 }
 
+export function relocateRows(rows: Candidate[], documentText: string): Candidate[] {
+  return rows.map((row) => {
+    if (row.chapterBoundaryState === "deleted") return row;
+    const located = locateCandidate(documentText, row);
+    return located ? { ...row, range: located } : row;
+  });
+}
+
 export function locateCandidate(documentText: string, candidate: Candidate): SourceRange | undefined {
   const lines = splitDocumentLines(documentText);
   const hits = candidate.raw ? findRawHits(documentText, candidate.raw) : [];
@@ -257,6 +265,8 @@ function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
     chapterFile: previous.chapterFile ?? scanned.chapterFile,
     localPath: previous.localPath ?? scanned.localPath,
     isWorkingCorrection: previous.isWorkingCorrection,
+    chapterBoundaryState: scanned.chapterBoundaryState ?? previous.chapterBoundaryState,
+    baselinePreview: scanned.baselinePreview ?? previous.baselinePreview,
     annotationNumber: previous.annotationNumberSource === "manual"
       ? previous.annotationNumber
       : scanned.annotationNumber ?? previous.annotationNumber,
