@@ -3,6 +3,7 @@ import type { Candidate, ModuleName, SidebarState } from "./types";
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "图片"];
 export const TABLE_COLUMNS = ["多选", "行号", "行类型", "预览"] as const;
 export const ANNOTATION_EXTRA_COLUMNS = ["注释号"] as const;
+export const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ["章节文件"] as const;
 
 export function renderSidebar(state: SidebarState): string {
   const encoded = escapeScriptJson(state);
@@ -52,9 +53,10 @@ export function renderSidebar(state: SidebarState): string {
     .number-column { width: 118px; }
     .line-type { min-width: 118px; }
     .chapter-file { width: 210px; }
+    .chapter-file-column { width: 220px; }
     .annotation-number { width: 88px; }
-    tr.missing-number { box-shadow: inset 3px 0 #f1c40f; }
-    input.annotation-number.missing {
+    tr.missing-number, tr.missing-chapter-file { box-shadow: inset 3px 0 #f1c40f; }
+    input.annotation-number.missing, input.chapter-file.missing {
       border-color: #f1c40f;
       background: rgba(241, 196, 15, .18);
     }
@@ -71,6 +73,7 @@ export function renderSidebar(state: SidebarState): string {
     const state = ${encoded};
     const MODULES = ${JSON.stringify(MODULES)};
     const ANNOTATION_EXTRA_COLUMNS = ${JSON.stringify(ANNOTATION_EXTRA_COLUMNS)};
+    const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ${JSON.stringify(CHAPTER_BOUNDARY_EXTRA_COLUMNS)};
     const DELETED = "已删除";
     const LINE_TYPES = {
       "章节定界": ["1 级标题", "新增", "修改", "删除", DELETED],
@@ -93,7 +96,7 @@ export function renderSidebar(state: SidebarState): string {
     };
     const selected = new Set();
     const persisted = vscode.getState() || {};
-    const allowedSortKeys = ["line", "lineType", "preview", "number"];
+    const allowedSortKeys = ["line", "lineType", "preview", "number", "chapterFile"];
     function sanitizeSortRules(rules) {
       return Array.isArray(rules)
         ? rules.filter((rule) => allowedSortKeys.includes(rule.key) && ["asc", "desc"].includes(rule.direction))
@@ -233,6 +236,7 @@ export function renderSidebar(state: SidebarState): string {
           if (rule.key === "lineType") compared = collator.compare(left.row.lineType || "", right.row.lineType || "");
           if (rule.key === "preview") compared = collator.compare(previewText(left.row), previewText(right.row));
           if (rule.key === "number") compared = compareAnnotationNumbers(left.row, right.row);
+          if (rule.key === "chapterFile") compared = collator.compare(left.row.chapterFile || "", right.row.chapterFile || "");
           if (compared) return rule.direction === "asc" ? compared : -compared;
         }
         return left.index - right.index;
@@ -399,6 +403,19 @@ export function renderSidebar(state: SidebarState): string {
           postKeepView("setRowsLineType", { ids: [...selected], lineType: select.value }, { clearSelection: true });
         }),
       );
+      if (state.activeModule === "章节定界") {
+        const fileInput = document.createElement("input");
+        fileInput.className = "chapter-file";
+        fileInput.placeholder = "章节名称";
+        fileInput.title = "分配给所选记录的章节目录名，例如 12 Valuation";
+        bar.append(
+          fileInput,
+          button("分配章节文件", () => {
+            if (!selected.size) return;
+            postKeepView("setChapterFile", { ids: [...selected], chapterFile: fileInput.value }, { clearSelection: true });
+          }, "primary"),
+        );
+      }
       return bar;
     }
 
@@ -436,6 +453,9 @@ export function renderSidebar(state: SidebarState): string {
       if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号")) {
         headRow.append(sortableHeader("注释号", "number", "number-column"));
       }
+      if (state.activeModule === "章节定界" && CHAPTER_BOUNDARY_EXTRA_COLUMNS.includes("章节文件")) {
+        headRow.append(sortableHeader("章节文件", "chapterFile", "chapter-file-column"));
+      }
       headRow.append(
         sortableHeader("行类型", "lineType"),
         sortableHeader("预览", "preview"),
@@ -462,7 +482,11 @@ export function renderSidebar(state: SidebarState): string {
       const missingNumber = state.activeModule === "注释"
         && (candidate.lineType === "注释引用" || candidate.lineType === "注释正文")
         && !String(candidate.annotationNumber || "").trim();
+      const missingChapterFile = state.activeModule === "章节定界"
+        && candidate.lineType === "1 级标题"
+        && !String(candidate.chapterFile || "").trim();
       if (missingNumber) row.classList.add("missing-number");
+      if (missingChapterFile) row.classList.add("missing-chapter-file");
 
       const checkCell = document.createElement("td");
       const check = document.createElement("input");
@@ -494,6 +518,21 @@ export function renderSidebar(state: SidebarState): string {
         numberCell.append(numberInput);
         row.append(numberCell);
       }
+      if (state.activeModule === "章节定界") {
+        const fileCell = document.createElement("td");
+        const fileInput = document.createElement("input");
+        fileInput.className = "chapter-file" + (missingChapterFile ? " missing" : "");
+        fileInput.value = candidate.chapterFile || "";
+        fileInput.placeholder = missingChapterFile ? "请分配章节文件" : "章节名称";
+        fileInput.title = missingChapterFile ? "一级标题尚未分配章节文件" : "章节文件";
+        fileInput.setAttribute("data-row-id", candidate.id);
+        fileInput.setAttribute("data-field", "chapterFile");
+        fileInput.addEventListener("click", (event) => event.stopPropagation());
+        fileInput.addEventListener("focus", () => rememberFocus(candidate.id, "chapterFile"));
+        fileInput.addEventListener("change", () => postKeepView("setChapterFile", { ids: selectedIds(candidate.id), chapterFile: fileInput.value }));
+        fileCell.append(fileInput);
+        row.append(fileCell);
+      }
 
       const typeCell = document.createElement("td");
       const typeSelect = document.createElement("select");
@@ -511,20 +550,6 @@ export function renderSidebar(state: SidebarState): string {
       previewCell.append(el("div", previewText(candidate), "preview-content"));
       row.append(typeCell, previewCell);
 
-      if (state.activeModule === "章节定界") {
-        const detail = el("div", undefined, "preview-detail");
-        const input = document.createElement("input");
-        input.className = "chapter-file";
-        input.value = candidate.chapterFile || "";
-        input.placeholder = "例如 11 Chapter.md";
-        input.setAttribute("data-row-id", candidate.id);
-        input.setAttribute("data-field", "chapterFile");
-        input.addEventListener("click", (event) => event.stopPropagation());
-        input.addEventListener("focus", () => rememberFocus(candidate.id, "chapterFile"));
-        input.addEventListener("change", () => postKeepView("setChapterFile", { id: candidate.id, chapterFile: input.value }));
-        detail.append(el("span", "章节文件"), input);
-        previewCell.append(detail);
-      }
       if (state.activeModule === "注释") {
         const status = pair
           ? pair.pairId + " · " + pair.status

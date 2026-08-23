@@ -199,10 +199,11 @@ class Ocr2mdExtension implements vscode.Disposable {
         }
         break;
       case "setChapterFile":
-        if (typeof message.id === "string" && typeof message.chapterFile === "string") {
-          const chapterFile = message.chapterFile.trim();
-          this.rows = this.rows.map((row) => row.id === message.id ? { ...row, chapterFile } : row);
-          this.update();
+        if (typeof message.chapterFile === "string") {
+          const ids = Array.isArray(message.ids) && message.ids.length
+            ? message.ids.filter((id): id is string => typeof id === "string")
+            : (typeof message.id === "string" ? [message.id] : []);
+          if (ids.length) this.setChapterFile(ids, message.chapterFile);
         }
         break;
       case "matchAnnotationPairs":
@@ -471,6 +472,13 @@ class Ocr2mdExtension implements vscode.Disposable {
       this.rows = this.rows.map((row) => selected.has(row.id) ? { ...row, lineType } : row);
     }
     this.rebuildAnnotationPairs();
+    this.update();
+  }
+
+  private setChapterFile(ids: string[], value: string) {
+    const chapterFile = value.trim();
+    const selected = new Set(ids);
+    this.rows = this.rows.map((row) => selected.has(row.id) ? { ...row, chapterFile } : row);
     this.update();
   }
 
