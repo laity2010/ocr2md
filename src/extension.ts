@@ -1125,6 +1125,7 @@ class Ocr2mdExtension implements vscode.Disposable {
 
 class SidebarProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
+  private loaded = false;
 
   constructor(
     private readonly state: () => SidebarState,
@@ -1133,13 +1134,21 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(view: vscode.WebviewView) {
     this.view = view;
+    this.loaded = false;
     view.webview.options = { enableScripts: true };
     view.webview.onDidReceiveMessage((message: WebviewMessage) => this.onMessage(message));
     this.update();
   }
 
   update() {
-    if (this.view) this.view.webview.html = renderSidebar(this.state());
+    if (!this.view) return;
+    const state = this.state();
+    if (this.loaded) {
+      void this.view.webview.postMessage({ command: "setState", state });
+      return;
+    }
+    this.view.webview.html = renderSidebar(state);
+    this.loaded = true;
   }
 }
 

@@ -79,6 +79,8 @@ assert.ok(html.includes("手工输入注释号"), "missing annotation number mus
 assert.ok(html.includes("tr.missing-number"), "rows without annotation numbers must be highlighted");
 assert.ok(html.includes("function restoreScroll()"), "table scroll must be restored after rerender");
 assert.ok(html.includes("function restoreFocus()"), "row focus must be restored after rerender");
+assert.ok(html.includes("if (!focusTarget || !document.hasFocus()) return;"), "table must not steal focus from the source editor");
+assert.ok(html.includes('data.command !== "setState"'), "host updates must reuse the webview instead of rewriting html");
 assert.ok(html.includes("persisted.selectedIds"), "multi-select must survive host webview reloads");
 assert.ok(html.includes("clearSelection"), "batch line-type changes must clear multi-select without dropping scroll");
 assert.ok(html.includes("syncSelectionChrome()"), "checkbox toggles must not rebuild the table");

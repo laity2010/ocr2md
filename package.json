@@ -76,7 +76,8 @@
         {
           "id": "ocr2md.regex",
           "name": "标定模块",
-          "type": "webview"
+          "type": "webview",
+          "retainContextWhenHidden": true
         }
       ]
     },

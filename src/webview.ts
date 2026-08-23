@@ -89,7 +89,7 @@ export function renderSidebar(state: SidebarState): string {
   <div id="app"></div>
   <script>
     const vscode = acquireVsCodeApi();
-    const state = ${encoded};
+    let state = ${encoded};
     const MODULES = ${JSON.stringify(MODULES)};
     const ANNOTATION_EXTRA_COLUMNS = ${JSON.stringify(ANNOTATION_EXTRA_COLUMNS)};
     const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ${JSON.stringify(CHAPTER_BOUNDARY_EXTRA_COLUMNS)};
@@ -174,7 +174,7 @@ export function renderSidebar(state: SidebarState): string {
     }
 
     function restoreFocus() {
-      if (!focusTarget) return;
+      if (!focusTarget || !document.hasFocus()) return;
       const selector = '[data-row-id="' + cssEscape(focusTarget.rowId) + '"][data-field="' + cssEscape(focusTarget.field) + '"]';
       const node = document.querySelector(selector);
       if (node && node.focus) node.focus({ preventScroll: true });
@@ -727,6 +727,17 @@ export function renderSidebar(state: SidebarState): string {
       return row;
     }
 
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data || data.command !== "setState" || !data.state) return;
+      const previousModule = state.activeModule;
+      state = data.state;
+      if (state.activeModule !== previousModule) {
+        sortRules = sanitizeSortRules(sortRulesByModule[state.activeModule]);
+        if (!sortRules.length) sortRules = defaultSortRules(state.activeModule);
+      }
+      render();
+    });
     render();
   </script>
 </body>
