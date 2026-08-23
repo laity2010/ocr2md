@@ -130,6 +130,10 @@ const gtDoc = ["<table>", ">", "<tr><td>x</td></tr>", "</table>"].join("\n");
 const gtRow = candidate(">", 1, { typeLabel: "嵌入块", lineType: "嵌入块首" });
 assert.strictEqual(locateCandidate(gtDoc, gtRow)?.line, 1, "embed block start must locate the > line, not a tag");
 
+const tdDoc = ["<table>", ...Array.from({ length: 40 }, () => "<tr><td>x</td></tr>"), "</table>"].join("\n");
+const tdRow = candidate("<td>", 10, { typeLabel: "嵌入块", lineType: "嵌入HTML" });
+assert.strictEqual(locateCandidate(tdDoc, tdRow)?.line, 10, "short HTML tags must not global-search every <td>");
+
 const fileStart = attachLineIdentity(candidate("# Chapter", 0), original, context);
 assert.strictEqual(fileStart.anchorPreviousHash, hashText(FILE_START_ANCHOR));
 const fileEnd = attachLineIdentity(candidate("gamma", 3), original, context);

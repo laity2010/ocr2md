@@ -31,7 +31,7 @@ import {
   locateCandidate,
   reconcileRows,
 } from "./rowIdentity";
-import { detectEmbedLineType, embedNumberAtLine, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
+import { detectEmbedLineType, embedRowsFromBlock, mergeEmbedScan, scanRegexMatches } from "./scanner";
 import type {
   AnnotationPair,
   Candidate,
@@ -389,7 +389,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const patterns = splitPatterns(this.moduleRegexPatterns[moduleName] ?? "");
     const unique = new Map<string, Candidate>();
-    const scannedEmbeds = moduleName === "嵌入块" ? scanEmbedLines(text) : [];
+    const scannedEmbeds = moduleName === "嵌入块" ? mergeEmbedScan(text, patterns) : [];
     for (const candidate of scannedEmbeds) {
       unique.set(candidatePositionKey({ ...candidate, sourcePath: source, workingCopyPath: workingPath }), {
         ...candidate,
@@ -400,23 +400,23 @@ class Ocr2mdExtension implements vscode.Disposable {
         workingCopyPath: workingPath,
       });
     }
-    for (const pattern of patterns) {
-      for (const match of scanRegexMatches(text, pattern)) {
-        const embedNumber = moduleName === "嵌入块" ? embedNumberAtLine(text, match.range.line) : undefined;
-        const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(match.raw) : undefined;
-        const row: Candidate = {
-          ...match,
-          typeLabel: moduleName,
-          lineType: defaultLineType(moduleName, match.raw),
-          regexSource: pattern,
-          annotationNumber: extractedNumber,
-          annotationNumberSource: extractedNumber ? "extracted" : undefined,
-          embedNumber,
-          sourcePath: source,
-          sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
-          workingCopyPath: workingPath,
-        };
-        unique.set(candidatePositionKey(row), row);
+    if (moduleName !== "嵌入块") {
+      for (const pattern of patterns) {
+        for (const match of scanRegexMatches(text, pattern)) {
+          const extractedNumber = extractAnnotationNumber(match.raw);
+          const row: Candidate = {
+            ...match,
+            typeLabel: moduleName,
+            lineType: defaultLineType(moduleName, match.raw),
+            regexSource: pattern,
+            annotationNumber: extractedNumber,
+            annotationNumberSource: extractedNumber ? "extracted" : undefined,
+            sourcePath: source,
+            sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
+            workingCopyPath: workingPath,
+          };
+          unique.set(candidatePositionKey(row), row);
+        }
       }
     }
     const scanned = attachScanIdentities([...unique.values()], text, { moduleName, sourcePath: source });

@@ -1,5 +1,14 @@
 import * as assert from "assert";
-import { detectEmbedLineType, embedRowsFromBlock, findEmbedRegions, scanEmbedLines, scanRegexMatches } from "./scanner";
+import { EMBED_REGEX_PRESETS, MODULE_REGEX_DEFAULTS } from "./regexPresets";
+import {
+  detectEmbedLineType,
+  embedRowsFromBlock,
+  findEmbedRegions,
+  isHtmlTagFragment,
+  mergeEmbedScan,
+  scanEmbedLines,
+  scanRegexMatches,
+} from "./scanner";
 import type { Candidate } from "./types";
 
 const markdown = [
@@ -118,5 +127,35 @@ assert.deepStrictEqual(
     [2, "嵌入链接"],
   ],
 );
+
+assert.ok(isHtmlTagFragment("<td>"));
+assert.ok(isHtmlTagFragment("</tr>"));
+assert.ok(isHtmlTagFragment("<table>"));
+assert.ok(!isHtmlTagFragment("<table>\n<tr><td>A</td></tr>\n</table>"));
+assert.ok(!isHtmlTagFragment("![image](https://example.com/a.jpg)"));
+
+const tagFragmentPattern = "<\\s*\\/?\\s*[a-zA-Z][a-zA-Z0-9-]*(?:\\s|\\/|>)";
+const wideTable = [
+  "Intro",
+  ">",
+  "<table>",
+  ...Array.from({ length: 80 }, (_, index) => `<tr><td>cell-${index}</td><td>more</td></tr>`),
+  "</table>",
+  "",
+  "![image](https://example.com/a.jpg)",
+].join("\n");
+const exploded = scanRegexMatches(wideTable, tagFragmentPattern);
+assert.ok(exploded.length > 200, "legacy html-embed regex matches every tag");
+const merged = mergeEmbedScan(wideTable, [tagFragmentPattern, "!\\[[^\\]]*\\]\\([^)]*\\)"]);
+assert.deepStrictEqual(merged.map((row) => [row.lineType, row.embedNumber]), [
+  ["嵌入块首", 1],
+  ["嵌入HTML", 1],
+  ["嵌入链接", undefined],
+]);
+assert.ok(!merged.some((row) => isHtmlTagFragment(row.raw)));
+
+assert.ok(!MODULE_REGEX_DEFAULTS["嵌入块"].includes(tagFragmentPattern));
+assert.ok(EMBED_REGEX_PRESETS.some((preset) => preset.id === "html-embed"));
+assert.ok(!MODULE_REGEX_DEFAULTS["嵌入块"].includes(EMBED_REGEX_PRESETS.find((preset) => preset.id === "html-embed")!.pattern));
 
 console.log("scanner tests passed");

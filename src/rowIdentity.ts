@@ -134,8 +134,7 @@ export function locateCandidate(documentText: string, candidate: Candidate): Sou
   if (stored) return stored;
 
   const raw = candidate.raw ?? "";
-  const skipGlobalSearch = raw.trim() === ">" || raw.length <= 1;
-  const hits = !skipGlobalSearch && raw ? findRawHits(documentText, raw) : [];
+  const hits = !shouldSkipGlobalRawSearch(raw) && raw ? findRawHits(documentText, raw) : [];
   if (hits.length) {
     hits.sort((left, right) => {
       const score = scoreHit(lines, candidate, right) - scoreHit(lines, candidate, left);
@@ -223,25 +222,38 @@ function neighborText(lines: string[], from: number, direction: -1 | 1): string 
   return direction < 0 ? FILE_START_ANCHOR : FILE_END_ANCHOR;
 }
 
+function shouldSkipGlobalRawSearch(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length <= 1) return true;
+  if (trimmed === ">") return true;
+  return /^<\/?\s*[a-zA-Z][a-zA-Z0-9-]*(?:\s|\/|>)\s*$/.test(trimmed);
+}
+
 function findRawHits(documentText: string, raw: string): SourceRange[] {
-  if (!raw) return [];
+  if (!raw || shouldSkipGlobalRawSearch(raw)) return [];
   const normalized = documentText.replace(/\r\n?/g, "\n");
+  const starts = lineStartOffsets(normalized);
   const hits: SourceRange[] = [];
   let from = 0;
   while (from <= normalized.length) {
     const index = normalized.indexOf(raw, from);
     if (index < 0) break;
-    hits.push(rangeFromOffsets(normalized, index, index + raw.length));
+    hits.push(rangeFromOffsets(starts, index, index + raw.length));
     from = index + Math.max(raw.length, 1);
+    if (hits.length >= 256) break;
   }
   return hits;
 }
 
-function rangeFromOffsets(text: string, startOffset: number, endOffset: number): SourceRange {
+function lineStartOffsets(text: string): number[] {
   const starts = [0];
   for (let index = 0; index < text.length; index += 1) {
     if (text[index] === "\n") starts.push(index + 1);
   }
+  return starts;
+}
+
+function rangeFromOffsets(starts: number[], startOffset: number, endOffset: number): SourceRange {
   const position = (offset: number) => {
     let low = 0;
     let high = starts.length - 1;

@@ -77,6 +77,47 @@ export function scanEmbedLines(text: string): Candidate[] {
   return scanEmbedFromLines(text.replace(/\r\n?/g, "\n").split("\n"), 0);
 }
 
+/** Tag openers like `<td>` / `<tr ` from the html-embed regex — not whole elements. */
+export function isHtmlTagFragment(raw: string): boolean {
+  const trimmed = raw.trim();
+  return /^<\s*\/?\s*[a-zA-Z][a-zA-Z0-9-]*(?:\s|\/|>)\s*$/.test(trimmed);
+}
+
+/**
+ * Combine `>`-block / HTML / image detection with extra regex hits.
+ * Matches already covered by a grouped HTML block, and per-tag fragments
+ * like `<td>`, are dropped so a large table cannot explode the row list.
+ */
+export function mergeEmbedScan(text: string, patterns: string[]): Candidate[] {
+  const scanned = scanEmbedLines(text);
+  const unique = new Map<string, Candidate>();
+  const keyOf = (row: Candidate) => `${row.range.line}\0${row.range.start}\0${row.raw}`;
+  for (const row of scanned) unique.set(keyOf(row), row);
+
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const regions = findEmbedRegions(lines);
+  const numberAt = (line: number) => regions.find((region) =>
+    line === region.markerLine || (line >= region.contentStart && line <= region.contentEnd)
+  )?.number;
+
+  for (const pattern of patterns) {
+    for (const match of scanRegexMatches(text, pattern)) {
+      if (isHtmlTagFragment(match.raw)) continue;
+      if (scanned.some((embed) => embedRangeContains(embed.range, match.range))) continue;
+      const row: Candidate = {
+        ...match,
+        typeLabel: "嵌入块",
+        lineType: detectEmbedLineType(match.raw) ?? "嵌入文本",
+        regexSource: pattern,
+        embedNumber: numberAt(match.range.line),
+      };
+      unique.set(keyOf(row), row);
+    }
+  }
+  return [...unique.values()].sort((left, right) =>
+    left.range.line - right.range.line || left.range.start - right.range.start);
+}
+
 export function embedNumberAtLine(text: string, line: number): number | undefined {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   return findEmbedRegions(lines).find((region) =>
