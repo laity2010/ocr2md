@@ -55,13 +55,10 @@ import {
 
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "图片"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
-/** Left 2/3, right 1/3 split into source (top) and preview (bottom). */
-const PREVIEW_EDITOR_LAYOUT = {
-  orientation: 0,
-  groups: [
-    { size: 2 / 3 },
-    { size: 1 / 3, groups: [{ size: 1 / 2 }, { size: 1 / 2 }] },
-  ],
+/** Source on top, Markdown Preview below. Never include an empty group: VS Code closes those and the remaining pair becomes two columns. */
+const STACKED_SOURCE_PREVIEW_LAYOUT = {
+  orientation: 1,
+  groups: [{ size: 1 / 2 }, { size: 1 / 2 }],
 };
 
 export function activate(context: vscode.ExtensionContext) {
@@ -88,7 +85,6 @@ class Ocr2mdExtension implements vscode.Disposable {
   private chapterWorkingUri: vscode.Uri | undefined;
   private annotationWorkingUri: vscode.Uri | undefined;
   private readonly modulePreviewPaths = new Map<ModuleName, string>();
-  private pairedDocumentPath: string | undefined;
   private readonly headingDecorations = HEADING_COLORS.map((color) =>
     vscode.window.createTextEditorDecorationType({ color, fontWeight: "bold" })
   );
@@ -589,34 +585,47 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async showDocumentPair(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<vscode.TextEditor> {
-    const changedDocument = this.pairedDocumentPath !== uri.fsPath;
-    if (changedDocument) {
-      await vscode.commands.executeCommand("vscode.setEditorLayout", PREVIEW_EDITOR_LAYOUT);
-    }
     const document = await vscode.workspace.openTextDocument(uri);
-    if (changedDocument) {
-      await vscode.window.showTextDocument(document, {
-        preview: false,
-        viewColumn: vscode.ViewColumn.Three,
-        preserveFocus: false,
-      });
-      await vscode.commands.executeCommand("markdown.showPreview");
-      this.pairedDocumentPath = uri.fsPath;
-    }
+    if (!this.hasStackedSourcePreview(uri)) await this.openStackedSourcePreview(document, uri);
     const editor = await vscode.window.showTextDocument(document, {
       preview: false,
-      viewColumn: vscode.ViewColumn.Two,
+      viewColumn: vscode.ViewColumn.One,
       preserveFocus: options.preserveFocus,
     });
-    const duplicateSourceTabs = vscode.window.tabGroups.all.flatMap((group) =>
-      group.viewColumn === vscode.ViewColumn.Two
-        ? []
-        : group.tabs.filter((tab) => tab.input instanceof vscode.TabInputText
-          && tab.input.uri.fsPath === uri.fsPath),
-    );
-    if (duplicateSourceTabs.length) await vscode.window.tabGroups.close(duplicateSourceTabs, true);
     this.applyHeadingDecorations(editor);
     return editor;
+  }
+
+  private hasStackedSourcePreview(uri: vscode.Uri): boolean {
+    const sourceColumn = sourceViewColumn(uri);
+    const previewColumn = markdownPreviewGroup()?.viewColumn;
+    return sourceColumn === vscode.ViewColumn.One
+      && previewColumn === vscode.ViewColumn.Two
+      && vscode.window.tabGroups.all.length === 2;
+  }
+
+  private async openStackedSourcePreview(document: vscode.TextDocument, uri: vscode.Uri): Promise<void> {
+    await vscode.commands.executeCommand("vscode.setEditorLayout", { orientation: 0, groups: [{ size: 1 }] });
+    await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.One, preserveFocus: false });
+    await vscode.commands.executeCommand("workbench.action.splitEditorDown");
+    await vscode.commands.executeCommand("vscode.setEditorLayout", STACKED_SOURCE_PREVIEW_LAYOUT);
+    await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Two, preserveFocus: false });
+    try {
+      await vscode.commands.executeCommand("markdown.showPreview", uri);
+    } catch {
+      return;
+    }
+    if (!markdownPreviewGroup()) await delay(100);
+    if (!markdownPreviewGroup()) return;
+    const tabsToClose = vscode.window.tabGroups.all.flatMap((group) => group.tabs.filter((tab) => {
+      const isSource = tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === uri.fsPath;
+      const isPreview = isMarkdownPreviewTab(tab);
+      if (group.viewColumn === vscode.ViewColumn.One) return isPreview;
+      if (group.viewColumn === vscode.ViewColumn.Two) return isSource;
+      return isSource || isPreview;
+    }));
+    if (tabsToClose.length) await vscode.window.tabGroups.close(tabsToClose, true);
+    await vscode.commands.executeCommand("vscode.setEditorLayout", STACKED_SOURCE_PREVIEW_LAYOUT);
   }
 
   private scheduleHeadingDecorations(document: vscode.TextDocument) {
@@ -1175,6 +1184,25 @@ class DirectoryItem extends vscode.TreeItem {
     item.iconPath = new vscode.ThemeIcon(moduleName === "章节标题" ? "symbol-key" : moduleName === "注释" ? "references" : "file-media");
     return item;
   }
+}
+
+function isMarkdownPreviewTab(tab: vscode.Tab): boolean {
+  return tab.input instanceof vscode.TabInputWebview
+    && tab.input.viewType.toLowerCase().includes("markdown.preview");
+}
+
+function markdownPreviewGroup(): vscode.TabGroup | undefined {
+  return vscode.window.tabGroups.all.find((group) => group.tabs.some(isMarkdownPreviewTab));
+}
+
+function sourceViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
+  return vscode.window.tabGroups.all.find((group) =>
+    group.tabs.some((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === uri.fsPath)
+  )?.viewColumn;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function chapterTreeLabel(workspacePath: string, file: FileEntry): string {
