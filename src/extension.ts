@@ -69,7 +69,8 @@ import {
 
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
-/** Source on top, Markdown Preview below. Never include an empty group: VS Code closes those and the remaining pair becomes two columns. */
+/** Source on top, preview below. Never include an empty group: VS Code closes those and the remaining pair becomes two columns. */
+const SOURCE_PREVIEW_VIEW_TYPE = "ocr2md.sourcePreview";
 const STACKED_SOURCE_PREVIEW_LAYOUT = {
   orientation: 1,
   groups: [{ size: 1 / 2 }, { size: 1 / 2 }],
@@ -104,6 +105,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   );
   private headingDecorationTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingWorkingCopyRescan = false;
+  private sourcePreview: vscode.WebviewPanel | undefined;
   private imageDownloadProgress: ImageDownloadProgress | undefined;
   private readonly chapterDecorations: ChapterChangeDecorationProvider;
 
@@ -141,10 +143,6 @@ class Ocr2mdExtension implements vscode.Disposable {
       vscode.commands.registerCommand("ocr2md.exportChapterBoundaryChapters", () => this.exportChapterBoundaryChapters()),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.refreshFiles()),
       vscode.workspace.onDidSaveTextDocument((document) => this.handleSavedDocument(document)),
-      vscode.window.onDidChangeVisibleTextEditors((editors) => {
-        if (this.isWorkingCopyEditorActive()) return;
-        editors.forEach((editor) => this.applyHeadingDecorations(editor));
-      }),
       vscode.window.onDidChangeActiveTextEditor(() => {
         if (this.pendingWorkingCopyRescan && !this.shouldDeferWorkingCopyUi()) {
           const uri = this.chapterWorkingUri;
@@ -478,7 +476,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   private shouldDeferWorkingCopyUi(): boolean {
     if (this.isWorkingCopyEditorActive()) return true;
     const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-    return Boolean(tab && isMarkdownPreviewTab(tab));
+    return Boolean(tab && (isMarkdownPreviewTab(tab) || isSourcePreviewTab(tab)));
   }
 
   private shiftWorkingCopyRows(current: string) {
@@ -506,6 +504,8 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     this.pendingWorkingCopyRescan = false;
     this.update();
+    const previewDocument = vscode.workspace.textDocuments.find((item) => item.uri.fsPath === uri.fsPath);
+    if (previewDocument) await this.refreshSourcePreview(previewDocument);
   }
 
   private async syncWorkingCopyTable(document: vscode.TextDocument) {
@@ -699,6 +699,8 @@ class Ocr2mdExtension implements vscode.Disposable {
   private async showDocumentPair(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<vscode.TextEditor> {
     const document = await vscode.workspace.openTextDocument(uri);
     if (!this.hasStackedSourcePreview(uri)) await this.openStackedSourcePreview(document, uri);
+    else this.sourcePreview?.reveal(vscode.ViewColumn.Two, true);
+    await this.refreshSourcePreview(document, { force: true });
     const editor = await vscode.window.showTextDocument(document, {
       preview: false,
       viewColumn: vscode.ViewColumn.One,
@@ -710,7 +712,7 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   private hasStackedSourcePreview(uri: vscode.Uri): boolean {
     const sourceColumn = sourceViewColumn(uri);
-    const previewColumn = markdownPreviewGroup()?.viewColumn;
+    const previewColumn = sourcePreviewGroup()?.viewColumn;
     return sourceColumn === vscode.ViewColumn.One
       && previewColumn === vscode.ViewColumn.Two
       && vscode.window.tabGroups.all.length === 2;
@@ -721,24 +723,60 @@ class Ocr2mdExtension implements vscode.Disposable {
     await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.One, preserveFocus: false });
     await vscode.commands.executeCommand("workbench.action.splitEditorDown");
     await vscode.commands.executeCommand("vscode.setEditorLayout", STACKED_SOURCE_PREVIEW_LAYOUT);
-    await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Two, preserveFocus: false });
-    try {
-      await vscode.commands.executeCommand("markdown.showPreview", uri);
-      await vscode.commands.executeCommand("markdown.preview.toggleLock");
-    } catch {
-      return;
-    }
-    if (!markdownPreviewGroup()) await delay(100);
-    if (!markdownPreviewGroup()) return;
+    await this.ensureSourcePreviewPanel();
+    this.sourcePreview?.reveal(vscode.ViewColumn.Two, true);
     const tabsToClose = vscode.window.tabGroups.all.flatMap((group) => group.tabs.filter((tab) => {
       const isSource = tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === uri.fsPath;
-      const isPreview = isMarkdownPreviewTab(tab);
-      if (group.viewColumn === vscode.ViewColumn.One) return isPreview;
-      if (group.viewColumn === vscode.ViewColumn.Two) return isSource;
-      return isSource || isPreview;
+      const isNativePreview = isMarkdownPreviewTab(tab);
+      if (group.viewColumn === vscode.ViewColumn.One) return isNativePreview || isSourcePreviewTab(tab);
+      if (group.viewColumn === vscode.ViewColumn.Two) return isSource || isNativePreview;
+      return isSource || isNativePreview;
     }));
     if (tabsToClose.length) await vscode.window.tabGroups.close(tabsToClose, true);
     await vscode.commands.executeCommand("vscode.setEditorLayout", STACKED_SOURCE_PREVIEW_LAYOUT);
+  }
+
+  private ensureSourcePreviewPanel() {
+    if (this.sourcePreview) return;
+    const roots = vscode.workspace.workspaceFolders?.map((folder) => folder.uri) ?? [];
+    this.sourcePreview = vscode.window.createWebviewPanel(
+      SOURCE_PREVIEW_VIEW_TYPE,
+      "预览",
+      { viewColumn: vscode.ViewColumn.Two, preserveFocus: true },
+      { enableScripts: false, retainContextWhenHidden: true, localResourceRoots: roots },
+    );
+    this.sourcePreview.onDidDispose(() => {
+      this.sourcePreview = undefined;
+    });
+    this.disposables.push(this.sourcePreview);
+  }
+
+  private async refreshSourcePreview(document: vscode.TextDocument, options: { force?: boolean } = {}): Promise<void> {
+    if (!this.sourcePreview) return;
+    if (!options.force && this.isWorkingCopyEditorActive()) return;
+    const webview = this.sourcePreview.webview;
+    let body: string;
+    try {
+      const rendered = await vscode.commands.executeCommand("markdown.api.render", document.getText());
+      body = typeof rendered === "string" ? rendered : `<pre>${escapeHtml(document.getText())}</pre>`;
+    } catch {
+      body = `<pre>${escapeHtml(document.getText())}</pre>`;
+    }
+    const base = webview.asWebviewUri(vscode.Uri.joinPath(document.uri, "..")).toString();
+    this.sourcePreview.webview.html = `<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <base href="${escapeHtml(base)}/">
+  <style>
+    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 12px 16px; }
+    img { max-width: 100%; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid var(--vscode-panel-border); padding: 4px 8px; }
+  </style>
+</head>
+<body>${body}</body>
+</html>`;
   }
 
   private scheduleHeadingDecorations(document: vscode.TextDocument) {
@@ -1321,18 +1359,23 @@ function isMarkdownPreviewTab(tab: vscode.Tab): boolean {
     && tab.input.viewType.toLowerCase().includes("markdown.preview");
 }
 
-function markdownPreviewGroup(): vscode.TabGroup | undefined {
-  return vscode.window.tabGroups.all.find((group) => group.tabs.some(isMarkdownPreviewTab));
+function isSourcePreviewTab(tab: vscode.Tab): boolean {
+  return tab.input instanceof vscode.TabInputWebview
+    && tab.input.viewType.toLowerCase().includes(SOURCE_PREVIEW_VIEW_TYPE);
+}
+
+function sourcePreviewGroup(): vscode.TabGroup | undefined {
+  return vscode.window.tabGroups.all.find((group) => group.tabs.some(isSourcePreviewTab));
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function sourceViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
   return vscode.window.tabGroups.all.find((group) =>
     group.tabs.some((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === uri.fsPath)
   )?.viewColumn;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function chapterTreeLabel(workspacePath: string, file: FileEntry): string {
