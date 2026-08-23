@@ -168,6 +168,7 @@ function scanEmbedFromLines(lines: string[], lineOffset: number): Candidate[] {
       const absolute = lineOffset + index;
       const line = lines[index];
       if (covered.has(absolute) || !line.trim()) continue;
+      if (!isEmbedCaptionLine(lines, index, region, covered, lineOffset)) continue;
       rows.push({
         id: `embed-${absolute}`,
         kind: "regex",
@@ -183,6 +184,29 @@ function scanEmbedFromLines(lines: string[], lineOffset: number): Candidate[] {
     }
   }
   return rows.sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
+}
+
+/** Caption-like leftover next to a `>` pack or after an already-detected embed line — not chapter prose. */
+function isEmbedCaptionLine(
+  lines: string[],
+  index: number,
+  region: EmbedRegion,
+  covered: Set<number>,
+  lineOffset: number,
+): boolean {
+  if (HEADING_RE.test(lines[index])) return false;
+  const first = region.markerLine + 1;
+  if (first < lines.length && lines[first].trim()) {
+    let runEnd = first;
+    while (runEnd + 1 < lines.length && lines[runEnd + 1].trim()) runEnd += 1;
+    if (index >= first && index <= runEnd) return true;
+  }
+  let runStart = index;
+  while (runStart > 0 && lines[runStart - 1].trim()) runStart -= 1;
+  for (let cursor = runStart; cursor < index; cursor += 1) {
+    if (covered.has(lineOffset + cursor)) return true;
+  }
+  return false;
 }
 
 function collectEmbedRows(lines: string[], lineOffset: number): Candidate[] {

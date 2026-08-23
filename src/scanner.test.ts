@@ -79,7 +79,6 @@ assert.deepStrictEqual(
     [2, "内嵌标题", 1],
     [3, "嵌入链接", 1],
     [4, "嵌入HTML", 1],
-    [6, "嵌入文本", 1],
   ],
 );
 
@@ -100,7 +99,6 @@ const tableRows = scanEmbedLines(tableDoc);
 assert.deepStrictEqual(tableRows.map((row) => [row.lineType, row.embedNumber, row.range.line]), [
   ["嵌入块首", 1, 1],
   ["嵌入HTML", 1, 2],
-  ["嵌入文本", 1, 9],
   ["嵌入链接", 1, 10],
 ]);
 assert.strictEqual(tableRows[1].range.endLine, 7);
@@ -208,6 +206,31 @@ assert.deepStrictEqual(
   ).filter((row) => row.lineType === "嵌入块首").map((row) => row.embedNumber),
   [1, 2],
   "each > 嵌入块首 keeps its own 序号, including 2",
+);
+
+const proseBetween = [
+  ">",
+  "FIGURE 1.1 | One",
+  "![one](https://example.com/1.jpg)",
+  "",
+  "I will return to this picture later in the chapter.",
+  "### The Responses",
+  "Ordinary paragraph about valuation.",
+  "",
+  ">",
+  "FIGURE 1.2 | Two",
+  "![two](https://example.com/2.jpg)",
+].join("\n");
+assert.deepStrictEqual(
+  scanEmbedLines(proseBetween).map((row) => [row.range.line, row.lineType, row.embedNumber]),
+  [
+    [0, "嵌入块首", 1],
+    [1, "内嵌标题", 1],
+    [2, "嵌入链接", 1],
+    [8, "嵌入块首", 2],
+    [9, "内嵌标题", 2],
+    [10, "嵌入链接", 2],
+  ],
 );
 
 console.log("scanner tests passed");
