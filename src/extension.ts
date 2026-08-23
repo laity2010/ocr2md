@@ -69,12 +69,6 @@ import {
 
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
-/** Source on top, preview below. Never include an empty group: VS Code closes those and the remaining pair becomes two columns. */
-const SOURCE_PREVIEW_VIEW_TYPE = "ocr2md.sourcePreview";
-const STACKED_SOURCE_PREVIEW_LAYOUT = {
-  orientation: 1,
-  groups: [{ size: 1 / 2 }, { size: 1 / 2 }],
-};
 
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(new Ocr2mdExtension());
@@ -105,7 +99,6 @@ class Ocr2mdExtension implements vscode.Disposable {
   );
   private headingDecorationTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingWorkingCopyRescan = false;
-  private sourcePreview: vscode.WebviewPanel | undefined;
   private imageDownloadProgress: ImageDownloadProgress | undefined;
   private readonly chapterDecorations: ChapterChangeDecorationProvider;
 
@@ -474,9 +467,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private shouldDeferWorkingCopyUi(): boolean {
-    if (this.isWorkingCopyEditorActive()) return true;
-    const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-    return Boolean(tab && (isMarkdownPreviewTab(tab) || isSourcePreviewTab(tab)));
+    return this.isWorkingCopyEditorActive();
   }
 
   private shiftWorkingCopyRows(current: string) {
@@ -504,8 +495,6 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     this.pendingWorkingCopyRescan = false;
     this.update();
-    const previewDocument = vscode.workspace.textDocuments.find((item) => item.uri.fsPath === uri.fsPath);
-    if (previewDocument) await this.refreshSourcePreview(previewDocument);
   }
 
   private async syncWorkingCopyTable(document: vscode.TextDocument) {
@@ -693,131 +682,18 @@ class Ocr2mdExtension implements vscode.Disposable {
     const range = new vscode.Range(startLine, start, endLine, end);
     editor.selection = new vscode.Selection(range.start, range.end);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-    await this.scrollSourcePreview(document, startLine, document.lineAt(startLine).text);
     this.rows = this.rows.map((candidate) => candidate.id === row.id ? { ...candidate, range: located } : candidate);
   }
 
   private async showDocumentPair(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<vscode.TextEditor> {
     const document = await vscode.workspace.openTextDocument(uri);
-    if (!this.hasStackedSourcePreview(uri)) await this.openStackedSourcePreview(document, uri);
-    else this.sourcePreview?.reveal(vscode.ViewColumn.Two, true);
-    await this.refreshSourcePreview(document, { force: true });
     const editor = await vscode.window.showTextDocument(document, {
       preview: false,
-      viewColumn: vscode.ViewColumn.One,
       preserveFocus: options.preserveFocus,
     });
     this.applyHeadingDecorations(editor);
     return editor;
   }
-
-  private hasStackedSourcePreview(uri: vscode.Uri): boolean {
-    const sourceColumn = sourceViewColumn(uri);
-    const previewColumn = sourcePreviewGroup()?.viewColumn;
-    return sourceColumn === vscode.ViewColumn.One
-      && previewColumn === vscode.ViewColumn.Two
-      && vscode.window.tabGroups.all.length === 2;
-  }
-
-  private async openStackedSourcePreview(document: vscode.TextDocument, uri: vscode.Uri): Promise<void> {
-    await vscode.commands.executeCommand("vscode.setEditorLayout", { orientation: 0, groups: [{ size: 1 }] });
-    await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.One, preserveFocus: false });
-    await vscode.commands.executeCommand("workbench.action.splitEditorDown");
-    await vscode.commands.executeCommand("vscode.setEditorLayout", STACKED_SOURCE_PREVIEW_LAYOUT);
-    await this.ensureSourcePreviewPanel();
-    this.sourcePreview?.reveal(vscode.ViewColumn.Two, true);
-    const tabsToClose = vscode.window.tabGroups.all.flatMap((group) => group.tabs.filter((tab) => {
-      const isSource = tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === uri.fsPath;
-      const isNativePreview = isMarkdownPreviewTab(tab);
-      if (group.viewColumn === vscode.ViewColumn.One) return isNativePreview || isSourcePreviewTab(tab);
-      if (group.viewColumn === vscode.ViewColumn.Two) return isSource || isNativePreview;
-      return isSource || isNativePreview;
-    }));
-    if (tabsToClose.length) await vscode.window.tabGroups.close(tabsToClose, true);
-    await vscode.commands.executeCommand("vscode.setEditorLayout", STACKED_SOURCE_PREVIEW_LAYOUT);
-  }
-
-  private ensureSourcePreviewPanel() {
-    if (this.sourcePreview) return;
-    const roots = vscode.workspace.workspaceFolders?.map((folder) => folder.uri) ?? [];
-    this.sourcePreview = vscode.window.createWebviewPanel(
-      SOURCE_PREVIEW_VIEW_TYPE,
-      "预览",
-      { viewColumn: vscode.ViewColumn.Two, preserveFocus: true },
-      { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: roots },
-    );
-    this.sourcePreview.onDidDispose(() => {
-      this.sourcePreview = undefined;
-    });
-    this.disposables.push(this.sourcePreview);
-  }
-
-  private async refreshSourcePreview(document: vscode.TextDocument, options: { force?: boolean } = {}): Promise<void> {
-    if (!this.sourcePreview) return;
-    if (!options.force && this.isWorkingCopyEditorActive()) return;
-    const webview = this.sourcePreview.webview;
-    let body: string;
-    try {
-      const rendered = await vscode.commands.executeCommand("markdown.api.render", document.getText());
-      body = typeof rendered === "string" ? rendered : `<pre>${escapeHtml(document.getText())}</pre>`;
-    } catch {
-      body = `<pre>${escapeHtml(document.getText())}</pre>`;
-    }
-    const base = webview.asWebviewUri(vscode.Uri.joinPath(document.uri, "..")).toString();
-    const nonce = randomUUID();
-    this.sourcePreview.webview.html = `<!doctype html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-  <base href="${escapeHtml(base)}/">
-  <style>
-    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 12px 16px; }
-    img { max-width: 100%; }
-    table { border-collapse: collapse; }
-    th, td { border: 1px solid var(--vscode-panel-border); padding: 4px 8px; }
-    .ocr2md-locate { outline: 2px solid var(--vscode-focusBorder); }
-  </style>
-</head>
-<body>${body}
-<script nonce="${nonce}">
-  window.addEventListener("message", (event) => {
-    const data = event.data;
-    if (!data || data.command !== "scrollToLine") return;
-    const snippet = String(data.snippet || "").trim();
-    document.querySelectorAll(".ocr2md-locate").forEach((node) => node.classList.remove("ocr2md-locate"));
-    if (snippet) {
-      const nodes = Array.from(document.body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,td,th,pre,blockquote"));
-      const hit = nodes.find((node) => (node.textContent || "").replace(/\\s+/g, " ").includes(snippet));
-      if (hit) {
-        hit.classList.add("ocr2md-locate");
-        hit.scrollIntoView({ block: "center" });
-        return;
-      }
-    }
-    const line = Number(data.line) || 0;
-    const lineCount = Math.max(Number(data.lineCount) || 1, 1);
-    const max = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0);
-    window.scrollTo(0, max * (line / Math.max(lineCount - 1, 1)));
-  });
-</script>
-</body>
-</html>`;
-  }
-
-  private async scrollSourcePreview(document: vscode.TextDocument, line: number, snippet?: string): Promise<void> {
-    if (!this.sourcePreview) return;
-    this.sourcePreview.reveal(vscode.ViewColumn.Two, true);
-    await delay(50);
-    void this.sourcePreview.webview.postMessage({
-      command: "scrollToLine",
-      line,
-      lineCount: document.lineCount,
-      snippet: String(snippet || "").replace(/\s+/g, " ").trim().slice(0, 80),
-    });
-  }
-
-
 
   private scheduleHeadingDecorations(document: vscode.TextDocument) {
     if (document.languageId !== "markdown") return;
@@ -1392,34 +1268,6 @@ class DirectoryItem extends vscode.TreeItem {
     item.iconPath = new vscode.ThemeIcon(moduleName === "章节标题" ? "symbol-key" : moduleName === "注释" ? "references" : "file-media");
     return item;
   }
-}
-
-function isMarkdownPreviewTab(tab: vscode.Tab): boolean {
-  return tab.input instanceof vscode.TabInputWebview
-    && tab.input.viewType.toLowerCase().includes("markdown.preview");
-}
-
-function isSourcePreviewTab(tab: vscode.Tab): boolean {
-  return tab.input instanceof vscode.TabInputWebview
-    && tab.input.viewType.toLowerCase().includes(SOURCE_PREVIEW_VIEW_TYPE);
-}
-
-function sourcePreviewGroup(): vscode.TabGroup | undefined {
-  return vscode.window.tabGroups.all.find((group) => group.tabs.some(isSourcePreviewTab));
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function sourceViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
-  return vscode.window.tabGroups.all.find((group) =>
-    group.tabs.some((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === uri.fsPath)
-  )?.viewColumn;
 }
 
 function chapterTreeLabel(workspacePath: string, file: FileEntry): string {
