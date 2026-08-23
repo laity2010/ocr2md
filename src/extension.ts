@@ -31,6 +31,7 @@ import {
   relocateRows,
 } from "./rowIdentity";
 import { splitBlankLineBlocks } from "./atoms";
+import { extractImageUrl, safeImageName, shouldDownloadImage } from "./imageDownload";
 import { applyEmbedNumbers, detectEmbedLineType, mergeEmbedScan, scanRegexMatches } from "./scanner";
 import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
 import type {
@@ -101,6 +102,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   private workingCopyPaintTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingWorkingCopyRescan = false;
   private imageDownloadProgress: ImageDownloadProgress | undefined;
+  private imageDownloadRunning = false;
   private readonly chapterDecorations: ChapterChangeDecorationProvider;
 
   constructor() {
@@ -241,7 +243,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         if (typeof message.id === "string") await this.locateRow(message.id);
         break;
       case "downloadImages":
-        if (Array.isArray(message.ids)) await this.downloadImages(message.ids);
+        await this.downloadImages();
         break;
       case "saveAnnotations":
         await this.saveSidecar();
@@ -745,43 +747,100 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.headingDecorations.forEach((decoration, index) => editor.setDecorations(decoration, ranges[index]));
   }
 
-  private async downloadImages(ids: string[]) {
+  private async downloadImages() {
+    if (this.imageDownloadRunning) return;
     const workspace = vscode.workspace.workspaceFolders?.[0];
     if (!workspace) return;
-    const selected = new Set(ids);
-    const rows = activeCandidates(this.rows).filter((row) => selected.has(row.id) && row.typeLabel === "嵌入块");
-    if (!rows.length) {
-      void vscode.window.showWarningMessage("请先选择含外部图片地址的嵌入记录。");
+    const candidates = activeCandidates(this.rows).filter((row) => row.typeLabel === "嵌入块" && extractImageUrl(row.raw));
+    if (!candidates.length) {
+      void vscode.window.showWarningMessage("当前嵌入块没有可下载的外部图片。");
       return;
     }
     const originalPath = this.selectedFile?.path ?? workspace.uri.fsPath;
     const directory = vscode.Uri.file(this.selectedFile ? chapterImageDirectory(originalPath) : path.join(workspace.uri.fsPath, CHAPTER_IMAGE_DIRECTORY));
     await vscode.workspace.fs.createDirectory(directory);
+    this.imageDownloadRunning = true;
+    let downloaded = 0;
+    let skipped = 0;
     let failed = 0;
-    for (const [index, row] of rows.entries()) {
-      this.imageDownloadProgress = { phase: "downloading", completed: index, total: rows.length, current: row.raw, failed };
-      this.update();
-      try {
+    const total = candidates.length;
+    try {
+      for (const [index, row] of candidates.entries()) {
         const url = extractImageUrl(row.raw);
-        if (!url) throw new Error("未找到外部图片 URL");
-        const name = safeImageName(url, row);
-        await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(directory, name), await download(url));
-        const localPath = `${CHAPTER_IMAGE_DIRECTORY}/${name}`;
-        this.rows = this.rows.map((candidate) => candidate.id === row.id ? { ...candidate, localPath } : candidate);
-      } catch (error) {
-        failed += 1;
+        const name = url ? safeImageName(url, row.range.line) : "";
+        const target = name ? vscode.Uri.joinPath(directory, name) : undefined;
+        const existsAlready = target ? await exists(target) : false;
         this.imageDownloadProgress = {
           phase: "downloading",
-          completed: index + 1,
-          total: rows.length,
-          current: row.raw,
+          completed: index,
+          total,
+          downloaded,
+          skipped,
           failed,
-          lastError: error instanceof Error ? error.message : String(error),
+          current: `下载中 ${index + 1}/${total}`,
         };
+        this.update();
+        if (!url || !target) {
+          failed += 1;
+          this.patchImageRow(row.id, { imageDownloadStatus: "failed", imageDownloadError: "未找到外部图片 URL" });
+          await this.saveSidecar({ silent: true });
+          continue;
+        }
+        const localPath = `${CHAPTER_IMAGE_DIRECTORY}/${name}`;
+        if (!shouldDownloadImage({ raw: row.raw, localPath, imageDownloadStatus: row.imageDownloadStatus }, existsAlready)) {
+          skipped += 1;
+          this.patchImageRow(row.id, {
+            localPath,
+            imageDownloadStatus: "done",
+            imageDownloadError: undefined,
+          });
+          await this.saveSidecar({ silent: true });
+          continue;
+        }
+        try {
+          await vscode.workspace.fs.writeFile(target, await download(url));
+          downloaded += 1;
+          this.patchImageRow(row.id, {
+            localPath,
+            imageDownloadStatus: "done",
+            imageDownloadError: undefined,
+          });
+        } catch (error) {
+          failed += 1;
+          this.patchImageRow(row.id, {
+            imageDownloadStatus: "failed",
+            imageDownloadError: error instanceof Error ? error.message : String(error),
+          });
+          this.imageDownloadProgress = {
+            phase: "downloading",
+            completed: index + 1,
+            total,
+            downloaded,
+            skipped,
+            failed,
+            current: `下载中 ${index + 1}/${total}`,
+            lastError: error instanceof Error ? error.message : String(error),
+          };
+        }
+        await this.saveSidecar({ silent: true });
       }
+      this.imageDownloadProgress = {
+        phase: "complete",
+        completed: total,
+        total,
+        downloaded,
+        skipped,
+        failed,
+        current: `图片下载完成：成功 ${downloaded} · 跳过 ${skipped} · 失败 ${failed}`,
+      };
+      this.update();
+    } finally {
+      this.imageDownloadRunning = false;
     }
-    this.imageDownloadProgress = { phase: "complete", completed: rows.length, total: rows.length, failed, current: "图片下载完成" };
-    this.update();
+  }
+
+  private patchImageRow(id: string, patch: Partial<Candidate>) {
+    this.rows = this.rows.map((candidate) => candidate.id === id ? { ...candidate, ...patch } : candidate);
   }
 
   private async openChapterWorkingCopy(options: { silent?: boolean } = {}) {
@@ -1149,7 +1208,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
   }
 
-  private async saveSidecar() {
+  private async saveSidecar(options: { silent?: boolean } = {}) {
     const file = this.selectedFile;
     const workspace = file ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file.path)) ?? vscode.workspace.workspaceFolders?.[0] : undefined;
     if (!file || !workspace) return;
@@ -1157,7 +1216,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(sidecarPath)));
     const sidecar = serializeSidecar(file.path, this.rows, this.annotationPairs);
     await vscode.workspace.fs.writeFile(vscode.Uri.file(sidecarPath), Buffer.from(JSON.stringify(sidecar, null, 2), "utf8"));
-    void vscode.window.showInformationMessage(`已保存 ${this.rows.length} 条标定。`);
+    if (!options.silent) void vscode.window.showInformationMessage(`已保存 ${this.rows.length} 条标定。`);
   }
 
   private update() {
@@ -1448,16 +1507,6 @@ function boundaryStateLabel(state: "heading" | "added" | "modified" | "deleted")
 function withChapterFrontmatter(markdown: string, chapterFile: string, source: string): string {
   const body = markdown.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").replace(/^\s+/, "");
   return `---\nocr2md_chapter_split: true\nocr2md_chapter_split_at: ${new Date().toISOString()}\nocr2md_chapter_file: ${JSON.stringify(chapterFile)}\nocr2md_chapter_source: ${JSON.stringify(source)}\n${CHAPTER_CHANGED_PROPERTY}: false\n---\n\n${body}`;
-}
-
-function extractImageUrl(value: string): string | undefined {
-  return /!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/i.exec(value)?.[1] ?? /https?:\/\/[^\s)]+/i.exec(value)?.[0];
-}
-
-function safeImageName(url: string, row: Candidate): string {
-  let name = "";
-  try { name = path.posix.basename(new URL(url).pathname); } catch { /* use fallback */ }
-  return (name || `image-${row.range.line + 1}.jpg`).replace(/[<>:\"/\\|?*\u0000-\u001f]/g, "_");
 }
 
 function download(url: string, redirects = 5): Promise<Uint8Array> {

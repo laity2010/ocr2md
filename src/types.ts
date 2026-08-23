@@ -33,6 +33,8 @@ export interface Candidate {
   chapterBoundaryState?: "heading" | "added" | "modified" | "deleted";
   baselinePreview?: string;
   localPath?: string;
+  imageDownloadStatus?: "pending" | "done" | "failed";
+  imageDownloadError?: string;
   embedNumber?: number;
   sourcePath?: string;
   sourceLabel?: string;
@@ -69,6 +71,8 @@ export interface ImageDownloadProgress {
   phase: "downloading" | "complete";
   completed: number;
   total: number;
+  downloaded?: number;
+  skipped?: number;
   current?: string;
   failed?: number;
   lastError?: string;

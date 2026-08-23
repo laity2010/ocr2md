@@ -13,6 +13,8 @@ export interface Calibration {
   annotationNumberSource?: Candidate["annotationNumberSource"];
   isWorkingCorrection?: boolean;
   localPath?: string;
+  imageDownloadStatus?: Candidate["imageDownloadStatus"];
+  imageDownloadError?: string;
   status?: Candidate["status"];
   raw?: string;
   preview?: string;
@@ -68,6 +70,8 @@ export function calibrationOf(row: Candidate): Calibration {
     annotationNumberSource: row.annotationNumberSource,
     isWorkingCorrection: row.isWorkingCorrection,
     localPath: row.localPath,
+    imageDownloadStatus: row.imageDownloadStatus,
+    imageDownloadError: row.imageDownloadError,
     status: row.status,
     raw: row.raw,
     preview: row.preview,
@@ -107,6 +111,8 @@ export function candidateFromCalibration(calibration: Calibration): Candidate {
     annotationNumberSource: calibration.annotationNumberSource,
     isWorkingCorrection: calibration.isWorkingCorrection,
     localPath: calibration.localPath,
+    imageDownloadStatus: calibration.imageDownloadStatus,
+    imageDownloadError: calibration.imageDownloadError,
     status: calibration.status,
     regexSource: calibration.regexSource,
     chapterBoundaryState: calibration.chapterBoundaryState,

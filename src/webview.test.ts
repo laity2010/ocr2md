@@ -56,6 +56,8 @@ assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-f
 assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
 assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
 assert.ok(html.includes('"嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本"'), "embed module line types");
+assert.ok(html.includes("下载图片到本地"), "embed module must download all images, not only the selection");
+assert.ok(!html.includes("下载所选图片"), "selected-only image download must be removed");
 assert.ok(
   html.includes('if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号"))'),
   "embed number column must be gated to the embed module",

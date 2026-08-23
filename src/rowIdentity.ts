@@ -405,6 +405,8 @@ function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
     lineType: previous.lineType ?? scanned.lineType,
     chapterFile: previous.chapterFile ?? scanned.chapterFile,
     localPath: previous.localPath ?? scanned.localPath,
+    imageDownloadStatus: previous.imageDownloadStatus ?? scanned.imageDownloadStatus,
+    imageDownloadError: previous.imageDownloadError ?? scanned.imageDownloadError,
     embedNumber: scanned.embedNumber ?? previous.embedNumber,
     isWorkingCorrection: previous.isWorkingCorrection,
     chapterBoundaryState: nextChangeState(previous, scanned),

@@ -549,7 +549,7 @@ export function renderSidebar(state: SidebarState): string {
         }
       } else {
         const running = state.imageDownloadProgress?.phase === "downloading";
-        const download = button(running ? "正在下载" : "下载所选图片", () => postKeepView("downloadImages", { ids: [...selected] }));
+        const download = button(running ? "正在下载" : "下载图片到本地", () => postKeepView("downloadImages"));
         download.disabled = running;
         toolbar.append(
           download,
@@ -557,7 +557,8 @@ export function renderSidebar(state: SidebarState): string {
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
         if (state.imageDownloadProgress) {
-          toolbar.append(el("span", state.imageDownloadProgress.current || (state.imageDownloadProgress.completed + "/" + state.imageDownloadProgress.total), "progress"));
+          const progress = state.imageDownloadProgress;
+          toolbar.append(el("span", progress.current || (progress.completed + "/" + progress.total), "progress"));
         }
       }
       return toolbar;
@@ -741,8 +742,14 @@ export function renderSidebar(state: SidebarState): string {
           : pair ? "pair-status matched" : "pair-status";
         previewCell.append(el("div", status, statusClass + " preview-detail"));
       }
-      if (state.activeModule === "嵌入块" && candidate.localPath) {
-        previewCell.append(el("div", "本地路径：" + candidate.localPath, "preview-detail"));
+      if (state.activeModule === "嵌入块") {
+        if (candidate.imageDownloadStatus === "done" && candidate.localPath) {
+          previewCell.append(el("div", "下载：已保存 " + candidate.localPath, "preview-detail"));
+        } else if (candidate.imageDownloadStatus === "failed") {
+          previewCell.append(el("div", "下载失败：" + (candidate.imageDownloadError || "未知错误"), "preview-detail"));
+        } else if (candidate.localPath) {
+          previewCell.append(el("div", "本地路径：" + candidate.localPath, "preview-detail"));
+        }
       }
       previewCell.addEventListener("click", () => post("locateRow", { id: candidate.id }));
       return row;
