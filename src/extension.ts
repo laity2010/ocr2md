@@ -31,7 +31,7 @@ import {
   locateCandidate,
   reconcileRows,
 } from "./rowIdentity";
-import { detectEmbedLineType, embedRangeContains, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
+import { detectEmbedLineType, embedNumberAtLine, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
 import type {
   AnnotationPair,
   Candidate,
@@ -401,16 +401,18 @@ class Ocr2mdExtension implements vscode.Disposable {
       });
     }
     for (const pattern of patterns) {
-      for (const candidate of scanRegexMatches(text, pattern)) {
-        if (moduleName === "嵌入块" && scannedEmbeds.some((block) => embedRangeContains(block.range, candidate.range))) continue;
-        const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(candidate.raw) : undefined;
+      for (const match of scanRegexMatches(text, pattern)) {
+        const embedNumber = moduleName === "嵌入块" ? embedNumberAtLine(text, match.range.line) : undefined;
+        if (moduleName === "嵌入块" && embedNumber === undefined) continue;
+        const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(match.raw) : undefined;
         const row: Candidate = {
-          ...candidate,
+          ...match,
           typeLabel: moduleName,
-          lineType: defaultLineType(moduleName, candidate.raw),
+          lineType: defaultLineType(moduleName, match.raw),
           regexSource: pattern,
           annotationNumber: extractedNumber,
           annotationNumberSource: extractedNumber ? "extracted" : undefined,
+          embedNumber,
           sourcePath: source,
           sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
           workingCopyPath: workingPath,

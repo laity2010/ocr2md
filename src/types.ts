@@ -31,6 +31,7 @@ export interface Candidate {
   chapterBoundaryState?: "heading" | "added" | "modified" | "deleted";
   baselinePreview?: string;
   localPath?: string;
+  embedNumber?: number;
   sourcePath?: string;
   sourceLabel?: string;
   status?: "候选" | "异常";

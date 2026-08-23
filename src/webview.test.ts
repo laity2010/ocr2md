@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { ANNOTATION_EXTRA_COLUMNS, CHAPTER_BOUNDARY_EXTRA_COLUMNS, renderSidebar, TABLE_COLUMNS } from "./webview";
+import { ANNOTATION_EXTRA_COLUMNS, CHAPTER_BOUNDARY_EXTRA_COLUMNS, EMBED_EXTRA_COLUMNS, renderSidebar, TABLE_COLUMNS } from "./webview";
 import type { SidebarState } from "./types";
 
 const state: SidebarState = {
@@ -25,6 +25,8 @@ assert.ok(!TABLE_COLUMNS.includes("注释号" as typeof TABLE_COLUMNS[number]), 
 assert.ok(!TABLE_COLUMNS.includes("章节文件" as typeof TABLE_COLUMNS[number]), "chapter file is not a shared table column");
 assert.deepStrictEqual(ANNOTATION_EXTRA_COLUMNS, ["注释号"]);
 assert.deepStrictEqual(CHAPTER_BOUNDARY_EXTRA_COLUMNS, ["章节文件"]);
+assert.ok(!TABLE_COLUMNS.includes("序号" as typeof TABLE_COLUMNS[number]), "embed index is not a shared table column");
+assert.deepStrictEqual(EMBED_EXTRA_COLUMNS, ["序号"]);
 for (const column of TABLE_COLUMNS) {
   assert.ok(html.includes(column), `missing table column: ${column}`);
 }
@@ -54,6 +56,14 @@ assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-f
 assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
 assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
 assert.ok(html.includes('"嵌入块": ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"'), "embed module line types");
+assert.ok(
+  html.includes('if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号"))'),
+  "embed number column must be gated to the embed module",
+);
+assert.ok(
+  html.includes('"嵌入块": [{ key: "embedNumber", direction: "asc" }, { key: "line", direction: "asc" }]'),
+  "embed module default sort must be block number then line",
+);
 for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+增删改行", "嵌入相关+增删改行"]) {
   assert.ok(html.includes(defaultFilter), `missing default module filter: ${defaultFilter}`);
 }

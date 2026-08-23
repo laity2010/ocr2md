@@ -4,6 +4,7 @@ const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入
 export const TABLE_COLUMNS = ["多选", "行号", "行类型", "预览"] as const;
 export const ANNOTATION_EXTRA_COLUMNS = ["注释号"] as const;
 export const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ["章节文件"] as const;
+export const EMBED_EXTRA_COLUMNS = ["序号"] as const;
 
 export function renderSidebar(state: SidebarState): string {
   const encoded = escapeScriptJson(state);
@@ -93,6 +94,7 @@ export function renderSidebar(state: SidebarState): string {
     const MODULES = ${JSON.stringify(MODULES)};
     const ANNOTATION_EXTRA_COLUMNS = ${JSON.stringify(ANNOTATION_EXTRA_COLUMNS)};
     const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ${JSON.stringify(CHAPTER_BOUNDARY_EXTRA_COLUMNS)};
+    const EMBED_EXTRA_COLUMNS = ${JSON.stringify(EMBED_EXTRA_COLUMNS)};
     const DELETED = "已删除";
     const LINE_TYPES = {
       "章节定界": ["1 级标题", "新增", "修改", "删除", DELETED],
@@ -112,10 +114,11 @@ export function renderSidebar(state: SidebarState): string {
     };
     const DEFAULT_SORT_RULES = {
       "注释": [{ key: "number", direction: "asc" }, { key: "line", direction: "asc" }],
+      "嵌入块": [{ key: "embedNumber", direction: "asc" }, { key: "line", direction: "asc" }],
     };
     const selected = new Set();
     const persisted = vscode.getState() || {};
-    const allowedSortKeys = ["line", "lineType", "preview", "number", "chapterFile"];
+    const allowedSortKeys = ["line", "lineType", "preview", "number", "chapterFile", "embedNumber"];
     function sanitizeSortRules(rules) {
       return Array.isArray(rules)
         ? rules.filter((rule) => allowedSortKeys.includes(rule.key) && ["asc", "desc"].includes(rule.direction))
@@ -259,6 +262,14 @@ export function renderSidebar(state: SidebarState): string {
           if (rule.key === "lineType") compared = collator.compare(left.row.lineType || "", right.row.lineType || "");
           if (rule.key === "preview") compared = collator.compare(previewText(left.row), previewText(right.row));
           if (rule.key === "number") compared = compareAnnotationNumbers(left.row, right.row);
+          if (rule.key === "embedNumber") {
+            const leftNumber = left.row.embedNumber;
+            const rightNumber = right.row.embedNumber;
+            if (leftNumber == null && rightNumber == null) compared = 0;
+            else if (leftNumber == null) compared = 1;
+            else if (rightNumber == null) compared = -1;
+            else compared = leftNumber - rightNumber;
+          }
           if (rule.key === "chapterFile") compared = collator.compare(left.row.chapterFile || "", right.row.chapterFile || "");
           if (compared) return rule.direction === "asc" ? compared : -compared;
         }
@@ -618,6 +629,9 @@ export function renderSidebar(state: SidebarState): string {
       if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号")) {
         headRow.append(sortableHeader("注释号", "number", "number-column"));
       }
+      if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号")) {
+        headRow.append(sortableHeader("序号", "embedNumber", "number-column"));
+      }
       if (state.activeModule === "章节定界" && CHAPTER_BOUNDARY_EXTRA_COLUMNS.includes("章节文件")) {
         headRow.append(sortableHeader("章节文件", "chapterFile", "chapter-file-column"));
       }
@@ -668,6 +682,9 @@ export function renderSidebar(state: SidebarState): string {
       });
       checkCell.append(check);
       row.append(checkCell, el("td", String(candidate.range.line + 1)));
+      if (state.activeModule === "嵌入块") {
+        row.append(el("td", candidate.embedNumber ? String(candidate.embedNumber) : ""));
+      }
       if (state.activeModule === "注释") {
         const numberCell = document.createElement("td");
         const numberInput = document.createElement("input");

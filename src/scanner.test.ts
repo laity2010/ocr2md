@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { detectEmbedLineType, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
+import { detectEmbedLineType, embedRowsFromBlock, findEmbedRegions, scanEmbedLines, scanRegexMatches } from "./scanner";
 import type { Candidate } from "./types";
 
 const markdown = [
@@ -31,66 +31,83 @@ assert.strictEqual(detectEmbedLineType('<div class="callout">note</div>'), "嵌�
 assert.strictEqual(detectEmbedLineType("<https://example.com/a.jpg>"), undefined);
 assert.strictEqual(detectEmbedLineType("Ordinary paragraph"), undefined);
 
+assert.deepStrictEqual(scanEmbedLines("FIGURE 1.1 | Title\n![image](https://cdn.example/a.jpg)\n").map((row) => row.lineType), []);
+
 const figureBlock: Candidate = {
   id: "block",
   kind: "regex",
   label: "FIGURE 12.2",
-  raw: "FIGURE 12.2 | A Numbers-Driven Valuation Story\n![image](https://example.com/a.jpg)",
+  raw: ">\nFIGURE 12.2 | A Numbers-Driven Valuation Story\n![image](https://example.com/a.jpg)",
   preview: "FIGURE 12.2",
-  range: { line: 92, start: 0, endLine: 93, end: 40 },
+  range: { line: 91, start: 0, endLine: 93, end: 40 },
   typeLabel: "章节标题",
 };
 const split = embedRowsFromBlock(figureBlock);
-assert.deepStrictEqual(split.map((row) => [row.range.line, row.lineType, row.raw.split("\n").length]), [
+assert.deepStrictEqual(split.map((row) => [row.range.line, row.lineType, row.embedNumber]), [
   [92, "内嵌标题", 1],
   [93, "嵌入链接", 1],
 ]);
-assert.deepStrictEqual(split.map((row) => row.typeLabel), ["嵌入块", "嵌入块"]);
 
 const chapter = [
   "Intro text",
+  ">",
   "FIGURE 1.1 | Title",
   "![image](https://cdn.example/a.jpg)",
   '<iframe src="https://example.com"></iframe>',
+  "",
   "Plain sentence.",
 ].join("\n");
 assert.deepStrictEqual(
-  scanEmbedLines(chapter).map((row) => [row.range.line, row.lineType]),
+  scanEmbedLines(chapter).map((row) => [row.range.line, row.lineType, row.embedNumber]),
   [
-    [1, "内嵌标题"],
-    [2, "嵌入链接"],
-    [3, "嵌入HTML"],
+    [2, "内嵌标题", 1],
+    [3, "嵌入链接", 1],
+    [4, "嵌入HTML", 1],
   ],
 );
 
 const tableDoc = [
   "Before",
+  ">",
   "<table>",
   "<tr><td>A</td></tr>",
   "<tr>",
   "<td>B</td>",
   "</tr>",
   "</table>",
+  "",
   "After",
   "![image](https://example.com/a.jpg)",
 ].join("\n");
 const tableRows = scanEmbedLines(tableDoc);
-assert.strictEqual(tableRows.length, 2, "a multi-line table must stay one embed HTML row");
+assert.strictEqual(tableRows.length, 1, "a table inside a > block is one embed HTML row");
 assert.strictEqual(tableRows[0].lineType, "嵌入HTML");
-assert.strictEqual(tableRows[0].range.line, 1);
-assert.strictEqual(tableRows[0].range.endLine, 6);
+assert.strictEqual(tableRows[0].embedNumber, 1);
+assert.strictEqual(tableRows[0].range.line, 2);
+assert.strictEqual(tableRows[0].range.endLine, 7);
 assert.ok(tableRows[0].raw.startsWith("<table>"));
 assert.ok(tableRows[0].raw.endsWith("</table>"));
-assert.strictEqual(tableRows[1].lineType, "嵌入链接");
-assert.strictEqual(tableRows[1].range.line, 8);
 
-const tableThenHeading = [
-  "<table>",
-  "<tr><td>cell</td></tr>",
-  "# Next chapter",
+const numbered = [
+  ">",
+  "![one](https://example.com/1.jpg)",
+  "",
+  ">",
+  "caption text",
+  "![two](https://example.com/2.jpg)",
+  "",
 ].join("\n");
-const unclosed = scanEmbedLines(tableThenHeading);
-assert.strictEqual(unclosed.length, 1);
-assert.strictEqual(unclosed[0].range.endLine, 1);
+assert.deepStrictEqual(
+  findEmbedRegions(numbered.split("\n")).map((region) => [region.number, region.contentStart, region.contentEnd]),
+  [[1, 1, 1], [2, 4, 5]],
+);
+assert.deepStrictEqual(
+  scanEmbedLines(numbered).map((row) => [row.embedNumber, row.lineType]),
+  [
+    [1, "嵌入链接"],
+    [2, "嵌入文本"],
+    [2, "嵌入链接"],
+  ],
+);
 
 console.log("scanner tests passed");

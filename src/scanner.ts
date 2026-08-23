@@ -24,9 +24,47 @@ export function embedRangeContains(outer: SourceRange, inner: SourceRange): bool
   return inner.line >= outer.line && innerEnd <= outerEnd;
 }
 
-/** Split a consecutive-text block into embed rows, keeping HTML tables intact. */
+export interface EmbedRegion {
+  number: number;
+  markerLine: number;
+  contentStart: number;
+  contentEnd: number;
+}
+
+/** A line whose only character is `>` starts an embed block. */
+export function isEmbedBlockStart(line: string): boolean {
+  return line.trim() === ">";
+}
+
+/** Embed blocks run from `>` until two or more consecutive newlines. */
+export function findEmbedRegions(lines: string[]): EmbedRegion[] {
+  const regions: EmbedRegion[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (!isEmbedBlockStart(lines[index])) {
+      index += 1;
+      continue;
+    }
+    const markerLine = index;
+    const contentStart = index + 1;
+    let contentEnd = contentStart - 1;
+    index = contentStart;
+    while (index < lines.length && lines[index].trim() !== "") {
+      contentEnd = index;
+      index += 1;
+    }
+    if (contentEnd >= contentStart) {
+      regions.push({ number: regions.length + 1, markerLine, contentStart, contentEnd });
+    }
+    while (index < lines.length && lines[index].trim() === "") index += 1;
+  }
+  return regions;
+}
+
+/** Split a consecutive-text block into embed rows inside `>` regions. */
 export function embedRowsFromBlock(block: Candidate): Candidate[] {
-  return collectEmbedRows(block.raw.replace(/\r\n?/g, "\n").split("\n"), block.range.line).map((row) => ({
+  const lines = block.raw.replace(/\r\n?/g, "\n").split("\n");
+  return scanEmbedFromLines(lines, block.range.line).map((row) => ({
     ...block,
     ...row,
     typeLabel: "嵌入块",
@@ -35,9 +73,47 @@ export function embedRowsFromBlock(block: Candidate): Candidate[] {
   }));
 }
 
-/** Identify every image link and HTML block in a chapter file. */
+/** Identify HTML and image links inside `>` embed blocks. */
 export function scanEmbedLines(text: string): Candidate[] {
-  return collectEmbedRows(text.replace(/\r\n?/g, "\n").split("\n"), 0);
+  return scanEmbedFromLines(text.replace(/\r\n?/g, "\n").split("\n"), 0);
+}
+
+export function embedNumberAtLine(text: string, line: number): number | undefined {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  return findEmbedRegions(lines).find((region) => line >= region.contentStart && line <= region.contentEnd)?.number;
+}
+
+function scanEmbedFromLines(lines: string[], lineOffset: number): Candidate[] {
+  const rows: Candidate[] = [];
+  for (const region of findEmbedRegions(lines)) {
+    const inner = lines.slice(region.contentStart, region.contentEnd + 1);
+    const collected = collectEmbedRows(inner, lineOffset + region.contentStart);
+    const covered = new Set<number>();
+    for (const row of collected) {
+      const start = row.range.line;
+      const end = row.range.endLine ?? row.range.line;
+      for (let line = start; line <= end; line += 1) covered.add(line);
+      rows.push({ ...row, embedNumber: region.number });
+    }
+    for (let offset = 0; offset < inner.length; offset += 1) {
+      const line = inner[offset];
+      const absolute = lineOffset + region.contentStart + offset;
+      if (covered.has(absolute) || !line.trim()) continue;
+      rows.push({
+        id: `embed-${absolute}`,
+        kind: "regex",
+        label: line.trim(),
+        raw: line,
+        preview: line.slice(0, 255),
+        range: { line: absolute, start: 0, end: line.length },
+        typeLabel: "嵌入块",
+        lineType: detectEmbedLineType(line) ?? "嵌入文本",
+        embedNumber: region.number,
+        status: "候选",
+      });
+    }
+  }
+  return rows.sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
 }
 
 function collectEmbedRows(lines: string[], lineOffset: number): Candidate[] {

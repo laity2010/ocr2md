@@ -273,6 +273,7 @@ function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
     lineType: previous.lineType ?? scanned.lineType,
     chapterFile: previous.chapterFile ?? scanned.chapterFile,
     localPath: previous.localPath ?? scanned.localPath,
+    embedNumber: scanned.embedNumber ?? previous.embedNumber,
     isWorkingCorrection: previous.isWorkingCorrection,
     chapterBoundaryState: nextChangeState(previous, scanned),
     baselinePreview: scanned.baselinePreview ?? previous.baselinePreview,
