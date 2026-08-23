@@ -67,7 +67,13 @@ export function buildAnnotationPairs(rows: Candidate[], previous: AnnotationPair
   return pairs.sort((left, right) => left.pairId.localeCompare(right.pairId, "zh-CN", { numeric: true }));
 }
 
+export function annotatedRowCount(rows: Candidate[]): number {
+  return activeCandidates(rows).filter((row) =>
+    row.typeLabel === "注释" && (row.lineType === "注释引用" || row.lineType === "注释正文")).length;
+}
+
 export function annotationMatchSummary(rows: Candidate[], pairs: AnnotationPair[]): {
+  calibrated: number;
   paired: number;
   missingRef: number;
   missingBody: number;
@@ -76,6 +82,7 @@ export function annotationMatchSummary(rows: Candidate[], pairs: AnnotationPair[
   const active = activeCandidates(rows).filter((row) =>
     row.typeLabel === "注释" && (row.lineType === "注释引用" || row.lineType === "注释正文"));
   return {
+    calibrated: active.length,
     paired: pairs.filter((pair) => pair.status === "自动匹配" || pair.status === "已确认").length,
     missingRef: pairs.filter((pair) => pair.status === "待补引用").length,
     missingBody: pairs.filter((pair) => pair.status === "待补正文").length,

@@ -283,7 +283,9 @@ export function renderSidebar(state: SidebarState): string {
       app.replaceChildren();
       const tabs = el("div", undefined, "tabs");
       for (const moduleName of MODULES) {
-        const count = state.rows.filter((row) => row.typeLabel === moduleName).length;
+        const count = moduleName === "注释" && state.annotationMatchSummary
+          ? state.annotationMatchSummary.calibrated
+          : state.rows.filter((row) => row.typeLabel === moduleName).length;
         const tab = button(moduleName + " (" + count + ")", () => postKeepView("setActiveModule", { moduleName }), "tab");
         if (moduleName === state.activeModule) tab.classList.add("active");
         tabs.append(tab);

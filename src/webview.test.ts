@@ -55,6 +55,11 @@ assert.ok(
   "preview navigation must be attached to the preview cell",
 );
 assert.ok(html.includes("匹配注释对"), "annotation matching action is missing");
+assert.ok(
+  html.includes('moduleName === "注释" && state.annotationMatchSummary')
+    && html.includes("state.annotationMatchSummary.calibrated"),
+  "annotation tab count must use calibrated rows, not ignored regex hits",
+);
 assert.ok(!html.includes("确认所选 Pair"), "old pair confirmation label must be removed");
 assert.ok(html.includes("手工输入注释号"), "missing annotation number must prompt for manual input");
 assert.ok(html.includes("tr.missing-number"), "rows without annotation numbers must be highlighted");

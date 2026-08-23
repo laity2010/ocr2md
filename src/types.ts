@@ -82,6 +82,7 @@ export interface SidebarState {
   moduleRegexPresets: Record<string, RegexPreset[]>;
   imageDownloadProgress?: ImageDownloadProgress;
   annotationMatchSummary?: {
+    calibrated: number;
     paired: number;
     missingRef: number;
     missingBody: number;

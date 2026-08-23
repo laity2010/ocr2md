@@ -1,5 +1,6 @@
 import * as assert from "assert";
 import {
+  annotatedRowCount,
   annotationMatchSummary,
   buildAnnotationPairs,
   extractAnnotationNumber,
@@ -41,7 +42,11 @@ assert.deepStrictEqual(pairs.map((pair) => [pair.number, pair.status, pair.refCa
 ]);
 
 const summary = annotationMatchSummary([ref, body, lonelyRef, noNumber], pairs);
-assert.deepStrictEqual(summary, { paired: 1, missingRef: 0, missingBody: 1, missingNumber: 1 });
+assert.deepStrictEqual(summary, { calibrated: 4, paired: 1, missingRef: 0, missingBody: 1, missingNumber: 1 });
+
+const ignored = row({ id: "skip", raw: "false hit", lineType: "忽略", range: { line: 8, start: 0, end: 9 } });
+const deleted = row({ id: "gone", raw: "gone", lineType: "已删除", range: { line: 9, start: 0, end: 4 } });
+assert.strictEqual(annotatedRowCount([ref, body, lonelyRef, noNumber, ignored, deleted]), 4);
 
 const missingRef = buildAnnotationPairs([
   row({ id: "body-9", raw: "9. Only body", lineType: "注释正文", annotationNumber: "9", range: { line: 1, start: 0, end: 12 } }),
