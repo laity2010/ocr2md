@@ -6,6 +6,7 @@ export const CHAPTER_SPLIT_PROPERTY = "ocr2md_chapter_split";
 export const CHAPTER_CHANGED_PROPERTY = "ocr2md_chapter_changed";
 export const CHAPTER_BOUNDARY_WORKING_FILE = ".ocr2md-merged.working.md";
 export const CHAPTER_OUTPUT_DIRECTORY = "chapters";
+export const CHAPTER_IMAGE_DIRECTORY = "imgs";
 export const CHAPTER_WORKING_DIRECTORY = path.join(".ocr2md", "chapter-working");
 export const CHAPTER_OUTPUT_BASELINE_DIRECTORY = path.join(".ocr2md", "chapter-output-baselines");
 
@@ -104,14 +105,86 @@ export function isChapterOutputPath(workspaceRoot: string, filePath: string): bo
   return path.resolve(filePath).startsWith(directory);
 }
 
+export function chapterStem(chapterFile: string): string {
+  const name = chapterFile.trim().replace(/\.md$/i, "").replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
+  return name || "chapter";
+}
+
+export function chapterOriginalFileName(chapterFile: string): string {
+  return `${chapterStem(chapterFile)}.md`;
+}
+
+export function chapterDirectoryPath(workspaceRoot: string, chapterFile: string): string {
+  return path.join(workspaceRoot, CHAPTER_OUTPUT_DIRECTORY, chapterStem(chapterFile));
+}
+
+export function chapterOriginalPath(workspaceRoot: string, chapterFile: string): string {
+  const stem = chapterStem(chapterFile);
+  return path.join(workspaceRoot, CHAPTER_OUTPUT_DIRECTORY, stem, `${stem}.md`);
+}
+
+export function isChapterDerivedMarkdown(filePath: string): boolean {
+  return /\.(?:annotation\.)?working\.md$/i.test(filePath) || /\.baseline\.md$/i.test(filePath);
+}
+
+/** Original chapter file: chapters/<name>/<name>.md, plus legacy chapters/<name>.md. */
+export function isCanonicalChapterOriginal(workspaceRoot: string, filePath: string): boolean {
+  if (!isChapterOutputPath(workspaceRoot, filePath) || isChapterDerivedMarkdown(filePath)) return false;
+  const relative = path.relative(path.resolve(workspaceRoot, CHAPTER_OUTPUT_DIRECTORY), path.resolve(filePath));
+  const parts = relative.split(path.sep);
+  if (parts.length === 1) return /\.md$/i.test(parts[0]);
+  if (parts.length === 2) return /\.md$/i.test(parts[1]) && path.parse(parts[1]).name === parts[0];
+  return false;
+}
+
+export function chapterDisplayName(workspaceRoot: string, filePath: string): string {
+  const relative = path.relative(path.resolve(workspaceRoot, CHAPTER_OUTPUT_DIRECTORY), path.resolve(filePath));
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return path.basename(filePath);
+  const parts = relative.split(path.sep);
+  return parts.length >= 2 ? parts[0] : path.parse(parts[0] ?? filePath).name;
+}
+
 export function chapterWorkingCopyPath(workspaceRoot: string, originalPath: string): string {
+  void workspaceRoot;
+  const parsed = path.parse(originalPath);
+  return path.join(parsed.dir, `${parsed.name}.working.md`);
+}
+
+export function chapterSidecarPath(originalPath: string): string {
+  const parsed = path.parse(originalPath);
+  return path.join(parsed.dir, `${parsed.name}.ocr2md.json`);
+}
+
+export function chapterImageDirectory(originalPath: string): string {
+  return path.join(path.dirname(originalPath), CHAPTER_IMAGE_DIRECTORY);
+}
+
+export function chapterAnnotationWorkingPath(originalPath: string): string {
+  const parsed = path.parse(originalPath);
+  return path.join(parsed.dir, `${parsed.name}.annotation.working.md`);
+}
+
+export function chapterOutputBaselinePath(workspaceRoot: string, originalPath: string): string {
+  void workspaceRoot;
+  const parsed = path.parse(originalPath);
+  return path.join(parsed.dir, `${parsed.name}.baseline.md`);
+}
+
+export function legacyChapterWorkingCopyPath(workspaceRoot: string, originalPath: string): string {
   const relative = path.relative(workspaceRoot, originalPath).replace(/[\\/]/g, "__");
   return path.join(workspaceRoot, CHAPTER_WORKING_DIRECTORY, `${relative}.chapter.working.md`);
 }
 
-export function chapterOutputBaselinePath(workspaceRoot: string, originalPath: string): string {
+export function legacyChapterOutputBaselinePath(workspaceRoot: string, originalPath: string): string {
   const relative = path.relative(workspaceRoot, originalPath).replace(/[\\/]/g, "__");
   return path.join(workspaceRoot, CHAPTER_OUTPUT_BASELINE_DIRECTORY, `${relative}.baseline.md`);
+}
+
+export function legacyChapterSidecarPaths(workspaceRoot: string, originalPath: string): string[] {
+  return [
+    `${originalPath}.ocr2md.json`,
+    path.join(workspaceRoot, ".ocr2md", "annotations.json"),
+  ];
 }
 
 /**

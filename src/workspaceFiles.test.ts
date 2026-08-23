@@ -1,12 +1,22 @@
 import * as assert from "assert";
 import * as path from "path";
 import {
+  chapterAnnotationWorkingPath,
   chapterContentsDiffer,
   chapterDiffBaseline,
+  chapterDirectoryPath,
+  chapterDisplayName,
+  chapterImageDirectory,
+  chapterOriginalFileName,
+  chapterOriginalPath,
   chapterOutputBaselinePath,
+  chapterSidecarPath,
+  chapterStem,
   chapterWorkingCopyPath,
   hasChapterChangedFrontmatter,
   hasChapterSplitFrontmatter,
+  isCanonicalChapterOriginal,
+  isChapterDerivedMarkdown,
   isChapterOutputPath,
   markdownFileKind,
   planChapterWorkingCopyInit,
@@ -33,13 +43,43 @@ assert.strictEqual(isChapterOutputPath("/ws", path.join("/ws", "chapters", "11.m
 assert.strictEqual(isChapterOutputPath("/ws", path.join("/ws", "ocr", "11.md")), false);
 assert.strictEqual(isChapterOutputPath("/ws", path.join("/ws", "chapters-extra", "11.md")), false);
 
+assert.strictEqual(chapterStem("12 Valuation.md"), "12 Valuation");
+assert.strictEqual(chapterOriginalFileName("12 Valuation"), "12 Valuation.md");
 assert.strictEqual(
-  chapterWorkingCopyPath("/ws", path.join("/ws", "chapters", "11 Chapter.md")),
-  path.join("/ws", ".ocr2md", "chapter-working", "chapters__11 Chapter.md.chapter.working.md"),
+  chapterDirectoryPath("/ws", "12 Valuation.md"),
+  path.join("/ws", "chapters", "12 Valuation"),
 );
 assert.strictEqual(
-  chapterOutputBaselinePath("/ws", path.join("/ws", "chapters", "11.md")),
-  path.join("/ws", ".ocr2md", "chapter-output-baselines", "chapters__11.md.baseline.md"),
+  chapterOriginalPath("/ws", "12 Valuation.md"),
+  path.join("/ws", "chapters", "12 Valuation", "12 Valuation.md"),
+);
+
+const nestedOriginal = path.join("/ws", "chapters", "11 Chapter", "11 Chapter.md");
+assert.strictEqual(isCanonicalChapterOriginal("/ws", nestedOriginal), true);
+assert.strictEqual(isCanonicalChapterOriginal("/ws", path.join("/ws", "chapters", "11.md")), true);
+assert.strictEqual(isCanonicalChapterOriginal("/ws", path.join("/ws", "chapters", "11 Chapter", "11 Chapter.working.md")), false);
+assert.strictEqual(isCanonicalChapterOriginal("/ws", path.join("/ws", "chapters", "11 Chapter", "notes.md")), false);
+assert.strictEqual(isChapterDerivedMarkdown(path.join("/ws", "chapters", "11 Chapter", "11 Chapter.working.md")), true);
+assert.strictEqual(chapterDisplayName("/ws", nestedOriginal), "11 Chapter");
+assert.strictEqual(
+  chapterWorkingCopyPath("/ws", nestedOriginal),
+  path.join("/ws", "chapters", "11 Chapter", "11 Chapter.working.md"),
+);
+assert.strictEqual(
+  chapterSidecarPath(nestedOriginal),
+  path.join("/ws", "chapters", "11 Chapter", "11 Chapter.ocr2md.json"),
+);
+assert.strictEqual(
+  chapterImageDirectory(nestedOriginal),
+  path.join("/ws", "chapters", "11 Chapter", "imgs"),
+);
+assert.strictEqual(
+  chapterAnnotationWorkingPath(nestedOriginal),
+  path.join("/ws", "chapters", "11 Chapter", "11 Chapter.annotation.working.md"),
+);
+assert.strictEqual(
+  chapterOutputBaselinePath("/ws", nestedOriginal),
+  path.join("/ws", "chapters", "11 Chapter", "11 Chapter.baseline.md"),
 );
 
 assert.deepStrictEqual(

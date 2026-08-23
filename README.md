@@ -22,7 +22,11 @@
 ├── ocr
 │   └── 未带章节定界 YAML 标记的原始序列 Markdown
 └── chapters
-    └── 章节文件
+    └── 章节名称/
+        ├── 章节名称.md              章节定界原文件
+        ├── 章节名称.working.md      工作稿
+        ├── 章节名称.ocr2md.json     工作表数据结构
+        ├── imgs/                    章节图片源文件
         ├── 标题
         ├── 注释
         └── 图片
@@ -31,9 +35,9 @@
 - Markdown 开头的 YAML 没有 `ocr2md_chapter_split: true` 时，文件归入 `ocr`，并按自然序参与合并。
 - 旧版输出目录 `output/` 与 `output_chapters/` 不参与新工作流扫描，也不会被删除。
 - “创建/打开定界工作稿”将 `ocr` 中的序列文件拼接为工作目录根层的 `.ocr2md-merged.working.md`。
-- “导出章节”将结果写入 `工作目录/chapters/`，作为该章只读原件，并写入 `ocr2md_chapter_split: true` 等章节定界 properties。
+- “导出章节”写入 `工作目录/chapters/章节名称/`，该目录是这一章的内容工作目录：定界原文件、工作稿、工作表、图片及其他章节文件都放在这里。原文件写入 `ocr2md_chapter_split: true` 等章节定界 properties。
 - 工作稿相对原件有改动时，章节 YAML 写入 `ocr2md_chapter_changed: true`，目录树中该章节会着色并标注“已变动”。
-- 点击 `chapters/章节文件/标题`、`注释` 或 `图片`，打开该章工作稿；数据表只处理这一章，增删改相对 `chapters/` 原件比较。
+- 点击 `chapters/章节名称/标题`、`注释` 或 `图片`，打开该章工作稿；数据表只处理这一章，增删改相对章节原件比较。
 
 ## 开发运行
 
@@ -47,10 +51,8 @@ code .
 
 ## 数据与输出
 
-- `.ocr2md/`：模块基线、工作稿和标定 sidecar。
+- `.ocr2md/`：章节定界合并基线等扩展内部数据。
 - `.ocr2md-merged.working.md`：章节定界合并工作稿。
-- `chapters/`：章节定界导出的章节原件，用作比较基准；有工作稿改动时 YAML 含 `ocr2md_chapter_changed: true`。
-- `.ocr2md/chapter-working/`：章节工作稿；标题层级、注释和图片相关改动写在这里。
-- `imgs/`：图片模块下载的本地图片。
+- `chapters/章节名称/`：该章内容工作目录。含定界原文件、工作稿、工作表 sidecar、`imgs/` 图片及其他章节文件；有工作稿改动时原文件 YAML 含 `ocr2md_chapter_changed: true`。
 
 源 Markdown 不会因为数据表中的 `已删除` 标记而被删除。
