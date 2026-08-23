@@ -132,7 +132,7 @@ const fileEnd = attachLineIdentity(candidate("gamma", 3), original, context);
 assert.strictEqual(fileEnd.anchorNextHash, hashText(FILE_END_ANCHOR));
 
 const imageDoc = "![image](https://example.com/a.jpg)";
-const scannedImage = scan(imageDoc, [["![image](https://example.com/a.jpg)", 0]], "图片");
+const scannedImage = scan(imageDoc, [["![image](https://example.com/a.jpg)", 0]], "嵌入块");
 scannedImage[0].chapterBoundaryState = "heading";
 const manualImage = {
   ...scannedImage[0],

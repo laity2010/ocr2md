@@ -1,4 +1,4 @@
-export type ModuleName = "章节定界" | "章节标题" | "注释" | "图片";
+export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块";
 
 export interface SourceRange {
   line: number;

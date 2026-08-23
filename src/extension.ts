@@ -31,7 +31,7 @@ import {
   locateCandidate,
   reconcileRows,
 } from "./rowIdentity";
-import { detectImageLineType, imageRowsFromBlock, scanRegexMatches } from "./scanner";
+import { detectEmbedLineType, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
 import type {
   AnnotationPair,
   Candidate,
@@ -67,7 +67,7 @@ import {
   withChapterChangedFrontmatter,
 } from "./workspaceFiles";
 
-const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "图片"];
+const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
 /** Source on top, Markdown Preview below. Never include an empty group: VS Code closes those and the remaining pair becomes two columns. */
 const STACKED_SOURCE_PREVIEW_LAYOUT = {
@@ -130,7 +130,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       vscode.commands.registerCommand("ocr2md.pickFolder", () => this.pickWorkspaceFolder()),
       vscode.commands.registerCommand("ocr2md.openMarkdownFile", (filePath: string) => this.selectFile(filePath)),
       vscode.commands.registerCommand("ocr2md.openChapterModule", (filePath: string, moduleName: ModuleName) => {
-        if (moduleName === "章节标题" || moduleName === "注释" || moduleName === "图片") {
+        if (moduleName === "章节标题" || moduleName === "注释" || moduleName === "嵌入块") {
           return this.selectFile(filePath, moduleName);
         }
         return undefined;
@@ -189,7 +189,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         await this.exportChapterBoundaryChapters();
         break;
       case "scanModule":
-        if ((message.moduleName === "注释" || message.moduleName === "图片") && typeof message.pattern === "string") {
+        if ((message.moduleName === "注释" || message.moduleName === "嵌入块") && typeof message.pattern === "string") {
           this.moduleRegexPatterns[message.moduleName] = message.pattern;
           await this.scanCurrentModule(message.moduleName);
         }
@@ -282,7 +282,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       this.selectedFileText = ensured.workingText;
       editorUri = ensured.workingUri;
     }
-    for (const moduleName of ["章节标题", "注释", "图片"] as const) {
+    for (const moduleName of ["章节标题", "注释", "嵌入块"] as const) {
       this.modulePreviewPaths.set(moduleName, editorUri.fsPath);
     }
     this.rows = [];
@@ -298,13 +298,13 @@ class Ocr2mdExtension implements vscode.Disposable {
       }
       this.chapterWorkingUri = this.chapterWorkingUri ?? editorUri;
       await this.refreshChapterTitleRows(this.chapterWorkingUri);
-    } else if (requestedModule === "注释" || requestedModule === "图片") {
+    } else if (requestedModule === "注释" || requestedModule === "嵌入块") {
       this.activeModule = requestedModule;
-      if (requestedModule === "图片" && this.chapterWorkingUri) {
+      if (requestedModule === "嵌入块" && this.chapterWorkingUri) {
         await this.refreshChapterTitleRows(this.chapterWorkingUri, { writeMarker: false });
       }
       await this.scanCurrentModule(requestedModule);
-    } else if (this.activeModule === "注释" || this.activeModule === "图片") {
+    } else if (this.activeModule === "注释" || this.activeModule === "嵌入块") {
       await this.scanCurrentModule(this.activeModule);
     }
     await this.showDocumentPair(editorUri, { preserveFocus: true });
@@ -324,7 +324,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     } else if (moduleName === "章节标题") {
       if (this.selectedFile) await this.openChapterWorkingCopy({ silent: true });
     } else if (this.selectedFile) {
-      if (moduleName === "图片" && this.chapterWorkingUri) {
+      if (moduleName === "嵌入块" && this.chapterWorkingUri) {
         await this.refreshChapterTitleRows(this.chapterWorkingUri, { writeMarker: false });
       }
       await this.scanCurrentModule(moduleName);
@@ -350,13 +350,13 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (document.uri.fsPath === this.selectedFile?.path) {
       if (this.chapterWorkingUri && this.chapterWorkingUri.fsPath !== document.uri.fsPath) return;
       this.selectedFileText = document.getText();
-      if (this.activeModule === "注释" || this.activeModule === "图片") {
+      if (this.activeModule === "注释" || this.activeModule === "嵌入块") {
         await this.scanCurrentModule(this.activeModule);
       }
     }
   }
 
-  private async scanCurrentModule(moduleName: "注释" | "图片", options: { silent?: boolean } = {}) {
+  private async scanCurrentModule(moduleName: "注释" | "嵌入块", options: { silent?: boolean } = {}) {
     if (!this.selectedFile) return;
     const workingPath = this.chapterWorkingUri?.fsPath ?? this.selectedFile.path;
     const text = this.chapterWorkingUri
@@ -369,7 +369,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async scanModuleText(
-    moduleName: "注释" | "图片",
+    moduleName: "注释" | "嵌入块",
     text: string,
     workingPath: string,
     sourcePath?: string,
@@ -380,6 +380,17 @@ class Ocr2mdExtension implements vscode.Disposable {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const patterns = splitPatterns(this.moduleRegexPatterns[moduleName] ?? "");
     const unique = new Map<string, Candidate>();
+    const scannedEmbeds = moduleName === "嵌入块" ? scanEmbedLines(text) : [];
+    for (const candidate of scannedEmbeds) {
+      unique.set(candidatePositionKey({ ...candidate, sourcePath: source, workingCopyPath: workingPath }), {
+        ...candidate,
+        typeLabel: moduleName,
+        lineType: candidate.lineType ?? defaultLineType(moduleName, candidate.raw),
+        sourcePath: source,
+        sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
+        workingCopyPath: workingPath,
+      });
+    }
     for (const pattern of patterns) {
       for (const candidate of scanRegexMatches(text, pattern)) {
         const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(candidate.raw) : undefined;
@@ -400,7 +411,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     const scanned = attachScanIdentities([...unique.values()], text, { moduleName, sourcePath: source });
     const previous = this.rows.filter((row) => row.typeLabel === moduleName && row.sourcePath === source);
     let reconciled = reconcileRows(previous, scanned, text);
-    if (moduleName === "图片") {
+    if (moduleName === "嵌入块") {
       const present = new Set(reconciled.map((row) => row.id));
       const extras = previous.filter((row) =>
         !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
@@ -463,7 +474,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       currentText: current,
       silent: true,
     });
-    if (this.activeModule === "注释" || this.activeModule === "图片") {
+    if (this.activeModule === "注释" || this.activeModule === "嵌入块") {
       await this.scanCurrentModule(this.activeModule, { silent: true });
     }
     this.rows = await this.applyWorkingCopyDiff(this.rows, current);
@@ -723,9 +734,9 @@ class Ocr2mdExtension implements vscode.Disposable {
     const workspace = vscode.workspace.workspaceFolders?.[0];
     if (!workspace) return;
     const selected = new Set(ids);
-    const rows = activeCandidates(this.rows).filter((row) => selected.has(row.id) && row.typeLabel === "图片");
+    const rows = activeCandidates(this.rows).filter((row) => selected.has(row.id) && row.typeLabel === "嵌入块");
     if (!rows.length) {
-      void vscode.window.showWarningMessage("请先选择有效图片记录。");
+      void vscode.window.showWarningMessage("请先选择含外部图片地址的嵌入记录。");
       return;
     }
     const originalPath = this.selectedFile?.path ?? workspace.uri.fsPath;
@@ -774,7 +785,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.selectedFileText = ensured.workingText;
     this.modulePreviewPaths.set("章节标题", ensured.workingUri.fsPath);
     this.modulePreviewPaths.set("注释", ensured.workingUri.fsPath);
-    this.modulePreviewPaths.set("图片", ensured.workingUri.fsPath);
+    this.modulePreviewPaths.set("嵌入块", ensured.workingUri.fsPath);
     this.activeModule = "章节标题";
     await this.refreshChapterTitleRows(ensured.workingUri);
     await this.showDocumentPair(ensured.workingUri);
@@ -838,7 +849,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       if (await exists(originalUri)) baseline = Buffer.from(await vscode.workspace.fs.readFile(originalUri)).toString("utf8");
     }
     const previousTitles = this.rows.filter((row) => row.typeLabel === "章节标题" && rowBelongsToChapter(row, originalPath, uri.fsPath));
-    const previousImages = this.rows.filter((row) => row.typeLabel === "图片" && rowBelongsToChapter(row, originalPath, uri.fsPath));
+    const previousImages = this.rows.filter((row) => row.typeLabel === "嵌入块" && rowBelongsToChapter(row, originalPath, uri.fsPath));
     const changes = scanChapterBoundaryLines(chapterDiffBaseline(baseline, current), current);
     const currentChanges = changes.filter((entry) => entry.state !== "deleted");
     const sourcePath = originalPath ?? uri.fsPath;
@@ -849,14 +860,14 @@ class Ocr2mdExtension implements vscode.Disposable {
     });
     const identityContext = { sourcePath };
     const titleBlocks = attachScanIdentities(
-      blocks.filter((row) => !detectImageLineType(row.raw)),
+      blocks.filter((row) => !detectEmbedLineType(row.raw)),
       current,
       { moduleName: "章节标题", ...identityContext },
     );
     const imageBlocks = attachScanIdentities(
-      blocks.flatMap((row) => imageRowsFromBlock(row)),
+      blocks.flatMap((row) => embedRowsFromBlock(row)),
       current,
-      { moduleName: "图片", ...identityContext },
+      { moduleName: "嵌入块", ...identityContext },
     );
     const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks, current);
     const imageRows = reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current)
@@ -864,7 +875,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     const lines = current.replace(/\r\n?/g, "\n").split("\n");
     for (const entry of changes.filter((candidate) => candidate.state === "deleted")) {
       const raw = entry.baselineText ?? "";
-      const imageLineType = detectImageLineType(raw);
+      const imageLineType = detectEmbedLineType(raw);
       const deleted = attachLineIdentity({
         id: `chapter-deleted-${candidateHash(`${uri.fsPath}\0${raw}`)}`,
         kind: "regex",
@@ -872,7 +883,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         raw,
         preview: raw,
         range: { line: Math.min(entry.line, Math.max(0, lines.length - 1)), start: 0, end: 0 },
-        typeLabel: imageLineType ? "图片" : "章节标题",
+        typeLabel: imageLineType ? "嵌入块" : "章节标题",
         lineType: imageLineType ?? "非标题",
         chapterBoundaryState: "deleted",
         baselinePreview: raw,
@@ -880,12 +891,12 @@ class Ocr2mdExtension implements vscode.Disposable {
         sourcePath,
         sourceLabel: workspace ? path.relative(workspace.uri.fsPath, sourcePath) : path.basename(sourcePath),
         status: "候选",
-      }, current, { moduleName: imageLineType ? "图片" : "章节标题", sourcePath });
+      }, current, { moduleName: imageLineType ? "嵌入块" : "章节标题", sourcePath });
       (imageLineType ? imageRows : titleRows).push(deleted);
     }
     this.rows = [
       ...this.rows.filter((row) => row.typeLabel !== "章节标题"
-        && !(row.typeLabel === "图片" && rowBelongsToChapter(row, originalPath, uri.fsPath))),
+        && !(row.typeLabel === "嵌入块" && rowBelongsToChapter(row, originalPath, uri.fsPath))),
       ...titleRows,
       ...imageRows,
     ].sort(compareRows);
@@ -1196,7 +1207,7 @@ class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
       return ([
         ["标题", "章节标题"],
         ["注释", "注释"],
-        ["图片", "图片"],
+        ["嵌入块", "嵌入块"],
       ] as const).map(([label, moduleName]) => DirectoryItem.chapterModule(
         label,
         moduleName,
@@ -1316,13 +1327,25 @@ interface SidecarRow extends Omit<Candidate, "range"> {
   end?: number;
 }
 
+const LEGACY_MODULE_NAMES: Record<string, ModuleName> = { "图片": "嵌入块" };
+const LEGACY_LINE_TYPES: Record<string, string> = {
+  "图片标题": "内嵌标题",
+  "图片链接": "嵌入链接",
+  "图片HTML": "嵌入HTML",
+  "图片文本": "嵌入文本",
+};
+
 function fromSidecarRow(row: SidecarRow): Candidate {
+  const typeLabel = row.typeLabel ? LEGACY_MODULE_NAMES[row.typeLabel] ?? row.typeLabel : row.typeLabel;
+  const lineType = row.lineType ? LEGACY_LINE_TYPES[row.lineType] ?? row.lineType : row.lineType;
   return {
     ...row,
     kind: row.kind ?? "regex",
     label: row.label ?? row.raw ?? "",
     raw: row.raw ?? "",
     preview: row.preview ?? row.raw ?? "",
+    typeLabel,
+    lineType,
     range: row.range ?? {
       line: row.line ?? 0,
       start: row.start ?? 0,
@@ -1435,7 +1458,7 @@ function defaultLineType(moduleName: ModuleName, raw: string): string {
   if (moduleName === "注释") {
     return /^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/.test(raw) ? "注释正文" : "注释引用";
   }
-  return detectImageLineType(raw) ?? "图片文本";
+  return detectEmbedLineType(raw) ?? "嵌入文本";
 }
 
 function candidatePositionKey(row: Candidate): string {

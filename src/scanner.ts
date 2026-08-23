@@ -1,32 +1,58 @@
 import type { Candidate } from "./types";
 
-export type ImageLineType = "图片标题" | "图片链接" | "图片HTML";
+export type EmbedLineType = "内嵌标题" | "嵌入链接" | "嵌入HTML" | "嵌入文本";
 
-export function detectImageLineType(raw: string): ImageLineType | undefined {
-  if (/<\s*(?:img|picture|figure|source)\b/i.test(raw)) return "图片HTML";
-  if (/!\[[^\]]*\]\([^)]+\)|!\[\[[^\]]+\]\]/.test(raw)) return "图片链接";
-  if (/^\s*(?:#{1,6}\s*)?(?:figure|fig\.?|图)\s*(?:\d|[IVXLCDM])/i.test(raw)) return "图片标题";
+const HTML_TAG_RE = /<\s*\/?\s*[a-zA-Z][a-zA-Z0-9-]*(?:\s|\/|>)/;
+const IMAGE_LINK_RE = /!\[[^\]]*\]\([^)]+\)|!\[\[[^\]]+\]\]/;
+const EMBED_TITLE_RE = /^\s*(?:#{1,6}\s*)?(?:figure|fig\.?|图)\s*(?:\d|[IVXLCDM])/i;
+
+export function detectEmbedLineType(raw: string): Exclude<EmbedLineType, "嵌入文本"> | undefined {
+  if (HTML_TAG_RE.test(raw)) return "嵌入HTML";
+  if (IMAGE_LINK_RE.test(raw)) return "嵌入链接";
+  if (EMBED_TITLE_RE.test(raw)) return "内嵌标题";
   return undefined;
 }
 
-/** Split a consecutive-text block into one image row per matching line. */
-export function imageRowsFromBlock(block: Candidate): Candidate[] {
+/** Split a consecutive-text block into one embed row per matching line. */
+export function embedRowsFromBlock(block: Candidate): Candidate[] {
   const lines = block.raw.replace(/\r\n?/g, "\n").split("\n");
   const start = block.range.line;
   const rows: Candidate[] = [];
   lines.forEach((line, offset) => {
-    const lineType = detectImageLineType(line);
+    const lineType = detectEmbedLineType(line);
     if (!lineType) return;
     rows.push({
       ...block,
       raw: line,
       preview: line.slice(0, 255),
       label: line.trim(),
-      typeLabel: "图片",
+      typeLabel: "嵌入块",
       lineType,
       chapterBoundaryState: undefined,
       baselinePreview: undefined,
       range: { line: start + offset, start: 0, end: line.length },
+    });
+  });
+  return rows;
+}
+
+/** Identify every image link and HTML line in a chapter file. */
+export function scanEmbedLines(text: string): Candidate[] {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const rows: Candidate[] = [];
+  lines.forEach((line, lineNumber) => {
+    const lineType = detectEmbedLineType(line);
+    if (!lineType) return;
+    rows.push({
+      id: `embed-${lineNumber}`,
+      kind: "regex",
+      label: line.trim(),
+      raw: line,
+      preview: line.slice(0, 255),
+      range: { line: lineNumber, start: 0, end: line.length },
+      typeLabel: "嵌入块",
+      lineType,
+      status: "候选",
     });
   });
   return rows;

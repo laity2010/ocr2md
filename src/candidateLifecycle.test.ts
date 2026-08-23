@@ -15,8 +15,8 @@ const rows: Candidate[] = [
     raw: "FIGURE 11.3 |",
     preview: "FIGURE 11.3 |",
     range: { line: 61, start: 0, end: 13 },
-    typeLabel: "图片",
-    lineType: "图片标题",
+    typeLabel: "嵌入块",
+    lineType: "内嵌标题",
     isWorkingCorrection: true,
   },
   {
@@ -26,8 +26,8 @@ const rows: Candidate[] = [
     raw: "FIGURE 11.3 | Valuation Challenges—Growth Companies",
     preview: "FIGURE 11.3 | Valuation Challenges—Growth Companies",
     range: { line: 61, start: 0, end: 51 },
-    typeLabel: "图片",
-    lineType: "图片标题",
+    typeLabel: "嵌入块",
+    lineType: "内嵌标题",
     isWorkingCorrection: true,
   },
 ];
@@ -35,7 +35,7 @@ const rows: Candidate[] = [
 const marked = markCandidatesDeleted(rows, new Set(["old-row"]));
 assert.strictEqual(marked[0].lineType, DELETED_LINE_TYPE);
 assert.strictEqual(marked[0].raw, rows[0].raw);
-assert.strictEqual(marked[1].lineType, "图片标题");
+assert.strictEqual(marked[1].lineType, "内嵌标题");
 assert.strictEqual(isDeletedCandidate(marked[0]), true);
 assert.deepStrictEqual(activeCandidates(marked).map((row) => row.id), ["new-row"]);
 

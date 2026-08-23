@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { detectImageLineType, imageRowsFromBlock, scanRegexMatches } from "./scanner";
+import { detectEmbedLineType, embedRowsFromBlock, scanEmbedLines, scanRegexMatches } from "./scanner";
 import type { Candidate } from "./types";
 
 const markdown = [
@@ -23,10 +23,13 @@ const images = scanRegexMatches(markdown, "!\\[[^\\]]*\\]\\(https?://[^\\s)]+\\)
 assert.strictEqual(images.length, 1);
 assert.strictEqual(images[0].range.line, 4);
 
-assert.strictEqual(detectImageLineType("FIGURE 11.3 | Valuation Challenges"), "图片标题");
-assert.strictEqual(detectImageLineType("![image](https://example.com/a.jpg)"), "图片链接");
-assert.strictEqual(detectImageLineType('<figure><img src="a.jpg"></figure>'), "图片HTML");
-assert.strictEqual(detectImageLineType("Ordinary paragraph"), undefined);
+assert.strictEqual(detectEmbedLineType("FIGURE 11.3 | Valuation Challenges"), "内嵌标题");
+assert.strictEqual(detectEmbedLineType("![image](https://example.com/a.jpg)"), "嵌入链接");
+assert.strictEqual(detectEmbedLineType("![[local.png]]"), "嵌入链接");
+assert.strictEqual(detectEmbedLineType('<figure><img src="a.jpg"></figure>'), "嵌入HTML");
+assert.strictEqual(detectEmbedLineType('<div class="callout">note</div>'), "嵌入HTML");
+assert.strictEqual(detectEmbedLineType("<https://example.com/a.jpg>"), undefined);
+assert.strictEqual(detectEmbedLineType("Ordinary paragraph"), undefined);
 
 const figureBlock: Candidate = {
   id: "block",
@@ -37,10 +40,27 @@ const figureBlock: Candidate = {
   range: { line: 92, start: 0, endLine: 93, end: 40 },
   typeLabel: "章节标题",
 };
-const split = imageRowsFromBlock(figureBlock);
+const split = embedRowsFromBlock(figureBlock);
 assert.deepStrictEqual(split.map((row) => [row.range.line, row.lineType, row.raw.split("\n").length]), [
-  [92, "图片标题", 1],
-  [93, "图片链接", 1],
+  [92, "内嵌标题", 1],
+  [93, "嵌入链接", 1],
 ]);
+assert.deepStrictEqual(split.map((row) => row.typeLabel), ["嵌入块", "嵌入块"]);
+
+const chapter = [
+  "Intro text",
+  "FIGURE 1.1 | Title",
+  "![image](https://cdn.example/a.jpg)",
+  '<iframe src="https://example.com"></iframe>',
+  "Plain sentence.",
+].join("\n");
+assert.deepStrictEqual(
+  scanEmbedLines(chapter).map((row) => [row.range.line, row.lineType]),
+  [
+    [1, "内嵌标题"],
+    [2, "嵌入链接"],
+    [3, "嵌入HTML"],
+  ],
+);
 
 console.log("scanner tests passed");

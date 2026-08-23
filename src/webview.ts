@@ -1,6 +1,6 @@
 import type { Candidate, ModuleName, SidebarState } from "./types";
 
-const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "图片"];
+const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块"];
 export const TABLE_COLUMNS = ["多选", "行号", "行类型", "预览"] as const;
 export const ANNOTATION_EXTRA_COLUMNS = ["注释号"] as const;
 export const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ["章节文件"] as const;
@@ -98,17 +98,17 @@ export function renderSidebar(state: SidebarState): string {
       "章节定界": ["1 级标题", "新增", "修改", "删除", DELETED],
       "章节标题": ["1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题", "非标题", DELETED],
       "注释": ["注释引用", "注释正文", "忽略", DELETED],
-      "图片": ["图片标题", "图片链接", "图片文本", "图片HTML", DELETED],
+      "嵌入块": ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本", DELETED],
     };
     const FILTER_OPTIONS = {
       "章节标题": ["层级标题行+增删改行", "全部", "层级标题行", "增删改行"],
       "注释": ["注释及引用+增删改行", "全部", "注释及引用", "增删改行"],
-      "图片": ["图片相关+增删改行", "全部", "图片相关", "增删改行"],
+      "嵌入块": ["嵌入相关+增删改行", "全部", "嵌入相关", "增删改行"],
     };
     const DEFAULT_FILTERS = {
       "章节标题": "层级标题行+增删改行",
       "注释": "注释及引用+增删改行",
-      "图片": "图片相关+增删改行",
+      "嵌入块": "嵌入相关+增删改行",
     };
     const DEFAULT_SORT_RULES = {
       "注释": [{ key: "number", direction: "asc" }, { key: "line", direction: "asc" }],
@@ -223,14 +223,14 @@ export function renderSidebar(state: SidebarState): string {
       const changed = rowWasChanged(row, moduleName);
       const heading = /^[1-6] 级标题$/.test(row.lineType || "");
       const annotation = ["注释引用", "注释正文"].includes(row.lineType || "");
-      const image = ["图片标题", "图片链接", "图片文本", "图片HTML"].includes(row.lineType || "");
+      const embed = ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"].includes(row.lineType || "");
       if (filter === "增删改行") return changed;
       if (filter === "层级标题行") return heading;
       if (filter === "注释及引用") return annotation;
-      if (filter === "图片相关") return image;
+      if (filter === "嵌入相关") return embed;
       if (moduleName === "章节标题") return heading || changed;
       if (moduleName === "注释") return annotation || changed;
-      if (moduleName === "图片") return image || changed;
+      if (moduleName === "嵌入块") return embed || changed;
       return true;
     }
 
@@ -472,7 +472,7 @@ export function renderSidebar(state: SidebarState): string {
       const meta = el("div", state.selectedFile ? state.selectedFile.label : "请先在目录中选择 Markdown 文件", "meta");
       app.append(meta);
       app.append(moduleToolbar());
-      if (state.activeModule === "注释" || state.activeModule === "图片") app.append(regexCard());
+      if (state.activeModule === "注释" || state.activeModule === "嵌入块") app.append(regexCard());
       if (FILTER_OPTIONS[state.activeModule]) app.append(filterToolbar());
       app.append(bulkToolbar());
       app.append(rowTable(rowsForModule()));
@@ -720,7 +720,7 @@ export function renderSidebar(state: SidebarState): string {
           : pair ? "pair-status matched" : "pair-status";
         previewCell.append(el("div", status, statusClass + " preview-detail"));
       }
-      if (state.activeModule === "图片" && candidate.localPath) {
+      if (state.activeModule === "嵌入块" && candidate.localPath) {
         previewCell.append(el("div", "本地路径：" + candidate.localPath, "preview-detail"));
       }
       previewCell.addEventListener("click", () => post("locateRow", { id: candidate.id }));

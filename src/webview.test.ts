@@ -9,12 +9,12 @@ const state: SidebarState = {
   activeModule: "章节定界",
   rows: [],
   annotationPairs: [],
-  moduleRegexPatterns: { "注释": "", "图片": "" },
-  moduleRegexPresets: { "注释": [], "图片": [] },
+  moduleRegexPatterns: { "注释": "", "嵌入块": "" },
+  moduleRegexPresets: { "注释": [], "嵌入块": [] },
 };
 
 const html = renderSidebar(state);
-for (const moduleName of ["章节定界", "章节标题", "注释", "图片"]) {
+for (const moduleName of ["章节定界", "章节标题", "注释", "嵌入块"]) {
   assert.ok(html.includes(moduleName), `missing module: ${moduleName}`);
 }
 for (const removedModule of ["未分类", "非法断行", "拼写检查", "文本块", "分句", "翻译设置"]) {
@@ -53,7 +53,8 @@ assert.ok(html.includes("整体偏移"), "chapter-file dialog must support numbe
 assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-file dialog must run from selected level-one headings");
 assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
 assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
-for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+增删改行", "图片相关+增删改行"]) {
+assert.ok(html.includes('"嵌入块": ["内嵌标题", "嵌入链接", "嵌入HTML", "嵌入文本"'), "embed module line types");
+for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+增删改行", "嵌入相关+增删改行"]) {
   assert.ok(html.includes(defaultFilter), `missing default module filter: ${defaultFilter}`);
 }
 assert.ok(
