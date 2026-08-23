@@ -667,8 +667,13 @@ class Ocr2mdExtension implements vscode.Disposable {
     const row = this.rows.find((candidate) => candidate.id === id);
     const target = this.modulePreviewPaths.get(this.activeModule)
       ?? row?.workingCopyPath
+      ?? this.chapterWorkingUri?.fsPath
       ?? row?.sourcePath;
-    if (!row || !target || !(await exists(vscode.Uri.file(target)))) return;
+    if (!row) return;
+    if (!target || !(await exists(vscode.Uri.file(target)))) {
+      void vscode.window.showWarningMessage("无法打开源文件。");
+      return;
+    }
     const editor = await this.showDocumentPair(vscode.Uri.file(target));
     const document = editor.document;
     const located = locateCandidate(document.getText(), row);

@@ -130,7 +130,12 @@ export function relocateRows(rows: Candidate[], documentText: string): Candidate
 
 export function locateCandidate(documentText: string, candidate: Candidate): SourceRange | undefined {
   const lines = splitDocumentLines(documentText);
-  const hits = candidate.raw ? findRawHits(documentText, candidate.raw) : [];
+  const stored = matchAtStoredLine(lines, candidate);
+  if (stored) return stored;
+
+  const raw = candidate.raw ?? "";
+  const skipGlobalSearch = raw.trim() === ">" || raw.length <= 1;
+  const hits = !skipGlobalSearch && raw ? findRawHits(documentText, raw) : [];
   if (hits.length) {
     hits.sort((left, right) => {
       const score = scoreHit(lines, candidate, right) - scoreHit(lines, candidate, left);
@@ -143,15 +148,54 @@ export function locateCandidate(documentText: string, candidate: Candidate): Sou
   const slot = findNeighborSlot(lines, candidate);
   if (slot) return slot;
 
+  if (candidate.lineType === "嵌入块首") {
+    const markers = lines
+      .map((text, line) => ({ text, line }))
+      .filter((entry) => entry.text.trim() === ">");
+    if (markers.length) {
+      markers.sort((left, right) => Math.abs(left.line - candidate.range.line) - Math.abs(right.line - candidate.range.line));
+      return { line: markers[0].line, start: 0, end: markers[0].text.length };
+    }
+  }
+
   if (candidate.range.line >= 0 && candidate.range.line < lines.length) {
     const line = lines[candidate.range.line];
-    if (candidate.raw && line.includes(candidate.raw)) {
-      const start = Math.max(0, line.indexOf(candidate.raw));
-      return { line: candidate.range.line, start, end: start + candidate.raw.length };
+    const first = raw.split("\n")[0];
+    if (first && line.includes(first)) {
+      const start = Math.max(0, line.indexOf(first));
+      return { line: candidate.range.line, start, end: start + first.length, endLine: storedEndLine(candidate, lines.length) };
     }
-    if (line === candidate.raw) {
-      return { line: candidate.range.line, start: 0, end: line.length };
-    }
+    if (line === raw) return { line: candidate.range.line, start: 0, end: line.length };
+  }
+  return undefined;
+}
+
+function storedEndLine(candidate: Candidate, lineCount: number): number | undefined {
+  const endLine = candidate.range.endLine;
+  if (endLine === undefined || endLine === candidate.range.line) return undefined;
+  if (endLine < candidate.range.line || endLine >= lineCount) return undefined;
+  return endLine;
+}
+
+function matchAtStoredLine(lines: string[], candidate: Candidate): SourceRange | undefined {
+  const line = candidate.range.line;
+  if (line < 0 || line >= lines.length) return undefined;
+  const text = lines[line];
+  if (candidate.lineType === "嵌入块首" && text.trim() === ">") {
+    return { line, start: 0, end: text.length };
+  }
+  const raw = candidate.raw ?? "";
+  if (!raw.includes("\n")) return undefined;
+  const first = raw.split("\n")[0];
+  if (first && (text === first || text.includes(first))) {
+    const start = Math.max(0, text.indexOf(first));
+    const endLine = storedEndLine(candidate, lines.length);
+    return {
+      line,
+      start,
+      endLine,
+      end: endLine === undefined ? start + first.length : (lines[endLine] ?? "").length,
+    };
   }
   return undefined;
 }

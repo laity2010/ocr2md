@@ -126,6 +126,10 @@ assert.strictEqual(secondSame?.line, 3);
 const locatedHeading = locateCandidate(promotedDoc, headingRows[0]);
 assert.strictEqual(locatedHeading?.line, 0);
 
+const gtDoc = ["<table>", ">", "<tr><td>x</td></tr>", "</table>"].join("\n");
+const gtRow = candidate(">", 1, { typeLabel: "嵌入块", lineType: "嵌入块首" });
+assert.strictEqual(locateCandidate(gtDoc, gtRow)?.line, 1, "embed block start must locate the > line, not a tag");
+
 const fileStart = attachLineIdentity(candidate("# Chapter", 0), original, context);
 assert.strictEqual(fileStart.anchorPreviousHash, hashText(FILE_START_ANCHOR));
 const fileEnd = attachLineIdentity(candidate("gamma", 3), original, context);
