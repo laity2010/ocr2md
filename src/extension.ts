@@ -55,6 +55,14 @@ import {
 
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "图片"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
+/** Left 2/3, right 1/3 split into source (top) and preview (bottom). */
+const PREVIEW_EDITOR_LAYOUT = {
+  orientation: 0,
+  groups: [
+    { size: 2 / 3 },
+    { size: 1 / 3, groups: [{ size: 1 / 2 }, { size: 1 / 2 }] },
+  ],
+};
 
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(new Ocr2mdExtension());
@@ -583,30 +591,30 @@ class Ocr2mdExtension implements vscode.Disposable {
   private async showDocumentPair(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<vscode.TextEditor> {
     const changedDocument = this.pairedDocumentPath !== uri.fsPath;
     if (changedDocument) {
-      await vscode.commands.executeCommand("workbench.action.editorLayoutTwoRows");
+      await vscode.commands.executeCommand("vscode.setEditorLayout", PREVIEW_EDITOR_LAYOUT);
     }
     const document = await vscode.workspace.openTextDocument(uri);
-    let editor = await vscode.window.showTextDocument(document, {
+    if (changedDocument) {
+      await vscode.window.showTextDocument(document, {
+        preview: false,
+        viewColumn: vscode.ViewColumn.Three,
+        preserveFocus: false,
+      });
+      await vscode.commands.executeCommand("markdown.showPreview");
+      this.pairedDocumentPath = uri.fsPath;
+    }
+    const editor = await vscode.window.showTextDocument(document, {
       preview: false,
-      viewColumn: vscode.ViewColumn.One,
+      viewColumn: vscode.ViewColumn.Two,
       preserveFocus: options.preserveFocus,
     });
     const duplicateSourceTabs = vscode.window.tabGroups.all.flatMap((group) =>
-      group.viewColumn === vscode.ViewColumn.One
+      group.viewColumn === vscode.ViewColumn.Two
         ? []
         : group.tabs.filter((tab) => tab.input instanceof vscode.TabInputText
           && tab.input.uri.fsPath === uri.fsPath),
     );
     if (duplicateSourceTabs.length) await vscode.window.tabGroups.close(duplicateSourceTabs, true);
-    if (changedDocument) {
-      await vscode.commands.executeCommand("markdown.showPreviewToSide", uri);
-      this.pairedDocumentPath = uri.fsPath;
-      editor = await vscode.window.showTextDocument(document, {
-        preview: false,
-        viewColumn: vscode.ViewColumn.One,
-        preserveFocus: options.preserveFocus,
-      });
-    }
     this.applyHeadingDecorations(editor);
     return editor;
   }
