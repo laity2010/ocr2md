@@ -10,6 +10,7 @@ import {
   chapterOriginalFileName,
   chapterOriginalPath,
   chapterOutputBaselinePath,
+  chapterCalibrationOutputDirectory,
   chapterSidecarPath,
   chapterStem,
   chapterWorkingCopyPath,
@@ -72,6 +73,10 @@ assert.strictEqual(
 assert.strictEqual(
   chapterImageDirectory(nestedOriginal),
   path.join("/ws", "chapters", "11 Chapter", "imgs"),
+);
+assert.strictEqual(
+  chapterCalibrationOutputDirectory(nestedOriginal),
+  path.join("/ws", "chapters", "11 Chapter", "output"),
 );
 assert.strictEqual(
   chapterAnnotationWorkingPath(nestedOriginal),

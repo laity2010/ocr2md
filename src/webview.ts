@@ -526,6 +526,7 @@ export function renderSidebar(state: SidebarState): string {
       } else if (state.activeModule === "章节标题") {
         toolbar.append(
           button("创建/打开章节工作稿", () => postKeepView("openChapterWorkingCopy"), "primary"),
+          button("按标定导出", () => postKeepView("exportByCalibration")),
           button("保存标定", () => postKeepView("saveAnnotations")),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
@@ -537,6 +538,7 @@ export function renderSidebar(state: SidebarState): string {
             sortRules = defaultSortRules("注释");
             postKeepView("matchAnnotationPairs");
           }, "primary"),
+          button("按标定导出", () => postKeepView("exportByCalibration")),
           button("保存标定", () => postKeepView("saveAnnotations")),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
@@ -553,6 +555,7 @@ export function renderSidebar(state: SidebarState): string {
         download.disabled = running;
         toolbar.append(
           download,
+          button("按标定导出", () => postKeepView("exportByCalibration")),
           button("保存标定", () => postKeepView("saveAnnotations"), "primary"),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );

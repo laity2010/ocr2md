@@ -31,6 +31,7 @@ import {
   relocateRows,
 } from "./rowIdentity";
 import { splitBlankLineBlocks } from "./atoms";
+import { exportByCalibration } from "./calibrationExport";
 import { extractImageUrl, safeImageName, shouldDownloadImage } from "./imageDownload";
 import { applyEmbedNumbers, detectEmbedLineType, mergeEmbedScan, scanRegexMatches } from "./scanner";
 import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
@@ -47,6 +48,7 @@ import {
   CHAPTER_BOUNDARY_WORKING_FILE,
   CHAPTER_CHANGED_PROPERTY,
   CHAPTER_IMAGE_DIRECTORY,
+  chapterCalibrationOutputDirectory,
   chapterAnnotationWorkingPath,
   chapterContentsDiffer,
   chapterDiffBaseline,
@@ -244,6 +246,9 @@ class Ocr2mdExtension implements vscode.Disposable {
         break;
       case "downloadImages":
         await this.downloadImages();
+        break;
+      case "exportByCalibration":
+        await this.exportCalibratedChapter();
         break;
       case "saveAnnotations":
         await this.saveSidecar();
@@ -841,6 +846,23 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   private patchImageRow(id: string, patch: Partial<Candidate>) {
     this.rows = this.rows.map((candidate) => candidate.id === id ? { ...candidate, ...patch } : candidate);
+  }
+
+  private async exportCalibratedChapter() {
+    const file = this.selectedFile;
+    const working = this.chapterWorkingUri;
+    if (!file || !working) {
+      void vscode.window.showWarningMessage("请先打开章节工作稿。");
+      return;
+    }
+    await this.reindexChapterWorkingCopy(await this.readWorkingText(working), { silent: true });
+    const markdown = exportByCalibration(this.selectedFileText, this.rows);
+    const directory = vscode.Uri.file(chapterCalibrationOutputDirectory(file.path));
+    const outputUri = vscode.Uri.joinPath(directory, `${path.parse(file.path).name}.md`);
+    await vscode.workspace.fs.createDirectory(directory);
+    await vscode.workspace.fs.writeFile(outputUri, Buffer.from(markdown, "utf8"));
+    await this.showDocumentPair(outputUri);
+    void vscode.window.showInformationMessage(`已按标定导出到 ${outputUri.fsPath}`);
   }
 
   private async openChapterWorkingCopy(options: { silent?: boolean } = {}) {

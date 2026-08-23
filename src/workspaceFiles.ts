@@ -159,6 +159,10 @@ export function chapterImageDirectory(originalPath: string): string {
   return path.join(path.dirname(originalPath), CHAPTER_IMAGE_DIRECTORY);
 }
 
+export function chapterCalibrationOutputDirectory(originalPath: string): string {
+  return path.join(path.dirname(originalPath), "output");
+}
+
 export function chapterAnnotationWorkingPath(originalPath: string): string {
   const parsed = path.parse(originalPath);
   return path.join(parsed.dir, `${parsed.name}.annotation.working.md`);
