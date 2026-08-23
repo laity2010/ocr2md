@@ -1,12 +1,16 @@
 import * as assert from "assert";
 import * as path from "path";
 import {
+  chapterContentsDiffer,
+  chapterDiffBaseline,
   chapterOutputBaselinePath,
   chapterWorkingCopyPath,
+  hasChapterChangedFrontmatter,
   hasChapterSplitFrontmatter,
   isChapterOutputPath,
   markdownFileKind,
   planChapterWorkingCopyInit,
+  withChapterChangedFrontmatter,
 } from "./workspaceFiles";
 
 const chapter = [
@@ -54,5 +58,28 @@ assert.deepStrictEqual(
   planChapterWorkingCopyInit({ workingExists: false, originalText: "copy me" }),
   { action: "create", workingText: "copy me" },
 );
+
+const exported = [
+  "---",
+  "ocr2md_chapter_split: true",
+  "ocr2md_chapter_file: \"11.md\"",
+  "---",
+  "",
+  "# Chapter 11",
+].join("\n");
+const markedChanged = withChapterChangedFrontmatter(exported, true);
+assert.strictEqual(hasChapterChangedFrontmatter(exported), false);
+assert.strictEqual(hasChapterChangedFrontmatter(markedChanged), true);
+assert.ok(markedChanged.includes("ocr2md_chapter_changed: true"));
+assert.ok(markedChanged.includes("# Chapter 11"));
+assert.strictEqual(hasChapterChangedFrontmatter(withChapterChangedFrontmatter(markedChanged, false)), false);
+assert.strictEqual(chapterContentsDiffer(exported, markedChanged), false);
+assert.strictEqual(chapterContentsDiffer(exported, exported.replace("# Chapter 11", "# Chapter 11 edited")), true);
+
+const workingUnmarked = exported.replace("# Chapter 11", "# Chapter 11 edited");
+const diffBaseline = chapterDiffBaseline(markedChanged, workingUnmarked);
+assert.strictEqual(hasChapterChangedFrontmatter(diffBaseline), false);
+assert.ok(diffBaseline.includes("# Chapter 11"));
+assert.ok(!diffBaseline.includes("ocr2md_chapter_changed"));
 
 console.log("workspaceFiles tests passed");

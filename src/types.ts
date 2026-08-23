@@ -51,6 +51,7 @@ export interface FileEntry {
   label: string;
   path: string;
   kind: "ocr" | "chapter" | "working";
+  changed?: boolean;
 }
 
 export interface RegexPreset {

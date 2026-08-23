@@ -34,11 +34,15 @@ import type {
 import { renderSidebar } from "./webview";
 import {
   CHAPTER_BOUNDARY_WORKING_FILE,
+  CHAPTER_CHANGED_PROPERTY,
+  chapterContentsDiffer,
+  chapterDiffBaseline,
   chapterOutputBaselinePath,
   chapterWorkingCopyPath,
   isChapterOutputPath,
   markdownFileKind,
   planChapterWorkingCopyInit,
+  withChapterChangedFrontmatter,
 } from "./workspaceFiles";
 
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "图片"];
@@ -74,6 +78,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   );
   private headingDecorationTimer: ReturnType<typeof setTimeout> | undefined;
   private imageDownloadProgress: ImageDownloadProgress | undefined;
+  private readonly chapterDecorations: ChapterChangeDecorationProvider;
 
   constructor() {
     this.directoryProvider = new DirectoryProvider(
@@ -85,10 +90,13 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.directoryView = vscode.window.createTreeView("ocr2md.directory", {
       treeDataProvider: this.directoryProvider,
     });
+    this.chapterDecorations = new ChapterChangeDecorationProvider(() => this.files);
     this.sidebarProvider = new SidebarProvider(() => this.sidebarState(), (message) => this.handleMessage(message));
 
     this.disposables.push(
       this.directoryView,
+      this.chapterDecorations,
+      vscode.window.registerFileDecorationProvider(this.chapterDecorations),
       ...this.headingDecorations,
       vscode.window.registerWebviewViewProvider("ocr2md.regex", this.sidebarProvider),
       vscode.commands.registerCommand("ocr2md.refreshFiles", () => this.refreshFiles()),
@@ -192,8 +200,9 @@ class Ocr2mdExtension implements vscode.Disposable {
       this.update();
       return;
     }
-    this.files = await this.discoverWorkspaceFiles(workspace);
+    this.files = await this.syncChapterChangeMarkers(workspace, await this.discoverWorkspaceFiles(workspace));
     this.directoryProvider.refresh();
+    this.chapterDecorations.refresh();
     this.update();
   }
 
@@ -644,7 +653,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     const previousTitles = this.rows.filter((row) => row.typeLabel === "章节标题" && rowBelongsToChapter(row, originalPath, uri.fsPath));
     const previousImages = this.rows.filter((row) => row.typeLabel === "图片" && rowBelongsToChapter(row, originalPath, uri.fsPath));
-    const changes = scanChapterBoundaryLines(baseline, current);
+    const changes = scanChapterBoundaryLines(chapterDiffBaseline(baseline, current), current);
     const currentChanges = changes.filter((entry) => entry.state !== "deleted");
     const sourcePath = originalPath ?? uri.fsPath;
     const blocks = scanChapterBlocks(current, uri.fsPath, workspace?.uri.fsPath, sourcePath).map((row) => {
@@ -696,7 +705,42 @@ class Ocr2mdExtension implements vscode.Disposable {
       ...titleRows,
       ...imageRows,
     ].sort(compareRows);
+    if (workspace && originalPath && isChapterOutputPath(workspace.uri.fsPath, originalPath)) {
+      await this.writeChapterChangedMarker(originalPath, chapterContentsDiffer(baseline, current));
+    }
     this.update();
+  }
+
+  private async syncChapterChangeMarkers(workspace: vscode.WorkspaceFolder, files: FileEntry[]): Promise<FileEntry[]> {
+    const next: FileEntry[] = [];
+    for (const file of files) {
+      if (file.kind !== "chapter" || !isChapterOutputPath(workspace.uri.fsPath, file.path)) {
+        next.push(file);
+        continue;
+      }
+      const originalUri = vscode.Uri.file(file.path);
+      const originalText = Buffer.from(await vscode.workspace.fs.readFile(originalUri)).toString("utf8");
+      const workingUri = vscode.Uri.file(chapterWorkingCopyPath(workspace.uri.fsPath, file.path));
+      const workingText = (await exists(workingUri))
+        ? Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8")
+        : undefined;
+      const changed = workingText !== undefined && chapterContentsDiffer(originalText, workingText);
+      const updated = withChapterChangedFrontmatter(originalText, changed);
+      if (updated !== originalText) await vscode.workspace.fs.writeFile(originalUri, Buffer.from(updated, "utf8"));
+      next.push({ ...file, changed });
+    }
+    return next;
+  }
+
+  private async writeChapterChangedMarker(originalPath: string, changed: boolean) {
+    const uri = vscode.Uri.file(originalPath);
+    if (!(await exists(uri))) return;
+    const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+    const updated = withChapterChangedFrontmatter(text, changed);
+    if (updated !== text) await vscode.workspace.fs.writeFile(uri, Buffer.from(updated, "utf8"));
+    this.files = this.files.map((file) => file.path === originalPath ? { ...file, changed } : file);
+    this.directoryProvider.refresh();
+    this.chapterDecorations.refresh();
   }
 
   private async openChapterBoundaryWork() {
@@ -909,6 +953,27 @@ class SidebarProvider implements vscode.WebviewViewProvider {
   }
 }
 
+class ChapterChangeDecorationProvider implements vscode.FileDecorationProvider, vscode.Disposable {
+  private readonly emitter = new vscode.EventEmitter<vscode.Uri | vscode.Uri[] | undefined>();
+  readonly onDidChangeFileDecorations = this.emitter.event;
+
+  constructor(private readonly files: () => FileEntry[]) {}
+
+  refresh() {
+    this.emitter.fire(undefined);
+  }
+
+  provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+    const file = this.files().find((entry) => entry.path === uri.fsPath);
+    if (!file?.changed) return undefined;
+    return new vscode.FileDecoration("改", "工作稿相对章节原件已有变动", new vscode.ThemeColor("gitDecoration.modifiedResourceForeground"));
+  }
+
+  dispose() {
+    this.emitter.dispose();
+  }
+}
+
 type DirectoryNodeKind = "workspace" | "ocr-group" | "chapters-group" | "ocr-file" | "chapter-file" | "chapter-module";
 
 class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
@@ -999,9 +1064,14 @@ class DirectoryItem extends vscode.TreeItem {
 
   static chapterFile(file: FileEntry, label: string, selected: boolean) {
     const item = new DirectoryItem(label, "chapter-file", vscode.TreeItemCollapsibleState.Collapsed, file);
-    item.description = selected ? "当前章节" : undefined;
-    item.tooltip = file.path;
-    item.iconPath = new vscode.ThemeIcon("book");
+    item.resourceUri = vscode.Uri.file(file.path);
+    item.description = file.changed
+      ? (selected ? "当前章节 · 已变动" : "已变动")
+      : (selected ? "当前章节" : undefined);
+    item.tooltip = file.changed ? `${file.path}\n工作稿相对章节原件已有变动` : file.path;
+    item.iconPath = file.changed
+      ? new vscode.ThemeIcon("book", new vscode.ThemeColor("gitDecoration.modifiedResourceForeground"))
+      : new vscode.ThemeIcon("book");
     return item;
   }
 
@@ -1179,7 +1249,7 @@ function outputFileName(value: string): string {
 
 function withChapterFrontmatter(markdown: string, chapterFile: string, source: string): string {
   const body = markdown.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").replace(/^\s+/, "");
-  return `---\nocr2md_chapter_split: true\nocr2md_chapter_split_at: ${new Date().toISOString()}\nocr2md_chapter_file: ${JSON.stringify(chapterFile)}\nocr2md_chapter_source: ${JSON.stringify(source)}\n---\n\n${body}`;
+  return `---\nocr2md_chapter_split: true\nocr2md_chapter_split_at: ${new Date().toISOString()}\nocr2md_chapter_file: ${JSON.stringify(chapterFile)}\nocr2md_chapter_source: ${JSON.stringify(source)}\n${CHAPTER_CHANGED_PROPERTY}: false\n---\n\n${body}`;
 }
 
 function extractImageUrl(value: string): string | undefined {
