@@ -12,10 +12,15 @@ import {
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
-  isDeletedCandidate,
   markCandidatesDeleted,
 } from "./candidateLifecycle";
 import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS } from "./regexPresets";
+import {
+  attachLineIdentity,
+  attachScanIdentities,
+  locateCandidate,
+  reconcileRows,
+} from "./rowIdentity";
 import { detectImageLineType, scanRegexMatches } from "./scanner";
 import type {
   AnnotationPair,
@@ -274,14 +279,11 @@ class Ocr2mdExtension implements vscode.Disposable {
     const source = sourcePath ?? workingPath;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const patterns = splitPatterns(this.moduleRegexPatterns[moduleName] ?? "");
-    const scanned = new Map<string, Candidate>();
+    const unique = new Map<string, Candidate>();
     for (const pattern of patterns) {
       for (const candidate of scanRegexMatches(text, pattern)) {
         const row: Candidate = {
           ...candidate,
-          id: stableRowId(moduleName, source, candidate),
-          rowId: stableRowId(moduleName, source, candidate),
-          atomId: `atom-${candidateHash(`${source}\0${candidate.range.line}\0${candidate.range.start}\0${candidate.raw}`)}`,
           typeLabel: moduleName,
           lineType: defaultLineType(moduleName, candidate.raw),
           regexSource: pattern,
@@ -290,11 +292,12 @@ class Ocr2mdExtension implements vscode.Disposable {
           sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
           workingCopyPath: workingPath,
         };
-        scanned.set(candidatePositionKey(row), row);
+        unique.set(candidatePositionKey(row), row);
       }
     }
+    const scanned = attachScanIdentities([...unique.values()], text, { moduleName, sourcePath: source });
     const previous = this.rows.filter((row) => row.typeLabel === moduleName && row.sourcePath === source);
-    const reconciled = reconcileRows(previous, [...scanned.values()]);
+    const reconciled = reconcileRows(previous, scanned);
     this.rows = [
       ...this.rows.filter((row) => !(row.typeLabel === moduleName && row.sourcePath === source)),
       ...reconciled,
@@ -328,9 +331,11 @@ class Ocr2mdExtension implements vscode.Disposable {
       const uri = vscode.Uri.file(target);
       const document = await vscode.workspace.openTextDocument(uri);
       const edit = new vscode.WorkspaceEdit();
+      const documentText = document.getText();
       for (const row of targetRows) {
-        if (row.range.line >= document.lineCount) continue;
-        const sourceLine = document.lineAt(row.range.line);
+        const located = locateCandidate(documentText, row);
+        if (!located || located.line >= document.lineCount) continue;
+        const sourceLine = document.lineAt(located.line);
         const content = sourceLine.text.replace(/^ {0,3}#{1,6}(?:\s+|$)/, "");
         const match = /^([1-6]) 级标题$/.exec(lineType);
         const replacement = match ? `${"#".repeat(Number(match[1]))} ${content}` : content;
@@ -413,8 +418,9 @@ class Ocr2mdExtension implements vscode.Disposable {
     const line = editor.document.lineAt(editor.selection.active.line);
     const moduleName = this.activeModule;
     const sourcePath = this.selectedFile?.path ?? editor.document.uri.fsPath;
-    const row: Candidate = {
-      id: `manual-${randomUUID()}`,
+    const manualId = `manual-${randomUUID()}`;
+    const attached = attachLineIdentity({
+      id: manualId,
       kind: "regex",
       label: line.text.trim(),
       raw: line.text,
@@ -428,7 +434,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       sourcePath,
       sourceLabel: path.basename(sourcePath),
       status: "候选",
-    };
+    }, editor.document.getText(), { moduleName, sourcePath });
+    const row: Candidate = { ...attached, id: manualId, isWorkingCorrection: true };
     this.rows = [...this.rows, row].sort(compareRows);
     this.modulePreviewPaths.set(moduleName, editor.document.uri.fsPath);
     this.rebuildAnnotationPairs();
@@ -443,12 +450,19 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (!row || !target || !(await exists(vscode.Uri.file(target)))) return;
     const editor = await this.showDocumentPair(vscode.Uri.file(target));
     const document = editor.document;
-    const line = Math.min(row.range.line, Math.max(0, document.lineCount - 1));
-    const start = Math.min(row.range.start, document.lineAt(line).text.length);
-    const end = Math.min(Math.max(start, row.range.end), document.lineAt(line).text.length);
-    const range = new vscode.Range(line, start, line, end);
+    const located = locateCandidate(document.getText(), row);
+    if (!located) {
+      void vscode.window.showWarningMessage("无法在当前文档中定位该行。");
+      return;
+    }
+    const startLine = Math.min(located.line, Math.max(0, document.lineCount - 1));
+    const endLine = Math.min(located.endLine ?? located.line, Math.max(0, document.lineCount - 1));
+    const start = Math.min(located.start, document.lineAt(startLine).text.length);
+    const end = Math.min(Math.max(start, located.end), document.lineAt(endLine).text.length);
+    const range = new vscode.Range(startLine, start, endLine, end);
     editor.selection = new vscode.Selection(range.start, range.end);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    this.rows = this.rows.map((candidate) => candidate.id === row.id ? { ...candidate, range: located } : candidate);
   }
 
   private async showDocumentPair(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<vscode.TextEditor> {
@@ -587,19 +601,28 @@ class Ocr2mdExtension implements vscode.Disposable {
       const change = currentChanges.find((entry) => entry.line >= row.range.line && entry.line <= endLine);
       return { ...row, chapterBoundaryState: change?.state ?? "heading", baselinePreview: change?.baselineText };
     });
-    const titleBlocks = blocks.filter((row) => !detectImageLineType(row.raw));
-    const imageBlocks = blocks.flatMap((row) => {
-      const lineType = detectImageLineType(row.raw);
-      return lineType ? [{ ...row, typeLabel: "图片" as const, lineType }] : [];
-    });
+    const identityContext = { sourcePath: uri.fsPath };
+    const titleBlocks = attachScanIdentities(
+      blocks.filter((row) => !detectImageLineType(row.raw)),
+      current,
+      { moduleName: "章节标题", ...identityContext },
+    );
+    const imageBlocks = attachScanIdentities(
+      blocks.flatMap((row) => {
+        const lineType = detectImageLineType(row.raw);
+        return lineType ? [{ ...row, typeLabel: "图片" as const, lineType }] : [];
+      }),
+      current,
+      { moduleName: "图片", ...identityContext },
+    );
     const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks);
     const imageRows = reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks);
     const lines = current.replace(/\r\n?/g, "\n").split("\n");
     for (const entry of changes.filter((candidate) => candidate.state === "deleted")) {
       const raw = entry.baselineText ?? "";
       const imageLineType = detectImageLineType(raw);
-      const deleted: Candidate = {
-        id: `chapter-deleted-${candidateHash(`${uri.fsPath}\0${entry.line}\0${raw}`)}`,
+      const deleted = attachLineIdentity({
+        id: `chapter-deleted-${candidateHash(`${uri.fsPath}\0${raw}`)}`,
         kind: "regex",
         label: raw.trim() || `L${entry.line + 1}`,
         raw,
@@ -613,7 +636,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         sourcePath: uri.fsPath,
         sourceLabel: workspace ? path.relative(workspace.uri.fsPath, uri.fsPath) : path.basename(uri.fsPath),
         status: "候选",
-      };
+      }, current, { moduleName: imageLineType ? "图片" : "章节标题", sourcePath: uri.fsPath });
       (imageLineType ? imageRows : titleRows).push(deleted);
     }
     this.rows = [
@@ -695,30 +718,29 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (!(await exists(baselineUri)) || !(await exists(working))) return;
     const baseline = Buffer.from(await vscode.workspace.fs.readFile(baselineUri)).toString("utf8");
     const current = Buffer.from(await vscode.workspace.fs.readFile(working)).toString("utf8");
-    const previousFiles = new Map(this.rows.filter((row) => row.typeLabel === "章节定界" && row.chapterFile).map((row) => [row.id, row.chapterFile!]));
+    const previous = this.rows.filter((row) => row.typeLabel === "章节定界");
     const lines = current.replace(/\r\n?/g, "\n").split("\n");
-    const rows: Candidate[] = scanChapterBoundaryLines(baseline, current).map((entry) => {
+    const scanned = attachScanIdentities(scanChapterBoundaryLines(baseline, current).map((entry) => {
       const raw = entry.text || entry.baselineText || "";
       const heading = /^ {0,3}#(?!#)(?:\s+|$)/.test(entry.text);
       return {
         id: entry.id,
-        kind: "regex",
+        kind: "regex" as const,
         label: raw.trim() || `L${entry.line + 1}`,
         raw,
         preview: raw,
         range: { line: Math.min(entry.line, Math.max(0, lines.length - 1)), start: 0, end: entry.state === "deleted" ? 0 : raw.length },
-        typeLabel: "章节定界",
+        typeLabel: "章节定界" as const,
         lineType: heading ? "1 级标题" : boundaryStateLabel(entry.state),
-        chapterFile: previousFiles.get(entry.id),
         chapterBoundaryState: entry.state,
         baselinePreview: entry.baselineText,
         workingCopyPath: working.fsPath,
         sourcePath: working.fsPath,
         sourceLabel: path.basename(working.fsPath),
-        status: "候选",
+        status: "候选" as const,
       };
-    });
-    this.rows = [...this.rows.filter((row) => row.typeLabel !== "章节定界"), ...rows].sort(compareRows);
+    }), current, { moduleName: "章节定界", sourcePath: working.fsPath });
+    this.rows = [...this.rows.filter((row) => row.typeLabel !== "章节定界"), ...reconcileRows(previous, scanned)].sort(compareRows);
     this.selectedFileText = current;
     this.update();
   }
@@ -1011,36 +1033,6 @@ function toSidecarRow(row: Candidate): SidecarRow {
   return { ...rest, line: range.line, start: range.start, endLine: range.endLine, end: range.end };
 }
 
-function reconcileRows(previous: Candidate[], scanned: Candidate[]): Candidate[] {
-  const unused = new Set(previous.map((_, index) => index));
-  const result = scanned.map((candidate) => {
-    const match = [...unused].find((index) => {
-      const old = previous[index];
-      return old.range.line === candidate.range.line && old.range.start === candidate.range.start && old.raw === candidate.raw;
-    });
-    if (match === undefined) return candidate;
-    unused.delete(match);
-    const old = previous[match];
-    return {
-      ...candidate,
-      id: old.id,
-      rowId: old.rowId ?? old.id,
-      atomId: old.atomId,
-      lineType: old.lineType ?? candidate.lineType,
-      chapterFile: old.chapterFile,
-      localPath: old.localPath,
-      isWorkingCorrection: old.isWorkingCorrection,
-    };
-  });
-  for (const index of unused) {
-    const old = previous[index];
-    if (isDeletedCandidate(old)
-      || old.isWorkingCorrection
-      || ["added", "modified", "deleted"].includes(old.chapterBoundaryState ?? "")) result.push(old);
-  }
-  return result.sort(compareRows);
-}
-
 function scanChapterBlocks(text: string, workingPath: string, workspaceRoot?: string): Candidate[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const rows: Candidate[] = [];
@@ -1077,15 +1069,17 @@ function scanChapterBlocks(text: string, workingPath: string, workspaceRoot?: st
 function applyAnnotationCorrections(text: string, rows: Candidate[]): string {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   for (const row of activeCandidates(rows)) {
-    const line = lines[row.range.line];
-    if (line === undefined) continue;
+    const located = locateCandidate(text, row);
+    const lineNumber = located?.line;
+    if (lineNumber === undefined || lines[lineNumber] === undefined) continue;
+    const line = lines[lineNumber];
     const number = row.annotationNumber ?? annotationNumber(row.raw);
     if (!number) continue;
     if (row.lineType === "注释引用") {
       const pattern = new RegExp(`<sup>\\s*\\(?\\s*${escapeRegex(number)}\\s*\\)?\\s*</sup>|\\[\\*${escapeRegex(number)}\\]`, "i");
-      lines[row.range.line] = line.replace(pattern, `[^${number}]`);
+      lines[lineNumber] = line.replace(pattern, `[^${number}]`);
     } else if (row.lineType === "注释正文") {
-      lines[row.range.line] = line.replace(/^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/, `[^${number}]: `);
+      lines[lineNumber] = line.replace(/^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/, `[^${number}]: `);
     }
   }
   return lines.join("\n");
@@ -1108,10 +1102,6 @@ function annotationNumber(text: string): string | undefined {
     ?? /\[\^(\d+)\](?!:)/.exec(text)?.[1]
     ?? /\[\*(\d+)\]/.exec(text)?.[1]
     ?? /^\s*(?:\[\^(\d+)\]:|(\d+)\.|\*(\d+))\s+/.exec(text)?.slice(1).find(Boolean);
-}
-
-function stableRowId(moduleName: ModuleName, sourcePath: string, row: Candidate): string {
-  return `row-${candidateHash(`${moduleName}\0${sourcePath}\0${row.range.line}\0${row.range.start}\0${row.raw}`)}`;
 }
 
 function candidatePositionKey(row: Candidate): string {
