@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { renderSidebar, TABLE_COLUMNS } from "./webview";
+import { ANNOTATION_EXTRA_COLUMNS, renderSidebar, TABLE_COLUMNS } from "./webview";
 import type { SidebarState } from "./types";
 
 const state: SidebarState = {
@@ -21,6 +21,8 @@ for (const removedModule of ["未分类", "非法断行", "拼写检查", "文�
   assert.ok(!html.includes(removedModule), `removed module leaked into UI: ${removedModule}`);
 }
 assert.deepStrictEqual(TABLE_COLUMNS, ["多选", "行号", "行类型", "预览"]);
+assert.ok(!TABLE_COLUMNS.includes("注释号" as typeof TABLE_COLUMNS[number]), "annotation number is not a shared table column");
+assert.deepStrictEqual(ANNOTATION_EXTRA_COLUMNS, ["注释号"]);
 for (const column of TABLE_COLUMNS) {
   assert.ok(html.includes(column), `missing table column: ${column}`);
 }
@@ -34,7 +36,10 @@ assert.ok(
   html.includes('"注释": [{ key: "number", direction: "asc" }, { key: "line", direction: "asc" }]'),
   "annotation module default sort must be number then line",
 );
-assert.ok(html.includes('sortableHeader("注释号", "number", "number-column")'), "annotation number column is missing");
+assert.ok(
+  html.includes('if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号"))'),
+  "annotation number column must be gated to the annotation module",
+);
 for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+增删改行", "图片相关+增删改行"]) {
   assert.ok(html.includes(defaultFilter), `missing default module filter: ${defaultFilter}`);
 }

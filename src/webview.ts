@@ -2,6 +2,7 @@ import type { Candidate, ModuleName, SidebarState } from "./types";
 
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "图片"];
 export const TABLE_COLUMNS = ["多选", "行号", "行类型", "预览"] as const;
+export const ANNOTATION_EXTRA_COLUMNS = ["注释号"] as const;
 
 export function renderSidebar(state: SidebarState): string {
   const encoded = escapeScriptJson(state);
@@ -69,6 +70,7 @@ export function renderSidebar(state: SidebarState): string {
     const vscode = acquireVsCodeApi();
     const state = ${encoded};
     const MODULES = ${JSON.stringify(MODULES)};
+    const ANNOTATION_EXTRA_COLUMNS = ${JSON.stringify(ANNOTATION_EXTRA_COLUMNS)};
     const DELETED = "已删除";
     const LINE_TYPES = {
       "章节定界": ["1 级标题", "新增", "修改", "删除", DELETED],
@@ -429,7 +431,9 @@ export function renderSidebar(state: SidebarState): string {
       });
       selectCell.append(selectAll, document.createTextNode(" 多选"));
       headRow.append(selectCell, sortableHeader("行号", "line", "line-column"));
-      if (state.activeModule === "注释") headRow.append(sortableHeader("注释号", "number", "number-column"));
+      if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号")) {
+        headRow.append(sortableHeader("注释号", "number", "number-column"));
+      }
       headRow.append(
         sortableHeader("行类型", "lineType"),
         sortableHeader("预览", "preview"),
