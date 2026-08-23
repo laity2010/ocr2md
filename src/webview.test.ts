@@ -69,6 +69,10 @@ assert.ok(html.includes("persisted.selectedIds"), "multi-select must survive hos
 assert.ok(html.includes("clearSelection"), "batch line-type changes must clear multi-select without dropping scroll");
 assert.ok(html.includes("syncSelectionChrome()"), "checkbox toggles must not rebuild the table");
 assert.ok(!html.includes("selected.add(candidate.id); else selected.delete(candidate.id);\n        render();"), "checkbox change must not call render()");
+assert.ok(
+  html.includes('["added", "modified", "deleted"].includes(row.chapterBoundaryState)'),
+  "add/modify/delete coloring is a shared table filter, not module-specific",
+);
 assert.ok(html.includes('if (candidate.chapterBoundaryState === "added") row.classList.add("added");'), "added rows must be colored");
 assert.ok(html.includes('if (candidate.chapterBoundaryState === "modified") row.classList.add("modified");'), "modified rows must be colored");
 assert.ok(html.includes('if (candidate.chapterBoundaryState === "deleted") row.classList.add("removed");'), "deleted rows must be colored");

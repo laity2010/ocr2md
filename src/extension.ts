@@ -307,12 +307,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     if (document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
-      const current = document.getText();
-      this.shiftWorkingCopyRows(current);
-      await this.refreshChapterTitleRows(document.uri, { currentText: current });
-      if (this.activeModule === "注释" || this.activeModule === "图片") {
-        await this.scanCurrentModule(this.activeModule);
-      }
+      await this.syncTableToWorkingCopy(document.uri, document.getText(), { writeMarker: true });
       return;
     }
     if (document.uri.fsPath === this.annotationWorkingUri?.fsPath) {
@@ -328,17 +323,25 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
   }
 
-  private async scanCurrentModule(moduleName: "注释" | "图片") {
+  private async scanCurrentModule(moduleName: "注释" | "图片", options: { silent?: boolean } = {}) {
     if (!this.selectedFile) return;
     const workingPath = this.chapterWorkingUri?.fsPath ?? this.selectedFile.path;
     const text = this.chapterWorkingUri
       ? await this.readWorkingText(this.chapterWorkingUri)
       : this.selectedFileText;
     this.selectedFileText = text;
-    await this.scanModuleText(moduleName, text, workingPath, this.selectedFile.path);
+    await this.scanModuleText(moduleName, text, workingPath, this.selectedFile.path, { silent: true });
+    this.rows = await this.applyWorkingCopyDiff(this.rows, text);
+    if (!options.silent) this.update();
   }
 
-  private async scanModuleText(moduleName: "注释" | "图片", text: string, workingPath: string, sourcePath?: string) {
+  private async scanModuleText(
+    moduleName: "注释" | "图片",
+    text: string,
+    workingPath: string,
+    sourcePath?: string,
+    options: { silent?: boolean } = {},
+  ) {
     this.modulePreviewPaths.set(moduleName, workingPath);
     const source = sourcePath ?? workingPath;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -369,21 +372,23 @@ class Ocr2mdExtension implements vscode.Disposable {
       const extras = previous.filter((row) =>
         !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
       reconciled = dedupeImageRows([...reconciled, ...extras]);
-      reconciled = await this.applyWorkingCopyDiff(reconciled, text);
     }
     this.rows = [
       ...this.rows.filter((row) => !(row.typeLabel === moduleName && row.sourcePath === source)),
       ...reconciled,
     ].sort(compareRows);
     if (moduleName === "注释") this.rebuildAnnotationPairs();
-    this.update();
+    if (!options.silent) this.update();
   }
 
   private async applyWorkingCopyDiff(rows: Candidate[], current: string): Promise<Candidate[]> {
     const baseline = await this.readChapterOriginalText();
     if (baseline === undefined) return rows;
+    const workingPath = this.chapterWorkingUri?.fsPath ?? "";
+    const originalPath = this.selectedFile?.path;
     const changes = scanChapterBoundaryLines(chapterDiffBaseline(baseline, current), current);
-    return rows.map((row) => applyChangeState(row, changes));
+    return rows.map((row) =>
+      rowBelongsToChapter(row, originalPath, workingPath) ? applyChangeState(row, changes) : row);
   }
 
   private async readWorkingText(uri: vscode.Uri, override?: string): Promise<string> {
@@ -418,14 +423,23 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.selectedFileText = current;
   }
 
+  private async syncTableToWorkingCopy(uri: vscode.Uri, current: string, options: { writeMarker?: boolean } = {}) {
+    this.shiftWorkingCopyRows(current);
+    await this.refreshChapterTitleRows(uri, {
+      writeMarker: options.writeMarker,
+      currentText: current,
+      silent: true,
+    });
+    if (this.activeModule === "注释" || this.activeModule === "图片") {
+      await this.scanCurrentModule(this.activeModule, { silent: true });
+    }
+    this.rows = await this.applyWorkingCopyDiff(this.rows, current);
+    this.update();
+  }
+
   private async syncWorkingCopyTable(document: vscode.TextDocument) {
     if (document.uri.fsPath !== this.chapterWorkingUri?.fsPath) return;
-    const current = document.getText();
-    this.shiftWorkingCopyRows(current);
-    await this.refreshChapterTitleRows(document.uri, { writeMarker: false, currentText: current });
-    if (this.activeModule === "注释" || this.activeModule === "图片") {
-      await this.scanCurrentModule(this.activeModule);
-    }
+    await this.syncTableToWorkingCopy(document.uri, document.getText(), { writeMarker: false });
   }
 
   private async setRowsLineType(ids: string[], lineType: string) {
@@ -710,7 +724,10 @@ class Ocr2mdExtension implements vscode.Disposable {
     return { workingUri, workingText: plan.workingText };
   }
 
-  private async refreshChapterTitleRows(uri: vscode.Uri, options: { writeMarker?: boolean; currentText?: string } = {}) {
+  private async refreshChapterTitleRows(
+    uri: vscode.Uri,
+    options: { writeMarker?: boolean; currentText?: string; silent?: boolean } = {},
+  ) {
     if (!(await exists(uri)) && options.currentText === undefined) return;
     const workspace = vscode.workspace.getWorkspaceFolder(uri) ?? vscode.workspace.workspaceFolders?.[0];
     const current = await this.readWorkingText(uri, options.currentText);
@@ -775,7 +792,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (options.writeMarker !== false && workspace && originalPath && isChapterOutputPath(workspace.uri.fsPath, originalPath)) {
       await this.writeChapterChangedMarker(originalPath, chapterContentsDiffer(baseline, current));
     }
-    this.update();
+    if (!options.silent) this.update();
   }
 
   private async syncChapterChangeMarkers(workspace: vscode.WorkspaceFolder, files: FileEntry[]): Promise<FileEntry[]> {
