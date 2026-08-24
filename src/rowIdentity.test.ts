@@ -151,6 +151,36 @@ const gtDoc = ["<table>", ">", "<tr><td>x</td></tr>", "</table>"].join("\n");
 const gtRow = candidate(">", 1, { typeLabel: "嵌入块", lineType: "嵌入块首" });
 assert.strictEqual(locateCandidate(gtDoc, gtRow)?.line, 1, "embed block start must locate the > line, not a tag");
 
+const transEmbedRaw = [
+  ">",
+  "FIGURE 1.1 | Demo",
+  "内嵌图片链接: ![[imgs/demo.png]]",
+  "><embed id=01></embed>",
+].join("\n");
+const transEmbedDoc = ["intro", transEmbedRaw, "<br>", "tail"].join("\n");
+const transEmbedBlock = candidate(transEmbedRaw, 1, {
+  typeLabel: "文本块",
+  lineType: "内嵌",
+  range: { line: 1, start: 0, endLine: 4, end: "><embed id=01></embed>".length },
+});
+assert.deepStrictEqual(
+  locateCandidate(transEmbedDoc, transEmbedBlock),
+  { line: 1, start: 0, endLine: 4, end: "><embed id=01></embed>".length },
+  "trans 内嵌文本块必须按完整块定位，不能被首行 > 的嵌入块特判拦截",
+);
+
+const repeatedSentenceDoc = "Same sentence. Middle. Same sentence.";
+const repeatedSentence = candidate("Same sentence.", 0, {
+  typeLabel: "分句",
+  lineType: "文本",
+  range: { line: 0, start: 23, end: 37 },
+});
+assert.deepStrictEqual(
+  locateCandidate(repeatedSentenceDoc, repeatedSentence),
+  { line: 0, start: 23, endLine: undefined, end: 37 },
+  "同一行有重复句子时，分句定位必须优先匹配保存的字符起点",
+);
+
 const figureCaption = "FIGURE 12.1 | Valuation Challenges—Mature Businesses";
 const figureBeforeMarker = [
   "In sum, as can be seen in figure 12.1.",

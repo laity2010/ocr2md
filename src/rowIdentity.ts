@@ -160,6 +160,17 @@ function nearestUnclaimedMarker(lines: string[], hint: number, claimed: Readonly
 
 export function locateCandidate(documentText: string, candidate: Candidate): SourceRange | undefined {
   const lines = splitDocumentLines(documentText);
+  if (candidate.typeLabel === "文本块" || candidate.typeLabel === "分句") {
+    const raw = (candidate.raw ?? "").replace(/\r\n?/g, "\n");
+    const hits = raw ? findRawHits(documentText, raw) : [];
+    if (hits.length) {
+      hits.sort((left, right) =>
+        Math.abs(left.line - candidate.range.line) - Math.abs(right.line - candidate.range.line)
+        || Math.abs(left.start - candidate.range.start) - Math.abs(right.start - candidate.range.start)
+      );
+      return hits[0];
+    }
+  }
   const stored = matchAtStoredLine(lines, candidate);
   if (stored && rangeFitsCandidate(lines, stored, candidate)) return stored;
 

@@ -11,17 +11,20 @@ import {
   chapterOriginalPath,
   chapterOutputBaselinePath,
   chapterCalibrationOutputDirectory,
+  chapterTransOutputPath,
   chapterSidecarPath,
   chapterStem,
   chapterWorkingCopyPath,
   hasChapterChangedFrontmatter,
   hasChapterSplitFrontmatter,
+  hasFormatCalibratedFrontmatter,
   isCanonicalChapterOriginal,
   isChapterDerivedMarkdown,
   isChapterOutputPath,
   markdownFileKind,
   planChapterWorkingCopyInit,
   withChapterChangedFrontmatter,
+  withFormatCalibratedFrontmatter,
 } from "./workspaceFiles";
 
 const chapter = [
@@ -79,6 +82,10 @@ assert.strictEqual(
   path.join("/ws", "chapters", "11 Chapter", "output"),
 );
 assert.strictEqual(
+  chapterTransOutputPath("/ws", nestedOriginal),
+  path.join("/ws", "trans", "11 Chapter", "11 Chapter.md"),
+);
+assert.strictEqual(
   chapterAnnotationWorkingPath(nestedOriginal),
   path.join("/ws", "chapters", "11 Chapter", "11 Chapter.annotation.working.md"),
 );
@@ -126,5 +133,13 @@ const diffBaseline = chapterDiffBaseline(markedChanged, workingUnmarked);
 assert.strictEqual(hasChapterChangedFrontmatter(diffBaseline), false);
 assert.ok(diffBaseline.includes("# Chapter 11"));
 assert.ok(!diffBaseline.includes("ocr2md_chapter_changed"));
+
+const calibrated = withFormatCalibratedFrontmatter(exported);
+assert.strictEqual(hasFormatCalibratedFrontmatter(calibrated), true);
+assert.ok(calibrated.includes("ocr2md_format_calibrated: true"));
+assert.ok(calibrated.includes("ocr2md_chapter_split: true"), "existing chapter YAML must be preserved");
+const calibratedWithoutYaml = withFormatCalibratedFrontmatter("# Plain chapter\n");
+assert.strictEqual(hasFormatCalibratedFrontmatter(calibratedWithoutYaml), true);
+assert.ok(calibratedWithoutYaml.startsWith("---\nocr2md_format_calibrated: true\n---\n\n# Plain chapter"));
 
 console.log("workspaceFiles tests passed");

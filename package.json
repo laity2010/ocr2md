@@ -18,6 +18,8 @@
     "onCommand:ocr2md.refreshFiles",
     "onCommand:ocr2md.pickFolder",
     "onCommand:ocr2md.openMarkdownFile",
+    "onCommand:ocr2md.openTransChapter",
+    "onCommand:ocr2md.openTranslationService",
     "onCommand:ocr2md.addCurrentLineToModule",
     "onCommand:ocr2md.openChapterBoundaryWork",
     "onCommand:ocr2md.openChapterWorkingCopy",
@@ -40,6 +42,14 @@
       {
         "command": "ocr2md.openMarkdownFile",
         "title": "ocr2md: Open Markdown File"
+      },
+      {
+        "command": "ocr2md.openTransChapter",
+        "title": "ocr2md: 打开 trans 章节派生表"
+      },
+      {
+        "command": "ocr2md.openTranslationService",
+        "title": "ocr2md: 打开翻译服务设置"
       },
       {
         "command": "ocr2md.addCurrentLineToModule",
@@ -105,7 +115,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "test": "npm run compile && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js && node ./out/rowIdentity.test.js && node ./out/annotation.test.js && node ./out/scanner.test.js && node ./out/workspaceFiles.test.js && node ./out/chapterFileAssign.test.js && node ./out/atoms.test.js && node ./out/imageDownload.test.js && node ./out/calibrationExport.test.js && node ./out/webview.test.js",
+    "test": "npm run compile && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js && node ./out/rowIdentity.test.js && node ./out/annotation.test.js && node ./out/scanner.test.js && node ./out/workspaceFiles.test.js && node ./out/chapterFileAssign.test.js && node ./out/atoms.test.js && node ./out/imageDownload.test.js && node ./out/calibrationExport.test.js && node ./out/textBlocks.test.js && node ./out/sentences.test.js && node ./out/latexMask.test.js && node ./out/translationService.test.js && node ./out/webview.test.js",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile"
   },

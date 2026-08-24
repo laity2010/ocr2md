@@ -4,8 +4,10 @@ export type MarkdownFileKind = "ocr" | "chapter" | "working";
 
 export const CHAPTER_SPLIT_PROPERTY = "ocr2md_chapter_split";
 export const CHAPTER_CHANGED_PROPERTY = "ocr2md_chapter_changed";
+export const FORMAT_CALIBRATED_PROPERTY = "ocr2md_format_calibrated";
 export const CHAPTER_BOUNDARY_WORKING_FILE = ".ocr2md-merged.working.md";
 export const CHAPTER_OUTPUT_DIRECTORY = "chapters";
+export const TRANS_OUTPUT_DIRECTORY = "trans";
 export const CHAPTER_IMAGE_DIRECTORY = "imgs";
 export const CHAPTER_WORKING_DIRECTORY = path.join(".ocr2md", "chapter-working");
 export const CHAPTER_OUTPUT_BASELINE_DIRECTORY = path.join(".ocr2md", "chapter-output-baselines");
@@ -55,6 +57,26 @@ export function hasChapterChangedFrontmatter(markdown: string): boolean {
   const frontmatter = parseLeadingFrontmatter(markdown);
   if (!frontmatter) return false;
   return yamlPropertyIsTrue(frontmatter.yaml, CHAPTER_CHANGED_PROPERTY);
+}
+
+export function hasFormatCalibratedFrontmatter(markdown: string): boolean {
+  const frontmatter = parseLeadingFrontmatter(markdown);
+  if (!frontmatter) return false;
+  return yamlPropertyIsTrue(frontmatter.yaml, FORMAT_CALIBRATED_PROPERTY);
+}
+
+export function withFormatCalibratedFrontmatter(markdown: string): string {
+  const frontmatter = parseLeadingFrontmatter(markdown);
+  if (!frontmatter) {
+    const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
+    return `---${eol}${FORMAT_CALIBRATED_PROPERTY}: true${eol}---${eol}${eol}${markdown.replace(/^\s+/, "")}`;
+  }
+  const line = `${FORMAT_CALIBRATED_PROPERTY}: true`;
+  const key = new RegExp(`^${FORMAT_CALIBRATED_PROPERTY}[ \\t]*:[ \\t]*.+$`, "im");
+  const yaml = key.test(frontmatter.yaml)
+    ? frontmatter.yaml.replace(key, line)
+    : `${frontmatter.yaml.replace(/[ \t]*$/, "")}${frontmatter.yaml.trim() ? frontmatter.eol : ""}${line}`;
+  return `${frontmatter.bom}${frontmatter.open}${yaml}${frontmatter.close}${frontmatter.body}`;
 }
 
 export function withChapterChangedFrontmatter(markdown: string, changed: boolean): string {
@@ -161,6 +183,11 @@ export function chapterImageDirectory(originalPath: string): string {
 
 export function chapterCalibrationOutputDirectory(originalPath: string): string {
   return path.join(path.dirname(originalPath), "output");
+}
+
+export function chapterTransOutputPath(workspaceRoot: string, originalPath: string): string {
+  const chapterDirectory = chapterDisplayName(workspaceRoot, originalPath) || path.parse(originalPath).name;
+  return path.join(workspaceRoot, TRANS_OUTPUT_DIRECTORY, chapterDirectory, path.basename(originalPath));
 }
 
 export function chapterAnnotationWorkingPath(originalPath: string): string {

@@ -14,10 +14,14 @@ const state: SidebarState = {
 };
 
 const html = renderSidebar(state);
+const scriptStart = html.indexOf("<script>") + "<script>".length;
+const scriptEnd = html.lastIndexOf("</script>");
+const generatedScript = html.slice(scriptStart, scriptEnd);
+assert.doesNotThrow(() => new Function(generatedScript), "generated webview JavaScript must be syntactically valid");
 for (const moduleName of ["章节定界", "章节标题", "注释", "嵌入块"]) {
   assert.ok(html.includes(moduleName), `missing module: ${moduleName}`);
 }
-for (const removedModule of ["未分类", "非法断行", "拼写检查", "文本块", "分句", "翻译设置"]) {
+for (const removedModule of ["未分类", "非法断行", "拼写检查", "翻译设置"]) {
   assert.ok(!html.includes(removedModule), `removed module leaked into UI: ${removedModule}`);
 }
 assert.deepStrictEqual(TABLE_COLUMNS, ["多选", "行号", "行类型", "预览"]);
@@ -59,7 +63,25 @@ assert.ok(html.includes('"嵌入块": ["嵌入块首", "内嵌标题", "嵌入�
 assert.ok(html.includes("下载图片到本地"), "embed module must download all images, not only the selection");
 assert.ok(html.includes("按标定导出"), "chapter modules must export by calibration");
 assert.ok(html.includes('postKeepView("exportByCalibration")'), "calibration export must post exportByCalibration");
+assert.ok(html.includes("导出标定到trans"), "chapter modules must expose trans export");
+assert.ok(html.includes('postKeepView("exportCalibrationToTrans")'), "trans export must post exportCalibrationToTrans");
 assert.ok(html.includes('"导出：" + candidate.localPath'), "embed preview must show the exact export path for local images");
+assert.ok(html.includes('"文本块": ["标题", "内嵌", "文本", "注释正文"]'), "trans text-block types must be available");
+assert.ok(html.includes('state.selectedFile?.kind === "trans"'), "trans selection must switch the sidebar to the text-block table");
+assert.ok(html.includes('state.activeModule === "文本块" ? "文本块类型" : state.activeModule === "分句" ? "来源类型" : "行类型"'), "derived trans tables must label their type columns");
+assert.ok(html.includes('按 <br> 划分 · 只读派生表'), "text-block table must be clearly read-only and delimiter-derived");
+assert.ok(html.includes('["文本块", "分句"]'), "trans sidebar must expose text-block and sentence tables");
+assert.ok(html.includes('"分句": ["标题", "文本", "注释正文"]'), "sentence source types must exclude embeds");
+assert.ok(html.includes("句内序号"), "sentence table must show sentence index within its parent block");
+assert.ok(html.includes("Intl.Segmenter + 例外合并 · 只读派生表"), "sentence table must describe the segmentation strategy");
+assert.ok(html.includes('state.viewMode === "translationService"'), "translation service must have a dedicated settings view");
+for (const translationUiText of ["翻译服务", "当前翻译服务", "DeepL", "API Key", "测试样本句子", "保存设置", "测试", "服务器返回信息"]) {
+  assert.ok(html.includes(translationUiText), `missing translation service UI text: ${translationUiText}`);
+}
+assert.ok(html.includes('apiKey.type = "password"'), "translation API key must use a password field");
+assert.ok(html.includes("VS Code SecretStorage"), "translation API key storage guidance is missing");
+assert.ok(html.includes('post("testTranslationService"'), "translation service test action is missing");
+assert.ok(html.includes('post("saveTranslationSettings"'), "translation settings save action is missing");
 assert.ok(!html.includes("下载所选图片"), "selected-only image download must be removed");
 assert.ok(
   html.includes('if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号"))'),

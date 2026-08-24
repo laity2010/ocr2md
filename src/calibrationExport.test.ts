@@ -49,7 +49,7 @@ const simple = [
 ];
 assert.strictEqual(
   formatEmbed(groupEmbeds(simple)[0]),
-  [">", "FIGURE 1.1 | Title", "![[imgs/a.jpg]]", "><embed id=01></embed>"].join("\n"),
+  [">", "FIGURE 1.1 | Title", "内嵌图片链接: ![[imgs/a.jpg]]", "><embed id=01></embed>", "<br>"].join("\n"),
 );
 
 const tableRows = [
@@ -66,7 +66,7 @@ const tableRows = [
 ];
 assert.strictEqual(
   formatEmbed(groupEmbeds(tableRows)[0]),
-  [">", "Table 12.2", "><table><tr><td>A</td></tr></table>", "><embed id=02></embed>"].join("\n"),
+  [">", "Table 12.2", "><table><tr><td>A</td></tr></table>", "><embed id=02></embed>", "<br>"].join("\n"),
 );
 
 const both = [
@@ -95,6 +95,8 @@ assert.ok(bothBlock.includes(">>[! ]- HTML"));
 assert.ok(bothBlock.includes(">><table><tr><td>A</td></tr></table>"));
 assert.ok(bothBlock.includes("><embed id=03></embed>"));
 assert.ok(bothBlock.includes("![[imgs/a.jpg]]"));
+assert.ok(!bothBlock.includes("内嵌图片链接:"), "image+HTML table must keep the bare Obsidian image link");
+assert.ok(bothBlock.endsWith("\n<br>"));
 
 const withEmbedText = [
   row({ id: "m5", raw: ">", typeLabel: "嵌入块", lineType: "嵌入块首", embedNumber: 5, range: { line: 0, start: 0, end: 1 } }),
@@ -122,10 +124,11 @@ assert.strictEqual(
   [
     ">",
     "FIGURE 14.4 | Excess Returns around Earnings Announcements",
-    "![[imgs/xxx.jpg]]",
+    "内嵌图片链接: ![[imgs/xxx.jpg]]",
     ">",
     "Source: D. Craig Nichols and James Whalen",
     "><embed id=05></embed>",
+    "<br>",
   ].join("\n"),
 );
 
@@ -149,13 +152,48 @@ const exported = exportByCalibration(source, [
   })),
   row({ id: "b", raw: "1. Footnote body", typeLabel: "注释", lineType: "注释正文", annotationNumber: "1", range: { line: 8, start: 0, end: 16 } }),
 ]);
-assert.ok(exported.includes("## Heading\n\n<br>\n"));
-assert.ok(exported.includes("See[^1] here."));
-assert.ok(exported.includes("Keep this paragraph."));
+assert.ok(exported.includes("## Heading\n<br>\n\n"));
+assert.ok(exported.includes("See[^1] here.\n<br>\n\n"));
+assert.ok(exported.includes("Keep this paragraph.\n<br>\n\n[^1]: Footnote body\n<br>"));
 assert.ok(!exported.includes("1. Footnote body"));
-assert.ok(exported.includes("[^1]: Footnote body"));
-assert.ok(exported.includes("![[imgs/a.jpg]]"));
+assert.ok(exported.endsWith("[^1]: Footnote body\n<br>\n"));
+assert.ok(exported.includes("内嵌图片链接: ![[imgs/a.jpg]]"));
 assert.ok(exported.includes("><embed id=01></embed>"));
 assert.ok(!exported.includes("![image](https://cdn.example/a.jpg)"));
+
+const formattedBlocksSource = [
+  "---",
+  "ocr2md_chapter_split: true",
+  "---",
+  "",
+  "### Original heading",
+  "",
+  "First paragraph line one.",
+  "First paragraph line two.",
+  "",
+  "Second paragraph.",
+].join("\n");
+const formattedBlocks = exportByCalibration(formattedBlocksSource, [
+  row({ id: "formatted-h", raw: "### Original heading", typeLabel: "章节标题", lineType: "2 级标题", range: { line: 4, start: 0, end: 20 } }),
+]);
+assert.strictEqual(
+  formattedBlocks,
+  [
+    "---",
+    "ocr2md_chapter_split: true",
+    "---",
+    "",
+    "## Original heading",
+    "<br>",
+    "",
+    "First paragraph line one.",
+    "First paragraph line two.",
+    "<br>",
+    "",
+    "Second paragraph.",
+    "<br>",
+    "",
+  ].join("\n"),
+);
 
 console.log("calibrationExport tests passed");

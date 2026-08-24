@@ -31,34 +31,68 @@ export function exportByCalibration(text: string, rows: Candidate[]): string {
     refsByLine.set(row.range.line, list);
   }
 
-  const chunks: string[] = [];
+  const blocks: string[] = [];
+  const plainLines: string[] = [];
+  const flushPlainText = () => {
+    while (plainLines.length && !plainLines[plainLines.length - 1].trim()) plainLines.pop();
+    if (!plainLines.length) return;
+    blocks.push(`${plainLines.join("\n")}\n<br>`);
+    plainLines.length = 0;
+  };
+
   let index = 0;
+  const frontmatterEnd = leadingFrontmatterEnd(lines);
+  if (frontmatterEnd > 0) {
+    blocks.push(lines.slice(0, frontmatterEnd).join("\n"));
+    index = frontmatterEnd;
+  }
+
   while (index < lines.length) {
     const embed = embedAt.get(index);
     if (embed) {
-      chunks.push(formatEmbed(embed));
+      flushPlainText();
+      blocks.push(formatEmbed(embed));
       index = embed.end + 1;
       continue;
     }
     if (bodyLines.has(index)) {
+      flushPlainText();
       index += 1;
       continue;
     }
     if (coveredByEmbed(embeds, index)) {
+      flushPlainText();
       index += 1;
       continue;
     }
-    let line = replaceAnnotationRefs(lines[index], refsByLine.get(index) ?? []);
+    if (!lines[index].trim()) {
+      flushPlainText();
+      index += 1;
+      continue;
+    }
     const heading = headingStarts.get(index);
-    if (heading) line = formatHeading(line, heading.lineType ?? "");
-    chunks.push(line);
+    let line = replaceAnnotationRefs(lines[index], refsByLine.get(index) ?? []);
+    if (heading) {
+      flushPlainText();
+      blocks.push(formatHeading(line, heading.lineType ?? ""));
+    } else {
+      plainLines.push(line);
+    }
     index += 1;
   }
+  flushPlainText();
 
   const footnotes = collectFootnotes(live);
-  let markdown = chunks.join("\n").replace(/\n{3,}/g, "\n\n").replace(/[ \t]+\n/g, "\n");
-  if (footnotes.length) markdown = `${markdown.replace(/\s+$/, "")}\n\n${footnotes.join("\n")}`;
-  return markdown.replace(/\s+$/, "") + "\n";
+  if (footnotes.length) blocks.push(footnotes.join("\n\n"));
+  return blocks.join("\n\n").replace(/[ \t]+\n/g, "\n").replace(/\s+$/, "") + "\n";
+}
+
+function leadingFrontmatterEnd(lines: string[]): number {
+  if (lines[0]?.replace(/^\uFEFF/, "").trim() !== "---") return 0;
+  for (let index = 1; index < lines.length; index += 1) {
+    if (/^---[ \t]*$/.test(lines[index])) return index + 1;
+  }
+  return 0;
 }
 
 export function groupEmbeds(rows: Candidate[]): EmbedExportGroup[] {
@@ -93,7 +127,11 @@ export function formatEmbed(group: EmbedExportGroup): string {
   const extraHtml = !table && html ? compactHtml(html.raw) : undefined;
   const lines = [">"];
   if (title) lines.push(title);
-  for (const image of images) lines.push(image);
+  if (images.length && !tableSrc && !extraHtml) {
+    for (const image of images) lines.push(`内嵌图片链接: ${image}`);
+  } else {
+    for (const image of images) lines.push(image);
+  }
   if (tableSrc && images.length) {
     lines.push(">>[! ]- HTML");
     lines.push(`>>${tableSrc}`);
@@ -107,6 +145,7 @@ export function formatEmbed(group: EmbedExportGroup): string {
     lines.push(text);
   }
   lines.push(`><embed id=${id}></embed>`);
+  lines.push("<br>");
   return lines.join("\n");
 }
 
@@ -143,7 +182,7 @@ function formatHeading(line: string, lineType: string): string {
   const level = Number(match[1]);
   const content = line.replace(/^ {0,3}#{1,6}(?:\s+|$)/, "").trim();
   const heading = content ? `${"#".repeat(level)} ${content}` : "#".repeat(level);
-  return `${heading}\n\n<br>\n`;
+  return `${heading}\n<br>`;
 }
 
 function replaceAnnotationRefs(line: string, refs: Candidate[]): string {
@@ -167,7 +206,7 @@ function collectFootnotes(rows: Candidate[]): string[] {
     const number = resolvedAnnotationNumber(row);
     if (!number || byNumber.has(number)) continue;
     const body = row.raw.replace(/^\s*(?:\[\^[^\]]+\]:|\d+\.|\*\d+)\s+/, "").trim();
-    byNumber.set(number, `[^${number}]: ${body}`);
+    byNumber.set(number, `[^${number}]: ${body}\n<br>`);
   }
   return [...byNumber.entries()]
     .sort((left, right) => left[0].localeCompare(right[0], "zh-CN", { numeric: true }))

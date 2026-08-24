@@ -1,4 +1,4 @@
-export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块";
+export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块" | "文本块" | "分句";
 
 export interface SourceRange {
   line: number;
@@ -36,6 +36,9 @@ export interface Candidate {
   imageDownloadStatus?: "pending" | "done" | "failed";
   imageDownloadError?: string;
   embedNumber?: number;
+  parentBlockId?: string;
+  parentBlockIndex?: number;
+  sentenceIndex?: number;
   sourcePath?: string;
   sourceLabel?: string;
   status?: "候选" | "异常";
@@ -56,7 +59,7 @@ export interface AnnotationPair {
 export interface FileEntry {
   label: string;
   path: string;
-  kind: "ocr" | "chapter" | "working";
+  kind: "ocr" | "chapter" | "working" | "trans";
   changed?: boolean;
 }
 
@@ -78,6 +81,23 @@ export interface ImageDownloadProgress {
   lastError?: string;
 }
 
+export type TranslationServiceId = "deepl";
+
+export interface TranslationTestState {
+  phase: "idle" | "testing" | "success" | "error";
+  message: string;
+  statusCode?: number;
+  translatedText?: string;
+  rawResponse?: string;
+}
+
+export interface TranslationSettingsState {
+  service: TranslationServiceId;
+  apiKeyConfigured: boolean;
+  sampleText: string;
+  test: TranslationTestState;
+}
+
 export interface SidebarState {
   workspaceLabel: string;
   selectedFile?: FileEntry;
@@ -87,6 +107,8 @@ export interface SidebarState {
   annotationPairs: AnnotationPair[];
   moduleRegexPatterns: Record<string, string>;
   moduleRegexPresets: Record<string, RegexPreset[]>;
+  viewMode?: "table" | "translationService";
+  translationSettings?: TranslationSettingsState;
   imageDownloadProgress?: ImageDownloadProgress;
   annotationMatchSummary?: {
     calibrated: number;

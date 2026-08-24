@@ -1,6 +1,6 @@
 import type { Candidate, ModuleName, SidebarState } from "./types";
 
-const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块"];
+const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "文本块", "分句"];
 export const TABLE_COLUMNS = ["多选", "行号", "行类型", "预览"] as const;
 export const ANNOTATION_EXTRA_COLUMNS = ["注释号"] as const;
 export const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ["章节文件"] as const;
@@ -65,6 +65,16 @@ export function renderSidebar(state: SidebarState): string {
     .pair-status.matched { color: var(--vscode-testing-iconPassed, #89d185); }
     .empty { padding: 24px; text-align: center; color: var(--vscode-descriptionForeground); }
     .progress { color: var(--vscode-descriptionForeground); }
+    .settings-panel { max-width: 760px; display: grid; gap: 14px; overflow: auto; padding-right: 4px; }
+    .settings-card { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--vscode-panel-border); }
+    .settings-card h2 { margin: 0 0 4px; font-size: 16px; }
+    .settings-card label { font-weight: 600; }
+    .settings-card input, .settings-card select, .settings-card textarea { width: 100%; }
+    .settings-card textarea { min-height: 92px; }
+    .settings-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .test-result { margin: 0; padding: 10px; border: 1px solid var(--vscode-panel-border); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--vscode-editor-font-family); }
+    .test-result.success { border-color: var(--vscode-testing-iconPassed, #89d185); }
+    .test-result.error { border-color: var(--vscode-testing-iconFailed, #f14c4c); }
     .modal-backdrop {
       position: fixed; inset: 0; z-index: 100;
       display: flex; align-items: flex-start; justify-content: center;
@@ -101,6 +111,8 @@ export function renderSidebar(state: SidebarState): string {
       "章节标题": ["1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题", "非标题", DELETED],
       "注释": ["注释引用", "注释正文", "忽略", DELETED],
       "嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本", DELETED],
+      "文本块": ["标题", "内嵌", "文本", "注释正文"],
+      "分句": ["标题", "文本", "注释正文"],
     };
     const FILTER_OPTIONS = {
       "章节标题": ["层级标题行+增删改行", "全部", "层级标题行", "增删改行"],
@@ -473,8 +485,15 @@ export function renderSidebar(state: SidebarState): string {
     function render() {
       captureScroll();
       app.replaceChildren();
+      if (state.viewMode === "translationService") {
+        app.append(translationServiceSettings());
+        return;
+      }
       const tabs = el("div", undefined, "tabs");
-      for (const moduleName of MODULES) {
+      const visibleModules = state.selectedFile?.kind === "trans"
+        ? ["文本块", "分句"]
+        : MODULES.filter((moduleName) => moduleName !== "文本块" && moduleName !== "分句");
+      for (const moduleName of visibleModules) {
         const count = moduleName === "注释" && state.annotationMatchSummary
           ? state.annotationMatchSummary.calibrated
           : state.rows.filter((row) => row.typeLabel === moduleName).length;
@@ -489,12 +508,80 @@ export function renderSidebar(state: SidebarState): string {
       app.append(moduleToolbar());
       if (state.activeModule === "注释" || state.activeModule === "嵌入块") app.append(regexCard());
       if (FILTER_OPTIONS[state.activeModule]) app.append(filterToolbar());
-      app.append(bulkToolbar());
+      if (state.activeModule !== "文本块" && state.activeModule !== "分句") app.append(bulkToolbar());
       app.append(rowTable(rowsForModule()));
       requestAnimationFrame(() => {
         restoreScroll();
         restoreFocus();
       });
+    }
+
+    function translationServiceSettings() {
+      const settings = state.translationSettings || {
+        service: "deepl",
+        apiKeyConfigured: false,
+        sampleText: "The company reported stronger earnings this quarter.",
+        test: { phase: "idle", message: "尚未测试。" },
+      };
+      const panel = el("div", undefined, "settings-panel");
+      const card = el("div", undefined, "settings-card");
+      card.append(el("h2", "翻译服务"));
+
+      const serviceLabel = el("label", "当前翻译服务");
+      const service = document.createElement("select");
+      service.append(new Option("DeepL", "deepl", false, settings.service === "deepl"));
+
+      const keyLabel = el("label", "API Key");
+      const apiKey = document.createElement("input");
+      apiKey.type = "password";
+      apiKey.autocomplete = "off";
+      apiKey.placeholder = settings.apiKeyConfigured
+        ? "已保存 API Key；留空可继续使用"
+        : "输入 DeepL API Key";
+      const keyStatus = el(
+        "div",
+        settings.apiKeyConfigured ? "API Key 已安全保存到 VS Code SecretStorage。" : "尚未保存 API Key。",
+        "meta",
+      );
+
+      const sampleLabel = el("label", "测试样本句子");
+      const sample = document.createElement("textarea");
+      sample.value = settings.sampleText || "The company reported stronger earnings this quarter.";
+
+      const actions = el("div", undefined, "settings-actions");
+      const payload = () => ({ service: service.value, apiKey: apiKey.value, sampleText: sample.value });
+      const save = button("保存设置", () => post("saveTranslationSettings", payload()));
+      const test = button(
+        settings.test?.phase === "testing" ? "正在测试…" : "测试",
+        () => post("testTranslationService", payload()),
+        "primary",
+      );
+      test.disabled = settings.test?.phase === "testing";
+      actions.append(save, test);
+
+      const resultTitle = el("label", "服务器返回信息");
+      const result = el("pre", undefined, "test-result " + (settings.test?.phase || "idle"));
+      const resultLines = [];
+      if (settings.test?.message) resultLines.push(settings.test.message);
+      if (settings.test?.statusCode != null) resultLines.push("HTTP " + settings.test.statusCode);
+      if (settings.test?.translatedText) resultLines.push("译文：" + settings.test.translatedText);
+      if (settings.test?.rawResponse) resultLines.push("原始响应：\\\\n" + settings.test.rawResponse);
+      result.textContent = resultLines.join("\\\\n\\\\n") || "尚未测试。";
+
+      card.append(
+        serviceLabel,
+        service,
+        keyLabel,
+        apiKey,
+        keyStatus,
+        sampleLabel,
+        sample,
+        actions,
+        resultTitle,
+        result,
+      );
+      panel.append(card);
+      return panel;
     }
 
     function filterToolbar() {
@@ -516,6 +603,14 @@ export function renderSidebar(state: SidebarState): string {
 
     function moduleToolbar() {
       const toolbar = el("div", undefined, "toolbar");
+      if (state.activeModule === "文本块") {
+        toolbar.append(el("span", "按 <br> 划分 · 只读派生表", "progress"));
+        return toolbar;
+      }
+      if (state.activeModule === "分句") {
+        toolbar.append(el("span", "非内嵌文本块 · Intl.Segmenter + 例外合并 · 只读派生表", "progress"));
+        return toolbar;
+      }
       if (state.activeModule === "章节定界") {
         toolbar.append(
           button("创建/打开定界工作稿", () => postKeepView("openChapterBoundaryWork"), "primary"),
@@ -527,6 +622,7 @@ export function renderSidebar(state: SidebarState): string {
         toolbar.append(
           button("创建/打开章节工作稿", () => postKeepView("openChapterWorkingCopy"), "primary"),
           button("按标定导出", () => postKeepView("exportByCalibration")),
+          button("导出标定到trans", () => postKeepView("exportCalibrationToTrans")),
           button("保存标定", () => postKeepView("saveAnnotations")),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
@@ -539,6 +635,7 @@ export function renderSidebar(state: SidebarState): string {
             postKeepView("matchAnnotationPairs");
           }, "primary"),
           button("按标定导出", () => postKeepView("exportByCalibration")),
+          button("导出标定到trans", () => postKeepView("exportCalibrationToTrans")),
           button("保存标定", () => postKeepView("saveAnnotations")),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
@@ -556,6 +653,7 @@ export function renderSidebar(state: SidebarState): string {
         toolbar.append(
           download,
           button("按标定导出", () => postKeepView("exportByCalibration")),
+          button("导出标定到trans", () => postKeepView("exportCalibrationToTrans")),
           button("保存标定", () => postKeepView("saveAnnotations"), "primary"),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
@@ -612,24 +710,30 @@ export function renderSidebar(state: SidebarState): string {
       const table = document.createElement("table");
       const head = document.createElement("thead");
       const headRow = document.createElement("tr");
-      const selectCell = el("th", undefined, "check-column");
-      const selectAll = document.createElement("input");
-      const visibleIds = rows.map((row) => row.id);
-      selectAll.type = "checkbox";
-      selectAll.id = "select-all";
-      selectAll.title = "多选当前表格全部记录";
-      selectAll.setAttribute("aria-label", "多选当前表格全部记录");
-      selectAll.checked = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
-      selectAll.indeterminate = visibleIds.some((id) => selected.has(id)) && !selectAll.checked;
-      selectAll.addEventListener("change", () => {
-        for (const id of visibleIds) selectAll.checked ? selected.add(id) : selected.delete(id);
-        for (const box of document.querySelectorAll("input.row-check")) {
-          box.checked = selected.has(box.getAttribute("data-row-id"));
-        }
-        syncSelectionChrome();
-      });
-      selectCell.append(selectAll, document.createTextNode(" 多选"));
-      headRow.append(selectCell, sortableHeader("行号", "line", "line-column"));
+      if (state.activeModule !== "文本块" && state.activeModule !== "分句") {
+        const selectCell = el("th", undefined, "check-column");
+        const selectAll = document.createElement("input");
+        const visibleIds = rows.map((row) => row.id);
+        selectAll.type = "checkbox";
+        selectAll.id = "select-all";
+        selectAll.title = "多选当前表格全部记录";
+        selectAll.setAttribute("aria-label", "多选当前表格全部记录");
+        selectAll.checked = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+        selectAll.indeterminate = visibleIds.some((id) => selected.has(id)) && !selectAll.checked;
+        selectAll.addEventListener("change", () => {
+          for (const id of visibleIds) selectAll.checked ? selected.add(id) : selected.delete(id);
+          for (const box of document.querySelectorAll("input.row-check")) {
+            box.checked = selected.has(box.getAttribute("data-row-id"));
+          }
+          syncSelectionChrome();
+        });
+        selectCell.append(selectAll, document.createTextNode(" 多选"));
+        headRow.append(selectCell);
+      }
+      headRow.append(sortableHeader("行号", "line", "line-column"));
+      if (state.activeModule === "分句") {
+        headRow.append(el("th", "文本块"), el("th", "句内序号"));
+      }
       if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号")) {
         headRow.append(sortableHeader("注释号", "number", "number-column"));
       }
@@ -640,7 +744,10 @@ export function renderSidebar(state: SidebarState): string {
         headRow.append(sortableHeader("章节文件", "chapterFile", "chapter-file-column"));
       }
       headRow.append(
-        sortableHeader("行类型", "lineType"),
+        sortableHeader(
+          state.activeModule === "文本块" ? "文本块类型" : state.activeModule === "分句" ? "来源类型" : "行类型",
+          "lineType",
+        ),
         sortableHeader("预览", "preview"),
       );
       head.append(headRow);
@@ -685,7 +792,14 @@ export function renderSidebar(state: SidebarState): string {
         syncSelectionChrome();
       });
       checkCell.append(check);
-      row.append(checkCell, el("td", String(candidate.range.line + 1)));
+      if (state.activeModule !== "文本块" && state.activeModule !== "分句") row.append(checkCell);
+      row.append(el("td", String(candidate.range.line + 1)));
+      if (state.activeModule === "分句") {
+        row.append(
+          el("td", candidate.parentBlockIndex == null ? "" : "B" + String(candidate.parentBlockIndex).padStart(3, "0")),
+          el("td", candidate.sentenceIndex == null ? "" : String(candidate.sentenceIndex)),
+        );
+      }
       if (state.activeModule === "嵌入块") {
         row.append(el("td", candidate.embedNumber == null ? "" : String(candidate.embedNumber)));
       }
@@ -721,17 +835,21 @@ export function renderSidebar(state: SidebarState): string {
       }
 
       const typeCell = document.createElement("td");
-      const typeSelect = document.createElement("select");
-      typeSelect.className = "line-type";
-      typeSelect.setAttribute("data-row-id", candidate.id);
-      typeSelect.setAttribute("data-field", "lineType");
-      for (const value of LINE_TYPES[state.activeModule]) typeSelect.append(new Option(value, value, false, value === candidate.lineType));
-      typeSelect.addEventListener("click", (event) => event.stopPropagation());
-      typeSelect.addEventListener("focus", () => rememberFocus(candidate.id, "lineType"));
-      typeSelect.addEventListener("change", () => {
-        postKeepView("setRowsLineType", { ids: selectedIds(candidate.id), lineType: typeSelect.value }, { clearSelection: true });
-      });
-      typeCell.append(typeSelect);
+      if (state.activeModule === "文本块" || state.activeModule === "分句") {
+        typeCell.append(el("span", candidate.lineType || "文本"));
+      } else {
+        const typeSelect = document.createElement("select");
+        typeSelect.className = "line-type";
+        typeSelect.setAttribute("data-row-id", candidate.id);
+        typeSelect.setAttribute("data-field", "lineType");
+        for (const value of LINE_TYPES[state.activeModule]) typeSelect.append(new Option(value, value, false, value === candidate.lineType));
+        typeSelect.addEventListener("click", (event) => event.stopPropagation());
+        typeSelect.addEventListener("focus", () => rememberFocus(candidate.id, "lineType"));
+        typeSelect.addEventListener("change", () => {
+          postKeepView("setRowsLineType", { ids: selectedIds(candidate.id), lineType: typeSelect.value }, { clearSelection: true });
+        });
+        typeCell.append(typeSelect);
+      }
       const previewCell = el("td", undefined, "preview");
       previewCell.append(el("div", previewText(candidate), "preview-content"));
       row.append(typeCell, previewCell);
