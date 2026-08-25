@@ -1,4 +1,4 @@
-export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块" | "文本块" | "分句";
+export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块" | "文本块" | "分句" | "翻译";
 
 export interface SourceRange {
   line: number;
@@ -39,6 +39,10 @@ export interface Candidate {
   parentBlockId?: string;
   parentBlockIndex?: number;
   sentenceIndex?: number;
+  translationUnitKind?: "sentence" | "composite";
+  translationText?: string;
+  translationStatus?: "待翻译" | "已翻译" | "失败";
+  translationError?: string;
   sourcePath?: string;
   sourceLabel?: string;
   status?: "候选" | "异常";
@@ -98,6 +102,14 @@ export interface TranslationSettingsState {
   test: TranslationTestState;
 }
 
+export interface TranslationProgressState {
+  phase: "idle" | "running" | "complete";
+  completed: number;
+  total: number;
+  failed: number;
+  current?: string;
+}
+
 export interface SidebarState {
   workspaceLabel: string;
   selectedFile?: FileEntry;
@@ -109,6 +121,7 @@ export interface SidebarState {
   moduleRegexPresets: Record<string, RegexPreset[]>;
   viewMode?: "table" | "translationService";
   translationSettings?: TranslationSettingsState;
+  translationProgress?: TranslationProgressState;
   imageDownloadProgress?: ImageDownloadProgress;
   annotationMatchSummary?: {
     calibrated: number;

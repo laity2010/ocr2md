@@ -83,7 +83,7 @@ assert.strictEqual(
 );
 assert.strictEqual(
   chapterTransOutputPath("/ws", nestedOriginal),
-  path.join("/ws", "trans", "11 Chapter", "11 Chapter.md"),
+  path.join("/ws", "chapters", "11 Chapter", "trans", "11 Chapter.md"),
 );
 assert.strictEqual(
   chapterAnnotationWorkingPath(nestedOriginal),

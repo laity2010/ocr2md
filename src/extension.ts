@@ -32,9 +32,30 @@ import {
 } from "./rowIdentity";
 import { splitBlankLineBlocks } from "./atoms";
 import { exportByCalibration } from "./calibrationExport";
+import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
 import { scanTextBlocks } from "./textBlocks";
 import { scanSentences } from "./sentences";
-import { DEFAULT_TRANSLATION_SAMPLE, testDeepL } from "./translationService";
+import {
+  markdownStructureIssue,
+  missingProtectedMarkdownTokens,
+  protectMarkdownForTranslation,
+  restoreProtectedMarkdown,
+} from "./markdownProtection";
+import { scanTranslationUnits } from "./translationUnits";
+import { DEFAULT_TRANSLATION_SAMPLE, testDeepL, translateDeepL } from "./translationService";
+import {
+  TRANSLATION_STATE_FILE,
+  emptyTranslationState,
+  isTranslationUnitTranslated,
+  parseTranslationState,
+  recordTranslation,
+  recordTranslationError,
+  serializeTranslationState,
+  translationEntryForUnit,
+  translationProgress,
+  translationRows,
+  type TranslationStateFile,
+} from "./translationState";
 import {
   extractImageUrl,
   extractLocalImagePath,
@@ -57,6 +78,7 @@ import type {
   ImageDownloadProgress,
   ModuleName,
   SidebarState,
+  TranslationProgressState,
   TranslationServiceId,
   TranslationTestState,
 } from "./types";
@@ -90,7 +112,7 @@ import {
   withFormatCalibratedFrontmatter,
 } from "./workspaceFiles";
 
-const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "文本块", "分句"];
+const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "文本块", "分句", "翻译"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
 const DEEPL_API_KEY_SECRET = "ocr2md.translation.deepl.apiKey";
 const TRANSLATION_SERVICE_SETTING = "ocr2md.translation.service";
@@ -135,6 +157,8 @@ class Ocr2mdExtension implements vscode.Disposable {
   private translationApiKeyConfigured = false;
   private translationSampleText = DEFAULT_TRANSLATION_SAMPLE;
   private translationTest: TranslationTestState = { phase: "idle", message: "尚未测试。" };
+  private translationProgress: TranslationProgressState = { phase: "idle", completed: 0, total: 0, failed: 0 };
+  private translationRunning = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.translationService = context.globalState.get<TranslationServiceId>(TRANSLATION_SERVICE_SETTING, "deepl");
@@ -154,13 +178,6 @@ class Ocr2mdExtension implements vscode.Disposable {
 
     this.disposables.push(
       this.directoryView,
-      this.directoryView.onDidChangeSelection((event) => {
-        const item = event.selection[0];
-        if (!item) return;
-        if (item.nodeKind === "trans-chapter-directory" && item.transDirectoryPath) {
-          void this.runTransAction("打开 trans 章节文本块", () => this.openTransChapterDirectory(item.transDirectoryPath!, "文本块"));
-        }
-      }),
       this.output,
       this.chapterDecorations,
       vscode.window.registerFileDecorationProvider(this.chapterDecorations),
@@ -169,7 +186,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       vscode.commands.registerCommand("ocr2md.refreshFiles", () => this.refreshFiles()),
       vscode.commands.registerCommand("ocr2md.pickFolder", () => this.pickWorkspaceFolder()),
       vscode.commands.registerCommand("ocr2md.openMarkdownFile", (filePath: string) => this.selectFile(filePath)),
-      vscode.commands.registerCommand("ocr2md.openTransChapter", (directoryPath: string, moduleName?: "文本块" | "分句") =>
+      vscode.commands.registerCommand("ocr2md.openTransChapter", (directoryPath: string, moduleName?: "文本块" | "分句" | "翻译") =>
         this.runTransAction(`打开 trans ${moduleName ?? "文本块"}`, () => this.openTransChapterDirectory(directoryPath, moduleName))),
       vscode.commands.registerCommand("ocr2md.openTranslationService", () =>
         this.runTransAction("打开翻译服务", () => this.openTranslationService())),
@@ -244,6 +261,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         sampleText: this.translationSampleText,
         test: this.translationTest,
       },
+      translationProgress: this.translationProgress,
       imageDownloadProgress: this.imageDownloadProgress,
       annotationMatchSummary: annotationMatchSummary(this.rows, this.annotationPairs),
     };
@@ -259,6 +277,12 @@ class Ocr2mdExtension implements vscode.Disposable {
         break;
       case "testTranslationService":
         await this.testTranslationService(message);
+        break;
+      case "translateCurrentChapter":
+        await this.runTransAction("翻译当前章节", () => this.translateCurrentChapter());
+        break;
+      case "exportCrossTranslation":
+        await this.runTransAction("导出双向互译", () => this.exportCurrentChapterCrossTranslation());
         break;
       case "openChapterBoundaryWork":
         await this.openChapterBoundaryWork();
@@ -342,10 +366,49 @@ class Ocr2mdExtension implements vscode.Disposable {
       this.update();
       return;
     }
+    await this.migrateLegacyTransDirectories(workspace);
     this.files = await this.syncChapterChangeMarkers(workspace, await this.discoverWorkspaceFiles(workspace));
     this.directoryProvider.refresh();
     this.chapterDecorations.refresh();
     this.update();
+  }
+
+  private async migrateLegacyTransDirectories(workspace: vscode.WorkspaceFolder) {
+    const legacyRoot = vscode.Uri.joinPath(workspace.uri, TRANS_OUTPUT_DIRECTORY);
+    if (!(await exists(legacyRoot))) return;
+    let entries: [string, vscode.FileType][];
+    try {
+      entries = await vscode.workspace.fs.readDirectory(legacyRoot);
+    } catch (error) {
+      this.output.appendLine(`[trans] 读取旧 trans 目录失败：${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    for (const [name, type] of entries) {
+      if ((type & vscode.FileType.Directory) === 0) continue;
+      const source = vscode.Uri.joinPath(legacyRoot, name);
+      const chapterDirectory = vscode.Uri.file(chapterDirectoryPath(workspace.uri.fsPath, name));
+      const target = vscode.Uri.joinPath(chapterDirectory, TRANS_OUTPUT_DIRECTORY);
+      if (!(await exists(chapterDirectory))) {
+        this.output.appendLine(`[trans] 跳过旧目录 ${source.fsPath}：找不到对应章节目录。`);
+        continue;
+      }
+      if (await exists(target)) {
+        this.output.appendLine(`[trans] 跳过旧目录 ${source.fsPath}：目标已存在 ${target.fsPath}。`);
+        continue;
+      }
+      try {
+        await vscode.workspace.fs.rename(source, target, { overwrite: false });
+        this.output.appendLine(`[trans] 已迁移 ${source.fsPath} -> ${target.fsPath}`);
+      } catch (error) {
+        this.output.appendLine(`[trans] 迁移失败 ${source.fsPath}：${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    try {
+      const remaining = await vscode.workspace.fs.readDirectory(legacyRoot);
+      if (!remaining.length) await vscode.workspace.fs.delete(legacyRoot);
+    } catch {
+      // Keep the legacy root when it still has entries or cannot be removed safely.
+    }
   }
 
   private async pickWorkspaceFolder() {
@@ -400,12 +463,12 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.update();
   }
 
-  private async openTransChapterDirectory(directoryPath: string, moduleName: "文本块" | "分句" = "文本块") {
+  private async openTransChapterDirectory(directoryPath: string, moduleName: "文本块" | "分句" | "翻译" = "文本块") {
     this.viewMode = "table";
     const directory = vscode.Uri.file(directoryPath);
     const workspace = vscode.workspace.getWorkspaceFolder(directory) ?? vscode.workspace.workspaceFolders?.[0];
     if (!workspace) return;
-    const chapterName = path.basename(directoryPath);
+    const chapterName = path.basename(path.dirname(directoryPath));
     const preferred = vscode.Uri.joinPath(directory, `${chapterName}.md`);
     let chapterUri: vscode.Uri | undefined;
     if (await exists(preferred)) {
@@ -436,7 +499,18 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.chapterWorkingUri = undefined;
     this.annotationWorkingUri = undefined;
     this.annotationPairs = [];
-    this.rows = moduleName === "分句" ? scanSentences(text, chapterUri.fsPath) : scanTextBlocks(text, chapterUri.fsPath);
+    if (moduleName === "翻译") {
+      const units = scanTranslationUnits(text, chapterUri.fsPath);
+      const { state } = await this.readValidatedTranslationState(chapterUri, units);
+      this.rows = translationRows(units, state);
+      const progress = translationProgress(units, state);
+      this.translationProgress = {
+        ...progress,
+        phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
+      };
+    } else {
+      this.rows = moduleName === "分句" ? scanSentences(text, chapterUri.fsPath) : scanTextBlocks(text, chapterUri.fsPath);
+    }
     this.activeModule = moduleName;
     this.modulePreviewPaths.set(moduleName, chapterUri.fsPath);
     await this.showDocumentPair(chapterUri, { preserveFocus: true });
@@ -511,6 +585,226 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.update();
   }
 
+  private async translateCurrentChapter() {
+    if (this.translationRunning) return;
+    if (this.activeModule !== "翻译" || this.selectedFile?.kind !== "trans") {
+      void vscode.window.showWarningMessage("请先打开 trans 章节的“翻译”模块。");
+      return;
+    }
+    const apiKey = await this.context.secrets.get(DEEPL_API_KEY_SECRET) || "";
+    if (!apiKey) {
+      void vscode.window.showWarningMessage("尚未设置 DeepL API Key，请先打开“翻译服务”。");
+      return;
+    }
+
+    const chapterPath = this.selectedFile.path;
+    const chapterUri = vscode.Uri.file(chapterPath);
+    const sourceText = this.selectedFileText;
+    const units = scanTranslationUnits(sourceText, chapterPath);
+    const blocks = scanTextBlocks(sourceText, chapterPath);
+    const blockById = new Map(blocks.map((block) => [block.id, block]));
+    const { state } = await this.readValidatedTranslationState(chapterUri, units);
+
+    this.translationRunning = true;
+    this.translationProgress = translationProgress(units, state, "running");
+    this.rows = translationRows(units, state);
+    this.update();
+
+    try {
+      for (const unit of units) {
+        if (isTranslationUnitTranslated(unit, state)) continue;
+        const blockLabel = unit.parentBlockIndex == null
+          ? ""
+          : `B${String(unit.parentBlockIndex).padStart(3, "0")}`;
+        const unitPrefix = unit.translationUnitKind === "composite" ? "C" : "S";
+        const unitLabel = unit.sentenceIndex == null ? "" : `${unitPrefix}${String(unit.sentenceIndex).padStart(3, "0")}`;
+        const current = [blockLabel, unitLabel].filter(Boolean).join("-");
+        this.translationProgress = translationProgress(units, state, "running", current);
+        this.updateTranslationUi(chapterPath, units, state);
+
+        const protectedUnit = protectMarkdownForTranslation(unit.raw);
+        const parentBlock = unit.parentBlockId ? blockById.get(unit.parentBlockId) : undefined;
+        const contextText = parentBlock?.raw ?? unit.raw;
+        const protectedContext = protectMarkdownForTranslation(contextText).text;
+        const result = await translateDeepL(apiKey, protectedUnit.text, protectedContext);
+
+        if (result.ok && result.translatedText) {
+          const missing = missingProtectedMarkdownTokens(result.translatedText, protectedUnit.replacements);
+          if (missing.length) {
+            recordTranslationError(state, unit, `翻译结果缺少 Markdown 保护占位符：${missing.join(", ")}`);
+          } else {
+            const restored = restoreProtectedMarkdown(result.translatedText, protectedUnit.replacements);
+            const structureIssue = markdownStructureIssue(unit.raw, restored);
+            if (structureIssue) {
+              recordTranslationError(state, unit, `翻译结果 Markdown 结构异常：${structureIssue}`);
+            } else {
+              recordTranslation(state, unit, restored);
+            }
+          }
+        } else {
+          recordTranslationError(state, unit, result.message);
+        }
+
+        await this.writeTranslationState(chapterUri, state);
+        this.updateTranslationUi(chapterPath, units, state);
+
+        if (result.statusCode && [401, 403, 429, 456].includes(result.statusCode)) {
+          this.output.appendLine(`[translation] DeepL HTTP ${result.statusCode}; 已停止本轮翻译，可修正后继续。`);
+          break;
+        }
+      }
+    } finally {
+      this.translationRunning = false;
+      const progress = translationProgress(units, state);
+      this.translationProgress = {
+        ...progress,
+        phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
+      };
+      this.updateTranslationUi(chapterPath, units, state);
+    }
+  }
+
+  private async exportCurrentChapterCrossTranslation() {
+    if (this.translationRunning) {
+      void vscode.window.showWarningMessage("翻译进行中，请等待当前翻译结束后再导出。");
+      return;
+    }
+    if (this.activeModule !== "翻译" || this.selectedFile?.kind !== "trans") {
+      void vscode.window.showWarningMessage("请先打开章节 trans 下的“翻译”模块。");
+      return;
+    }
+    const workspace = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(this.selectedFile.path))
+      ?? vscode.workspace.workspaceFolders?.[0];
+    if (!workspace) throw new Error("当前没有打开工作目录。");
+
+    const outputDirectory = vscode.Uri.file(path.dirname(this.selectedFile.path));
+    const outputRelativePath = normalizeVaultRelativePath(
+      path.relative(workspace.uri.fsPath, outputDirectory.fsPath).replace(/\\/g, "/") || ".",
+    );
+    const chapterUri = vscode.Uri.file(this.selectedFile.path);
+    const units = scanTranslationUnits(this.selectedFileText, this.selectedFile.path);
+    const { state, invalidated } = await this.readValidatedTranslationState(chapterUri, units);
+    if (invalidated) {
+      this.rows = translationRows(units, state);
+      const progress = translationProgress(units, state);
+      this.translationProgress = { ...progress, phase: "idle" };
+      this.update();
+      void vscode.window.showWarningMessage(
+        `检测到 ${invalidated} 个旧译文 Markdown 结构异常，已标记为失败。请点击“继续翻译”修复后再导出。`,
+      );
+      return;
+    }
+    const result = exportCrossTranslation({
+      sourceMarkdown: this.selectedFileText,
+      sourcePath: this.selectedFile.path,
+      chapterFileName: path.basename(this.selectedFile.path),
+      outputVaultRelativePath: outputRelativePath,
+      translationState: state,
+    });
+
+    await vscode.workspace.fs.createDirectory(outputDirectory);
+    const transactionId = randomUUID();
+    const outputs = [
+      { fileName: result.orgFileName, markdown: result.orgMarkdown },
+      { fileName: result.transFileName, markdown: result.transMarkdown },
+      { fileName: result.pureTransFileName, markdown: result.pureTransMarkdown },
+    ].map((output) => ({
+      ...output,
+      target: vscode.Uri.joinPath(outputDirectory, output.fileName),
+      temp: vscode.Uri.joinPath(outputDirectory, `.${output.fileName}.${transactionId}.tmp`),
+      backup: vscode.Uri.joinPath(outputDirectory, `.${output.fileName}.${transactionId}.bak`),
+      backedUp: false,
+      committed: false,
+    }));
+
+    let committedAll = false;
+    try {
+      for (const output of outputs) {
+        await vscode.workspace.fs.writeFile(output.temp, Buffer.from(output.markdown, "utf8"));
+      }
+      for (const output of outputs) {
+        if (!(await exists(output.target))) continue;
+        await vscode.workspace.fs.rename(output.target, output.backup, { overwrite: false });
+        output.backedUp = true;
+      }
+      for (const output of outputs) {
+        await vscode.workspace.fs.rename(output.temp, output.target, { overwrite: false });
+        output.committed = true;
+      }
+      committedAll = true;
+    } catch (error) {
+      for (const output of outputs) {
+        if (output.committed) await deleteIfExists(output.target);
+      }
+      for (const output of outputs) {
+        if (output.backedUp && await exists(output.backup)) {
+          await vscode.workspace.fs.rename(output.backup, output.target, { overwrite: true });
+        }
+      }
+      throw error;
+    } finally {
+      for (const output of outputs) await deleteIfExists(output.temp);
+    }
+    if (committedAll) {
+      // Backup cleanup is deliberately outside the commit/rollback block. If
+      // cleanup fails, keeping a .bak is safer than rolling back valid output.
+      for (const output of outputs) {
+        if (output.backedUp) await deleteIfExists(output.backup);
+      }
+    }
+    void vscode.window.showInformationMessage(
+      `互译与纯译文已导出：${result.orgFileName} / ${result.transFileName} / ${result.pureTransFileName}`,
+    );
+  }
+
+  private updateTranslationUi(chapterPath: string, units: Candidate[], state: TranslationStateFile) {
+    if (this.activeModule !== "翻译" || this.selectedFile?.path !== chapterPath) return;
+    this.rows = translationRows(units, state);
+    if (this.translationRunning) {
+      this.translationProgress = translationProgress(units, state, "running", this.translationProgress.current);
+    }
+    this.update();
+  }
+
+  private async readTranslationState(chapterUri: vscode.Uri): Promise<TranslationStateFile> {
+    const stateUri = vscode.Uri.joinPath(vscode.Uri.file(path.dirname(chapterUri.fsPath)), TRANSLATION_STATE_FILE);
+    try {
+      const raw = Buffer.from(await vscode.workspace.fs.readFile(stateUri)).toString("utf8");
+      return parseTranslationState(raw, chapterUri.fsPath);
+    } catch {
+      return emptyTranslationState(chapterUri.fsPath);
+    }
+  }
+
+  private async writeTranslationState(chapterUri: vscode.Uri, state: TranslationStateFile) {
+    const directory = vscode.Uri.file(path.dirname(chapterUri.fsPath));
+    const stateUri = vscode.Uri.joinPath(directory, TRANSLATION_STATE_FILE);
+    const tempUri = vscode.Uri.joinPath(directory, `${TRANSLATION_STATE_FILE}.tmp`);
+    await vscode.workspace.fs.writeFile(tempUri, Buffer.from(serializeTranslationState(state), "utf8"));
+    await vscode.workspace.fs.rename(tempUri, stateUri, { overwrite: true });
+  }
+
+  private async readValidatedTranslationState(
+    chapterUri: vscode.Uri,
+    units: readonly Candidate[],
+  ): Promise<{ state: TranslationStateFile; invalidated: number }> {
+    const state = await this.readTranslationState(chapterUri);
+    let invalidated = 0;
+    for (const unit of units) {
+      const entry = translationEntryForUnit(unit, state);
+      if (entry?.status !== "translated" || !entry.translatedText) continue;
+      const issue = markdownStructureIssue(unit.raw, entry.translatedText);
+      if (!issue) continue;
+      recordTranslationError(state, unit, `译文 Markdown 结构校验失败：${issue}`);
+      invalidated += 1;
+    }
+    if (invalidated) {
+      await this.writeTranslationState(chapterUri, state);
+      this.output.appendLine(`[translation] 检测到 ${invalidated} 个旧译文 Markdown 结构异常，已标记为失败并等待重译。`);
+    }
+    return { state, invalidated };
+  }
+
   private async activateModule(moduleName: ModuleName) {
     this.viewMode = "table";
     this.activeModule = moduleName;
@@ -523,11 +817,22 @@ class Ocr2mdExtension implements vscode.Disposable {
       }
     } else if (moduleName === "章节标题") {
       if (this.selectedFile) await this.openChapterWorkingCopy({ silent: true });
-    } else if (moduleName === "文本块" || moduleName === "分句") {
+    } else if (moduleName === "文本块" || moduleName === "分句" || moduleName === "翻译") {
       if (this.selectedFile?.kind === "trans") {
-        this.rows = moduleName === "分句"
-          ? scanSentences(this.selectedFileText, this.selectedFile.path)
-          : scanTextBlocks(this.selectedFileText, this.selectedFile.path);
+        if (moduleName === "翻译") {
+          const units = scanTranslationUnits(this.selectedFileText, this.selectedFile.path);
+          const { state } = await this.readValidatedTranslationState(vscode.Uri.file(this.selectedFile.path), units);
+          this.rows = translationRows(units, state);
+          const progress = translationProgress(units, state);
+          this.translationProgress = {
+            ...progress,
+            phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
+          };
+        } else {
+          this.rows = moduleName === "分句"
+            ? scanSentences(this.selectedFileText, this.selectedFile.path)
+            : scanTextBlocks(this.selectedFileText, this.selectedFile.path);
+        }
         this.modulePreviewPaths.set(moduleName, this.selectedFile.path);
       }
     } else if (this.selectedFile) {
@@ -554,10 +859,21 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (document.uri.fsPath === this.selectedFile?.path) {
       if (this.chapterWorkingUri && this.chapterWorkingUri.fsPath !== document.uri.fsPath) return;
       this.selectedFileText = document.getText();
-      if ((this.activeModule === "文本块" || this.activeModule === "分句") && this.selectedFile.kind === "trans") {
-        this.rows = this.activeModule === "分句"
-          ? scanSentences(this.selectedFileText, this.selectedFile.path)
-          : scanTextBlocks(this.selectedFileText, this.selectedFile.path);
+      if ((this.activeModule === "文本块" || this.activeModule === "分句" || this.activeModule === "翻译") && this.selectedFile.kind === "trans") {
+        if (this.activeModule === "翻译") {
+          const units = scanTranslationUnits(this.selectedFileText, this.selectedFile.path);
+          const { state } = await this.readValidatedTranslationState(vscode.Uri.file(this.selectedFile.path), units);
+          this.rows = translationRows(units, state);
+          const progress = translationProgress(units, state);
+          this.translationProgress = {
+            ...progress,
+            phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
+          };
+        } else {
+          this.rows = this.activeModule === "分句"
+            ? scanSentences(this.selectedFileText, this.selectedFile.path)
+            : scanTextBlocks(this.selectedFileText, this.selectedFile.path);
+        }
         this.update();
       } else if (this.activeModule === "注释" || this.activeModule === "嵌入块") {
         await this.scanCurrentModule(this.activeModule);
@@ -1586,7 +1902,7 @@ class ChapterChangeDecorationProvider implements vscode.FileDecorationProvider, 
   }
 }
 
-type DirectoryNodeKind = "workspace" | "ocr-group" | "chapters-group" | "trans-group" | "translation-service" | "ocr-file" | "chapter-file" | "chapter-module" | "trans-chapter-directory" | "trans-module";
+type DirectoryNodeKind = "workspace" | "ocr-group" | "chapters-group" | "translation-service" | "ocr-file" | "chapter-file" | "chapter-module" | "chapter-trans" | "trans-module";
 
 class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
   private readonly emitter = new vscode.EventEmitter<DirectoryItem | undefined>();
@@ -1618,7 +1934,7 @@ class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
       return [
         DirectoryItem.group("ocr", "ocr-group"),
         DirectoryItem.group("chapters", "chapters-group"),
-        DirectoryItem.group("trans", "trans-group"),
+        DirectoryItem.translationService(this.viewMode() === "translationService"),
       ];
     }
     if (item.nodeKind === "ocr-group") {
@@ -1631,11 +1947,8 @@ class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
         .filter((file) => file.kind === "chapter")
         .map((file) => DirectoryItem.chapterFile(file, chapterTreeLabel(workspace.uri.fsPath, file), file.path === this.selectedPath()));
     }
-    if (item.nodeKind === "trans-group") {
-      return this.transChildren(workspace);
-    }
     if (item.nodeKind === "chapter-file" && item.file) {
-      return ([
+      const modules = ([
         ["标题", "章节标题"],
         ["注释", "注释"],
         ["嵌入块", "嵌入块"],
@@ -1645,10 +1958,15 @@ class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
         item.file!,
         item.file!.path === this.selectedPath() && moduleName === this.activeModule(),
       ));
+      const transDirectoryPath = path.join(path.dirname(item.file.path), TRANS_OUTPUT_DIRECTORY);
+      const transSelected = this.viewMode() === "table"
+        && Boolean(this.selectedPath())
+        && path.dirname(this.selectedPath()!) === transDirectoryPath;
+      return [...modules, DirectoryItem.chapterTrans(transDirectoryPath, transSelected)];
     }
-    if (item.nodeKind === "trans-chapter-directory" && item.resourceUri) {
+    if (item.nodeKind === "chapter-trans" && item.resourceUri) {
       const directoryPath = item.resourceUri.fsPath;
-      return (["文本块", "分句"] as const).map((moduleName) => DirectoryItem.transModule(
+      return (["文本块", "分句", "翻译"] as const).map((moduleName) => DirectoryItem.transModule(
         moduleName,
         directoryPath,
         Boolean(this.selectedPath())
@@ -1659,29 +1977,11 @@ class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
     return [];
   }
 
-  private async transChildren(workspace: vscode.WorkspaceFolder): Promise<DirectoryItem[]> {
-    const settings = DirectoryItem.translationService(this.viewMode() === "translationService");
-    const directory = vscode.Uri.joinPath(workspace.uri, TRANS_OUTPUT_DIRECTORY);
-    try {
-      const entries = await vscode.workspace.fs.readDirectory(directory);
-      const chapters = entries
-        .filter(([, type]) => (type & vscode.FileType.Directory) !== 0)
-        .map(([name]) => {
-          const chapterPath = vscode.Uri.joinPath(directory, name).fsPath;
-          const selected = this.viewMode() === "table" && Boolean(this.selectedPath()) && path.dirname(this.selectedPath()!) === chapterPath;
-          return DirectoryItem.transChapterDirectory(name, chapterPath, selected);
-        })
-        .sort((left, right) => String(left.label).localeCompare(String(right.label), "zh-CN", { numeric: true }));
-      return [settings, ...chapters];
-    } catch {
-      return [settings];
-    }
-  }
 }
 
 class DirectoryItem extends vscode.TreeItem {
   transDirectoryPath?: string;
-  transModuleName?: "文本块" | "分句";
+  transModuleName?: "文本块" | "分句" | "翻译";
 
   private constructor(
     label: string,
@@ -1699,7 +1999,7 @@ class DirectoryItem extends vscode.TreeItem {
     return item;
   }
 
-  static group(label: string, nodeKind: "ocr-group" | "chapters-group" | "trans-group") {
+  static group(label: string, nodeKind: "ocr-group" | "chapters-group") {
     const item = new DirectoryItem(label, nodeKind, vscode.TreeItemCollapsibleState.Collapsed);
     item.iconPath = new vscode.ThemeIcon("folder");
     return item;
@@ -1714,17 +2014,17 @@ class DirectoryItem extends vscode.TreeItem {
     return item;
   }
 
-  static transChapterDirectory(label: string, directoryPath: string, selected: boolean) {
-    const item = new DirectoryItem(label, "trans-chapter-directory", vscode.TreeItemCollapsibleState.Collapsed);
+  static chapterTrans(directoryPath: string, selected: boolean) {
+    const item = new DirectoryItem("trans", "chapter-trans", vscode.TreeItemCollapsibleState.Collapsed);
     item.transDirectoryPath = directoryPath;
     item.resourceUri = vscode.Uri.file(directoryPath);
     item.description = selected ? "当前" : undefined;
-    item.tooltip = `${directoryPath}\n展开查看文本块与分句派生表`;
+    item.tooltip = `${directoryPath}\n展开查看文本块、分句与翻译`;
     item.iconPath = new vscode.ThemeIcon("folder");
     return item;
   }
 
-  static transModule(moduleName: "文本块" | "分句", directoryPath: string, selected: boolean) {
+  static transModule(moduleName: "文本块" | "分句" | "翻译", directoryPath: string, selected: boolean) {
     const item = new DirectoryItem(moduleName, "trans-module", vscode.TreeItemCollapsibleState.None);
     item.transDirectoryPath = directoryPath;
     item.transModuleName = moduleName;
@@ -1735,7 +2035,7 @@ class DirectoryItem extends vscode.TreeItem {
       title: `打开 trans ${moduleName}`,
       arguments: [directoryPath, moduleName],
     };
-    item.iconPath = new vscode.ThemeIcon(moduleName === "文本块" ? "symbol-structure" : "list-ordered");
+    item.iconPath = new vscode.ThemeIcon(moduleName === "文本块" ? "symbol-structure" : moduleName === "分句" ? "list-ordered" : "globe");
     return item;
   }
 
@@ -1931,5 +2231,13 @@ async function exists(uri: vscode.Uri): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function deleteIfExists(uri: vscode.Uri): Promise<void> {
+  try {
+    await vscode.workspace.fs.delete(uri, { useTrash: false });
+  } catch {
+    // Temporary export file may already have been renamed or may never exist.
   }
 }

@@ -186,8 +186,8 @@ export function chapterCalibrationOutputDirectory(originalPath: string): string 
 }
 
 export function chapterTransOutputPath(workspaceRoot: string, originalPath: string): string {
-  const chapterDirectory = chapterDisplayName(workspaceRoot, originalPath) || path.parse(originalPath).name;
-  return path.join(workspaceRoot, TRANS_OUTPUT_DIRECTORY, chapterDirectory, path.basename(originalPath));
+  void workspaceRoot;
+  return path.join(path.dirname(originalPath), TRANS_OUTPUT_DIRECTORY, path.basename(originalPath));
 }
 
 export function chapterAnnotationWorkingPath(originalPath: string): string {

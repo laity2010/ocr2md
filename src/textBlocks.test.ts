@@ -25,7 +25,7 @@ const markdown = [
   "Trailing text without delimiter.",
 ].join("\n");
 
-const rows = scanTextBlocks(markdown, "/ws/trans/01/01.md");
+const rows = scanTextBlocks(markdown, "/ws/chapters/01/trans/01.md");
 assert.deepStrictEqual(rows.map((row) => [row.range.line + 1, row.lineType]), [
   [5, "标题"],
   [8, "文本"],

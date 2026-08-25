@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { scanSentences, segmentSentences } from "./sentences";
+import { findMultilineLatexRanges, isStandaloneMultilineLatexBlock, scanSentences, segmentSentences } from "./sentences";
 
 assert.deepStrictEqual(
   segmentSentences("Mr. Smith went home. He slept."),
@@ -37,6 +37,27 @@ assert.deepStrictEqual(
   segmentSentences("Text before [^12] text after. Next sentence."),
   ["Text before [^12] text after.", "Next sentence."],
 );
+assert.deepStrictEqual(
+  segmentSentences("See https://example.com/a.b. Next sentence."),
+  ["See https://example.com/a.b.", "Next sentence."],
+);
+assert.deepStrictEqual(
+  segmentSentences("Use `obj.method()` here. Next sentence."),
+  ["Use `obj.method()` here.", "Next sentence."],
+);
+assert.deepStrictEqual(
+  segmentSentences("Value $x.y$ is shown. Next sentence."),
+  ["Value $x.y$ is shown.", "Next sentence."],
+);
+assert.deepStrictEqual(
+  segmentSentences("See [[Notes.v1]] for details. Next sentence."),
+  ["See [[Notes.v1]] for details.", "Next sentence."],
+);
+assert.deepStrictEqual(
+  segmentSentences("Read [Sec. 2](https://example.com/doc) first. Next sentence."),
+  ["Read [Sec. 2](https://example.com/doc) first.", "Next sentence."],
+);
+
 assert.deepStrictEqual(
   segmentSentences("1. First item continues here. 2. Second item."),
   ["1. First item continues here.", "2. Second item."],
@@ -76,7 +97,7 @@ const markdown = [
   "<br>",
 ].join("\n");
 
-const rows = scanSentences(markdown, "/ws/trans/01/01.md");
+const rows = scanSentences(markdown, "/ws/chapters/01/trans/01.md");
 assert.deepStrictEqual(rows.map((row) => [row.range.line + 1, row.lineType, row.preview]), [
   [5, "标题", "## Chapter title"],
   [8, "文本", "Mr. Smith went home."],
@@ -93,5 +114,21 @@ assert.deepStrictEqual(rows.filter((row) => row.range.line === 7).map((row) => r
 
 const wrapped = rows.find((row) => row.preview === "A sentence that wraps across source lines.");
 assert.deepStrictEqual(wrapped?.range, { line: 19, start: 0, endLine: 20, end: "across source lines.".length });
+
+
+const latexBlockSource = [
+  "Before the formula.",
+  "$$",
+  "E = mc^2",
+  "$$",
+  "After the formula.",
+].join("\n");
+const latexRows = scanSentences(latexBlockSource, "/ws/chapters/01/trans/01.md");
+assert.deepStrictEqual(latexRows.map((row) => row.raw), ["Before the formula.", "After the formula."]);
+assert.deepStrictEqual(
+  findMultilineLatexRanges(latexBlockSource).map((range) => latexBlockSource.slice(range.start, range.end)),
+  ["$$\nE = mc^2\n$$"],
+);
+assert.ok(isStandaloneMultilineLatexBlock("$$\nE = mc^2\n$$"));
 
 console.log("sentences tests passed");

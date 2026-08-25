@@ -1,8 +1,17 @@
 import * as assert from "assert";
-import { deepLApiHost, parseDeepLResponse } from "./translationService";
+import { buildDeepLRequestBody, deepLApiHost, parseDeepLResponse } from "./translationService";
 
 assert.strictEqual(deepLApiHost("abc:fx"), "api-free.deepl.com");
 assert.strictEqual(deepLApiHost("abc"), "api.deepl.com");
+
+assert.strictEqual(
+  buildDeepLRequestBody("Sentence one.", "Sentence one. Sentence two."),
+  JSON.stringify({ text: ["Sentence one."], target_lang: "ZH-HANS", context: "Sentence one. Sentence two." }),
+);
+assert.strictEqual(
+  buildDeepLRequestBody("Sentence one."),
+  JSON.stringify({ text: ["Sentence one."], target_lang: "ZH-HANS" }),
+);
 
 assert.deepStrictEqual(
   parseDeepLResponse(200, JSON.stringify({ translations: [{ text: "本季度公司盈利更为强劲。" }] })),

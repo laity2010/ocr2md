@@ -14,6 +14,15 @@ export function deepLApiHost(apiKey: string): string {
   return apiKey.trim().endsWith(":fx") ? "api-free.deepl.com" : "api.deepl.com";
 }
 
+export function buildDeepLRequestBody(text: string, context?: string): string {
+  const payload: { text: string[]; target_lang: "ZH-HANS"; context?: string } = {
+    text: [text],
+    target_lang: "ZH-HANS",
+  };
+  if (context?.trim()) payload.context = context;
+  return JSON.stringify(payload);
+}
+
 export function parseDeepLResponse(statusCode: number, rawResponse: string): TranslationServiceTestResult {
   let parsed: unknown;
   try {
@@ -39,24 +48,32 @@ export function parseDeepLResponse(statusCode: number, rawResponse: string): Tra
   };
 }
 
-export async function testDeepL(apiKey: string, sampleText: string): Promise<TranslationServiceTestResult> {
+export async function translateDeepL(
+  apiKey: string,
+  text: string,
+  context?: string,
+): Promise<TranslationServiceTestResult> {
   const key = apiKey.trim();
-  const text = sampleText.trim();
+  const source = text.trim();
   if (!key) return { ok: false, message: "请先填写 DeepL API Key。" };
+  if (!source) return { ok: false, message: "没有可翻译的文本。" };
+  return requestDeepL(key, buildDeepLRequestBody(source, context));
+}
+
+export async function testDeepL(apiKey: string, sampleText: string): Promise<TranslationServiceTestResult> {
+  const text = sampleText.trim();
   if (!text) return { ok: false, message: "请输入测试样本句子。" };
+  return translateDeepL(apiKey, text);
+}
 
-  const body = JSON.stringify({
-    text: [text],
-    target_lang: "ZH-HANS",
-  });
-
+function requestDeepL(apiKey: string, body: string): Promise<TranslationServiceTestResult> {
   return new Promise((resolve) => {
     const request = https.request({
-      hostname: deepLApiHost(key),
+      hostname: deepLApiHost(apiKey),
       path: "/v2/translate",
       method: "POST",
       headers: {
-        Authorization: `DeepL-Auth-Key ${key}`,
+        Authorization: `DeepL-Auth-Key ${apiKey}`,
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(body),
       },

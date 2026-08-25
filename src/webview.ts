@@ -1,6 +1,6 @@
 import type { Candidate, ModuleName, SidebarState } from "./types";
 
-const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "文本块", "分句"];
+const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "文本块", "分句", "翻译"];
 export const TABLE_COLUMNS = ["多选", "行号", "行类型", "预览"] as const;
 export const ANNOTATION_EXTRA_COLUMNS = ["注释号"] as const;
 export const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ["章节文件"] as const;
@@ -65,6 +65,10 @@ export function renderSidebar(state: SidebarState): string {
     .pair-status.matched { color: var(--vscode-testing-iconPassed, #89d185); }
     .empty { padding: 24px; text-align: center; color: var(--vscode-descriptionForeground); }
     .progress { color: var(--vscode-descriptionForeground); }
+    .translation-progress { width: min(360px, 46vw); height: 14px; }
+    .translation-text { white-space: pre-wrap; min-width: 220px; overflow-wrap: anywhere; }
+    .translation-status { min-width: 86px; }
+    tr.translation-failed { box-shadow: inset 3px 0 var(--vscode-testing-iconFailed, #f14c4c); }
     .settings-panel { max-width: 760px; display: grid; gap: 14px; overflow: auto; padding-right: 4px; }
     .settings-card { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--vscode-panel-border); }
     .settings-card h2 { margin: 0 0 4px; font-size: 16px; }
@@ -113,6 +117,7 @@ export function renderSidebar(state: SidebarState): string {
       "嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本", DELETED],
       "文本块": ["标题", "内嵌", "文本", "注释正文"],
       "分句": ["标题", "文本", "注释正文"],
+      "翻译": ["标题", "文本", "注释正文"],
     };
     const FILTER_OPTIONS = {
       "章节标题": ["层级标题行+增删改行", "全部", "层级标题行", "增删改行"],
@@ -491,8 +496,8 @@ export function renderSidebar(state: SidebarState): string {
       }
       const tabs = el("div", undefined, "tabs");
       const visibleModules = state.selectedFile?.kind === "trans"
-        ? ["文本块", "分句"]
-        : MODULES.filter((moduleName) => moduleName !== "文本块" && moduleName !== "分句");
+        ? ["文本块", "分句", "翻译"]
+        : MODULES.filter((moduleName) => moduleName !== "文本块" && moduleName !== "分句" && moduleName !== "翻译");
       for (const moduleName of visibleModules) {
         const count = moduleName === "注释" && state.annotationMatchSummary
           ? state.annotationMatchSummary.calibrated
@@ -508,7 +513,7 @@ export function renderSidebar(state: SidebarState): string {
       app.append(moduleToolbar());
       if (state.activeModule === "注释" || state.activeModule === "嵌入块") app.append(regexCard());
       if (FILTER_OPTIONS[state.activeModule]) app.append(filterToolbar());
-      if (state.activeModule !== "文本块" && state.activeModule !== "分句") app.append(bulkToolbar());
+      if (state.activeModule !== "文本块" && state.activeModule !== "分句" && state.activeModule !== "翻译") app.append(bulkToolbar());
       app.append(rowTable(rowsForModule()));
       requestAnimationFrame(() => {
         restoreScroll();
@@ -611,6 +616,30 @@ export function renderSidebar(state: SidebarState): string {
         toolbar.append(el("span", "非内嵌文本块 · Intl.Segmenter + 例外合并 · 只读派生表", "progress"));
         return toolbar;
       }
+      if (state.activeModule === "翻译") {
+        const progressState = state.translationProgress || { phase: "idle", completed: 0, total: 0, failed: 0 };
+        const percent = progressState.total ? Math.round(progressState.completed * 100 / progressState.total) : 0;
+        const run = button(
+          progressState.phase === "running" ? "翻译中…" : progressState.phase === "complete" ? "已全部翻译" : progressState.completed ? "继续翻译" : "开始翻译",
+          () => postKeepView("translateCurrentChapter"),
+          "primary",
+        );
+        run.disabled = progressState.phase === "running" || progressState.phase === "complete" || progressState.total === 0;
+        const exportCross = button("导出双向互译", () => postKeepView("exportCrossTranslation"));
+        exportCross.disabled = progressState.phase === "running"
+          || progressState.total === 0
+          || progressState.completed !== progressState.total;
+        exportCross.title = exportCross.disabled ? "全部翻译单元完成后可导出" : "生成 org2trans / trans2org / trans 纯译文 Markdown";
+        const meter = document.createElement("progress");
+        meter.className = "translation-progress";
+        meter.max = Math.max(progressState.total, 1);
+        meter.value = progressState.completed;
+        const summary = progressState.completed + "/" + progressState.total + " · " + percent + "%"
+          + (progressState.failed ? " · 失败 " + progressState.failed : "")
+          + (progressState.current ? " · 当前 " + progressState.current : "");
+        toolbar.append(run, exportCross, meter, el("span", summary, "progress"));
+        return toolbar;
+      }
       if (state.activeModule === "章节定界") {
         toolbar.append(
           button("创建/打开定界工作稿", () => postKeepView("openChapterBoundaryWork"), "primary"),
@@ -710,7 +739,7 @@ export function renderSidebar(state: SidebarState): string {
       const table = document.createElement("table");
       const head = document.createElement("thead");
       const headRow = document.createElement("tr");
-      if (state.activeModule !== "文本块" && state.activeModule !== "分句") {
+      if (state.activeModule !== "文本块" && state.activeModule !== "分句" && state.activeModule !== "翻译") {
         const selectCell = el("th", undefined, "check-column");
         const selectAll = document.createElement("input");
         const visibleIds = rows.map((row) => row.id);
@@ -731,8 +760,11 @@ export function renderSidebar(state: SidebarState): string {
         headRow.append(selectCell);
       }
       headRow.append(sortableHeader("行号", "line", "line-column"));
-      if (state.activeModule === "分句") {
-        headRow.append(el("th", "文本块"), el("th", "句内序号"));
+      if (state.activeModule === "分句" || state.activeModule === "翻译") {
+        headRow.append(
+          el("th", "文本块"),
+          el("th", state.activeModule === "翻译" ? "单元序号" : "句内序号"),
+        );
       }
       if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号")) {
         headRow.append(sortableHeader("注释号", "number", "number-column"));
@@ -743,13 +775,22 @@ export function renderSidebar(state: SidebarState): string {
       if (state.activeModule === "章节定界" && CHAPTER_BOUNDARY_EXTRA_COLUMNS.includes("章节文件")) {
         headRow.append(sortableHeader("章节文件", "chapterFile", "chapter-file-column"));
       }
-      headRow.append(
-        sortableHeader(
-          state.activeModule === "文本块" ? "文本块类型" : state.activeModule === "分句" ? "来源类型" : "行类型",
-          "lineType",
-        ),
-        sortableHeader("预览", "preview"),
-      );
+      if (state.activeModule === "翻译") {
+        headRow.append(
+          sortableHeader("来源类型", "lineType"),
+          sortableHeader("原文", "preview"),
+          el("th", "译文"),
+          el("th", "状态"),
+        );
+      } else {
+        headRow.append(
+          sortableHeader(
+            state.activeModule === "文本块" ? "文本块类型" : state.activeModule === "分句" ? "来源类型" : "行类型",
+            "lineType",
+          ),
+          sortableHeader("预览", "preview"),
+        );
+      }
       head.append(headRow);
       const body = document.createElement("tbody");
       const pairByRow = new Map();
@@ -769,6 +810,7 @@ export function renderSidebar(state: SidebarState): string {
       if (candidate.chapterBoundaryState === "added") row.classList.add("added");
       if (candidate.chapterBoundaryState === "modified") row.classList.add("modified");
       if (candidate.chapterBoundaryState === "deleted") row.classList.add("removed");
+      if (state.activeModule === "翻译" && candidate.translationStatus === "失败") row.classList.add("translation-failed");
       const missingNumber = state.activeModule === "注释"
         && (candidate.lineType === "注释引用" || candidate.lineType === "注释正文")
         && !String(candidate.annotationNumber || "").trim();
@@ -792,9 +834,9 @@ export function renderSidebar(state: SidebarState): string {
         syncSelectionChrome();
       });
       checkCell.append(check);
-      if (state.activeModule !== "文本块" && state.activeModule !== "分句") row.append(checkCell);
+      if (state.activeModule !== "文本块" && state.activeModule !== "分句" && state.activeModule !== "翻译") row.append(checkCell);
       row.append(el("td", String(candidate.range.line + 1)));
-      if (state.activeModule === "分句") {
+      if (state.activeModule === "分句" || state.activeModule === "翻译") {
         row.append(
           el("td", candidate.parentBlockIndex == null ? "" : "B" + String(candidate.parentBlockIndex).padStart(3, "0")),
           el("td", candidate.sentenceIndex == null ? "" : String(candidate.sentenceIndex)),
@@ -835,7 +877,7 @@ export function renderSidebar(state: SidebarState): string {
       }
 
       const typeCell = document.createElement("td");
-      if (state.activeModule === "文本块" || state.activeModule === "分句") {
+      if (state.activeModule === "文本块" || state.activeModule === "分句" || state.activeModule === "翻译") {
         typeCell.append(el("span", candidate.lineType || "文本"));
       } else {
         const typeSelect = document.createElement("select");
@@ -852,7 +894,14 @@ export function renderSidebar(state: SidebarState): string {
       }
       const previewCell = el("td", undefined, "preview");
       previewCell.append(el("div", previewText(candidate), "preview-content"));
-      row.append(typeCell, previewCell);
+      if (state.activeModule === "翻译") {
+        const translationCell = el("td", candidate.translationText || "", "translation-text");
+        const statusCell = el("td", candidate.translationStatus || "待翻译", "translation-status");
+        if (candidate.translationError) statusCell.append(el("div", candidate.translationError, "preview-detail"));
+        row.append(typeCell, previewCell, translationCell, statusCell);
+      } else {
+        row.append(typeCell, previewCell);
+      }
 
       if (state.activeModule === "注释") {
         const status = pair

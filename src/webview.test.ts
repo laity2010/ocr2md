@@ -70,10 +70,22 @@ assert.ok(html.includes('"文本块": ["标题", "内嵌", "文本", "注释正�
 assert.ok(html.includes('state.selectedFile?.kind === "trans"'), "trans selection must switch the sidebar to the text-block table");
 assert.ok(html.includes('state.activeModule === "文本块" ? "文本块类型" : state.activeModule === "分句" ? "来源类型" : "行类型"'), "derived trans tables must label their type columns");
 assert.ok(html.includes('按 <br> 划分 · 只读派生表'), "text-block table must be clearly read-only and delimiter-derived");
-assert.ok(html.includes('["文本块", "分句"]'), "trans sidebar must expose text-block and sentence tables");
+assert.ok(html.includes('["文本块", "分句", "翻译"]'), "trans sidebar must expose text-block, sentence, and translation tables");
 assert.ok(html.includes('"分句": ["标题", "文本", "注释正文"]'), "sentence source types must exclude embeds");
 assert.ok(html.includes("句内序号"), "sentence table must show sentence index within its parent block");
 assert.ok(html.includes("Intl.Segmenter + 例外合并 · 只读派生表"), "sentence table must describe the segmentation strategy");
+
+assert.ok(html.includes("开始翻译"), "translation module must expose a start action");
+assert.ok(html.includes("继续翻译"), "translation module must expose a resume action");
+assert.ok(html.includes("导出双向互译"), "translation module must expose cross-translation export");
+assert.ok(html.includes('postKeepView("exportCrossTranslation")'), "cross-translation export action is missing");
+assert.ok(html.includes("全部翻译单元完成后可导出"), "cross export must remain gated until translation is complete");
+assert.ok(html.includes("translation-progress"), "translation module must display overall progress");
+assert.ok(html.includes('postKeepView("translateCurrentChapter")'), "translation module must invoke chapter translation");
+for (const column of ["原文", "译文", "状态"]) {
+  assert.ok(html.includes(column), `translation table missing column: ${column}`);
+}
+assert.ok(html.includes('candidate.translationStatus || "待翻译"'), "translation table must show persisted row status");
 assert.ok(html.includes('state.viewMode === "translationService"'), "translation service must have a dedicated settings view");
 for (const translationUiText of ["翻译服务", "当前翻译服务", "DeepL", "API Key", "测试样本句子", "保存设置", "测试", "服务器返回信息"]) {
   assert.ok(html.includes(translationUiText), `missing translation service UI text: ${translationUiText}`);

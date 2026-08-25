@@ -29,7 +29,7 @@ export function scanSentences(markdown: string, sourcePath: string): Candidate[]
     if (block.lineType === "内嵌") continue;
     const slices = block.lineType === "标题"
       ? [{ start: 0, end: block.raw.length }]
-      : segmentSentenceSlices(block.raw);
+      : segmentTranslatableSentenceSlices(block.raw);
     slices.forEach((slice, index) => {
       const raw = block.raw.slice(slice.start, slice.end);
       if (!raw.trim()) return;
@@ -61,7 +61,66 @@ export function scanSentences(markdown: string, sourcePath: string): Candidate[]
 }
 
 export function segmentSentences(text: string): string[] {
-  return segmentSentenceSlices(text).map((slice) => text.slice(slice.start, slice.end));
+  return segmentTranslatableSentenceSlices(text).map((slice) => text.slice(slice.start, slice.end));
+}
+
+export interface MultilineLatexRange {
+  start: number;
+  end: number;
+}
+
+/** Exact multi-line $$ blocks are structural content, never translation units. */
+export function findMultilineLatexRanges(text: string): MultilineLatexRange[] {
+  const lines = text.split("\n");
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    starts.push(offset);
+    offset += line.length + 1;
+  }
+  const ranges: MultilineLatexRange[] = [];
+  let open: number | undefined;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].trim() !== "$$") continue;
+    if (open === undefined) {
+      open = index;
+      continue;
+    }
+    const start = starts[open];
+    const end = starts[index] + lines[index].length;
+    ranges.push({ start, end });
+    open = undefined;
+  }
+  return ranges;
+}
+
+export function isStandaloneMultilineLatexBlock(text: string): boolean {
+  const trimmed = text.trim();
+  const ranges = findMultilineLatexRanges(trimmed);
+  return ranges.length === 1 && ranges[0].start === 0 && ranges[0].end === trimmed.length;
+}
+
+function segmentTranslatableSentenceSlices(text: string): SentenceSlice[] {
+  const formulas = findMultilineLatexRanges(text);
+  if (!formulas.length) return segmentSentenceSlices(text);
+  const slices: SentenceSlice[] = [];
+  let cursor = 0;
+  for (const formula of formulas) {
+    if (cursor < formula.start) {
+      const prefix = text.slice(cursor, formula.start);
+      for (const slice of segmentSentenceSlices(prefix)) {
+        slices.push({ start: cursor + slice.start, end: cursor + slice.end });
+      }
+    }
+    cursor = formula.end;
+  }
+  if (cursor < text.length) {
+    const suffix = text.slice(cursor);
+    for (const slice of segmentSentenceSlices(suffix)) {
+      slices.push({ start: cursor + slice.start, end: cursor + slice.end });
+    }
+  }
+  return slices;
 }
 
 function segmentSentenceSlices(text: string): SentenceSlice[] {
@@ -129,6 +188,30 @@ function prepareSegmentationText(text: string): string {
   const original = text.replace(/\n/g, " ");
   const chars = [...original];
 
+  // Mask punctuation inside structures that must survive sentence segmentation
+  // intact. Replacement is character-for-character so source offsets remain
+  // exact for editor navigation and stable sentence ids.
+  const protectedPatterns = [
+    /`+[^`\n]*`+/g,
+    /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|(?<!\\)\$(?!\$)(?:\\.|[^$\n])*?(?<!\\)\$/g,
+    /!?\[\[[^\]\r\n]+\]\]/g,
+    /!\[[^\]\r\n]*\]\([^)\r\n]+\)/g,
+    /(?<!!)\[[^\]\r\n]+\]\([^)\r\n]+\)/g,
+    /<[^>\r\n]+>/g,
+  ];
+  for (const pattern of protectedPatterns) {
+    for (const match of original.matchAll(pattern)) {
+      if (match.index === undefined) continue;
+      maskSegmentationRange(chars, match.index, match.index + match[0].length);
+    }
+  }
+  for (const match of original.matchAll(/\bhttps?:\/\/[^\s<>{}\[\]"']+/g)) {
+    if (match.index === undefined) continue;
+    let end = match.index + match[0].length;
+    while (end > match.index && /[.,;:!?]/.test(original[end - 1])) end -= 1;
+    maskSegmentationRange(chars, match.index, end);
+  }
+
   for (const match of original.matchAll(FOOTNOTE_REFERENCE)) {
     const start = match.index;
     if (start === undefined) continue;
@@ -145,6 +228,12 @@ function prepareSegmentationText(text: string): string {
   }
 
   return chars.join("");
+}
+
+function maskSegmentationRange(chars: string[], start: number, end: number) {
+  for (let index = start; index < end; index += 1) {
+    if (!/\s/.test(chars[index])) chars[index] = "x";
+  }
 }
 
 function blockSliceRange(block: Candidate, startOffset: number, endOffset: number): SourceRange {
