@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import {
   activeCandidates,
+  isIgnoredEmbedCandidate,
   DELETED_LINE_TYPE,
   findReusableManualRow,
   isDeletedCandidate,
@@ -67,3 +68,7 @@ assert.strictEqual(
 );
 
 console.log("candidateLifecycle tests passed");
+
+const ignoredEmbed = { ...rows[0], typeLabel: "嵌入块" as const, lineType: "已忽略" };
+assert.strictEqual(isIgnoredEmbedCandidate(ignoredEmbed), true);
+assert.strictEqual(activeCandidates([ignoredEmbed]).length, 1, "已忽略 must remain auditable rather than soft-deleted");

@@ -2,9 +2,14 @@ import type { Candidate } from "./types";
 
 /** Soft-deleted table rows remain auditable but must not affect processing. */
 export const DELETED_LINE_TYPE = "已删除";
+export const IGNORED_EMBED_LINE_TYPE = "已忽略";
 
 export function isDeletedCandidate(candidate: Candidate): boolean {
   return candidate.lineType === DELETED_LINE_TYPE;
+}
+
+export function isIgnoredEmbedCandidate(candidate: Candidate): boolean {
+  return candidate.typeLabel === "嵌入块" && candidate.lineType === IGNORED_EMBED_LINE_TYPE;
 }
 
 export function markCandidatesDeleted(rows: Candidate[], ids: ReadonlySet<string>): Candidate[] {

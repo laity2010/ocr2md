@@ -19,6 +19,8 @@ import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign"
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
+  IGNORED_EMBED_LINE_TYPE,
+  isIgnoredEmbedCandidate,
   findReusableManualRow,
   markCandidatesDeleted,
 } from "./candidateLifecycle";
@@ -34,6 +36,7 @@ import { splitBlankLineBlocks } from "./atoms";
 import { exportByCalibration } from "./calibrationExport";
 import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
 import { scanTextBlocks } from "./textBlocks";
+import { scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { scanSentences } from "./sentences";
 import {
   markdownStructureIssue,
@@ -112,7 +115,7 @@ import {
   withFormatCalibratedFrontmatter,
 } from "./workspaceFiles";
 
-const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "文本块", "分句", "翻译"];
+const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "非法断行", "文本块", "分句", "翻译"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
 const DEEPL_API_KEY_SECRET = "ocr2md.translation.deepl.apiKey";
 const TRANSLATION_SERVICE_SETTING = "ocr2md.translation.service";
@@ -191,7 +194,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       vscode.commands.registerCommand("ocr2md.openTranslationService", () =>
         this.runTransAction("打开翻译服务", () => this.openTranslationService())),
       vscode.commands.registerCommand("ocr2md.openChapterModule", (filePath: string, moduleName: ModuleName) => {
-        if (moduleName === "章节标题" || moduleName === "注释" || moduleName === "嵌入块") {
+        if (moduleName === "章节标题" || moduleName === "注释" || moduleName === "嵌入块" || moduleName === "非法断行") {
           return this.selectFile(filePath, moduleName);
         }
         return undefined;
@@ -436,7 +439,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       this.selectedFileText = ensured.workingText;
       editorUri = ensured.workingUri;
     }
-    for (const moduleName of ["章节标题", "注释", "嵌入块"] as const) {
+    for (const moduleName of ["章节标题", "注释", "嵌入块", "非法断行"] as const) {
       this.modulePreviewPaths.set(moduleName, editorUri.fsPath);
     }
     this.rows = [];
@@ -452,6 +455,9 @@ class Ocr2mdExtension implements vscode.Disposable {
       }
       this.chapterWorkingUri = this.chapterWorkingUri ?? editorUri;
       await this.reindexChapterWorkingCopy(this.selectedFileText);
+    } else if (requestedModule === "非法断行") {
+      this.activeModule = requestedModule;
+      this.refreshIllegalLineBreakRows(this.selectedFileText, editorUri.fsPath);
     } else if (requestedModule === "注释" || requestedModule === "嵌入块") {
       this.activeModule = requestedModule;
       await this.reindexChapterWorkingCopy(this.selectedFileText);
@@ -817,6 +823,13 @@ class Ocr2mdExtension implements vscode.Disposable {
       }
     } else if (moduleName === "章节标题") {
       if (this.selectedFile) await this.openChapterWorkingCopy({ silent: true });
+    } else if (moduleName === "非法断行") {
+      if (this.selectedFile?.kind === "chapter") {
+        const workingPath = this.chapterWorkingUri?.fsPath ?? this.selectedFile.path;
+        const text = this.chapterWorkingUri ? await this.readWorkingText(this.chapterWorkingUri) : this.selectedFileText;
+        this.selectedFileText = text;
+        this.refreshIllegalLineBreakRows(text, workingPath);
+      }
     } else if (moduleName === "文本块" || moduleName === "分句" || moduleName === "翻译") {
       if (this.selectedFile?.kind === "trans") {
         if (moduleName === "翻译") {
@@ -1002,6 +1015,22 @@ class Ocr2mdExtension implements vscode.Disposable {
     }, 300);
   }
 
+  private refreshIllegalLineBreakRows(text: string, workingPath: string) {
+    const sourcePath = this.selectedFile?.path ?? workingPath;
+    const scanned = attachScanIdentities(
+      scanIllegalLineBreaks(text, sourcePath).map((row) => ({ ...row, workingCopyPath: workingPath })),
+      text,
+      { moduleName: "非法断行", sourcePath },
+    );
+    const previous = this.rows.filter((row) => row.typeLabel === "非法断行" && row.sourcePath === sourcePath);
+    const reconciled = reconcileRows(previous, scanned, text);
+    this.rows = [
+      ...this.rows.filter((row) => !(row.typeLabel === "非法断行" && row.sourcePath === sourcePath)),
+      ...reconciled,
+    ].sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
+    this.modulePreviewPaths.set("非法断行", workingPath);
+  }
+
   private async reindexChapterWorkingCopy(text: string, options: { writeMarker?: boolean; silent?: boolean } = {}) {
     const uri = this.chapterWorkingUri;
     if (!uri) {
@@ -1036,6 +1065,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       { silent: true },
     );
     this.rows = await this.applyWorkingCopyDiff(this.rows, current);
+    this.refreshIllegalLineBreakRows(current, uri.fsPath);
     await this.planLocalImageExportPaths(uri);
     this.pendingWorkingCopyRescan = false;
     if (!options.silent) this.update();
@@ -1053,6 +1083,8 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   private async setRowsLineType(ids: string[], lineType: string) {
     const selected = new Set(ids);
+    const selectedRows = this.rows.filter((row) => selected.has(row.id));
+    if (lineType === IGNORED_EMBED_LINE_TYPE && selectedRows.some((row) => row.typeLabel !== "嵌入块")) return;
     if (lineType === DELETED_LINE_TYPE) {
       this.rows = markCandidatesDeleted(this.rows, selected);
     } else {
@@ -1061,6 +1093,15 @@ class Ocr2mdExtension implements vscode.Disposable {
         await this.applyHeadingLineType(titleRows, lineType);
       }
       this.rows = this.rows.map((row) => selected.has(row.id) ? { ...row, lineType } : row);
+    }
+    if (selectedRows.some((row) => row.typeLabel === "嵌入块")) {
+      const source = this.selectedFile?.path;
+      const workingPath = this.chapterWorkingUri?.fsPath ?? source;
+      const targetRows = this.rows.filter((row) =>
+        row.typeLabel === "嵌入块" && (!workingPath || rowBelongsToChapter(row, source, workingPath)));
+      const renumbered = applyEmbedNumbers(targetRows, this.selectedFileText);
+      const byId = new Map(renumbered.map((row) => [row.id, row]));
+      this.rows = this.rows.map((row) => byId.get(row.id) ?? row);
     }
     this.rebuildAnnotationPairs();
     this.update();
@@ -1277,7 +1318,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (this.imageDownloadRunning) return;
     const workspace = vscode.workspace.workspaceFolders?.[0];
     if (!workspace) return;
-    const candidates = activeCandidates(this.rows).filter((row) => row.typeLabel === "嵌入块" && extractImageUrl(row.raw));
+    const candidates = activeCandidates(this.rows).filter((row) => row.typeLabel === "嵌入块" && !isIgnoredEmbedCandidate(row) && extractImageUrl(row.raw));
     if (!candidates.length) {
       void vscode.window.showWarningMessage("当前嵌入块没有可下载的外部图片。");
       return;
@@ -1952,6 +1993,7 @@ class DirectoryProvider implements vscode.TreeDataProvider<DirectoryItem> {
         ["标题", "章节标题"],
         ["注释", "注释"],
         ["嵌入块", "嵌入块"],
+        ["非法断行", "非法断行"],
       ] as const).map(([label, moduleName]) => DirectoryItem.chapterModule(
         label,
         moduleName,
@@ -2061,12 +2103,17 @@ class DirectoryItem extends vscode.TreeItem {
     return item;
   }
 
-  static chapterModule(label: string, moduleName: Exclude<ModuleName, "章节定界" | "文本块">, file: FileEntry, selected: boolean) {
+  static chapterModule(label: string, moduleName: Extract<ModuleName, "章节标题" | "注释" | "嵌入块" | "非法断行">, file: FileEntry, selected: boolean) {
     const item = new DirectoryItem(label, "chapter-module", vscode.TreeItemCollapsibleState.None, file);
     item.description = selected ? "当前" : undefined;
     item.tooltip = `${file.path} · ${label}`;
     item.command = { command: "ocr2md.openChapterModule", title: `打开${label}模块`, arguments: [file.path, moduleName] };
-    item.iconPath = new vscode.ThemeIcon(moduleName === "章节标题" ? "symbol-key" : moduleName === "注释" ? "references" : "file-media");
+    item.iconPath = new vscode.ThemeIcon(
+      moduleName === "章节标题" ? "symbol-key"
+        : moduleName === "注释" ? "references"
+          : moduleName === "非法断行" ? "warning"
+            : "file-media",
+    );
     return item;
   }
 }

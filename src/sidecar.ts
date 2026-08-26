@@ -61,7 +61,7 @@ export function serializeSidecar(sourceFile: string, rows: Candidate[], annotati
     schemaVersion: SIDECAR_SCHEMA_VERSION,
     sourceFile,
     savedAt: new Date().toISOString(),
-    annotations: calibrationsOf(rows),
+    annotations: calibrationsOf(rows.filter((row) => isModuleName(row.typeLabel))),
     annotationPairs,
   };
 }
@@ -87,7 +87,7 @@ function normalizeCalibration(row: Calibration): Calibration {
 }
 
 function isModuleName(value: unknown): value is ModuleName {
-  return value === "章节定界" || value === "章节标题" || value === "注释" || value === "嵌入块";
+  return value === "章节定界" || value === "章节标题" || value === "注释" || value === "嵌入块" || value === "非法断行";
 }
 
 export { calibrationsOf, candidateFromCalibration };

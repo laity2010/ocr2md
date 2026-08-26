@@ -1,4 +1,4 @@
-export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块" | "文本块" | "分句" | "翻译";
+export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块" | "非法断行" | "文本块" | "分句" | "翻译";
 
 export interface SourceRange {
   line: number;
@@ -43,6 +43,11 @@ export interface Candidate {
   translationText?: string;
   translationStatus?: "待翻译" | "已翻译" | "失败";
   translationError?: string;
+  previousLineText?: string;
+  nextLineText?: string;
+  mergedPreview?: string;
+  breakReason?: string;
+  breakConfidence?: "高" | "中";
   sourcePath?: string;
   sourceLabel?: string;
   status?: "候选" | "异常";

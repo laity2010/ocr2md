@@ -18,12 +18,24 @@ const scriptStart = html.indexOf("<script>") + "<script>".length;
 const scriptEnd = html.lastIndexOf("</script>");
 const generatedScript = html.slice(scriptStart, scriptEnd);
 assert.doesNotThrow(() => new Function(generatedScript), "generated webview JavaScript must be syntactically valid");
-for (const moduleName of ["章节定界", "章节标题", "注释", "嵌入块"]) {
+for (const moduleName of ["章节定界", "章节标题", "注释", "嵌入块", "非法断行"]) {
   assert.ok(html.includes(moduleName), `missing module: ${moduleName}`);
 }
-for (const removedModule of ["未分类", "非法断行", "拼写检查", "翻译设置"]) {
+for (const removedModule of ["未分类", "拼写检查", "翻译设置"]) {
   assert.ok(!html.includes(removedModule), `removed module leaked into UI: ${removedModule}`);
 }
+
+assert.ok(html.includes('"非法断行": ["合并", "忽略"]'), "illegal line-break line types must be merge/ignore");
+assert.ok(html.includes("候选由正文段落边界自动派生 · 合并/忽略写入标定"), "illegal line-break table must explain derived candidates and persisted decisions");
+for (const column of ["断行位置", "上一行", "下一行", "合并预览", "判断"]) {
+  assert.ok(html.includes(column), `illegal line-break table missing column: ${column}`);
+}
+assert.ok(html.includes('function illegalBreakDisplay(row)'), "illegal line-break table must derive compact previews around the break");
+assert.ok(html.includes('previousChars.slice(-10).join("")'), "previous-line preview must show only the 10 chars before the break");
+assert.ok(html.includes('nextChars.slice(0, 10).join("")'), "next-line preview must show only the 10 chars after the break");
+assert.ok(html.includes('mergedChars.slice(start, start + 20).join("")'), "merged preview must show only 20 chars around the join");
+assert.ok(html.includes('const display = illegalBreakDisplay(candidate);'), "illegal line-break cells must use compact display previews");
+
 assert.deepStrictEqual(TABLE_COLUMNS, ["多选", "行号", "行类型", "预览"]);
 assert.ok(!TABLE_COLUMNS.includes("注释号" as typeof TABLE_COLUMNS[number]), "annotation number is not a shared table column");
 assert.ok(!TABLE_COLUMNS.includes("章节文件" as typeof TABLE_COLUMNS[number]), "chapter file is not a shared table column");
@@ -60,11 +72,19 @@ assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-f
 assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
 assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
 assert.ok(html.includes('"嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本"'), "embed module line types");
+assert.ok(html.includes('"嵌入文本", "已忽略", DELETED'), "embed module must expose 已忽略 without deleting the row");
 assert.ok(html.includes("下载图片到本地"), "embed module must download all images, not only the selection");
 assert.ok(html.includes("按标定导出"), "chapter modules must export by calibration");
 assert.ok(html.includes('postKeepView("exportByCalibration")'), "calibration export must post exportByCalibration");
 assert.ok(html.includes("导出标定到trans"), "chapter modules must expose trans export");
 assert.ok(html.includes('postKeepView("exportCalibrationToTrans")'), "trans export must post exportCalibrationToTrans");
+assert.ok(html.includes('function chapterTitlePreview(row)'), "chapter-title table must have a dedicated rendered preview");
+assert.ok(html.includes('/^([1-6]) 级标题$/.exec'), "chapter-title preview must follow the current calibrated heading level");
+assert.ok(html.includes('return el("h" + level, content, "chapter-heading-preview")'), "chapter-title rows must render as h1-h6 elements");
+assert.ok(html.includes('source.replace(/^ {0,3}#{1,6}'), "rendered chapter-title previews must hide Markdown heading markers");
+assert.ok(html.includes('state.activeModule === "章节标题"'), "chapter-title preview rendering must be module-specific");
+assert.ok(html.includes('h1.chapter-heading-preview'), "chapter-title H1 preview style must mirror Markdown preview CSS");
+assert.ok(html.includes('h6.chapter-heading-preview'), "chapter-title H6 preview style must mirror Markdown preview CSS");
 assert.ok(html.includes('"导出：" + candidate.localPath'), "embed preview must show the exact export path for local images");
 assert.ok(html.includes('"文本块": ["标题", "内嵌", "文本", "注释正文"]'), "trans text-block types must be available");
 assert.ok(html.includes('state.selectedFile?.kind === "trans"'), "trans selection must switch the sidebar to the text-block table");
@@ -74,6 +94,14 @@ assert.ok(html.includes('["文本块", "分句", "翻译"]'), "trans sidebar mus
 assert.ok(html.includes('"分句": ["标题", "文本", "注释正文"]'), "sentence source types must exclude embeds");
 assert.ok(html.includes("句内序号"), "sentence table must show sentence index within its parent block");
 assert.ok(html.includes("Intl.Segmenter + 例外合并 · 只读派生表"), "sentence table must describe the segmentation strategy");
+
+assert.ok(html.includes("扫描完成 · "), "illegal-line-break toolbar must report that the scan completed");
+assert.ok(html.includes("候选由正文段落边界自动派生"), "illegal-line-break scan description must match the chapter file layout");
+assert.ok(html.includes("扫描完成：当前章节未发现疑似非法断行。"), "empty illegal-line-break table must clearly report a completed zero-result scan");
+assert.ok(html.includes('sortableHeader("行类型", "lineType")'), "illegal line-break table must show a line-type column");
+assert.ok(html.includes('for (const value of LINE_TYPES["非法断行"])'), "illegal line-break rows must use merge/ignore dropdowns");
+assert.ok(html.includes('button("保存标定", () => postKeepView("saveAnnotations"), "primary")'), "illegal line-break decisions must be saveable");
+assert.ok(html.includes('emptyCell.colSpan = 7'), "empty illegal-line-break table must keep its seven-column table layout");
 
 assert.ok(html.includes("开始翻译"), "translation module must expose a start action");
 assert.ok(html.includes("继续翻译"), "translation module must expose a resume action");

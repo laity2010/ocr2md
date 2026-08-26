@@ -42,6 +42,23 @@ const saved = serializeSidecar("/work/chapter.md", scanned, []);
 assert.strictEqual(saved.schemaVersion, SIDECAR_SCHEMA_VERSION);
 assert.ok(saved.annotations.every((item) => item.atomId));
 assert.ok(!("line" in saved.annotations[0]));
+const derivedIllegalBreak: Candidate = {
+  id: "derived-break",
+  rowId: "derived-break",
+  atomId: "derived-break-atom",
+  kind: "regex",
+  label: "joined",
+  raw: "line one\nline two",
+  preview: "line one line two",
+  range: { line: 1, start: 0, endLine: 2, end: 8 },
+  typeLabel: "非法断行",
+  lineType: "忽略",
+};
+const savedWithDerived = serializeSidecar("/work/chapter.md", [...scanned, derivedIllegalBreak], []);
+const savedIllegalBreak = savedWithDerived.annotations.find((item) => item.typeLabel === "非法断行");
+assert.ok(savedIllegalBreak, "illegal-line-break merge/ignore calibration must enter sidecar");
+assert.strictEqual(savedIllegalBreak?.lineType, "忽略");
+assert.ok(!("line" in savedIllegalBreak!), "derived source range must not become sidecar identity");
 
 const loaded = candidatesFromSidecar(saved);
 assert.ok(loaded.rows.every((row) => row.rangeUntrusted));
@@ -49,6 +66,18 @@ const rejoined = reconcileRows(loaded.rows, scanned, doc);
 assert.strictEqual(rejoined.find((row) => row.lineType === "内嵌标题")?.range.line, 5);
 assert.strictEqual(rejoined.find((row) => row.lineType === "内嵌标题")?.atomId, title.atomId);
 assert.strictEqual(rejoined.find((row) => row.lineType === "嵌入块首")?.range.line, 4);
+
+const illegalCalibration: Candidate = {
+  id: "illegal-row", rowId: "illegal-row", atomId: "illegal-atom", kind: "regex",
+  label: "A B", raw: "A\n\nB", preview: "A B", range: { line: 10, start: 0, endLine: 12, end: 1 },
+  typeLabel: "非法断行", lineType: "忽略", sourcePath: "/work/chapter.md",
+};
+const illegalSaved = serializeSidecar("/work/chapter.md", [illegalCalibration], []);
+assert.strictEqual(illegalSaved.annotations[0]?.typeLabel, "非法断行");
+assert.strictEqual(illegalSaved.annotations[0]?.lineType, "忽略");
+const illegalLoaded = candidatesFromSidecar(illegalSaved).rows[0];
+assert.strictEqual(illegalLoaded?.typeLabel, "非法断行");
+assert.strictEqual(illegalLoaded?.lineType, "忽略");
 
 const v3 = {
   schemaVersion: 3,

@@ -161,6 +161,22 @@ assert.ok(exported.includes("内嵌图片链接: ![[imgs/a.jpg]]"));
 assert.ok(exported.includes("><embed id=01></embed>"));
 assert.ok(!exported.includes("![image](https://cdn.example/a.jpg)"));
 
+const ignoredEmbedSource = [
+  ">",
+  "FIGURE 9.9 | Title",
+  "This prose was wrongly captured as embed text.",
+  "![image](https://cdn.example/ignored-test.jpg)",
+].join("\n");
+const ignoredEmbedExport = exportByCalibration(ignoredEmbedSource, [
+  row({ id: "ie-marker", raw: ">", typeLabel: "嵌入块", lineType: "嵌入块首", embedNumber: 9, range: { line: 0, start: 0, end: 1 } }),
+  row({ id: "ie-title", raw: "FIGURE 9.9 | Title", typeLabel: "嵌入块", lineType: "内嵌标题", embedNumber: 9, range: { line: 1, start: 0, end: 18 } }),
+  row({ id: "ie-ignore", raw: "This prose was wrongly captured as embed text.", typeLabel: "嵌入块", lineType: "已忽略", range: { line: 2, start: 0, end: 45 } }),
+  row({ id: "ie-image", raw: "![image](https://cdn.example/ignored-test.jpg)", typeLabel: "嵌入块", lineType: "嵌入链接", embedNumber: 9, range: { line: 3, start: 0, end: 47 } }),
+]);
+assert.ok(ignoredEmbedExport.includes("FIGURE 9.9 | Title"), "active embed rows must still export");
+assert.ok(ignoredEmbedExport.includes("This prose was wrongly captured as embed text.\n<br>"), "已忽略 embed rows must return to normal prose output");
+assert.ok(!ignoredEmbedExport.includes(">\nThis prose was wrongly captured as embed text."), "已忽略 text must not remain inside the embed block");
+
 const formattedBlocksSource = [
   "---",
   "ocr2md_chapter_split: true",

@@ -1,5 +1,5 @@
 import { resolvedAnnotationNumber } from "./annotation";
-import { activeCandidates } from "./candidateLifecycle";
+import { activeCandidates, isIgnoredEmbedCandidate } from "./candidateLifecycle";
 import type { Candidate } from "./types";
 
 export interface EmbedExportGroup {
@@ -12,9 +12,16 @@ export interface EmbedExportGroup {
 export function exportByCalibration(text: string, rows: Candidate[]): string {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const live = activeCandidates(rows);
-  const embeds = groupEmbeds(live);
+  const embeds = groupEmbeds(live.filter((row) => !isIgnoredEmbedCandidate(row)));
   const embedAt = new Map<number, EmbedExportGroup>();
-  for (const group of embeds) embedAt.set(group.start, group);
+  const embedCoveredLines = new Set<number>();
+  for (const group of embeds) {
+    embedAt.set(group.start, group);
+    for (const row of group.rows) {
+      const end = row.range.endLine ?? row.range.line;
+      for (let line = row.range.line; line <= end; line += 1) embedCoveredLines.add(line);
+    }
+  }
   const bodyLines = new Set<number>();
   for (const row of live.filter((item) => item.typeLabel === "注释" && item.lineType === "注释正文")) {
     const end = row.range.endLine ?? row.range.line;
@@ -52,7 +59,7 @@ export function exportByCalibration(text: string, rows: Candidate[]): string {
     if (embed) {
       flushPlainText();
       blocks.push(formatEmbed(embed));
-      index = embed.end + 1;
+      index += 1;
       continue;
     }
     if (bodyLines.has(index)) {
@@ -60,7 +67,7 @@ export function exportByCalibration(text: string, rows: Candidate[]): string {
       index += 1;
       continue;
     }
-    if (coveredByEmbed(embeds, index)) {
+    if (embedCoveredLines.has(index)) {
       flushPlainText();
       index += 1;
       continue;
@@ -97,7 +104,7 @@ function leadingFrontmatterEnd(lines: string[]): number {
 
 export function groupEmbeds(rows: Candidate[]): EmbedExportGroup[] {
   const groups = new Map<number, Candidate[]>();
-  for (const row of rows.filter((item) => item.typeLabel === "嵌入块" && item.embedNumber)) {
+  for (const row of rows.filter((item) => item.typeLabel === "嵌入块" && item.lineType !== "已忽略" && item.embedNumber)) {
     const number = row.embedNumber!;
     groups.set(number, [...(groups.get(number) ?? []), row]);
   }
@@ -149,9 +156,6 @@ export function formatEmbed(group: EmbedExportGroup): string {
   return lines.join("\n");
 }
 
-function coveredByEmbed(embeds: EmbedExportGroup[], line: number): boolean {
-  return embeds.some((group) => line >= group.start && line <= group.end);
-}
 
 function embedTitle(rows: Candidate[]): string | undefined {
   const title = rows.find((row) => row.lineType === "内嵌标题");

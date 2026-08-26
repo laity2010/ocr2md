@@ -227,6 +227,20 @@ assert.deepStrictEqual(
   "each > 嵌入块首 keeps its own 序号, including 2",
 );
 
+const ignoredEmbedRows = scanEmbedLines(untilNextMarker).map((row) =>
+  row.lineType === "嵌入文本" ? { ...row, lineType: "已忽略" } : row);
+const ignoredRenumbered = applyEmbedNumbers(ignoredEmbedRows, untilNextMarker);
+assert.strictEqual(
+  ignoredRenumbered.find((row) => row.lineType === "已忽略")?.embedNumber,
+  undefined,
+  "已忽略 rows must leave the embed numbering/group",
+);
+assert.deepStrictEqual(
+  ignoredRenumbered.filter((row) => row.lineType === "嵌入块首").map((row) => row.embedNumber),
+  [1, 2],
+  "ignoring one row must not renumber the surrounding embed blocks",
+);
+
 const proseBetween = [
   ">",
   "FIGURE 1.1 | One",
