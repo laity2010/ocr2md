@@ -44,6 +44,43 @@ assert.strictEqual(
 );
 assert.strictEqual(app.snapshot().rows, result.rows, "application must retain the new review state after refresh");
 
+const annotationResult = app.refreshAnnotation({
+  baselineText: source,
+  workingText: working,
+  sourcePath,
+  workingPath,
+  sourceLabel: sidecar.rows.find((row) => row.sourceLabel)?.sourceLabel ?? "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md",
+  patterns: splitPatterns(MODULE_REGEX_DEFAULTS["注释"] ?? ""),
+});
+assert.deepStrictEqual(
+  countByType(annotationResult.rows),
+  countByType(sidecar.rows),
+  "platform-independent annotation refresh must preserve the real reviewed module/line-type counts",
+);
+assert.strictEqual(
+  annotationResult.annotationPairs.length,
+  sidecar.annotationPairs.length,
+  "annotation refresh must rebuild the same number of reviewed pairs",
+);
+assert.deepStrictEqual(
+  annotationResult.annotationPairs.map((pair) => [pair.pairId, pair.status]),
+  sidecar.annotationPairs.map((pair) => [pair.pairId, pair.status]),
+  "annotation refresh must preserve pair identities and statuses",
+);
+const firstRef = annotationResult.rows.find((row) => row.typeLabel === "注释" && row.lineType === "注释引用" && row.annotationNumber === "1");
+assert.ok(firstRef, "real fixture must retain annotation reference 1");
+const cleared = app.setAnnotationNumber(firstRef!.id, "");
+assert.strictEqual(
+  cleared.rows.find((row) => row.id === firstRef!.id)?.annotationNumber,
+  undefined,
+  "application must own manual annotation-number edits",
+);
+const restored = app.setAnnotationNumber(firstRef!.id, "1");
+assert.ok(restored.annotationPairs.some((pair) => pair.number === "1" && pair.refCandidateId === firstRef!.id), "restoring a number must rebuild its pair");
+const corrected = app.annotationWorkingText(working);
+assert.ok(corrected.includes("[^1]"), "annotation working text must convert reviewed references to Markdown footnotes");
+assert.ok(corrected.includes("[^10]:"), "annotation working text must convert reviewed note bodies to Markdown footnotes");
+
 console.log("chapterReviewApplication tests passed");
 
 function splitPatterns(value: string): string[] {

@@ -76,7 +76,6 @@ import {
   applyEmbedNumbers,
   detectEmbedLineType,
   mergeEmbedScan,
-  scanRegexMatches,
 } from "./scanner";
 import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
 import type {
@@ -93,11 +92,9 @@ import type {
 import { renderSidebar } from "./webview";
 import { ChapterReviewApplication } from "./chapterReviewApplication";
 import {
-  applyAnnotationNumber as applyReviewAnnotationNumber,
   applyChapterFile as applyReviewChapterFile,
   applyRowsLineType as applyReviewRowsLineType,
   planHeadingLineTypeEdits,
-  rebuildAnnotationReviewState,
 } from "./chapterReviewActions";
 import type { UiCommandMessage } from "./uiProtocol";
 import {
@@ -1028,55 +1025,50 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.modulePreviewPaths.set(moduleName, workingPath);
     const source = sourcePath ?? workingPath;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const sourceLabel = workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source);
     const patterns = splitPatterns(this.moduleRegexPatterns[moduleName] ?? "");
+
+    if (moduleName === "注释") {
+      const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+      const result = application.refreshAnnotation({
+        baselineText: await this.readChapterOriginalText(),
+        workingText: text,
+        sourcePath: source,
+        workingPath,
+        sourceLabel,
+        patterns,
+      });
+      this.rows = result.rows;
+      this.annotationPairs = result.annotationPairs;
+      if (!options.silent) this.update();
+      return;
+    }
+
     const unique = new Map<string, Candidate>();
-    const scannedEmbeds = moduleName === "嵌入块" ? mergeEmbedScan(text, patterns) : [];
-    for (const candidate of scannedEmbeds) {
+    for (const candidate of mergeEmbedScan(text, patterns)) {
       unique.set(candidatePositionKey({ ...candidate, sourcePath: source, workingCopyPath: workingPath }), {
         ...candidate,
         typeLabel: moduleName,
         lineType: candidate.lineType ?? defaultLineType(moduleName, candidate.raw),
         sourcePath: source,
-        sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
+        sourceLabel,
         workingCopyPath: workingPath,
       });
-    }
-    if (moduleName !== "嵌入块") {
-      for (const pattern of patterns) {
-        for (const match of scanRegexMatches(text, pattern)) {
-          const extractedNumber = extractAnnotationNumber(match.raw);
-          const row: Candidate = {
-            ...match,
-            typeLabel: moduleName,
-            lineType: defaultLineType(moduleName, match.raw),
-            regexSource: pattern,
-            annotationNumber: extractedNumber,
-            annotationNumberSource: extractedNumber ? "extracted" : undefined,
-            sourcePath: source,
-            sourceLabel: workspaceRoot ? path.relative(workspaceRoot, source) : path.basename(source),
-            workingCopyPath: workingPath,
-          };
-          unique.set(candidatePositionKey(row), row);
-        }
-      }
     }
     const scanned = attachScanIdentities([...unique.values()], text, { moduleName, sourcePath: source });
     const previous = this.rows.filter((row) => row.typeLabel === moduleName && row.sourcePath === source);
     let reconciled = reconcileRows(previous, scanned, text);
-    if (moduleName === "嵌入块") {
-      const present = new Set(reconciled.map((row) => row.id));
-      const extras = previous.filter((row) =>
-        !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
-      reconciled = applyEmbedNumbers(
-        dedupeImageRows([...reconciled, ...relocateRows(extras, text)], text),
-        text,
-      );
-    }
+    const present = new Set(reconciled.map((row) => row.id));
+    const extras = previous.filter((row) =>
+      !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
+    reconciled = applyEmbedNumbers(
+      dedupeImageRows([...reconciled, ...relocateRows(extras, text)], text),
+      text,
+    );
     this.rows = [
       ...this.rows.filter((row) => !(row.typeLabel === moduleName && row.sourcePath === source)),
       ...reconciled,
     ].sort(compareRows);
-    if (moduleName === "注释") this.rebuildAnnotationPairs();
     if (!options.silent) this.update();
   }
 
@@ -1252,7 +1244,8 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private rebuildAnnotationPairs() {
-    const next = rebuildAnnotationReviewState(this.rows, this.annotationPairs);
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const next = application.matchAnnotationPairs();
     this.rows = next.rows;
     this.annotationPairs = next.annotationPairs;
   }
@@ -1263,7 +1256,8 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private setAnnotationNumber(id: string, value: string) {
-    const next = applyReviewAnnotationNumber({ rows: this.rows, annotationPairs: this.annotationPairs }, id, value);
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const next = application.setAnnotationNumber(id, value);
     this.rows = next.rows;
     this.annotationPairs = next.annotationPairs;
     this.update();
@@ -1279,7 +1273,8 @@ class Ocr2mdExtension implements vscode.Disposable {
     const uri = vscode.Uri.file(chapterAnnotationWorkingPath(file.path));
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)));
     if (!(await exists(uri))) {
-      const corrected = applyAnnotationCorrections(this.selectedFileText, this.rows.filter((row) => row.typeLabel === "注释"));
+      const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+      const corrected = application.annotationWorkingText(this.selectedFileText);
       await vscode.workspace.fs.writeFile(uri, Buffer.from(corrected, "utf8"));
     }
     this.annotationWorkingUri = uri;
@@ -2298,25 +2293,6 @@ function dedupeImageRows(rows: Candidate[], text?: string): Candidate[] {
   return [...deleted, ...byLine.values()].sort(compareRows);
 }
 
-function applyAnnotationCorrections(text: string, rows: Candidate[]): string {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  for (const row of activeCandidates(rows)) {
-    const located = locateCandidate(text, row);
-    const lineNumber = located?.line;
-    if (lineNumber === undefined || lines[lineNumber] === undefined) continue;
-    const line = lines[lineNumber];
-    const number = row.annotationNumber ?? extractAnnotationNumber(row.raw);
-    if (!number) continue;
-    if (row.lineType === "注释引用") {
-      const pattern = new RegExp(`<sup>\\s*\\(?\\s*${escapeRegex(number)}\\s*\\)?\\s*</sup>|\\[\\*${escapeRegex(number)}\\]`, "i");
-      lines[lineNumber] = line.replace(pattern, `[^${number}]`);
-    } else if (row.lineType === "注释正文") {
-      lines[lineNumber] = line.replace(/^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/, `[^${number}]: `);
-    }
-  }
-  return lines.join("\n");
-}
-
 function defaultLineType(moduleName: ModuleName, raw: string): string {
   if (moduleName === "章节定界") return /^ {0,3}#(?!#)(?:\s+|$)/.test(raw) ? "1 级标题" : "修改";
   if (moduleName === "章节标题") {
@@ -2393,9 +2369,6 @@ function download(url: string, redirects = 5): Promise<Uint8Array> {
   });
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 async function exists(uri: vscode.Uri): Promise<boolean> {
   try {

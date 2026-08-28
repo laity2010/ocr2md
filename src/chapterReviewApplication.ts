@@ -1,10 +1,17 @@
 import { applyChangeState, scanChapterBoundaryLines } from "./chapterBoundary";
+import { extractAnnotationNumber } from "./annotation";
+import { activeCandidates } from "./candidateLifecycle";
 import { splitBlankLineBlocks } from "./atoms";
-import { rowBelongsToScope } from "./chapterReviewActions";
+import {
+  applyAnnotationNumber,
+  rebuildAnnotationReviewState,
+  rowBelongsToScope,
+} from "./chapterReviewActions";
 import {
   attachLineIdentity,
   attachScanIdentities,
   hashText,
+  locateCandidate,
   reconcileRows,
 } from "./rowIdentity";
 import {
@@ -12,6 +19,7 @@ import {
   detectEmbedLineType,
   excludeRowsOverlappingEmbeds,
   mergeEmbedScan,
+  scanRegexMatches,
 } from "./scanner";
 import { chapterContentsDiffer, chapterDiffBaseline } from "./workspaceFiles";
 import type { AnnotationPair, Candidate } from "./types";
@@ -34,6 +42,16 @@ export interface RefreshChapterTitleResult extends ChapterReviewApplicationState
   changed: boolean;
 }
 
+export interface RefreshAnnotationInput {
+  baselineText?: string;
+  workingText: string;
+  sourcePath: string;
+  workingPath: string;
+  sourceLabel: string;
+  patterns: readonly string[];
+}
+
+
 /**
  * Platform-independent application service for the chapter review workflow.
  * It owns review state transitions; VS Code/Web hosts own file I/O and editor UX.
@@ -53,6 +71,25 @@ export class ChapterReviewApplication {
     const result = refreshChapterTitleReviewState(this.state, input);
     this.state = { rows: result.rows, annotationPairs: result.annotationPairs };
     return result;
+  }
+
+  refreshAnnotation(input: RefreshAnnotationInput): ChapterReviewApplicationState {
+    this.state = refreshAnnotationReviewState(this.state, input);
+    return this.snapshot();
+  }
+
+  matchAnnotationPairs(): ChapterReviewApplicationState {
+    this.state = rebuildAnnotationReviewState(this.state.rows, this.state.annotationPairs);
+    return this.snapshot();
+  }
+
+  setAnnotationNumber(id: string, value: string): ChapterReviewApplicationState {
+    this.state = applyAnnotationNumber(this.state, id, value);
+    return this.snapshot();
+  }
+
+  annotationWorkingText(text: string): string {
+    return buildAnnotationWorkingText(text, this.state.rows);
   }
 }
 
@@ -161,6 +198,78 @@ export function refreshChapterTitleReviewState(
     changed: chapterContentsDiffer(baselineText, workingText),
   };
 }
+
+
+export function refreshAnnotationReviewState(
+  state: ChapterReviewApplicationState,
+  input: RefreshAnnotationInput,
+): ChapterReviewApplicationState {
+  const { workingText, sourcePath, workingPath, sourceLabel } = input;
+  const scope = { sourcePath, workingPath };
+  const unique = new Map<string, Candidate>();
+  for (const pattern of input.patterns) {
+    for (const match of scanRegexMatches(workingText, pattern)) {
+      const extractedNumber = extractAnnotationNumber(match.raw);
+      const row: Candidate = {
+        ...match,
+        typeLabel: "注释",
+        lineType: defaultAnnotationLineType(match.raw),
+        regexSource: pattern,
+        annotationNumber: extractedNumber,
+        annotationNumberSource: extractedNumber ? "extracted" : undefined,
+        sourcePath,
+        sourceLabel,
+        workingCopyPath: workingPath,
+      };
+      unique.set(candidatePositionKey(row), row);
+    }
+  }
+
+  const scanned = attachScanIdentities([...unique.values()], workingText, { moduleName: "注释", sourcePath });
+  const previous = state.rows.filter((row) => row.typeLabel === "注释" && rowBelongsToScope(row, scope));
+  let reconciled = reconcileRows(previous, scanned, workingText);
+  if (input.baselineText !== undefined) {
+    const changes = scanChapterBoundaryLines(chapterDiffBaseline(input.baselineText, workingText), workingText);
+    reconciled = reconciled.map((row) => applyChangeState(row, changes));
+  }
+  const rows = [
+    ...state.rows.filter((row) => !(row.typeLabel === "注释" && rowBelongsToScope(row, scope))),
+    ...reconciled,
+  ].sort(compareRows);
+  return rebuildAnnotationReviewState(rows, state.annotationPairs);
+}
+
+export function buildAnnotationWorkingText(text: string, rows: readonly Candidate[]): string {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  for (const row of activeCandidates([...rows]).filter((candidate) => candidate.typeLabel === "注释")) {
+    const located = locateCandidate(text, row);
+    const lineNumber = located?.line;
+    if (lineNumber === undefined || lines[lineNumber] === undefined) continue;
+    const line = lines[lineNumber];
+    const number = row.annotationNumber ?? extractAnnotationNumber(row.raw);
+    if (!number) continue;
+    if (row.lineType === "注释引用") {
+      const pattern = new RegExp(`<sup>\\s*\\(?\\s*${escapeRegex(number)}\\s*\\)?\\s*</sup>|\\[\\*${escapeRegex(number)}\\]`, "i");
+      lines[lineNumber] = line.replace(pattern, `[^${number}]`);
+    } else if (row.lineType === "注释正文") {
+      lines[lineNumber] = line.replace(/^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/, `[^${number}]: `);
+    }
+  }
+  return lines.join("\n");
+}
+
+function defaultAnnotationLineType(raw: string): "注释正文" | "注释引用" {
+  return /^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/.test(raw) ? "注释正文" : "注释引用";
+}
+
+function candidatePositionKey(row: Candidate): string {
+  return `${row.sourcePath}\0${row.range.line}\0${row.range.start}\0${row.raw}`;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 
 function dedupeImageRows(rows: Candidate[], text?: string): Candidate[] {
   const deleted = rows.filter((row) => row.chapterBoundaryState === "deleted");
