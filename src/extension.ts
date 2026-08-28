@@ -85,6 +85,8 @@ import type {
 } from "./types";
 import { renderSidebar } from "./webview";
 import { ChapterReviewApplication } from "./chapterReviewApplication";
+import { VsCodeWorkspaceStorage } from "./vscodeWorkspaceStorage";
+import { deleteIfExists as deleteStoredIfExists, readText, writeText, type WorkspaceStorage } from "./workspaceStorage";
 import {
   applyRowsLineType as applyReviewRowsLineType,
   planHeadingLineTypeEdits,
@@ -188,8 +190,10 @@ class Ocr2mdExtension implements vscode.Disposable {
   private translationProgress: TranslationProgressState = { phase: "idle", completed: 0, total: 0, failed: 0 };
   private translationRunning = false;
   private headingNumberingEnabled = true;
+  private readonly storage: WorkspaceStorage;
 
-  constructor(private readonly context: vscode.ExtensionContext) {
+  constructor(private readonly context: vscode.ExtensionContext, storage: WorkspaceStorage = new VsCodeWorkspaceStorage()) {
+    this.storage = storage;
     this.translationService = context.globalState.get<TranslationServiceId>(TRANSLATION_SERVICE_SETTING, "deepl");
     this.translationExportService = context.globalState.get<TranslationServiceId>(TRANSLATION_EXPORT_SERVICE_SETTING, "deepl");
     this.translationSampleText = context.globalState.get<string>(TRANSLATION_SAMPLE_SETTING, DEFAULT_TRANSLATION_SAMPLE);
@@ -441,38 +445,38 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async migrateLegacyTransDirectories(workspace: vscode.WorkspaceFolder) {
-    const legacyRoot = vscode.Uri.joinPath(workspace.uri, TRANS_OUTPUT_DIRECTORY);
-    if (!(await exists(legacyRoot))) return;
-    let entries: [string, vscode.FileType][];
+    const legacyRootPath = path.join(workspace.uri.fsPath, TRANS_OUTPUT_DIRECTORY);
+    if (!(await this.storage.exists(legacyRootPath))) return;
+    let entries;
     try {
-      entries = await vscode.workspace.fs.readDirectory(legacyRoot);
+      entries = await this.storage.readDirectory(legacyRootPath);
     } catch (error) {
       this.output.appendLine(`[trans] 读取旧 trans 目录失败：${error instanceof Error ? error.message : String(error)}`);
       return;
     }
-    for (const [name, type] of entries) {
-      if ((type & vscode.FileType.Directory) === 0) continue;
-      const source = vscode.Uri.joinPath(legacyRoot, name);
-      const chapterDirectory = vscode.Uri.file(chapterDirectoryPath(workspace.uri.fsPath, name));
-      const target = vscode.Uri.joinPath(chapterDirectory, TRANS_OUTPUT_DIRECTORY);
-      if (!(await exists(chapterDirectory))) {
-        this.output.appendLine(`[trans] 跳过旧目录 ${source.fsPath}：找不到对应章节目录。`);
+    for (const entry of entries) {
+      if (entry.type !== "directory") continue;
+      const sourcePath = path.join(legacyRootPath, entry.name);
+      const chapterDirectoryPathValue = chapterDirectoryPath(workspace.uri.fsPath, entry.name);
+      const targetPath = path.join(chapterDirectoryPathValue, TRANS_OUTPUT_DIRECTORY);
+      if (!(await this.storage.exists(chapterDirectoryPathValue))) {
+        this.output.appendLine(`[trans] 跳过旧目录 ${sourcePath}：找不到对应章节目录。`);
         continue;
       }
-      if (await exists(target)) {
-        this.output.appendLine(`[trans] 跳过旧目录 ${source.fsPath}：目标已存在 ${target.fsPath}。`);
+      if (await this.storage.exists(targetPath)) {
+        this.output.appendLine(`[trans] 跳过旧目录 ${sourcePath}：目标已存在 ${targetPath}。`);
         continue;
       }
       try {
-        await vscode.workspace.fs.rename(source, target, { overwrite: false });
-        this.output.appendLine(`[trans] 已迁移 ${source.fsPath} -> ${target.fsPath}`);
+        await this.storage.rename(sourcePath, targetPath, { overwrite: false });
+        this.output.appendLine(`[trans] 已迁移 ${sourcePath} -> ${targetPath}`);
       } catch (error) {
-        this.output.appendLine(`[trans] 迁移失败 ${source.fsPath}：${error instanceof Error ? error.message : String(error)}`);
+        this.output.appendLine(`[trans] 迁移失败 ${sourcePath}：${error instanceof Error ? error.message : String(error)}`);
       }
     }
     try {
-      const remaining = await vscode.workspace.fs.readDirectory(legacyRoot);
-      if (!remaining.length) await vscode.workspace.fs.delete(legacyRoot);
+      const remaining = await this.storage.readDirectory(legacyRootPath);
+      if (!remaining.length) await this.storage.delete(legacyRootPath);
     } catch {
       // Keep the legacy root when it still has entries or cannot be removed safely.
     }
@@ -488,7 +492,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.viewMode = "table";
     const uri = vscode.Uri.file(filePath);
     const workspace = vscode.workspace.getWorkspaceFolder(uri) ?? vscode.workspace.workspaceFolders?.[0];
-    const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+    const text = await readText(this.storage, filePath);
     this.selectedFile = this.files.find((file) => file.path === filePath) ?? {
       label: workspace ? path.relative(workspace.uri.fsPath, filePath) || path.basename(filePath) : path.basename(filePath),
       path: filePath,
@@ -541,14 +545,14 @@ class Ocr2mdExtension implements vscode.Disposable {
     const chapterName = path.basename(path.dirname(directoryPath));
     const preferred = vscode.Uri.joinPath(directory, `${chapterName}.md`);
     let chapterUri: vscode.Uri | undefined;
-    if (await exists(preferred)) {
+    if (await this.storage.exists(preferred.fsPath)) {
       chapterUri = preferred;
     } else {
       try {
-        const entries = await vscode.workspace.fs.readDirectory(directory);
+        const entries = await this.storage.readDirectory(directoryPath);
         const markdown = entries
-          .filter(([name, type]) => (type & vscode.FileType.File) !== 0 && /\.md$/i.test(name))
-          .map(([name]) => name)
+          .filter((entry) => entry.type === "file" && /\.md$/i.test(entry.name))
+          .map((entry) => entry.name)
           .sort((left, right) => left.localeCompare(right, "zh-CN", { numeric: true }));
         if (markdown[0]) chapterUri = vscode.Uri.joinPath(directory, markdown[0]);
       } catch {
@@ -559,7 +563,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       void vscode.window.showWarningMessage(`trans 章节目录中没有 Markdown 文件：${chapterName}`);
       return;
     }
-    const text = Buffer.from(await vscode.workspace.fs.readFile(chapterUri)).toString("utf8");
+    const text = await readText(this.storage, chapterUri.fsPath);
     this.selectedFile = {
       label: path.relative(workspace.uri.fsPath, chapterUri.fsPath) || path.basename(chapterUri.fsPath),
       path: chapterUri.fsPath,
@@ -802,7 +806,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       translationServiceId: serviceId,
     });
 
-    await vscode.workspace.fs.createDirectory(outputDirectory);
+    await this.storage.createDirectory(outputDirectory.fsPath);
     const transactionId = randomUUID();
     const outputs = [
       { fileName: result.orgFileName, markdown: result.orgMarkdown },
@@ -820,36 +824,36 @@ class Ocr2mdExtension implements vscode.Disposable {
     let committedAll = false;
     try {
       for (const output of outputs) {
-        await vscode.workspace.fs.writeFile(output.temp, Buffer.from(output.markdown, "utf8"));
+        await writeText(this.storage, output.temp.fsPath, output.markdown);
       }
       for (const output of outputs) {
-        if (!(await exists(output.target))) continue;
-        await vscode.workspace.fs.rename(output.target, output.backup, { overwrite: false });
+        if (!(await this.storage.exists(output.target.fsPath))) continue;
+        await this.storage.rename(output.target.fsPath, output.backup.fsPath, { overwrite: false });
         output.backedUp = true;
       }
       for (const output of outputs) {
-        await vscode.workspace.fs.rename(output.temp, output.target, { overwrite: false });
+        await this.storage.rename(output.temp.fsPath, output.target.fsPath, { overwrite: false });
         output.committed = true;
       }
       committedAll = true;
     } catch (error) {
       for (const output of outputs) {
-        if (output.committed) await deleteIfExists(output.target);
+        if (output.committed) await deleteStoredIfExists(this.storage, output.target.fsPath);
       }
       for (const output of outputs) {
-        if (output.backedUp && await exists(output.backup)) {
-          await vscode.workspace.fs.rename(output.backup, output.target, { overwrite: true });
+        if (output.backedUp && await this.storage.exists(output.backup.fsPath)) {
+          await this.storage.rename(output.backup.fsPath, output.target.fsPath, { overwrite: true });
         }
       }
       throw error;
     } finally {
-      for (const output of outputs) await deleteIfExists(output.temp);
+      for (const output of outputs) await deleteStoredIfExists(this.storage, output.temp.fsPath);
     }
     if (committedAll) {
       // Backup cleanup is deliberately outside the commit/rollback block. If
       // cleanup fails, keeping a .bak is safer than rolling back valid output.
       for (const output of outputs) {
-        if (output.backedUp) await deleteIfExists(output.backup);
+        if (output.backedUp) await deleteStoredIfExists(this.storage, output.backup.fsPath);
       }
     }
     void vscode.window.showInformationMessage(
@@ -867,9 +871,9 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async readTranslationState(chapterUri: vscode.Uri): Promise<TranslationStateFile> {
-    const stateUri = vscode.Uri.joinPath(vscode.Uri.file(path.dirname(chapterUri.fsPath)), TRANSLATION_STATE_FILE);
+    const statePath = path.join(path.dirname(chapterUri.fsPath), TRANSLATION_STATE_FILE);
     try {
-      const raw = Buffer.from(await vscode.workspace.fs.readFile(stateUri)).toString("utf8");
+      const raw = await readText(this.storage, statePath);
       return parseTranslationState(raw, chapterUri.fsPath);
     } catch {
       return emptyTranslationState(chapterUri.fsPath);
@@ -877,11 +881,11 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async writeTranslationState(chapterUri: vscode.Uri, state: TranslationStateFile) {
-    const directory = vscode.Uri.file(path.dirname(chapterUri.fsPath));
-    const stateUri = vscode.Uri.joinPath(directory, TRANSLATION_STATE_FILE);
-    const tempUri = vscode.Uri.joinPath(directory, `${TRANSLATION_STATE_FILE}.tmp`);
-    await vscode.workspace.fs.writeFile(tempUri, Buffer.from(serializeTranslationState(state), "utf8"));
-    await vscode.workspace.fs.rename(tempUri, stateUri, { overwrite: true });
+    const directoryPath = path.dirname(chapterUri.fsPath);
+    const statePath = path.join(directoryPath, TRANSLATION_STATE_FILE);
+    const tempPath = path.join(directoryPath, `${TRANSLATION_STATE_FILE}.tmp`);
+    await writeText(this.storage, tempPath, serializeTranslationState(state));
+    await this.storage.rename(tempPath, statePath, { overwrite: true });
   }
 
   private async readValidatedTranslationState(
@@ -918,7 +922,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (moduleName === "章节定界") {
       const workspace = vscode.workspace.workspaceFolders?.[0];
       const working = workspace ? vscode.Uri.joinPath(workspace.uri, ".ocr2md-merged.working.md") : undefined;
-      if (working && await exists(working)) {
+      if (working && await this.storage.exists(working.fsPath)) {
         this.chapterBoundaryWorkingUri = working;
         await this.refreshChapterBoundaryRows();
       }
@@ -1064,17 +1068,16 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (override !== undefined) return override;
     const open = vscode.workspace.textDocuments.find((document) => document.uri.fsPath === uri.fsPath);
     if (open) return open.getText();
-    if (!(await exists(uri))) return "";
-    return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+    if (!(await this.storage.exists(uri.fsPath))) return "";
+    return readText(this.storage, uri.fsPath);
   }
 
   private async readChapterOriginalText(): Promise<string | undefined> {
     const originalPath = this.selectedFile?.path;
     const workspace = vscode.workspace.workspaceFolders?.[0];
     if (!workspace || !originalPath || !isChapterOutputPath(workspace.uri.fsPath, originalPath)) return undefined;
-    const uri = vscode.Uri.file(originalPath);
-    if (!(await exists(uri))) return undefined;
-    return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+    if (!(await this.storage.exists(originalPath))) return undefined;
+    return readText(this.storage, originalPath);
   }
 
   private isWorkingCopyEditorActive(): boolean {
@@ -1244,11 +1247,11 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     const uri = vscode.Uri.file(chapterAnnotationWorkingPath(file.path));
-    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)));
-    if (!(await exists(uri))) {
+    await this.storage.createDirectory(path.dirname(uri.fsPath));
+    if (!(await this.storage.exists(uri.fsPath))) {
       const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
       const corrected = application.annotationWorkingText(this.selectedFileText);
-      await vscode.workspace.fs.writeFile(uri, Buffer.from(corrected, "utf8"));
+      await writeText(this.storage, uri.fsPath, corrected);
     }
     this.annotationWorkingUri = uri;
     this.modulePreviewPaths.set("注释", uri.fsPath);
@@ -1372,7 +1375,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       ?? this.chapterWorkingUri?.fsPath
       ?? row?.sourcePath;
     if (!row) return;
-    if (!target || !(await exists(vscode.Uri.file(target)))) {
+    if (!target || !(await this.storage.exists(target))) {
       void vscode.window.showWarningMessage("无法打开源文件。");
       return;
     }
@@ -1466,8 +1469,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     const originalPath = this.selectedFile?.path ?? workspace.uri.fsPath;
-    const directory = vscode.Uri.file(this.selectedFile ? chapterImageDirectory(originalPath) : path.join(workspace.uri.fsPath, CHAPTER_IMAGE_DIRECTORY));
-    await vscode.workspace.fs.createDirectory(directory);
+    const directoryPath = this.selectedFile ? chapterImageDirectory(originalPath) : path.join(workspace.uri.fsPath, CHAPTER_IMAGE_DIRECTORY);
+    await this.storage.createDirectory(directoryPath);
     this.imageDownloadRunning = true;
     let downloaded = 0;
     let skipped = 0;
@@ -1477,8 +1480,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       for (const [index, row] of candidates.entries()) {
         const url = extractImageUrl(row.raw);
         const name = url ? safeImageName(url, row.range.line) : "";
-        const target = name ? vscode.Uri.joinPath(directory, name) : undefined;
-        const existsAlready = target ? await exists(target) : false;
+        const targetPath = name ? path.join(directoryPath, name) : undefined;
+        const existsAlready = targetPath ? await this.storage.exists(targetPath) : false;
         this.imageDownloadProgress = {
           phase: "downloading",
           completed: index,
@@ -1489,7 +1492,7 @@ class Ocr2mdExtension implements vscode.Disposable {
           current: `下载中 ${index + 1}/${total}`,
         };
         this.update();
-        if (!url || !target) {
+        if (!url || !targetPath) {
           failed += 1;
           this.patchImageRow(row.id, { imageDownloadStatus: "failed", imageDownloadError: "未找到外部图片 URL" });
           await this.saveSidecar({ silent: true });
@@ -1507,7 +1510,7 @@ class Ocr2mdExtension implements vscode.Disposable {
           continue;
         }
         try {
-          await vscode.workspace.fs.writeFile(target, await download(url));
+          await this.storage.writeFile(targetPath, await download(url));
           downloaded += 1;
           this.patchImageRow(row.id, {
             localPath,
@@ -1563,7 +1566,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         ? localReference
         : path.resolve(sourceDirectory, localReference);
       try {
-        const stat = await vscode.workspace.fs.stat(vscode.Uri.file(sourcePath));
+        const stat = await this.storage.stat(sourcePath);
         patches.set(row.id, `${CHAPTER_IMAGE_DIRECTORY}/${timestampedImageName(sourcePath, stat.mtime)}`);
       } catch {
         // Leave unresolved local images unchanged so the source remains inspectable.
@@ -1582,8 +1585,8 @@ class Ocr2mdExtension implements vscode.Disposable {
     await this.planLocalImageExportPaths(working);
     const sourceDirectory = path.dirname(working.fsPath);
     const chapterDirectory = path.dirname(file.path);
-    const imageDirectory = vscode.Uri.file(chapterImageDirectory(file.path));
-    await vscode.workspace.fs.createDirectory(imageDirectory);
+    const imageDirectory = chapterImageDirectory(file.path);
+    await this.storage.createDirectory(imageDirectory);
     for (const row of activeCandidates(this.rows)) {
       if (row.typeLabel !== "嵌入块" || row.lineType !== "嵌入链接") continue;
       const localReference = extractLocalImagePath(row.raw);
@@ -1591,14 +1594,13 @@ class Ocr2mdExtension implements vscode.Disposable {
       const sourcePath = path.isAbsolute(localReference)
         ? localReference
         : path.resolve(sourceDirectory, localReference);
-      const sourceUri = vscode.Uri.file(sourcePath);
-      if (!(await exists(sourceUri))) {
+      if (!(await this.storage.exists(sourcePath))) {
         throw new Error(`本地图片不存在：${localReference}`);
       }
-      const targetUri = vscode.Uri.file(path.resolve(chapterDirectory, row.localPath));
-      await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(targetUri.fsPath)));
-      if (sourceUri.fsPath !== targetUri.fsPath) {
-        await vscode.workspace.fs.copy(sourceUri, targetUri, { overwrite: true });
+      const targetPath = path.resolve(chapterDirectory, row.localPath);
+      await this.storage.createDirectory(path.dirname(targetPath));
+      if (sourcePath !== targetPath) {
+        await this.storage.copy(sourcePath, targetPath, { overwrite: true });
       }
     }
     await this.saveSidecar({ silent: true });
@@ -1619,10 +1621,10 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     const markdown = exportByCalibration(this.selectedFileText, this.rows, { numberHeadings: this.headingNumberingEnabled });
-    const directory = vscode.Uri.file(chapterCalibrationOutputDirectory(file.path));
-    const outputUri = vscode.Uri.joinPath(directory, `${path.parse(file.path).name}.md`);
-    await vscode.workspace.fs.createDirectory(directory);
-    await vscode.workspace.fs.writeFile(outputUri, Buffer.from(markdown, "utf8"));
+    const directoryPath = chapterCalibrationOutputDirectory(file.path);
+    const outputUri = vscode.Uri.file(path.join(directoryPath, `${path.parse(file.path).name}.md`));
+    await this.storage.createDirectory(directoryPath);
+    await writeText(this.storage, outputUri.fsPath, markdown);
     await this.showDocumentPair(outputUri);
     void vscode.window.showInformationMessage(`已按标定导出到 ${outputUri.fsPath}`);
   }
@@ -1646,8 +1648,8 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     const markdown = withFormatCalibratedFrontmatter(exportByCalibration(this.selectedFileText, this.rows, { numberHeadings: this.headingNumberingEnabled }));
     const outputUri = vscode.Uri.file(chapterTransOutputPath(workspace.uri.fsPath, file.path));
-    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(outputUri.fsPath)));
-    await vscode.workspace.fs.writeFile(outputUri, Buffer.from(markdown, "utf8"));
+    await this.storage.createDirectory(path.dirname(outputUri.fsPath));
+    await writeText(this.storage, outputUri.fsPath, markdown);
     this.directoryProvider.refresh();
     await this.showDocumentPair(outputUri);
     void vscode.window.showInformationMessage(`已导出标定到 trans：${outputUri.fsPath}`);
@@ -1660,9 +1662,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       if (!options.silent) void vscode.window.showWarningMessage("请先选择 Markdown 文件。");
       return;
     }
-    const originalUri = vscode.Uri.file(file.path);
-    const originalText = (await exists(originalUri))
-      ? Buffer.from(await vscode.workspace.fs.readFile(originalUri)).toString("utf8")
+    const originalText = (await this.storage.exists(file.path))
+      ? await readText(this.storage, file.path)
       : this.selectedFileText;
     const ensured = await this.ensureChapterWorkingCopy(workspace, file, originalText);
     this.chapterWorkingUri = ensured.workingUri;
@@ -1682,11 +1683,11 @@ class Ocr2mdExtension implements vscode.Disposable {
   ): Promise<{ workingUri: vscode.Uri; workingText: string }> {
     const workingPath = chapterWorkingCopyPath(workspace.uri.fsPath, file.path);
     const workingUri = vscode.Uri.file(workingPath);
-    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(workingPath)));
-    if (!(await exists(workingUri))) {
-      const legacyWorking = vscode.Uri.file(legacyChapterWorkingCopyPath(workspace.uri.fsPath, file.path));
-      if (await exists(legacyWorking)) {
-        await vscode.workspace.fs.writeFile(workingUri, await vscode.workspace.fs.readFile(legacyWorking));
+    await this.storage.createDirectory(path.dirname(workingPath));
+    if (!(await this.storage.exists(workingPath))) {
+      const legacyWorkingPath = legacyChapterWorkingCopyPath(workspace.uri.fsPath, file.path);
+      if (await this.storage.exists(legacyWorkingPath)) {
+        await this.storage.copy(legacyWorkingPath, workingPath);
       }
     }
     let baselineText: string | undefined;
@@ -1696,25 +1697,24 @@ class Ocr2mdExtension implements vscode.Disposable {
         legacyChapterOutputBaselinePath(workspace.uri.fsPath, file.path),
       ];
       for (const baselinePath of baselineCandidates) {
-        const baselineUri = vscode.Uri.file(baselinePath);
-        if (await exists(baselineUri)) {
-          baselineText = Buffer.from(await vscode.workspace.fs.readFile(baselineUri)).toString("utf8");
+        if (await this.storage.exists(baselinePath)) {
+          baselineText = await readText(this.storage, baselinePath);
           break;
         }
       }
     }
     const plan = planChapterWorkingCopyInit({
-      workingExists: await exists(workingUri),
+      workingExists: await this.storage.exists(workingPath),
       originalText,
       baselineText,
     });
     if (plan.action === "keep-working") {
-      const workingText = Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8");
+      const workingText = await readText(this.storage, workingPath);
       return { workingUri, workingText };
     }
-    await vscode.workspace.fs.writeFile(workingUri, Buffer.from(plan.workingText, "utf8"));
+    await writeText(this.storage, workingPath, plan.workingText);
     if (plan.restoreOriginal !== undefined) {
-      await vscode.workspace.fs.writeFile(vscode.Uri.file(file.path), Buffer.from(plan.restoreOriginal, "utf8"));
+      await writeText(this.storage, file.path, plan.restoreOriginal);
     }
     return { workingUri, workingText: plan.workingText };
   }
@@ -1723,14 +1723,13 @@ class Ocr2mdExtension implements vscode.Disposable {
     uri: vscode.Uri,
     options: { writeMarker?: boolean; currentText?: string; silent?: boolean } = {},
   ) {
-    if (!(await exists(uri)) && options.currentText === undefined) return;
+    if (!(await this.storage.exists(uri.fsPath)) && options.currentText === undefined) return;
     const workspace = vscode.workspace.getWorkspaceFolder(uri) ?? vscode.workspace.workspaceFolders?.[0];
     const current = await this.readWorkingText(uri, options.currentText);
     const originalPath = this.selectedFile?.path;
     let baseline = current;
     if (workspace && originalPath && isChapterOutputPath(workspace.uri.fsPath, originalPath) && originalPath !== uri.fsPath) {
-      const originalUri = vscode.Uri.file(originalPath);
-      if (await exists(originalUri)) baseline = Buffer.from(await vscode.workspace.fs.readFile(originalUri)).toString("utf8");
+      if (await this.storage.exists(originalPath)) baseline = await readText(this.storage, originalPath);
     }
 
     const sourcePath = originalPath ?? uri.fsPath;
@@ -1760,26 +1759,24 @@ class Ocr2mdExtension implements vscode.Disposable {
         next.push(file);
         continue;
       }
-      const originalUri = vscode.Uri.file(file.path);
-      const originalText = Buffer.from(await vscode.workspace.fs.readFile(originalUri)).toString("utf8");
-      const workingUri = vscode.Uri.file(chapterWorkingCopyPath(workspace.uri.fsPath, file.path));
-      const workingText = (await exists(workingUri))
-        ? Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8")
+      const originalText = await readText(this.storage, file.path);
+      const workingPath = chapterWorkingCopyPath(workspace.uri.fsPath, file.path);
+      const workingText = (await this.storage.exists(workingPath))
+        ? await readText(this.storage, workingPath)
         : undefined;
       const changed = workingText !== undefined && chapterContentsDiffer(originalText, workingText);
       const updated = withChapterChangedFrontmatter(originalText, changed);
-      if (updated !== originalText) await vscode.workspace.fs.writeFile(originalUri, Buffer.from(updated, "utf8"));
+      if (updated !== originalText) await writeText(this.storage, file.path, updated);
       next.push({ ...file, changed });
     }
     return next;
   }
 
   private async writeChapterChangedMarker(originalPath: string, changed: boolean) {
-    const uri = vscode.Uri.file(originalPath);
-    if (!(await exists(uri))) return;
-    const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+    if (!(await this.storage.exists(originalPath))) return;
+    const text = await readText(this.storage, originalPath);
     const updated = withChapterChangedFrontmatter(text, changed);
-    if (updated !== text) await vscode.workspace.fs.writeFile(uri, Buffer.from(updated, "utf8"));
+    if (updated !== text) await writeText(this.storage, originalPath, updated);
     this.files = this.files.map((file) => file.path === originalPath ? { ...file, changed } : file);
     this.directoryProvider.refresh();
     this.chapterDecorations.refresh();
@@ -1789,25 +1786,25 @@ class Ocr2mdExtension implements vscode.Disposable {
     const workspace = vscode.workspace.workspaceFolders?.[0];
     if (!workspace) return;
     const workingUri = vscode.Uri.joinPath(workspace.uri, CHAPTER_BOUNDARY_WORKING_FILE);
-    const boundaryDirectory = vscode.Uri.joinPath(workspace.uri, ".ocr2md", "chapter-boundary");
-    const baselineUri = vscode.Uri.joinPath(boundaryDirectory, "baseline.md");
-    const manifestUri = vscode.Uri.joinPath(boundaryDirectory, "manifest.json");
+    const boundaryDirectoryPath = path.join(workspace.uri.fsPath, ".ocr2md", "chapter-boundary");
+    const baselinePath = path.join(boundaryDirectoryPath, "baseline.md");
+    const manifestPath = path.join(boundaryDirectoryPath, "manifest.json");
     const inputs = await this.readSequenceInputs(workspace, workingUri.fsPath);
-    if (!inputs.length && !(await exists(workingUri))) {
+    if (!inputs.length && !(await this.storage.exists(workingUri.fsPath))) {
       void vscode.window.showWarningMessage("工作目录根层没有可合并的序列 Markdown 文件。");
       return;
     }
-    await vscode.workspace.fs.createDirectory(boundaryDirectory);
-    if (!(await exists(workingUri))) await vscode.workspace.fs.writeFile(workingUri, Buffer.from(mergeSequenceMarkdown(inputs), "utf8"));
-    const workingText = Buffer.from(await vscode.workspace.fs.readFile(workingUri)).toString("utf8");
-    if (!(await exists(baselineUri))) await vscode.workspace.fs.writeFile(baselineUri, Buffer.from(workingText, "utf8"));
-    if (!(await exists(manifestUri))) {
-      await vscode.workspace.fs.writeFile(manifestUri, Buffer.from(JSON.stringify({
+    await this.storage.createDirectory(boundaryDirectoryPath);
+    if (!(await this.storage.exists(workingUri.fsPath))) await writeText(this.storage, workingUri.fsPath, mergeSequenceMarkdown(inputs));
+    const workingText = await readText(this.storage, workingUri.fsPath);
+    if (!(await this.storage.exists(baselinePath))) await writeText(this.storage, baselinePath, workingText);
+    if (!(await this.storage.exists(manifestPath))) {
+      await writeText(this.storage, manifestPath, JSON.stringify({
         schemaVersion: 2,
         createdAt: new Date().toISOString(),
         workingFile: workingUri.fsPath,
         sourceFiles: inputs.map((input) => input.path),
-      }, null, 2), "utf8"));
+      }, null, 2));
     }
     this.chapterBoundaryWorkingUri = workingUri;
     this.modulePreviewPaths.set("章节定界", workingUri.fsPath);
@@ -1825,8 +1822,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       .sort((left, right) => left.label.localeCompare(right.label, "zh-CN", { numeric: true }));
     const inputs: MergeInputText[] = [];
     for (const file of files) {
-      const uri = vscode.Uri.file(file.path);
-      inputs.push({ path: file.path, text: Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8") });
+      inputs.push({ path: file.path, text: await readText(this.storage, file.path) });
     }
     return inputs;
   }
@@ -1840,7 +1836,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       if (!isChapterOutputPath(workspace.uri.fsPath, uri.fsPath)) return true;
       return isCanonicalChapterOriginal(workspace.uri.fsPath, uri.fsPath);
     }).map(async (uri): Promise<FileEntry> => {
-      const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+      const text = await readText(this.storage, uri.fsPath);
       return {
         label: path.relative(workspace.uri.fsPath, uri.fsPath),
         path: uri.fsPath,
@@ -1854,10 +1850,10 @@ class Ocr2mdExtension implements vscode.Disposable {
     const workspace = vscode.workspace.workspaceFolders?.[0];
     const working = this.chapterBoundaryWorkingUri;
     if (!workspace || !working) return;
-    const baselineUri = vscode.Uri.joinPath(workspace.uri, ".ocr2md", "chapter-boundary", "baseline.md");
-    if (!(await exists(baselineUri)) || !(await exists(working))) return;
-    const baseline = Buffer.from(await vscode.workspace.fs.readFile(baselineUri)).toString("utf8");
-    const current = Buffer.from(await vscode.workspace.fs.readFile(working)).toString("utf8");
+    const baselinePath = path.join(workspace.uri.fsPath, ".ocr2md", "chapter-boundary", "baseline.md");
+    if (!(await this.storage.exists(baselinePath)) || !(await this.storage.exists(working.fsPath))) return;
+    const baseline = await readText(this.storage, baselinePath);
+    const current = await readText(this.storage, working.fsPath);
     const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
     const result = application.refreshChapterBoundary({
       baselineText: baseline,
@@ -1874,12 +1870,12 @@ class Ocr2mdExtension implements vscode.Disposable {
   private async exportChapterBoundaryChapters() {
     const workspace = vscode.workspace.workspaceFolders?.[0];
     const working = this.chapterBoundaryWorkingUri;
-    if (!workspace || !working || !(await exists(working))) {
+    if (!workspace || !working || !(await this.storage.exists(working.fsPath))) {
       void vscode.window.showWarningMessage("请先创建或打开章节定界工作稿。");
       return;
     }
     await this.refreshChapterBoundaryRows();
-    const text = Buffer.from(await vscode.workspace.fs.readFile(working)).toString("utf8");
+    const text = await readText(this.storage, working.fsPath);
     const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
     const segments = application.chapterBoundarySegments(text);
     if (!segments.length) {
@@ -1890,14 +1886,14 @@ class Ocr2mdExtension implements vscode.Disposable {
     for (const segment of segments) {
       const body = lines.slice(segment.startLine, segment.endLine).join("\n");
       const output = withChapterFrontmatter(body, segment.chapterFile, path.basename(working.fsPath));
-      const chapterDir = vscode.Uri.file(chapterDirectoryPath(workspace.uri.fsPath, segment.chapterFile));
-      const originalUri = vscode.Uri.file(chapterOriginalPath(workspace.uri.fsPath, segment.chapterFile));
-      const workingUri = vscode.Uri.file(chapterWorkingCopyPath(workspace.uri.fsPath, originalUri.fsPath));
-      const imageDir = vscode.Uri.file(chapterImageDirectory(originalUri.fsPath));
-      await vscode.workspace.fs.createDirectory(chapterDir);
-      await vscode.workspace.fs.createDirectory(imageDir);
-      await vscode.workspace.fs.writeFile(originalUri, Buffer.from(output, "utf8"));
-      if (!(await exists(workingUri))) await vscode.workspace.fs.writeFile(workingUri, Buffer.from(output, "utf8"));
+      const chapterDir = chapterDirectoryPath(workspace.uri.fsPath, segment.chapterFile);
+      const originalPath = chapterOriginalPath(workspace.uri.fsPath, segment.chapterFile);
+      const workingPath = chapterWorkingCopyPath(workspace.uri.fsPath, originalPath);
+      const imageDir = chapterImageDirectory(originalPath);
+      await this.storage.createDirectory(chapterDir);
+      await this.storage.createDirectory(imageDir);
+      await writeText(this.storage, originalPath, output);
+      if (!(await this.storage.exists(workingPath))) await writeText(this.storage, workingPath, output);
     }
     await this.refreshFiles();
     void vscode.window.showInformationMessage(`已导出 ${segments.length} 个章节到 chapters/章节名称/。`);
@@ -1909,15 +1905,14 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (!file || !workspace) return;
     let sidecarPath: string | undefined;
     for (const candidate of [chapterSidecarPath(file.path), ...legacyChapterSidecarPaths(workspace.uri.fsPath, file.path)]) {
-      if (await exists(vscode.Uri.file(candidate))) {
+      if (await this.storage.exists(candidate)) {
         sidecarPath = candidate;
         break;
       }
     }
     if (!sidecarPath) return;
-    const uri = vscode.Uri.file(sidecarPath);
     try {
-      const parsed = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8"));
+      const parsed = JSON.parse(await readText(this.storage, sidecarPath));
       const loaded = candidatesFromSidecar(parsed);
       this.rows = loaded.rows.filter((row) =>
         row.typeLabel && rowBelongsToChapter(row, file.path, this.chapterWorkingUri?.fsPath ?? file.path)
@@ -1940,9 +1935,9 @@ class Ocr2mdExtension implements vscode.Disposable {
     const workspace = file ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file.path)) ?? vscode.workspace.workspaceFolders?.[0] : undefined;
     if (!file || !workspace) return;
     const sidecarPath = chapterSidecarPath(file.path);
-    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(sidecarPath)));
+    await this.storage.createDirectory(path.dirname(sidecarPath));
     const sidecar = serializeSidecar(file.path, this.rows, this.annotationPairs);
-    await vscode.workspace.fs.writeFile(vscode.Uri.file(sidecarPath), Buffer.from(JSON.stringify(sidecar, null, 2), "utf8"));
+    await writeText(this.storage, sidecarPath, JSON.stringify(sidecar, null, 2));
     if (!options.silent) void vscode.window.showInformationMessage(`已保存 ${this.rows.length} 条标定。`);
   }
 
@@ -2270,22 +2265,4 @@ function download(url: string, redirects = 5): Promise<Uint8Array> {
     });
     request.on("error", reject);
   });
-}
-
-
-async function exists(uri: vscode.Uri): Promise<boolean> {
-  try {
-    await vscode.workspace.fs.stat(uri);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function deleteIfExists(uri: vscode.Uri): Promise<void> {
-  try {
-    await vscode.workspace.fs.delete(uri, { useTrash: false });
-  } catch {
-    // Temporary export file may already have been renamed or may never exist.
-  }
 }
