@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { exportByCalibration, formatEmbed, groupEmbeds, obsidianImage } from "./calibrationExport";
+import { buildIllegalMergeSpans, exportByCalibration, formatEmbed, groupEmbeds, obsidianImage } from "./calibrationExport";
 import type { Candidate } from "./types";
 
 function row(partial: Partial<Candidate> & Pick<Candidate, "id" | "raw" | "typeLabel" | "lineType">): Candidate {
@@ -132,6 +132,30 @@ assert.strictEqual(
   ].join("\n"),
 );
 
+const rowOrderedEmbed = [
+  row({ id: "order-image", raw: "![image](https://cdn.example/order.jpg)", typeLabel: "嵌入块", lineType: "嵌入链接", embedNumber: 6, localPath: "imgs/order.jpg", range: { line: 30, start: 0, end: 44 } }),
+  row({ id: "order-title", raw: "FIGURE 6 | Ordered", typeLabel: "嵌入块", lineType: "内嵌标题", embedNumber: 6, range: { line: 20, start: 0, end: 18 } }),
+  row({ id: "order-text", raw: "Source text appears first.", typeLabel: "嵌入块", lineType: "嵌入文本", embedNumber: 6, range: { line: 10, start: 0, end: 26 } }),
+  row({ id: "order-marker", raw: ">", typeLabel: "嵌入块", lineType: "嵌入块首", embedNumber: 6, range: { line: 5, start: 0, end: 1 } }),
+];
+const rowOrderedBlock = formatEmbed(groupEmbeds(rowOrderedEmbed)[0]);
+assert.ok(
+  rowOrderedBlock.indexOf("Source text appears first.") < rowOrderedBlock.indexOf("FIGURE 6 | Ordered")
+    && rowOrderedBlock.indexOf("FIGURE 6 | Ordered") < rowOrderedBlock.indexOf("内嵌图片链接: ![[imgs/order.jpg]]"),
+  "embed export order must follow source line numbers rather than input array order or line type",
+);
+
+const htmlBeforeImage = [
+  row({ id: "order2-marker", raw: ">", typeLabel: "嵌入块", lineType: "嵌入块首", embedNumber: 7, range: { line: 0, start: 0, end: 1 } }),
+  row({ id: "order2-table", raw: "<table><tr><td>A</td></tr></table>", typeLabel: "嵌入块", lineType: "HTML表", embedNumber: 7, range: { line: 1, start: 0, end: 34 } }),
+  row({ id: "order2-image", raw: "![image](https://cdn.example/order2.jpg)", typeLabel: "嵌入块", lineType: "嵌入链接", embedNumber: 7, localPath: "imgs/order2.jpg", range: { line: 2, start: 0, end: 45 } }),
+];
+const htmlBeforeImageBlock = formatEmbed(groupEmbeds(htmlBeforeImage)[0]);
+assert.ok(
+  htmlBeforeImageBlock.indexOf(">><table><tr><td>A</td></tr></table>") < htmlBeforeImageBlock.indexOf("![[imgs/order2.jpg]]"),
+  "HTML/image output must preserve source line order even when HTML appears before the image",
+);
+
 const source = [
   "## Heading",
   "",
@@ -152,7 +176,7 @@ const exported = exportByCalibration(source, [
   })),
   row({ id: "b", raw: "1. Footnote body", typeLabel: "注释", lineType: "注释正文", annotationNumber: "1", range: { line: 8, start: 0, end: 16 } }),
 ]);
-assert.ok(exported.includes("## Heading\n<br>\n\n"));
+assert.ok(exported.includes("## (001) Heading\n<br>\n\n"));
 assert.ok(exported.includes("See[^1] here.\n<br>\n\n"));
 assert.ok(exported.includes("Keep this paragraph.\n<br>\n\n[^1]: Footnote body\n<br>"));
 assert.ok(!exported.includes("1. Footnote body"));
@@ -199,7 +223,7 @@ assert.strictEqual(
     "ocr2md_chapter_split: true",
     "---",
     "",
-    "## Original heading",
+    "## (001) Original heading",
     "<br>",
     "",
     "First paragraph line one.",
@@ -211,5 +235,68 @@ assert.strictEqual(
     "",
   ].join("\n"),
 );
+
+const numberedHeadingSource = [
+  "# Top",
+  "",
+  "### Deep",
+  "",
+  "## Middle",
+].join("\n");
+const numberedHeadingExport = exportByCalibration(numberedHeadingSource, [
+  row({ id: "nh-3", raw: "## Middle", typeLabel: "章节标题", lineType: "2 级标题", range: { line: 4, start: 0, end: 9 } }),
+  row({ id: "nh-1", raw: "# Top", typeLabel: "章节标题", lineType: "1 级标题", range: { line: 0, start: 0, end: 5 } }),
+  row({ id: "nh-2", raw: "### Deep", typeLabel: "章节标题", lineType: "3 级标题", range: { line: 2, start: 0, end: 8 } }),
+]);
+assert.ok(numberedHeadingExport.includes("# (001) Top\n<br>"));
+assert.ok(numberedHeadingExport.includes("### (002) Deep\n<br>"));
+assert.ok(numberedHeadingExport.includes("## (003) Middle\n<br>"));
+const unnumberedHeadingExport = exportByCalibration(numberedHeadingSource, [
+  row({ id: "nh-3", raw: "## Middle", typeLabel: "章节标题", lineType: "2 级标题", range: { line: 4, start: 0, end: 9 } }),
+  row({ id: "nh-1", raw: "# Top", typeLabel: "章节标题", lineType: "1 级标题", range: { line: 0, start: 0, end: 5 } }),
+  row({ id: "nh-2", raw: "### Deep", typeLabel: "章节标题", lineType: "3 级标题", range: { line: 2, start: 0, end: 8 } }),
+], { numberHeadings: false });
+assert.ok(unnumberedHeadingExport.includes("# Top\n<br>"));
+assert.ok(unnumberedHeadingExport.includes("### Deep\n<br>"));
+assert.ok(!unnumberedHeadingExport.includes("(001)"));
+assert.ok(
+  numberedHeadingExport.indexOf("(001)") < numberedHeadingExport.indexOf("(002)")
+    && numberedHeadingExport.indexOf("(002)") < numberedHeadingExport.indexOf("(003)"),
+  "heading sequence must follow chapter position rather than calibration row order or heading level",
+);
+
+
+const illegalBreakSource = [
+  "First part of one sentence",
+  "continues on the next physical line.",
+  "",
+  "Another paragraph was broken in the",
+  "",
+  "middle by OCR.",
+  "",
+  "A hyphenated exam-",
+  "ple continues here.",
+  "",
+  "This break stays.",
+  "And this line stays separate.",
+].join("\n");
+const illegalBreakRows = [
+  row({ id: "lb-1", raw: "First part of one sentence\ncontinues on the next physical line.", typeLabel: "非法断行", lineType: "合并", range: { line: 0, start: 0, endLine: 1, end: 36 } }),
+  row({ id: "lb-2", raw: "Another paragraph was broken in the\n\nmiddle by OCR.", typeLabel: "非法断行", lineType: "合并", range: { line: 3, start: 0, endLine: 5, end: 14 } }),
+  row({ id: "lb-3", raw: "A hyphenated exam-\nple continues here.", typeLabel: "非法断行", lineType: "合并", range: { line: 7, start: 0, endLine: 8, end: 19 } }),
+  row({ id: "lb-ignore", raw: "This break stays.\nAnd this line stays separate.", typeLabel: "非法断行", lineType: "已忽略", range: { line: 10, start: 0, endLine: 11, end: 29 } }),
+];
+const illegalBreakExport = exportByCalibration(illegalBreakSource, illegalBreakRows);
+assert.ok(illegalBreakExport.includes("First part of one sentence continues on the next physical line.\n<br>"), "calibrated illegal adjacent break must merge on export");
+assert.ok(illegalBreakExport.includes("Another paragraph was broken in the middle by OCR.\n<br>"), "calibrated illegal blank-line break must remove blank lines on export");
+assert.ok(illegalBreakExport.includes("A hyphenated example continues here.\n<br>"), "hyphenated OCR split word must join without a space");
+assert.ok(illegalBreakExport.includes("This break stays.\nAnd this line stays separate.\n<br>"), "已忽略 illegal break must remain unchanged");
+
+const chainedSpans = buildIllegalMergeSpans([
+  row({ id: "chain-1", raw: "a\nb", typeLabel: "非法断行", lineType: "合并", range: { line: 20, start: 0, endLine: 21, end: 4 } }),
+  row({ id: "chain-2", raw: "b\nc", typeLabel: "非法断行", lineType: "合并", range: { line: 21, start: 0, endLine: 22, end: 4 } }),
+  row({ id: "chain-3", raw: "d\n\ne", typeLabel: "非法断行", lineType: "合并", range: { line: 30, start: 0, endLine: 32, end: 4 } }),
+]);
+assert.deepStrictEqual(chainedSpans, [{ start: 20, end: 22 }, { start: 30, end: 32 }], "connected illegal-break decisions must export as one merged span");
 
 console.log("calibrationExport tests passed");

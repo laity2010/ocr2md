@@ -13,8 +13,10 @@ interface MatchRange {
   end: number;
 }
 
-const TOKEN_PREFIX = "__OCR2MD_PROTECTED_";
-const TOKEN_RE = /__OCR2MD_PROTECTED_\d{4}__/;
+export const MARKDOWN_PROTECTION_TAG = "ocr2md-protected";
+const LEGACY_TOKEN_PREFIX = "__OCR2MD_PROTECTED_";
+const LEGACY_TOKEN_RE = /__OCR2MD_PROTECTED_\d{4}__/;
+const XML_TOKEN_RE = /<ocr2md-protected\b[^>]*\bid\s*=\s*["']p\d{4}["'][^>]*>/i;
 
 /**
  * Protect Markdown syntax and non-translatable inline content before sending
@@ -47,7 +49,8 @@ export function restoreProtectedMarkdown(
 ): string {
   let restored = translatedText;
   for (const replacement of replacements) {
-    restored = restored.split(replacement.token).join(replacement.value);
+    const pattern = replacementPattern(replacement.token);
+    restored = pattern ? restored.replace(pattern, replacement.value) : restored.split(replacement.token).join(replacement.value);
   }
   return restored;
 }
@@ -57,12 +60,19 @@ export function missingProtectedMarkdownTokens(
   replacements: readonly MarkdownReplacement[],
 ): string[] {
   return replacements
-    .filter((replacement) => !translatedText.includes(replacement.token))
+    .filter((replacement) => {
+      const pattern = replacementPattern(replacement.token);
+      return pattern ? !pattern.test(translatedText) : !translatedText.includes(replacement.token);
+    })
     .map((replacement) => replacement.token);
 }
 
 export function containsProtectionPlaceholder(text: string): boolean {
-  return TOKEN_RE.test(text);
+  return XML_TOKEN_RE.test(text) || LEGACY_TOKEN_RE.test(text);
+}
+
+export function usesXmlProtectionPlaceholders(text: string): boolean {
+  return XML_TOKEN_RE.test(text);
 }
 
 /**
@@ -73,17 +83,53 @@ export function containsProtectionPlaceholder(text: string): boolean {
 export function markdownStructureIssue(source: string, translated: string): string | undefined {
   const expected = protectMarkdownForTranslation(source).replacements.map((item) => item.value);
   const actual = protectMarkdownForTranslation(translated).replacements.map((item) => item.value);
-  const count = Math.max(expected.length, actual.length);
+
+  // DeepL XML tag handling is allowed to move atomic inline LaTeX together with
+  // the translated phrase it belongs to. That is not structural corruption:
+  // formulas/currency expressions must survive byte-for-byte and with the same
+  // multiplicity, but their relative order may legitimately change in Chinese.
+  const expectedLatex = expected.filter(isAtomicLatexStructure);
+  const actualLatex = actual.filter(isAtomicLatexStructure);
+  const latexIssue = structureMultisetIssue(expectedLatex, actualLatex, "LaTeX");
+  if (latexIssue) return latexIssue;
+
+  // Markdown syntax, links, footnote prefixes, HTML, URLs, code, etc. remain
+  // order-sensitive because reordering those fragments can create malformed Markdown.
+  const expectedOrdered = expected.filter((value) => !isAtomicLatexStructure(value));
+  const actualOrdered = actual.filter((value) => !isAtomicLatexStructure(value));
+  const count = Math.max(expectedOrdered.length, actualOrdered.length);
   for (let index = 0; index < count; index += 1) {
-    if (expected[index] === actual[index]) continue;
-    if (expected[index] === undefined) {
-      return `出现额外 Markdown 结构：${formatStructure(actual[index])}`;
+    if (expectedOrdered[index] === actualOrdered[index]) continue;
+    if (expectedOrdered[index] === undefined) {
+      return `出现额外 Markdown 结构：${formatStructure(actualOrdered[index])}`;
     }
-    if (actual[index] === undefined) {
-      return `丢失 Markdown 结构：${formatStructure(expected[index])}`;
+    if (actualOrdered[index] === undefined) {
+      return `丢失 Markdown 结构：${formatStructure(expectedOrdered[index])}`;
     }
-    return `Markdown 结构发生变化：${formatStructure(expected[index])} → ${formatStructure(actual[index])}`;
+    return `Markdown 结构发生变化：${formatStructure(expectedOrdered[index])} → ${formatStructure(actualOrdered[index])}`;
   }
+  return undefined;
+}
+
+function isAtomicLatexStructure(value: string): boolean {
+  const trimmed = value.trim();
+  return /^\$\$[\s\S]*\$\$$/.test(trimmed)
+    || /^\\\[[\s\S]*\\\]$/.test(trimmed)
+    || /^\\\([\s\S]*\\\)$/.test(trimmed)
+    || /^\$(?!\$)[\s\S]*\$$/.test(trimmed);
+}
+
+function structureMultisetIssue(expected: readonly string[], actual: readonly string[], label: string): string | undefined {
+  const counts = new Map<string, number>();
+  for (const value of actual) counts.set(value, (counts.get(value) ?? 0) + 1);
+  for (const value of expected) {
+    const count = counts.get(value) ?? 0;
+    if (!count) return `丢失 ${label} 结构：${formatStructure(value)}`;
+    if (count === 1) counts.delete(value);
+    else counts.set(value, count - 1);
+  }
+  const extra = counts.entries().next().value as [string, number] | undefined;
+  if (extra) return `出现额外 ${label} 结构：${formatStructure(extra[0])}`;
   return undefined;
 }
 
@@ -165,5 +211,24 @@ function collectRegex(
 }
 
 function markdownToken(index: number): string {
-  return `${TOKEN_PREFIX}${String(index).padStart(4, "0")}__`;
+  return `<${MARKDOWN_PROTECTION_TAG} id="p${String(index).padStart(4, "0")}"/>`;
+}
+
+function replacementPattern(token: string): RegExp | undefined {
+  const xmlId = /\bid\s*=\s*["'](p\d{4})["']/i.exec(token)?.[1];
+  if (xmlId) {
+    const id = escapeRegex(xmlId);
+    // DeepL XML handling may normalize quote style, whitespace, or expand a
+    // self-closing placeholder into an explicit empty element. Match both.
+    return new RegExp(
+      `<${MARKDOWN_PROTECTION_TAG}\\b(?=[^>]*\\bid\\s*=\\s*["']${id}["'])[^>]*(?:\\/\\s*>|>\\s*<\\/${MARKDOWN_PROTECTION_TAG}\\s*>)`,
+      "gi",
+    );
+  }
+  if (token.startsWith(LEGACY_TOKEN_PREFIX)) return new RegExp(escapeRegex(token), "g");
+  return undefined;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

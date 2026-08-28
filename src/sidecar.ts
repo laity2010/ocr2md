@@ -77,7 +77,8 @@ export function candidatesFromSidecar(raw: unknown): { rows: Candidate[]; annota
 
 function normalizeCalibration(row: Calibration): Calibration {
   const typeLabel = row.typeLabel ? LEGACY_MODULE_NAMES[row.typeLabel] ?? row.typeLabel : row.typeLabel;
-  const lineType = row.lineType ? LEGACY_LINE_TYPES[row.lineType] ?? row.lineType : row.lineType;
+  const legacyLineType = row.lineType ? LEGACY_LINE_TYPES[row.lineType] ?? row.lineType : row.lineType;
+  const lineType = typeLabel === "非法断行" && legacyLineType === "忽略" ? "已忽略" : legacyLineType;
   return {
     ...row,
     typeLabel: typeLabel as ModuleName,

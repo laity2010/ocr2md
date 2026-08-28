@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { scanIllegalLineBreaks } from "./illegalLineBreaks";
+import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { attachScanIdentities, reconcileRows } from "./rowIdentity";
 
 const markdown = [
@@ -83,14 +83,14 @@ assert.ok(!rows.some((row) => row.raw.includes("a + b")));
 assert.ok(!rows.some((row) => row.raw.includes("deliberate Markdown break")));
 
 const identified = attachScanIdentities(rows, markdown, { moduleName: "非法断行", sourcePath: "/ws/chapters/01/01.md" });
-const decided = identified.map((row, index) => index === 0 ? { ...row, lineType: "忽略" } : row);
+const decided = identified.map((row, index) => index === 0 ? { ...row, lineType: "已忽略" } : row);
 const rescanned = attachScanIdentities(
   scanIllegalLineBreaks(markdown, "/ws/chapters/01/01.md"),
   markdown,
   { moduleName: "非法断行", sourcePath: "/ws/chapters/01/01.md" },
 );
 const reconciled = reconcileRows(decided, rescanned, markdown);
-assert.strictEqual(reconciled[0]?.lineType, "忽略", "manual merge/ignore decision must survive a derived rescan");
+assert.strictEqual(reconciled[0]?.lineType, "已忽略", "manual merge/ignored decision must survive a derived rescan");
 
 const lowercaseAfterPeriod = scanIllegalLineBreaks("Sentence ends.\n\ncontinuation starts lowercase.", "/ws/lowercase.md");
 assert.strictEqual(lowercaseAfterPeriod.length, 1);
@@ -100,5 +100,48 @@ const hyphen = scanIllegalLineBreaks("inter-\n\nnational", "/ws/hyphen.md");
 assert.strictEqual(hyphen.length, 1);
 assert.strictEqual(hyphen[0].mergedPreview, "international");
 assert.ok(hyphen[0].breakReason.includes("拆词"));
+
+
+const manualMarkdown = [
+  "Paragraph one ends naturally.",
+  "",
+  "Paragraph two starts here.",
+  "",
+  "Third paragraph.",
+].join("\n");
+const manualFromPrevious = manualIllegalLineBreakAtLine(manualMarkdown, "/ws/manual.md", 0);
+assert.ok(manualFromPrevious, "manual illegal break must be creatable from the previous prose line");
+assert.deepStrictEqual(manualFromPrevious?.range, { line: 0, start: 0, endLine: 2, end: "Paragraph two starts here.".length });
+assert.strictEqual(manualFromPrevious?.lineType, "合并");
+assert.strictEqual(manualFromPrevious?.breakReason, "人工加入");
+assert.strictEqual(manualFromPrevious?.raw, "Paragraph one ends naturally.\n\nParagraph two starts here.");
+const manualFromBlank = manualIllegalLineBreakAtLine(manualMarkdown, "/ws/manual.md", 1);
+assert.strictEqual(manualFromBlank?.id, manualFromPrevious?.id, "blank-line cursor must resolve to the same paragraph boundary");
+assert.strictEqual(manualIllegalLineBreakAtLine(manualMarkdown, "/ws/manual.md", 4), undefined, "last prose line has no following boundary to mark");
+
+
+const manualOnly = manualIllegalLineBreakAtLine(
+  "First complete sentence.\n\nSecond complete sentence.",
+  "/ws/manual-only.md",
+  1,
+)!;
+const manualOnlyIdentified = attachScanIdentities(
+  [{ ...manualOnly, isWorkingCorrection: true }],
+  "First complete sentence.\n\nSecond complete sentence.",
+  { moduleName: "非法断行", sourcePath: "/ws/manual-only.md" },
+);
+const noAutomaticCandidates = attachScanIdentities(
+  scanIllegalLineBreaks("First complete sentence.\n\nSecond complete sentence.", "/ws/manual-only.md"),
+  "First complete sentence.\n\nSecond complete sentence.",
+  { moduleName: "非法断行", sourcePath: "/ws/manual-only.md" },
+);
+assert.strictEqual(noAutomaticCandidates.length, 0, "fixture must be invisible to the automatic heuristic");
+const keptManualOnly = reconcileRows(
+  manualOnlyIdentified,
+  noAutomaticCandidates,
+  "First complete sentence.\n\nSecond complete sentence.",
+);
+assert.strictEqual(keptManualOnly.length, 1, "manual illegal-break candidate must survive a derived rescan even when heuristics miss it");
+assert.strictEqual(keptManualOnly[0]?.breakReason, "人工加入");
 
 console.log("illegalLineBreaks tests passed");

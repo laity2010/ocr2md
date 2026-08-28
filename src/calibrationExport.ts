@@ -2,6 +2,10 @@ import { resolvedAnnotationNumber } from "./annotation";
 import { activeCandidates, isIgnoredEmbedCandidate } from "./candidateLifecycle";
 import type { Candidate } from "./types";
 
+export interface CalibrationExportOptions {
+  numberHeadings?: boolean;
+}
+
 export interface EmbedExportGroup {
   number: number;
   start: number;
@@ -9,9 +13,12 @@ export interface EmbedExportGroup {
   rows: Candidate[];
 }
 
-export function exportByCalibration(text: string, rows: Candidate[]): string {
+export function exportByCalibration(text: string, rows: Candidate[], options: CalibrationExportOptions = {}): string {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const numberHeadings = options.numberHeadings !== false;
   const live = activeCandidates(rows);
+  const illegalMergeSpans = buildIllegalMergeSpans(live);
+  const illegalMergeAt = new Map(illegalMergeSpans.map((span) => [span.start, span]));
   const embeds = groupEmbeds(live.filter((row) => !isIgnoredEmbedCandidate(row)));
   const embedAt = new Map<number, EmbedExportGroup>();
   const embedCoveredLines = new Set<number>();
@@ -27,10 +34,11 @@ export function exportByCalibration(text: string, rows: Candidate[]): string {
     const end = row.range.endLine ?? row.range.line;
     for (let line = row.range.line; line <= end; line += 1) bodyLines.add(line);
   }
-  const headingStarts = new Map<number, Candidate>();
-  for (const row of live.filter((item) => item.typeLabel === "章节标题" && /^[1-6] 级标题$/.test(item.lineType ?? ""))) {
-    headingStarts.set(row.range.line, row);
-  }
+  const headingStarts = new Map<number, { row: Candidate; ordinal: number }>();
+  const headings = live
+    .filter((item) => item.typeLabel === "章节标题" && /^[1-6] 级标题$/.test(item.lineType ?? ""))
+    .sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
+  headings.forEach((row, index) => headingStarts.set(row.range.line, { row, ordinal: index + 1 }));
   const refsByLine = new Map<number, Candidate[]>();
   for (const row of live.filter((item) => item.typeLabel === "注释" && item.lineType === "注释引用")) {
     const list = refsByLine.get(row.range.line) ?? [];
@@ -72,6 +80,17 @@ export function exportByCalibration(text: string, rows: Candidate[]): string {
       index += 1;
       continue;
     }
+    const illegalMerge = illegalMergeAt.get(index);
+    if (illegalMerge) {
+      const mergedParts: string[] = [];
+      for (let lineIndex = illegalMerge.start; lineIndex <= illegalMerge.end; lineIndex += 1) {
+        if (!lines[lineIndex]?.trim()) continue;
+        mergedParts.push(replaceAnnotationRefs(lines[lineIndex], refsByLine.get(lineIndex) ?? []));
+      }
+      if (mergedParts.length) plainLines.push(mergeExportProseParts(mergedParts));
+      index = illegalMerge.end + 1;
+      continue;
+    }
     if (!lines[index].trim()) {
       flushPlainText();
       index += 1;
@@ -81,7 +100,7 @@ export function exportByCalibration(text: string, rows: Candidate[]): string {
     let line = replaceAnnotationRefs(lines[index], refsByLine.get(index) ?? []);
     if (heading) {
       flushPlainText();
-      blocks.push(formatHeading(line, heading.lineType ?? ""));
+      blocks.push(formatHeading(line, heading.row.lineType ?? "", heading.ordinal, numberHeadings));
     } else {
       plainLines.push(line);
     }
@@ -92,6 +111,40 @@ export function exportByCalibration(text: string, rows: Candidate[]): string {
   const footnotes = collectFootnotes(live);
   if (footnotes.length) blocks.push(footnotes.join("\n\n"));
   return blocks.join("\n\n").replace(/[ \t]+\n/g, "\n").replace(/\s+$/, "") + "\n";
+}
+
+
+export interface IllegalMergeSpan {
+  start: number;
+  end: number;
+}
+
+/** Build connected source-line spans from calibrated illegal-line-break merge decisions. */
+export function buildIllegalMergeSpans(rows: Candidate[]): IllegalMergeSpan[] {
+  const ranges = rows
+    .filter((row) => row.typeLabel === "非法断行" && row.lineType === "合并")
+    .map((row) => ({ start: row.range.line, end: row.range.endLine ?? row.range.line }))
+    .filter((span) => span.end > span.start)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const merged: IllegalMergeSpan[] = [];
+  for (const span of ranges) {
+    const previous = merged[merged.length - 1];
+    if (previous && span.start <= previous.end) {
+      previous.end = Math.max(previous.end, span.end);
+    } else {
+      merged.push({ ...span });
+    }
+  }
+  return merged;
+}
+
+function mergeExportProseParts(parts: string[]): string {
+  return parts.reduce((left, right) => {
+    const a = left.trimEnd();
+    const b = right.trimStart();
+    if (/\p{L}[-‐‑]$/u.test(a) && /^\p{L}/u.test(b)) return `${a.slice(0, -1)}${b}`;
+    return `${a} ${b}`;
+  });
 }
 
 function leadingFrontmatterEnd(lines: string[]): number {
@@ -122,47 +175,63 @@ export function groupEmbeds(rows: Candidate[]): EmbedExportGroup[] {
 
 export function formatEmbed(group: EmbedExportGroup): string {
   const id = String(group.number).padStart(2, "0");
-  const title = embedTitle(group.rows);
-  const images = group.rows.filter((row) => row.lineType === "嵌入链接").map(obsidianImage);
-  const texts = group.rows
-    .filter((row) => row.lineType === "嵌入文本")
-    .map((row) => row.raw.trim())
-    .filter(Boolean);
-  const table = group.rows.find((row) => row.lineType === "HTML表");
-  const html = group.rows.find((row) => row.lineType === "嵌入HTML");
-  const tableSrc = table ? compactHtml(table.raw) : undefined;
-  const extraHtml = !table && html ? compactHtml(html.raw) : undefined;
-  const lines = [">"];
-  if (title) lines.push(title);
-  if (images.length && !tableSrc && !extraHtml) {
-    for (const image of images) lines.push(`内嵌图片链接: ${image}`);
-  } else {
-    for (const image of images) lines.push(image);
+  const orderedRows = [...group.rows]
+    .sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
+  const hasImage = orderedRows.some((row) => row.lineType === "嵌入链接");
+  const hasHtml = orderedRows.some((row) => row.lineType === "HTML表" || row.lineType === "嵌入HTML");
+  const lines: string[] = [];
+  let started = false;
+  let htmlCalloutStarted = false;
+
+  for (const row of orderedRows) {
+    if (row.lineType === "嵌入块首") {
+      if (!started) lines.push(">");
+      started = true;
+      continue;
+    }
+    if (!started) {
+      lines.push(">");
+      started = true;
+    }
+
+    if (row.lineType === "内嵌标题") {
+      const title = row.raw.split("\n")[0]?.replace(/^\s*>\s*/, "").trim();
+      if (title) lines.push(title);
+      continue;
+    }
+    if (row.lineType === "嵌入链接") {
+      const image = obsidianImage(row);
+      lines.push(hasHtml ? image : `内嵌图片链接: ${image}`);
+      continue;
+    }
+    if (row.lineType === "HTML表" || row.lineType === "嵌入HTML") {
+      const html = compactHtml(row.raw);
+      if (hasImage) {
+        if (!htmlCalloutStarted) {
+          lines.push(">>[! ]- HTML");
+          htmlCalloutStarted = true;
+        }
+        lines.push(`>>${html}`);
+      } else {
+        lines.push(`>${html}`);
+      }
+      continue;
+    }
+    if (row.lineType === "嵌入文本") {
+      const text = row.raw.trim();
+      if (text) {
+        lines.push(">");
+        lines.push(text);
+      }
+    }
   }
-  if (tableSrc && images.length) {
-    lines.push(">>[! ]- HTML");
-    lines.push(`>>${tableSrc}`);
-  } else if (tableSrc) {
-    lines.push(`>${tableSrc}`);
-  } else if (extraHtml) {
-    lines.push(`>${extraHtml}`);
-  }
-  for (const text of texts) {
-    lines.push(">");
-    lines.push(text);
-  }
+
+  if (!started) lines.push(">");
   lines.push(`><embed id=${id}></embed>`);
   lines.push("<br>");
   return lines.join("\n");
 }
 
-
-function embedTitle(rows: Candidate[]): string | undefined {
-  const title = rows.find((row) => row.lineType === "内嵌标题");
-  if (!title) return undefined;
-  const text = title.raw.split("\n")[0]?.replace(/^\s*>\s*/, "").trim();
-  return text || undefined;
-}
 
 export function obsidianImage(row: Candidate): string {
   const local = row.localPath?.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -180,12 +249,13 @@ function compactHtml(raw: string): string {
   return html.replace(/\s*\n\s*/g, "");
 }
 
-function formatHeading(line: string, lineType: string): string {
+function formatHeading(line: string, lineType: string, ordinal: number, includeOrdinal: boolean): string {
   const match = /^([1-6]) 级标题$/.exec(lineType);
   if (!match) return line;
   const level = Number(match[1]);
   const content = line.replace(/^ {0,3}#{1,6}(?:\s+|$)/, "").trim();
-  const heading = content ? `${"#".repeat(level)} ${content}` : "#".repeat(level);
+  const prefix = includeOrdinal ? `(${String(ordinal).padStart(3, "0")}) ` : "";
+  const heading = content ? `${"#".repeat(level)} ${prefix}${content}` : `${"#".repeat(level)}${prefix ? ` ${prefix.trimEnd()}` : ""}`;
   return `${heading}\n<br>`;
 }
 

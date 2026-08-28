@@ -52,12 +52,12 @@ const derivedIllegalBreak: Candidate = {
   preview: "line one line two",
   range: { line: 1, start: 0, endLine: 2, end: 8 },
   typeLabel: "非法断行",
-  lineType: "忽略",
+  lineType: "已忽略",
 };
 const savedWithDerived = serializeSidecar("/work/chapter.md", [...scanned, derivedIllegalBreak], []);
 const savedIllegalBreak = savedWithDerived.annotations.find((item) => item.typeLabel === "非法断行");
 assert.ok(savedIllegalBreak, "illegal-line-break merge/ignore calibration must enter sidecar");
-assert.strictEqual(savedIllegalBreak?.lineType, "忽略");
+assert.strictEqual(savedIllegalBreak?.lineType, "已忽略");
 assert.ok(!("line" in savedIllegalBreak!), "derived source range must not become sidecar identity");
 
 const loaded = candidatesFromSidecar(saved);
@@ -70,14 +70,19 @@ assert.strictEqual(rejoined.find((row) => row.lineType === "嵌入块首")?.rang
 const illegalCalibration: Candidate = {
   id: "illegal-row", rowId: "illegal-row", atomId: "illegal-atom", kind: "regex",
   label: "A B", raw: "A\n\nB", preview: "A B", range: { line: 10, start: 0, endLine: 12, end: 1 },
-  typeLabel: "非法断行", lineType: "忽略", sourcePath: "/work/chapter.md",
+  typeLabel: "非法断行", lineType: "已忽略", sourcePath: "/work/chapter.md",
 };
 const illegalSaved = serializeSidecar("/work/chapter.md", [illegalCalibration], []);
 assert.strictEqual(illegalSaved.annotations[0]?.typeLabel, "非法断行");
-assert.strictEqual(illegalSaved.annotations[0]?.lineType, "忽略");
+assert.strictEqual(illegalSaved.annotations[0]?.lineType, "已忽略");
 const illegalLoaded = candidatesFromSidecar(illegalSaved).rows[0];
 assert.strictEqual(illegalLoaded?.typeLabel, "非法断行");
-assert.strictEqual(illegalLoaded?.lineType, "忽略");
+assert.strictEqual(illegalLoaded?.lineType, "已忽略");
+const legacyIllegalLoaded = candidatesFromSidecar({
+  ...illegalSaved,
+  annotations: illegalSaved.annotations.map((item) => item.typeLabel === "非法断行" ? { ...item, lineType: "忽略" } : item),
+}).rows[0];
+assert.strictEqual(legacyIllegalLoaded?.lineType, "已忽略", "legacy 非法断行 忽略 must migrate to 已忽略");
 
 const v3 = {
   schemaVersion: 3,

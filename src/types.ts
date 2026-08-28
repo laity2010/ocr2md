@@ -40,9 +40,22 @@ export interface Candidate {
   parentBlockIndex?: number;
   sentenceIndex?: number;
   translationUnitKind?: "sentence" | "composite";
+  /** Stable identity derived from normalized translatable source content, independent of block/line position. */
+  translationSourceFingerprint?: string;
+  /** Neighbor-aware fingerprint used only to disambiguate repeated identical source units. */
+  translationContextFingerprint?: string;
+  /** Number of current translation units sharing the same source fingerprint. */
+  translationSourceOccurrenceCount?: number;
   translationText?: string;
   translationStatus?: "待翻译" | "已翻译" | "失败";
   translationError?: string;
+  /** Per-service translation results shown side-by-side in the translation table. */
+  translationResults?: Record<string, {
+    translatedText?: string;
+    status: "待翻译" | "已翻译" | "失败";
+    error?: string;
+    model?: string;
+  }>;
   previousLineText?: string;
   nextLineText?: string;
   mergedPreview?: string;
@@ -90,7 +103,7 @@ export interface ImageDownloadProgress {
   lastError?: string;
 }
 
-export type TranslationServiceId = "deepl";
+export type TranslationServiceId = "deepl" | "openai";
 
 export interface TranslationTestState {
   phase: "idle" | "testing" | "success" | "error";
@@ -100,15 +113,27 @@ export interface TranslationTestState {
   rawResponse?: string;
 }
 
-export interface TranslationSettingsState {
-  service: TranslationServiceId;
+export interface TranslationServiceSettingsItem {
+  id: TranslationServiceId;
+  label: string;
   apiKeyConfigured: boolean;
+  model?: string;
+  prompt?: string;
+}
+
+export interface TranslationSettingsState {
+  /** Service used by the next Start/Continue Translation action. */
+  service: TranslationServiceId;
+  /** Default service shown in the cross-translation export selector. */
+  exportService: TranslationServiceId;
+  services: TranslationServiceSettingsItem[];
   sampleText: string;
   test: TranslationTestState;
 }
 
 export interface TranslationProgressState {
   phase: "idle" | "running" | "complete";
+  serviceId?: TranslationServiceId;
   completed: number;
   total: number;
   failed: number;
@@ -120,6 +145,7 @@ export interface SidebarState {
   selectedFile?: FileEntry;
   files: FileEntry[];
   activeModule: ModuleName;
+  headingNumberingEnabled: boolean;
   rows: Candidate[];
   annotationPairs: AnnotationPair[];
   moduleRegexPatterns: Record<string, string>;

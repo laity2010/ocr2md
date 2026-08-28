@@ -21,6 +21,38 @@ export interface IllegalLineBreakCandidate extends Candidate {
  * Markdown/figure/table/code/math/source-note structures are excluded. The
  * candidates are derived from source text; the user decision (合并/忽略) may be persisted separately.
  */
+
+export function manualIllegalLineBreakAtLine(
+  markdown: string,
+  sourcePath: string,
+  cursorLine: number,
+): IllegalLineBreakCandidate | undefined {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  if (!lines.length || cursorLine < 0 || cursorLine >= lines.length) return undefined;
+
+  let previousIndex: number;
+  let nextIndex: number;
+  if ((lines[cursorLine] ?? "").trim()) {
+    previousIndex = cursorLine;
+    nextIndex = cursorLine + 1;
+    while (nextIndex < lines.length && !(lines[nextIndex] ?? "").trim()) nextIndex += 1;
+  } else {
+    previousIndex = cursorLine - 1;
+    while (previousIndex >= 0 && !(lines[previousIndex] ?? "").trim()) previousIndex -= 1;
+    nextIndex = cursorLine + 1;
+    while (nextIndex < lines.length && !(lines[nextIndex] ?? "").trim()) nextIndex += 1;
+  }
+  if (previousIndex < 0 || nextIndex >= lines.length || previousIndex >= nextIndex) return undefined;
+
+  return illegalLineBreakCandidate(
+    lines,
+    previousIndex,
+    nextIndex,
+    sourcePath,
+    { reason: "人工加入", confidence: "高" },
+  );
+}
+
 export function scanIllegalLineBreaks(markdown: string, sourcePath: string): IllegalLineBreakCandidate[] {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   const rows: IllegalLineBreakCandidate[] = [];
@@ -52,39 +84,52 @@ export function scanIllegalLineBreaks(markdown: string, sourcePath: string): Ill
       if (!strongContinuation) continue;
     }
 
-    const mergedPreview = mergeProseLines(previous, next);
-    const raw = lines.slice(index, nextIndex + 1).join("\n");
-    const hash = createHash("sha256")
-      .update(`${index}\0${nextIndex}\0${previous}\0${next}`)
-      .digest("hex")
-      .slice(0, 16);
-    const id = `illegal-line-break-${index}-${nextIndex}-${hash}`;
-    rows.push({
-      id,
-      rowId: id,
-      kind: "regex",
-      label: mergedPreview,
-      raw,
-      preview: mergedPreview,
-      range: {
-        line: index,
-        start: 0,
-        endLine: nextIndex,
-        end: next.length,
-      },
-      typeLabel: "非法断行",
-      lineType: "合并",
-      sourcePath,
-      sourceLabel: sourcePath.split(/[\\/]/).pop() ?? sourcePath,
-      status: "候选",
-      previousLineText: previous,
-      nextLineText: next,
-      mergedPreview,
-      breakReason: judgement.reason,
-      breakConfidence: judgement.confidence,
-    });
+    rows.push(illegalLineBreakCandidate(lines, index, nextIndex, sourcePath, judgement));
   }
   return rows;
+}
+
+
+function illegalLineBreakCandidate(
+  lines: string[],
+  previousIndex: number,
+  nextIndex: number,
+  sourcePath: string,
+  judgement: { reason: string; confidence: "高" | "中" },
+): IllegalLineBreakCandidate {
+  const previous = lines[previousIndex] ?? "";
+  const next = lines[nextIndex] ?? "";
+  const mergedPreview = mergeProseLines(previous, next);
+  const raw = lines.slice(previousIndex, nextIndex + 1).join("\n");
+  const hash = createHash("sha256")
+    .update(`${previousIndex}\0${nextIndex}\0${previous}\0${next}`)
+    .digest("hex")
+    .slice(0, 16);
+  const id = `illegal-line-break-${previousIndex}-${nextIndex}-${hash}`;
+  return {
+    id,
+    rowId: id,
+    kind: "regex",
+    label: mergedPreview,
+    raw,
+    preview: mergedPreview,
+    range: {
+      line: previousIndex,
+      start: 0,
+      endLine: nextIndex,
+      end: next.length,
+    },
+    typeLabel: "非法断行",
+    lineType: "合并",
+    sourcePath,
+    sourceLabel: sourcePath.split(/[\\/]/).pop() ?? sourcePath,
+    status: "候选",
+    previousLineText: previous,
+    nextLineText: next,
+    mergedPreview,
+    breakReason: judgement.reason,
+    breakConfidence: judgement.confidence,
+  };
 }
 
 function classifySuspicion(

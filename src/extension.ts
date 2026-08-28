@@ -19,7 +19,7 @@ import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign"
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
-  IGNORED_EMBED_LINE_TYPE,
+  IGNORED_LINE_TYPE,
   isIgnoredEmbedCandidate,
   findReusableManualRow,
   markCandidatesDeleted,
@@ -36,7 +36,7 @@ import { splitBlankLineBlocks } from "./atoms";
 import { exportByCalibration } from "./calibrationExport";
 import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
 import { scanTextBlocks } from "./textBlocks";
-import { scanIllegalLineBreaks } from "./illegalLineBreaks";
+import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { scanSentences } from "./sentences";
 import {
   markdownStructureIssue,
@@ -45,16 +45,25 @@ import {
   restoreProtectedMarkdown,
 } from "./markdownProtection";
 import { scanTranslationUnits } from "./translationUnits";
-import { DEFAULT_TRANSLATION_SAMPLE, testDeepL, translateDeepL } from "./translationService";
+import {
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_OPENAI_TRANSLATION_PROMPT,
+  DEFAULT_TRANSLATION_SAMPLE,
+  testDeepL,
+  testOpenAI,
+  translateDeepL,
+  translateOpenAI,
+} from "./translationService";
 import {
   TRANSLATION_STATE_FILE,
+  backfillTranslationFingerprints,
   emptyTranslationState,
   isTranslationUnitTranslated,
   parseTranslationState,
   recordTranslation,
   recordTranslationError,
   serializeTranslationState,
-  translationEntryForUnit,
+  translationResultForUnit,
   translationProgress,
   translationRows,
   type TranslationStateFile,
@@ -118,8 +127,13 @@ import {
 const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "非法断行", "文本块", "分句", "翻译"];
 const HEADING_COLORS = ["#ff5c57", "#ff9f43", "#feca57", "#9ccc65", "#55c6a9", "#d77bbf"];
 const DEEPL_API_KEY_SECRET = "ocr2md.translation.deepl.apiKey";
+const OPENAI_API_KEY_SECRET = "ocr2md.translation.openai.apiKey";
 const TRANSLATION_SERVICE_SETTING = "ocr2md.translation.service";
+const TRANSLATION_EXPORT_SERVICE_SETTING = "ocr2md.translation.exportService";
 const TRANSLATION_SAMPLE_SETTING = "ocr2md.translation.sampleText";
+const OPENAI_MODEL_SETTING = "ocr2md.translation.openai.model";
+const OPENAI_PROMPT_SETTING = "ocr2md.translation.openai.prompt";
+const HEADING_NUMBERING_SETTING = "ocr2md.heading.numberingEnabled";
 
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(new Ocr2mdExtension(context));
@@ -148,6 +162,20 @@ class Ocr2mdExtension implements vscode.Disposable {
   private readonly headingDecorations = HEADING_COLORS.map((color) =>
     vscode.window.createTextEditorDecorationType({ color, fontWeight: "bold" })
   );
+  private readonly locatedRowDecoration = vscode.window.createTextEditorDecorationType({
+    border: "1px solid",
+    borderColor: new vscode.ThemeColor("editor.findMatchBorder"),
+    borderRadius: "2px",
+  });
+  private readonly sourceLineBreakDecoration = vscode.window.createTextEditorDecorationType({
+    after: {
+      contentText: "↵",
+      color: "#ff9f43",
+      backgroundColor: "rgba(255, 159, 67, 0.18)",
+      fontWeight: "bold",
+      margin: "0 0 0 3px",
+    },
+  });
   private headingDecorationTimer: ReturnType<typeof setTimeout> | undefined;
   private workingCopyPaintTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingWorkingCopyRescan = false;
@@ -157,15 +185,23 @@ class Ocr2mdExtension implements vscode.Disposable {
   private readonly output = vscode.window.createOutputChannel("ocr2md");
   private viewMode: "table" | "translationService" = "table";
   private translationService: TranslationServiceId = "deepl";
-  private translationApiKeyConfigured = false;
+  private translationExportService: TranslationServiceId = "deepl";
+  private translationApiKeyConfigured: Record<TranslationServiceId, boolean> = { deepl: false, openai: false };
   private translationSampleText = DEFAULT_TRANSLATION_SAMPLE;
+  private openAIModel = DEFAULT_OPENAI_MODEL;
+  private openAIPrompt = DEFAULT_OPENAI_TRANSLATION_PROMPT;
   private translationTest: TranslationTestState = { phase: "idle", message: "尚未测试。" };
   private translationProgress: TranslationProgressState = { phase: "idle", completed: 0, total: 0, failed: 0 };
   private translationRunning = false;
+  private headingNumberingEnabled = true;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.translationService = context.globalState.get<TranslationServiceId>(TRANSLATION_SERVICE_SETTING, "deepl");
+    this.translationExportService = context.globalState.get<TranslationServiceId>(TRANSLATION_EXPORT_SERVICE_SETTING, "deepl");
     this.translationSampleText = context.globalState.get<string>(TRANSLATION_SAMPLE_SETTING, DEFAULT_TRANSLATION_SAMPLE);
+    this.openAIModel = context.globalState.get<string>(OPENAI_MODEL_SETTING, DEFAULT_OPENAI_MODEL);
+    this.openAIPrompt = context.globalState.get<string>(OPENAI_PROMPT_SETTING, DEFAULT_OPENAI_TRANSLATION_PROMPT);
+    this.headingNumberingEnabled = context.workspaceState.get<boolean>(HEADING_NUMBERING_SETTING, true);
     this.directoryProvider = new DirectoryProvider(
       () => vscode.workspace.workspaceFolders?.[0],
       () => this.files,
@@ -185,6 +221,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       this.chapterDecorations,
       vscode.window.registerFileDecorationProvider(this.chapterDecorations),
       ...this.headingDecorations,
+      this.locatedRowDecoration,
+      this.sourceLineBreakDecoration,
       vscode.window.registerWebviewViewProvider("ocr2md.regex", this.sidebarProvider),
       vscode.commands.registerCommand("ocr2md.refreshFiles", () => this.refreshFiles()),
       vscode.commands.registerCommand("ocr2md.pickFolder", () => this.pickWorkspaceFolder()),
@@ -200,6 +238,7 @@ class Ocr2mdExtension implements vscode.Disposable {
         return undefined;
       }),
       vscode.commands.registerCommand("ocr2md.addCurrentLineToModule", () => this.addCurrentLine()),
+      vscode.commands.registerCommand("ocr2md.markIllegalLineBreak", () => this.markIllegalLineBreakAtCursor()),
       vscode.commands.registerCommand("ocr2md.openChapterBoundaryWork", () => this.openChapterBoundaryWork()),
       vscode.commands.registerCommand("ocr2md.openChapterWorkingCopy", () => this.openChapterWorkingCopy()),
       vscode.commands.registerCommand("ocr2md.exportChapterBoundaryChapters", () => this.exportChapterBoundaryChapters()),
@@ -215,6 +254,9 @@ class Ocr2mdExtension implements vscode.Disposable {
         }
       }),
       vscode.workspace.onDidChangeTextDocument((event) => {
+        for (const editor of vscode.window.visibleTextEditors) {
+          if (editor.document.uri.toString() === event.document.uri.toString()) this.decorateSourceLineBreaks(editor);
+        }
         if (event.document.uri.fsPath === this.chapterWorkingUri?.fsPath) {
           this.pendingWorkingCopyRescan = true;
           this.scheduleWorkingCopyReindex(event.document);
@@ -253,6 +295,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       selectedFile: this.selectedFile,
       files: this.files,
       activeModule: this.activeModule,
+      headingNumberingEnabled: this.headingNumberingEnabled,
       rows: this.rows,
       annotationPairs: this.annotationPairs,
       moduleRegexPatterns: this.moduleRegexPatterns,
@@ -260,7 +303,17 @@ class Ocr2mdExtension implements vscode.Disposable {
       viewMode: this.viewMode,
       translationSettings: {
         service: this.translationService,
-        apiKeyConfigured: this.translationApiKeyConfigured,
+        exportService: this.translationExportService,
+        services: [
+          { id: "deepl", label: "DeepL", apiKeyConfigured: this.translationApiKeyConfigured.deepl },
+          {
+            id: "openai",
+            label: "GPT",
+            apiKeyConfigured: this.translationApiKeyConfigured.openai,
+            model: this.openAIModel,
+            prompt: this.openAIPrompt,
+          },
+        ],
         sampleText: this.translationSampleText,
         test: this.translationTest,
       },
@@ -281,11 +334,21 @@ class Ocr2mdExtension implements vscode.Disposable {
       case "testTranslationService":
         await this.testTranslationService(message);
         break;
+      case "setTranslationService":
+        if (isTranslationServiceId(message.service)) await this.selectTranslationService(message.service);
+        break;
+      case "setExportTranslationService":
+        if (isTranslationServiceId(message.service)) {
+          this.translationExportService = message.service;
+          await this.context.globalState.update(TRANSLATION_EXPORT_SERVICE_SETTING, message.service);
+          this.update();
+        }
+        break;
       case "translateCurrentChapter":
         await this.runTransAction("翻译当前章节", () => this.translateCurrentChapter());
         break;
       case "exportCrossTranslation":
-        await this.runTransAction("导出双向互译", () => this.exportCurrentChapterCrossTranslation());
+        await this.runTransAction("导出双向互译", () => this.exportCurrentChapterCrossTranslation(message.service));
         break;
       case "openChapterBoundaryWork":
         await this.openChapterBoundaryWork();
@@ -303,6 +366,13 @@ class Ocr2mdExtension implements vscode.Disposable {
         if ((message.moduleName === "注释" || message.moduleName === "嵌入块") && typeof message.pattern === "string") {
           this.moduleRegexPatterns[message.moduleName] = message.pattern;
           await this.scanCurrentModule(message.moduleName);
+        }
+        break;
+      case "setHeadingNumbering":
+        if (typeof message.enabled === "boolean") {
+          this.headingNumberingEnabled = message.enabled;
+          await this.context.workspaceState.update(HEADING_NUMBERING_SETTING, message.enabled);
+          this.update();
         }
         break;
       case "setRowsLineType":
@@ -508,8 +578,8 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (moduleName === "翻译") {
       const units = scanTranslationUnits(text, chapterUri.fsPath);
       const { state } = await this.readValidatedTranslationState(chapterUri, units);
-      this.rows = translationRows(units, state);
-      const progress = translationProgress(units, state);
+      this.rows = translationRows(units, state, this.translationService);
+      const progress = translationProgress(units, state, "idle", undefined, this.translationService);
       this.translationProgress = {
         ...progress,
         phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
@@ -526,61 +596,89 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   private async openTranslationService() {
     this.viewMode = "translationService";
-    this.translationApiKeyConfigured = Boolean(await this.context.secrets.get(DEEPL_API_KEY_SECRET));
+    await this.refreshTranslationSecretFlags();
     this.translationTest = { phase: "idle", message: "尚未测试。" };
     this.directoryProvider.refresh();
     this.update();
   }
 
   private async loadTranslationSecretState() {
-    this.translationApiKeyConfigured = Boolean(await this.context.secrets.get(DEEPL_API_KEY_SECRET));
+    await this.refreshTranslationSecretFlags();
+    this.update();
+  }
+
+  private async refreshTranslationSecretFlags() {
+    this.translationApiKeyConfigured = {
+      deepl: Boolean(await this.context.secrets.get(DEEPL_API_KEY_SECRET)),
+      openai: Boolean(await this.context.secrets.get(OPENAI_API_KEY_SECRET)),
+    };
+  }
+
+  private async selectTranslationService(service: TranslationServiceId) {
+    if (this.translationRunning) return;
+    this.translationService = service;
+    await this.context.globalState.update(TRANSLATION_SERVICE_SETTING, service);
+    if (this.activeModule === "翻译" && this.selectedFile?.kind === "trans") {
+      const units = scanTranslationUnits(this.selectedFileText, this.selectedFile.path);
+      const { state } = await this.readValidatedTranslationState(vscode.Uri.file(this.selectedFile.path), units, [service]);
+      this.rows = translationRows(units, state, service);
+      const progress = translationProgress(units, state, "idle", undefined, service);
+      this.translationProgress = { ...progress, phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle" };
+    }
     this.update();
   }
 
   private async saveTranslationSettings(message: WebviewMessage) {
-    const service: TranslationServiceId = message.service === "deepl" ? "deepl" : this.translationService;
+    const service = isTranslationServiceId(message.service) ? message.service : this.translationService;
     const sampleText = typeof message.sampleText === "string" && message.sampleText.trim()
       ? message.sampleText
       : this.translationSampleText;
     this.translationService = service;
     this.translationSampleText = sampleText;
+    if (service === "openai") {
+      if (typeof message.model === "string" && message.model.trim()) this.openAIModel = message.model.trim();
+      if (typeof message.prompt === "string" && message.prompt.trim()) this.openAIPrompt = message.prompt.trim();
+      await this.context.globalState.update(OPENAI_MODEL_SETTING, this.openAIModel);
+      await this.context.globalState.update(OPENAI_PROMPT_SETTING, this.openAIPrompt);
+    }
     await this.context.globalState.update(TRANSLATION_SERVICE_SETTING, service);
     await this.context.globalState.update(TRANSLATION_SAMPLE_SETTING, sampleText);
-    if (typeof message.apiKey === "string" && message.apiKey.trim()) {
-      await this.context.secrets.store(DEEPL_API_KEY_SECRET, message.apiKey.trim());
-      this.translationApiKeyConfigured = true;
-    } else {
-      this.translationApiKeyConfigured = Boolean(await this.context.secrets.get(DEEPL_API_KEY_SECRET));
-    }
+    const enteredKey = typeof message.apiKey === "string" ? message.apiKey.trim() : "";
+    if (enteredKey) await this.context.secrets.store(translationSecretKey(service), enteredKey);
+    await this.refreshTranslationSecretFlags();
     this.translationTest = { phase: "idle", message: "设置已保存。" };
     this.update();
   }
 
   private async testTranslationService(message: WebviewMessage) {
-    this.translationService = message.service === "deepl" ? "deepl" : this.translationService;
-    if (typeof message.sampleText === "string" && message.sampleText.trim()) {
-      this.translationSampleText = message.sampleText;
+    const service = isTranslationServiceId(message.service) ? message.service : this.translationService;
+    this.translationService = service;
+    if (typeof message.sampleText === "string" && message.sampleText.trim()) this.translationSampleText = message.sampleText;
+    if (service === "openai") {
+      if (typeof message.model === "string" && message.model.trim()) this.openAIModel = message.model.trim();
+      if (typeof message.prompt === "string" && message.prompt.trim()) this.openAIPrompt = message.prompt.trim();
+      await this.context.globalState.update(OPENAI_MODEL_SETTING, this.openAIModel);
+      await this.context.globalState.update(OPENAI_PROMPT_SETTING, this.openAIPrompt);
     }
-    await this.context.globalState.update(TRANSLATION_SERVICE_SETTING, this.translationService);
+    await this.context.globalState.update(TRANSLATION_SERVICE_SETTING, service);
     await this.context.globalState.update(TRANSLATION_SAMPLE_SETTING, this.translationSampleText);
 
     const enteredKey = typeof message.apiKey === "string" ? message.apiKey.trim() : "";
-    if (enteredKey) {
-      await this.context.secrets.store(DEEPL_API_KEY_SECRET, enteredKey);
-      this.translationApiKeyConfigured = true;
-    }
-    const apiKey = enteredKey || await this.context.secrets.get(DEEPL_API_KEY_SECRET) || "";
+    if (enteredKey) await this.context.secrets.store(translationSecretKey(service), enteredKey);
+    const apiKey = enteredKey || await this.context.secrets.get(translationSecretKey(service)) || "";
     if (!apiKey) {
-      this.translationApiKeyConfigured = false;
-      this.translationTest = { phase: "error", message: "请先填写 DeepL API Key。" };
+      this.translationApiKeyConfigured[service] = false;
+      this.translationTest = { phase: "error", message: `请先填写 ${translationServiceLabel(service)} API Key。` };
       this.update();
       return;
     }
 
-    this.translationTest = { phase: "testing", message: "正在请求 DeepL…" };
+    this.translationTest = { phase: "testing", message: `正在请求 ${translationServiceLabel(service)}…` };
     this.update();
-    const result = await testDeepL(apiKey, this.translationSampleText);
-    this.translationApiKeyConfigured = true;
+    const result = service === "deepl"
+      ? await testDeepL(apiKey, this.translationSampleText)
+      : await testOpenAI(apiKey, this.translationSampleText, this.openAIModel, this.openAIPrompt);
+    this.translationApiKeyConfigured[service] = true;
     this.translationTest = {
       phase: result.ok ? "success" : "error",
       message: result.message,
@@ -597,9 +695,10 @@ class Ocr2mdExtension implements vscode.Disposable {
       void vscode.window.showWarningMessage("请先打开 trans 章节的“翻译”模块。");
       return;
     }
-    const apiKey = await this.context.secrets.get(DEEPL_API_KEY_SECRET) || "";
+    const serviceId = this.translationService;
+    const apiKey = await this.context.secrets.get(translationSecretKey(serviceId)) || "";
     if (!apiKey) {
-      void vscode.window.showWarningMessage("尚未设置 DeepL API Key，请先打开“翻译服务”。");
+      void vscode.window.showWarningMessage(`尚未设置 ${translationServiceLabel(serviceId)} API Key，请先打开“翻译服务”。`);
       return;
     }
 
@@ -609,68 +708,68 @@ class Ocr2mdExtension implements vscode.Disposable {
     const units = scanTranslationUnits(sourceText, chapterPath);
     const blocks = scanTextBlocks(sourceText, chapterPath);
     const blockById = new Map(blocks.map((block) => [block.id, block]));
-    const { state } = await this.readValidatedTranslationState(chapterUri, units);
+    const { state } = await this.readValidatedTranslationState(chapterUri, units, [serviceId]);
+    const model = serviceId === "openai" ? this.openAIModel : undefined;
 
     this.translationRunning = true;
-    this.translationProgress = translationProgress(units, state, "running");
-    this.rows = translationRows(units, state);
+    this.translationProgress = translationProgress(units, state, "running", undefined, serviceId);
+    this.rows = translationRows(units, state, serviceId);
     this.update();
 
     try {
       for (const unit of units) {
-        if (isTranslationUnitTranslated(unit, state)) continue;
-        const blockLabel = unit.parentBlockIndex == null
-          ? ""
-          : `B${String(unit.parentBlockIndex).padStart(3, "0")}`;
+        if (isTranslationUnitTranslated(unit, state, serviceId)) continue;
+        const blockLabel = unit.parentBlockIndex == null ? "" : `B${String(unit.parentBlockIndex).padStart(3, "0")}`;
         const unitPrefix = unit.translationUnitKind === "composite" ? "C" : "S";
         const unitLabel = unit.sentenceIndex == null ? "" : `${unitPrefix}${String(unit.sentenceIndex).padStart(3, "0")}`;
         const current = [blockLabel, unitLabel].filter(Boolean).join("-");
-        this.translationProgress = translationProgress(units, state, "running", current);
+        this.translationProgress = translationProgress(units, state, "running", current, serviceId);
         this.updateTranslationUi(chapterPath, units, state);
 
         const protectedUnit = protectMarkdownForTranslation(unit.raw);
         const parentBlock = unit.parentBlockId ? blockById.get(unit.parentBlockId) : undefined;
         const contextText = parentBlock?.raw ?? unit.raw;
         const protectedContext = protectMarkdownForTranslation(contextText).text;
-        const result = await translateDeepL(apiKey, protectedUnit.text, protectedContext);
+        const result = serviceId === "deepl"
+          ? await translateDeepL(apiKey, protectedUnit.text, protectedContext)
+          : await translateOpenAI(apiKey, protectedUnit.text, protectedContext, this.openAIModel, this.openAIPrompt);
 
         if (result.ok && result.translatedText) {
           const missing = missingProtectedMarkdownTokens(result.translatedText, protectedUnit.replacements);
           if (missing.length) {
-            recordTranslationError(state, unit, `翻译结果缺少 Markdown 保护占位符：${missing.join(", ")}`);
+            recordTranslationError(state, unit, `翻译结果缺少 Markdown 保护占位符：${missing.join(", ")}`, undefined, serviceId, model);
           } else {
             const restored = restoreProtectedMarkdown(result.translatedText, protectedUnit.replacements);
             const structureIssue = markdownStructureIssue(unit.raw, restored);
             if (structureIssue) {
-              recordTranslationError(state, unit, `翻译结果 Markdown 结构异常：${structureIssue}`);
+              recordTranslationError(state, unit, `翻译结果 Markdown 结构异常：${structureIssue}`, undefined, serviceId, model);
             } else {
-              recordTranslation(state, unit, restored);
+              recordTranslation(state, unit, restored, undefined, serviceId, model);
             }
           }
         } else {
-          recordTranslationError(state, unit, result.message);
+          recordTranslationError(state, unit, result.message, undefined, serviceId, model);
         }
 
         await this.writeTranslationState(chapterUri, state);
         this.updateTranslationUi(chapterPath, units, state);
-
         if (result.statusCode && [401, 403, 429, 456].includes(result.statusCode)) {
-          this.output.appendLine(`[translation] DeepL HTTP ${result.statusCode}; 已停止本轮翻译，可修正后继续。`);
+          this.output.appendLine(`[translation] ${translationServiceLabel(serviceId)} HTTP ${result.statusCode}; 已停止本轮翻译，可修正后继续。`);
           break;
         }
       }
     } finally {
       this.translationRunning = false;
-      const progress = translationProgress(units, state);
-      this.translationProgress = {
-        ...progress,
-        phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
-      };
+      const progress = translationProgress(units, state, "idle", undefined, serviceId);
+      this.translationProgress = { ...progress, phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle" };
       this.updateTranslationUi(chapterPath, units, state);
     }
   }
 
-  private async exportCurrentChapterCrossTranslation() {
+  private async exportCurrentChapterCrossTranslation(requestedService?: string) {
+    const serviceId = isTranslationServiceId(requestedService) ? requestedService : this.translationExportService;
+    this.translationExportService = serviceId;
+    await this.context.globalState.update(TRANSLATION_EXPORT_SERVICE_SETTING, serviceId);
     if (this.translationRunning) {
       void vscode.window.showWarningMessage("翻译进行中，请等待当前翻译结束后再导出。");
       return;
@@ -689,14 +788,14 @@ class Ocr2mdExtension implements vscode.Disposable {
     );
     const chapterUri = vscode.Uri.file(this.selectedFile.path);
     const units = scanTranslationUnits(this.selectedFileText, this.selectedFile.path);
-    const { state, invalidated } = await this.readValidatedTranslationState(chapterUri, units);
+    const { state, invalidated } = await this.readValidatedTranslationState(chapterUri, units, [serviceId]);
     if (invalidated) {
-      this.rows = translationRows(units, state);
-      const progress = translationProgress(units, state);
+      this.rows = translationRows(units, state, this.translationService);
+      const progress = translationProgress(units, state, "idle", undefined, this.translationService);
       this.translationProgress = { ...progress, phase: "idle" };
       this.update();
       void vscode.window.showWarningMessage(
-        `检测到 ${invalidated} 个旧译文 Markdown 结构异常，已标记为失败。请点击“继续翻译”修复后再导出。`,
+        `检测到 ${invalidated} 个 ${translationServiceLabel(serviceId)} 译文 Markdown 结构异常，已标记为失败。请修复后再导出。`,
       );
       return;
     }
@@ -706,6 +805,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       chapterFileName: path.basename(this.selectedFile.path),
       outputVaultRelativePath: outputRelativePath,
       translationState: state,
+      translationServiceId: serviceId,
     });
 
     await vscode.workspace.fs.createDirectory(outputDirectory);
@@ -765,9 +865,9 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   private updateTranslationUi(chapterPath: string, units: Candidate[], state: TranslationStateFile) {
     if (this.activeModule !== "翻译" || this.selectedFile?.path !== chapterPath) return;
-    this.rows = translationRows(units, state);
+    this.rows = translationRows(units, state, this.translationService);
     if (this.translationRunning) {
-      this.translationProgress = translationProgress(units, state, "running", this.translationProgress.current);
+      this.translationProgress = translationProgress(units, state, "running", this.translationProgress.current, this.translationService);
     }
     this.update();
   }
@@ -793,20 +893,27 @@ class Ocr2mdExtension implements vscode.Disposable {
   private async readValidatedTranslationState(
     chapterUri: vscode.Uri,
     units: readonly Candidate[],
+    serviceIds: readonly TranslationServiceId[] = ["deepl", "openai"],
   ): Promise<{ state: TranslationStateFile; invalidated: number }> {
     const state = await this.readTranslationState(chapterUri);
+    const fingerprintUpdates = backfillTranslationFingerprints(units, state);
     let invalidated = 0;
     for (const unit of units) {
-      const entry = translationEntryForUnit(unit, state);
-      if (entry?.status !== "translated" || !entry.translatedText) continue;
-      const issue = markdownStructureIssue(unit.raw, entry.translatedText);
-      if (!issue) continue;
-      recordTranslationError(state, unit, `译文 Markdown 结构校验失败：${issue}`);
-      invalidated += 1;
+      for (const serviceId of serviceIds) {
+        const result = translationResultForUnit(unit, state, serviceId);
+        if (result?.status !== "translated" || !result.translatedText) continue;
+        const issue = markdownStructureIssue(unit.raw, result.translatedText);
+        if (!issue) continue;
+        recordTranslationError(state, unit, `译文 Markdown 结构校验失败：${issue}`, undefined, serviceId, result.model);
+        invalidated += 1;
+      }
+    }
+    if (invalidated || fingerprintUpdates) await this.writeTranslationState(chapterUri, state);
+    if (fingerprintUpdates) {
+      this.output.appendLine(`[translation] 已为 ${fingerprintUpdates} 项旧翻译补充稳定内容/上下文指纹，无需重翻。`);
     }
     if (invalidated) {
-      await this.writeTranslationState(chapterUri, state);
-      this.output.appendLine(`[translation] 检测到 ${invalidated} 个旧译文 Markdown 结构异常，已标记为失败并等待重译。`);
+      this.output.appendLine(`[translation] 检测到 ${invalidated} 个旧译文 Markdown 结构异常，已按服务分别标记为失败。`);
     }
     return { state, invalidated };
   }
@@ -835,8 +942,8 @@ class Ocr2mdExtension implements vscode.Disposable {
         if (moduleName === "翻译") {
           const units = scanTranslationUnits(this.selectedFileText, this.selectedFile.path);
           const { state } = await this.readValidatedTranslationState(vscode.Uri.file(this.selectedFile.path), units);
-          this.rows = translationRows(units, state);
-          const progress = translationProgress(units, state);
+          this.rows = translationRows(units, state, this.translationService);
+          const progress = translationProgress(units, state, "idle", undefined, this.translationService);
           this.translationProgress = {
             ...progress,
             phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
@@ -876,8 +983,8 @@ class Ocr2mdExtension implements vscode.Disposable {
         if (this.activeModule === "翻译") {
           const units = scanTranslationUnits(this.selectedFileText, this.selectedFile.path);
           const { state } = await this.readValidatedTranslationState(vscode.Uri.file(this.selectedFile.path), units);
-          this.rows = translationRows(units, state);
-          const progress = translationProgress(units, state);
+          this.rows = translationRows(units, state, this.translationService);
+          const progress = translationProgress(units, state, "idle", undefined, this.translationService);
           this.translationProgress = {
             ...progress,
             phase: progress.total > 0 && progress.completed === progress.total ? "complete" : "idle",
@@ -1084,7 +1191,7 @@ class Ocr2mdExtension implements vscode.Disposable {
   private async setRowsLineType(ids: string[], lineType: string) {
     const selected = new Set(ids);
     const selectedRows = this.rows.filter((row) => selected.has(row.id));
-    if (lineType === IGNORED_EMBED_LINE_TYPE && selectedRows.some((row) => row.typeLabel !== "嵌入块")) return;
+    if (lineType === IGNORED_LINE_TYPE && selectedRows.some((row) => row.typeLabel !== "嵌入块" && row.typeLabel !== "章节定界" && row.typeLabel !== "非法断行")) return;
     if (lineType === DELETED_LINE_TYPE) {
       this.rows = markCandidatesDeleted(this.rows, selected);
     } else {
@@ -1201,6 +1308,10 @@ class Ocr2mdExtension implements vscode.Disposable {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.languageId !== "markdown") return;
     const moduleName = this.activeModule;
+    if (moduleName === "非法断行") {
+      await this.markIllegalLineBreakAtCursor();
+      return;
+    }
     const sourcePath = this.selectedFile?.path ?? editor.document.uri.fsPath;
     const workingPath = this.chapterWorkingUri?.fsPath ?? editor.document.uri.fsPath;
     const hintLine = editor.selection.active.line;
@@ -1216,8 +1327,17 @@ class Ocr2mdExtension implements vscode.Disposable {
       belongs: (row) => rowBelongsToChapter(row, sourcePath, workingPath),
     });
     if (existing) {
+      const restoredLineType = existing.lineType === IGNORED_LINE_TYPE
+        ? (moduleName === "章节定界" ? "新增" : defaultLineType(moduleName, lineText))
+        : existing.lineType;
       this.rows = this.rows.map((row) => row.id === existing.id
-        ? { ...row, isWorkingCorrection: true, chapterBoundaryState: "added" as const, range: { ...row.range, line: lineNumber } }
+        ? {
+            ...row,
+            lineType: restoredLineType,
+            isWorkingCorrection: true,
+            chapterBoundaryState: "added" as const,
+            range: { ...row.range, line: lineNumber },
+          }
         : row);
     } else {
       const manualId = `manual-${randomUUID()}`;
@@ -1243,8 +1363,76 @@ class Ocr2mdExtension implements vscode.Disposable {
       this.rows = [...this.rows, { ...attached, id: manualId, isWorkingCorrection: true, chapterBoundaryState: "added" as const }].sort(compareRows);
     }
     this.modulePreviewPaths.set(moduleName, workingPath);
-    this.rows = await this.applyWorkingCopyDiff(this.rows, documentText);
+    if (moduleName === "嵌入块") {
+      const chapterEmbeds = this.rows.filter((row) =>
+        row.typeLabel === "嵌入块" && rowBelongsToChapter(row, sourcePath, workingPath));
+      const numbered = applyEmbedNumbers(chapterEmbeds, documentText);
+      const byId = new Map(numbered.map((row) => [row.id, row]));
+      this.rows = this.rows.map((row) => byId.get(row.id) ?? row).sort(compareRows);
+    }
     this.rebuildAnnotationPairs();
+    // A context-menu add is an explicit calibration action, not a text-edit rescan:
+    // surface it in the table immediately, before any asynchronous diff bookkeeping.
+    this.update();
+    this.rows = await this.applyWorkingCopyDiff(this.rows, documentText);
+    this.update();
+  }
+
+  private async markIllegalLineBreakAtCursor() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.languageId !== "markdown") return;
+    if (this.activeModule !== "非法断行") {
+      void vscode.window.showWarningMessage("请先进入“非法断行”模块，再在章节工作稿中标记断行。 ");
+      return;
+    }
+    const working = this.chapterWorkingUri;
+    if (!working || editor.document.uri.fsPath !== working.fsPath) {
+      void vscode.window.showWarningMessage("请在当前章节的 .working.md 源码窗口中标记非法断行。");
+      return;
+    }
+
+    const text = editor.document.getText();
+    const sourcePath = this.selectedFile?.path ?? working.fsPath;
+    const manual = manualIllegalLineBreakAtLine(text, sourcePath, editor.selection.active.line);
+    if (!manual) {
+      void vscode.window.showWarningMessage("此处无法形成断行边界：请把光标放在断行前正文行或两段之间的空行。");
+      return;
+    }
+    const attached = attachScanIdentities([{
+      ...manual,
+      workingCopyPath: working.fsPath,
+      isWorkingCorrection: true,
+    }], text, { moduleName: "非法断行", sourcePath })[0];
+    if (!attached) return;
+
+    const sameBoundary = (row: Candidate) => row.typeLabel === "非法断行"
+      && row.sourcePath === sourcePath
+      && row.raw === manual.raw
+      && row.range.line === manual.range.line
+      && (row.range.endLine ?? row.range.line) === (manual.range.endLine ?? manual.range.line);
+    const existing = this.rows.find(sameBoundary);
+    if (existing) {
+      this.rows = this.rows.map((row) => row.id === existing.id ? {
+        ...row,
+        ...attached,
+        id: existing.id,
+        rowId: existing.rowId ?? existing.id,
+        atomId: existing.atomId ?? attached.atomId,
+        lineType: "合并",
+        isWorkingCorrection: true,
+        breakReason: "人工加入",
+        breakConfidence: "高" as const,
+      } : row);
+    } else {
+      this.rows = [...this.rows, {
+        ...attached,
+        lineType: "合并",
+        isWorkingCorrection: true,
+        breakReason: "人工加入",
+        breakConfidence: "高" as const,
+      }].sort(compareRows);
+    }
+    this.modulePreviewPaths.set("非法断行", working.fsPath);
     this.update();
   }
 
@@ -1278,8 +1466,36 @@ class Ocr2mdExtension implements vscode.Disposable {
     const range = new vscode.Range(startLine, start, endLine, end);
     editor.selection = new vscode.Selection(range.start, range.end);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    this.decorateLocatedRow(editor, range);
     this.rows = this.rows.map((candidate) => candidate.id === current.id ? { ...candidate, range: located } : candidate);
     this.update();
+  }
+
+  private decorateLocatedRow(editor: vscode.TextEditor, range: vscode.Range) {
+    for (const visible of vscode.window.visibleTextEditors) {
+      visible.setDecorations(this.locatedRowDecoration, []);
+    }
+    const textRanges: vscode.Range[] = [];
+    for (let line = range.start.line; line <= range.end.line; line += 1) {
+      const textLine = editor.document.lineAt(line);
+      const start = line === range.start.line ? Math.min(range.start.character, textLine.text.length) : 0;
+      const end = line === range.end.line ? Math.min(range.end.character, textLine.text.length) : textLine.text.length;
+      textRanges.push(new vscode.Range(line, start, line, Math.max(start, end)));
+    }
+    editor.setDecorations(this.locatedRowDecoration, textRanges);
+  }
+
+  /** Source-window feature shared by every module: visualize every real physical line break. */
+  private decorateSourceLineBreaks(editor: vscode.TextEditor) {
+    const document = editor.document;
+    const hasFinalBreak = /(?:\r\n|\r|\n)$/.test(document.getText());
+    const ranges: vscode.Range[] = [];
+    for (let line = 0; line < document.lineCount; line += 1) {
+      if (line === document.lineCount - 1 && !hasFinalBreak) continue;
+      const textLine = document.lineAt(line);
+      ranges.push(new vscode.Range(line, textLine.text.length, line, textLine.text.length));
+    }
+    editor.setDecorations(this.sourceLineBreakDecoration, ranges);
   }
 
   private async showDocumentPair(uri: vscode.Uri, options: { preserveFocus?: boolean } = {}): Promise<vscode.TextEditor> {
@@ -1289,6 +1505,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       preserveFocus: options.preserveFocus,
     });
     this.applyHeadingDecorations(editor);
+    this.decorateSourceLineBreaks(editor);
     return editor;
   }
 
@@ -1476,7 +1693,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       void vscode.window.showErrorMessage(`本地图片导出失败：${error instanceof Error ? error.message : String(error)}`);
       return;
     }
-    const markdown = exportByCalibration(this.selectedFileText, this.rows);
+    const markdown = exportByCalibration(this.selectedFileText, this.rows, { numberHeadings: this.headingNumberingEnabled });
     const directory = vscode.Uri.file(chapterCalibrationOutputDirectory(file.path));
     const outputUri = vscode.Uri.joinPath(directory, `${path.parse(file.path).name}.md`);
     await vscode.workspace.fs.createDirectory(directory);
@@ -1502,7 +1719,7 @@ class Ocr2mdExtension implements vscode.Disposable {
       void vscode.window.showErrorMessage(`本地图片导出失败：${error instanceof Error ? error.message : String(error)}`);
       return;
     }
-    const markdown = withFormatCalibratedFrontmatter(exportByCalibration(this.selectedFileText, this.rows));
+    const markdown = withFormatCalibratedFrontmatter(exportByCalibration(this.selectedFileText, this.rows, { numberHeadings: this.headingNumberingEnabled }));
     const outputUri = vscode.Uri.file(chapterTransOutputPath(workspace.uri.fsPath, file.path));
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(outputUri.fsPath)));
     await vscode.workspace.fs.writeFile(outputUri, Buffer.from(markdown, "utf8"));
@@ -2137,6 +2354,9 @@ interface WebviewMessage {
   service?: string;
   apiKey?: string;
   sampleText?: string;
+  model?: string;
+  prompt?: string;
+  enabled?: boolean;
 }
 
 function nearestMatchingLine(text: string, lineText: string, hint: number): number {
@@ -2230,6 +2450,18 @@ function compareRows(left: Candidate, right: Candidate): number {
 
 function splitPatterns(value: string): string[] {
   return value.split(/^\s*---\s*$/m).map((item) => item.trim()).filter(Boolean);
+}
+
+function isTranslationServiceId(value: unknown): value is TranslationServiceId {
+  return value === "deepl" || value === "openai";
+}
+
+function translationSecretKey(serviceId: TranslationServiceId): string {
+  return serviceId === "openai" ? OPENAI_API_KEY_SECRET : DEEPL_API_KEY_SECRET;
+}
+
+function translationServiceLabel(serviceId: TranslationServiceId): string {
+  return serviceId === "openai" ? "GPT" : "DeepL";
 }
 
 function isModuleName(value: unknown): value is ModuleName {

@@ -21,6 +21,7 @@
     "onCommand:ocr2md.openTransChapter",
     "onCommand:ocr2md.openTranslationService",
     "onCommand:ocr2md.addCurrentLineToModule",
+    "onCommand:ocr2md.markIllegalLineBreak",
     "onCommand:ocr2md.openChapterBoundaryWork",
     "onCommand:ocr2md.openChapterWorkingCopy",
     "onCommand:ocr2md.exportChapterBoundaryChapters"
@@ -54,6 +55,10 @@
       {
         "command": "ocr2md.addCurrentLineToModule",
         "title": "ocr2md: 将当前行加入到数据表"
+      },
+      {
+        "command": "ocr2md.markIllegalLineBreak",
+        "title": "ocr2md: 标记此处为非法断行"
       },
       {
         "command": "ocr2md.openChapterBoundaryWork",
@@ -105,6 +110,11 @@
         }
       ],
       "editor/context": [
+        {
+          "command": "ocr2md.markIllegalLineBreak",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "navigation@8"
+        },
         {
           "command": "ocr2md.addCurrentLineToModule",
           "when": "editorLangId == markdown && resourceScheme == file",

@@ -7,6 +7,7 @@ const state: SidebarState = {
   selectedFile: { label: "chapter.md", path: "/workspace/chapter.md", kind: "chapter" },
   files: [],
   activeModule: "章节定界",
+  headingNumberingEnabled: true,
   rows: [],
   annotationPairs: [],
   moduleRegexPatterns: { "注释": "", "嵌入块": "" },
@@ -25,8 +26,8 @@ for (const removedModule of ["未分类", "拼写检查", "翻译设置"]) {
   assert.ok(!html.includes(removedModule), `removed module leaked into UI: ${removedModule}`);
 }
 
-assert.ok(html.includes('"非法断行": ["合并", "忽略"]'), "illegal line-break line types must be merge/ignore");
-assert.ok(html.includes("候选由正文段落边界自动派生 · 合并/忽略写入标定"), "illegal line-break table must explain derived candidates and persisted decisions");
+assert.ok(html.includes('"非法断行": ["合并", "已忽略"]'), "illegal line-break line types must be merge/ignored");
+assert.ok(html.includes("候选由正文段落边界自动派生 · 合并/已忽略写入标定"), "illegal line-break table must explain derived candidates and persisted decisions");
 for (const column of ["断行位置", "上一行", "下一行", "合并预览", "判断"]) {
   assert.ok(html.includes(column), `illegal line-break table missing column: ${column}`);
 }
@@ -71,16 +72,23 @@ assert.ok(html.includes("整体偏移"), "chapter-file dialog must support numbe
 assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-file dialog must run from selected level-one headings");
 assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
 assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
+assert.ok(html.includes('"章节定界": ["1 级标题", "新增", "修改", "删除", "已忽略", DELETED]'), "chapter-boundary module must expose 已忽略 without deleting the row");
 assert.ok(html.includes('"嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本"'), "embed module line types");
 assert.ok(html.includes('"嵌入文本", "已忽略", DELETED'), "embed module must expose 已忽略 without deleting the row");
+assert.ok(html.includes('&& row.lineType !== "已忽略"'), "unified table view must hide rows calibrated as 已忽略");
 assert.ok(html.includes("下载图片到本地"), "embed module must download all images, not only the selection");
 assert.ok(html.includes("按标定导出"), "chapter modules must export by calibration");
 assert.ok(html.includes('postKeepView("exportByCalibration")'), "calibration export must post exportByCalibration");
 assert.ok(html.includes("导出标定到trans"), "chapter modules must expose trans export");
 assert.ok(html.includes('postKeepView("exportCalibrationToTrans")'), "trans export must post exportCalibrationToTrans");
+assert.ok(html.includes("为标题编号"), "chapter-title toolbar must expose the numbering checkbox");
+assert.ok(html.includes('numbering.checked = state.headingNumberingEnabled !== false'), "heading numbering must default to enabled");
+assert.ok(html.includes('postKeepView("setHeadingNumbering", { enabled: numbering.checked })'), "heading numbering checkbox must update host state");
+assert.ok(html.includes('function chapterHeadingOrdinal(row)'), "chapter-title preview must derive chapter-global heading ordinals");
+assert.ok(html.includes('String(ordinal).padStart(3, "0")'), "chapter-title preview must render the three-digit heading prefix");
 assert.ok(html.includes('function chapterTitlePreview(row)'), "chapter-title table must have a dedicated rendered preview");
 assert.ok(html.includes('/^([1-6]) 级标题$/.exec'), "chapter-title preview must follow the current calibrated heading level");
-assert.ok(html.includes('return el("h" + level, content, "chapter-heading-preview")'), "chapter-title rows must render as h1-h6 elements");
+assert.ok(html.includes('return el("h" + level, prefix + content, "chapter-heading-preview")'), "chapter-title rows must render as numbered-or-plain h1-h6 elements");
 assert.ok(html.includes('source.replace(/^ {0,3}#{1,6}'), "rendered chapter-title previews must hide Markdown heading markers");
 assert.ok(html.includes('state.activeModule === "章节标题"'), "chapter-title preview rendering must be module-specific");
 assert.ok(html.includes('h1.chapter-heading-preview'), "chapter-title H1 preview style must mirror Markdown preview CSS");
@@ -99,23 +107,26 @@ assert.ok(html.includes("扫描完成 · "), "illegal-line-break toolbar must re
 assert.ok(html.includes("候选由正文段落边界自动派生"), "illegal-line-break scan description must match the chapter file layout");
 assert.ok(html.includes("扫描完成：当前章节未发现疑似非法断行。"), "empty illegal-line-break table must clearly report a completed zero-result scan");
 assert.ok(html.includes('sortableHeader("行类型", "lineType")'), "illegal line-break table must show a line-type column");
-assert.ok(html.includes('for (const value of LINE_TYPES["非法断行"])'), "illegal line-break rows must use merge/ignore dropdowns");
+assert.ok(html.includes('for (const value of LINE_TYPES["非法断行"])'), "illegal line-break rows must use merge/ignored dropdowns");
 assert.ok(html.includes('button("保存标定", () => postKeepView("saveAnnotations"), "primary")'), "illegal line-break decisions must be saveable");
 assert.ok(html.includes('emptyCell.colSpan = 7'), "empty illegal-line-break table must keep its seven-column table layout");
 
 assert.ok(html.includes("开始翻译"), "translation module must expose a start action");
 assert.ok(html.includes("继续翻译"), "translation module must expose a resume action");
 assert.ok(html.includes("导出双向互译"), "translation module must expose cross-translation export");
-assert.ok(html.includes('postKeepView("exportCrossTranslation")'), "cross-translation export action is missing");
-assert.ok(html.includes("全部翻译单元完成后可导出"), "cross export must remain gated until translation is complete");
-assert.ok(html.includes("translation-progress"), "translation module must display overall progress");
+assert.ok(html.includes('postKeepView("exportCrossTranslation", { service: exportSelect.value })'), "cross-translation export must send the selected provider");
+assert.ok(html.includes("所选服务全部翻译单元完成后可导出"), "cross export must remain gated per selected service");
+assert.ok(html.includes("translation-progress"), "translation module must display active-service progress");
 assert.ok(html.includes('postKeepView("translateCurrentChapter")'), "translation module must invoke chapter translation");
-for (const column of ["原文", "译文", "状态"]) {
-  assert.ok(html.includes(column), `translation table missing column: ${column}`);
-}
-assert.ok(html.includes('candidate.translationStatus || "待翻译"'), "translation table must show persisted row status");
+assert.ok(html.includes('postKeepView("setTranslationService"'), "translation toolbar must switch the provider being translated");
+assert.ok(html.includes('postKeepView("setExportTranslationService"'), "translation toolbar must switch the provider used for export");
+assert.ok(html.includes('sortableHeader("原文", "preview")'), "translation table must keep the source column");
+assert.ok(html.includes('for (const item of services) headRow.append(el("th", item.label + "译文"))'), "translation table must create one comparison column per service");
+assert.ok(html.includes('candidate.translationResults?.[item.id]'), "translation table must render per-service persisted results");
+assert.ok(html.includes('if (status === "失败")'), "translation cells must keep failure diagnostics");
+assert.ok(!html.includes('status + (result?.model ? " · " + result.model : "")'), "translated rows must not repeat translated status/model metadata");
 assert.ok(html.includes('state.viewMode === "translationService"'), "translation service must have a dedicated settings view");
-for (const translationUiText of ["翻译服务", "当前翻译服务", "DeepL", "API Key", "测试样本句子", "保存设置", "测试", "服务器返回信息"]) {
+for (const translationUiText of ["翻译服务", "当前翻译服务", "DeepL", "GPT", "API Key", "GPT 模型", "GPT 翻译提示词", "测试样本句子", "保存设置", "测试", "服务器返回信息"]) {
   assert.ok(html.includes(translationUiText), `missing translation service UI text: ${translationUiText}`);
 }
 assert.ok(html.includes('apiKey.type = "password"'), "translation API key must use a password field");
@@ -137,6 +148,10 @@ for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+�
 assert.ok(
   html.includes('if (moduleName === "章节标题") return chapterChange;'),
   "chapter title changes must not inherit stale working-correction flags",
+);
+assert.ok(
+  html.includes('!(moduleName === "章节标题" && row.chapterBoundaryState === "deleted")'),
+  "chapter-title table must hide rows that no longer exist in the working Markdown",
 );
 assert.ok(html.includes("#app { display: flex; flex-direction: column; height: 100%; min-height: 0; }"), "app does not fill the view");
 assert.ok(html.includes(".table-wrap { flex: 1 1 auto; min-height: 0; overflow: auto;"), "table does not fill remaining space");

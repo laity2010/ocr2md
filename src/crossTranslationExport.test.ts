@@ -168,6 +168,22 @@ assert.ok(!/^\^(?:sid|bid)-/m.test(result.pureTransMarkdown));
 assert.ok(!/^>+\[!\s*ds\]/mi.test(result.pureTransMarkdown));
 assert.ok(!/#\^(?:sid|bid)-/.test(result.pureTransMarkdown));
 
+// The export provider is explicit: GPT output must not fall back to DeepL.
+for (const unit of units) {
+  recordTranslation(state, unit, `GPT:${translations.get(unit.raw)!}`, undefined, "openai", "gpt-test");
+}
+const gptResult = exportCrossTranslation({
+  sourceMarkdown: source,
+  sourcePath,
+  chapterFileName: "04 Chapter.md",
+  outputVaultRelativePath: "English/weaver/Book",
+  translationState: state,
+  translationServiceId: "openai",
+});
+assert.ok(gptResult.transMarkdown.includes("GPT:第一句。"));
+assert.ok(gptResult.pureTransMarkdown.includes("GPT:## 章节标题"));
+assert.ok(!gptResult.transMarkdown.includes("\n第一句。\n^sid-2-1"), "GPT export must not silently use the DeepL slot");
+
 assert.strictEqual(normalizeVaultRelativePath("./English\\Book/"), "English/Book");
 assert.strictEqual(normalizeVaultRelativePath("."), "");
 assert.throws(() => normalizeVaultRelativePath("../outside"), /不能包含/);

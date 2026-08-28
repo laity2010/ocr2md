@@ -31,6 +31,8 @@ export function renderSidebar(state: SidebarState): string {
     .tab { border: 0; border-bottom: 2px solid transparent; background: transparent; }
     .tab.active { border-bottom-color: var(--vscode-focusBorder); color: var(--vscode-textLink-foreground); }
     .toolbar { margin: 8px 0; }
+    .toolbar-check { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .toolbar-check input { margin: 0; }
     .regex-card { display: grid; gap: 7px; margin: 10px 0; padding: 9px; border: 1px solid var(--vscode-panel-border); }
     textarea { width: 100%; min-height: 74px; resize: vertical; font-family: var(--vscode-editor-font-family); }
     .meta { color: var(--vscode-descriptionForeground); margin: 6px 0; overflow-wrap: anywhere; }
@@ -133,11 +135,11 @@ export function renderSidebar(state: SidebarState): string {
     const EMBED_EXTRA_COLUMNS = ${JSON.stringify(EMBED_EXTRA_COLUMNS)};
     const DELETED = "已删除";
     const LINE_TYPES = {
-      "章节定界": ["1 级标题", "新增", "修改", "删除", DELETED],
+      "章节定界": ["1 级标题", "新增", "修改", "删除", "已忽略", DELETED],
       "章节标题": ["1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题", "非标题", DELETED],
       "注释": ["注释引用", "注释正文", "忽略", DELETED],
       "嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本", "已忽略", DELETED],
-      "非法断行": ["合并", "忽略"],
+      "非法断行": ["合并", "已忽略"],
       "文本块": ["标题", "内嵌", "文本", "注释正文"],
       "分句": ["标题", "文本", "注释正文"],
       "翻译": ["标题", "文本", "注释正文"],
@@ -285,12 +287,24 @@ export function renderSidebar(state: SidebarState): string {
       const moduleName = state.activeModule;
       const filter = moduleFilters[moduleName] || DEFAULT_FILTERS[moduleName];
       return state.rows.filter((row) =>
-        row.typeLabel === moduleName && rowMatchesModuleFilter(row, moduleName, filter)
+        row.typeLabel === moduleName
+        && row.lineType !== "已忽略"
+        && !(moduleName === "章节标题" && row.chapterBoundaryState === "deleted")
+        && rowMatchesModuleFilter(row, moduleName, filter)
       );
     }
 
     function previewText(row) {
       return Array.from(String(row.preview || row.raw || "")).slice(0, 255).join("");
+    }
+
+    function chapterHeadingOrdinal(row) {
+      const headings = state.rows
+        .filter((candidate) => candidate.typeLabel === "章节标题" && /^[1-6] 级标题$/.test(String(candidate.lineType || "")))
+        .slice()
+        .sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
+      const index = headings.findIndex((candidate) => candidate.id === row.id);
+      return index >= 0 ? index + 1 : undefined;
     }
 
     function chapterTitlePreview(row) {
@@ -299,7 +313,11 @@ export function renderSidebar(state: SidebarState): string {
       const level = Number(match[1]);
       const source = String(row.raw || row.preview || "");
       const content = source.replace(/^ {0,3}#{1,6}(?:\s+|$)/, "").trim();
-      return el("h" + level, content, "chapter-heading-preview");
+      const ordinal = chapterHeadingOrdinal(row);
+      const prefix = state.headingNumberingEnabled !== false && ordinal != null
+        ? "(" + String(ordinal).padStart(3, "0") + ") "
+        : "";
+      return el("h" + level, prefix + content, "chapter-heading-preview");
     }
 
     function illegalBreakDisplay(row) {
@@ -574,37 +592,66 @@ export function renderSidebar(state: SidebarState): string {
     function translationServiceSettings() {
       const settings = state.translationSettings || {
         service: "deepl",
-        apiKeyConfigured: false,
+        exportService: "deepl",
+        services: [
+          { id: "deepl", label: "DeepL", apiKeyConfigured: false },
+          { id: "openai", label: "GPT", apiKeyConfigured: false, model: "gpt-5.4", prompt: "" },
+        ],
         sampleText: "The company reported stronger earnings this quarter.",
         test: { phase: "idle", message: "尚未测试。" },
       };
+      const services = settings.services || [];
       const panel = el("div", undefined, "settings-panel");
       const card = el("div", undefined, "settings-card");
       card.append(el("h2", "翻译服务"));
 
       const serviceLabel = el("label", "当前翻译服务");
       const service = document.createElement("select");
-      service.append(new Option("DeepL", "deepl", false, settings.service === "deepl"));
+      for (const item of services) service.append(new Option(item.label, item.id, false, item.id === settings.service));
 
       const keyLabel = el("label", "API Key");
       const apiKey = document.createElement("input");
       apiKey.type = "password";
       apiKey.autocomplete = "off";
-      apiKey.placeholder = settings.apiKeyConfigured
-        ? "已保存 API Key；留空可继续使用"
-        : "输入 DeepL API Key";
-      const keyStatus = el(
-        "div",
-        settings.apiKeyConfigured ? "API Key 已安全保存到 VS Code SecretStorage。" : "尚未保存 API Key。",
-        "meta",
-      );
+      const keyStatus = el("div", "", "meta");
+
+      const modelLabel = el("label", "GPT 模型");
+      const model = document.createElement("input");
+      model.type = "text";
+      const promptLabel = el("label", "GPT 翻译提示词");
+      const prompt = document.createElement("textarea");
 
       const sampleLabel = el("label", "测试样本句子");
       const sample = document.createElement("textarea");
       sample.value = settings.sampleText || "The company reported stronger earnings this quarter.";
 
+      const syncServiceFields = () => {
+        const current = services.find((item) => item.id === service.value) || services[0] || { id: "deepl", label: "DeepL", apiKeyConfigured: false };
+        keyLabel.textContent = current.label + " API Key";
+        apiKey.value = "";
+        apiKey.placeholder = current.apiKeyConfigured ? "已保存 API Key；留空可继续使用" : "输入 " + current.label + " API Key";
+        keyStatus.textContent = current.apiKeyConfigured ? "API Key 已安全保存到 VS Code SecretStorage。" : "尚未保存 API Key。";
+        const isOpenAI = current.id === "openai";
+        modelLabel.style.display = isOpenAI ? "" : "none";
+        model.style.display = isOpenAI ? "" : "none";
+        promptLabel.style.display = isOpenAI ? "" : "none";
+        prompt.style.display = isOpenAI ? "" : "none";
+        if (isOpenAI) {
+          model.value = current.model || "gpt-5.4";
+          prompt.value = current.prompt || "";
+        }
+      };
+      service.addEventListener("change", syncServiceFields);
+      syncServiceFields();
+
       const actions = el("div", undefined, "settings-actions");
-      const payload = () => ({ service: service.value, apiKey: apiKey.value, sampleText: sample.value });
+      const payload = () => ({
+        service: service.value,
+        apiKey: apiKey.value,
+        sampleText: sample.value,
+        model: model.value,
+        prompt: prompt.value,
+      });
       const save = button("保存设置", () => post("saveTranslationSettings", payload()));
       const test = button(
         settings.test?.phase === "testing" ? "正在测试…" : "测试",
@@ -620,20 +667,13 @@ export function renderSidebar(state: SidebarState): string {
       if (settings.test?.message) resultLines.push(settings.test.message);
       if (settings.test?.statusCode != null) resultLines.push("HTTP " + settings.test.statusCode);
       if (settings.test?.translatedText) resultLines.push("译文：" + settings.test.translatedText);
-      if (settings.test?.rawResponse) resultLines.push("原始响应：\\\\n" + settings.test.rawResponse);
-      result.textContent = resultLines.join("\\\\n\\\\n") || "尚未测试。";
+      if (settings.test?.rawResponse) resultLines.push("原始响应：\\n" + settings.test.rawResponse);
+      result.textContent = resultLines.join("\\n\\n") || "尚未测试。";
 
       card.append(
-        serviceLabel,
-        service,
-        keyLabel,
-        apiKey,
-        keyStatus,
-        sampleLabel,
-        sample,
-        actions,
-        resultTitle,
-        result,
+        serviceLabel, service, keyLabel, apiKey, keyStatus,
+        modelLabel, model, promptLabel, prompt,
+        sampleLabel, sample, actions, resultTitle, result,
       );
       panel.append(card);
       return panel;
@@ -663,7 +703,7 @@ export function renderSidebar(state: SidebarState): string {
         toolbar.append(
           button("保存标定", () => postKeepView("saveAnnotations"), "primary"),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
-          el("span", "扫描完成 · " + count + " 条疑似 · 候选由正文段落边界自动派生 · 合并/忽略写入标定", "progress"),
+          el("span", "扫描完成 · " + count + " 条疑似 · 候选由正文段落边界自动派生 · 合并/已忽略写入标定", "progress"),
         );
         return toolbar;
       }
@@ -676,27 +716,48 @@ export function renderSidebar(state: SidebarState): string {
         return toolbar;
       }
       if (state.activeModule === "翻译") {
+        const settings = state.translationSettings || { service: "deepl", exportService: "deepl", services: [] };
+        const services = settings.services || [];
         const progressState = state.translationProgress || { phase: "idle", completed: 0, total: 0, failed: 0 };
         const percent = progressState.total ? Math.round(progressState.completed * 100 / progressState.total) : 0;
+
+        const translateSelect = document.createElement("select");
+        for (const item of services) translateSelect.append(new Option(item.label, item.id, false, item.id === settings.service));
+        translateSelect.disabled = progressState.phase === "running";
+        translateSelect.addEventListener("change", () => postKeepView("setTranslationService", { service: translateSelect.value }));
+
         const run = button(
-          progressState.phase === "running" ? "翻译中…" : progressState.phase === "complete" ? "已全部翻译" : progressState.completed ? "继续翻译" : "开始翻译",
+          progressState.phase === "running" ? "翻译中…" : progressState.phase === "complete" ? "该服务已完成" : progressState.completed ? "继续翻译" : "开始翻译",
           () => postKeepView("translateCurrentChapter"),
           "primary",
         );
         run.disabled = progressState.phase === "running" || progressState.phase === "complete" || progressState.total === 0;
-        const exportCross = button("导出双向互译", () => postKeepView("exportCrossTranslation"));
-        exportCross.disabled = progressState.phase === "running"
-          || progressState.total === 0
-          || progressState.completed !== progressState.total;
-        exportCross.title = exportCross.disabled ? "全部翻译单元完成后可导出" : "生成 org2trans / trans2org / trans 纯译文 Markdown";
+
+        const exportSelect = document.createElement("select");
+        const exportService = settings.exportService || settings.service || "deepl";
+        for (const item of services) exportSelect.append(new Option(item.label, item.id, false, item.id === exportService));
+        exportSelect.disabled = progressState.phase === "running";
+        exportSelect.addEventListener("change", () => postKeepView("setExportTranslationService", { service: exportSelect.value }));
+        const exportReady = progressState.total > 0 && state.rows
+          .filter((row) => row.typeLabel === "翻译")
+          .every((row) => row.translationResults?.[exportService]?.status === "已翻译");
+        const exportCross = button("导出双向互译", () => postKeepView("exportCrossTranslation", { service: exportSelect.value }));
+        exportCross.disabled = progressState.phase === "running" || !exportReady;
+        exportCross.title = exportReady ? "按所选译文生成 org2trans / trans2org / trans" : "所选服务全部翻译单元完成后可导出";
+
         const meter = document.createElement("progress");
         meter.className = "translation-progress";
         meter.max = Math.max(progressState.total, 1);
         meter.value = progressState.completed;
-        const summary = progressState.completed + "/" + progressState.total + " · " + percent + "%"
+        const currentLabel = services.find((item) => item.id === settings.service)?.label || settings.service || "翻译";
+        const summary = currentLabel + " " + progressState.completed + "/" + progressState.total + " · " + percent + "%"
           + (progressState.failed ? " · 失败 " + progressState.failed : "")
           + (progressState.current ? " · 当前 " + progressState.current : "");
-        toolbar.append(run, exportCross, meter, el("span", summary, "progress"));
+        toolbar.append(
+          el("span", "翻译"), translateSelect, run,
+          el("span", "导出译文"), exportSelect, exportCross,
+          meter, el("span", summary, "progress"),
+        );
         return toolbar;
       }
       if (state.activeModule === "章节定界") {
@@ -707,7 +768,14 @@ export function renderSidebar(state: SidebarState): string {
           button("保存标定", () => postKeepView("saveAnnotations")),
         );
       } else if (state.activeModule === "章节标题") {
+        const numberingLabel = el("label", undefined, "toolbar-check");
+        const numbering = document.createElement("input");
+        numbering.type = "checkbox";
+        numbering.checked = state.headingNumberingEnabled !== false;
+        numbering.addEventListener("change", () => postKeepView("setHeadingNumbering", { enabled: numbering.checked }));
+        numberingLabel.append(numbering, document.createTextNode("为标题编号"));
         toolbar.append(
+          numberingLabel,
           button("创建/打开章节工作稿", () => postKeepView("openChapterWorkingCopy"), "primary"),
           button("按标定导出", () => postKeepView("exportByCalibration")),
           button("导出标定到trans", () => postKeepView("exportCalibrationToTrans")),
@@ -845,12 +913,9 @@ export function renderSidebar(state: SidebarState): string {
       if (state.activeModule === "非法断行") {
         // Dedicated derived-table columns were appended above.
       } else if (state.activeModule === "翻译") {
-        headRow.append(
-          sortableHeader("来源类型", "lineType"),
-          sortableHeader("原文", "preview"),
-          el("th", "译文"),
-          el("th", "状态"),
-        );
+        headRow.append(sortableHeader("来源类型", "lineType"), sortableHeader("原文", "preview"));
+        const services = state.translationSettings?.services || [];
+        for (const item of services) headRow.append(el("th", item.label + "译文"));
       } else {
         headRow.append(
           sortableHeader(
@@ -998,10 +1063,19 @@ export function renderSidebar(state: SidebarState): string {
         ? chapterTitlePreview(candidate)
         : el("div", previewText(candidate), "preview-content"));
       if (state.activeModule === "翻译") {
-        const translationCell = el("td", candidate.translationText || "", "translation-text");
-        const statusCell = el("td", candidate.translationStatus || "待翻译", "translation-status");
-        if (candidate.translationError) statusCell.append(el("div", candidate.translationError, "preview-detail"));
-        row.append(typeCell, previewCell, translationCell, statusCell);
+        row.append(typeCell, previewCell);
+        const services = state.translationSettings?.services || [];
+        for (const item of services) {
+          const result = candidate.translationResults?.[item.id];
+          const cell = el("td", result?.translatedText || "", "translation-text");
+          const status = result?.status || "待翻译";
+          if (status === "失败") {
+            cell.classList.add("translation-failed");
+            cell.append(el("div", "失败", "translation-status preview-detail"));
+            if (result?.error) cell.append(el("div", result.error, "preview-detail"));
+          }
+          row.append(cell);
+        }
       } else {
         row.append(typeCell, previewCell);
       }

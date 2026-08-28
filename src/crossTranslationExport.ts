@@ -2,9 +2,9 @@ import * as path from "path";
 import { containsProtectionPlaceholder } from "./markdownProtection";
 import { findMultilineLatexRanges } from "./sentences";
 import { scanTextBlocks } from "./textBlocks";
-import { translationEntryForUnit, type TranslationStateFile } from "./translationState";
+import { translationResultForUnit, type TranslationStateFile } from "./translationState";
 import { scanTranslationUnits } from "./translationUnits";
-import type { Candidate } from "./types";
+import type { Candidate, TranslationServiceId } from "./types";
 
 export interface CrossTranslationExportInput {
   sourceMarkdown: string;
@@ -12,6 +12,8 @@ export interface CrossTranslationExportInput {
   chapterFileName: string;
   outputVaultRelativePath: string;
   translationState: TranslationStateFile;
+  /** Translation provider/result to render into trans2org and pure translation. */
+  translationServiceId?: TranslationServiceId;
 }
 
 export interface CrossTranslationExportResult {
@@ -27,6 +29,7 @@ export interface CrossTranslationExportResult {
 
 interface RenderContext {
   state: TranslationStateFile;
+  serviceId: TranslationServiceId;
   orgTarget: string;
   transTarget: string;
 }
@@ -45,9 +48,10 @@ export function exportCrossTranslation(input: CrossTranslationExportInput): Cros
   const transTarget = vaultJoin(outputPath, transLinkName);
 
   const units = scanTranslationUnits(source, input.sourcePath);
+  const serviceId = input.translationServiceId ?? "deepl";
   const missing = units.filter((unit) => {
-    const entry = translationEntryForUnit(unit, input.translationState);
-    return entry?.status !== "translated" || !entry.translatedText;
+    const result = translationResultForUnit(unit, input.translationState, serviceId);
+    return result?.status !== "translated" || !result.translatedText;
   });
   if (missing.length) {
     const first = missing.slice(0, 5).map(unitLabel).join("、");
@@ -56,6 +60,7 @@ export function exportCrossTranslation(input: CrossTranslationExportInput): Cros
 
   const context: RenderContext = {
     state: input.translationState,
+    serviceId,
     orgTarget,
     transTarget,
   };
@@ -157,7 +162,7 @@ function renderOrdinaryBlock(
   if (block.lineType === "注释正文") {
     return renderFootnoteBody(block, sentenceUnits, context);
   }
-  const pure = renderPureOrdinaryBlock(block, sentenceUnits, context.state);
+  const pure = renderPureOrdinaryBlock(block, sentenceUnits, context.state, context.serviceId);
   if (isListParagraph(block.raw)) {
     return { ...renderListParagraph(sentenceUnits, context), pure };
   }
@@ -172,7 +177,7 @@ function renderOrdinaryBlock(
     appendGap(orgParts, block.raw.slice(cursor, index));
     appendGap(transParts, block.raw.slice(cursor, index));
 
-    const entry = requireTranslation(unit, context.state);
+    const entry = requireTranslation(unit, context.state, context.serviceId);
     const anchor = sentenceAnchor(unit);
     anchors.push(anchor);
     const titleSpacing = block.lineType === "标题";
@@ -204,6 +209,7 @@ function renderPureOrdinaryBlock(
   block: Candidate,
   sentenceUnits: Candidate[],
   state: TranslationStateFile,
+  serviceId: TranslationServiceId,
 ): string {
   let output = "";
   let cursor = 0;
@@ -211,7 +217,7 @@ function renderPureOrdinaryBlock(
     const index = block.raw.indexOf(unit.raw, cursor);
     if (index < 0) throw new Error(`无法在文本块中定位纯译文单元：${unitLabel(unit)}`);
     output += block.raw.slice(cursor, index);
-    output += requireTranslation(unit, state).translatedText!;
+    output += requireTranslation(unit, state, serviceId).translatedText!;
     cursor = index + unit.raw.length;
   }
   output += block.raw.slice(cursor);
@@ -230,7 +236,7 @@ function renderFootnoteBody(
   const originalParts: string[] = [];
   const translatedParts: string[] = [];
   sentenceUnits.forEach((unit, index) => {
-    const entry = requireTranslation(unit, context.state);
+    const entry = requireTranslation(unit, context.state, context.serviceId);
     let original = collapseFootnoteText(unit.raw);
     let translated = collapseFootnoteText(entry.translatedText!);
     if (index === 0) {
@@ -266,7 +272,7 @@ function renderListParagraph(
   const transLines: string[] = [];
   const anchors: string[] = [];
   sentenceUnits.forEach((unit, index) => {
-    const entry = requireTranslation(unit, context.state);
+    const entry = requireTranslation(unit, context.state, context.serviceId);
     const anchor = sentenceAnchor(unit);
     anchors.push(anchor);
     if (index > 0) {
@@ -339,7 +345,7 @@ function renderCompositeBlock(
       index += 1;
       continue;
     }
-    const entry = requireTranslation(unit, context.state);
+    const entry = requireTranslation(unit, context.state, context.serviceId);
     const original = normalizeInternalBlankLines(unit.raw);
     const translated = normalizeInternalBlankLines(entry.translatedText!);
     appendCompositeTranslatedContent(orgLines, original, translated);
@@ -439,12 +445,12 @@ function sentenceAnchor(unit: Candidate): string {
   return `sid-${unit.parentBlockIndex}-${unit.sentenceIndex}`;
 }
 
-function requireTranslation(unit: Candidate, state: TranslationStateFile) {
-  const entry = translationEntryForUnit(unit, state);
-  if (!entry || entry.status !== "translated" || !entry.translatedText) {
-    throw new Error(`翻译单元尚未完成：${unitLabel(unit)}`);
+function requireTranslation(unit: Candidate, state: TranslationStateFile, serviceId: TranslationServiceId = "deepl") {
+  const result = translationResultForUnit(unit, state, serviceId);
+  if (!result || result.status !== "translated" || !result.translatedText) {
+    throw new Error(`翻译单元尚未完成：${unitLabel(unit)} · ${serviceId}`);
   }
-  return entry;
+  return result;
 }
 
 function groupUnitsByBlock(units: Candidate[]): Map<string, Candidate[]> {

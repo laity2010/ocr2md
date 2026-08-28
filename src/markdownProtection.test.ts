@@ -23,6 +23,13 @@ assert.deepStrictEqual(missingProtectedMarkdownTokens(protectedText.text, protec
 assert.strictEqual(restoreProtectedMarkdown(protectedText.text, protectedText.replacements), source);
 assert.ok(containsProtectionPlaceholder(protectedText.text));
 assert.ok(!containsProtectionPlaceholder(source));
+assert.match(protectedText.replacements[0].token, /^<ocr2md-protected id="p\d{4}"\/>$/, "protected Markdown must use XML placeholders rather than translatable plain-text tokens");
+
+const xmlNormalized = protectedText.text
+  .replace(protectedText.replacements[0].token, "<ocr2md-protected id='p0001'></ocr2md-protected>")
+  .replace(protectedText.replacements[1].token, '<ocr2md-protected   id = "p0002" />');
+assert.deepStrictEqual(missingProtectedMarkdownTokens(xmlNormalized, protectedText.replacements), [], "XML placeholder normalization by DeepL must not be treated as token loss");
+assert.strictEqual(restoreProtectedMarkdown(xmlNormalized, protectedText.replacements), source, "normalized XML placeholders must restore byte-for-byte Markdown");
 
 const nested = "    - Nested item.\n>> Quoted text.";
 const nestedProtected = protectMarkdownForTranslation(nested);
@@ -59,6 +66,34 @@ assert.strictEqual(
   ),
   undefined,
   "translated Markdown link label may change while its structure/destination stays intact",
+);
+
+
+
+// XML-aware translation may legitimately reorder atomic formulas with Chinese word order.
+assert.strictEqual(
+  markdownStructureIssue(
+    "The $\\$ 32$ total includes $( 4 8 \\% )$ income tax and $( 3 4 \\% )$ receipts.",
+    "其中所得税占 $( 4 8 \\% )$，相关收入占 $( 3 4 \\% )$，总额为 $\\$ 32$。",
+  ),
+  undefined,
+  "atomic LaTeX may move with translated word order as long as every exact formula survives",
+);
+assert.match(
+  markdownStructureIssue(
+    "The $\\$ 32$ total includes $( 4 8 \\% )$ income tax.",
+    "其中所得税占 $( 4 8 \\% )$。",
+  ) || "",
+  /丢失 LaTeX 结构/,
+  "missing atomic LaTeX must still be rejected",
+);
+assert.match(
+  markdownStructureIssue(
+    "The $\\$ 32$ total includes $( 4 8 \\% )$ income tax.",
+    "其中所得税占 $( 4 9 \\% )$，总额为 $\\$ 32$。",
+  ) || "",
+  /LaTeX 结构/,
+  "changed atomic LaTeX must still be rejected",
 );
 
 console.log("markdownProtection tests passed");

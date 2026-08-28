@@ -18,10 +18,51 @@ export function scanTranslationUnits(markdown: string, sourcePath: string): Cand
     if (block.lineType !== "内嵌") continue;
     composite.push(...compositeUnits(block, blockIndex + 1));
   }
-  return [...ordinary, ...composite].sort((left, right) =>
+  const units = [...ordinary, ...composite].sort((left, right) =>
     left.range.line - right.range.line
       || left.range.start - right.range.start
       || (left.translationUnitKind === "sentence" ? -1 : 1));
+  return attachTranslationFingerprints(units);
+}
+
+/**
+ * Translation identity must survive layout-only edits. Keep punctuation/Markdown
+ * content intact, but normalize Unicode composition and whitespace differences.
+ */
+export function normalizeTranslationSource(value: string): string {
+  return value.normalize("NFC").replace(/\r\n?/g, "\n").replace(/\s+/gu, " ").trim();
+}
+
+export function translationSourceFingerprint(value: string): string {
+  return createHash("sha256")
+    .update(normalizeTranslationSource(value))
+    .digest("hex")
+    .slice(0, 24);
+}
+
+export function translationContextFingerprint(previous: string, current: string, next: string): string {
+  return createHash("sha256")
+    .update(`${previous}\0${current}\0${next}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
+function attachTranslationFingerprints(units: Candidate[]): Candidate[] {
+  const sourceFingerprints = units.map((unit) => translationSourceFingerprint(unit.raw));
+  const counts = new Map<string, number>();
+  for (const fingerprint of sourceFingerprints) counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1);
+  return units.map((unit, index) => {
+    const sourceFingerprint = sourceFingerprints[index];
+    const previous = index > 0 ? sourceFingerprints[index - 1] : "^";
+    const next = index + 1 < units.length ? sourceFingerprints[index + 1] : "$";
+    const contextFingerprint = translationContextFingerprint(previous, sourceFingerprint, next);
+    return {
+      ...unit,
+      translationSourceFingerprint: sourceFingerprint,
+      translationContextFingerprint: contextFingerprint,
+      translationSourceOccurrenceCount: counts.get(sourceFingerprint) ?? 1,
+    };
+  });
 }
 
 function compositeUnits(block: Candidate, blockIndex: number): Candidate[] {
