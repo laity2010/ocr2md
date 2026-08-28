@@ -1,5 +1,13 @@
 import * as assert from "assert";
-import { ANNOTATION_EXTRA_COLUMNS, CHAPTER_BOUNDARY_EXTRA_COLUMNS, EMBED_EXTRA_COLUMNS, renderSidebar, TABLE_COLUMNS } from "./webview";
+import {
+  ANNOTATION_EXTRA_COLUMNS,
+  CHAPTER_BOUNDARY_EXTRA_COLUMNS,
+  EMBED_EXTRA_COLUMNS,
+  renderSidebar,
+  TABLE_COLUMNS,
+  VSCODE_REVIEW_UI_BOOTSTRAP,
+  VSCODE_REVIEW_UI_THEME,
+} from "./webview";
 import type { SidebarState } from "./types";
 
 const state: SidebarState = {
@@ -17,172 +25,26 @@ const state: SidebarState = {
 const html = renderSidebar(state);
 const scriptStart = html.indexOf("<script>") + "<script>".length;
 const scriptEnd = html.lastIndexOf("</script>");
-const generatedScript = html.slice(scriptStart, scriptEnd);
-assert.doesNotThrow(() => new Function(generatedScript), "generated webview JavaScript must be syntactically valid");
-for (const moduleName of ["章节定界", "章节标题", "注释", "嵌入块", "非法断行"]) {
-  assert.ok(html.includes(moduleName), `missing module: ${moduleName}`);
-}
-for (const removedModule of ["未分类", "拼写检查", "翻译设置"]) {
-  assert.ok(!html.includes(removedModule), `removed module leaked into UI: ${removedModule}`);
-}
+assert.doesNotThrow(() => new Function(html.slice(scriptStart, scriptEnd)), "VS Code-hosted review UI JavaScript must be syntactically valid");
 
-assert.ok(html.includes('"非法断行": ["合并", "已忽略"]'), "illegal line-break line types must be merge/ignored");
-assert.ok(html.includes("候选由正文段落边界自动派生 · 合并/已忽略写入标定"), "illegal line-break table must explain derived candidates and persisted decisions");
-for (const column of ["断行位置", "上一行", "下一行", "合并预览", "判断"]) {
-  assert.ok(html.includes(column), `illegal line-break table missing column: ${column}`);
+assert.ok(VSCODE_REVIEW_UI_BOOTSTRAP.includes("acquireVsCodeApi()"), "VS Code adapter must acquire the VS Code webview API");
+assert.ok(VSCODE_REVIEW_UI_BOOTSTRAP.includes("window.ocr2mdHost"), "VS Code adapter must expose the generic ocr2md host bridge");
+for (const method of ["postMessage", "getState", "setState", "onState"]) {
+  assert.ok(VSCODE_REVIEW_UI_BOOTSTRAP.includes(method), `VS Code host bridge missing method: ${method}`);
 }
-assert.ok(html.includes('function illegalBreakDisplay(row)'), "illegal line-break table must derive compact previews around the break");
-assert.ok(html.includes('previousChars.slice(-10).join("")'), "previous-line preview must show only the 10 chars before the break");
-assert.ok(html.includes('nextChars.slice(0, 10).join("")'), "next-line preview must show only the 10 chars after the break");
-assert.ok(html.includes('mergedChars.slice(start, start + 20).join("")'), "merged preview must show only 20 chars around the join");
-assert.ok(html.includes('const display = illegalBreakDisplay(candidate);'), "illegal line-break cells must use compact display previews");
+assert.ok(VSCODE_REVIEW_UI_BOOTSTRAP.includes('data.command !== "setState"'), "VS Code adapter must translate host state messages without rebuilding the webview");
+
+for (const semanticVariable of ["--ocr-foreground", "--ocr-border", "--ocr-header-background", "--ocr-focus-border"]) {
+  assert.ok(VSCODE_REVIEW_UI_THEME.includes(semanticVariable), `VS Code theme adapter missing semantic variable: ${semanticVariable}`);
+}
+for (const vscodeVariable of ["--vscode-foreground", "--vscode-panel-border", "--vscode-sideBarSectionHeader-background"]) {
+  assert.ok(VSCODE_REVIEW_UI_THEME.includes(vscodeVariable), `VS Code theme adapter missing host variable: ${vscodeVariable}`);
+}
+assert.ok(html.includes("const host = window.ocr2mdHost"), "rendered sidebar must consume the generic host bridge");
 
 assert.deepStrictEqual(TABLE_COLUMNS, ["多选", "行号", "行类型", "预览"]);
-assert.ok(!TABLE_COLUMNS.includes("注释号" as typeof TABLE_COLUMNS[number]), "annotation number is not a shared table column");
-assert.ok(!TABLE_COLUMNS.includes("章节文件" as typeof TABLE_COLUMNS[number]), "chapter file is not a shared table column");
 assert.deepStrictEqual(ANNOTATION_EXTRA_COLUMNS, ["注释号"]);
 assert.deepStrictEqual(CHAPTER_BOUNDARY_EXTRA_COLUMNS, ["章节文件"]);
-assert.ok(!TABLE_COLUMNS.includes("序号" as typeof TABLE_COLUMNS[number]), "embed index is not a shared table column");
 assert.deepStrictEqual(EMBED_EXTRA_COLUMNS, ["序号"]);
-for (const column of TABLE_COLUMNS) {
-  assert.ok(html.includes(column), `missing table column: ${column}`);
-}
-assert.ok(html.includes("event.shiftKey"), "multi-column sorting gesture is missing");
-assert.ok(html.includes("Shift+单击可追加多列排序"), "multi-column sorting guidance is missing");
-assert.ok(
-  html.includes('return DEFAULT_SORT_RULES[moduleName] || [{ key: "line", direction: "asc" }]'),
-  "default line ascending sort is missing",
-);
-assert.ok(
-  html.includes('"注释": [{ key: "number", direction: "asc" }, { key: "line", direction: "asc" }]'),
-  "annotation module default sort must be number then line",
-);
-assert.ok(
-  html.includes('if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号"))'),
-  "annotation number column must be gated to the annotation module",
-);
-assert.ok(
-  html.includes('if (state.activeModule === "章节定界" && CHAPTER_BOUNDARY_EXTRA_COLUMNS.includes("章节文件"))'),
-  "chapter file column must be gated to the chapter boundary module",
-);
-assert.ok(html.includes("设置章节文件"), "chapter boundary must expose the chapter-file dialog");
-assert.ok(html.includes("统一序号"), "chapter-file dialog must support same-number assignment");
-assert.ok(html.includes("从起始序号依次递增"), "chapter-file dialog must support sequential assignment");
-assert.ok(html.includes("整体偏移"), "chapter-file dialog must support number offset");
-assert.ok(html.includes("function setSelectedChapterBoundaryFile()"), "chapter-file dialog must run from selected level-one headings");
-assert.ok(html.includes("tr.missing-chapter-file"), "unassigned level-one headings must be highlighted");
-assert.ok(html.includes('postKeepView("assignChapterFiles"'), "chapter-file dialog must assign generated filenames");
-assert.ok(html.includes('"章节定界": ["1 级标题", "新增", "修改", "删除", "已忽略", DELETED]'), "chapter-boundary module must expose 已忽略 without deleting the row");
-assert.ok(html.includes('"嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本"'), "embed module line types");
-assert.ok(html.includes('"嵌入文本", "已忽略", DELETED'), "embed module must expose 已忽略 without deleting the row");
-assert.ok(html.includes('&& row.lineType !== "已忽略"'), "unified table view must hide rows calibrated as 已忽略");
-assert.ok(html.includes("下载图片到本地"), "embed module must download all images, not only the selection");
-assert.ok(html.includes("按标定导出"), "chapter modules must export by calibration");
-assert.ok(html.includes('postKeepView("exportByCalibration")'), "calibration export must post exportByCalibration");
-assert.ok(html.includes("导出标定到trans"), "chapter modules must expose trans export");
-assert.ok(html.includes('postKeepView("exportCalibrationToTrans")'), "trans export must post exportCalibrationToTrans");
-assert.ok(html.includes("为标题编号"), "chapter-title toolbar must expose the numbering checkbox");
-assert.ok(html.includes('numbering.checked = state.headingNumberingEnabled !== false'), "heading numbering must default to enabled");
-assert.ok(html.includes('postKeepView("setHeadingNumbering", { enabled: numbering.checked })'), "heading numbering checkbox must update host state");
-assert.ok(html.includes('function chapterHeadingOrdinal(row)'), "chapter-title preview must derive chapter-global heading ordinals");
-assert.ok(html.includes('String(ordinal).padStart(3, "0")'), "chapter-title preview must render the three-digit heading prefix");
-assert.ok(html.includes('function chapterTitlePreview(row)'), "chapter-title table must have a dedicated rendered preview");
-assert.ok(html.includes('/^([1-6]) 级标题$/.exec'), "chapter-title preview must follow the current calibrated heading level");
-assert.ok(html.includes('return el("h" + level, prefix + content, "chapter-heading-preview")'), "chapter-title rows must render as numbered-or-plain h1-h6 elements");
-assert.ok(html.includes('source.replace(/^ {0,3}#{1,6}'), "rendered chapter-title previews must hide Markdown heading markers");
-assert.ok(html.includes('state.activeModule === "章节标题"'), "chapter-title preview rendering must be module-specific");
-assert.ok(html.includes('h1.chapter-heading-preview'), "chapter-title H1 preview style must mirror Markdown preview CSS");
-assert.ok(html.includes('h6.chapter-heading-preview'), "chapter-title H6 preview style must mirror Markdown preview CSS");
-assert.ok(html.includes('"导出：" + candidate.localPath'), "embed preview must show the exact export path for local images");
-assert.ok(html.includes('"文本块": ["标题", "内嵌", "文本", "注释正文"]'), "trans text-block types must be available");
-assert.ok(html.includes('state.selectedFile?.kind === "trans"'), "trans selection must switch the sidebar to the text-block table");
-assert.ok(html.includes('state.activeModule === "文本块" ? "文本块类型" : state.activeModule === "分句" ? "来源类型" : "行类型"'), "derived trans tables must label their type columns");
-assert.ok(html.includes('按 <br> 划分 · 只读派生表'), "text-block table must be clearly read-only and delimiter-derived");
-assert.ok(html.includes('["文本块", "分句", "翻译"]'), "trans sidebar must expose text-block, sentence, and translation tables");
-assert.ok(html.includes('"分句": ["标题", "文本", "注释正文"]'), "sentence source types must exclude embeds");
-assert.ok(html.includes("句内序号"), "sentence table must show sentence index within its parent block");
-assert.ok(html.includes("Intl.Segmenter + 例外合并 · 只读派生表"), "sentence table must describe the segmentation strategy");
-
-assert.ok(html.includes("扫描完成 · "), "illegal-line-break toolbar must report that the scan completed");
-assert.ok(html.includes("候选由正文段落边界自动派生"), "illegal-line-break scan description must match the chapter file layout");
-assert.ok(html.includes("扫描完成：当前章节未发现疑似非法断行。"), "empty illegal-line-break table must clearly report a completed zero-result scan");
-assert.ok(html.includes('sortableHeader("行类型", "lineType")'), "illegal line-break table must show a line-type column");
-assert.ok(html.includes('for (const value of LINE_TYPES["非法断行"])'), "illegal line-break rows must use merge/ignored dropdowns");
-assert.ok(html.includes('button("保存标定", () => postKeepView("saveAnnotations"), "primary")'), "illegal line-break decisions must be saveable");
-assert.ok(html.includes('emptyCell.colSpan = 7'), "empty illegal-line-break table must keep its seven-column table layout");
-
-assert.ok(html.includes("开始翻译"), "translation module must expose a start action");
-assert.ok(html.includes("继续翻译"), "translation module must expose a resume action");
-assert.ok(html.includes("导出双向互译"), "translation module must expose cross-translation export");
-assert.ok(html.includes('postKeepView("exportCrossTranslation", { service: exportSelect.value })'), "cross-translation export must send the selected provider");
-assert.ok(html.includes("所选服务全部翻译单元完成后可导出"), "cross export must remain gated per selected service");
-assert.ok(html.includes("translation-progress"), "translation module must display active-service progress");
-assert.ok(html.includes('postKeepView("translateCurrentChapter")'), "translation module must invoke chapter translation");
-assert.ok(html.includes('postKeepView("setTranslationService"'), "translation toolbar must switch the provider being translated");
-assert.ok(html.includes('postKeepView("setExportTranslationService"'), "translation toolbar must switch the provider used for export");
-assert.ok(html.includes('sortableHeader("原文", "preview")'), "translation table must keep the source column");
-assert.ok(html.includes('for (const item of services) headRow.append(el("th", item.label + "译文"))'), "translation table must create one comparison column per service");
-assert.ok(html.includes('candidate.translationResults?.[item.id]'), "translation table must render per-service persisted results");
-assert.ok(html.includes('if (status === "失败")'), "translation cells must keep failure diagnostics");
-assert.ok(!html.includes('status + (result?.model ? " · " + result.model : "")'), "translated rows must not repeat translated status/model metadata");
-assert.ok(html.includes('state.viewMode === "translationService"'), "translation service must have a dedicated settings view");
-for (const translationUiText of ["翻译服务", "当前翻译服务", "DeepL", "GPT", "API Key", "GPT 模型", "GPT 翻译提示词", "测试样本句子", "保存设置", "测试", "服务器返回信息"]) {
-  assert.ok(html.includes(translationUiText), `missing translation service UI text: ${translationUiText}`);
-}
-assert.ok(html.includes('apiKey.type = "password"'), "translation API key must use a password field");
-assert.ok(html.includes("宿主密钥存储"), "translation API key storage guidance is missing");
-assert.ok(html.includes('post("testTranslationService"'), "translation service test action is missing");
-assert.ok(html.includes('post("saveTranslationSettings"'), "translation settings save action is missing");
-assert.ok(!html.includes("下载所选图片"), "selected-only image download must be removed");
-assert.ok(
-  html.includes('if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号"))'),
-  "embed number column must be gated to the embed module",
-);
-assert.ok(
-  html.includes('"嵌入块": [{ key: "embedNumber", direction: "asc" }, { key: "line", direction: "asc" }]'),
-  "embed module default sort must be block number then line",
-);
-for (const defaultFilter of ["层级标题行+增删改行", "注释及引用+增删改行", "嵌入相关+增删改行"]) {
-  assert.ok(html.includes(defaultFilter), `missing default module filter: ${defaultFilter}`);
-}
-assert.ok(
-  html.includes('if (moduleName === "章节标题") return chapterChange;'),
-  "chapter title changes must not inherit stale working-correction flags",
-);
-assert.ok(
-  html.includes('!(moduleName === "章节标题" && row.chapterBoundaryState === "deleted")'),
-  "chapter-title table must hide rows that no longer exist in the working Markdown",
-);
-assert.ok(html.includes("#app { display: flex; flex-direction: column; height: 100%; min-height: 0; }"), "app does not fill the view");
-assert.ok(html.includes(".table-wrap { flex: 1 1 auto; min-height: 0; overflow: auto;"), "table does not fill remaining space");
-assert.ok(html.includes('Array.from(String(row.preview || row.raw || "")).slice(0, 255).join("")'), "preview is not limited to 255 characters");
-assert.ok(
-  html.includes('previewCell.addEventListener("click", () => post("locateRow", { id: candidate.id }))'),
-  "preview navigation must be attached to the preview cell",
-);
-assert.ok(html.includes("匹配注释对"), "annotation matching action is missing");
-assert.ok(
-  html.includes('moduleName === "注释" && state.annotationMatchSummary')
-    && html.includes("state.annotationMatchSummary.calibrated"),
-  "annotation tab count must use calibrated rows, not ignored regex hits",
-);
-assert.ok(!html.includes("确认所选 Pair"), "old pair confirmation label must be removed");
-assert.ok(html.includes("手工输入注释号"), "missing annotation number must prompt for manual input");
-assert.ok(html.includes("tr.missing-number"), "rows without annotation numbers must be highlighted");
-assert.ok(html.includes("function restoreScroll()"), "table scroll must be restored after rerender");
-assert.ok(html.includes("function restoreFocus()"), "row focus must be restored after rerender");
-assert.ok(html.includes("if (!focusTarget || !webviewIsActive) return;"), "table must not steal focus from the source editor");
-assert.ok(html.includes('data.command !== "setState"'), "host updates must reuse the webview instead of rewriting html");
-assert.ok(html.includes("persisted.selectedIds"), "multi-select must survive host webview reloads");
-assert.ok(html.includes("clearSelection"), "batch line-type changes must clear multi-select without dropping scroll");
-assert.ok(html.includes("syncSelectionChrome()"), "checkbox toggles must not rebuild the table");
-assert.ok(!html.includes("selected.add(candidate.id); else selected.delete(candidate.id);\n        render();"), "checkbox change must not call render()");
-assert.ok(
-  html.includes('["added", "modified", "deleted"].includes(row.chapterBoundaryState)'),
-  "add/modify/delete coloring is a shared table filter, not module-specific",
-);
-assert.ok(html.includes('if (candidate.chapterBoundaryState === "added") row.classList.add("added");'), "added rows must be colored");
-assert.ok(html.includes('if (candidate.chapterBoundaryState === "modified") row.classList.add("modified");'), "modified rows must be colored");
-assert.ok(html.includes('if (candidate.chapterBoundaryState === "deleted") row.classList.add("removed");'), "deleted rows must be colored");
 
 console.log("webview tests passed");

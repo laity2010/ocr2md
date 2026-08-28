@@ -50,6 +50,54 @@ for (const variable of ["--ocr-foreground", "--ocr-border", "--ocr-header-backgr
   assert.ok(html.includes(variable), `shared UI semantic theme variable missing: ${variable}`);
 }
 
+
+for (const text of [
+  "设置章节文件",
+  "创建/打开章节工作稿",
+  "为标题编号",
+  "匹配注释对",
+  "下载图片到本地",
+  "候选由正文段落边界自动派生",
+  "上一行",
+  "下一行",
+  "合并预览",
+  "开始翻译",
+  "继续翻译",
+  "导出双向互译",
+]) {
+  assert.ok(html.includes(text), `shared review UI is missing user-facing behavior: ${text}`);
+}
+for (const sharedBehavior of [
+  "moduleDefinition().bulkEdit",
+  "moduleDefinition().regexCard",
+  "definition.selectable",
+  "definition.editableLineType",
+  "definition.extraColumns.includes",
+  "definition.previewKind",
+  "definition.detailKind",
+  "definition.tableKind",
+  "definition.typeColumnLabel",
+]) {
+  assert.ok(html.includes(sharedBehavior), `shared review base renderer is missing definition-driven behavior: ${sharedBehavior}`);
+}
+assert.ok(html.includes("function restoreScroll()"), "shared review base must preserve table scroll");
+assert.ok(html.includes("function restoreFocus()"), "shared review base must preserve row focus");
+assert.ok(html.includes("event.shiftKey"), "shared review base must support multi-column sorting");
+assert.ok(html.includes("persisted.selectedIds"), "shared review base must preserve multi-select state");
+assert.ok(html.includes('previewCell.addEventListener("click", () => post("locateRow", { id: candidate.id }))'), "shared review base must expose source-location navigation");
+assert.ok(html.includes('postKeepView("setRowsLineType"'), "shared review base must expose line-type review commands");
+
+const reviewUiSource = fs.readFileSync(path.join(process.cwd(), "src", "reviewUi.ts"), "utf8");
+for (const forbiddenBranch of [
+  'state.activeModule === "章节定界"',
+  'state.activeModule === "章节标题"',
+  'state.activeModule === "注释"',
+  'state.activeModule === "嵌入块"',
+  'state.activeModule === "非法断行"',
+]) {
+  assert.ok(!reviewUiSource.includes(forbiddenBranch), `shared review base must not hard-code module branch: ${forbiddenBranch}`);
+}
+
 const scriptStart = html.indexOf("<script>") + "<script>".length;
 const scriptEnd = html.lastIndexOf("</script>");
 assert.doesNotThrow(() => new Function(html.slice(scriptStart, scriptEnd)), "browser-hosted shared UI JavaScript must be syntactically valid");

@@ -1,6 +1,5 @@
 import type { Candidate, ModuleName, SidebarState } from "./types";
-
-const MODULES: ModuleName[] = ["章节定界", "章节标题", "注释", "嵌入块", "非法断行", "文本块", "分句", "翻译"];
+import { REVIEW_MODULE_DEFINITIONS, REVIEW_MODULES } from "./reviewModuleDefinitions";
 export const TABLE_COLUMNS = ["多选", "行号", "行类型", "预览"] as const;
 export const ANNOTATION_EXTRA_COLUMNS = ["注释号"] as const;
 export const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ["章节文件"] as const;
@@ -151,35 +150,15 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
     const host = window.ocr2mdHost;
     if (!host) throw new Error("ocr2md UI host bridge is missing");
     let state = ${encoded};
-    const MODULES = ${JSON.stringify(MODULES)};
+    const MODULES = ${JSON.stringify(REVIEW_MODULES)};
+    const MODULE_DEFINITIONS = ${JSON.stringify(REVIEW_MODULE_DEFINITIONS)};
     const ANNOTATION_EXTRA_COLUMNS = ${JSON.stringify(ANNOTATION_EXTRA_COLUMNS)};
     const CHAPTER_BOUNDARY_EXTRA_COLUMNS = ${JSON.stringify(CHAPTER_BOUNDARY_EXTRA_COLUMNS)};
     const EMBED_EXTRA_COLUMNS = ${JSON.stringify(EMBED_EXTRA_COLUMNS)};
     const DELETED = "已删除";
-    const LINE_TYPES = {
-      "章节定界": ["1 级标题", "新增", "修改", "删除", "已忽略", DELETED],
-      "章节标题": ["1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题", "非标题", DELETED],
-      "注释": ["注释引用", "注释正文", "忽略", DELETED],
-      "嵌入块": ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本", "已忽略", DELETED],
-      "非法断行": ["合并", "已忽略"],
-      "文本块": ["标题", "内嵌", "文本", "注释正文"],
-      "分句": ["标题", "文本", "注释正文"],
-      "翻译": ["标题", "文本", "注释正文"],
-    };
-    const FILTER_OPTIONS = {
-      "章节标题": ["层级标题行+增删改行", "全部", "层级标题行", "增删改行"],
-      "注释": ["注释及引用+增删改行", "全部", "注释及引用", "增删改行"],
-      "嵌入块": ["嵌入相关+增删改行", "全部", "嵌入相关", "增删改行"],
-    };
-    const DEFAULT_FILTERS = {
-      "章节标题": "层级标题行+增删改行",
-      "注释": "注释及引用+增删改行",
-      "嵌入块": "嵌入相关+增删改行",
-    };
-    const DEFAULT_SORT_RULES = {
-      "注释": [{ key: "number", direction: "asc" }, { key: "line", direction: "asc" }],
-      "嵌入块": [{ key: "embedNumber", direction: "asc" }, { key: "line", direction: "asc" }],
-    };
+    function moduleDefinition(moduleName = state.activeModule) {
+      return MODULE_DEFINITIONS[moduleName];
+    }
     const selected = new Set();
     const persisted = host.getState() || {};
     const allowedSortKeys = ["line", "lineType", "preview", "number", "chapterFile", "embedNumber"];
@@ -189,7 +168,7 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         : [];
     }
     function defaultSortRules(moduleName) {
-      return DEFAULT_SORT_RULES[moduleName] || [{ key: "line", direction: "asc" }];
+      return moduleDefinition(moduleName)?.defaultSort || [{ key: "line", direction: "asc" }];
     }
     const sortRulesByModule = persisted.sortRulesByModule && typeof persisted.sortRulesByModule === "object" ? persisted.sortRulesByModule : {};
     let sortRules = sanitizeSortRules(sortRulesByModule[state.activeModule]);
@@ -282,37 +261,32 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
       }
     }
 
-    function rowWasChanged(row, moduleName) {
+    function rowWasChanged(row, definition) {
       const chapterChange = row.lineType === DELETED
         || ["added", "modified", "deleted"].includes(row.chapterBoundaryState);
-      if (moduleName === "章节标题") return chapterChange;
-      return chapterChange || row.isWorkingCorrection === true;
+      return chapterChange || (definition?.includeWorkingCorrectionInChanged !== false && row.isWorkingCorrection === true);
     }
 
-    function rowMatchesModuleFilter(row, moduleName, filter) {
-      if (!filter || filter === "全部") return true;
-      const changed = rowWasChanged(row, moduleName);
-      const heading = /^[1-6] 级标题$/.test(row.lineType || "");
-      const annotation = ["注释引用", "注释正文"].includes(row.lineType || "");
-      const embed = ["嵌入块首", "内嵌标题", "嵌入链接", "嵌入HTML", "HTML表", "嵌入文本", "已忽略"].includes(row.lineType || "");
-      if (filter === "增删改行") return changed;
-      if (filter === "层级标题行") return heading;
-      if (filter === "注释及引用") return annotation;
-      if (filter === "嵌入相关") return embed;
-      if (moduleName === "章节标题") return heading || changed;
-      if (moduleName === "注释") return annotation || changed;
-      if (moduleName === "嵌入块") return embed || changed;
+    function rowMatchesModuleFilter(row, definition, filterValue) {
+      const filter = definition?.filter;
+      if (!filter || !filterValue || filterValue === "全部") return true;
+      const changed = rowWasChanged(row, definition);
+      const primary = filter.primaryLineTypes.includes(row.lineType || "");
+      if (filterValue === "增删改行") return changed;
+      if (filterValue === filter.primaryOnlyLabel) return primary;
+      if (filterValue === filter.combinedLabel) return primary || changed;
       return true;
     }
 
     function rowsForModule() {
-      const moduleName = state.activeModule;
-      const filter = moduleFilters[moduleName] || DEFAULT_FILTERS[moduleName];
+      const definition = moduleDefinition();
+      const moduleName = definition.name;
+      const filterValue = moduleFilters[moduleName] || definition.filter?.defaultValue;
       return state.rows.filter((row) =>
         row.typeLabel === moduleName
         && row.lineType !== "已忽略"
-        && !(moduleName === "章节标题" && row.chapterBoundaryState === "deleted")
-        && rowMatchesModuleFilter(row, moduleName, filter)
+        && !(definition.filter?.hideDeletedWorkingRows && row.chapterBoundaryState === "deleted")
+        && rowMatchesModuleFilter(row, definition, filterValue)
       );
     }
 
@@ -589,7 +563,8 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         ? ["文本块", "分句", "翻译"]
         : MODULES.filter((moduleName) => moduleName !== "文本块" && moduleName !== "分句" && moduleName !== "翻译");
       for (const moduleName of visibleModules) {
-        const count = moduleName === "注释" && state.annotationMatchSummary
+        const tabDefinition = moduleDefinition(moduleName);
+        const count = tabDefinition.countKind === "annotationCalibrated" && state.annotationMatchSummary
           ? state.annotationMatchSummary.calibrated
           : state.rows.filter((row) => row.typeLabel === moduleName).length;
         const tab = button(moduleName + " (" + count + ")", () => postKeepView("setActiveModule", { moduleName }), "tab");
@@ -601,9 +576,9 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
       const meta = el("div", state.selectedFile ? state.selectedFile.label : "请先在目录中选择 Markdown 文件", "meta");
       app.append(meta);
       app.append(moduleToolbar());
-      if (state.activeModule === "注释" || state.activeModule === "嵌入块") app.append(regexCard());
-      if (FILTER_OPTIONS[state.activeModule]) app.append(filterToolbar());
-      if (state.activeModule !== "文本块" && state.activeModule !== "分句" && state.activeModule !== "翻译") app.append(bulkToolbar());
+      if (moduleDefinition().regexCard) app.append(regexCard());
+      if (moduleDefinition().filter) app.append(filterToolbar());
+      if (moduleDefinition().bulkEdit) app.append(bulkToolbar());
       app.append(rowTable(rowsForModule()));
       requestAnimationFrame(() => {
         restoreScroll();
@@ -704,8 +679,9 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
     function filterToolbar() {
       const bar = el("div", undefined, "toolbar");
       const select = document.createElement("select");
-      const options = FILTER_OPTIONS[state.activeModule] || [];
-      const current = moduleFilters[state.activeModule] || DEFAULT_FILTERS[state.activeModule];
+      const definition = moduleDefinition();
+      const options = definition.filter?.options || [];
+      const current = moduleFilters[state.activeModule] || definition.filter?.defaultValue;
       for (const value of options) select.append(new Option(value, value, false, value === current));
       select.addEventListener("change", () => {
         moduleFilters[state.activeModule] = select.value;
@@ -720,7 +696,8 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
 
     function moduleToolbar() {
       const toolbar = el("div", undefined, "toolbar");
-      if (state.activeModule === "非法断行") {
+      const toolbarKind = moduleDefinition().toolbarKind;
+      if (toolbarKind === "illegalBreak") {
         const count = state.rows.filter((row) => row.typeLabel === "非法断行").length;
         toolbar.append(
           button("保存标定", () => postKeepView("saveAnnotations"), "primary"),
@@ -729,15 +706,15 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         );
         return toolbar;
       }
-      if (state.activeModule === "文本块") {
+      if (toolbarKind === "textBlocks") {
         toolbar.append(el("span", "按 <br> 划分 · 只读派生表", "progress"));
         return toolbar;
       }
-      if (state.activeModule === "分句") {
+      if (toolbarKind === "sentences") {
         toolbar.append(el("span", "非内嵌文本块 · Intl.Segmenter + 例外合并 · 只读派生表", "progress"));
         return toolbar;
       }
-      if (state.activeModule === "翻译") {
+      if (toolbarKind === "translation") {
         const settings = state.translationSettings || { service: "deepl", exportService: "deepl", services: [] };
         const services = settings.services || [];
         const progressState = state.translationProgress || { phase: "idle", completed: 0, total: 0, failed: 0 };
@@ -782,14 +759,14 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         );
         return toolbar;
       }
-      if (state.activeModule === "章节定界") {
+      if (toolbarKind === "chapterBoundary") {
         toolbar.append(
           button("创建/打开定界工作稿", () => postKeepView("openChapterBoundaryWork"), "primary"),
           button("设置章节文件", () => setSelectedChapterBoundaryFile()),
           button("导出章节", () => postKeepView("exportChapterBoundaryChapters")),
           button("保存标定", () => postKeepView("saveAnnotations")),
         );
-      } else if (state.activeModule === "章节标题") {
+      } else if (toolbarKind === "chapterTitle") {
         const numberingLabel = el("label", undefined, "toolbar-check");
         const numbering = document.createElement("input");
         numbering.type = "checkbox";
@@ -804,7 +781,7 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
           button("保存标定", () => postKeepView("saveAnnotations")),
           button("重新加载标定", () => postKeepView("reloadAnnotations")),
         );
-      } else if (state.activeModule === "注释") {
+      } else if (toolbarKind === "annotation") {
         const summary = state.annotationMatchSummary;
         toolbar.append(
           button("打开注释订正工作稿", () => postKeepView("openAnnotationWorkingCopy")),
@@ -861,7 +838,7 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
     function bulkToolbar() {
       const bar = el("div", undefined, "bulk");
       const select = document.createElement("select");
-      for (const value of LINE_TYPES[state.activeModule]) select.append(new Option(value, value));
+      for (const value of moduleDefinition().lineTypes) select.append(new Option(value, value));
       const count = el("span", "已选 " + selected.size);
       count.id = "selected-count";
       bar.append(
@@ -876,19 +853,20 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
     }
 
     function rowTable(rows) {
+      const definition = moduleDefinition();
       const wrap = el("div", undefined, "table-wrap");
       wrap.addEventListener("scroll", () => {
         scrollByModule[state.activeModule] = { top: wrap.scrollTop, left: wrap.scrollLeft };
         persistViewState();
       }, { passive: true });
-      if (!rows.length && state.activeModule !== "非法断行") {
+      if (!rows.length && definition.tableKind !== "illegalBreak") {
         wrap.append(el("div", "当前模块没有记录。", "empty"));
         return wrap;
       }
       const table = document.createElement("table");
       const head = document.createElement("thead");
       const headRow = document.createElement("tr");
-      if (state.activeModule !== "文本块" && state.activeModule !== "分句" && state.activeModule !== "翻译") {
+      if (definition.selectable) {
         const selectCell = el("th", undefined, "check-column");
         const selectAll = document.createElement("input");
         const visibleIds = rows.map((row) => row.id);
@@ -908,8 +886,8 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         selectCell.append(selectAll, document.createTextNode(" 多选"));
         headRow.append(selectCell);
       }
-      headRow.append(sortableHeader(state.activeModule === "非法断行" ? "断行位置" : "行号", "line", "line-column"));
-      if (state.activeModule === "非法断行") {
+      headRow.append(sortableHeader(definition.tableKind === "illegalBreak" ? "断行位置" : "行号", "line", "line-column"));
+      if (definition.tableKind === "illegalBreak") {
         headRow.append(
           sortableHeader("行类型", "lineType"),
           el("th", "上一行"),
@@ -917,39 +895,36 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
           sortableHeader("合并预览", "preview"),
           el("th", "判断"),
         );
-      } else if (state.activeModule === "分句" || state.activeModule === "翻译") {
+      } else if (definition.tableKind === "sentenceDerived" || definition.tableKind === "translation") {
         headRow.append(
           el("th", "文本块"),
-          el("th", state.activeModule === "翻译" ? "单元序号" : "句内序号"),
+          el("th", definition.tableKind === "translation" ? "单元序号" : "句内序号"),
         );
       }
-      if (state.activeModule === "注释" && ANNOTATION_EXTRA_COLUMNS.includes("注释号")) {
+      if (definition.extraColumns.includes("annotationNumber") && ANNOTATION_EXTRA_COLUMNS.includes("注释号")) {
         headRow.append(sortableHeader("注释号", "number", "number-column"));
       }
-      if (state.activeModule === "嵌入块" && EMBED_EXTRA_COLUMNS.includes("序号")) {
+      if (definition.extraColumns.includes("embedNumber") && EMBED_EXTRA_COLUMNS.includes("序号")) {
         headRow.append(sortableHeader("序号", "embedNumber", "number-column"));
       }
-      if (state.activeModule === "章节定界" && CHAPTER_BOUNDARY_EXTRA_COLUMNS.includes("章节文件")) {
+      if (definition.extraColumns.includes("chapterFile") && CHAPTER_BOUNDARY_EXTRA_COLUMNS.includes("章节文件")) {
         headRow.append(sortableHeader("章节文件", "chapterFile", "chapter-file-column"));
       }
-      if (state.activeModule === "非法断行") {
+      if (definition.tableKind === "illegalBreak") {
         // Dedicated derived-table columns were appended above.
-      } else if (state.activeModule === "翻译") {
+      } else if (definition.tableKind === "translation") {
         headRow.append(sortableHeader("来源类型", "lineType"), sortableHeader("原文", "preview"));
         const services = state.translationSettings?.services || [];
         for (const item of services) headRow.append(el("th", item.label + "译文"));
       } else {
         headRow.append(
-          sortableHeader(
-            state.activeModule === "文本块" ? "文本块类型" : state.activeModule === "分句" ? "来源类型" : "行类型",
-            "lineType",
-          ),
+          sortableHeader(definition.typeColumnLabel, "lineType"),
           sortableHeader("预览", "preview"),
         );
       }
       head.append(headRow);
       const body = document.createElement("tbody");
-      if (!rows.length && state.activeModule === "非法断行") {
+      if (!rows.length && definition.tableKind === "illegalBreak") {
         const emptyRow = document.createElement("tr");
         const emptyCell = el("td", "扫描完成：当前章节未发现疑似非法断行。", "empty");
         emptyCell.colSpan = 7;
@@ -968,46 +943,51 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
     }
 
     function candidateRow(candidate, pair) {
+      const definition = moduleDefinition();
       const row = document.createElement("tr");
       if (candidate.lineType === DELETED) row.classList.add("deleted");
       if (candidate.chapterBoundaryState === "added") row.classList.add("added");
       if (candidate.chapterBoundaryState === "modified") row.classList.add("modified");
       if (candidate.chapterBoundaryState === "deleted") row.classList.add("removed");
-      if (state.activeModule === "翻译" && candidate.translationStatus === "失败") row.classList.add("translation-failed");
-      const missingNumber = state.activeModule === "注释"
+      if (definition.tableKind === "translation" && candidate.translationStatus === "失败") row.classList.add("translation-failed");
+      const missingNumber = definition.extraColumns.includes("annotationNumber")
         && (candidate.lineType === "注释引用" || candidate.lineType === "注释正文")
         && !String(candidate.annotationNumber || "").trim();
-      const missingChapterFile = state.activeModule === "章节定界"
+      const missingChapterFile = definition.extraColumns.includes("chapterFile")
         && candidate.lineType === "1 级标题"
         && !String(candidate.chapterFile || "").trim();
       if (missingNumber) row.classList.add("missing-number");
       if (missingChapterFile) row.classList.add("missing-chapter-file");
 
-      const checkCell = document.createElement("td");
-      const check = document.createElement("input");
-      check.type = "checkbox";
-      check.className = "row-check";
-      check.checked = selected.has(candidate.id);
-      check.setAttribute("data-row-id", candidate.id);
-      check.setAttribute("data-field", "check");
-      check.addEventListener("click", (event) => event.stopPropagation());
-      check.addEventListener("focus", () => rememberFocus(candidate.id, "check"));
-      check.addEventListener("change", () => {
-        if (check.checked) selected.add(candidate.id); else selected.delete(candidate.id);
-        syncSelectionChrome();
-      });
-      checkCell.append(check);
-      if (state.activeModule !== "文本块" && state.activeModule !== "分句" && state.activeModule !== "翻译") row.append(checkCell);
-      row.append(el("td", state.activeModule === "非法断行"
+      if (definition.selectable) {
+        const checkCell = document.createElement("td");
+        const check = document.createElement("input");
+        check.type = "checkbox";
+        check.className = "row-check";
+        check.checked = selected.has(candidate.id);
+        check.setAttribute("data-row-id", candidate.id);
+        check.setAttribute("data-field", "check");
+        check.addEventListener("click", (event) => event.stopPropagation());
+        check.addEventListener("focus", () => rememberFocus(candidate.id, "check"));
+        check.addEventListener("change", () => {
+          if (check.checked) selected.add(candidate.id); else selected.delete(candidate.id);
+          syncSelectionChrome();
+        });
+        checkCell.append(check);
+        row.append(checkCell);
+      }
+
+      row.append(el("td", definition.tableKind === "illegalBreak"
         ? String(candidate.range.line + 1) + " → " + String((candidate.range.endLine ?? candidate.range.line) + 1)
         : String(candidate.range.line + 1)));
-      if (state.activeModule === "非法断行") {
+
+      if (definition.tableKind === "illegalBreak") {
         const typeCell = document.createElement("td");
         const typeSelect = document.createElement("select");
         typeSelect.className = "line-type";
         typeSelect.setAttribute("data-row-id", candidate.id);
         typeSelect.setAttribute("data-field", "lineType");
-        for (const value of LINE_TYPES["非法断行"]) typeSelect.append(new Option(value, value, false, value === candidate.lineType));
+        for (const value of definition.lineTypes) typeSelect.append(new Option(value, value, false, value === candidate.lineType));
         typeSelect.addEventListener("click", (event) => event.stopPropagation());
         typeSelect.addEventListener("focus", () => rememberFocus(candidate.id, "lineType"));
         typeSelect.addEventListener("change", () => {
@@ -1024,16 +1004,18 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         row.append(typeCell, previousCell, nextCell, mergedCell, reasonCell);
         return row;
       }
-      if (state.activeModule === "分句" || state.activeModule === "翻译") {
+
+      if (definition.tableKind === "sentenceDerived" || definition.tableKind === "translation") {
         row.append(
           el("td", candidate.parentBlockIndex == null ? "" : "B" + String(candidate.parentBlockIndex).padStart(3, "0")),
           el("td", candidate.sentenceIndex == null ? "" : String(candidate.sentenceIndex)),
         );
       }
-      if (state.activeModule === "嵌入块") {
+
+      if (definition.extraColumns.includes("embedNumber")) {
         row.append(el("td", candidate.embedNumber == null ? "" : String(candidate.embedNumber)));
       }
-      if (state.activeModule === "注释") {
+      if (definition.extraColumns.includes("annotationNumber")) {
         const numberCell = document.createElement("td");
         const numberInput = document.createElement("input");
         numberInput.className = "annotation-number" + (missingNumber ? " missing" : "");
@@ -1048,7 +1030,7 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         numberCell.append(numberInput);
         row.append(numberCell);
       }
-      if (state.activeModule === "章节定界") {
+      if (definition.extraColumns.includes("chapterFile")) {
         const fileCell = document.createElement("td");
         const fileInput = document.createElement("input");
         fileInput.className = "chapter-file" + (missingChapterFile ? " missing" : "");
@@ -1065,14 +1047,14 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
       }
 
       const typeCell = document.createElement("td");
-      if (state.activeModule === "非法断行" || state.activeModule === "文本块" || state.activeModule === "分句" || state.activeModule === "翻译") {
+      if (!definition.editableLineType) {
         typeCell.append(el("span", candidate.lineType || "文本"));
       } else {
         const typeSelect = document.createElement("select");
         typeSelect.className = "line-type";
         typeSelect.setAttribute("data-row-id", candidate.id);
         typeSelect.setAttribute("data-field", "lineType");
-        for (const value of LINE_TYPES[state.activeModule]) typeSelect.append(new Option(value, value, false, value === candidate.lineType));
+        for (const value of definition.lineTypes) typeSelect.append(new Option(value, value, false, value === candidate.lineType));
         typeSelect.addEventListener("click", (event) => event.stopPropagation());
         typeSelect.addEventListener("focus", () => rememberFocus(candidate.id, "lineType"));
         typeSelect.addEventListener("change", () => {
@@ -1080,11 +1062,13 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         });
         typeCell.append(typeSelect);
       }
+
       const previewCell = el("td", undefined, "preview");
-      previewCell.append(state.activeModule === "章节标题"
+      previewCell.append(definition.previewKind === "chapterHeading"
         ? chapterTitlePreview(candidate)
         : el("div", previewText(candidate), "preview-content"));
-      if (state.activeModule === "翻译") {
+
+      if (definition.tableKind === "translation") {
         row.append(typeCell, previewCell);
         const services = state.translationSettings?.services || [];
         for (const item of services) {
@@ -1102,7 +1086,7 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         row.append(typeCell, previewCell);
       }
 
-      if (state.activeModule === "注释") {
+      if (definition.detailKind === "annotationPair") {
         const status = pair
           ? pair.pairId + " · " + pair.status
           : (missingNumber ? "未配对，请输入注释号" : "未配对");
@@ -1111,7 +1095,7 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
           : pair ? "pair-status matched" : "pair-status";
         previewCell.append(el("div", status, statusClass + " preview-detail"));
       }
-      if (state.activeModule === "嵌入块") {
+      if (definition.detailKind === "embedDownload") {
         if (candidate.imageDownloadStatus === "done" && candidate.localPath) {
           previewCell.append(el("div", "下载：已保存 " + candidate.localPath, "preview-detail"));
         } else if (candidate.imageDownloadStatus === "failed") {
