@@ -81,6 +81,38 @@ const corrected = app.annotationWorkingText(working);
 assert.ok(corrected.includes("[^1]"), "annotation working text must convert reviewed references to Markdown footnotes");
 assert.ok(corrected.includes("[^10]:"), "annotation working text must convert reviewed note bodies to Markdown footnotes");
 
+const embedResult = app.refreshEmbed({
+  baselineText: source,
+  workingText: working,
+  sourcePath,
+  workingPath,
+  sourceLabel: sidecar.rows.find((row) => row.sourceLabel)?.sourceLabel ?? "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md",
+  patterns: splitPatterns(MODULE_REGEX_DEFAULTS["嵌入块"] ?? ""),
+});
+assert.deepStrictEqual(
+  countByType(embedResult.rows),
+  countByType(sidecar.rows),
+  "platform-independent embed refresh must preserve the real reviewed module/line-type counts",
+);
+assert.strictEqual(
+  embedResult.rows.filter((row) => row.typeLabel === "嵌入块" && row.lineType === "已忽略").length,
+  12,
+  "reviewed ignored embed rows must survive refresh",
+);
+assert.strictEqual(
+  embedResult.rows.filter((row) => row.typeLabel === "嵌入块" && row.lineType === "已删除").length,
+  2,
+  "reviewed deleted embed rows must survive refresh",
+);
+assert.ok(
+  embedResult.rows.filter((row) => row.typeLabel === "嵌入块" && row.lineType === "嵌入块首").every((row) => row.embedNumber != null),
+  "live embed block starts must be renumbered in the application layer",
+);
+assert.ok(
+  embedResult.rows.filter((row) => row.typeLabel === "嵌入块" && row.lineType === "已忽略").every((row) => row.embedNumber == null),
+  "ignored embed rows must stay outside embed numbering",
+);
+
 console.log("chapterReviewApplication tests passed");
 
 function splitPatterns(value: string): string[] {

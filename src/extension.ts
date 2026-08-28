@@ -28,7 +28,6 @@ import {
   attachScanIdentities,
   locateCandidate,
   reconcileRows,
-  relocateRows,
 } from "./rowIdentity";
 import { exportByCalibration } from "./calibrationExport";
 import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
@@ -75,7 +74,6 @@ import {
 import {
   applyEmbedNumbers,
   detectEmbedLineType,
-  mergeEmbedScan,
 } from "./scanner";
 import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
 import type {
@@ -1044,31 +1042,17 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
 
-    const unique = new Map<string, Candidate>();
-    for (const candidate of mergeEmbedScan(text, patterns)) {
-      unique.set(candidatePositionKey({ ...candidate, sourcePath: source, workingCopyPath: workingPath }), {
-        ...candidate,
-        typeLabel: moduleName,
-        lineType: candidate.lineType ?? defaultLineType(moduleName, candidate.raw),
-        sourcePath: source,
-        sourceLabel,
-        workingCopyPath: workingPath,
-      });
-    }
-    const scanned = attachScanIdentities([...unique.values()], text, { moduleName, sourcePath: source });
-    const previous = this.rows.filter((row) => row.typeLabel === moduleName && row.sourcePath === source);
-    let reconciled = reconcileRows(previous, scanned, text);
-    const present = new Set(reconciled.map((row) => row.id));
-    const extras = previous.filter((row) =>
-      !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
-    reconciled = applyEmbedNumbers(
-      dedupeImageRows([...reconciled, ...relocateRows(extras, text)], text),
-      text,
-    );
-    this.rows = [
-      ...this.rows.filter((row) => !(row.typeLabel === moduleName && row.sourcePath === source)),
-      ...reconciled,
-    ].sort(compareRows);
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.refreshEmbed({
+      baselineText: await this.readChapterOriginalText(),
+      workingText: text,
+      sourcePath: source,
+      workingPath,
+      sourceLabel,
+      patterns,
+    });
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     if (!options.silent) this.update();
   }
 
@@ -2271,28 +2255,6 @@ function rowBelongsToChapter(row: Candidate, originalPath: string | undefined, w
   return Boolean(originalPath) && (row.sourcePath === originalPath || row.workingCopyPath === originalPath);
 }
 
-function dedupeImageRows(rows: Candidate[], text?: string): Candidate[] {
-  const deleted = rows.filter((row) => row.chapterBoundaryState === "deleted");
-  const live = rows.filter((row) => row.chapterBoundaryState !== "deleted");
-  const lines = text ? text.replace(/\r\n?/g, "\n").split("\n") : undefined;
-  const score = (row: Candidate): number => {
-    const lineText = lines?.[row.range.line];
-    if (lineText === undefined) return 0;
-    const raw = (row.raw ?? "").split("\n")[0]?.trim() ?? "";
-    if (lineText === row.raw) return 5;
-    if (lineText.trim() === raw) return 4;
-    if (detectEmbedLineType(lineText) === row.lineType) return 3;
-    if (raw && lineText.includes(raw)) return 2;
-    return 0;
-  };
-  const byLine = new Map<number, Candidate>();
-  for (const row of live) {
-    const existing = byLine.get(row.range.line);
-    if (!existing || score(row) > score(existing)) byLine.set(row.range.line, row);
-  }
-  return [...deleted, ...byLine.values()].sort(compareRows);
-}
-
 function defaultLineType(moduleName: ModuleName, raw: string): string {
   if (moduleName === "章节定界") return /^ {0,3}#(?!#)(?:\s+|$)/.test(raw) ? "1 级标题" : "修改";
   if (moduleName === "章节标题") {
@@ -2305,9 +2267,6 @@ function defaultLineType(moduleName: ModuleName, raw: string): string {
   return detectEmbedLineType(raw) ?? "嵌入文本";
 }
 
-function candidatePositionKey(row: Candidate): string {
-  return `${row.sourcePath}\0${row.range.line}\0${row.range.start}\0${row.raw}`;
-}
 
 
 function compareRows(left: Candidate, right: Candidate): number {

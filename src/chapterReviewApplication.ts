@@ -13,6 +13,7 @@ import {
   hashText,
   locateCandidate,
   reconcileRows,
+  relocateRows,
 } from "./rowIdentity";
 import {
   applyEmbedNumbers,
@@ -51,6 +52,15 @@ export interface RefreshAnnotationInput {
   patterns: readonly string[];
 }
 
+export interface RefreshEmbedInput {
+  baselineText?: string;
+  workingText: string;
+  sourcePath: string;
+  workingPath: string;
+  sourceLabel: string;
+  patterns: readonly string[];
+}
+
 
 /**
  * Platform-independent application service for the chapter review workflow.
@@ -75,6 +85,11 @@ export class ChapterReviewApplication {
 
   refreshAnnotation(input: RefreshAnnotationInput): ChapterReviewApplicationState {
     this.state = refreshAnnotationReviewState(this.state, input);
+    return this.snapshot();
+  }
+
+  refreshEmbed(input: RefreshEmbedInput): ChapterReviewApplicationState {
+    this.state = refreshEmbedReviewState(this.state, input);
     return this.snapshot();
   }
 
@@ -238,6 +253,49 @@ export function refreshAnnotationReviewState(
   ].sort(compareRows);
   return rebuildAnnotationReviewState(rows, state.annotationPairs);
 }
+
+
+export function refreshEmbedReviewState(
+  state: ChapterReviewApplicationState,
+  input: RefreshEmbedInput,
+): ChapterReviewApplicationState {
+  const { workingText, sourcePath, workingPath, sourceLabel } = input;
+  const scope = { sourcePath, workingPath };
+  const scanned = attachScanIdentities(
+    mergeEmbedScan(workingText, [...input.patterns]).map((row) => ({
+      ...row,
+      typeLabel: "嵌入块" as const,
+      lineType: row.lineType ?? detectEmbedLineType(row.raw) ?? "嵌入文本",
+      sourcePath,
+      sourceLabel,
+      workingCopyPath: workingPath,
+    })),
+    workingText,
+    { moduleName: "嵌入块", sourcePath },
+  );
+  const previous = state.rows.filter((row) => row.typeLabel === "嵌入块" && rowBelongsToScope(row, scope));
+  let reconciled = reconcileRows(previous, scanned, workingText);
+  const present = new Set(reconciled.map((row) => row.id));
+  const extras = previous.filter((row) =>
+    !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
+  reconciled = applyEmbedNumbers(
+    dedupeImageRows([...reconciled, ...relocateRows(extras, workingText)], workingText),
+    workingText,
+  );
+  if (input.baselineText !== undefined) {
+    const changes = scanChapterBoundaryLines(chapterDiffBaseline(input.baselineText, workingText), workingText);
+    reconciled = applyEmbedNumbers(
+      reconciled.map((row) => applyChangeState(row, changes)),
+      workingText,
+    );
+  }
+  const rows = [
+    ...state.rows.filter((row) => !(row.typeLabel === "嵌入块" && rowBelongsToScope(row, scope))),
+    ...reconciled,
+  ].sort(compareRows);
+  return { rows, annotationPairs: state.annotationPairs };
+}
+
 
 export function buildAnnotationWorkingText(text: string, rows: readonly Candidate[]): string {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
