@@ -14,6 +14,11 @@ for (const implementationDetail of [
   "candidatesFromSidecar",
   "withChapterFrontmatter",
   "vscode.workspace.findFiles",
+  "extractLocalImagePath",
+  "timestampedImageName",
+  "chapterCalibrationOutputDirectory",
+  "chapterTransOutputPath",
+  "chapterAnnotationWorkingPath",
 ]) {
   assert.ok(!extension.includes(implementationDetail), `workspace workflow leaked back into extension: ${implementationDetail}`);
 }
@@ -25,6 +30,11 @@ for (const delegation of [
   "chapterWorkspace.ensureChapterBoundaryWork",
   "chapterWorkspace.writeChapterBoundarySegments",
   "chapterWorkspace.discoverWorkspaceFiles",
+  "chapterWorkspace.ensureAnnotationWorkingCopy",
+  "chapterWorkspace.planLocalImageExportPaths",
+  "chapterWorkspace.copyLocalImagesForExport",
+  "chapterWorkspace.writeCalibrationOutput",
+  "chapterWorkspace.writeTransOutput",
 ]) {
   assert.ok(extension.includes(delegation), `VS Code host must delegate workspace workflow: ${delegation}`);
 }

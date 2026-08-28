@@ -61,10 +61,8 @@ import {
 } from "./translationState";
 import {
   extractImageUrl,
-  extractLocalImagePath,
   safeImageName,
   shouldDownloadImage,
-  timestampedImageName,
 } from "./imageDownload";
 import {
   applyEmbedNumbers,
@@ -95,13 +93,10 @@ import {
   CHAPTER_BOUNDARY_WORKING_FILE,
   CHAPTER_IMAGE_DIRECTORY,
   TRANS_OUTPUT_DIRECTORY,
-  chapterCalibrationOutputDirectory,
-  chapterAnnotationWorkingPath,
   chapterDiffBaseline,
   chapterDirectoryPath,
   chapterDisplayName,
   chapterImageDirectory,
-  chapterTransOutputPath,
   isChapterOutputPath,
   markdownFileKind,
   withFormatCalibratedFrontmatter,
@@ -1235,13 +1230,10 @@ class Ocr2mdExtension implements vscode.Disposable {
       void vscode.window.showWarningMessage("请先选择 Markdown 文件。");
       return;
     }
-    const uri = vscode.Uri.file(chapterAnnotationWorkingPath(file.path));
-    await this.storage.createDirectory(path.dirname(uri.fsPath));
-    if (!(await this.storage.exists(uri.fsPath))) {
-      const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
-      const corrected = application.annotationWorkingText(this.selectedFileText);
-      await writeText(this.storage, uri.fsPath, corrected);
-    }
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const corrected = application.annotationWorkingText(this.selectedFileText);
+    const workingPath = await this.chapterWorkspace.ensureAnnotationWorkingCopy(file.path, corrected);
+    const uri = vscode.Uri.file(workingPath);
     this.annotationWorkingUri = uri;
     this.modulePreviewPaths.set("注释", uri.fsPath);
     await this.showDocumentPair(uri);
@@ -1545,53 +1537,17 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private async planLocalImageExportPaths(working: vscode.Uri) {
-    const sourceDirectory = path.dirname(working.fsPath);
-    const patches = new Map<string, string>();
-    for (const row of activeCandidates(this.rows)) {
-      if (row.typeLabel !== "嵌入块" || row.lineType !== "嵌入链接" || row.localPath) continue;
-      const localReference = extractLocalImagePath(row.raw);
-      if (!localReference) continue;
-      const sourcePath = path.isAbsolute(localReference)
-        ? localReference
-        : path.resolve(sourceDirectory, localReference);
-      try {
-        const stat = await this.storage.stat(sourcePath);
-        patches.set(row.id, `${CHAPTER_IMAGE_DIRECTORY}/${timestampedImageName(sourcePath, stat.mtime)}`);
-      } catch {
-        // Leave unresolved local images unchanged so the source remains inspectable.
-      }
-    }
-    if (!patches.size) return;
-    this.rows = this.rows.map((row) => {
-      const localPath = patches.get(row.id);
-      return localPath ? { ...row, localPath } : row;
-    });
+    this.rows = await this.chapterWorkspace.planLocalImageExportPaths(this.rows, working.fsPath);
   }
 
   private async copyLocalImagesForExport(working: vscode.Uri) {
     const file = this.selectedFile;
     if (!file) return;
-    await this.planLocalImageExportPaths(working);
-    const sourceDirectory = path.dirname(working.fsPath);
-    const chapterDirectory = path.dirname(file.path);
-    const imageDirectory = chapterImageDirectory(file.path);
-    await this.storage.createDirectory(imageDirectory);
-    for (const row of activeCandidates(this.rows)) {
-      if (row.typeLabel !== "嵌入块" || row.lineType !== "嵌入链接") continue;
-      const localReference = extractLocalImagePath(row.raw);
-      if (!localReference || !row.localPath) continue;
-      const sourcePath = path.isAbsolute(localReference)
-        ? localReference
-        : path.resolve(sourceDirectory, localReference);
-      if (!(await this.storage.exists(sourcePath))) {
-        throw new Error(`本地图片不存在：${localReference}`);
-      }
-      const targetPath = path.resolve(chapterDirectory, row.localPath);
-      await this.storage.createDirectory(path.dirname(targetPath));
-      if (sourcePath !== targetPath) {
-        await this.storage.copy(sourcePath, targetPath, { overwrite: true });
-      }
-    }
+    this.rows = await this.chapterWorkspace.copyLocalImagesForExport({
+      filePath: file.path,
+      workingPath: working.fsPath,
+      rows: this.rows,
+    });
     await this.saveSidecar({ silent: true });
   }
 
@@ -1610,10 +1566,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     const markdown = exportByCalibration(this.selectedFileText, this.rows, { numberHeadings: this.headingNumberingEnabled });
-    const directoryPath = chapterCalibrationOutputDirectory(file.path);
-    const outputUri = vscode.Uri.file(path.join(directoryPath, `${path.parse(file.path).name}.md`));
-    await this.storage.createDirectory(directoryPath);
-    await writeText(this.storage, outputUri.fsPath, markdown);
+    const outputPath = await this.chapterWorkspace.writeCalibrationOutput(file.path, markdown);
+    const outputUri = vscode.Uri.file(outputPath);
     await this.showDocumentPair(outputUri);
     void vscode.window.showInformationMessage(`已按标定导出到 ${outputUri.fsPath}`);
   }
@@ -1636,9 +1590,8 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     const markdown = withFormatCalibratedFrontmatter(exportByCalibration(this.selectedFileText, this.rows, { numberHeadings: this.headingNumberingEnabled }));
-    const outputUri = vscode.Uri.file(chapterTransOutputPath(workspace.uri.fsPath, file.path));
-    await this.storage.createDirectory(path.dirname(outputUri.fsPath));
-    await writeText(this.storage, outputUri.fsPath, markdown);
+    const outputPath = await this.chapterWorkspace.writeTransOutput(workspace.uri.fsPath, file.path, markdown);
+    const outputUri = vscode.Uri.file(outputPath);
     this.directoryProvider.refresh();
     await this.showDocumentPair(outputUri);
     void vscode.window.showInformationMessage(`已导出标定到 trans：${outputUri.fsPath}`);

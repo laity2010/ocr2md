@@ -72,6 +72,27 @@ void (async () => {
     workingCopyPath: workingPath, status: "候选",
   }];
   const annotationPairs: AnnotationPair[] = [];
+  const annotationWorkingPath = await app.ensureAnnotationWorkingCopy(originalPath, "corrected annotation");
+  assert.strictEqual(await readText(storage, annotationWorkingPath), "corrected annotation");
+  await writeText(storage, annotationWorkingPath, "manual annotation edit");
+  await app.ensureAnnotationWorkingCopy(originalPath, "should not overwrite");
+  assert.strictEqual(await readText(storage, annotationWorkingPath), "manual annotation edit");
+
+  const sourceImagePath = path.join(path.dirname(workingPath), "local.png");
+  await storage.writeFile(sourceImagePath, Uint8Array.from([1, 2, 3]));
+  const embedRow: Candidate = {
+    id: "embed-1", rowId: "embed-1", atomId: "embed-atom-1", kind: "regex", label: "image", raw: "![](local.png)", preview: "![](local.png)",
+    range: { line: 8, start: 0, end: 14 }, typeLabel: "嵌入块", lineType: "嵌入链接", sourcePath: originalPath, workingCopyPath: workingPath, status: "候选",
+  };
+  const copiedRows = await app.copyLocalImagesForExport({ filePath: originalPath, workingPath, rows: [embedRow] });
+  assert.ok(copiedRows[0].localPath?.startsWith("imgs/"));
+  assert.strictEqual(await storage.exists(path.resolve(path.dirname(originalPath), copiedRows[0].localPath!)), true);
+
+  const calibrationOutput = await app.writeCalibrationOutput(originalPath, "calibrated");
+  assert.strictEqual(await readText(storage, calibrationOutput), "calibrated");
+  const transOutput = await app.writeTransOutput(workspaceRoot, originalPath, "translated-source");
+  assert.strictEqual(await readText(storage, transOutput), "translated-source");
+
   const savedPath = await app.saveSidecar({ filePath: originalPath, rows, annotationPairs });
   assert.strictEqual(savedPath, chapterSidecarPath(originalPath));
   const savedRaw = JSON.parse(await readText(storage, savedPath));

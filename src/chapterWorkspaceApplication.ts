@@ -1,5 +1,7 @@
 import * as path from "path";
 import type { ChapterBoundarySegment } from "./chapterBoundary";
+import { activeCandidates } from "./candidateLifecycle";
+import { extractLocalImagePath, timestampedImageName } from "./imageDownload";
 import { rowBelongsToScope } from "./chapterReviewActions";
 import { candidatesFromSidecar, serializeSidecar } from "./sidecar";
 import type { AnnotationPair, Candidate, FileEntry } from "./types";
@@ -8,6 +10,8 @@ import {
   CHAPTER_BOUNDARY_WORKING_FILE,
   CHAPTER_CHANGED_PROPERTY,
   TRANS_OUTPUT_DIRECTORY,
+  chapterAnnotationWorkingPath,
+  chapterCalibrationOutputDirectory,
   chapterContentsDiffer,
   chapterDirectoryPath,
   chapterImageDirectory,
@@ -15,6 +19,7 @@ import {
   chapterOriginalPath,
   chapterOutputBaselinePath,
   chapterSidecarPath,
+  chapterTransOutputPath,
   chapterWorkingCopyPath,
   isChapterOutputPath,
   markdownFileKind,
@@ -155,6 +160,73 @@ export class ChapterWorkspaceApplication {
       .sort(compareRows);
     const annotationPairs = (loaded.annotationPairs ?? []).filter((pair) => pair.sourcePath === input.filePath);
     return { rows, annotationPairs, sidecarPath };
+  }
+
+  async ensureAnnotationWorkingCopy(filePath: string, correctedText: string): Promise<string> {
+    const workingPath = chapterAnnotationWorkingPath(filePath);
+    await this.storage.createDirectory(path.dirname(workingPath));
+    if (!(await this.storage.exists(workingPath))) await writeText(this.storage, workingPath, correctedText);
+    return workingPath;
+  }
+
+  async planLocalImageExportPaths(rows: readonly Candidate[], workingPath: string): Promise<Candidate[]> {
+    const sourceDirectory = path.dirname(workingPath);
+    const patches = new Map<string, string>();
+    for (const row of activeCandidates([...rows])) {
+      if (row.typeLabel !== "嵌入块" || row.lineType !== "嵌入链接" || row.localPath) continue;
+      const localReference = extractLocalImagePath(row.raw);
+      if (!localReference) continue;
+      const sourcePath = path.isAbsolute(localReference)
+        ? localReference
+        : path.resolve(sourceDirectory, localReference);
+      try {
+        const stat = await this.storage.stat(sourcePath);
+        patches.set(row.id, `imgs/${timestampedImageName(sourcePath, stat.mtime)}`);
+      } catch {
+        // Keep unresolved local references unchanged for manual review.
+      }
+    }
+    if (!patches.size) return [...rows];
+    return rows.map((row) => patches.has(row.id) ? { ...row, localPath: patches.get(row.id) } : row);
+  }
+
+  async copyLocalImagesForExport(input: {
+    filePath: string;
+    workingPath: string;
+    rows: readonly Candidate[];
+  }): Promise<Candidate[]> {
+    const rows = await this.planLocalImageExportPaths(input.rows, input.workingPath);
+    const sourceDirectory = path.dirname(input.workingPath);
+    const chapterDirectory = path.dirname(input.filePath);
+    await this.storage.createDirectory(chapterImageDirectory(input.filePath));
+    for (const row of activeCandidates([...rows])) {
+      if (row.typeLabel !== "嵌入块" || row.lineType !== "嵌入链接") continue;
+      const localReference = extractLocalImagePath(row.raw);
+      if (!localReference || !row.localPath) continue;
+      const sourcePath = path.isAbsolute(localReference)
+        ? localReference
+        : path.resolve(sourceDirectory, localReference);
+      if (!(await this.storage.exists(sourcePath))) throw new Error(`本地图片不存在：${localReference}`);
+      const targetPath = path.resolve(chapterDirectory, row.localPath);
+      await this.storage.createDirectory(path.dirname(targetPath));
+      if (sourcePath !== targetPath) await this.storage.copy(sourcePath, targetPath, { overwrite: true });
+    }
+    return rows;
+  }
+
+  async writeCalibrationOutput(filePath: string, markdown: string): Promise<string> {
+    const directoryPath = chapterCalibrationOutputDirectory(filePath);
+    const outputPath = path.join(directoryPath, `${path.parse(filePath).name}.md`);
+    await this.storage.createDirectory(directoryPath);
+    await writeText(this.storage, outputPath, markdown);
+    return outputPath;
+  }
+
+  async writeTransOutput(workspaceRoot: string, filePath: string, markdown: string): Promise<string> {
+    const outputPath = chapterTransOutputPath(workspaceRoot, filePath);
+    await this.storage.createDirectory(path.dirname(outputPath));
+    await writeText(this.storage, outputPath, markdown);
+    return outputPath;
   }
 
   async saveSidecar(input: {
