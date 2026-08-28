@@ -13,6 +13,7 @@ import { splitBlankLineBlocks } from "./atoms";
 import {
   applyAnnotationNumber,
   applyChapterFile,
+  applyRowsLineType,
   rebuildAnnotationReviewState,
   rowBelongsToScope,
 } from "./chapterReviewActions";
@@ -98,6 +99,21 @@ export interface AddManualReviewLineResult extends ChapterReviewApplicationState
   row: Candidate;
 }
 
+export interface ApplyWorkingCopyDiffInput {
+  baselineText: string;
+  currentText: string;
+  sourcePath?: string;
+  workingPath: string;
+}
+
+export interface SetReviewRowsLineTypeInput {
+  ids: readonly string[];
+  lineType: string;
+  text: string;
+  sourcePath?: string;
+  workingPath?: string;
+}
+
 export interface RefreshChapterBoundaryInput {
   baselineText: string;
   workingText: string;
@@ -157,6 +173,23 @@ export class ChapterReviewApplication {
     const result = addManualReviewLineState(this.state, input);
     this.state = { rows: result.rows, annotationPairs: result.annotationPairs };
     return result;
+  }
+
+  applyWorkingCopyDiff(input: ApplyWorkingCopyDiffInput): ChapterReviewApplicationState {
+    this.state = applyWorkingCopyDiffState(this.state, input);
+    return this.snapshot();
+  }
+
+  setRowsLineType(input: SetReviewRowsLineTypeInput): ChapterReviewApplicationState {
+    const rows = applyRowsLineType(
+      this.state.rows,
+      input.ids,
+      input.lineType,
+      input.text,
+      { sourcePath: input.sourcePath, workingPath: input.workingPath },
+    );
+    this.state = rebuildAnnotationReviewState(rows, this.state.annotationPairs);
+    return this.snapshot();
   }
 
   refreshChapterBoundary(input: RefreshChapterBoundaryInput): ChapterReviewApplicationState {
@@ -312,6 +345,20 @@ export function refreshChapterTitleReviewState(
   };
 }
 
+
+export function applyWorkingCopyDiffState(
+  state: ChapterReviewApplicationState,
+  input: ApplyWorkingCopyDiffInput,
+): ChapterReviewApplicationState {
+  const changes = scanChapterBoundaryLines(chapterDiffBaseline(input.baselineText, input.currentText), input.currentText);
+  return {
+    rows: state.rows.map((row) =>
+      rowBelongsToScope(row, { sourcePath: input.sourcePath, workingPath: input.workingPath })
+        ? applyChangeState(row, changes)
+        : row),
+    annotationPairs: state.annotationPairs,
+  };
+}
 
 export function addManualReviewLineState(
   state: ChapterReviewApplicationState,

@@ -4,16 +4,13 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import * as vscode from "vscode";
 import {
-  applyChangeState,
   mergeSequenceMarkdown,
-  scanChapterBoundaryLines,
 } from "./chapterBoundary";
 import { annotationMatchSummary } from "./annotation";
 import type { ChapterAssignMode } from "./chapterFileAssign";
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
-  IGNORED_LINE_TYPE,
   isIgnoredEmbedCandidate,
 } from "./candidateLifecycle";
 import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS } from "./regexPresets";
@@ -75,16 +72,13 @@ import { ChapterWorkspaceApplication } from "./chapterWorkspaceApplication";
 import { VsCodeWorkspaceStorage } from "./vscodeWorkspaceStorage";
 import { deleteIfExists as deleteStoredIfExists, readText, writeText, type WorkspaceStorage } from "./workspaceStorage";
 import {
-  applyRowsLineType as applyReviewRowsLineType,
   planHeadingLineTypeEdits,
-  rowBelongsToScope,
 } from "./chapterReviewActions";
 import type { UiCommandMessage } from "./uiProtocol";
 import {
   CHAPTER_BOUNDARY_WORKING_FILE,
   CHAPTER_IMAGE_DIRECTORY,
   TRANS_OUTPUT_DIRECTORY,
-  chapterDiffBaseline,
   chapterDirectoryPath,
   chapterDisplayName,
   chapterImageDirectory,
@@ -1033,10 +1027,13 @@ class Ocr2mdExtension implements vscode.Disposable {
     const baseline = await this.readChapterOriginalText();
     if (baseline === undefined) return rows;
     const workingPath = this.chapterWorkingUri?.fsPath ?? "";
-    const originalPath = this.selectedFile?.path;
-    const changes = scanChapterBoundaryLines(chapterDiffBaseline(baseline, current), current);
-    return rows.map((row) =>
-      rowBelongsToScope(row, { sourcePath: originalPath, workingPath }) ? applyChangeState(row, changes) : row);
+    const application = new ChapterReviewApplication({ rows, annotationPairs: this.annotationPairs });
+    return application.applyWorkingCopyDiff({
+      baselineText: baseline,
+      currentText: current,
+      sourcePath: this.selectedFile?.path,
+      workingPath,
+    }).rows;
   }
 
   private async readWorkingText(uri: vscode.Uri, override?: string): Promise<string> {
@@ -1141,15 +1138,22 @@ class Ocr2mdExtension implements vscode.Disposable {
   private async setRowsLineType(ids: string[], lineType: string) {
     const selected = new Set(ids);
     const selectedRows = this.rows.filter((row) => selected.has(row.id));
-    if (lineType === IGNORED_LINE_TYPE && selectedRows.some((row) => row.typeLabel !== "嵌入块" && row.typeLabel !== "章节定界" && row.typeLabel !== "非法断行")) return;
     const titleRows = selectedRows.filter((row) => row.typeLabel === "章节标题");
     if (lineType !== DELETED_LINE_TYPE && titleRows.length && /^(?:[1-6] 级标题|非标题)$/.test(lineType)) {
       await this.applyHeadingLineType(titleRows, lineType);
     }
     const sourcePath = this.selectedFile?.path;
     const workingPath = this.chapterWorkingUri?.fsPath ?? sourcePath;
-    this.rows = applyReviewRowsLineType(this.rows, ids, lineType, this.selectedFileText, { sourcePath, workingPath });
-    this.rebuildAnnotationPairs();
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.setRowsLineType({
+      ids,
+      lineType,
+      text: this.selectedFileText,
+      sourcePath,
+      workingPath,
+    });
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     this.update();
   }
 

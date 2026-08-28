@@ -122,6 +122,23 @@ assert.deepStrictEqual(
 assert.strictEqual(breakResult.rows.filter((row) => row.typeLabel === "非法断行" && row.lineType === "合并").length, 6);
 assert.strictEqual(breakResult.rows.filter((row) => row.typeLabel === "非法断行" && row.lineType === "已忽略").length, 3);
 
+const diffApp = new ChapterReviewApplication({ rows: sidecar.rows, annotationPairs: sidecar.annotationPairs });
+const diffState = diffApp.applyWorkingCopyDiff({ baselineText: source, currentText: working, sourcePath, workingPath });
+assert.deepStrictEqual(
+  countByType(diffState.rows),
+  countByType(sidecar.rows),
+  "working-copy diff application must preserve the reviewed real fixture state",
+);
+
+const lineTypeApp = new ChapterReviewApplication({ rows: sidecar.rows, annotationPairs: sidecar.annotationPairs });
+const firstEmbed = sidecar.rows.find((row) => row.typeLabel === "嵌入块" && row.lineType === "嵌入文本");
+assert.ok(firstEmbed);
+const ignoredEmbedState = lineTypeApp.setRowsLineType({
+  ids: [firstEmbed!.id], lineType: "已忽略", text: working, sourcePath, workingPath,
+});
+assert.strictEqual(ignoredEmbedState.rows.find((row) => row.id === firstEmbed!.id)?.lineType, "已忽略");
+assert.strictEqual(ignoredEmbedState.rows.find((row) => row.id === firstEmbed!.id)?.embedNumber, undefined);
+
 const manualAddApp = new ChapterReviewApplication({ rows: sidecar.rows, annotationPairs: sidecar.annotationPairs });
 const manualAnnotation = manualAddApp.addManualReviewLine({
   moduleName: "注释",
