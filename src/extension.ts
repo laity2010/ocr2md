@@ -8,23 +8,16 @@ import {
   mergeSequenceMarkdown,
   scanChapterBoundaryLines,
 } from "./chapterBoundary";
-import {
-  annotationMatchSummary,
-  extractAnnotationNumber,
-} from "./annotation";
+import { annotationMatchSummary } from "./annotation";
 import type { ChapterAssignMode } from "./chapterFileAssign";
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
   IGNORED_LINE_TYPE,
   isIgnoredEmbedCandidate,
-  findReusableManualRow,
 } from "./candidateLifecycle";
 import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS } from "./regexPresets";
-import {
-  attachLineIdentity,
-  locateCandidate,
-} from "./rowIdentity";
+import { locateCandidate } from "./rowIdentity";
 import { exportByCalibration } from "./calibrationExport";
 import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
 import { scanTextBlocks } from "./textBlocks";
@@ -64,10 +57,7 @@ import {
   safeImageName,
   shouldDownloadImage,
 } from "./imageDownload";
-import {
-  applyEmbedNumbers,
-  detectEmbedLineType,
-} from "./scanner";
+
 import type {
   AnnotationPair,
   Candidate,
@@ -87,6 +77,7 @@ import { deleteIfExists as deleteStoredIfExists, readText, writeText, type Works
 import {
   applyRowsLineType as applyReviewRowsLineType,
   planHeadingLineTypeEdits,
+  rowBelongsToScope,
 } from "./chapterReviewActions";
 import type { UiCommandMessage } from "./uiProtocol";
 import {
@@ -1045,7 +1036,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     const originalPath = this.selectedFile?.path;
     const changes = scanChapterBoundaryLines(chapterDiffBaseline(baseline, current), current);
     return rows.map((row) =>
-      rowBelongsToChapter(row, originalPath, workingPath) ? applyChangeState(row, changes) : row);
+      rowBelongsToScope(row, { sourcePath: originalPath, workingPath }) ? applyChangeState(row, changes) : row);
   }
 
   private async readWorkingText(uri: vscode.Uri, override?: string): Promise<string> {
@@ -1249,65 +1240,22 @@ class Ocr2mdExtension implements vscode.Disposable {
     }
     const sourcePath = this.selectedFile?.path ?? editor.document.uri.fsPath;
     const workingPath = this.chapterWorkingUri?.fsPath ?? editor.document.uri.fsPath;
-    const hintLine = editor.selection.active.line;
-    const lineText = editor.document.lineAt(hintLine).text;
     const documentText = workingPath === editor.document.uri.fsPath
       ? editor.document.getText()
       : await this.readWorkingText(vscode.Uri.file(workingPath));
-    const lineNumber = nearestMatchingLine(documentText, lineText, hintLine);
-    const existing = findReusableManualRow(this.rows, {
-      typeLabel: moduleName,
-      raw: lineText,
-      line: lineNumber,
-      belongs: (row) => rowBelongsToChapter(row, sourcePath, workingPath),
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.addManualReviewLine({
+      moduleName,
+      documentText,
+      lineText: editor.document.lineAt(editor.selection.active.line).text,
+      hintLine: editor.selection.active.line,
+      sourcePath,
+      workingPath,
     });
-    if (existing) {
-      const restoredLineType = existing.lineType === IGNORED_LINE_TYPE
-        ? (moduleName === "章节定界" ? "新增" : defaultLineType(moduleName, lineText))
-        : existing.lineType;
-      this.rows = this.rows.map((row) => row.id === existing.id
-        ? {
-            ...row,
-            lineType: restoredLineType,
-            isWorkingCorrection: true,
-            chapterBoundaryState: "added" as const,
-            range: { ...row.range, line: lineNumber },
-          }
-        : row);
-    } else {
-      const manualId = `manual-${randomUUID()}`;
-      const extractedNumber = moduleName === "注释" ? extractAnnotationNumber(lineText) : undefined;
-      const attached = attachLineIdentity({
-        id: manualId,
-        kind: "regex",
-        label: lineText.trim(),
-        raw: lineText,
-        preview: lineText,
-        range: { line: lineNumber, start: 0, end: lineText.length },
-        typeLabel: moduleName,
-        lineType: moduleName === "章节定界" ? "新增" : defaultLineType(moduleName, lineText),
-        annotationNumber: extractedNumber,
-        annotationNumberSource: extractedNumber ? "extracted" : undefined,
-        isWorkingCorrection: true,
-        chapterBoundaryState: "added",
-        workingCopyPath: workingPath,
-        sourcePath,
-        sourceLabel: path.basename(sourcePath),
-        status: "候选",
-      }, documentText, { moduleName, sourcePath });
-      this.rows = [...this.rows, { ...attached, id: manualId, isWorkingCorrection: true, chapterBoundaryState: "added" as const }].sort(compareRows);
-    }
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     this.modulePreviewPaths.set(moduleName, workingPath);
-    if (moduleName === "嵌入块") {
-      const chapterEmbeds = this.rows.filter((row) =>
-        row.typeLabel === "嵌入块" && rowBelongsToChapter(row, sourcePath, workingPath));
-      const numbered = applyEmbedNumbers(chapterEmbeds, documentText);
-      const byId = new Map(numbered.map((row) => [row.id, row]));
-      this.rows = this.rows.map((row) => byId.get(row.id) ?? row).sort(compareRows);
-    }
-    this.rebuildAnnotationPairs();
-    // A context-menu add is an explicit calibration action, not a text-edit rescan:
-    // surface it in the table immediately, before any asynchronous diff bookkeeping.
+    // Explicit calibration should surface immediately before asynchronous diff bookkeeping.
     this.update();
     this.rows = await this.applyWorkingCopyDiff(this.rows, documentText);
     this.update();
@@ -2024,48 +1972,6 @@ function chapterTreeLabel(workspacePath: string, file: FileEntry): string {
   return chapterDisplayName(workspacePath, file.path) || file.label;
 }
 
-
-function nearestMatchingLine(text: string, lineText: string, hint: number): number {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  if (lines[hint] === lineText) return hint;
-  let best = hint;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index] !== lineText) continue;
-    const distance = Math.abs(index - hint);
-    if (distance < bestDistance) {
-      best = index;
-      bestDistance = distance;
-    }
-  }
-  return best;
-}
-
-function rowBelongsToChapter(row: Candidate, originalPath: string | undefined, workingPath: string): boolean {
-  if (row.sourcePath === workingPath || row.workingCopyPath === workingPath) return true;
-  return Boolean(originalPath) && (row.sourcePath === originalPath || row.workingCopyPath === originalPath);
-}
-
-function defaultLineType(moduleName: ModuleName, raw: string): string {
-  if (moduleName === "章节定界") return /^ {0,3}#(?!#)(?:\s+|$)/.test(raw) ? "1 级标题" : "修改";
-  if (moduleName === "章节标题") {
-    const match = /^ {0,3}(#{1,6})(?:\s+|$)/.exec(raw);
-    return match ? `${match[1].length} 级标题` : "非标题";
-  }
-  if (moduleName === "注释") {
-    return /^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/.test(raw) ? "注释正文" : "注释引用";
-  }
-  return detectEmbedLineType(raw) ?? "嵌入文本";
-}
-
-
-
-function compareRows(left: Candidate, right: Candidate): number {
-  return (left.sourceLabel ?? "").localeCompare(right.sourceLabel ?? "", "zh-CN", { numeric: true })
-    || left.range.line - right.range.line
-    || left.range.start - right.range.start
-    || left.raw.localeCompare(right.raw);
-}
 
 function splitPatterns(value: string): string[] {
   return value.split(/^\s*---\s*$/m).map((item) => item.trim()).filter(Boolean);

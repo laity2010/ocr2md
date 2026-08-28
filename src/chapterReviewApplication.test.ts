@@ -122,6 +122,39 @@ assert.deepStrictEqual(
 assert.strictEqual(breakResult.rows.filter((row) => row.typeLabel === "非法断行" && row.lineType === "合并").length, 6);
 assert.strictEqual(breakResult.rows.filter((row) => row.typeLabel === "非法断行" && row.lineType === "已忽略").length, 3);
 
+const manualAddApp = new ChapterReviewApplication({ rows: sidecar.rows, annotationPairs: sidecar.annotationPairs });
+const manualAnnotation = manualAddApp.addManualReviewLine({
+  moduleName: "注释",
+  documentText: "Alpha <sup>99</sup> text.\n99. Added note.",
+  lineText: "99. Added note.",
+  hintLine: 1,
+  sourcePath: "/ws/chapters/01/01.md",
+  workingPath: "/ws/chapters/01/01.working.md",
+});
+assert.strictEqual(manualAnnotation.row.lineType, "注释正文");
+assert.strictEqual(manualAnnotation.row.annotationNumber, "99");
+assert.strictEqual(manualAnnotation.row.isWorkingCorrection, true);
+assert.ok(manualAnnotation.annotationPairs.some((pair) => pair.number === "99" && pair.status === "待补引用"));
+
+const embedText = ">\ncaption\n![](local.png)";
+const manualEmbedApp = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
+const embedStart = manualEmbedApp.addManualReviewLine({
+  moduleName: "嵌入块", documentText: embedText, lineText: ">", hintLine: 0,
+  sourcePath: "/ws/chapters/01/01.md", workingPath: "/ws/chapters/01/01.working.md",
+});
+assert.strictEqual(embedStart.row.lineType, "嵌入块首");
+assert.strictEqual(embedStart.row.embedNumber, 1);
+const restoredState = new ChapterReviewApplication({
+  rows: [{ ...embedStart.row, lineType: "已忽略", embedNumber: undefined }], annotationPairs: [],
+});
+const restoredEmbed = restoredState.addManualReviewLine({
+  moduleName: "嵌入块", documentText: embedText, lineText: ">", hintLine: 0,
+  sourcePath: "/ws/chapters/01/01.md", workingPath: "/ws/chapters/01/01.working.md",
+});
+assert.strictEqual(restoredEmbed.rows.length, 1, "manual add must reuse an existing ignored review row");
+assert.strictEqual(restoredEmbed.row.lineType, "嵌入块首");
+assert.strictEqual(restoredEmbed.row.embedNumber, 1);
+
 const manualText = "First complete sentence.\n\nSecond complete sentence.";
 const manualApp = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
 const manual = manualApp.markIllegalLineBreak({

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import {
   applyChangeState,
   buildChapterBoundarySegments,
@@ -6,7 +7,7 @@ import {
 } from "./chapterBoundary";
 import { extractAnnotationNumber } from "./annotation";
 import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign";
-import { activeCandidates } from "./candidateLifecycle";
+import { activeCandidates, findReusableManualRow, IGNORED_LINE_TYPE } from "./candidateLifecycle";
 import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { splitBlankLineBlocks } from "./atoms";
 import {
@@ -31,7 +32,7 @@ import {
   scanRegexMatches,
 } from "./scanner";
 import { chapterContentsDiffer, chapterDiffBaseline, chapterOriginalFileName } from "./workspaceFiles";
-import type { AnnotationPair, Candidate } from "./types";
+import type { AnnotationPair, Candidate, ModuleName } from "./types";
 
 export interface ChapterReviewApplicationState {
   rows: Candidate[];
@@ -80,6 +81,20 @@ export interface MarkIllegalLineBreakInput extends RefreshIllegalLineBreakInput 
 }
 
 export interface MarkIllegalLineBreakResult extends ChapterReviewApplicationState {
+  row: Candidate;
+}
+
+
+export interface AddManualReviewLineInput {
+  moduleName: ModuleName;
+  documentText: string;
+  lineText: string;
+  hintLine: number;
+  sourcePath: string;
+  workingPath: string;
+}
+
+export interface AddManualReviewLineResult extends ChapterReviewApplicationState {
   row: Candidate;
 }
 
@@ -134,6 +149,12 @@ export class ChapterReviewApplication {
   markIllegalLineBreak(input: MarkIllegalLineBreakInput): MarkIllegalLineBreakResult | undefined {
     const result = markIllegalLineBreakReviewState(this.state, input);
     if (!result) return undefined;
+    this.state = { rows: result.rows, annotationPairs: result.annotationPairs };
+    return result;
+  }
+
+  addManualReviewLine(input: AddManualReviewLineInput): AddManualReviewLineResult {
+    const result = addManualReviewLineState(this.state, input);
     this.state = { rows: result.rows, annotationPairs: result.annotationPairs };
     return result;
   }
@@ -291,6 +312,71 @@ export function refreshChapterTitleReviewState(
   };
 }
 
+
+export function addManualReviewLineState(
+  state: ChapterReviewApplicationState,
+  input: AddManualReviewLineInput,
+): AddManualReviewLineResult {
+  const lineNumber = nearestMatchingLine(input.documentText, input.lineText, input.hintLine);
+  const scope = { sourcePath: input.sourcePath, workingPath: input.workingPath };
+  const existing = findReusableManualRow(state.rows, {
+    typeLabel: input.moduleName,
+    raw: input.lineText,
+    line: lineNumber,
+    belongs: (row) => rowBelongsToScope(row, scope),
+  });
+  let rows: Candidate[];
+  let row: Candidate;
+  if (existing) {
+    const restoredLineType = existing.lineType === IGNORED_LINE_TYPE
+      ? (input.moduleName === "章节定界" ? "新增" : defaultLineType(input.moduleName, input.lineText))
+      : existing.lineType;
+    rows = state.rows.map((candidate) => candidate.id === existing.id
+      ? {
+          ...candidate,
+          lineType: restoredLineType,
+          isWorkingCorrection: true,
+          chapterBoundaryState: "added" as const,
+          range: { ...candidate.range, line: lineNumber },
+        }
+      : candidate);
+    row = rows.find((candidate) => candidate.id === existing.id)!;
+  } else {
+    const manualId = `manual-${randomUUID()}`;
+    const extractedNumber = input.moduleName === "注释" ? extractAnnotationNumber(input.lineText) : undefined;
+    const attached = attachLineIdentity({
+      id: manualId,
+      kind: "regex",
+      label: input.lineText.trim(),
+      raw: input.lineText,
+      preview: input.lineText,
+      range: { line: lineNumber, start: 0, end: input.lineText.length },
+      typeLabel: input.moduleName,
+      lineType: input.moduleName === "章节定界" ? "新增" : defaultLineType(input.moduleName, input.lineText),
+      annotationNumber: extractedNumber,
+      annotationNumberSource: extractedNumber ? "extracted" : undefined,
+      isWorkingCorrection: true,
+      chapterBoundaryState: "added",
+      workingCopyPath: input.workingPath,
+      sourcePath: input.sourcePath,
+      sourceLabel: input.sourcePath.split(/[\\/]/).pop() ?? input.sourcePath,
+      status: "候选",
+    }, input.documentText, { moduleName: input.moduleName, sourcePath: input.sourcePath });
+    row = { ...attached, id: manualId, isWorkingCorrection: true, chapterBoundaryState: "added" as const };
+    rows = [...state.rows, row].sort(compareRows);
+  }
+
+  if (input.moduleName === "嵌入块") {
+    const targetRows = rows.filter((candidate) => candidate.typeLabel === "嵌入块" && rowBelongsToScope(candidate, scope));
+    const numbered = applyEmbedNumbers(targetRows, input.documentText);
+    const byId = new Map(numbered.map((candidate) => [candidate.id, candidate]));
+    rows = rows.map((candidate) => byId.get(candidate.id) ?? candidate).sort(compareRows);
+    row = rows.find((candidate) => candidate.id === row.id) ?? row;
+  }
+
+  const next = rebuildAnnotationReviewState(rows, state.annotationPairs);
+  return { rows: next.rows, annotationPairs: next.annotationPairs, row };
+}
 
 export function refreshAnnotationReviewState(
   state: ChapterReviewApplicationState,
@@ -524,6 +610,34 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+
+function nearestMatchingLine(text: string, lineText: string, hint: number): number {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  if (lines[hint] === lineText) return hint;
+  let best = hint;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index] !== lineText) continue;
+    const distance = Math.abs(index - hint);
+    if (distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function defaultLineType(moduleName: ModuleName, raw: string): string {
+  if (moduleName === "章节定界") return /^ {0,3}#(?!#)(?:\s+|$)/.test(raw) ? "1 级标题" : "修改";
+  if (moduleName === "章节标题") {
+    const match = /^ {0,3}(#{1,6})(?:\s+|$)/.exec(raw);
+    return match ? `${match[1].length} 级标题` : "非标题";
+  }
+  if (moduleName === "注释") {
+    return /^\s*(?:\d+\.|\*\d+|\[\^\d+\]:)\s+/.test(raw) ? "注释正文" : "注释引用";
+  }
+  return detectEmbedLineType(raw) ?? "嵌入文本";
+}
 
 function dedupeImageRows(rows: Candidate[], text?: string): Candidate[] {
   const deleted = rows.filter((row) => row.chapterBoundaryState === "deleted");
