@@ -1,0 +1,192 @@
+import { applyChangeState, scanChapterBoundaryLines } from "./chapterBoundary";
+import { splitBlankLineBlocks } from "./atoms";
+import { rowBelongsToScope } from "./chapterReviewActions";
+import {
+  attachLineIdentity,
+  attachScanIdentities,
+  hashText,
+  reconcileRows,
+} from "./rowIdentity";
+import {
+  applyEmbedNumbers,
+  detectEmbedLineType,
+  excludeRowsOverlappingEmbeds,
+  mergeEmbedScan,
+} from "./scanner";
+import { chapterContentsDiffer, chapterDiffBaseline } from "./workspaceFiles";
+import type { AnnotationPair, Candidate } from "./types";
+
+export interface ChapterReviewApplicationState {
+  rows: Candidate[];
+  annotationPairs: AnnotationPair[];
+}
+
+export interface RefreshChapterTitleInput {
+  baselineText: string;
+  workingText: string;
+  sourcePath: string;
+  workingPath: string;
+  sourceLabel: string;
+  embedPatterns: readonly string[];
+}
+
+export interface RefreshChapterTitleResult extends ChapterReviewApplicationState {
+  changed: boolean;
+}
+
+/**
+ * Platform-independent application service for the chapter review workflow.
+ * It owns review state transitions; VS Code/Web hosts own file I/O and editor UX.
+ */
+export class ChapterReviewApplication {
+  private state: ChapterReviewApplicationState;
+
+  constructor(state: ChapterReviewApplicationState) {
+    this.state = { rows: state.rows, annotationPairs: state.annotationPairs };
+  }
+
+  snapshot(): ChapterReviewApplicationState {
+    return { rows: this.state.rows, annotationPairs: this.state.annotationPairs };
+  }
+
+  refreshChapterTitle(input: RefreshChapterTitleInput): RefreshChapterTitleResult {
+    const result = refreshChapterTitleReviewState(this.state, input);
+    this.state = { rows: result.rows, annotationPairs: result.annotationPairs };
+    return result;
+  }
+}
+
+export function refreshChapterTitleReviewState(
+  state: ChapterReviewApplicationState,
+  input: RefreshChapterTitleInput,
+): RefreshChapterTitleResult {
+  const { baselineText, workingText, sourcePath, workingPath, sourceLabel } = input;
+  const scope = { sourcePath, workingPath };
+  const previousTitles = state.rows.filter((row) => row.typeLabel === "章节标题" && rowBelongsToScope(row, scope));
+  const previousImages = state.rows.filter((row) => row.typeLabel === "嵌入块" && rowBelongsToScope(row, scope));
+  const changes = scanChapterBoundaryLines(chapterDiffBaseline(baselineText, workingText), workingText);
+  const currentChanges = changes.filter((entry) => entry.state !== "deleted");
+
+  const blocks: Candidate[] = splitBlankLineBlocks(workingText).map((block) => {
+    const endLine = block.range.endLine ?? block.range.line;
+    const change = currentChanges.find((entry) => entry.line >= block.range.line && entry.line <= endLine);
+    const heading = /^ {0,3}(#{1,6})(?:\s+|$)/.exec(block.raw.split("\n")[0] ?? "");
+    return {
+      id: `chapter-block-${hashText(`${sourcePath}\0${block.range.line}\0${block.raw}`)}`,
+      kind: "regex",
+      label: block.raw.split("\n")[0]?.trim() || `L${block.range.line + 1}`,
+      raw: block.raw,
+      preview: block.raw.slice(0, 255),
+      range: block.range,
+      typeLabel: "章节标题",
+      lineType: heading ? `${heading[1].length} 级标题` : "非标题",
+      workingCopyPath: workingPath,
+      sourcePath,
+      sourceLabel,
+      status: "候选",
+      chapterBoundaryState: change?.state ?? "heading",
+      baselinePreview: change?.baselineText,
+    };
+  });
+
+  const titleBlocks = attachScanIdentities(
+    blocks.filter((row) => !detectEmbedLineType(row.raw)),
+    workingText,
+    { moduleName: "章节标题", sourcePath },
+  );
+  const imageBlocks = attachScanIdentities(
+    mergeEmbedScan(workingText, [...input.embedPatterns]).map((row) => ({
+      ...row,
+      typeLabel: "嵌入块" as const,
+      workingCopyPath: workingPath,
+      sourcePath,
+      sourceLabel,
+    })),
+    workingText,
+    { moduleName: "嵌入块", sourcePath },
+  );
+
+  const titleRows = reconcileRows(
+    previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"),
+    titleBlocks,
+    workingText,
+  );
+  let imageRows = applyEmbedNumbers(
+    dedupeImageRows(
+      reconcileRows(
+        previousImages.filter((row) => row.chapterBoundaryState !== "deleted"),
+        imageBlocks,
+        workingText,
+      ).map((row) => applyChangeState(row, changes)),
+      workingText,
+    ),
+    workingText,
+  );
+
+  const lines = workingText.replace(/\r\n?/g, "\n").split("\n");
+  for (const entry of changes.filter((candidate) => candidate.state === "deleted")) {
+    const raw = entry.baselineText ?? "";
+    const imageLineType = detectEmbedLineType(raw);
+    const deleted = attachLineIdentity({
+      id: `chapter-deleted-${hashText(`${workingPath}\0${raw}`)}`,
+      kind: "regex",
+      label: raw.trim() || `L${entry.line + 1}`,
+      raw,
+      preview: raw,
+      range: { line: Math.min(entry.line, Math.max(0, lines.length - 1)), start: 0, end: 0 },
+      typeLabel: imageLineType ? "嵌入块" : "章节标题",
+      lineType: imageLineType ?? "非标题",
+      chapterBoundaryState: "deleted",
+      baselinePreview: raw,
+      workingCopyPath: workingPath,
+      sourcePath,
+      sourceLabel,
+      status: "候选",
+    }, workingText, { moduleName: imageLineType ? "嵌入块" : "章节标题", sourcePath });
+    (imageLineType ? imageRows : titleRows).push(deleted);
+  }
+
+  imageRows = applyEmbedNumbers(imageRows, workingText);
+  const cleanedTitleRows = excludeRowsOverlappingEmbeds(titleRows, imageRows);
+  const rows = [
+    ...state.rows.filter((row) => row.typeLabel !== "章节标题"
+      && !(row.typeLabel === "嵌入块" && rowBelongsToScope(row, scope))),
+    ...cleanedTitleRows,
+    ...imageRows,
+  ].sort(compareRows);
+
+  return {
+    rows,
+    annotationPairs: state.annotationPairs,
+    changed: chapterContentsDiffer(baselineText, workingText),
+  };
+}
+
+function dedupeImageRows(rows: Candidate[], text?: string): Candidate[] {
+  const deleted = rows.filter((row) => row.chapterBoundaryState === "deleted");
+  const live = rows.filter((row) => row.chapterBoundaryState !== "deleted");
+  const lines = text ? text.replace(/\r\n?/g, "\n").split("\n") : undefined;
+  const score = (row: Candidate): number => {
+    const lineText = lines?.[row.range.line];
+    if (lineText === undefined) return 0;
+    const raw = (row.raw ?? "").split("\n")[0]?.trim() ?? "";
+    if (lineText === row.raw) return 5;
+    if (lineText.trim() === raw) return 4;
+    if (detectEmbedLineType(lineText) === row.lineType) return 3;
+    if (raw && lineText.includes(raw)) return 2;
+    return 0;
+  };
+  const byLine = new Map<number, Candidate>();
+  for (const row of live) {
+    const existing = byLine.get(row.range.line);
+    if (!existing || score(row) > score(existing)) byLine.set(row.range.line, row);
+  }
+  return [...deleted, ...byLine.values()].sort(compareRows);
+}
+
+function compareRows(left: Candidate, right: Candidate): number {
+  return (left.sourceLabel ?? "").localeCompare(right.sourceLabel ?? "", "zh-CN", { numeric: true })
+    || left.range.line - right.range.line
+    || left.range.start - right.range.start
+    || left.raw.localeCompare(right.raw);
+}

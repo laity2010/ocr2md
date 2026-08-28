@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as https from "https";
 import * as path from "path";
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import * as vscode from "vscode";
 import {
   applyChangeState,
@@ -30,7 +30,6 @@ import {
   reconcileRows,
   relocateRows,
 } from "./rowIdentity";
-import { splitBlankLineBlocks } from "./atoms";
 import { exportByCalibration } from "./calibrationExport";
 import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
 import { scanTextBlocks } from "./textBlocks";
@@ -76,7 +75,6 @@ import {
 import {
   applyEmbedNumbers,
   detectEmbedLineType,
-  excludeRowsOverlappingEmbeds,
   mergeEmbedScan,
   scanRegexMatches,
 } from "./scanner";
@@ -93,6 +91,7 @@ import type {
   TranslationTestState,
 } from "./types";
 import { renderSidebar } from "./webview";
+import { ChapterReviewApplication } from "./chapterReviewApplication";
 import {
   applyAnnotationNumber as applyReviewAnnotationNumber,
   applyChapterFile as applyReviewChapterFile,
@@ -1791,91 +1790,23 @@ class Ocr2mdExtension implements vscode.Disposable {
       const originalUri = vscode.Uri.file(originalPath);
       if (await exists(originalUri)) baseline = Buffer.from(await vscode.workspace.fs.readFile(originalUri)).toString("utf8");
     }
-    const previousTitles = this.rows.filter((row) => row.typeLabel === "章节标题" && rowBelongsToChapter(row, originalPath, uri.fsPath));
-    const previousImages = this.rows.filter((row) => row.typeLabel === "嵌入块" && rowBelongsToChapter(row, originalPath, uri.fsPath));
-    const changes = scanChapterBoundaryLines(chapterDiffBaseline(baseline, current), current);
-    const currentChanges = changes.filter((entry) => entry.state !== "deleted");
+
     const sourcePath = originalPath ?? uri.fsPath;
     const sourceLabel = workspace ? path.relative(workspace.uri.fsPath, sourcePath) : path.basename(sourcePath);
-    const blocks = splitBlankLineBlocks(current).map((block) => {
-      const endLine = block.range.endLine ?? block.range.line;
-      const change = currentChanges.find((entry) => entry.line >= block.range.line && entry.line <= endLine);
-      const heading = /^ {0,3}(#{1,6})(?:\s+|$)/.exec(block.raw.split("\n")[0] ?? "");
-      return {
-        id: `chapter-block-${candidateHash(`${sourcePath}\0${block.range.line}\0${block.raw}`)}`,
-        kind: "regex" as const,
-        label: block.raw.split("\n")[0]?.trim() || `L${block.range.line + 1}`,
-        raw: block.raw,
-        preview: block.raw.slice(0, 255),
-        range: block.range,
-        typeLabel: "章节标题" as const,
-        lineType: heading ? `${heading[1].length} 级标题` : "非标题",
-        workingCopyPath: uri.fsPath,
-        sourcePath,
-        sourceLabel,
-        status: "候选" as const,
-        chapterBoundaryState: change?.state ?? "heading" as const,
-        baselinePreview: change?.baselineText,
-      };
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.refreshChapterTitle({
+      baselineText: baseline,
+      workingText: current,
+      sourcePath,
+      workingPath: uri.fsPath,
+      sourceLabel,
+      embedPatterns: splitPatterns(this.moduleRegexPatterns["嵌入块"] ?? ""),
     });
-    const identityContext = { sourcePath };
-    const titleBlocks = attachScanIdentities(
-      blocks.filter((row) => !detectEmbedLineType(row.raw)),
-      current,
-      { moduleName: "章节标题", ...identityContext },
-    );
-    const imageBlocks = attachScanIdentities(
-      mergeEmbedScan(current, splitPatterns(this.moduleRegexPatterns["嵌入块"] ?? "")).map((row) => ({
-        ...row,
-        typeLabel: "嵌入块" as const,
-        workingCopyPath: uri.fsPath,
-        sourcePath,
-        sourceLabel,
-      })),
-      current,
-      { moduleName: "嵌入块", ...identityContext },
-    );
-    const titleRows = reconcileRows(previousTitles.filter((row) => row.chapterBoundaryState !== "deleted"), titleBlocks, current);
-    let imageRows = applyEmbedNumbers(
-      dedupeImageRows(
-        reconcileRows(previousImages.filter((row) => row.chapterBoundaryState !== "deleted"), imageBlocks, current)
-          .map((row) => applyChangeState(row, changes)),
-        current,
-      ),
-      current,
-    );
-    const lines = current.replace(/\r\n?/g, "\n").split("\n");
-    for (const entry of changes.filter((candidate) => candidate.state === "deleted")) {
-      const raw = entry.baselineText ?? "";
-      const imageLineType = detectEmbedLineType(raw);
-      const deleted = attachLineIdentity({
-        id: `chapter-deleted-${candidateHash(`${uri.fsPath}\0${raw}`)}`,
-        kind: "regex",
-        label: raw.trim() || `L${entry.line + 1}`,
-        raw,
-        preview: raw,
-        range: { line: Math.min(entry.line, Math.max(0, lines.length - 1)), start: 0, end: 0 },
-        typeLabel: imageLineType ? "嵌入块" : "章节标题",
-        lineType: imageLineType ?? "非标题",
-        chapterBoundaryState: "deleted",
-        baselinePreview: raw,
-        workingCopyPath: uri.fsPath,
-        sourcePath,
-        sourceLabel: workspace ? path.relative(workspace.uri.fsPath, sourcePath) : path.basename(sourcePath),
-        status: "候选",
-      }, current, { moduleName: imageLineType ? "嵌入块" : "章节标题", sourcePath });
-      (imageLineType ? imageRows : titleRows).push(deleted);
-    }
-    imageRows = applyEmbedNumbers(imageRows, current);
-    const cleanedTitleRows = excludeRowsOverlappingEmbeds(titleRows, imageRows);
-    this.rows = [
-      ...this.rows.filter((row) => row.typeLabel !== "章节标题"
-        && !(row.typeLabel === "嵌入块" && rowBelongsToChapter(row, originalPath, uri.fsPath))),
-      ...cleanedTitleRows,
-      ...imageRows,
-    ].sort(compareRows);
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
+
     if (options.writeMarker !== false && workspace && originalPath && isChapterOutputPath(workspace.uri.fsPath, originalPath)) {
-      await this.writeChapterChangedMarker(originalPath, chapterContentsDiffer(baseline, current));
+      await this.writeChapterChangedMarker(originalPath, result.changed);
     }
     if (!options.silent) this.update();
   }
@@ -2402,9 +2333,6 @@ function candidatePositionKey(row: Candidate): string {
   return `${row.sourcePath}\0${row.range.line}\0${row.range.start}\0${row.raw}`;
 }
 
-function candidateHash(value: string): string {
-  return createHash("sha256").update(value).digest("hex").slice(0, 20);
-}
 
 function compareRows(left: Candidate, right: Candidate): number {
   return (left.sourceLabel ?? "").localeCompare(right.sourceLabel ?? "", "zh-CN", { numeric: true })
