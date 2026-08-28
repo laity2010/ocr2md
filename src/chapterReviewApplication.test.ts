@@ -142,6 +142,33 @@ const manualAgain = manualApp.markIllegalLineBreak({
 });
 assert.strictEqual(manualAgain?.rows.filter((row) => row.typeLabel === "非法断行").length, 1, "marking the same boundary twice must reuse the review row");
 
+const boundaryBaseline = ["# One", "First body.", "# Two", "Second body."].join("\n");
+const boundaryWorking = ["# One", "First body edited.", "# Inserted", "Inserted body.", "# Two", "Second body."].join("\n");
+const boundaryApp = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
+const boundary = boundaryApp.refreshChapterBoundary({
+  baselineText: boundaryBaseline,
+  workingText: boundaryWorking,
+  workingPath: "/ws/.ocr2md-merged.working.md",
+  sourceLabel: ".ocr2md-merged.working.md",
+});
+const boundaryHeadings = boundary.rows.filter((row) => row.typeLabel === "章节定界" && row.lineType === "1 级标题");
+assert.strictEqual(boundaryHeadings.length, 3, "chapter-boundary application must expose every current level-one heading");
+assert.ok(boundary.rows.some((row) => row.typeLabel === "章节定界" && row.lineType === "修改"), "chapter-boundary application must expose edited source lines");
+const assignedBoundary = boundaryApp.assignChapterFiles(boundaryHeadings.map((row) => row.id), "sequence", "01");
+assert.strictEqual(assignedBoundary.ok, true, "chapter-boundary numbering must live in the application layer");
+if (assignedBoundary.ok) {
+  assert.deepStrictEqual(
+    boundaryHeadings.map((row) => assignedBoundary.rows.find((candidate) => candidate.id === row.id)?.chapterFile),
+    ["01 One.md", "02 Inserted.md", "03 Two.md"],
+  );
+}
+const boundarySegments = boundaryApp.chapterBoundarySegments(boundaryWorking);
+assert.deepStrictEqual(
+  boundarySegments.map((segment) => [segment.chapterFile, segment.startLine, segment.endLine]),
+  [["01 One.md", 0, 2], ["02 Inserted.md", 2, 4], ["03 Two.md", 4, 6]],
+  "host-independent chapter segmentation must follow the reviewed heading assignments",
+);
+
 console.log("chapterReviewApplication tests passed");
 
 function splitPatterns(value: string): string[] {

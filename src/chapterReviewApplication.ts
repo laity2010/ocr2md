@@ -1,10 +1,17 @@
-import { applyChangeState, scanChapterBoundaryLines } from "./chapterBoundary";
+import {
+  applyChangeState,
+  buildChapterBoundarySegments,
+  scanChapterBoundaryLines,
+  type ChapterBoundarySegment,
+} from "./chapterBoundary";
 import { extractAnnotationNumber } from "./annotation";
+import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign";
 import { activeCandidates } from "./candidateLifecycle";
 import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { splitBlankLineBlocks } from "./atoms";
 import {
   applyAnnotationNumber,
+  applyChapterFile,
   rebuildAnnotationReviewState,
   rowBelongsToScope,
 } from "./chapterReviewActions";
@@ -23,7 +30,7 @@ import {
   mergeEmbedScan,
   scanRegexMatches,
 } from "./scanner";
-import { chapterContentsDiffer, chapterDiffBaseline } from "./workspaceFiles";
+import { chapterContentsDiffer, chapterDiffBaseline, chapterOriginalFileName } from "./workspaceFiles";
 import type { AnnotationPair, Candidate } from "./types";
 
 export interface ChapterReviewApplicationState {
@@ -76,6 +83,17 @@ export interface MarkIllegalLineBreakResult extends ChapterReviewApplicationStat
   row: Candidate;
 }
 
+export interface RefreshChapterBoundaryInput {
+  baselineText: string;
+  workingText: string;
+  workingPath: string;
+  sourceLabel: string;
+}
+
+export type AssignChapterFilesResult =
+  | (ChapterReviewApplicationState & { ok: true })
+  | { ok: false; error: string };
+
 
 /**
  * Platform-independent application service for the chapter review workflow.
@@ -118,6 +136,38 @@ export class ChapterReviewApplication {
     if (!result) return undefined;
     this.state = { rows: result.rows, annotationPairs: result.annotationPairs };
     return result;
+  }
+
+  refreshChapterBoundary(input: RefreshChapterBoundaryInput): ChapterReviewApplicationState {
+    this.state = refreshChapterBoundaryReviewState(this.state, input);
+    return this.snapshot();
+  }
+
+  setChapterFile(ids: readonly string[], value: string): ChapterReviewApplicationState {
+    this.state = { ...this.state, rows: applyChapterFile(this.state.rows, ids, value) };
+    return this.snapshot();
+  }
+
+  assignChapterFiles(ids: readonly string[], mode: ChapterAssignMode, value: string): AssignChapterFilesResult {
+    const selected = new Set(ids);
+    const rows = this.state.rows.filter((row) =>
+      selected.has(row.id) && row.typeLabel === "章节定界" && row.lineType === "1 级标题");
+    const assigned = assignChapterFiles({
+      mode,
+      value,
+      rows: rows.map((row) => ({ id: row.id, raw: row.raw, chapterFile: row.chapterFile })),
+    });
+    if (!assigned.ok) return assigned;
+    this.state = {
+      ...this.state,
+      rows: this.state.rows.map((row) =>
+        assigned.files[row.id] !== undefined ? { ...row, chapterFile: assigned.files[row.id] } : row),
+    };
+    return { ok: true, ...this.snapshot() };
+  }
+
+  chapterBoundarySegments(text: string): ChapterBoundarySegment[] {
+    return chapterBoundarySegments(this.state.rows, text);
   }
 
   matchAnnotationPairs(): ChapterReviewApplicationState {
@@ -325,6 +375,58 @@ export function refreshEmbedReviewState(
 
 
 
+
+export function refreshChapterBoundaryReviewState(
+  state: ChapterReviewApplicationState,
+  input: RefreshChapterBoundaryInput,
+): ChapterReviewApplicationState {
+  const previous = state.rows.filter((row) => row.typeLabel === "章节定界");
+  const lines = input.workingText.replace(/\r\n?/g, "\n").split("\n");
+  const scanned = attachScanIdentities(
+    scanChapterBoundaryLines(input.baselineText, input.workingText).map((entry) => {
+      const raw = entry.text || entry.baselineText || "";
+      const heading = /^ {0,3}#(?!#)(?:\s+|$)/.test(entry.text);
+      return {
+        id: entry.id,
+        kind: "regex" as const,
+        label: raw.trim() || `L${entry.line + 1}`,
+        raw,
+        preview: raw,
+        range: {
+          line: Math.min(entry.line, Math.max(0, lines.length - 1)),
+          start: 0,
+          end: entry.state === "deleted" ? 0 : raw.length,
+        },
+        typeLabel: "章节定界" as const,
+        lineType: heading ? "1 级标题" : boundaryStateLabel(entry.state),
+        chapterBoundaryState: entry.state,
+        baselinePreview: entry.baselineText,
+        workingCopyPath: input.workingPath,
+        sourcePath: input.workingPath,
+        sourceLabel: input.sourceLabel,
+        status: "候选" as const,
+      };
+    }),
+    input.workingText,
+    { moduleName: "章节定界", sourcePath: input.workingPath },
+  );
+  const rows = [
+    ...state.rows.filter((row) => row.typeLabel !== "章节定界"),
+    ...reconcileRows(previous, scanned),
+  ].sort(compareRows);
+  return { rows, annotationPairs: state.annotationPairs };
+}
+
+export function chapterBoundarySegments(rows: readonly Candidate[], text: string): ChapterBoundarySegment[] {
+  const starts = activeCandidates([...rows])
+    .filter((row) => row.typeLabel === "章节定界" && row.lineType === "1 级标题" && row.chapterFile?.trim())
+    .map((row) => ({ line: row.range.line, chapterFile: chapterOriginalFileName(row.chapterFile!) }));
+  if (!starts.length) return [];
+  const lineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
+  return buildChapterBoundarySegments(starts, lineCount);
+}
+
+
 export function refreshIllegalLineBreakReviewState(
   state: ChapterReviewApplicationState,
   input: RefreshIllegalLineBreakInput,
@@ -444,6 +546,12 @@ function dedupeImageRows(rows: Candidate[], text?: string): Candidate[] {
   }
   return [...deleted, ...byLine.values()].sort(compareRows);
 }
+
+
+function boundaryStateLabel(state: "heading" | "added" | "modified" | "deleted"): string {
+  return state === "added" ? "新增" : state === "modified" ? "修改" : state === "deleted" ? "删除" : "1 级标题";
+}
+
 
 function compareRows(left: Candidate, right: Candidate): number {
   return (left.sourceLabel ?? "").localeCompare(right.sourceLabel ?? "", "zh-CN", { numeric: true })

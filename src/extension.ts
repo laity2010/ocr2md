@@ -5,7 +5,6 @@ import { randomUUID } from "crypto";
 import * as vscode from "vscode";
 import {
   applyChangeState,
-  buildChapterBoundarySegments,
   mergeSequenceMarkdown,
   scanChapterBoundaryLines,
   type MergeInputText,
@@ -14,7 +13,7 @@ import {
   annotationMatchSummary,
   extractAnnotationNumber,
 } from "./annotation";
-import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign";
+import type { ChapterAssignMode } from "./chapterFileAssign";
 import {
   activeCandidates,
   DELETED_LINE_TYPE,
@@ -25,9 +24,7 @@ import {
 import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS } from "./regexPresets";
 import {
   attachLineIdentity,
-  attachScanIdentities,
   locateCandidate,
-  reconcileRows,
 } from "./rowIdentity";
 import { exportByCalibration } from "./calibrationExport";
 import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
@@ -89,7 +86,6 @@ import type {
 import { renderSidebar } from "./webview";
 import { ChapterReviewApplication } from "./chapterReviewApplication";
 import {
-  applyChapterFile as applyReviewChapterFile,
   applyRowsLineType as applyReviewRowsLineType,
   planHeadingLineTypeEdits,
 } from "./chapterReviewActions";
@@ -106,7 +102,6 @@ import {
   chapterDirectoryPath,
   chapterDisplayName,
   chapterImageDirectory,
-  chapterOriginalFileName,
   chapterOriginalPath,
   chapterOutputBaselinePath,
   chapterSidecarPath,
@@ -1181,24 +1176,22 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private setChapterFile(ids: string[], value: string) {
-    this.rows = applyReviewChapterFile(this.rows, ids, value);
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.setChapterFile(ids, value);
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     this.update();
   }
 
   private assignSelectedChapterFiles(ids: string[], mode: string, value: string) {
-    const selected = new Set(ids);
-    const rows = this.rows.filter((row) =>
-      selected.has(row.id) && row.typeLabel === "章节定界" && row.lineType === "1 级标题");
-    const result = assignChapterFiles({
-      mode: mode as ChapterAssignMode,
-      value,
-      rows: rows.map((row) => ({ id: row.id, raw: row.raw, chapterFile: row.chapterFile })),
-    });
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.assignChapterFiles(ids, mode as ChapterAssignMode, value);
     if (!result.ok) {
       void vscode.window.showWarningMessage(result.error);
       return;
     }
-    this.rows = this.rows.map((row) => result.files[row.id] !== undefined ? { ...row, chapterFile: result.files[row.id] } : row);
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     this.update();
   }
 
@@ -1865,29 +1858,15 @@ class Ocr2mdExtension implements vscode.Disposable {
     if (!(await exists(baselineUri)) || !(await exists(working))) return;
     const baseline = Buffer.from(await vscode.workspace.fs.readFile(baselineUri)).toString("utf8");
     const current = Buffer.from(await vscode.workspace.fs.readFile(working)).toString("utf8");
-    const previous = this.rows.filter((row) => row.typeLabel === "章节定界");
-    const lines = current.replace(/\r\n?/g, "\n").split("\n");
-    const scanned = attachScanIdentities(scanChapterBoundaryLines(baseline, current).map((entry) => {
-      const raw = entry.text || entry.baselineText || "";
-      const heading = /^ {0,3}#(?!#)(?:\s+|$)/.test(entry.text);
-      return {
-        id: entry.id,
-        kind: "regex" as const,
-        label: raw.trim() || `L${entry.line + 1}`,
-        raw,
-        preview: raw,
-        range: { line: Math.min(entry.line, Math.max(0, lines.length - 1)), start: 0, end: entry.state === "deleted" ? 0 : raw.length },
-        typeLabel: "章节定界" as const,
-        lineType: heading ? "1 级标题" : boundaryStateLabel(entry.state),
-        chapterBoundaryState: entry.state,
-        baselinePreview: entry.baselineText,
-        workingCopyPath: working.fsPath,
-        sourcePath: working.fsPath,
-        sourceLabel: path.basename(working.fsPath),
-        status: "候选" as const,
-      };
-    }), current, { moduleName: "章节定界", sourcePath: working.fsPath });
-    this.rows = [...this.rows.filter((row) => row.typeLabel !== "章节定界"), ...reconcileRows(previous, scanned)].sort(compareRows);
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.refreshChapterBoundary({
+      baselineText: baseline,
+      workingText: current,
+      workingPath: working.fsPath,
+      sourceLabel: path.basename(working.fsPath),
+    });
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     this.selectedFileText = current;
     this.update();
   }
@@ -1900,16 +1879,14 @@ class Ocr2mdExtension implements vscode.Disposable {
       return;
     }
     await this.refreshChapterBoundaryRows();
-    const starts = activeCandidates(this.rows)
-      .filter((row) => row.typeLabel === "章节定界" && row.lineType === "1 级标题" && row.chapterFile?.trim())
-      .map((row) => ({ line: row.range.line, chapterFile: chapterOriginalFileName(row.chapterFile!) }));
-    if (!starts.length) {
+    const text = Buffer.from(await vscode.workspace.fs.readFile(working)).toString("utf8");
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const segments = application.chapterBoundarySegments(text);
+    if (!segments.length) {
       void vscode.window.showWarningMessage("请先为至少一个一级标题设置章节文件。");
       return;
     }
-    const text = Buffer.from(await vscode.workspace.fs.readFile(working)).toString("utf8");
     const lines = text.replace(/\r\n?/g, "\n").split("\n");
-    const segments = buildChapterBoundarySegments(starts, lines.length);
     for (const segment of segments) {
       const body = lines.slice(segment.startLine, segment.endLine).join("\n");
       const output = withChapterFrontmatter(body, segment.chapterFile, path.basename(working.fsPath));
@@ -2266,9 +2243,6 @@ function isModuleName(value: unknown): value is ModuleName {
   return typeof value === "string" && MODULES.includes(value as ModuleName);
 }
 
-function boundaryStateLabel(state: "heading" | "added" | "modified" | "deleted"): string {
-  return state === "added" ? "新增" : state === "modified" ? "修改" : state === "deleted" ? "删除" : "1 级标题";
-}
 
 function withChapterFrontmatter(markdown: string, chapterFile: string, source: string): string {
   const body = markdown.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").replace(/^\s+/, "");
