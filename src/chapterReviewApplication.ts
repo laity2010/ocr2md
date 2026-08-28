@@ -1,6 +1,7 @@
 import { applyChangeState, scanChapterBoundaryLines } from "./chapterBoundary";
 import { extractAnnotationNumber } from "./annotation";
 import { activeCandidates } from "./candidateLifecycle";
+import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { splitBlankLineBlocks } from "./atoms";
 import {
   applyAnnotationNumber,
@@ -61,6 +62,20 @@ export interface RefreshEmbedInput {
   patterns: readonly string[];
 }
 
+export interface RefreshIllegalLineBreakInput {
+  workingText: string;
+  sourcePath: string;
+  workingPath: string;
+}
+
+export interface MarkIllegalLineBreakInput extends RefreshIllegalLineBreakInput {
+  cursorLine: number;
+}
+
+export interface MarkIllegalLineBreakResult extends ChapterReviewApplicationState {
+  row: Candidate;
+}
+
 
 /**
  * Platform-independent application service for the chapter review workflow.
@@ -91,6 +106,18 @@ export class ChapterReviewApplication {
   refreshEmbed(input: RefreshEmbedInput): ChapterReviewApplicationState {
     this.state = refreshEmbedReviewState(this.state, input);
     return this.snapshot();
+  }
+
+  refreshIllegalLineBreak(input: RefreshIllegalLineBreakInput): ChapterReviewApplicationState {
+    this.state = refreshIllegalLineBreakReviewState(this.state, input);
+    return this.snapshot();
+  }
+
+  markIllegalLineBreak(input: MarkIllegalLineBreakInput): MarkIllegalLineBreakResult | undefined {
+    const result = markIllegalLineBreakReviewState(this.state, input);
+    if (!result) return undefined;
+    this.state = { rows: result.rows, annotationPairs: result.annotationPairs };
+    return result;
   }
 
   matchAnnotationPairs(): ChapterReviewApplicationState {
@@ -294,6 +321,73 @@ export function refreshEmbedReviewState(
     ...reconciled,
   ].sort(compareRows);
   return { rows, annotationPairs: state.annotationPairs };
+}
+
+
+
+export function refreshIllegalLineBreakReviewState(
+  state: ChapterReviewApplicationState,
+  input: RefreshIllegalLineBreakInput,
+): ChapterReviewApplicationState {
+  const scanned = attachScanIdentities(
+    scanIllegalLineBreaks(input.workingText, input.sourcePath).map((row) => ({
+      ...row,
+      workingCopyPath: input.workingPath,
+    })),
+    input.workingText,
+    { moduleName: "非法断行", sourcePath: input.sourcePath },
+  );
+  const previous = state.rows.filter((row) =>
+    row.typeLabel === "非法断行" && rowBelongsToScope(row, { sourcePath: input.sourcePath, workingPath: input.workingPath }));
+  const reconciled = reconcileRows(previous, scanned, input.workingText);
+  const rows = [
+    ...state.rows.filter((row) => !(row.typeLabel === "非法断行"
+      && rowBelongsToScope(row, { sourcePath: input.sourcePath, workingPath: input.workingPath }))),
+    ...reconciled,
+  ].sort(compareRows);
+  return { rows, annotationPairs: state.annotationPairs };
+}
+
+export function markIllegalLineBreakReviewState(
+  state: ChapterReviewApplicationState,
+  input: MarkIllegalLineBreakInput,
+): MarkIllegalLineBreakResult | undefined {
+  const manual = manualIllegalLineBreakAtLine(input.workingText, input.sourcePath, input.cursorLine);
+  if (!manual) return undefined;
+  const attached = attachScanIdentities([{
+    ...manual,
+    workingCopyPath: input.workingPath,
+    isWorkingCorrection: true,
+  }], input.workingText, { moduleName: "非法断行", sourcePath: input.sourcePath })[0];
+  if (!attached) return undefined;
+
+  const sameBoundary = (row: Candidate) => row.typeLabel === "非法断行"
+    && row.sourcePath === input.sourcePath
+    && row.raw === manual.raw
+    && row.range.line === manual.range.line
+    && (row.range.endLine ?? row.range.line) === (manual.range.endLine ?? manual.range.line);
+  const existing = state.rows.find(sameBoundary);
+  const row: Candidate = existing ? {
+    ...existing,
+    ...attached,
+    id: existing.id,
+    rowId: existing.rowId ?? existing.id,
+    atomId: existing.atomId ?? attached.atomId,
+    lineType: "合并",
+    isWorkingCorrection: true,
+    breakReason: "人工加入",
+    breakConfidence: "高",
+  } : {
+    ...attached,
+    lineType: "合并",
+    isWorkingCorrection: true,
+    breakReason: "人工加入",
+    breakConfidence: "高",
+  };
+  const rows = existing
+    ? state.rows.map((candidate) => candidate.id === existing.id ? row : candidate)
+    : [...state.rows, row].sort(compareRows);
+  return { rows, annotationPairs: state.annotationPairs, row };
 }
 
 

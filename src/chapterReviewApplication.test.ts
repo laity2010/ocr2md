@@ -113,6 +113,35 @@ assert.ok(
   "ignored embed rows must stay outside embed numbering",
 );
 
+const breakResult = app.refreshIllegalLineBreak({ workingText: working, sourcePath, workingPath });
+assert.deepStrictEqual(
+  countByType(breakResult.rows),
+  countByType(sidecar.rows),
+  "platform-independent illegal-line-break refresh must preserve the real reviewed decisions",
+);
+assert.strictEqual(breakResult.rows.filter((row) => row.typeLabel === "非法断行" && row.lineType === "合并").length, 6);
+assert.strictEqual(breakResult.rows.filter((row) => row.typeLabel === "非法断行" && row.lineType === "已忽略").length, 3);
+
+const manualText = "First complete sentence.\n\nSecond complete sentence.";
+const manualApp = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
+const manual = manualApp.markIllegalLineBreak({
+  workingText: manualText,
+  sourcePath: "/ws/chapters/01/01.md",
+  workingPath: "/ws/chapters/01/01.working.md",
+  cursorLine: 0,
+});
+assert.ok(manual, "application must support a human-added line break even when the automatic scan would not select it");
+assert.strictEqual(manual?.row.lineType, "合并");
+assert.strictEqual(manual?.row.breakReason, "人工加入");
+assert.strictEqual(manual?.row.isWorkingCorrection, true);
+const manualAgain = manualApp.markIllegalLineBreak({
+  workingText: manualText,
+  sourcePath: "/ws/chapters/01/01.md",
+  workingPath: "/ws/chapters/01/01.working.md",
+  cursorLine: 1,
+});
+assert.strictEqual(manualAgain?.rows.filter((row) => row.typeLabel === "非法断行").length, 1, "marking the same boundary twice must reuse the review row");
+
 console.log("chapterReviewApplication tests passed");
 
 function splitPatterns(value: string): string[] {

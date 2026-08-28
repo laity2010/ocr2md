@@ -32,7 +32,6 @@ import {
 import { exportByCalibration } from "./calibrationExport";
 import { exportCrossTranslation, normalizeVaultRelativePath } from "./crossTranslationExport";
 import { scanTextBlocks } from "./textBlocks";
-import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { scanSentences } from "./sentences";
 import {
   markdownStructureIssue,
@@ -1105,17 +1104,14 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   private refreshIllegalLineBreakRows(text: string, workingPath: string) {
     const sourcePath = this.selectedFile?.path ?? workingPath;
-    const scanned = attachScanIdentities(
-      scanIllegalLineBreaks(text, sourcePath).map((row) => ({ ...row, workingCopyPath: workingPath })),
-      text,
-      { moduleName: "非法断行", sourcePath },
-    );
-    const previous = this.rows.filter((row) => row.typeLabel === "非法断行" && row.sourcePath === sourcePath);
-    const reconciled = reconcileRows(previous, scanned, text);
-    this.rows = [
-      ...this.rows.filter((row) => !(row.typeLabel === "非法断行" && row.sourcePath === sourcePath)),
-      ...reconciled,
-    ].sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.refreshIllegalLineBreak({
+      workingText: text,
+      sourcePath,
+      workingPath,
+    });
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     this.modulePreviewPaths.set("非法断行", workingPath);
   }
 
@@ -1355,45 +1351,19 @@ class Ocr2mdExtension implements vscode.Disposable {
 
     const text = editor.document.getText();
     const sourcePath = this.selectedFile?.path ?? working.fsPath;
-    const manual = manualIllegalLineBreakAtLine(text, sourcePath, editor.selection.active.line);
-    if (!manual) {
+    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
+    const result = application.markIllegalLineBreak({
+      workingText: text,
+      sourcePath,
+      workingPath: working.fsPath,
+      cursorLine: editor.selection.active.line,
+    });
+    if (!result) {
       void vscode.window.showWarningMessage("此处无法形成断行边界：请把光标放在断行前正文行或两段之间的空行。");
       return;
     }
-    const attached = attachScanIdentities([{
-      ...manual,
-      workingCopyPath: working.fsPath,
-      isWorkingCorrection: true,
-    }], text, { moduleName: "非法断行", sourcePath })[0];
-    if (!attached) return;
-
-    const sameBoundary = (row: Candidate) => row.typeLabel === "非法断行"
-      && row.sourcePath === sourcePath
-      && row.raw === manual.raw
-      && row.range.line === manual.range.line
-      && (row.range.endLine ?? row.range.line) === (manual.range.endLine ?? manual.range.line);
-    const existing = this.rows.find(sameBoundary);
-    if (existing) {
-      this.rows = this.rows.map((row) => row.id === existing.id ? {
-        ...row,
-        ...attached,
-        id: existing.id,
-        rowId: existing.rowId ?? existing.id,
-        atomId: existing.atomId ?? attached.atomId,
-        lineType: "合并",
-        isWorkingCorrection: true,
-        breakReason: "人工加入",
-        breakConfidence: "高" as const,
-      } : row);
-    } else {
-      this.rows = [...this.rows, {
-        ...attached,
-        lineType: "合并",
-        isWorkingCorrection: true,
-        breakReason: "人工加入",
-        breakConfidence: "高" as const,
-      }].sort(compareRows);
-    }
+    this.rows = result.rows;
+    this.annotationPairs = result.annotationPairs;
     this.modulePreviewPaths.set("非法断行", working.fsPath);
     this.update();
   }
