@@ -130,7 +130,7 @@ for (const translationUiText of ["翻译服务", "当前翻译服务", "DeepL", 
   assert.ok(html.includes(translationUiText), `missing translation service UI text: ${translationUiText}`);
 }
 assert.ok(html.includes('apiKey.type = "password"'), "translation API key must use a password field");
-assert.ok(html.includes("VS Code SecretStorage"), "translation API key storage guidance is missing");
+assert.ok(html.includes("宿主密钥存储"), "translation API key storage guidance is missing");
 assert.ok(html.includes('post("testTranslationService"'), "translation service test action is missing");
 assert.ok(html.includes('post("saveTranslationSettings"'), "translation settings save action is missing");
 assert.ok(!html.includes("下载所选图片"), "selected-only image download must be removed");

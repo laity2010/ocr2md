@@ -12,7 +12,6 @@ import {
 } from "./chapterBoundary";
 import {
   annotationMatchSummary,
-  buildAnnotationPairs,
   extractAnnotationNumber,
 } from "./annotation";
 import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign";
@@ -22,7 +21,6 @@ import {
   IGNORED_LINE_TYPE,
   isIgnoredEmbedCandidate,
   findReusableManualRow,
-  markCandidatesDeleted,
 } from "./candidateLifecycle";
 import { MODULE_REGEX_DEFAULTS, MODULE_REGEX_PRESETS } from "./regexPresets";
 import {
@@ -95,6 +93,14 @@ import type {
   TranslationTestState,
 } from "./types";
 import { renderSidebar } from "./webview";
+import {
+  applyAnnotationNumber as applyReviewAnnotationNumber,
+  applyChapterFile as applyReviewChapterFile,
+  applyRowsLineType as applyReviewRowsLineType,
+  planHeadingLineTypeEdits,
+  rebuildAnnotationReviewState,
+} from "./chapterReviewActions";
+import type { UiCommandMessage } from "./uiProtocol";
 import {
   CHAPTER_BOUNDARY_WORKING_FILE,
   CHAPTER_CHANGED_PROPERTY,
@@ -323,7 +329,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     };
   }
 
-  private async handleMessage(message: WebviewMessage) {
+  private async handleMessage(message: UiCommandMessage) {
     switch (message.command) {
       case "setActiveModule":
         if (isModuleName(message.moduleName)) await this.activateModule(message.moduleName);
@@ -628,7 +634,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.update();
   }
 
-  private async saveTranslationSettings(message: WebviewMessage) {
+  private async saveTranslationSettings(message: UiCommandMessage) {
     const service = isTranslationServiceId(message.service) ? message.service : this.translationService;
     const sampleText = typeof message.sampleText === "string" && message.sampleText.trim()
       ? message.sampleText
@@ -650,7 +656,7 @@ class Ocr2mdExtension implements vscode.Disposable {
     this.update();
   }
 
-  private async testTranslationService(message: WebviewMessage) {
+  private async testTranslationService(message: UiCommandMessage) {
     const service = isTranslationServiceId(message.service) ? message.service : this.translationService;
     this.translationService = service;
     if (typeof message.sampleText === "string" && message.sampleText.trim()) this.translationSampleText = message.sampleText;
@@ -1192,32 +1198,19 @@ class Ocr2mdExtension implements vscode.Disposable {
     const selected = new Set(ids);
     const selectedRows = this.rows.filter((row) => selected.has(row.id));
     if (lineType === IGNORED_LINE_TYPE && selectedRows.some((row) => row.typeLabel !== "嵌入块" && row.typeLabel !== "章节定界" && row.typeLabel !== "非法断行")) return;
-    if (lineType === DELETED_LINE_TYPE) {
-      this.rows = markCandidatesDeleted(this.rows, selected);
-    } else {
-      const titleRows = this.rows.filter((row) => selected.has(row.id) && row.typeLabel === "章节标题");
-      if (titleRows.length && /^(?:[1-6] 级标题|非标题)$/.test(lineType)) {
-        await this.applyHeadingLineType(titleRows, lineType);
-      }
-      this.rows = this.rows.map((row) => selected.has(row.id) ? { ...row, lineType } : row);
+    const titleRows = selectedRows.filter((row) => row.typeLabel === "章节标题");
+    if (lineType !== DELETED_LINE_TYPE && titleRows.length && /^(?:[1-6] 级标题|非标题)$/.test(lineType)) {
+      await this.applyHeadingLineType(titleRows, lineType);
     }
-    if (selectedRows.some((row) => row.typeLabel === "嵌入块")) {
-      const source = this.selectedFile?.path;
-      const workingPath = this.chapterWorkingUri?.fsPath ?? source;
-      const targetRows = this.rows.filter((row) =>
-        row.typeLabel === "嵌入块" && (!workingPath || rowBelongsToChapter(row, source, workingPath)));
-      const renumbered = applyEmbedNumbers(targetRows, this.selectedFileText);
-      const byId = new Map(renumbered.map((row) => [row.id, row]));
-      this.rows = this.rows.map((row) => byId.get(row.id) ?? row);
-    }
+    const sourcePath = this.selectedFile?.path;
+    const workingPath = this.chapterWorkingUri?.fsPath ?? sourcePath;
+    this.rows = applyReviewRowsLineType(this.rows, ids, lineType, this.selectedFileText, { sourcePath, workingPath });
     this.rebuildAnnotationPairs();
     this.update();
   }
 
   private setChapterFile(ids: string[], value: string) {
-    const chapterFile = value.trim();
-    const selected = new Set(ids);
-    this.rows = this.rows.map((row) => selected.has(row.id) ? { ...row, chapterFile } : row);
+    this.rows = applyReviewChapterFile(this.rows, ids, value);
     this.update();
   }
 
@@ -1249,14 +1242,10 @@ class Ocr2mdExtension implements vscode.Disposable {
       const document = await vscode.workspace.openTextDocument(uri);
       const edit = new vscode.WorkspaceEdit();
       const documentText = document.getText();
-      for (const row of targetRows) {
-        const located = locateCandidate(documentText, row);
-        if (!located || located.line >= document.lineCount) continue;
-        const sourceLine = document.lineAt(located.line);
-        const content = sourceLine.text.replace(/^ {0,3}#{1,6}(?:\s+|$)/, "");
-        const match = /^([1-6]) 级标题$/.exec(lineType);
-        const replacement = match ? `${"#".repeat(Number(match[1]))} ${content}` : content;
-        if (replacement !== sourceLine.text) edit.replace(uri, sourceLine.range, replacement);
+      for (const planned of planHeadingLineTypeEdits(documentText, targetRows, lineType)) {
+        if (planned.line >= document.lineCount) continue;
+        const sourceLine = document.lineAt(planned.line);
+        if (planned.replacement !== sourceLine.text) edit.replace(uri, sourceLine.range, planned.replacement);
       }
       await vscode.workspace.applyEdit(edit);
       await document.save();
@@ -1264,12 +1253,9 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private rebuildAnnotationPairs() {
-    this.rows = this.rows.map((row) => {
-      if (row.typeLabel !== "注释" || row.annotationNumberSource === "manual") return row;
-      const extracted = extractAnnotationNumber(row.raw);
-      return extracted ? { ...row, annotationNumber: extracted, annotationNumberSource: "extracted" } : row;
-    });
-    this.annotationPairs = buildAnnotationPairs(this.rows, this.annotationPairs);
+    const next = rebuildAnnotationReviewState(this.rows, this.annotationPairs);
+    this.rows = next.rows;
+    this.annotationPairs = next.annotationPairs;
   }
 
   private matchAnnotationPairs() {
@@ -1278,11 +1264,9 @@ class Ocr2mdExtension implements vscode.Disposable {
   }
 
   private setAnnotationNumber(id: string, value: string) {
-    const annotationNumber = value.trim();
-    this.rows = this.rows.map((row) => row.id === id
-      ? { ...row, annotationNumber: annotationNumber || undefined, annotationNumberSource: "manual" }
-      : row);
-    this.rebuildAnnotationPairs();
+    const next = applyReviewAnnotationNumber({ rows: this.rows, annotationPairs: this.annotationPairs }, id, value);
+    this.rows = next.rows;
+    this.annotationPairs = next.annotationPairs;
     this.update();
   }
 
@@ -2116,14 +2100,14 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly state: () => SidebarState,
-    private readonly onMessage: (message: WebviewMessage) => Promise<void>,
+    private readonly onMessage: (message: UiCommandMessage) => Promise<void>,
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView) {
     this.view = view;
     this.loaded = false;
     view.webview.options = { enableScripts: true };
-    view.webview.onDidReceiveMessage((message: WebviewMessage) => this.onMessage(message));
+    view.webview.onDidReceiveMessage((message: UiCommandMessage) => this.onMessage(message));
     this.update();
   }
 
@@ -2339,25 +2323,6 @@ function chapterTreeLabel(workspacePath: string, file: FileEntry): string {
   return chapterDisplayName(workspacePath, file.path) || file.label;
 }
 
-interface WebviewMessage {
-  command: string;
-  moduleName?: string;
-  pattern?: string;
-  ids?: string[];
-  id?: string;
-  lineType?: string;
-  mode?: string;
-  value?: string;
-  message?: string;
-  chapterFile?: string;
-  annotationNumber?: string;
-  service?: string;
-  apiKey?: string;
-  sampleText?: string;
-  model?: string;
-  prompt?: string;
-  enabled?: boolean;
-}
 
 function nearestMatchingLine(text: string, lineText: string, hint: number): number {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
