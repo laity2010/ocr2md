@@ -60,7 +60,15 @@ export function install(payload: DemoPayload): void {
   };
 
   (window as unknown as { ocr2mdHost: typeof host }).ocr2mdHost = host;
-  if (payload.googleDrive) installGoogleDriveCloudPanel(payload.googleDrive, setStatus, openDriveDocument);
+  if (payload.googleDrive) {
+    installGoogleDriveCloudPanel(
+      payload.googleDrive,
+      setStatus,
+      openDriveDocument,
+      getDriveSaveText,
+      markDriveDocumentSaved,
+    );
+  }
   queueMicrotask(() => host.postMessage({ command: "exportByCalibration" }));
 
   async function dispatch(message: UiCommandMessage): Promise<void> {
@@ -237,6 +245,17 @@ export function install(payload: DemoPayload): void {
     saved = currentSavedState();
     publish();
     setStatus(`已载入工作台 · ${file.name}`, "pass");
+  }
+
+  function getDriveSaveText(path: string): string | undefined {
+    return sourcePath === path ? workingText : undefined;
+  }
+
+  function markDriveDocumentSaved(file: GoogleDriveOpenedFile): void {
+    if (sourcePath !== file.path) return;
+    sourceText = file.text;
+    state.selectedFile = state.selectedFile ? { ...state.selectedFile, changed: false } : state.selectedFile;
+    publish();
   }
 
   function verifyGolden(): void {

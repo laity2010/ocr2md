@@ -21,17 +21,20 @@ export interface GoogleDriveOpenedFile {
 }
 
 export type CloudDriveFileOpenedHandler = (file: GoogleDriveOpenedFile) => void;
+export type CloudDriveFileSavedHandler = (file: GoogleDriveOpenedFile) => void;
+export type CloudDriveSaveTextProvider = (path: string) => string | undefined;
 
 /**
- * Mounts a deliberately read-only Google Drive connection panel.
- *
- * This milestone proves browser OAuth, Drive API transport, and the
- * GoogleDriveWorkspaceStorage adapter without exposing write/delete actions.
+ * Mounts the Google Drive smoke panel. Directory browsing and file opening are
+ * read-only; the only exposed write action is an explicit save of the currently
+ * opened file. Delete, move, rename, and folder writes stay unavailable.
  */
 export function installGoogleDriveCloudPanel(
   config: GoogleDriveCloudConfig,
   reportStatus: CloudDriveStatusReporter,
   onFileOpened?: CloudDriveFileOpenedHandler,
+  getSaveText?: CloudDriveSaveTextProvider,
+  onFileSaved?: CloudDriveFileSavedHandler,
 ): void {
   const session = new GoogleIdentityTokenSession(config.clientId);
   const gateway = new GoogleDriveApiGateway(
@@ -39,6 +42,7 @@ export function installGoogleDriveCloudPanel(
     () => session.getAccessToken(),
   );
   const storage = new GoogleDriveWorkspaceStorage(gateway, config.rootFolderId);
+  let openedFile: Pick<GoogleDriveOpenedFile, "path" | "name"> | undefined;
 
   const panel = element("aside", "cloud-smoke-drive");
   panel.setAttribute("aria-label", "Google Drive connection");
@@ -51,16 +55,18 @@ export function installGoogleDriveCloudPanel(
   header.append(title, connection);
 
   const note = element("p", "cloud-smoke-drive__note");
-  note.textContent = "只读验证：登录后列出同步文件夹，不会保存或删除。";
+  note.textContent = "受控写入验证：只允许原位保存当前文件；不会删除、移动或重命名。";
 
   const actions = element("div", "cloud-smoke-drive__actions");
   const connectButton = button("连接 Google Drive");
   const refreshButton = button("刷新目录");
+  const saveButton = button("保存当前文件");
   const disconnectButton = button("断开");
   connectButton.disabled = true;
   refreshButton.disabled = true;
+  saveButton.disabled = true;
   disconnectButton.disabled = true;
-  actions.append(connectButton, refreshButton, disconnectButton);
+  actions.append(connectButton, refreshButton, saveButton, disconnectButton);
 
   const list = element("ul", "cloud-smoke-drive__list");
   renderMessage(list, "正在准备 Google 登录…");
@@ -83,8 +89,12 @@ export function installGoogleDriveCloudPanel(
   refreshButton.addEventListener("click", () => {
     void refreshDirectory();
   });
+  saveButton.addEventListener("click", () => {
+    void saveOpenedFile();
+  });
   disconnectButton.addEventListener("click", () => {
     session.disconnect();
+    openedFile = undefined;
     setConnected(false);
     closePreview();
     renderMessage(list, "已断开。访问令牌已从浏览器内存清除。");
@@ -150,11 +160,47 @@ export function installGoogleDriveCloudPanel(
       const path = `/${entry.name}`;
       const data = await storage.readFile(path);
       const text = new TextDecoder("utf-8").decode(data);
+      openedFile = { path, name: entry.name };
       previewContent.textContent = text;
       onFileOpened?.({ path, name: entry.name, text });
       reportStatus(`Google Drive 已读取 · ${entry.name}`, "pass");
     } catch (error) {
       previewContent.textContent = errorMessage(error);
+      reportStatus(errorMessage(error), "fail");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveOpenedFile(): Promise<void> {
+    if (!session.isConnected()) {
+      setConnected(false);
+      reportStatus("登录已失效，请重新连接 Google Drive。", "fail");
+      return;
+    }
+    if (!openedFile) {
+      reportStatus("请先打开一个 Google Drive 文件。", "fail");
+      return;
+    }
+    const text = getSaveText?.(openedFile.path);
+    if (text === undefined) {
+      reportStatus("当前工作台没有可保存的 Drive 文件内容。", "fail");
+      return;
+    }
+
+    setBusy(true);
+    connection.textContent = "正在保存";
+    try {
+      await storage.writeFile(openedFile.path, new TextEncoder().encode(text));
+      const verifiedData = await storage.readFile(openedFile.path);
+      const verifiedText = new TextDecoder("utf-8").decode(verifiedData);
+      if (verifiedText !== text) throw new Error("Google Drive 保存后回读内容不一致");
+      preview.hidden = false;
+      previewTitle.textContent = openedFile.name;
+      previewContent.textContent = verifiedText;
+      onFileSaved?.({ ...openedFile, text: verifiedText });
+      reportStatus(`Google Drive 已保存并回读验证 · ${openedFile.name}`, "pass");
+    } catch (error) {
       reportStatus(errorMessage(error), "fail");
     } finally {
       setBusy(false);
@@ -172,6 +218,7 @@ export function installGoogleDriveCloudPanel(
     connection.textContent = connected ? "已连接" : "未连接";
     connectButton.disabled = connected;
     refreshButton.disabled = !connected;
+    saveButton.disabled = !connected || !openedFile || !getSaveText;
     disconnectButton.disabled = !connected;
   }
 
@@ -180,6 +227,7 @@ export function installGoogleDriveCloudPanel(
     if (busy) {
       connectButton.disabled = true;
       refreshButton.disabled = true;
+      saveButton.disabled = true;
       disconnectButton.disabled = true;
       return;
     }
