@@ -14,6 +14,14 @@ export type CloudDriveStatusReporter = (
   kind: "ready" | "pass" | "fail",
 ) => void;
 
+export interface GoogleDriveOpenedFile {
+  path: string;
+  name: string;
+  text: string;
+}
+
+export type CloudDriveFileOpenedHandler = (file: GoogleDriveOpenedFile) => void;
+
 /**
  * Mounts a deliberately read-only Google Drive connection panel.
  *
@@ -23,6 +31,7 @@ export type CloudDriveStatusReporter = (
 export function installGoogleDriveCloudPanel(
   config: GoogleDriveCloudConfig,
   reportStatus: CloudDriveStatusReporter,
+  onFileOpened?: CloudDriveFileOpenedHandler,
 ): void {
   const session = new GoogleIdentityTokenSession(config.clientId);
   const gateway = new GoogleDriveApiGateway(
@@ -138,8 +147,11 @@ export function installGoogleDriveCloudPanel(
     previewTitle.textContent = entry.name;
     previewContent.textContent = "正在读取…";
     try {
-      const data = await storage.readFile(`/${entry.name}`);
-      previewContent.textContent = new TextDecoder("utf-8").decode(data);
+      const path = `/${entry.name}`;
+      const data = await storage.readFile(path);
+      const text = new TextDecoder("utf-8").decode(data);
+      previewContent.textContent = text;
+      onFileOpened?.({ path, name: entry.name, text });
       reportStatus(`Google Drive 已读取 · ${entry.name}`, "pass");
     } catch (error) {
       previewContent.textContent = errorMessage(error);

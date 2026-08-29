@@ -6,7 +6,11 @@ import { MODULE_REGEX_DEFAULTS } from "../src/regexPresets";
 import { withFormatCalibratedFrontmatter } from "../src/workspaceFiles";
 import type { Candidate, SidebarState } from "../src/types";
 import type { UiCommandMessage } from "../src/uiProtocol";
-import { installGoogleDriveCloudPanel, type GoogleDriveCloudConfig } from "./googleDriveCloudPanel";
+import {
+  installGoogleDriveCloudPanel,
+  type GoogleDriveCloudConfig,
+  type GoogleDriveOpenedFile,
+} from "./googleDriveCloudPanel";
 
 interface DemoPayload {
   initialState: SidebarState;
@@ -31,7 +35,11 @@ const VIEW_STATE_KEY = "ocr2md-cloud-smoke-view-v1";
 
 export function install(payload: DemoPayload): void {
   let state = clone(payload.initialState);
+  let sourceText = payload.sourceText;
   let workingText = payload.workingText;
+  let sourcePath = payload.sourcePath;
+  let workingPath = payload.workingPath;
+  let sourceLabel = payload.sourceLabel;
   let application = new ChapterReviewApplication({ rows: state.rows, annotationPairs: state.annotationPairs });
   let saved = currentSavedState();
   const listeners: Array<(state: SidebarState) => void> = [];
@@ -52,7 +60,7 @@ export function install(payload: DemoPayload): void {
   };
 
   (window as unknown as { ocr2mdHost: typeof host }).ocr2mdHost = host;
-  if (payload.googleDrive) installGoogleDriveCloudPanel(payload.googleDrive, setStatus);
+  if (payload.googleDrive) installGoogleDriveCloudPanel(payload.googleDrive, setStatus, openDriveDocument);
   queueMicrotask(() => host.postMessage({ command: "exportByCalibration" }));
 
   async function dispatch(message: UiCommandMessage): Promise<void> {
@@ -78,8 +86,8 @@ export function install(payload: DemoPayload): void {
             ids,
             lineType,
             text: workingText,
-            sourcePath: payload.sourcePath,
-            workingPath: payload.workingPath,
+            sourcePath,
+            workingPath,
           });
           updateFromApplication(next);
           setStatus(`已更新 ${ids.length} 行 → ${lineType}`, "ready");
@@ -99,20 +107,20 @@ export function install(payload: DemoPayload): void {
           const patterns = splitPatterns(message.pattern ?? state.moduleRegexPatterns[moduleName] ?? "");
           if (moduleName === "注释") {
             updateFromApplication(application.refreshAnnotation({
-              baselineText: payload.sourceText,
+              baselineText: sourceText,
               workingText,
-              sourcePath: payload.sourcePath,
-              workingPath: payload.workingPath,
-              sourceLabel: payload.sourceLabel,
+              sourcePath,
+              workingPath,
+              sourceLabel,
               patterns,
             }));
           } else if (moduleName === "嵌入块") {
             updateFromApplication(application.refreshEmbed({
-              baselineText: payload.sourceText,
+              baselineText: sourceText,
               workingText,
-              sourcePath: payload.sourcePath,
-              workingPath: payload.workingPath,
-              sourceLabel: payload.sourceLabel,
+              sourcePath,
+              workingPath,
+              sourceLabel,
               patterns,
             }));
           }
@@ -184,7 +192,58 @@ export function install(payload: DemoPayload): void {
     }
   }
 
+  function openDriveDocument(file: GoogleDriveOpenedFile): void {
+    sourceText = file.text;
+    workingText = file.text;
+    sourcePath = file.path;
+    workingPath = `${file.path}.ocr2md-memory-working`;
+    sourceLabel = file.name;
+
+    application = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
+    application.refreshChapterTitle({
+      baselineText: sourceText,
+      workingText,
+      sourcePath,
+      workingPath,
+      sourceLabel,
+      embedPatterns: splitPatterns(state.moduleRegexPatterns["嵌入块"] ?? MODULE_REGEX_DEFAULTS["嵌入块"] ?? ""),
+    });
+    application.refreshAnnotation({
+      baselineText: sourceText,
+      workingText,
+      sourcePath,
+      workingPath,
+      sourceLabel,
+      patterns: splitPatterns(state.moduleRegexPatterns["注释"] ?? MODULE_REGEX_DEFAULTS["注释"] ?? ""),
+    });
+    application.refreshEmbed({
+      baselineText: sourceText,
+      workingText,
+      sourcePath,
+      workingPath,
+      sourceLabel,
+      patterns: splitPatterns(state.moduleRegexPatterns["嵌入块"] ?? MODULE_REGEX_DEFAULTS["嵌入块"] ?? ""),
+    });
+    application.refreshIllegalLineBreak({ workingText, sourcePath, workingPath });
+
+    const snapshot = application.snapshot();
+    state.workspaceLabel = `Google Drive · ${file.name}`;
+    state.selectedFile = { label: file.name, path: file.path, kind: "chapter" };
+    state.files = [state.selectedFile];
+    state.activeModule = "章节标题";
+    state.viewMode = "table";
+    state.rows = snapshot.rows;
+    state.annotationPairs = snapshot.annotationPairs;
+    saved = currentSavedState();
+    publish();
+    setStatus(`已载入工作台 · ${file.name}`, "pass");
+  }
+
   function verifyGolden(): void {
+    if (sourcePath !== payload.sourcePath) {
+      setStatus(`真实 Drive 文件已载入 · ${sourceLabel}`, "pass");
+      return;
+    }
     const output = exportByCalibration(workingText, application.snapshot().rows, { numberHeadings: state.headingNumberingEnabled });
     const passed = output === payload.goldenText;
     setStatus(`${passed ? "GOLDEN PASS" : "GOLDEN FAIL"} · ${byteLength(output).toLocaleString()} bytes`, passed ? "pass" : "fail");
