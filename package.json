@@ -127,11 +127,16 @@
     "compile": "tsc -p ./",
     "test": "npm run compile && node ./out/chapterBoundary.test.js && node ./out/candidateLifecycle.test.js && node ./out/rowIdentity.test.js && node ./out/annotation.test.js && node ./out/scanner.test.js && node ./out/workspaceFiles.test.js && node ./out/workspaceStorage.test.js && node ./out/workspaceStorageBoundary.test.js && node ./out/chapterWorkspaceApplication.test.js && node ./out/chapterWorkspaceApplicationBoundary.test.js && node ./out/chapterWorkflow.e2e.test.js && node ./out/chapterFileAssign.test.js && node ./out/chapterReviewActions.test.js && node ./out/chapterReviewApplication.test.js && node ./out/chapterReviewApplicationBoundary.test.js && node ./out/reviewModuleDefinitions.test.js && node ./out/reviewUi.test.js && node ./out/atoms.test.js && node ./out/imageDownload.test.js && node ./out/calibrationExport.test.js && node ./out/illegalLineBreaks.test.js && node ./out/textBlocks.test.js && node ./out/sentences.test.js && node ./out/latexMask.test.js && node ./out/markdownProtection.test.js && node ./out/translationService.test.js && node ./out/translationUnits.test.js && node ./out/crossTranslationExport.test.js && node ./out/translationState.test.js && node ./out/webview.test.js",
     "watch": "tsc -watch -p ./",
-    "vscode:prepublish": "npm run compile"
+    "vscode:prepublish": "npm run compile",
+    "build:cloud-smoke": "npm run compile && node scripts/build-cloud-smoke.mjs",
+    "serve:cloud-smoke": "python3 -m http.server 4173 -d cloud-smoke-dist"
   },
   "devDependencies": {
+    "@noble/hashes": "^2.4.0",
     "@types/node": "^20.14.10",
     "@types/vscode": "^1.90.0",
+    "esbuild": "^0.25.12",
+    "path-browserify": "^1.0.1",
     "typescript": "^5.6.3"
   },
   "dependencies": {
