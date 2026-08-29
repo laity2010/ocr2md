@@ -80,6 +80,15 @@ const bundleResult = await esbuild.build({
 });
 const runtimeBundle = bundleResult.outputFiles[0].text;
 
+const googleDriveClientId = process.env.OCR2MD_GOOGLE_CLIENT_ID?.trim();
+const googleDriveRootFolderId = process.env.OCR2MD_GOOGLE_ROOT_FOLDER_ID?.trim();
+if (Boolean(googleDriveClientId) !== Boolean(googleDriveRootFolderId)) {
+  throw new Error("Set both OCR2MD_GOOGLE_CLIENT_ID and OCR2MD_GOOGLE_ROOT_FOLDER_ID");
+}
+const googleDrive = googleDriveClientId && googleDriveRootFolderId
+  ? { clientId: googleDriveClientId, rootFolderId: googleDriveRootFolderId }
+  : undefined;
+
 const payload = {
   initialState,
   sourceText,
@@ -88,6 +97,7 @@ const payload = {
   sourcePath: virtualSourcePath,
   workingPath: virtualWorkingPath,
   sourceLabel,
+  ...(googleDrive ? { googleDrive } : {}),
 };
 const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
 const bootstrap = `${runtimeBundle}\nOcr2mdCloudSmoke.install(${payloadJson});`;
@@ -110,6 +120,58 @@ const theme = `
     box-shadow: 0 6px 24px rgba(0,0,0,.25); white-space: pre-wrap;
     font: 12px/1.55 var(--ocr-editor-font-family); cursor: pointer;
   }
+  .cloud-smoke-drive {
+    position: fixed; z-index: 280; right: 14px; top: 48px;
+    width: min(360px, calc(100vw - 28px)); padding: 14px;
+    border: 1px solid var(--ocr-border); border-radius: 10px;
+    color: var(--ocr-foreground); background: color-mix(in srgb, var(--ocr-background) 97%, transparent);
+    box-shadow: 0 8px 28px rgba(0,0,0,.24); font: 13px/1.4 var(--ocr-font-family);
+  }
+  .cloud-smoke-drive__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .cloud-smoke-drive__connection {
+    padding: 2px 7px; border: 1px solid var(--ocr-border); border-radius: 999px;
+    color: var(--ocr-description-foreground); font-size: 11px;
+  }
+  .cloud-smoke-drive__connection[data-connected="true"] { border-color: var(--ocr-passed); color: var(--ocr-passed); }
+  .cloud-smoke-drive__note { margin: 8px 0; color: var(--ocr-description-foreground); font-size: 12px; }
+  .cloud-smoke-drive__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cloud-smoke-drive__actions button {
+    padding: 5px 8px; border: 1px solid var(--ocr-border); border-radius: 5px;
+    color: var(--ocr-foreground); background: var(--ocr-input-background); cursor: pointer;
+  }
+  .cloud-smoke-drive__actions button:disabled { cursor: default; opacity: .5; }
+  .cloud-smoke-drive__list {
+    max-height: min(260px, 34vh); overflow: auto; margin: 10px 0 0; padding: 0;
+    border-top: 1px solid var(--ocr-border); list-style: none;
+  }
+  .cloud-smoke-drive__item, .cloud-smoke-drive__message {
+    display: flex; gap: 7px; padding: 7px 2px; border-bottom: 1px solid var(--ocr-border);
+    overflow-wrap: anywhere;
+  }
+  .cloud-smoke-drive__message { color: var(--ocr-description-foreground); }
+  .cloud-smoke-drive__icon { flex: none; }
+  .cloud-smoke-drive__file {
+    flex: 1; min-width: 0; padding: 0; border: 0; text-align: left;
+    color: var(--ocr-text-link); background: transparent; cursor: pointer; font: inherit;
+    overflow-wrap: anywhere;
+  }
+  .cloud-smoke-drive__file:hover { text-decoration: underline; }
+  .cloud-smoke-drive__preview { margin-top: 10px; border-top: 1px solid var(--ocr-border); }
+  .cloud-smoke-drive__preview[hidden] { display: none; }
+  .cloud-smoke-drive__preview-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0;
+  }
+  .cloud-smoke-drive__preview-header strong { min-width: 0; overflow-wrap: anywhere; }
+  .cloud-smoke-drive__preview-header button {
+    flex: none; padding: 3px 6px; border: 1px solid var(--ocr-border); border-radius: 5px;
+    color: var(--ocr-foreground); background: var(--ocr-input-background); cursor: pointer;
+  }
+  .cloud-smoke-drive__preview-content {
+    max-height: min(320px, 42vh); overflow: auto; margin: 0; padding: 9px;
+    border: 1px solid var(--ocr-border); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere;
+    color: var(--ocr-foreground); background: var(--ocr-editor-background, var(--ocr-background));
+    font: 12px/1.55 var(--ocr-editor-font-family);
+  }
 `;
 
 const html = renderReviewUi(initialState, bootstrap, theme);
@@ -120,3 +182,4 @@ await fs.writeFile(path.join(publicDir, ".nojekyll"), "", "utf8");
 console.log(`cloud smoke built: ${path.relative(root, path.join(publicDir, "index.html"))}`);
 console.log(`html bytes: ${Buffer.byteLength(html).toLocaleString()}`);
 console.log(`golden bytes: ${Buffer.byteLength(goldenText).toLocaleString()}`);
+console.log(`google drive panel: ${googleDrive ? "enabled" : "disabled"}`);

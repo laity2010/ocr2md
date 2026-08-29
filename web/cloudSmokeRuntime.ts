@@ -6,6 +6,7 @@ import { MODULE_REGEX_DEFAULTS } from "../src/regexPresets";
 import { withFormatCalibratedFrontmatter } from "../src/workspaceFiles";
 import type { Candidate, SidebarState } from "../src/types";
 import type { UiCommandMessage } from "../src/uiProtocol";
+import { installGoogleDriveCloudPanel, type GoogleDriveCloudConfig } from "./googleDriveCloudPanel";
 
 interface DemoPayload {
   initialState: SidebarState;
@@ -15,6 +16,7 @@ interface DemoPayload {
   sourcePath: string;
   workingPath: string;
   sourceLabel: string;
+  googleDrive?: GoogleDriveCloudConfig;
 }
 
 interface SavedReviewState {
@@ -50,6 +52,7 @@ export function install(payload: DemoPayload): void {
   };
 
   (window as unknown as { ocr2mdHost: typeof host }).ocr2mdHost = host;
+  if (payload.googleDrive) installGoogleDriveCloudPanel(payload.googleDrive, setStatus);
   queueMicrotask(() => host.postMessage({ command: "exportByCalibration" }));
 
   async function dispatch(message: UiCommandMessage): Promise<void> {
