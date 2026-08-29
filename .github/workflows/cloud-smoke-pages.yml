@@ -35,6 +35,9 @@ jobs:
         run: npm test
 
       - name: Build cloud smoke demo
+        env:
+          OCR2MD_GOOGLE_CLIENT_ID: ${{ vars.OCR2MD_GOOGLE_CLIENT_ID }}
+          OCR2MD_GOOGLE_ROOT_FOLDER_ID: ${{ vars.OCR2MD_GOOGLE_ROOT_FOLDER_ID }}
         run: npm run build:cloud-smoke
 
       - name: Configure Pages
