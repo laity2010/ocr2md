@@ -140,6 +140,10 @@ const theme = `
     color: var(--ocr-foreground); background: var(--ocr-input-background); cursor: pointer;
   }
   .cloud-smoke-drive__actions button:disabled { cursor: default; opacity: .5; }
+  .cloud-smoke-drive__path {
+    margin-top: 8px; color: var(--ocr-description-foreground); font: 11px/1.35 var(--ocr-editor-font-family);
+    overflow-wrap: anywhere;
+  }
   .cloud-smoke-drive__list {
     max-height: min(260px, 34vh); overflow: auto; margin: 10px 0 0; padding: 0;
     border-top: 1px solid var(--ocr-border); list-style: none;

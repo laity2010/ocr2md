@@ -42,6 +42,7 @@ export function installGoogleDriveCloudPanel(
     () => session.getAccessToken(),
   );
   const storage = new GoogleDriveWorkspaceStorage(gateway, config.rootFolderId);
+  let currentDirectory = "/";
   let openedFile: Pick<GoogleDriveOpenedFile, "path" | "name"> | undefined;
 
   const panel = element("aside", "cloud-smoke-drive");
@@ -59,14 +60,19 @@ export function installGoogleDriveCloudPanel(
 
   const actions = element("div", "cloud-smoke-drive__actions");
   const connectButton = button("连接 Google Drive");
+  const upButton = button("上级");
   const refreshButton = button("刷新目录");
   const saveButton = button("保存当前文件");
   const disconnectButton = button("断开");
   connectButton.disabled = true;
+  upButton.disabled = true;
   refreshButton.disabled = true;
   saveButton.disabled = true;
   disconnectButton.disabled = true;
-  actions.append(connectButton, refreshButton, saveButton, disconnectButton);
+  actions.append(connectButton, upButton, refreshButton, saveButton, disconnectButton);
+
+  const pathLabel = element("div", "cloud-smoke-drive__path");
+  pathLabel.textContent = currentDirectory;
 
   const list = element("ul", "cloud-smoke-drive__list");
   renderMessage(list, "正在准备 Google 登录…");
@@ -80,11 +86,16 @@ export function installGoogleDriveCloudPanel(
   previewHeader.append(previewTitle, closePreviewButton);
   preview.append(previewHeader, previewContent);
 
-  panel.append(header, note, actions, list, preview);
+  panel.append(header, note, actions, pathLabel, list, preview);
   document.body.append(panel);
 
   connectButton.addEventListener("click", () => {
     void connect();
+  });
+  upButton.addEventListener("click", () => {
+    if (currentDirectory === "/") return;
+    currentDirectory = parentPath(currentDirectory);
+    void refreshDirectory();
   });
   refreshButton.addEventListener("click", () => {
     void refreshDirectory();
@@ -137,10 +148,11 @@ export function installGoogleDriveCloudPanel(
     setBusy(true);
     connection.textContent = "正在读取";
     try {
-      const entries = await storage.readDirectory("/");
-      renderEntries(list, entries, openEntry);
+      const entries = await storage.readDirectory(currentDirectory);
+      renderEntries(list, entries, openEntry, openDirectory);
+      pathLabel.textContent = currentDirectory;
       connection.textContent = "已连接";
-      reportStatus(`Google Drive 已读取 · ${entries.length} 项`, "pass");
+      reportStatus(`Google Drive 已读取 · ${currentDirectory} · ${entries.length} 项`, "pass");
     } catch (error) {
       connection.textContent = session.isConnected() ? "读取失败" : "未连接";
       renderMessage(list, errorMessage(error));
@@ -150,6 +162,13 @@ export function installGoogleDriveCloudPanel(
     }
   }
 
+  async function openDirectory(entry: WorkspaceDirectoryEntry): Promise<void> {
+    if (entry.type !== "directory") return;
+    currentDirectory = childPath(currentDirectory, entry.name);
+    closePreview();
+    await refreshDirectory();
+  }
+
   async function openEntry(entry: WorkspaceDirectoryEntry): Promise<void> {
     if (entry.type !== "file") return;
     setBusy(true);
@@ -157,7 +176,7 @@ export function installGoogleDriveCloudPanel(
     previewTitle.textContent = entry.name;
     previewContent.textContent = "正在读取…";
     try {
-      const path = `/${entry.name}`;
+      const path = childPath(currentDirectory, entry.name);
       const data = await storage.readFile(path);
       const text = new TextDecoder("utf-8").decode(data);
       openedFile = { path, name: entry.name };
@@ -217,6 +236,7 @@ export function installGoogleDriveCloudPanel(
     connection.dataset.connected = String(connected);
     connection.textContent = connected ? "已连接" : "未连接";
     connectButton.disabled = connected;
+    upButton.disabled = !connected || currentDirectory === "/";
     refreshButton.disabled = !connected;
     saveButton.disabled = !connected || !openedFile || !getSaveText;
     disconnectButton.disabled = !connected;
@@ -226,6 +246,7 @@ export function installGoogleDriveCloudPanel(
     panel.dataset.busy = String(busy);
     if (busy) {
       connectButton.disabled = true;
+      upButton.disabled = true;
       refreshButton.disabled = true;
       saveButton.disabled = true;
       disconnectButton.disabled = true;
@@ -239,6 +260,7 @@ function renderEntries(
   list: HTMLUListElement,
   entries: WorkspaceDirectoryEntry[],
   openEntry: (entry: WorkspaceDirectoryEntry) => Promise<void>,
+  openDirectory: (entry: WorkspaceDirectoryEntry) => Promise<void>,
 ): void {
   list.replaceChildren();
   if (!entries.length) {
@@ -255,6 +277,13 @@ function renderEntries(
       name.className = "cloud-smoke-drive__file";
       name.addEventListener("click", () => {
         void openEntry(entry);
+      });
+      item.append(name);
+    } else if (entry.type === "directory") {
+      const name = button(entry.name);
+      name.className = "cloud-smoke-drive__file";
+      name.addEventListener("click", () => {
+        void openDirectory(entry);
       });
       item.append(name);
     } else {
@@ -290,4 +319,15 @@ function element<K extends keyof HTMLElementTagNameMap>(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function childPath(parent: string, name: string): string {
+  const cleanParent = parent === "/" ? "" : parent.replace(/\/$/, "");
+  return `${cleanParent}/${name}`.replace(/\/{2,}/g, "/");
+}
+
+function parentPath(target: string): string {
+  const normalized = target.replace(/\/+$/, "");
+  const slash = normalized.lastIndexOf("/");
+  return slash <= 0 ? "/" : normalized.slice(0, slash);
 }
