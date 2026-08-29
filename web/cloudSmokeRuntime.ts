@@ -34,12 +34,13 @@ const REVIEW_SAVE_KEY = "ocr2md-cloud-smoke-review-v1";
 const VIEW_STATE_KEY = "ocr2md-cloud-smoke-view-v1";
 
 export function install(payload: DemoPayload): void {
-  let state = clone(payload.initialState);
-  let sourceText = payload.sourceText;
-  let workingText = payload.workingText;
-  let sourcePath = payload.sourcePath;
-  let workingPath = payload.workingPath;
-  let sourceLabel = payload.sourceLabel;
+  const driveMode = Boolean(payload.googleDrive);
+  let state = driveMode ? emptyDriveState(payload.initialState) : clone(payload.initialState);
+  let sourceText = driveMode ? "" : payload.sourceText;
+  let workingText = driveMode ? "" : payload.workingText;
+  let sourcePath = driveMode ? "" : payload.sourcePath;
+  let workingPath = driveMode ? "" : payload.workingPath;
+  let sourceLabel = driveMode ? "" : payload.sourceLabel;
   let application = new ChapterReviewApplication({ rows: state.rows, annotationPairs: state.annotationPairs });
   let saved = currentSavedState();
   const listeners: Array<(state: SidebarState) => void> = [];
@@ -69,7 +70,8 @@ export function install(payload: DemoPayload): void {
       markDriveDocumentSaved,
     );
   }
-  queueMicrotask(() => host.postMessage({ command: "exportByCalibration" }));
+  if (driveMode) queueMicrotask(publish);
+  else queueMicrotask(() => host.postMessage({ command: "exportByCalibration" }));
 
   async function dispatch(message: UiCommandMessage): Promise<void> {
     try {
@@ -289,6 +291,26 @@ export function install(payload: DemoPayload): void {
     state.annotationMatchSummary = annotationMatchSummary(state.rows, state.annotationPairs);
     for (const listener of listeners) listener(clone(state));
   }
+}
+
+function emptyDriveState(initialState: SidebarState): SidebarState {
+  return {
+    ...clone(initialState),
+    workspaceLabel: "Google Drive",
+    selectedFile: undefined,
+    files: [],
+    activeModule: "章节标题",
+    rows: [],
+    annotationPairs: [],
+    viewMode: "table",
+    annotationMatchSummary: {
+      calibrated: 0,
+      paired: 0,
+      missingRef: 0,
+      missingBody: 0,
+      missingNumber: 0,
+    },
+  };
 }
 
 function splitPatterns(value: string): string[] {
