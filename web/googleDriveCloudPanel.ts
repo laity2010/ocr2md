@@ -1,12 +1,17 @@
 import { GoogleDriveApiGateway } from "../src/googleDriveApiGateway";
-import { GoogleDriveWorkspaceStorage } from "../src/googleDriveWorkspaceStorage";
+import {
+  GOOGLE_DRIVE_FOLDER_MIME_TYPE,
+  GoogleDriveWorkspaceStorage,
+  type GoogleDriveItem,
+} from "../src/googleDriveWorkspaceStorage";
 import type { WorkspaceDirectoryEntry } from "../src/workspaceStorage";
 import { BrowserFetchDriveTransport } from "./googleDriveFetchTransport";
 import { GoogleIdentityTokenSession } from "./googleIdentityTokenSession";
 
 export interface GoogleDriveCloudConfig {
   clientId: string;
-  rootFolderId: string;
+  /** Optional deployment default. Users can replace it from the browser UI. */
+  rootFolderId?: string;
 }
 
 export type CloudDriveStatusReporter = (
@@ -23,6 +28,19 @@ export interface GoogleDriveOpenedFile {
 export type CloudDriveFileOpenedHandler = (file: GoogleDriveOpenedFile) => void;
 export type CloudDriveFileSavedHandler = (file: GoogleDriveOpenedFile) => void;
 export type CloudDriveSaveTextProvider = (path: string) => string | undefined;
+
+const DRIVE_ROOT_ID = "root";
+const DRIVE_WORKSPACE_BINDING_KEY = "ocr2md-google-drive-workspace-v1";
+
+interface DriveWorkspaceBinding {
+  id: string;
+  name: string;
+}
+
+interface DriveBrowseLocation {
+  id: string;
+  name: string;
+}
 
 /**
  * Mounts the Google Drive smoke panel. Directory browsing and file opening are
@@ -41,8 +59,11 @@ export function installGoogleDriveCloudPanel(
     new BrowserFetchDriveTransport(),
     () => session.getAccessToken(),
   );
-  const storage = new GoogleDriveWorkspaceStorage(gateway, config.rootFolderId);
+  let binding = loadWorkspaceBinding() ?? deploymentDefaultBinding(config.rootFolderId);
+  let storage = binding ? new GoogleDriveWorkspaceStorage(gateway, binding.id) : undefined;
   let currentDirectory = "/";
+  let browseStack: DriveBrowseLocation[] = [{ id: DRIVE_ROOT_ID, name: "我的云端硬盘" }];
+  let selectingWorkspace = false;
   let openedFile: Pick<GoogleDriveOpenedFile, "path" | "name"> | undefined;
 
   const panel = element("aside", "cloud-smoke-drive");
@@ -56,20 +77,26 @@ export function installGoogleDriveCloudPanel(
   header.append(title, connection);
 
   const note = element("p", "cloud-smoke-drive__note");
-  note.textContent = "受控写入验证：只允许原位保存当前文件；不会删除、移动或重命名。";
+  note.textContent = "工作目录可从 Google Drive 中直接选择；只允许原位保存当前文件，不会删除、移动或重命名。";
 
   const actions = element("div", "cloud-smoke-drive__actions");
   const connectButton = button("连接 Google Drive");
+  const chooseWorkspaceButton = button(binding ? "更换工作目录" : "选择工作目录");
+  const useWorkspaceButton = button("使用此目录");
+  const cancelWorkspaceButton = button("取消选择");
   const upButton = button("上级");
   const refreshButton = button("刷新目录");
   const saveButton = button("保存当前文件");
   const disconnectButton = button("断开");
   connectButton.disabled = true;
+  chooseWorkspaceButton.disabled = true;
+  useWorkspaceButton.hidden = true;
+  cancelWorkspaceButton.hidden = true;
   upButton.disabled = true;
   refreshButton.disabled = true;
   saveButton.disabled = true;
   disconnectButton.disabled = true;
-  actions.append(connectButton, upButton, refreshButton, saveButton, disconnectButton);
+  actions.append(connectButton, chooseWorkspaceButton, useWorkspaceButton, cancelWorkspaceButton, upButton, refreshButton, saveButton, disconnectButton);
 
   const pathLabel = element("div", "cloud-smoke-drive__path");
   pathLabel.textContent = currentDirectory;
@@ -92,13 +119,29 @@ export function installGoogleDriveCloudPanel(
   connectButton.addEventListener("click", () => {
     void connect();
   });
+  chooseWorkspaceButton.addEventListener("click", () => {
+    void beginWorkspaceSelection();
+  });
+  useWorkspaceButton.addEventListener("click", () => {
+    void bindCurrentBrowseLocation();
+  });
+  cancelWorkspaceButton.addEventListener("click", () => {
+    cancelWorkspaceSelection();
+  });
   upButton.addEventListener("click", () => {
+    if (selectingWorkspace) {
+      if (browseStack.length <= 1) return;
+      browseStack.pop();
+      void refreshWorkspaceBrowser();
+      return;
+    }
     if (currentDirectory === "/") return;
     currentDirectory = parentPath(currentDirectory);
     void refreshDirectory();
   });
   refreshButton.addEventListener("click", () => {
-    void refreshDirectory();
+    if (selectingWorkspace) void refreshWorkspaceBrowser();
+    else void refreshDirectory();
   });
   saveButton.addEventListener("click", () => {
     void saveOpenedFile();
@@ -129,7 +172,8 @@ export function installGoogleDriveCloudPanel(
     try {
       await session.connect();
       setConnected(true);
-      await refreshDirectory();
+      if (binding) await refreshDirectory();
+      else await beginWorkspaceSelection();
     } catch (error) {
       setConnected(false);
       renderMessage(list, errorMessage(error));
@@ -140,6 +184,10 @@ export function installGoogleDriveCloudPanel(
   }
 
   async function refreshDirectory(): Promise<void> {
+    if (!storage || !binding) {
+      await beginWorkspaceSelection();
+      return;
+    }
     if (!session.isConnected()) {
       setConnected(false);
       renderMessage(list, "登录已失效，请重新连接 Google Drive。");
@@ -152,7 +200,7 @@ export function installGoogleDriveCloudPanel(
       renderEntries(list, entries, openEntry, openDirectory);
       pathLabel.textContent = currentDirectory;
       connection.textContent = "已连接";
-      reportStatus(`Google Drive 已读取 · ${currentDirectory} · ${entries.length} 项`, "pass");
+      reportStatus(`Google Drive 已读取 · ${binding.name}${currentDirectory === "/" ? "" : currentDirectory} · ${entries.length} 项`, "pass");
     } catch (error) {
       connection.textContent = session.isConnected() ? "读取失败" : "未连接";
       renderMessage(list, errorMessage(error));
@@ -160,6 +208,70 @@ export function installGoogleDriveCloudPanel(
     } finally {
       setBusy(false);
     }
+  }
+
+  async function beginWorkspaceSelection(): Promise<void> {
+    if (!session.isConnected()) return;
+    selectingWorkspace = true;
+    browseStack = [{ id: DRIVE_ROOT_ID, name: "我的云端硬盘" }];
+    openedFile = undefined;
+    closePreview();
+    chooseWorkspaceButton.hidden = true;
+    useWorkspaceButton.hidden = false;
+    cancelWorkspaceButton.hidden = !binding;
+    saveButton.disabled = true;
+    await refreshWorkspaceBrowser();
+  }
+
+  async function refreshWorkspaceBrowser(): Promise<void> {
+    if (!session.isConnected()) return;
+    setBusy(true);
+    connection.textContent = "正在浏览";
+    try {
+      const current = browseStack[browseStack.length - 1];
+      const folders = (await gateway.listChildren(current.id))
+        .filter((item) => item.mimeType === GOOGLE_DRIVE_FOLDER_MIME_TYPE)
+        .sort((left, right) => left.name.localeCompare(right.name, "zh-CN", { numeric: true }));
+      renderDriveFolders(list, folders, async (folder) => {
+        browseStack.push({ id: folder.id, name: folder.name });
+        await refreshWorkspaceBrowser();
+      });
+      pathLabel.textContent = `/ ${browseStack.map((item) => item.name).join(" / ")}`;
+      connection.textContent = "选择目录";
+      reportStatus(`请选择 Google Drive 工作目录 · ${folders.length} 个子文件夹`, "ready");
+    } catch (error) {
+      connection.textContent = "浏览失败";
+      renderMessage(list, errorMessage(error));
+      reportStatus(errorMessage(error), "fail");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bindCurrentBrowseLocation(): Promise<void> {
+    if (!session.isConnected() || !browseStack.length) return;
+    const current = browseStack[browseStack.length - 1];
+    binding = { id: current.id, name: current.name };
+    saveWorkspaceBinding(binding);
+    storage = new GoogleDriveWorkspaceStorage(gateway, binding.id);
+    selectingWorkspace = false;
+    currentDirectory = "/";
+    chooseWorkspaceButton.textContent = "更换工作目录";
+    chooseWorkspaceButton.hidden = false;
+    useWorkspaceButton.hidden = true;
+    cancelWorkspaceButton.hidden = true;
+    reportStatus(`Google Drive 工作目录已绑定 · ${binding.name}`, "pass");
+    await refreshDirectory();
+  }
+
+  function cancelWorkspaceSelection(): void {
+    if (!binding) return;
+    selectingWorkspace = false;
+    chooseWorkspaceButton.hidden = false;
+    useWorkspaceButton.hidden = true;
+    cancelWorkspaceButton.hidden = true;
+    currentDirectory = "/";
+    void refreshDirectory();
   }
 
   async function openDirectory(entry: WorkspaceDirectoryEntry): Promise<void> {
@@ -177,6 +289,7 @@ export function installGoogleDriveCloudPanel(
     previewContent.textContent = "正在读取…";
     try {
       const path = childPath(currentDirectory, entry.name);
+      if (!storage) throw new Error("请先选择 Google Drive 工作目录");
       const data = await storage.readFile(path);
       const text = new TextDecoder("utf-8").decode(data);
       openedFile = { path, name: entry.name };
@@ -210,6 +323,7 @@ export function installGoogleDriveCloudPanel(
     setBusy(true);
     connection.textContent = "正在保存";
     try {
+      if (!storage) throw new Error("请先选择 Google Drive 工作目录");
       await storage.writeFile(openedFile.path, new TextEncoder().encode(text));
       const verifiedData = await storage.readFile(openedFile.path);
       const verifiedText = new TextDecoder("utf-8").decode(verifiedData);
@@ -236,7 +350,8 @@ export function installGoogleDriveCloudPanel(
     connection.dataset.connected = String(connected);
     connection.textContent = connected ? "已连接" : "未连接";
     connectButton.disabled = connected;
-    upButton.disabled = !connected || currentDirectory === "/";
+    chooseWorkspaceButton.disabled = !connected;
+    upButton.disabled = !connected || (selectingWorkspace ? browseStack.length <= 1 : currentDirectory === "/");
     refreshButton.disabled = !connected;
     saveButton.disabled = !connected || !openedFile || !getSaveText;
     disconnectButton.disabled = !connected;
@@ -246,13 +361,61 @@ export function installGoogleDriveCloudPanel(
     panel.dataset.busy = String(busy);
     if (busy) {
       connectButton.disabled = true;
+      chooseWorkspaceButton.disabled = true;
+      useWorkspaceButton.disabled = true;
+      cancelWorkspaceButton.disabled = true;
       upButton.disabled = true;
       refreshButton.disabled = true;
       saveButton.disabled = true;
       disconnectButton.disabled = true;
       return;
     }
+    useWorkspaceButton.disabled = false;
+    cancelWorkspaceButton.disabled = false;
     setConnected(session.isConnected());
+  }
+}
+
+function deploymentDefaultBinding(rootFolderId: string | undefined): DriveWorkspaceBinding | undefined {
+  const id = rootFolderId?.trim();
+  return id ? { id, name: "默认工作目录" } : undefined;
+}
+
+function loadWorkspaceBinding(): DriveWorkspaceBinding | undefined {
+  try {
+    const raw = localStorage.getItem(DRIVE_WORKSPACE_BINDING_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as Partial<DriveWorkspaceBinding>;
+    if (typeof parsed.id !== "string" || !parsed.id.trim()) return undefined;
+    return { id: parsed.id, name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : "已绑定目录" };
+  } catch {
+    return undefined;
+  }
+}
+
+function saveWorkspaceBinding(binding: DriveWorkspaceBinding): void {
+  localStorage.setItem(DRIVE_WORKSPACE_BINDING_KEY, JSON.stringify(binding));
+}
+
+function renderDriveFolders(
+  list: HTMLUListElement,
+  folders: GoogleDriveItem[],
+  openFolder: (folder: GoogleDriveItem) => Promise<void>,
+): void {
+  list.replaceChildren();
+  if (!folders.length) {
+    renderMessage(list, "当前目录没有子文件夹。可以直接使用此目录。");
+    return;
+  }
+  for (const folder of folders) {
+    const item = element("li", "cloud-smoke-drive__item");
+    const icon = element("span", "cloud-smoke-drive__icon");
+    icon.textContent = "📁";
+    const name = button(folder.name);
+    name.className = "cloud-smoke-drive__file";
+    name.addEventListener("click", () => { void openFolder(folder); });
+    item.append(icon, name);
+    list.append(item);
   }
 }
 

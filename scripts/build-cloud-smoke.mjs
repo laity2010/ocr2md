@@ -82,11 +82,8 @@ const runtimeBundle = bundleResult.outputFiles[0].text;
 
 const googleDriveClientId = process.env.OCR2MD_GOOGLE_CLIENT_ID?.trim();
 const googleDriveRootFolderId = process.env.OCR2MD_GOOGLE_ROOT_FOLDER_ID?.trim();
-if (Boolean(googleDriveClientId) !== Boolean(googleDriveRootFolderId)) {
-  throw new Error("Set both OCR2MD_GOOGLE_CLIENT_ID and OCR2MD_GOOGLE_ROOT_FOLDER_ID");
-}
-const googleDrive = googleDriveClientId && googleDriveRootFolderId
-  ? { clientId: googleDriveClientId, rootFolderId: googleDriveRootFolderId }
+const googleDrive = googleDriveClientId
+  ? { clientId: googleDriveClientId, ...(googleDriveRootFolderId ? { rootFolderId: googleDriveRootFolderId } : {}) }
   : undefined;
 
 const payload = {
