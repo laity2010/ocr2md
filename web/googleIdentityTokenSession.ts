@@ -1,6 +1,6 @@
 const GOOGLE_IDENTITY_SCRIPT_ID = "ocr2md-google-identity-services";
 const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
-export const GOOGLE_DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+export const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const EXPIRY_SAFETY_WINDOW_MS = 60_000;
 
 interface GoogleTokenResponse {
@@ -47,7 +47,7 @@ export class GoogleIdentityTokenSession {
 
   constructor(
     private readonly clientId: string,
-    private readonly scope = GOOGLE_DRIVE_FILE_SCOPE,
+    private readonly scope = GOOGLE_DRIVE_SCOPE,
   ) {
     if (!clientId.trim()) throw new Error("Google OAuth client ID is required");
   }
