@@ -78,7 +78,7 @@ export function installGoogleDriveCloudPanel(
   header.append(title, connection);
 
   const note = element("p", "cloud-smoke-drive__note");
-  note.textContent = "工作目录可从 Google Drive 中直接选择；只允许原位保存当前文件，不会删除、移动或重命名。";
+  note.textContent = "工作目录可从 Google Drive 中直接选择；只允许原位保存当前文件。保存前检查远端版本，检测到外部更新时拒绝覆盖。";
 
   const actions = element("div", "cloud-smoke-drive__actions");
   const connectButton = button("连接 Google Drive");
