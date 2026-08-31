@@ -63,6 +63,8 @@ void (async () => {
   assert.deepStrictEqual(children.map((item) => item.id), ["file-1", "file-2"]);
   assert.strictEqual(transport.requests.length, 2);
   assert.ok(decodeURIComponent(transport.requests[0].url).includes("'folder-id' in parents and trashed = false"));
+  assert.ok(transport.requests[0].url.includes("headRevisionId"));
+  assert.ok(transport.requests[0].url.includes("md5Checksum"));
   assert.ok(transport.requests[1].url.includes("pageToken=page-2"));
   assert.strictEqual(transport.requests[0].headers.Authorization, "Bearer short-lived-access-token");
 

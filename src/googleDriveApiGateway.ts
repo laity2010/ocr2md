@@ -6,7 +6,7 @@ import {
 
 const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3";
-const FILE_FIELDS = "id,name,mimeType,parents,createdTime,modifiedTime,size";
+const FILE_FIELDS = "id,name,mimeType,parents,createdTime,modifiedTime,size,headRevisionId,md5Checksum";
 
 export interface DriveHttpRequest {
   method: "GET" | "POST" | "PATCH";

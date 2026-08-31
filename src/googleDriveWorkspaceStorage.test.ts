@@ -15,6 +15,7 @@ class MemoryGoogleDriveGateway implements GoogleDriveFileGateway {
   readonly createdFileIds: string[] = [];
   readonly updatedFileIds: string[] = [];
   private nextId = 1;
+  private revisionSequence = 1;
 
   constructor(readonly rootId = "drive-root") {
     this.items.set(rootId, {
@@ -54,6 +55,8 @@ class MemoryGoogleDriveGateway implements GoogleDriveFileGateway {
     item.mimeType = mimeType;
     item.modifiedTime = "2026-08-29T01:00:00.000Z";
     item.size = String(data.byteLength);
+    item.headRevisionId = `rev-${this.revisionSequence++}`;
+    item.md5Checksum = `fake-${item.headRevisionId}-${data.byteLength}`;
     this.data.set(fileId, Uint8Array.from(data));
     this.updatedFileIds.push(fileId);
     return cloneItem(item);
@@ -83,6 +86,16 @@ class MemoryGoogleDriveGateway implements GoogleDriveFileGateway {
     return [...this.items.values()].find((item) => item.name === name && !this.trashed.has(item.id))?.id;
   }
 
+  externalUpdate(fileId: string, text: string, modifiedTime: string): void {
+    const item = this.requireItem(fileId);
+    const data = new TextEncoder().encode(text);
+    item.modifiedTime = modifiedTime;
+    item.size = String(data.byteLength);
+    item.headRevisionId = `external-${modifiedTime}`;
+    item.md5Checksum = `external-${data.byteLength}-${modifiedTime}`;
+    this.data.set(fileId, data);
+  }
+
   private createItem(name: string, parentId: string, mimeType: string, data?: Uint8Array): GoogleDriveItem {
     this.requireItem(parentId);
     const id = `drive-${this.nextId++}`;
@@ -95,6 +108,10 @@ class MemoryGoogleDriveGateway implements GoogleDriveFileGateway {
       modifiedTime: "2026-08-29T00:00:00.000Z",
       size: String(data?.byteLength ?? 0),
     };
+    if (data) {
+      item.headRevisionId = `rev-${this.revisionSequence++}`;
+      item.md5Checksum = `fake-${item.headRevisionId}-${data.byteLength}`;
+    }
     this.items.set(id, item);
     if (data) this.data.set(id, Uint8Array.from(data));
     return cloneItem(item);
@@ -132,16 +149,34 @@ void (async () => {
   assert.strictEqual(gateway.findActiveFileId("source.md"), originalId);
   assert.strictEqual(await readText(storage, "/vault/chapters/01/source.md"), "# 第一章\n\n已修改。\n");
 
+  // A browser page that read an older Drive revision must never silently overwrite
+  // a newer edit made by Obsidian/Drive/Desktop or another browser session.
+  gateway.externalUpdate(originalId, "# 第一章\n\n远端新版本。\n", "2026-08-29T03:00:00.000Z");
+  await rejectsWithCode(
+    () => writeText(storage, "/vault/chapters/01/source.md", "# 第一章\n\n旧页面保存。\n"),
+    "ESTALE",
+  );
+  assert.strictEqual(
+    new TextDecoder().decode(gateway.data.get(originalId)!),
+    "# 第一章\n\n远端新版本。\n",
+    "stale browser save must not modify the newer Drive content",
+  );
+
+  // Re-reading establishes a fresh baseline, after which an explicit save is safe.
+  assert.strictEqual(await readText(storage, "/vault/chapters/01/source.md"), "# 第一章\n\n远端新版本。\n");
+  await writeText(storage, "/vault/chapters/01/source.md", "# 第一章\n\n重新读取后保存。\n");
+  assert.strictEqual(await readText(storage, "/vault/chapters/01/source.md"), "# 第一章\n\n重新读取后保存。\n");
+
   assert.deepStrictEqual(await storage.readDirectory("/vault/chapters/01"), [
     { name: "source.md", type: "file" },
   ]);
   const stat = await storage.stat("/vault/chapters/01/source.md");
   assert.strictEqual(stat.type, "file");
-  assert.strictEqual(stat.size, Buffer.byteLength("# 第一章\n\n已修改。\n"));
+  assert.strictEqual(stat.size, Buffer.byteLength("# 第一章\n\n重新读取后保存。\n"));
   assert.strictEqual(stat.mtime, Date.parse("2026-08-29T01:00:00.000Z"));
 
   await storage.copy("/vault/chapters/01/source.md", "/vault/chapters/01/copied.md");
-  assert.strictEqual(await readText(storage, "/vault/chapters/01/copied.md"), "# 第一章\n\n已修改。\n");
+  assert.strictEqual(await readText(storage, "/vault/chapters/01/copied.md"), "# 第一章\n\n重新读取后保存。\n");
 
   await storage.rename("/vault/chapters/01/copied.md", "/vault/chapters/01/moved.md");
   assert.strictEqual(await storage.exists("/vault/chapters/01/copied.md"), false);

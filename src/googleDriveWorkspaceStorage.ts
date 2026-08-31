@@ -17,6 +17,8 @@ export interface GoogleDriveItem {
   createdTime?: string;
   modifiedTime?: string;
   size?: string;
+  headRevisionId?: string;
+  md5Checksum?: string;
 }
 
 export interface GoogleDriveFileGateway {
@@ -37,6 +39,7 @@ export type GoogleDriveWorkspaceErrorCode =
   | "ENOENT"
   | "ENOTDIR"
   | "ENOTEMPTY"
+  | "ESTALE"
   | "EXDEV";
 
 export class GoogleDriveWorkspaceError extends Error {
@@ -56,8 +59,14 @@ export class GoogleDriveWorkspaceError extends Error {
  * OAuth and HTTP stay outside this class. Browser hosts inject a gateway backed
  * by the Drive API, while tests inject an in-memory gateway.
  */
+interface GoogleDriveReadBaseline {
+  fileId: string;
+  version: string;
+}
+
 export class GoogleDriveWorkspaceStorage implements WorkspaceStorage {
   readonly rootPath: string;
+  private readonly readBaselines = new Map<string, GoogleDriveReadBaseline>();
 
   constructor(
     private readonly gateway: GoogleDriveFileGateway,
@@ -69,9 +78,20 @@ export class GoogleDriveWorkspaceStorage implements WorkspaceStorage {
   }
 
   async readFile(filePath: string): Promise<Uint8Array> {
-    const item = await this.resolveItem(filePath);
-    if (isFolder(item)) throw new GoogleDriveWorkspaceError("EISDIR", filePath);
-    return this.gateway.downloadFile(item.id);
+    const normalizedPath = this.normalizeTarget(filePath);
+    const before = await this.resolveItem(normalizedPath);
+    if (isFolder(before)) throw new GoogleDriveWorkspaceError("EISDIR", filePath);
+    const data = await this.gateway.downloadFile(before.id);
+    const after = await this.resolveItem(normalizedPath);
+    if (isFolder(after) || before.id !== after.id || driveVersion(before) !== driveVersion(after)) {
+      throw new GoogleDriveWorkspaceError(
+        "ESTALE",
+        normalizedPath,
+        `Google Drive 文件在读取过程中已更新，请重新打开：${normalizedPath}`,
+      );
+    }
+    this.readBaselines.set(normalizedPath, { fileId: after.id, version: driveVersion(after) });
+    return data;
   }
 
   async writeFile(filePath: string, data: Uint8Array): Promise<void> {
@@ -80,10 +100,20 @@ export class GoogleDriveWorkspaceStorage implements WorkspaceStorage {
     const mimeType = markdownMimeType(name);
     if (existing) {
       if (isFolder(existing)) throw new GoogleDriveWorkspaceError("EISDIR", normalizedPath);
-      await this.gateway.updateFile(existing.id, Uint8Array.from(data), mimeType);
+      const baseline = this.readBaselines.get(normalizedPath);
+      if (baseline && (baseline.fileId !== existing.id || baseline.version !== driveVersion(existing))) {
+        throw new GoogleDriveWorkspaceError(
+          "ESTALE",
+          normalizedPath,
+          `Google Drive 文件已在其他位置更新，已拒绝覆盖：${normalizedPath}`,
+        );
+      }
+      const updated = await this.gateway.updateFile(existing.id, Uint8Array.from(data), mimeType);
+      this.readBaselines.set(normalizedPath, { fileId: updated.id, version: driveVersion(updated) });
       return;
     }
-    await this.gateway.createFile(name, parent.id, Uint8Array.from(data), mimeType);
+    const created = await this.gateway.createFile(name, parent.id, Uint8Array.from(data), mimeType);
+    this.readBaselines.set(normalizedPath, { fileId: created.id, version: driveVersion(created) });
   }
 
   async exists(targetPath: string): Promise<boolean> {
@@ -233,6 +263,16 @@ export class GoogleDriveWorkspaceStorage implements WorkspaceStorage {
     }
     return matches[0];
   }
+}
+
+
+function driveVersion(item: GoogleDriveItem): string {
+  return JSON.stringify([
+    item.headRevisionId ?? "",
+    item.md5Checksum ?? "",
+    item.modifiedTime ?? "",
+    item.size ?? "",
+  ]);
 }
 
 function normalizeRootPath(rootPath: string): string {

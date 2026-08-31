@@ -1,6 +1,7 @@
 import { GoogleDriveApiGateway } from "../src/googleDriveApiGateway";
 import {
   GOOGLE_DRIVE_FOLDER_MIME_TYPE,
+  GoogleDriveWorkspaceError,
   GoogleDriveWorkspaceStorage,
   type GoogleDriveItem,
 } from "../src/googleDriveWorkspaceStorage";
@@ -334,7 +335,11 @@ export function installGoogleDriveCloudPanel(
       onFileSaved?.({ ...openedFile, text: verifiedText });
       reportStatus(`Google Drive 已保存并回读验证 · ${openedFile.name}`, "pass");
     } catch (error) {
-      reportStatus(errorMessage(error), "fail");
+      if (error instanceof GoogleDriveWorkspaceError && error.code === "ESTALE") {
+        reportStatus("保存已停止：Google Drive 文件已在其他位置更新。当前工作台内容没有写入远端，请先重新打开文件并比较内容。", "fail");
+      } else {
+        reportStatus(errorMessage(error), "fail");
+      }
     } finally {
       setBusy(false);
     }
