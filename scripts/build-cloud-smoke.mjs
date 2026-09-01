@@ -157,6 +157,12 @@ const theme = `
     overflow-wrap: anywhere;
   }
   .cloud-smoke-drive__file:hover { text-decoration: underline; }
+  .cloud-smoke-drive__conflict {
+    margin-top: 10px; padding: 10px; border: 1px solid color-mix(in srgb, var(--ocr-warning, #d29922) 70%, var(--ocr-border));
+    border-radius: 7px; background: color-mix(in srgb, var(--ocr-warning, #d29922) 8%, var(--ocr-background));
+  }
+  .cloud-smoke-drive__conflict[hidden] { display: none; }
+  .cloud-smoke-drive__conflict-message { margin: 6px 0 8px; color: var(--ocr-description-foreground); font-size: 12px; }
   .cloud-smoke-drive__preview { margin-top: 10px; border-top: 1px solid var(--ocr-border); }
   .cloud-smoke-drive__preview[hidden] { display: none; }
   .cloud-smoke-drive__preview-header {

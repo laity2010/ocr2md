@@ -43,6 +43,11 @@ interface DriveBrowseLocation {
   name: string;
 }
 
+interface DriveConflictState {
+  path: string;
+  name: string;
+}
+
 /**
  * Mounts the Google Drive smoke panel. Directory browsing and file opening are
  * read-only; the only exposed write action is an explicit save of the currently
@@ -66,6 +71,7 @@ export function installGoogleDriveCloudPanel(
   let browseStack: DriveBrowseLocation[] = [{ id: DRIVE_ROOT_ID, name: "我的云端硬盘" }];
   let selectingWorkspace = false;
   let openedFile: Pick<GoogleDriveOpenedFile, "path" | "name"> | undefined;
+  let conflictState: DriveConflictState | undefined;
 
   const panel = element("aside", "cloud-smoke-drive");
   panel.setAttribute("aria-label", "Google Drive connection");
@@ -105,6 +111,19 @@ export function installGoogleDriveCloudPanel(
   const list = element("ul", "cloud-smoke-drive__list");
   renderMessage(list, "正在准备 Google 登录…");
 
+  const conflictPanel = element("section", "cloud-smoke-drive__conflict");
+  conflictPanel.hidden = true;
+  const conflictTitle = element("strong");
+  conflictTitle.textContent = "版本冲突";
+  const conflictMessage = element("p", "cloud-smoke-drive__conflict-message");
+  const conflictActions = element("div", "cloud-smoke-drive__actions");
+  const viewRemoteButton = button("查看远端版本");
+  const viewLocalButton = button("查看当前工作台版本");
+  const reloadRemoteButton = button("重新载入远端…");
+  const saveConflictCopyButton = button("另存冲突副本");
+  conflictActions.append(viewRemoteButton, viewLocalButton, reloadRemoteButton, saveConflictCopyButton);
+  conflictPanel.append(conflictTitle, conflictMessage, conflictActions);
+
   const preview = element("section", "cloud-smoke-drive__preview");
   preview.hidden = true;
   const previewHeader = element("div", "cloud-smoke-drive__preview-header");
@@ -114,7 +133,7 @@ export function installGoogleDriveCloudPanel(
   previewHeader.append(previewTitle, closePreviewButton);
   preview.append(previewHeader, previewContent);
 
-  panel.append(header, note, actions, pathLabel, list, preview);
+  panel.append(header, note, actions, pathLabel, list, conflictPanel, preview);
   document.body.append(panel);
 
   connectButton.addEventListener("click", () => {
@@ -147,9 +166,22 @@ export function installGoogleDriveCloudPanel(
   saveButton.addEventListener("click", () => {
     void saveOpenedFile();
   });
+  viewRemoteButton.addEventListener("click", () => {
+    void viewConflictRemote();
+  });
+  viewLocalButton.addEventListener("click", () => {
+    viewConflictLocal();
+  });
+  reloadRemoteButton.addEventListener("click", () => {
+    void reloadConflictRemote();
+  });
+  saveConflictCopyButton.addEventListener("click", () => {
+    void saveConflictCopy();
+  });
   disconnectButton.addEventListener("click", () => {
     session.disconnect();
     openedFile = undefined;
+    clearConflict();
     setConnected(false);
     closePreview();
     renderMessage(list, "已断开。访问令牌已从浏览器内存清除。");
@@ -216,6 +248,7 @@ export function installGoogleDriveCloudPanel(
     selectingWorkspace = true;
     browseStack = [{ id: DRIVE_ROOT_ID, name: "我的云端硬盘" }];
     openedFile = undefined;
+    clearConflict();
     closePreview();
     chooseWorkspaceButton.hidden = true;
     useWorkspaceButton.hidden = false;
@@ -294,6 +327,7 @@ export function installGoogleDriveCloudPanel(
       const data = await storage.readFile(path);
       const text = new TextDecoder("utf-8").decode(data);
       openedFile = { path, name: entry.name };
+      clearConflict();
       previewContent.textContent = text;
       onFileOpened?.({ path, name: entry.name, text });
       reportStatus(`Google Drive 已读取 · ${entry.name}`, "pass");
@@ -332,14 +366,111 @@ export function installGoogleDriveCloudPanel(
       preview.hidden = false;
       previewTitle.textContent = openedFile.name;
       previewContent.textContent = verifiedText;
+      clearConflict();
       onFileSaved?.({ ...openedFile, text: verifiedText });
       reportStatus(`Google Drive 已保存并回读验证 · ${openedFile.name}`, "pass");
     } catch (error) {
       if (error instanceof GoogleDriveWorkspaceError && error.code === "ESTALE") {
-        reportStatus("保存已停止：Google Drive 文件已在其他位置更新。当前工作台内容没有写入远端，请先重新打开文件并比较内容。", "fail");
+        showConflict(openedFile);
+        reportStatus("保存已停止：Google Drive 文件已在其他位置更新。请使用冲突处理入口查看双方版本、重新载入或另存副本。", "fail");
       } else {
         reportStatus(errorMessage(error), "fail");
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function showConflict(file: Pick<GoogleDriveOpenedFile, "path" | "name">): void {
+    conflictState = { path: file.path, name: file.name };
+    conflictPanel.hidden = false;
+    conflictMessage.textContent = "远端文件已在当前页面打开后发生变化。原文件尚未被当前工作台覆盖。请选择如何处理。";
+    refreshConflictControls();
+  }
+
+  function clearConflict(): void {
+    conflictState = undefined;
+    conflictPanel.hidden = true;
+    conflictMessage.textContent = "";
+    refreshConflictControls();
+  }
+
+  function refreshConflictControls(): void {
+    const enabled = session.isConnected() && Boolean(conflictState) && panel.dataset.busy !== "true";
+    viewRemoteButton.disabled = !enabled;
+    viewLocalButton.disabled = !enabled;
+    reloadRemoteButton.disabled = !enabled;
+    saveConflictCopyButton.disabled = !enabled;
+  }
+
+  async function viewConflictRemote(): Promise<void> {
+    if (!conflictState || !storage) return;
+    setBusy(true);
+    try {
+      const data = await storage.readFileWithoutBaseline(conflictState.path);
+      preview.hidden = false;
+      previewTitle.textContent = `远端版本 · ${conflictState.name}`;
+      previewContent.textContent = new TextDecoder("utf-8").decode(data);
+      reportStatus(`正在查看远端版本 · ${conflictState.name} · 保存基线未改变`, "ready");
+    } catch (error) {
+      reportStatus(errorMessage(error), "fail");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function viewConflictLocal(): void {
+    if (!conflictState) return;
+    const text = getSaveText?.(conflictState.path);
+    if (text === undefined) {
+      reportStatus("当前工作台内容已不可用，无法预览。", "fail");
+      return;
+    }
+    preview.hidden = false;
+    previewTitle.textContent = `当前工作台版本 · ${conflictState.name}`;
+    previewContent.textContent = text;
+    reportStatus(`正在查看当前工作台版本 · ${conflictState.name}`, "ready");
+  }
+
+  async function reloadConflictRemote(): Promise<void> {
+    if (!conflictState || !storage) return;
+    const state = conflictState;
+    const accepted = globalThis.confirm("重新载入远端版本会放弃当前工作台中尚未保存的内容。确定继续吗？");
+    if (!accepted) return;
+    setBusy(true);
+    try {
+      const data = await storage.readFile(state.path);
+      const text = new TextDecoder("utf-8").decode(data);
+      openedFile = { path: state.path, name: state.name };
+      preview.hidden = false;
+      previewTitle.textContent = state.name;
+      previewContent.textContent = text;
+      onFileOpened?.({ path: state.path, name: state.name, text });
+      clearConflict();
+      reportStatus(`已重新载入远端版本 · ${state.name}`, "pass");
+    } catch (error) {
+      reportStatus(errorMessage(error), "fail");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveConflictCopy(): Promise<void> {
+    if (!conflictState || !storage) return;
+    const state = conflictState;
+    const text = getSaveText?.(state.path);
+    if (text === undefined) {
+      reportStatus("当前工作台内容已不可用，无法另存冲突副本。", "fail");
+      return;
+    }
+    setBusy(true);
+    try {
+      const copyPath = await writeUniqueConflictCopy(storage, state.path, new TextEncoder().encode(text));
+      conflictMessage.textContent = `当前工作台版本已另存为 ${fileName(copyPath)}。远端原文件仍保持不变；你可以继续查看双方版本或重新载入远端。`;
+      if (parentPath(copyPath) === currentDirectory) await refreshDirectory();
+      reportStatus(`冲突副本已保存 · ${copyPath}`, "pass");
+    } catch (error) {
+      reportStatus(errorMessage(error), "fail");
     } finally {
       setBusy(false);
     }
@@ -358,8 +489,9 @@ export function installGoogleDriveCloudPanel(
     chooseWorkspaceButton.disabled = !connected;
     upButton.disabled = !connected || (selectingWorkspace ? browseStack.length <= 1 : currentDirectory === "/");
     refreshButton.disabled = !connected;
-    saveButton.disabled = !connected || !openedFile || !getSaveText;
+    saveButton.disabled = !connected || !openedFile || !getSaveText || Boolean(conflictState);
     disconnectButton.disabled = !connected;
+    refreshConflictControls();
   }
 
   function setBusy(busy: boolean): void {
@@ -373,6 +505,10 @@ export function installGoogleDriveCloudPanel(
       refreshButton.disabled = true;
       saveButton.disabled = true;
       disconnectButton.disabled = true;
+      viewRemoteButton.disabled = true;
+      viewLocalButton.disabled = true;
+      reloadRemoteButton.disabled = true;
+      saveConflictCopyButton.disabled = true;
       return;
     }
     useWorkspaceButton.disabled = false;
@@ -483,6 +619,41 @@ function element<K extends keyof HTMLElementTagNameMap>(
   const node = document.createElement(tag);
   if (className) node.className = className;
   return node;
+}
+
+async function writeUniqueConflictCopy(
+  storage: GoogleDriveWorkspaceStorage,
+  sourcePath: string,
+  data: Uint8Array,
+): Promise<string> {
+  const directory = parentPath(sourcePath);
+  const name = fileName(sourcePath);
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : "";
+  const stamp = timestampForFileName(new Date());
+  for (let sequence = 1; sequence <= 99; sequence += 1) {
+    const suffix = sequence === 1 ? "" : `-${sequence}`;
+    const candidate = childPath(directory, `${stem}.conflict-${stamp}${suffix}${extension}`);
+    try {
+      await storage.createFileExclusive(candidate, data);
+      return candidate;
+    } catch (error) {
+      if (error instanceof GoogleDriveWorkspaceError && error.code === "EEXIST") continue;
+      throw error;
+    }
+  }
+  throw new Error("无法生成唯一的冲突副本文件名");
+}
+
+function timestampForFileName(date: Date): string {
+  const part = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${part(date.getMonth() + 1)}${part(date.getDate())}-${part(date.getHours())}${part(date.getMinutes())}${part(date.getSeconds())}`;
+}
+
+function fileName(targetPath: string): string {
+  const normalized = targetPath.replace(/\/+$/, "");
+  return normalized.slice(normalized.lastIndexOf("/") + 1);
 }
 
 function errorMessage(error: unknown): string {

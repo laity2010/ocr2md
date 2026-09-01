@@ -78,20 +78,26 @@ export class GoogleDriveWorkspaceStorage implements WorkspaceStorage {
   }
 
   async readFile(filePath: string): Promise<Uint8Array> {
-    const normalizedPath = this.normalizeTarget(filePath);
-    const before = await this.resolveItem(normalizedPath);
-    if (isFolder(before)) throw new GoogleDriveWorkspaceError("EISDIR", filePath);
-    const data = await this.gateway.downloadFile(before.id);
-    const after = await this.resolveItem(normalizedPath);
-    if (isFolder(after) || before.id !== after.id || driveVersion(before) !== driveVersion(after)) {
-      throw new GoogleDriveWorkspaceError(
-        "ESTALE",
-        normalizedPath,
-        `Google Drive 文件在读取过程中已更新，请重新打开：${normalizedPath}`,
-      );
-    }
-    this.readBaselines.set(normalizedPath, { fileId: after.id, version: driveVersion(after) });
+    const { normalizedPath, item, data } = await this.readStableFile(filePath);
+    this.readBaselines.set(normalizedPath, { fileId: item.id, version: driveVersion(item) });
     return data;
+  }
+
+  /**
+   * Reads the latest stable Drive contents without advancing the write baseline.
+   * This is used by conflict UI so merely viewing the remote version can never
+   * authorize a later stale local save.
+   */
+  async readFileWithoutBaseline(filePath: string): Promise<Uint8Array> {
+    return (await this.readStableFile(filePath)).data;
+  }
+
+  async createFileExclusive(filePath: string, data: Uint8Array): Promise<void> {
+    const { parent, name, normalizedPath } = await this.resolveParent(filePath);
+    const existing = await this.findChild(parent.id, name, normalizedPath);
+    if (existing) throw new GoogleDriveWorkspaceError("EEXIST", normalizedPath);
+    const created = await this.gateway.createFile(name, parent.id, Uint8Array.from(data), markdownMimeType(name));
+    this.readBaselines.set(normalizedPath, { fileId: created.id, version: driveVersion(created) });
   }
 
   async writeFile(filePath: string, data: Uint8Array): Promise<void> {
@@ -200,6 +206,26 @@ export class GoogleDriveWorkspaceStorage implements WorkspaceStorage {
       mtime: parseDriveTime(item.modifiedTime),
       size: Number(item.size ?? 0),
     };
+  }
+
+  private async readStableFile(filePath: string): Promise<{
+    normalizedPath: string;
+    item: GoogleDriveItem;
+    data: Uint8Array;
+  }> {
+    const normalizedPath = this.normalizeTarget(filePath);
+    const before = await this.resolveItem(normalizedPath);
+    if (isFolder(before)) throw new GoogleDriveWorkspaceError("EISDIR", filePath);
+    const data = await this.gateway.downloadFile(before.id);
+    const after = await this.resolveItem(normalizedPath);
+    if (isFolder(after) || before.id !== after.id || driveVersion(before) !== driveVersion(after)) {
+      throw new GoogleDriveWorkspaceError(
+        "ESTALE",
+        normalizedPath,
+        `Google Drive 文件在读取过程中已更新，请重新打开：${normalizedPath}`,
+      );
+    }
+    return { normalizedPath, item: after, data };
   }
 
   private rootItem(): GoogleDriveItem {

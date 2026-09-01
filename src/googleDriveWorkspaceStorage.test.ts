@@ -162,6 +162,22 @@ void (async () => {
     "stale browser save must not modify the newer Drive content",
   );
 
+  // Conflict preview may read the remote version, but must never advance the
+  // write baseline merely because the user viewed it.
+  assert.strictEqual(
+    new TextDecoder().decode(await storage.readFileWithoutBaseline("/vault/chapters/01/source.md")),
+    "# 第一章\n\n远端新版本。\n",
+  );
+  await rejectsWithCode(
+    () => writeText(storage, "/vault/chapters/01/source.md", "# 第一章\n\n查看远端后仍是旧页面。\n"),
+    "ESTALE",
+  );
+  assert.strictEqual(
+    new TextDecoder().decode(gateway.data.get(originalId)!),
+    "# 第一章\n\n远端新版本。\n",
+    "viewing the remote conflict version must not authorize stale overwrite",
+  );
+
   // Re-reading establishes a fresh baseline, after which an explicit save is safe.
   assert.strictEqual(await readText(storage, "/vault/chapters/01/source.md"), "# 第一章\n\n远端新版本。\n");
   await writeText(storage, "/vault/chapters/01/source.md", "# 第一章\n\n重新读取后保存。\n");
@@ -174,6 +190,14 @@ void (async () => {
   assert.strictEqual(stat.type, "file");
   assert.strictEqual(stat.size, Buffer.byteLength("# 第一章\n\n重新读取后保存。\n"));
   assert.strictEqual(stat.mtime, Date.parse("2026-08-29T01:00:00.000Z"));
+
+  await rejectsWithCode(
+    () => storage.createFileExclusive("/vault/chapters/01/source.md", new TextEncoder().encode("不得覆盖")),
+    "EEXIST",
+  );
+  await storage.createFileExclusive("/vault/chapters/01/conflict-copy.md", new TextEncoder().encode("冲突副本"));
+  assert.strictEqual(await readText(storage, "/vault/chapters/01/conflict-copy.md"), "冲突副本");
+  await storage.delete("/vault/chapters/01/conflict-copy.md");
 
   await storage.copy("/vault/chapters/01/source.md", "/vault/chapters/01/copied.md");
   assert.strictEqual(await readText(storage, "/vault/chapters/01/copied.md"), "# 第一章\n\n重新读取后保存。\n");
