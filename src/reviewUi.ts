@@ -44,8 +44,15 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
     button { cursor: pointer; background: var(--ocr-button-secondary-background); }
     button.primary { color: var(--ocr-button-foreground); background: var(--ocr-button-background); }
     button:disabled { opacity: .5; cursor: default; }
+    .workbench-header {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+      margin-bottom: 8px; padding: 0 2px 8px; border-bottom: 1px solid var(--ocr-border);
+    }
+    .workbench-heading { min-width: 0; display: grid; gap: 2px; }
+    .workbench-title { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+    .workbench-file { color: var(--ocr-description-foreground); font-size: 12px; overflow-wrap: anywhere; }
     .tabs, .toolbar, .regex-controls, .bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
-    .tabs { margin-bottom: 10px; }
+    .tabs { margin-bottom: 8px; }
     .tab { border: 0; border-bottom: 2px solid transparent; background: transparent; }
     .tab.active { border-bottom-color: var(--ocr-focus-border); color: var(--ocr-link); }
     .toolbar { margin: 8px 0; }
@@ -558,6 +565,15 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         app.append(translationServiceSettings());
         return;
       }
+      const workbenchHeader = el("div", undefined, "workbench-header");
+      const workbenchHeading = el("div", undefined, "workbench-heading");
+      workbenchHeading.append(
+        el("div", state.workspaceLabel || "MD 工作台", "workbench-title"),
+        el("div", state.selectedFile ? state.selectedFile.label : "尚未打开 Markdown 文件", "workbench-file"),
+      );
+      workbenchHeader.append(workbenchHeading);
+      app.append(workbenchHeader);
+
       const tabs = el("div", undefined, "tabs");
       const visibleModules = state.selectedFile?.kind === "trans"
         ? ["文本块", "分句", "翻译"]
@@ -572,9 +588,6 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         tabs.append(tab);
       }
       app.append(tabs);
-
-      const meta = el("div", state.selectedFile ? state.selectedFile.label : "请先在目录中选择 Markdown 文件", "meta");
-      app.append(meta);
       app.append(moduleToolbar());
       if (moduleDefinition().regexCard) app.append(regexCard());
       if (moduleDefinition().filter) app.append(filterToolbar());

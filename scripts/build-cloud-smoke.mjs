@@ -124,12 +124,22 @@ const theme = `
     color: var(--ocr-foreground); background: color-mix(in srgb, var(--ocr-background) 97%, transparent);
     box-shadow: 0 8px 28px rgba(0,0,0,.24); font: 13px/1.4 var(--ocr-font-family);
   }
+  .cloud-smoke-drive[data-collapsed="true"] {
+    width: auto; min-width: min(220px, calc(100vw - 28px)); padding: 9px 11px;
+  }
   .cloud-smoke-drive__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .cloud-smoke-drive__header-actions { display: flex; align-items: center; gap: 7px; }
   .cloud-smoke-drive__connection {
     padding: 2px 7px; border: 1px solid var(--ocr-border); border-radius: 999px;
     color: var(--ocr-description-foreground); font-size: 11px;
   }
   .cloud-smoke-drive__connection[data-connected="true"] { border-color: var(--ocr-passed); color: var(--ocr-passed); }
+  .cloud-smoke-drive__collapse {
+    padding: 3px 6px; border: 1px solid var(--ocr-border); border-radius: 5px;
+    color: var(--ocr-foreground); background: var(--ocr-input-background); cursor: pointer;
+    font-size: 11px;
+  }
+  .cloud-smoke-drive[data-collapsed="true"] .cloud-smoke-drive__body { display: none; }
   .cloud-smoke-drive__note { margin: 8px 0; color: var(--ocr-description-foreground); font-size: 12px; }
   .cloud-smoke-drive__actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .cloud-smoke-drive__actions button {

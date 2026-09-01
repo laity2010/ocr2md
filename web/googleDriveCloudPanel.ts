@@ -32,6 +32,7 @@ export type CloudDriveSaveTextProvider = (path: string) => string | undefined;
 
 const DRIVE_ROOT_ID = "root";
 const DRIVE_WORKSPACE_BINDING_KEY = "ocr2md-google-drive-workspace-v1";
+const DRIVE_PANEL_COLLAPSED_KEY = "ocr2md-google-drive-panel-collapsed-v1";
 
 interface DriveWorkspaceBinding {
   id: string;
@@ -72,16 +73,22 @@ export function installGoogleDriveCloudPanel(
   let selectingWorkspace = false;
   let openedFile: Pick<GoogleDriveOpenedFile, "path" | "name"> | undefined;
   let conflictState: DriveConflictState | undefined;
+  let panelCollapsed = loadPanelCollapsed();
 
   const panel = element("aside", "cloud-smoke-drive");
   panel.setAttribute("aria-label", "Google Drive connection");
   const header = element("div", "cloud-smoke-drive__header");
   const title = element("strong");
   title.textContent = "Google Drive";
+  const headerActions = element("div", "cloud-smoke-drive__header-actions");
   const connection = element("span", "cloud-smoke-drive__connection");
   connection.textContent = "准备中";
   connection.dataset.connected = "false";
-  header.append(title, connection);
+  const collapseButton = button(panelCollapsed ? "展开" : "收起");
+  collapseButton.className = "cloud-smoke-drive__collapse";
+  collapseButton.setAttribute("aria-expanded", String(!panelCollapsed));
+  headerActions.append(connection, collapseButton);
+  header.append(title, headerActions);
 
   const note = element("p", "cloud-smoke-drive__note");
   note.textContent = "工作目录可从 Google Drive 中直接选择；只允许原位保存当前文件。保存前检查远端版本，检测到外部更新时拒绝覆盖。";
@@ -133,11 +140,17 @@ export function installGoogleDriveCloudPanel(
   previewHeader.append(previewTitle, closePreviewButton);
   preview.append(previewHeader, previewContent);
 
-  panel.append(header, note, actions, pathLabel, list, conflictPanel, preview);
+  const body = element("div", "cloud-smoke-drive__body");
+  body.append(note, actions, pathLabel, list, conflictPanel, preview);
+  panel.append(header, body);
   document.body.append(panel);
+  setPanelCollapsed(panelCollapsed);
 
   connectButton.addEventListener("click", () => {
     void connect();
+  });
+  collapseButton.addEventListener("click", () => {
+    setPanelCollapsed(!panelCollapsed);
   });
   chooseWorkspaceButton.addEventListener("click", () => {
     void beginWorkspaceSelection();
@@ -245,6 +258,7 @@ export function installGoogleDriveCloudPanel(
 
   async function beginWorkspaceSelection(): Promise<void> {
     if (!session.isConnected()) return;
+    setPanelCollapsed(false);
     selectingWorkspace = true;
     browseStack = [{ id: DRIVE_ROOT_ID, name: "我的云端硬盘" }];
     openedFile = undefined;
@@ -382,6 +396,7 @@ export function installGoogleDriveCloudPanel(
   }
 
   function showConflict(file: Pick<GoogleDriveOpenedFile, "path" | "name">): void {
+    setPanelCollapsed(false);
     conflictState = { path: file.path, name: file.name };
     conflictPanel.hidden = false;
     conflictMessage.textContent = "远端文件已在当前页面打开后发生变化。原文件尚未被当前工作台覆盖。请选择如何处理。";
@@ -515,6 +530,15 @@ export function installGoogleDriveCloudPanel(
     cancelWorkspaceButton.disabled = false;
     setConnected(session.isConnected());
   }
+
+  function setPanelCollapsed(collapsed: boolean): void {
+    panelCollapsed = collapsed;
+    panel.dataset.collapsed = String(collapsed);
+    collapseButton.textContent = collapsed ? "展开" : "收起";
+    collapseButton.setAttribute("aria-expanded", String(!collapsed));
+    collapseButton.title = collapsed ? "展开 Google Drive 工具" : "收起 Google Drive 工具";
+    savePanelCollapsed(collapsed);
+  }
 }
 
 function deploymentDefaultBinding(rootFolderId: string | undefined): DriveWorkspaceBinding | undefined {
@@ -536,6 +560,25 @@ function loadWorkspaceBinding(): DriveWorkspaceBinding | undefined {
 
 function saveWorkspaceBinding(binding: DriveWorkspaceBinding): void {
   localStorage.setItem(DRIVE_WORKSPACE_BINDING_KEY, JSON.stringify(binding));
+}
+
+function loadPanelCollapsed(): boolean {
+  try {
+    const saved = localStorage.getItem(DRIVE_PANEL_COLLAPSED_KEY);
+    if (saved === "true") return true;
+    if (saved === "false") return false;
+  } catch {
+    // Ignore unavailable browser storage and fall back to viewport preference.
+  }
+  return globalThis.innerWidth <= 900;
+}
+
+function savePanelCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(DRIVE_PANEL_COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // The panel remains usable even when browser storage is unavailable.
+  }
 }
 
 function renderDriveFolders(

@@ -49,6 +49,11 @@ for (const moduleName of ["章节定界", "章节标题", "注释", "嵌入块",
 for (const variable of ["--ocr-foreground", "--ocr-border", "--ocr-header-background", "--ocr-focus-border"]) {
   assert.ok(html.includes(variable), `shared UI semantic theme variable missing: ${variable}`);
 }
+for (const workbenchChrome of ["workbench-header", "workbench-title", "workbench-file"]) {
+  assert.ok(html.includes(workbenchChrome), `shared review UI is missing workbench chrome: ${workbenchChrome}`);
+}
+assert.ok(html.includes(state.workspaceLabel), "shared review UI must expose the active workspace label");
+assert.ok(html.includes(state.selectedFile?.label ?? ""), "shared review UI must expose the active Markdown file label");
 
 
 for (const text of [
