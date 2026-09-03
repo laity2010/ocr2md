@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { shortSha256 } from "./platformHash";
 import type { Candidate } from "./types";
 
 export interface IllegalLineBreakCandidate extends Candidate {
@@ -101,10 +101,7 @@ function illegalLineBreakCandidate(
   const next = lines[nextIndex] ?? "";
   const mergedPreview = mergeProseLines(previous, next);
   const raw = lines.slice(previousIndex, nextIndex + 1).join("\n");
-  const hash = createHash("sha256")
-    .update(`${previousIndex}\0${nextIndex}\0${previous}\0${next}`)
-    .digest("hex")
-    .slice(0, 16);
+  const hash = shortSha256(`${previousIndex}\0${nextIndex}\0${previous}\0${next}`, 16);
   const id = `illegal-line-break-${previousIndex}-${nextIndex}-${hash}`;
   return {
     id,

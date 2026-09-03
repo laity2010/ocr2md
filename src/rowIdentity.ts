@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { shortSha256 } from "./platformHash";
 import { isDeletedCandidate } from "./candidateLifecycle";
 import { isEmbedBlockStart } from "./scanner";
 import type { Candidate, ModuleName, SourceRange } from "./types";
@@ -11,7 +11,7 @@ export function splitDocumentLines(text: string): string[] {
 }
 
 export function hashText(value: string): string {
-  return createHash("sha256").update(value).digest("hex").slice(0, 20);
+  return shortSha256(value, 20);
 }
 
 export function attachLineIdentity(

@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { shortSha256 } from "./platformHash";
 import { diffLines } from "diff";
 
 export type ChapterBoundaryState = "heading" | "added" | "modified" | "deleted";
@@ -227,7 +227,7 @@ function isLevelOneHeading(text: string): boolean {
 }
 
 function shortHash(value: string): string {
-  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+  return shortSha256(value, 12);
 }
 
 function stateOrder(state: ChapterBoundaryState): number {

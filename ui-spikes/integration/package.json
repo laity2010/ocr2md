@@ -1,0 +1,31 @@
+{
+  "name": "integration",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "typecheck": "../../node_modules/.bin/tsc --noEmit --target ES2022 --module ESNext --moduleResolution node --lib ES2022,DOM --esModuleInterop --allowSyntheticDefaultImports --resolveJsonModule --skipLibCheck --strict app.ts",
+    "build": "esbuild app.ts --bundle --format=esm --target=es2022 --outfile=app.js",
+    "watch": "esbuild app.ts --bundle --format=esm --target=es2022 --outfile=app.js --watch",
+    "serve": "python3 -m http.server 4176 --bind 0.0.0.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.2",
+    "@codemirror/view": "^6.43.10",
+    "@lezer/highlight": "^1.2.3",
+    "@noble/hashes": "^1.8.0",
+    "ag-grid-community": "^36.1.0",
+    "dompurify": "^3.4.14",
+    "esbuild": "^0.28.2",
+    "katex": "^0.18.5",
+    "markdown-it": "^15.0.1",
+    "markdown-it-texmath": "^1.0.0",
+    "path-browserify": "^1.0.1"
+  }
+}

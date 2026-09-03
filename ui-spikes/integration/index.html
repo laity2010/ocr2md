@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ocr2md Grid + Editor integration spike</title>
+  <link rel="stylesheet" href="./node_modules/katex/dist/katex.min.css">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --obsidian-font: "Sarasa Fixed SC ExtraLight", "Sarasa Fixed SC", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --obsidian-font-size: 24px;
+      --right-font-size: 16px;
+      --obsidian-bg: #2f383e;
+      --obsidian-bg-alt: #272f34;
+      --obsidian-fg: #d3c6aa;
+      --obsidian-h1: #da6362;
+      --obsidian-h2: #d77f48;
+      --obsidian-h3: #bf983d;
+      --obsidian-h4: #899c40;
+      --obsidian-h5: #569d79;
+      --obsidian-h6: #b87b9d;
+      --obsidian-code-normal: #d3c6aa;
+      --obsidian-code-comment: #859289;
+      --obsidian-code-link: #83c092;
+      --obsidian-code-url: #7fbbb3;
+      --obsidian-code-function: #7fbbb3;
+      --obsidian-code-keyword: #d699b6;
+      --obsidian-code-operator: #83c092;
+      --obsidian-code-property: #a7c080;
+      --obsidian-code-string: #a7c080;
+      --obsidian-code-tag: #da6362;
+      --obsidian-code-value: #dbbc7f;
+      --obsidian-code-punctuation: #9aa79d;
+      --obsidian-h1-size: 2.125em;
+      --obsidian-h2-size: 1.625em;
+      --obsidian-h3-size: 1.375em;
+      --obsidian-h4-size: 1.25em;
+      --obsidian-h5-size: 1.125em;
+      --obsidian-h6-size: 1.125em;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --obsidian-bg: #fdf6e3;
+        --obsidian-bg-alt: #f6f1dd;
+        --obsidian-fg: #5c6a72;
+        --obsidian-h1: #f85552;
+        --obsidian-h2: #f57d26;
+        --obsidian-h3: #bf983d;
+        --obsidian-h4: #899c40;
+        --obsidian-h5: #569d79;
+        --obsidian-h6: #b87b9d;
+        --obsidian-code-normal: #5c6a72;
+        --obsidian-code-comment: #939f91;
+        --obsidian-code-link: #569d79;
+        --obsidian-code-url: #5a93a2;
+        --obsidian-code-function: #5a93a2;
+        --obsidian-code-keyword: #b87b9d;
+        --obsidian-code-operator: #569d79;
+        --obsidian-code-property: #899c40;
+        --obsidian-code-string: #a4bb4a;
+        --obsidian-code-tag: #f85552;
+        --obsidian-code-value: #bf983d;
+        --obsidian-code-punctuation: #879686;
+      }
+    }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: block;
+      background: var(--obsidian-bg); color: var(--obsidian-fg);
+      font-family: var(--obsidian-font); font-weight: 300; font-synthesis: none;
+    }
+    .pane-menu {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px;
+      min-height: 44px;
+      background: var(--obsidian-bg-alt);
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent);
+      font-family: var(--obsidian-font);
+    }
+    .pane-menu input,
+    .pane-menu button,
+    .pane-menu select { font: inherit; }
+    .pane-title { font-weight: 600; margin-right: 2px; }
+    .regex-search { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .regex-search #regex-search { width: min(340px, 42vw); }
+    .regex-search select { font: inherit; }
+    #search-status { opacity: 0.8; font-size: 0.85em; }
+    #regex-search[aria-invalid="true"] { outline: 2px solid var(--obsidian-h1); }
+    .workspace {
+      height: 100vh;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(320px, var(--left-pane-width, 42%)) 6px minmax(360px, 1fr);
+      overflow: hidden;
+    }
+    .grid-pane {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .editor-pane {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(160px, var(--editor-top-height, 50%)) 6px minmax(160px, 1fr);
+      overflow: hidden;
+    }
+    .splitter {
+      position: relative;
+      background: transparent;
+      touch-action: none;
+      z-index: 5;
+    }
+    .splitter::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: color-mix(in srgb, var(--obsidian-fg) 22%, transparent);
+      transition: background 120ms ease;
+    }
+    .splitter:hover::after,
+    .splitter.is-dragging::after { background: #569d79; }
+    #splitter-vertical { cursor: col-resize; }
+    #splitter-horizontal { cursor: row-resize; }
+    body.is-resizing { user-select: none; }
+    .grid-menu { font-size: 14px; align-content: flex-start; }
+    .grid-menu #grid-filter { width: min(360px, 34vw); }
+    .grid-menu .status { color: color-mix(in srgb, var(--obsidian-fg) 72%, transparent); }
+    .module-tags { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+    .module-tag {
+      border: 1px solid #475258;
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: transparent;
+      color: var(--obsidian-fg);
+      cursor: pointer;
+    }
+    .module-tag:hover { border-color: #569d79; }
+    .module-tag.is-active {
+      background: rgba(86, 157, 121, 0.18);
+      border-color: #569d79;
+      color: #83c092;
+    }
+    #review-grid { min-height: 0; min-width: 0; }
+    .line-type-select {
+      width: 100%; height: 29px; min-width: 0;
+      border: 1px solid #475258; border-radius: 4px;
+      background: #272f34; color: #d3c6aa; font: inherit;
+    }
+    .grid-preview-cell { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.2; }
+    .grid-preview-cell.is-h1 { color: var(--obsidian-h1); font-size: var(--obsidian-h1-size); font-weight: 500; }
+    .grid-preview-cell.is-h2 { color: var(--obsidian-h2); font-size: var(--obsidian-h2-size); font-weight: 500; }
+    .grid-preview-cell.is-h3 { color: var(--obsidian-h3); font-size: var(--obsidian-h3-size); font-weight: 500; }
+    .grid-preview-cell.is-h4 { color: var(--obsidian-h4); font-size: var(--obsidian-h4-size); font-weight: 500; }
+    .grid-preview-cell.is-h5 { color: var(--obsidian-h5); font-size: var(--obsidian-h5-size); font-weight: 500; }
+    .grid-preview-cell.is-h6 { color: var(--obsidian-h6); font-size: var(--obsidian-h6-size); font-weight: 500; }
+    .annotation-member-cell {
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer;
+    }
+    .annotation-member-cell:hover { text-decoration: underline; }
+    .annotation-member-cell.is-missing { color: #dbbc7f; cursor: default; font-style: italic; }
+    .annotation-member-cell.is-missing:hover { text-decoration: none; }
+    .ag-row.row-changed {
+      box-shadow: inset 4px 0 rgba(255, 193, 7, 0.95);
+      background: rgba(255, 193, 7, 0.10) !important;
+    }
+    #review-grid .ag-row:not(.row-changed),
+    #review-grid .ag-row.ag-row-focus:not(.row-changed),
+    #review-grid .ag-row.ag-row-selected:not(.row-changed) {
+      background-color: transparent !important;
+    }
+    #review-grid .ag-cell-focus {
+      border-color: #68747a !important;
+    }
+    #editor { min-width: 0; min-height: 0; overflow: hidden; border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent); }
+    #preview {
+      min-width: 0; min-height: 0; overflow: auto; padding: 18px 24px; box-sizing: border-box;
+      background: var(--obsidian-bg); color: var(--obsidian-fg);
+      font: 300 var(--right-font-size)/1.6 var(--obsidian-font); font-synthesis: none;
+    }
+    #preview h1, #preview h2, #preview h3, #preview h4, #preview h5, #preview h6 {
+      font-family: var(--obsidian-font); font-weight: 500; line-height: 1.3;
+    }
+    #preview h1 { color: var(--obsidian-h1); font-size: var(--obsidian-h1-size); }
+    #preview h2 { color: var(--obsidian-h2); font-size: var(--obsidian-h2-size); }
+    #preview h3 { color: var(--obsidian-h3); font-size: var(--obsidian-h3-size); }
+    #preview h4 { color: var(--obsidian-h4); font-size: var(--obsidian-h4-size); }
+    #preview h5 { color: var(--obsidian-h5); font-size: var(--obsidian-h5-size); }
+    #preview h6 { color: var(--obsidian-h6); font-size: var(--obsidian-h6-size); }
+    #preview pre { overflow: auto; padding: 10px; background: var(--obsidian-bg-alt); }
+    #preview code { font-family: var(--obsidian-font); }
+    #preview table { border-collapse: collapse; width: max-content; min-width: 100%; }
+    #preview th, #preview td { border: 1px solid color-mix(in srgb, var(--obsidian-fg) 45%, transparent); padding: 5px 7px; vertical-align: top; }
+    #preview .md-html-block { overflow-x: auto; }
+    #preview .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+    .cm-editor { height: 100%; font: 300 var(--right-font-size)/1.6 var(--obsidian-font); background: var(--obsidian-bg); color: var(--obsidian-fg); }
+    .cm-scroller { overflow: auto; font-family: var(--obsidian-font); }
+    .cm-gutters { background: var(--obsidian-bg-alt) !important; color: color-mix(in srgb, var(--obsidian-fg) 62%, transparent) !important; border-right: 0 !important; }
+    .cm-content, .cm-line { font-family: var(--obsidian-font); font-synthesis: none; }
+    .cm-line.cm-obsidian-h1, .cm-line.cm-obsidian-h2, .cm-line.cm-obsidian-h3,
+    .cm-line.cm-obsidian-h4, .cm-line.cm-obsidian-h5, .cm-line.cm-obsidian-h6 { font-weight: 500; line-height: 1.3; }
+    .cm-line.cm-obsidian-h1 { color: var(--obsidian-h1); font-size: var(--obsidian-h1-size); }
+    .cm-line.cm-obsidian-h2 { color: var(--obsidian-h2); font-size: var(--obsidian-h2-size); }
+    .cm-line.cm-obsidian-h3 { color: var(--obsidian-h3); font-size: var(--obsidian-h3-size); }
+    .cm-line.cm-obsidian-h4 { color: var(--obsidian-h4); font-size: var(--obsidian-h4-size); }
+    .cm-line.cm-obsidian-h5 { color: var(--obsidian-h5); font-size: var(--obsidian-h5-size); }
+    .cm-line.cm-obsidian-h6 { color: var(--obsidian-h6); font-size: var(--obsidian-h6-size); }
+    .cm-obsidian-latex-function { color: var(--obsidian-code-function); }
+    .cm-obsidian-latex-operator { color: var(--obsidian-code-operator); }
+    .cm-obsidian-latex-value { color: var(--obsidian-code-value); }
+    .cm-obsidian-latex-punctuation { color: var(--obsidian-code-punctuation); }
+    .cm-ocr-target-line { background: color-mix(in srgb, Highlight 20%, transparent); }
+    .cm-ocr-regex-match,
+    #preview mark.ocr-regex-match {
+      background: rgba(255, 170, 0, 0.30);
+      color: inherit;
+      border-radius: 2px;
+    }
+    .cm-ocr-regex-match.is-active,
+    #preview mark.ocr-regex-match.is-active {
+      background: rgba(255, 170, 0, 0.58);
+      outline: 1px solid #ff9e64;
+    }
+    .cm-ocr-eol {
+      display: inline-block;
+      margin-inline-start: 0.25em;
+      color: #ff9e64;
+      font-size: 0.78em;
+      font-weight: 500;
+      opacity: 0.95;
+      user-select: none;
+      pointer-events: none;
+    }
+    @media (max-width: 1100px) and (min-width: 601px) { :root { --obsidian-font-size: 16px; } }
+    @media (max-width: 600px) {
+      :root { --obsidian-font-size: 20px; --right-font-size: 16px; }
+      .workspace { grid-template-columns: 1fr; grid-template-rows: 42vh minmax(0, 1fr); }
+      .grid-pane { border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent); }
+      #splitter-vertical { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="workspace">
+    <section class="grid-pane">
+      <div class="pane-menu grid-menu">
+        <span class="pane-title">数据表</span>
+        <span class="module-tags" role="tablist" aria-label="标定模块">
+          <button class="module-tag is-active" type="button" data-module="章节标题">章节标题</button>
+          <button class="module-tag" type="button" data-module="注释">注释</button>
+          <button class="module-tag" type="button" data-module="嵌入块">嵌入块</button>
+          <button class="module-tag" type="button" data-module="非法断行">非法断行</button>
+        </span>
+        <input id="grid-filter" type="search" placeholder="筛选全部列，例如 章节标题 / 已删除 / Buffett">
+        <span id="grid-status" class="status"></span>
+        <span id="grid-selected" class="status"></span>
+      </div>
+      <section id="review-grid"></section>
+    </section>
+    <div id="splitter-vertical" class="splitter" role="separator" aria-orientation="vertical" tabindex="0"></div>
+    <section class="editor-pane">
+      <div class="pane-menu editor-menu">
+        <span class="pane-title">Markdown</span>
+        <span class="regex-search">
+          <input id="regex-search" type="text" spellcheck="false" placeholder="正则搜索，例如 ^#{1,6}\\s">
+          <select id="search-target" aria-label="搜索目标">
+            <option value="source">源码</option>
+            <option value="preview">预览</option>
+            <option value="both">两边</option>
+          </select>
+          <label><input id="search-case" type="checkbox"> 区分大小写</label>
+          <button id="search-prev" type="button" title="上一个匹配（Shift+Enter）">↑</button>
+          <button id="search-next" type="button" title="下一个匹配（Enter）">↓</button>
+          <span id="search-status"></span>
+        </span>
+        <label>跳到行 <input id="line" type="number" min="1" value="120"></label>
+        <button id="jump" type="button">跳转</button>
+        <label><input id="sync-scroll" type="checkbox" checked> 联动</label>
+        <label><input id="show-eol" type="checkbox" checked> 换行符</label>
+        <span id="status"></span>
+      </div>
+      <section id="editor"></section>
+      <div id="splitter-horizontal" class="splitter" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+      <article id="preview"></article>
+    </section>
+  </div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { shortSha256 } from "./platformHash";
 import { activeCandidates } from "./candidateLifecycle";
 import type { AnnotationPair, Candidate } from "./types";
 
@@ -108,5 +108,5 @@ function byLine(left: Candidate, right: Candidate): number {
 }
 
 function shortHash(value: string): string {
-  return createHash("sha256").update(value).digest("hex").slice(0, 20);
+  return shortSha256(value, 20);
 }

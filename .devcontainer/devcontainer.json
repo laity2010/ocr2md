@@ -1,0 +1,15 @@
+{
+  "name": "ocr2md Codespaces Spike",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "forwardPorts": [4176],
+  "portsAttributes": {
+    "4176": {
+      "label": "ocr2md integration",
+      "onAutoForward": "notify",
+      "protocol": "http",
+      "visibility": "private"
+    }
+  },
+  "postCreateCommand": "npm ci && npm ci --prefix ui-spikes/integration && npm run compile && npm --prefix ui-spikes/integration run typecheck && npm --prefix ui-spikes/integration run build",
+  "postStartCommand": "bash .devcontainer/start-4176.sh"
+}

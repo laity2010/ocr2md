@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUuid } from "./platformHash";
 import {
   applyChangeState,
   buildChapterBoundarySegments,
@@ -32,7 +32,7 @@ import {
   mergeEmbedScan,
   scanRegexMatches,
 } from "./scanner";
-import { chapterContentsDiffer, chapterDiffBaseline, chapterOriginalFileName } from "./workspaceFiles";
+import { chapterContentsDiffer, chapterDiffBaseline, chapterOriginalFileName } from "./chapterReviewText";
 import type { AnnotationPair, Candidate, ModuleName } from "./types";
 
 export interface ChapterReviewApplicationState {
@@ -389,7 +389,7 @@ export function addManualReviewLineState(
       : candidate);
     row = rows.find((candidate) => candidate.id === existing.id)!;
   } else {
-    const manualId = `manual-${randomUUID()}`;
+    const manualId = `manual-${randomUuid()}`;
     const extractedNumber = input.moduleName === "注释" ? extractAnnotationNumber(input.lineText) : undefined;
     const attached = attachLineIdentity({
       id: manualId,
