@@ -86,6 +86,23 @@ chapters/章节名称/trans/
 
 导出校验至少包括：双向 `sid` 集合一一对应、交叉引用路径正确、合成块无跨文件锚点、块级公式无锚点/callout、无残留保护占位符，以及图片/HTML/脚注/公式未丢失。只要仍有待翻译或失败单元，「导出双向互译」保持不可用。
 
+## 技术决策
+
+### 云端开发执行链（2026-09-03）
+
+当前采用并保留以下开发链路：
+
+```text
+ChatGPT → AgentDock（当前运行在 Mac）→ GitHub Codespaces → GitHub
+```
+
+- **AgentDock 是执行桥，不是代码宿主。** 本项目不依赖普通 ChatGPT GitHub 连接器执行写代码、运行命令或提交代码；这些动作由 AgentDock 提供的 shell / Git / GitHub CLI 权限完成。现阶段继续保留 AgentDock，以维持当前 Chat 对话中“讨论 → 修改 → build/test → 浏览器验收”的连续工作流。
+- **Codespaces 是主要云端开发机。** 仓库工作目录、Node 依赖、编译、测试和浏览器预览服务都运行在 Codespace 中；Mac 和 iPad 通过 Codespaces 的转发端口直接验收同一运行实例。
+- **Mac 只是 AgentDock 当前宿主和跳板，不是架构必需。** 目前链路实际经过 `ChatGPT → AgentDock/Mac → gh codespace ssh → Codespace`。未来若把 AgentDock 搬到常驻云主机，可演进为 `ChatGPT → 云端 AgentDock → Codespace → GitHub`，届时 Mac 可完全退出开发链路。
+- **暂不改用纯 Codex 开发链。** Codex 可作为未来替代方案，但当前优先保留本项目已经验证顺手的长期 Chat 上下文和高频 UI 往返验收方式；除非后续重新评估，否则不因“去掉 Mac”而自动切换工具链。
+- **实验与正式部署严格隔离。** Codespaces/UI 实验只在 `gpt/codespaces-spike` 进行；`gpt/web` 是正式 Web 分支，push 会触发 GitHub Pages 部署。未经明确验收，不把实验改动推入 `gpt/web`。
+- **当前云端预览约束。** Codespace 使用 private forwarded port；实例可能因空闲自动停机。devcontainer 必须提供 SSH server，确保 AgentDock 能通过 `gh codespace ssh` 直接进入云端开发机。
+
 ## 开发运行
 
 ```bash
