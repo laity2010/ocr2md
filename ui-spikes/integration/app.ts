@@ -30,17 +30,7 @@ import type { AnnotationPair, Candidate } from "../../src/types";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-type ReviewRow = Candidate & {
-  annotationGroup?: boolean;
-  annotationPairId?: string;
-  annotationRefCandidateId?: string;
-  annotationBodyCandidateId?: string;
-  annotationRefPreview?: string;
-  annotationBodyPreview?: string;
-  annotationRefLine?: number;
-  annotationBodyLine?: number;
-  annotationPairStatus?: AnnotationPair["status"];
-};
+type ReviewRow = Candidate;
 let reviewRows: ReviewRow[] = [];
 let annotationPairs: AnnotationPair[] = [];
 
@@ -357,40 +347,7 @@ let gridApi: ReturnType<typeof createGrid<ReviewRow>> | undefined;
 type ReviewModule = "章节标题" | "注释" | "嵌入块" | "非法断行";
 let activeModule: ReviewModule = "章节标题";
 
-function annotationGroupRows(): ReviewRow[] {
-  return annotationPairs
-    .map((pair): ReviewRow | undefined => {
-      const ref = pair.refCandidateId ? reviewRows.find((row) => row.id === pair.refCandidateId) : undefined;
-      const body = pair.bodyCandidateId ? reviewRows.find((row) => row.id === pair.bodyCandidateId) : undefined;
-      const anchor = ref ?? body;
-      if (!anchor) return undefined;
-      return {
-        ...anchor,
-        id: `annotation-group-${pair.id}`,
-        rowId: `annotation-group-${pair.id}`,
-        annotationGroup: true,
-        annotationPairId: pair.id,
-        annotationNumber: pair.number,
-        annotationRefCandidateId: ref?.id,
-        annotationBodyCandidateId: body?.id,
-        annotationRefPreview: ref?.preview ?? ref?.raw ?? "",
-        annotationBodyPreview: body?.preview ?? body?.raw ?? "",
-        annotationRefLine: ref?.range.line,
-        annotationBodyLine: body?.range.line,
-        annotationPairStatus: pair.status,
-        lineType: "注释组",
-        preview: ref?.preview ?? body?.preview ?? "",
-        raw: ref?.raw ?? body?.raw ?? "",
-      };
-    })
-    .filter((row): row is ReviewRow => Boolean(row))
-    .sort((left, right) => String(left.annotationNumber ?? "").localeCompare(
-      String(right.annotationNumber ?? ""), "zh-CN", { numeric: true },
-    ));
-}
-
 function activeRows(): ReviewRow[] {
-  if (activeModule === "注释") return annotationGroupRows();
   return reviewRows.filter((row) => {
     if (row.typeLabel !== activeModule) return false;
     if (activeModule !== "章节标题") return true;
@@ -398,17 +355,22 @@ function activeRows(): ReviewRow[] {
   });
 }
 
+function annotationPairForRow(row: ReviewRow | undefined): AnnotationPair | undefined {
+  if (!row || row.typeLabel !== "注释") return undefined;
+  return annotationPairs.find((pair) => pair.refCandidateId === row.id || pair.bodyCandidateId === row.id);
+}
+
+function annotationPairStatusForRow(row: ReviewRow | undefined): string {
+  if (!row || row.typeLabel !== "注释") return "";
+  if (row.lineType !== "注释引用" && row.lineType !== "注释正文") return "";
+  if (!String(row.annotationNumber ?? "").trim()) return "待补注释号";
+  const pair = annotationPairForRow(row);
+  if (pair) return pair.status;
+  return row.lineType === "注释引用" ? "待补正文" : "待补引用";
+}
+
 function currentRowDiffState(row: ReviewRow | undefined): "added" | "modified" | "deleted" | undefined {
   if (!row) return undefined;
-  if (row.annotationGroup) {
-    for (const id of [row.annotationRefCandidateId, row.annotationBodyCandidateId]) {
-      if (!id) continue;
-      const member = reviewRows.find((candidate) => candidate.id === id);
-      const state = currentRowDiffState(member);
-      if (state) return state;
-    }
-    return undefined;
-  }
   if (row.chapterBoundaryState === "deleted") {
     const baselineText = row.baselinePreview ?? row.raw;
     const deleted = liveDiffChanges.find((change) => change.state === "deleted" && change.text === baselineText);
@@ -510,14 +472,6 @@ function locateReviewRow(row: ReviewRow): { offset: number; line: number } | und
 }
 
 function jumpToReviewRow(row: ReviewRow): void {
-  if (row.annotationGroup) {
-    const targetId = row.annotationRefCandidateId ?? row.annotationBodyCandidateId;
-    const target = targetId ? reviewRows.find((candidate) => candidate.id === targetId) : undefined;
-    if (target) {
-      jumpToReviewRow(target);
-      return;
-    }
-  }
   const located = locateReviewRow(row);
   if (!located) {
     gridStatus.textContent = `当前源码无法定位 · ${row.typeLabel} / ${row.lineType}`;
@@ -605,25 +559,26 @@ function reviewPreviewRenderer(params: ICellRendererParams<ReviewRow, string>): 
   return node;
 }
 
-function annotationMemberRenderer(kind: "ref" | "body") {
-  return (params: ICellRendererParams<ReviewRow, string>): HTMLElement => {
-    const node = document.createElement("div");
-    node.className = "annotation-member-cell";
-    node.textContent = String(params.value ?? "");
-    const id = kind === "ref" ? params.data?.annotationRefCandidateId : params.data?.annotationBodyCandidateId;
-    const member = id ? reviewRows.find((candidate) => candidate.id === id) : undefined;
-    if (member) {
-      node.title = `点击定位到源码第 ${member.range.line + 1} 行`;
-      node.addEventListener("click", (event) => {
-        event.stopPropagation();
-        jumpToReviewRow(member);
-      });
-    } else {
-      node.classList.add("is-missing");
-      node.textContent = kind === "ref" ? "待补引用" : "待补正文";
-    }
-    return node;
-  };
+function annotationNumberRenderer(params: ICellRendererParams<ReviewRow, string>): HTMLElement {
+  const input = document.createElement("input");
+  input.className = "annotation-number-input";
+  input.type = "text";
+  input.spellcheck = false;
+  input.value = String(params.value ?? "");
+  input.setAttribute("aria-label", "注释号");
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("change", () => {
+    if (!params.data) return;
+    const next = application.setAnnotationNumber(params.data.id, input.value);
+    reviewRows = next.rows;
+    annotationPairs = next.annotationPairs;
+    gridApi?.setGridOption("rowData", activeRows());
+    gridApi?.refreshCells({ force: true });
+    gridApi?.redrawRows();
+    gridStatus.textContent = `注释号已改为 ${input.value.trim() || "空"} · 配对已重算`;
+    updateGridCounters();
+  });
+  return input;
 }
 
 const rowSelection: RowSelectionOptions = {
@@ -659,43 +614,43 @@ const standardColumnDefs: ColDef<ReviewRow>[] = [
 
 const annotationColumnDefs: ColDef<ReviewRow>[] = [
   {
+    colId: "sourceLine",
+    headerName: "行号",
+    width: 84,
+    minWidth: 72,
+    pinned: "left",
+    sortable: true,
+    sort: "asc",
+    sortIndex: 1,
+    valueGetter: (params) => params.data ? params.data.range.line + 1 : null,
+  },
+  { field: "lineType", headerName: "行类型", width: 130, filter: true, cellRenderer: lineTypeRenderer },
+  {
     field: "annotationNumber",
     colId: "annotationNumber",
-    headerName: "编号",
-    width: 78,
-    minWidth: 68,
-    pinned: "left",
+    headerName: "注释号",
+    width: 92,
+    minWidth: 82,
+    sortable: true,
     sort: "asc",
     sortIndex: 0,
-    comparator: (left, right) => String(left ?? "").localeCompare(String(right ?? ""), "zh-CN", { numeric: true }),
+    comparator: (left, right) => {
+      const leftNumber = String(left ?? "").trim();
+      const rightNumber = String(right ?? "").trim();
+      if (!leftNumber && rightNumber) return 1;
+      if (leftNumber && !rightNumber) return -1;
+      return leftNumber.localeCompare(rightNumber, "zh-CN", { numeric: true });
+    },
+    cellRenderer: annotationNumberRenderer,
   },
+  { field: "preview", headerName: "预览", minWidth: 320, flex: 1, cellRenderer: reviewPreviewRenderer },
   {
-    colId: "annotationRefLine",
-    headerName: "引用行",
-    width: 88,
-    valueGetter: (params) => params.data?.annotationRefLine === undefined ? "" : params.data.annotationRefLine + 1,
+    colId: "annotationPairStatus",
+    headerName: "配对状态",
+    width: 112,
+    filter: true,
+    valueGetter: (params) => annotationPairStatusForRow(params.data),
   },
-  {
-    field: "annotationRefPreview",
-    headerName: "注释引用",
-    minWidth: 260,
-    flex: 1,
-    cellRenderer: annotationMemberRenderer("ref"),
-  },
-  {
-    colId: "annotationBodyLine",
-    headerName: "正文行",
-    width: 88,
-    valueGetter: (params) => params.data?.annotationBodyLine === undefined ? "" : params.data.annotationBodyLine + 1,
-  },
-  {
-    field: "annotationBodyPreview",
-    headerName: "注释正文",
-    minWidth: 260,
-    flex: 1,
-    cellRenderer: annotationMemberRenderer("body"),
-  },
-  { field: "annotationPairStatus", headerName: "配对状态", width: 110, filter: true },
   {
     colId: "currentDiff",
     headerName: "变更",
@@ -764,7 +719,12 @@ function selectModule(module: ReviewModule): void {
   gridApi?.setGridOption("rowData", activeRows());
   gridApi?.deselectAll();
   gridApi?.applyColumnState({
-    state: [{ colId: module === "注释" ? "annotationNumber" : "sourceLine", sort: "asc", sortIndex: 0 }],
+    state: module === "注释"
+      ? [
+          { colId: "annotationNumber", sort: "asc", sortIndex: 0 },
+          { colId: "sourceLine", sort: "asc", sortIndex: 1 },
+        ]
+      : [{ colId: "sourceLine", sort: "asc", sortIndex: 0 }],
     defaultState: { sort: null },
   });
   updateGridCounters();
