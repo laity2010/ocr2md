@@ -1,6 +1,11 @@
 {
   "name": "ocr2md Codespaces Spike",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    }
+  },
   "forwardPorts": [4176],
   "portsAttributes": {
     "4176": {
