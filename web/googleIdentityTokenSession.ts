@@ -2,6 +2,8 @@ const GOOGLE_IDENTITY_SCRIPT_ID = "ocr2md-google-identity-services";
 const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
 export const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const EXPIRY_SAFETY_WINDOW_MS = 60_000;
+const AUTHORIZATION_HINT_PREFIX = "ocr2md-google-authorization-v1:";
+const SESSION_TOKEN_PREFIX = "ocr2md-google-session-token-v1:";
 
 interface GoogleTokenResponse {
   access_token?: string;
@@ -37,19 +39,26 @@ let scriptLoad: Promise<void> | undefined;
 /**
  * Browser-only OAuth token session backed by Google Identity Services.
  *
- * Access tokens live only in this object. They are never written to localStorage,
- * sessionStorage, IndexedDB, cookies, URLs, or the generated HTML.
+ * Access tokens are kept in memory and mirrored to sessionStorage so a normal
+ * page refresh in the same browser tab does not require another OAuth gesture.
+ * They are never written to localStorage, IndexedDB, cookies, URLs, or HTML.
  */
 export class GoogleIdentityTokenSession {
   private accessToken = "";
   private expiresAt = 0;
-  private hasAuthorized = false;
+  private hasAuthorized: boolean;
 
   constructor(
     private readonly clientId: string,
     private readonly scope = GOOGLE_DRIVE_SCOPE,
   ) {
     if (!clientId.trim()) throw new Error("Google OAuth client ID is required");
+    this.hasAuthorized = loadAuthorizationHint(this.authorizationHintKey());
+    const restored = loadSessionToken(this.sessionTokenKey());
+    if (restored) {
+      this.accessToken = restored.accessToken;
+      this.expiresAt = restored.expiresAt;
+    }
   }
 
   async prepare(): Promise<void> {
@@ -72,6 +81,8 @@ export class GoogleIdentityTokenSession {
           this.accessToken = response.access_token;
           this.expiresAt = Date.now() + Math.max(0, seconds * 1000 - EXPIRY_SAFETY_WINDOW_MS);
           this.hasAuthorized = true;
+          saveAuthorizationHint(this.authorizationHintKey(), true);
+          saveSessionToken(this.sessionTokenKey(), this.accessToken, this.expiresAt);
           resolve();
         },
         error_callback: (error) => {
@@ -94,10 +105,15 @@ export class GoogleIdentityTokenSession {
     return Boolean(this.accessToken) && Date.now() < this.expiresAt;
   }
 
+  hasPriorAuthorization(): boolean {
+    return this.hasAuthorized;
+  }
+
   disconnect(): void {
     const token = this.accessToken;
     this.clear();
     this.hasAuthorized = false;
+    saveAuthorizationHint(this.authorizationHintKey(), false);
     if (!token) return;
     try {
       googleOauth2().revoke(token);
@@ -109,6 +125,67 @@ export class GoogleIdentityTokenSession {
   private clear(): void {
     this.accessToken = "";
     this.expiresAt = 0;
+    clearSessionToken(this.sessionTokenKey());
+  }
+
+  private authorizationHintKey(): string {
+    return `${AUTHORIZATION_HINT_PREFIX}${this.clientId}:${this.scope}`;
+  }
+
+  private sessionTokenKey(): string {
+    return `${SESSION_TOKEN_PREFIX}${this.clientId}:${this.scope}`;
+  }
+}
+
+function loadSessionToken(key: string): { accessToken: string; expiresAt: number } | undefined {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { accessToken?: unknown; expiresAt?: unknown };
+    if (typeof parsed.accessToken !== "string" || typeof parsed.expiresAt !== "number") {
+      sessionStorage.removeItem(key);
+      return undefined;
+    }
+    if (!parsed.accessToken || Date.now() >= parsed.expiresAt) {
+      sessionStorage.removeItem(key);
+      return undefined;
+    }
+    return { accessToken: parsed.accessToken, expiresAt: parsed.expiresAt };
+  } catch {
+    return undefined;
+  }
+}
+
+function saveSessionToken(key: string, accessToken: string, expiresAt: number): void {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ accessToken, expiresAt }));
+  } catch {
+    // Refresh persistence is optional; in-memory auth still works.
+  }
+}
+
+function clearSessionToken(key: string): void {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // Ignore unavailable browser storage.
+  }
+}
+
+function loadAuthorizationHint(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function saveAuthorizationHint(key: string, authorized: boolean): void {
+  try {
+    if (authorized) localStorage.setItem(key, "true");
+    else localStorage.removeItem(key);
+  } catch {
+    // Authorization still works; only automatic reconnect is unavailable.
   }
 }
 

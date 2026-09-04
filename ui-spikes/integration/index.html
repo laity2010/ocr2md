@@ -13,6 +13,7 @@
     })();
   </script>
   <link rel="stylesheet" href="./node_modules/katex/dist/katex.min.css">
+  <link rel="stylesheet" href="./node_modules/js-fileexplorer/file-explorer/file-explorer.css">
   <style>
     :root {
       color-scheme: light dark;
@@ -50,7 +51,7 @@
       --obsidian-h6-size: 1.125em;
     }
     :root[data-device-profile="ipad"] {
-      --ui-font-size: 10px;
+      --ui-font-size: 12px;
       --grid-font-size: 10px;
       --right-font-size: 12px;
     }
@@ -81,9 +82,43 @@
     }
     html, body { height: 100%; margin: 0; }
     body {
-      display: block;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
       background: var(--obsidian-bg); color: var(--obsidian-fg);
       font-family: var(--obsidian-font); font-size: var(--ui-font-size); font-weight: 300; font-synthesis: none;
+    }
+    [hidden] { display: none !important; }
+    .workspace-switcher {
+      min-width: 0; min-height: 34px; box-sizing: border-box;
+      display: flex; align-items: center; gap: 4px; padding: 3px 8px;
+      background: color-mix(in srgb, var(--obsidian-bg-alt) 96%, black);
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent);
+    }
+    .workspace-brand {
+      display: inline-flex; align-items: baseline; gap: 5px; flex: 0 0 auto;
+      margin-right: 4px; padding-right: 9px;
+      border-right: 1px solid color-mix(in srgb, var(--obsidian-fg) 22%, transparent);
+      color: var(--obsidian-fg); font-weight: 600; white-space: nowrap;
+    }
+    .workspace-version {
+      color: color-mix(in srgb, var(--obsidian-fg) 52%, transparent);
+      font-size: 0.78em; font-weight: 400;
+    }
+    .workspace-tab {
+      min-height: 27px; padding: 3px 10px;
+      border: 1px solid transparent; border-radius: 5px;
+      background: transparent; color: color-mix(in srgb, var(--obsidian-fg) 72%, transparent);
+      font: inherit; cursor: pointer;
+    }
+    .workspace-tab:hover { color: var(--obsidian-fg); background: color-mix(in srgb, var(--obsidian-fg) 7%, transparent); }
+    .workspace-tab.is-active {
+      color: #83c092;
+      border-color: color-mix(in srgb, #569d79 65%, transparent);
+      background: color-mix(in srgb, #569d79 13%, transparent);
+    }
+    .workspace-document {
+      min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: color-mix(in srgb, var(--obsidian-fg) 58%, transparent); font-size: 0.85em;
     }
     .pane-menu {
       display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px;
@@ -100,25 +135,210 @@
     .regex-search #regex-search { width: min(340px, 42vw); }
     .regex-search select { font: inherit; }
     #search-status { opacity: 0.8; font-size: 0.85em; }
+    .pane-status {
+      min-width: 0; min-height: 24px; box-sizing: border-box;
+      display: flex; align-items: center; gap: 12px;
+      padding: 3px 10px;
+      background: var(--obsidian-bg-alt);
+      border-top: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent);
+      color: color-mix(in srgb, var(--obsidian-fg) 72%, transparent);
+      font-size: 0.85em; white-space: nowrap; overflow: hidden;
+    }
+    .pane-status > span { overflow: hidden; text-overflow: ellipsis; }
+    .pane-status .status-secondary { margin-left: auto; }
     #regex-search[aria-invalid="true"] { outline: 2px solid var(--obsidian-h1); }
     .workspace {
-      height: 100vh;
+      height: 100%;
       min-height: 0;
       display: grid;
       grid-template-columns: minmax(320px, var(--left-pane-width, 42%)) 6px minmax(360px, 1fr);
       overflow: hidden;
     }
+    .gd-workspace {
+      min-width: 0; min-height: 0;
+      display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      background: var(--obsidian-bg);
+    }
+    .gd-toolbar {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      min-height: 44px; box-sizing: border-box; padding: 7px 10px;
+      background: var(--obsidian-bg-alt);
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent);
+    }
+    .gd-toolbar button, .gd-breadcrumbs button {
+      border: 1px solid #475258; border-radius: 5px; padding: 4px 8px;
+      background: transparent; color: var(--obsidian-fg); font: inherit; cursor: pointer;
+    }
+    .gd-toolbar button:hover:not(:disabled), .gd-breadcrumbs button:hover:not(:disabled) { border-color: #569d79; }
+    .gd-toolbar button:disabled, .gd-breadcrumbs button:disabled { opacity: .45; cursor: default; }
+    .gd-toolbar .gd-spacer { flex: 1; }
+    .gd-breadcrumbs {
+      min-width: 0; min-height: 36px; box-sizing: border-box;
+      display: flex; align-items: center; gap: 5px; overflow-x: auto;
+      padding: 5px 10px;
+      background: color-mix(in srgb, var(--obsidian-bg-alt) 72%, var(--obsidian-bg));
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 25%, transparent);
+      white-space: nowrap;
+    }
+    .gd-breadcrumbs button { padding: 2px 6px; border-color: transparent; }
+    .gd-breadcrumbs button:disabled { color: #83c092; opacity: 1; }
+    .gd-breadcrumb-separator { color: color-mix(in srgb, var(--obsidian-fg) 42%, transparent); }
+    .gd-browser {
+      min-width: 0; min-height: 0; overflow: auto;
+      padding: 8px 10px 18px;
+    }
+    .gd-list-header, .gd-entry {
+      display: grid; grid-template-columns: 24px minmax(220px, 1fr) 100px;
+      align-items: center; gap: 6px; box-sizing: border-box;
+    }
+    .gd-list-header {
+      position: sticky; top: -8px; z-index: 2;
+      min-height: 31px; padding: 4px 8px;
+      background: var(--obsidian-bg-alt);
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent);
+      color: color-mix(in srgb, var(--obsidian-fg) 62%, transparent);
+      font-size: 0.86em;
+    }
+    #gd-list { min-width: 0; }
+    .gd-entry {
+      width: 100%; min-height: 34px; padding: 4px 8px;
+      border: 0; border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 16%, transparent);
+      background: transparent; color: var(--obsidian-fg); font: inherit; text-align: left; cursor: default;
+    }
+    .gd-entry:hover { background: color-mix(in srgb, var(--obsidian-fg) 5%, transparent); }
+    .gd-entry.is-selected { background: color-mix(in srgb, #569d79 17%, transparent); }
+    .gd-entry-icon { color: #dbbc7f; text-align: center; }
+    .gd-entry-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gd-entry-type { color: color-mix(in srgb, var(--obsidian-fg) 58%, transparent); }
+    .gd-message { padding: 18px 8px; color: color-mix(in srgb, var(--obsidian-fg) 62%, transparent); }
+    #gd-status[data-kind="pass"] { color: #83c092; }
+    #gd-status[data-kind="fail"] { color: var(--obsidian-h1); }
+    .jsfe-workspace {
+      min-width: 0; min-height: 0;
+      display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      background: var(--obsidian-bg);
+    }
+    .jsfe-toolbar {
+      display: flex; align-items: center; gap: 6px; min-height: 44px;
+      box-sizing: border-box; padding: 7px 10px;
+      background: var(--obsidian-bg-alt);
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent);
+    }
+    .jsfe-toolbar button {
+      border: 1px solid #475258; border-radius: 5px; padding: 4px 8px;
+      background: transparent; color: var(--obsidian-fg); font: inherit; cursor: pointer;
+    }
+    .jsfe-toolbar button:hover:not(:disabled) { border-color: #569d79; }
+    .jsfe-toolbar button:disabled { opacity: .45; cursor: default; }
+    .jsfe-toolbar .jsfe-spacer { flex: 1; }
+    #gd-jsfe-host {
+      min-width: 0; min-height: 0; position: relative; overflow: hidden;
+      background: var(--obsidian-bg);
+    }
+    #gd-jsfe-status[data-kind="pass"] { color: #83c092; }
+    #gd-jsfe-status[data-kind="fail"] { color: var(--obsidian-h1); }
+    #gd-jsfe-host .fe_fileexplorer_wrap {
+      height: 100%; min-height: 0;
+      color: var(--obsidian-fg);
+      background: var(--obsidian-bg);
+      font-family: var(--obsidian-font);
+    }
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap {
+      border: 0;
+      color: var(--obsidian-fg);
+      background: var(--obsidian-bg);
+    }
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap.fe_fileexplorer_inner_wrap_focused {
+      border: 0;
+    }
+    #gd-jsfe-host .fe_fileexplorer_toolbar,
+    #gd-jsfe-host .fe_fileexplorer_statusbar_wrap {
+      color: color-mix(in srgb, var(--obsidian-fg) 78%, transparent);
+      background: var(--obsidian-bg-alt);
+    }
+    #gd-jsfe-host .fe_fileexplorer_toolbar {
+      margin-top: 0; padding: 5px 6px;
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 25%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_path_wrap {
+      border-color: #475258;
+      background: color-mix(in srgb, var(--obsidian-bg) 86%, var(--obsidian-bg-alt));
+    }
+    #gd-jsfe-host .fe_fileexplorer_path_segments_wrap button,
+    #gd-jsfe-host .fe_fileexplorer_path_segment_wrap {
+      color: var(--obsidian-fg);
+    }
+    #gd-jsfe-host .fe_fileexplorer_path_segment_wrap:hover,
+    #gd-jsfe-host .fe_fileexplorer_path_segment_wrap:focus,
+    #gd-jsfe-host .fe_fileexplorer_path_segment_wrap.fe_fileexplorer_path_segment_wrap_focus,
+    #gd-jsfe-host .fe_fileexplorer_path_segment_wrap.fe_fileexplorer_drag_hover {
+      border-color: #569d79;
+      background: color-mix(in srgb, #569d79 16%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_folder_tools_scroll_wrap {
+      border-right-color: color-mix(in srgb, var(--obsidian-fg) 22%, transparent);
+      background: var(--obsidian-bg-alt);
+    }
+    #gd-jsfe-host .fe_fileexplorer_folder_tools button:not(.fe_fileexplorer_disabled):hover,
+    #gd-jsfe-host .fe_fileexplorer_folder_tools button:not(.fe_fileexplorer_disabled):focus {
+      border-color: #569d79;
+      background: color-mix(in srgb, #569d79 16%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_folder_tool_separator {
+      border-top-color: color-mix(in srgb, var(--obsidian-fg) 22%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_items_scroll_wrap,
+    #gd-jsfe-host .fe_fileexplorer_items_scroll_wrap_inner {
+      background: var(--obsidian-bg);
+    }
+    #gd-jsfe-host .fe_fileexplorer_items_message_wrap {
+      color: color-mix(in srgb, var(--obsidian-fg) 58%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_item_text {
+      color: var(--obsidian-fg);
+    }
+    #gd-jsfe-host .fe_fileexplorer_item_wrap_inner:hover,
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap:not(.fe_fileexplorer_inner_wrap_focused) .fe_fileexplorer_item_selected .fe_fileexplorer_item_wrap_inner:hover,
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap.fe_fileexplorer_inner_wrap_focused .fe_fileexplorer_items_wrap:not(.fe_fileexplorer_items_focus) .fe_fileexplorer_item_wrap_inner:hover {
+      border-color: #569d79;
+      background: color-mix(in srgb, #569d79 12%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap:not(.fe_fileexplorer_inner_wrap_focused) .fe_fileexplorer_item_selected .fe_fileexplorer_item_wrap_inner,
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap.fe_fileexplorer_inner_wrap_focused .fe_fileexplorer_items_wrap:not(.fe_fileexplorer_items_focus) .fe_fileexplorer_item_selected .fe_fileexplorer_item_wrap_inner,
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap.fe_fileexplorer_inner_wrap_focused .fe_fileexplorer_items_wrap.fe_fileexplorer_items_focus .fe_fileexplorer_item_selected .fe_fileexplorer_item_wrap_inner,
+    #gd-jsfe-host .fe_fileexplorer_inner_wrap.fe_fileexplorer_inner_wrap_focused .fe_fileexplorer_items_wrap.fe_fileexplorer_items_focus .fe_fileexplorer_item_selected.fe_fileexplorer_item_focused .fe_fileexplorer_item_wrap_inner {
+      border-color: color-mix(in srgb, #569d79 72%, transparent);
+      background: color-mix(in srgb, #569d79 22%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_statusbar_wrap {
+      border-top: 1px solid color-mix(in srgb, var(--obsidian-fg) 22%, transparent);
+    }
+    #gd-jsfe-host .fe_fileexplorer_statusbar_text_segment_wrap,
+    #gd-jsfe-host .fe_fileexplorer_action_progress_msg_wrap {
+      border-color: color-mix(in srgb, var(--obsidian-fg) 18%, transparent);
+    }
+    .fe_fileexplorer_popup_wrap {
+      border-color: #475258;
+      color: var(--obsidian-fg);
+      background: var(--obsidian-bg-alt);
+      font-family: var(--obsidian-font);
+    }
+    .fe_fileexplorer_popup_wrap .fe_fileexplorer_popup_item_wrap:focus {
+      background: color-mix(in srgb, #569d79 22%, transparent);
+    }
     .grid-pane {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) auto;
     }
     .editor-pane {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: auto minmax(160px, var(--editor-top-height, 50%)) 6px minmax(160px, 1fr);
+      grid-template-rows: auto minmax(160px, var(--editor-top-height, 50%)) 6px minmax(160px, 1fr) auto;
       overflow: hidden;
     }
     .splitter {
@@ -140,7 +360,6 @@
     #splitter-horizontal { cursor: row-resize; }
     body.is-resizing { user-select: none; }
     .grid-menu { font-size: var(--ui-font-size); align-content: flex-start; }
-    .grid-menu #grid-filter { width: min(360px, 34vw); }
     .grid-menu .status { color: color-mix(in srgb, var(--obsidian-fg) 72%, transparent); }
     .module-tags { display: inline-flex; gap: 6px; flex-wrap: wrap; }
     .module-tag {
@@ -172,6 +391,8 @@
       background: #272f34; color: #d3c6aa; font: inherit;
     }
     .grid-preview-cell { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.2; }
+    .illegal-line-break-preview { cursor: pointer; }
+    .illegal-line-break-preview:hover { text-decoration: underline; }
     .grid-preview-cell.is-h1 { color: var(--obsidian-h1); font-size: var(--obsidian-h1-size); font-weight: 500; }
     .grid-preview-cell.is-h2 { color: var(--obsidian-h2); font-size: var(--obsidian-h2-size); font-weight: 500; }
     .grid-preview-cell.is-h3 { color: var(--obsidian-h3); font-size: var(--obsidian-h3-size); font-weight: 500; }
@@ -253,30 +474,40 @@
       .workspace { grid-template-columns: 1fr; grid-template-rows: 42vh minmax(0, 1fr); }
       .grid-pane { border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent); }
       #splitter-vertical { display: none; }
+      .workspace-document { display: none; }
+      .gd-list-header, .gd-entry { grid-template-columns: 20px minmax(140px, 1fr) 62px; }
     }
   </style>
 </head>
 <body>
-  <div class="workspace">
+  <nav class="workspace-switcher" aria-label="工作区">
+    <span class="workspace-brand">ocr2md <span id="workspace-version" class="workspace-version">v0.0.1 · --</span></span>
+    <button class="workspace-tab is-active" type="button" data-workspace="cleaning">清洗工作区</button>
+    <button class="workspace-tab" type="button" data-workspace="gd">GD 工作区</button>
+    <button class="workspace-tab" type="button" data-workspace="jsfe">GD · JSFE</button>
+    <span id="workspace-document" class="workspace-document">本地示例 · Buffett’s Alpha</span>
+  </nav>
+  <div id="cleaning-workspace" class="workspace">
     <section class="grid-pane">
       <div class="pane-menu grid-menu">
         <span class="pane-title">数据表</span>
         <span class="module-tags" role="tablist" aria-label="标定模块">
+          <button class="module-tag boundary-module-tag" type="button" data-module="章节定界" hidden>章节定界</button>
           <button class="module-tag is-active" type="button" data-module="章节标题">章节标题</button>
           <button class="module-tag" type="button" data-module="注释">注释</button>
           <button class="module-tag" type="button" data-module="嵌入块">嵌入块</button>
           <button class="module-tag" type="button" data-module="非法断行">非法断行</button>
         </span>
-        <input id="grid-filter" type="search" placeholder="筛选全部列，例如 章节标题 / 已删除 / Buffett">
-        <span id="grid-status" class="status"></span>
-        <span id="grid-selected" class="status"></span>
       </div>
       <section id="review-grid"></section>
+      <div class="pane-status grid-statusbar" role="status" aria-live="polite">
+        <span id="grid-status" class="status"></span>
+        <span id="grid-selected" class="status status-secondary"></span>
+      </div>
     </section>
     <div id="splitter-vertical" class="splitter" role="separator" aria-orientation="vertical" tabindex="0"></div>
     <section class="editor-pane">
       <div class="pane-menu editor-menu">
-        <span class="pane-title">Markdown</span>
         <span class="regex-search">
           <input id="regex-search" type="text" spellcheck="false" placeholder="正则搜索，例如 ^#{1,6}\\s">
           <select id="search-target" aria-label="搜索目标">
@@ -287,19 +518,81 @@
           <label><input id="search-case" type="checkbox"> 区分大小写</label>
           <button id="search-prev" type="button" title="上一个匹配（Shift+Enter）">↑</button>
           <button id="search-next" type="button" title="下一个匹配（Enter）">↓</button>
-          <span id="search-status"></span>
         </span>
-        <label>跳到行 <input id="line" type="number" min="1" value="120"></label>
-        <button id="jump" type="button">跳转</button>
-        <label><input id="sync-scroll" type="checkbox" checked> 联动</label>
-        <label><input id="show-eol" type="checkbox" checked> 换行符</label>
-        <span id="status"></span>
       </div>
       <section id="editor"></section>
       <div id="splitter-horizontal" class="splitter" role="separator" aria-orientation="horizontal" tabindex="0"></div>
       <article id="preview"></article>
+      <div class="pane-status editor-statusbar" role="status" aria-live="polite">
+        <span id="status"></span>
+        <span id="search-status" class="status-secondary"></span>
+      </div>
     </section>
   </div>
-  <script type="module" src="./app.js"></script>
+  <section id="gd-workspace" class="gd-workspace" hidden>
+    <div class="gd-toolbar">
+      <span class="pane-title">Google Drive</span>
+      <button id="gd-connect" type="button">连接</button>
+      <button id="gd-up" type="button">上级</button>
+      <button id="gd-refresh" type="button">刷新</button>
+      <span class="gd-spacer"></span>
+      <button id="gd-open" type="button">打开到清洗工作区</button>
+      <button id="gd-rename" type="button">重命名</button>
+      <button id="gd-disconnect" type="button">断开</button>
+    </div>
+    <nav id="gd-breadcrumbs" class="gd-breadcrumbs" aria-label="Google Drive 路径"></nav>
+    <div class="gd-browser">
+      <div class="gd-list-header" role="row">
+        <span></span>
+        <span>名称</span>
+        <span>类型</span>
+      </div>
+      <div id="gd-list" role="rowgroup"></div>
+    </div>
+    <div class="pane-status gd-statusbar" role="status" aria-live="polite">
+      <span id="gd-status"></span>
+      <span id="gd-selection-status" class="status-secondary">未连接</span>
+    </div>
+  </section>
+  <section id="gd-jsfe-workspace" class="jsfe-workspace" hidden>
+    <div class="jsfe-toolbar">
+      <span class="pane-title">js-fileexplorer · Google Drive spike</span>
+      <button id="gd-jsfe-connect" type="button">连接</button>
+      <button id="gd-jsfe-disconnect" type="button">断开</button>
+      <span class="jsfe-spacer"></span>
+      <span>双击 Markdown → 清洗工作区</span>
+    </div>
+    <div id="gd-jsfe-host"></div>
+    <div class="pane-status" role="status" aria-live="polite">
+      <span id="gd-jsfe-status">尚未启动</span>
+      <span id="gd-jsfe-selection" class="status-secondary"></span>
+    </div>
+  </section>
+  <script src="./node_modules/js-fileexplorer/file-explorer/file-explorer.js"></script>
+  <script type="module">
+    const appUrl = "./app.js?v=" + Date.now();
+    const versionEl = document.getElementById("workspace-version");
+
+    try {
+      const response = await fetch(appUrl, { method: "HEAD", cache: "no-store" });
+      const lastModified = response.headers.get("Last-Modified");
+      if (versionEl && lastModified) {
+        const updatedAt = new Date(lastModified);
+        const stamp = new Intl.DateTimeFormat("sv-SE", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(updatedAt);
+        versionEl.textContent = "v0.0.1 · " + stamp;
+      }
+    } catch {
+      // Keep the version visible even if Last-Modified is unavailable.
+    }
+
+    import(appUrl);
+  </script>
 </body>
 </html>

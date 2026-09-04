@@ -27,6 +27,11 @@ import { chapterDiffBaseline } from "../../src/chapterReviewText";
 import { MODULE_REGEX_DEFAULTS } from "../../src/regexPresets";
 import { candidatesFromSidecar } from "../../src/sidecar";
 import type { AnnotationPair, Candidate } from "../../src/types";
+import {
+  installGoogleDriveWorkspace,
+  type GoogleDriveWorkspaceOpenedFile,
+} from "./googleDriveWorkspace";
+import { installGoogleDriveFileExplorerSpike } from "./googleDriveFileExplorerSpike";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -57,19 +62,24 @@ function requiredElement<T extends Element>(selector: string): T {
 const editorHost = requiredElement<HTMLElement>("#editor");
 const preview = requiredElement<HTMLElement>("#preview");
 const gridHost = requiredElement<HTMLElement>("#review-grid");
-const gridFilter = requiredElement<HTMLInputElement>("#grid-filter");
 const gridStatus = requiredElement<HTMLElement>("#grid-status");
 const gridSelected = requiredElement<HTMLElement>("#grid-selected");
+const cleaningWorkspace = requiredElement<HTMLElement>("#cleaning-workspace");
+const gdWorkspace = requiredElement<HTMLElement>("#gd-workspace");
+const gdJsfeWorkspace = requiredElement<HTMLElement>("#gd-jsfe-workspace");
+const workspaceDocument = requiredElement<HTMLElement>("#workspace-document");
+const workspaceTabs = Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-tab"));
 const moduleTags = Array.from(document.querySelectorAll<HTMLButtonElement>(".module-tag"));
-if (moduleTags.length !== 4) throw new Error("missing module tags");
+const expectedModuleTags = ["章节定界", "章节标题", "注释", "嵌入块", "非法断行"];
+if (expectedModuleTags.some((name) => !moduleTags.some((tag) => tag.dataset.module === name))) {
+  throw new Error("missing module tags");
+}
 const workspace = requiredElement<HTMLElement>(".workspace");
 const editorPane = requiredElement<HTMLElement>(".editor-pane");
+const editorMenu = requiredElement<HTMLElement>(".editor-menu");
+const editorStatusbar = requiredElement<HTMLElement>(".editor-statusbar");
 const verticalSplitter = requiredElement<HTMLElement>("#splitter-vertical");
 const horizontalSplitter = requiredElement<HTMLElement>("#splitter-horizontal");
-const lineInput = requiredElement<HTMLInputElement>("#line");
-const jumpButton = requiredElement<HTMLButtonElement>("#jump");
-const syncToggle = requiredElement<HTMLInputElement>("#sync-scroll");
-const eolToggle = requiredElement<HTMLInputElement>("#show-eol");
 const regexInput = requiredElement<HTMLInputElement>("#regex-search");
 const searchTarget = requiredElement<HTMLSelectElement>("#search-target");
 const caseToggle = requiredElement<HTMLInputElement>("#search-case");
@@ -260,7 +270,7 @@ function render(text: string): void {
   });
 }
 
-const [sourceText, initialWorkingText, sidecarRaw] = await Promise.all([
+const [initialSourceText, initialWorkingText, sidecarRaw] = await Promise.all([
   fetch("./source.md").then((response) => {
     if (!response.ok) throw new Error(`source load failed: ${response.status}`);
     return response.text();
@@ -275,9 +285,10 @@ const [sourceText, initialWorkingText, sidecarRaw] = await Promise.all([
   }),
 ]);
 
-const virtualSourcePath = "/demo/chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md";
-const virtualWorkingPath = "/demo/chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.working.md";
-const sourceLabel = "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md";
+let sourceText = initialSourceText;
+let virtualSourcePath = "/demo/chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md";
+let virtualWorkingPath = "/demo/chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.working.md";
+let sourceLabel = "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md";
 const loadedSidecar = candidatesFromSidecar(JSON.parse(sidecarRaw));
 reviewRows = loadedSidecar.rows.map((row) => ({
   ...row,
@@ -295,9 +306,22 @@ const annotationPatterns = splitPatterns(MODULE_REGEX_DEFAULTS["注释"] ?? "");
 const embedPatterns = splitPatterns(MODULE_REGEX_DEFAULTS["嵌入块"] ?? "");
 let application = new ChapterReviewApplication({ rows: reviewRows, annotationPairs });
 let liveDiffChanges: ReturnType<typeof scanChapterBoundaryLines> = [];
+type WorkbenchReviewMode = "chapter" | "boundary";
+let workbenchReviewMode: WorkbenchReviewMode = "chapter";
 
 function refreshReviewFromWorkingText(workingText: string): void {
   liveDiffChanges = scanChapterBoundaryLines(chapterDiffBaseline(sourceText, workingText), workingText);
+  if (workbenchReviewMode === "boundary") {
+    const snapshot = application.refreshChapterBoundary({
+      baselineText: sourceText,
+      workingText,
+      workingPath: virtualWorkingPath,
+      sourceLabel,
+    });
+    reviewRows = snapshot.rows;
+    annotationPairs = snapshot.annotationPairs;
+    return;
+  }
   application.refreshChapterTitle({
     baselineText: sourceText,
     workingText,
@@ -344,12 +368,13 @@ const sourceLineSeparator = sample.includes("\r\n") ? "\r\n" : sample.includes("
 lineEndingGlyph = sourceLineSeparator === "\r\n" ? "␍␊" : sourceLineSeparator === "\r" ? "␍" : "␊";
 
 let gridApi: ReturnType<typeof createGrid<ReviewRow>> | undefined;
-type ReviewModule = "章节标题" | "注释" | "嵌入块" | "非法断行";
+type ReviewModule = "章节定界" | "章节标题" | "注释" | "嵌入块" | "非法断行";
 let activeModule: ReviewModule = "章节标题";
 
 function activeRows(): ReviewRow[] {
   return reviewRows.filter((row) => {
     if (row.typeLabel !== activeModule) return false;
+    if (row.lineType === "已忽略") return false;
     if (activeModule !== "章节标题") return true;
     return /^[1-6]\s*级标题$/.test(row.lineType ?? "");
   });
@@ -422,6 +447,77 @@ const view = new EditorView({
 render(sample);
 status.textContent = `工作稿 · ${view.state.doc.lines} 行 · 原稿只读基线 · 数据表已同步`;
 
+function setWorkbenchReviewMode(mode: WorkbenchReviewMode): void {
+  workbenchReviewMode = mode;
+  for (const tag of moduleTags) {
+    const module = tag.dataset.module as ReviewModule | undefined;
+    if (!module) continue;
+    tag.hidden = mode === "boundary" ? module !== "章节定界" : module === "章节定界";
+  }
+}
+
+function loadDriveDocument(file: GoogleDriveWorkspaceOpenedFile): void {
+  setWorkbenchReviewMode("chapter");
+  sourceText = file.text;
+  virtualSourcePath = `/gd${file.path}`;
+  virtualWorkingPath = `/gd${file.path}.working`;
+  sourceLabel = file.path.replace(/^\//, "");
+  reviewRows = [];
+  annotationPairs = [];
+  liveDiffChanges = [];
+  application = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
+
+  const lineSeparator = file.text.includes("\r\n") ? "\r\n" : file.text.includes("\r") ? "\r" : "\n";
+  lineEndingGlyph = lineSeparator === "\r\n" ? "␍␊" : lineSeparator === "\r" ? "␍" : "␊";
+
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: file.text },
+    selection: { anchor: 0 },
+    effects: [setTargetLine.of(1), EditorView.scrollIntoView(0, { y: "start" })],
+  });
+  workspaceDocument.textContent = `GD · ${file.path}`;
+  status.textContent = `GD 工作稿 · ${file.name} · ${view.state.doc.lines} 行 · 远端打开版本为只读基线`;
+  selectModule("章节标题");
+  gridApi?.setGridOption("rowData", activeRows());
+  gridApi?.refreshCells({ force: true });
+  updateGridCounters();
+  requestAnimationFrame(() => {
+    syncPreviewFromEditor();
+    runRegexSearch(false);
+  });
+}
+
+function loadDriveBoundaryDocument(file: GoogleDriveWorkspaceOpenedFile): void {
+  setWorkbenchReviewMode("boundary");
+  sourceText = file.text;
+  virtualSourcePath = `/gd${file.path}`;
+  virtualWorkingPath = `/gd${file.path}`;
+  sourceLabel = file.path.replace(/^\//, "");
+  reviewRows = [];
+  annotationPairs = [];
+  liveDiffChanges = [];
+  application = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
+
+  const lineSeparator = file.text.includes("\r\n") ? "\r\n" : file.text.includes("\r") ? "\r" : "\n";
+  lineEndingGlyph = lineSeparator === "\r\n" ? "␍␊" : lineSeparator === "\r" ? "␍" : "␊";
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: file.text },
+    selection: { anchor: 0 },
+    effects: [setTargetLine.of(1), EditorView.scrollIntoView(0, { y: "start" })],
+  });
+  refreshReviewFromWorkingText(file.text);
+  workspaceDocument.textContent = `GD · 章节定界 · ${file.path}`;
+  status.textContent = `章节定界工作稿 · ${view.state.doc.lines} 行 · OCR 序列已自然序合并`;
+  selectModule("章节定界");
+  gridApi?.setGridOption("rowData", activeRows());
+  gridApi?.refreshCells({ force: true });
+  updateGridCounters();
+  requestAnimationFrame(() => {
+    syncPreviewFromEditor();
+    runRegexSearch(false);
+  });
+}
+
 const CHAPTER_TITLE_LINE_TYPES = [
   "1 级标题",
   "2 级标题",
@@ -431,8 +527,10 @@ const CHAPTER_TITLE_LINE_TYPES = [
   "6 级标题",
   "已忽略",
 ] as const;
+const CHAPTER_BOUNDARY_LINE_TYPES = ["1 级标题", "新增", "修改", "删除", "已忽略", "已删除"] as const;
 
 function lineTypesForRow(row: ReviewRow | undefined): readonly string[] {
+  if (row?.typeLabel === "章节定界") return CHAPTER_BOUNDARY_LINE_TYPES;
   if (row?.typeLabel === "章节标题") return CHAPTER_TITLE_LINE_TYPES;
   return Array.from(new Set(
     reviewRows
@@ -559,6 +657,64 @@ function reviewPreviewRenderer(params: ICellRendererParams<ReviewRow, string>): 
   return node;
 }
 
+function firstCodePoints(text: string, count: number): string {
+  return Array.from(text).slice(0, count).join("");
+}
+
+function lastCodePoints(text: string, count: number): string {
+  return Array.from(text).slice(-count).join("");
+}
+
+function illegalLineBreakPreview(row: ReviewRow | undefined): string {
+  if (!row) return "";
+  const previous = String(row.previousLineText ?? "").trimEnd();
+  const next = String(row.nextLineText ?? "").trimStart();
+  if (!previous && !next) return String(row.preview ?? "");
+  return `${lastCodePoints(previous, 10)} ⏎ ${firstCodePoints(next, 10)}`;
+}
+
+function jumpToIllegalLineBreak(row: ReviewRow): void {
+  const previousLineNumber = row.range.line + 1;
+  const nextLineNumber = (row.range.endLine ?? row.range.line + 1) + 1;
+  if (previousLineNumber < 1 || nextLineNumber > view.state.doc.lines || previousLineNumber >= nextLineNumber) {
+    jumpToReviewRow(row);
+    return;
+  }
+
+  const previousLine = view.state.doc.line(previousLineNumber);
+  const nextLine = view.state.doc.line(nextLineNumber);
+  const previousContent = previousLine.text.trimEnd();
+  const nextContent = nextLine.text.trimStart();
+  const previousTail = lastCodePoints(previousContent, 10);
+  const nextHead = firstCodePoints(nextContent, 10);
+  const nextLeadingWhitespace = nextLine.text.length - nextContent.length;
+  const from = previousLine.from + previousContent.length - previousTail.length;
+  const to = nextLine.from + nextLeadingWhitespace + nextHead.length;
+
+  view.dispatch({
+    selection: { anchor: from, head: Math.max(from, to) },
+    effects: [
+      setTargetLine.of(previousLineNumber),
+      EditorView.scrollIntoView(from, { y: "center" }),
+    ],
+  });
+  view.focus();
+  gridStatus.textContent = `已定位断行 · 第 ${previousLineNumber} → ${nextLineNumber} 行 · 前后各 10 字`;
+  requestAnimationFrame(syncPreviewFromEditor);
+}
+
+function illegalLineBreakPreviewRenderer(params: ICellRendererParams<ReviewRow, string>): HTMLElement {
+  const node = document.createElement("div");
+  node.className = "grid-preview-cell illegal-line-break-preview";
+  node.textContent = illegalLineBreakPreview(params.data);
+  node.title = "点击定位并选中断点前后各 10 个字符";
+  node.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (params.data) jumpToIllegalLineBreak(params.data);
+  });
+  return node;
+}
+
 function annotationNumberRenderer(params: ICellRendererParams<ReviewRow, string>): HTMLElement {
   const input = document.createElement("input");
   input.className = "annotation-number-input";
@@ -576,6 +732,29 @@ function annotationNumberRenderer(params: ICellRendererParams<ReviewRow, string>
     gridApi?.refreshCells({ force: true });
     gridApi?.redrawRows();
     gridStatus.textContent = `注释号已改为 ${input.value.trim() || "空"} · 配对已重算`;
+    updateGridCounters();
+  });
+  return input;
+}
+
+function chapterFileRenderer(params: ICellRendererParams<ReviewRow, string>): HTMLElement {
+  const input = document.createElement("input");
+  input.className = "annotation-number-input";
+  input.type = "text";
+  input.spellcheck = false;
+  input.value = String(params.value ?? "");
+  input.placeholder = params.data?.lineType === "1 级标题" ? "例如 01 章节名.md" : "";
+  input.disabled = params.data?.lineType !== "1 级标题";
+  input.setAttribute("aria-label", "章节文件");
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("change", () => {
+    if (!params.data || params.data.lineType !== "1 级标题") return;
+    const next = application.setChapterFile([params.data.id], input.value.trim());
+    reviewRows = next.rows;
+    annotationPairs = next.annotationPairs;
+    gridApi?.setGridOption("rowData", activeRows());
+    gridApi?.refreshCells({ force: true });
+    gridStatus.textContent = `章节文件已设为 ${input.value.trim() || "空"}`;
     updateGridCounters();
   });
   return input;
@@ -603,6 +782,37 @@ const standardColumnDefs: ColDef<ReviewRow>[] = [
   { field: "lineType", headerName: "行类型", width: 150, filter: true, cellRenderer: lineTypeRenderer },
   { field: "preview", headerName: "预览", minWidth: 360, flex: 1, cellRenderer: reviewPreviewRenderer },
   { field: "status", headerName: "状态", width: 95, filter: true },
+  {
+    colId: "currentDiff",
+    headerName: "变更",
+    width: 120,
+    filter: true,
+    valueGetter: (params) => currentRowDiffState(params.data) ? "与原稿不同" : "",
+  },
+];
+
+const chapterBoundaryColumnDefs: ColDef<ReviewRow>[] = [
+  {
+    colId: "sourceLine",
+    headerName: "行号",
+    width: 84,
+    minWidth: 72,
+    pinned: "left",
+    sortable: true,
+    sort: "asc",
+    sortIndex: 0,
+    valueGetter: (params) => params.data ? params.data.range.line + 1 : null,
+  },
+  { field: "lineType", headerName: "行类型", width: 130, filter: true, cellRenderer: lineTypeRenderer },
+  { field: "preview", headerName: "预览", minWidth: 320, flex: 1, cellRenderer: reviewPreviewRenderer },
+  {
+    field: "chapterFile",
+    colId: "chapterFile",
+    headerName: "章节文件",
+    minWidth: 210,
+    width: 260,
+    cellRenderer: chapterFileRenderer,
+  },
   {
     colId: "currentDiff",
     headerName: "变更",
@@ -660,8 +870,82 @@ const annotationColumnDefs: ColDef<ReviewRow>[] = [
   },
 ];
 
+const embedColumnDefs: ColDef<ReviewRow>[] = [
+  {
+    field: "embedNumber",
+    colId: "embedNumber",
+    headerName: "组号",
+    width: 78,
+    minWidth: 68,
+    pinned: "left",
+    sortable: true,
+    sort: "asc",
+    sortIndex: 0,
+    comparator: (left, right) => {
+      const leftNumber = typeof left === "number" ? left : Number.POSITIVE_INFINITY;
+      const rightNumber = typeof right === "number" ? right : Number.POSITIVE_INFINITY;
+      return leftNumber - rightNumber;
+    },
+  },
+  {
+    colId: "sourceLine",
+    headerName: "行号",
+    width: 84,
+    minWidth: 72,
+    sortable: true,
+    sort: "asc",
+    sortIndex: 1,
+    valueGetter: (params) => params.data ? params.data.range.line + 1 : null,
+  },
+  { field: "lineType", headerName: "行类型", width: 150, filter: true, cellRenderer: lineTypeRenderer },
+  { field: "preview", headerName: "预览", minWidth: 360, flex: 1, cellRenderer: reviewPreviewRenderer },
+  { field: "status", headerName: "状态", width: 95, filter: true },
+  {
+    colId: "currentDiff",
+    headerName: "变更",
+    width: 120,
+    filter: true,
+    valueGetter: (params) => currentRowDiffState(params.data) ? "与原稿不同" : "",
+  },
+];
+
+const illegalLineBreakColumnDefs: ColDef<ReviewRow>[] = [
+  {
+    colId: "sourceLine",
+    headerName: "断行处",
+    width: 92,
+    minWidth: 80,
+    pinned: "left",
+    sortable: true,
+    sort: "asc",
+    sortIndex: 0,
+    valueGetter: (params) => params.data ? params.data.range.line + 1 : null,
+  },
+  { field: "lineType", headerName: "行类型", width: 130, filter: true, cellRenderer: lineTypeRenderer },
+  {
+    colId: "illegalBreakPreview",
+    headerName: "预览（前10 + 后10）",
+    minWidth: 300,
+    flex: 1,
+    valueGetter: (params) => illegalLineBreakPreview(params.data),
+    cellRenderer: illegalLineBreakPreviewRenderer,
+  },
+  { field: "breakReason", headerName: "判断", minWidth: 220, flex: 1, filter: true },
+  {
+    colId: "currentDiff",
+    headerName: "变更",
+    width: 120,
+    filter: true,
+    valueGetter: (params) => currentRowDiffState(params.data) ? "与原稿不同" : "",
+  },
+];
+
 function columnDefsForModule(module: ReviewModule): ColDef<ReviewRow>[] {
-  return module === "注释" ? annotationColumnDefs : standardColumnDefs;
+  if (module === "章节定界") return chapterBoundaryColumnDefs;
+  if (module === "注释") return annotationColumnDefs;
+  if (module === "嵌入块") return embedColumnDefs;
+  if (module === "非法断行") return illegalLineBreakColumnDefs;
+  return standardColumnDefs;
 }
 
 const gridTheme = themeQuartz.withParams({
@@ -689,7 +973,8 @@ gridApi = createGrid<ReviewRow>(gridHost, {
   rowData: activeRows(),
   columnDefs: columnDefsForModule(activeModule),
   rowSelection,
-  defaultColDef: { sortable: true, resizable: true, filter: true },
+  defaultColDef: { sortable: true, resizable: true, filter: true, suppressMovable: true },
+  suppressMovableColumns: true,
   rowHeight: 42,
   headerHeight: 38,
   animateRows: false,
@@ -701,11 +986,6 @@ gridApi = createGrid<ReviewRow>(gridHost, {
   onSelectionChanged: updateGridCounters,
   onFilterChanged: updateGridCounters,
   onGridReady: updateGridCounters,
-});
-
-gridFilter.addEventListener("input", () => {
-  gridApi?.setGridOption("quickFilterText", gridFilter.value);
-  updateGridCounters();
 });
 
 function selectModule(module: ReviewModule): void {
@@ -724,7 +1004,12 @@ function selectModule(module: ReviewModule): void {
           { colId: "annotationNumber", sort: "asc", sortIndex: 0 },
           { colId: "sourceLine", sort: "asc", sortIndex: 1 },
         ]
-      : [{ colId: "sourceLine", sort: "asc", sortIndex: 0 }],
+      : module === "嵌入块"
+        ? [
+            { colId: "embedNumber", sort: "asc", sortIndex: 0 },
+            { colId: "sourceLine", sort: "asc", sortIndex: 1 },
+          ]
+        : [{ colId: "sourceLine", sort: "asc", sortIndex: 0 }],
     defaultState: { sort: null },
   });
   updateGridCounters();
@@ -930,7 +1215,7 @@ function previewTopLine(): number | undefined {
 }
 
 function syncPreviewFromEditor(): void {
-  if (!syncToggle.checked || syncOrigin === "preview") return;
+  if (syncOrigin === "preview") return;
   const block = previewBlockForLine(editorTopLine());
   if (!block) return;
   const previewRect = preview.getBoundingClientRect();
@@ -941,7 +1226,7 @@ function syncPreviewFromEditor(): void {
 }
 
 function syncEditorFromPreview(): void {
-  if (!syncToggle.checked || syncOrigin === "editor") return;
+  if (syncOrigin === "editor") return;
   const line = previewTopLine();
   if (!line) return;
   const clamped = Math.max(1, Math.min(line, view.state.doc.lines));
@@ -952,45 +1237,17 @@ function syncEditorFromPreview(): void {
 }
 
 view.scrollDOM.addEventListener("scroll", () => {
-  if (!syncToggle.checked || syncOrigin === "preview") return;
+  if (syncOrigin === "preview") return;
   cancelAnimationFrame(editorFrame);
   editorFrame = requestAnimationFrame(syncPreviewFromEditor);
 }, { passive: true });
 
 preview.addEventListener("scroll", () => {
-  if (!syncToggle.checked || syncOrigin === "editor") return;
+  if (syncOrigin === "editor") return;
   cancelAnimationFrame(previewFrame);
   previewFrame = requestAnimationFrame(syncEditorFromPreview);
 }, { passive: true });
 
-function jumpToLine(): void {
-  const requested = Number.parseInt(lineInput.value, 10);
-  const line = Number.isFinite(requested) ? Math.max(1, Math.min(requested, view.state.doc.lines)) : 1;
-  const info = view.state.doc.line(line);
-  view.dispatch({
-    selection: { anchor: info.from },
-    effects: [
-      setTargetLine.of(line),
-      EditorView.scrollIntoView(info.from, { y: "center" }),
-    ],
-  });
-  view.focus();
-  status.textContent = `已定位第 ${line} 行 · offset ${info.from}`;
-  requestAnimationFrame(syncPreviewFromEditor);
-}
-
-jumpButton.addEventListener("click", jumpToLine);
-lineInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") jumpToLine();
-});
-syncToggle.addEventListener("change", () => {
-  status.textContent = syncToggle.checked ? "双向滚动联动：开" : "双向滚动联动：关";
-  if (syncToggle.checked) requestAnimationFrame(syncPreviewFromEditor);
-});
-eolToggle.addEventListener("change", () => {
-  view.dispatch({ effects: setLineEndingsVisible.of(eolToggle.checked) });
-  status.textContent = eolToggle.checked ? `行尾符号：开 · ${lineEndingGlyph}` : "行尾符号：关";
-});
 regexInput.addEventListener("input", () => runRegexSearch(true));
 regexInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -1030,9 +1287,30 @@ function saveSplitState(state: SplitState): void {
 
 let splitState = loadSplitState();
 
+type HorizontalDragState = { clientY: number; topPx: number };
+let horizontalDragState: HorizontalDragState | undefined;
+
+function editorSplitAvailableHeight(): number {
+  const menuHeight = editorMenu.getBoundingClientRect().height;
+  const splitterHeight = horizontalSplitter.getBoundingClientRect().height;
+  const statusbarHeight = editorStatusbar.getBoundingClientRect().height;
+  return Math.max(0, editorPane.clientHeight - menuHeight - splitterHeight - statusbarHeight);
+}
+
+function clampEditorTopPx(value: number, availableHeight: number): number {
+  const minPaneHeight = Math.min(160, availableHeight / 2);
+  return Math.max(minPaneHeight, Math.min(value, availableHeight - minPaneHeight));
+}
+
 function applySplitState(): void {
   workspace.style.setProperty("--left-pane-width", `${splitState.leftPercent}%`);
-  editorPane.style.setProperty("--editor-top-height", `${splitState.editorTopPercent}%`);
+  const availableHeight = editorSplitAvailableHeight();
+  if (availableHeight > 0) {
+    const requestedTop = availableHeight * splitState.editorTopPercent / 100;
+    const topPx = clampEditorTopPx(requestedTop, availableHeight);
+    splitState.editorTopPercent = topPx / availableHeight * 100;
+    editorPane.style.setProperty("--editor-top-height", `${topPx}px`);
+  }
   verticalSplitter.setAttribute("aria-valuenow", String(Math.round(splitState.leftPercent)));
   horizontalSplitter.setAttribute("aria-valuenow", String(Math.round(splitState.editorTopPercent)));
   requestAnimationFrame(() => {
@@ -1070,22 +1348,32 @@ verticalSplitter.addEventListener("pointercancel", () => finishResize(verticalSp
 
 horizontalSplitter.addEventListener("pointerdown", (event) => {
   event.preventDefault();
+  horizontalDragState = {
+    clientY: event.clientY,
+    topPx: editorHost.getBoundingClientRect().height,
+  };
   horizontalSplitter.setPointerCapture(event.pointerId);
   horizontalSplitter.classList.add("is-dragging");
   document.body.classList.add("is-resizing");
 });
 horizontalSplitter.addEventListener("pointermove", (event) => {
-  if (!horizontalSplitter.hasPointerCapture(event.pointerId)) return;
-  const rect = editorPane.getBoundingClientRect();
-  const top = Math.max(160, Math.min(event.clientY - rect.top, rect.height - 166));
-  splitState.editorTopPercent = (top / rect.height) * 100;
+  if (!horizontalSplitter.hasPointerCapture(event.pointerId) || !horizontalDragState) return;
+  const availableHeight = editorSplitAvailableHeight();
+  if (availableHeight <= 0) return;
+  const requestedTop = horizontalDragState.topPx + (event.clientY - horizontalDragState.clientY);
+  const topPx = clampEditorTopPx(requestedTop, availableHeight);
+  splitState.editorTopPercent = topPx / availableHeight * 100;
   applySplitState();
 });
 horizontalSplitter.addEventListener("pointerup", (event) => {
   if (horizontalSplitter.hasPointerCapture(event.pointerId)) horizontalSplitter.releasePointerCapture(event.pointerId);
+  horizontalDragState = undefined;
   finishResize(horizontalSplitter);
 });
-horizontalSplitter.addEventListener("pointercancel", () => finishResize(horizontalSplitter));
+horizontalSplitter.addEventListener("pointercancel", () => {
+  horizontalDragState = undefined;
+  finishResize(horizontalSplitter);
+});
 
 verticalSplitter.addEventListener("keydown", (event) => {
   if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -1102,4 +1390,58 @@ horizontalSplitter.addEventListener("keydown", (event) => {
   saveSplitState(splitState);
 });
 
+window.addEventListener("resize", applySplitState);
 applySplitState();
+
+type AppWorkspace = "cleaning" | "gd" | "jsfe";
+let activeWorkspace: AppWorkspace = "cleaning";
+
+function activateWorkspace(nextWorkspace: AppWorkspace): void {
+  activeWorkspace = nextWorkspace;
+  cleaningWorkspace.hidden = nextWorkspace !== "cleaning";
+  gdWorkspace.hidden = nextWorkspace !== "gd";
+  gdJsfeWorkspace.hidden = nextWorkspace !== "jsfe";
+  for (const tab of workspaceTabs) {
+    const active = tab.dataset.workspace === nextWorkspace;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+  }
+  if (nextWorkspace === "cleaning") {
+    requestAnimationFrame(applySplitState);
+  }
+}
+
+const googleDriveWorkspace = installGoogleDriveWorkspace(
+  {
+    clientId: "826904666866-l6upvckiav2to61q6th604jl19m2t9k0.apps.googleusercontent.com",
+    rootFolderId: "13qObSp0T0bRXQ-Ev3tK1hWhJU8kqaH4r",
+  },
+  {
+    onOpenFile: loadDriveDocument,
+    onActivateCleaningWorkspace: () => activateWorkspace("cleaning"),
+  },
+);
+
+const googleDriveFileExplorerSpike = installGoogleDriveFileExplorerSpike(
+  {
+    clientId: "826904666866-l6upvckiav2to61q6th604jl19m2t9k0.apps.googleusercontent.com",
+    rootFolderId: "13qObSp0T0bRXQ-Ev3tK1hWhJU8kqaH4r",
+  },
+  {
+    onOpenFile: loadDriveDocument,
+    onOpenBoundary: loadDriveBoundaryDocument,
+    onActivateCleaningWorkspace: () => activateWorkspace("cleaning"),
+  },
+);
+
+for (const tab of workspaceTabs) {
+  tab.addEventListener("click", () => {
+    const nextWorkspace = tab.dataset.workspace;
+    if (nextWorkspace !== "cleaning" && nextWorkspace !== "gd" && nextWorkspace !== "jsfe") return;
+    activateWorkspace(nextWorkspace);
+    if (nextWorkspace === "jsfe") void googleDriveFileExplorerSpike.activate();
+  });
+}
+
+activateWorkspace(activeWorkspace);
+void googleDriveWorkspace.prepare();

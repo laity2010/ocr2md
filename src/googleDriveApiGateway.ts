@@ -152,6 +152,16 @@ export class GoogleDriveApiGateway implements GoogleDriveFileGateway {
     );
   }
 
+  async renameItem(fileId: string, name: string): Promise<GoogleDriveItem> {
+    return this.requestJson(
+      "PATCH",
+      `${DRIVE_API_BASE}/files/${encodeURIComponent(fileId)}?fields=${encodeURIComponent(FILE_FIELDS)}`,
+      jsonBytes({ name }),
+      "application/json; charset=UTF-8",
+      "rename item",
+    );
+  }
+
   async trashItem(fileId: string): Promise<void> {
     await this.requestJson(
       "PATCH",
