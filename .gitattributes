@@ -1,0 +1,2 @@
+# Byte-exact OCR fixtures: trailing spaces participate in sidecar offsets.
+ui-spikes/v2/fixtures/buffett-alpha/*.md -whitespace

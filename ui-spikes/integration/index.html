@@ -116,8 +116,121 @@
       border-color: color-mix(in srgb, #569d79 65%, transparent);
       background: color-mix(in srgb, #569d79 13%, transparent);
     }
+    .ui-debug-picker {
+      position: relative; flex: 0 0 auto;
+    }
+    .ui-debug-toggle {
+      min-height: 27px; padding: 3px 9px;
+      border: 1px solid color-mix(in srgb, var(--obsidian-fg) 24%, transparent); border-radius: 5px;
+      background: transparent; color: color-mix(in srgb, var(--obsidian-fg) 78%, transparent);
+      font: inherit; cursor: pointer; white-space: nowrap;
+    }
+    .ui-debug-toggle:hover { border-color: #d699b6; color: var(--obsidian-fg); }
+    .ui-debug-menu {
+      position: absolute; left: 0; top: calc(100% + 5px); z-index: 50;
+      width: min(430px, calc(100vw - 24px)); max-height: min(72vh, 680px);
+      overflow: auto; padding: 7px; box-sizing: border-box;
+      border: 1px solid #475258; border-radius: 7px;
+      background: var(--obsidian-bg-alt); box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+    }
+    .feature-debug-intro {
+      padding: 5px 8px 8px;
+      color: color-mix(in srgb, var(--obsidian-fg) 70%, transparent);
+      font-size: .9em; line-height: 1.45;
+    }
+    .feature-debug-intro strong { color: var(--obsidian-fg); }
+    .ui-debug-action {
+      display: flex; width: 100%; min-height: 32px; align-items: flex-start;
+      flex-direction: column; gap: 2px;
+      padding: 7px 8px; border: 0; border-radius: 5px;
+      background: transparent; color: var(--obsidian-fg); font: inherit;
+      text-align: left; cursor: pointer;
+    }
+    .feature-debug-title { font-weight: 650; }
+    .feature-debug-spec {
+      display: block; font-size: .88em; line-height: 1.38;
+      color: color-mix(in srgb, var(--obsidian-fg) 72%, transparent);
+    }
+    .feature-debug-spec b {
+      color: color-mix(in srgb, var(--obsidian-fg) 88%, transparent);
+      font-weight: 600;
+    }
+    .ui-debug-action:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--obsidian-fg) 8%, transparent);
+    }
+    .ui-debug-action:disabled { opacity: .42; cursor: default; }
+    .ui-debug-action + .ui-debug-action {
+      border-top: 1px solid color-mix(in srgb, var(--obsidian-fg) 13%, transparent);
+      border-radius: 0 0 5px 5px;
+    }
+    .source-line-context-menu {
+      position: fixed; z-index: 90; width: min(230px, calc(100vw - 20px));
+      padding: 6px; box-sizing: border-box;
+      border: 1px solid #475258; border-radius: 8px;
+      background: var(--obsidian-bg-alt); box-shadow: 0 12px 32px rgba(0, 0, 0, .34);
+    }
+    .source-line-context-title {
+      padding: 5px 8px 7px; color: color-mix(in srgb, var(--obsidian-fg) 58%, transparent);
+      font-size: .88em; border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 14%, transparent);
+    }
+    .source-line-context-action {
+      display: block; width: 100%; min-height: 34px; padding: 6px 8px;
+      border: 0; border-radius: 5px; background: transparent;
+      color: var(--obsidian-fg); font: inherit; text-align: left; cursor: pointer;
+    }
+    .source-line-context-action:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--obsidian-fg) 8%, transparent);
+    }
+    .source-line-context-action:disabled { opacity: .38; cursor: default; }
+    #editor .cm-lineNumbers .cm-gutterElement {
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: pointer;
+    }
+    #editor .cm-lineNumbers .cm-activeLineGutter {
+      background: color-mix(in srgb, #569d79 24%, transparent) !important;
+      color: #a7c080 !important;
+      font-weight: 700;
+      border-radius: 4px;
+    }
+    .workspace-root-picker {
+      position: relative; min-width: 0; margin-left: auto;
+    }
+    .workspace-root-button {
+      max-width: min(360px, 38vw); min-height: 27px; padding: 3px 9px;
+      border: 1px solid color-mix(in srgb, var(--obsidian-fg) 24%, transparent); border-radius: 5px;
+      background: transparent; color: color-mix(in srgb, var(--obsidian-fg) 78%, transparent);
+      font: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .workspace-root-button:hover:not(:disabled) { border-color: #569d79; color: var(--obsidian-fg); }
+    .workspace-root-button:disabled { opacity: .55; cursor: default; }
+    .workspace-root-menu {
+      position: absolute; right: 0; top: calc(100% + 5px); z-index: 40;
+      width: min(420px, 72vw); max-height: min(520px, 66vh); overflow: auto;
+      padding: 7px; box-sizing: border-box;
+      border: 1px solid #475258; border-radius: 7px;
+      background: var(--obsidian-bg-alt); box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+    }
+    .workspace-root-tree { display: grid; gap: 2px; }
+    .workspace-tree-row {
+      display: flex; align-items: center; gap: 4px; min-height: 28px;
+      padding-left: calc(var(--tree-depth, 0) * 16px);
+    }
+    .workspace-tree-toggle,
+    .workspace-tree-name {
+      border: 0; background: transparent; color: var(--obsidian-fg); font: inherit; cursor: pointer;
+    }
+    .workspace-tree-toggle { width: 22px; padding: 2px; color: #dbbc7f; }
+    .workspace-tree-toggle:disabled { opacity: .4; cursor: default; }
+    .workspace-tree-name {
+      min-width: 0; flex: 1; padding: 3px 5px; text-align: left;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .workspace-tree-name:hover { background: color-mix(in srgb, var(--obsidian-fg) 7%, transparent); border-radius: 4px; }
+    .workspace-tree-note { padding: 7px 8px; color: color-mix(in srgb, var(--obsidian-fg) 62%, transparent); }
     .workspace-document {
-      min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       color: color-mix(in srgb, var(--obsidian-fg) 58%, transparent); font-size: 0.85em;
     }
     .pane-menu {
@@ -329,6 +442,7 @@
       background: color-mix(in srgb, #569d79 22%, transparent);
     }
     .grid-pane {
+      position: relative;
       min-width: 0;
       min-height: 0;
       display: grid;
@@ -360,6 +474,83 @@
     #splitter-horizontal { cursor: row-resize; }
     body.is-resizing { user-select: none; }
     .grid-menu { font-size: var(--ui-font-size); align-content: flex-start; }
+    .grid-menu-spacer { flex: 1 1 auto; }
+    .history-control,
+    #save-calibration {
+      flex: 0 0 auto; border: 1px solid #569d79; border-radius: 5px; padding: 3px 9px;
+      background: color-mix(in srgb, #569d79 13%, transparent); color: #83c092; cursor: pointer;
+    }
+    .history-control { border-color: color-mix(in srgb, var(--obsidian-fg) 28%, transparent); color: var(--obsidian-fg); }
+    .history-control:disabled,
+    #save-calibration:disabled { opacity: .45; cursor: default; }
+
+    .feature-debug-progress {
+      position: absolute; top: 52px; right: 10px; z-index: 35;
+      width: min(330px, calc(100% - 20px)); box-sizing: border-box;
+      padding: 9px 10px; border: 1px solid #475258; border-radius: 8px;
+      background: color-mix(in srgb, var(--obsidian-bg-alt) 96%, transparent);
+      box-shadow: 0 12px 30px rgba(0,0,0,.28);
+      font-family: var(--obsidian-font); font-size: var(--ui-font-size);
+    }
+    .feature-debug-progress-title { font-weight: 650; margin-bottom: 6px; }
+    .feature-debug-progress-list { display: grid; gap: 3px; }
+    .feature-debug-progress-step {
+      color: color-mix(in srgb, var(--obsidian-fg) 62%, transparent);
+      line-height: 1.35;
+    }
+    .feature-debug-progress-step.is-current { color: #dbbc7f; font-weight: 600; }
+    .feature-debug-progress-step.is-done { color: #83c092; }
+    .feature-debug-progress-step.is-failed { color: #e67e80; font-weight: 600; }
+    .editor-menu {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+    }
+    .editor-tabs {
+      grid-column: 1; grid-row: 1;
+      display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+    }
+    .editor-menu .regex-search,
+    .editor-menu .css-controls {
+      grid-column: 2; grid-row: 1;
+      min-width: 0;
+    }
+    .editor-menu .is-mode-hidden {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .editor-tab {
+      border: 1px solid transparent; border-radius: 5px; padding: 3px 8px;
+      background: transparent; color: color-mix(in srgb, var(--obsidian-fg) 70%, transparent);
+      font: inherit; cursor: pointer;
+    }
+    .editor-tab:hover { color: var(--obsidian-fg); background: color-mix(in srgb, var(--obsidian-fg) 7%, transparent); }
+    .editor-tab.is-active {
+      color: #83c092;
+      border-color: color-mix(in srgb, #569d79 65%, transparent);
+      background: color-mix(in srgb, #569d79 13%, transparent);
+    }
+    .css-controls { display: inline-flex; align-items: center; gap: 6px; }
+    .css-controls button {
+      border: 1px solid #475258; border-radius: 5px; padding: 3px 8px;
+      background: transparent; color: var(--obsidian-fg); font: inherit; cursor: pointer;
+    }
+    .css-controls button:hover { border-color: #569d79; }
+    #editor, .css-editor-wrap { grid-column: 1; grid-row: 2; }
+    #splitter-horizontal { grid-column: 1; grid-row: 3; }
+    #preview { grid-column: 1; grid-row: 4; }
+    .editor-statusbar { grid-column: 1; grid-row: 5; }
+    .css-editor-wrap {
+      min-width: 0; min-height: 0; height: 100%; box-sizing: border-box;
+      background: var(--obsidian-bg);
+      border-bottom: 1px solid color-mix(in srgb, var(--obsidian-fg) 35%, transparent);
+    }
+    #custom-css-editor {
+      width: 100%; height: 100%; resize: none; box-sizing: border-box;
+      margin: 0; border: 0; outline: 0; padding: 12px 14px;
+      background: var(--obsidian-bg); color: var(--obsidian-fg);
+      font: 300 var(--right-font-size)/1.6 var(--obsidian-font); tab-size: 2;
+    }
     .grid-menu .status { color: color-mix(in srgb, var(--obsidian-fg) 72%, transparent); }
     .module-tags { display: inline-flex; gap: 6px; flex-wrap: wrap; }
     .module-tag {
@@ -375,6 +566,32 @@
       background: rgba(86, 157, 121, 0.18);
       border-color: #569d79;
       color: #83c092;
+    }
+    .module-tag-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 1.6em; margin-left: 4px; padding: 0 5px;
+      border-radius: 999px; font-size: .82em; font-weight: 700;
+      background: #d699b6; color: #2d353b;
+    }
+    .module-tag.has-change-notice {
+      border-color: #d699b6;
+      animation: module-change-flash 760ms ease-out 2;
+    }
+    #review-grid .ag-row.row-deleted-change .ag-cell,
+    #review-grid .ag-row.row-deleted-change .ag-cell * {
+      color: color-mix(in srgb, var(--obsidian-fg) 45%, transparent);
+      text-decoration-line: line-through;
+      text-decoration-thickness: 1px;
+    }
+    #review-grid .ag-row.row-deleted-change .grid-preview-cell {
+      cursor: default;
+    }
+    @keyframes module-change-flash {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(214, 153, 182, 0); }
+      45% {
+        background: rgba(214, 153, 182, .22);
+        box-shadow: 0 0 0 4px rgba(214, 153, 182, .13);
+      }
     }
     #review-grid {
       min-height: 0; min-width: 0;
@@ -482,12 +699,71 @@
 <body>
   <nav class="workspace-switcher" aria-label="工作区">
     <span class="workspace-brand">ocr2md <span id="workspace-version" class="workspace-version">v0.0.1 · --</span></span>
-    <button class="workspace-tab is-active" type="button" data-workspace="cleaning">清洗工作区</button>
-    <button class="workspace-tab" type="button" data-workspace="gd">GD 工作区</button>
-    <button class="workspace-tab" type="button" data-workspace="jsfe">GD · JSFE</button>
-    <span id="workspace-document" class="workspace-document">本地示例 · Buffett’s Alpha</span>
+    <button class="workspace-tab" type="button" data-workspace="cleaning">清洗工作区</button>
+    <button class="workspace-tab is-active" type="button" data-workspace="gd">GD 工作区</button>
+    <div id="ui-debug-picker" class="ui-debug-picker">
+      <button id="ui-debug-toggle" class="ui-debug-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-disabled="true" disabled>功能调试 ▾</button>
+      <div id="ui-debug-menu" class="ui-debug-menu" role="menu" hidden>
+        <div class="feature-debug-intro">
+          <strong>功能规范</strong> · 点击项目运行固定样例。自动测试只做预检，最终以人工运行审核为准。
+        </div>
+        <button id="ui-debug-initialize" class="ui-debug-action" type="button" role="menuitem">
+          <span class="feature-debug-title">初始化</span>
+          <span class="feature-debug-spec"><b>操作</b>：恢复固定功能样例。</span>
+          <span class="feature-debug-spec"><b>需要</b>：无。</span>
+          <span class="feature-debug-spec"><b>效果</b>：working 恢复基线，所有功能项目重新可运行。</span>
+        </button>
+        <button id="ui-debug-move-source-block" class="ui-debug-action" type="button" role="menuitem" title="UIC-CLEAN-001 · 376–378 → 359" disabled>
+          <span class="feature-debug-title">移动源文本块</span>
+          <span class="feature-debug-spec"><b>操作</b>：将工作稿第 376–378 行移动到第 359 行之前。</span>
+          <span class="feature-debug-spec"><b>需要</b>：固定 source 基线；清洗工作区。</span>
+          <span class="feature-debug-spec"><b>效果</b>：工作稿完成移动；章节标题定位 Editor’s Note；变动行显示 +4。</span>
+        </button>
+        <button id="ui-debug-line-menu" class="ui-debug-action" type="button" role="menuitem" title="UIC-DEBUG-003 · 18→14，点击 14 行号 → 加入嵌入块表">
+          <span class="feature-debug-title">行号菜单</span>
+          <span class="feature-debug-spec"><b>操作</b>：点击源码行号，使用“加入当前数据表”人工加入目标行。</span>
+          <span class="feature-debug-spec"><b>需要</b>：清洗工作区；章节模式；当前数据表允许人工加入。</span>
+          <span class="feature-debug-spec"><b>效果</b>：固定样例把第 14 行 Top Award 加入嵌入块；正常工作区也可直接手动操作。</span>
+        </button>
+        <button id="ui-debug-edit-text-line" class="ui-debug-action" type="button" role="menuitem" title="UIC-DEBUG-006 · 修正第 26 行 OCR 文本 → 变动行">
+          <span class="feature-debug-title">修改文本行</span>
+          <span class="feature-debug-spec"><b>操作</b>：精确修正第 26 行指定 OCR 片段。</span>
+          <span class="feature-debug-spec"><b>需要</b>：原 OCR 片段存在；行尾 &lt;sup&gt;1&lt;/sup&gt; 保持不动。</span>
+          <span class="feature-debug-spec"><b>效果</b>：变动行显示第 26 行“修改 / 未归类”；原注释引用继续保留。</span>
+        </button>
+        <button id="ui-debug-ignore-line-type" class="ui-debug-action" type="button" role="menuitem" title="UIC-GRID-001 · 行类型统一支持已忽略">
+          <span class="feature-debug-title">行类型：已忽略</span>
+          <span class="feature-debug-spec"><b>操作</b>：把当前候选行的行类型改为“已忽略”。</span>
+          <span class="feature-debug-spec"><b>需要</b>：任意可编辑数据表存在候选行；固定样例使用第 26 行注释引用。</span>
+          <span class="feature-debug-spec"><b>效果</b>：该行从当前数据表隐藏；标定状态保留；working 不变；所有可编辑模块均有同一选项。</span>
+        </button>
+        <button id="ui-debug-undo-redo" class="ui-debug-action" type="button" role="menuitem" title="UIC-DEBUG-008 · 撤销 / 重做完整流程">
+          <span class="feature-debug-title">撤销 / 重做</span>
+          <span class="feature-debug-spec"><b>操作</b>：一次运行“已忽略 → Undo → Redo → Undo → 新文本修改 → Undo”的完整流程。</span>
+          <span class="feature-debug-spec"><b>需要</b>：固定 source 基线；Undo / Redo 历史从空状态开始。</span>
+          <span class="feature-debug-spec"><b>效果</b>：6 个步骤在界面逐步显示；验证状态恢复、Redo、分支失效以及文本/标定两类撤销。</span>
+        </button>
+        <button id="ui-debug-save-reenter" class="ui-debug-action" type="button" role="menuitem" title="UIC-DEBUG-009 · 保存标定并重入自动加载">
+          <span class="feature-debug-title">保存标定 / 重入加载</span>
+          <span class="feature-debug-spec"><b>操作</b>：修改正文并做人工标定，保存后模拟离开章节，再重新进入。</span>
+          <span class="feature-debug-spec"><b>需要</b>：固定章节 fixture；功能调试使用内存持久化，不写真实 Google Drive。</span>
+          <span class="feature-debug-spec"><b>效果</b>：重入后自动恢复已保存 working 与 sidecar 标定；人工“已忽略”不会被重扫覆盖。</span>
+        </button>
+      </div>
+    </div>
+    <div class="workspace-root-picker">
+      <button id="workspace-root-button" class="workspace-root-button" type="button" disabled>工作目录 · 未选择 ▾</button>
+      <div id="workspace-root-menu" class="workspace-root-menu" hidden>
+        <div id="workspace-root-tree" class="workspace-root-tree"></div>
+      </div>
+    </div>
+    <span id="workspace-document" class="workspace-document" hidden></span>
   </nav>
-  <div id="cleaning-workspace" class="workspace">
+  <div id="source-line-context-menu" class="source-line-context-menu" role="menu" hidden>
+    <div id="source-line-context-title" class="source-line-context-title">行操作</div>
+    <button id="source-line-add-current" class="source-line-context-action" type="button" role="menuitem">加入当前数据表</button>
+  </div>
+  <div id="cleaning-workspace" class="workspace" hidden>
     <section class="grid-pane">
       <div class="pane-menu grid-menu">
         <span class="pane-title">数据表</span>
@@ -497,7 +773,19 @@
           <button class="module-tag" type="button" data-module="注释">注释</button>
           <button class="module-tag" type="button" data-module="嵌入块">嵌入块</button>
           <button class="module-tag" type="button" data-module="非法断行">非法断行</button>
+          <button class="module-tag" type="button" data-module="变动行">
+            <span class="module-tag-label">变动行</span>
+            <span id="changed-lines-badge" class="module-tag-badge" hidden></span>
+          </button>
         </span>
+        <span class="grid-menu-spacer"></span>
+        <button id="undo-workbench" class="history-control" type="button" title="撤销（⌘/Ctrl+Z）" aria-label="撤销" disabled>撤销</button>
+        <button id="redo-workbench" class="history-control" type="button" title="重做（⌘/Ctrl+Shift+Z）" aria-label="重做" disabled>重做</button>
+        <button id="save-calibration" type="button" disabled>保存标定</button>
+      </div>
+      <div id="feature-debug-progress" class="feature-debug-progress" hidden aria-live="polite">
+        <div id="feature-debug-progress-title" class="feature-debug-progress-title">撤销 / 重做功能调试</div>
+        <div id="feature-debug-progress-list" class="feature-debug-progress-list"></div>
       </div>
       <section id="review-grid"></section>
       <div class="pane-status grid-statusbar" role="status" aria-live="polite">
@@ -508,6 +796,10 @@
     <div id="splitter-vertical" class="splitter" role="separator" aria-orientation="vertical" tabindex="0"></div>
     <section class="editor-pane">
       <div class="pane-menu editor-menu">
+        <span class="editor-tabs" role="tablist" aria-label="源码窗模式">
+          <button id="editor-tab-source" class="editor-tab is-active" type="button" role="tab" aria-selected="true">源码</button>
+          <button id="editor-tab-css" class="editor-tab" type="button" role="tab" aria-selected="false">自定义 CSS</button>
+        </span>
         <span class="regex-search">
           <input id="regex-search" type="text" spellcheck="false" placeholder="正则搜索，例如 ^#{1,6}\\s">
           <select id="search-target" aria-label="搜索目标">
@@ -519,8 +811,15 @@
           <button id="search-prev" type="button" title="上一个匹配（Shift+Enter）">↑</button>
           <button id="search-next" type="button" title="下一个匹配（Enter）">↓</button>
         </span>
+        <span id="css-controls" class="css-controls is-mode-hidden" aria-hidden="true">
+          <button id="css-save" type="button">保存</button>
+          <button id="css-reset" type="button">恢复默认</button>
+        </span>
       </div>
       <section id="editor"></section>
+      <section id="custom-css-wrap" class="css-editor-wrap" hidden>
+        <div id="custom-css-editor" aria-label="自定义 CSS"></div>
+      </section>
       <div id="splitter-horizontal" class="splitter" role="separator" aria-orientation="horizontal" tabindex="0"></div>
       <article id="preview"></article>
       <div class="pane-status editor-statusbar" role="status" aria-live="polite">
@@ -529,15 +828,16 @@
       </div>
     </section>
   </div>
-  <section id="gd-workspace" class="gd-workspace" hidden>
+  <section id="gd-workspace" class="gd-workspace">
     <div class="gd-toolbar">
       <span class="pane-title">Google Drive</span>
       <button id="gd-connect" type="button">连接</button>
       <button id="gd-up" type="button">上级</button>
       <button id="gd-refresh" type="button">刷新</button>
+      <button id="gd-set-workdir" type="button">设当前目录为工作目录</button>
       <span class="gd-spacer"></span>
-      <button id="gd-open" type="button">打开到清洗工作区</button>
-      <button id="gd-rename" type="button">重命名</button>
+      <button id="gd-open" type="button" hidden>打开到清洗工作区</button>
+      <button id="gd-rename" type="button" hidden>重命名</button>
       <button id="gd-disconnect" type="button">断开</button>
     </div>
     <nav id="gd-breadcrumbs" class="gd-breadcrumbs" aria-label="Google Drive 路径"></nav>

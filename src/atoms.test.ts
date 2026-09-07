@@ -83,6 +83,11 @@ const legacyIllegalLoaded = candidatesFromSidecar({
   annotations: illegalSaved.annotations.map((item) => item.typeLabel === "非法断行" ? { ...item, lineType: "忽略" } : item),
 }).rows[0];
 assert.strictEqual(legacyIllegalLoaded?.lineType, "已忽略", "legacy 非法断行 忽略 must migrate to 已忽略");
+const legacyAnnotationLoaded = candidatesFromSidecar({
+  ...illegalSaved,
+  annotations: illegalSaved.annotations.map((item) => ({ ...item, typeLabel: "注释", lineType: "忽略" })),
+}).rows[0];
+assert.strictEqual(legacyAnnotationLoaded?.lineType, "已忽略", "legacy 注释 忽略 must migrate to 已忽略");
 
 const v3 = {
   schemaVersion: 3,

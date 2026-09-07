@@ -9,7 +9,7 @@ import { extractAnnotationNumber } from "./annotation";
 import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign";
 import { activeCandidates, findReusableManualRow, IGNORED_LINE_TYPE } from "./candidateLifecycle";
 import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
-import { splitBlankLineBlocks } from "./atoms";
+import { splitBlankLineBlocks, type TextBlock } from "./atoms";
 import {
   applyAnnotationNumber,
   applyChapterFile,
@@ -250,7 +250,7 @@ export function refreshChapterTitleReviewState(
   const changes = scanChapterBoundaryLines(chapterDiffBaseline(baselineText, workingText), workingText);
   const currentChanges = changes.filter((entry) => entry.state !== "deleted");
 
-  const blocks: Candidate[] = splitBlankLineBlocks(workingText).map((block) => {
+  const blocks: Candidate[] = splitChapterTitleBlocks(workingText).map((block) => {
     const endLine = block.range.endLine ?? block.range.line;
     const change = currentChanges.find((entry) => entry.line >= block.range.line && entry.line <= endLine);
     const heading = /^ {0,3}(#{1,6})(?:\s+|$)/.exec(block.raw.split("\n")[0] ?? "");
@@ -294,13 +294,18 @@ export function refreshChapterTitleReviewState(
     titleBlocks,
     workingText,
   );
+  const reconciledImages = reconcileRows(
+    previousImages.filter((row) => row.chapterBoundaryState !== "deleted"),
+    imageBlocks,
+    workingText,
+  ).map((row) => applyChangeState(row, changes));
+  const reconciledImageIds = new Set(reconciledImages.map((row) => row.id));
+  const preservedIgnoredImages = previousImages.filter(
+    (row) => row.lineType === "已忽略" && !reconciledImageIds.has(row.id),
+  );
   let imageRows = applyEmbedNumbers(
     dedupeImageRows(
-      reconcileRows(
-        previousImages.filter((row) => row.chapterBoundaryState !== "deleted"),
-        imageBlocks,
-        workingText,
-      ).map((row) => applyChangeState(row, changes)),
+      [...reconciledImages, ...relocateRows(preservedIgnoredImages, workingText)],
       workingText,
     ),
     workingText,
@@ -487,7 +492,8 @@ export function refreshEmbedReviewState(
   let reconciled = reconcileRows(previous, scanned, workingText);
   const present = new Set(reconciled.map((row) => row.id));
   const extras = previous.filter((row) =>
-    !present.has(row.id) && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection));
+    !present.has(row.id)
+    && (row.chapterBoundaryState === "deleted" || row.isWorkingCorrection || row.lineType === "已忽略"));
   reconciled = applyEmbedNumbers(
     dedupeImageRows([...reconciled, ...relocateRows(extras, workingText)], workingText),
     workingText,
@@ -643,6 +649,39 @@ export function buildAnnotationWorkingText(text: string, rows: readonly Candidat
     }
   }
   return lines.join("\n");
+}
+
+function splitChapterTitleBlocks(text: string): TextBlock[] {
+  const blocks: TextBlock[] = [];
+  for (const block of splitBlankLineBlocks(text)) {
+    const lines = block.raw.split("\n");
+    let segmentStart = 0;
+
+    const pushSegment = (startOffset: number, endOffset: number): void => {
+      if (startOffset > endOffset) return;
+      const segmentLines = lines.slice(startOffset, endOffset + 1);
+      const startLine = block.range.line + startOffset;
+      const endLine = block.range.line + endOffset;
+      blocks.push({
+        raw: segmentLines.join("\n"),
+        range: {
+          line: startLine,
+          start: 0,
+          endLine: startLine === endLine ? undefined : endLine,
+          end: segmentLines.at(-1)?.length ?? 0,
+        },
+      });
+    };
+
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!/^ {0,3}#{1,6}(?:\s+|$)/.test(lines[index] ?? "")) continue;
+      pushSegment(segmentStart, index - 1);
+      pushSegment(index, index);
+      segmentStart = index + 1;
+    }
+    pushSegment(segmentStart, lines.length - 1);
+  }
+  return blocks;
 }
 
 function defaultAnnotationLineType(raw: string): "注释正文" | "注释引用" {

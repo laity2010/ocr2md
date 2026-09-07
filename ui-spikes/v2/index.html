@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ocr2md v2 · 产品壳重建</title>
+  <link rel="stylesheet" href="./dist/app.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --bg: #2f383e;
+      --bg-alt: #272f34;
+      --fg: #d3c6aa;
+      --muted: #859289;
+      --border: #475258;
+      --accent: #83c092;
+      --ui-font-size: 13px;
+      --grid-font-size: 13px;
+      --right-font-size: 14px;
+      --obsidian-h1: #da6362;
+      --obsidian-h2: #d77f48;
+      --obsidian-h3: #bf983d;
+      --obsidian-h4: #899c40;
+      --obsidian-h5: #569d79;
+      --obsidian-h6: #b87b9d;
+      --obsidian-code-comment: #859289;
+      --obsidian-code-link: #83c092;
+      --obsidian-code-url: #7fbbb3;
+      --obsidian-code-function: #7fbbb3;
+      --obsidian-code-keyword: #d699b6;
+      --obsidian-code-operator: #83c092;
+      --obsidian-code-property: #a7c080;
+      --obsidian-code-string: #a7c080;
+      --obsidian-code-tag: #da6362;
+      --obsidian-code-value: #dbbc7f;
+      --obsidian-code-punctuation: #9aa79d;
+      --obsidian-h1-size: 2.125em;
+      --obsidian-h2-size: 1.625em;
+      --obsidian-h3-size: 1.375em;
+      --obsidian-h4-size: 1.25em;
+      --obsidian-h5-size: 1.125em;
+      --obsidian-h6-size: 1.125em;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      background: var(--bg);
+      color: var(--fg);
+      font-size: var(--ui-font-size);
+    }
+    [hidden] { display: none !important; }
+    button, select, input { font: inherit; }
+    button, select {
+      min-height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--fg);
+      padding: 3px 8px;
+    }
+    button:not(:disabled) { cursor: pointer; }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled, select:disabled { opacity: .42; }
+
+    .workspace-switcher {
+      position: relative;
+      z-index: 200;
+      overflow: visible;
+      min-width: 0;
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border);
+    }
+    .workspace-brand {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      padding-right: 10px;
+      margin-right: 2px;
+      border-right: 1px solid var(--border);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .workspace-version { color: var(--muted); font-size: .82em; font-weight: 400; }
+    .project-navigation,
+    .project-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .project-navigation {
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+    .project-actions {
+      flex: 0 0 auto;
+    }
+    .workspace-spacer { flex: 1; min-width: 6px; }
+    .ui-debug-picker { position: relative; flex: 0 0 auto; }
+    .ui-debug-menu {
+      position: absolute;
+      right: 0;
+      left: auto;
+      top: auto;
+      bottom: calc(100% + 6px);
+      z-index: 1200;
+      width: min(430px, calc(100vw - 24px));
+      max-height: min(62vh, 620px);
+      overflow: auto;
+      padding: 7px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-alt);
+      box-shadow: 0 10px 30px rgba(0,0,0,.34);
+    }
+    .feature-debug-intro {
+      padding: 5px 8px 8px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .ui-debug-action {
+      display: flex;
+      width: 100%;
+      min-height: 34px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      padding: 7px 8px;
+      border-color: transparent;
+      text-align: left;
+    }
+    .feature-debug-title { font-weight: 700; }
+    .feature-debug-spec { color: var(--muted); font-size: .9em; }
+    .feature-debug-progress {
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .feature-debug-progress > summary {
+      list-style: none;
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--bg-alt);
+      color: var(--muted);
+      white-space: nowrap;
+      box-shadow: 0 8px 22px rgba(0,0,0,.24);
+    }
+    .feature-debug-progress > summary::-webkit-details-marker { display: none; }
+    .feature-debug-progress[open] > summary { color: var(--fg); }
+    .feature-debug-progress-panel {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 6px);
+      z-index: 1150;
+      width: min(460px, calc(100vw - 24px));
+      max-height: min(52vh, 520px);
+      overflow: auto;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-alt);
+      box-shadow: 0 10px 30px rgba(0,0,0,.34);
+    }
+    .feature-debug-progress-title { font-weight: 700; margin-bottom: 6px; }
+    .feature-debug-progress-step[data-state="done"] { color: var(--accent); }
+    .feature-debug-progress-step[data-state="failed"] { color: #e67e80; }
+    .project-controls {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+    #chapter-select { max-width: min(340px, 36vw); }
+
+    .workspace {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(340px, var(--left-pane-width, 43%)) 6px minmax(360px, 1fr);
+      overflow: hidden;
+    }
+    .grid-pane, .editor-pane {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .grid-pane {
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "menu"
+        "toolbar"
+        "grid"
+        "status";
+    }
+    .grid-pane > .pane-menu { grid-area: menu; }
+    #heading-toolbar,
+    #boundary-toolbar { grid-area: toolbar; }
+    #calibration-grid { grid-area: grid; }
+    .grid-pane > .pane-status { grid-area: status; }
+    .editor-pane {
+      grid-template-rows:
+        auto
+        minmax(150px, var(--editor-top-percent, 55%))
+        6px
+        minmax(150px, 1fr)
+        auto;
+    }
+    .editor-pane > .pane-menu { grid-row: 1; }
+    #working-editor,
+    #custom-css-wrap,
+    #regex-search-panel { grid-column: 1; grid-row: 2; }
+    #editor-preview-splitter { grid-column: 1; grid-row: 3; }
+    #markdown-preview { grid-column: 1; grid-row: 4; }
+    .editor-pane > .pane-status { grid-column: 1; grid-row: 5; }
+
+    .source-tabs {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .source-tab {
+      border-color: transparent;
+      color: var(--muted);
+      background: transparent;
+    }
+    .source-tab[aria-selected="true"] {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    .source-mode-panel {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .css-editor-wrap {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .css-editor-toolbar,
+    .regex-panel-toolbar {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-alt);
+    }
+    #custom-css-editor {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    #custom-css-editor .cm-editor {
+      height: 100%;
+      font-size: var(--right-font-size);
+      background: var(--bg);
+      color: var(--fg);
+    }
+    #custom-css-editor .cm-scroller {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    #regex-search-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .regex-panel-body {
+      padding: 12px;
+      color: var(--muted);
+      overflow: auto;
+    }
+    .splitter {
+      background: color-mix(in srgb, var(--border) 70%, var(--bg));
+      cursor: col-resize;
+      touch-action: none;
+      outline: none;
+    }
+    .splitter:hover,
+    .splitter:focus-visible,
+    .splitter.is-dragging {
+      background: color-mix(in srgb, var(--accent) 55%, var(--border));
+    }
+    body.is-resizing-workspace {
+      cursor: col-resize;
+      user-select: none;
+    }
+    #editor-preview-splitter { cursor: row-resize; }
+    body.is-resizing-editor-preview {
+      cursor: row-resize;
+      user-select: none;
+    }
+    .pane-menu {
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 5px 8px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border);
+    }
+    .pane-title { font-weight: 700; }
+    .regex-search {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+    #regex-search {
+      width: min(300px, 34vw);
+      min-width: 120px;
+      height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--bg);
+      color: var(--fg);
+      padding: 3px 7px;
+    }
+    #regex-search[aria-invalid="true"] {
+      border-color: #e67e80;
+    }
+    .regex-search label {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .module-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .module-tab { border-color: transparent; color: var(--muted); }
+    .module-tab[aria-pressed="true"] {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    }
+    .grid-menu-spacer { flex: 1; }
+    .review-toolbar {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 4px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+      background: color-mix(in srgb, var(--bg-alt) 78%, var(--bg));
+    }
+    .pane-message {
+      min-height: 28px;
+      padding: 5px 8px;
+      color: var(--muted);
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #calibration-grid {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+    }
+    .calibration-line-type,
+    .annotation-number-input,
+    .chapter-file-input { width: 100%; min-height: 30px; box-sizing: border-box; }
+
+    #working-editor {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    #working-editor .cm-editor {
+      height: 100%;
+      font-size: var(--right-font-size);
+      background: var(--bg);
+      color: var(--fg);
+    }
+    #working-editor .cm-scroller {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    #working-editor .cm-gutters {
+      background: var(--bg-alt) !important;
+      color: color-mix(in srgb, var(--fg) 62%, transparent) !important;
+      border-right: 0 !important;
+    }
+    #working-editor .cm-content { min-height: 100%; }
+    #working-editor .cm-content,
+    #working-editor .cm-line { font-synthesis: none; }
+    #working-editor .cm-line.cm-obsidian-h1,
+    #working-editor .cm-line.cm-obsidian-h2,
+    #working-editor .cm-line.cm-obsidian-h3,
+    #working-editor .cm-line.cm-obsidian-h4,
+    #working-editor .cm-line.cm-obsidian-h5,
+    #working-editor .cm-line.cm-obsidian-h6 {
+      font-weight: 500;
+      line-height: 1.3;
+    }
+    #working-editor .cm-line.cm-obsidian-h1 { color: var(--obsidian-h1); font-size: var(--obsidian-h1-size); }
+    #working-editor .cm-line.cm-obsidian-h2 { color: var(--obsidian-h2); font-size: var(--obsidian-h2-size); }
+    #working-editor .cm-line.cm-obsidian-h3 { color: var(--obsidian-h3); font-size: var(--obsidian-h3-size); }
+    #working-editor .cm-line.cm-obsidian-h4 { color: var(--obsidian-h4); font-size: var(--obsidian-h4-size); }
+    #working-editor .cm-line.cm-obsidian-h5 { color: var(--obsidian-h5); font-size: var(--obsidian-h5-size); }
+    #working-editor .cm-line.cm-obsidian-h6 { color: var(--obsidian-h6); font-size: var(--obsidian-h6-size); }
+    #working-editor .cm-obsidian-latex-function { color: var(--obsidian-code-function); }
+    #working-editor .cm-obsidian-latex-operator { color: var(--obsidian-code-operator); }
+    #working-editor .cm-obsidian-latex-value { color: var(--obsidian-code-value); }
+    #working-editor .cm-obsidian-latex-punctuation { color: var(--obsidian-code-punctuation); }
+    #markdown-preview {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 14px 18px 28px;
+      font-size: var(--right-font-size);
+      line-height: 1.65;
+      background: color-mix(in srgb, var(--bg) 88%, black);
+    }
+    #markdown-preview > :first-child { margin-top: 0; }
+    #markdown-preview h1,
+    #markdown-preview h2,
+    #markdown-preview h3,
+    #markdown-preview h4,
+    #markdown-preview h5,
+    #markdown-preview h6 {
+      font-weight: 500;
+      line-height: 1.3;
+    }
+    #markdown-preview h1 { color: var(--obsidian-h1); font-size: var(--obsidian-h1-size); }
+    #markdown-preview h2 { color: var(--obsidian-h2); font-size: var(--obsidian-h2-size); }
+    #markdown-preview h3 { color: var(--obsidian-h3); font-size: var(--obsidian-h3-size); }
+    #markdown-preview h4 { color: var(--obsidian-h4); font-size: var(--obsidian-h4-size); }
+    #markdown-preview h5 { color: var(--obsidian-h5); font-size: var(--obsidian-h5-size); }
+    #markdown-preview h6 { color: var(--obsidian-h6); font-size: var(--obsidian-h6-size); }
+    #markdown-preview a {
+      color: var(--obsidian-code-link);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    #markdown-preview blockquote {
+      margin-left: 0;
+      padding-left: 12px;
+      border-left: 3px solid var(--border);
+      color: var(--muted);
+    }
+    #markdown-preview pre {
+      overflow: auto;
+      padding: 10px 12px;
+      background: var(--bg-alt);
+      border-radius: 5px;
+    }
+    #markdown-preview code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    #markdown-preview table {
+      border-collapse: collapse;
+      width: max-content;
+      min-width: 100%;
+    }
+    #markdown-preview th,
+    #markdown-preview td {
+      border: 1px solid color-mix(in srgb, var(--fg) 45%, transparent);
+      padding: 5px 7px;
+      vertical-align: top;
+    }
+    #markdown-preview img {
+      max-width: 100%;
+      height: auto;
+    }
+    #markdown-preview .md-html-block {
+      overflow-x: auto;
+    }
+    #markdown-preview .katex-display {
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 4px 0;
+    }
+    .preview-empty { color: var(--muted); }
+    .chapter-heading-preview {
+      margin: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+      font-weight: 500;
+    }
+    h1.chapter-heading-preview { color: var(--obsidian-h1); font-size: var(--obsidian-h1-size); }
+    h2.chapter-heading-preview { color: var(--obsidian-h2); font-size: var(--obsidian-h2-size); }
+    h3.chapter-heading-preview { color: var(--obsidian-h3); font-size: var(--obsidian-h3-size); }
+    h4.chapter-heading-preview { color: var(--obsidian-h4); font-size: var(--obsidian-h4-size); }
+    h5.chapter-heading-preview { color: var(--obsidian-h5); font-size: var(--obsidian-h5-size); }
+    h6.chapter-heading-preview { color: var(--obsidian-h6); font-size: var(--obsidian-h6-size); }
+
+    .pane-status {
+      min-width: 0;
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 3px 8px;
+      background: var(--bg-alt);
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: .86em;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .pane-status > span { overflow: hidden; text-overflow: ellipsis; }
+    .status-secondary { margin-left: auto; }
+
+    .floating-debug-dock {
+      position: fixed;
+      right: 8px;
+      bottom: 30px;
+      z-index: 900;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      max-width: min(520px, calc(100vw - 16px));
+      pointer-events: none;
+    }
+    .floating-debug-dock > * {
+      pointer-events: auto;
+    }
+    .engineering-state {
+      position: relative;
+      right: auto;
+      bottom: auto;
+      z-index: auto;
+      width: fit-content;
+      max-width: min(520px, calc(100vw - 16px));
+      max-height: 60vh;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-alt);
+      box-shadow: 0 12px 32px rgba(0,0,0,.35);
+    }
+    .engineering-state > summary {
+      cursor: pointer;
+      padding: 7px 10px;
+      color: var(--muted);
+    }
+    .state-grid {
+      display: grid;
+      grid-template-columns: 150px minmax(120px, 1fr);
+      gap: 7px 12px;
+      padding: 8px 10px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .state-grid dt { color: var(--muted); }
+    .state-grid dd { margin: 0; overflow-wrap: anywhere; }
+
+    .compat-controls { display: none !important; }
+    .leave-overlay[hidden] { display: none; }
+    .leave-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(0,0,0,.42);
+    }
+    .leave-dialog {
+      width: min(520px, 100%);
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-alt);
+      box-shadow: 0 18px 60px rgba(0,0,0,.4);
+    }
+    .leave-dialog h2 { margin-top: 0; }
+    .leave-dialog .controls { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+    @media (max-width: 700px) {
+      .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(280px, 48%) minmax(0, 1fr); }
+      .splitter { display: none; }
+      .grid-pane { border-bottom: 1px solid var(--border); }
+      #chapter-select { max-width: 42vw; }
+      .project-navigation #refresh-catalog { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="workspace-switcher" aria-label="项目导航">
+    <span class="workspace-brand">ocr2md <span class="workspace-version">v2 · private cloud</span></span>
+    <div class="project-navigation">
+      <select id="chapter-select" aria-label="项目导航">
+        <option value="" disabled selected>正在接入工作目录…</option>
+      </select>
+      <button id="refresh-catalog" type="button">刷新</button>
+    </div>
+    <span class="workspace-spacer"></span>
+    <div class="project-actions" aria-label="工作目录操作">
+      <button id="undo" title="撤销工作目录最近一次修改（⌘/Ctrl+Z）">撤销</button>
+      <button id="redo" title="重做工作目录最近一次修改（⌘/Ctrl+Shift+Z）">重做</button>
+      <button id="save">保存标定</button>
+    </div>
+  </nav>
+
+  <main class="workspace" id="cleaning-workspace">
+    <section class="grid-pane">
+      <div class="pane-menu">
+        <span class="pane-title">数据表</span>
+        <div id="review-module-tabs" class="module-tabs" aria-label="标定模块">
+          <button class="module-tab" data-review-module="章节定界" aria-pressed="false">章节定界</button>
+          <button class="module-tab" data-review-module="章节标题" aria-pressed="false">章节标题</button>
+          <button class="module-tab" data-review-module="注释" aria-pressed="false">注释</button>
+          <button class="module-tab" data-review-module="嵌入块" aria-pressed="false">嵌入块</button>
+          <button class="module-tab" data-review-module="非法断行" aria-pressed="false">非法断行</button>
+          <button class="module-tab compat-controls" data-review-module="翻译" aria-pressed="false">翻译</button>
+        </div>
+        <span class="grid-menu-spacer"></span>
+      </div>
+
+      <div id="heading-toolbar" class="review-toolbar" hidden>
+        <label><input id="heading-numbering" type="checkbox" checked> 为标题编号</label>
+      </div>
+      <div id="boundary-toolbar" class="review-toolbar" hidden>
+        <label>起始序号 <input id="boundary-sequence-start" type="text" value="01" inputmode="numeric"></label>
+        <button id="assign-boundary-sequence">按一级标题依次编号</button>
+        <button id="export-boundary">导出章节</button>
+      </div>
+
+      <div id="calibration-grid" aria-label="真实标定表"></div>
+      <div class="pane-status" role="status" aria-live="polite">
+        <span id="review-grid-status">尚未打开章节</span>
+        <span id="chapter-selection-status" class="status-secondary">正在读取项目章节…</span>
+        <span id="title-export-status" class="status-secondary" hidden>导出效果：—</span>
+        <span id="illegal-export-status" class="status-secondary" hidden>导出效果：—</span>
+        <span id="boundary-export-status" class="status-secondary" hidden>导出：—</span>
+        <span id="boundary-selection-status" class="status-secondary" hidden>正在读取章节定界输入…</span>
+      </div>
+    </section>
+
+    <div id="workspace-splitter" class="splitter" role="separator" aria-orientation="vertical" aria-label="调整数据表与源码窗宽度" aria-valuemin="25" aria-valuemax="70" aria-valuenow="43" tabindex="0"></div>
+
+    <section id="editor-pane" class="editor-pane">
+      <div class="pane-menu">
+        <span class="source-tabs" role="tablist" aria-label="源码窗">
+          <button id="editor-tab-source" class="source-tab" type="button" role="tab" aria-selected="true">源码</button>
+          <button id="editor-tab-css" class="source-tab" type="button" role="tab" aria-selected="false">自定义 CSS</button>
+          <button id="editor-tab-regex" class="source-tab" type="button" role="tab" aria-selected="false">正则搜索</button>
+        </span>
+        <span class="workspace-spacer"></span>
+        <button id="close">关闭章节</button>
+      </div>
+
+      <div id="working-editor" class="source-mode-panel" role="tabpanel" aria-label="源码" aria-labelledby="editor-tab-source"></div>
+
+      <section id="custom-css-wrap" class="source-mode-panel css-editor-wrap" role="tabpanel" aria-label="自定义 CSS" aria-labelledby="editor-tab-css" hidden>
+        <div class="css-editor-toolbar">
+          <span>只允许修改 UI / 数据表 / 源码预览字号</span>
+          <span class="workspace-spacer"></span>
+          <button id="css-save" type="button">保存</button>
+          <button id="css-reset" type="button">恢复默认</button>
+        </div>
+        <div id="custom-css-editor" aria-label="自定义 CSS 编辑器"></div>
+      </section>
+
+      <section id="regex-search-panel" class="source-mode-panel" role="tabpanel" aria-label="正则搜索" aria-labelledby="editor-tab-regex" hidden>
+        <div class="regex-panel-toolbar">
+          <span class="regex-search">
+            <input id="regex-search" type="text" spellcheck="false" placeholder="正则搜索，例如 ^#{1,6}\\s" aria-label="源码正则搜索">
+            <label><input id="search-case" type="checkbox"> 区分大小写</label>
+            <button id="search-prev" type="button" title="上一个匹配（Shift+Enter）">↑</button>
+            <button id="search-next" type="button" title="下一个匹配（Enter）">↓</button>
+          </span>
+        </div>
+        <div class="regex-panel-body">
+          正则搜索只作用于当前 working 源码。匹配结果会定位到源码；切回“源码”即可查看当前命中位置。
+        </div>
+      </section>
+
+      <div id="editor-preview-splitter" class="splitter" role="separator" aria-orientation="horizontal" aria-label="调整源码与预览高度" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" tabindex="0"></div>
+      <article id="markdown-preview" aria-label="Markdown 预览">
+        <div class="preview-empty">打开章节后显示 Markdown 预览</div>
+      </article>
+      <div class="pane-status" role="status" aria-live="polite">
+        <span id="source-location-status">源码定位：—</span>
+        <span id="search-status" class="status-secondary"></span>
+        <span id="editor-mode-status" class="status-secondary"></span>
+        <span class="workspace-spacer"></span>
+      </div>
+    </section>
+  </main>
+
+
+  <aside id="floating-debug-dock" class="floating-debug-dock" aria-label="调试工具">
+    <details id="feature-debug-progress" class="feature-debug-progress">
+          <summary id="feature-debug-progress-summary">调试步骤 ▾</summary>
+          <div class="feature-debug-progress-panel" aria-live="polite">
+            <div id="feature-debug-progress-title" class="feature-debug-progress-title">尚无调试记录</div>
+            <div id="feature-debug-progress-list"></div>
+          </div>
+        </details>
+    <div class="ui-debug-picker">
+      <button id="ui-debug-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-disabled="true" disabled>功能调试 ▾</button>
+      <div id="ui-debug-menu" class="ui-debug-menu" role="menu" hidden>
+        <div class="feature-debug-intro">
+          <strong>功能规范</strong> · 调试项目必须走真实产品路径；自动化只做预检，最终以人工逐步审核为准。
+        </div>
+        <button id="ui-debug-initialize" class="ui-debug-action" type="button" role="menuitem">
+          <span class="feature-debug-title">初始化工作稿</span>
+          <span class="feature-debug-spec"><b>操作</b>：打开固定安全副本的已保存 working，恢复默认工作台状态。</span>
+          <span class="feature-debug-spec"><b>需要</b>：当前没有未保存修改；项目中存在功能调试安全副本。</span>
+          <span class="feature-debug-spec"><b>效果</b>：得到 clean、Undo/Redo 0/0、未进行本轮操作的工作稿；所有功能调试项重新可运行。</span>
+        </button>
+        <button id="ui-debug-chapter-open" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">章节选择 / 打开章节</span>
+          <span class="feature-debug-spec"><b>操作</b>：读取真实项目导航，核对 ready / blocked；用真实导航依次打开两个不同 ready 章节，再回到安全副本。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；目录至少有 3 个 ready 章节和 1 个 blocked 章节。</span>
+          <span class="feature-debug-spec"><b>效果</b>：blocked 始终不可选；ready 章节可连续切换且表格上下文同步；最后安全副本及所有访问章节均保持 clean、零写入、revision 不变。</span>
+        </button>
+        <button id="ui-debug-workspace-splitter" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">左右工作窗分割条</span>
+          <span class="feature-debug-spec"><b>操作</b>：用正式分割条键盘路径依次调整 43% → 51% → 59% → 43%。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”。</span>
+          <span class="feature-debug-spec"><b>效果</b>：左右窗宽度逐步可见变化，最终恢复 43%；工作稿、Undo/Redo、revision 均不改变。</span>
+        </button>
+        <button id="ui-debug-editor-preview-splitter" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">源码 / 预览水平分割条</span>
+          <span class="feature-debug-spec"><b>操作</b>：用正式水平分割条键盘路径依次调整 55% → 47% → 39% → 55%。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”。</span>
+          <span class="feature-debug-spec"><b>效果</b>：源码与预览高度逐步可见变化，最终恢复 55%；工作稿、Undo/Redo、revision 均不改变。</span>
+        </button>
+        <button id="ui-debug-working-text" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">修改工作稿文本</span>
+          <span class="feature-debug-spec"><b>操作</b>：走正式正文修改路径，在 working 顶部临时插入一行可见文本，再用正式 Undo 精确恢复。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”。</span>
+          <span class="feature-debug-spec"><b>效果</b>：源码窗同步显示临时文本，工作台进入 dirty、Undo 与保存标定可用；Undo 后 working 精确恢复，重入确认未写盘。</span>
+        </button>
+        <button id="ui-debug-ignore-line-type" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">行类型：已忽略</span>
+          <span class="feature-debug-spec"><b>操作</b>：使用真实数据表“行类型”下拉，把第一条可见标题行改为“已忽略”，再用正式 Undo 恢复。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；章节标题表至少有一条可见候选。</span>
+          <span class="feature-debug-spec"><b>效果</b>：被忽略行立即从数据表消失、计数与 Undo/保存状态同步变化；Undo 后该行与计数精确恢复，不写盘。</span>
+        </button>
+        <button id="ui-debug-save-reload" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">保存标定 / 重入加载</span>
+          <span class="feature-debug-spec"><b>操作</b>：用真实数据表下拉临时改变一个标题层级，执行真实“保存标定”，关闭重入确认已加载，再改回原层级并再次保存恢复基线。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本可保存且章节标题表有可编辑标题。</span>
+          <span class="feature-debug-spec"><b>效果</b>：第一次保存产生新 revision 且重入后标定保持；第二次产品保存恢复原标定，最后由调试安全清理原样还原调试前 working/sidecar/revision。</span>
+        </button>
+        <button id="ui-debug-review-module-switch" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">数据表模块切换</span>
+          <span class="feature-debug-spec"><b>操作</b>：依次点击真实数据表 tag：章节标题 → 注释 → 嵌入块 → 非法断行 → 章节标题。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；四个章节清洗模块均可用。</span>
+          <span class="feature-debug-spec"><b>效果</b>：每次切换都保持 clean，不产生 Undo/Redo；行数和 AG Grid 列头随模块正确刷新，最后回到章节标题。</span>
+        </button>
+        <button id="ui-debug-review-row-locate" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">数据表行定位源码</span>
+          <span class="feature-debug-spec"><b>操作</b>：从非“源码”tag 出发，点击真实章节标题行确认自动切回源码并定位；再点击真实非法断行行，确认选中断点前后各 10 字。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；章节标题与非法断行数据表均有可见行。</span>
+          <span class="feature-debug-spec"><b>效果</b>：普通行准确定位源码；非法断行选中跨行上下文；全程 clean、Undo/Redo 0/0、不写盘。</span>
+        </button>
+        <button id="ui-debug-dirty-leave-protection" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">脏章节离开保护</span>
+          <span class="feature-debug-spec"><b>操作</b>：制造真实未保存正文，分别走关闭章节和切换章节；依次验证取消、放弃修改、保存并继续。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本之外至少还有一个可打开章节。</span>
+          <span class="feature-debug-spec"><b>效果</b>：任何离开都不会静默丢修改；三种选择均按预期执行，最后安全副本自动恢复原 working / sidecar / revision。</span>
+        </button>
+        <button id="ui-debug-illegal-line-break" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">非法断行模块</span>
+          <span class="feature-debug-spec"><b>操作</b>：进入真实“非法断行”表，验证前10/后10、合并预览与判断；把第一条“合并”改为“已忽略”，再 Undo / Redo / 保存 / 重入。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本存在非法断行候选。</span>
+          <span class="feature-debug-spec"><b>效果</b>：可见候选与真实导出 merge 决策同步 6→5→6→5；保存重入保持，最后自动恢复原 working / sidecar / revision。</span>
+        </button>
+        <button id="ui-debug-chapter-title" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">章节标题模块</span>
+          <span class="feature-debug-spec"><b>操作</b>：验证 10 条标题、层级预览和编号；第一条临时“已忽略”并 Undo；第二条 H2→H3，验证 Undo/Redo、编号开关、保存重入。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本章节标题基线为 10 条。</span>
+          <span class="feature-debug-spec"><b>效果</b>：标题层级直接修改 working；编号只影响导出/预览；最后自动恢复原 working / sidecar / revision。</span>
+        </button>
+        <button id="ui-debug-annotation" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">注释模块</span>
+          <span class="feature-debug-spec"><b>操作</b>：验证 20 行 / 10 对注释基线；首个引用 #1→#99，检查配对重建与 Undo/Redo；再验证“已忽略”产生待补引用，最后保存重入。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本注释基线为 20 行 / 10 对。</span>
+          <span class="feature-debug-spec"><b>效果</b>：改号会真实重建配对；已忽略会更新配对缺口；最后自动恢复原 #1 / working / sidecar / revision。</span>
+        </button>
+        <button id="ui-debug-embed" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">嵌入块模块</span>
+          <span class="feature-debug-spec"><b>操作</b>：验证 65 行 / 可见 51 / 11 组 / 未分组 0；将组 1 的“嵌入块首”临时设为“已忽略”，再 Undo / Redo / 保存 / 重入。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本嵌入块基线稳定。</span>
+          <span class="feature-debug-spec"><b>效果</b>：可见行 51→50→51→50，组结构保持 11 / 未分组 0；最后自动恢复原 working / sidecar / revision。</span>
+        </button>
+        <button id="ui-debug-chapter-boundary" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">章节定界模块</span>
+          <span class="feature-debug-spec"><b>操作</b>：从真实导航进入 ocr；临时按 9901 起依次编号，验证 Undo / Redo、保存 / 重入，再恢复原定界工作稿。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；当前项目已有章节定界工作稿和至少一个一级标题。</span>
+          <span class="feature-debug-spec"><b>效果</b>：编号与 segments 同步；导出按钮可用但真实设备不执行导出；最后恢复原 working / sidecar / revision，不生成章节目录。</span>
+        </button>
+        <button id="ui-debug-markdown-preview" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">Markdown 预览</span>
+          <span class="feature-debug-spec"><b>操作</b>：用正式正文修改路径临时插入标题、引用与列表，确认右下预览同步渲染，再 Undo 恢复。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”。</span>
+          <span class="feature-debug-spec"><b>效果</b>：预览结构随 working 实时更新，Undo 后精确回到原预览；不写盘。</span>
+        </button>
+        <button id="ui-debug-source-preview-sync" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">源码 / 预览联动</span>
+          <span class="feature-debug-spec"><b>操作</b>：先滚动真实源码窗到文档中后段，确认右下预览跟随；再滚动真实预览窗到另一锚点，确认源码反向跟随。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；右下 Markdown 预览已生成 source-line 锚点。</span>
+          <span class="feature-debug-spec"><b>效果</b>：源码↔预览按 Markdown source line 双向同步，不按滚动百分比硬绑；全程 clean、Undo/Redo 0/0、不写盘。</span>
+        </button>
+        <button id="ui-debug-source-regex-search" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">源码正则搜索</span>
+          <span class="feature-debug-spec"><b>操作</b>：在真实搜索框输入 Buffett，验证计数，下一条/上一条定位，再触发非法正则错误并清空。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”。</span>
+          <span class="feature-debug-spec"><b>效果</b>：搜索状态与 CodeMirror 定位同步变化；最终搜索状态清空，工作稿与业务历史不变。</span>
+        </button>
+        <button id="ui-debug-undo-redo" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">撤销 / 重做</span>
+          <span class="feature-debug-spec"><b>操作</b>：自动执行正文修改、标定修改、Undo、Redo，再精确恢复原始状态。</span>
+          <span class="feature-debug-spec"><b>需要</b>：工作台为空闲或只有已保存章节；存在可用普通章节。</span>
+          <span class="feature-debug-spec"><b>效果</b>：验证正文与标定共用同一历史、Redo 正确，最终不写盘且 Undo / Redo 历史清空。</span>
+        </button>
+      </div>
+    </div>
+    <details class="engineering-state">
+    <summary>工程状态</summary>
+    <dl class="state-grid">
+      <dt>刷新时间</dt><dd id="page-loaded-at">—</dd>
+      <dt>session</dt><dd id="state-value">—</dd>
+      <dt>project</dt><dd id="project-name">—</dd>
+      <dt>chapter path</dt><dd id="chapter-path">—</dd>
+      <dt>chapter name</dt><dd id="chapter-name">—</dd>
+      <dt>working 行数</dt><dd id="working-lines">—</dd>
+      <dt>working 字符数</dt><dd id="working-length">—</dd>
+      <dt>sidecar 标定总数</dt><dd id="calibration-rows">—</dd>
+      <dt>表内可见标定</dt><dd id="visible-calibration-rows">—</dd>
+      <dt>已忽略标定</dt><dd id="ignored-calibration-rows">—</dd>
+      <dt>当前模块</dt><dd id="active-review-module">—</dd>
+      <dt>当前模块行数</dt><dd id="active-module-rows">—</dd>
+      <dt>定位源码行</dt><dd id="focused-source-line">—</dd>
+      <dt>annotation pairs</dt><dd id="annotation-pairs">—</dd>
+      <dt>注释配对状态</dt><dd id="annotation-match-status">—</dd>
+      <dt>嵌入块分组</dt><dd id="embed-group-status">—</dd>
+      <dt>章节定界</dt><dd id="boundary-status">—</dd>
+      <dt>翻译进度</dt><dd id="translation-status">—</dd>
+      <dt>revision</dt><dd id="revision">—</dd>
+      <dt>lastSavedAt</dt><dd id="last-saved-at">—</dd>
+      <dt>canEdit</dt><dd id="can-edit">—</dd>
+      <dt>canUndo</dt><dd id="can-undo">—</dd>
+      <dt>canRedo</dt><dd id="can-redo">—</dd>
+      <dt>undoDepth</dt><dd id="undo-depth">0</dd>
+      <dt>redoDepth</dt><dd id="redo-depth">0</dd>
+      <dt>canSave</dt><dd id="can-save">—</dd>
+      <dt>catalogError</dt><dd id="catalog-error">—</dd>
+      <dt>loadError</dt><dd id="load-error">—</dd>
+      <dt>saveError</dt><dd id="save-error">—</dd>
+    </dl>
+  </details>
+
+  </aside>
+
+  <div class="compat-controls" aria-hidden="true">
+    <button id="open-chapter">打开章节</button>
+    <button id="open-boundary">章节定界</button>
+    <button id="open-translation">打开翻译</button>
+    <button id="export-trans">导出到 trans</button>
+    <button id="enter-debug">进入功能调试</button>
+    <button id="exit-debug">退出功能调试</button>
+  </div>
+
+  <div id="leave-confirm-overlay" class="leave-overlay" hidden>
+    <section class="leave-dialog" role="dialog" aria-modal="true" aria-labelledby="leave-confirm-title">
+      <h2 id="leave-confirm-title">章节有未保存修改</h2>
+      <p id="leave-confirm-message">保存或放弃当前修改后，才能离开当前章节。</p>
+      <div class="controls">
+        <button id="leave-cancel">取消</button>
+        <button id="leave-discard">放弃修改</button>
+        <button id="leave-save">保存并继续</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const post = (event, extra = {}) => fetch("/__debug/runtime", {
+        method: "POST",
+        credentials: "same-origin",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event,
+          reportedAt: new Date().toISOString(),
+          device: /iPhone/i.test(navigator.userAgent)
+            ? "iPhone"
+            : /iPad/i.test(navigator.userAgent)
+              ? "iPad"
+              : "browser",
+          ...extra
+        })
+      }).catch(() => {});
+
+      void post("html_bootstrap", {
+        bootstrap: {
+          pathname: location.pathname,
+          online: navigator.onLine
+        }
+      });
+
+      const standaloneModule = document.createElement("script");
+      standaloneModule.type = "module";
+      standaloneModule.src = "/module-probe.js?v=1";
+      standaloneModule.addEventListener("load", () => {
+        void post("standalone_module_load");
+      });
+      standaloneModule.addEventListener("error", () => {
+        void post("standalone_module_error");
+      });
+      document.head.appendChild(standaloneModule);
+
+      window.addEventListener("error", (event) => {
+        const target = event.target;
+        if (target && target.tagName === "SCRIPT") {
+          const src = target.getAttribute("src") || "";
+          void post("bootstrap_script_error", {
+            resource: {
+              path: src ? new URL(src, location.href).pathname : ""
+            }
+          });
+          return;
+        }
+        void post("bootstrap_javascript_error", {
+          javascriptError: {
+            errorType: event.error && event.error.name
+              ? String(event.error.name)
+              : "ErrorEvent",
+            sourcePath: event.filename
+              ? new URL(event.filename, location.href).pathname
+              : "",
+            line: event.lineno || 0,
+            column: event.colno || 0
+          }
+        });
+      }, true);
+
+      window.addEventListener("unhandledrejection", (event) => {
+        void post("bootstrap_unhandled_rejection", {
+          promiseError: {
+            errorType: event.reason && event.reason.name
+              ? String(event.reason.name)
+              : typeof event.reason
+          }
+        });
+      });
+
+      window.addEventListener("DOMContentLoaded", () => {
+        const moduleScript = document.querySelector(
+          'script[data-ocr2md-main][type="module"][src]'
+        );
+        if (!moduleScript) {
+          void post("bootstrap_module_missing");
+          return;
+        }
+        const src = moduleScript.getAttribute("src");
+        if (!src) {
+          void post("bootstrap_module_missing_src");
+          return;
+        }
+        void fetch(src, {
+          credentials: "same-origin",
+          cache: "no-store"
+        }).then((response) => {
+          void post("bootstrap_module_fetch", {
+            moduleFetch: {
+              path: new URL(src, location.href).pathname,
+              status: response.status,
+              ok: response.ok,
+              redirected: response.redirected,
+              finalPath: new URL(response.url, location.href).pathname,
+              contentType: response.headers.get("content-type") || ""
+            }
+          });
+        }).catch((error) => {
+          void post("bootstrap_module_fetch_failed", {
+            moduleFetch: {
+              path: new URL(src, location.href).pathname,
+              errorType: error && error.name
+                ? String(error.name)
+                : typeof error
+            }
+          });
+        });
+      }, { once: true });
+    })();
+  </script>
+  <script data-ocr2md-main type="module" src="./dist/app.js"></script>
+</body>
+</html>

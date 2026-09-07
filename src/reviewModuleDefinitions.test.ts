@@ -26,6 +26,12 @@ const illegal = REVIEW_MODULE_DEFINITIONS["非法断行"];
 assert.strictEqual(illegal.tableKind, "illegalBreak");
 assert.deepStrictEqual(illegal.lineTypes, ["合并", "已忽略"]);
 
+for (const module of ["章节定界", "章节标题", "注释", "嵌入块", "非法断行"] as const) {
+  const definition = REVIEW_MODULE_DEFINITIONS[module];
+  assert.strictEqual(definition.editableLineType, true, `${module} must keep editable line type`);
+  assert.ok(definition.lineTypes.includes("已忽略"), `${module} line types must always include 已忽略`);
+}
+
 for (const derived of ["文本块", "分句", "翻译"] as const) {
   const definition = REVIEW_MODULE_DEFINITIONS[derived];
   assert.strictEqual(definition.selectable, false);

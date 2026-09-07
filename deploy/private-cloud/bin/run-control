@@ -1,0 +1,6 @@
+#!/bin/zsh
+set -euo pipefail
+ROOT="/Users/daisor/AgentDock/ocr2md-codespaces-spike"
+export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+mkdir -p "$ROOT/.runtime/ocr2md-debug"
+exec python3 "$ROOT/ui-spikes/v2/dev_server.py"   --bind 127.0.0.1   --port 4183   --directory "$ROOT/ui-spikes/v2"   --workspace-upstream http://127.0.0.1:30418   --debug-dir "$ROOT/.runtime/ocr2md-debug"

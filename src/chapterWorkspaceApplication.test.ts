@@ -101,6 +101,36 @@ void (async () => {
   assert.strictEqual(loaded.rows.length, 1);
   assert.strictEqual(loaded.rows[0].lineType, "1 级标题");
 
+  // Save calibration, then recreate the application as a fresh chapter session.
+  // Re-entry must prefer the saved working copy and restore manual sidecar calibration.
+  const persistedWorkingText = exported.replace("Original body.", "Persisted reviewed body.");
+  const persistedRows = rows.map((row) => ({ ...row, lineType: "已忽略" }));
+  await writeText(storage, workingPath, persistedWorkingText);
+  await app.saveSidecar({ filePath: originalPath, rows: persistedRows, annotationPairs });
+
+  const reentryApp = new ChapterWorkspaceApplication(storage, () => now);
+  const reenteredWorking = await reentryApp.ensureChapterWorkingCopy({
+    workspaceRoot,
+    filePath: originalPath,
+    originalText: exported,
+  });
+  assert.strictEqual(
+    reenteredWorking.workingText,
+    persistedWorkingText,
+    "re-entry must automatically load the saved working copy instead of resetting to original",
+  );
+  const reenteredSidecar = await reentryApp.loadSidecar({
+    workspaceRoot,
+    filePath: originalPath,
+    workingPath: reenteredWorking.workingPath,
+  });
+  assert.strictEqual(reenteredSidecar.rows.length, 1);
+  assert.strictEqual(
+    reenteredSidecar.rows[0].lineType,
+    "已忽略",
+    "re-entry must restore persisted manual calibration from sidecar",
+  );
+
   const files: FileEntry[] = [{ label: "01 Sample", path: originalPath, kind: "chapter" }];
   const synced = await app.syncChapterChangeMarkers(workspaceRoot, files);
   assert.strictEqual(synced[0].changed, true);

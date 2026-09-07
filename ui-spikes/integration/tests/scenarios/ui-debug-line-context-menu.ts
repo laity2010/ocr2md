@@ -1,0 +1,96 @@
+import type { UiInteractionContract } from "../uic/schema";
+
+export const uiDebugLineContextMenu: UiInteractionContract = {
+  id: "UIC-DEBUG-003",
+  title: "移动 18→14 后把第 14 行加入当前嵌入块表",
+  area: "顶部功能调试 / 源码行号 / 嵌入块",
+  intent: "验证先改变工作稿位置，再通过点击当前行号把移动后的行人工加入当前嵌入块数据表。",
+  automation: "browser",
+  fixture: {
+    mode: "ui-test",
+    source: "source.md",
+    baseline: "source",
+  },
+  preconditions: [
+    "工作稿先初始化为固定 source.md。",
+    "功能调试样例把工作稿第 18 行 Top Award 移到第 14 行。",
+    "当前数据表切换为嵌入块。",
+    "移动后的第 14 行不会被嵌入块扫描器自动收入。",
+  ],
+  steps: [
+    { action: "clickControl", controlId: "ui-debug-toggle", note: "打开功能调试菜单。" },
+    {
+      action: "clickControl",
+      controlId: "ui-debug-line-menu",
+      note: "单击调试节点必须直接执行完整样例：working 18→14，并把第 14 行 Top Award 加入嵌入块表。",
+    },
+    {
+      action: "clickControl",
+      controlId: "ui-debug-toggle",
+      note: "重新打开调试下拉，验证只有刚执行的行号菜单节点变灰。",
+    },
+  ],
+  expectations: [
+    {
+      kind: "workingEqualsMovedSource",
+      startLine: 18,
+      endLine: 18,
+      beforeLine: 14,
+      note: "人工加入完成后，working 只能保留样例预设的第 18 行移动到第 14 行，不得产生额外文本修改。",
+    },
+    {
+      kind: "sourceLineActive",
+      line: 14,
+      note: "移动后的第 14 行行号必须保持高亮。",
+    },
+    {
+      kind: "controlState",
+      controlId: "ui-debug-line-menu",
+      visible: true,
+      disabled: true,
+      text: "行号菜单",
+      note: "执行完整样例后，行号菜单节点必须变灰并禁止再次执行。",
+    },
+    {
+      kind: "controlState",
+      controlId: "ui-debug-move-source-block",
+      visible: true,
+      disabled: false,
+      text: "移动源文本块",
+      note: "执行行号菜单样例不得错误禁用另一个独立调试节点。",
+    },
+    {
+      kind: "moduleNotice",
+      module: "嵌入块",
+      text: "+1",
+      flashing: true,
+      note: "首次人工加入成功后，嵌入块模块标签必须显示 +1。",
+    },
+    {
+      kind: "gridRow",
+      module: "嵌入块",
+      line: 14,
+      text: "Top Award",
+      lineType: "嵌入文本",
+      navigable: true,
+      note: "移动后的 Top Award 必须作为人工嵌入文本出现在第 14 行，并可点击返回源码。",
+    },
+  ],
+  invariants: [
+    "光标所在行的行号必须有稳定高亮。",
+    "调试下拉中的行号菜单节点必须一次点击就执行完整样例，不能只准备半成品状态。",
+    "样例内部仍必须复用真实行号菜单链路：定位第 14 行 → 当前嵌入块表 → 人工加入。",
+    "菜单语义绑定当前数据表，不再让用户二次选择模块。",
+    "样例必须先真实修改 working：第 18 行移动到第 14 行。",
+    "第 14 行 Top Award 必须由人工加入嵌入块，而不是自动扫描产生。",
+    "人工加入必须复用 ChapterReviewApplication.addManualReviewLine()。",
+    "同一行再次加入同一数据表时不得产生重复标定记录。",
+    "人工加入动作本身不得再修改 working；最终 working 只能保留 18→14 这一项样例预置移动。",
+    "变动行为系统派生审计表，不允许人工加入。",
+  ],
+  evidence: {
+    coreTest: "src/chapterReviewApplication.test.ts",
+    browserTest: "ui-spikes/integration/tests/ui.spec.ts",
+  },
+  tags: ["ui-debug", "line-number", "active-line", "current-table", "manual-review", "embed", "move-line"],
+};

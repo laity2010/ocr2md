@@ -1,3 +1,4 @@
+import { IGNORED_LINE_TYPE } from "./candidateLifecycle";
 import type { ModuleName } from "./types";
 
 export type ReviewToolbarKind =
@@ -88,7 +89,7 @@ export const REVIEW_MODULE_DEFINITIONS: Record<ModuleName, ReviewModuleDefinitio
     ...BASE_REVIEW_BEHAVIOR,
     name: "章节标题",
     toolbarKind: "chapterTitle",
-    lineTypes: ["1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题", "非标题", DELETED],
+    lineTypes: ["1 级标题", "2 级标题", "3 级标题", "4 级标题", "5 级标题", "6 级标题", "非标题", IGNORED_LINE_TYPE, DELETED],
     previewKind: "chapterHeading",
     includeWorkingCorrectionInChanged: false,
     filter: {
@@ -104,7 +105,7 @@ export const REVIEW_MODULE_DEFINITIONS: Record<ModuleName, ReviewModuleDefinitio
     ...BASE_REVIEW_BEHAVIOR,
     name: "注释",
     toolbarKind: "annotation",
-    lineTypes: ["注释引用", "注释正文", "忽略", DELETED],
+    lineTypes: ["注释引用", "注释正文", IGNORED_LINE_TYPE, DELETED],
     regexCard: true,
     detailKind: "annotationPair",
     extraColumns: ["annotationNumber"],

@@ -91,8 +91,20 @@ const breakBefore = rows.map((row) => row.id === ignoredBreak.id ? { ...row, lin
 const breakAfter = applyRowsLineType(breakBefore, [ignoredBreak.id], "已忽略", working);
 assert.strictEqual(breakAfter.find((row) => row.id === ignoredBreak.id)?.lineType, "已忽略");
 
+const titleToIgnore = rows.find((row) => row.typeLabel === "章节标题" && row.lineType === "非标题");
+assert.ok(titleToIgnore, "fixture must contain a chapter-title review row");
+const titleIgnored = applyRowsLineType(rows, [titleToIgnore.id], "已忽略", working);
+assert.strictEqual(titleIgnored.find((row) => row.id === titleToIgnore.id)?.lineType, "已忽略", "chapter-title rows must support 已忽略");
+
 const annotation = rows.find((row) => row.typeLabel === "注释" && row.lineType === "注释引用" && row.annotationNumber);
 assert.ok(annotation?.annotationNumber, "fixture must contain a reviewed annotation number");
+const annotationIgnored = applyRowsLineType(rows, [annotation.id], "已忽略", working);
+assert.strictEqual(annotationIgnored.find((row) => row.id === annotation.id)?.lineType, "已忽略", "annotation rows must support 已忽略");
+const ignoredAnnotationState = rebuildAnnotationReviewState(annotationIgnored, parsed.annotationPairs);
+assert.ok(
+  ignoredAnnotationState.annotationPairs.every((pair) => pair.refCandidateId !== annotation.id),
+  "ignored annotation references must leave annotation pairing",
+);
 const originalNumber = annotation.annotationNumber;
 const annotationState = rebuildAnnotationReviewState(rows, parsed.annotationPairs);
 const cleared = applyAnnotationNumber(annotationState, annotation.id, "");

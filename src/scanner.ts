@@ -14,7 +14,11 @@ const TABLE_INNER_TAGS = new Set(["thead", "tbody", "tfoot", "tr", "td", "th", "
 export function detectEmbedLineType(raw: string): Exclude<EmbedLineType, "嵌入文本"> | undefined {
   if (isEmbedBlockStart(raw)) return "嵌入块首";
   if (isHtmlTableMarkup(raw)) return "HTML表";
-  if (HTML_TAG_RE.test(raw)) return "嵌入HTML";
+  // Numeric <sup>...</sup> is an annotation reference, not an embed/HTML block.
+  // Ignore those markers when deciding whether the surrounding line belongs to
+  // the embed module.
+  const htmlProbe = raw.replace(/<sup>\s*\(?\s*\d+\s*\)?\s*<\/sup>/gi, "");
+  if (HTML_TAG_RE.test(htmlProbe)) return "嵌入HTML";
   if (IMAGE_LINK_RE.test(raw)) return "嵌入链接";
   if (EMBED_TITLE_RE.test(raw)) return "内嵌标题";
   return undefined;

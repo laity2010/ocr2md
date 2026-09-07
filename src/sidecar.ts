@@ -1,3 +1,4 @@
+import { IGNORED_LINE_TYPE } from "./candidateLifecycle";
 import type { AnnotationPair, Candidate, ModuleName } from "./types";
 import {
   calibrationsOf,
@@ -78,7 +79,7 @@ export function candidatesFromSidecar(raw: unknown): { rows: Candidate[]; annota
 function normalizeCalibration(row: Calibration): Calibration {
   const typeLabel = row.typeLabel ? LEGACY_MODULE_NAMES[row.typeLabel] ?? row.typeLabel : row.typeLabel;
   const legacyLineType = row.lineType ? LEGACY_LINE_TYPES[row.lineType] ?? row.lineType : row.lineType;
-  const lineType = typeLabel === "非法断行" && legacyLineType === "忽略" ? "已忽略" : legacyLineType;
+  const lineType = legacyLineType === "忽略" ? IGNORED_LINE_TYPE : legacyLineType;
   return {
     ...row,
     typeLabel: typeLabel as ModuleName,

@@ -219,6 +219,33 @@ assert.deepStrictEqual(
   "host-independent chapter segmentation must follow the reviewed heading assignments",
 );
 
+const movedTitleLines = source.replace(/\r\n?/g, "\n").split("\n");
+const movedEditorNote = movedTitleLines.splice(375, 3);
+movedTitleLines.splice(358, 0, ...movedEditorNote);
+const movedTitleWorking = movedTitleLines.join("\n");
+const movedTitleApp = new ChapterReviewApplication({ rows: [], annotationPairs: [] });
+movedTitleApp.refreshChapterTitle({
+  baselineText: source,
+  workingText: source,
+  sourcePath,
+  workingPath,
+  sourceLabel: "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md",
+  embedPatterns: splitPatterns(MODULE_REGEX_DEFAULTS["嵌入块"] ?? ""),
+});
+const movedTitleState = movedTitleApp.refreshChapterTitle({
+  baselineText: source,
+  workingText: movedTitleWorking,
+  sourcePath,
+  workingPath,
+  sourceLabel: "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md",
+  embedPatterns: splitPatterns(MODULE_REGEX_DEFAULTS["嵌入块"] ?? ""),
+});
+const movedEditorHeading = movedTitleState.rows.find((row) =>
+  row.typeLabel === "章节标题" && row.raw === "## Editor’s Note" && row.range.line === 358);
+assert.ok(movedEditorHeading, "a Markdown heading moved directly after prose must remain a chapter-title candidate");
+assert.strictEqual(movedEditorHeading?.lineType, "2 级标题");
+assert.strictEqual(movedEditorHeading?.chapterBoundaryState, "added");
+
 console.log("chapterReviewApplication tests passed");
 
 function splitPatterns(value: string): string[] {

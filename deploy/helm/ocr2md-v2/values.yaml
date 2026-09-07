@@ -1,0 +1,21 @@
+replicaCount: 1
+
+image:
+  repository: ocr2md/v2
+  tag: dev
+  pullPolicy: IfNotPresent
+
+workspace:
+  existingClaim: ""
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 2Gi
+  mountPath: /data
+  projectSubdir: project
+
+service:
+  type: ClusterIP
+  port: 4180
+  nodePort: null
+
+resources: {}

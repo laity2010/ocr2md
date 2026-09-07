@@ -1,0 +1,14 @@
+image:
+  repository: ocr2md/v2
+  tag: m11-boundary-20260906b
+  pullPolicy: IfNotPresent
+
+workspace:
+  existingClaim: ocr2md-workspace
+  mountPath: /data
+  projectSubdir: "Bufett’s Alpha"
+
+service:
+  type: NodePort
+  port: 4180
+  nodePort: 30418

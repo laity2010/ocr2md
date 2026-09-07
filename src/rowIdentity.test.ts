@@ -107,6 +107,14 @@ const afterDemote = reconcileRows(staleHeading, demotedRows);
 assert.strictEqual(afterDemote[0].raw, "#### Title");
 assert.strictEqual(afterDemote[0].lineType, "4 级标题", "chapter heading type must follow the current working Markdown");
 
+const ignoredHeading = [{ ...promotedRows[0], lineType: "已忽略" }];
+const afterIgnoredHeadingRescan = reconcileRows(ignoredHeading, promotedRows);
+assert.strictEqual(
+  afterIgnoredHeadingRescan[0].lineType,
+  "已忽略",
+  "ignored chapter heading must survive rescans",
+);
+
 const annotationDoc = "Text<sup>1</sup>";
 const annotationScanned = attachScanIdentities(
   [candidate(annotationDoc, 0, { typeLabel: "注释", lineType: "注释引用" })],

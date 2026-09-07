@@ -44,6 +44,11 @@ assert.strictEqual(detectEmbedLineType("<table><tr><td>A</td></tr></table>"), "H
 assert.strictEqual(detectEmbedLineType("<tr><td>A</td></tr>"), "HTML表");
 assert.strictEqual(detectEmbedLineType("<https://example.com/a.jpg>"), undefined);
 assert.strictEqual(detectEmbedLineType("Ordinary paragraph"), undefined);
+assert.strictEqual(
+  detectEmbedLineType("Ordinary prose with a footnote<sup>1</sup>"),
+  undefined,
+  "numeric sup annotation references must not make an ordinary prose line an embed HTML row",
+);
 
 assert.deepStrictEqual(
   scanEmbedLines("FIGURE 1.1 | Title\n![image](https://cdn.example/a.jpg)\n").map((row) => row.lineType),

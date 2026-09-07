@@ -1,0 +1,14 @@
+.git
+node_modules
+**/node_modules
+out
+**/out
+dist
+**/dist
+.tmp
+**/.tmp
+playwright-report
+**/playwright-report
+test-results
+**/test-results
+.DS_Store

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.daisor.ocr2md-preview</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/daisor/AgentDock/ocr2md-codespaces-spike/deploy/private-cloud/bin/run-preview</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>WorkingDirectory</key><string>/Users/daisor/AgentDock/ocr2md-codespaces-spike</string>
+  <key>StandardOutPath</key><string>/Users/daisor/Library/Logs/ocr2md/preview.log</string>
+  <key>StandardErrorPath</key><string>/Users/daisor/Library/Logs/ocr2md/preview.log</string>
+</dict>
+</plist>

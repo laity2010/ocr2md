@@ -67,8 +67,16 @@ export class GoogleIdentityTokenSession {
 
   async connect(): Promise<void> {
     await this.prepare();
+    await this.requestAccessToken();
+  }
+
+  connectFromUserGesture(): Promise<void> {
+    return this.requestAccessToken();
+  }
+
+  private requestAccessToken(): Promise<void> {
     const oauth2 = googleOauth2();
-    await new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const client = oauth2.initTokenClient({
         client_id: this.clientId,
         scope: this.scope,

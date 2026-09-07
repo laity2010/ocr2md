@@ -25,11 +25,11 @@ export interface WorkspaceStorage {
 }
 
 export async function readText(storage: WorkspaceStorage, path: string): Promise<string> {
-  return Buffer.from(await storage.readFile(path)).toString("utf8");
+  return new TextDecoder("utf-8").decode(await storage.readFile(path));
 }
 
 export async function writeText(storage: WorkspaceStorage, path: string, text: string): Promise<void> {
-  await storage.writeFile(path, Buffer.from(text, "utf8"));
+  await storage.writeFile(path, new TextEncoder().encode(text));
 }
 
 export async function deleteIfExists(storage: WorkspaceStorage, path: string, options: { recursive?: boolean } = {}): Promise<void> {

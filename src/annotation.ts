@@ -1,5 +1,5 @@
 import { shortSha256 } from "./platformHash";
-import { activeCandidates } from "./candidateLifecycle";
+import { activeCandidates, IGNORED_LINE_TYPE } from "./candidateLifecycle";
 import type { AnnotationPair, Candidate } from "./types";
 
 const SUPER_DIGITS: Record<string, string> = {
@@ -32,7 +32,8 @@ export function resolvedAnnotationNumber(row: Candidate): string | undefined {
 export function buildAnnotationPairs(rows: Candidate[], previous: AnnotationPair[] = []): AnnotationPair[] {
   const previousStatus = new Map(previous.map((pair) => [pair.id, pair.status]));
   const groups = new Map<string, { sourcePath: string; number: string; refs: Candidate[]; bodies: Candidate[] }>();
-  for (const row of activeCandidates(rows).filter((candidate) => candidate.typeLabel === "注释" && candidate.lineType !== "忽略")) {
+  for (const row of activeCandidates(rows).filter((candidate) =>
+    candidate.typeLabel === "注释" && candidate.lineType !== IGNORED_LINE_TYPE)) {
     const number = resolvedAnnotationNumber(row);
     if (!number) continue;
     const sourcePath = row.sourcePath ?? "";

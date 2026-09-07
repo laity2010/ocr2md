@@ -1,0 +1,30 @@
+FROM node:20-alpine AS build
+WORKDIR /src
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY ui-spikes/v2/package.json ui-spikes/v2/package-lock.json ./ui-spikes/v2/
+RUN npm --prefix ui-spikes/v2 ci
+
+COPY src ./src
+COPY ui-spikes/v2 ./ui-spikes/v2
+RUN npm --prefix ui-spikes/v2 run build
+
+FROM python:3.12-alpine
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+WORKDIR /app
+
+RUN addgroup -g 10001 ocr2md \
+    && adduser -D -u 10001 -G ocr2md ocr2md
+
+COPY --from=build /src/ui-spikes/v2/index.html /app/index.html
+COPY --from=build /src/ui-spikes/v2/module-probe.js /app/module-probe.js
+COPY --from=build /src/ui-spikes/v2/dist /app/dist
+COPY --from=build /src/ui-spikes/v2/dev_server.py /app/dev_server.py
+
+EXPOSE 4180
+USER 10001:10001
+ENTRYPOINT ["python3", "/app/dev_server.py"]
+CMD ["--bind", "0.0.0.0", "--port", "4180", "--directory", "/app"]

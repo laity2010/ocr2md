@@ -414,7 +414,9 @@ function mergeMatched(previous: Candidate, scanned: Candidate): Candidate {
     rowId: previous.rowId ?? previous.id,
     atomId: previous.atomId ?? scanned.atomId,
     lineType: scanned.typeLabel === "章节标题"
-      ? scanned.lineType
+      ? previous.lineType === "已忽略"
+        ? previous.lineType
+        : scanned.lineType
       : previous.lineType ?? scanned.lineType,
     chapterFile: previous.chapterFile ?? scanned.chapterFile,
     localPath: previous.localPath ?? scanned.localPath,

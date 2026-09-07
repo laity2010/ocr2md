@@ -1,0 +1,18 @@
+{{- if not .Values.workspace.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-workspace
+  labels:
+    app.kubernetes.io/name: ocr2md-v2
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  accessModes:
+    - {{ .Values.workspace.accessMode | quote }}
+  {{- if .Values.workspace.storageClassName }}
+  storageClassName: {{ .Values.workspace.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.workspace.size | quote }}
+{{- end }}

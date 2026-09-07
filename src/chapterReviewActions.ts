@@ -1,7 +1,6 @@
 import { buildAnnotationPairs, extractAnnotationNumber } from "./annotation";
 import {
   DELETED_LINE_TYPE,
-  IGNORED_LINE_TYPE,
   markCandidatesDeleted,
 } from "./candidateLifecycle";
 import { locateCandidate } from "./rowIdentity";
@@ -33,12 +32,6 @@ export function applyRowsLineType(
 ): Candidate[] {
   const selected = new Set(ids);
   const selectedRows = rows.filter((row) => selected.has(row.id));
-  if (
-    lineType === IGNORED_LINE_TYPE
-    && selectedRows.some((row) => row.typeLabel !== "嵌入块" && row.typeLabel !== "章节定界" && row.typeLabel !== "非法断行")
-  ) {
-    return rows;
-  }
 
   let next = lineType === DELETED_LINE_TYPE
     ? markCandidatesDeleted(rows, selected)

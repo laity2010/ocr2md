@@ -1,0 +1,36 @@
+{
+  "name": "ocr2md-ui-v2",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/app.ts --bundle --format=esm --target=es2022 --alias:path=path-browserify --alias:crypto=./src/cryptoBrowser.ts --loader:.woff=file --loader:.woff2=file --loader:.ttf=file --outfile=dist/app.js",
+    "test:dom-contract": "node tests/domContractSmoke.mjs",
+    "test:machine": "esbuild tests/workspaceMachine.test.ts --bundle --platform=node --format=esm --target=node20 --outfile=.tmp/workspaceMachine.test.mjs && node .tmp/workspaceMachine.test.mjs",
+    "test:ui": "playwright test -c playwright.config.ts",
+    "test": "npm run typecheck && npm run test:dom-contract && npm run test:machine && npm run build && npm run test:ui",
+    "serve": "python3 dev_server.py --port 4180 --bind 0.0.0.0",
+    "serve:test": "python3 prepare_test_workspace.py && python3 dev_server.py --port 4281 --bind 127.0.0.1 --project-dir .tmp/persistent-project"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.4",
+    "@codemirror/view": "^6.43.11",
+    "@lezer/highlight": "^1.2.3",
+    "ag-grid-community": "^36.1.0",
+    "dompurify": "^3.4.15",
+    "katex": "^0.18.7",
+    "markdown-it": "^15.0.1",
+    "markdown-it-texmath": "^1.0.0",
+    "xstate": "^5.32.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.6.3"
+  }
+}
