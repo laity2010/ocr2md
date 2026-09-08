@@ -11,6 +11,7 @@ import {
   reportDebugState,
 } from "./debugStateReporter";
 import { CalibrationGrid } from "./calibrationGrid";
+import { changedLineAuditCandidates } from "./changedLineAudit";
 import { CustomCssEditor } from "./customCssEditor";
 import { PersistentChapterRepository } from "./persistentChapterRepository";
 import { FeatureDebugMenu } from "./featureDebugMenu";
@@ -166,6 +167,8 @@ const featureDebugDirtyLeaveProtectionButton =
   requireElement<HTMLButtonElement>("ui-debug-dirty-leave-protection");
 const featureDebugIllegalLineBreakButton =
   requireElement<HTMLButtonElement>("ui-debug-illegal-line-break");
+const featureDebugChangedLineButton =
+  requireElement<HTMLButtonElement>("ui-debug-changed-line");
 const featureDebugChapterTitleButton =
   requireElement<HTMLButtonElement>("ui-debug-chapter-title");
 const featureDebugAnnotationButton =
@@ -221,8 +224,94 @@ let workingTextDebugBaselineRevision: string | undefined;
 let markdownPreviewDebugBaselineWorking: string | undefined;
 let markdownPreviewDebugBaselineText: string | undefined;
 let sourcePreviewSyncDebugBaselineSourceLine = 1;
+let changedLineNoticeChapterId: string | undefined;
+let changedLineKnownIds = new Set<string>();
+let changedLineUnreadIds = new Set<string>();
 
 const deviceDebugBridge = createDeviceDebugBridge();
+
+function changedLineModuleButton(): HTMLButtonElement | undefined {
+  return reviewModuleButtons.find(
+    (button) => button.dataset.reviewModule === "变动行",
+  );
+}
+
+function renderChangedLineNotice(): void {
+  const button = changedLineModuleButton();
+  if (!button) return;
+  if (changedLineUnreadIds.size <= 0) {
+    button.removeAttribute("data-change-notice");
+    button.classList.remove("has-change-notice");
+    return;
+  }
+  button.setAttribute("data-change-notice", `+${changedLineUnreadIds.size}`);
+  button.classList.remove("has-change-notice");
+  void button.offsetWidth;
+  button.classList.add("has-change-notice");
+}
+
+type ChangedLineNoticeRow = {
+  id: string;
+  sourceState: string;
+  workingText: string;
+  baselineText?: string;
+};
+
+function changedLineNoticeKeys(
+  changedRows: readonly ChangedLineNoticeRow[],
+): Set<string> {
+  const occurrences = new Map<string, number>();
+  const keys = new Set<string>();
+
+  for (const row of changedRows) {
+    const signature = [
+      row.sourceState,
+      row.workingText,
+      row.baselineText ?? "",
+    ].join("\u001f");
+    const occurrence = (occurrences.get(signature) ?? 0) + 1;
+    occurrences.set(signature, occurrence);
+    keys.add(signature + "\u001e" + occurrence);
+  }
+
+  return keys;
+}
+
+function syncChangedLineNotice(
+  chapterId: string | undefined,
+  activeModule: ActiveReviewModule,
+  changedRows: readonly ChangedLineNoticeRow[],
+): void {
+  if (!chapterId) {
+    changedLineNoticeChapterId = undefined;
+    changedLineKnownIds = new Set();
+    changedLineUnreadIds = new Set();
+    renderChangedLineNotice();
+    return;
+  }
+
+  const currentIds = changedLineNoticeKeys(changedRows);
+  if (chapterId !== changedLineNoticeChapterId) {
+    changedLineNoticeChapterId = chapterId;
+    changedLineKnownIds = currentIds;
+    changedLineUnreadIds = new Set();
+    renderChangedLineNotice();
+    return;
+  }
+
+  for (const id of [...changedLineUnreadIds]) {
+    if (!currentIds.has(id)) changedLineUnreadIds.delete(id);
+  }
+  if (activeModule === "变动行") {
+    changedLineUnreadIds.clear();
+  } else {
+    for (const id of currentIds) {
+      if (!changedLineKnownIds.has(id)) changedLineUnreadIds.add(id);
+    }
+  }
+  changedLineKnownIds = currentIds;
+  renderChangedLineNotice();
+}
 
 function applyWorkingTextChange(text: string): void {
   if (!pendingEditorCommandId) {
@@ -334,6 +423,10 @@ const calibrationGrid = new CalibrationGrid(
     if (!pendingCalibrationFocusCommandId) {
       lastUiAction = "focus-calibration-row";
       lastCommandId = undefined;
+    }
+    if (activation === "changed-deleted") {
+      sourceLocationStatus.textContent = "该行已删除，无法定位到工作稿";
+      return;
     }
     if (!located) {
       sourceLocationStatus.textContent =
@@ -457,7 +550,9 @@ actor.subscribe((snapshot) => {
   sourcePreviewScrollSync.syncFromEditor();
   sourceRegexSearch.updateText(chapter?.workingText ?? "");
   calibrationGrid.setContext(
-    chapter?.rows ?? [],
+    view.activeReviewModule === "变动行"
+      ? changedLineAuditCandidates(view.changedLineRows)
+      : chapter?.rows ?? [],
     chapter?.workingText ?? "",
     view.activeReviewModule,
     view.headingNumberingEnabled,
@@ -489,6 +584,11 @@ actor.subscribe((snapshot) => {
   ignoredCalibrationRows.textContent = view.ignoredCalibrationRows?.toString() ?? "—";
   activeReviewModule.textContent = view.activeReviewModule;
   activeModuleRows.textContent = view.activeModuleRows.toString();
+  syncChangedLineNotice(
+    chapter?.kind === "chapter" ? chapter.id : undefined,
+    view.activeReviewModule,
+    view.changedLineRows,
+  );
   focusedSourceLine.textContent = view.focusedSourceLine?.toString() ?? "—";
   annotationPairs.textContent = view.annotationPairs?.toString() ?? "—";
   annotationMatchStatus.textContent = chapter
@@ -801,6 +901,17 @@ type IllegalLineBreakDebugContext = {
 
 let illegalLineBreakDebugContext: IllegalLineBreakDebugContext | undefined;
 
+type ChangedLineDebugContext = {
+  baselineWorkingText: string;
+  baselineSidecar: Record<string, unknown>;
+  baselineRevision: string;
+  baselineWorkingLength: number;
+  baselineChangedRows: number;
+  temporaryRevision?: string;
+};
+
+let changedLineDebugContext: ChangedLineDebugContext | undefined;
+
 type ChapterTitleDebugContext = {
   baselineWorkingText: string;
   baselineSidecar: Record<string, unknown>;
@@ -905,6 +1016,7 @@ async function initializeFeatureDebugWorkspace(): Promise<void> {
   saveReloadDebugContext = undefined;
   dirtyLeaveDebugContext = undefined;
   illegalLineBreakDebugContext = undefined;
+  changedLineDebugContext = undefined;
   chapterTitleDebugContext = undefined;
   annotationDebugContext = undefined;
   embedDebugContext = undefined;
@@ -3267,6 +3379,427 @@ function recoverIllegalLineBreakFeatureDebug(error: Error): void {
     .catch((restoreError) => {
       sourceLocationStatus.textContent =
         "非法断行模块功能调试失败 · 安全恢复也失败 · "
+        + (restoreError instanceof Error ? restoreError.message : String(restoreError));
+    });
+}
+
+const CHANGED_LINE_DEBUG_PREFIX = "变动行功能调试临时正文\n";
+
+function currentChangedLineDebugContext(): ChangedLineDebugContext {
+  requireFeatureDebug(
+    changedLineDebugContext,
+    "变动行模块调试上下文不存在",
+  );
+  return changedLineDebugContext;
+}
+
+async function waitForChangedLineView(
+  predicate: (view: ReturnType<typeof deriveWorkspaceView>) => boolean,
+  message: string,
+  timeoutMs = 5_000,
+): Promise<ReturnType<typeof deriveWorkspaceView>> {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    const view = deriveWorkspaceView(actor.getSnapshot());
+    if (predicate(view)) return view;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 25));
+  }
+  throw new Error(message);
+}
+
+async function restoreChangedLineRawBaseline(): Promise<void> {
+  const context = currentChangedLineDebugContext();
+  requireFeatureDebug(featureDebugChapterId, "功能调试安全副本不存在");
+
+  let view = deriveWorkspaceView(actor.getSnapshot());
+  if (view.session === "chapter-leave-confirm") {
+    leaveCancelButton.click();
+    await waitForLeaveSession("chapter-dirty");
+    view = deriveWorkspaceView(actor.getSnapshot());
+  }
+
+  if (view.session === "chapter-dirty") {
+    while (view.canUndo) {
+      executeProductAction("undo");
+      view = deriveWorkspaceView(actor.getSnapshot());
+    }
+  }
+
+  view = deriveWorkspaceView(actor.getSnapshot());
+  if (view.session === "chapter-dirty") {
+    executeProductAction("close");
+    await waitForLeaveSession("chapter-leave-confirm");
+    executeProductAction("leave-discard");
+    await waitForWorkspaceSession("idle");
+  } else if (view.session === "chapter-clean") {
+    executeProductAction("close");
+    await waitForWorkspaceSession("idle");
+  }
+
+  view = deriveWorkspaceView(actor.getSnapshot());
+  if (view.session !== "idle") {
+    requireFeatureDebug(false, "变动行调试安全清理无法进入 idle");
+  }
+
+  const raw = await fetchRawChapter(featureDebugChapterId);
+  if (raw.revision !== context.baselineRevision) {
+    const response = await fetch("/__workspace/chapter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        chapterId: featureDebugChapterId,
+        expectedRevision: raw.revision,
+        workingText: context.baselineWorkingText,
+        sidecar: context.baselineSidecar,
+      }),
+    });
+    requireFeatureDebug(response.ok, "变动行调试安全清理写回失败");
+    const restored = await response.json() as {
+      conflict?: boolean;
+      revision?: string;
+    };
+    requireFeatureDebug(!restored.conflict, "变动行调试安全清理发生 revision 冲突");
+    requireFeatureDebug(
+      restored.revision === context.baselineRevision,
+      "变动行调试安全清理未恢复原 revision",
+    );
+  }
+
+  executeProductAction("open-chapter", undefined, featureDebugChapterId);
+  await waitForWorkspaceSession("chapter-clean");
+  executeProductAction(
+    "select-review-module",
+    undefined,
+    undefined,
+    "变动行",
+  );
+
+  const finalView = await waitForChangedLineView(
+    (candidate) =>
+      candidate.session === "chapter-clean"
+      && candidate.activeReviewModule === "变动行"
+      && candidate.changedLineCount === context.baselineChangedRows,
+    "变动行安全清理后模块没有恢复基线",
+  );
+  const finalRaw = await fetchRawChapter(featureDebugChapterId);
+
+  requireFeatureDebug(
+    finalRaw.workingText === context.baselineWorkingText,
+    "变动行安全清理后 working 未恢复原基线",
+  );
+  requireFeatureDebug(
+    JSON.stringify(finalRaw.sidecar) === JSON.stringify(context.baselineSidecar),
+    "变动行安全清理后 sidecar 未恢复原基线",
+  );
+  requireFeatureDebug(
+    finalRaw.revision === context.baselineRevision
+      && finalView.revision === context.baselineRevision,
+    "变动行安全清理后 revision 未恢复原基线",
+  );
+  requireFeatureDebug(
+    finalView.workingLength === context.baselineWorkingLength
+      && finalView.undoDepth === 0
+      && finalView.redoDepth === 0
+      && !finalView.canSave,
+    "变动行安全清理后 working / 历史不干净",
+  );
+  requireFeatureDebug(
+    !changedLineModuleButton()?.hasAttribute("data-change-notice"),
+    "变动行安全清理后仍残留未读提醒",
+  );
+}
+
+async function prepareChangedLineFeatureDebug(): Promise<void> {
+  featureDebugMenu.close();
+  const initialView = requireInitializedFeatureDebugWorkspace();
+  requireFeatureDebug(featureDebugChapterId, "功能调试安全副本不存在");
+
+  executeProductAction(
+    "select-review-module",
+    undefined,
+    undefined,
+    "变动行",
+  );
+  const view = await waitForChangedLineView(
+    (candidate) =>
+      candidate.session === "chapter-clean"
+      && candidate.activeReviewModule === "变动行",
+    "无法进入变动行模块",
+  );
+  const raw = await fetchRawChapter(featureDebugChapterId);
+
+  requireFeatureDebug(
+    raw.revision === featureDebugBaselineRevision
+      && view.revision === featureDebugBaselineRevision,
+    "变动行调试基线 revision 不一致",
+  );
+  requireFeatureDebug(
+    initialView.workingLength === raw.workingText.length,
+    "变动行调试基线 working 长度不一致",
+  );
+  requireFeatureDebug(
+    view.changedLineCount === 41
+      && view.activeModuleRows === 41
+      && raw.workingText.length === 63833,
+    "安全副本变动行基线不是 41 行 / 63833 字符",
+  );
+
+  changedLineDebugContext = {
+    baselineWorkingText: raw.workingText,
+    baselineSidecar: raw.sidecar,
+    baselineRevision: raw.revision,
+    baselineWorkingLength: raw.workingText.length,
+    baselineChangedRows: view.changedLineCount,
+  };
+}
+
+function createChangedLineFeatureDebugSteps(): readonly FeatureDebugStep[] {
+  return [
+    {
+      label: "1 基线：41 条完整 diff；5 列；新增/修改/删除与归属并存；clean 0/0",
+      run: () => {
+        const context = currentChangedLineDebugContext();
+        const view = deriveWorkspaceView(actor.getSnapshot());
+        requireFeatureDebug(
+          view.activeReviewModule === "变动行"
+            && view.activeModuleRows === context.baselineChangedRows
+            && view.changedLineCount === 41,
+          "变动行安全副本基线不是 41 条",
+        );
+        requireFeatureDebug(
+          calibrationGridHost.querySelector('[role="grid"]')
+            ?.getAttribute("aria-colcount") === "5",
+          "变动行 AG Grid 总列数不是 5",
+        );
+        requireFeatureDebug(
+          view.changedLineAddedCount > 0
+            && view.changedLineModifiedCount > 0
+            && view.changedLineDeletedCount > 0
+            && view.changedLineUnclassifiedCount > 0,
+          "变动行基线没有同时覆盖新增/修改/删除/未归类",
+        );
+        requireFeatureDebug(
+          Boolean(calibrationGridHost.querySelector(".row-deleted-change")),
+          "变动行基线没有删除行视觉状态",
+        );
+        requireFeatureDebug(
+          view.workingLength === 63833
+            && view.undoDepth === 0
+            && view.redoDepth === 0
+            && !view.canSave,
+          "变动行基线不是 63833 / clean 0/0",
+        );
+        requireFeatureDebug(
+          !changedLineModuleButton()?.hasAttribute("data-change-notice"),
+          "打开变动行基线时不应存在 +N 提醒",
+        );
+      },
+    },
+    {
+      label: "2 临时正文：真实 working 产生新 diff，变动行 +N 提醒且完整 diff 增加",
+      run: async () => {
+        const context = currentChangedLineDebugContext();
+        executeProductAction(
+          "select-review-module",
+          undefined,
+          undefined,
+          "章节标题",
+        );
+        await waitForChangedLineView(
+          (candidate) => candidate.activeReviewModule === "章节标题",
+          "变动行调试无法离开变动行模块",
+        );
+
+        applyWorkingTextChange(
+          CHANGED_LINE_DEBUG_PREFIX + context.baselineWorkingText,
+        );
+        const view = await waitForChangedLineView(
+          (candidate) =>
+            candidate.session === "chapter-dirty"
+            && candidate.changedLineCount > context.baselineChangedRows,
+          "临时正文没有产生新的变动行",
+        );
+
+        requireFeatureDebug(
+          view.workingLength
+            === context.baselineWorkingLength + CHANGED_LINE_DEBUG_PREFIX.length,
+          "临时正文 working 长度不正确",
+        );
+        requireFeatureDebug(
+          view.changedLineRows.some(
+            (row) =>
+              row.workingText === CHANGED_LINE_DEBUG_PREFIX.trimEnd()
+              && row.state === "新增"
+              && row.owner === "未归类",
+          ),
+          "临时正文没有形成“新增 / 未归类”审计行",
+        );
+        requireFeatureDebug(
+          /^\+\d+$/.test(
+            changedLineModuleButton()?.getAttribute("data-change-notice") ?? "",
+          ),
+          "临时正文后变动行没有出现 +N 提醒",
+        );
+        requireFeatureDebug(
+          view.undoDepth === 1 && view.redoDepth === 0 && view.canSave,
+          "临时正文后历史/保存状态不正确",
+        );
+      },
+    },
+    {
+      label: "3 访问 + Undo/Redo：进入变动行清 +N；Undo 回 41；Redo 再产生 +N",
+      run: async () => {
+        const context = currentChangedLineDebugContext();
+
+        executeProductAction(
+          "select-review-module",
+          undefined,
+          undefined,
+          "变动行",
+        );
+        let view = await waitForChangedLineView(
+          (candidate) =>
+            candidate.activeReviewModule === "变动行"
+            && candidate.changedLineCount > context.baselineChangedRows,
+          "进入变动行后没有显示新增 diff",
+        );
+        requireFeatureDebug(
+          !changedLineModuleButton()?.hasAttribute("data-change-notice"),
+          "访问变动行后 +N 没有清零",
+        );
+
+        executeProductAction(
+          "select-review-module",
+          undefined,
+          undefined,
+          "章节标题",
+        );
+        executeProductAction("undo");
+        view = await waitForChangedLineView(
+          (candidate) =>
+            candidate.session === "chapter-clean"
+            && candidate.changedLineCount === context.baselineChangedRows,
+          "变动行 Undo 没有恢复 41 条基线",
+        );
+        requireFeatureDebug(
+          !changedLineModuleButton()?.hasAttribute("data-change-notice")
+            && view.redoDepth === 1,
+          "变动行 Undo 后提醒/Redo 状态不正确",
+        );
+
+        executeProductAction("redo");
+        view = await waitForChangedLineView(
+          (candidate) =>
+            candidate.session === "chapter-dirty"
+            && candidate.changedLineCount > context.baselineChangedRows,
+          "变动行 Redo 没有恢复临时 diff",
+        );
+        requireFeatureDebug(
+          /^\+\d+$/.test(
+            changedLineModuleButton()?.getAttribute("data-change-notice") ?? "",
+          ),
+          "变动行 Redo 后没有重新出现 +N",
+        );
+      },
+    },
+    {
+      label: "4 保存 / 重入：临时 diff 持久化；Save 不清未读；重入仍按 original 审计",
+      run: async () => {
+        const context = currentChangedLineDebugContext();
+
+        saveButton.click();
+        context.temporaryRevision = await waitForCleanRevision(
+          (nextRevision) =>
+            Boolean(nextRevision)
+            && nextRevision !== context.baselineRevision,
+        );
+        let view = deriveWorkspaceView(actor.getSnapshot());
+        requireFeatureDebug(
+          view.session === "chapter-clean"
+            && view.changedLineCount > context.baselineChangedRows
+            && /^\+\d+$/.test(
+              changedLineModuleButton()?.getAttribute("data-change-notice") ?? "",
+            ),
+          "变动行保存后 diff 或 +N 被错误清空",
+        );
+
+        closeButton.click();
+        await waitForWorkspaceSession("idle");
+        executeProductAction("open-chapter", undefined, featureDebugChapterId);
+        await waitForWorkspaceSession("chapter-clean");
+
+        view = await waitForChangedLineView(
+          (candidate) =>
+            candidate.changedLineCount > context.baselineChangedRows
+            && candidate.revision === context.temporaryRevision,
+          "变动行保存重入后没有保留 working-vs-original diff",
+        );
+        requireFeatureDebug(
+          view.workingLength
+            === context.baselineWorkingLength + CHANGED_LINE_DEBUG_PREFIX.length,
+          "变动行保存重入后 working 长度不正确",
+        );
+        requireFeatureDebug(
+          !changedLineModuleButton()?.hasAttribute("data-change-notice"),
+          "章节重入时既有 diff 不应被误报为新 +N",
+        );
+
+        executeProductAction(
+          "select-review-module",
+          undefined,
+          undefined,
+          "变动行",
+        );
+        await waitForChangedLineView(
+          (candidate) =>
+            candidate.activeReviewModule === "变动行"
+            && candidate.changedLineCount > context.baselineChangedRows,
+          "变动行保存重入后无法重新打开审计表",
+        );
+      },
+    },
+    {
+      label: "5 安全清理：恢复原 41 条 / 63833 / sidecar / revision / clean 0/0",
+      run: async () => {
+        await restoreChangedLineRawBaseline();
+        const context = currentChangedLineDebugContext();
+        const view = requireInitializedFeatureDebugWorkspace();
+
+        requireFeatureDebug(
+          view.activeReviewModule === "变动行"
+            && view.changedLineCount === context.baselineChangedRows
+            && view.activeModuleRows === context.baselineChangedRows,
+          "变动行最终没有恢复 41 条基线",
+        );
+        requireFeatureDebug(
+          view.workingLength === context.baselineWorkingLength
+            && view.revision === context.baselineRevision
+            && view.undoDepth === 0
+            && view.redoDepth === 0
+            && !view.canSave,
+          "变动行最终 working / revision / 历史未恢复原基线",
+        );
+      },
+    },
+  ];
+}
+
+function recoverChangedLineFeatureDebug(error: Error): void {
+  featureDebugEnvironmentReady = false;
+  document.documentElement.dataset.featureDebugReady = "false";
+  featureDebugRunner.refreshControls();
+  sourceLocationStatus.textContent =
+    "变动行模块功能调试失败 · 正在尝试恢复安全副本 · " + error.message;
+
+  void restoreChangedLineRawBaseline()
+    .then(() => {
+      sourceLocationStatus.textContent =
+        "变动行模块功能调试失败 · 安全副本已恢复 · 请重新初始化";
+    })
+    .catch((restoreError) => {
+      sourceLocationStatus.textContent =
+        "变动行模块功能调试失败 · 安全恢复也失败 · "
         + (restoreError instanceof Error ? restoreError.message : String(restoreError));
     });
 }
@@ -6059,6 +6592,21 @@ featureDebugRunner.register({
     illegalLineBreakDebugContext = undefined;
   },
   onFailure: recoverIllegalLineBreakFeatureDebug,
+});
+
+featureDebugRunner.register({
+  id: "changed-line",
+  title: "变动行模块",
+  button: featureDebugChangedLineButton,
+  enabled: () => featureDebugEnvironmentReady,
+  beforeRun: prepareChangedLineFeatureDebug,
+  steps: createChangedLineFeatureDebugSteps,
+  onSuccess: () => {
+    sourceLocationStatus.textContent =
+      "变动行模块功能调试通过 · 41→新 diff + +N + Undo/Redo + 保存重入 + 安全恢复原 41 条 / 63833 / revision";
+    changedLineDebugContext = undefined;
+  },
+  onFailure: recoverChangedLineFeatureDebug,
 });
 
 featureDebugRunner.register({

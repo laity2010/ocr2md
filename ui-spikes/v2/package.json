@@ -8,6 +8,7 @@
     "build": "esbuild src/app.ts --bundle --format=esm --target=es2022 --alias:path=path-browserify --alias:crypto=./src/cryptoBrowser.ts --loader:.woff=file --loader:.woff2=file --loader:.ttf=file --outfile=dist/app.js",
     "test:dom-contract": "node tests/domContractSmoke.mjs",
     "test:machine": "esbuild tests/workspaceMachine.test.ts --bundle --platform=node --format=esm --target=node20 --outfile=.tmp/workspaceMachine.test.mjs && node .tmp/workspaceMachine.test.mjs",
+    "test:changed-lines": "esbuild tests/changedLineAudit.test.ts --bundle --platform=node --format=esm --target=node20 --outfile=.tmp/changedLineAudit.test.mjs && node .tmp/changedLineAudit.test.mjs",
     "test:ui": "playwright test -c playwright.config.ts",
     "test": "npm run typecheck && npm run test:dom-contract && npm run test:machine && npm run build && npm run test:ui",
     "serve": "python3 dev_server.py --port 4180 --bind 0.0.0.0",

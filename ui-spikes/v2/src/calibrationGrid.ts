@@ -107,7 +107,7 @@ export class CalibrationGrid {
     private readonly onRowActivated: (
       row: Candidate,
       located: SourceRange | undefined,
-      activation?: "row" | "illegal-context",
+      activation?: "row" | "illegal-context" | "changed-deleted",
     ) => void,
   ) {
     this.api = createGrid<Candidate>(host, {
@@ -124,6 +124,11 @@ export class CalibrationGrid {
       headerHeight: 38,
       animateRows: false,
       getRowId: (params) => params.data.rowId ?? params.data.id,
+      rowClassRules: {
+        "row-deleted-change": (params) =>
+          this.module === "变动行"
+          && params.data?.chapterBoundaryState === "deleted",
+      },
       onRowClicked: (event: RowClickedEvent<Candidate>) => {
         if (!event.data) return;
         this.activateRow(event.data);
@@ -209,6 +214,15 @@ export class CalibrationGrid {
   }
 
   private activateRow(row: Candidate): void {
+    if (this.module === "变动行") {
+      if (row.chapterBoundaryState === "deleted") {
+        this.onRowActivated(row, undefined, "changed-deleted");
+        return;
+      }
+      this.onRowActivated(row, row.range, "row");
+      return;
+    }
+
     this.onRowActivated(
       row,
       locateCandidate(this.workingText, row),
@@ -218,6 +232,7 @@ export class CalibrationGrid {
 
   private locatedLine(row: Candidate | undefined): number | null {
     if (!row) return null;
+    if (this.module === "变动行") return row.range.line + 1;
     const located = locateCandidate(this.workingText, row);
     return located ? located.line + 1 : null;
   }
@@ -237,9 +252,9 @@ export class CalibrationGrid {
       {
         field: "lineType",
         colId: "lineType",
-        headerName: "行类型",
-        width: 150,
-        minWidth: 130,
+        headerName: this.module === "变动行" ? "变动" : "行类型",
+        width: this.module === "变动行" ? 100 : 150,
+        minWidth: this.module === "变动行" ? 90 : 130,
         cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
           this.lineTypeRenderer(params),
       },
@@ -284,6 +299,33 @@ export class CalibrationGrid {
           this.chapterFileRenderer(params),
       });
     }
+    if (this.module === "变动行") {
+      columns.push(
+        {
+          colId: "changeOwner",
+          headerName: "归属模块",
+          width: 120,
+          minWidth: 110,
+          valueGetter: (params) =>
+            (params.data as (Candidate & { changeOwner?: string }) | undefined)
+              ?.changeOwner ?? "未归类",
+        },
+        {
+          field: "preview",
+          colId: "changedContent",
+          headerName: "变动内容",
+          minWidth: 360,
+          flex: 1,
+        },
+        {
+          field: "baselinePreview",
+          colId: "baselineContent",
+          headerName: "原稿内容",
+          minWidth: 300,
+          flex: 1,
+        },
+      );
+    }
     if (this.module === "翻译") {
       columns.push(
         {
@@ -312,7 +354,9 @@ export class CalibrationGrid {
       );
     }
 
-    if (this.module === "翻译") {
+    if (this.module === "变动行") {
+      // Changed-line audit columns are already complete above.
+    } else if (this.module === "翻译") {
       // Translation source/provider columns are already complete above.
     } else if (this.module === "章节标题") {
       columns.push({
@@ -376,6 +420,15 @@ export class CalibrationGrid {
     }
     if (this.module === "章节定界") {
       return ["sourceLine", "lineType", "chapterFile", "preview"];
+    }
+    if (this.module === "变动行") {
+      return [
+        "sourceLine",
+        "lineType",
+        "changeOwner",
+        "changedContent",
+        "baselineContent",
+      ];
     }
     if (this.module === "翻译") {
       return [
@@ -491,6 +544,13 @@ export class CalibrationGrid {
   private lineTypeRenderer(
     params: ICellRendererParams<Candidate, string>,
   ): HTMLElement {
+    if (this.module === "变动行") {
+      const node = document.createElement("span");
+      node.className = "changed-line-state";
+      node.textContent = String(params.value ?? "");
+      return node;
+    }
+
     const select = document.createElement("select");
     select.className = "calibration-line-type";
     select.setAttribute("aria-label", "行类型");

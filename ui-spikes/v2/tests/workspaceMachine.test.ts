@@ -33,6 +33,7 @@ const chapterA: ChapterWorkspaceData = {
     range: { line: 1, start: 0, end: 6 },
     typeLabel: "非法断行",
     lineType: "合并",
+    isWorkingCorrection: true,
   }],
   annotationPairs: [],
   sidecarSourceFile: "01 Demo.md",
@@ -165,6 +166,13 @@ assert.equal(baselineIgnoredCalibrationRows, 0);
 assert.equal(view().canClose, true);
 
 const baselineWorkingLength = view().workingLength!;
+const baselineChangedLineCount = view().changedLineCount;
+assert.equal(baselineChangedLineCount, 1, "saved working may already differ from immutable original");
+assert.equal(view().changedLineAddedCount, 1);
+assert.equal(view().changedLineModifiedCount, 0);
+assert.equal(view().changedLineDeletedCount, 0);
+assert.equal(view().changedLineRows[0]?.owner, "非法断行");
+assert.equal(view().changedLineUnclassifiedCount, 0);
 assert.equal(view().canUndo, false);
 assert.equal(view().canRedo, false);
 assert.equal(view().undoDepth, 0);
@@ -178,6 +186,10 @@ assert.equal(view().canUndo, true);
 assert.equal(view().canRedo, false);
 assert.equal(view().undoDepth, 1);
 assert.equal(view().redoDepth, 0);
+assert.ok(
+  view().changedLineCount > baselineChangedLineCount,
+  "working edit must immediately update derived changed-line audit data",
+);
 
 actor.send({
   type: "CALIBRATION_LINE_TYPE_CHANGED",
@@ -189,6 +201,16 @@ assert.equal(view().workingLength, editedA.length, "calibration edit must not ch
 assert.equal(view().calibrationRows, baselineCalibrationRows);
 assert.equal(view().visibleCalibrationRows, baselineVisibleCalibrationRows - 1);
 assert.equal(view().ignoredCalibrationRows, baselineIgnoredCalibrationRows + 1);
+assert.equal(
+  view().changedLineRows.find((row) => row.workingText === "Edited")?.owner,
+  "未归类",
+  "ignoring the owning module row must only change attribution",
+);
+assert.equal(
+  view().changedLineRows.filter((row) => row.workingText === "Edited").length,
+  1,
+  "changing attribution must never remove the underlying diff",
+);
 assert.equal(view().undoDepth, 2);
 assert.equal(view().redoDepth, 0);
 
@@ -198,6 +220,11 @@ assert.equal(view().workingLength, editedA.length);
 assert.equal(view().calibrationRows, baselineCalibrationRows);
 assert.equal(view().visibleCalibrationRows, baselineVisibleCalibrationRows);
 assert.equal(view().ignoredCalibrationRows, baselineIgnoredCalibrationRows);
+assert.equal(
+  view().changedLineRows.find((row) => row.workingText === "Edited")?.owner,
+  "非法断行",
+  "undo must restore module attribution",
+);
 assert.equal(view().undoDepth, 1);
 assert.equal(view().redoDepth, 1);
 assert.equal(view().canSave, true);
@@ -214,6 +241,11 @@ assert.equal(view().canUndo, false);
 assert.equal(view().canRedo, true);
 assert.equal(view().undoDepth, 0);
 assert.equal(view().redoDepth, 2);
+assert.equal(
+  view().changedLineCount,
+  baselineChangedLineCount,
+  "undo back to the saved working baseline must restore its original-vs-working audit",
+);
 
 actor.send({ type: "REDO" });
 assert.equal(view().session, "chapter-dirty");
@@ -230,6 +262,11 @@ assert.equal(view().workingLength, editedA.length);
 assert.equal(view().calibrationRows, baselineCalibrationRows);
 assert.equal(view().visibleCalibrationRows, baselineVisibleCalibrationRows - 1);
 assert.equal(view().ignoredCalibrationRows, baselineIgnoredCalibrationRows + 1);
+assert.equal(
+  view().changedLineRows.find((row) => row.workingText === "Edited")?.owner,
+  "未归类",
+  "redo must reapply attribution change without losing the diff",
+);
 assert.equal(view().undoDepth, 2);
 assert.equal(view().redoDepth, 0);
 
@@ -258,6 +295,10 @@ assert.equal(view().canUndo, false, "save establishes a new baseline and clears 
 assert.equal(view().canRedo, false, "save clears redo");
 assert.equal(view().undoDepth, 0);
 assert.equal(view().redoDepth, 0);
+assert.ok(
+  view().changedLineCount > baselineChangedLineCount,
+  "save must not clear working-vs-original audit rows",
+);
 
 actor.send({ type: "CLOSE" });
 assert.equal(view().session, "idle");
@@ -272,6 +313,10 @@ assert.equal(
   "calibration edit must survive save/reentry",
 );
 assert.equal(view().visibleCalibrationRows, baselineVisibleCalibrationRows - 1);
+assert.ok(
+  view().changedLineCount > baselineChangedLineCount,
+  "reentry must derive changed lines from persisted working vs immutable original",
+);
 
 const branchText = editedA + "branch";
 actor.send({ type: "WORKING_CHANGED", text: branchText });

@@ -35,6 +35,7 @@ type LoadedPayload = {
   id: string;
   path: string;
   name: string;
+  originalText?: string;
   workingText: string;
   sidecar: unknown;
   revision: string;
@@ -170,7 +171,7 @@ export class PersistentChapterRepository implements ChapterRepository {
       kind: "chapter",
       path: payload.path,
       name: payload.name,
-      originalText: payload.workingText,
+      originalText: payload.originalText ?? payload.workingText,
       workingText: payload.workingText,
       rows: refreshed.rows,
       annotationPairs: refreshed.annotationPairs,

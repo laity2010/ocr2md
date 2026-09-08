@@ -356,6 +356,31 @@
       color: var(--accent);
       border-color: color-mix(in srgb, var(--accent) 55%, transparent);
     }
+    .module-tab[data-change-notice]::after {
+      content: attr(data-change-notice);
+      display: inline-block;
+      min-width: 18px;
+      margin-left: 4px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background: #d699b6;
+      color: #2d353b;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 18px;
+      text-align: center;
+    }
+    .module-tab.has-change-notice {
+      border-color: #d699b6;
+      animation: module-change-flash 760ms ease-out 2;
+    }
+    @keyframes module-change-flash {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(214, 153, 182, 0); }
+      45% {
+        background: rgba(214, 153, 182, .22);
+        box-shadow: 0 0 0 4px rgba(214, 153, 182, .13);
+      }
+    }
     .grid-menu-spacer { flex: 1; }
     .review-toolbar {
       min-height: 34px;
@@ -381,6 +406,13 @@
       height: 100%;
       min-height: 0;
     }
+    #calibration-grid .ag-row.row-deleted-change .ag-cell,
+    #calibration-grid .ag-row.row-deleted-change .ag-cell * {
+      color: color-mix(in srgb, var(--fg) 45%, transparent);
+      text-decoration-line: line-through;
+      text-decoration-thickness: 1px;
+    }
+    #calibration-grid .ag-row.row-deleted-change { cursor: default; }
     .calibration-line-type,
     .annotation-number-input,
     .chapter-file-input { width: 100%; min-height: 30px; box-sizing: border-box; }
@@ -630,6 +662,7 @@
           <button class="module-tab" data-review-module="注释" aria-pressed="false">注释</button>
           <button class="module-tab" data-review-module="嵌入块" aria-pressed="false">嵌入块</button>
           <button class="module-tab" data-review-module="非法断行" aria-pressed="false">非法断行</button>
+          <button class="module-tab" data-review-module="变动行" aria-pressed="false">变动行</button>
           <button class="module-tab compat-controls" data-review-module="翻译" aria-pressed="false">翻译</button>
         </div>
         <span class="grid-menu-spacer"></span>
@@ -787,6 +820,12 @@
           <span class="feature-debug-spec"><b>操作</b>：进入真实“非法断行”表，验证前10/后10、合并预览与判断；把第一条“合并”改为“已忽略”，再 Undo / Redo / 保存 / 重入。</span>
           <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本存在非法断行候选。</span>
           <span class="feature-debug-spec"><b>效果</b>：可见候选与真实导出 merge 决策同步 6→5→6→5；保存重入保持，最后自动恢复原 working / sidecar / revision。</span>
+        </button>
+        <button id="ui-debug-changed-line" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">变动行模块</span>
+          <span class="feature-debug-spec"><b>操作</b>：验证完整 working↔original 审计；临时新增正文，检查 +N、Undo/Redo、保存重入与删除行不可定位。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本变动行基线稳定。</span>
+          <span class="feature-debug-spec"><b>效果</b>：diff 实时刷新且不被归属模块吞掉；访问后 +N 清零；最后自动恢复原 41 行 / working / sidecar / revision。</span>
         </button>
         <button id="ui-debug-chapter-title" class="ui-debug-action" type="button" role="menuitem" disabled>
           <span class="feature-debug-title">章节标题模块</span>

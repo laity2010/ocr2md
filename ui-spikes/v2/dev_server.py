@@ -52,6 +52,7 @@ ALLOWED_REVIEW_MODULES = {
     "注释",
     "嵌入块",
     "非法断行",
+    "变动行",
 }
 
 
@@ -162,6 +163,26 @@ class ChapterProjectStore:
             )
         return record
 
+    def chapter_original_path(self, record, working_path, sidecar):
+        original_name = working_path.name.removesuffix(".working.md") + ".md"
+        same_dir = working_path.with_name(original_name)
+        if same_dir.is_file():
+            return same_dir
+
+        source_file = sidecar.get("sourceFile") if isinstance(sidecar, dict) else None
+        if isinstance(source_file, str) and source_file.strip():
+            normalized = source_file.replace("\\", "/")
+            source_name = normalized.rsplit("/", 1)[-1]
+            if source_name.endswith(".md"):
+                source_dir_name = source_name.removesuffix(".md")
+                sibling = (self.chapters_dir / source_dir_name / source_name).resolve()
+                if (
+                    sibling.is_file()
+                    and sibling.parent.parent == self.chapters_dir
+                ):
+                    return sibling
+        return None
+
     def read(self, chapter_id):
         record = self.resolve(chapter_id)
         with self.lock:
@@ -169,6 +190,12 @@ class ChapterProjectStore:
             sidecar_path = record["_sidecar"]
             working_text = working_path.read_text(encoding="utf-8")
             sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            original_path = self.chapter_original_path(record, working_path, sidecar)
+            original_text = (
+                original_path.read_text(encoding="utf-8")
+                if original_path is not None
+                else working_text
+            )
             return {
                 "id": record["id"],
                 "path": (
@@ -176,10 +203,12 @@ class ChapterProjectStore:
                     f"{record['name']}/{working_path.name}"
                 ),
                 "name": working_path.name.removesuffix(".working.md") + ".md",
+                "originalText": original_text,
                 "workingText": working_text,
                 "sidecar": sidecar,
                 "revision": self.revision(working_text, sidecar),
                 "storagePath": str(working_path),
+                "originalPath": str(original_path) if original_path is not None else None,
                 "sidecarPath": str(sidecar_path),
             }
 

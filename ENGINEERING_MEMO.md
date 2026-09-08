@@ -3970,3 +3970,315 @@ fixture 特别说明：
 - 真实 iPad final clean / 0/0 / canSave=false / lastFailure=null。
 
 下一动作：创建并推送 100% v2 migration checkpoint commit；禁止 reset / clean / rebase / force push。
+
+### 13.55 2026-09-07 · 迁移范围补漏：变动行模块；M1 数据契约完成
+
+在 v2 迁移 100% checkpoint 之后重新对照旧 integration 产品，确认章节清洗模块遗漏了正式的“变动行”审计模块。
+
+范围修正：
+- 不推翻 `OCR2MD_V2_MIGRATION_ACCEPTED_100_PERCENT` 的历史事实；该标记表示当时列入迁移验收范围的项目全部通过。
+- 新发现的遗漏属于 scope correction：旧产品已有“变动行”，但未被纳入 v2 迁移清单。
+- 已封箱的章节定界 / 章节标题 / 注释 / 嵌入块 / 非法断行等模块不重新验收。
+- 先补齐“变动行”六个航点，再进入“章节清洗 → trans → 翻译”新产品里程碑。
+
+变动行六航点：
+1. M1 数据契约
+2. M2 正式模块入口与表格
+3. M3 源码定位与删除语义
+4. M4 归属模块联动
+5. M5 实时刷新与未读提醒
+6. M6 功能调试 / 私有云 / 真实 iPad 封箱
+
+M1 已完成：
+- 新增 `ui-spikes/v2/src/changedLineAudit.ts`。
+- 直接复用核心 `scanChapterBoundaryLines(original, working)`；没有另写第二套行级 diff。
+- 派生数据完全只读，不写 sidecar。
+- 数据契约包含：
+  - 0-based 变动位置；
+  - 新增 / 修改 / 删除；
+  - working 内容；
+  - original 内容；
+  - 归属模块；
+  - 删除行不可定位 working 的语义。
+- 当前归属候选：
+  - 章节标题
+  - 注释
+  - 嵌入块
+  - 非法断行
+  - 未归类
+- 继承旧 integration 的关键保护：
+  - 同一物理行上的模块候选只有在实际修改字符与候选范围重叠时才认领“修改”；
+  - 自动非法断行候选只是建议，不得吞掉真实正文 diff；
+  - 只有人工 working correction 才可认领非法断行变动；
+  - 已忽略候选不认领变动。
+- `deriveWorkspaceView()` 已接入实时派生：
+  - changedLineRows
+  - changedLineCount
+  - changedLineAddedCount
+  - changedLineModifiedCount
+  - changedLineDeletedCount
+  - changedLineUnclassifiedCount
+- Save 不清空变动行：比较基准始终是 immutable original，而不是上次保存。
+- Undo 回到先前 working 时，变动行同步恢复。
+
+M1 专项：
+- 新增 `tests/changedLineAudit.test.ts`。
+- `npm run test:changed-lines` PASS。
+- `npm run test:machine` PASS。
+- v2 typecheck PASS。
+- v2 build PASS。
+- `git diff --check` PASS。
+
+M1 私有云 smoke：
+- image = `ocr2md/v2:changed-lines-m1-20260907a`
+- Helm revision = 56
+- Deployment = 1/1 Ready
+- stable local entry `http://127.0.0.1:4176/` → HTTP 200
+- project = Bufett’s Alpha
+- catalog = 7 chapters / 5 ready
+
+M1 没有可见 UI 变化，因此不要求真实 iPad 人工验收。
+
+变动行补迁航路进度：
+- M1 = 完成
+- 总进度 = 1/6 = 16.7%
+- 下一航点 = M2 正式“变动行”模块入口 + 五列表格
+
+### 13.56 2026-09-07 · 变动行 M2 自动化 / 私有云完成，真实 iPad 待前台验收
+
+M2 目标：
+- 章节清洗正式出现“变动行”模块；
+- 五列表格：行号 / 变动 / 归属模块 / 变动内容 / 原稿内容；
+- 只读审计，不允许通过表格修改 lineType；
+- 普通章节显示，OCR 章节定界隐藏；
+- 本航点不实现点击定位与删除行特殊交互（留给 M3）。
+
+实现：
+- src/types.ts 将“变动行”加入 ModuleName。
+- workspaceMachine.ts 将“变动行”加入正式章节模块集合；activeModuleRows 对该模块使用完整 changedLine audit 数量。
+- index.html 恢复正式“变动行”模块 tab。
+- calibrationGrid.ts 增加变动行五列只读 projection。
+- app.ts 在变动行模块使用 changedLineAuditCandidates() 派生 grid rows。
+- changedLineAudit.ts 增加只读 grid candidate adapter，不写 sidecar。
+- debug bridge ALLOWED_REVIEW_MODULES 增加“变动行”。
+
+M2 期间发现并修正一个生产数据契约缺口：
+- v2 PersistentChapterRepository 此前把 workingText 同时作为 originalText，真实产品中的 working-vs-original diff 因而会恒为 0。
+- dev_server.py 现在返回 immutable original：
+  1. 优先同目录 <章节>.md；
+  2. 安全副本缺同目录 original 时，根据 sidecar sourceFile 在当前项目 chapters 内解析原章节；
+  3. 都不可用时才兼容回退 working。
+- 其它已封箱模块仍继续用 working 作为 refresh baseline；这次修正只为变动行提供 immutable original，不改变章节标题 / 注释 / 嵌入块 / 非法断行既有扫描行为。
+
+自动门禁：
+- changedLineModule Playwright：2/2 PASS。
+- reviewModules + navigationContext + workspaceUi 相关回归：5/5 PASS。
+- changedLineAudit、workspaceMachine、typecheck、build、DOM contract 均 PASS。
+- git diff --check PASS。
+- dev_server.py py_compile PASS。
+
+私有云：
+- image = ocr2md/v2:changed-lines-m2-20260907b
+- Helm revision = 58
+- Deployment = 1/1 Ready
+- workspace = Bufett’s Alpha
+- stable local entry = http://127.0.0.1:4176
+- NodePort = 30418
+
+真实 Buffett 非破坏性 4176 smoke：
+- 01 Buffett’s Alpha
+  - originalLength = 67154
+  - workingLength = 67160
+  - original != working
+  - originalPath = /data/Bufett’s Alpha/chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md
+- 01 Buffett’s Alpha 副本
+  - originalPath 正确回落到原章节 01 Buffett’s Alpha.md
+  - workingLength = 63833
+  - original != working
+- UI：
+  - state = chapter-clean
+  - module = 变动行
+  - rows = 7
+  - review status = 变动行 · 7 行
+  - canSave = 否
+  - AG Grid aria-colcount = 5
+  - iPad 宽度下前四列表头直接可见；横向滚动后“原稿内容”可见。
+
+稳定入口结构确认：
+- 4176 = preview_server.py
+- static = 当前工作树 ui-spikes/v2
+- workspace target = http://127.0.0.1:30418
+- debug target = http://127.0.0.1:4183
+- 4183 debug bridge 已重启到当前代码；“变动行”远程模块命令白名单已生效。
+
+当前仅剩真实 iPad 最终 UI 验收：
+- debug bridge 重启后尚无真实 iPad 客户端重新报到，说明页面当前处于后台 / 已关闭。
+- 不要求截图；只需真实 iPad 页面重新前台/刷新后，直接读取桥状态完成验收。
+
+变动行补迁航路：
+- M1 = 完成
+- M2 = 自动化 + 私有云完成，真实 iPad 待验收
+- 总进度仍按已到达航点计 = 1/6 = 16.7%
+
+### 13.57 2026-09-08 · Cross-Conversation Goal Handoff / 低回显规则
+
+当前变动行补迁不新建第二条同类航路，继续使用既有 Goal：
+- Task ID = tsk_d0f171b506caec01
+- Title = 迁移变动行模块
+- 航路 = M1 数据契约 → M2 正式模块入口与表格 → M3 源码定位与删除语义 → M4 归属模块联动 → M5 实时刷新与未读提醒 → M6 功能调试 / 私有云 / 真实 iPad 封箱
+
+跨对话执行规则与 agent-trading-lab 对齐：
+- Goal checkpoint / completed steps / current step 是跨对话权威执行状态；ENGINEERING_MEMO.md 是工程证据与接手说明的权威文本状态。
+- 不需要用户介入的航段默认采用静默 Goal 模式持续推进，不因对话回显本身暂停。
+- 只在以下情况报告：
+  1. 航点真正完成；
+  2. 重大问题或新的产品缺陷；
+  3. 安全停机；
+  4. 必须人工决策；
+  5. 真实 iPad / 视觉验收确实需要用户介入。
+- 普通专项测试、构建、镜像、Helm、私有云 smoke、诊断与无风险修复不逐项回显。
+- 不展开长篇推理过程。
+- 航路进度只按已完成航点计，不按“代码做到哪里”提前计票。
+- 固定进度格式：
+  - 进行中：🟡 航路进行中｜当前进度：X / 6｜当前航点：...｜下一航点：...
+  - 完成：🟢 航路已完成｜当前进度：6 / 6
+  - 阻塞：🔴 航路阻塞｜当前进度：X / 6｜问题：...
+  - 需人工：🟠 需要人工决策｜当前进度：X / 6｜事项：...
+- 子任务 / smoke / 单项测试禁止单独显示裸 100%，避免与总航路混淆。
+
+当前正式进度仍为 1 / 6；工程实现已推进至 M6 收口，但 M2–M6 尚未满足完整正式验收条件，因此不提前标记 completed。
+
+### 13.58 2026-09-08 · 变动行 M2–M5 consolidated PASS；M6 私有云 5/5 PASS
+
+在修正 stale 候选对新增正文的 owner 误认领后，重新执行变动行整条邻接门禁与私有云封箱。
+
+关键缺陷修复：
+- refresh 后若旧候选无法可靠重定位，可能暂时保留 `range line=0/start=0/end=0`；此前新增 diff 只按行范围认领 owner，导致第 0 行普通新增正文被旧注释候选误认领。
+- `changedLineAudit.ts` 现规定：added change 除行范围外，候选 raw/preview 必须真实出现在新增文本中（或新增文本被候选真实包含）才允许认领。
+- 同样保护章节标题 added owner，避免 stale 标题只靠行号吞普通正文。
+- 反向验证：普通新增正文仍为 `新增 / 未归类`；真实新增注释仍归 `注释`；真实 `>` 新增嵌入行仍归 `嵌入块`。
+
+本地 / Playwright consolidated gate：
+- `npm run test:changed-lines` PASS。
+- `npm run test:machine` PASS。
+- v2 typecheck PASS。
+- v2 build PASS。
+- `changedLineLocate.spec.ts` PASS。
+- `changedLineModule.spec.ts` 2/2 PASS。
+- `changedLineNotice.spec.ts` PASS。
+- `changedLineRealtime.spec.ts` PASS。
+- `featureDebugChangedLine.spec.ts` PASS。
+- 组合 Playwright = 6/6 PASS。
+- `git diff --check` PASS。
+- `dev_server.py` py_compile PASS。
+
+当前私有云：
+- Helm revision = 63
+- image = `ocr2md/v2:changed-lines-m6-20260908b`
+- Deployment = 1/1 Ready
+
+4176 + 真实 Buffett PVC 功能调试：
+- 安全副本 = `01 Buffett’s Alpha 副本`
+- 功能调试 = `变动行模块功能调试 · 5/5 通过`
+- 步骤：
+  1. 基线 41 条完整 diff / 5 列 / clean 0/0；
+  2. 正式 working 临时修改 → 新 diff + +N；
+  3. 访问后清 +N，Undo 回 41，Redo 再产生 +N；
+  4. Save / 重入后临时 diff 持久化，且 Save 不清 working↔original 审计；
+  5. 安全清理恢复原 41 条 / 63833 / sidecar / revision / clean 0/0。
+- 调试前后逐项核对：
+  - workingLength = 63833 → 63833
+  - revision = `409011a882c808a17a4c6ffd9f31e62826036a86aa5f1fbe01a292b43aae751a` → 同值
+  - working + sidecar + revision exact restored = true
+  - final module = 变动行
+  - final rows = 41
+  - Undo / Redo = 0 / 0
+  - canSave = 否
+  - JS errors = 0
+  - request failures = 0
+
+航点结论：
+- M2 正式模块入口与表格：PASS
+- M3 源码定位与删除语义：PASS
+- M4 归属模块联动：PASS
+- M5 实时刷新与未读提醒：PASS
+- M6 自动化 / 私有云：PASS；仅剩真实 iPad 最终封箱票
+
+正式航路进度更新为 5 / 6；下一航点仅剩 M6 真实 iPad 封箱。
+
+### 13.59 2026-09-08 · 变动行补迁航路 6/6 完成 · 真实 iPad 最终封箱
+
+用户在真实 iPad Safari 刷新正式外网入口后，device bridge 识别到当前页面：
+- client = `04bb504a-7e75-43d8-8170-c5d76b46ed81`
+- pageLoadedAt = `2026-09-08T01:56:41.841Z`
+- viewport = 1032 × 642
+- devicePixelRatio = 2
+- project = `Bufett’s Alpha`
+- 初始 session = idle
+
+正式私有云版本：
+- Helm revision = 63
+- image = `ocr2md/v2:changed-lines-m6-20260908b`
+- Deployment = 1/1 Ready
+
+真实 iPad 最终 smoke 全部通过，走正式产品命令/XState/Grid 路径，不使用 debug-only 业务捷径：
+1. `open-chapter(01 Buffett’s Alpha 副本)`
+   - chapter-clean
+   - workingLength = 63833
+   - revision = `409011a882c808a17a4c6ffd9f31e62826036a86aa5f1fbe01a292b43aae751a`
+2. `select-review-module(变动行)`
+   - activeReviewModule = 变动行
+   - activeModuleRows = 41
+   - canSave = false
+3. `focus-first-calibration`
+   - focused row = `change-audit-chapter-change-12772c5caf11-5`
+   - focusedSourceLine = 6
+4. `edit`
+   - workingLength 63833 → 63834
+   - changed rows 41 → 42
+   - undoDepth = 1
+   - canSave = true
+   - 持久化 revision 未改变
+5. `undo`
+   - workingLength = 63833
+   - changed rows = 41
+   - undo/redo = 0/1
+   - chapter-clean
+6. `redo`
+   - workingLength = 63834
+   - changed rows = 42
+   - undo/redo = 1/0
+7. final `undo`
+   - workingLength = 63833
+   - changed rows = 41
+   - canSave = false
+   - revision 精确回原值
+8. `close`
+   - session = idle
+
+最终正式 4176 → k3s/PVC 重读安全副本：
+- workingLength = 63833
+- sidecar 与验收前逐项相同
+- revision = `409011a882c808a17a4c6ffd9f31e62826036a86aa5f1fbe01a292b43aae751a`
+- working + sidecar + revision exact restored = true
+
+结合此前已经通过的删除行专项、owner 契约、+N notice、保存重入与私有云功能调试 5/5，本次真实 iPad smoke 完成 M6 最终物理设备封箱。
+
+变动行补迁航路最终状态：
+- M1 数据契约 = PASS
+- M2 正式模块入口与五列表格 = PASS
+- M3 源码定位与删除语义 = PASS
+- M4 归属模块联动 = PASS
+- M5 实时刷新与未读提醒 = PASS
+- M6 功能调试 / 私有云 / 真实 iPad 封箱 = PASS
+
+固定进度：6/6。
+
+章节清洗正式模块集合现为：
+- 章节标题
+- 注释
+- 嵌入块
+- 非法断行
+- 变动行
+
+下一产品里程碑恢复原规划：`章节清洗 → trans → 翻译`。翻译阶段优先复用现有 translation core / hidden compat bones，不重新发明翻译架构。

@@ -18,6 +18,10 @@ import type {
   ChapterSaveResult,
   ChapterWorkspaceData,
 } from "./chapterRepository";
+import {
+  deriveChangedLineAuditRows,
+  type ChangedLineAuditRow,
+} from "./changedLineAudit";
 
 export type ActiveReviewModule =
   | "章节定界"
@@ -25,6 +29,7 @@ export type ActiveReviewModule =
   | "注释"
   | "嵌入块"
   | "非法断行"
+  | "变动行"
   | "翻译";
 
 export const ACTIVE_REVIEW_MODULES: readonly ActiveReviewModule[] = [
@@ -33,6 +38,7 @@ export const ACTIVE_REVIEW_MODULES: readonly ActiveReviewModule[] = [
   "注释",
   "嵌入块",
   "非法断行",
+  "变动行",
   "翻译",
 ];
 
@@ -1303,6 +1309,12 @@ export type WorkspaceViewModel = {
   selectedChapterId?: string;
   activeReviewModule: ActiveReviewModule;
   activeModuleRows: number;
+  changedLineRows: ChangedLineAuditRow[];
+  changedLineCount: number;
+  changedLineAddedCount: number;
+  changedLineModifiedCount: number;
+  changedLineDeletedCount: number;
+  changedLineUnclassifiedCount: number;
   headingNumberingEnabled: boolean;
   titleHeadingCount: number;
   titleExportHeadingCount: number;
@@ -1460,10 +1472,20 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
           (item) => item.id === pendingLeaveIntent.chapterId,
         )?.name
       : undefined;
-  const activeModuleRows = chapter
-    ? chapter.rows.filter((row) =>
-        rowVisibleInModule(row, snapshot.context.activeReviewModule)).length
-    : 0;
+  const changedLineRows =
+    chapter?.kind === "chapter" || (!chapter?.kind && chapter)
+      ? deriveChangedLineAuditRows({
+          originalText: chapter.originalText,
+          workingText: chapter.workingText,
+          calibrationRows: chapter.rows,
+        })
+      : [];
+  const activeModuleRows = snapshot.context.activeReviewModule === "变动行"
+    ? changedLineRows.length
+    : chapter
+      ? chapter.rows.filter((row) =>
+          rowVisibleInModule(row, snapshot.context.activeReviewModule)).length
+      : 0;
   const illegalLineBreakRows = chapter
     ? chapter.rows.filter((row) => row.typeLabel === "非法断行")
     : [];
@@ -1547,6 +1569,12 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
     selectedChapterId: snapshot.context.selectedChapterId,
     activeReviewModule: snapshot.context.activeReviewModule,
     activeModuleRows,
+    changedLineRows,
+    changedLineCount: changedLineRows.length,
+    changedLineAddedCount: changedLineRows.filter((row) => row.state === "新增").length,
+    changedLineModifiedCount: changedLineRows.filter((row) => row.state === "修改").length,
+    changedLineDeletedCount: changedLineRows.filter((row) => row.state === "删除").length,
+    changedLineUnclassifiedCount: changedLineRows.filter((row) => row.owner === "未归类").length,
     headingNumberingEnabled: snapshot.context.headingNumberingEnabled,
     titleHeadingCount,
     titleExportHeadingCount,
