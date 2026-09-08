@@ -115,6 +115,10 @@ const cssResetButton = requireElement<HTMLButtonElement>("css-reset");
 const tableConfigWrap = requireElement<HTMLElement>("table-config-wrap");
 const tableConfigEditorHost =
   requireElement<HTMLElement>("table-config-editor");
+const tableConfigSearchInput =
+  requireElement<HTMLInputElement>("table-config-search");
+const tableConfigSettingsList =
+  requireElement<HTMLElement>("table-config-settings-list");
 const tableConfigSaveButton =
   requireElement<HTMLButtonElement>("table-config-save");
 const tableConfigResetButton =
@@ -487,6 +491,8 @@ const calibrationGrid = new CalibrationGrid(
 
 tablePresentationEditor = new TablePresentationEditor(
   tableConfigEditorHost,
+  tableConfigSearchInput,
+  tableConfigSettingsList,
   (resolved, sourceEditor) => {
     calibrationGrid.setPresentationConfig(resolved);
     workingEditor.setShowHardReturns(sourceEditor.showHardReturns);

@@ -292,6 +292,80 @@
       user-select: none;
       pointer-events: none;
     }
+    #table-config-wrap {
+      grid-template-rows: auto minmax(150px, 34%) minmax(0, 1fr);
+    }
+    .table-config-settings {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg-alt) 60%, var(--bg));
+    }
+    .table-config-search-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+    }
+    #table-config-search {
+      flex: 1;
+      min-width: 0;
+      height: 30px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--fg);
+      padding: 4px 8px;
+    }
+    #table-config-settings-list {
+      min-height: 0;
+      overflow: auto;
+      padding: 4px 6px 8px;
+    }
+    .config-setting-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px 10px;
+      align-items: center;
+      padding: 7px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+    }
+    .config-setting-row:last-child { border-bottom: 0; }
+    .config-setting-group {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .config-setting-title {
+      font-weight: 700;
+      min-width: 0;
+    }
+    .config-setting-description,
+    .config-setting-summary,
+    .config-setting-path {
+      color: var(--muted);
+      font-size: 11px;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .config-setting-summary {
+      grid-column: 1 / -1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .config-setting-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .config-setting-empty {
+      padding: 14px 10px;
+      color: var(--muted);
+      text-align: center;
+    }
     #regex-search-panel {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
@@ -729,12 +803,18 @@
 
       <section id="table-config-wrap" class="source-mode-panel css-editor-wrap" role="tabpanel" aria-label="表格配置" aria-labelledby="editor-tab-table-config" hidden>
         <div class="table-config-toolbar">
-          <span>只控制列序 / 排序 / 宽度 / 隐藏 / 固定；不改变业务数据</span>
+          <span>搜索设置；JSON 仍是唯一配置源</span>
           <span class="workspace-spacer"></span>
           <button id="table-config-save" type="button">保存</button>
           <button id="table-config-reset" type="button">恢复默认</button>
         </div>
-        <div id="table-config-editor" aria-label="表格配置编辑器"></div>
+        <div class="table-config-settings" aria-label="配置设置面板">
+          <div class="table-config-search-row">
+            <input id="table-config-search" type="search" spellcheck="false" placeholder="搜索设置，例如：硬回车、注释 排序、列宽" aria-label="搜索配置">
+          </div>
+          <div id="table-config-settings-list" aria-label="配置搜索结果"></div>
+        </div>
+        <div id="table-config-editor" aria-label="表格配置 JSON 编辑器"></div>
       </section>
 
       <section id="regex-search-panel" class="source-mode-panel" role="tabpanel" aria-label="正则搜索" aria-labelledby="editor-tab-regex" hidden>

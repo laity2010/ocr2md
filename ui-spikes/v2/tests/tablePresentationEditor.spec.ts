@@ -16,6 +16,7 @@ async function headerOrder(page: Page): Promise<string[]> {
 async function replaceTableConfig(page: Page, source: string): Promise<void> {
   const content = page.locator("#table-config-editor .cm-content");
   await content.click();
+  await content.press("ControlOrMeta+A");
   await content.fill(source);
 }
 
@@ -45,6 +46,40 @@ test("table presentation config hot-applies, guards invalid edits, persists and 
   );
   await expect(page.locator("#table-config-wrap")).toBeVisible();
   await expect(page.locator("#editor-mode-status")).toContainText("表格配置");
+
+  const settingsSearch = page.locator("#table-config-search");
+  await settingsSearch.fill("硬回车");
+  const hardReturnSetting = page.locator(
+    '#table-config-settings-list [data-setting-id="sourceEditor.showHardReturns"]',
+  );
+  await expect(hardReturnSetting).toBeVisible();
+  await expect(page.locator("#table-config-settings-list .config-setting-row"))
+    .toHaveCount(1);
+  const hardReturnToggle = hardReturnSetting.locator('input[type="checkbox"]');
+  await expect(hardReturnToggle).toBeChecked();
+  await hardReturnToggle.uncheck();
+  await expect(page.locator("#table-config-editor .cm-content")).toContainText(
+    '"showHardReturns": false',
+  );
+  await expect(page.locator("#state-value")).toHaveText("chapter-clean");
+  await expect(page.locator("#undo-depth")).toHaveText("0");
+
+  await page.locator("#editor-tab-source").click();
+  await expect(page.locator("#working-editor .cm-hard-return-marker")).toHaveCount(0);
+  await page.locator("#editor-tab-table-config").click();
+
+  await settingsSearch.fill("注释 排序");
+  const annotationSortSetting = page.locator(
+    '#table-config-settings-list [data-setting-id="modules.注释.sort"]',
+  );
+  await expect(annotationSortSetting).toBeVisible();
+  await expect(page.locator("#table-config-settings-list .config-setting-row"))
+    .toHaveCount(1);
+  await annotationSortSetting.getByRole("button", { name: "定位 JSON" }).click();
+  await expect(page.locator("#editor-mode-status")).toHaveText(
+    "已定位 JSON · modules.注释.sort",
+  );
+  await settingsSearch.fill("");
 
   const valid = JSON.stringify({
     version: 1,

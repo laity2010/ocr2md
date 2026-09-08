@@ -52,6 +52,18 @@ export interface SourceEditorPresentation {
   showHardReturns: boolean;
 }
 
+export type TablePresentationSettingKind = "boolean" | "json";
+
+export interface TablePresentationSettingDescriptor {
+  id: string;
+  group: string;
+  title: string;
+  description: string;
+  path: string[];
+  kind: TablePresentationSettingKind;
+  keywords: string[];
+}
+
 export interface TablePresentationConfig {
   version: 1;
   sourceEditor?: Partial<SourceEditorPresentation>;
@@ -135,6 +147,57 @@ const MODULE_COLUMNS: Record<TablePresentationModule, readonly TableColumnId[]> 
     "translationOpenAI",
   ],
 };
+
+export const TABLE_PRESENTATION_SETTINGS: TablePresentationSettingDescriptor[] = [
+  {
+    id: "sourceEditor.showHardReturns",
+    group: "源码窗口",
+    title: "显示硬回车",
+    description: "在每个实际换行末尾显示 ↵；只影响源码窗呈现。",
+    path: ["sourceEditor", "showHardReturns"],
+    kind: "boolean",
+    keywords: ["硬回车", "回车", "换行", "源码", "source", "return"],
+  },
+  ...(
+    [
+      "章节标题",
+      "注释",
+      "嵌入块",
+      "非法断行",
+      "变动行",
+      "章节定界",
+      "翻译",
+    ] as TablePresentationModule[]
+  ).flatMap((module) => [
+    {
+      id: "modules." + module + ".columns",
+      group: "数据表 / " + module,
+      title: "列顺序",
+      description: "控制列的显示先后；未列出的字段按模块默认规则补齐。",
+      path: ["modules", module, "columns"],
+      kind: "json" as const,
+      keywords: [module, "列", "列序", "顺序", "columns"],
+    },
+    {
+      id: "modules." + module + ".sort",
+      group: "数据表 / " + module,
+      title: "默认排序",
+      description: "控制进入模块时的默认排序优先级与升降序。",
+      path: ["modules", module, "sort"],
+      kind: "json" as const,
+      keywords: [module, "排序", "默认排序", "sort"],
+    },
+    {
+      id: "modules." + module + ".columnStyles",
+      group: "数据表 / " + module,
+      title: "列样式",
+      description: "控制列宽、最小宽度、flex、隐藏和固定位置。",
+      path: ["modules", module, "columnStyles"],
+      kind: "json" as const,
+      keywords: [module, "列宽", "宽度", "隐藏", "固定", "pin", "style"],
+    },
+  ]),
+];
 
 const DEFAULT_STYLES: Partial<Record<TableColumnId, TableColumnPresentation>> = {
   sourceLine: { width: 82, minWidth: 72, pinned: "left" },

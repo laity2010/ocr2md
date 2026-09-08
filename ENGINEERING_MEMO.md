@@ -4649,3 +4649,50 @@ M4 完成条件已满足：
 - Helm revision = 68。
 - image = ocr2md/v2:source-hard-return-config-20260908a。
 - Deployment = 1/1 Ready。
+
+### 13.70 2026-09-08 · 配置搜索层试验：Settings UI + JSON 单一数据源
+
+目标：
+- JSON 继续作为唯一配置源。
+- 在“表格配置”上方增加可搜索 Settings 层，解决配置项变多后难找的问题。
+- 不创建第二套配置存储或第二套业务状态。
+
+实现：
+- 新增 schema 元数据 TABLE_PRESENTATION_SETTINGS。
+- Settings UI 完全由元数据自动生成；以后新增配置项只需补 descriptor。
+- 搜索框支持多关键词 AND 匹配，例如：
+  - 硬回车
+  - 注释 排序
+  - 嵌入块 列宽
+- 简单 boolean 配置直接提供控件：
+  - sourceEditor.showHardReturns 可直接开关。
+  - 控件修改会同步改写下方 JSON，并沿现有热更新链路即时生效。
+- 复杂配置不重复造编辑器，展示摘要并提供“定位 JSON”：
+  - 每个模块的 columns
+  - sort
+  - columnStyles
+- 点击“定位 JSON”后 CodeMirror 直接选中对应 JSON key 并滚动到中间。
+- Settings 面板和 JSON 同屏：上方搜索/设置，下方完整 JSON。
+- JSON 仍承担 Save / Reset / last-known-good / 项目级持久化。
+
+覆盖模块：
+- 源码窗口：显示硬回车。
+- 数据表：章节标题 / 注释 / 嵌入块 / 非法断行 / 变动行 / 章节定界 / 翻译。
+- 每个数据表模块生成：列顺序 / 默认排序 / 列样式。
+
+验证：
+- typecheck PASS。
+- build PASS。
+- sourcePaneTabs + tablePresentationEditor Playwright 2/2 PASS。
+- test:table-config PASS。
+- 4176 私有云 smoke：
+  - 搜索“硬回车”结果数=1，开关 checked=true；切为 false 后源码硬回车 marker=0。
+  - 搜索“注释 排序”结果数=1，摘要=注释号 → 行号。
+  - “定位 JSON”状态=已定位 JSON · modules.注释.sort。
+  - 章节保持 chapter-clean / Undo 0 / Redo 0 / canSave=否。
+  - smoke 全程未保存；前后项目配置 payload 完全一致。
+- image = ocr2md/v2:config-search-20260908a。
+- Helm revision = 69。
+- Deployment = 1/1 Ready。
+
+此版本是“配置多了不好找”的第一版交互试验。复杂项暂不做表单化编辑，避免在 JSON 之外再长出第二套配置编辑逻辑。
