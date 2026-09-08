@@ -223,6 +223,7 @@
     .editor-pane > .pane-menu { grid-row: 1; }
     #working-editor,
     #custom-css-wrap,
+    #table-config-wrap,
     #regex-search-panel { grid-column: 1; grid-row: 2; }
     #editor-preview-splitter { grid-column: 1; grid-row: 3; }
     #markdown-preview { grid-column: 1; grid-row: 4; }
@@ -255,6 +256,7 @@
       grid-template-rows: auto minmax(0, 1fr);
     }
     .css-editor-toolbar,
+    .table-config-toolbar,
     .regex-panel-toolbar {
       min-height: 36px;
       display: flex;
@@ -264,19 +266,22 @@
       border-bottom: 1px solid var(--border);
       background: var(--bg-alt);
     }
-    #custom-css-editor {
+    #custom-css-editor,
+    #table-config-editor {
       min-width: 0;
       min-height: 0;
       height: 100%;
       overflow: hidden;
     }
-    #custom-css-editor .cm-editor {
+    #custom-css-editor .cm-editor,
+    #table-config-editor .cm-editor {
       height: 100%;
       font-size: var(--right-font-size);
       background: var(--bg);
       color: var(--fg);
     }
-    #custom-css-editor .cm-scroller {
+    #custom-css-editor .cm-scroller,
+    #table-config-editor .cm-scroller {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     #regex-search-panel {
@@ -695,6 +700,7 @@
         <span class="source-tabs" role="tablist" aria-label="源码窗">
           <button id="editor-tab-source" class="source-tab" type="button" role="tab" aria-selected="true">源码</button>
           <button id="editor-tab-css" class="source-tab" type="button" role="tab" aria-selected="false">自定义 CSS</button>
+          <button id="editor-tab-table-config" class="source-tab" type="button" role="tab" aria-selected="false">表格配置</button>
           <button id="editor-tab-regex" class="source-tab" type="button" role="tab" aria-selected="false">正则搜索</button>
         </span>
         <span class="workspace-spacer"></span>
@@ -711,6 +717,16 @@
           <button id="css-reset" type="button">恢复默认</button>
         </div>
         <div id="custom-css-editor" aria-label="自定义 CSS 编辑器"></div>
+      </section>
+
+      <section id="table-config-wrap" class="source-mode-panel css-editor-wrap" role="tabpanel" aria-label="表格配置" aria-labelledby="editor-tab-table-config" hidden>
+        <div class="table-config-toolbar">
+          <span>只控制列序 / 排序 / 宽度 / 隐藏 / 固定；不改变业务数据</span>
+          <span class="workspace-spacer"></span>
+          <button id="table-config-save" type="button">保存</button>
+          <button id="table-config-reset" type="button">恢复默认</button>
+        </div>
+        <div id="table-config-editor" aria-label="表格配置编辑器"></div>
       </section>
 
       <section id="regex-search-panel" class="source-mode-panel" role="tabpanel" aria-label="正则搜索" aria-labelledby="editor-tab-regex" hidden>
@@ -862,6 +878,12 @@
           <span class="feature-debug-spec"><b>操作</b>：先滚动真实源码窗到文档中后段，确认右下预览跟随；再滚动真实预览窗到另一锚点，确认源码反向跟随。</span>
           <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；右下 Markdown 预览已生成 source-line 锚点。</span>
           <span class="feature-debug-spec"><b>效果</b>：源码↔预览按 Markdown source line 双向同步，不按滚动百分比硬绑；全程 clean、Undo/Redo 0/0、不写盘。</span>
+        </button>
+        <button id="ui-debug-table-config" class="ui-debug-action" type="button" role="menuitem" disabled>
+          <span class="feature-debug-title">表格配置</span>
+          <span class="feature-debug-spec"><b>操作</b>：通过真实“表格配置”编辑器临时改注释列序，验证热更新、非法配置保护、保存/重载，再恢复原项目配置。</span>
+          <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本注释表可用。</span>
+          <span class="feature-debug-spec"><b>效果</b>：列序即时变化但章节始终 clean、Undo/Redo 0/0；最后项目配置文件精确恢复。</span>
         </button>
         <button id="ui-debug-source-regex-search" class="ui-debug-action" type="button" role="menuitem" disabled>
           <span class="feature-debug-title">源码正则搜索</span>

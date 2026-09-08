@@ -13,6 +13,8 @@ import {
 import { CalibrationGrid } from "./calibrationGrid";
 import { changedLineAuditCandidates } from "./changedLineAudit";
 import { CustomCssEditor } from "./customCssEditor";
+import { TablePresentationEditor } from "./tablePresentationEditor";
+import { TABLE_PRESENTATION_DEFAULT_SOURCE } from "./tablePresentationConfig";
 import { PersistentChapterRepository } from "./persistentChapterRepository";
 import { FeatureDebugMenu } from "./featureDebugMenu";
 import {
@@ -103,11 +105,20 @@ const saveError = requireElement<HTMLElement>("save-error");
 const workingEditorHost = requireElement<HTMLElement>("working-editor");
 const sourceEditorTab = requireElement<HTMLButtonElement>("editor-tab-source");
 const cssEditorTab = requireElement<HTMLButtonElement>("editor-tab-css");
+const tableConfigEditorTab =
+  requireElement<HTMLButtonElement>("editor-tab-table-config");
 const regexEditorTab = requireElement<HTMLButtonElement>("editor-tab-regex");
 const customCssWrap = requireElement<HTMLElement>("custom-css-wrap");
 const customCssEditorHost = requireElement<HTMLElement>("custom-css-editor");
 const cssSaveButton = requireElement<HTMLButtonElement>("css-save");
 const cssResetButton = requireElement<HTMLButtonElement>("css-reset");
+const tableConfigWrap = requireElement<HTMLElement>("table-config-wrap");
+const tableConfigEditorHost =
+  requireElement<HTMLElement>("table-config-editor");
+const tableConfigSaveButton =
+  requireElement<HTMLButtonElement>("table-config-save");
+const tableConfigResetButton =
+  requireElement<HTMLButtonElement>("table-config-reset");
 const regexSearchPanel = requireElement<HTMLElement>("regex-search-panel");
 const editorModeStatus = requireElement<HTMLElement>("editor-mode-status");
 const markdownPreviewHost = requireElement<HTMLElement>("markdown-preview");
@@ -181,6 +192,8 @@ const featureDebugMarkdownPreviewButton =
   requireElement<HTMLButtonElement>("ui-debug-markdown-preview");
 const featureDebugSourcePreviewSyncButton =
   requireElement<HTMLButtonElement>("ui-debug-source-preview-sync");
+const featureDebugTableConfigButton =
+  requireElement<HTMLButtonElement>("ui-debug-table-config");
 const featureDebugSourceRegexSearchButton =
   requireElement<HTMLButtonElement>("ui-debug-source-regex-search");
 const featureDebugUndoRedoButton =
@@ -359,8 +372,9 @@ const customCssEditor = new CustomCssEditor(
   },
 );
 
-type SourcePaneMode = "source" | "css" | "regex";
+type SourcePaneMode = "source" | "css" | "table-config" | "regex";
 let sourcePaneMode: SourcePaneMode = "source";
+let tablePresentationEditor: TablePresentationEditor | undefined;
 
 function setSourcePaneMode(mode: SourcePaneMode): void {
   sourcePaneMode = mode;
@@ -368,6 +382,7 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
   const tabs: Array<[HTMLButtonElement, SourcePaneMode]> = [
     [sourceEditorTab, "source"],
     [cssEditorTab, "css"],
+    [tableConfigEditorTab, "table-config"],
     [regexEditorTab, "regex"],
   ];
   for (const [tab, tabMode] of tabs) {
@@ -376,15 +391,18 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
 
   workingEditorHost.hidden = mode !== "source";
   customCssWrap.hidden = mode !== "css";
+  tableConfigWrap.hidden = mode !== "table-config";
   regexSearchPanel.hidden = mode !== "regex";
 
   editorPreviewSplitter.setAttribute(
     "aria-label",
     mode === "css"
       ? "调整自定义 CSS 与预览高度"
-      : mode === "regex"
-        ? "调整正则搜索与预览高度"
-        : "调整源码与预览高度",
+      : mode === "table-config"
+        ? "调整表格配置与预览高度"
+        : mode === "regex"
+          ? "调整正则搜索与预览高度"
+          : "调整源码与预览高度",
   );
 
   if (mode === "source") {
@@ -393,6 +411,9 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
   } else if (mode === "css") {
     editorModeStatus.textContent = "自定义 CSS · 修改后实时预览";
     requestAnimationFrame(() => customCssEditor.focus());
+  } else if (mode === "table-config") {
+    editorModeStatus.textContent = "表格配置 · 修改后实时预览";
+    requestAnimationFrame(() => tablePresentationEditor?.focus());
   } else {
     editorModeStatus.textContent = "正则搜索";
     requestAnimationFrame(() => regexSearchInput.focus());
@@ -401,9 +422,21 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
 
 sourceEditorTab.addEventListener("click", () => setSourcePaneMode("source"));
 cssEditorTab.addEventListener("click", () => setSourcePaneMode("css"));
+tableConfigEditorTab.addEventListener(
+  "click",
+  () => setSourcePaneMode("table-config"),
+);
 regexEditorTab.addEventListener("click", () => setSourcePaneMode("regex"));
 cssSaveButton.addEventListener("click", () => customCssEditor.save());
 cssResetButton.addEventListener("click", () => customCssEditor.reset());
+tableConfigSaveButton.addEventListener(
+  "click",
+  () => void tablePresentationEditor?.save(),
+);
+tableConfigResetButton.addEventListener(
+  "click",
+  () => void tablePresentationEditor?.reset(),
+);
 setSourcePaneMode("source");
 
 const calibrationGrid = new CalibrationGrid(
@@ -451,6 +484,17 @@ const calibrationGrid = new CalibrationGrid(
     });
   },
 );
+
+tablePresentationEditor = new TablePresentationEditor(
+  tableConfigEditorHost,
+  (resolved) => calibrationGrid.setPresentationConfig(resolved),
+  (text) => {
+    if (sourcePaneMode === "table-config") {
+      editorModeStatus.textContent = text;
+    }
+  },
+);
+void tablePresentationEditor.load();
 
 pageLoadedAt.textContent = getPageLoadedAtDisplay();
 
@@ -912,6 +956,16 @@ type ChangedLineDebugContext = {
 
 let changedLineDebugContext: ChangedLineDebugContext | undefined;
 
+type TableConfigDebugContext = {
+  baselineExists: boolean;
+  baselineSource?: string;
+  baselineHeaders: string[];
+  temporarySource: string;
+  temporaryHeaders: string[];
+};
+
+let tableConfigDebugContext: TableConfigDebugContext | undefined;
+
 type ChapterTitleDebugContext = {
   baselineWorkingText: string;
   baselineSidecar: Record<string, unknown>;
@@ -1017,6 +1071,7 @@ async function initializeFeatureDebugWorkspace(): Promise<void> {
   dirtyLeaveDebugContext = undefined;
   illegalLineBreakDebugContext = undefined;
   changedLineDebugContext = undefined;
+  tableConfigDebugContext = undefined;
   chapterTitleDebugContext = undefined;
   annotationDebugContext = undefined;
   embedDebugContext = undefined;
@@ -5971,6 +6026,293 @@ function recoverSourcePreviewSyncFeatureDebug(error: Error): void {
     + error.message;
 }
 
+function currentTableConfigDebugContext(): TableConfigDebugContext {
+  requireFeatureDebug(tableConfigDebugContext, "表格配置调试上下文不存在");
+  return tableConfigDebugContext;
+}
+
+async function readTablePresentationPayload(): Promise<{
+  exists: boolean;
+  source?: string;
+}> {
+  const response = await fetch("/__workspace/table-presentation", {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  requireFeatureDebug(response.ok, "无法读取项目表格配置");
+  const payload = await response.json() as {
+    exists?: boolean;
+    source?: string | null;
+  };
+  return {
+    exists: payload.exists === true,
+    source: typeof payload.source === "string" ? payload.source : undefined,
+  };
+}
+
+async function waitForTableConfigHeaderPrefix(
+  expected: readonly string[],
+  timeoutMs = 4_000,
+): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    const headers = currentCalibrationHeaderOrder();
+    if (
+      headers.length >= expected.length
+      && expected.every((value, index) => headers[index] === value)
+    ) {
+      return;
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 25));
+  }
+  throw new Error(
+    "表格列序未更新为 " + expected.join(" → ")
+      + "；当前 " + currentCalibrationHeaderOrder().join(" → "),
+  );
+}
+
+async function restoreTableConfigDebugBaseline(): Promise<void> {
+  const context = currentTableConfigDebugContext();
+  requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+
+  tablePresentationEditor.setSource(TABLE_PRESENTATION_DEFAULT_SOURCE);
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
+
+  const response = context.baselineExists
+    ? await fetch("/__workspace/table-presentation", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ source: context.baselineSource ?? "" }),
+      })
+    : await fetch("/__workspace/table-presentation", {
+        method: "DELETE",
+        headers: { Accept: "application/json" },
+      });
+  requireFeatureDebug(response.ok, "恢复原项目表格配置失败");
+
+  await tablePresentationEditor.load();
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 120));
+
+  const restored = await readTablePresentationPayload();
+  requireFeatureDebug(
+    restored.exists === context.baselineExists,
+    "项目表格配置存在状态未恢复",
+  );
+  requireFeatureDebug(
+    !context.baselineExists || restored.source === context.baselineSource,
+    "项目表格配置文本未精确恢复",
+  );
+}
+
+async function prepareTableConfigFeatureDebug(): Promise<void> {
+  featureDebugMenu.close();
+  requireInitializedFeatureDebugWorkspace();
+  requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+
+  const annotationButton = reviewModuleButtons.find(
+    (button) => button.dataset.reviewModule === "注释",
+  );
+  requireFeatureDebug(annotationButton, "找不到注释正式数据表 tag");
+  annotationButton.click();
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 80));
+  requireFeatureDebug(
+    deriveWorkspaceView(actor.getSnapshot()).activeReviewModule === "注释",
+    "没有进入注释模块",
+  );
+
+  setSourcePaneMode("table-config");
+  await tablePresentationEditor.load();
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 120));
+
+  const baseline = await readTablePresentationPayload();
+  const baselineHeaders = currentCalibrationHeaderOrder();
+  requireFeatureDebug(baselineHeaders.length >= 4, "注释表列头不足");
+
+  const temporaryColumns =
+    baselineHeaders[0] === "注释号"
+      ? ["行号", "注释号", "预览", "行类型", "配对状态"]
+      : ["注释号", "行号", "预览", "行类型", "配对状态"];
+  const temporarySource = JSON.stringify({
+    version: 1,
+    modules: {
+      注释: {
+        columns: temporaryColumns,
+        sort: ["注释号", "行号"],
+        columnStyles: {
+          行号: { pinned: null },
+          预览: { minWidth: 220, flex: 1 },
+        },
+      },
+    },
+  }, null, 2) + "\n";
+
+  tableConfigDebugContext = {
+    baselineExists: baseline.exists,
+    baselineSource: baseline.source,
+    baselineHeaders,
+    temporarySource,
+    temporaryHeaders: temporaryColumns.slice(0, 4),
+  };
+}
+
+function createTableConfigFeatureDebugSteps(): readonly FeatureDebugStep[] {
+  const defaultProbeSource = JSON.stringify({
+    version: 1,
+    modules: {
+      注释: {
+        columns: ["行号", "行类型", "注释号", "预览", "配对状态"],
+        sort: ["注释号", "行号"],
+      },
+    },
+  }, null, 2) + "\n";
+
+  return [
+    {
+      label: "1 基线：项目配置已快照，章节 clean / Undo Redo 0/0",
+      run: () => {
+        const context = currentTableConfigDebugContext();
+        const view = requireInitializedFeatureDebugWorkspace();
+        requireFeatureDebug(
+          view.activeReviewModule === "注释",
+          "基线没有停在注释模块",
+        );
+        requireFeatureDebug(
+          view.undoDepth === 0 && view.redoDepth === 0 && !view.canSave,
+          "基线存在章节历史或可保存修改",
+        );
+        requireFeatureDebug(
+          sameStringArray(
+            currentCalibrationHeaderOrder().slice(
+              0,
+              context.baselineHeaders.length,
+            ),
+            context.baselineHeaders,
+          ),
+          "基线列序与快照不一致",
+        );
+      },
+    },
+    {
+      label: "2 热更新：真实表格配置编辑器改列序，无需 build / reload",
+      run: async () => {
+        const context = currentTableConfigDebugContext();
+        requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+        tablePresentationEditor.setSource(context.temporarySource);
+        await waitForTableConfigHeaderPrefix(context.temporaryHeaders);
+        requireFeatureDebug(
+          (editorModeStatus.textContent ?? "").includes("实时预览"),
+          "有效配置没有进入实时预览状态",
+        );
+        const view = deriveWorkspaceView(actor.getSnapshot());
+        requireFeatureDebug(
+          view.session === "chapter-clean"
+            && view.undoDepth === 0
+            && view.redoDepth === 0
+            && !view.canSave,
+          "热更新污染了章节业务状态",
+        );
+      },
+    },
+    {
+      label: "3 非法配置：保留 last-known-good，不破坏当前表格",
+      run: async () => {
+        const context = currentTableConfigDebugContext();
+        requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+        tablePresentationEditor.setSource("{ bad json");
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
+        requireFeatureDebug(
+          (editorModeStatus.textContent ?? "").includes(
+            "已保留最后有效配置",
+          ),
+          "非法配置没有显示 last-known-good 保护",
+        );
+        await waitForTableConfigHeaderPrefix(context.temporaryHeaders);
+        const view = deriveWorkspaceView(actor.getSnapshot());
+        requireFeatureDebug(
+          view.undoDepth === 0 && view.redoDepth === 0 && !view.canSave,
+          "非法配置污染了章节历史",
+        );
+      },
+    },
+    {
+      label: "4 保存 / 重载：项目配置持久化并重新加载同一列序",
+      run: async () => {
+        const context = currentTableConfigDebugContext();
+        requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+        tablePresentationEditor.setSource(context.temporarySource);
+        await waitForTableConfigHeaderPrefix(context.temporaryHeaders);
+        requireFeatureDebug(
+          await tablePresentationEditor.save(),
+          "临时表格配置保存失败",
+        );
+
+        tablePresentationEditor.setSource(defaultProbeSource);
+        await waitForTableConfigHeaderPrefix(
+          ["行号", "行类型", "注释号", "预览"],
+        );
+        await tablePresentationEditor.load();
+        await waitForTableConfigHeaderPrefix(context.temporaryHeaders);
+
+        const persisted = await readTablePresentationPayload();
+        requireFeatureDebug(
+          persisted.exists && persisted.source === context.temporarySource,
+          "保存 / 重载后项目配置内容不一致",
+        );
+        const view = deriveWorkspaceView(actor.getSnapshot());
+        requireFeatureDebug(
+          view.session === "chapter-clean"
+            && view.undoDepth === 0
+            && view.redoDepth === 0
+            && !view.canSave,
+          "保存表格配置意外污染章节状态",
+        );
+      },
+    },
+    {
+      label: "5 安全恢复：原配置存在状态 / 文本精确恢复，章节仍 clean",
+      run: async () => {
+        const context = currentTableConfigDebugContext();
+        await restoreTableConfigDebugBaseline();
+
+        if (context.baselineHeaders.length >= 4) {
+          await waitForTableConfigHeaderPrefix(
+            context.baselineHeaders.slice(0, 4),
+          );
+        }
+        const view = deriveWorkspaceView(actor.getSnapshot());
+        requireFeatureDebug(
+          view.session === "chapter-clean"
+            && view.undoDepth === 0
+            && view.redoDepth === 0
+            && !view.canSave,
+          "恢复后章节状态不干净",
+        );
+        requireFeatureDebug(
+          view.revision === featureDebugBaselineRevision,
+          "表格配置调试意外改变章节 revision",
+        );
+      },
+    },
+  ];
+}
+
+function recoverTableConfigFeatureDebug(error: Error): void {
+  void (async () => {
+    try {
+      if (tableConfigDebugContext) {
+        await restoreTableConfigDebugBaseline();
+      }
+    } finally {
+      sourceLocationStatus.textContent =
+        "表格配置功能调试失败 · 已尝试恢复原项目配置 · " + error.message;
+      tableConfigDebugContext = undefined;
+    }
+  })();
+}
+
 function setRegexSearchThroughProductUi(value: string): void {
   regexSearchInput.focus();
   regexSearchInput.value = value;
@@ -6695,6 +7037,21 @@ featureDebugRunner.register({
       "源码 / 预览联动功能调试通过 · 源码→预览→源码双向 source-line 同步 · 全程 clean 未写盘";
   },
   onFailure: recoverSourcePreviewSyncFeatureDebug,
+});
+
+featureDebugRunner.register({
+  id: "table-config",
+  title: "表格配置",
+  button: featureDebugTableConfigButton,
+  enabled: () => featureDebugEnvironmentReady,
+  beforeRun: prepareTableConfigFeatureDebug,
+  steps: createTableConfigFeatureDebugSteps,
+  onSuccess: () => {
+    sourceLocationStatus.textContent =
+      "表格配置功能调试通过 · 热更新→非法配置保护→保存重载→原项目配置精确恢复 · 章节全程 clean 0/0";
+    tableConfigDebugContext = undefined;
+  },
+  onFailure: recoverTableConfigFeatureDebug,
 });
 
 featureDebugRunner.register({

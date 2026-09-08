@@ -4282,3 +4282,313 @@ M2 期间发现并修正一个生产数据契约缺口：
 - 变动行
 
 下一产品里程碑恢复原规划：`章节清洗 → trans → 翻译`。翻译阶段优先复用现有 translation core / hidden compat bones，不重新发明翻译架构。
+
+### 13.60 2026-09-08 · 数据表列顺序微调：注释号 / 组号移到预览左侧
+
+用户要求把注释模块的“注释号”和嵌入块模块的“组号”放到预览列左边。
+
+最终列顺序：
+- 注释：行号 → 行类型 → 配对状态 → 注释号 → 预览
+- 嵌入块：行号 → 行类型 → 组号 → 预览
+
+实现：
+- 仅修改 `CalibrationGrid.columnOrder()` 与嵌入块 `embedNumber` 的 pin 行为；业务状态、working、sidecar、Undo/Redo、保存语义均未改变。
+- 模块切换时显式重置 AG Grid pin state，避免旧模块 pin 状态污染新模块视觉顺序。
+
+验证：
+- v2 build PASS
+- typecheck PASS
+- reviewModules / annotationModule / embedModule 合计 5/5 PASS
+- git diff --check PASS
+- 4176 私有云 smoke：注释与嵌入块视觉 header 顺序与上述目标完全一致；state=chapter-clean，canSave=否。
+- image = `ocr2md/v2:grid-column-order-20260908a`
+- Helm revision = 64
+- Deployment = 1/1 Ready
+
+当前仅剩真实 iPad 刷新后的视觉确认；此为 UI 微调，不影响已完成的“迁移变动行模块”6/6 Goal。
+
+### 13.61 2026-09-08 · 数据表统一呈现：组号靠前 + 组号/行号默认顺序
+
+按最新统一规则收敛注释 / 嵌入块数据表，仅修改 CalibrationGrid 呈现层，不改 XState、working、sidecar、Undo/Redo 或保存语义。
+
+最终列序：
+- 注释：行号 → 行类型 → 注释号 → 预览 → 配对状态
+- 嵌入块：行号 → 行类型 → 组号 → 预览
+
+统一排序：
+- 只要表中存在组号语义列（注释的“注释号”、嵌入块的“组号”），默认展示顺序固定为：组号升序 → 行号升序。
+- 组号在 UI 中编辑变化后立即重新投影排序；例如注释号 1 改成 99，该行实时离开第 1 组，不等保存/重入。
+- 为避免 AG Grid 稳定 row-id 保留旧节点顺序，仅当 group/line 排序签名变化时清空并重建 grouped row projection；普通状态更新不重建。
+
+验证：
+- v2 build PASS
+- typecheck PASS
+- annotationModule / reviewModules / embedModule 合计 5/5 PASS
+- git diff --check PASS
+- 安全副本运行时探针：注释号 1→99 后第 1 行变为剩余 group=1 / line=363，实时排序正确；随后 Undo 恢复且未保存。
+- 4176 私有云 smoke：
+  - 注释首列可见：行号 / 行类型 / 注释号 / 预览；前 6 行 group = 1,1,2,2,3,3，组内行号升序。
+  - 嵌入块：行号 / 行类型 / 组号 / 预览；前 7 行 group = 1,1,1,2,2,2,2，组内行号升序。
+  - state = chapter-clean，canSave = 否。
+- image = ocr2md/v2:grid-group-order-20260908a
+- Helm revision = 65
+- Deployment = 1/1 Ready
+
+此项为已完成“迁移变动行模块”Goal 6/6 之后的表格呈现微调，不重开旧 Goal。
+
+### 13.62 2026-09-08 · 新航路规划：表格呈现配置化
+
+Goal：
+- Task ID = tsk_81cea0ebbc8e6429
+- Title = 表格呈现配置化
+- 固定进度口径 = 当前/总量
+- 初始进度 = 0/4
+- 默认执行方式 = 静默 Goal；仅航点完成、重大问题、安全停机、必须人工决策或真实 iPad 验收时报告。
+
+目标：
+把章节清洗数据表的列序、默认排序、列宽、隐藏、pinned 等“怎么显示”从 CalibrationGrid 代码中剥离成项目级配置，并在源码窗新增“表格配置”标签，像自定义 CSS 一样可编辑、校验、保存和热更新。业务语义继续由程序负责。
+
+边界：
+- 配置只控制 presentation，不控制 semantics。
+- 不允许配置改变行属于哪个模块、注释号/组号如何生成、删除/忽略语义、源码定位、XState、working、sidecar、Undo/Redo、章节保存。
+- 配置编辑自身不得把章节置 dirty，也不得进入章节 Undo/Redo。
+- 源码窗保留 4 个标签：源码 / 自定义 CSS / 表格配置 / 正则搜索。
+
+航点：
+M1 配置契约与持久化边界
+- 定义项目级 Table Presentation Config schema。
+- 至少支持 columns/order、defaultSort、width/minWidth/flex、hidden、pinned。
+- 配置用人可读的列名/模块名，内部映射稳定 colId。
+- 缺失配置回退内置默认；非法配置保留 last-known-good，并显示错误。
+- 持久化优先复用自定义 CSS 的项目级配置链路，不另造第二套无必要存储系统。
+
+M2 源码窗“表格配置”标签与热更新
+- 增加第 4 个标签“表格配置”。
+- CodeMirror 编辑 JSONC/等价人可读配置。
+- 有效配置 debounce 后即时应用，无需 build/刷新。
+- Save 单独落盘；Reset 恢复默认。
+- 配置错误定位到行/列，不破坏当前已生效表格。
+
+M3 CalibrationGrid 配置驱动与现有模块迁移
+- CalibrationGrid 不再为各模块硬编码列序/默认排序。
+- 章节标题 / 注释 / 嵌入块 / 非法断行 / 变动行迁移到同一 presentation contract。
+- 注释默认：行号 → 行类型 → 注释号 → 预览 → 其他；sort = 注释号 → 行号。
+- 嵌入块默认：行号 → 行类型 → 组号 → 预览 → 其他；sort = 组号 → 行号。
+- “有组号列的，组号优先 + 行号次级”成为配置默认，而非业务代码特例。
+- 保留用户手工点击表头排序能力；重新进入模块恢复配置默认。
+
+M4 自动化 / 私有云 / 真实 iPad 封箱
+- schema/fallback/last-known-good 单测。
+- UI 热更新/保存/重入/Reset/非法配置测试。
+- 现有模块表格回归。
+- 功能调试新增“一键表格配置”任务，能改配置 → 验证即时变化 → 恢复 baseline。
+- 私有云部署 smoke。
+- 真实 iPad 验收源码窗 4 标签、热更新、重入持久化与无章节 dirty。
+- 最终 Git checkpoint。
+
+完成条件：
+1. 源码窗 4 标签完整。
+2. 表格配置只改呈现，不触碰业务语义。
+3. 缺失/非法配置安全回退。
+4. 修改配置无需重新构建即可看到效果。
+5. 现有章节清洗模块统一迁移。
+6. 配置编辑不污染章节 dirty/Undo。
+7. 自动化、私有云、真实 iPad 全通过。
+
+### 13.63 2026-09-08 · 表格呈现配置化 M1 完成
+
+M1 配置契约与持久化边界完成：
+- 新增 `ui-spikes/v2/src/tablePresentationConfig.ts`。
+- 配置 version=1；模块使用人可读中文名，列使用人可读列名，内部解析到稳定 colId。
+- 支持：columns/order、sort（asc/desc）、columnStyles.width/minWidth/flex/hidden/pinned。
+- 缺失模块/缺失列自动补内置默认；未知模块/未知列/非法样式/非法 JSON 明确报错。
+- 内置默认覆盖：章节标题 / 注释 / 嵌入块 / 非法断行 / 变动行 / 章节定界 / 翻译。
+- 注释默认 sort = 注释号 → 行号；嵌入块默认 sort = 组号 → 行号。
+- 配置契约不含任何业务动作或状态字段，presentation/semantics 边界已锁定。
+- 新增 `test:table-config`，契约单测 PASS；typecheck PASS；git diff --check PASS。
+
+下一航点 M2：源码窗“表格配置”标签 + 项目级持久化 + last-known-good 热更新。
+
+### 13.64 2026-09-08 · 表格呈现配置化 M2 完成
+
+M2 源码窗“表格配置”标签与热更新完成：
+- 源码窗现有 4 个 tag：源码 / 自定义 CSS / 表格配置 / 正则搜索。
+- 新增项目级配置 API：GET/POST `/__workspace/table-presentation`。
+- 配置存储：项目根 `.ocr2md/table-presentation.json`；4176 代理链路复用 workspace upstream，不另造本地存储旁路。
+- 有效配置 150ms debounce 后即时应用，无需 build/刷新；Save 单独保存项目配置；Reset 恢复默认并保存。
+- 非法 JSON/非法 schema 不应用，继续保留 last-known-good；JSON 解析错误显示行/列位置。
+- 配置编辑与保存不触发章节 dirty，不进入章节 Undo/Redo。
+- `tablePresentationEditor.spec.ts`：热更新 → 非法配置保护 → 保存 → reload 重入保持 → Reset，全流程 PASS。
+- build/typecheck/diff-check PASS。
+
+下一航点 M3：清理 CalibrationGrid 内剩余的 presentation hard-code，并对全部章节清洗模块做统一契约回归。
+
+### 13.65 2026-09-08 · 表格呈现配置化 M3 完成
+
+M3 CalibrationGrid 配置驱动与现有模块迁移完成：
+- CalibrationGrid 持有 resolved presentation config；模块列 order / width / minWidth / flex / hidden / pinned / default sort 均从配置投影。
+- 业务 cell renderer、行类型修改、注释号语义、源码定位、删除/忽略等继续由代码负责，不进入配置。
+- 默认排序由 presentation sort rules 统一执行，不再依赖 annotation/embed 的业务特例。
+- 稳定 row-id 下仅当配置排序签名或排序键变化时重建 row projection，避免 AG Grid 保留旧节点顺序。
+- 注释默认：行号 → 行类型 → 注释号 → 预览 → 配对状态；sort=注释号→行号。
+- 嵌入块默认：行号 → 行类型 → 组号 → 预览；sort=组号→行号。
+- 章节标题 / 非法断行 / 变动行 / 章节定界 / 翻译均进入同一 presentation contract，并保留默认 fallback。
+
+验证：
+- test:table-config PASS。
+- typecheck / build / DOM contract PASS。
+- annotation / changed-line / chapter-title / embed / illegal-break / review modules broad regression 均 PASS。
+- sourcePaneTabs 的唯一失败是旧测试仍期待 3 个标签；更新为 4 标签契约后，与 tablePresentationEditor focused rerun 2/2 PASS。
+- 表格配置变化不改变章节 dirty / Undo / Redo。
+
+下一航点 M4：一键“表格配置”功能调试、私有云部署 smoke、真实 iPad 封箱。
+
+### 13.65 2026-09-08 · 表格呈现配置化 M3 完成
+
+M3 CalibrationGrid 配置驱动与现有模块迁移完成：
+- CalibrationGrid 中列序、默认排序、width/minWidth/flex/hidden/pinned 已由 tablePresentationConfig.ts 统一驱动。
+- 删除旧 columnOrder() 硬编码；列定义只保留字段语义、header/cell renderer/value getter/comparator 等业务展示能力。
+- presentation 默认覆盖：章节标题 / 注释 / 嵌入块 / 非法断行 / 变动行 / 章节定界；翻译兼容骨架也已纳入契约。
+- 注释默认 = 行号 → 行类型 → 注释号 → 预览 → 配对状态；sort = 注释号 → 行号。
+- 嵌入块默认 = 行号 → 行类型 → 组号 → 预览；sort = 组号 → 行号。
+- 自定义配置已实际验证列序、desc 排序、hidden、width、pinned；reload 后仍保持；Reset 回默认。
+- 配置默认排序使用表格投影层，不改变 Candidate / XState / working / sidecar。
+- 组号或行号排序键变化时只重建 presentation row projection，业务对象不变。
+- 修复一次清理 columnOrder() 时误带 helper 的局部编辑，使用当前 HEAD 只取回 helper，无 reset/clean/rebase。
+
+回归门禁：
+- build PASS
+- typecheck PASS
+- chapterBoundary / chapterTitle / annotation / embed / reviewModules / changedLine / sourcePaneTabs / tablePresentationEditor 合计 12/12 PASS
+- git diff --check PASS
+
+下一航点 M4：一键功能调试 + 全量专项 + 私有云部署 + 真实 iPad 封箱。
+
+### 13.66 2026-09-08 · 表格呈现配置化 M4 自动化 / 私有云通过，真实 iPad 待封箱
+
+M4 自动化门禁：
+- test:table-config PASS
+- typecheck PASS
+- build PASS
+- DOM contract PASS（ids=112）
+- dev_server.py py_compile PASS
+- sourcePaneTabs / tablePresentationEditor / featureDebugTableConfig / reviewModules / annotationModule / embedModule / chapterTitleModule / changedLineModule / chapterBoundary 合计 13/13 PASS
+- git diff --check PASS
+
+私有云部署：
+- image = ocr2md/v2:table-config-20260908a
+- Helm revision = 66
+- Deployment = 1/1 Ready
+
+私有云第一次 4176 一键功能调试暴露一个代理层问题：
+- 当项目基线不存在 table-presentation.json 时，安全恢复需要 DELETE `/__workspace/table-presentation`；
+- k3s workspace API 已支持 DELETE，但 4176 preview_server 只代理 GET/HEAD/POST，导致最后一步恢复失败；
+- 章节 working / sidecar / revision 全程未受影响且精确恢复；临时配置随后人工用新 DELETE 路径清除。
+
+修复：
+- preview_server.py 新增 do_DELETE，仅复用既有 `_proxy()`，不新增业务逻辑。
+- 重启 4176 preview server；DELETE 代理 smoke PASS。
+
+修复后 4176 + 真实 Buffett PVC 功能调试：
+- 表格配置功能调试 = 5/5 通过
+- source tabs = 源码 / 自定义 CSS / 表格配置 / 正则搜索
+- active module = 注释
+- chapter = clean，Undo/Redo = 0/0，Save disabled
+- 热更新 / 非法配置 last-known-good / 保存重载 / 精确恢复全通过
+- chapter working + sidecar + revision exact restored = true
+- project table config baseline exists=false → 调试后仍 exists=false，exact restored = true
+- JS errors = 0
+
+当前 M4 只剩真实 iPad 最终封箱票。
+
+### 13.66 2026-09-08 · 表格呈现配置化 M4 自动化 / 私有云门禁完成，真实 iPad 待封箱
+
+自动化最终门禁：
+- test:table-config PASS。
+- typecheck PASS。
+- build PASS。
+- Playwright 14/14 PASS：
+  - sourcePaneTabs
+  - tablePresentationEditor
+  - featureDebugTablePresentation
+  - chapterTitleModule
+  - annotationModule
+  - embedModule
+  - illegalLineBreakModule
+  - changedLineModule
+  - reviewModules
+  - chapterBoundary
+- git diff --check PASS。
+- dev_server.py py_compile PASS。
+
+一键“表格配置”功能调试：
+- 5/5 PASS。
+- 覆盖：基线 → 热更新列序 → 非法配置 last-known-good → 保存/重载 → 原项目配置恢复。
+- 全程章节 chapter-clean、Undo/Redo=0/0、canSave=否。
+- 调试入口新增“表格配置”。
+
+私有云：
+- Helm revision = 66。
+- image = ocr2md/v2:table-config-20260908a。
+- Deployment = 1/1 Ready。
+- stable entry = http://127.0.0.1:4176。
+- 4176 真实 PVC 一键调试 = 5/5 PASS。
+- 源码窗 4 tab = 源码 / 自定义 CSS / 表格配置 / 正则搜索。
+- JS page errors = 0；request failures = 0。
+- 串行 smoke 调试前后 .ocr2md/table-presentation.json 的 exists/source 精确一致。
+
+封箱期间曾观察到一次“调试 UI 报 5/5、但项目配置被删除”的异常：
+- 根因不是单次产品流程，而是前一轮停止回显后仍有多个先后启动的 headless 封箱客户端，其清理阶段发生重叠，旧客户端按自己的 baseline 回写/删除配置。
+- 立即用调试前独立快照恢复项目配置，恢复校验 true。
+- 清理并确保单一客户端后重新跑完整 4176 smoke，exactRestored=true。
+- 后续工程规则：共享真实 PVC 的 destructive/restore 类 Feature Debug 必须串行，不并发启动多个自动封箱客户端。
+
+当前 M4 仅剩真实 iPad 前台刷新后的最终视觉/物理设备验收。
+
+### 13.67 2026-09-08 · 表格呈现配置化 M4 真实 iPad 封箱完成
+
+真实 iPad 最终验收：
+- client = 04bb504a-7e75-43d8-8170-c5d76b46ed81
+- pageLoadedAt = 2026-09-08T03:41:26.329Z
+- viewport = 1032 × 642
+- devicePixelRatio = 2
+- visibility = visible
+- bridgeVersion = 2
+- focused = true
+
+刷新后项目级测试配置已清理，/__workspace/table-presentation：
+- exists = false
+- source = null
+- 因此页面回退内置默认配置。
+
+真实 iPad 打开安全副本并进入“注释”后：
+- session = chapter-clean
+- activeModuleRows = 20
+- undoDepth = 0
+- redoDepth = 0
+- canSave = false
+- revision = 409011a882c808a17a4c6ffd9f31e62826036a86aa5f1fbe01a292b43aae751a
+- 实际可见列序 = 行号 → 行类型 → 注释号 → 预览（配对状态在横向右侧）
+- 与内置默认契约一致。
+
+此前同一真实 iPad 已验证项目级配置重入后会实际改变列序：
+- 注释号 → 行号 → 预览 → 行类型 → 配对状态
+- 且章节仍保持 clean / Undo 0 / Redo 0 / canSave=false。
+因此真实设备上的“项目配置持久化 → 刷新重入 → 表格投影变化”链路成立。
+
+验收后通过远程正式命令 close，iPad 最终：
+- session = idle
+- undoDepth = 0
+- redoDepth = 0
+- canSave = false
+
+设备桥记录到 image-5.png 资源失败；该资源是 Buffett Alpha fixture 正文既有 Markdown 图片引用，和表格配置功能无关，不作为本航路阻塞。
+
+M4 完成条件已满足：
+- 自动化门禁 14/14 PASS
+- 一键“表格配置”功能调试 5/5 PASS
+- 私有云 Helm revision 66 / image ocr2md/v2:table-config-20260908a / 1/1 Ready
+- 4176 串行 smoke exactRestored=true
+- 真实 iPad 热配置重入、默认回退、章节 clean 状态均通过
+
+表格呈现配置化航路最终状态：4/4。

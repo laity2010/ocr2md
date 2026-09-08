@@ -479,6 +479,7 @@ class ChapterProjectStore:
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+
     def read_boundary(self):
         with self.lock:
             payload = {
@@ -769,6 +770,65 @@ class ChapterProjectStore:
             }
 
 
+    @property
+    def table_presentation_config_path(self):
+        return self.project_dir / ".ocr2md" / "table-presentation.json"
+
+    def read_table_presentation(self):
+        path = self.table_presentation_config_path
+        with self.lock:
+            if not path.is_file():
+                return {
+                    "exists": False,
+                    "source": None,
+                    "storagePath": str(path),
+                }
+            source = path.read_text(encoding="utf-8")
+            if len(source.encode("utf-8")) > 1_000_000:
+                raise RuntimeError("表格配置文件过大")
+            return {
+                "exists": True,
+                "source": source,
+                "storagePath": str(path),
+            }
+
+    def save_table_presentation(self, source):
+        if not isinstance(source, str):
+            raise ValueError("source must be a string")
+        if len(source.encode("utf-8")) > 1_000_000:
+            raise ValueError("表格配置文件过大")
+        path = self.table_presentation_config_path
+        with self.lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                self.write_text_fsync(temp, source)
+                os.replace(temp, path)
+            except Exception:
+                if temp.exists():
+                    temp.unlink()
+                raise
+            return {
+                "exists": True,
+                "source": source,
+                "storagePath": str(path),
+                "savedAt": utc_now(),
+            }
+
+    def delete_table_presentation(self):
+        path = self.table_presentation_config_path
+        with self.lock:
+            if path.exists():
+                path.unlink()
+            return {
+                "exists": False,
+                "source": None,
+                "storagePath": str(path),
+                "deletedAt": utc_now(),
+            }
+
+
+
 class UpstreamStoreError(Exception):
     def __init__(self, status, payload):
         self.status = status
@@ -913,6 +973,21 @@ class UpstreamChapterProjectStore:
                     "currentRevision": error.payload.get("currentRevision"),
                 }
             raise
+
+
+    def read_table_presentation(self):
+        return self._request("GET", "/__workspace/table-presentation")
+
+    def save_table_presentation(self, source):
+        return self._request(
+            "POST",
+            "/__workspace/table-presentation",
+            {"source": source},
+        )
+
+
+    def delete_table_presentation(self):
+        return self._request("DELETE", "/__workspace/table-presentation")
 
     def read_boundary(self):
         return self._request("GET", "/__workspace/boundary")
@@ -1123,6 +1198,16 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                 self._write_store_error(error)
             return
 
+        if route == "/__workspace/table-presentation":
+            try:
+                self._write_json(
+                    200,
+                    self.project_store.read_table_presentation(),
+                )
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
         if route == "/__workspace/chapter":
             chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
             try:
@@ -1254,6 +1339,21 @@ class V2DevHandler(SimpleHTTPRequestHandler):
 
         super().do_GET()
 
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        route = parsed.path
+
+        if route == "/__workspace/table-presentation":
+            try:
+                deleted = self.project_store.delete_table_presentation()
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            self._write_json(200, deleted)
+            return
+
+        self._write_json(404, {"error": "unknown delete endpoint"})
+
     def do_POST(self):
         route = urlparse(self.path).path
 
@@ -1358,6 +1458,17 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             if state_report is not None:
                 response["stateAccepted"] = state_accepted
             self._write_json(200, response)
+            return
+
+        if route == "/__workspace/table-presentation":
+            try:
+                saved = self.project_store.save_table_presentation(
+                    payload.get("source")
+                )
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            self._write_json(200, saved)
             return
 
         if route == "/__workspace/chapter":

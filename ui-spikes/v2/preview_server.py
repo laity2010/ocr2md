@@ -104,6 +104,11 @@ class PreviewHandler(SimpleHTTPRequestHandler):
             return
         self.send_error(404)
 
+    def do_DELETE(self):
+        if self._proxy():
+            return
+        self.send_error(404)
+
 
 def main():
     parser = argparse.ArgumentParser()

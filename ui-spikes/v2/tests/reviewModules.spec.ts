@@ -28,7 +28,15 @@ test("review module tabs filter real calibration rows without dirtying chapter",
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#active-review-module")).toHaveText("注释");
   await expect(page.locator("#active-module-rows")).toHaveText("20");
-  expect(await visualHeaderOrder(page)).toEqual(["行号", "行类型", "注释号", "配对状态", "预览"]);
+  expect(await visualHeaderOrder(page)).toEqual(["行号", "行类型", "注释号", "预览"]);
+  const annotationRows = await page.locator("#calibration-grid .ag-row").evaluateAll((rows) =>
+    rows.slice(0, 6).map((row) => ({
+      line: Number(row.querySelector('[col-id="sourceLine"]')?.textContent?.trim()),
+      group: Number((row.querySelector("input.annotation-number-input") as HTMLInputElement | null)?.value),
+    })),
+  );
+  expect(annotationRows.map((row) => row.group)).toEqual([1, 1, 2, 2, 3, 3]);
+  expect(annotationRows[0].line).toBeLessThan(annotationRows[1].line);
 
   await page.locator('[data-review-module="嵌入块"]').click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
@@ -37,7 +45,16 @@ test("review module tabs filter real calibration rows without dirtying chapter",
   await expect(page.locator("#embed-group-status")).toHaveText(
     "总计 65 · 可见 51 · 组 11 · 未分组 0",
   );
-  expect(await visualHeaderOrder(page)).toEqual(["组号", "行号", "行类型", "预览"]);
+  expect(await visualHeaderOrder(page)).toEqual(["行号", "行类型", "组号", "预览"]);
+  const embedRows = await page.locator("#calibration-grid .ag-row").evaluateAll((rows) =>
+    rows.slice(0, 7).map((row) => ({
+      line: Number(row.querySelector('[col-id="sourceLine"]')?.textContent?.trim()),
+      group: Number(row.querySelector('[col-id="embedNumber"]')?.textContent?.trim()),
+    })),
+  );
+  expect(embedRows.map((row) => row.group)).toEqual([1, 1, 1, 2, 2, 2, 2]);
+  expect(embedRows.slice(0, 3).map((row) => row.line))
+    .toEqual([...embedRows.slice(0, 3).map((row) => row.line)].sort((a, b) => a - b));
 
   await page.locator('[data-review-module="非法断行"]').click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");

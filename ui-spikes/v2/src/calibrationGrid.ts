@@ -11,6 +11,12 @@ import {
 import { locateCandidate } from "../../../src/rowIdentity";
 import type { AnnotationPair, Candidate, SourceRange } from "../../../src/types";
 import type { ActiveReviewModule } from "./workspaceMachine";
+import {
+  resolveDefaultTablePresentation,
+  type ResolvedTableModulePresentation,
+  type TableColumnId,
+  type TablePresentationModule,
+} from "./tablePresentationConfig";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -90,6 +96,8 @@ export class CalibrationGrid {
   private workingText = "";
   private module: ActiveReviewModule = "章节标题";
   private headingNumberingEnabled = true;
+  private presentation = resolveDefaultTablePresentation();
+  private presentationRowOrderSignature = "";
 
   private readonly api;
 
@@ -153,16 +161,10 @@ export class CalibrationGrid {
     this.headingNumberingEnabled = headingNumberingEnabled;
 
     if (moduleChanged) {
-      const columnDefs = this.columnDefs();
-      this.api.setGridOption("columnDefs", columnDefs);
-      this.api.applyColumnState({
-        state: this.columnOrder().map((colId) => ({ colId })),
-        applyOrder: true,
-      });
+      this.rebuildPresentationColumns();
     }
 
-    this.api.setGridOption("rowData", visibleRowsForModule(rows, module));
-    this.api.refreshCells({ force: true });
+    this.refreshPresentationRows(moduleChanged);
 
     if (moduleChanged) {
       this.api.refreshHeader();
@@ -170,6 +172,46 @@ export class CalibrationGrid {
     } else if (numberingChanged && module === "章节标题") {
       this.api.refreshCells({ force: true });
     }
+  }
+
+  setPresentationConfig(
+    presentation: Record<
+      TablePresentationModule,
+      ResolvedTableModulePresentation
+    >,
+  ): void {
+    this.presentation = presentation;
+    this.presentationRowOrderSignature = "";
+    this.rebuildPresentationColumns();
+    this.refreshPresentationRows(true);
+    this.api.refreshHeader();
+    this.api.redrawRows();
+  }
+
+  private rebuildPresentationColumns(): void {
+    this.api.setGridOption("columnDefs", this.columnDefs());
+    this.api.applyColumnState({
+      state: this.presentation[this.module].columns.map((column) => ({
+        colId: column.colId,
+        pinned: column.pinned ?? null,
+        hide: column.hidden ?? false,
+        sort: null,
+        sortIndex: null,
+      })),
+      applyOrder: true,
+    });
+  }
+
+  private refreshPresentationRows(forceRebuild = false): void {
+    const visibleRows = visibleRowsForModule(this.rows, this.module);
+    const gridRows = this.sortRowsForPresentation(visibleRows);
+    const signature = this.presentationRowSignature(gridRows);
+    if (forceRebuild || signature !== this.presentationRowOrderSignature) {
+      this.api.setGridOption("rowData", []);
+    }
+    this.api.setGridOption("rowData", gridRows);
+    this.presentationRowOrderSignature = signature;
+    this.api.refreshCells({ force: true });
   }
 
   ignoreFirstVisible(): string | undefined {
@@ -242,19 +284,12 @@ export class CalibrationGrid {
       {
         colId: "sourceLine",
         headerName: this.module === "非法断行" ? "断行处" : "行号",
-        width: 82,
-        minWidth: 72,
-        pinned: this.module === "嵌入块" ? undefined : "left",
         valueGetter: (params) => this.locatedLine(params.data),
-        sort: "asc",
-        sortIndex: 0,
       },
       {
         field: "lineType",
         colId: "lineType",
         headerName: this.module === "变动行" ? "变动" : "行类型",
-        width: this.module === "变动行" ? 100 : 150,
-        minWidth: this.module === "变动行" ? 90 : 130,
         cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
           this.lineTypeRenderer(params),
       },
@@ -265,16 +300,14 @@ export class CalibrationGrid {
         field: "annotationNumber",
         colId: "annotationNumber",
         headerName: "注释号",
-        width: 92,
-        minWidth: 82,
+        comparator: (left, right) =>
+          this.groupNumberSortValue(left) - this.groupNumberSortValue(right),
         cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
           this.annotationNumberRenderer(params),
       });
       columns.push({
         colId: "annotationPairStatus",
         headerName: "配对状态",
-        width: 112,
-        minWidth: 100,
         valueGetter: (params) => this.annotationPairStatus(params.data),
       });
     }
@@ -283,9 +316,8 @@ export class CalibrationGrid {
         field: "embedNumber",
         colId: "embedNumber",
         headerName: "组号",
-        width: 78,
-        minWidth: 68,
-        pinned: "left",
+        comparator: (left, right) =>
+          this.groupNumberSortValue(left) - this.groupNumberSortValue(right),
       });
     }
     if (this.module === "章节定界") {
@@ -293,8 +325,6 @@ export class CalibrationGrid {
         field: "chapterFile",
         colId: "chapterFile",
         headerName: "章节文件",
-        width: 240,
-        minWidth: 200,
         cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
           this.chapterFileRenderer(params),
       });
@@ -304,8 +334,6 @@ export class CalibrationGrid {
         {
           colId: "changeOwner",
           headerName: "归属模块",
-          width: 120,
-          minWidth: 110,
           valueGetter: (params) =>
             (params.data as (Candidate & { changeOwner?: string }) | undefined)
               ?.changeOwner ?? "未归类",
@@ -314,15 +342,11 @@ export class CalibrationGrid {
           field: "preview",
           colId: "changedContent",
           headerName: "变动内容",
-          minWidth: 360,
-          flex: 1,
         },
         {
           field: "baselinePreview",
           colId: "baselineContent",
           headerName: "原稿内容",
-          minWidth: 300,
-          flex: 1,
         },
       );
     }
@@ -332,22 +356,16 @@ export class CalibrationGrid {
           field: "preview",
           colId: "translationSource",
           headerName: "原文",
-          minWidth: 320,
-          flex: 1,
         },
         {
           colId: "translationDeepL",
           headerName: "DeepL",
-          minWidth: 300,
-          flex: 1,
           valueGetter: (params) =>
             this.translationResultText(params.data, "deepl"),
         },
         {
           colId: "translationOpenAI",
           headerName: "GPT",
-          minWidth: 300,
-          flex: 1,
           valueGetter: (params) =>
             this.translationResultText(params.data, "openai"),
         },
@@ -362,8 +380,6 @@ export class CalibrationGrid {
       columns.push({
         colId: "chapterHeadingPreview",
         headerName: "标题预览",
-        minWidth: 360,
-        flex: 1,
         cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
           this.chapterHeadingPreviewRenderer(params),
       });
@@ -372,8 +388,6 @@ export class CalibrationGrid {
         {
           colId: "illegalBreakContext",
           headerName: "预览（前10 + 后10）",
-          minWidth: 300,
-          flex: 1,
           valueGetter: (params) => illegalLineBreakContextPreview(params.data),
           cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
             this.illegalContextRenderer(params),
@@ -381,16 +395,12 @@ export class CalibrationGrid {
         {
           colId: "illegalBreakMerged",
           headerName: "合并预览",
-          minWidth: 320,
-          flex: 1,
           valueGetter: (params) => illegalLineBreakMergedPreview(params.data),
         },
         {
           field: "breakReason",
           colId: "breakReason",
           headerName: "判断",
-          minWidth: 220,
-          flex: 1,
         },
       );
     } else {
@@ -398,60 +408,110 @@ export class CalibrationGrid {
         field: "preview",
         colId: "preview",
         headerName: "预览",
-        minWidth: 360,
-        flex: 1,
       });
     }
-    return columns;
+    const baseById = new Map(
+      columns.map((column) => [
+        String(column.colId ?? column.field ?? ""),
+        column,
+      ]),
+    );
+    return this.presentation[this.module].columns.flatMap((presentation) => {
+      const base = baseById.get(presentation.colId);
+      if (!base) return [];
+      return [{
+        ...base,
+        width: presentation.width,
+        minWidth: presentation.minWidth,
+        flex: presentation.flex,
+        hide: presentation.hidden ?? false,
+        pinned: presentation.pinned ?? undefined,
+        sort: undefined,
+        sortIndex: undefined,
+      }];
+    });
   }
 
-  private columnOrder(): string[] {
-    if (this.module === "注释") {
-      return [
-        "sourceLine",
-        "lineType",
-        "annotationNumber",
-        "annotationPairStatus",
-        "preview",
-      ];
+  private groupNumberSortValue(value: unknown): number {
+    const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+    return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+  }
+
+  private sortRowsForPresentation(rows: Candidate[]): Candidate[] {
+    const rules = this.presentation[this.module].sort;
+    if (!rules.length) return [...rows];
+
+    return [...rows].sort((left, right) => {
+      for (const rule of rules) {
+        const compared = this.comparePresentationValues(
+          this.presentationSortValue(left, rule.colId),
+          this.presentationSortValue(right, rule.colId),
+        );
+        if (compared !== 0) {
+          return rule.direction === "desc" ? -compared : compared;
+        }
+      }
+      return left.id.localeCompare(right.id);
+    });
+  }
+
+  private presentationRowSignature(rows: Candidate[]): string {
+    const rules = this.presentation[this.module].sort;
+    return rows.map((row) => [
+      row.id,
+      ...rules.map((rule) =>
+        String(this.presentationSortValue(row, rule.colId) ?? "")),
+    ].join(":")).join("|");
+  }
+
+  private comparePresentationValues(left: unknown, right: unknown): number {
+    if (typeof left === "number" && typeof right === "number") {
+      return left - right;
     }
-    if (this.module === "嵌入块") {
-      return ["embedNumber", "sourceLine", "lineType", "preview"];
+    return String(left ?? "").localeCompare(
+      String(right ?? ""),
+      "zh-Hans-CN",
+      { numeric: true, sensitivity: "base" },
+    );
+  }
+
+  private presentationSortValue(
+    row: Candidate,
+    colId: TableColumnId,
+  ): unknown {
+    switch (colId) {
+      case "sourceLine":
+        return this.locatedLine(row) ?? Number.MAX_SAFE_INTEGER;
+      case "annotationNumber":
+        return this.groupNumberSortValue(row.annotationNumber);
+      case "embedNumber":
+        return this.groupNumberSortValue(row.embedNumber);
+      case "lineType":
+        return row.lineType ?? "";
+      case "chapterFile":
+        return row.chapterFile ?? "";
+      case "annotationPairStatus":
+        return this.annotationPairStatus(row);
+      case "chapterHeadingPreview":
+      case "preview":
+      case "changedContent":
+      case "translationSource":
+        return row.preview ?? row.raw ?? "";
+      case "illegalBreakContext":
+        return illegalLineBreakContextPreview(row);
+      case "illegalBreakMerged":
+        return illegalLineBreakMergedPreview(row);
+      case "breakReason":
+        return row.breakReason ?? "";
+      case "changeOwner":
+        return (row as Candidate & { changeOwner?: string }).changeOwner ?? "";
+      case "baselineContent":
+        return row.baselinePreview ?? "";
+      case "translationDeepL":
+        return this.translationResultText(row, "deepl");
+      case "translationOpenAI":
+        return this.translationResultText(row, "openai");
     }
-    if (this.module === "章节定界") {
-      return ["sourceLine", "lineType", "chapterFile", "preview"];
-    }
-    if (this.module === "变动行") {
-      return [
-        "sourceLine",
-        "lineType",
-        "changeOwner",
-        "changedContent",
-        "baselineContent",
-      ];
-    }
-    if (this.module === "翻译") {
-      return [
-        "sourceLine",
-        "lineType",
-        "translationSource",
-        "translationDeepL",
-        "translationOpenAI",
-      ];
-    }
-    if (this.module === "非法断行") {
-      return [
-        "sourceLine",
-        "lineType",
-        "illegalBreakContext",
-        "illegalBreakMerged",
-        "breakReason",
-      ];
-    }
-    if (this.module === "章节标题") {
-      return ["sourceLine", "lineType", "chapterHeadingPreview"];
-    }
-    return ["sourceLine", "lineType", "preview"];
   }
 
   private translationResultText(

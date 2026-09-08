@@ -1,24 +1,28 @@
 import { expect, test } from "@playwright/test";
 
-test("source pane has Source, Custom CSS, and Regex Search as three peer tabs", async ({ page }) => {
+test("source pane has Source, Custom CSS, Table Config, and Regex Search as four peer tabs", async ({ page }) => {
   await page.goto("/");
 
   const tabs = page.locator("#editor-pane .source-tab");
-  await expect(tabs).toHaveText(["源码", "自定义 CSS", "正则搜索"]);
+  await expect(tabs).toHaveText(["源码", "自定义 CSS", "表格配置", "正则搜索"]);
 
   const sourceTab = page.locator("#editor-tab-source");
   const cssTab = page.locator("#editor-tab-css");
+  const tableConfigTab = page.locator("#editor-tab-table-config");
   const regexTab = page.locator("#editor-tab-regex");
   const source = page.locator("#working-editor");
   const cssPanel = page.locator("#custom-css-wrap");
+  const tableConfigPanel = page.locator("#table-config-wrap");
   const regexPanel = page.locator("#regex-search-panel");
   const preview = page.locator("#markdown-preview");
 
   await expect(sourceTab).toHaveAttribute("aria-selected", "true");
   await expect(cssTab).toHaveAttribute("aria-selected", "false");
+  await expect(tableConfigTab).toHaveAttribute("aria-selected", "false");
   await expect(regexTab).toHaveAttribute("aria-selected", "false");
   await expect(source).toBeVisible();
   await expect(cssPanel).toBeHidden();
+  await expect(tableConfigPanel).toBeHidden();
   await expect(regexPanel).toBeHidden();
   await expect(preview).toBeVisible();
 
@@ -30,6 +34,7 @@ test("source pane has Source, Custom CSS, and Regex Search as three peer tabs", 
   await expect(cssTab).toHaveAttribute("aria-selected", "true");
   await expect(source).toBeHidden();
   await expect(cssPanel).toBeVisible();
+  await expect(tableConfigPanel).toBeHidden();
   await expect(regexPanel).toBeHidden();
   await expect(page.locator("#custom-css-editor .cm-content")).toContainText(
     "--ui-font-size",
@@ -44,10 +49,24 @@ test("source pane has Source, Custom CSS, and Regex Search as three peer tabs", 
   await expect(page.locator("#css-reset")).toBeVisible();
   await expect(preview).toBeVisible();
 
+  await tableConfigTab.click();
+  await expect(tableConfigTab).toHaveAttribute("aria-selected", "true");
+  await expect(source).toBeHidden();
+  await expect(cssPanel).toBeHidden();
+  await expect(tableConfigPanel).toBeVisible();
+  await expect(regexPanel).toBeHidden();
+  await expect(page.locator("#table-config-editor .cm-content")).toContainText(
+    "\"version\": 1",
+  );
+  await expect(page.locator("#table-config-save")).toBeVisible();
+  await expect(page.locator("#table-config-reset")).toBeVisible();
+  await expect(preview).toBeVisible();
+
   await regexTab.click();
   await expect(regexTab).toHaveAttribute("aria-selected", "true");
   await expect(source).toBeHidden();
   await expect(cssPanel).toBeHidden();
+  await expect(tableConfigPanel).toBeHidden();
   await expect(regexPanel).toBeVisible();
   await expect(page.locator("#regex-search")).toBeVisible();
   await expect(page.locator("#search-case")).toBeVisible();
@@ -59,6 +78,7 @@ test("source pane has Source, Custom CSS, and Regex Search as three peer tabs", 
   await expect(sourceTab).toHaveAttribute("aria-selected", "true");
   await expect(source).toBeVisible();
   await expect(cssPanel).toBeHidden();
+  await expect(tableConfigPanel).toBeHidden();
   await expect(regexPanel).toBeHidden();
 
   const finalPreviewBox = await preview.boundingBox();

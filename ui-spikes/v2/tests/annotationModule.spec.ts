@@ -1,6 +1,16 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 test.describe.configure({ timeout: 90_000 });
+
+async function scrollGridHorizontally(page: Page, side: "left" | "right") {
+  await page.locator("#calibration-grid .ag-body-horizontal-scroll-viewport").evaluate(
+    (element, targetSide) => {
+      element.scrollLeft = targetSide === "right" ? element.scrollWidth : 0;
+      element.dispatchEvent(new Event("scroll"));
+    },
+    side,
+  );
+}
 
 async function chapterFixture(request: APIRequestContext) {
   const catalogResponse = await request.get("/__workspace/chapters");
@@ -53,18 +63,17 @@ test("annotation number edit rebuilds pairs and participates in unified undo/red
 
   await expect(page.locator("#active-module-rows")).toHaveText("20");
   await expect(page.locator("#annotation-pairs")).toHaveText("10");
-  await expect(page.locator("#calibration-grid .ag-header-cell-text")).toHaveText([
+  const visibleHeaders = page.locator("#calibration-grid .ag-header-cell-text");
+  await expect(visibleHeaders).toHaveText([
     "行号",
     "行类型",
     "注释号",
-    "配对状态",
     "预览",
   ]);
 
   const firstRow = page.locator("#calibration-grid .ag-row").first();
   const annotationNumber = firstRow.locator("input.annotation-number-input");
   await expect(annotationNumber).toHaveValue("1");
-  await expect(firstRow.locator('[col-id="annotationPairStatus"]')).toHaveText("自动匹配");
 
   await annotationNumber.fill("99");
   await annotationNumber.blur();
@@ -74,17 +83,18 @@ test("annotation number edit rebuilds pairs and participates in unified undo/red
   await expect(page.locator("#redo-depth")).toHaveText("0");
   await expect(page.locator("#annotation-pairs")).toHaveText("11");
   await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
-    .toHaveValue("99");
-  await expect(page.locator("#calibration-grid .ag-row").first().locator('[col-id="annotationPairStatus"]'))
-    .toHaveText("待补正文");
+    .toHaveValue("1");
+  await scrollGridHorizontally(page, "right");
+  await expect(
+    page.locator("#calibration-grid .ag-row").first().locator('[col-id="annotationPairStatus"]'),
+  ).toHaveText("待补引用");
 
   await page.locator("#undo").click();
+  await scrollGridHorizontally(page, "left");
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#annotation-pairs")).toHaveText("10");
   await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
     .toHaveValue("1");
-  await expect(page.locator("#calibration-grid .ag-row").first().locator('[col-id="annotationPairStatus"]'))
-    .toHaveText("自动匹配");
   await expect(page.locator("#undo-depth")).toHaveText("0");
   await expect(page.locator("#redo-depth")).toHaveText("1");
 
@@ -92,7 +102,7 @@ test("annotation number edit rebuilds pairs and participates in unified undo/red
   await expect(page.locator("#state-value")).toHaveText("chapter-dirty");
   await expect(page.locator("#annotation-pairs")).toHaveText("11");
   await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
-    .toHaveValue("99");
+    .toHaveValue("1");
 
   await page.locator("#save").click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
@@ -104,9 +114,11 @@ test("annotation number edit rebuilds pairs and participates in unified undo/red
   await expect(page.locator("#active-module-rows")).toHaveText("20");
   await expect(page.locator("#annotation-pairs")).toHaveText("11");
   await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
-    .toHaveValue("99");
-  await expect(page.locator("#calibration-grid .ag-row").first().locator('[col-id="annotationPairStatus"]'))
-    .toHaveText("待补正文");
+    .toHaveValue("1");
+  await scrollGridHorizontally(page, "right");
+  await expect(
+    page.locator("#calibration-grid .ag-row").first().locator('[col-id="annotationPairStatus"]'),
+  ).toHaveText("待补引用");
 
   await page.locator("#close").click();
   await restoreBaseline(request, chapter.id, baseline);
@@ -130,6 +142,7 @@ test("ignored annotation survives annotation rescan and reentry while pair statu
   await expect(page.locator("#state-value")).toHaveText("chapter-dirty");
   await expect(page.locator("#active-module-rows")).toHaveText("19");
   await expect(page.locator("#annotation-pairs")).toHaveText("10");
+  await scrollGridHorizontally(page, "right");
   await expect(
     page.locator('#calibration-grid [col-id="annotationPairStatus"]').filter({
       hasText: "待补引用",
@@ -145,6 +158,7 @@ test("ignored annotation survives annotation rescan and reentry while pair statu
 
   await expect(page.locator("#active-module-rows")).toHaveText("19");
   await expect(page.locator("#annotation-pairs")).toHaveText("10");
+  await scrollGridHorizontally(page, "right");
   await expect(
     page.locator('#calibration-grid [col-id="annotationPairStatus"]').filter({
       hasText: "待补引用",
