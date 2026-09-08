@@ -487,7 +487,10 @@ const calibrationGrid = new CalibrationGrid(
 
 tablePresentationEditor = new TablePresentationEditor(
   tableConfigEditorHost,
-  (resolved) => calibrationGrid.setPresentationConfig(resolved),
+  (resolved, sourceEditor) => {
+    calibrationGrid.setPresentationConfig(resolved);
+    workingEditor.setShowHardReturns(sourceEditor.showHardReturns);
+  },
   (text) => {
     if (sourcePaneMode === "table-config") {
       editorModeStatus.textContent = text;

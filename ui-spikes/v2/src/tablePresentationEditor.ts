@@ -9,6 +9,7 @@ import {
   parseTablePresentationConfig,
   resolveDefaultTablePresentation,
   type ResolvedTableModulePresentation,
+  type SourceEditorPresentation,
   type TablePresentationModule,
 } from "./tablePresentationConfig";
 
@@ -26,11 +27,17 @@ export class TablePresentationEditor {
   private readonly view: EditorView;
   private applyTimer = 0;
   private lastKnownGood = resolveDefaultTablePresentation();
+  private lastKnownGoodSourceEditor: SourceEditorPresentation = {
+    showHardReturns: true,
+  };
   private savedSource = TABLE_PRESENTATION_DEFAULT_SOURCE;
 
   constructor(
     host: HTMLElement,
-    private readonly onApply: (resolved: ResolvedTablePresentation) => void,
+    private readonly onApply: (
+      resolved: ResolvedTablePresentation,
+      sourceEditor: SourceEditorPresentation,
+    ) => void,
     private readonly onStatus: (text: string) => void,
   ) {
     this.view = new EditorView({
@@ -53,7 +60,7 @@ export class TablePresentationEditor {
         ],
       }),
     });
-    this.onApply(this.lastKnownGood);
+    this.onApply(this.lastKnownGood, { showHardReturns: true });
   }
 
   focus(): void {
@@ -86,23 +93,24 @@ export class TablePresentationEditor {
       this.replaceDocument(source);
       this.savedSource = source;
       const parsed = parseTablePresentationConfig(source);
-      if (parsed.ok && parsed.resolved) {
+      if (parsed.ok && parsed.resolved && parsed.sourceEditor) {
         this.lastKnownGood = parsed.resolved;
-        this.onApply(parsed.resolved);
+        this.lastKnownGoodSourceEditor = parsed.sourceEditor;
+        this.onApply(parsed.resolved, parsed.sourceEditor);
         this.onStatus(
           payload.exists
             ? "表格配置 · 已加载项目配置"
             : "表格配置 · 使用内置默认（项目尚未保存）",
         );
       } else {
-        this.onApply(this.lastKnownGood);
+        this.onApply(this.lastKnownGood, this.lastKnownGoodSourceEditor);
         this.onStatus(
           "表格配置错误 · 已保留最后有效配置 · "
             + (parsed.errors[0] ?? "未知错误"),
         );
       }
     } catch (error) {
-      this.onApply(this.lastKnownGood);
+      this.onApply(this.lastKnownGood, this.lastKnownGoodSourceEditor);
       this.onStatus(
         "表格配置读取失败 · 已使用最后有效配置 · "
           + (error instanceof Error ? error.message : String(error)),
@@ -114,7 +122,7 @@ export class TablePresentationEditor {
     window.clearTimeout(this.applyTimer);
     const source = this.source();
     const parsed = parseTablePresentationConfig(source);
-    if (!parsed.ok || !parsed.resolved) {
+    if (!parsed.ok || !parsed.resolved || !parsed.sourceEditor) {
       this.onStatus(
         "表格配置未保存 · "
           + (parsed.errors[0] ?? "配置无效"),
@@ -123,7 +131,8 @@ export class TablePresentationEditor {
     }
 
     this.lastKnownGood = parsed.resolved;
-    this.onApply(parsed.resolved);
+    this.lastKnownGoodSourceEditor = parsed.sourceEditor;
+    this.onApply(parsed.resolved, parsed.sourceEditor);
     try {
       const response = await fetch("/__workspace/table-presentation", {
         method: "POST",
@@ -153,7 +162,8 @@ export class TablePresentationEditor {
     this.replaceDocument(TABLE_PRESENTATION_DEFAULT_SOURCE);
     window.clearTimeout(this.applyTimer);
     this.lastKnownGood = resolveDefaultTablePresentation();
-    this.onApply(this.lastKnownGood);
+    this.lastKnownGoodSourceEditor = { showHardReturns: true };
+    this.onApply(this.lastKnownGood, this.lastKnownGoodSourceEditor);
     const saved = await this.save();
     if (saved) this.onStatus("表格配置已恢复默认并保存");
     return saved;
@@ -165,7 +175,7 @@ export class TablePresentationEditor {
 
   private preview(source: string): void {
     const parsed = parseTablePresentationConfig(source);
-    if (!parsed.ok || !parsed.resolved) {
+    if (!parsed.ok || !parsed.resolved || !parsed.sourceEditor) {
       this.onStatus(
         "表格配置错误 · 已保留最后有效配置 · "
           + (parsed.errors[0] ?? "配置无效"),
@@ -173,7 +183,8 @@ export class TablePresentationEditor {
       return;
     }
     this.lastKnownGood = parsed.resolved;
-    this.onApply(parsed.resolved);
+    this.lastKnownGoodSourceEditor = parsed.sourceEditor;
+    this.onApply(parsed.resolved, parsed.sourceEditor);
     this.onStatus(
       source === this.savedSource
         ? "表格配置 · 已保存"

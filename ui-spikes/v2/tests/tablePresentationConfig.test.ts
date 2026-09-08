@@ -8,6 +8,7 @@ import {
 {
   const parsed = parseTablePresentationConfig(TABLE_PRESENTATION_DEFAULT_SOURCE);
   assert.equal(parsed.ok, true);
+  assert.equal(parsed.sourceEditor?.showHardReturns, true);
   const annotation = parsed.resolved?.["注释"];
   assert.deepEqual(
     annotation?.columns.map((column) => column.label),
@@ -66,6 +67,34 @@ import {
   assert.equal(
     annotation?.columns.find((column) => column.label === "配对状态")?.hidden,
     true,
+  );
+}
+
+
+{
+  const parsed = parseTablePresentationConfig(JSON.stringify({
+    version: 1,
+    sourceEditor: {
+      showHardReturns: false,
+    },
+    modules: {},
+  }));
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.sourceEditor?.showHardReturns, false);
+}
+
+{
+  const parsed = parseTablePresentationConfig(JSON.stringify({
+    version: 1,
+    sourceEditor: {
+      showHardReturns: "yes",
+    },
+    modules: {},
+  }));
+  assert.equal(parsed.ok, false);
+  assert.ok(
+    parsed.errors.some((error) =>
+      error.includes("sourceEditor.showHardReturns 必须是 boolean")),
   );
 }
 

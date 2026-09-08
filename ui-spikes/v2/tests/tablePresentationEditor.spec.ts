@@ -48,6 +48,9 @@ test("table presentation config hot-applies, guards invalid edits, persists and 
 
   const valid = JSON.stringify({
     version: 1,
+    sourceEditor: {
+      showHardReturns: false,
+    },
     modules: {
       注释: {
         columns: ["注释号", "行号", "预览", "行类型", "配对状态"],
@@ -84,11 +87,18 @@ test("table presentation config hot-applies, guards invalid edits, persists and 
   await expect(page.locator("#redo-depth")).toHaveText("0");
   await expect(page.locator("#can-save")).toHaveText("否");
 
+  await page.locator("#editor-tab-source").click();
+  await expect(page.locator("#working-editor .cm-hard-return-marker")).toHaveCount(0);
+  await page.locator("#editor-tab-table-config").click();
+
   await replaceTableConfig(page, "{ bad json");
   await expect(page.locator("#editor-mode-status")).toContainText(
     "表格配置错误 · 已保留最后有效配置",
   );
   await expect(page.locator("#editor-mode-status")).toContainText("第 1 行");
+  await page.locator("#editor-tab-source").click();
+  await expect(page.locator("#working-editor .cm-hard-return-marker")).toHaveCount(0);
+  await page.locator("#editor-tab-table-config").click();
   await expect.poll(async () => (await headerOrder(page)).slice(0, 3))
     .toEqual(["annotationNumber", "sourceLine", "preview"]);
   await expect(page.locator("#calibration-grid .ag-row").first().locator(
@@ -136,4 +146,7 @@ test("table presentation config hot-applies, guards invalid edits, persists and 
   await expect(page.locator("#undo-depth")).toHaveText("0");
   await expect(page.locator("#redo-depth")).toHaveText("0");
   await expect(page.locator("#can-save")).toHaveText("否");
+  await page.locator("#editor-tab-source").click();
+  await expect(page.locator("#working-editor .cm-hard-return-marker").first())
+    .toBeVisible();
 });

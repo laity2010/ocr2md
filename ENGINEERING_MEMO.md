@@ -4616,3 +4616,36 @@ M4 完成条件已满足：
 - Deployment = 1/1 Ready。
 
 此项仅补编辑器 language/highlight 层，不改变表格配置 schema、热更新、保存或业务状态。
+
+### 13.69 2026-09-08 · 源码窗硬回车可视化 + 配置开关
+
+需求：
+- 源码窗显示物理换行位置的硬回车符号。
+- 开关暴露到现有项目级配置文件，和表格呈现配置一起热更新。
+
+配置：
+- 根节点新增：
+  sourceEditor.showHardReturns
+- 类型 = boolean
+- 缺失时默认 = true
+- true：源码窗每个实际换行末尾显示 ↵
+- false：隐藏 ↵
+- 旧项目配置无该字段时自动兼容并使用 true。
+
+实现：
+- WorkingEditor 新增 hardReturnField，以 CodeMirror widget 在每个非末行行尾渲染 ↵。
+- 使用 Compartment 动态开关，不修改 Markdown 文本。
+- TablePresentationEditor 将 sourceEditor 配置和 table presentation 一起热应用。
+- 非法配置时 sourceEditor 开关也遵循 last-known-good，不回退乱跳。
+- 配置编辑依旧不进入章节 dirty / Undo / Redo。
+
+验证：
+- test:table-config PASS。
+- typecheck PASS。
+- build PASS。
+- sourcePaneTabs + tablePresentationEditor Playwright 2/2 PASS。
+- 4176 私有云 smoke：默认源码窗可见硬回车 marker = 27；临时有效配置 showHardReturns=false 后 marker = 0；状态显示“实时预览（未保存）”；章节保持 clean / Undo 0 / Redo 0 / canSave=否。
+- 临时 smoke 未保存，PVC 项目配置未改变。
+- Helm revision = 68。
+- image = ocr2md/v2:source-hard-return-config-20260908a。
+- Deployment = 1/1 Ready。

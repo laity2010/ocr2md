@@ -11,6 +11,7 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
+  WidgetType,
   keymap,
   lineNumbers,
 } from "@codemirror/view";
@@ -172,8 +173,51 @@ const latexHighlightField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+class HardReturnWidget extends WidgetType {
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-hard-return-marker";
+    span.textContent = "↵";
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+function hardReturnDecorations(doc: EditorState["doc"]): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  for (let lineNumber = 1; lineNumber < doc.lines; lineNumber += 1) {
+    const line = doc.line(lineNumber);
+    builder.add(
+      line.to,
+      line.to,
+      Decoration.widget({
+        widget: new HardReturnWidget(),
+        side: 1,
+      }),
+    );
+  }
+  return builder.finish();
+}
+
+const hardReturnField = StateField.define<DecorationSet>({
+  create(state) {
+    return hardReturnDecorations(state.doc);
+  },
+  update(value, transaction) {
+    return transaction.docChanged
+      ? hardReturnDecorations(transaction.state.doc)
+      : value;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 export class WorkingEditor {
   private readonly editableCompartment = new Compartment();
+  private readonly hardReturnCompartment = new Compartment();
   private syncing = false;
   private readonly view: EditorView;
 
@@ -217,6 +261,7 @@ export class WorkingEditor {
           syntaxHighlighting(obsidianSyntaxHighlight),
           sourceHeadingField,
           latexHighlightField,
+          this.hardReturnCompartment.of(hardReturnField),
           EditorView.lineWrapping,
           this.editableCompartment.of(EditorView.editable.of(false)),
           EditorView.updateListener.of((update) => {
@@ -246,6 +291,14 @@ export class WorkingEditor {
 
   clear(): void {
     this.setDocument("");
+  }
+
+  setShowHardReturns(show: boolean): void {
+    this.view.dispatch({
+      effects: this.hardReturnCompartment.reconfigure(
+        show ? hardReturnField : [],
+      ),
+    });
   }
 
   setEditable(editable: boolean): void {

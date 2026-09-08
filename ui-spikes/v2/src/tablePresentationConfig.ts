@@ -48,8 +48,13 @@ export interface TableModulePresentation {
   columnStyles?: Record<string, TableColumnPresentation>;
 }
 
+export interface SourceEditorPresentation {
+  showHardReturns: boolean;
+}
+
 export interface TablePresentationConfig {
   version: 1;
+  sourceEditor?: Partial<SourceEditorPresentation>;
   modules: Partial<Record<TablePresentationModule, TableModulePresentation>>;
 }
 
@@ -73,6 +78,7 @@ export interface TablePresentationParseResult {
   ok: boolean;
   config?: TablePresentationConfig;
   resolved?: Record<TablePresentationModule, ResolvedTableModulePresentation>;
+  sourceEditor?: SourceEditorPresentation;
   errors: string[];
 }
 
@@ -183,6 +189,9 @@ function defaultModule(module: TablePresentationModule): TableModulePresentation
 
 export const TABLE_PRESENTATION_DEFAULT: TablePresentationConfig = {
   version: 1,
+  sourceEditor: {
+    showHardReturns: true,
+  },
   modules: {
     章节标题: defaultModule("章节标题"),
     注释: defaultModule("注释"),
@@ -364,6 +373,35 @@ function resolveModule(
   return { module, columns, sort };
 }
 
+export function resolveSourceEditorPresentation(
+  config: TablePresentationConfig,
+): {
+  resolved: SourceEditorPresentation;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  const raw = config.sourceEditor;
+  if (raw !== undefined && !isObject(raw)) {
+    return {
+      resolved: { showHardReturns: true },
+      errors: ["sourceEditor 必须是对象"],
+    };
+  }
+  if (raw && raw.showHardReturns !== undefined
+      && typeof raw.showHardReturns !== "boolean") {
+    errors.push("sourceEditor.showHardReturns 必须是 boolean");
+  }
+  return {
+    resolved: {
+      showHardReturns:
+        raw && typeof raw.showHardReturns === "boolean"
+          ? raw.showHardReturns
+          : true,
+    },
+    errors,
+  };
+}
+
 export function resolveTablePresentationConfig(
   config: TablePresentationConfig,
 ): {
@@ -424,11 +462,13 @@ export function parseTablePresentationConfig(
 
   const config = parsed as unknown as TablePresentationConfig;
   const resolved = resolveTablePresentationConfig(config);
-  errors.push(...resolved.errors);
+  const sourceEditor = resolveSourceEditorPresentation(config);
+  errors.push(...resolved.errors, ...sourceEditor.errors);
   return {
     ok: errors.length === 0,
     config: errors.length === 0 ? config : undefined,
     resolved: errors.length === 0 ? resolved.resolved : undefined,
+    sourceEditor: errors.length === 0 ? sourceEditor.resolved : undefined,
     errors,
   };
 }
