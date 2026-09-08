@@ -3,11 +3,25 @@ import { css } from "@codemirror/lang-css";
 import { syntaxHighlighting } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import {
+  regexHighlightEffect,
+  regexHighlightField,
+} from "./regexMatchHighlight";
+import type { SourceRegexMatch } from "./sourceRegexSearch";
 import { obsidianSyntaxHighlight } from "./workingEditor";
 
 export const CUSTOM_CSS_STORAGE_KEY = "ocr2md.v2.custom-css.v1";
 
-export const CUSTOM_CSS_DEFAULT = `/* 自定义 CSS：只允许修改下面三个字体变量。 */
+const CUSTOM_CSS_COMMON = `/* 通用：iPad / Mac 共用 */
+:root {
+  --regex-match-bg: color-mix(in srgb, var(--accent) 28%, transparent);
+  --regex-match-current-bg: color-mix(in srgb, var(--accent) 58%, transparent);
+  --regex-match-current-border: var(--accent);
+}`;
+
+export const CUSTOM_CSS_DEFAULT = `${CUSTOM_CSS_COMMON}
+
+/* 设备字体 */
 :root[data-device-profile="ipad"] {
   --ui-font-size: 13px;
   --grid-font-size: 13px;
@@ -21,25 +35,53 @@ export const CUSTOM_CSS_DEFAULT = `/* 自定义 CSS：只允许修改下面三�
 }
 `;
 
-const ALLOWED_CUSTOM_CSS_VARS = new Set([
+const ALLOWED_COMMON_CSS_VARS = new Set([
+  "--regex-match-bg",
+  "--regex-match-current-bg",
+  "--regex-match-current-border",
+]);
+
+const ALLOWED_DEVICE_CSS_VARS = new Set([
   "--ui-font-size",
   "--grid-font-size",
   "--right-font-size",
 ]);
 
+function declarationsFor(
+  body: string,
+  allowed: ReadonlySet<string>,
+): string[] {
+  return Array.from(
+    body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;{}]+)\s*;?/gi),
+  )
+    .filter((entry) => allowed.has(entry[1]))
+    .map((entry) => `  ${entry[1]}: ${entry[2].trim()};`);
+}
+
 function sanitizedCustomCss(source: string): string {
   const blocks: string[] = [];
+
+  const commonMatch = /:root\s*\{([\s\S]*?)\}/.exec(source);
+  if (commonMatch) {
+    const declarations = declarationsFor(
+      commonMatch[1],
+      ALLOWED_COMMON_CSS_VARS,
+    );
+    if (declarations.length) {
+      blocks.push(`:root {\n${declarations.join("\n")}\n}`);
+    }
+  }
+
   const blockPattern =
     /:root\[data-device-profile="(ipad|mac)"\]\s*\{([\s\S]*?)\}/g;
   let match: RegExpExecArray | null;
 
   while ((match = blockPattern.exec(source))) {
     const selector = `:root[data-device-profile="${match[1]}"]`;
-    const declarations = Array.from(
-      match[2].matchAll(/(--[a-z0-9-]+)\s*:\s*([^;{}]+)\s*;?/gi),
-    )
-      .filter((entry) => ALLOWED_CUSTOM_CSS_VARS.has(entry[1]))
-      .map((entry) => `  ${entry[1]}: ${entry[2].trim()};`);
+    const declarations = declarationsFor(
+      match[2],
+      ALLOWED_DEVICE_CSS_VARS,
+    );
 
     if (declarations.length) {
       blocks.push(`${selector} {\n${declarations.join("\n")}\n}`);
@@ -51,7 +93,10 @@ function sanitizedCustomCss(source: string): string {
 
 function storedCustomCss(): string {
   try {
-    return localStorage.getItem(CUSTOM_CSS_STORAGE_KEY) ?? CUSTOM_CSS_DEFAULT;
+    const stored = localStorage.getItem(CUSTOM_CSS_STORAGE_KEY);
+    if (!stored) return CUSTOM_CSS_DEFAULT;
+    if (/:root\s*\{/.test(stored)) return stored;
+    return `${CUSTOM_CSS_COMMON}\n\n${stored}`;
   } catch {
     return CUSTOM_CSS_DEFAULT;
   }
@@ -82,6 +127,7 @@ export class CustomCssEditor {
           lineNumbers(),
           css(),
           syntaxHighlighting(obsidianSyntaxHighlight),
+          regexHighlightField,
           keymap.of(defaultKeymap),
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
@@ -95,6 +141,29 @@ export class CustomCssEditor {
         ],
       }),
     });
+  }
+
+  source(): string {
+    return this.view.state.doc.toString();
+  }
+
+  setRegexMatches(
+    matches: readonly SourceRegexMatch[],
+    currentIndex: number,
+  ): void {
+    this.view.dispatch({
+      effects: regexHighlightEffect(matches, currentIndex),
+    });
+  }
+
+  revealOffsets(from: number, to: number, focus = true): void {
+    const safeFrom = Math.max(0, Math.min(from, this.view.state.doc.length));
+    const safeTo = Math.max(safeFrom, Math.min(to, this.view.state.doc.length));
+    this.view.dispatch({
+      selection: { anchor: safeFrom, head: safeTo },
+      effects: EditorView.scrollIntoView(safeFrom, { y: "center" }),
+    });
+    if (focus) this.view.focus();
   }
 
   focus(): void {

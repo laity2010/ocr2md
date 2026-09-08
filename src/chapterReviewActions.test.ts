@@ -2,7 +2,6 @@ import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
 import {
-  applyAnnotationNumber,
   applyHeadingLineTypeToText,
   applyRowsLineType,
   rebuildAnnotationReviewState,
@@ -105,12 +104,18 @@ assert.ok(
   ignoredAnnotationState.annotationPairs.every((pair) => pair.refCandidateId !== annotation.id),
   "ignored annotation references must leave annotation pairing",
 );
-const originalNumber = annotation.annotationNumber;
-const annotationState = rebuildAnnotationReviewState(rows, parsed.annotationPairs);
-const cleared = applyAnnotationNumber(annotationState, annotation.id, "");
-assert.strictEqual(cleared.rows.find((row) => row.id === annotation.id)?.annotationNumber, undefined);
-const restored = applyAnnotationNumber(cleared, annotation.id, originalNumber);
-assert.strictEqual(restored.rows.find((row) => row.id === annotation.id)?.annotationNumber, originalNumber);
-assert.strictEqual(restored.rows.find((row) => row.id === annotation.id)?.annotationNumberSource, "manual");
+const annotationState = rebuildAnnotationReviewState(
+  rows.map((row) => row.id === annotation.id ? { ...row, annotationNumber: "999" } : row),
+  parsed.annotationPairs,
+);
+assert.strictEqual(
+  annotationState.rows.find((row) => row.id === annotation.id)?.annotationNumber,
+  annotation.annotationNumber,
+  "annotation rebuild must overwrite stored numbers with the value extracted from source",
+);
+assert.strictEqual(
+  annotationState.rows.find((row) => row.id === annotation.id)?.annotationNumberSource,
+  "extracted",
+);
 
 console.log("chapterReviewActions tests passed");

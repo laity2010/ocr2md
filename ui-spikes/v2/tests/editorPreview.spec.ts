@@ -10,7 +10,11 @@ test("editor preview mirrors working and horizontal splitter persists", async ({
   await page.locator("#chapter-select").selectOption({ label: "chapters/01 Buffett’s Alpha" });
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
 
-  await expect(preview.locator("h1,h2,h3,h4,h5,h6").first()).toBeVisible();
+  const firstHeading = preview.locator("h1,h2,h3,h4,h5,h6").first();
+  await expect(firstHeading).toBeVisible();
+  await expect(preview).not.toContainText("ocr2md_chapter_split");
+  await expect(preview).not.toContainText("ocr2md_chapter_file");
+  await expect(firstHeading).toHaveAttribute("data-source-line", "9");
   const previewText = (await preview.textContent()) ?? "";
   expect(previewText.length).toBeGreaterThan(100);
 

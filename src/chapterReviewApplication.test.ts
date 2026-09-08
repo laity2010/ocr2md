@@ -69,14 +69,15 @@ assert.deepStrictEqual(
 );
 const firstRef = annotationResult.rows.find((row) => row.typeLabel === "注释" && row.lineType === "注释引用" && row.annotationNumber === "1");
 assert.ok(firstRef, "real fixture must retain annotation reference 1");
-const cleared = app.setAnnotationNumber(firstRef!.id, "");
 assert.strictEqual(
-  cleared.rows.find((row) => row.id === firstRef!.id)?.annotationNumber,
-  undefined,
-  "application must own manual annotation-number edits",
+  firstRef!.annotationNumber,
+  "1",
+  "application annotation numbers must be derived from the source reference",
 );
-const restored = app.setAnnotationNumber(firstRef!.id, "1");
-assert.ok(restored.annotationPairs.some((pair) => pair.number === "1" && pair.refCandidateId === firstRef!.id), "restoring a number must rebuild its pair");
+assert.ok(
+  annotationResult.annotationPairs.some((pair) => pair.number === "1" && pair.refCandidateId === firstRef!.id),
+  "source-derived annotation number must participate in pair rebuilding",
+);
 const corrected = app.annotationWorkingText(working);
 assert.ok(corrected.includes("[^1]"), "annotation working text must convert reviewed references to Markdown footnotes");
 assert.ok(corrected.includes("[^10]:"), "annotation working text must convert reviewed note bodies to Markdown footnotes");

@@ -9,6 +9,7 @@ import {
   const parsed = parseTablePresentationConfig(TABLE_PRESENTATION_DEFAULT_SOURCE);
   assert.equal(parsed.ok, true);
   assert.equal(parsed.sourceEditor?.showHardReturns, true);
+  assert.equal(parsed.sourceEditor?.hardReturnColor, "#9aa79d");
   const annotation = parsed.resolved?.["注释"];
   assert.deepEqual(
     annotation?.columns.map((column) => column.label),
@@ -34,6 +35,86 @@ import {
 }
 
 {
+  const source = JSON.parse(TABLE_PRESENTATION_DEFAULT_SOURCE) as {
+    版本: number;
+    配置: Array<Record<string, unknown>>;
+  };
+  assert.equal(source.版本, 2);
+  assert.ok(source.配置.length >= 23);
+  assert.deepEqual(
+    Object.keys(source.配置[0] ?? {}),
+    ["控件", "功能组", "键值", "中文描述"],
+  );
+  assert.ok(source.配置.every((entry) => entry["功能组"] === "通用"));
+  assert.deepEqual(
+    source.配置.find((entry) => {
+      const keyValue = entry["键值"];
+      return typeof keyValue === "object"
+        && keyValue !== null
+        && "showHardReturns" in keyValue;
+    }),
+    {
+      控件: "源码窗口",
+      功能组: "通用",
+      键值: { showHardReturns: true },
+      中文描述: "显示硬回车",
+    },
+  );
+  assert.deepEqual(
+    source.配置.find((entry) => {
+      const keyValue = entry["键值"];
+      return typeof keyValue === "object"
+        && keyValue !== null
+        && "hardReturnColor" in keyValue;
+    }),
+    {
+      控件: "源码窗口",
+      功能组: "通用",
+      键值: { hardReturnColor: "#9aa79d" },
+      中文描述: "硬回车颜色",
+    },
+  );
+}
+
+{
+  const parsed = parseTablePresentationConfig(JSON.stringify({
+    版本: 2,
+    配置: [
+      {
+        控件: "源码窗口",
+        键值: { showHardReturns: false },
+        中文描述: "显示硬回车",
+      },
+    ],
+  }));
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.sourceEditor?.showHardReturns, false);
+  assert.equal(parsed.config?.配置[0]?.功能组, "通用");
+}
+
+{
+  const parsed = parseTablePresentationConfig(JSON.stringify({
+    版本: 2,
+    配置: [
+      {
+        控件: "源码窗口",
+        功能组: "通用",
+        键值: {
+          showHardReturns: true,
+          extra: false,
+        },
+        中文描述: "显示硬回车",
+      },
+    ],
+  }));
+  assert.equal(parsed.ok, false);
+  assert.ok(
+    parsed.errors.some((error) =>
+      error.includes("键值 必须且只能包含一个键")),
+  );
+}
+
+{
   const parsed = parseTablePresentationConfig(JSON.stringify({
     version: 1,
     modules: {
@@ -51,6 +132,12 @@ import {
     },
   }));
   assert.equal(parsed.ok, true);
+  assert.equal(parsed.migratedFromLegacy, true);
+  assert.equal(parsed.config?.版本, 2);
+  assert.deepEqual(
+    Object.keys(parsed.config?.配置[0] ?? {}),
+    ["控件", "功能组", "键值", "中文描述"],
+  );
   const annotation = parsed.resolved?.["注释"];
   assert.deepEqual(
     annotation?.columns.map((column) => column.label),
@@ -81,6 +168,7 @@ import {
   }));
   assert.equal(parsed.ok, true);
   assert.equal(parsed.sourceEditor?.showHardReturns, false);
+  assert.equal(parsed.sourceEditor?.hardReturnColor, "#9aa79d");
 }
 
 {
@@ -99,9 +187,46 @@ import {
 }
 
 {
+  const parsed = parseTablePresentationConfig(JSON.stringify({
+    version: 1,
+    sourceEditor: {
+      hardReturnColor: "",
+    },
+    modules: {},
+  }));
+  assert.equal(parsed.ok, false);
+  assert.ok(
+    parsed.errors.some((error) =>
+      error.includes("sourceEditor.hardReturnColor 必须是非空字符串")),
+  );
+}
+
+{
   const parsed = parseTablePresentationConfig("{ bad json");
   assert.equal(parsed.ok, false);
   assert.match(parsed.errors[0] ?? "", /JSON 解析失败/);
+}
+
+{
+  const parsed = parseTablePresentationConfig(JSON.stringify({
+    版本: 2,
+    配置: [
+      {
+        控件: "源码窗口",
+        功能组: "通用",
+        键值: {
+          showHardReturns: true,
+          extra: false,
+        },
+        中文描述: "显示硬回车",
+      },
+    ],
+  }));
+  assert.equal(parsed.ok, false);
+  assert.ok(
+    parsed.errors.some((error) =>
+      error.includes("键值 必须且只能包含一个键")),
+  );
 }
 
 {

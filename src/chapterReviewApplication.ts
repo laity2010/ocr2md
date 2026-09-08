@@ -11,7 +11,6 @@ import { activeCandidates, findReusableManualRow, IGNORED_LINE_TYPE } from "./ca
 import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { splitBlankLineBlocks, type TextBlock } from "./atoms";
 import {
-  applyAnnotationNumber,
   applyChapterFile,
   applyRowsLineType,
   rebuildAnnotationReviewState,
@@ -226,11 +225,6 @@ export class ChapterReviewApplication {
 
   matchAnnotationPairs(): ChapterReviewApplicationState {
     this.state = rebuildAnnotationReviewState(this.state.rows, this.state.annotationPairs);
-    return this.snapshot();
-  }
-
-  setAnnotationNumber(id: string, value: string): ChapterReviewApplicationState {
-    this.state = applyAnnotationNumber(this.state, id, value);
     return this.snapshot();
   }
 

@@ -32,7 +32,7 @@ test("review module tabs filter real calibration rows without dirtying chapter",
   const annotationRows = await page.locator("#calibration-grid .ag-row").evaluateAll((rows) =>
     rows.slice(0, 6).map((row) => ({
       line: Number(row.querySelector('[col-id="sourceLine"]')?.textContent?.trim()),
-      group: Number((row.querySelector("input.annotation-number-input") as HTMLInputElement | null)?.value),
+      group: Number(row.querySelector('[col-id="annotationNumber"]')?.textContent?.trim()),
     })),
   );
   expect(annotationRows.map((row) => row.group)).toEqual([1, 1, 2, 2, 3, 3]);

@@ -50,21 +50,35 @@ export interface TableModulePresentation {
 
 export interface SourceEditorPresentation {
   showHardReturns: boolean;
+  hardReturnColor: string;
 }
 
 export type TablePresentationSettingKind = "boolean" | "json";
 
 export interface TablePresentationSettingDescriptor {
   id: string;
-  group: string;
-  title: string;
+  control: string;
+  functionGroup: string;
+  key: string;
   description: string;
-  path: string[];
+  legacyPath: string[];
   kind: TablePresentationSettingKind;
   keywords: string[];
 }
 
+export interface TablePresentationEntry {
+  控件: string;
+  功能组: string;
+  键值: Record<string, unknown>;
+  中文描述: string;
+}
+
 export interface TablePresentationConfig {
+  版本: 2;
+  配置: TablePresentationEntry[];
+}
+
+interface LegacyTablePresentationConfig {
   version: 1;
   sourceEditor?: Partial<SourceEditorPresentation>;
   modules: Partial<Record<TablePresentationModule, TableModulePresentation>>;
@@ -91,6 +105,7 @@ export interface TablePresentationParseResult {
   config?: TablePresentationConfig;
   resolved?: Record<TablePresentationModule, ResolvedTableModulePresentation>;
   sourceEditor?: SourceEditorPresentation;
+  migratedFromLegacy?: boolean;
   errors: string[];
 }
 
@@ -148,51 +163,57 @@ const MODULE_COLUMNS: Record<TablePresentationModule, readonly TableColumnId[]> 
   ],
 };
 
+const MODULE_NAMES = Object.keys(MODULE_COLUMNS) as TablePresentationModule[];
+
 export const TABLE_PRESENTATION_SETTINGS: TablePresentationSettingDescriptor[] = [
   {
     id: "sourceEditor.showHardReturns",
-    group: "源码窗口",
-    title: "显示硬回车",
-    description: "在每个实际换行末尾显示 ↵；只影响源码窗呈现。",
-    path: ["sourceEditor", "showHardReturns"],
+    control: "源码窗口",
+    functionGroup: "通用",
+    key: "showHardReturns",
+    description: "显示硬回车",
+    legacyPath: ["sourceEditor", "showHardReturns"],
     kind: "boolean",
     keywords: ["硬回车", "回车", "换行", "源码", "source", "return"],
   },
-  ...(
-    [
-      "章节标题",
-      "注释",
-      "嵌入块",
-      "非法断行",
-      "变动行",
-      "章节定界",
-      "翻译",
-    ] as TablePresentationModule[]
-  ).flatMap((module) => [
+  {
+    id: "sourceEditor.hardReturnColor",
+    control: "源码窗口",
+    functionGroup: "通用",
+    key: "hardReturnColor",
+    description: "硬回车颜色",
+    legacyPath: ["sourceEditor", "hardReturnColor"],
+    kind: "json",
+    keywords: ["硬回车", "颜色", "源码", "color", "return"],
+  },
+  ...MODULE_NAMES.flatMap((module) => [
     {
       id: "modules." + module + ".columns",
-      group: "数据表 / " + module,
-      title: "列顺序",
-      description: "控制列的显示先后；未列出的字段按模块默认规则补齐。",
-      path: ["modules", module, "columns"],
+      control: module + "数据表",
+      functionGroup: "通用",
+      key: "columns",
+      description: "列顺序",
+      legacyPath: ["modules", module, "columns"],
       kind: "json" as const,
       keywords: [module, "列", "列序", "顺序", "columns"],
     },
     {
       id: "modules." + module + ".sort",
-      group: "数据表 / " + module,
-      title: "默认排序",
-      description: "控制进入模块时的默认排序优先级与升降序。",
-      path: ["modules", module, "sort"],
+      control: module + "数据表",
+      functionGroup: "通用",
+      key: "sort",
+      description: "默认排序",
+      legacyPath: ["modules", module, "sort"],
       kind: "json" as const,
       keywords: [module, "排序", "默认排序", "sort"],
     },
     {
       id: "modules." + module + ".columnStyles",
-      group: "数据表 / " + module,
-      title: "列样式",
-      description: "控制列宽、最小宽度、flex、隐藏和固定位置。",
-      path: ["modules", module, "columnStyles"],
+      control: module + "数据表",
+      functionGroup: "通用",
+      key: "columnStyles",
+      description: "列样式",
+      legacyPath: ["modules", module, "columnStyles"],
       kind: "json" as const,
       keywords: [module, "列宽", "宽度", "隐藏", "固定", "pin", "style"],
     },
@@ -219,7 +240,9 @@ const DEFAULT_STYLES: Partial<Record<TableColumnId, TableColumnPresentation>> = 
   translationOpenAI: { minWidth: 300, flex: 1 },
 };
 
-function labelsForModule(module: TablePresentationModule): Record<string, TableColumnId> {
+function labelsForModule(
+  module: TablePresentationModule,
+): Record<string, TableColumnId> {
   return Object.fromEntries(
     MODULE_COLUMNS[module].map((colId) => [COLUMN_LABELS[colId], colId]),
   );
@@ -250,10 +273,11 @@ function defaultModule(module: TablePresentationModule): TableModulePresentation
   return { columns, sort, columnStyles: styles };
 }
 
-export const TABLE_PRESENTATION_DEFAULT: TablePresentationConfig = {
+const LEGACY_TABLE_PRESENTATION_DEFAULT: LegacyTablePresentationConfig = {
   version: 1,
   sourceEditor: {
     showHardReturns: true,
+    hardReturnColor: "#9aa79d",
   },
   modules: {
     章节标题: defaultModule("章节标题"),
@@ -266,12 +290,126 @@ export const TABLE_PRESENTATION_DEFAULT: TablePresentationConfig = {
   },
 };
 
-export const TABLE_PRESENTATION_DEFAULT_SOURCE =
-  JSON.stringify(TABLE_PRESENTATION_DEFAULT, null, 2) + "\n";
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+function cloneValue<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function valueAtPath(
+  root: unknown,
+  path: readonly string[],
+): unknown {
+  let value = root;
+  for (const segment of path) {
+    if (!isObject(value)) return undefined;
+    value = value[segment];
+  }
+  return value;
+}
+
+function setValueAtPath(
+  root: Record<string, unknown>,
+  path: readonly string[],
+  value: unknown,
+): void {
+  let target = root;
+  for (const segment of path.slice(0, -1)) {
+    const existing = target[segment];
+    if (!isObject(existing)) target[segment] = {};
+    target = target[segment] as Record<string, unknown>;
+  }
+  target[path.at(-1) ?? ""] = cloneValue(value);
+}
+
+function descriptorForEntry(
+  control: string,
+  key: string,
+): TablePresentationSettingDescriptor | undefined {
+  return TABLE_PRESENTATION_SETTINGS.find(
+    (descriptor) =>
+      descriptor.control === control
+      && descriptor.key === key,
+  );
+}
+
+export function tablePresentationEntryKey(
+  entry: TablePresentationEntry,
+): string | undefined {
+  return Object.keys(entry.键值)[0];
+}
+
+export function tablePresentationEntryValue(
+  entry: TablePresentationEntry,
+): unknown {
+  const key = tablePresentationEntryKey(entry);
+  return key === undefined ? undefined : entry.键值[key];
+}
+
+function configFromLegacy(
+  legacy: LegacyTablePresentationConfig,
+): TablePresentationConfig {
+  return {
+    版本: 2,
+    配置: TABLE_PRESENTATION_SETTINGS.map((descriptor) => ({
+      控件: descriptor.control,
+      功能组: descriptor.functionGroup,
+      键值: {
+        [descriptor.key]: cloneValue(
+          valueAtPath(legacy, descriptor.legacyPath)
+            ?? valueAtPath(
+              LEGACY_TABLE_PRESENTATION_DEFAULT,
+              descriptor.legacyPath,
+            ),
+        ),
+      },
+      中文描述: descriptor.description,
+    })),
+  };
+}
+
+function legacyFromConfig(
+  config: TablePresentationConfig,
+  errors: string[],
+): LegacyTablePresentationConfig {
+  const legacy: LegacyTablePresentationConfig = {
+    version: 1,
+    modules: {},
+  };
+
+  const seen = new Set<string>();
+  for (const entry of config.配置) {
+    const key = tablePresentationEntryKey(entry);
+    if (!key) {
+      errors.push("配置键值必须且只能包含一个键");
+      continue;
+    }
+    const descriptor = descriptorForEntry(entry.控件, key);
+    if (!descriptor) {
+      errors.push("未知配置：" + entry.控件 + " / " + key);
+      continue;
+    }
+    if (seen.has(descriptor.id)) {
+      errors.push("重复配置：" + entry.控件 + " / " + key);
+      continue;
+    }
+    seen.add(descriptor.id);
+    setValueAtPath(
+      legacy as unknown as Record<string, unknown>,
+      descriptor.legacyPath,
+      tablePresentationEntryValue(entry),
+    );
+  }
+  return legacy;
+}
+
+export const TABLE_PRESENTATION_DEFAULT: TablePresentationConfig =
+  configFromLegacy(LEGACY_TABLE_PRESENTATION_DEFAULT);
+
+export const TABLE_PRESENTATION_DEFAULT_SOURCE =
+  JSON.stringify(TABLE_PRESENTATION_DEFAULT, null, 2) + "\n";
 
 function validateStyle(
   module: string,
@@ -280,14 +418,16 @@ function validateStyle(
   errors: string[],
 ): TableColumnPresentation | undefined {
   if (!isObject(value)) {
-    errors.push(`${module}.columnStyles.${label} 必须是对象`);
+    errors.push(module + ".columnStyles." + label + " 必须是对象");
     return undefined;
   }
 
   const allowed = new Set(["width", "minWidth", "flex", "hidden", "pinned"]);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) {
-      errors.push(`${module}.columnStyles.${label} 不支持属性 ${key}`);
+      errors.push(
+        module + ".columnStyles." + label + " 不支持属性 " + key,
+      );
     }
   }
 
@@ -299,7 +439,9 @@ function validateStyle(
       || !Number.isFinite(value[key])
       || value[key] <= 0
     ) {
-      errors.push(`${module}.columnStyles.${label}.${key} 必须是正数`);
+      errors.push(
+        module + ".columnStyles." + label + "." + key + " 必须是正数",
+      );
     } else {
       result[key] = value[key];
     }
@@ -307,7 +449,9 @@ function validateStyle(
 
   if (value.hidden !== undefined) {
     if (typeof value.hidden !== "boolean") {
-      errors.push(`${module}.columnStyles.${label}.hidden 必须是 boolean`);
+      errors.push(
+        module + ".columnStyles." + label + ".hidden 必须是 boolean",
+      );
     } else {
       result.hidden = value.hidden;
     }
@@ -319,7 +463,10 @@ function validateStyle(
       && value.pinned !== "left"
       && value.pinned !== "right"
     ) {
-      errors.push(`${module}.columnStyles.${label}.pinned 只能是 left/right/null`);
+      errors.push(
+        module + ".columnStyles." + label
+          + ".pinned 只能是 left/right/null",
+      );
     } else {
       result.pinned = value.pinned as TablePinned;
     }
@@ -336,29 +483,29 @@ function resolveModule(
   const fallback = defaultModule(module);
   const raw = isObject(input) ? input : fallback;
   if (input !== undefined && !isObject(input)) {
-    errors.push(`${module} 配置必须是对象`);
+    errors.push(module + " 配置必须是对象");
   }
 
   const labels = labelsForModule(module);
   const columnsRaw = Array.isArray(raw.columns) ? raw.columns : fallback.columns;
   if (!Array.isArray(raw.columns) && raw.columns !== undefined) {
-    errors.push(`${module}.columns 必须是字符串数组`);
+    errors.push(module + ".columns 必须是字符串数组");
   }
 
   const seen = new Set<string>();
   const orderedIds: TableColumnId[] = [];
   for (const entry of columnsRaw) {
     if (typeof entry !== "string") {
-      errors.push(`${module}.columns 只能包含列名字符串`);
+      errors.push(module + ".columns 只能包含列名字符串");
       continue;
     }
     const colId = labels[entry];
     if (!colId) {
-      errors.push(`${module}.columns 包含未知列：${entry}`);
+      errors.push(module + ".columns 包含未知列：" + entry);
       continue;
     }
     if (seen.has(entry)) {
-      errors.push(`${module}.columns 重复列：${entry}`);
+      errors.push(module + ".columns 重复列：" + entry);
       continue;
     }
     seen.add(entry);
@@ -372,14 +519,14 @@ function resolveModule(
 
   const styleInput = isObject(raw.columnStyles) ? raw.columnStyles : {};
   if (raw.columnStyles !== undefined && !isObject(raw.columnStyles)) {
-    errors.push(`${module}.columnStyles 必须是对象`);
+    errors.push(module + ".columnStyles 必须是对象");
   }
 
   const styleById = new Map<TableColumnId, TableColumnPresentation>();
   for (const [label, value] of Object.entries(styleInput)) {
     const colId = labels[label];
     if (!colId) {
-      errors.push(`${module}.columnStyles 包含未知列：${label}`);
+      errors.push(module + ".columnStyles 包含未知列：" + label);
       continue;
     }
     const style = validateStyle(module, label, value, errors);
@@ -396,7 +543,7 @@ function resolveModule(
 
   const sortInput = Array.isArray(raw.sort) ? raw.sort : fallback.sort ?? [];
   if (raw.sort !== undefined && !Array.isArray(raw.sort)) {
-    errors.push(`${module}.sort 必须是数组`);
+    errors.push(module + ".sort 必须是数组");
   }
 
   const sort: ResolvedTableSortRule[] = [];
@@ -413,20 +560,22 @@ function resolveModule(
         ? entry.direction
         : "asc";
     if (!label) {
-      errors.push(`${module}.sort 项必须是列名或 {column,direction}`);
+      errors.push(module + ".sort 项必须是列名或 {column,direction}");
       continue;
     }
     const colId = labels[label];
     if (!colId) {
-      errors.push(`${module}.sort 包含未知列：${label}`);
+      errors.push(module + ".sort 包含未知列：" + label);
       continue;
     }
     if (direction !== "asc" && direction !== "desc") {
-      errors.push(`${module}.sort.${label} direction 只能是 asc/desc`);
+      errors.push(
+        module + ".sort." + label + " direction 只能是 asc/desc",
+      );
       continue;
     }
     if (sortSeen.has(colId)) {
-      errors.push(`${module}.sort 重复列：${label}`);
+      errors.push(module + ".sort 重复列：" + label);
       continue;
     }
     sortSeen.add(colId);
@@ -436,23 +585,39 @@ function resolveModule(
   return { module, columns, sort };
 }
 
-export function resolveSourceEditorPresentation(
-  config: TablePresentationConfig,
+function resolveSourceEditorPresentation(
+  legacy: LegacyTablePresentationConfig,
 ): {
   resolved: SourceEditorPresentation;
   errors: string[];
 } {
   const errors: string[] = [];
-  const raw = config.sourceEditor;
+  const raw = legacy.sourceEditor;
   if (raw !== undefined && !isObject(raw)) {
     return {
-      resolved: { showHardReturns: true },
+      resolved: {
+        showHardReturns: true,
+        hardReturnColor: "#9aa79d",
+      },
       errors: ["sourceEditor 必须是对象"],
     };
   }
-  if (raw && raw.showHardReturns !== undefined
-      && typeof raw.showHardReturns !== "boolean") {
+  if (
+    raw
+    && raw.showHardReturns !== undefined
+    && typeof raw.showHardReturns !== "boolean"
+  ) {
     errors.push("sourceEditor.showHardReturns 必须是 boolean");
+  }
+  if (
+    raw
+    && raw.hardReturnColor !== undefined
+    && (
+      typeof raw.hardReturnColor !== "string"
+      || raw.hardReturnColor.trim().length === 0
+    )
+  ) {
+    errors.push("sourceEditor.hardReturnColor 必须是非空字符串");
   }
   return {
     resolved: {
@@ -460,27 +625,147 @@ export function resolveSourceEditorPresentation(
         raw && typeof raw.showHardReturns === "boolean"
           ? raw.showHardReturns
           : true,
+      hardReturnColor:
+        raw
+        && typeof raw.hardReturnColor === "string"
+        && raw.hardReturnColor.trim()
+          ? raw.hardReturnColor.trim()
+          : "#9aa79d",
     },
     errors,
   };
 }
 
-export function resolveTablePresentationConfig(
-  config: TablePresentationConfig,
+function resolveLegacyTablePresentationConfig(
+  legacy: LegacyTablePresentationConfig,
 ): {
   resolved: Record<TablePresentationModule, ResolvedTableModulePresentation>;
   errors: string[];
 } {
   const errors: string[] = [];
-  const modules = config.modules ?? {};
-  const moduleNames = Object.keys(MODULE_COLUMNS) as TablePresentationModule[];
+  const modules = legacy.modules ?? {};
   const resolved = Object.fromEntries(
-    moduleNames.map((module) => [
+    MODULE_NAMES.map((module) => [
       module,
       resolveModule(module, modules[module], errors),
     ]),
   ) as Record<TablePresentationModule, ResolvedTableModulePresentation>;
   return { resolved, errors };
+}
+
+function parseVersion2(
+  parsed: Record<string, unknown>,
+): {
+  config?: TablePresentationConfig;
+  legacy?: LegacyTablePresentationConfig;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  if (parsed["版本"] !== 2) {
+    return { errors: ["版本 必须为 2"] };
+  }
+  if (!Array.isArray(parsed["配置"])) {
+    return { errors: ["配置 必须是数组"] };
+  }
+
+  const allowed = new Set(["控件", "功能组", "键值", "中文描述"]);
+  const entries: TablePresentationEntry[] = [];
+
+  parsed["配置"].forEach((value, index) => {
+    if (!isObject(value)) {
+      errors.push("配置[" + index + "] 必须是对象");
+      return;
+    }
+    for (const key of Object.keys(value)) {
+      if (!allowed.has(key)) {
+        errors.push("配置[" + index + "] 不支持属性 " + key);
+      }
+    }
+
+    const control = value["控件"];
+    const keyValue = value["键值"];
+    const functionGroup =
+      typeof value["功能组"] === "string" && value["功能组"].trim()
+        ? value["功能组"].trim()
+        : "通用";
+
+    if (typeof control !== "string" || !control.trim()) {
+      errors.push("配置[" + index + "].控件 必须是非空字符串");
+      return;
+    }
+    if (!isObject(keyValue)) {
+      errors.push("配置[" + index + "].键值 必须是对象");
+      return;
+    }
+
+    const keys = Object.keys(keyValue);
+    if (keys.length !== 1) {
+      errors.push("配置[" + index + "].键值 必须且只能包含一个键");
+      return;
+    }
+    const key = keys[0] ?? "";
+    const descriptor = descriptorForEntry(control.trim(), key);
+    if (!descriptor) {
+      errors.push(
+        "未知配置：" + control.trim() + " / " + key,
+      );
+      return;
+    }
+
+    const description =
+      typeof value["中文描述"] === "string" && value["中文描述"].trim()
+        ? value["中文描述"].trim()
+        : descriptor.description;
+
+    entries.push({
+      控件: control.trim(),
+      功能组: functionGroup,
+      键值: { [key]: cloneValue(keyValue[key]) },
+      中文描述: description,
+    });
+  });
+
+  const config: TablePresentationConfig = {
+    版本: 2,
+    配置: entries,
+  };
+  const legacy = legacyFromConfig(config, errors);
+  return {
+    config: errors.length ? undefined : config,
+    legacy: errors.length ? undefined : legacy,
+    errors,
+  };
+}
+
+function parseLegacyVersion1(
+  parsed: Record<string, unknown>,
+): {
+  config?: TablePresentationConfig;
+  legacy?: LegacyTablePresentationConfig;
+  errors: string[];
+} {
+  if (parsed.version !== 1) {
+    return { errors: ["version 必须为 1"] };
+  }
+  if (!isObject(parsed.modules)) {
+    return { errors: ["modules 必须是对象"] };
+  }
+
+  const knownModules = new Set(MODULE_NAMES);
+  const errors: string[] = [];
+  for (const module of Object.keys(parsed.modules)) {
+    if (!knownModules.has(module as TablePresentationModule)) {
+      errors.push("未知模块：" + module);
+    }
+  }
+  if (errors.length) return { errors };
+
+  const legacy = parsed as unknown as LegacyTablePresentationConfig;
+  return {
+    config: configFromLegacy(legacy),
+    legacy,
+    errors,
+  };
 }
 
 export function parseTablePresentationConfig(
@@ -497,50 +782,51 @@ export function parseTablePresentationConfig(
       const position = Number(positionMatch[1]);
       const prefix = source.slice(0, position);
       const lines = prefix.split("\n");
-      location = `（第 ${lines.length} 行，第 ${(lines.at(-1)?.length ?? 0) + 1} 列）`;
+      location =
+        "（第 " + lines.length + " 行，第 "
+        + ((lines.at(-1)?.length ?? 0) + 1) + " 列）";
     }
     return {
       ok: false,
-      errors: [`JSON 解析失败${location}：${message}`],
+      errors: ["JSON 解析失败" + location + "：" + message],
     };
   }
 
   if (!isObject(parsed)) {
-    return { ok: false, errors: ["表格配置根节点必须是对象"] };
-  }
-  if (parsed.version !== 1) {
-    return { ok: false, errors: ["version 必须为 1"] };
-  }
-  if (!isObject(parsed.modules)) {
-    return { ok: false, errors: ["modules 必须是对象"] };
+    return { ok: false, errors: ["配置根节点必须是对象"] };
   }
 
-  const knownModules = new Set(Object.keys(MODULE_COLUMNS));
-  const errors: string[] = [];
-  for (const module of Object.keys(parsed.modules)) {
-    if (!knownModules.has(module)) {
-      errors.push(`未知模块：${module}`);
-    }
+  const legacyInput = parsed.version === 1;
+  const parsedShape = legacyInput
+    ? parseLegacyVersion1(parsed)
+    : parseVersion2(parsed);
+
+  if (!parsedShape.config || !parsedShape.legacy || parsedShape.errors.length) {
+    return {
+      ok: false,
+      errors: parsedShape.errors,
+    };
   }
 
-  const config = parsed as unknown as TablePresentationConfig;
-  const resolved = resolveTablePresentationConfig(config);
-  const sourceEditor = resolveSourceEditorPresentation(config);
-  errors.push(...resolved.errors, ...sourceEditor.errors);
+  const resolved = resolveLegacyTablePresentationConfig(parsedShape.legacy);
+  const sourceEditor = resolveSourceEditorPresentation(parsedShape.legacy);
+  const errors = [...resolved.errors, ...sourceEditor.errors];
+
   return {
     ok: errors.length === 0,
-    config: errors.length === 0 ? config : undefined,
+    config: errors.length === 0 ? parsedShape.config : undefined,
     resolved: errors.length === 0 ? resolved.resolved : undefined,
     sourceEditor: errors.length === 0 ? sourceEditor.resolved : undefined,
+    migratedFromLegacy: legacyInput && errors.length === 0,
     errors,
   };
 }
 
 export function resolveDefaultTablePresentation():
   Record<TablePresentationModule, ResolvedTableModulePresentation> {
-  const result = resolveTablePresentationConfig(TABLE_PRESENTATION_DEFAULT);
-  if (result.errors.length) {
-    throw new Error(result.errors.join("; "));
+  const parsed = parseTablePresentationConfig(TABLE_PRESENTATION_DEFAULT_SOURCE);
+  if (!parsed.ok || !parsed.resolved) {
+    throw new Error(parsed.errors.join("; "));
   }
-  return result.resolved;
+  return parsed.resolved;
 }

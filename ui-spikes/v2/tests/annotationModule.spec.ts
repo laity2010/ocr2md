@@ -53,8 +53,8 @@ async function restoreBaseline(
   expect(restored.revision).toBe(baseline.revision);
 }
 
-test("annotation number edit rebuilds pairs and participates in unified undo/redo/save reentry", async ({ page, request }) => {
-  const { chapter, baseline } = await chapterFixture(request);
+test("annotation numbers are derived from source pairs and are read-only", async ({ page, request }) => {
+  const { chapter } = await chapterFixture(request);
 
   await page.goto("/");
   await page.locator("#chapter-select").selectOption(chapter.id);
@@ -71,57 +71,31 @@ test("annotation number edit rebuilds pairs and participates in unified undo/red
     "预览",
   ]);
 
-  const firstRow = page.locator("#calibration-grid .ag-row").first();
-  const annotationNumber = firstRow.locator("input.annotation-number-input");
-  await expect(annotationNumber).toHaveValue("1");
+  await expect(
+    page.locator("#calibration-grid input.annotation-number-input"),
+  ).toHaveCount(0);
+  const derivedNumbers = await page.locator(
+    '#calibration-grid .ag-row [col-id="annotationNumber"]',
+  ).evaluateAll((cells) =>
+    cells.slice(0, 6).map((cell) => cell.textContent?.trim() ?? "")
+  );
+  expect(derivedNumbers).toEqual(["1", "1", "2", "2", "3", "3"]);
 
-  await annotationNumber.fill("99");
-  await annotationNumber.blur();
+  const firstNumberCell = page.locator(
+    '#calibration-grid .ag-row [col-id="annotationNumber"]',
+  ).first();
+  await expect(firstNumberCell).toHaveText("1");
+  await expect(firstNumberCell).not.toHaveAttribute("contenteditable", "true");
 
-  await expect(page.locator("#state-value")).toHaveText("chapter-dirty");
-  await expect(page.locator("#undo-depth")).toHaveText("1");
-  await expect(page.locator("#redo-depth")).toHaveText("0");
-  await expect(page.locator("#annotation-pairs")).toHaveText("11");
-  await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
-    .toHaveValue("1");
   await scrollGridHorizontally(page, "right");
   await expect(
     page.locator("#calibration-grid .ag-row").first().locator('[col-id="annotationPairStatus"]'),
-  ).toHaveText("待补引用");
+  ).toHaveText("自动匹配");
 
-  await page.locator("#undo").click();
-  await scrollGridHorizontally(page, "left");
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await expect(page.locator("#annotation-pairs")).toHaveText("10");
-  await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
-    .toHaveValue("1");
   await expect(page.locator("#undo-depth")).toHaveText("0");
-  await expect(page.locator("#redo-depth")).toHaveText("1");
-
-  await page.locator("#redo").click();
-  await expect(page.locator("#state-value")).toHaveText("chapter-dirty");
-  await expect(page.locator("#annotation-pairs")).toHaveText("11");
-  await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
-    .toHaveValue("1");
-
-  await page.locator("#save").click();
-  await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await page.locator("#close").click();
-  await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
-  await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await page.locator('[data-review-module="注释"]').click();
-
-  await expect(page.locator("#active-module-rows")).toHaveText("20");
-  await expect(page.locator("#annotation-pairs")).toHaveText("11");
-  await expect(page.locator("#calibration-grid .ag-row").first().locator("input.annotation-number-input"))
-    .toHaveValue("1");
-  await scrollGridHorizontally(page, "right");
-  await expect(
-    page.locator("#calibration-grid .ag-row").first().locator('[col-id="annotationPairStatus"]'),
-  ).toHaveText("待补引用");
-
-  await page.locator("#close").click();
-  await restoreBaseline(request, chapter.id, baseline);
+  await expect(page.locator("#redo-depth")).toHaveText("0");
+  await expect(page.locator("#can-save")).toHaveText("否");
 });
 
 test("ignored annotation survives annotation rescan and reentry while pair status reflects missing reference", async ({ page, request }) => {

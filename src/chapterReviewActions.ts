@@ -51,26 +51,18 @@ export function rebuildAnnotationReviewState(
   annotationPairs: AnnotationPair[],
 ): ChapterReviewState {
   const refreshed = rows.map((row) => {
-    if (row.typeLabel !== "注释" || row.annotationNumberSource === "manual") return row;
+    if (row.typeLabel !== "注释") return row;
     const extracted = extractAnnotationNumber(row.raw);
-    return extracted ? { ...row, annotationNumber: extracted, annotationNumberSource: "extracted" as const } : row;
+    return {
+      ...row,
+      annotationNumber: extracted,
+      annotationNumberSource: extracted ? "extracted" as const : undefined,
+    };
   });
   return {
     rows: refreshed,
     annotationPairs: buildAnnotationPairs(refreshed, annotationPairs),
   };
-}
-
-export function applyAnnotationNumber(
-  state: ChapterReviewState,
-  id: string,
-  value: string,
-): ChapterReviewState {
-  const annotationNumber = value.trim();
-  const rows = state.rows.map((row) => row.id === id
-    ? { ...row, annotationNumber: annotationNumber || undefined, annotationNumberSource: "manual" as const }
-    : row);
-  return rebuildAnnotationReviewState(rows, state.annotationPairs);
 }
 
 export function applyChapterFile(rows: Candidate[], ids: readonly string[], value: string): Candidate[] {

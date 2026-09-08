@@ -20,7 +20,7 @@ export interface Candidate {
   preview: string;
   regexSource?: string;
   annotationNumber?: string;
-  annotationNumberSource?: "extracted" | "manual";
+  annotationNumberSource?: "extracted";
   isWorkingCorrection?: boolean;
   workingCopyPath?: string;
   sourceLine?: number;

@@ -20,7 +20,7 @@ import {
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const calibrationTheme = themeQuartz
+export const calibrationTheme = themeQuartz
   .withPart(colorSchemeDark)
   .withParams({
     backgroundColor: "#2f383e",
@@ -104,10 +104,6 @@ export class CalibrationGrid {
   constructor(
     host: HTMLElement,
     private readonly onLineTypeChanged: (rowId: string, lineType: string) => void,
-    private readonly onAnnotationNumberChanged: (
-      rowId: string,
-      value: string,
-    ) => void,
     private readonly onChapterFileChanged: (
       rowId: string,
       value: string,
@@ -234,14 +230,6 @@ export class CalibrationGrid {
     return target.id;
   }
 
-  renumberFirstVisibleAnnotation(value = "99"): string | undefined {
-    if (!this.editable || this.module !== "注释") return undefined;
-    const target = visibleRowsForModule(this.rows, this.module)[0];
-    if (!target) return undefined;
-    this.onAnnotationNumberChanged(target.id, value);
-    return target.id;
-  }
-
   focusFirstVisible(): string | undefined {
     const target = visibleRowsForModule(this.rows, this.module)[0];
     if (!target) return undefined;
@@ -302,8 +290,6 @@ export class CalibrationGrid {
         headerName: "注释号",
         comparator: (left, right) =>
           this.groupNumberSortValue(left) - this.groupNumberSortValue(right),
-        cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
-          this.annotationNumberRenderer(params),
       });
       columns.push({
         colId: "annotationPairStatus",
@@ -651,27 +637,6 @@ export class CalibrationGrid {
     );
     if (pair) return pair.status;
     return row.lineType === "注释引用" ? "待补正文" : "待补引用";
-  }
-
-  private annotationNumberRenderer(
-    params: ICellRendererParams<Candidate, string>,
-  ): HTMLElement {
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "annotation-number-input";
-    input.setAttribute("aria-label", "注释号");
-    input.spellcheck = false;
-    input.value = String(params.value ?? "");
-    input.disabled = !this.editable;
-    input.addEventListener("click", (event) => event.stopPropagation());
-    input.addEventListener("change", () => {
-      if (!this.editable || !params.data) return;
-      const next = input.value.trim();
-      const current = String(params.data.annotationNumber ?? "").trim();
-      if (next === current) return;
-      this.onAnnotationNumberChanged(params.data.id, next);
-    });
-    return input;
   }
 
   private chapterFileRenderer(

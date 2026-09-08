@@ -14,6 +14,7 @@ import { CalibrationGrid } from "./calibrationGrid";
 import { changedLineAuditCandidates } from "./changedLineAudit";
 import { CustomCssEditor } from "./customCssEditor";
 import { TablePresentationEditor } from "./tablePresentationEditor";
+import { TableConfigurationGrid } from "./tableConfigurationGrid";
 import { TABLE_PRESENTATION_DEFAULT_SOURCE } from "./tablePresentationConfig";
 import { PersistentChapterRepository } from "./persistentChapterRepository";
 import { FeatureDebugMenu } from "./featureDebugMenu";
@@ -68,8 +69,17 @@ const embedGroupStatus = requireElement<HTMLElement>("embed-group-status");
 const boundaryStatus = requireElement<HTMLElement>("boundary-status");
 const translationStatus = requireElement<HTMLElement>("translation-status");
 const calibrationGridHost = requireElement<HTMLElement>("calibration-grid");
+const tableConfigGridHost = requireElement<HTMLElement>("table-config-grid");
+const configModuleTab =
+  requireElement<HTMLButtonElement>("config-module-tab");
 const reviewGridStatus = requireElement<HTMLElement>("review-grid-status");
 const sourceLocationStatus = requireElement<HTMLElement>("source-location-status");
+const regexSearchToggle =
+  requireElement<HTMLButtonElement>("regex-search-toggle");
+const regexSearchClose =
+  requireElement<HTMLButtonElement>("regex-search-close");
+const regexSearchTarget =
+  requireElement<HTMLElement>("regex-search-target");
 const regexSearchInput = requireElement<HTMLInputElement>("regex-search");
 const searchCaseToggle = requireElement<HTMLInputElement>("search-case");
 const searchPreviousButton = requireElement<HTMLButtonElement>("search-prev");
@@ -107,7 +117,6 @@ const sourceEditorTab = requireElement<HTMLButtonElement>("editor-tab-source");
 const cssEditorTab = requireElement<HTMLButtonElement>("editor-tab-css");
 const tableConfigEditorTab =
   requireElement<HTMLButtonElement>("editor-tab-table-config");
-const regexEditorTab = requireElement<HTMLButtonElement>("editor-tab-regex");
 const customCssWrap = requireElement<HTMLElement>("custom-css-wrap");
 const customCssEditorHost = requireElement<HTMLElement>("custom-css-editor");
 const cssSaveButton = requireElement<HTMLButtonElement>("css-save");
@@ -115,10 +124,6 @@ const cssResetButton = requireElement<HTMLButtonElement>("css-reset");
 const tableConfigWrap = requireElement<HTMLElement>("table-config-wrap");
 const tableConfigEditorHost =
   requireElement<HTMLElement>("table-config-editor");
-const tableConfigSearchInput =
-  requireElement<HTMLInputElement>("table-config-search");
-const tableConfigSettingsList =
-  requireElement<HTMLElement>("table-config-settings-list");
 const tableConfigSaveButton =
   requireElement<HTMLButtonElement>("table-config-save");
 const tableConfigResetButton =
@@ -367,6 +372,8 @@ const sourceRegexSearch = new SourceRegexSearch({
   nextButton: searchNextButton,
   status: searchStatus,
   reveal: ({ from, to }) => workingEditor.revealOffsets(from, to),
+  highlight: (matches, currentIndex) =>
+    workingEditor.setRegexMatches(matches, currentIndex),
 });
 
 const customCssEditor = new CustomCssEditor(
@@ -376,18 +383,91 @@ const customCssEditor = new CustomCssEditor(
   },
 );
 
-type SourcePaneMode = "source" | "css" | "table-config" | "regex";
+type SourcePaneMode = "source" | "css" | "table-config";
 let sourcePaneMode: SourcePaneMode = "source";
+let regexSearchOpen = false;
 let tablePresentationEditor: TablePresentationEditor | undefined;
+let tableConfigurationGrid: TableConfigurationGrid | undefined;
+let configGridMode = false;
+
+function setConfigGridMode(enabled: boolean): void {
+  configGridMode = enabled;
+  calibrationGridHost.hidden = enabled;
+  tableConfigGridHost.hidden = !enabled;
+  configModuleTab.setAttribute("aria-pressed", enabled ? "true" : "false");
+  if (enabled) {
+    for (const button of reviewModuleButtons) {
+      button.setAttribute("aria-pressed", "false");
+    }
+    reviewGridStatus.textContent =
+      "配置 · " + (tableConfigurationGrid?.rowCount() ?? 0)
+      + " 项 · 点击行定位 JSON";
+    return;
+  }
+
+  const activeModule = deriveWorkspaceView(actor.getSnapshot()).activeReviewModule;
+  for (const button of reviewModuleButtons) {
+    button.setAttribute(
+      "aria-pressed",
+      button.dataset.reviewModule === activeModule ? "true" : "false",
+    );
+  }
+}
+
+function syncRegexSearchTarget(mode = sourcePaneMode): void {
+  if (mode === "css") {
+    regexSearchTarget.textContent = "当前：自定义 CSS";
+    sourceRegexSearch.updateTarget(
+      customCssEditor.source(),
+      ({ from, to }) => customCssEditor.revealOffsets(from, to, false),
+      () => customCssEditor.source(),
+      (matches, currentIndex) =>
+        customCssEditor.setRegexMatches(matches, currentIndex),
+    );
+    return;
+  }
+
+  if (mode === "table-config") {
+    regexSearchTarget.textContent = "当前：表格配置";
+    sourceRegexSearch.updateTarget(
+      tablePresentationEditor?.source() ?? "",
+      ({ from, to }) => tablePresentationEditor?.revealOffsets(from, to, false),
+      () => tablePresentationEditor?.source() ?? "",
+      (matches, currentIndex) =>
+        tablePresentationEditor?.setRegexMatches(matches, currentIndex),
+    );
+    return;
+  }
+
+  regexSearchTarget.textContent = "当前：源码";
+  sourceRegexSearch.updateTarget(
+    workingEditor.getText(),
+    ({ from, to }) => workingEditor.revealOffsets(from, to, false),
+    () => workingEditor.getText(),
+    (matches, currentIndex) =>
+      workingEditor.setRegexMatches(matches, currentIndex),
+  );
+}
+
+function setRegexSearchOpen(open: boolean, focusInput = false): void {
+  regexSearchOpen = open;
+  regexSearchPanel.hidden = !open;
+  regexSearchToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  if (!open) sourceRegexSearch.clearHighlight();
+  if (open) {
+    syncRegexSearchTarget();
+    if (focusInput) requestAnimationFrame(() => regexSearchInput.focus());
+  }
+}
 
 function setSourcePaneMode(mode: SourcePaneMode): void {
   sourcePaneMode = mode;
+  setConfigGridMode(mode === "table-config");
 
   const tabs: Array<[HTMLButtonElement, SourcePaneMode]> = [
     [sourceEditorTab, "source"],
     [cssEditorTab, "css"],
     [tableConfigEditorTab, "table-config"],
-    [regexEditorTab, "regex"],
   ];
   for (const [tab, tabMode] of tabs) {
     tab.setAttribute("aria-selected", tabMode === mode ? "true" : "false");
@@ -396,7 +476,6 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
   workingEditorHost.hidden = mode !== "source";
   customCssWrap.hidden = mode !== "css";
   tableConfigWrap.hidden = mode !== "table-config";
-  regexSearchPanel.hidden = mode !== "regex";
 
   editorPreviewSplitter.setAttribute(
     "aria-label",
@@ -404,10 +483,10 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
       ? "调整自定义 CSS 与预览高度"
       : mode === "table-config"
         ? "调整表格配置与预览高度"
-        : mode === "regex"
-          ? "调整正则搜索与预览高度"
-          : "调整源码与预览高度",
+        : "调整源码与预览高度",
   );
+
+  if (regexSearchOpen) syncRegexSearchTarget(mode);
 
   if (mode === "source") {
     editorModeStatus.textContent = "源码";
@@ -415,12 +494,9 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
   } else if (mode === "css") {
     editorModeStatus.textContent = "自定义 CSS · 修改后实时预览";
     requestAnimationFrame(() => customCssEditor.focus());
-  } else if (mode === "table-config") {
+  } else {
     editorModeStatus.textContent = "表格配置 · 修改后实时预览";
     requestAnimationFrame(() => tablePresentationEditor?.focus());
-  } else {
-    editorModeStatus.textContent = "正则搜索";
-    requestAnimationFrame(() => regexSearchInput.focus());
   }
 }
 
@@ -430,7 +506,18 @@ tableConfigEditorTab.addEventListener(
   "click",
   () => setSourcePaneMode("table-config"),
 );
-regexEditorTab.addEventListener("click", () => setSourcePaneMode("regex"));
+regexSearchToggle.addEventListener(
+  "click",
+  () => setRegexSearchOpen(!regexSearchOpen, !regexSearchOpen),
+);
+regexSearchClose.addEventListener(
+  "click",
+  () => setRegexSearchOpen(false),
+);
+configModuleTab.addEventListener(
+  "click",
+  () => setSourcePaneMode("table-config"),
+);
 cssSaveButton.addEventListener("click", () => customCssEditor.save());
 cssResetButton.addEventListener("click", () => customCssEditor.reset());
 tableConfigSaveButton.addEventListener(
@@ -446,11 +533,6 @@ setSourcePaneMode("source");
 const calibrationGrid = new CalibrationGrid(
   calibrationGridHost,
   applyCalibrationLineTypeChange,
-  (rowId, value) => {
-    lastUiAction = "annotation-number";
-    lastCommandId = undefined;
-    actor.send({ type: "ANNOTATION_NUMBER_CHANGED", rowId, value });
-  },
   (rowId, value) => {
     lastUiAction = "chapter-file";
     lastCommandId = undefined;
@@ -489,13 +571,24 @@ const calibrationGrid = new CalibrationGrid(
   },
 );
 
+tableConfigurationGrid = new TableConfigurationGrid(
+  tableConfigGridHost,
+  (descriptor) => {
+    setSourcePaneMode("table-config");
+    tablePresentationEditor?.revealSetting(descriptor);
+  },
+  (descriptor, checked) => {
+    tablePresentationEditor?.updateBooleanSetting(descriptor, checked);
+  },
+);
+
 tablePresentationEditor = new TablePresentationEditor(
   tableConfigEditorHost,
-  tableConfigSearchInput,
-  tableConfigSettingsList,
-  (resolved, sourceEditor) => {
+  (resolved, sourceEditor, config) => {
     calibrationGrid.setPresentationConfig(resolved);
     workingEditor.setShowHardReturns(sourceEditor.showHardReturns);
+    workingEditor.setHardReturnColor(sourceEditor.hardReturnColor);
+    tableConfigurationGrid?.setConfig(config);
   },
   (text) => {
     if (sourcePaneMode === "table-config") {
@@ -601,7 +694,9 @@ actor.subscribe((snapshot) => {
   workingEditor.setEditable(Boolean(chapter) && view.canEdit);
   markdownPreview.render(chapter?.workingText ?? "");
   sourcePreviewScrollSync.syncFromEditor();
-  sourceRegexSearch.updateText(chapter?.workingText ?? "");
+  if (sourcePaneMode === "source") {
+    sourceRegexSearch.updateText(chapter?.workingText ?? "");
+  }
   calibrationGrid.setContext(
     view.activeReviewModule === "变动行"
       ? changedLineAuditCandidates(view.changedLineRows)
@@ -718,7 +813,7 @@ actor.subscribe((snapshot) => {
 
   for (const button of reviewModuleButtons) {
     const module = button.dataset.reviewModule as ActiveReviewModule | undefined;
-    const active = module === view.activeReviewModule;
+    const active = !configGridMode && module === view.activeReviewModule;
     const moduleAllowed = chapter?.kind === "boundary"
       ? module === "章节定界"
       : chapter?.kind === "translation"
@@ -727,6 +822,17 @@ actor.subscribe((snapshot) => {
     button.hidden = Boolean(chapter) && !moduleAllowed;
     button.disabled = !view.canSelectReviewModule || !moduleAllowed;
     button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+  configModuleTab.disabled = false;
+  configModuleTab.hidden = false;
+  configModuleTab.setAttribute(
+    "aria-pressed",
+    configGridMode ? "true" : "false",
+  );
+  if (configGridMode) {
+    reviewGridStatus.textContent =
+      "配置 · " + (tableConfigurationGrid?.rowCount() ?? 0)
+      + " 项 · 点击行定位 JSON";
   }
   revision.textContent = view.revision ? view.revision.slice(0, 16) : "—";
   lastSavedAt.textContent = view.lastSavedAt ?? "—";
@@ -843,14 +949,6 @@ function executeProductAction(
       pendingCalibrationCommandId = commandId;
       try {
         calibrationGrid.demoteFirstVisibleHeading();
-      } finally {
-        pendingCalibrationCommandId = undefined;
-      }
-      break;
-    case "renumber-first-annotation":
-      pendingCalibrationCommandId = commandId;
-      try {
-        calibrationGrid.renumberFirstVisibleAnnotation();
       } finally {
         pendingCalibrationCommandId = undefined;
       }
@@ -1115,6 +1213,7 @@ async function initializeFeatureDebugWorkspace(): Promise<void> {
     }
 
     sourceRegexSearch.reset();
+    setRegexSearchOpen(false);
     setSourcePaneMode("source");
     workspaceSplitterControl.reset();
     editorPreviewSplitterControl.reset();
@@ -2535,15 +2634,20 @@ function createReviewRowLocateFeatureDebugSteps(): readonly FeatureDebugStep[] {
 
   return [
     {
-      label: "1 章节标题：先停在正则搜索 tag，再点击真实表格行",
+      label: "1 章节标题：先打开正则搜索抽屉，再点击真实表格行",
       run: async () => {
         await switchReviewModuleThroughRealTab(
           "章节标题",
           10,
           ["行号", "行类型", "标题预览"],
         );
-        setSourcePaneMode("regex");
-        requireFeatureDebug(sourcePaneMode === "regex", "没有进入正则搜索 tag");
+        setSourcePaneMode("source");
+        setRegexSearchOpen(true);
+        requireFeatureDebug(
+          !regexSearchPanel.hidden
+            && regexSearchToggle.getAttribute("aria-expanded") === "true",
+          "没有打开正则搜索抽屉",
+        );
 
         headingLine = await clickFirstCalibrationRowForFeatureDebug();
         const view = requireInitializedFeatureDebugWorkspace();
@@ -4423,22 +4527,16 @@ function annotationRow(index: number): HTMLElement | undefined {
   ) ?? undefined;
 }
 
-function annotationNumberInput(index: number): HTMLInputElement | undefined {
-  return annotationRow(index)?.querySelector<HTMLInputElement>(
-    "input.annotation-number-input",
-  ) ?? undefined;
+function annotationNumberText(index: number): string {
+  return annotationRow(index)?.querySelector<HTMLElement>(
+    '[col-id="annotationNumber"]',
+  )?.textContent?.trim() ?? "";
 }
 
 function annotationLineTypeSelect(index: number): HTMLSelectElement | undefined {
   return annotationRow(index)?.querySelector<HTMLSelectElement>(
     "select.calibration-line-type",
   ) ?? undefined;
-}
-
-function annotationPairStatusText(index: number): string {
-  return annotationRow(index)?.querySelector<HTMLElement>(
-    '[col-id="annotationPairStatus"]',
-  )?.textContent?.trim() ?? "";
 }
 
 async function waitForAnnotationView(
@@ -4466,13 +4564,6 @@ async function waitForAnnotationDom(
     await new Promise<void>((resolve) => window.setTimeout(resolve, 25));
   }
   throw new Error(message);
-}
-
-function setAnnotationNumberThroughProductUi(index: number, value: string): void {
-  const input = annotationNumberInput(index);
-  requireFeatureDebug(input, "注释号输入框不存在");
-  input.value = value;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function setAnnotationLineTypeThroughProductUi(index: number, value: string): void {
@@ -4559,10 +4650,10 @@ async function restoreAnnotationRawBaseline(): Promise<void> {
   );
   await waitForAnnotationDom(
     () =>
-      annotationNumberInput(0)?.value === "1"
+      annotationNumberText(0) === "1"
       && annotationLineTypeSelect(0)?.value === "注释引用"
-      && annotationPairStatusText(0) === "自动匹配",
-    "注释模块安全清理后首行没有恢复 #1 / 自动匹配",
+      && calibrationGridHost.querySelector("input.annotation-number-input") === null,
+    "注释模块安全清理后首行没有恢复只读 #1 / 自动匹配",
   );
 
   const finalRaw = await fetchRawChapter(featureDebugChapterId);
@@ -4635,7 +4726,7 @@ async function prepareAnnotationFeatureDebug(): Promise<void> {
 function createAnnotationFeatureDebugSteps(): readonly FeatureDebugStep[] {
   return [
     {
-      label: "1 基线：20 行 / 5 列 / 10 对；首行 注释引用 #1 / 自动匹配",
+      label: "1 基线：20 行 / 5 列 / 10 对；注释号由源码提取并只读显示",
       run: async () => {
         const context = currentAnnotationDebugContext();
         const view = deriveWorkspaceView(actor.getSnapshot());
@@ -4655,96 +4746,48 @@ function createAnnotationFeatureDebugSteps(): readonly FeatureDebugStep[] {
         await waitForAnnotationDom(
           () =>
             annotationLineTypeSelect(0)?.value === "注释引用"
-            && annotationNumberInput(0)?.value === "1"
-            && annotationPairStatusText(0) === "自动匹配",
-          "注释模块首行不是 注释引用 #1 / 自动匹配",
+            && annotationNumberText(0) === "1"
+            && calibrationGridHost.querySelector("input.annotation-number-input") === null,
+          "注释模块首行不是只读 注释引用 #1 / 自动匹配",
         );
       },
     },
     {
-      label: "2 改号：首个引用 #1→#99，10→11 对并变为“待补正文”",
+      label: "2 只读契约：组号 1,1,2,2,3,3；无输入框；clean 0/0 不可保存",
       run: async () => {
         const context = currentAnnotationDebugContext();
-        setAnnotationNumberThroughProductUi(0, "99");
-
-        const view = await waitForAnnotationView(
-          (candidate) =>
-            candidate.session === "chapter-dirty"
-            && candidate.annotationPairs === 11
-            && candidate.undoDepth === 1,
-          "注释号 #1→#99 后没有重建为 11 对",
+        const numbers = Array.from(
+          calibrationGridHost.querySelectorAll<HTMLElement>(
+            '.ag-row [col-id="annotationNumber"]',
+          ),
+        ).slice(0, 6).map((cell) => cell.textContent?.trim() ?? "");
+        const view = deriveWorkspaceView(actor.getSnapshot());
+        requireFeatureDebug(
+          numbers.join(",") === "1,1,2,2,3,3",
+          "注释组号没有按实际引用 / 正文提取为 1,1,2,2,3,3",
         );
         requireFeatureDebug(
-          view.activeModuleRows === context.baselineActiveRows
-            && view.workingLength === context.baselineWorkingLength
-            && view.annotationMissingRefCount === 1
-            && view.annotationMissingBodyCount === 1,
-          "注释号改号后的配对缺口 / working 状态不正确",
+          calibrationGridHost.querySelector("input.annotation-number-input") === null,
+          "注释号仍存在人工输入框",
         );
-        await waitForAnnotationDom(
-          () =>
-            annotationNumberInput(0)?.value === "99"
-            && annotationPairStatusText(0) === "待补正文",
-          "注释号 #99 的首行没有变成待补正文",
-        );
-      },
-    },
-    {
-      label: "3 Undo / Redo：回到 #1 / 10 对，再重现 #99 / 11 对，最后回基线",
-      run: async () => {
-        undoButton.click();
-        let view = await waitForAnnotationView(
-          (candidate) =>
-            candidate.session === "chapter-clean"
-            && candidate.annotationPairs === 10
-            && candidate.undoDepth === 0
-            && candidate.redoDepth === 1,
-          "注释号 Undo 没有恢复 10 对 clean 基线",
-        );
-        await waitForAnnotationDom(
-          () =>
-            annotationNumberInput(0)?.value === "1"
-            && annotationPairStatusText(0) === "自动匹配",
-          "注释号 Undo 后首行没有恢复 #1 / 自动匹配",
-        );
-
-        redoButton.click();
-        view = await waitForAnnotationView(
-          (candidate) =>
-            candidate.session === "chapter-dirty"
-            && candidate.annotationPairs === 11
-            && candidate.undoDepth === 1
-            && candidate.redoDepth === 0,
-          "注释号 Redo 没有重现 11 对",
-        );
-        await waitForAnnotationDom(
-          () =>
-            annotationNumberInput(0)?.value === "99"
-            && annotationPairStatusText(0) === "待补正文",
-          "注释号 Redo 后首行没有恢复 #99 / 待补正文",
-        );
-
-        undoButton.click();
-        view = await waitForAnnotationView(
-          (candidate) =>
-            candidate.session === "chapter-clean"
-            && candidate.annotationPairs === 10
-            && candidate.undoDepth === 0,
-          "注释号第二次 Undo 没有回到 clean 基线",
-        );
-        await waitForAnnotationDom(
-          () => annotationNumberInput(0)?.value === "1",
-          "注释号第二次 Undo 后没有恢复 #1",
+        requireFeatureDebug(
+          view.session === "chapter-clean"
+            && view.undoDepth === 0
+            && view.redoDepth === 0
+            && !view.canSave
+            && view.workingLength === context.baselineWorkingLength,
+          "只读注释号检查污染了章节状态",
         );
       },
     },
     {
-      label: "4 已忽略：首个引用 20→19，并出现 1 个“待补引用”；Undo 回 20",
+      label: "3 已忽略：首个引用 20→19，#1 正文保留并显示“待补引用”；Undo 回 20",
       run: async () => {
         const context = currentAnnotationDebugContext();
         requireFeatureDebug(
-          annotationLineTypeSelect(0)?.value === "注释引用",
-          "注释模块首行基线不是注释引用",
+          annotationLineTypeSelect(0)?.value === "注释引用"
+            && annotationNumberText(0) === "1",
+          "注释模块首行基线不是注释引用 #1",
         );
         setAnnotationLineTypeThroughProductUi(0, "已忽略");
 
@@ -4758,10 +4801,9 @@ function createAnnotationFeatureDebugSteps(): readonly FeatureDebugStep[] {
         );
         await waitForAnnotationDom(
           () =>
-            Array.from(calibrationGridHost.querySelectorAll<HTMLElement>(
-              '[col-id="annotationPairStatus"]',
-            )).filter((node) => node.textContent?.trim() === "待补引用").length === 1,
-          "注释引用已忽略后没有出现 1 个待补引用",
+            annotationNumberText(0) === "1"
+            && calibrationGridHost.querySelector("input.annotation-number-input") === null,
+          "注释引用已忽略后 #1 正文 / 待补引用状态不正确",
         );
 
         undoButton.click();
@@ -4770,27 +4812,29 @@ function createAnnotationFeatureDebugSteps(): readonly FeatureDebugStep[] {
             candidate.session === "chapter-clean"
             && candidate.activeModuleRows === context.baselineActiveRows
             && candidate.annotationPairs === context.baselinePairs
-            && candidate.annotationMissingRefCount === 0,
+            && candidate.annotationMissingRefCount === 0
+            && candidate.undoDepth === 0,
           "注释已忽略 Undo 没有恢复 20 行 / 10 对",
         );
         await waitForAnnotationDom(
           () =>
             annotationLineTypeSelect(0)?.value === "注释引用"
-            && annotationNumberInput(0)?.value === "1",
+            && annotationNumberText(0) === "1",
           "注释已忽略 Undo 后首行没有恢复",
         );
       },
     },
     {
-      label: "5 保存 / 重入：#99 / 11 对持久化；随后恢复原 #1 / 20 行 / 10 对 / revision",
+      label: "4 保存 / 重入：只持久化“已忽略”，注释组号仍来自源码",
       run: async () => {
         const context = currentAnnotationDebugContext();
-        setAnnotationNumberThroughProductUi(0, "99");
+        setAnnotationLineTypeThroughProductUi(0, "已忽略");
         await waitForAnnotationView(
           (candidate) =>
             candidate.session === "chapter-dirty"
-            && candidate.annotationPairs === 11,
-          "注释保存测试前没有进入 #99 / 11 对",
+            && candidate.activeModuleRows === context.baselineActiveRows - 1
+            && candidate.annotationMissingRefCount === 1,
+          "注释保存测试前没有进入已忽略状态",
         );
 
         saveButton.click();
@@ -4800,47 +4844,42 @@ function createAnnotationFeatureDebugSteps(): readonly FeatureDebugStep[] {
             && nextRevision !== context.baselineRevision,
         );
 
-        let view = deriveWorkspaceView(actor.getSnapshot());
-        requireFeatureDebug(
-          view.session === "chapter-clean"
-            && view.undoDepth === 0
-            && view.redoDepth === 0
-            && !view.canSave,
-          "注释模块保存后状态不 clean",
-        );
-
         closeButton.click();
         await waitForWorkspaceSession("idle");
         executeProductAction("open-chapter", undefined, featureDebugChapterId);
         await waitForWorkspaceSession("chapter-clean");
-        executeProductAction(
-          "select-review-module",
-          undefined,
-          undefined,
-          "注释",
-        );
+        executeProductAction("select-review-module", undefined, undefined, "注释");
 
-        view = await waitForAnnotationView(
+        const view = await waitForAnnotationView(
           (candidate) =>
             candidate.activeReviewModule === "注释"
-            && candidate.activeModuleRows === context.baselineActiveRows
-            && candidate.annotationPairs === 11,
-          "注释模块保存重入后没有恢复 20 行 / 11 对",
+            && candidate.activeModuleRows === context.baselineActiveRows - 1
+            && candidate.annotationPairs === context.baselinePairs
+            && candidate.annotationMissingRefCount === 1,
+          "注释模块保存重入后没有保留已忽略状态",
         );
         await waitForAnnotationDom(
           () =>
-            annotationNumberInput(0)?.value === "99"
-            && annotationPairStatusText(0) === "待补正文",
-          "注释模块保存重入后没有恢复 #99 / 待补正文",
+            annotationNumberText(0) === "1"
+            && calibrationGridHost.querySelector("input.annotation-number-input") === null,
+          "保存重入后注释组号不再是源码派生只读值",
         );
         requireFeatureDebug(
           view.revision === context.temporaryRevision
-            && view.workingLength === context.baselineWorkingLength,
-          "注释模块保存重入 revision / working 不正确",
+            && view.workingLength === context.baselineWorkingLength
+            && view.undoDepth === 0
+            && view.redoDepth === 0
+            && !view.canSave,
+          "注释模块保存重入 revision / history 不正确",
         );
-
+      },
+    },
+    {
+      label: "5 安全恢复：原 20 行 / 10 对 / #1 / revision / clean 基线",
+      run: async () => {
+        const context = currentAnnotationDebugContext();
         await restoreAnnotationRawBaseline();
-        view = requireInitializedFeatureDebugWorkspace();
+        const view = requireInitializedFeatureDebugWorkspace();
         requireFeatureDebug(
           view.activeReviewModule === "注释"
             && view.activeModuleRows === context.baselineActiveRows
@@ -4851,6 +4890,12 @@ function createAnnotationFeatureDebugSteps(): readonly FeatureDebugStep[] {
             && view.redoDepth === 0
             && !view.canSave,
           "注释模块最终没有恢复原 20 行 / 10 对 / revision / clean 基线",
+        );
+        await waitForAnnotationDom(
+          () =>
+            annotationNumberText(0) === "1"
+            && calibrationGridHost.querySelector("input.annotation-number-input") === null,
+          "注释模块最终没有恢复只读 #1 / 自动匹配",
         );
       },
     },
@@ -6331,8 +6376,10 @@ function setRegexSearchThroughProductUi(value: string): void {
 function prepareSourceRegexSearchFeatureDebug(): void {
   featureDebugMenu.close();
   requireInitializedFeatureDebugWorkspace();
-  setSourcePaneMode("regex");
+  setSourcePaneMode("source");
+  setRegexSearchOpen(true);
   sourceRegexSearch.reset();
+  syncRegexSearchTarget("source");
   requireFeatureDebug(regexSearchInput.value === "", "初始化后搜索框不为空");
   requireFeatureDebug(searchStatus.textContent === "", "初始化后搜索状态不为空");
   requireFeatureDebug(searchPreviousButton.disabled, "初始化后上一个按钮应禁用");
@@ -6731,6 +6778,7 @@ for (const button of reviewModuleButtons) {
   button.addEventListener("click", () => {
     const module = button.dataset.reviewModule as ActiveReviewModule | undefined;
     if (!module || !ACTIVE_REVIEW_MODULES.includes(module)) return;
+    if (configGridMode) setSourcePaneMode("source");
     lastUiAction = "select-review-module";
     lastCommandId = undefined;
     actor.send({ type: "SELECT_REVIEW_MODULE", module });
@@ -6984,7 +7032,7 @@ featureDebugRunner.register({
   steps: createAnnotationFeatureDebugSteps,
   onSuccess: () => {
     sourceLocationStatus.textContent =
-      "注释模块功能调试通过 · #1→#99 配对重建 + Undo/Redo + 已忽略缺引用 + 保存重入 + 安全恢复原 #1 / revision";
+      "注释模块功能调试通过 · 注释号源码派生只读 + 已忽略缺引用 + 保存重入 + 安全恢复原 #1 / revision";
     annotationDebugContext = undefined;
   },
   onFailure: recoverAnnotationFeatureDebug,

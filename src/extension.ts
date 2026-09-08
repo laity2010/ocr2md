@@ -372,11 +372,6 @@ class Ocr2mdExtension implements vscode.Disposable {
       case "matchAnnotationPairs":
         this.matchAnnotationPairs();
         break;
-      case "setAnnotationNumber":
-        if (typeof message.id === "string" && typeof message.annotationNumber === "string") {
-          this.setAnnotationNumber(message.id, message.annotationNumber);
-        }
-        break;
       case "locateRow":
         if (typeof message.id === "string") await this.locateRow(message.id);
         break;
@@ -1207,14 +1202,6 @@ class Ocr2mdExtension implements vscode.Disposable {
 
   private matchAnnotationPairs() {
     this.rebuildAnnotationPairs();
-    this.update();
-  }
-
-  private setAnnotationNumber(id: string, value: string) {
-    const application = new ChapterReviewApplication({ rows: this.rows, annotationPairs: this.annotationPairs });
-    const next = application.setAnnotationNumber(id, value);
-    this.rows = next.rows;
-    this.annotationPairs = next.annotationPairs;
     this.update();
   }
 

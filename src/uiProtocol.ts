@@ -19,7 +19,6 @@ export type UiCommand =
   | { command: "assignChapterFiles"; ids?: string[]; mode?: string; value?: string }
   | { command: "showWarning"; message?: string }
   | { command: "matchAnnotationPairs" }
-  | { command: "setAnnotationNumber"; id?: string; annotationNumber?: string }
   | { command: "locateRow"; id?: string }
   | { command: "downloadImages" }
   | { command: "exportByCalibration" }
@@ -38,7 +37,6 @@ export interface UiCommandMessage {
   value?: string;
   message?: string;
   chapterFile?: string;
-  annotationNumber?: string;
   service?: string;
   apiKey?: string;
   sampleText?: string;
@@ -76,7 +74,6 @@ export const CHAPTER_REVIEW_COMMANDS = [
   "assignChapterFiles",
   "showWarning",
   "matchAnnotationPairs",
-  "setAnnotationNumber",
   "locateRow",
   "downloadImages",
   "exportByCalibration",

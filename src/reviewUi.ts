@@ -1029,18 +1029,11 @@ export function renderReviewUi(state: SidebarState, platformBootstrap: string, p
         row.append(el("td", candidate.embedNumber == null ? "" : String(candidate.embedNumber)));
       }
       if (definition.extraColumns.includes("annotationNumber")) {
-        const numberCell = document.createElement("td");
-        const numberInput = document.createElement("input");
-        numberInput.className = "annotation-number" + (missingNumber ? " missing" : "");
-        numberInput.value = candidate.annotationNumber || "";
-        numberInput.placeholder = missingNumber ? "手工输入注释号" : "注释号";
-        numberInput.title = missingNumber ? "未能提取注释号，请手工输入" : "注释号";
-        numberInput.setAttribute("data-row-id", candidate.id);
-        numberInput.setAttribute("data-field", "annotationNumber");
-        numberInput.addEventListener("click", (event) => event.stopPropagation());
-        numberInput.addEventListener("focus", () => rememberFocus(candidate.id, "annotationNumber"));
-        numberInput.addEventListener("change", () => postKeepView("setAnnotationNumber", { id: candidate.id, annotationNumber: numberInput.value }));
-        numberCell.append(numberInput);
+        const numberCell = el("td", candidate.annotationNumber || "");
+        numberCell.className = missingNumber ? "missing" : "";
+        numberCell.title = missingNumber
+          ? "未能从源码提取注释号"
+          : "注释号由引用 / 正文源码提取";
         row.append(numberCell);
       }
       if (definition.extraColumns.includes("chapterFile")) {

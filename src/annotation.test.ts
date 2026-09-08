@@ -53,7 +53,15 @@ const missingRef = buildAnnotationPairs([
 ]);
 assert.strictEqual(missingRef[0].status, "待补引用");
 
-assert.strictEqual(resolvedAnnotationNumber(row({ id: "m", raw: "plain", lineType: "注释引用", annotationNumber: "15", annotationNumberSource: "manual" })), "15");
-assert.strictEqual(resolvedAnnotationNumber(row({ id: "e", raw: "plain", lineType: "注释引用", annotationNumberSource: "manual" })), undefined);
+assert.strictEqual(
+  resolvedAnnotationNumber(row({ id: "m", raw: "[^15]", lineType: "注释引用", annotationNumber: "99" })),
+  "15",
+  "resolved annotation number must come from source text, not stored row state",
+);
+assert.strictEqual(
+  resolvedAnnotationNumber(row({ id: "e", raw: "plain", lineType: "注释引用", annotationNumber: "15" })),
+  undefined,
+  "stored annotation numbers must not create a source-missing annotation number",
+);
 
 console.log("annotation tests passed");

@@ -84,7 +84,6 @@ export type WorkspaceEvent =
   | { type: "CALIBRATION_ROW_FOCUSED"; rowId: string; sourceLine: number }
   | { type: "WORKING_CHANGED"; text: string }
   | { type: "CALIBRATION_LINE_TYPE_CHANGED"; rowId: string; lineType: string }
-  | { type: "ANNOTATION_NUMBER_CHANGED"; rowId: string; value: string }
   | { type: "CHAPTER_FILE_CHANGED"; rowId: string; value: string }
   | { type: "ASSIGN_BOUNDARY_SEQUENCE"; start: string }
   | { type: "UNDO" }
@@ -337,14 +336,6 @@ export const workspaceMachine = setup({
       && context.chapter?.kind !== "translation"
       && context.chapter?.rows.some(
         (row) => row.id === event.rowId && row.lineType !== event.lineType,
-      ) === true,
-    annotationNumberChanged: ({ context, event }) =>
-      event.type === "ANNOTATION_NUMBER_CHANGED"
-      && context.chapter?.rows.some(
-        (row) =>
-          row.id === event.rowId
-          && row.typeLabel === "注释"
-          && String(row.annotationNumber ?? "").trim() !== event.value.trim(),
       ) === true,
     chapterFileChanged: ({ context, event }) =>
       event.type === "CHAPTER_FILE_CHANGED"
@@ -647,31 +638,6 @@ export const workspaceMachine = setup({
       return {
         chapter,
         undoStack: pushHistory(context.undoStack, historySnapshot(context.chapter)),
-        redoStack: [],
-        focusedReviewRowId: undefined,
-        focusedSourceLine: undefined,
-        saveError: undefined,
-      };
-    }),
-    updateAnnotationNumber: assign(({ context, event }) => {
-      if (!context.chapter || event.type !== "ANNOTATION_NUMBER_CHANGED") {
-        return {};
-      }
-      const application = new ChapterReviewApplication({
-        rows: context.chapter.rows,
-        annotationPairs: context.chapter.annotationPairs,
-      });
-      const next = application.setAnnotationNumber(event.rowId, event.value);
-      return {
-        chapter: {
-          ...context.chapter,
-          rows: next.rows,
-          annotationPairs: next.annotationPairs,
-        },
-        undoStack: pushHistory(
-          context.undoStack,
-          historySnapshot(context.chapter),
-        ),
         redoStack: [],
         focusedReviewRowId: undefined,
         focusedSourceLine: undefined,
@@ -1002,11 +968,6 @@ export const workspaceMachine = setup({
               target: "dirty",
               actions: "updateCalibrationLineType",
             },
-            ANNOTATION_NUMBER_CHANGED: {
-              guard: "annotationNumberChanged",
-              target: "dirty",
-              actions: "updateAnnotationNumber",
-            },
             CHAPTER_FILE_CHANGED: {
               guard: "chapterFileChanged",
               target: "dirty",
@@ -1072,10 +1033,6 @@ export const workspaceMachine = setup({
             CALIBRATION_LINE_TYPE_CHANGED: {
               guard: "calibrationLineTypeChanged",
               actions: "updateCalibrationLineType",
-            },
-            ANNOTATION_NUMBER_CHANGED: {
-              guard: "annotationNumberChanged",
-              actions: "updateAnnotationNumber",
             },
             CHAPTER_FILE_CHANGED: {
               guard: "chapterFileChanged",

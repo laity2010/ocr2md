@@ -17,6 +17,11 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import type { SourceRange } from "../../../src/types";
+import {
+  regexHighlightEffect,
+  regexHighlightField,
+} from "./regexMatchHighlight";
+import type { SourceRegexMatch } from "./sourceRegexSearch";
 
 export const obsidianSyntaxHighlight = HighlightStyle.define([
   { tag: tags.comment, color: "var(--obsidian-code-comment)" },
@@ -261,6 +266,7 @@ export class WorkingEditor {
           syntaxHighlighting(obsidianSyntaxHighlight),
           sourceHeadingField,
           latexHighlightField,
+          regexHighlightField,
           this.hardReturnCompartment.of(hardReturnField),
           EditorView.lineWrapping,
           this.editableCompartment.of(EditorView.editable.of(false)),
@@ -301,6 +307,13 @@ export class WorkingEditor {
     });
   }
 
+  setHardReturnColor(color: string): void {
+    this.view.dom.style.setProperty(
+      "--ocr2md-hard-return-color",
+      color,
+    );
+  }
+
   setEditable(editable: boolean): void {
     this.view.dispatch({
       effects: this.editableCompartment.reconfigure(
@@ -327,14 +340,23 @@ export class WorkingEditor {
     });
   }
 
-  revealOffsets(from: number, to: number): void {
+  setRegexMatches(
+    matches: readonly SourceRegexMatch[],
+    currentIndex: number,
+  ): void {
+    this.view.dispatch({
+      effects: regexHighlightEffect(matches, currentIndex),
+    });
+  }
+
+  revealOffsets(from: number, to: number, focus = true): void {
     const safeFrom = Math.max(0, Math.min(from, this.view.state.doc.length));
     const safeTo = Math.max(safeFrom, Math.min(to, this.view.state.doc.length));
     this.view.dispatch({
       selection: { anchor: safeFrom, head: safeTo },
       effects: EditorView.scrollIntoView(safeFrom, { y: "center" }),
     });
-    this.view.focus();
+    if (focus) this.view.focus();
   }
 
   revealRange(range: SourceRange): number | undefined {

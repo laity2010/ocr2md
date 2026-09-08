@@ -3,7 +3,7 @@ import { ensureFeatureDebugCopy } from "./debugFixture";
 
 test.describe.configure({ timeout: 60_000 });
 
-test("annotation feature debug covers renumber pairs undo redo ignore save reentry and restores baseline", async ({ page, request }) => {
+test("annotation feature debug enforces source-derived read-only numbers and restores baseline", async ({ page, request }) => {
   ensureFeatureDebugCopy();
 
   const catalog = await request.get("/__workspace/chapters").then((response) =>
@@ -57,14 +57,17 @@ test("annotation feature debug covers renumber pairs undo redo ignore save reent
   await expect(page.locator("#active-module-rows")).toHaveText("20");
   await expect(page.locator("#annotation-pairs")).toHaveText("10");
   await expect(
-    page.locator('#calibration-grid .ag-row[row-index="0"] input.annotation-number-input'),
-  ).toHaveValue("1");
+    page.locator('#calibration-grid .ag-row[row-index="0"] [col-id="annotationNumber"]'),
+  ).toHaveText("1");
+  await expect(
+    page.locator("#calibration-grid input.annotation-number-input"),
+  ).toHaveCount(0);
   await expect(
     page.locator('#calibration-grid .ag-row[row-index="0"] select.calibration-line-type'),
   ).toHaveValue("注释引用");
-  await expect(
-    page.locator('#calibration-grid .ag-row[row-index="0"] [col-id="annotationPairStatus"]'),
-  ).toHaveText("自动匹配");
+  await expect(page.locator("#annotation-match-status")).toContainText(
+    "配对 10 · 缺引用 0 · 缺正文 0 · 缺号 0",
+  );
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#undo-depth")).toHaveText("0");
   await expect(page.locator("#redo-depth")).toHaveText("0");

@@ -15,6 +15,8 @@ test("source editor restores heading link latex and html semantic styles", async
   await page.locator("#ui-debug-initialize").click();
 
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
+  await page.locator("#regex-search-toggle").click();
+  await expect(page.locator("#regex-search-panel")).toBeVisible();
 
   const h1 = page.locator("#working-editor .cm-line.cm-obsidian-h1").first();
   await expect(h1).toContainText("Buffett");

@@ -434,7 +434,7 @@ test("remote command can persist one chapter and switch to another catalog chapt
   await waitForCommand(request, clientId, finalCloseId, "idle");
 });
 
-test("remote annotation renumber survives working rescan and unified undo restores exact pair state", async ({ page, request }) => {
+test("remote working rescan preserves source-derived annotation pair state", async ({ page, request }) => {
   await page.goto("/");
   await expect(page.locator("#state-value")).toHaveText("idle");
   const clientId = await pageClientId(page);
@@ -482,26 +482,6 @@ test("remote annotation renumber survives working rescan and unified undo restor
       && client.state?.activeModuleRows === 20,
   );
 
-  const renumberId = await issueCommand(
-    request,
-    clientId,
-    "renumber-first-annotation",
-  );
-  const renumbered = await waitForCommand(
-    request,
-    clientId,
-    renumberId,
-    "chapter-dirty",
-    (client) =>
-      client.state?.annotationPairs === 11
-      && client.state?.annotationPairedCount === 9
-      && client.state?.annotationMissingRefCount === 1
-      && client.state?.annotationMissingBodyCount === 1
-      && client.state?.undoDepth === 1,
-  );
-  expect(renumbered.state?.workingLength).toBe(baselineLength);
-  expect(renumbered.state?.annotationCalibratedRows).toBe(20);
-
   const editId = await issueCommand(request, clientId, "edit");
   const edited = await waitForCommand(
     request,
@@ -510,36 +490,20 @@ test("remote annotation renumber survives working rescan and unified undo restor
     "chapter-dirty",
     (client) =>
       client.state?.workingLength === baselineLength + 1
-      && client.state?.annotationPairs === 11
-      && client.state?.annotationPairedCount === 9
-      && client.state?.annotationMissingRefCount === 1
-      && client.state?.annotationMissingBodyCount === 1
-      && client.state?.undoDepth === 2,
+      && client.state?.annotationPairs === 10
+      && client.state?.annotationPairedCount === 10
+      && client.state?.annotationMissingRefCount === 0
+      && client.state?.annotationMissingBodyCount === 0
+      && client.state?.undoDepth === 1,
   );
   expect(edited.state?.annotationCalibratedRows).toBe(20);
   expect(edited.state?.annotationMissingNumberCount).toBe(0);
 
-  const undoEditId = await issueCommand(request, clientId, "undo");
-  const undoEdit = await waitForCommand(
-    request,
-    clientId,
-    undoEditId,
-    "chapter-dirty",
-    (client) =>
-      client.state?.workingLength === baselineLength
-      && client.state?.annotationPairs === 11
-      && client.state?.annotationPairedCount === 9
-      && client.state?.undoDepth === 1
-      && client.state?.redoDepth === 1,
-  );
-  expect(undoEdit.state?.annotationMissingRefCount).toBe(1);
-  expect(undoEdit.state?.annotationMissingBodyCount).toBe(1);
-
-  const undoRenumberId = await issueCommand(request, clientId, "undo");
+  const undoId = await issueCommand(request, clientId, "undo");
   const restored = await waitForCommand(
     request,
     clientId,
-    undoRenumberId,
+    undoId,
     "chapter-clean",
     (client) =>
       client.state?.workingLength === baselineLength
@@ -548,7 +512,7 @@ test("remote annotation renumber survives working rescan and unified undo restor
       && client.state?.annotationMissingRefCount === 0
       && client.state?.annotationMissingBodyCount === 0
       && client.state?.undoDepth === 0
-      && client.state?.redoDepth === 2,
+      && client.state?.redoDepth === 1,
   );
   expect(restored.state?.annotationCalibratedRows).toBe(20);
   expect(restored.state?.annotationMissingNumberCount).toBe(0);

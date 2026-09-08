@@ -44,6 +44,7 @@ test("initialize working draft creates a clean reusable feature-debug baseline",
     "aria-valuenow",
     "57",
   );
+  await page.locator("#regex-search-toggle").click();
   await page.locator("#regex-search").fill("temporary");
   await page.locator("#search-case").check();
 

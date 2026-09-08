@@ -23,9 +23,6 @@ export function extractAnnotationNumber(text: string): string | undefined {
 }
 
 export function resolvedAnnotationNumber(row: Candidate): string | undefined {
-  const stored = row.annotationNumber?.trim();
-  if (stored) return stored;
-  if (row.annotationNumberSource === "manual") return undefined;
   return extractAnnotationNumber(row.raw);
 }
 

@@ -4696,3 +4696,858 @@ M4 完成条件已满足：
 - Deployment = 1/1 Ready。
 
 此版本是“配置多了不好找”的第一版交互试验。复杂项暂不做表单化编辑，避免在 JSON 之外再长出第二套配置编辑逻辑。
+
+### 13.71 2026-09-08 · 配置浏览器迁移到左侧数据表
+
+用户否定右侧“Settings + JSON”双层方案，改为：
+- JSON 保持唯一配置源。
+- 配置浏览、分组、简单编辑放到左侧数据表。
+- 右侧“表格配置”只保留 JSON 编辑器。
+- 点击左侧配置行，右侧 JSON 精确定位对应字段。
+
+实现：
+- 新增独立 UI 模式“配置”，不进入 WorkspaceMachine / ActiveReviewModule，避免污染章节业务状态。
+- 左侧模块条新增“配置”。
+- 进入配置模式：
+  - 隐藏章节 calibration grid。
+  - 显示独立 TableConfigurationGrid。
+  - 右侧自动切到“表格配置” JSON。
+- 退出配置模式或点击正式章节模块：
+  - 恢复 calibration grid。
+  - 恢复此前 activeReviewModule，不改变 XState。
+  - 右侧回到源码。
+- TableConfigurationGrid 使用同一 AG Grid 视觉体系。
+- 列：
+  - 分组
+  - 配置项
+  - 当前值
+  - JSON 路径
+- 配置行来源继续使用 TABLE_PRESENTATION_SETTINGS schema descriptor。
+- boolean 简单项在“当前值”列直接 checkbox 编辑。
+- array/object 等复杂项显示摘要，点击整行定位右侧 JSON。
+- 删除上一版右侧搜索 Settings 面板及其重复 UI 逻辑。
+- JSON 的 Save / Reset / last-known-good / 项目级持久化不变。
+
+4176 真链路：
+- 配置 AG Grid aria-rowcount = 23（22 配置行 + header）。
+- 表头 = 分组 / 配置项 / 当前值 / JSON 路径。
+- “源码窗口 / 显示硬回车” checkbox=true，切 false 后右侧 JSON 即时变为 showHardReturns=false。
+- “数据表 / 注释 / 默认排序”摘要 = 注释号 → 行号。
+- 点击该行后状态 = 已定位 JSON · modules.注释.sort。
+- 全程 chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 点击“注释”正式模块后：
+  - 配置表隐藏
+  - calibration grid 恢复
+  - activeReviewModule 仍为注释
+  - 右侧回源码
+- smoke 未点保存，前后项目配置 payload 完全一致。
+
+自动化：
+- typecheck PASS。
+- build PASS。
+- tablePresentationEditor + sourcePaneTabs 2/2 PASS。
+- test:table-config PASS。
+- featureDebugTablePresentation + reviewModules + annotation + embed 回归 6/6 PASS。
+- git diff --check PASS。
+
+私有云：
+- image = ocr2md/v2:config-grid-20260908a
+- Helm revision = 70
+- Deployment = 1/1 Ready
+
+当前等待真实 iPad UI 验收后再 Git checkpoint。
+
+### 13.72 2026-09-08 · 配置契约 v2：数据表 / JSON 五列同构
+
+用户确认配置数据表固定列：
+- 控件
+- 功能组
+- 键名
+- 值
+- 中文描述
+
+契约：
+- JSON 外部格式升级为 v2，和数据表五列同构：
+  - 根节点：版本 = 2
+  - 配置 = 配置记录数组
+  - 每条记录字段固定为：控件 / 功能组 / 键名 / 值 / 中文描述
+- 功能组用于同一控件下配置较多时进一步分组。
+- 功能组缺失或空字符串时默认归一化为“通用”。
+- 当前已有配置全部默认使用“通用”。
+
+当前控件命名：
+- 源码窗口
+- 章节标题数据表
+- 注释数据表
+- 嵌入块数据表
+- 非法断行数据表
+- 变动行数据表
+- 章节定界数据表
+- 翻译数据表
+
+当前键：
+- 源码窗口：showHardReturns
+- 各数据表：columns / sort / columnStyles
+
+实现边界：
+- v2 JSON 只是面向人的外部配置契约。
+- 内部继续投影到原有稳定 presentation runtime，不改 CalibrationGrid 业务契约。
+- v1 legacy JSON 保持兼容读取。
+- 正常加载 v1 项目配置时，右侧编辑器直接显示 canonical v2 五列格式。
+- 不自动写回 PVC；只有用户点击“保存”才升级落盘。
+- v2 中缺少某些配置记录时继续使用内置默认。
+- 未知 控件/键名、重复配置、值类型错误继续走 last-known-good 防护。
+
+左侧配置表：
+- 列严格为 控件 / 功能组 / 键名 / 值 / 中文描述。
+- 行直接来自 v2 配置记录，不再从另一套 Settings UI 组装。
+- boolean 值直接 checkbox。
+- array/object 值显示摘要。
+- 点击行按 控件 + 键名 定位右侧 JSON。
+- JSON 定位状态示例：
+  已定位 JSON · 注释数据表 / 通用 / sort
+
+验证：
+- typecheck PASS。
+- build PASS。
+- 配置契约单测 PASS：
+  - default source = 版本 2
+  - 五字段顺序固定
+  - 默认功能组全部 = 通用
+  - 功能组缺失自动补 通用
+  - legacy v1 -> v2 canonical projection
+- sourcePaneTabs + tablePresentationEditor = 2/2 PASS。
+- featureDebugTablePresentation + reviewModules + annotation + embed = 6/6 PASS。
+- git diff --check PASS。
+
+4176 真链路：
+- aria-colcount = 5。
+- aria-rowcount = 23（22 配置记录 + header）。
+- 前四列 = 控件 / 功能组 / 键名 / 值。
+- 横向滚动后第 5 列 = 中文描述。
+- 源码窗口 / 通用 / showHardReturns：
+  - checkbox 默认 true。
+  - 中文描述 = 显示硬回车。
+  - 切 false 后右侧 v2 JSON 即时显示 值=false。
+- 注释数据表 / 通用 / sort：
+  - 值摘要 = 注释号 → 行号。
+  - 点击后精确定位 JSON。
+- 全程 chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- smoke 未保存；PVC payload 前后完全一致。
+- 现有 PVC 仍是 v1，证明只读迁移没有写回。
+
+私有云：
+- image = ocr2md/v2:config-flat-v2-20260908a
+- Helm revision = 71
+- Deployment = 1/1 Ready
+
+当前等待真实 iPad UI 验收后再 Git checkpoint。
+
+### 13.73 2026-09-08 · 配置表值列改为源码真实值
+
+用户澄清：
+- 键名 = JSON 配置中的真实键名。
+- 值 = JSON 配置中的真实值。
+- 不允许把值转义成语义摘要。
+- 数组只做 50 字符预览。
+
+实现：
+- 配置表键名继续直接使用 canonical config key：
+  - showHardReturns
+  - columns
+  - sort
+  - columnStyles
+- 值列改为源码字面值风格：
+  - boolean: checkbox + true / false
+  - number: JSON 数值
+  - string: JSON 字符串
+  - null: null
+  - object: 紧凑 JSON 原值
+  - array: 紧凑 JSON 原值预览，最长 50 个字符；超过时前 49 字符 + …
+- 删除旧的语义摘要：
+  - 不再显示 注释号 → 行号
+  - 不再显示 N 项
+  - boolean 不再显示 开 / 关
+- 实际配置 value 不做截断；只有数据表显示层预览数组时截断。
+
+验证：
+- configuration value preview 单测 PASS：
+  - true / false / number / string / object 保持 JSON 字面值
+  - 长数组预览长度严格 = 50
+  - 第 50 字符为 …
+  - 前 49 字符与 JSON.stringify 原值一致
+- build PASS。
+- tablePresentationEditor + sourcePaneTabs = 2/2 PASS。
+- git diff --check PASS。
+
+4176 真链路：
+- showHardReturns 行 = 源码窗口 / 通用 / showHardReturns / true
+- 注释 sort 行值 = ["注释号","行号"]
+- sort 值不再含 →
+- 注释 columnStyles 行显示真实紧凑 JSON 对象，不再显示 N 项
+- chapter-clean / Undo 0 / Redo 0 / canSave=否
+- smoke 未保存；PVC payload 前后完全一致。
+
+私有云：
+- image = ocr2md/v2:config-raw-value-20260908a
+- Helm revision = 72
+- Deployment = 1/1 Ready
+
+等待真实 iPad 验收后再 Git checkpoint。
+
+### 13.74 2026-09-08 · 配置契约定稿：单键键值对象 + 三列筛选
+
+用户确认最终 JSON 记录结构：
+- 控件
+- 功能组
+- 键值
+- 中文描述
+
+其中：
+- 键值必须是对象。
+- 键值对象必须且只能包含 1 个 key。
+- 数据表中的“键名”直接取这个唯一 key。
+- 数据表中的“值”直接取该 key 的真实 value。
+- 功能组缺失/空值时默认归一化为“通用”。
+
+示例：
+- 控件 = 章节标题数据表
+- 功能组 = 通用
+- 键值 = { columns: [行号, 行类型, 标题预览] }
+- 中文描述 = 列顺序
+
+左侧配置表保持五列：
+- 控件
+- 功能组
+- 键名
+- 值
+- 中文描述
+
+值显示规则保持：
+- boolean = checkbox + true/false
+- number/string/null = JSON 字面值
+- object = 紧凑 JSON
+- array = 紧凑 JSON 单行预览，最长 50 字符，超出前49字符 + …
+- 实际配置值不截断，只截断数据表显示。
+
+筛选：
+- 控件列：agTextColumnFilter + floating filter
+- 功能组列：agTextColumnFilter + floating filter
+- 键名列：agTextColumnFilter + floating filter
+- 值、中文描述不提供筛选输入。
+- 三个筛选条件可叠加。
+
+验证：
+- typecheck PASS。
+- table presentation config contract PASS。
+- 键值多 key 会明确报错并拒绝应用。
+- tableConfigurationGrid value preview PASS。
+- sourcePaneTabs + tablePresentationEditor = 2/2 PASS。
+- featureDebugTablePresentation + reviewModules + annotation + embed = 6/6 PASS。
+- git diff --check PASS。
+
+4176 真链路：
+- canonical JSON 含 键值，不再含独立 键名/值 字段。
+- 章节标题 columns 行 = 章节标题数据表 / 通用 / columns / [行号,行类型,标题预览]。
+- floating filter 输入数 = 3。
+- 控件筛 注释 -> 3 行。
+- 叠加键名筛 sort -> 1 行。
+- 再叠加功能组筛 不存在 -> 0 行。
+- 功能组改回 通用 -> 1 行。
+- 过滤后的唯一行 = 注释数据表 / 通用 / sort / [注释号,行号]。
+- 全程 chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- smoke 未保存；PVC payload 前后完全一致，仍保持既有 v1 文件。
+
+私有云：
+- image = ocr2md/v2:config-keyvalue-filter-20260908a
+- Helm revision = 73
+- Deployment = 1/1 Ready
+
+等待真实 iPad UI 验收后再 Git checkpoint。
+
+### 13.75 2026-09-08 · 配置表枚举多选筛选
+
+用户将配置表筛选交互定为枚举 Set Filter，而非文本搜索：
+- 适用列：控件 / 功能组 / 键名。
+- 点击列筛选入口后，列出该列已有值。
+- 每个值使用 checkbox，支持多选。
+- 顶部提供 All；All = 该列不过滤。
+- 多列筛选条件可以叠加。
+- 值 / 中文描述不提供筛选。
+
+实现：
+- 移除三列文本 floating filter。
+- 使用 AG Grid Community 自定义 IFilterComp EnumCheckboxFilter，不依赖 Enterprise Set Filter。
+- 弹层值从 grid leaf rows 动态枚举并去重。
+- checkbox 变更后即时应用。
+- 全部已有值重新被选中时归一化为 All。
+- 筛选按钮触摸目标至少 28×28。
+- 弹层支持滚动，适合 iPad。
+
+验收：
+- sourcePaneTabs + tablePresentationEditor = 2/2 PASS。
+- 控件：注释数据表 + 嵌入块数据表多选 -> 6 行；去掉嵌入块 -> 3 行。
+- 叠加键名 sort -> 1 行。
+- All 恢复后 aria-rowcount = 23（22 配置行 + header）。
+- table presentation config contract PASS。
+- table configuration value preview PASS。
+- featureDebugTablePresentation + reviewModules + annotation + embed = 6/6 PASS。
+- typecheck / build / git diff --check PASS。
+
+4176 真链路：
+- baseline aria-rowcount = 23。
+- 控件多选两项 -> 7（6 rows + header）。
+- 控件单选注释 -> 4（3 rows + header）。
+- 再叠加键名 sort -> 2（1 row + header）。
+- All 恢复 -> 23。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；PVC payload 前后完全一致。
+
+私有云：
+- image = ocr2md/v2:config-set-filter-20260908a
+- Helm revision = 74
+- Deployment = 1/1 Ready
+
+等待真实 iPad UI 验收后再 Git checkpoint。
+
+### 13.76 2026-09-08 · 暴露源码硬回车颜色
+
+新增源码窗口配置：
+- 控件 = 源码窗口
+- 功能组 = 通用
+- 键名 = hardReturnColor
+- 默认值 = #9aa79d
+- 中文描述 = 硬回车颜色
+
+JSON canonical 记录：
+- 键值 = { hardReturnColor: #9aa79d }
+- 仍遵守单键键值对象契约。
+
+运行时：
+- SourceEditorPresentation 新增 hardReturnColor。
+- WorkingEditor 新增 setHardReturnColor。
+- 硬回车 marker 使用独立 CSS 变量 --ocr2md-hard-return-color。
+- 默认值保持原视觉等效颜色 #9aa79d。
+- 配置热更新只改变 marker 呈现，不重建 working，不进入业务历史。
+- hardReturnColor 缺失时回退 #9aa79d。
+- 空字符串会被配置校验拒绝并保留 last-known-good。
+
+配置表：
+- 新行 = 源码窗口 / 通用 / hardReturnColor / "#9aa79d" / 硬回车颜色。
+- 点击行定位到右侧 canonical JSON。
+- 键名枚举筛选会自动包含 hardReturnColor。
+- 配置总记录由 22 增为 23，aria-rowcount = 24（23 rows + header）。
+
+验证：
+- typecheck PASS。
+- table presentation config contract PASS。
+- build PASS。
+- sourcePaneTabs + tablePresentationEditor = 2/2 PASS。
+- UI 真实热更新：#9aa79d -> #ff0000 后 cm-hard-return-marker computed color = rgb(255, 0, 0)。
+- 恢复默认后 computed color = rgb(154, 167, 157)。
+- featureDebugTablePresentation + reviewModules + annotation + embed = 6/6 PASS。
+- git diff --check PASS。
+
+4176 真链路：
+- hardReturnColor 行存在，真实值 = "#9aa79d"。
+- 点击状态 = 已定位 JSON · 源码窗口 / 通用 / hardReturnColor。
+- 改为 #ff0000 后源码硬回车即时变红。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- smoke 未保存；PVC payload 前后完全一致。
+
+私有云：
+- image = ocr2md/v2:hard-return-color-20260908a
+- Helm revision = 75
+- Deployment = 1/1 Ready
+
+等待真实 iPad UI 验收后再 Git checkpoint。
+
+### 13.76 2026-09-08 · 暴露源码硬回车颜色
+
+用户要求将源码窗硬回车标记 ↵ 的颜色暴露到统一配置。
+
+配置契约：
+- 控件 = 源码窗口
+- 功能组 = 通用
+- 键名 = hardReturnColor
+- 默认值 = "#9aa79d"
+- 中文描述 = 硬回车颜色
+- JSON：键值对象仍保持单 key 约束。
+
+实现：
+- SourceEditorPresentation 新增 hardReturnColor:string。
+- 旧 v1 sourceEditor 未配置颜色时自动回落 #9aa79d。
+- 空字符串/非字符串颜色配置判为无效，保留 last-known-good。
+- 源码窗 .cm-hard-return-marker 改用 --ocr2md-hard-return-color。
+- WorkingEditor 新增 setHardReturnColor(color)，通过 CSS variable 即时热更新，不重建文档。
+- 表格自动新增：源码窗口 / 通用 / hardReturnColor / "#9aa79d" / 硬回车颜色。
+- 默认视觉保持原样，不因升级改变颜色。
+
+验证：
+- typecheck PASS。
+- table presentation config contract PASS。
+- build PASS。
+- sourcePaneTabs + tablePresentationEditor = 2/2 PASS。
+- hardReturnColor 改为 #ff0000 -> computed color rgb(255, 0, 0)。
+- 恢复 #9aa79d -> computed color rgb(154, 167, 157)。
+- 原模块回归最新 Playwright .last-run = passed，failedTests = []。
+- 4176 HTTP 200。
+
+4176 真链路：
+- hardReturnColor 行真实存在，默认值 #9aa79d。
+- 点击行可定位 JSON：源码窗口 / 通用 / hardReturnColor。
+- 最小合法配置改 #ff0000 -> ↵ 即时变红。
+- 改回 #9aa79d -> ↵ 即时恢复。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；PVC payload 前后完全一致。
+
+私有云：
+- image = ocr2md/v2:hard-return-color-20260908a
+- Helm revision = 76
+- Deployment = 1/1 Ready
+
+接手最终复核：
+- featureDebugTablePresentation + reviewModules + annotation + embed = 6/6 PASS（4393）。
+- git diff --check PASS。
+- 4176 / 1032×642 真链路再次验证：配置行、JSON 定位、#ff0000 热更新、#9aa79d 恢复均 PASS。
+- 全程 chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- PVC table-presentation payload SHA-256 前后均为 c8b99d921752ef87784de39b028f7251969ec71fcc85d045b51c2659f4fdf66f，确认未写入。
+
+等待真实 iPad 视觉验收后再 Git checkpoint。
+
+### 13.77 2026-09-08 · 表格配置 → 源码时业务 tag 同步修复
+
+真实 iPad 发现：
+- 处于“表格配置”时切回“源码”，右侧数据表已经恢复章节标题，但左侧业务 tag 没有恢复选中态。
+
+根因：
+- 进入配置表模式时会主动清空所有业务 tag 的 aria-pressed。
+- 离开配置表模式时只恢复数据表显示，没有重新按 XState 当前 activeReviewModule 投影业务 tag。
+- 这是纯 UI 投影遗漏，不是状态机或数据表模块错误。
+
+修复：
+- setConfigGridMode(false) 时读取当前 activeReviewModule。
+- 对 reviewModuleButtons 重新投影 aria-pressed。
+- 因此配置 → 源码 / CSS / 正则搜索离开配置模式时，业务 tag 与真实数据表模块保持一致。
+- 不发送 SELECT_REVIEW_MODULE，不修改 chapter history。
+
+验证：
+- typecheck PASS。
+- table presentation config contract PASS。
+- build PASS。
+- git diff --check PASS。
+- sourcePaneTabs + tablePresentationEditor = 2/2 PASS。
+- sourcePaneTabs 新增精确路径：章节标题 tag=true → 表格配置 tag=true/章节标题=false → 源码后章节标题=true/配置=false。
+
+私有云：
+- image = ocr2md/v2:config-tab-sync-20260908a
+- Helm revision = 77
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / 1032×642 真链路：
+- 初始：章节标题=true / 配置=false。
+- 表格配置：章节标题=false / 配置=true，配置表可见。
+- 切回源码：章节标题=true / 配置=false，章节标题数据表可见。
+- activeReviewModule=章节标题。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；PVC table-presentation payload SHA-256 前后均为 0a455c1d5e247883d15e3beca68bbdbf60bb5a3137fe57573c95ef81ada9cff9。
+
+等待真实 iPad 复验后再 Git checkpoint。
+
+### 13.78 2026-09-08 · 注释组号改为源码派生只读字段
+
+用户明确业务规则：
+- 注释组号来自源码中的实际注释引用与注释正文提取 / 配对结果。
+- 组号是派生字段，不允许人工修改。
+
+产品收紧：
+- 注释号列保留显示与排序，但移除文本输入 renderer，改为 AG Grid 只读文本。
+- CalibrationGrid 移除 annotationNumberChanged 回调与 renumberFirstVisibleAnnotation。
+- XState 移除 ANNOTATION_NUMBER_CHANGED event、guard、action 及 clean / dirty 两条 transition。
+- 调试命令通道移除 renumber-first-annotation，避免旁路重新开放人工改号。
+- 因此编号变化只能来自源码内容重新扫描 / 提取，不能由表格 UI、状态机事件或调试命令直接写入。
+
+功能调试：
+- 注释模块调试改为验证“源码派生只读”契约。
+- 基线验证 20 行 / 10 对，前 6 个组号为 1,1,2,2,3,3。
+- 验证不存在 input.annotation-number-input。
+- 已忽略语义仍可正常产生缺引用状态，并可 Undo / 保存重入。
+- 配对统计改用 workspace model 验证，不依赖 AG Grid 横向虚拟化后可能不在 DOM 的配对状态列。
+
+自动验证：
+- annotationModule = 2/2 PASS。
+- featureDebugAnnotation = 1/1 PASS。
+- reviewModules + tablePresentationEditor = 3/3 PASS。
+- debugCommandChannel 源码重扫派生配对专项 = 1/1 PASS。
+- 最终较宽 gate：featureDebugTablePresentation + reviewModules + annotationModule + embedModule + featureDebugAnnotation + sourcePaneTabs = 8/8 PASS。
+- table presentation config contract / typecheck / build / git diff --check 均 PASS。
+
+私有云：
+- image = ocr2md/v2:annotation-number-readonly-20260908a
+- Helm revision = 78
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / 1032×642 真实 Buffett smoke：
+- activeReviewModule = 注释。
+- 20 行 / 10 对。
+- 注释号输入框 = 0。
+- 前 6 个组号 = 1,1,2,2,3,3。
+- 首个组号单元格 contenteditable != true。
+- 点击组号后输入框仍 = 0。
+- 配对统计 = 10，缺引用 / 缺正文 / 缺号均 0。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 验收后再 Git checkpoint。
+
+### 13.79 2026-09-08 · 预览窗口不渲染 YAML frontmatter
+
+用户规则：
+- 预览窗口不需要显示 / 渲染 Markdown 文件头的 YAML frontmatter。
+- 源码窗口保持原样。
+
+实现：
+- BasicMarkdownPreview 在交给 markdown-it 前识别文件头 `--- ... ---` / `--- ... ...` frontmatter。
+- frontmatter 不直接删除，而是替换为“等行数空白”，因此预览不显示 YAML，同时保留后续 token 的原始源码行号。
+- 这样源码 ↔ 预览滚动联动仍使用真实源码行号，不发生整体上移。
+
+验证：
+- editorPreview + sourcePreviewScrollSync + featureDebugMarkdownPreview = 3/3 PASS。
+- editorPreview 精确验证：
+  - 预览不含 `ocr2md_chapter_split`。
+  - 预览不含 `ocr2md_chapter_file`。
+  - 第一正文标题 Buffett’s Alpha 仍为 `data-source-line=9`。
+- Markdown 预览功能调试 5/5 PASS。
+- source ↔ preview 双向滚动 PASS。
+- ui-spikes/v2 build / typecheck / git diff --check PASS。
+
+同时完成上一条注释号“全仓只读”收尾：
+- 旧 VS Code reviewUi 移除注释号 input 与 setAnnotationNumber command。
+- uiProtocol / extension / ChapterReviewApplication 移除手工改号入口。
+- rebuildAnnotationReviewState 无条件按源码重新提取注释号，不再保留历史 manual 值。
+- rowIdentity 不再让历史 manual 注释号覆盖重新扫描结果。
+- Candidate.annotationNumberSource 收紧为 extracted-only。
+- 全仓 grep 不再存在 setAnnotationNumber / applyAnnotationNumber / manual annotation number 编辑路径。
+- annotation / chapterReviewActions / chapterReviewApplication / reviewUi 4 项可执行专项 PASS。
+- extension bundle gate PASS。
+- 根层 `npm test` 仍被既有无关错误挡住：reviewModuleDefinitions.ts 缺少 ModuleName=`变动行` 定义；本次未扩大范围修复。
+
+私有云：
+- image = ocr2md/v2:preview-no-yaml-20260908a
+- Helm revision = 79
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / 1032×642 真实 Buffett smoke：
+- YAML key 在预览中计数 = 0。
+- 第一标题 = Buffett’s Alpha，source line = 9。
+- preview chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 注释号输入框 = 0。
+- 前 6 个组号 = 1,1,2,2,3,3。
+- 注释模块 chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 验收后再 Git checkpoint。
+
+### 13.80 2026-09-08 · 正则搜索从第四个 tag 改为三编辑器共享抽屉
+
+用户提出：
+- 正则搜索不应只作用于 working 源码。
+- 应能搜索当前获得焦点的源码文件：源码 / 自定义 CSS / 表格配置。
+- 正则搜索本身不是第四种内容，应重新考虑位置。
+
+界面调整：
+- 源码窗 tag 收敛为 3 个：源码 / 自定义 CSS / 表格配置。
+- 移除“正则搜索”第四个 peer tab。
+- 顶部增加 `.* 正则搜索` 工具按钮。
+- 点击后在当前编辑器下方展开共享搜索抽屉；当前编辑器保持可见。
+- 抽屉显示当前目标：源码 / 自定义 CSS / 表格配置。
+- 支持 × 关闭；抽屉打开时切换三个 tag，目标自动跟随。
+
+搜索引擎：
+- SourceRegexSearch 从固定 working 源码改为可切换 target。
+- 每个 target 提供当前文本 getter + match reveal 回调。
+- 编辑后再次搜索会读取目标编辑器最新文本。
+- WorkingEditor / CustomCssEditor / TablePresentationEditor 均支持 revealOffsets。
+- 搜索命中会在对应 CodeMirror 中选中并滚动到匹配位置。
+- 搜索不进入 XState 业务历史，不触发保存。
+
+验证：
+- sourcePaneTabs + sourceRegexSearch + featureDebugSourceRegexSearch = 3/3 PASS。
+- 受影响回归共 6/6 PASS：featureDebugInitialize / featureDebugReviewRowLocate / sourcePreviewScrollSync / sourceSemanticStyles / tablePresentationEditor。
+- ui-spikes/v2 typecheck / build / git diff --check PASS。
+
+私有云：
+- image = ocr2md/v2:regex-shared-drawer-20260908a
+- Helm revision = 80
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / 1032×642 真实 Buffett smoke：
+- tabs = 源码 / 自定义 CSS / 表格配置。
+- 搜索抽屉默认关闭，可正常展开；展开后当前编辑器仍可见。
+- 源码 target：Buffett = 8 个匹配。
+- CSS target：--ui-font-size = 2 个匹配。
+- 表格配置 target：columns = 14 个匹配。
+- 切回源码后 target 自动恢复“当前：源码”。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 手感验收后再决定该位置是否保留，并暂不 Git checkpoint。
+
+### 13.81 2026-09-08 · 修复正则输入每字符抢焦点
+
+真实 iPad 发现：
+- 正则搜索框每输入一个字符，实时匹配会调用目标编辑器 revealOffsets。
+- revealOffsets 原实现会在定位后强制 focus 对应 CodeMirror。
+- 因而搜索框输入事件后焦点立即跳回源码，造成后续字符误触到源码。
+
+修复：
+- WorkingEditor / CustomCssEditor / TablePresentationEditor 的 revealOffsets 增加可选 focus 参数，默认仍为 true。
+- 普通数据表行定位等既有调用保持默认，行为不变。
+- 正则搜索的三个 target reveal 均使用 focus=false：
+  - 源码
+  - 自定义 CSS
+  - 表格配置
+- 因此匹配仍会选中并滚动，但不会夺走正则输入框焦点。
+
+验证：
+- sourceRegexSearch 增加真实逐字符输入 Buffett 回归；输入完成后正则框仍 focused。
+- sourceRegexSearch + sourcePaneTabs + featureDebugSourceRegexSearch = 3/3 PASS。
+- ui-spikes/v2 typecheck / build / git diff --check PASS。
+
+私有云：
+- image = ocr2md/v2:regex-focus-sticky-20260908a
+- Helm revision = 81
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / 1032×642 真实 Buffett smoke：
+- 逐字符输入 B / Bu / Buf / Buff / Buffe / Buffet / Buffett。
+- 7 次 input 事件中 document.activeElement 均为 #regex-search。
+- 最终输入值 = Buffett。
+- 匹配状态 = 8 个匹配 · 1/8。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 复验后再继续；暂不 Git checkpoint。
+
+### 13.82 2026-09-08 · 正则命中着色 + 搜索状态移出底部状态栏
+
+真实 iPad 反馈：
+- 正则匹配虽然能定位，但源码窗中命中项没有持续着色。
+- 底部状态栏信息过多，当前正则的匹配计数 / 索引不易辨认。
+
+调整：
+- 新增 CodeMirror regex decoration state。
+- 源码 / 自定义 CSS / 表格配置三个编辑器均支持正则命中装饰。
+- 所有可见命中使用普通高亮背景。
+- 当前命中使用更强背景 + accent 描边。
+- ↑ / ↓ 导航会同步更新当前命中强调。
+- 非法正则、清空搜索、关闭搜索抽屉会清理高亮。
+- 搜索定位继续使用 focus=false，因此高亮不会抢走正则输入框焦点。
+- search-status 从底部 pane-status 移到 regex 搜索抽屉，与输入框 / 导航按钮同一区域。
+- 搜索状态使用加粗、tabular nums；底部状态栏不再承载正则信息。
+
+验证：
+- sourceRegexSearch / sourcePaneTabs / featureDebugSourceRegexSearch = 3/3 PASS。
+- sourceSemanticStyles / tablePresentationEditor / featureDebugInitialize = 4/4 PASS。
+- ui-spikes/v2 typecheck / build / git diff --check PASS。
+
+私有云：
+- image = ocr2md/v2:regex-highlight-status-20260908a
+- Helm revision = 82
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / 1032×642 真实 Buffett smoke：
+- search-status parent = regex-search；底部 pane-status 内 search-status 数量 = 0。
+- Buffett = 8 个匹配 · 1/8。
+- 当前命中文本 = Buffett。
+- 当前命中 background 非透明，outline = solid。
+- 当前视口可见 regex match decoration = 2。
+- regex input 仍保持 focused。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 复验；暂不 Git checkpoint。
+
+### 13.83 2026-09-08 · 正则着色暴露到自定义 CSS 通用区
+
+用户确认：
+- 正则匹配项着色属于自定义 CSS。
+- 放在“通用”自定义区。
+- iPad / Mac 全平台共用，不做设备分叉。
+
+实现：
+- 自定义 CSS 默认源码新增：
+  - `/* 通用：iPad / Mac 共用 */`
+  - `:root { ... }`
+- 暴露 3 个通用变量：
+  - `--regex-match-bg`
+  - `--regex-match-current-bg`
+  - `--regex-match-current-border`
+- .cm-regex-match / .cm-regex-match-current 不再写死颜色，统一引用上述变量。
+- index.html :root 仍提供相同 fallback，确保自定义 CSS 缺失时视觉不失效。
+- profile 字体变量继续放在 ipad / mac 专属块，不与通用正则颜色混用。
+
+兼容旧自定义 CSS：
+- 旧 localStorage 若只有 ipad / mac profile 块、没有通用 :root 块，加载时会在编辑器顶部自动补入新的通用块。
+- 原有字体设置保持不变。
+- 不主动覆盖/清空用户已有自定义 CSS。
+
+验证：
+- 新增 customCssCommon.spec.ts：
+  - 旧版 stored CSS 可迁移。
+  - 通用块和 3 个变量在 CSS 编辑器可见。
+  - 修改通用变量后实时作用于源码正则高亮。
+  - 当前命中背景 / 描边实际跟随变量。
+  - chapter 不变脏。
+- customCssCommon + sourceRegexSearch + sourcePaneTabs = 3/3 PASS。
+- ui-spikes/v2 typecheck / build / git diff --check PASS。
+
+私有云：
+- image = ocr2md/v2:regex-colors-common-css-20260908a
+- Helm revision = 83
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / 1032×642 真实 Buffett smoke：
+- 自定义 CSS 可见“通用：iPad / Mac 共用”。
+- 3 个 regex 变量均存在。
+- 当前 profile=mac 时通用变量正常生效，证明不依赖 profile selector。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 验收；暂不 Git checkpoint。
+
+### 13.84 2026-09-08 · 修复 iPad 窄视口下右窗被分栏挤出屏幕
+
+真实 iPad 截图反馈：
+- 源码窗顶部“正则搜索”按钮被裁到最右侧，只剩一小截。
+- 继续检查后确认根因不是按钮自身，而是旧的工作区分栏百分比在 iPad CSS 视口下仍允许过大。
+- workspace 仍要求左窗至少 340px、右窗至少 360px、分隔条 6px；旧全局 clamp 仅按 25%~70% 限制，不能保证小视口下两边都装得下。
+- 因此旧保存值如 70% 会让 editor pane 整体超出 viewport，最右按钮首先被裁掉。
+
+修复：
+- WorkspaceSplitter 新增基于实际 workspace 宽度的动态安全 clamp：
+  - 左窗保留至少 340px。
+  - 右窗保留至少 360px。
+  - 分隔条保留 6px。
+  - 同时仍服从原 25%~70% 总范围。
+- 初始化时会把旧的越界保存值夹到当前视口安全值，并回写 localStorage，避免每次重载复发。
+- ResizeObserver 在工作区宽度变化时再次校正。
+- 业务状态、章节历史与保存状态不受影响。
+
+验证：
+- workspaceSplitter 原有 resize/persist 测试继续 PASS。
+- 新增 iPad 旧 70% split 回归：
+  - 旧 70% 会被自动夹紧。
+  - editor pane right 不超过 workspace right。
+  - regex button / close button 均不超过 editor pane right。
+  - document 无横向 overflow。
+- workspaceSplitter + sourcePaneTabs + sourceRegexSearch = 4/4 PASS。
+- ui-spikes/v2 typecheck / build / git diff --check PASS。
+
+私有云：
+- image = ocr2md/v2:workspace-split-clamp-20260908a
+- Helm revision = 84
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / iPad CSS viewport 834×1194 / 旧 split=70 真链路：
+- viewport = 834，document scrollWidth = 834。
+- editor pane = left 474 / right 834 / width 360，完整留在 viewport 内。
+- regex button = left 732.5 / right 826，完整留在 editor pane 内。
+- close button 自动换到下一行，但仍完整可见。
+- 旧 split 70 自动夹到 aria 56，localStorage=56.11510791366906。
+- 点击正则按钮正常打开 drawer。
+- Buffett = 8 个匹配 · 1/8。
+- regex input 保持 focused。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 复验；暂不 Git checkpoint。
+
+### 13.85 2026-09-08 · 修复“点击正则后按钮被抽屉撑飞”
+
+真实 iPad 继续反馈：
+- rev84 刷新后按钮初始位置正常，但一点击“正则搜索”，按钮仍会飞出右窗。
+- 重新按点击前 / 点击后量测，确认 rev84 只解决了分栏初始越界，没有覆盖抽屉打开后的 grid intrinsic sizing。
+
+复现量测（rev84，4176 / iPad 834×1194）：
+- 点击前：editor pane width/clientWidth/scrollWidth = 360/360/360；pane-menu width=360；regex button right=826。
+- 点击后：editor pane 外壳仍 width=360，但 scrollWidth=679。
+- regex drawer / toolbar 被其内容最小宽度撑到 679。
+- 隐式 CSS Grid 列随之膨胀到 679，pane-menu 也变成 679 宽。
+- regex button right≈1066，close right≈1142，飞出 834px viewport。
+- 根因是 editor-pane 隐式 grid column 使用 auto min-content，正则 drawer 的不换行控件组合把列撑宽。
+
+修复：
+- editor-pane 显式增加 grid-template-columns:minmax(0,1fr)，禁止子项最小内容宽度反向撑大右窗 grid track。
+- regex-search-panel：min-width:0 / max-width:100% / overflow:hidden。
+- regex-panel-toolbar：min-width:0 / flex-wrap:wrap。
+- regex-search：flex:1 1 240px / min-width:0 / max-width:100% / flex-wrap:wrap。
+- regex input 改为 flex:1 1 140px，不再固定占用 min(300px,34vw)。
+- regex status 去掉固定 118px 最小宽度，在窄右窗下按实际文字宽度参与布局。
+
+回归：
+- workspaceSplitter 新测试会实际点击正则并输入 Buffett，然后验证 editor scrollWidth<=clientWidth。
+- pane-menu / regex button / close / drawer 均不越过 editor right。
+- regex toolbar 无内部横向 overflow；document 无横向 overflow。
+- workspaceSplitter + sourcePaneTabs + sourceRegexSearch = 4/4 PASS。
+- ui-spikes/v2 typecheck / build / git diff --check PASS。
+
+私有云：
+- image = ocr2md/v2:regex-drawer-width-fix-20260908a
+- Helm revision = 85
+- Deployment = 1/1 Ready
+- private cloud HTTP 200
+
+4176 / iPad 834×1194 / 旧 split=70 / 真章节 Buffett 点击后 smoke：
+- before editor = width/clientWidth/scrollWidth 360/360/360。
+- after editor = 360/360/360。
+- after pane-menu = 360/360/360。
+- regex button right=826 <= editor right=834。
+- drawer right=834，toolbar width/clientWidth/scrollWidth=360/360/360。
+- search group 被限制在 273px 内并通过换行适配。
+- Buffett = 8 个匹配 · 1/8。
+- regex input focused。
+- chapter-clean / Undo 0 / Redo 0 / canSave=否。
+- 未保存；真实章节 payload SHA-256 前后均为 25819b824e81b73b8bf22dc6835661398d8cbc239108fd3de75cbb7250e04bd7。
+
+等待真实 iPad 复验；暂不 Git checkpoint。
+
+### 13.86 2026-09-08 · GitHub checkpoint gate
+
+用户明确要求“提交一次 GitHub”，视为本轮累计 UI / review 约束改动进入正式 checkpoint。
+
+本轮纳入 checkpoint 的关键项：
+- 注释组号严格由源码引用/正文提取，取消手工改号入口。
+- Markdown 预览隐藏 YAML frontmatter，但保持源码行映射。
+- 表格配置数据表与配置编辑器、列过滤和展示规则。
+- 源码窗保持 3 个内容 tag：源码 / 自定义 CSS / 表格配置。
+- 正则搜索作为共享工具抽屉，不再作为第 4 个内容 tag。
+- 正则输入不抢编辑器焦点；命中持续着色、当前命中强化。
+- 正则状态移入搜索抽屉；底部状态栏移除正则噪音。
+- 正则着色变量暴露到自定义 CSS 通用区，iPad / Mac 共用，并兼容旧 stored CSS。
+- 修复 iPad 窄右窗下 workspace split 越界。
+- 修复打开正则抽屉后 min-content 把 editor grid 从 360px 撑到 679px、导致按钮飞出视口的问题。
+
+最终 gate：
+- ui-spikes/v2 typecheck PASS。
+- ui-spikes/v2 build PASS。
+- git diff --check PASS。
+- V2 DOM contract PASS（ids=116）。
+- workspaceMachine gate PASS。
+- 广覆盖 Playwright：19/20 PASS；唯一失败为 sourceRegexSearch 在 4 分钟长跑中切 CSS 时一次得到 0 个匹配。
+- 该失败测试随后在全新端口/工作区单独复跑：1/1 PASS；此前专项也多次 PASS，记录为长跑时序 flaky，不修改产品代码掩盖。
+- rev85 4176 真链路 iPad 834×1194：打开正则前后 editor width/clientWidth/scrollWidth 均为 360/360/360；按钮、抽屉、toolbar 均不越界；Buffett=8 个匹配 · 1/8；chapter-clean；真实章节 payload hash 前后一致。
+
+已知非本轮 blocker：
+- root 全量 npm test 仍受既有 reviewModuleDefinitions.ts 缺少“变动行”定义的 compile blocker 影响；本轮未扩展修复该无关问题。
+- ui-spikes/v2 全量 npm test 本次还遇到一次 Playwright/@noble/hashes 模块缓存错误 `request for './_md.js' is not in cache`；静态/DOM/machine 与受影响范围 Playwright 均已独立验证。
+
+用户授权本次 checkpoint，随后提交并 push 到 origin/gpt/codespaces-spike。

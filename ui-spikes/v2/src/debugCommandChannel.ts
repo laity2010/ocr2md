@@ -14,7 +14,6 @@ export type DebugCommandAction =
   | "focus-first-calibration"
   | "ignore-first-calibration"
   | "demote-first-heading"
-  | "renumber-first-annotation"
   | "toggle-heading-numbering"
   | "undo"
   | "redo"

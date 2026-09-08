@@ -2,6 +2,9 @@ const STORAGE_KEY = "ocr2md-v2-workspace-split-v1";
 const DEFAULT_LEFT_PERCENT = 43;
 const MIN_LEFT_PERCENT = 25;
 const MAX_LEFT_PERCENT = 70;
+const MIN_LEFT_PX = 340;
+const MIN_RIGHT_PX = 360;
+const SPLITTER_PX = 6;
 
 function clamp(value: number): number {
   return Math.max(MIN_LEFT_PERCENT, Math.min(MAX_LEFT_PERCENT, value));
@@ -29,6 +32,7 @@ function saveLeftPercent(value: number): void {
 export class WorkspaceSplitter {
   private leftPercent = loadLeftPercent();
   private activePointerId: number | undefined;
+  private readonly resizeObserver: ResizeObserver;
 
   constructor(
     private readonly workspace: HTMLElement,
@@ -74,7 +78,15 @@ export class WorkspaceSplitter {
       saveLeftPercent(this.leftPercent);
     });
 
+    this.resizeObserver = new ResizeObserver(() => {
+      const before = this.leftPercent;
+      this.apply(this.leftPercent);
+      if (this.leftPercent !== before) saveLeftPercent(this.leftPercent);
+    });
+    this.resizeObserver.observe(this.workspace);
+
     this.apply(this.leftPercent);
+    saveLeftPercent(this.leftPercent);
   }
 
   getLeftPercent(): number {
@@ -87,7 +99,7 @@ export class WorkspaceSplitter {
   }
 
   private apply(value: number): void {
-    this.leftPercent = clamp(value);
+    this.leftPercent = this.clampToWorkspace(clamp(value));
     this.workspace.style.setProperty(
       "--left-pane-width",
       `${this.leftPercent}%`,
@@ -97,6 +109,24 @@ export class WorkspaceSplitter {
       String(Math.round(this.leftPercent)),
     );
     window.dispatchEvent(new Event("resize"));
+  }
+
+  private clampToWorkspace(value: number): number {
+    const width = this.workspace.getBoundingClientRect().width;
+    if (width <= 0 || width <= MIN_LEFT_PX + SPLITTER_PX + MIN_RIGHT_PX) {
+      return value;
+    }
+
+    const minimum = Math.max(
+      MIN_LEFT_PERCENT,
+      (MIN_LEFT_PX / width) * 100,
+    );
+    const maximum = Math.min(
+      MAX_LEFT_PERCENT,
+      ((width - SPLITTER_PX - MIN_RIGHT_PX) / width) * 100,
+    );
+
+    return Math.max(minimum, Math.min(maximum, value));
   }
 
   private finish(): void {

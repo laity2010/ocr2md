@@ -32,6 +32,19 @@ md.renderer.rules.html_block = (tokens, idx, options, env, self) => {
     : `<div class="md-source-block md-html-block" data-source-line="${line + 1}">${rendered}</div>`;
 };
 
+function maskLeadingYamlFrontmatter(text: string): string {
+  const opening = /^(?:\uFEFF)?---[ \t]*(?:\r\n|\n|\r)/.exec(text);
+  if (!opening) return text;
+
+  const closing = /^(?:---|\.\.\.)[ \t]*(?:\r\n|\n|\r|$)/gm;
+  closing.lastIndex = opening[0].length;
+  const match = closing.exec(text);
+  if (!match) return text;
+
+  const end = match.index + match[0].length;
+  return text.slice(0, end).replace(/[^\r\n]/g, " ") + text.slice(end);
+}
+
 export class BasicMarkdownPreview {
   private lastText = "";
 
@@ -48,7 +61,7 @@ export class BasicMarkdownPreview {
     }
 
     const env = {};
-    const tokens = md.parse(text, env);
+    const tokens = md.parse(maskLeadingYamlFrontmatter(text), env);
 
     for (const token of tokens) {
       if (

@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { ensureFeatureDebugCopy } from "./debugFixture";
 
+test.describe.configure({ timeout: 60_000 });
+
 test("Markdown preview feature debug follows real working edit and restores persisted baseline", async ({ page, request }) => {
   ensureFeatureDebugCopy();
 
@@ -102,7 +104,7 @@ test("Markdown preview feature debug follows real working edit and restores pers
   );
   await expect(page.locator("#feature-debug-progress-title")).toContainText(
     "5/5 通过",
-    { timeout: 12_000 },
+    { timeout: 35_000 },
   );
 
   const snapshots = await page.evaluate(

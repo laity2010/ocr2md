@@ -10,14 +10,25 @@ type SourceRegexSearchOptions = {
   nextButton: HTMLButtonElement;
   status: HTMLElement;
   reveal: (match: SourceRegexMatch) => void;
+  highlight?: (
+    matches: readonly SourceRegexMatch[],
+    currentIndex: number,
+  ) => void;
 };
 
 export class SourceRegexSearch {
   private text = "";
+  private reveal: (match: SourceRegexMatch) => void;
+  private highlight:
+    | ((matches: readonly SourceRegexMatch[], currentIndex: number) => void)
+    | undefined;
+  private currentText: (() => string) | undefined;
   private matches: SourceRegexMatch[] = [];
   private index = -1;
 
   constructor(private readonly options: SourceRegexSearchOptions) {
+    this.reveal = options.reveal;
+    this.highlight = options.highlight;
     options.input.addEventListener("input", () => this.recalculate(true));
     options.input.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
@@ -30,10 +41,31 @@ export class SourceRegexSearch {
     this.syncControls();
   }
 
+  updateTarget(
+    text: string,
+    reveal: (match: SourceRegexMatch) => void,
+    currentText?: () => string,
+    highlight?: (
+      matches: readonly SourceRegexMatch[],
+      currentIndex: number,
+    ) => void,
+  ): void {
+    this.highlight?.([], -1);
+    this.text = text;
+    this.reveal = reveal;
+    this.currentText = currentText;
+    this.highlight = highlight;
+    this.recalculate(true);
+  }
+
   updateText(text: string): void {
     if (text === this.text) return;
     this.text = text;
     this.recalculate(false);
+  }
+
+  clearHighlight(): void {
+    this.highlight?.([], -1);
   }
 
   reset(): void {
@@ -43,16 +75,19 @@ export class SourceRegexSearch {
     this.index = -1;
     this.options.input.removeAttribute("aria-invalid");
     this.options.status.textContent = "";
+    this.syncHighlight();
     this.syncControls();
   }
 
   private recalculate(resetIndex: boolean): void {
+    if (this.currentText) this.text = this.currentText();
     const pattern = this.options.input.value;
     if (!pattern) {
       this.matches = [];
       this.index = -1;
       this.options.input.removeAttribute("aria-invalid");
       this.options.status.textContent = "";
+      this.syncHighlight();
       this.syncControls();
       return;
     }
@@ -83,6 +118,7 @@ export class SourceRegexSearch {
 
       this.options.input.removeAttribute("aria-invalid");
       this.syncStatus();
+      this.syncHighlight();
       this.syncControls();
       if (resetIndex && this.index >= 0) this.revealCurrent();
     } catch (error) {
@@ -91,6 +127,7 @@ export class SourceRegexSearch {
       this.options.input.setAttribute("aria-invalid", "true");
       this.options.status.textContent =
         "正则错误：" + (error instanceof Error ? error.message : String(error));
+      this.syncHighlight();
       this.syncControls();
     }
   }
@@ -100,13 +137,18 @@ export class SourceRegexSearch {
     this.index =
       (this.index + direction + this.matches.length) % this.matches.length;
     this.syncStatus();
+    this.syncHighlight();
     this.revealCurrent();
   }
 
   private revealCurrent(): void {
     const match = this.matches[this.index];
     if (!match) return;
-    this.options.reveal(match);
+    this.reveal(match);
+  }
+
+  private syncHighlight(): void {
+    this.highlight?.(this.matches, this.index);
   }
 
   private syncStatus(): void {
