@@ -1,4 +1,5 @@
 import { defaultKeymap } from "@codemirror/commands";
+import { json } from "@codemirror/lang-json";
 import { syntaxHighlighting } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
@@ -38,6 +39,7 @@ export class TablePresentationEditor {
         doc: TABLE_PRESENTATION_DEFAULT_SOURCE,
         extensions: [
           lineNumbers(),
+          json(),
           syntaxHighlighting(obsidianSyntaxHighlight),
           keymap.of(defaultKeymap),
           EditorView.lineWrapping,

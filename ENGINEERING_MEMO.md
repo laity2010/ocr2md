@@ -4592,3 +4592,27 @@ M4 完成条件已满足：
 - 真实 iPad 热配置重入、默认回退、章节 clean 状态均通过
 
 表格呈现配置化航路最终状态：4/4。
+
+### 13.68 2026-09-08 · 表格配置 JSON 语法高亮补齐
+
+问题：
+- “表格配置”使用 CodeMirror 与现有 Obsidian HighlightStyle，但此前未挂 JSON language parser，因此只有编辑器外壳，没有 token 级着色。
+
+修复：
+- 新增 @codemirror/lang-json 依赖。
+- TablePresentationEditor extensions 加入 json()。
+- 继续复用 obsidianSyntaxHighlight，因此 property/string/number/punctuation 与源码/CSS 编辑器保持同一套色彩变量。
+
+验证：
+- typecheck PASS。
+- build PASS。
+- tablePresentationEditor Playwright PASS。
+- 4176 运行时 DOM 颜色探针：
+  - property "version" = rgb(167, 192, 128)
+  - number 1 = rgb(219, 188, 127)
+  - punctuation = rgb(154, 167, 157)
+- 私有云 Helm revision = 67。
+- image = ocr2md/v2:table-config-json-highlight-20260908a。
+- Deployment = 1/1 Ready。
+
+此项仅补编辑器 language/highlight 层，不改变表格配置 schema、热更新、保存或业务状态。
