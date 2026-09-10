@@ -17,6 +17,7 @@ import { TablePresentationEditor } from "./tablePresentationEditor";
 import { TableConfigurationGrid } from "./tableConfigurationGrid";
 import { TABLE_PRESENTATION_DEFAULT_SOURCE } from "./tablePresentationConfig";
 import { PersistentChapterRepository } from "./persistentChapterRepository";
+import type { ChapterWorkspaceData } from "./chapterRepository";
 import { FeatureDebugMenu } from "./featureDebugMenu";
 import {
   FeatureDebugRunner,
@@ -29,6 +30,8 @@ import { BasicMarkdownPreview } from "./basicMarkdownPreview";
 import { EditorPreviewSplitter } from "./editorPreviewSplitter";
 import { SourceRegexSearch } from "./sourceRegexSearch";
 import { SourcePreviewScrollSync } from "./sourcePreviewScrollSync";
+import { deriveMediaCatalog } from "./mediaCatalog";
+import type { Candidate } from "../../../src/types";
 import {
   ACTIVE_REVIEW_MODULES,
   deriveWorkspaceView,
@@ -40,6 +43,51 @@ function requireElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`missing #${id}`);
   return element as T;
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function chapterImageUrl(chapterId: string, relativePath: string): string {
+  return "/__workspace/chapter/image?chapterId="
+    + encodeURIComponent(chapterId)
+    + "&path="
+    + encodeURIComponent(relativePath);
+}
+
+function mediaCandidates(
+  chapter: ChapterWorkspaceData | undefined,
+): Candidate[] {
+  if (!chapter || chapter.kind !== "chapter") return [];
+  return deriveMediaCatalog(chapter).map((item, index) => ({
+    id: "media:" + item.id,
+    kind: "regex",
+    label: item.displayName,
+    raw: item.displayName,
+    preview: item.displayName,
+    range: {
+      line: index,
+      start: 0,
+      end: 0,
+    },
+    typeLabel: "媒体",
+    lineType: "媒体",
+    localPath: item.localPath
+      ? chapterImageUrl(chapter.id, item.localPath)
+      : item.sourceUrl,
+    mediaPath: item.localPath,
+    mediaGroup: item.group,
+    mediaSourceUrl: item.sourceUrl,
+    mediaSizeBytes: item.sizeBytes,
+    mediaMimeType: item.mimeType,
+  }));
 }
 
 const isIPadLike =
@@ -72,6 +120,12 @@ const calibrationGridHost = requireElement<HTMLElement>("calibration-grid");
 const tableConfigGridHost = requireElement<HTMLElement>("table-config-grid");
 const configModuleTab =
   requireElement<HTMLButtonElement>("config-module-tab");
+const chapterElementPicker =
+  requireElement<HTMLElement>("chapter-element-picker");
+const chapterElementTab =
+  requireElement<HTMLButtonElement>("chapter-element-tab");
+const chapterElementMenu =
+  requireElement<HTMLElement>("chapter-element-menu");
 const reviewGridStatus = requireElement<HTMLElement>("review-grid-status");
 const sourceLocationStatus = requireElement<HTMLElement>("source-location-status");
 const regexSearchToggle =
@@ -87,6 +141,9 @@ const searchNextButton = requireElement<HTMLButtonElement>("search-next");
 const searchStatus = requireElement<HTMLElement>("search-status");
 const headingToolbar = requireElement<HTMLElement>("heading-toolbar");
 const headingNumbering = requireElement<HTMLInputElement>("heading-numbering");
+const mediaToolbar = requireElement<HTMLElement>("media-toolbar");
+const mediaDownloadButton = requireElement<HTMLButtonElement>("media-download");
+const mediaDownloadStatus = requireElement<HTMLElement>("media-download-status");
 const titleExportStatus = requireElement<HTMLElement>("title-export-status");
 const illegalExportStatus = requireElement<HTMLElement>("illegal-export-status");
 const boundaryToolbar = requireElement<HTMLElement>("boundary-toolbar");
@@ -113,6 +170,15 @@ const catalogError = requireElement<HTMLElement>("catalog-error");
 const loadError = requireElement<HTMLElement>("load-error");
 const saveError = requireElement<HTMLElement>("save-error");
 const workingEditorHost = requireElement<HTMLElement>("working-editor");
+const sourceLineMenu = requireElement<HTMLElement>("source-line-menu");
+const sourceLineMenuTitle =
+  requireElement<HTMLElement>("source-line-menu-title");
+const sourceLineAddActive =
+  requireElement<HTMLButtonElement>("source-line-add-active");
+const sourceLineInsertBr =
+  requireElement<HTMLButtonElement>("source-line-insert-br");
+const sourceLineDelete =
+  requireElement<HTMLButtonElement>("source-line-delete");
 const sourceEditorTab = requireElement<HTMLButtonElement>("editor-tab-source");
 const cssEditorTab = requireElement<HTMLButtonElement>("editor-tab-css");
 const tableConfigEditorTab =
@@ -145,6 +211,8 @@ const openBoundaryButton = requireElement<HTMLButtonElement>("open-boundary");
 const undoButton = requireElement<HTMLButtonElement>("undo");
 const redoButton = requireElement<HTMLButtonElement>("redo");
 const saveButton = requireElement<HTMLButtonElement>("save");
+const resetCalibrationButton =
+  requireElement<HTMLButtonElement>("reset-calibration");
 const exportTransButton = requireElement<HTMLButtonElement>("export-trans");
 const closeButton = requireElement<HTMLButtonElement>("close");
 const enterDebugButton = requireElement<HTMLButtonElement>("enter-debug");
@@ -155,6 +223,10 @@ const leaveConfirmMessage = requireElement<HTMLElement>("leave-confirm-message")
 const leaveCancelButton = requireElement<HTMLButtonElement>("leave-cancel");
 const leaveDiscardButton = requireElement<HTMLButtonElement>("leave-discard");
 const leaveSaveButton = requireElement<HTMLButtonElement>("leave-save");
+const resetConfirmOverlay = requireElement<HTMLElement>("reset-confirm-overlay");
+const resetConfirmMessage = requireElement<HTMLElement>("reset-confirm-message");
+const resetCancelButton = requireElement<HTMLButtonElement>("reset-cancel");
+const resetConfirmButton = requireElement<HTMLButtonElement>("reset-confirm");
 const featureDebugToggle =
   requireElement<HTMLButtonElement>("ui-debug-toggle");
 const featureDebugMenuElement =
@@ -226,9 +298,10 @@ const featureDebugRunner = new FeatureDebugRunner({
   completionHideDelayMs: () => 1800,
 });
 
+const chapterRepository = new PersistentChapterRepository();
 const actor = createActor(workspaceMachine, {
   input: {
-    chapterRepository: new PersistentChapterRepository(),
+    chapterRepository,
   },
 });
 
@@ -238,6 +311,7 @@ let pendingEditorCommandId: string | undefined;
 let pendingCalibrationCommandId: string | undefined;
 let pendingCalibrationFocusCommandId: string | undefined;
 let catalogSignature = "";
+let resetConfirmVisible = false;
 let featureDebugEnvironmentReady = false;
 let featureDebugChapterId: string | undefined;
 let featureDebugBaselineRevision: string | undefined;
@@ -249,6 +323,9 @@ let sourcePreviewSyncDebugBaselineSourceLine = 1;
 let changedLineNoticeChapterId: string | undefined;
 let changedLineKnownIds = new Set<string>();
 let changedLineUnreadIds = new Set<string>();
+let mediaDownloadRunning = false;
+let mediaDownloadStatusText = "";
+let mediaDownloadStatusChapterId: string | undefined;
 
 const deviceDebugBridge = createDeviceDebugBridge();
 
@@ -336,11 +413,47 @@ function syncChangedLineNotice(
 }
 
 function applyWorkingTextChange(text: string): void {
+  const beforeSnapshot = actor.getSnapshot();
+  const beforeView = deriveWorkspaceView(beforeSnapshot);
+  const followNewEmbedRow = beforeView.activeReviewModule === "嵌入块";
+  const sourceLine = followNewEmbedRow ? workingEditor.selectionLine() : undefined;
+  const beforeEmbedRowKeys = followNewEmbedRow
+    ? new Set(
+        (beforeSnapshot.context.chapter?.rows ?? [])
+          .filter(
+            (row) => row.typeLabel === "嵌入块"
+              && row.lineType !== "已忽略"
+              && row.lineType !== "已删除",
+          )
+          .map((row) => row.rowId ?? row.id),
+      )
+    : undefined;
+
   if (!pendingEditorCommandId) {
     lastUiAction = "working-change";
     lastCommandId = undefined;
   }
   actor.send({ type: "WORKING_CHANGED", text });
+
+  if (!followNewEmbedRow) return;
+  const afterSnapshot = actor.getSnapshot();
+  const addedEmbedRowKey = (afterSnapshot.context.chapter?.rows ?? [])
+    .filter(
+      (row) => row.typeLabel === "嵌入块"
+        && row.lineType !== "已忽略"
+        && row.lineType !== "已删除"
+        && !beforeEmbedRowKeys?.has(row.rowId ?? row.id),
+    )
+    .sort((left, right) =>
+      Math.abs(left.range.line + 1 - (sourceLine ?? 1))
+      - Math.abs(right.range.line + 1 - (sourceLine ?? 1)),
+    )
+    .map((row) => row.rowId ?? row.id)[0];
+  if (!addedEmbedRowKey) return;
+
+  window.requestAnimationFrame(() => {
+    calibrationGrid.revealRow(addedEmbedRowKey, false);
+  });
 }
 
 function applyCalibrationLineTypeChange(
@@ -359,6 +472,31 @@ const workingEditor = new WorkingEditor(
   applyWorkingTextChange,
   () => executeProductAction("undo"),
   () => executeProductAction("redo"),
+  async (file) => {
+    const view = deriveWorkspaceView(actor.getSnapshot());
+    if (
+      !view.canEdit
+      || view.workspaceKind !== "chapter"
+      || !view.selectedChapterId
+    ) {
+      throw new Error("当前不是可编辑章节，无法粘贴图片");
+    }
+    editorModeStatus.textContent = `源码 · 正在粘贴图片 · ${Math.ceil(file.size / 1024)} KB`;
+    const saved = await chapterRepository.savePastedImage({
+      chapterId: view.selectedChapterId,
+      mimeType: file.type,
+      dataBase64: await fileToBase64(file),
+    });
+    return `![[${saved.relativePath}]]`;
+  },
+  (markdown) => {
+    const path = /!\[\[([^\]]+)\]\]/.exec(markdown)?.[1] ?? markdown;
+    editorModeStatus.textContent = `源码 · 图片已粘贴 · ${path}`;
+  },
+  (message) => {
+    editorModeStatus.textContent = `源码 · 粘贴图片失败 · ${message}`;
+  },
+  (lineNumber, anchor) => openSourceLineMenu(lineNumber, anchor),
 );
 const sourcePreviewScrollSync = new SourcePreviewScrollSync(
   workingEditor,
@@ -386,16 +524,283 @@ const customCssEditor = new CustomCssEditor(
 type SourcePaneMode = "source" | "css" | "table-config";
 let sourcePaneMode: SourcePaneMode = "source";
 let regexSearchOpen = false;
+
+const manualSourceLineModules = new Set<ActiveReviewModule>([
+  "章节定界",
+  "章节标题",
+  "注释",
+  "嵌入块",
+  "非法断行",
+]);
+
+function closeSourceLineMenu(): void {
+  sourceLineMenu.hidden = true;
+  sourceLineMenu.removeAttribute("data-line");
+  sourceLineMenu.removeAttribute("data-module");
+}
+
+function deleteSourceLine(text: string, lineNumber: number): string {
+  if (!Number.isInteger(lineNumber) || lineNumber < 1) return text;
+
+  const starts = [0];
+  const breakPattern = /\r\n|\r|\n/g;
+  for (const match of text.matchAll(breakPattern)) {
+    starts.push((match.index ?? 0) + match[0].length);
+  }
+
+  const start = starts[lineNumber - 1];
+  if (start === undefined) return text;
+
+  breakPattern.lastIndex = start;
+  const followingBreak = breakPattern.exec(text);
+  if (followingBreak) {
+    return text.slice(0, start)
+      + text.slice(followingBreak.index + followingBreak[0].length);
+  }
+
+  if (start === 0) return "";
+  const previousText = text.slice(0, start);
+  const previousBreak = /(?:\r\n|\r|\n)$/.exec(previousText);
+  const deleteStart = previousBreak
+    ? start - previousBreak[0].length
+    : start;
+  return text.slice(0, deleteStart);
+}
+
+function insertBrAtSourceLineEnd(text: string, lineNumber: number): string {
+  if (!Number.isInteger(lineNumber) || lineNumber < 1) return text;
+
+  const starts = [0];
+  const breakPattern = /\r\n|\r|\n/g;
+  for (const match of text.matchAll(breakPattern)) {
+    starts.push((match.index ?? 0) + match[0].length);
+  }
+
+  const start = starts[lineNumber - 1];
+  if (start === undefined) return text;
+  breakPattern.lastIndex = start;
+  const followingBreak = breakPattern.exec(text);
+  const end = followingBreak?.index ?? text.length;
+  const content = text.slice(start, end);
+  if (/<br\s*\/?>\s*$/i.test(content)) return text;
+
+  return text.slice(0, end) + "<br>" + text.slice(end);
+}
+
+function openSourceLineMenu(
+  lineNumber: number,
+  anchor: { x: number; y: number },
+): void {
+  if (sourcePaneMode !== "source") return;
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  if (!view.canEdit) return;
+
+  const module = view.activeReviewModule;
+  sourceLineMenu.dataset.line = String(lineNumber);
+  sourceLineMenu.dataset.module = module;
+  sourceLineMenuTitle.textContent = `第 ${lineNumber} 行 · 当前数据表：${module}`;
+  sourceLineAddActive.textContent = manualSourceLineModules.has(module)
+    ? `加入「${module}」数据表`
+    : module === "变动行"
+      ? "变动行由系统自动生成"
+      : "当前数据表不支持人工加入";
+  sourceLineAddActive.disabled = !manualSourceLineModules.has(module);
+
+  sourceLineMenu.hidden = false;
+  sourceLineMenu.style.left = `${Math.max(8, anchor.x + 6)}px`;
+  sourceLineMenu.style.top = `${Math.max(8, anchor.y + 6)}px`;
+
+  const rect = sourceLineMenu.getBoundingClientRect();
+  const left = Math.max(
+    8,
+    Math.min(rect.left, window.innerWidth - rect.width - 8),
+  );
+  const top = Math.max(
+    8,
+    Math.min(rect.top, window.innerHeight - rect.height - 8),
+  );
+  sourceLineMenu.style.left = `${left}px`;
+  sourceLineMenu.style.top = `${top}px`;
+}
+
+sourceLineAddActive.addEventListener("click", () => {
+  const sourceLine = Number(sourceLineMenu.dataset.line);
+  const module = sourceLineMenu.dataset.module as ActiveReviewModule | undefined;
+  if (
+    !Number.isInteger(sourceLine)
+    || sourceLine < 1
+    || !module
+    || !manualSourceLineModules.has(module)
+  ) {
+    closeSourceLineMenu();
+    return;
+  }
+
+  const beforeSnapshot = actor.getSnapshot();
+  const before = deriveWorkspaceView(beforeSnapshot);
+  const beforeRowKeys = module === "嵌入块"
+    ? new Set(
+        (beforeSnapshot.context.chapter?.rows ?? [])
+          .filter((row) => row.typeLabel === module)
+          .map((row) => row.rowId ?? row.id),
+      )
+    : undefined;
+  lastUiAction = "add-current-source-line";
+  lastCommandId = undefined;
+  actor.send({ type: "ADD_SOURCE_LINE_TO_ACTIVE_MODULE", sourceLine });
+  const afterSnapshot = actor.getSnapshot();
+  const after = deriveWorkspaceView(afterSnapshot);
+  const added = after.undoDepth > before.undoDepth;
+
+  editorModeStatus.textContent = added
+    ? `源码 · 第 ${sourceLine} 行已加入「${module}」`
+    : `源码 · 第 ${sourceLine} 行已在「${module}」中`;
+  closeSourceLineMenu();
+  if (added && module === "嵌入块") {
+    const addedRowKey = (afterSnapshot.context.chapter?.rows ?? [])
+      .filter((row) => row.typeLabel === module)
+      .map((row) => row.rowId ?? row.id)
+      .find((rowKey) => !beforeRowKeys?.has(rowKey));
+    window.requestAnimationFrame(() => {
+      if (addedRowKey) calibrationGrid.revealRow(addedRowKey);
+    });
+  }
+});
+
+sourceLineInsertBr.addEventListener("click", () => {
+  const sourceLine = Number(sourceLineMenu.dataset.line);
+  const chapter = actor.getSnapshot().context.chapter;
+  if (
+    !Number.isInteger(sourceLine)
+    || sourceLine < 1
+    || !chapter
+    || chapter.kind === "translation"
+  ) {
+    closeSourceLineMenu();
+    return;
+  }
+
+  const nextText = insertBrAtSourceLineEnd(chapter.workingText, sourceLine);
+  if (nextText === chapter.workingText) {
+    editorModeStatus.textContent = `源码 · 第 ${sourceLine} 行末已有 <br>`;
+    closeSourceLineMenu();
+    window.requestAnimationFrame(() => workingEditor.focusLine(sourceLine));
+    return;
+  }
+
+  lastUiAction = "insert-br-at-source-line-end";
+  const beforeSnapshot = actor.getSnapshot();
+  const revealEmbedLine =
+    deriveWorkspaceView(beforeSnapshot).activeReviewModule === "嵌入块";
+  const beforeEmbedRowKeys = revealEmbedLine
+    ? new Set(
+        (beforeSnapshot.context.chapter?.rows ?? [])
+          .filter((row) => row.typeLabel === "嵌入块")
+          .map((row) => row.rowId ?? row.id),
+      )
+    : undefined;
+  lastCommandId = undefined;
+  actor.send({ type: "WORKING_CHANGED", text: nextText });
+  const afterSnapshot = actor.getSnapshot();
+  const addedEmbedRowKey = revealEmbedLine
+    ? (afterSnapshot.context.chapter?.rows ?? [])
+        .filter(
+          (row) => row.typeLabel === "嵌入块"
+            && row.lineType !== "已忽略"
+            && row.lineType !== "已删除"
+            && !beforeEmbedRowKeys?.has(row.rowId ?? row.id),
+        )
+        .sort((left, right) =>
+          Math.abs(left.range.line + 1 - sourceLine)
+          - Math.abs(right.range.line + 1 - sourceLine),
+        )
+        .map((row) => row.rowId ?? row.id)[0]
+    : undefined;
+  editorModeStatus.textContent = `源码 · 已在第 ${sourceLine} 行末插入 <br>`;
+  closeSourceLineMenu();
+  window.requestAnimationFrame(() => {
+    if (revealEmbedLine) {
+      if (addedEmbedRowKey) calibrationGrid.revealRow(addedEmbedRowKey);
+      else calibrationGrid.revealSourceLine(sourceLine);
+    }
+    workingEditor.focusLine(sourceLine);
+  });
+});
+
+sourceLineDelete.addEventListener("click", () => {
+  const sourceLine = Number(sourceLineMenu.dataset.line);
+  const chapter = actor.getSnapshot().context.chapter;
+  if (
+    !Number.isInteger(sourceLine)
+    || sourceLine < 1
+    || !chapter
+    || chapter.kind === "translation"
+  ) {
+    closeSourceLineMenu();
+    return;
+  }
+
+  const nextText = deleteSourceLine(chapter.workingText, sourceLine);
+  if (nextText === chapter.workingText) {
+    closeSourceLineMenu();
+    return;
+  }
+
+  lastUiAction = "delete-current-source-line";
+  lastCommandId = undefined;
+  actor.send({ type: "WORKING_CHANGED", text: nextText });
+  editorModeStatus.textContent = `源码 · 已删除第 ${sourceLine} 行`;
+  closeSourceLineMenu();
+  window.requestAnimationFrame(() => {
+    workingEditor.focusLine(sourceLine);
+  });
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (sourceLineMenu.hidden) return;
+  if (event.target instanceof Node && sourceLineMenu.contains(event.target)) return;
+  closeSourceLineMenu();
+}, true);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !sourceLineMenu.hidden) {
+    closeSourceLineMenu();
+  }
+});
 let tablePresentationEditor: TablePresentationEditor | undefined;
 let tableConfigurationGrid: TableConfigurationGrid | undefined;
 let configGridMode = false;
+const chapterElementModules = new Set<ActiveReviewModule>([
+  "章节标题",
+  "注释",
+  "嵌入块",
+  "非法断行",
+  "媒体",
+]);
+
+function setChapterElementMenuOpen(open: boolean): void {
+  chapterElementMenu.hidden = !open;
+  chapterElementTab.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function syncChapterElementTabState(): void {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  const active = !configGridMode
+    && chapterElementModules.has(view.activeReviewModule);
+  chapterElementTab.textContent = active
+    ? `${view.activeReviewModule} ▾`
+    : "章节元素 ▾";
+  chapterElementTab.setAttribute("aria-pressed", active ? "true" : "false");
+}
 
 function setConfigGridMode(enabled: boolean): void {
   configGridMode = enabled;
   calibrationGridHost.hidden = enabled;
   tableConfigGridHost.hidden = !enabled;
   configModuleTab.setAttribute("aria-pressed", enabled ? "true" : "false");
+  syncChapterElementTabState();
   if (enabled) {
+    setChapterElementMenuOpen(false);
     for (const button of reviewModuleButtons) {
       button.setAttribute("aria-pressed", "false");
     }
@@ -412,6 +817,7 @@ function setConfigGridMode(enabled: boolean): void {
       button.dataset.reviewModule === activeModule ? "true" : "false",
     );
   }
+  syncChapterElementTabState();
 }
 
 function syncRegexSearchTarget(mode = sourcePaneMode): void {
@@ -461,6 +867,7 @@ function setRegexSearchOpen(open: boolean, focusInput = false): void {
 }
 
 function setSourcePaneMode(mode: SourcePaneMode): void {
+  if (mode !== "source") closeSourceLineMenu();
   sourcePaneMode = mode;
   setConfigGridMode(mode === "table-config");
 
@@ -506,6 +913,10 @@ tableConfigEditorTab.addEventListener(
   "click",
   () => setSourcePaneMode("table-config"),
 );
+chapterElementTab.addEventListener("click", () => {
+  if (chapterElementTab.disabled) return;
+  setChapterElementMenuOpen(chapterElementMenu.hidden);
+});
 regexSearchToggle.addEventListener(
   "click",
   () => setRegexSearchOpen(!regexSearchOpen, !regexSearchOpen),
@@ -518,6 +929,22 @@ configModuleTab.addEventListener(
   "click",
   () => setSourcePaneMode("table-config"),
 );
+document.addEventListener("pointerdown", (event) => {
+  if (chapterElementMenu.hidden) return;
+  if (
+    event.target instanceof Node
+    && chapterElementPicker.contains(event.target)
+  ) {
+    return;
+  }
+  setChapterElementMenuOpen(false);
+}, true);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !chapterElementMenu.hidden) {
+    setChapterElementMenuOpen(false);
+    chapterElementTab.focus();
+  }
+});
 cssSaveButton.addEventListener("click", () => customCssEditor.save());
 cssResetButton.addEventListener("click", () => customCssEditor.reset());
 tableConfigSaveButton.addEventListener(
@@ -539,6 +966,25 @@ const calibrationGrid = new CalibrationGrid(
     actor.send({ type: "CHAPTER_FILE_CHANGED", rowId, value });
   },
   (row, located, activation = "row") => {
+    if (activation === "media") {
+      const chapter = actor.getSnapshot().context.chapter;
+      if (
+        chapter?.kind !== "chapter"
+        || (!row.mediaPath && !row.mediaSourceUrl)
+      ) {
+        sourceLocationStatus.textContent = "媒体预览失败 · 文件不可用";
+        return;
+      }
+      lastUiAction = "preview-media";
+      lastCommandId = undefined;
+      if (row.mediaPath) {
+        markdownPreview.renderMedia(chapter.id, row.mediaPath, row.raw);
+      } else if (row.mediaSourceUrl) {
+        markdownPreview.renderMediaSource(row.mediaSourceUrl, row.raw);
+      }
+      sourceLocationStatus.textContent = `媒体预览：${row.raw}`;
+      return;
+    }
     if (!pendingCalibrationFocusCommandId) {
       lastUiAction = "focus-calibration-row";
       lastCommandId = undefined;
@@ -658,7 +1104,7 @@ function renderChapterSelect(view: ReturnType<typeof deriveWorkspaceView>): void
     chapterSelect.append(transNode);
   }
 
-  chapterSelect.disabled = !view.canSelectChapter;
+  chapterSelect.disabled = !view.canSelectChapter || mediaDownloadRunning;
   chapterSelect.value =
     view.workspaceKind === "boundary"
       ? "__node_ocr__"
@@ -691,22 +1137,31 @@ actor.subscribe((snapshot) => {
   void reportDebugState(view, lastUiAction, lastCommandId);
 
   workingEditor.setDocument(chapter?.workingText ?? "");
-  workingEditor.setEditable(Boolean(chapter) && view.canEdit);
-  markdownPreview.render(chapter?.workingText ?? "");
+  workingEditor.setEditable(Boolean(chapter) && view.canEdit && !mediaDownloadRunning);
+  markdownPreview.render(
+    chapter?.workingText ?? "",
+    chapter && chapter.kind !== "boundary" && chapter.kind !== "translation"
+      ? chapter.id
+      : undefined,
+  );
   sourcePreviewScrollSync.syncFromEditor();
   if (sourcePaneMode === "source") {
     sourceRegexSearch.updateText(chapter?.workingText ?? "");
   }
   calibrationGrid.setContext(
-    view.activeReviewModule === "变动行"
-      ? changedLineAuditCandidates(view.changedLineRows)
-      : chapter?.rows ?? [],
+    view.activeReviewModule === "媒体"
+      ? mediaCandidates(chapter)
+      : view.activeReviewModule === "变动行"
+        ? changedLineAuditCandidates(view.changedLineRows)
+        : chapter?.rows ?? [],
     chapter?.workingText ?? "",
     view.activeReviewModule,
     view.headingNumberingEnabled,
     chapter?.annotationPairs ?? [],
   );
-  calibrationGrid.setEditable(Boolean(chapter) && view.canEdit);
+  calibrationGrid.setEditable(
+    Boolean(chapter) && view.canEdit && view.activeReviewModule !== "媒体",
+  );
   window.requestAnimationFrame(() => {
     reportDebugRuntime(
       "grid_projection_after_render",
@@ -782,6 +1237,29 @@ actor.subscribe((snapshot) => {
     || chapter.kind === "boundary";
   headingNumbering.checked = view.headingNumberingEnabled;
   headingNumbering.disabled = !view.canSetHeadingNumbering;
+  const mediaCatalog = deriveMediaCatalog(chapter);
+  const mediaCounts = {
+    adopted: mediaCatalog.filter((item) => item.group === "已采用").length,
+    unused: mediaCatalog.filter((item) => item.group === "未采用").length,
+    pending: mediaCatalog.filter((item) => item.group === "未下载").length,
+  };
+  mediaToolbar.hidden =
+    view.activeReviewModule !== "媒体"
+    || chapter?.kind !== "chapter";
+  mediaDownloadButton.disabled =
+    mediaDownloadRunning
+    || chapter?.kind !== "chapter"
+    || view.canSave
+    || mediaCounts.pending === 0;
+  mediaDownloadButton.textContent = mediaDownloadRunning
+    ? "下载中…"
+    : mediaCounts.pending > 0
+      ? `下载未下载媒体（${mediaCounts.pending}）`
+      : "已全部下载";
+  const currentMediaDownloadStatus =
+    mediaDownloadStatusChapterId === chapter?.id ? mediaDownloadStatusText : "";
+  mediaDownloadStatus.textContent = currentMediaDownloadStatus
+    || `已采用 ${mediaCounts.adopted} · 未采用 ${mediaCounts.unused} · 未下载 ${mediaCounts.pending}`;
   titleExportStatus.hidden =
     view.activeReviewModule !== "章节标题"
     || !chapter
@@ -823,6 +1301,11 @@ actor.subscribe((snapshot) => {
     button.disabled = !view.canSelectReviewModule || !moduleAllowed;
     button.setAttribute("aria-pressed", active ? "true" : "false");
   }
+  const ordinaryChapter = !chapter || chapter.kind === "chapter";
+  chapterElementPicker.hidden = Boolean(chapter) && !ordinaryChapter;
+  chapterElementTab.disabled =
+    !view.canSelectReviewModule || !ordinaryChapter;
+  syncChapterElementTabState();
   configModuleTab.disabled = false;
   configModuleTab.hidden = false;
   configModuleTab.setAttribute(
@@ -853,6 +1336,7 @@ actor.subscribe((snapshot) => {
   undoButton.disabled = !view.canUndo;
   redoButton.disabled = !view.canRedo;
   saveButton.disabled = !view.canSave;
+  resetCalibrationButton.disabled = !view.canResetCalibration;
   exportTransButton.disabled = !view.canExportTrans;
   closeButton.disabled = !view.canClose;
   enterDebugButton.disabled = !view.canEnterDebug;
@@ -873,6 +1357,13 @@ actor.subscribe((snapshot) => {
   leaveCancelButton.disabled = !view.canLeaveCancel;
   leaveDiscardButton.disabled = !view.canLeaveDiscard;
   leaveSaveButton.disabled = !view.canLeaveSave;
+
+  if (!view.canResetCalibration) resetConfirmVisible = false;
+  resetConfirmOverlay.hidden = !resetConfirmVisible;
+  resetConfirmButton.disabled = !view.canResetCalibration;
+  resetConfirmMessage.textContent = view.chapterName
+    ? `「${view.chapterName}」的当前工作稿和全部人工标定将恢复到原始状态，并立即保存。此操作会清空撤销 / 重做历史。`
+    : "当前工作稿和全部人工标定将恢复到原始状态，并立即保存。此操作会清空撤销 / 重做历史。";
 
 });
 
@@ -6778,12 +7269,117 @@ for (const button of reviewModuleButtons) {
   button.addEventListener("click", () => {
     const module = button.dataset.reviewModule as ActiveReviewModule | undefined;
     if (!module || !ACTIVE_REVIEW_MODULES.includes(module)) return;
+    if (chapterElementModules.has(module)) {
+      setChapterElementMenuOpen(false);
+    }
     if (configGridMode) setSourcePaneMode("source");
     lastUiAction = "select-review-module";
     lastCommandId = undefined;
     actor.send({ type: "SELECT_REVIEW_MODULE", module });
   });
 }
+
+async function downloadAllPendingMedia(): Promise<void> {
+  if (mediaDownloadRunning || !chapterRepository.downloadExternalMedia) return;
+  const initialSnapshot = actor.getSnapshot();
+  const initialView = deriveWorkspaceView(initialSnapshot);
+  const initialChapter = initialSnapshot.context.chapter;
+  if (
+    initialChapter?.kind !== "chapter"
+    || initialView.canSave
+    || !initialChapter.revision
+  ) {
+    mediaDownloadStatusText = initialView.canSave
+      ? "请先保存当前编辑，再下载媒体"
+      : "当前章节不能下载媒体";
+    mediaDownloadStatus.textContent = mediaDownloadStatusText;
+    return;
+  }
+
+  const pending = deriveMediaCatalog(initialChapter).filter(
+    (item) => item.group === "未下载" && item.sourceUrl,
+  );
+  if (!pending.length) {
+    mediaDownloadStatusText = "没有未下载媒体";
+    mediaDownloadStatus.textContent = mediaDownloadStatusText;
+    return;
+  }
+
+  mediaDownloadRunning = true;
+  mediaDownloadStatusChapterId = initialChapter.id;
+  mediaDownloadButton.disabled = true;
+  workingEditor.setEditable(false);
+  lastUiAction = "download-media";
+  lastCommandId = undefined;
+  let downloaded = 0;
+  let failed = 0;
+
+  try {
+    for (const [index, item] of pending.entries()) {
+      const snapshot = actor.getSnapshot();
+      const view = deriveWorkspaceView(snapshot);
+      const chapter = snapshot.context.chapter;
+      if (
+        chapter?.kind !== "chapter"
+        || chapter.id !== initialChapter.id
+        || view.canSave
+        || !chapter.revision
+      ) {
+        mediaDownloadStatusText = `下载已暂停 · 已完成 ${downloaded}/${pending.length}`;
+        break;
+      }
+      const sourceUrl = item.sourceUrl;
+      if (!sourceUrl) continue;
+      mediaDownloadButton.textContent = `下载中 ${index + 1}/${pending.length}`;
+      mediaDownloadStatusText = `正在下载 ${index + 1}/${pending.length} · ${item.displayName}`;
+      mediaDownloadStatus.textContent = mediaDownloadStatusText;
+      try {
+        const result = await chapterRepository.downloadExternalMedia({
+          chapterId: chapter.id,
+          expectedRevision: chapter.revision,
+          sourceUrl,
+        });
+        actor.send({
+          type: "MEDIA_DOWNLOAD_APPLIED",
+          chapterId: chapter.id,
+          workingText: result.workingText,
+          revision: result.revision,
+          savedAt: result.savedAt,
+          media: result.media,
+        });
+        downloaded += 1;
+        mediaDownloadStatusText = `已保存 ${downloaded}/${pending.length} · ${result.fileName}`;
+        mediaDownloadStatus.textContent = mediaDownloadStatusText;
+      } catch (error) {
+        failed += 1;
+        const message = error instanceof Error ? error.message : String(error);
+        mediaDownloadStatusText = `第 ${index + 1}/${pending.length} 项失败 · ${message}`;
+        mediaDownloadStatus.textContent = mediaDownloadStatusText;
+        if (/变化|冲突|revision/i.test(message)) break;
+      }
+    }
+  } finally {
+    mediaDownloadRunning = false;
+    const chapter = actor.getSnapshot().context.chapter;
+    const remaining = deriveMediaCatalog(chapter).filter(
+      (item) => item.group === "未下载",
+    ).length;
+    mediaDownloadStatusText = remaining === 0
+      ? `下载完成 · 成功 ${downloaded} · 失败 ${failed} · 已全部采用本地媒体`
+      : `本轮完成 · 成功 ${downloaded} · 失败 ${failed} · 剩余 ${remaining}；再次点击可续存`;
+    mediaDownloadStatus.textContent = mediaDownloadStatusText;
+    const view = deriveWorkspaceView(actor.getSnapshot());
+    workingEditor.setEditable(Boolean(chapter) && view.canEdit);
+    mediaDownloadButton.disabled = view.canSave || remaining === 0;
+    mediaDownloadButton.textContent = remaining > 0
+      ? `继续下载（${remaining}）`
+      : "已全部下载";
+  }
+}
+
+mediaDownloadButton.addEventListener("click", () => {
+  void downloadAllPendingMedia();
+});
 
 headingNumbering.addEventListener("change", () => {
   lastUiAction = "set-heading-numbering";
@@ -6823,6 +7419,29 @@ exportBoundaryButton.addEventListener("click", () => {
 undoButton.addEventListener("click", () => executeProductAction("undo"));
 redoButton.addEventListener("click", () => executeProductAction("redo"));
 saveButton.addEventListener("click", () => executeProductAction("save"));
+resetCalibrationButton.addEventListener("click", () => {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  if (!view.canResetCalibration) return;
+  resetConfirmVisible = true;
+  resetConfirmOverlay.hidden = false;
+  resetConfirmButton.disabled = false;
+  resetConfirmMessage.textContent = view.chapterName
+    ? `「${view.chapterName}」的当前工作稿和全部人工标定将恢复到原始状态，并立即保存。此操作会清空撤销 / 重做历史。`
+    : "当前工作稿和全部人工标定将恢复到原始状态，并立即保存。此操作会清空撤销 / 重做历史。";
+});
+resetCancelButton.addEventListener("click", () => {
+  resetConfirmVisible = false;
+  resetConfirmOverlay.hidden = true;
+});
+resetConfirmButton.addEventListener("click", () => {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  resetConfirmVisible = false;
+  resetConfirmOverlay.hidden = true;
+  if (!view.canResetCalibration) return;
+  lastUiAction = "reset-calibration";
+  lastCommandId = undefined;
+  actor.send({ type: "RESET_CALIBRATION" });
+});
 exportTransButton.addEventListener("click", () => {
   lastUiAction = "export-trans";
   lastCommandId = undefined;

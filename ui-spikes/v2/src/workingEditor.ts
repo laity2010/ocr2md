@@ -12,6 +12,7 @@ import {
   type DecorationSet,
   EditorView,
   WidgetType,
+  highlightActiveLineGutter,
   keymap,
   lineNumbers,
 } from "@codemirror/view";
@@ -231,13 +232,49 @@ export class WorkingEditor {
     private readonly onDocumentChanged: (text: string) => void,
     private readonly onUndo: () => void,
     private readonly onRedo: () => void,
+    private readonly onImagePasted?: (file: File) => Promise<string>,
+    private readonly onImagePasteComplete?: (markdown: string) => void,
+    private readonly onImagePasteError?: (message: string) => void,
+    private readonly onActiveLineNumberClicked?: (
+      lineNumber: number,
+      anchor: { x: number; y: number },
+    ) => void,
   ) {
     this.view = new EditorView({
       parent,
       state: EditorState.create({
         doc: "",
         extensions: [
-          lineNumbers(),
+          lineNumbers({
+            domEventHandlers: {
+              click: (view, block, event) => {
+                if (!this.onActiveLineNumberClicked) return false;
+                const lineNumber = view.state.doc.lineAt(block.from).number;
+                const activeLine = view.state.doc.lineAt(
+                  view.state.selection.main.head,
+                ).number;
+                if (lineNumber !== activeLine) return false;
+                const mouse = event as MouseEvent;
+                const target = event.currentTarget instanceof HTMLElement
+                  ? event.currentTarget
+                  : event.target instanceof HTMLElement
+                    ? event.target
+                    : undefined;
+                const rect = target?.getBoundingClientRect();
+                this.onActiveLineNumberClicked(lineNumber, {
+                  x: Number.isFinite(mouse.clientX) && mouse.clientX > 0
+                    ? mouse.clientX
+                    : (rect?.right ?? 0),
+                  y: Number.isFinite(mouse.clientY) && mouse.clientY > 0
+                    ? mouse.clientY
+                    : (rect?.bottom ?? 0),
+                });
+                event.preventDefault();
+                return true;
+              },
+            },
+          }),
+          highlightActiveLineGutter(),
           keymap.of([
             {
               key: "Mod-z",
@@ -269,6 +306,38 @@ export class WorkingEditor {
           regexHighlightField,
           this.hardReturnCompartment.of(hardReturnField),
           EditorView.lineWrapping,
+          EditorView.domEventHandlers({
+            paste: (event, view) => {
+              if (!this.onImagePasted) return false;
+              const clipboard = event.clipboardData;
+              if (!clipboard) return false;
+              const imageFile = Array.from(clipboard.files).find((file) =>
+                file.type.startsWith("image/"))
+                ?? Array.from(clipboard.items)
+                  .find((item) => item.kind === "file" && item.type.startsWith("image/"))
+                  ?.getAsFile()
+                ?? undefined;
+              if (!imageFile) return false;
+
+              event.preventDefault();
+              const selection = view.state.selection.main;
+              const from = selection.from;
+              const to = selection.to;
+              void this.onImagePasted(imageFile).then((markdown) => {
+                view.dispatch({
+                  changes: { from, to, insert: markdown },
+                  selection: { anchor: from + markdown.length },
+                  scrollIntoView: true,
+                });
+                view.focus();
+                this.onImagePasteComplete?.(markdown);
+              }).catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.onImagePasteError?.(message);
+              });
+              return true;
+            },
+          }),
           this.editableCompartment.of(EditorView.editable.of(false)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || this.syncing) return;
@@ -419,6 +488,18 @@ export class WorkingEditor {
     return this.view.state.doc.lineAt(
       this.view.state.selection.main.head,
     ).number;
+  }
+
+  focusLine(lineNumber: number): number {
+    const clamped = Math.max(1, Math.min(lineNumber, this.view.state.doc.lines));
+    const line = this.view.state.doc.line(clamped);
+    this.view.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: "nearest" }),
+    });
+    this.view.requestMeasure();
+    this.view.focus();
+    return clamped;
   }
 
   selectedText(): string {

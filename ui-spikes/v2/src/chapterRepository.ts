@@ -40,6 +40,14 @@ export interface ChapterWorkspaceData {
   translationState?: TranslationStateFile;
   translationSourceChapterId?: string;
   translationServiceId?: TranslationServiceId;
+  media?: ChapterMediaItem[];
+}
+
+export interface ChapterMediaItem {
+  fileName: string;
+  relativePath: string;
+  sizeBytes: number;
+  mimeType: string;
 }
 
 export interface ChapterSaveInput {
@@ -51,6 +59,29 @@ export interface ChapterSaveResult {
   revision: string;
   savedAt: string;
   workingText: string;
+}
+
+export interface ChapterImagePasteInput {
+  chapterId: string;
+  mimeType: string;
+  dataBase64: string;
+}
+
+export interface ChapterImagePasteResult {
+  relativePath: string;
+  fileName: string;
+}
+
+export interface ChapterMediaDownloadInput {
+  chapterId: string;
+  expectedRevision: string;
+  sourceUrl: string;
+}
+
+export interface ChapterMediaDownloadResult extends ChapterSaveResult {
+  relativePath: string;
+  fileName: string;
+  media: ChapterMediaItem[];
 }
 
 export interface BoundaryExportResult extends ChapterSaveResult {
@@ -77,6 +108,12 @@ export interface ChapterRepository {
   listChapters(): Promise<ChapterCatalog>;
   loadChapter(chapterId: string): Promise<ChapterWorkspaceData>;
   saveChapter(input: ChapterSaveInput): Promise<ChapterSaveResult>;
+  savePastedImage?(
+    input: ChapterImagePasteInput,
+  ): Promise<ChapterImagePasteResult>;
+  downloadExternalMedia?(
+    input: ChapterMediaDownloadInput,
+  ): Promise<ChapterMediaDownloadResult>;
   exportBoundary?(input: ChapterSaveInput): Promise<BoundaryExportResult>;
   exportTransSource?(input: TransSourceExportInput): Promise<ChapterWorkspaceData>;
   loadTranslation?(chapterId: string): Promise<ChapterWorkspaceData>;

@@ -13,6 +13,10 @@ import { markdownFileKind } from "../../../src/workspaceFiles";
 import type {
   BoundaryExportResult,
   ChapterCatalog,
+  ChapterImagePasteInput,
+  ChapterImagePasteResult,
+  ChapterMediaDownloadInput,
+  ChapterMediaDownloadResult,
   ChapterRepository,
   ChapterSaveInput,
   ChapterSaveResult,
@@ -39,6 +43,7 @@ type LoadedPayload = {
   workingText: string;
   sidecar: unknown;
   revision: string;
+  media?: ChapterWorkspaceData["media"];
 };
 
 type BoundaryPayload = {
@@ -177,6 +182,7 @@ export class PersistentChapterRepository implements ChapterRepository {
       annotationPairs: refreshed.annotationPairs,
       sidecarSourceFile: sidecar.sourceFile,
       revision: payload.revision,
+      media: payload.media ?? [],
     };
   }
 
@@ -204,6 +210,36 @@ export class PersistentChapterRepository implements ChapterRepository {
     }
 
     return response.json() as Promise<ChapterSaveResult>;
+  }
+
+  async savePastedImage(
+    input: ChapterImagePasteInput,
+  ): Promise<ChapterImagePasteResult> {
+    const response = await fetch("/__workspace/chapter/image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      throw new Error(await responseError(response, "粘贴图片失败"));
+    }
+    return response.json() as Promise<ChapterImagePasteResult>;
+  }
+
+  async downloadExternalMedia(
+    input: ChapterMediaDownloadInput,
+  ): Promise<ChapterMediaDownloadResult> {
+    const response = await fetch("/__workspace/chapter/media/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      throw new Error(await responseError(response, "下载媒体失败"));
+    }
+    return response.json() as Promise<ChapterMediaDownloadResult>;
   }
 
   async exportBoundary(input: ChapterSaveInput): Promise<BoundaryExportResult> {

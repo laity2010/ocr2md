@@ -60,6 +60,7 @@ type DebugUiState = {
   undoDepth: number;
   redoDepth: number;
   canSave: boolean;
+  canResetCalibration: boolean;
   canClose: boolean;
   canLeaveCancel: boolean;
   canLeaveDiscard: boolean;
@@ -218,6 +219,7 @@ export function createDebugStateReport(
     undoDepth: view.undoDepth,
     redoDepth: view.redoDepth,
     canSave: view.canSave,
+    canResetCalibration: view.canResetCalibration,
     canClose: view.canClose,
     canLeaveCancel: view.canLeaveCancel,
     canLeaveDiscard: view.canLeaveDiscard,

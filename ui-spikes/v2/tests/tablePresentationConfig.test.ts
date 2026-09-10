@@ -30,7 +30,7 @@ import {
   );
   assert.equal(
     embed?.columns.find((column) => column.colId === "sourceLine")?.pinned,
-    null,
+    "left",
   );
 }
 

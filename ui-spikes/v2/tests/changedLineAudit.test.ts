@@ -297,4 +297,49 @@ assert.deepStrictEqual(
   "restoring working text to original must clear the derived audit table",
 );
 
+const manualEmbedCalibration = deriveChangedLineAuditRows({
+  originalText: "plain source line\n",
+  workingText: "plain source line\n",
+  calibrationRows: [
+    row({
+      id: "manual-embed",
+      raw: "plain source line",
+      preview: "plain source line",
+      typeLabel: "嵌入块",
+      lineType: "嵌入文本",
+      isWorkingCorrection: true,
+      range: { line: 0, start: 0, end: 17 },
+    }),
+  ],
+});
+assert.equal(manualEmbedCalibration.length, 1);
+assert.equal(manualEmbedCalibration[0]?.line, 0);
+assert.equal(manualEmbedCalibration[0]?.state, "修改");
+assert.equal(manualEmbedCalibration[0]?.owner, "嵌入块");
+assert.equal(manualEmbedCalibration[0]?.workingText, "plain source line");
+assert.equal(manualEmbedCalibration[0]?.baselineText, "plain source line");
+assert.equal(manualEmbedCalibration[0]?.detail, "标定性质 → 嵌入文本");
+
+const manualEmbedWithTextDiff = deriveChangedLineAuditRows({
+  originalText: "plain source lne\n",
+  workingText: "plain source line\n",
+  calibrationRows: [
+    row({
+      id: "manual-embed-with-text-diff",
+      raw: "plain source line",
+      preview: "plain source line",
+      typeLabel: "嵌入块",
+      lineType: "嵌入文本",
+      isWorkingCorrection: true,
+      range: { line: 0, start: 0, end: 17 },
+    }),
+  ],
+});
+assert.equal(
+  manualEmbedWithTextDiff.length,
+  1,
+  "a calibration correction must not duplicate an existing text-diff row on the same line",
+);
+assert.equal(manualEmbedWithTextDiff[0]?.owner, "嵌入块");
+
 console.log("changedLineAudit tests passed");

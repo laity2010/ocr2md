@@ -3,6 +3,7 @@ export type TablePresentationModule =
   | "注释"
   | "嵌入块"
   | "非法断行"
+  | "媒体"
   | "变动行"
   | "章节定界"
   | "翻译";
@@ -19,6 +20,10 @@ export type TableColumnId =
   | "illegalBreakContext"
   | "illegalBreakMerged"
   | "breakReason"
+  | "mediaGroup"
+  | "mediaThumbnail"
+  | "mediaFileName"
+  | "mediaSize"
   | "changeOwner"
   | "changedContent"
   | "baselineContent"
@@ -121,6 +126,10 @@ const COLUMN_LABELS: Record<TableColumnId, string> = {
   illegalBreakContext: "预览（前10 + 后10）",
   illegalBreakMerged: "合并预览",
   breakReason: "判断",
+  mediaGroup: "分组",
+  mediaThumbnail: "缩略图",
+  mediaFileName: "文件名",
+  mediaSize: "大小",
   changeOwner: "归属模块",
   changedContent: "变动内容",
   baselineContent: "原稿内容",
@@ -146,6 +155,7 @@ const MODULE_COLUMNS: Record<TablePresentationModule, readonly TableColumnId[]> 
     "illegalBreakMerged",
     "breakReason",
   ],
+  媒体: ["mediaGroup", "mediaThumbnail", "mediaFileName", "mediaSize"],
   变动行: [
     "sourceLine",
     "lineType",
@@ -232,6 +242,10 @@ const DEFAULT_STYLES: Partial<Record<TableColumnId, TableColumnPresentation>> = 
   illegalBreakContext: { minWidth: 300, flex: 1 },
   illegalBreakMerged: { minWidth: 320, flex: 1 },
   breakReason: { minWidth: 220, flex: 1 },
+  mediaGroup: { width: 108, minWidth: 96, pinned: "left" },
+  mediaThumbnail: { width: 104, minWidth: 96 },
+  mediaFileName: { minWidth: 280, flex: 1 },
+  mediaSize: { width: 110, minWidth: 96 },
   changeOwner: { width: 120, minWidth: 110 },
   changedContent: { minWidth: 360, flex: 1 },
   baselineContent: { minWidth: 300, flex: 1 },
@@ -256,9 +270,6 @@ function defaultModule(module: TablePresentationModule): TableModulePresentation
     if (style) styles[COLUMN_LABELS[colId]] = { ...style };
   }
 
-  if (module === "嵌入块") {
-    styles["行号"] = { ...styles["行号"], pinned: null };
-  }
   if (module === "变动行") {
     styles["行类型"] = { width: 100, minWidth: 90 };
   }
@@ -268,7 +279,9 @@ function defaultModule(module: TablePresentationModule): TableModulePresentation
       ? ["注释号", "行号"]
       : module === "嵌入块"
         ? ["组号", "行号"]
-        : ["行号"];
+        : module === "媒体"
+          ? ["分组", "文件名"]
+          : ["行号"];
 
   return { columns, sort, columnStyles: styles };
 }
@@ -284,6 +297,7 @@ const LEGACY_TABLE_PRESENTATION_DEFAULT: LegacyTablePresentationConfig = {
     注释: defaultModule("注释"),
     嵌入块: defaultModule("嵌入块"),
     非法断行: defaultModule("非法断行"),
+    媒体: defaultModule("媒体"),
     变动行: defaultModule("变动行"),
     章节定界: defaultModule("章节定界"),
     翻译: defaultModule("翻译"),
@@ -537,8 +551,8 @@ function resolveModule(
     colId,
     label: COLUMN_LABELS[colId],
     ...(DEFAULT_STYLES[colId] ?? {}),
-    ...(module === "嵌入块" && colId === "sourceLine" ? { pinned: null } : {}),
     ...(styleById.get(colId) ?? {}),
+    ...(module === "嵌入块" && colId === "sourceLine" ? { pinned: "left" as const } : {}),
   }));
 
   const sortInput = Array.isArray(raw.sort) ? raw.sort : fallback.sort ?? [];

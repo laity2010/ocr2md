@@ -1,4 +1,4 @@
-export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块" | "非法断行" | "变动行" | "文本块" | "分句" | "翻译";
+export type ModuleName = "章节定界" | "章节标题" | "注释" | "嵌入块" | "非法断行" | "媒体" | "变动行" | "文本块" | "分句" | "翻译";
 
 export interface SourceRange {
   line: number;
@@ -33,6 +33,11 @@ export interface Candidate {
   chapterBoundaryState?: "heading" | "added" | "modified" | "deleted";
   baselinePreview?: string;
   localPath?: string;
+  mediaPath?: string;
+  mediaGroup?: "已采用" | "未采用" | "未下载";
+  mediaSourceUrl?: string;
+  mediaSizeBytes?: number;
+  mediaMimeType?: string;
   imageDownloadStatus?: "pending" | "done" | "failed";
   imageDownloadError?: string;
   embedNumber?: number;

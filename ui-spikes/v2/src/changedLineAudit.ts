@@ -15,6 +15,8 @@ export interface ChangedLineAuditRow {
   sourceState: "added" | "modified" | "deleted";
   /** Deleted content no longer exists in working.md and therefore cannot be located there. */
   canLocateWorking: boolean;
+  /** Human-readable explanation when the line changed by calibration rather than text. */
+  detail?: string;
 }
 
 export interface ChangedLineAuditInput {
@@ -64,7 +66,7 @@ export function changedLineAuditCandidates(
 export function deriveChangedLineAuditRows(
   input: ChangedLineAuditInput,
 ): ChangedLineAuditRow[] {
-  return scanChapterBoundaryLines(input.originalText, input.workingText)
+  const textChanges = scanChapterBoundaryLines(input.originalText, input.workingText)
     .filter(
       (change): change is ChapterBoundaryLine & {
         state: "added" | "modified" | "deleted";
@@ -81,6 +83,85 @@ export function deriveChangedLineAuditRows(
       sourceState: change.state,
       canLocateWorking: change.state !== "deleted",
     }));
+
+  const changedWorkingLines = new Set(
+    textChanges
+      .filter((change) => change.canLocateWorking)
+      .map((change) => change.line),
+  );
+  const workingLines = input.workingText.replace(/\r\n?/g, "\n").split("\n");
+  const calibrationChanges = manualCalibrationChangedLines(
+    input.calibrationRows,
+  )
+    .filter(({ line }) => !changedWorkingLines.has(line))
+    .map(({ line, owner, lineType, rowId }) => {
+      const workingText = workingLines[line] ?? "";
+      return {
+        id: `change-audit-calibration-${rowId}`,
+        line,
+        state: "修改" as const,
+        owner,
+        workingText,
+        baselineText: workingText,
+        sourceState: "modified" as const,
+        canLocateWorking: true,
+        detail: lineType
+          ? `标定性质 → ${lineType}`
+          : `标定性质 → ${owner}`,
+      };
+    });
+
+  return [...textChanges, ...calibrationChanges]
+    .sort((left, right) => left.line - right.line || left.id.localeCompare(right.id));
+}
+
+function manualCalibrationChangedLines(
+  rows: Candidate[],
+): Array<{
+  line: number;
+  owner: Exclude<ChangedLineOwner, "未归类">;
+  lineType?: string;
+  rowId: string;
+}> {
+  const owners: Exclude<ChangedLineOwner, "未归类">[] = [
+    "章节标题",
+    "注释",
+    "嵌入块",
+    "非法断行",
+  ];
+  const ownerPriority = new Map(owners.map((owner, index) => [owner, index]));
+  const byLine = new Map<number, {
+    line: number;
+    owner: Exclude<ChangedLineOwner, "未归类">;
+    lineType?: string;
+    rowId: string;
+  }>();
+
+  for (const row of rows) {
+    if (!row.isWorkingCorrection) continue;
+    if (!owners.includes(row.typeLabel as Exclude<ChangedLineOwner, "未归类">)) {
+      continue;
+    }
+    const line = row.range.line;
+    if (!Number.isInteger(line) || line < 0) continue;
+    const owner = row.typeLabel as Exclude<ChangedLineOwner, "未归类">;
+    const existing = byLine.get(line);
+    if (
+      existing
+      && (ownerPriority.get(existing.owner) ?? Number.MAX_SAFE_INTEGER)
+        <= (ownerPriority.get(owner) ?? Number.MAX_SAFE_INTEGER)
+    ) {
+      continue;
+    }
+    byLine.set(line, {
+      line,
+      owner,
+      lineType: row.lineType,
+      rowId: row.id,
+    });
+  }
+
+  return [...byLine.values()];
 }
 
 function changeStateLabel(

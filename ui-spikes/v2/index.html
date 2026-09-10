@@ -401,10 +401,40 @@
       gap: 4px;
       flex-wrap: wrap;
     }
+    .module-picker {
+      position: relative;
+      display: inline-flex;
+    }
     .module-tab { border-color: transparent; color: var(--muted); }
     .module-tab[aria-pressed="true"] {
       color: var(--accent);
       border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    }
+    .module-dropdown {
+      position: absolute;
+      z-index: 1100;
+      top: calc(100% + 5px);
+      left: 0;
+      min-width: 150px;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-alt);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, .34);
+    }
+    .module-dropdown[hidden] { display: none; }
+    .module-dropdown .module-option {
+      display: block;
+      width: 100%;
+      min-height: 36px;
+      text-align: left;
+      border-color: transparent;
+      color: var(--fg);
+      white-space: nowrap;
+    }
+    .module-dropdown .module-option[aria-pressed="true"] {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 13%, transparent);
     }
     .module-tab[data-change-notice]::after {
       content: attr(data-change-notice);
@@ -537,6 +567,14 @@
       color: color-mix(in srgb, var(--fg) 62%, transparent) !important;
       border-right: 0 !important;
     }
+    #working-editor .cm-lineNumbers .cm-gutterElement.cm-activeLineGutter {
+      color: var(--accent) !important;
+      background: color-mix(in srgb, var(--accent) 18%, var(--bg-alt)) !important;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+      cursor: pointer;
+      font-weight: 700;
+    }
     #working-editor .cm-content { min-height: 100%; }
     #working-editor .cm-content,
     #working-editor .cm-line { font-synthesis: none; }
@@ -619,6 +657,26 @@
       max-width: 100%;
       height: auto;
     }
+    #markdown-preview .media-preview-wrap {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    #markdown-preview .media-preview-image {
+      max-width: 100%;
+      max-height: calc(100% - 42px);
+      object-fit: contain;
+    }
+    #markdown-preview .media-preview-caption {
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+      text-align: center;
+    }
     #markdown-preview .md-html-block {
       overflow-x: auto;
     }
@@ -628,6 +686,35 @@
       padding: 4px 0;
     }
     .preview-empty { color: var(--muted); }
+    .source-line-menu {
+      position: fixed;
+      z-index: 1200;
+      min-width: 210px;
+      max-width: min(320px, calc(100vw - 16px));
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-alt);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, .38);
+    }
+    .source-line-menu[hidden] { display: none; }
+    .source-line-menu-title {
+      padding: 5px 8px 7px;
+      color: var(--muted);
+      font-size: .86em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .source-line-menu button {
+      width: 100%;
+      min-height: 36px;
+      text-align: left;
+    }
+    #source-line-delete {
+      margin-top: 5px;
+      border-top: 1px solid var(--border);
+    }
     .chapter-heading-preview {
       margin: 0;
       overflow: hidden;
@@ -749,6 +836,7 @@
       <button id="undo" title="撤销工作目录最近一次修改（⌘/Ctrl+Z）">撤销</button>
       <button id="redo" title="重做工作目录最近一次修改（⌘/Ctrl+Shift+Z）">重做</button>
       <button id="save">保存标定</button>
+      <button id="reset-calibration" type="button">重置标定</button>
     </div>
   </nav>
 
@@ -757,13 +845,20 @@
       <div class="pane-menu">
         <span class="pane-title">数据表</span>
         <div id="review-module-tabs" class="module-tabs" aria-label="标定模块">
-          <button class="module-tab" data-review-module="章节定界" aria-pressed="false">章节定界</button>
-          <button class="module-tab" data-review-module="章节标题" aria-pressed="false">章节标题</button>
-          <button class="module-tab" data-review-module="注释" aria-pressed="false">注释</button>
-          <button class="module-tab" data-review-module="嵌入块" aria-pressed="false">嵌入块</button>
-          <button class="module-tab" data-review-module="非法断行" aria-pressed="false">非法断行</button>
+          <div id="chapter-element-picker" class="module-picker">
+            <button id="chapter-element-tab" class="module-tab" type="button"
+              aria-haspopup="menu" aria-expanded="false" aria-pressed="false">章节元素 ▾</button>
+            <div id="chapter-element-menu" class="module-dropdown" role="menu" hidden>
+              <button class="module-option" type="button" role="menuitem" data-review-module="章节标题" aria-pressed="false">章节标题</button>
+              <button class="module-option" type="button" role="menuitem" data-review-module="注释" aria-pressed="false">注释</button>
+              <button class="module-option" type="button" role="menuitem" data-review-module="嵌入块" aria-pressed="false">嵌入块</button>
+              <button class="module-option" type="button" role="menuitem" data-review-module="非法断行" aria-pressed="false">非法断行</button>
+              <button class="module-option" type="button" role="menuitem" data-review-module="媒体" aria-pressed="false">媒体</button>
+            </div>
+          </div>
           <button class="module-tab" data-review-module="变动行" aria-pressed="false">变动行</button>
           <button id="config-module-tab" class="module-tab" type="button" aria-pressed="false">配置</button>
+          <button class="module-tab compat-controls" data-review-module="章节定界" aria-pressed="false">章节定界</button>
           <button class="module-tab compat-controls" data-review-module="翻译" aria-pressed="false">翻译</button>
         </div>
         <span class="grid-menu-spacer"></span>
@@ -771,6 +866,10 @@
 
       <div id="heading-toolbar" class="review-toolbar" hidden>
         <label><input id="heading-numbering" type="checkbox" checked> 为标题编号</label>
+      </div>
+      <div id="media-toolbar" class="review-toolbar" hidden>
+        <button id="media-download" type="button">下载未下载媒体</button>
+        <span id="media-download-status" class="status-secondary"></span>
       </div>
       <div id="boundary-toolbar" class="review-toolbar" hidden>
         <label>起始序号 <input id="boundary-sequence-start" type="text" value="01" inputmode="numeric"></label>
@@ -851,6 +950,13 @@
       </div>
     </section>
   </main>
+
+  <div id="source-line-menu" class="source-line-menu" role="menu" hidden>
+    <div id="source-line-menu-title" class="source-line-menu-title"></div>
+    <button id="source-line-add-active" type="button" role="menuitem"></button>
+    <button id="source-line-insert-br" type="button" role="menuitem">插入&lt;br&gt;</button>
+    <button id="source-line-delete" type="button" role="menuitem">删除该行</button>
+  </div>
 
 
   <aside id="floating-debug-dock" class="floating-debug-dock" aria-label="调试工具">
@@ -1049,6 +1155,17 @@
         <button id="leave-cancel">取消</button>
         <button id="leave-discard">放弃修改</button>
         <button id="leave-save">保存并继续</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="reset-confirm-overlay" class="leave-overlay" hidden>
+    <section class="leave-dialog" role="dialog" aria-modal="true" aria-labelledby="reset-confirm-title">
+      <h2 id="reset-confirm-title">重置当前章节标定？</h2>
+      <p id="reset-confirm-message">当前工作稿和全部人工标定将恢复到原始状态，并立即保存。此操作会清空撤销 / 重做历史。</p>
+      <div class="controls">
+        <button id="reset-cancel" type="button">取消</button>
+        <button id="reset-confirm" type="button">确认重置</button>
       </div>
     </section>
   </div>

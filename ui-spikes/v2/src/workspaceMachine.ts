@@ -22,6 +22,7 @@ import {
   deriveChangedLineAuditRows,
   type ChangedLineAuditRow,
 } from "./changedLineAudit";
+import { deriveMediaCatalog } from "./mediaCatalog";
 
 export type ActiveReviewModule =
   | "章节定界"
@@ -29,6 +30,7 @@ export type ActiveReviewModule =
   | "注释"
   | "嵌入块"
   | "非法断行"
+  | "媒体"
   | "变动行"
   | "翻译";
 
@@ -38,6 +40,7 @@ export const ACTIVE_REVIEW_MODULES: readonly ActiveReviewModule[] = [
   "注释",
   "嵌入块",
   "非法断行",
+  "媒体",
   "变动行",
   "翻译",
 ];
@@ -82,13 +85,23 @@ export type WorkspaceEvent =
   | { type: "SELECT_REVIEW_MODULE"; module: ActiveReviewModule }
   | { type: "SET_HEADING_NUMBERING"; enabled: boolean }
   | { type: "CALIBRATION_ROW_FOCUSED"; rowId: string; sourceLine: number }
+  | { type: "ADD_SOURCE_LINE_TO_ACTIVE_MODULE"; sourceLine: number }
   | { type: "WORKING_CHANGED"; text: string }
+  | {
+      type: "MEDIA_DOWNLOAD_APPLIED";
+      chapterId: string;
+      workingText: string;
+      revision: string;
+      savedAt: string;
+      media: NonNullable<ChapterWorkspaceData["media"]>;
+    }
   | { type: "CALIBRATION_LINE_TYPE_CHANGED"; rowId: string; lineType: string }
   | { type: "CHAPTER_FILE_CHANGED"; rowId: string; value: string }
   | { type: "ASSIGN_BOUNDARY_SEQUENCE"; start: string }
   | { type: "UNDO" }
   | { type: "REDO" }
   | { type: "SAVE" }
+  | { type: "RESET_CALIBRATION" }
   | { type: "EXPORT_BOUNDARY" }
   | { type: "EXPORT_TRANS" }
   | { type: "CLOSE" }
@@ -114,6 +127,11 @@ type ExportTransActorInput = SaveChapterActorInput & {
   headingNumberingEnabled: boolean;
 };
 
+type ResetChapterActorOutput = {
+  chapter: ChapterWorkspaceData;
+  saveResult: ChapterSaveResult;
+};
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -129,6 +147,88 @@ function splitPatterns(value: string): string[] {
 
 const EMBED_PATTERNS = splitPatterns(MODULE_REGEX_DEFAULTS["嵌入块"] ?? "");
 const ANNOTATION_PATTERNS = splitPatterns(MODULE_REGEX_DEFAULTS["注释"] ?? "");
+
+type ManualReviewModule =
+  | "章节定界"
+  | "章节标题"
+  | "注释"
+  | "嵌入块"
+  | "非法断行";
+
+function isManualReviewModule(
+  module: ActiveReviewModule,
+): module is ManualReviewModule {
+  return module === "章节定界"
+    || module === "章节标题"
+    || module === "注释"
+    || module === "嵌入块"
+    || module === "非法断行";
+}
+
+function chapterWithManualSourceLine(
+  context: WorkspaceContext,
+  sourceLine: number,
+): ChapterWorkspaceData | undefined {
+  const chapter = context.chapter;
+  const module = context.activeReviewModule;
+  if (
+    !chapter
+    || chapter.kind === "translation"
+    || !isManualReviewModule(module)
+    || !Number.isInteger(sourceLine)
+    || sourceLine < 1
+  ) {
+    return undefined;
+  }
+
+  const lines = chapter.workingText.replace(/\r\n?/g, "\n").split("\n");
+  const lineIndex = sourceLine - 1;
+  const lineText = lines[lineIndex];
+  if (lineText === undefined) return undefined;
+
+  const scopedRow = chapter.rows.find((row) => row.typeLabel === module)
+    ?? chapter.rows.find((row) => row.sourcePath || row.workingCopyPath);
+  const sourcePath = scopedRow?.sourcePath ?? chapter.path;
+  const workingPath = scopedRow?.workingCopyPath ?? chapter.path;
+  const application = new ChapterReviewApplication({
+    rows: chapter.rows,
+    annotationPairs: chapter.annotationPairs,
+  });
+
+  const next = module === "非法断行"
+    ? application.markIllegalLineBreak({
+        workingText: chapter.workingText,
+        sourcePath,
+        workingPath,
+        cursorLine: lineIndex,
+      })
+    : application.addManualReviewLine({
+        moduleName: module,
+        documentText: chapter.workingText,
+        lineText,
+        hintLine: lineIndex,
+        sourcePath,
+        workingPath,
+      });
+  if (!next) return undefined;
+
+  return {
+    ...chapter,
+    rows: next.rows,
+    annotationPairs: next.annotationPairs,
+  };
+}
+
+function manualSourceLineWouldChange(
+  context: WorkspaceContext,
+  sourceLine: number,
+): boolean {
+  const next = chapterWithManualSourceLine(context, sourceLine);
+  if (!next || !context.chapter) return false;
+  return JSON.stringify(next.rows) !== JSON.stringify(context.chapter.rows)
+    || JSON.stringify(next.annotationPairs)
+      !== JSON.stringify(context.chapter.annotationPairs);
+}
 
 function historySnapshot(chapter: ChapterWorkspaceData): WorkbenchHistorySnapshot {
   return cloneWorkbenchHistorySnapshot({
@@ -226,6 +326,64 @@ function refreshReviewForText(
   };
 }
 
+export function resetChapterToOriginal(
+  chapter: ChapterWorkspaceData,
+): ChapterWorkspaceData {
+  if (chapter.kind !== "chapter") {
+    throw new Error("只有普通章节可以重置标定");
+  }
+
+  const scopedRow = chapter.rows.find(
+    (row) =>
+      row.typeLabel === "章节标题"
+      || row.typeLabel === "注释"
+      || row.typeLabel === "嵌入块"
+      || row.typeLabel === "非法断行",
+  );
+  const sourcePath = scopedRow?.sourcePath ?? chapter.path;
+  const workingPath = scopedRow?.workingCopyPath ?? chapter.path;
+  const application = new ChapterReviewApplication({
+    rows: [],
+    annotationPairs: [],
+  });
+  application.refreshChapterTitle({
+    baselineText: chapter.originalText,
+    workingText: chapter.originalText,
+    sourcePath,
+    workingPath,
+    sourceLabel: chapter.name,
+    embedPatterns: EMBED_PATTERNS,
+  });
+  application.refreshAnnotation({
+    baselineText: chapter.originalText,
+    workingText: chapter.originalText,
+    sourcePath,
+    workingPath,
+    sourceLabel: chapter.name,
+    patterns: ANNOTATION_PATTERNS,
+  });
+  application.refreshEmbed({
+    baselineText: chapter.originalText,
+    workingText: chapter.originalText,
+    sourcePath,
+    workingPath,
+    sourceLabel: chapter.name,
+    patterns: EMBED_PATTERNS,
+  });
+  const reset = application.refreshIllegalLineBreak({
+    workingText: chapter.originalText,
+    sourcePath,
+    workingPath,
+  });
+
+  return {
+    ...chapter,
+    workingText: chapter.originalText,
+    rows: reset.rows,
+    annotationPairs: reset.annotationPairs,
+  };
+}
+
 function sameHistorySnapshot(
   left: WorkbenchHistorySnapshot | undefined,
   right: WorkbenchHistorySnapshot | undefined,
@@ -258,6 +416,16 @@ export const workspaceMachine = setup({
         chapter: input.chapter,
         workingText: input.chapter.workingText,
       })),
+    resetChapter: fromPromise(
+      async ({ input }: { input: SaveChapterActorInput }): Promise<ResetChapterActorOutput> => {
+        const chapter = resetChapterToOriginal(input.chapter);
+        const saveResult = await input.chapterRepository.saveChapter({
+          chapter,
+          workingText: chapter.workingText,
+        });
+        return { chapter, saveResult };
+      },
+    ),
     exportBoundary: fromPromise(async ({ input }: { input: SaveChapterActorInput }) => {
       if (!input.chapterRepository.exportBoundary) {
         throw new Error("当前 workspace repository 不支持章节定界导出");
@@ -309,6 +477,9 @@ export const workspaceMachine = setup({
     boundaryReady: ({ context, event }) =>
       event.type === "OPEN_BOUNDARY"
       && context.boundary?.ready === true,
+    canResetCalibration: ({ context, event }) =>
+      event.type === "RESET_CALIBRATION"
+      && context.chapter?.kind === "chapter",
     workingTextChanged: ({ context, event }) =>
       event.type === "WORKING_CHANGED"
       && context.chapter?.kind !== "translation"
@@ -337,6 +508,9 @@ export const workspaceMachine = setup({
       && context.chapter?.rows.some(
         (row) => row.id === event.rowId && row.lineType !== event.lineType,
       ) === true,
+    canAddSourceLineToActiveModule: ({ context, event }) =>
+      event.type === "ADD_SOURCE_LINE_TO_ACTIVE_MODULE"
+      && manualSourceLineWouldChange(context, event.sourceLine),
     chapterFileChanged: ({ context, event }) =>
       event.type === "CHAPTER_FILE_CHANGED"
       && context.chapter?.kind === "boundary"
@@ -600,6 +774,44 @@ export const workspaceMachine = setup({
         saveError: undefined,
       };
     }),
+    applyMediaDownloadResult: assign(({ context, event }) => {
+      if (
+        !context.chapter
+        || event.type !== "MEDIA_DOWNLOAD_APPLIED"
+        || context.chapter.id !== event.chapterId
+      ) return {};
+      const chapter = {
+        ...refreshReviewForText(context.chapter, event.workingText),
+        revision: event.revision,
+        media: event.media,
+      };
+      return {
+        chapter,
+        savedBaseline: historySnapshot(chapter),
+        undoStack: [],
+        redoStack: [],
+        lastSavedAt: event.savedAt,
+        saveError: undefined,
+      };
+    }),
+    addSourceLineToActiveModule: assign(({ context, event }) => {
+      if (event.type !== "ADD_SOURCE_LINE_TO_ACTIVE_MODULE" || !context.chapter) {
+        return {};
+      }
+      const chapter = chapterWithManualSourceLine(context, event.sourceLine);
+      if (!chapter) return {};
+      return {
+        chapter,
+        undoStack: pushHistory(
+          context.undoStack,
+          historySnapshot(context.chapter),
+        ),
+        redoStack: [],
+        focusedReviewRowId: undefined,
+        focusedSourceLine: event.sourceLine,
+        saveError: undefined,
+      };
+    }),
     updateCalibrationLineType: assign(({ context, event }) => {
       if (!context.chapter || event.type !== "CALIBRATION_LINE_TYPE_CHANGED") {
         return {};
@@ -754,6 +966,25 @@ export const workspaceMachine = setup({
         undoStack: [],
         redoStack: [],
         lastSavedAt: output.savedAt,
+        saveError: undefined,
+      };
+    }),
+    applyResetResult: assign(({ event }) => {
+      if (!("output" in event)) return {};
+      const output = event.output as ResetChapterActorOutput;
+      const chapter = {
+        ...output.chapter,
+        workingText: output.saveResult.workingText,
+        revision: output.saveResult.revision,
+      };
+      return {
+        chapter,
+        savedBaseline: historySnapshot(chapter),
+        undoStack: [],
+        redoStack: [],
+        focusedReviewRowId: undefined,
+        focusedSourceLine: undefined,
+        lastSavedAt: output.saveResult.savedAt,
         saveError: undefined,
       };
     }),
@@ -958,10 +1189,18 @@ export const workspaceMachine = setup({
             CALIBRATION_ROW_FOCUSED: {
               actions: "focusCalibrationRow",
             },
+            ADD_SOURCE_LINE_TO_ACTIVE_MODULE: {
+              guard: "canAddSourceLineToActiveModule",
+              target: "dirty",
+              actions: "addSourceLineToActiveModule",
+            },
             WORKING_CHANGED: {
               guard: "workingTextChanged",
               target: "dirty",
               actions: "updateWorkingText",
+            },
+            MEDIA_DOWNLOAD_APPLIED: {
+              actions: "applyMediaDownloadResult",
             },
             CALIBRATION_LINE_TYPE_CHANGED: {
               guard: "calibrationLineTypeChanged",
@@ -986,6 +1225,11 @@ export const workspaceMachine = setup({
             EXPORT_TRANS: {
               guard: "canExportTrans",
               target: "exportingTrans",
+              actions: "clearSaveError",
+            },
+            RESET_CALIBRATION: {
+              guard: "canResetCalibration",
+              target: "resettingClean",
               actions: "clearSaveError",
             },
             REDO: [
@@ -1025,6 +1269,10 @@ export const workspaceMachine = setup({
             },
             CALIBRATION_ROW_FOCUSED: {
               actions: "focusCalibrationRow",
+            },
+            ADD_SOURCE_LINE_TO_ACTIVE_MODULE: {
+              guard: "canAddSourceLineToActiveModule",
+              actions: "addSourceLineToActiveModule",
             },
             WORKING_CHANGED: {
               guard: "workingTextChanged",
@@ -1071,6 +1319,11 @@ export const workspaceMachine = setup({
             ],
             SAVE: {
               target: "saving",
+              actions: "clearSaveError",
+            },
+            RESET_CALIBRATION: {
+              guard: "canResetCalibration",
+              target: "resettingDirty",
               actions: "clearSaveError",
             },
             CLOSE: {
@@ -1144,6 +1397,46 @@ export const workspaceMachine = setup({
             onDone: {
               target: "clean",
               actions: "applySaveResult",
+            },
+            onError: {
+              target: "dirty",
+              actions: "recordSaveActorError",
+            },
+          },
+        },
+        resettingClean: {
+          invoke: {
+            src: "resetChapter",
+            input: ({ context }) => {
+              if (!context.chapter) throw new Error("cannot reset without an open chapter");
+              return {
+                chapterRepository: context.chapterRepository,
+                chapter: context.chapter,
+              };
+            },
+            onDone: {
+              target: "clean",
+              actions: "applyResetResult",
+            },
+            onError: {
+              target: "clean",
+              actions: "recordSaveActorError",
+            },
+          },
+        },
+        resettingDirty: {
+          invoke: {
+            src: "resetChapter",
+            input: ({ context }) => {
+              if (!context.chapter) throw new Error("cannot reset without an open chapter");
+              return {
+                chapterRepository: context.chapterRepository,
+                chapter: context.chapter,
+              };
+            },
+            onDone: {
+              target: "clean",
+              actions: "applyResetResult",
             },
             onError: {
               target: "dirty",
@@ -1244,6 +1537,7 @@ export type WorkspaceViewModel = {
     | "chapter-leave-confirm"
     | "chapter-leave-saving"
     | "chapter-saving"
+    | "chapter-resetting"
     | "chapter-exporting"
     | "debug";
   projectName?: string;
@@ -1311,6 +1605,7 @@ export type WorkspaceViewModel = {
   undoDepth: number;
   redoDepth: number;
   canSave: boolean;
+  canResetCalibration: boolean;
   canClose: boolean;
   canLeaveCancel: boolean;
   canLeaveDiscard: boolean;
@@ -1353,6 +1648,9 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
   const chapterLeaveConfirm = snapshot.matches({ chapter: "leaveConfirm" });
   const chapterLeaveSaving = snapshot.matches({ chapter: "leaveSaving" });
   const chapterSaving = snapshot.matches({ chapter: "saving" });
+  const chapterResetting =
+    snapshot.matches({ chapter: "resettingClean" })
+    || snapshot.matches({ chapter: "resettingDirty" });
   const chapterExporting =
     snapshot.matches({ chapter: "exportingClean" })
     || snapshot.matches({ chapter: "exportingDirty" })
@@ -1373,6 +1671,7 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
   else if (chapterLeaveConfirm) session = "chapter-leave-confirm";
   else if (chapterLeaveSaving) session = "chapter-leave-saving";
   else if (chapterSaving) session = "chapter-saving";
+  else if (chapterResetting) session = "chapter-resetting";
   else if (chapterExporting) session = "chapter-exporting";
   else if (debug) session = "debug";
 
@@ -1439,10 +1738,12 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
       : [];
   const activeModuleRows = snapshot.context.activeReviewModule === "变动行"
     ? changedLineRows.length
-    : chapter
-      ? chapter.rows.filter((row) =>
-          rowVisibleInModule(row, snapshot.context.activeReviewModule)).length
-      : 0;
+    : snapshot.context.activeReviewModule === "媒体"
+      ? deriveMediaCatalog(chapter).length
+      : chapter
+        ? chapter.rows.filter((row) =>
+            rowVisibleInModule(row, snapshot.context.activeReviewModule)).length
+        : 0;
   const illegalLineBreakRows = chapter
     ? chapter.rows.filter((row) => row.typeLabel === "非法断行")
     : [];
@@ -1587,6 +1888,8 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
     undoDepth: snapshot.context.undoStack.length,
     redoDepth: snapshot.context.redoStack.length,
     canSave: chapterDirty && chapter?.kind !== "translation",
+    canResetCalibration:
+      (chapterClean || chapterDirty) && chapter?.kind === "chapter",
     canClose: chapterClean || chapterDirty,
     canLeaveCancel: chapterLeaveConfirm,
     canLeaveDiscard: chapterLeaveConfirm,

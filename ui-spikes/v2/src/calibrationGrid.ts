@@ -111,7 +111,7 @@ export class CalibrationGrid {
     private readonly onRowActivated: (
       row: Candidate,
       located: SourceRange | undefined,
-      activation?: "row" | "illegal-context" | "changed-deleted",
+      activation?: "row" | "illegal-context" | "changed-deleted" | "media",
     ) => void,
   ) {
     this.api = createGrid<Candidate>(host, {
@@ -157,6 +157,7 @@ export class CalibrationGrid {
     this.headingNumberingEnabled = headingNumberingEnabled;
 
     if (moduleChanged) {
+      this.api.setGridOption("rowHeight", module === "媒体" ? 64 : 42);
       this.rebuildPresentationColumns();
     }
 
@@ -237,6 +238,33 @@ export class CalibrationGrid {
     return target.id;
   }
 
+  revealRow(rowKey: string, focusCell = true): boolean {
+    if (!rowKey) return false;
+    const gridRows = this.sortRowsForPresentation(
+      visibleRowsForModule(this.rows, this.module),
+    );
+    const index = gridRows.findIndex(
+      (row) => (row.rowId ?? row.id) === rowKey,
+    );
+    if (index < 0) return false;
+    this.api.ensureIndexVisible(index, "middle");
+    if (focusCell) this.api.setFocusedCell(index, "sourceLine");
+    return true;
+  }
+
+  revealSourceLine(lineNumber: number): boolean {
+    if (!Number.isInteger(lineNumber) || lineNumber < 1) return false;
+    const gridRows = this.sortRowsForPresentation(
+      visibleRowsForModule(this.rows, this.module),
+    );
+    const index = gridRows.findIndex(
+      (row) => this.locatedLine(row) === lineNumber,
+    );
+    if (index < 0) return false;
+    this.api.ensureIndexVisible(index, "middle");
+    return true;
+  }
+
   setEditable(editable: boolean): void {
     if (this.editable === editable) return;
     this.editable = editable;
@@ -244,6 +272,10 @@ export class CalibrationGrid {
   }
 
   private activateRow(row: Candidate): void {
+    if (this.module === "媒体") {
+      this.onRowActivated(row, undefined, "media");
+      return;
+    }
     if (this.module === "变动行") {
       if (row.chapterBoundaryState === "deleted") {
         this.onRowActivated(row, undefined, "changed-deleted");
@@ -268,6 +300,54 @@ export class CalibrationGrid {
   }
 
   private columnDefs(): ColDef<Candidate>[] {
+    if (this.module === "媒体") {
+      const mediaColumns: ColDef<Candidate>[] = [
+        {
+          colId: "mediaGroup",
+          headerName: "分组",
+          valueGetter: (params) => params.data?.mediaGroup ?? "",
+        },
+        {
+          colId: "mediaThumbnail",
+          headerName: "缩略图",
+          sortable: false,
+          cellRenderer: (params: ICellRendererParams<Candidate>) =>
+            this.mediaThumbnailRenderer(params),
+        },
+        {
+          colId: "mediaFileName",
+          headerName: "文件名",
+          valueGetter: (params) => params.data?.raw ?? "",
+        },
+        {
+          colId: "mediaSize",
+          headerName: "大小",
+          valueGetter: (params) =>
+            this.formatMediaSize(params.data?.mediaSizeBytes),
+        },
+      ];
+      const mediaById = new Map(
+        mediaColumns.map((column) => [
+          String(column.colId ?? column.field ?? ""),
+          column,
+        ]),
+      );
+      return this.presentation[this.module].columns.flatMap((presentation) => {
+        const base = mediaById.get(presentation.colId);
+        if (!base) return [];
+        return [{
+          ...base,
+          width: presentation.width,
+          minWidth: presentation.minWidth,
+          flex: presentation.flex,
+          hide: presentation.hidden ?? false,
+          pinned: presentation.pinned ?? undefined,
+          sort: undefined,
+          sortIndex: undefined,
+        }];
+      });
+    }
+
     const columns: ColDef<Candidate>[] = [
       {
         colId: "sourceLine",
@@ -418,6 +498,33 @@ export class CalibrationGrid {
     });
   }
 
+  private mediaThumbnailRenderer(
+    params: ICellRendererParams<Candidate>,
+  ): HTMLElement | string {
+    const source = params.data?.localPath;
+    if (!source) return "";
+    const image = document.createElement("img");
+    image.src = source;
+    image.alt = params.data?.raw ?? "媒体预览";
+    image.loading = "lazy";
+    image.style.display = "block";
+    image.style.width = "52px";
+    image.style.height = "52px";
+    image.style.objectFit = "contain";
+    image.style.borderRadius = "4px";
+    return image;
+  }
+
+  private formatMediaSize(sizeBytes: number | undefined): string {
+    if (sizeBytes === undefined) return "—";
+    if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return "0 B";
+    if (sizeBytes < 1024) return `${sizeBytes} B`;
+    if (sizeBytes < 1024 * 1024) {
+      return `${(sizeBytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   private groupNumberSortValue(value: unknown): number {
     const parsed = Number.parseInt(String(value ?? "").trim(), 10);
     return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
@@ -489,6 +596,20 @@ export class CalibrationGrid {
         return illegalLineBreakMergedPreview(row);
       case "breakReason":
         return row.breakReason ?? "";
+      case "mediaGroup":
+        return row.mediaGroup === "已采用"
+          ? 0
+          : row.mediaGroup === "未采用"
+            ? 1
+            : row.mediaGroup === "未下载"
+              ? 2
+              : 3;
+      case "mediaThumbnail":
+        return "";
+      case "mediaFileName":
+        return row.raw ?? "";
+      case "mediaSize":
+        return row.mediaSizeBytes ?? 0;
       case "changeOwner":
         return (row as Candidate & { changeOwner?: string }).changeOwner ?? "";
       case "baselineContent":

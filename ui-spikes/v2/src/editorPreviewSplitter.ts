@@ -29,6 +29,9 @@ function saveTopPercent(value: number): void {
 export class EditorPreviewSplitter {
   private topPercent = loadTopPercent();
   private activePointerId: number | undefined;
+  private dragStartY = 0;
+  private dragStartTopPercent = DEFAULT_TOP_PERCENT;
+  private dragPaneHeight = 0;
 
   constructor(
     private readonly pane: HTMLElement,
@@ -36,6 +39,28 @@ export class EditorPreviewSplitter {
   ) {
     this.splitter.addEventListener("pointerdown", (event) => {
       event.preventDefault();
+      const paneRect = this.pane.getBoundingClientRect();
+      const topTrack = Array.from(this.pane.children).find(
+        (element) =>
+          element instanceof HTMLElement
+          && !element.hidden
+          && (
+            element.id === "working-editor"
+            || element.id === "custom-css-wrap"
+            || element.id === "table-config-wrap"
+          ),
+      );
+      const renderedTopHeight =
+        topTrack instanceof HTMLElement
+          ? topTrack.getBoundingClientRect().height
+          : (this.topPercent / 100) * paneRect.height;
+
+      this.dragStartY = event.clientY;
+      this.dragPaneHeight = paneRect.height;
+      this.dragStartTopPercent =
+        paneRect.height > 0
+          ? (renderedTopHeight / paneRect.height) * 100
+          : this.topPercent;
       this.activePointerId = event.pointerId;
       this.splitter.setPointerCapture(event.pointerId);
       this.splitter.classList.add("is-dragging");
@@ -47,9 +72,10 @@ export class EditorPreviewSplitter {
         this.activePointerId !== event.pointerId
         || !this.splitter.hasPointerCapture(event.pointerId)
       ) return;
-      const rect = this.pane.getBoundingClientRect();
-      if (rect.height <= 0) return;
-      this.apply(((event.clientY - rect.top) / rect.height) * 100);
+      if (this.dragPaneHeight <= 0) return;
+      const deltaPercent =
+        ((event.clientY - this.dragStartY) / this.dragPaneHeight) * 100;
+      this.apply(this.dragStartTopPercent + deltaPercent);
     });
 
     this.splitter.addEventListener("pointerup", (event) => {
@@ -90,6 +116,7 @@ export class EditorPreviewSplitter {
 
   private finish(): void {
     this.activePointerId = undefined;
+    this.dragPaneHeight = 0;
     this.splitter.classList.remove("is-dragging");
     document.body.classList.remove("is-resizing-editor-preview");
     saveTopPercent(this.topPercent);

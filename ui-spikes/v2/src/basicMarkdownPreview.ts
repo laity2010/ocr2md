@@ -12,6 +12,57 @@ const md = new MarkdownIt({
   typographer: true,
 });
 
+type PreviewEnvironment = {
+  chapterId?: string;
+};
+
+function chapterImageUrl(
+  chapterId: string | undefined,
+  source: string,
+): string | undefined {
+  if (!chapterId) return undefined;
+  const normalized = source.replace(/^\.\//, "");
+  if (!/^imgs\/[^/]+\.(?:png|jpe?g|webp|gif)$/i.test(normalized)) {
+    return undefined;
+  }
+  return "/__workspace/chapter/image?chapterId="
+    + encodeURIComponent(chapterId)
+    + "&path="
+    + encodeURIComponent(normalized);
+}
+
+function rewriteObsidianImageEmbeds(
+  text: string,
+  chapterId: string | undefined,
+): string {
+  if (!chapterId) return text;
+  return text.replace(
+    /!\[\[([^\]|\r\n]+\.(?:png|jpe?g|webp|gif))(?:\|[^\]\r\n]+)?\]\]/gi,
+    (whole, source: string) => {
+      const url = chapterImageUrl(chapterId, source.trim());
+      return url ? `![image](${url})` : whole;
+    },
+  );
+}
+
+const defaultImage =
+  md.renderer.rules.image
+  ?? ((tokens, idx, options, env, self) =>
+    self.renderToken(tokens, idx, options));
+
+md.renderer.rules.image = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const source = token.attrGet("src");
+  if (source) {
+    const routed = chapterImageUrl(
+      (env as PreviewEnvironment).chapterId,
+      String(source),
+    );
+    if (routed) token.attrSet("src", routed);
+  }
+  return defaultImage(tokens, idx, options, env, self);
+};
+
 md.use(texmath, {
   engine: katex,
   delimiters: "dollars",
@@ -47,12 +98,20 @@ function maskLeadingYamlFrontmatter(text: string): string {
 
 export class BasicMarkdownPreview {
   private lastText = "";
+  private lastChapterId: string | undefined;
+  private lastMode: "markdown" | "media" = "markdown";
 
   constructor(private readonly root: HTMLElement) {}
 
-  render(text: string): void {
-    if (text === this.lastText) return;
+  render(text: string, chapterId?: string): void {
+    if (
+      this.lastMode === "markdown"
+      && text === this.lastText
+      && chapterId === this.lastChapterId
+    ) return;
+    this.lastMode = "markdown";
     this.lastText = text;
+    this.lastChapterId = chapterId;
 
     if (!text) {
       this.root.innerHTML =
@@ -60,8 +119,13 @@ export class BasicMarkdownPreview {
       return;
     }
 
-    const env = {};
-    const tokens = md.parse(maskLeadingYamlFrontmatter(text), env);
+    const env: PreviewEnvironment = { chapterId };
+    const tokens = md.parse(
+      maskLeadingYamlFrontmatter(
+        rewriteObsidianImageEmbeds(text, chapterId),
+      ),
+      env,
+    );
 
     for (const token of tokens) {
       if (
@@ -83,5 +147,29 @@ export class BasicMarkdownPreview {
         mathMl: true,
       },
     });
+  }
+
+  renderMedia(chapterId: string, relativePath: string, label: string): void {
+    this.renderMediaSource(
+      chapterImageUrl(chapterId, relativePath) ?? "",
+      label,
+    );
+  }
+
+  renderMediaSource(source: string, label: string): void {
+    this.lastMode = "media";
+    const image = document.createElement("img");
+    image.src = source;
+    image.alt = label;
+    image.className = "media-preview-image";
+
+    const caption = document.createElement("div");
+    caption.className = "media-preview-caption";
+    caption.textContent = label;
+
+    const wrap = document.createElement("div");
+    wrap.className = "media-preview-wrap";
+    wrap.append(image, caption);
+    this.root.replaceChildren(wrap);
   }
 }

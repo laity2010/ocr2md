@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import hashlib
+import ipaddress
 import json
 import os
+import socket
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -10,8 +13,8 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, quote, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 states = {}
 state_history = {}
@@ -58,6 +61,111 @@ ALLOWED_REVIEW_MODULES = {
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+MEDIA_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
+MEDIA_MIME_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+def validate_public_media_url(value):
+    if not isinstance(value, str) or not value:
+        raise ValueError("sourceUrl is required")
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("仅支持 HTTP(S) 外部媒体")
+    if parsed.username or parsed.password:
+        raise ValueError("外部媒体 URL 不能包含账号信息")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        literal_host = ipaddress.ip_address(parsed.hostname)
+    except ValueError:
+        literal_host = None
+    if literal_host is not None and not literal_host.is_global:
+        raise ValueError("拒绝下载内网或本机媒体地址")
+    try:
+        addresses = socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
+    except OSError as error:
+        raise ValueError(f"无法解析媒体地址：{parsed.hostname}") from error
+    if not addresses:
+        raise ValueError("无法解析媒体地址")
+    for info in addresses:
+        address = info[4][0].split("%", 1)[0]
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError as error:
+            raise ValueError("媒体地址解析结果无效") from error
+        # Clash/Surge-style TUN DNS commonly maps public hostnames into the
+        # RFC 2544 benchmark range 198.18.0.0/15. Allow that synthetic range
+        # only for a hostname (never for an IP literal); all actual private,
+        # loopback, link-local and other non-global destinations stay blocked.
+        fake_ip = ip in ipaddress.ip_network("198.18.0.0/15")
+        if not ip.is_global and not (literal_host is None and fake_ip):
+            raise ValueError("拒绝下载内网或本机媒体地址")
+    return value
+
+
+class PublicMediaRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        validate_public_media_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def detect_image_mime(data):
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def download_public_media(source_url):
+    validate_public_media_url(source_url)
+    opener = build_opener(PublicMediaRedirectHandler())
+    request = Request(
+        source_url,
+        headers={
+            "User-Agent": "ocr2md-media-downloader/1.0",
+            "Accept": "image/png,image/jpeg,image/webp,image/gif,image/*;q=0.8",
+        },
+    )
+    try:
+        with opener.open(request, timeout=30) as response:
+            validate_public_media_url(response.geturl())
+            content_length = response.headers.get("Content-Length")
+            if content_length:
+                try:
+                    if int(content_length) > MEDIA_DOWNLOAD_MAX_BYTES:
+                        raise ValueError("媒体文件不能超过 20 MB")
+                except ValueError as error:
+                    if str(error) == "媒体文件不能超过 20 MB":
+                        raise
+            chunks = []
+            total = 0
+            while True:
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MEDIA_DOWNLOAD_MAX_BYTES:
+                    raise ValueError("媒体文件不能超过 20 MB")
+                chunks.append(chunk)
+            data = b"".join(chunks)
+            if not data:
+                raise ValueError("下载到的媒体为空")
+            header_mime = response.headers.get_content_type()
+            detected_mime = detect_image_mime(data)
+            mime_type = detected_mime or header_mime
+            if mime_type not in MEDIA_MIME_TYPES:
+                raise ValueError("当前媒体下载仅支持 PNG / JPEG / WebP / GIF")
+            return data, mime_type
+    except HTTPError as error:
+        raise RuntimeError(f"媒体下载失败：HTTP {error.code}") from error
+    except URLError as error:
+        raise RuntimeError(f"媒体下载失败：{error.reason}") from error
 
 
 def default_project_dir():
@@ -210,6 +318,7 @@ class ChapterProjectStore:
                 "storagePath": str(working_path),
                 "originalPath": str(original_path) if original_path is not None else None,
                 "sidecarPath": str(sidecar_path),
+                "media": self.list_chapter_media(chapter_id),
             }
 
     @staticmethod
@@ -270,6 +379,120 @@ class ChapterProjectStore:
                 "revision": self.revision(persisted_working, persisted_sidecar),
                 "savedAt": utc_now(),
                 "workingText": persisted_working,
+            }
+
+    def read_chapter_image(self, chapter_id, relative_path):
+        if not isinstance(relative_path, str) or not relative_path:
+            raise ValueError("path is required")
+        normalized = relative_path.replace("\\", "/")
+        if not normalized.startswith("imgs/"):
+            raise ValueError("图片路径必须位于 imgs/")
+        if normalized.startswith("/") or ".." in Path(normalized).parts:
+            raise ValueError("invalid image path")
+
+        record = self.resolve(chapter_id)
+        chapter_dir = record["_dir"].resolve()
+        image_path = (chapter_dir / normalized).resolve()
+        imgs_dir = (chapter_dir / "imgs").resolve()
+        if image_path.parent != imgs_dir:
+            raise ValueError("invalid image path")
+        if not image_path.is_file():
+            raise KeyError("image not found")
+
+        mime_by_extension = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+        }
+        mime_type = mime_by_extension.get(image_path.suffix.lower())
+        if mime_type is None:
+            raise ValueError("unsupported image type")
+        return image_path.read_bytes(), mime_type
+
+    def list_chapter_media(self, chapter_id):
+        record = self.resolve(chapter_id)
+        chapter_dir = record["_dir"].resolve()
+        imgs_dir = (chapter_dir / "imgs").resolve()
+        if imgs_dir.parent != chapter_dir:
+            raise RuntimeError("invalid chapter image directory")
+        if not imgs_dir.is_dir():
+            return []
+
+        mime_by_extension = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+        }
+        media = []
+        for item in sorted(imgs_dir.iterdir(), key=lambda path: path.name.lower()):
+            if not item.is_file() or item.name.startswith("."):
+                continue
+            mime_type = mime_by_extension.get(item.suffix.lower())
+            if mime_type is None:
+                continue
+            media.append({
+                "fileName": item.name,
+                "relativePath": f"imgs/{item.name}",
+                "sizeBytes": item.stat().st_size,
+                "mimeType": mime_type,
+            })
+        return media
+
+    def save_pasted_image(self, chapter_id, mime_type, data_base64):
+        extension_by_mime = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+        }
+        if mime_type not in extension_by_mime:
+            raise ValueError("仅支持 PNG / JPEG / WebP / GIF 图片")
+        if not isinstance(data_base64, str) or not data_base64:
+            raise ValueError("image data is required")
+        try:
+            image_bytes = base64.b64decode(data_base64, validate=True)
+        except Exception as error:
+            raise ValueError("invalid image data") from error
+        if not image_bytes:
+            raise ValueError("image data is empty")
+        if len(image_bytes) > 20 * 1024 * 1024:
+            raise ValueError("图片不能超过 20 MB")
+
+        record = self.resolve(chapter_id)
+        with self.lock:
+            chapter_dir = record["_dir"].resolve()
+            if chapter_dir.parent != self.chapters_dir:
+                raise RuntimeError("invalid chapter directory")
+            imgs_dir = (chapter_dir / "imgs").resolve()
+            if imgs_dir.parent != chapter_dir:
+                raise RuntimeError("invalid chapter image directory")
+            imgs_dir.mkdir(parents=True, exist_ok=True)
+
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+            extension = extension_by_mime[mime_type]
+            file_name = f"image-{stamp}{extension}"
+            image_path = imgs_dir / file_name
+            if image_path.exists():
+                file_name = f"image-{stamp}-{uuid.uuid4().hex[:6]}{extension}"
+                image_path = imgs_dir / file_name
+            temp_path = imgs_dir / f".{file_name}.{uuid.uuid4().hex}.tmp"
+            try:
+                with temp_path.open("wb") as stream:
+                    stream.write(image_bytes)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temp_path, image_path)
+            finally:
+                if temp_path.exists():
+                    temp_path.unlink()
+
+            return {
+                "fileName": file_name,
+                "relativePath": f"imgs/{file_name}",
             }
 
     @staticmethod
@@ -924,6 +1147,46 @@ class UpstreamChapterProjectStore:
                 }
             raise
 
+    def read_chapter_image(self, chapter_id, relative_path):
+        query = (
+            "/__workspace/chapter/image?chapterId="
+            + quote(chapter_id, safe="")
+            + "&path="
+            + quote(relative_path, safe="")
+        )
+        request = Request(
+            self.base_url + query,
+            headers={"Accept": "image/*"},
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=10) as response:
+                return (
+                    response.read(),
+                    response.headers.get("Content-Type", "application/octet-stream"),
+                )
+        except HTTPError as error:
+            try:
+                error_payload = json.loads(error.read().decode("utf-8"))
+            except Exception:
+                error_payload = {"error": f"upstream HTTP {error.code}"}
+            raise UpstreamStoreError(error.code, error_payload) from error
+        except URLError as error:
+            raise RuntimeError(
+                f"workspace upstream unavailable: {error.reason}"
+            ) from error
+
+    def save_pasted_image(self, chapter_id, mime_type, data_base64):
+        return self._request(
+            "POST",
+            "/__workspace/chapter/image",
+            {
+                "chapterId": chapter_id,
+                "mimeType": mime_type,
+                "dataBase64": data_base64,
+            },
+        )
+
     def read_translation(self, chapter_id):
         self.resolve(chapter_id)
         return self._request(
@@ -1059,6 +1322,14 @@ class V2DevHandler(SimpleHTTPRequestHandler):
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _write_binary(self, status, body, content_type):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -1212,6 +1483,20 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
             try:
                 self._write_json(200, self.project_store.read(chapter_id))
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/chapter/image":
+            query = parse_qs(parsed.query)
+            chapter_id = query.get("chapterId", [""])[0]
+            relative_path = query.get("path", [""])[0]
+            try:
+                body, content_type = self.project_store.read_chapter_image(
+                    chapter_id,
+                    relative_path,
+                )
+                self._write_binary(200, body, content_type)
             except Exception as error:
                 self._write_store_error(error)
             return
@@ -1458,6 +1743,76 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             if state_report is not None:
                 response["stateAccepted"] = state_accepted
             self._write_json(200, response)
+            return
+
+        if route == "/__workspace/chapter/media/download":
+            chapter_id = payload.get("chapterId")
+            expected_revision = payload.get("expectedRevision")
+            source_url = payload.get("sourceUrl")
+            try:
+                current = self.project_store.read(chapter_id)
+                if current.get("revision") != expected_revision:
+                    self._write_json(
+                        409,
+                        {
+                            "error": "章节 working 已变化，媒体下载已暂停",
+                            "currentRevision": current.get("revision"),
+                        },
+                    )
+                    return
+                if not isinstance(source_url, str) or source_url not in current.get("workingText", ""):
+                    raise ValueError("当前章节中已找不到该外部媒体链接")
+                media_bytes, mime_type = download_public_media(source_url)
+                image = self.project_store.save_pasted_image(
+                    chapter_id,
+                    mime_type,
+                    base64.b64encode(media_bytes).decode("ascii"),
+                )
+                local_path = image.get("relativePath")
+                if not isinstance(local_path, str) or not local_path.startswith("imgs/"):
+                    raise RuntimeError("媒体落盘返回了无效路径")
+                next_working = current["workingText"].replace(source_url, local_path)
+                saved = self.project_store.save(
+                    chapter_id,
+                    expected_revision,
+                    next_working,
+                    current["sidecar"],
+                )
+                if saved.get("conflict"):
+                    self._write_json(
+                        409,
+                        {
+                            "error": "章节 working 已变化，媒体已落盘但引用未覆盖；该文件会显示为未采用",
+                            "currentRevision": saved.get("currentRevision"),
+                        },
+                    )
+                    return
+                refreshed = self.project_store.read(chapter_id)
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            self._write_json(
+                200,
+                {
+                    **saved,
+                    "relativePath": image["relativePath"],
+                    "fileName": image["fileName"],
+                    "media": refreshed.get("media", []),
+                },
+            )
+            return
+
+        if route == "/__workspace/chapter/image":
+            try:
+                saved = self.project_store.save_pasted_image(
+                    payload.get("chapterId"),
+                    payload.get("mimeType"),
+                    payload.get("dataBase64"),
+                )
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            self._write_json(200, saved)
             return
 
         if route == "/__workspace/table-presentation":

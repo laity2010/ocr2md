@@ -48,3 +48,29 @@ test("editor preview mirrors working and horizontal splitter persists", async ({
   );
   await expect(page.locator("#state-value")).toHaveText("idle");
 });
+
+test("horizontal splitter follows the pointer without vertical offset", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#chapter-select").selectOption({
+    label: "chapters/01 Buffett’s Alpha",
+  });
+  await expect(page.locator("#state-value")).toHaveText("chapter-clean");
+
+  const splitter = page.locator("#editor-preview-splitter");
+  const before = await splitter.boundingBox();
+  expect(before).toBeTruthy();
+
+  const x = before!.x + before!.width / 2;
+  const y = before!.y + before!.height / 2;
+  const deltaY = 60;
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + deltaY, { steps: 4 });
+
+  const during = await splitter.boundingBox();
+  expect(during).toBeTruthy();
+  expect(Math.abs((during!.y - before!.y) - deltaY)).toBeLessThanOrEqual(2);
+
+  await page.mouse.up();
+});
