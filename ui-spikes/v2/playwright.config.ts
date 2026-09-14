@@ -18,7 +18,7 @@ export default defineConfig({
   webServer: {
     command:
       `python3 prepare_test_workspace.py --project-dir ${testProjectDir} && `
-      + `python3 dev_server.py --port ${testPort} --bind 127.0.0.1 --project-dir ${testProjectDir}`,
+      + `python3 dev_server.py --port ${testPort} --bind 127.0.0.1 --project-dir ${testProjectDir} --config-dir .tmp/private-config`,
     url: testBaseUrl,
     reuseExistingServer: false,
     timeout: 30_000,

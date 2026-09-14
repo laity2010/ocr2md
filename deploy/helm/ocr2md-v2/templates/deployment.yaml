@@ -34,6 +34,8 @@ spec:
             - "/app"
             - "--project-dir"
             - {{ printf "%s/%s" .Values.workspace.mountPath .Values.workspace.projectSubdir | quote }}
+            - "--config-dir"
+            - {{ .Values.privateConfig.mountPath | quote }}
           ports:
             - name: http
               containerPort: 4180
@@ -61,9 +63,19 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.workspace.mountPath | quote }}
+            - name: private-config
+              mountPath: {{ .Values.privateConfig.mountPath | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
+        - name: private-config
+          {{- if .Values.privateConfig.hostPath }}
+          hostPath:
+            path: {{ .Values.privateConfig.hostPath | quote }}
+            type: Directory
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
         - name: workspace
           {{- if .Values.workspace.hostPath }}
           hostPath:

@@ -38,6 +38,9 @@ export type ActiveReviewModule =
   | "变动行"
   | "文本块"
   | "句子"
+  | "原文to译文"
+  | "译文to原文"
+  | "翻译服务"
   | "翻译";
 
 export const ACTIVE_REVIEW_MODULES: readonly ActiveReviewModule[] = [
@@ -50,6 +53,9 @@ export const ACTIVE_REVIEW_MODULES: readonly ActiveReviewModule[] = [
   "变动行",
   "文本块",
   "句子",
+  "原文to译文",
+  "译文to原文",
+  "翻译服务",
   "翻译",
 ];
 
@@ -545,12 +551,15 @@ export const workspaceMachine = setup({
         return event.module === "章节定界";
       }
       if (context.chapter.kind === "translation") {
-        return event.module === "文本块" || event.module === "句子";
+        return event.module === "文本块" || event.module === "句子" || event.module === "原文to译文" || event.module === "译文to原文" || event.module === "翻译服务";
       }
       return event.module !== "章节定界"
         && event.module !== "翻译"
         && event.module !== "文本块"
-        && event.module !== "句子";
+        && event.module !== "句子"
+        && event.module !== "原文to译文"
+        && event.module !== "译文to原文"
+        && event.module !== "翻译服务";
     },
     canExportTrans: ({ context, event }) =>
       event.type === "EXPORT_TRANS" && context.chapter?.kind === "chapter",
@@ -1858,7 +1867,7 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
     ? changedLineRows.length
     : snapshot.context.activeReviewModule === "媒体"
       ? deriveMediaCatalog(chapter).length
-      : snapshot.context.activeReviewModule === "句子" && chapter?.kind === "translation"
+      : (snapshot.context.activeReviewModule === "句子" || snapshot.context.activeReviewModule === "原文to译文" || snapshot.context.activeReviewModule === "译文to原文") && chapter?.kind === "translation"
         ? scanSentences(chapter.workingText, chapter.path).length
         : chapter
           ? chapter.rows.filter((row) =>

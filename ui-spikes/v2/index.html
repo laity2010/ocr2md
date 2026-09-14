@@ -197,6 +197,13 @@
       grid-template-columns: minmax(340px, var(--left-pane-width, 43%)) 6px minmax(360px, 1fr);
       overflow: hidden;
     }
+    .workspace.translation-service-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .workspace.translation-service-layout .grid-pane {
+      grid-column: 1;
+      border-right: 0;
+    }
     .grid-pane, .editor-pane {
       min-width: 0;
       min-height: 0;
@@ -236,6 +243,26 @@
     #editor-preview-splitter { grid-column: 1; grid-row: 4; }
     #markdown-preview { grid-column: 1; grid-row: 5; }
     .editor-pane > .pane-status { grid-column: 1; grid-row: 6; }
+    .editor-pane.translation-reading-layout {
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+    .editor-pane.translation-reading-layout .source-tabs,
+    .editor-pane.translation-reading-layout #regex-search-toggle,
+    .editor-pane.translation-reading-layout #working-editor,
+    .editor-pane.translation-reading-layout #custom-css-wrap,
+    .editor-pane.translation-reading-layout #table-config-wrap,
+    .editor-pane.translation-reading-layout #regex-search-panel,
+    .editor-pane.translation-reading-layout #editor-preview-splitter {
+      display: none !important;
+    }
+    .editor-pane.translation-reading-layout #markdown-preview {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .editor-pane.translation-reading-layout > .pane-status {
+      grid-column: 1;
+      grid-row: 3;
+    }
 
     .source-tabs {
       display: inline-flex;
@@ -762,6 +789,17 @@
       outline: 2px solid color-mix(in srgb, var(--accent) 75%, white);
       outline-offset: 2px;
     }
+    #markdown-preview .ocr2md-footnote-ref {
+      position: relative;
+      z-index: 2;
+      pointer-events: auto;
+    }
+    #markdown-preview .ocr2md-translation-sentence .ocr2md-footnote-ref {
+      position: relative;
+      z-index: 2;
+      pointer-events: auto;
+      cursor: pointer;
+    }
     .ocr2md-footnote-popover {
       position: fixed;
       z-index: 5000;
@@ -839,6 +877,46 @@
       overflow-y: hidden;
       padding: 4px 0;
     }
+
+    #markdown-preview .ocr2md-translation-sentence {
+      border-radius: 3px;
+      cursor: pointer;
+      text-decoration-line: underline;
+      text-decoration-style: dotted;
+      text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+      text-underline-offset: .16em;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #markdown-preview .ocr2md-translation-sentence:hover,
+    #markdown-preview .ocr2md-translation-sentence:focus-visible,
+    #markdown-preview .ocr2md-translation-sentence.is-open {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      outline: none;
+    }
+    .ocr2md-translation-popover {
+      position: fixed;
+      z-index: 5100;
+      width: min(520px, calc(100vw - 24px));
+      max-height: min(58vh, calc(100vh - 24px));
+      overflow: auto;
+      padding: 11px 13px 13px;
+      border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--bg-alt) 97%, black);
+      color: var(--fg);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+    }
+    .ocr2md-translation-popover__title {
+      margin-bottom: 6px;
+      color: var(--accent);
+      font-size: .82em;
+      font-weight: 750;
+    }
+    .ocr2md-translation-popover__body {
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+
     .preview-empty { color: var(--muted); }
     .source-line-menu {
       position: fixed;
@@ -883,6 +961,15 @@
     h4.chapter-heading-preview { color: var(--obsidian-h4); font-size: var(--obsidian-h4-size); }
     h5.chapter-heading-preview { color: var(--obsidian-h5); font-size: var(--obsidian-h5-size); }
     h6.chapter-heading-preview { color: var(--obsidian-h6); font-size: var(--obsidian-h6-size); }
+
+    .sentence-translate-toolbar {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 4px;
+    }
+    .sentence-translate-toolbar button {
+      white-space: nowrap;
+    }
 
     .pane-status {
       min-width: 0;
@@ -985,12 +1072,189 @@
 
     @media (max-width: 700px) {
       .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(280px, 48%) minmax(0, 1fr); }
+      .workspace.translation-service-layout { grid-template-rows: minmax(0, 1fr); }
       .splitter { display: none; }
       .grid-pane { border-bottom: 1px solid var(--border); }
       #chapter-select { max-width: 42vw; }
       .project-navigation #refresh-catalog { display: none; }
     }
-  </style>
+
+    .translation-service-panel {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px 22px 22px;
+      background: var(--panel-bg, #20272b);
+    }
+    .translation-service-shell {
+      display: grid;
+      grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
+      gap: 24px;
+      min-height: 100%;
+      max-width: 1380px;
+      margin: 0 auto;
+    }
+    .translation-service-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 12px;
+      border-right: 1px solid var(--border);
+    }
+    .translation-service-item {
+      display: grid;
+      grid-template-columns: 12px 1fr;
+      gap: 3px 8px;
+      align-items: center;
+      width: 100%;
+      padding: 10px;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+    }
+    .translation-service-item small {
+      grid-column: 2;
+      color: var(--muted);
+    }
+    .translation-service-item.is-active {
+      border-color: var(--border);
+      background: color-mix(in srgb, var(--accent) 10%, var(--bg-alt));
+    }
+    .translation-service-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .translation-service-item.is-configured .translation-service-dot {
+      background: var(--accent);
+    }
+    .translation-service-main {
+      min-width: 0;
+      max-width: 1120px;
+    }
+    .translation-service-header,
+    .translation-service-test-actions,
+    .translation-service-sentence-nav,
+    .translation-service-result-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .translation-service-header {
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .translation-service-header > div {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .translation-service-state,
+    .translation-service-message,
+    .translation-service-caption,
+    .translation-service-result-meta {
+      color: var(--muted);
+      font-size: .9em;
+    }
+    .translation-service-message.is-error {
+      color: #f08a8c;
+      font-weight: 650;
+    }
+    .translation-service-form {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(240px, 1fr));
+      gap: 14px 18px;
+    }
+    .translation-service-form label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+    .translation-service-form input,
+    .translation-service-form textarea {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 8px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--fg);
+      font: inherit;
+    }
+    #translation-service-instruction-row {
+      grid-column: 1 / -1;
+    }
+    .translation-service-key-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 6px;
+    }
+    .translation-service-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 18px 0 10px;
+      color: var(--muted);
+    }
+    .translation-service-divider::before,
+    .translation-service-divider::after {
+      content: "";
+      height: 1px;
+      flex: 1;
+      background: var(--border);
+    }
+    .translation-service-sentence-nav {
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    #translation-service-position {
+      margin-left: auto;
+      color: var(--muted);
+    }
+    .translation-service-sample-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .translation-service-sample-grid pre,
+    .translation-service-test-result pre {
+      box-sizing: border-box;
+      min-height: 110px;
+      max-height: 260px;
+      overflow: auto;
+      margin: 4px 0 0;
+      padding: 9px 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--fg);
+      font: inherit;
+    }
+    .translation-service-test-actions {
+      margin: 10px 0;
+    }
+    .translation-service-result-meta {
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+    @media (max-width: 760px) {
+      .translation-service-shell { grid-template-columns: 1fr; }
+      .translation-service-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+        padding: 0 0 10px;
+      }
+      .translation-service-form,
+      .translation-service-sample-grid { grid-template-columns: 1fr; }
+      #translation-service-instruction-row { grid-column: auto; }
+    }
+</style>
 </head>
 <body>
   <nav class="workspace-switcher" aria-label="项目导航">
@@ -1033,6 +1297,9 @@
             <div id="translation-element-menu" class="module-dropdown" role="menu" hidden>
               <button class="module-option" type="button" role="menuitem" data-review-module="文本块" aria-pressed="false">文本块</button>
               <button class="module-option" type="button" role="menuitem" data-review-module="句子" aria-pressed="false">句子</button>
+              <button class="module-option" type="button" role="menuitem" data-review-module="原文to译文" aria-pressed="false">原文to译文</button>
+              <button class="module-option" type="button" role="menuitem" data-review-module="译文to原文" aria-pressed="false">译文to原文</button>
+              <button class="module-option" type="button" role="menuitem" data-review-module="翻译服务" aria-pressed="false">翻译服务</button>
             </div>
           </div>
           <button class="module-tab" data-review-module="变动行" aria-pressed="false">变动行</button>
@@ -1040,6 +1307,9 @@
           <button class="module-tab compat-controls" data-review-module="章节定界" aria-pressed="false">章节定界</button>
           <button class="module-tab compat-controls" data-review-module="翻译" aria-pressed="false">翻译</button>
         </div>
+        <span id="sentence-translate-toolbar" class="sentence-translate-toolbar" hidden>
+          <button id="sentence-translate-button" type="button">DeepL 翻译</button>
+        </span>
         <span class="grid-menu-spacer"></span>
       </div>
 
@@ -1057,6 +1327,7 @@
       </div>
 
       <div id="calibration-grid" aria-label="真实标定表"></div>
+      <div id="translation-service-panel" class="translation-service-panel" aria-label="翻译服务工作台" hidden></div>
       <div id="table-config-grid" aria-label="配置数据表" hidden></div>
       <div class="pane-status" role="status" aria-live="polite">
         <span id="review-grid-status">尚未打开章节</span>

@@ -5,6 +5,7 @@ export type ObsidianPreviewNormalization = {
 
 export type ObsidianCalloutPreview = {
   sourceLine: number;
+  endSourceLine: number;
   quoteDepth: number;
   type: string;
   title: string;
@@ -33,11 +34,13 @@ export function scanObsidianCalloutsForPreview(
     const foldMarker = head[3] as "+" | "-" | undefined;
     const title = head[4].trim() || type || "Callout";
     const bodyLines: string[] = [];
+    let endSourceLine = start + 1;
 
     for (let index = start + 1; index < lines.length; index += 1) {
       const quoted = QUOTED_LINE_RE.exec(lines[index]);
       if (!quoted || quoted[1].length < quoteDepth) break;
 
+      endSourceLine = index + 1;
       const extraQuotes = quoted[1].slice(quoteDepth);
       bodyLines.push(
         extraQuotes.length > 0
@@ -48,6 +51,7 @@ export function scanObsidianCalloutsForPreview(
 
     callouts.set(start + 1, {
       sourceLine: start + 1,
+      endSourceLine,
       quoteDepth,
       type,
       title,

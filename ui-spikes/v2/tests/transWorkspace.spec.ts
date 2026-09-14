@@ -316,7 +316,8 @@ test("trans node opens editable translation working draft with text-block table"
     expect(alphaSentence!.translationText).not.toContain("$R_t$");
     expect(alphaSentence!.translationText).not.toContain("[^1]");
     expect(sentenceSource.entries.some((entry) => entry.sourceText.includes("E = mc^2"))).toBe(false);
-    expect(sentenceSource.entries.some((entry) => entry.sourceText.includes("raw-html-cell"))).toBe(false);
+    expect(sentenceSource.entries.some((entry) => entry.sourceText.includes("raw-html-cell"))).toBe(true);
+    expect(sentenceSource.entries.some((entry) => entry.sourceText.includes("Top Award"))).toBe(true);
 
     const protectedSentenceRow = page.locator("#calibration-grid .ag-row").filter({
       hasText: "Alpha value",
@@ -326,7 +327,8 @@ test("trans node opens editable translation working draft with text-block table"
       .toContainText("Alpha value $R_t$ rose.[^1]");
     await expect(page.locator("#calibration-grid")).toContainText("Next alpha sentence.");
     await expect(page.locator("#calibration-grid")).not.toContainText("E = mc^2");
-    await expect(page.locator("#calibration-grid")).not.toContainText("raw-html-cell");
+    await expect(page.locator("#calibration-grid")).toContainText("raw-html-cell");
+    await expect(page.locator("#calibration-grid")).toContainText("Top Award");
     await expect(page.locator("#calibration-grid select.calibration-line-type")).toHaveCount(0);
     await expect(page.locator("#state-value")).toHaveText("chapter-clean");
     await expect(page.locator("#save")).toBeDisabled();

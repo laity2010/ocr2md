@@ -21,16 +21,19 @@ type IntlSegmenterCtor = new (
 const NON_TERMINAL_ABBREVIATION = /(?:^|[\s([{"'])(?:Mr|Mrs|Ms|Dr|Prof|Fig|Figs|Eq|Eqs)\.$/i;
 const NAME_INITIAL = /(?:^|\s)[A-Z]\.$/;
 const NUMBERED_LIST_MARKER = /^\d+\.$/;
+const CAPTION_PREFIX = /(?:^|\s)(?:Table|Figure|Exhibit)\s+\d+(?:[A-Za-z]|\.\d+)*\.$/i;
 const FOOTNOTE_REFERENCE = /\[\^[^\]\r\n]+\]/g;
 const TERMINAL_BEFORE_FOOTNOTE = /([.!?。！？])([ \t]*(?:\[\^[^\]\r\n]+\])+)/g;
 
 export function scanSentences(markdown: string, sourcePath: string): Candidate[] {
   const rows: Candidate[] = [];
   for (const [blockIndex, block] of scanTextBlocks(markdown, sourcePath).entries()) {
-    if (block.lineType === "内嵌" || block.lineType === "LaTeX块") continue;
+    if (block.lineType === "LaTeX块") continue;
     const slices = block.lineType === "标题"
       ? [{ start: 0, end: block.raw.length }]
-      : segmentTranslatableSentenceSlices(block.raw);
+      : block.lineType === "内嵌"
+        ? embeddedTranslatableSentenceSlices(block.raw)
+        : segmentTranslatableSentenceSlices(block.raw);
     slices.forEach((slice, index) => {
       const raw = block.raw.slice(slice.start, slice.end);
       if (!raw.trim()) return;
@@ -63,6 +66,144 @@ export function scanSentences(markdown: string, sourcePath: string): Candidate[]
     });
   }
   return rows;
+}
+
+
+function embeddedTranslatableSentenceSlices(text: string): SentenceSlice[] {
+  const lines = text.split("\n");
+  const lineStarts: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    lineStarts.push(offset);
+    offset += line.length + 1;
+  }
+
+  const slices: SentenceSlice[] = [];
+  let plainStartLine: number | undefined;
+  let plainEndLine: number | undefined;
+
+  const flushPlain = () => {
+    if (plainStartLine === undefined || plainEndLine === undefined) return;
+    const start = lineStarts[plainStartLine];
+    const end = lineStarts[plainEndLine] + lines[plainEndLine].length;
+    const raw = text.slice(start, end);
+    for (const slice of segmentTranslatableSentenceSlices(raw)) {
+      slices.push({ start: start + slice.start, end: start + slice.end });
+    }
+    plainStartLine = undefined;
+    plainEndLine = undefined;
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const quote = /^(>+[ \t]*)/.exec(line);
+    const contentOffset = quote?.[0].length ?? 0;
+    const content = line.slice(contentOffset);
+    const trimmed = content.trim();
+
+    if (embeddedStructuralContent(trimmed)) {
+      flushPlain();
+      continue;
+    }
+
+    if (/!\[\[[^\]]+\]\]|!\[[^\]]*\]\([^)]+\)/.test(content)) {
+      flushPlain();
+      const leading = content.length - content.trimStart().length;
+      const trailing = content.trimEnd().length;
+      const raw = content.slice(leading, trailing);
+      if (!raw) continue;
+      for (const slice of segmentTranslatableSentenceSlices(raw)) {
+        slices.push({
+          start: lineStarts[index] + contentOffset + leading + slice.start,
+          end: lineStarts[index] + contentOffset + leading + slice.end,
+        });
+      }
+      continue;
+    }
+
+    if (/<[^>]+>/.test(content)) {
+      flushPlain();
+      for (const visible of htmlVisibleTextSlices(content)) {
+        const raw = content.slice(visible.start, visible.end);
+        for (const slice of segmentTranslatableSentenceSlices(raw)) {
+          const start = lineStarts[index] + contentOffset + visible.start + slice.start;
+          const end = lineStarts[index] + contentOffset + visible.start + slice.end;
+          slices.push({ start, end });
+        }
+      }
+      continue;
+    }
+
+    if (quote) {
+      flushPlain();
+      const leading = content.length - content.trimStart().length;
+      const trailing = content.trimEnd().length;
+      const raw = content.slice(leading, trailing);
+      if (!raw) continue;
+      for (const slice of segmentTranslatableSentenceSlices(raw)) {
+        slices.push({
+          start: lineStarts[index] + contentOffset + leading + slice.start,
+          end: lineStarts[index] + contentOffset + leading + slice.end,
+        });
+      }
+      continue;
+    }
+
+    if (plainStartLine === undefined) plainStartLine = index;
+    plainEndLine = index;
+  }
+  flushPlain();
+  return slices.filter((slice) => {
+    const protectedText = protectMarkdownForTranslation(text.slice(slice.start, slice.end));
+    return hasTranslatableText(protectedText.text);
+  });
+}
+
+function embeddedStructuralContent(trimmed: string): boolean {
+  if (!trimmed || /^<br>$/i.test(trimmed)) return true;
+  if (/^<embed\b[^>]*>\s*<\/embed>$/i.test(trimmed)) return true;
+  if (/^\[![^\]]*\]/.test(trimmed)) return true;
+  if (/^!\[\[[^\]]+\]\]$/.test(trimmed)) return true;
+  if (/^!\[[^\]]*\]\([^)]+\)$/.test(trimmed)) return true;
+  return false;
+}
+
+function htmlVisibleTextSlices(input: string): SentenceSlice[] {
+  const result: SentenceSlice[] = [];
+  const skipStack: string[] = [];
+  const tagRe = /<[^>]+>/g;
+  let cursor = 0;
+
+  const appendText = (start: number, end: number) => {
+    if (end <= start || skipStack.length) return;
+    const value = input.slice(start, end);
+    if (!/[\p{L}]/u.test(value)) return;
+    let left = start;
+    let right = end;
+    while (left < right && /\s/.test(input[left])) left += 1;
+    while (right > left && /\s/.test(input[right - 1])) right -= 1;
+    if (left < right) result.push({ start: left, end: right });
+  };
+
+  for (const match of input.matchAll(tagRe)) {
+    const start = match.index ?? 0;
+    appendText(cursor, start);
+    const tag = match[0];
+    const close = /^<\s*\//.test(tag);
+    const name = /^<\s*\/?\s*([a-zA-Z0-9:-]+)/.exec(tag)?.[1]?.toLowerCase();
+    const skip = name === "eq" || name === "math" || name === "script" || name === "style";
+    if (skip && name) {
+      if (close) {
+        const last = skipStack.lastIndexOf(name);
+        if (last >= 0) skipStack.splice(last, 1);
+      } else if (!/\/\s*>$/.test(tag)) {
+        skipStack.push(name);
+      }
+    }
+    cursor = start + tag.length;
+  }
+  appendText(cursor, input.length);
+  return result;
 }
 
 function hasTranslatableText(value: string): boolean {
@@ -194,7 +335,8 @@ function shouldMergeWithNext(previous: string): boolean {
   const trimmed = previous.trimEnd();
   return NON_TERMINAL_ABBREVIATION.test(trimmed)
     || NAME_INITIAL.test(trimmed)
-    || NUMBERED_LIST_MARKER.test(trimmed);
+    || NUMBERED_LIST_MARKER.test(trimmed)
+    || CAPTION_PREFIX.test(trimmed);
 }
 
 function prepareSegmentationText(text: string): string {

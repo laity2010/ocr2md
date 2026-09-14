@@ -8,6 +8,7 @@ import os
 import re
 import socket
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from functools import partial
@@ -683,6 +684,75 @@ class ChapterProjectStore:
                 "conflict": False,
                 "savedAt": utc_now(),
                 **payload,
+            }
+
+    def upsert_sentence_translation(
+        self,
+        chapter_id,
+        provider,
+        label,
+        sentence,
+        status,
+        translated_text=None,
+        error=None,
+        model=None,
+    ):
+        if not isinstance(sentence, dict) or not isinstance(sentence.get("id"), str):
+            raise ValueError("sentence is required")
+        if status not in ("translated", "error", "pending"):
+            raise ValueError("invalid sentence translation status")
+        with self.lock:
+            _, sentence_dir, _ = self.sentence_paths(chapter_id)
+            sentence_dir.mkdir(parents=True, exist_ok=True)
+            file_name = self.sentence_provider_file_name(provider)
+            target_path = sentence_dir / file_name
+            payload = {}
+            if target_path.is_file():
+                try:
+                    payload = json.loads(target_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            entries = payload.get("entries")
+            if not isinstance(entries, dict):
+                entries = {}
+            sentence_id = sentence["id"]
+            entry = {
+                "sentenceId": sentence_id,
+                "sourceFingerprint": sentence.get("sourceFingerprint"),
+                "contextFingerprint": sentence.get("contextFingerprint"),
+                "status": status,
+                "updatedAt": utc_now(),
+            }
+            if translated_text is not None:
+                entry["translatedText"] = translated_text
+            if error:
+                entry["error"] = error
+            if model:
+                entry["model"] = model
+            entries[sentence_id] = entry
+            payload = {
+                "version": 1,
+                "provider": provider,
+                "label": label,
+                "sourceFile": "original.json",
+                "entries": entries,
+            }
+            temp = target_path.with_name(f".{target_path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                self.write_text_fsync(
+                    temp,
+                    json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                )
+                os.replace(temp, target_path)
+            finally:
+                if temp.exists():
+                    temp.unlink()
+            return {
+                "fileName": file_name,
+                "provider": provider,
+                "data": payload,
             }
 
     def read_translation(self, chapter_id):
@@ -1654,8 +1724,328 @@ class UpstreamChapterProjectStore:
             raise
 
 
+class TranslationProviderError(RuntimeError):
+    def __init__(self, provider_status, message):
+        super().__init__(message)
+        self.provider_status = provider_status
+
+
+class TranslationServiceStore:
+    DEFAULTS = {
+        "deepl": {
+            "label": "DeepL",
+            "endpoint": "https://api-free.deepl.com",
+            "sourceLanguage": "EN",
+            "targetLanguage": "ZH-HANS",
+            "model": "",
+        },
+        "chatgpt": {
+            "label": "ChatGPT",
+            "endpoint": "https://api.openai.com/v1/responses",
+            "model": "gpt-5.6-luna",
+            "targetLanguage": "Simplified Chinese",
+            "instruction": (
+                "Translate the input into Simplified Chinese. Preserve every "
+                "<ocr2md-protected .../> token byte-for-byte and return only the translated text."
+            ),
+        },
+    }
+    ALLOWED_HOSTS = {
+        "deepl": {
+            "api-free.deepl.com",
+            "api.deepl.com",
+            "api-jp.deepl.com",
+            "api-us.deepl.com",
+        },
+        "chatgpt": {"api.openai.com"},
+    }
+
+    def __init__(self, config_dir):
+        self.config_dir = Path(config_dir).expanduser().resolve()
+        self.path = self.config_dir / "translation-services.json"
+        self.lock = threading.RLock()
+
+    def _defaults(self):
+        return {
+            "version": 1,
+            "activeProvider": "deepl",
+            "services": {
+                key: {**value, "apiKey": ""}
+                for key, value in self.DEFAULTS.items()
+            },
+        }
+
+    def _load(self):
+        data = self._defaults()
+        if not self.path.is_file():
+            return data
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return data
+        if isinstance(raw, dict):
+            active_provider = raw.get("activeProvider")
+            if active_provider in self.DEFAULTS:
+                data["activeProvider"] = active_provider
+        services = raw.get("services") if isinstance(raw, dict) else None
+        if not isinstance(services, dict):
+            return data
+        for provider, defaults in self.DEFAULTS.items():
+            incoming = services.get(provider)
+            if not isinstance(incoming, dict):
+                continue
+            merged = data["services"][provider]
+            for key in defaults:
+                value = incoming.get(key)
+                if isinstance(value, str):
+                    merged[key] = value
+            api_key = incoming.get("apiKey")
+            if isinstance(api_key, str):
+                merged["apiKey"] = api_key
+        return data
+
+    def _write(self, data):
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.config_dir, 0o700)
+        except OSError:
+            pass
+        temp = self.path.with_name(f".{self.path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temp.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            try:
+                os.chmod(temp, 0o600)
+            except OSError:
+                pass
+            os.replace(temp, self.path)
+            try:
+                os.chmod(self.path, 0o600)
+            except OSError:
+                pass
+        finally:
+            if temp.exists():
+                temp.unlink()
+
+    def public_payload(self):
+        with self.lock:
+            data = self._load()
+            services = []
+            for provider in ("deepl", "chatgpt"):
+                service = data["services"][provider]
+                public = {
+                    key: value
+                    for key, value in service.items()
+                    if key != "apiKey"
+                }
+                public.update({
+                    "id": provider,
+                    "apiKeyConfigured": bool(service.get("apiKey")),
+                })
+                services.append(public)
+            return {
+                "version": 1,
+                "activeProvider": data.get("activeProvider", "deepl"),
+                "services": services,
+            }
+
+    def select_provider(self, provider):
+        if provider not in self.DEFAULTS:
+            raise ValueError("unsupported translation provider")
+        with self.lock:
+            data = self._load()
+            data["activeProvider"] = provider
+            self._write(data)
+            return self.public_payload()
+
+    def provider_metadata(self, provider):
+        if provider not in self.DEFAULTS:
+            raise ValueError("unsupported translation provider")
+        with self.lock:
+            service = dict(self._load()["services"][provider])
+        return {
+            "provider": provider,
+            "label": service.get("label") or provider,
+            "model": service.get("model") or "",
+            "apiKeyConfigured": bool(service.get("apiKey")),
+        }
+
+    def save_service(self, provider, payload):
+        if provider not in self.DEFAULTS:
+            raise ValueError("unsupported translation provider")
+        if not isinstance(payload, dict):
+            raise ValueError("service config must be an object")
+        with self.lock:
+            data = self._load()
+            service = data["services"][provider]
+            allowed = set(self.DEFAULTS[provider].keys()) - {"label"}
+            for key in allowed:
+                if key not in payload:
+                    continue
+                value = payload.get(key)
+                if not isinstance(value, str):
+                    raise ValueError(f"{key} must be a string")
+                if len(value) > 4000:
+                    raise ValueError(f"{key} is too long")
+                service[key] = value.strip() if key != "instruction" else value.strip()
+            if "apiKey" in payload:
+                api_key = payload.get("apiKey")
+                if not isinstance(api_key, str):
+                    raise ValueError("apiKey must be a string")
+                if len(api_key) > 1000:
+                    raise ValueError("apiKey is too long")
+                if api_key.strip():
+                    service["apiKey"] = api_key.strip()
+            if payload.get("clearApiKey") is True:
+                service["apiKey"] = ""
+            self._validate_endpoint(provider, service.get("endpoint", ""))
+            self._write(data)
+            return self.public_payload()
+
+    def test_sentence(self, provider, source_text, translation_text):
+        if provider not in self.DEFAULTS:
+            raise ValueError("unsupported translation provider")
+        if not isinstance(source_text, str) or not isinstance(translation_text, str):
+            raise ValueError("sentence text is required")
+        with self.lock:
+            service = dict(self._load()["services"][provider])
+        api_key = service.get("apiKey", "")
+        if not api_key:
+            raise ValueError("API Key 未配置")
+        self._validate_endpoint(provider, service.get("endpoint", ""))
+        started = time.perf_counter()
+        if provider == "deepl":
+            translated = self._test_deepl(service, translation_text)
+        else:
+            translated = self._test_chatgpt(service, translation_text)
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        expected_tokens = re.findall(r'<ocr2md-protected\b[^>]*\/>', translation_text)
+        returned_tokens = re.findall(r'<ocr2md-protected\b[^>]*\/>', translated)
+        missing = [token for token in expected_tokens if token not in returned_tokens]
+        unexpected = [token for token in returned_tokens if token not in expected_tokens]
+        return {
+            "provider": provider,
+            "sourceText": source_text,
+            "translationText": translation_text,
+            "translatedText": translated,
+            "durationMs": duration_ms,
+            "placeholderIntegrity": not missing and not unexpected,
+            "missingPlaceholders": missing,
+            "unexpectedPlaceholders": unexpected,
+        }
+
+    def _validate_endpoint(self, provider, endpoint):
+        if not isinstance(endpoint, str) or not endpoint:
+            raise ValueError("endpoint is required")
+        parsed = urlparse(endpoint)
+        if parsed.scheme != "https" or parsed.hostname not in self.ALLOWED_HOSTS[provider]:
+            raise ValueError("endpoint must use the official HTTPS provider host")
+
+    def _test_deepl(self, service, text):
+        base = service["endpoint"].rstrip("/")
+        endpoint = base + "/translate" if base.endswith("/v2") else base + "/v2/translate"
+        body = {
+            "text": [text],
+            "target_lang": service.get("targetLanguage") or "ZH-HANS",
+            "split_sentences": "0",
+            "preserve_formatting": True,
+            "tag_handling": "xml",
+            "ignore_tags": ["ocr2md-protected"],
+        }
+        source_lang = service.get("sourceLanguage")
+        if source_lang:
+            body["source_lang"] = source_lang
+        model = service.get("model")
+        if model:
+            body["model_type"] = model
+        payload = self._request_json(
+            endpoint,
+            body,
+            {
+                "Authorization": f"DeepL-Auth-Key {service['apiKey']}",
+                "Content-Type": "application/json",
+            },
+        )
+        translations = payload.get("translations") if isinstance(payload, dict) else None
+        if not isinstance(translations, list) or not translations:
+            raise RuntimeError("DeepL 返回中没有 translations")
+        translated = translations[0].get("text") if isinstance(translations[0], dict) else None
+        if not isinstance(translated, str):
+            raise RuntimeError("DeepL 返回中没有译文")
+        return translated
+
+    def _test_chatgpt(self, service, text):
+        body = {
+            "model": service.get("model") or "gpt-5.6-luna",
+            "instructions": service.get("instruction") or self.DEFAULTS["chatgpt"]["instruction"],
+            "input": text,
+        }
+        payload = self._request_json(
+            service["endpoint"],
+            body,
+            {
+                "Authorization": f"Bearer {service['apiKey']}",
+                "Content-Type": "application/json",
+            },
+        )
+        direct = payload.get("output_text") if isinstance(payload, dict) else None
+        if isinstance(direct, str) and direct:
+            return direct
+        if isinstance(payload, dict):
+            for item in payload.get("output", []):
+                if not isinstance(item, dict):
+                    continue
+                for content in item.get("content", []):
+                    if isinstance(content, dict) and content.get("type") == "output_text":
+                        text_value = content.get("text")
+                        if isinstance(text_value, str) and text_value:
+                            return text_value
+        raise RuntimeError("ChatGPT 返回中没有 output_text")
+
+    @staticmethod
+    def _request_json(endpoint, body, headers):
+        request = Request(
+            endpoint,
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            raw = b""
+            try:
+                raw = error.read()
+            except Exception:
+                raw = b""
+            message = ""
+            if raw:
+                try:
+                    payload = json.loads(raw.decode("utf-8", errors="replace"))
+                    message = payload.get("message") or payload.get("error") or str(payload)
+                    if isinstance(message, dict):
+                        message = message.get("message") or str(message)
+                except Exception:
+                    message = raw.decode("utf-8", errors="replace").strip()
+            if error.code == 429:
+                message = message or "请求过于频繁或当前账号/IP 被限流，请稍后重试"
+            elif error.code in (401, 403):
+                message = message or "API Key 无效、权限不足或 endpoint 与账号类型不匹配"
+            elif error.code == 456:
+                message = message or "本月字符额度已用尽"
+            else:
+                message = message or f"HTTP {error.code}"
+            raise TranslationProviderError(error.code, str(message)) from error
+        except URLError as error:
+            raise TranslationProviderError(None, f"服务不可达：{error.reason}") from error
+
+
 class V2DevHandler(SimpleHTTPRequestHandler):
     project_store = None
+    translation_service_store = None
     debug_dir = None
 
     def _write_json(self, status, payload):
@@ -1848,6 +2238,25 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                     200,
                     self.project_store.read_translation(chapter_id),
                 )
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/translation/sentence-files":
+            chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
+            try:
+                source, translations = self.project_store.read_sentence_files(chapter_id)
+                self._write_json(200, {
+                    "sourceHash": source.get("sourceHash") if isinstance(source, dict) else None,
+                    "sentenceTranslations": translations,
+                })
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/translation-services":
+            try:
+                self._write_json(200, self.translation_service_store.public_payload())
             except Exception as error:
                 self._write_store_error(error)
             return
@@ -2236,6 +2645,182 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             self._write_json(200, saved)
             return
 
+        if route == "/__workspace/translation-services/active":
+            try:
+                result = self.translation_service_store.select_provider(
+                    payload.get("provider")
+                )
+                self._write_json(200, result)
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/translation-services/config":
+            try:
+                provider = payload.get("provider")
+                config = payload.get("config")
+                result = self.translation_service_store.save_service(provider, config)
+                self._write_json(200, result)
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/translation-services/translate-sentence":
+            provider = payload.get("provider")
+            chapter_id = payload.get("chapterId")
+            sentence_id = payload.get("sentenceId")
+            sentence = None
+            metadata = None
+            try:
+                metadata = self.translation_service_store.provider_metadata(provider)
+                translation = self.project_store.read_translation(chapter_id)
+                source = translation.get("sentenceSource")
+                entries = source.get("entries") if isinstance(source, dict) else None
+                if not isinstance(entries, list):
+                    raise RuntimeError("句子原文 JSON 尚未生成，请重新进入 trans 工作区")
+                sentence = next(
+                    (item for item in entries if isinstance(item, dict) and item.get("id") == sentence_id),
+                    None,
+                )
+                if sentence is None:
+                    raise KeyError("unknown sentenceId")
+
+                for item in translation.get("sentenceTranslations") or []:
+                    if not isinstance(item, dict) or item.get("provider") != provider:
+                        continue
+                    data = item.get("data")
+                    file_entries = data.get("entries") if isinstance(data, dict) else None
+                    existing = file_entries.get(sentence_id) if isinstance(file_entries, dict) else None
+                    if isinstance(existing, dict) and existing.get("status") == "translated":
+                        self._write_json(200, {
+                            "skipped": True,
+                            "provider": provider,
+                            "sentenceId": sentence_id,
+                            "translationFile": item,
+                        })
+                        return
+
+                result = self.translation_service_store.test_sentence(
+                    provider,
+                    sentence.get("sourceText"),
+                    sentence.get("translationText"),
+                )
+                if not result.get("placeholderIntegrity"):
+                    missing = len(result.get("missingPlaceholders") or [])
+                    unexpected = len(result.get("unexpectedPlaceholders") or [])
+                    message = f"占位符完整性检查失败：缺失 {missing} / 异常 {unexpected}"
+                    file_result = self.project_store.upsert_sentence_translation(
+                        chapter_id,
+                        provider,
+                        metadata["label"],
+                        sentence,
+                        "error",
+                        error=message,
+                        model=metadata.get("model"),
+                    )
+                    self._write_json(424, {
+                        "error": message,
+                        "provider": provider,
+                        "sentenceId": sentence_id,
+                        "translationFile": file_result,
+                    })
+                    return
+                file_result = self.project_store.upsert_sentence_translation(
+                    chapter_id,
+                    provider,
+                    metadata["label"],
+                    sentence,
+                    "translated",
+                    translated_text=result.get("translatedText"),
+                    model=metadata.get("model"),
+                )
+                self._write_json(200, {
+                    **result,
+                    "skipped": False,
+                    "sentenceId": sentence_id,
+                    "translationFile": file_result,
+                })
+            except TranslationProviderError as error:
+                status = error.provider_status
+                label = (metadata or {}).get("label") or ("DeepL" if provider == "deepl" else "ChatGPT")
+                if status == 429:
+                    message = f"{label} 429 · {error}"
+                elif status:
+                    message = f"{label} HTTP {status} · {error}"
+                else:
+                    message = f"{label} · {error}"
+                file_result = None
+                if isinstance(sentence, dict) and isinstance(chapter_id, str):
+                    try:
+                        file_result = self.project_store.upsert_sentence_translation(
+                            chapter_id,
+                            provider,
+                            label,
+                            sentence,
+                            "error",
+                            error=message,
+                            model=(metadata or {}).get("model"),
+                        )
+                    except Exception:
+                        file_result = None
+                self._write_json(424, {
+                    "error": message,
+                    "providerStatus": status,
+                    "provider": provider,
+                    "sentenceId": sentence_id,
+                    "translationFile": file_result,
+                })
+            except RuntimeError as error:
+                self._write_json(424, {"error": str(error), "provider": provider})
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/translation-services/test":
+            try:
+                provider = payload.get("provider")
+                chapter_id = payload.get("chapterId")
+                sentence_id = payload.get("sentenceId")
+                translation = self.project_store.read_translation(chapter_id)
+                source = translation.get("sentenceSource")
+                entries = source.get("entries") if isinstance(source, dict) else None
+                if not isinstance(entries, list):
+                    raise RuntimeError("句子原文 JSON 尚未生成，请重新进入 trans 工作区")
+                sentence = next(
+                    (item for item in entries if isinstance(item, dict) and item.get("id") == sentence_id),
+                    None,
+                )
+                if sentence is None:
+                    raise KeyError("unknown sentenceId")
+                result = self.translation_service_store.test_sentence(
+                    provider,
+                    sentence.get("sourceText"),
+                    sentence.get("translationText"),
+                )
+                self._write_json(200, result)
+            except TranslationProviderError as error:
+                status = error.provider_status
+                if status == 429:
+                    label = "DeepL" if payload.get("provider") == "deepl" else "ChatGPT"
+                    message = f"{label} 429 · {error}"
+                elif status:
+                    label = "DeepL" if payload.get("provider") == "deepl" else "ChatGPT"
+                    message = f"{label} HTTP {status} · {error}"
+                else:
+                    message = str(error)
+                # 424 keeps the JSON body intact through the external reverse proxy;
+                # using 502 here caused the proxy to replace our error payload.
+                self._write_json(424, {
+                    "error": message,
+                    "providerStatus": status,
+                    "provider": payload.get("provider"),
+                })
+            except RuntimeError as error:
+                self._write_json(424, {"error": str(error)})
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
         if route == "/__workspace/translation/source":
             try:
                 saved = self.project_store.export_trans_source(
@@ -2433,6 +3018,13 @@ def main():
         "--debug-dir",
         default=os.environ.get("OCR2MD_DEBUG_DIR", ""),
     )
+    parser.add_argument(
+        "--config-dir",
+        default=os.environ.get(
+            "OCR2MD_CONFIG_DIR",
+            str(Path.home() / ".config" / "ocr2md"),
+        ),
+    )
     args = parser.parse_args()
 
     if args.workspace_upstream:
@@ -2458,6 +3050,8 @@ def main():
         if args.debug_dir
         else None
     )
+
+    V2DevHandler.translation_service_store = TranslationServiceStore(args.config_dir)
 
     handler = partial(V2DevHandler, directory=args.directory)
     server = ThreadingHTTPServer((args.bind, args.port), handler)

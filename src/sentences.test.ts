@@ -68,6 +68,14 @@ assert.deepStrictEqual(
   ["10. Tenth item continues here.", "Next sentence."],
 );
 assert.deepStrictEqual(
+  segmentSentences("Table 1. Buffett Performance Relative to All Other Stocks"),
+  ["Table 1. Buffett Performance Relative to All Other Stocks"],
+);
+assert.deepStrictEqual(
+  segmentSentences("Figure 2. How Berkshire Stacks Up. Next sentence."),
+  ["Figure 2. How Berkshire Stacks Up.", "Next sentence."],
+);
+assert.deepStrictEqual(
   segmentSentences("The steps are 1. First item."),
   ["The steps are 1.", "First item."],
   "正文中的数字句尾不能因为项目符号规则被无条件合并",
@@ -103,19 +111,40 @@ assert.deepStrictEqual(rows.map((row) => [row.range.line + 1, row.lineType, row.
   [5, "标题", "## Chapter title"],
   [8, "文本", "Mr. Smith went home."],
   [8, "文本", "He slept."],
+  [12, "内嵌", "FIGURE 1.1 | Demo"],
+  [13, "内嵌", "内嵌图片链接: ![[imgs/demo.png]]"],
   [17, "注释正文", "[^1]: Dr. Jones wrote this."],
   [17, "注释正文", "It matters."],
   [20, "文本", "A sentence that wraps across source lines."],
   [21, "文本", "Then another."],
 ]);
 assert.ok(rows.every((row) => row.typeLabel === "分句"));
-assert.ok(rows.every((row) => row.lineType !== "内嵌"), "内嵌文本块必须完全跳过分句");
+assert.ok(rows.some((row) => row.lineType === "内嵌"), "内嵌块中的可见文本必须进入分句");
+assert.ok(!rows.some((row) => row.raw.includes("<embed id=01>")), "内嵌边界标记不得进入分句");
 assert.ok(rows.every((row) => row.parentBlockId), "每个句子必须保留来源文本块 id");
 assert.ok(rows.every((row) => row.translationText), "每个可翻译句子必须预生成保护后的翻译输入");
 assert.deepStrictEqual(rows.filter((row) => row.range.line === 7).map((row) => row.sentenceIndex), [1, 2]);
 
 const wrapped = rows.find((row) => row.preview === "A sentence that wraps across source lines.");
 assert.deepStrictEqual(wrapped?.range, { line: 19, start: 0, endLine: 20, end: "across source lines.".length });
+
+
+const embeddedHtmlSource = [
+  ">",
+  "Table caption text.",
+  ">>[! ]- HTML",
+  ">><table><tr><td>Stock/Fund Measure</td><td>Sharpe ratio</td><td><eq>R_t</eq></td></tr></table>",
+  "Notes: Visible note sentence.",
+  "><embed id=02></embed>",
+  "<br>",
+].join("\n");
+const embeddedHtmlRows = scanSentences(embeddedHtmlSource, "/ws/chapters/01/trans/01.md");
+assert.deepStrictEqual(
+  embeddedHtmlRows.map((row) => row.raw),
+  ["Table caption text.", "Stock/Fund Measure", "Sharpe ratio", "Notes: Visible note sentence."],
+  "内嵌块应翻译普通文本和 HTML 可见文字，但跳过 callout/embed/eq 结构",
+);
+assert.ok(embeddedHtmlRows.every((row) => row.lineType === "内嵌"));
 
 
 const latexBlockSource = [

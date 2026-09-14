@@ -13,7 +13,7 @@
     "test:ui": "playwright test -c playwright.config.ts",
     "test": "npm run typecheck && npm run test:dom-contract && npm run test:machine && npm run build && npm run test:ui",
     "serve": "python3 dev_server.py --port 4180 --bind 0.0.0.0",
-    "serve:test": "python3 prepare_test_workspace.py && python3 dev_server.py --port 4281 --bind 127.0.0.1 --project-dir .tmp/persistent-project"
+    "serve:test": "python3 prepare_test_workspace.py && python3 dev_server.py --port 4281 --bind 127.0.0.1 --project-dir .tmp/persistent-project --config-dir .tmp/private-config"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

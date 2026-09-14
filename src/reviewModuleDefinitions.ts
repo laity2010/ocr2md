@@ -77,7 +77,9 @@ const DERIVED_REVIEW_BEHAVIOR = {
   editableLineType: false,
 };
 
-export const REVIEW_MODULE_DEFINITIONS: Record<ModuleName, ReviewModuleDefinition> = {
+type ReviewModuleName = Exclude<ModuleName, "媒体" | "变动行">;
+
+export const REVIEW_MODULE_DEFINITIONS: Record<ReviewModuleName, ReviewModuleDefinition> = {
   "章节定界": {
     ...BASE_REVIEW_BEHAVIOR,
     name: "章节定界",
@@ -174,4 +176,4 @@ export const REVIEW_MODULE_DEFINITIONS: Record<ModuleName, ReviewModuleDefinitio
   },
 };
 
-export const REVIEW_MODULES = Object.keys(REVIEW_MODULE_DEFINITIONS) as ModuleName[];
+export const REVIEW_MODULES = Object.keys(REVIEW_MODULE_DEFINITIONS) as ReviewModuleName[];

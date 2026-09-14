@@ -15,6 +15,8 @@ import { locateCandidate } from "../../../src/rowIdentity";
 import { sentenceProviderLabel } from "../../../src/sentenceFiles";
 import type { AnnotationPair, Candidate, SourceRange } from "../../../src/types";
 import type { ActiveReviewModule } from "./workspaceMachine";
+
+type GridReviewModule = Exclude<ActiveReviewModule, "翻译服务" | "原文to译文" | "译文to原文">;
 import {
   resolveDefaultTablePresentation,
   type ResolvedTableModulePresentation,
@@ -198,7 +200,7 @@ export function illegalLineBreakMergedPreview(
 
 function visibleRowsForModule(
   rows: Candidate[],
-  module: ActiveReviewModule,
+  module: GridReviewModule,
 ): Candidate[] {
   return rows.filter((row) => {
     const moduleMatches = module === "句子"
@@ -218,10 +220,11 @@ export class CalibrationGrid {
   private rows: Candidate[] = [];
   private annotationPairs: AnnotationPair[] = [];
   private workingText = "";
-  private module: ActiveReviewModule = "章节标题";
+  private module: GridReviewModule = "章节标题";
   private headingNumberingEnabled = true;
   private presentation = resolveDefaultTablePresentation();
   private presentationRowOrderSignature = "";
+  private sentenceProviderSignature = "";
 
   private readonly api;
 
@@ -268,27 +271,35 @@ export class CalibrationGrid {
   setContext(
     rows: Candidate[],
     workingText: string,
-    module: ActiveReviewModule,
+    module: GridReviewModule,
     headingNumberingEnabled = true,
     annotationPairs: AnnotationPair[] = [],
   ): void {
     const moduleChanged = this.module !== module;
     const numberingChanged =
       this.headingNumberingEnabled !== headingNumberingEnabled;
+    const nextProviderSignature = module === "句子"
+      ? Array.from(new Set(
+          rows.flatMap((row) => Object.keys(row.translationResults ?? {})),
+        )).sort().join("|")
+      : "";
+    const providerColumnsChanged =
+      module === "句子" && this.sentenceProviderSignature !== nextProviderSignature;
     this.rows = rows;
     this.annotationPairs = annotationPairs;
     this.workingText = workingText;
     this.module = module;
     this.headingNumberingEnabled = headingNumberingEnabled;
+    this.sentenceProviderSignature = nextProviderSignature;
 
-    if (moduleChanged) {
+    if (moduleChanged || providerColumnsChanged) {
       this.api.setGridOption("rowHeight", module === "媒体" ? 64 : 42);
       this.rebuildPresentationColumns();
     }
 
-    this.refreshPresentationRows(moduleChanged);
+    this.refreshPresentationRows(moduleChanged || providerColumnsChanged);
 
-    if (moduleChanged) {
+    if (moduleChanged || providerColumnsChanged) {
       this.api.refreshHeader();
       this.api.redrawRows();
     } else if (numberingChanged && module === "章节标题") {

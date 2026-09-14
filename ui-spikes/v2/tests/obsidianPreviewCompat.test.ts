@@ -60,6 +60,7 @@ const nestedCallouts = scanObsidianCalloutsForPreview(nestedCalloutSource);
 assert.strictEqual(nestedCallouts.size, 1);
 assert.deepStrictEqual(nestedCallouts.get(3), {
   sourceLine: 3,
+  endSourceLine: 5,
   quoteDepth: 2,
   type: "",
   title: "HTML",

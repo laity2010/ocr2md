@@ -35,10 +35,18 @@ import { SourceRegexSearch } from "./sourceRegexSearch";
 import { SourcePreviewScrollSync } from "./sourcePreviewScrollSync";
 import { deriveMediaCatalog } from "./mediaCatalog";
 import {
+  TranslationServicePanel,
+  type TranslationServiceSelection,
+} from "./translationServicePanel";
+import {
   buildSentenceSourceFile,
+  parseSentenceTranslationFile,
   sentenceCandidatesFromFiles,
+  sentenceProviderLabel,
+  type SentenceTranslationFile,
 } from "../../../src/sentenceFiles";
 import type { Candidate } from "../../../src/types";
+import { restoreProtectedMarkdown } from "../../../src/markdownProtection";
 import {
   ACTIVE_REVIEW_MODULES,
   deriveWorkspaceView,
@@ -69,6 +77,111 @@ function chapterImageUrl(chapterId: string, relativePath: string): string {
     + encodeURIComponent(relativePath);
 }
 
+const sentenceTranslationCache = new Map<string, SentenceTranslationFile[]>();
+let sentenceCacheWorkspaceKind: ChapterWorkspaceData["kind"] | undefined;
+let sentenceTranslationDiskRefreshInFlight = false;
+let sentenceTranslationDiskRefreshSignature = "";
+let sentenceTranslationDiskRefreshChapterId = "";
+let sentenceTranslationModuleEntryKey = "";
+
+function sentenceTranslationCacheKey(chapter: ChapterWorkspaceData): string {
+  return `${chapter.id}:${chapter.sentenceSource?.sourceHash ?? "working"}`;
+}
+
+function effectiveSentenceTranslations(
+  chapter: ChapterWorkspaceData,
+): SentenceTranslationFile[] {
+  const key = sentenceTranslationCacheKey(chapter);
+  const cached = sentenceTranslationCache.get(key);
+  if (cached) return cached;
+  const initial = [...(chapter.sentenceTranslations ?? [])];
+  sentenceTranslationCache.set(key, initial);
+  return initial;
+}
+
+type SentenceTranslationFilesPayload = {
+  sourceHash?: string;
+  sentenceTranslations?: Array<{
+    fileName?: string;
+    provider?: string;
+    data?: unknown;
+  }>;
+};
+
+function isSentenceBackedTranslationModule(module: ActiveReviewModule): boolean {
+  return module === "句子" || module === "原文to译文" || module === "译文to原文";
+}
+
+async function refreshSentenceTranslationsFromDisk(): Promise<void> {
+  if (sentenceTranslationDiskRefreshInFlight || sentenceTranslationRunning) return;
+  const snapshot = actor.getSnapshot();
+  const view = deriveWorkspaceView(snapshot);
+  const chapter = snapshot.context.chapter;
+  if (
+    document.hidden
+    || configGridMode
+    || chapter?.kind !== "translation"
+    || !isSentenceBackedTranslationModule(view.activeReviewModule)
+    || !chapter.translationSourceChapterId
+  ) return;
+
+  sentenceTranslationDiskRefreshInFlight = true;
+  try {
+    const response = await fetch(
+      "/__workspace/translation/sentence-files?chapterId="
+        + encodeURIComponent(chapter.translationSourceChapterId),
+      { cache: "no-store" },
+    );
+    if (!response.ok) return;
+    const payload = await response.json() as SentenceTranslationFilesPayload;
+    if (
+      payload.sourceHash
+      && chapter.sentenceSource?.sourceHash
+      && payload.sourceHash !== chapter.sentenceSource.sourceHash
+    ) return;
+    const rawFiles = payload.sentenceTranslations ?? [];
+    const signature = JSON.stringify(rawFiles);
+    if (
+      sentenceTranslationDiskRefreshChapterId === chapter.id
+      && sentenceTranslationDiskRefreshSignature === signature
+    ) return;
+
+    const parsed = rawFiles
+      .map((item) => parseSentenceTranslationFile(
+        item.data,
+        item.provider ?? item.fileName?.replace(/\.json$/i, ""),
+      ))
+      .filter((item): item is SentenceTranslationFile => Boolean(item));
+    sentenceTranslationCache.set(sentenceTranslationCacheKey(chapter), parsed);
+    sentenceTranslationDiskRefreshChapterId = chapter.id;
+    sentenceTranslationDiskRefreshSignature = signature;
+    refreshSentenceTranslationGrid(chapter);
+    syncSentenceTranslationUi(chapter);
+    syncSourceToTranslationPreview(chapter);
+    syncTranslationToSourcePreview(chapter);
+  } catch {
+    // Keep the last known sentence table if a background refresh fails.
+  } finally {
+    sentenceTranslationDiskRefreshInFlight = false;
+  }
+}
+
+function updateSentenceTranslationCache(
+  chapter: ChapterWorkspaceData,
+  provider: string,
+  value: unknown,
+): SentenceTranslationFile | undefined {
+  const parsed = parseSentenceTranslationFile(value, provider);
+  if (!parsed) return undefined;
+  const key = sentenceTranslationCacheKey(chapter);
+  const current = [...effectiveSentenceTranslations(chapter)];
+  const index = current.findIndex((item) => item.provider === parsed.provider);
+  if (index >= 0) current[index] = parsed;
+  else current.push(parsed);
+  sentenceTranslationCache.set(key, current);
+  return parsed;
+}
+
 function sentenceCandidates(
   chapter: ChapterWorkspaceData | undefined,
 ): Candidate[] {
@@ -77,7 +190,7 @@ function sentenceCandidates(
     ?? buildSentenceSourceFile(chapter.workingText, chapter.path);
   return sentenceCandidatesFromFiles(
     source,
-    chapter.sentenceTranslations ?? [],
+    effectiveSentenceTranslations(chapter),
   );
 }
 
@@ -137,6 +250,7 @@ const boundaryStatus = requireElement<HTMLElement>("boundary-status");
 const translationStatus = requireElement<HTMLElement>("translation-status");
 const calibrationGridHost = requireElement<HTMLElement>("calibration-grid");
 const tableConfigGridHost = requireElement<HTMLElement>("table-config-grid");
+const translationServicePanelHost = requireElement<HTMLElement>("translation-service-panel");
 const configModuleTab =
   requireElement<HTMLButtonElement>("config-module-tab");
 const chapterElementPicker =
@@ -152,6 +266,8 @@ const translationElementTab =
 const translationElementMenu =
   requireElement<HTMLElement>("translation-element-menu");
 const reviewGridStatus = requireElement<HTMLElement>("review-grid-status");
+const sentenceTranslateToolbar = requireElement<HTMLElement>("sentence-translate-toolbar");
+const sentenceTranslateButton = requireElement<HTMLButtonElement>("sentence-translate-button");
 const sourceLocationStatus = requireElement<HTMLElement>("source-location-status");
 const regexSearchToggle =
   requireElement<HTMLButtonElement>("regex-search-toggle");
@@ -367,6 +483,14 @@ let changedLineUnreadIds = new Set<string>();
 let mediaDownloadRunning = false;
 let mediaDownloadStatusText = "";
 let mediaDownloadStatusChapterId: string | undefined;
+let selectedTranslationService: TranslationServiceSelection = {
+  id: "deepl",
+  label: "DeepL",
+  apiKeyConfigured: false,
+};
+let sentenceTranslationRunning = false;
+let sentenceTranslationRunToken = 0;
+const sentenceTranslationServiceStatus = new Map<string, string>();
 
 const deviceDebugBridge = createDeviceDebugBridge();
 
@@ -827,6 +951,9 @@ const chapterElementModules = new Set<ActiveReviewModule>([
 const translationElementModules = new Set<ActiveReviewModule>([
   "文本块",
   "句子",
+  "原文to译文",
+  "译文to原文",
+  "翻译服务",
 ]);
 
 function setChapterElementMenuOpen(open: boolean): void {
@@ -859,13 +986,34 @@ function syncTranslationElementTabState(): void {
   translationElementTab.setAttribute("aria-pressed", active ? "true" : "false");
 }
 
+function syncTranslationServiceWorkspaceLayout(): void {
+  const snapshot = actor.getSnapshot();
+  const view = deriveWorkspaceView(snapshot);
+  const serviceActive = !configGridMode
+    && view.activeReviewModule === "翻译服务"
+    && snapshot.context.chapter?.kind === "translation";
+  const readingActive = !configGridMode
+    && (view.activeReviewModule === "原文to译文" || view.activeReviewModule === "译文to原文")
+    && snapshot.context.chapter?.kind === "translation";
+  cleaningWorkspace.classList.toggle("translation-service-layout", serviceActive);
+  editorPane.classList.toggle("translation-reading-layout", readingActive);
+  workspaceSplitter.hidden = serviceActive;
+  editorPane.hidden = serviceActive;
+}
+
 function setConfigGridMode(enabled: boolean): void {
   configGridMode = enabled;
-  calibrationGridHost.hidden = enabled;
+  const currentView = deriveWorkspaceView(actor.getSnapshot());
+  const serviceActive = currentView.activeReviewModule === "翻译服务"
+    && actor.getSnapshot().context.chapter?.kind === "translation";
+  calibrationGridHost.hidden = enabled || serviceActive;
+  translationServicePanelHost.hidden = enabled || !serviceActive;
   tableConfigGridHost.hidden = !enabled;
   configModuleTab.setAttribute("aria-pressed", enabled ? "true" : "false");
   syncChapterElementTabState();
   syncTranslationElementTabState();
+  syncTranslationServiceWorkspaceLayout();
+  syncSentenceTranslationUi();
   if (enabled) {
     setChapterElementMenuOpen(false);
     setTranslationElementMenuOpen(false);
@@ -1043,6 +1191,302 @@ tableConfigResetButton.addEventListener(
   () => void tablePresentationEditor?.reset(),
 );
 setSourcePaneMode("source");
+
+type SentenceTranslateEndpointPayload = {
+  error?: string;
+  provider?: string;
+  sentenceId?: string;
+  skipped?: boolean;
+  translationFile?: {
+    fileName?: string;
+    provider?: string;
+    data?: unknown;
+  };
+};
+
+function sentenceTranslationProgress(
+  chapter: ChapterWorkspaceData,
+  provider: string,
+): { translated: number; total: number } {
+  const rows = sentenceCandidates(chapter);
+  return {
+    translated: rows.filter(
+      (row) => row.translationResults?.[provider]?.status === "已翻译",
+    ).length,
+    total: rows.length,
+  };
+}
+
+function syncSentenceTranslationUi(
+  chapter = actor.getSnapshot().context.chapter,
+): void {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  const active = !configGridMode
+    && chapter?.kind === "translation"
+    && view.activeReviewModule === "句子";
+  sentenceTranslateToolbar.hidden = !active;
+  if (!active || chapter.kind !== "translation") return;
+
+  const service = selectedTranslationService;
+  const progress = sentenceTranslationProgress(chapter, service.id);
+  const defaultStatus = !service.apiKeyConfigured
+    ? "未配置 API Key"
+    : progress.total > 0 && progress.translated === progress.total
+      ? "已完成"
+      : "已配置 · 待翻译";
+  const serviceStatus = sentenceTranslationServiceStatus.get(service.id)
+    ?? defaultStatus;
+  sentenceTranslateButton.textContent = `${service.label} 翻译`;
+  sentenceTranslateButton.disabled = sentenceTranslationRunning
+    || !service.apiKeyConfigured
+    || progress.total === 0
+    || progress.translated === progress.total;
+  reviewGridStatus.textContent =
+    `已翻 ${progress.translated}/${progress.total} · ${service.label} · ${serviceStatus}`;
+}
+
+function refreshSentenceTranslationGrid(chapter: ChapterWorkspaceData): void {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  if (chapter.kind !== "translation" || !isSentenceBackedTranslationModule(view.activeReviewModule)) return;
+  calibrationGrid.setContext(
+    sentenceCandidates(chapter),
+    chapter.workingText,
+    "句子",
+    view.headingNumberingEnabled,
+    chapter.annotationPairs ?? [],
+  );
+}
+
+function sourceToTranslationProvider(
+  chapter: ChapterWorkspaceData,
+): { id: string; label: string; translated: number; total: number } {
+  const rows = sentenceCandidates(chapter);
+  const total = rows.length;
+  const providers = effectiveSentenceTranslations(chapter).map((file) => ({
+    id: file.provider,
+    label: sentenceProviderLabel(file.provider, file.label),
+    translated: rows.filter(
+      (row) => row.translationResults?.[file.provider]?.status === "已翻译",
+    ).length,
+    total,
+  }));
+  providers.sort((left, right) =>
+    right.translated - left.translated
+    || Number(right.id === selectedTranslationService.id)
+      - Number(left.id === selectedTranslationService.id)
+    || left.label.localeCompare(right.label));
+  return providers[0] ?? {
+    id: selectedTranslationService.id,
+    label: selectedTranslationService.label,
+    translated: 0,
+    total,
+  };
+}
+
+function syncSourceToTranslationPreview(
+  chapter = actor.getSnapshot().context.chapter,
+): void {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  if (
+    chapter?.kind !== "translation"
+    || view.activeReviewModule !== "原文to译文"
+  ) return;
+  const provider = sourceToTranslationProvider(chapter);
+  reviewGridStatus.textContent =
+    `原文to译文 · ${provider.label} ${provider.translated}/${provider.total}`;
+  markdownPreview.renderTranslationDocument(
+    chapter.workingText,
+    chapter.translationSourceChapterId,
+    sentenceCandidates(chapter).map((row) => {
+      const result = row.translationResults?.[provider.id];
+      const translatedText = result?.status === "已翻译" && result.translatedText
+        ? restoreProtectedMarkdown(
+            result.translatedText,
+            row.translationProtection ?? [],
+          )
+        : undefined;
+      const sourceLine = chapter.workingText.replace(/\r\n?/g, "\n").split("\n")[row.range.line] ?? "";
+      return {
+        id: row.id,
+        sourceText: row.raw,
+        translatedText,
+        providerLabel: provider.label,
+        range: { ...row.range },
+        domOnly: row.lineType === "内嵌" && /<[^>]+>/.test(sourceLine),
+      };
+    }),
+  );
+}
+
+function syncTranslationToSourcePreview(
+  chapter = actor.getSnapshot().context.chapter,
+): void {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  if (
+    chapter?.kind !== "translation"
+    || view.activeReviewModule !== "译文to原文"
+  ) return;
+  const provider = sourceToTranslationProvider(chapter);
+  reviewGridStatus.textContent =
+    `译文to原文 · ${provider.label} ${provider.translated}/${provider.total}`;
+  markdownPreview.renderTranslatedDocument(
+    chapter.workingText,
+    chapter.translationSourceChapterId,
+    sentenceCandidates(chapter).map((row) => {
+      const result = row.translationResults?.[provider.id];
+      const translatedText = result?.status === "已翻译" && result.translatedText
+        ? restoreProtectedMarkdown(
+            result.translatedText,
+            row.translationProtection ?? [],
+          )
+        : undefined;
+      const sourceLine = chapter.workingText.replace(/\r\n?/g, "\n").split("\n")[row.range.line] ?? "";
+      return {
+        id: row.id,
+        sourceText: row.raw,
+        translatedText,
+        range: { ...row.range },
+        domOnly: row.lineType === "内嵌" && /<[^>]+>/.test(sourceLine),
+      };
+    }),
+  );
+}
+
+async function sentenceTranslateResponse(
+  response: Response,
+): Promise<SentenceTranslateEndpointPayload> {
+  try {
+    return await response.json() as SentenceTranslateEndpointPayload;
+  } catch {
+    return {};
+  }
+}
+
+async function translatePendingSentences(): Promise<void> {
+  if (sentenceTranslationRunning) return;
+  const snapshot = actor.getSnapshot();
+  const view = deriveWorkspaceView(snapshot);
+  const chapter = snapshot.context.chapter;
+  if (
+    chapter?.kind !== "translation"
+    || view.activeReviewModule !== "句子"
+    || !chapter.translationSourceChapterId
+  ) return;
+
+  const service = { ...selectedTranslationService };
+  if (!service.apiKeyConfigured) {
+    sentenceTranslationServiceStatus.set(service.id, "未配置 API Key");
+    syncSentenceTranslationUi(chapter);
+    return;
+  }
+  const source = chapter.sentenceSource
+    ?? buildSentenceSourceFile(chapter.workingText, chapter.path);
+  if (!source.entries.length) {
+    sentenceTranslationServiceStatus.set(service.id, "没有可翻译句子");
+    syncSentenceTranslationUi(chapter);
+    return;
+  }
+
+  sentenceTranslationRunning = true;
+  const runToken = ++sentenceTranslationRunToken;
+  sentenceTranslationServiceStatus.set(service.id, "准备翻译…");
+  syncSentenceTranslationUi(chapter);
+
+  try {
+    for (const sentence of source.entries) {
+      const currentSnapshot = actor.getSnapshot();
+      const currentChapter = currentSnapshot.context.chapter;
+      if (
+        runToken !== sentenceTranslationRunToken
+        || currentChapter?.id !== chapter.id
+        || currentSnapshot.context.activeReviewModule !== "句子"
+        || selectedTranslationService.id !== service.id
+      ) {
+        sentenceTranslationServiceStatus.set(service.id, "已暂停 · 离开句子模块或切换服务");
+        break;
+      }
+
+      const currentRow = sentenceCandidates(chapter).find((row) => row.id === sentence.id);
+      if (currentRow?.translationResults?.[service.id]?.status === "已翻译") continue;
+
+      const before = sentenceTranslationProgress(chapter, service.id);
+      sentenceTranslationServiceStatus.set(
+        service.id,
+        `翻译中 · 第 ${Math.min(before.translated + 1, before.total)}/${before.total} 句`,
+      );
+      syncSentenceTranslationUi(chapter);
+
+      const response = await fetch("/__workspace/translation-services/translate-sentence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          provider: service.id,
+          chapterId: chapter.translationSourceChapterId,
+          sentenceId: sentence.id,
+        }),
+      });
+      const payload = await sentenceTranslateResponse(response);
+      const translationFile = payload.translationFile;
+      if (translationFile?.data) {
+        updateSentenceTranslationCache(
+          chapter,
+          translationFile.provider ?? service.id,
+          translationFile.data,
+        );
+        refreshSentenceTranslationGrid(chapter);
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || `翻译失败 · HTTP ${response.status}`);
+      }
+      const after = sentenceTranslationProgress(chapter, service.id);
+      sentenceTranslationServiceStatus.set(
+        service.id,
+        after.translated === after.total
+          ? "已完成"
+          : `翻译中 · 已完成 ${after.translated}/${after.total}`,
+      );
+      syncSentenceTranslationUi(chapter);
+    }
+    const progress = sentenceTranslationProgress(chapter, service.id);
+    if (runToken === sentenceTranslationRunToken && progress.translated === progress.total) {
+      sentenceTranslationServiceStatus.set(service.id, "已完成");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sentenceTranslationServiceStatus.set(service.id, `失败 · ${message}`);
+  } finally {
+    if (runToken === sentenceTranslationRunToken) {
+      sentenceTranslationRunning = false;
+    }
+    refreshSentenceTranslationGrid(chapter);
+    syncSentenceTranslationUi(chapter);
+  }
+}
+
+sentenceTranslateButton.addEventListener("click", () => {
+  void translatePendingSentences();
+});
+
+const translationServicePanel = new TranslationServicePanel(
+  translationServicePanelHost,
+  (selection) => {
+    if (
+      sentenceTranslationRunning
+      && selection.id !== selectedTranslationService.id
+    ) {
+      sentenceTranslationRunToken += 1;
+      sentenceTranslationRunning = false;
+      sentenceTranslationServiceStatus.set(
+        selectedTranslationService.id,
+        "已暂停 · 已切换翻译服务",
+      );
+    }
+    selectedTranslationService = selection;
+    syncSentenceTranslationUi();
+    syncSourceToTranslationPreview();
+  },
+);
 
 const calibrationGrid = new CalibrationGrid(
   calibrationGridHost,
@@ -1224,6 +1668,12 @@ function renderChapterSelect(view: ReturnType<typeof deriveWorkspaceView>): void
 actor.subscribe((snapshot) => {
   const view = deriveWorkspaceView(snapshot);
   const chapter = snapshot.context.chapter;
+  if (sentenceCacheWorkspaceKind === "translation" && chapter?.kind !== "translation") {
+    sentenceTranslationCache.clear();
+    sentenceTranslationDiskRefreshSignature = "";
+    sentenceTranslationDiskRefreshChapterId = "";
+  }
+  sentenceCacheWorkspaceKind = chapter?.kind;
 
   // XState is the business truth. Report it before CodeMirror/AG Grid/DOM
   // projection work so remote control ACKs do not depend on mobile render cost.
@@ -1231,34 +1681,55 @@ actor.subscribe((snapshot) => {
 
   workingEditor.setDocument(chapter?.workingText ?? "");
   workingEditor.setEditable(Boolean(chapter) && view.canEdit && !mediaDownloadRunning);
-  markdownPreview.render(
-    chapter?.workingText ?? "",
-    chapter?.kind === "translation"
-      ? chapter.translationSourceChapterId
-      : chapter && chapter.kind !== "boundary"
-        ? chapter.id
-        : undefined,
-  );
-  sourcePreviewScrollSync.syncFromEditor();
+  if (chapter?.kind === "translation" && view.activeReviewModule === "原文to译文") {
+    syncSourceToTranslationPreview(chapter);
+  } else if (chapter?.kind === "translation" && view.activeReviewModule === "译文to原文") {
+    syncTranslationToSourcePreview(chapter);
+  } else {
+    markdownPreview.render(
+      chapter?.workingText ?? "",
+      chapter?.kind === "translation"
+        ? chapter.translationSourceChapterId
+        : chapter && chapter.kind !== "boundary"
+          ? chapter.id
+          : undefined,
+    );
+  }
+  if (!(chapter?.kind === "translation" && (view.activeReviewModule === "原文to译文" || view.activeReviewModule === "译文to原文"))) {
+    sourcePreviewScrollSync.syncFromEditor();
+  }
   if (sourcePaneMode === "source") {
     sourceRegexSearch.updateText(chapter?.workingText ?? "");
   }
-  calibrationGrid.setContext(
-    view.activeReviewModule === "媒体"
-      ? mediaCandidates(chapter)
-      : view.activeReviewModule === "变动行"
-        ? changedLineAuditCandidates(view.changedLineRows)
-        : view.activeReviewModule === "句子"
-          ? sentenceCandidates(chapter)
-          : chapter?.rows ?? [],
-    chapter?.workingText ?? "",
-    view.activeReviewModule,
-    view.headingNumberingEnabled,
-    chapter?.annotationPairs ?? [],
-  );
-  calibrationGrid.setEditable(
-    Boolean(chapter) && view.canEdit && view.activeReviewModule !== "媒体",
-  );
+  const translationServiceActive =
+    view.activeReviewModule === "翻译服务" && chapter?.kind === "translation";
+  translationServicePanel.setContext(chapter, translationServiceActive && !configGridMode);
+  syncTranslationServiceWorkspaceLayout();
+  calibrationGridHost.hidden = configGridMode || translationServiceActive;
+  tableConfigGridHost.hidden = !configGridMode;
+  const gridModule = view.activeReviewModule === "翻译服务"
+    ? undefined
+    : (view.activeReviewModule === "原文to译文" || view.activeReviewModule === "译文to原文")
+      ? "句子"
+      : view.activeReviewModule;
+  if (gridModule) {
+    calibrationGrid.setContext(
+      gridModule === "媒体"
+        ? mediaCandidates(chapter)
+        : gridModule === "变动行"
+          ? changedLineAuditCandidates(view.changedLineRows)
+          : gridModule === "句子"
+            ? sentenceCandidates(chapter)
+            : chapter?.rows ?? [],
+      chapter?.workingText ?? "",
+      gridModule,
+      view.headingNumberingEnabled,
+      chapter?.annotationPairs ?? [],
+    );
+    calibrationGrid.setEditable(
+      Boolean(chapter) && view.canEdit && view.activeReviewModule !== "媒体",
+    );
+  }
   window.requestAnimationFrame(() => {
     reportDebugRuntime(
       "grid_projection_after_render",
@@ -1321,6 +1792,24 @@ actor.subscribe((snapshot) => {
   reviewGridStatus.textContent = chapter
     ? `${view.activeReviewModule} · ${view.activeModuleRows} 行`
     : "尚未打开章节";
+  const sentenceEntryKey =
+    chapter?.kind === "translation"
+    && isSentenceBackedTranslationModule(view.activeReviewModule)
+    && !configGridMode
+      ? `${sentenceTranslationCacheKey(chapter)}:${view.activeReviewModule}`
+      : "";
+  if (sentenceEntryKey) {
+    syncSentenceTranslationUi(chapter);
+    syncSourceToTranslationPreview(chapter);
+    syncTranslationToSourcePreview(chapter);
+    if (sentenceTranslationModuleEntryKey !== sentenceEntryKey) {
+      sentenceTranslationModuleEntryKey = sentenceEntryKey;
+      void refreshSentenceTranslationsFromDisk();
+    }
+  } else {
+    sentenceTranslationModuleEntryKey = "";
+    sentenceTranslateToolbar.hidden = true;
+  }
   sourceLocationStatus.textContent = view.focusedSourceLine
     ? view.activeReviewModule === "非法断行"
       ? `已定位断行 · 第 ${view.focusedSourceLine} 行 · 前后各 10 字`
@@ -1394,7 +1883,10 @@ actor.subscribe((snapshot) => {
         : module !== "章节定界"
           && module !== "翻译"
           && module !== "文本块"
-          && module !== "句子";
+          && module !== "句子"
+          && module !== "原文to译文"
+          && module !== "译文to原文"
+          && module !== "翻译服务";
     button.hidden = Boolean(chapter) && !moduleAllowed;
     button.disabled = !view.canSelectReviewModule || !moduleAllowed;
     button.setAttribute("aria-pressed", active ? "true" : "false");

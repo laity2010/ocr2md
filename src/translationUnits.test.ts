@@ -30,17 +30,25 @@ assert.deepStrictEqual(
   [
     ["sentence", "Ordinary one."],
     ["sentence", "Ordinary two."],
+    ["sentence", "Figure 2. How Berkshire Stacks Up"],
     ["composite", "Figure 2. How Berkshire Stacks Up"],
+    ["sentence", "Notes: This figure shows the distribution..."],
     ["composite", "Notes: This figure shows the distribution..."],
+    ["sentence", "A"],
     ["sentence", "After formula."],
   ],
 );
 assert.ok(units.every((unit) => !unit.raw.includes("imgs/example.jpg")));
 assert.ok(units.every((unit) => !unit.raw.includes("<table")));
 assert.ok(units.every((unit) => !unit.raw.includes("E = mc^2")));
-assert.strictEqual(units[2].parentBlockIndex, 2);
-assert.strictEqual(units[2].sentenceIndex, 1);
-assert.strictEqual(units[3].sentenceIndex, 2);
+const compositeUnits = units.filter((unit) => unit.translationUnitKind === "composite");
+assert.strictEqual(compositeUnits[0].parentBlockIndex, 2);
+assert.strictEqual(compositeUnits[0].sentenceIndex, 1);
+assert.strictEqual(compositeUnits[1].sentenceIndex, 2);
+assert.ok(
+  units.some((unit) => unit.translationUnitKind === "sentence" && unit.raw === "A"),
+  "visible HTML table text inside embedded blocks must enter the sentence translation system",
+);
 assert.ok(units.every((unit) => unit.translationSourceFingerprint));
 assert.ok(units.every((unit) => unit.translationContextFingerprint));
 assert.strictEqual(

@@ -546,8 +546,13 @@ export class PersistentChapterRepository implements ChapterRepository {
     const hasLegacyTranslations = Object.values(legacyState.entries).some(
       (entry) => Object.keys(entry.translations).length > 0,
     );
+    const existingIds = existing?.entries.map((entry) => entry.id) ?? [];
+    const sourceIds = source.entries.map((entry) => entry.id);
+    const extractionMatches = existingIds.length === sourceIds.length
+      && existingIds.every((id, index) => id === sourceIds[index]);
     if (
       existing?.sourceHash === source.sourceHash
+      && extractionMatches
       && ((payload.sentenceTranslations?.length ?? 0) > 0 || !hasLegacyTranslations)
     ) {
       return payload;
