@@ -7,6 +7,7 @@ image:
 
 workspace:
   existingClaim: ""
+  hostPath: ""
   storageClassName: ""
   accessMode: ReadWriteOnce
   size: 2Gi

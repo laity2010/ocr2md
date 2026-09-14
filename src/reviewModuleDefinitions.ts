@@ -153,7 +153,7 @@ export const REVIEW_MODULE_DEFINITIONS: Record<ModuleName, ReviewModuleDefinitio
     ...DERIVED_REVIEW_BEHAVIOR,
     name: "文本块",
     toolbarKind: "textBlocks",
-    lineTypes: ["标题", "内嵌", "文本", "注释正文"],
+    lineTypes: ["标题", "内嵌", "LaTeX块", "文本", "注释正文"],
     typeColumnLabel: "文本块类型",
   },
   "分句": {

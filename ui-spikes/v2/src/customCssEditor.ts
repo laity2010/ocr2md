@@ -14,9 +14,11 @@ export const CUSTOM_CSS_STORAGE_KEY = "ocr2md.v2.custom-css.v1";
 
 const CUSTOM_CSS_COMMON = `/* 通用：iPad / Mac 共用 */
 :root {
+  --source-selection-bg: rgba(10, 132, 255, 0.32);
   --regex-match-bg: color-mix(in srgb, var(--accent) 28%, transparent);
   --regex-match-current-bg: color-mix(in srgb, var(--accent) 58%, transparent);
   --regex-match-current-border: var(--accent);
+  --footnote-ref-size: 1.25em;
 }`;
 
 export const CUSTOM_CSS_DEFAULT = `${CUSTOM_CSS_COMMON}
@@ -36,9 +38,11 @@ export const CUSTOM_CSS_DEFAULT = `${CUSTOM_CSS_COMMON}
 `;
 
 const ALLOWED_COMMON_CSS_VARS = new Set([
+  "--source-selection-bg",
   "--regex-match-bg",
   "--regex-match-current-bg",
   "--regex-match-current-border",
+  "--footnote-ref-size",
 ]);
 
 const ALLOWED_DEVICE_CSS_VARS = new Set([
@@ -95,7 +99,26 @@ function storedCustomCss(): string {
   try {
     const stored = localStorage.getItem(CUSTOM_CSS_STORAGE_KEY);
     if (!stored) return CUSTOM_CSS_DEFAULT;
-    if (/:root\s*\{/.test(stored)) return stored;
+    if (/:root\s*\{/.test(stored)) {
+      const common = /:root\s*\{([\s\S]*?)\}/.exec(stored);
+      const missing: string[] = [];
+      if (common && !/--source-selection-bg\s*:/.test(common[1])) {
+        missing.push("  --source-selection-bg: rgba(10, 132, 255, 0.32);");
+      }
+      if (common && !/--footnote-ref-size\s*:/.test(common[1])) {
+        missing.push("  --footnote-ref-size: 1.25em;");
+      }
+      if (common && missing.length) {
+        return stored.replace(
+          /(:root\s*\{)([\s\S]*?)(\})/,
+          (_whole, open: string, body: string, close: string) => {
+            const normalizedBody = body.endsWith("\n") ? body : `${body}\n`;
+            return `${open}${normalizedBody}${missing.join("\n")}\n${close}`;
+          },
+        );
+      }
+      return stored;
+    }
     return `${CUSTOM_CSS_COMMON}\n\n${stored}`;
   } catch {
     return CUSTOM_CSS_DEFAULT;

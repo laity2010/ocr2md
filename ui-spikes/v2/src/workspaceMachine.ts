@@ -12,6 +12,8 @@ import {
 } from "../../../src/workbenchHistory";
 import type {
   BoundaryExportResult,
+  CalibrationExportDestination,
+  CalibrationExportResult,
   ChapterCatalog,
   ChapterListItem,
   ChapterRepository,
@@ -23,6 +25,8 @@ import {
   type ChangedLineAuditRow,
 } from "./changedLineAudit";
 import { deriveMediaCatalog } from "./mediaCatalog";
+import { scanTextBlocks } from "../../../src/textBlocks";
+import { scanSentences } from "../../../src/sentences";
 
 export type ActiveReviewModule =
   | "章节定界"
@@ -32,6 +36,8 @@ export type ActiveReviewModule =
   | "非法断行"
   | "媒体"
   | "变动行"
+  | "文本块"
+  | "句子"
   | "翻译";
 
 export const ACTIVE_REVIEW_MODULES: readonly ActiveReviewModule[] = [
@@ -42,6 +48,8 @@ export const ACTIVE_REVIEW_MODULES: readonly ActiveReviewModule[] = [
   "非法断行",
   "媒体",
   "变动行",
+  "文本块",
+  "句子",
   "翻译",
 ];
 
@@ -74,6 +82,8 @@ export type WorkspaceContext = {
   saveError?: string;
   lastSavedAt?: string;
   lastExportedCount?: number;
+  pendingCalibrationExportDestination?: CalibrationExportDestination;
+  lastCalibrationExport?: CalibrationExportResult;
 };
 
 export type WorkspaceEvent =
@@ -103,6 +113,10 @@ export type WorkspaceEvent =
   | { type: "SAVE" }
   | { type: "RESET_CALIBRATION" }
   | { type: "EXPORT_BOUNDARY" }
+  | {
+      type: "EXPORT_CALIBRATION";
+      destination: CalibrationExportDestination;
+    }
   | { type: "EXPORT_TRANS" }
   | { type: "CLOSE" }
   | { type: "LEAVE_CANCEL" }
@@ -125,6 +139,10 @@ type SaveChapterActorInput = RepositoryInput & {
 
 type ExportTransActorInput = SaveChapterActorInput & {
   headingNumberingEnabled: boolean;
+};
+
+type ExportCalibrationActorInput = ExportTransActorInput & {
+  destination: CalibrationExportDestination;
 };
 
 type ResetChapterActorOutput = {
@@ -263,6 +281,14 @@ function refreshReviewForText(
   chapter: ChapterWorkspaceData,
   workingText: string,
 ): ChapterWorkspaceData {
+  if (chapter.kind === "translation") {
+    return {
+      ...chapter,
+      workingText,
+      rows: scanTextBlocks(workingText, chapter.path),
+      annotationPairs: [],
+    };
+  }
   if (chapter.kind === "boundary") {
     const application = new ChapterReviewApplication({
       rows: chapter.rows,
@@ -435,6 +461,27 @@ export const workspaceMachine = setup({
         workingText: input.chapter.workingText,
       });
     }),
+    exportCalibration: fromPromise(
+      async ({ input }: { input: ExportCalibrationActorInput }) => {
+        if (!input.chapterRepository.exportCalibration) {
+          throw new Error("当前 workspace repository 不支持导出标定");
+        }
+        if (input.chapter.kind !== "chapter") {
+          throw new Error("只有普通章节可以导出标定");
+        }
+        const markdown = withFormatCalibratedFrontmatter(
+          exportByCalibration(input.chapter.workingText, input.chapter.rows, {
+            numberHeadings: input.headingNumberingEnabled,
+          }),
+        );
+        return input.chapterRepository.exportCalibration({
+          chapterId: input.chapter.id,
+          expectedRevision: input.chapter.revision,
+          destination: input.destination,
+          markdown,
+        });
+      },
+    ),
     exportTransSource: fromPromise(
       async ({ input }: { input: ExportTransActorInput }) => {
         if (!input.chapterRepository.exportTransSource) {
@@ -472,7 +519,10 @@ export const workspaceMachine = setup({
     translationChapterReady: ({ context, event }) =>
       event.type === "OPEN_TRANSLATION"
       && context.chapters.some(
-        (chapter) => chapter.id === event.chapterId && chapter.ready,
+        (chapter) =>
+          chapter.id === event.chapterId
+          && chapter.ready
+          && chapter.transReady === true,
       ),
     boundaryReady: ({ context, event }) =>
       event.type === "OPEN_BOUNDARY"
@@ -482,7 +532,6 @@ export const workspaceMachine = setup({
       && context.chapter?.kind === "chapter",
     workingTextChanged: ({ context, event }) =>
       event.type === "WORKING_CHANGED"
-      && context.chapter?.kind !== "translation"
       && context.chapter?.workingText !== event.text,
     reviewModuleAvailable: ({ context, event }) => {
       if (
@@ -496,12 +545,19 @@ export const workspaceMachine = setup({
         return event.module === "章节定界";
       }
       if (context.chapter.kind === "translation") {
-        return event.module === "翻译";
+        return event.module === "文本块" || event.module === "句子";
       }
-      return event.module !== "章节定界" && event.module !== "翻译";
+      return event.module !== "章节定界"
+        && event.module !== "翻译"
+        && event.module !== "文本块"
+        && event.module !== "句子";
     },
     canExportTrans: ({ context, event }) =>
       event.type === "EXPORT_TRANS" && context.chapter?.kind === "chapter",
+    canExportCalibration: ({ context, event }) =>
+      event.type === "EXPORT_CALIBRATION"
+      && context.chapter?.kind === "chapter"
+      && (event.destination === "trans" || event.destination === "output"),
     calibrationLineTypeChanged: ({ context, event }) =>
       event.type === "CALIBRATION_LINE_TYPE_CHANGED"
       && context.chapter?.kind !== "translation"
@@ -647,7 +703,7 @@ export const workspaceMachine = setup({
         event.type === "OPEN_TRANSLATION" ? event.chapterId : undefined,
       pendingChapterId: ({ event }) =>
         event.type === "OPEN_TRANSLATION" ? event.chapterId : undefined,
-      activeReviewModule: () => "翻译" as const,
+      activeReviewModule: () => "文本块" as const,
       chapter: () => undefined,
       undoStack: () => [],
       redoStack: () => [],
@@ -666,7 +722,7 @@ export const workspaceMachine = setup({
       return {
         selectedChapterId: chapter.translationSourceChapterId,
         pendingChapterId: undefined,
-        activeReviewModule: "翻译" as const,
+        activeReviewModule: "文本块" as const,
         chapter,
         undoStack: [],
         redoStack: [],
@@ -695,6 +751,32 @@ export const workspaceMachine = setup({
     }),
     clearSaveError: assign({
       saveError: () => undefined,
+    }),
+    prepareCalibrationExport: assign({
+      pendingCalibrationExportDestination: ({ event }) =>
+        event.type === "EXPORT_CALIBRATION" ? event.destination : undefined,
+      saveError: () => undefined,
+    }),
+    applyCalibrationExportResult: assign(({ context, event }) => {
+      if (!("output" in event)) return {};
+      const output = event.output as CalibrationExportResult;
+      const chapterId = context.chapter?.id;
+      return {
+        pendingCalibrationExportDestination: undefined,
+        lastCalibrationExport: output,
+        chapters: output.destination === "trans" && chapterId
+          ? context.chapters.map((chapter) =>
+              chapter.id === chapterId
+                ? { ...chapter, transReady: true }
+                : chapter)
+          : context.chapters,
+        saveError: undefined,
+      };
+    }),
+    recordCalibrationExportError: assign({
+      pendingCalibrationExportDestination: () => undefined,
+      saveError: ({ event }) =>
+        "error" in event ? errorMessage(event.error) : "unknown export error",
     }),
     requestCloseLeave: assign({
       pendingLeaveIntent: () => ({ kind: "close" as const }),
@@ -1222,6 +1304,11 @@ export const workspaceMachine = setup({
               target: "exportingClean",
               actions: "clearSaveError",
             },
+            EXPORT_CALIBRATION: {
+              guard: "canExportCalibration",
+              target: "exportingCalibration",
+              actions: "prepareCalibrationExport",
+            },
             EXPORT_TRANS: {
               guard: "canExportTrans",
               target: "exportingTrans",
@@ -1488,6 +1575,33 @@ export const workspaceMachine = setup({
             },
           },
         },
+        exportingCalibration: {
+          invoke: {
+            src: "exportCalibration",
+            input: ({ context }) => {
+              if (!context.chapter) {
+                throw new Error("cannot export calibration without an open chapter");
+              }
+              if (!context.pendingCalibrationExportDestination) {
+                throw new Error("calibration export destination is required");
+              }
+              return {
+                chapterRepository: context.chapterRepository,
+                chapter: context.chapter,
+                headingNumberingEnabled: context.headingNumberingEnabled,
+                destination: context.pendingCalibrationExportDestination,
+              };
+            },
+            onDone: {
+              target: "clean",
+              actions: "applyCalibrationExportResult",
+            },
+            onError: {
+              target: "clean",
+              actions: "recordCalibrationExportError",
+            },
+          },
+        },
         exportingTrans: {
           invoke: {
             src: "exportTransSource",
@@ -1550,6 +1664,7 @@ export type WorkspaceViewModel = {
   boundarySegmentCount: number;
   canOpenBoundary: boolean;
   canExportBoundary: boolean;
+  canExportCalibration: boolean;
   canOpenTranslation: boolean;
   canExportTrans: boolean;
   translationTotal: number;
@@ -1557,6 +1672,8 @@ export type WorkspaceViewModel = {
   translationFailed: number;
   translationServiceId?: "deepl" | "openai";
   lastExportedCount?: number;
+  lastCalibrationExportDestination?: CalibrationExportDestination;
+  lastCalibrationExportPath?: string;
   selectedChapterId?: string;
   activeReviewModule: ActiveReviewModule;
   activeModuleRows: number;
@@ -1654,6 +1771,7 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
   const chapterExporting =
     snapshot.matches({ chapter: "exportingClean" })
     || snapshot.matches({ chapter: "exportingDirty" })
+    || snapshot.matches({ chapter: "exportingCalibration" })
     || snapshot.matches({ chapter: "exportingTrans" });
   const debug = snapshot.matches("debug");
   const chapter = snapshot.context.chapter;
@@ -1740,10 +1858,12 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
     ? changedLineRows.length
     : snapshot.context.activeReviewModule === "媒体"
       ? deriveMediaCatalog(chapter).length
-      : chapter
-        ? chapter.rows.filter((row) =>
-            rowVisibleInModule(row, snapshot.context.activeReviewModule)).length
-        : 0;
+      : snapshot.context.activeReviewModule === "句子" && chapter?.kind === "translation"
+        ? scanSentences(chapter.workingText, chapter.path).length
+        : chapter
+          ? chapter.rows.filter((row) =>
+              rowVisibleInModule(row, snapshot.context.activeReviewModule)).length
+          : 0;
   const illegalLineBreakRows = chapter
     ? chapter.rows.filter((row) => row.typeLabel === "非法断行")
     : [];
@@ -1812,6 +1932,7 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
       (chapterClean || chapterDirty)
       && chapter?.kind === "boundary"
       && boundarySegmentCount > 0,
+    canExportCalibration: chapterClean && chapter?.kind === "chapter",
     canOpenTranslation:
       (idle || loadErrorState || chapterClean)
       && selectedReady
@@ -1824,6 +1945,9 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
       ? chapter.translationServiceId
       : undefined,
     lastExportedCount: snapshot.context.lastExportedCount,
+    lastCalibrationExportDestination:
+      snapshot.context.lastCalibrationExport?.destination,
+    lastCalibrationExportPath: snapshot.context.lastCalibrationExport?.relativePath,
     selectedChapterId: snapshot.context.selectedChapterId,
     activeReviewModule: snapshot.context.activeReviewModule,
     activeModuleRows,
@@ -1875,19 +1999,16 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
     canRefreshCatalog: idle || loadErrorState || catalogErrorState,
     canSelectReviewModule: canUseReviewGrid,
     canFocusReviewRow: canUseReviewGrid && activeModuleRows > 0,
-    canEdit:
-      (chapterClean || chapterDirty) && chapter?.kind !== "translation",
+    canEdit: chapterClean || chapterDirty,
     canUndo:
       canUseReviewGrid
-      && chapter?.kind !== "translation"
       && snapshot.context.undoStack.length > 0,
     canRedo:
       canUseReviewGrid
-      && chapter?.kind !== "translation"
       && snapshot.context.redoStack.length > 0,
     undoDepth: snapshot.context.undoStack.length,
     redoDepth: snapshot.context.redoStack.length,
-    canSave: chapterDirty && chapter?.kind !== "translation",
+    canSave: chapterDirty,
     canResetCalibration:
       (chapterClean || chapterDirty) && chapter?.kind === "chapter",
     canClose: chapterClean || chapterDirty,

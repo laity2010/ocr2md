@@ -178,7 +178,6 @@ export function formatEmbed(group: EmbedExportGroup): string {
   const orderedRows = [...group.rows]
     .sort((left, right) => left.range.line - right.range.line || left.range.start - right.range.start);
   const hasImage = orderedRows.some((row) => row.lineType === "嵌入链接");
-  const hasHtml = orderedRows.some((row) => row.lineType === "HTML表" || row.lineType === "嵌入HTML");
   const lines: string[] = [];
   let started = false;
   let htmlCalloutStarted = false;
@@ -201,7 +200,7 @@ export function formatEmbed(group: EmbedExportGroup): string {
     }
     if (row.lineType === "嵌入链接") {
       const image = obsidianImage(row);
-      lines.push(hasHtml ? image : `内嵌图片链接: ${image}`);
+      lines.push(image);
       continue;
     }
     if (row.lineType === "HTML表" || row.lineType === "嵌入HTML") {
@@ -219,10 +218,7 @@ export function formatEmbed(group: EmbedExportGroup): string {
     }
     if (row.lineType === "嵌入文本") {
       const text = row.raw.trim();
-      if (text) {
-        lines.push(">");
-        lines.push(text);
-      }
+      if (text) lines.push(text);
     }
   }
 

@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { restoreProtectedMarkdown } from "./markdownProtection";
 import { findMultilineLatexRanges, isStandaloneMultilineLatexBlock, scanSentences, segmentSentences } from "./sentences";
 
 assert.deepStrictEqual(
@@ -110,6 +111,7 @@ assert.deepStrictEqual(rows.map((row) => [row.range.line + 1, row.lineType, row.
 assert.ok(rows.every((row) => row.typeLabel === "分句"));
 assert.ok(rows.every((row) => row.lineType !== "内嵌"), "内嵌文本块必须完全跳过分句");
 assert.ok(rows.every((row) => row.parentBlockId), "每个句子必须保留来源文本块 id");
+assert.ok(rows.every((row) => row.translationText), "每个可翻译句子必须预生成保护后的翻译输入");
 assert.deepStrictEqual(rows.filter((row) => row.range.line === 7).map((row) => row.sentenceIndex), [1, 2]);
 
 const wrapped = rows.find((row) => row.preview === "A sentence that wraps across source lines.");
@@ -130,5 +132,34 @@ assert.deepStrictEqual(
   ["$$\nE = mc^2\n$$"],
 );
 assert.ok(isStandaloneMultilineLatexBlock("$$\nE = mc^2\n$$"));
+
+const protectedSource = [
+  "Revenue was $R_t$.[^12] Next sentence.",
+  "<br>",
+  "![[imgs/standalone.png]]",
+  "<br>",
+  "$$",
+  "x = y + 1",
+  "$$",
+].join("\n");
+const protectedRows = scanSentences(protectedSource, "/ws/chapters/01/trans/01.md");
+assert.deepStrictEqual(
+  protectedRows.map((row) => row.raw),
+  ["Revenue was $R_t$.[^12]", "Next sentence."],
+  "独立媒体与独立 LaTeX 块不得进入句子翻译单元",
+);
+const protectedInline = protectedRows[0];
+assert.ok(protectedInline.translationText?.includes('<ocr2md-protected id="p0001"/>'));
+assert.ok(protectedInline.translationText?.includes('<ocr2md-protected id="p0002"/>'));
+assert.ok(!protectedInline.translationText?.includes("$R_t$"));
+assert.ok(!protectedInline.translationText?.includes("[^12]"));
+assert.strictEqual(
+  restoreProtectedMarkdown(
+    protectedInline.translationText ?? "",
+    protectedInline.translationProtection ?? [],
+  ),
+  protectedInline.raw,
+  "句内保护项必须可以字节级回填",
+);
 
 console.log("sentences tests passed");

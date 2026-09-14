@@ -5,6 +5,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 import socket
 import threading
 import uuid
@@ -220,6 +221,7 @@ class ChapterProjectStore:
     def chapter_record(self, chapter_dir):
         working = self.first_file(chapter_dir, "*.working.md")
         sidecar = self.first_file(chapter_dir, "*.ocr2md.json")
+        trans_source = chapter_dir / "trans" / f"{chapter_dir.name}.md"
         missing = []
         if working is None:
             missing.append("working")
@@ -232,6 +234,7 @@ class ChapterProjectStore:
             "reason": f"缺少 {' + '.join(missing)}" if missing else None,
             "workingFile": working.name if working else None,
             "sidecarFile": sidecar.name if sidecar else None,
+            "transReady": trans_source.is_file(),
             "_dir": chapter_dir,
             "_working": working,
             "_sidecar": sidecar,
@@ -516,17 +519,192 @@ class ChapterProjectStore:
             record,
             trans_dir,
             trans_dir / f"{record['name']}.md",
+            trans_dir / f"{record['name']}.working.md",
             trans_dir / ".ocr2md-translations.json",
         )
 
+    def sentence_paths(self, chapter_id):
+        record, trans_dir, _, _, _ = self.translation_paths(chapter_id)
+        sentence_dir = trans_dir / "sentences"
+        return record, sentence_dir, sentence_dir / "original.json"
+
+    @staticmethod
+    def sentence_provider_file_name(provider):
+        normalized = str(provider or "").strip().lower()
+        if normalized == "openai":
+            normalized = "chatgpt"
+        safe = re.sub(r"[^a-z0-9._-]+", "-", normalized).strip("-.")
+        return f"{safe or 'translation'}.json"
+
+    def read_sentence_files(self, chapter_id):
+        _, sentence_dir, source_path = self.sentence_paths(chapter_id)
+        source = None
+        if source_path.is_file():
+            try:
+                source = json.loads(source_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                source = None
+        translations = []
+        if sentence_dir.is_dir():
+            for path in sorted(sentence_dir.glob("*.json")):
+                if path.name == "original.json":
+                    continue
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                provider = data.get("provider") or path.stem
+                translations.append({
+                    "fileName": path.name,
+                    "provider": provider,
+                    "data": data,
+                })
+        return source, translations
+
+    def migrate_legacy_sentence_translations(self, chapter_id):
+        _, sentence_dir, _ = self.sentence_paths(chapter_id)
+        _, _, _, _, state_path = self.translation_paths(chapter_id)
+        if not state_path.is_file():
+            return
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        entries = state.get("entries") if isinstance(state, dict) else None
+        if not isinstance(entries, dict) or not entries:
+            return
+
+        grouped = {}
+        state_version = state.get("version")
+        for key, raw in entries.items():
+            if not isinstance(raw, dict):
+                continue
+            provider_results = raw.get("translations") if state_version == 2 else None
+            if isinstance(provider_results, dict):
+                items = provider_results.items()
+            else:
+                items = [("deepl", raw)]
+            for provider, result in items:
+                if not isinstance(result, dict):
+                    continue
+                status = result.get("status")
+                if status not in ("translated", "error"):
+                    continue
+                output_provider = "chatgpt" if provider == "openai" else str(provider)
+                target = grouped.setdefault(output_provider, {})
+                target[key] = {
+                    "sentenceId": raw.get("sentenceId") or key,
+                    "sourceFingerprint": raw.get("sourceFingerprint"),
+                    "contextFingerprint": raw.get("contextFingerprint"),
+                    "translatedText": result.get("translatedText"),
+                    "status": status,
+                    "error": result.get("error"),
+                    "updatedAt": result.get("updatedAt"),
+                    "model": result.get("model"),
+                }
+
+        if not grouped:
+            return
+        sentence_dir.mkdir(parents=True, exist_ok=True)
+        for provider, migrated_entries in grouped.items():
+            target_path = sentence_dir / self.sentence_provider_file_name(provider)
+            existing = {}
+            if target_path.is_file():
+                try:
+                    existing = json.loads(target_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    existing = {}
+            if not isinstance(existing, dict):
+                existing = {}
+            existing_entries = existing.get("entries")
+            if not isinstance(existing_entries, dict):
+                existing_entries = {}
+            changed = False
+            for key, value in migrated_entries.items():
+                if key not in existing_entries:
+                    existing_entries[key] = value
+                    changed = True
+            if target_path.is_file() and not changed:
+                continue
+            payload = {
+                "version": 1,
+                "provider": provider,
+                "label": "ChatGPT" if provider == "chatgpt" else "DeepL" if provider == "deepl" else provider,
+                "sourceFile": "original.json",
+                "entries": existing_entries,
+            }
+            temp = target_path.with_name(f".{target_path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                self.write_text_fsync(
+                    temp,
+                    json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                )
+                os.replace(temp, target_path)
+            finally:
+                if temp.exists():
+                    temp.unlink()
+
+    def sync_sentence_source(self, chapter_id, expected_revision, source):
+        if not isinstance(expected_revision, str) or not expected_revision:
+            raise ValueError("expectedRevision is required")
+        if not isinstance(source, dict):
+            raise ValueError("source must be an object")
+        with self.lock:
+            current = self.read_translation(chapter_id)
+            if current["revision"] != expected_revision:
+                return {
+                    "conflict": True,
+                    "currentRevision": current["revision"],
+                }
+            _, sentence_dir, source_path = self.sentence_paths(chapter_id)
+            sentence_dir.mkdir(parents=True, exist_ok=True)
+            existing = None
+            if source_path.is_file():
+                try:
+                    existing = json.loads(source_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    existing = None
+            if existing != source:
+                temp = source_path.with_name(f".{source_path.name}.{uuid.uuid4().hex}.tmp")
+                try:
+                    self.write_text_fsync(
+                        temp,
+                        json.dumps(source, ensure_ascii=False, indent=2) + "\n",
+                    )
+                    os.replace(temp, source_path)
+                finally:
+                    if temp.exists():
+                        temp.unlink()
+            self.migrate_legacy_sentence_translations(chapter_id)
+            payload = self.read_translation(chapter_id)
+            return {
+                "conflict": False,
+                "savedAt": utc_now(),
+                **payload,
+            }
+
     def read_translation(self, chapter_id):
         with self.lock:
-            record, _, source_path, state_path = self.translation_paths(chapter_id)
+            record, trans_dir, source_path, working_path, state_path = self.translation_paths(chapter_id)
             if not source_path.is_file():
                 raise RuntimeError(
                     f"章节尚未导出 trans：{record['name']}"
                 )
             source_text = source_path.read_text(encoding="utf-8")
+            if not working_path.is_file():
+                trans_dir.mkdir(parents=True, exist_ok=True)
+                temp = working_path.with_name(
+                    f".{working_path.name}.{uuid.uuid4().hex}.tmp"
+                )
+                try:
+                    self.write_text_fsync(temp, source_text)
+                    os.replace(temp, working_path)
+                finally:
+                    if temp.exists():
+                        temp.unlink()
+            working_text = working_path.read_text(encoding="utf-8")
             state = (
                 json.loads(state_path.read_text(encoding="utf-8"))
                 if state_path.is_file()
@@ -539,18 +717,111 @@ class ChapterProjectStore:
                     "entries": {},
                 }
             )
+            sentence_source, sentence_translations = self.read_sentence_files(chapter_id)
             return {
                 "chapterId": record["id"],
                 "chapterName": record["name"],
                 "path": (
                     f"project://{self.project_dir.name}/chapters/"
-                    f"{record['name']}/trans/{source_path.name}"
+                    f"{record['name']}/trans/{working_path.name}"
                 ),
                 "sourceText": source_text,
+                "workingText": working_text,
                 "translationState": state,
-                "revision": self.translation_revision(source_text, state),
-                "storagePath": str(source_path),
+                "sentenceSource": sentence_source,
+                "sentenceTranslations": sentence_translations,
+                "revision": self.translation_revision(working_text, state),
+                "storagePath": str(working_path),
+                "sourceStoragePath": str(source_path),
                 "statePath": str(state_path),
+            }
+
+    def save_translation_working(
+        self,
+        chapter_id,
+        expected_revision,
+        working_text,
+    ):
+        if not isinstance(expected_revision, str) or not expected_revision:
+            raise ValueError("expectedRevision is required")
+        if not isinstance(working_text, str):
+            raise ValueError("workingText must be a string")
+
+        with self.lock:
+            current = self.read_translation(chapter_id)
+            if current["revision"] != expected_revision:
+                return {
+                    "conflict": True,
+                    "currentRevision": current["revision"],
+                }
+
+            _, trans_dir, _, working_path, _ = self.translation_paths(chapter_id)
+            trans_dir.mkdir(parents=True, exist_ok=True)
+            previous = working_path.read_bytes() if working_path.exists() else None
+            temp = working_path.with_name(
+                f".{working_path.name}.{uuid.uuid4().hex}.tmp"
+            )
+            try:
+                self.write_text_fsync(temp, working_text)
+                os.replace(temp, working_path)
+            except Exception:
+                if temp.exists():
+                    temp.unlink()
+                self._restore_file(working_path, previous)
+                raise
+
+            payload = self.read_translation(chapter_id)
+            return {
+                "conflict": False,
+                "savedAt": utc_now(),
+                **payload,
+            }
+
+    def export_calibration(
+        self,
+        chapter_id,
+        expected_revision,
+        destination,
+        markdown,
+    ):
+        if not isinstance(expected_revision, str) or not expected_revision:
+            raise ValueError("expectedRevision is required")
+        if destination not in ("trans", "output"):
+            raise ValueError("destination must be trans or output")
+        if not isinstance(markdown, str):
+            raise ValueError("markdown must be a string")
+
+        record = self.resolve(chapter_id)
+        with self.lock:
+            current = self.read(chapter_id)
+            if current["revision"] != expected_revision:
+                return {
+                    "conflict": True,
+                    "currentRevision": current["revision"],
+                }
+
+            export_dir = record["_dir"] / destination
+            export_path = export_dir / f"{record['name']}.md"
+            export_dir.mkdir(parents=True, exist_ok=True)
+            previous = export_path.read_bytes() if export_path.exists() else None
+            temp = export_path.with_name(
+                f".{export_path.name}.{uuid.uuid4().hex}.tmp"
+            )
+            try:
+                self.write_text_fsync(temp, markdown)
+                os.replace(temp, export_path)
+            except Exception:
+                if temp.exists():
+                    temp.unlink()
+                self._restore_file(export_path, previous)
+                raise
+
+            return {
+                "conflict": False,
+                "savedAt": utc_now(),
+                "destination": destination,
+                "relativePath": f"{destination}/{export_path.name}",
+                "fileName": export_path.name,
             }
 
     def export_trans_source(self, chapter_id, expected_revision, markdown):
@@ -568,7 +839,7 @@ class ChapterProjectStore:
                     "currentRevision": current["revision"],
                 }
 
-            _, trans_dir, source_path, _ = self.translation_paths(chapter_id)
+            _, trans_dir, source_path, _, _ = self.translation_paths(chapter_id)
             trans_dir.mkdir(parents=True, exist_ok=True)
             previous = source_path.read_bytes() if source_path.exists() else None
             temp = source_path.with_name(
@@ -609,7 +880,7 @@ class ChapterProjectStore:
                     "currentRevision": current["revision"],
                 }
 
-            _, trans_dir, _, state_path = self.translation_paths(chapter_id)
+            _, trans_dir, _, _, state_path = self.translation_paths(chapter_id)
             trans_dir.mkdir(parents=True, exist_ok=True)
             previous = state_path.read_bytes() if state_path.exists() else None
             temp = state_path.with_name(
@@ -1187,12 +1458,62 @@ class UpstreamChapterProjectStore:
             },
         )
 
+    def export_calibration(
+        self,
+        chapter_id,
+        expected_revision,
+        destination,
+        markdown,
+    ):
+        try:
+            return self._request(
+                "POST",
+                "/__workspace/chapter/export-calibrated",
+                {
+                    "chapterId": chapter_id,
+                    "expectedRevision": expected_revision,
+                    "destination": destination,
+                    "markdown": markdown,
+                },
+            )
+        except UpstreamStoreError as error:
+            if error.status == 409:
+                return {
+                    "conflict": True,
+                    "currentRevision": error.payload.get("currentRevision"),
+                }
+            raise
+
     def read_translation(self, chapter_id):
         self.resolve(chapter_id)
         return self._request(
             "GET",
             "/__workspace/translation?chapterId=" + chapter_id,
         )
+
+    def save_translation_working(
+        self,
+        chapter_id,
+        expected_revision,
+        working_text,
+    ):
+        try:
+            return self._request(
+                "POST",
+                "/__workspace/translation",
+                {
+                    "chapterId": chapter_id,
+                    "expectedRevision": expected_revision,
+                    "workingText": working_text,
+                },
+            )
+        except UpstreamStoreError as error:
+            if error.status == 409:
+                return {
+                    "conflict": True,
+                    "currentRevision": error.payload.get("currentRevision"),
+                }
+            raise
 
     def export_trans_source(self, chapter_id, expected_revision, markdown):
         try:
@@ -1227,6 +1548,25 @@ class UpstreamChapterProjectStore:
                     "chapterId": chapter_id,
                     "expectedRevision": expected_revision,
                     "translationState": state,
+                },
+            )
+        except UpstreamStoreError as error:
+            if error.status == 409:
+                return {
+                    "conflict": True,
+                    "currentRevision": error.payload.get("currentRevision"),
+                }
+            raise
+
+    def sync_sentence_source(self, chapter_id, expected_revision, source):
+        try:
+            return self._request(
+                "POST",
+                "/__workspace/translation/sentences",
+                {
+                    "chapterId": chapter_id,
+                    "expectedRevision": expected_revision,
+                    "source": source,
                 },
             )
         except UpstreamStoreError as error:
@@ -1851,6 +2191,51 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             self._write_json(200, saved)
             return
 
+        if route == "/__workspace/chapter/export-calibrated":
+            try:
+                saved = self.project_store.export_calibration(
+                    payload.get("chapterId"),
+                    payload.get("expectedRevision"),
+                    payload.get("destination"),
+                    payload.get("markdown"),
+                )
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            if saved.get("conflict"):
+                self._write_json(
+                    409,
+                    {
+                        "error": "章节 working 已变化，已拒绝导出标定",
+                        "currentRevision": saved["currentRevision"],
+                    },
+                )
+                return
+            self._write_json(200, saved)
+            return
+
+        if route == "/__workspace/translation":
+            try:
+                saved = self.project_store.save_translation_working(
+                    payload.get("chapterId"),
+                    payload.get("expectedRevision"),
+                    payload.get("workingText"),
+                )
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            if saved.get("conflict"):
+                self._write_json(
+                    409,
+                    {
+                        "error": "trans 工作稿已在其他位置更新，已拒绝覆盖",
+                        "currentRevision": saved["currentRevision"],
+                    },
+                )
+                return
+            self._write_json(200, saved)
+            return
+
         if route == "/__workspace/translation/source":
             try:
                 saved = self.project_store.export_trans_source(
@@ -1866,6 +2251,28 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                     409,
                     {
                         "error": "章节 working 已变化，已拒绝覆盖 trans 原文",
+                        "currentRevision": saved["currentRevision"],
+                    },
+                )
+                return
+            self._write_json(200, saved)
+            return
+
+        if route == "/__workspace/translation/sentences":
+            try:
+                saved = self.project_store.sync_sentence_source(
+                    payload.get("chapterId"),
+                    payload.get("expectedRevision"),
+                    payload.get("source"),
+                )
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            if saved.get("conflict"):
+                self._write_json(
+                    409,
+                    {
+                        "error": "trans 工作稿已变化，已拒绝刷新句子原文",
                         "currentRevision": saved["currentRevision"],
                     },
                 )

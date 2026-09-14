@@ -5,6 +5,10 @@ import type {
 import type {
   TranslationStateFile,
 } from "../../../src/translationState";
+import type {
+  SentenceSourceFile,
+  SentenceTranslationFile,
+} from "../../../src/sentenceFiles";
 
 export interface ChapterListItem {
   id: string;
@@ -13,6 +17,7 @@ export interface ChapterListItem {
   reason?: string;
   workingFile?: string;
   sidecarFile?: string;
+  transReady?: boolean;
 }
 
 export interface ChapterCatalog {
@@ -38,6 +43,8 @@ export interface ChapterWorkspaceData {
   revision?: string;
   boundarySourceFiles?: string[];
   translationState?: TranslationStateFile;
+  sentenceSource?: SentenceSourceFile;
+  sentenceTranslations?: SentenceTranslationFile[];
   translationSourceChapterId?: string;
   translationServiceId?: TranslationServiceId;
   media?: ChapterMediaItem[];
@@ -99,6 +106,22 @@ export interface TransSourceExportInput {
   markdown: string;
 }
 
+export type CalibrationExportDestination = "trans" | "output";
+
+export interface CalibrationExportInput {
+  chapterId: string;
+  expectedRevision?: string;
+  destination: CalibrationExportDestination;
+  markdown: string;
+}
+
+export interface CalibrationExportResult {
+  savedAt: string;
+  destination: CalibrationExportDestination;
+  relativePath: string;
+  fileName: string;
+}
+
 export interface TranslationStateSaveInput {
   chapter: ChapterWorkspaceData;
   translationState: TranslationStateFile;
@@ -115,6 +138,9 @@ export interface ChapterRepository {
     input: ChapterMediaDownloadInput,
   ): Promise<ChapterMediaDownloadResult>;
   exportBoundary?(input: ChapterSaveInput): Promise<BoundaryExportResult>;
+  exportCalibration?(
+    input: CalibrationExportInput,
+  ): Promise<CalibrationExportResult>;
   exportTransSource?(input: TransSourceExportInput): Promise<ChapterWorkspaceData>;
   loadTranslation?(chapterId: string): Promise<ChapterWorkspaceData>;
   saveTranslationState?(

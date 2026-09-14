@@ -4,9 +4,10 @@ image:
   pullPolicy: IfNotPresent
 
 workspace:
-  existingClaim: ocr2md-workspace
+  existingClaim: ""
+  hostPath: "/Users/daisor/Library/Mobile Documents/iCloud~md~obsidian/Documents/ocr2md"
   mountPath: /data
-  projectSubdir: "Bufett’s Alpha"
+  projectSubdir: "books/ocr/Bufett’s Alpha"
 
 service:
   type: NodePort

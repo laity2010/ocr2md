@@ -51,7 +51,13 @@ export interface Candidate {
   translationContextFingerprint?: string;
   /** Number of current translation units sharing the same source fingerprint. */
   translationSourceOccurrenceCount?: number;
+  /** Text actually sent to translation after protecting non-translatable Markdown/LaTeX fragments. */
   translationText?: string;
+  /** Byte-exact fragments replaced by translationText placeholders and restored after translation. */
+  translationProtection?: Array<{
+    token: string;
+    value: string;
+  }>;
   translationStatus?: "待翻译" | "已翻译" | "失败";
   translationError?: string;
   /** Per-service translation results shown side-by-side in the translation table. */

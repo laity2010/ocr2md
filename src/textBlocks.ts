@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import type { Candidate } from "./types";
 
-export type TextBlockType = "标题" | "内嵌" | "文本" | "注释正文";
+export type TextBlockType = "标题" | "内嵌" | "LaTeX块" | "文本" | "注释正文";
 
 export function scanTextBlocks(markdown: string, sourcePath: string): Candidate[] {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
@@ -53,7 +53,16 @@ export function classifyTextBlock(raw: string): TextBlockType {
   if (/^#{1,6}(?:\s+|$)/.test(firstLine)) return "标题";
   if (/^\[\^[^\]]+\]:/.test(firstLine)) return "注释正文";
   if (/^>/.test(firstLine) || /<embed\s+id\s*=/.test(raw)) return "内嵌";
+  if (isStandaloneDisplayLatexBlock(raw)) return "LaTeX块";
   return "文本";
+}
+
+function isStandaloneDisplayLatexBlock(raw: string): boolean {
+  const trimmed = raw.trim();
+  const lines = trimmed.split("\n");
+  if (lines.length < 2) return false;
+  return lines[0]?.trim() === "$$"
+    && lines[lines.length - 1]?.trim() === "$$";
 }
 
 function leadingFrontmatterEnd(lines: string[]): number {

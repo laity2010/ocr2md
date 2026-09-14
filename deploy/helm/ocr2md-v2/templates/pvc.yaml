@@ -1,4 +1,4 @@
-{{- if not .Values.workspace.existingClaim }}
+{{- if and (not .Values.workspace.existingClaim) (not .Values.workspace.hostPath) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

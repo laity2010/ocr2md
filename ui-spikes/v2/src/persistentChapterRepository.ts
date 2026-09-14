@@ -6,12 +6,19 @@ import { candidatesFromSidecar, serializeSidecar } from "../../../src/sidecar";
 import {
   backfillTranslationFingerprints,
   parseTranslationState,
-  translationRows,
 } from "../../../src/translationState";
+import {
+  buildSentenceSourceFile,
+  parseSentenceSourceFile,
+  parseSentenceTranslationFile,
+} from "../../../src/sentenceFiles";
 import { scanTranslationUnits } from "../../../src/translationUnits";
+import { scanTextBlocks } from "../../../src/textBlocks";
 import { markdownFileKind } from "../../../src/workspaceFiles";
 import type {
   BoundaryExportResult,
+  CalibrationExportInput,
+  CalibrationExportResult,
   ChapterCatalog,
   ChapterImagePasteInput,
   ChapterImagePasteResult,
@@ -62,8 +69,16 @@ type TranslationPayload = {
   chapterName: string;
   path: string;
   sourceText: string;
+  workingText: string;
   translationState: unknown;
+  sentenceSource?: unknown;
+  sentenceTranslations?: Array<{
+    fileName?: string;
+    provider?: string;
+    data?: unknown;
+  }>;
   revision: string;
+  savedAt?: string;
 };
 
 const BOUNDARY_ID = "__boundary__";
@@ -190,6 +205,9 @@ export class PersistentChapterRepository implements ChapterRepository {
     if (input.chapter.kind === "boundary" || input.chapter.id === BOUNDARY_ID) {
       return this.saveBoundary(input);
     }
+    if (input.chapter.kind === "translation") {
+      return this.saveTranslationWorking(input);
+    }
     const response = await fetch("/__workspace/chapter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -312,6 +330,28 @@ export class PersistentChapterRepository implements ChapterRepository {
     );
   }
 
+  async exportCalibration(
+    input: CalibrationExportInput,
+  ): Promise<CalibrationExportResult> {
+    const response = await fetch("/__workspace/chapter/export-calibrated", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        chapterId: input.chapterId,
+        expectedRevision: input.expectedRevision,
+        destination: input.destination,
+        markdown: input.markdown,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        await responseError(response, "导出标定失败"),
+      );
+    }
+    return response.json() as Promise<CalibrationExportResult>;
+  }
+
   async loadTranslation(chapterId: string): Promise<ChapterWorkspaceData> {
     const response = await fetch(
       `/__workspace/translation?chapterId=${encodeURIComponent(chapterId)}`,
@@ -322,9 +362,8 @@ export class PersistentChapterRepository implements ChapterRepository {
         await responseError(response, "加载翻译工作台失败"),
       );
     }
-    return this.translationWorkspace(
-      await response.json() as TranslationPayload,
-    );
+    const payload = await response.json() as TranslationPayload;
+    return this.translationWorkspace(await this.syncSentenceFiles(payload));
   }
 
   async saveTranslationState(
@@ -351,9 +390,8 @@ export class PersistentChapterRepository implements ChapterRepository {
         await responseError(response, "保存翻译状态失败"),
       );
     }
-    return this.translationWorkspace(
-      await response.json() as TranslationPayload,
-    );
+    const payload = await response.json() as TranslationPayload;
+    return this.translationWorkspace(await this.syncSentenceFiles(payload));
   }
 
   private async loadBoundary(): Promise<ChapterWorkspaceData> {
@@ -435,26 +473,99 @@ export class PersistentChapterRepository implements ChapterRepository {
   private translationWorkspace(
     payload: TranslationPayload,
   ): ChapterWorkspaceData {
-    const units = scanTranslationUnits(payload.sourceText, payload.path);
+    const units = scanTranslationUnits(payload.workingText, payload.path);
     const state = parseTranslationState(
       JSON.stringify(payload.translationState ?? {}),
       payload.path,
     );
     backfillTranslationFingerprints(units, state);
+    const sentenceSource = parseSentenceSourceFile(payload.sentenceSource)
+      ?? buildSentenceSourceFile(payload.workingText, payload.path);
+    const sentenceTranslations = (payload.sentenceTranslations ?? [])
+      .map((item) => parseSentenceTranslationFile(
+        item.data,
+        item.provider ?? item.fileName?.replace(/\.json$/i, ""),
+      ))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
     return {
       id: `translation:${payload.chapterId}`,
       kind: "translation",
       path: payload.path,
       name: payload.chapterName,
       originalText: payload.sourceText,
-      workingText: payload.sourceText,
-      rows: translationRows(units, state, "deepl"),
+      workingText: payload.workingText,
+      rows: scanTextBlocks(payload.workingText, payload.path),
       annotationPairs: [],
       revision: payload.revision,
       translationState: state,
+      sentenceSource,
+      sentenceTranslations,
       translationSourceChapterId: payload.chapterId,
       translationServiceId: "deepl",
     };
+  }
+
+  private async saveTranslationWorking(
+    input: ChapterSaveInput,
+  ): Promise<ChapterSaveResult> {
+    if (!input.chapter.translationSourceChapterId) {
+      throw new Error("trans 工作稿缺少来源章节");
+    }
+    const response = await fetch("/__workspace/translation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        chapterId: input.chapter.translationSourceChapterId,
+        expectedRevision: input.chapter.revision,
+        workingText: input.workingText,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await responseError(response, "保存 trans 工作稿失败"));
+    }
+    const payload = await this.syncSentenceFiles(
+      await response.json() as TranslationPayload,
+    );
+    return {
+      revision: payload.revision,
+      savedAt: payload.savedAt ?? new Date().toISOString(),
+      workingText: payload.workingText,
+    };
+  }
+
+  private async syncSentenceFiles(
+    payload: TranslationPayload,
+  ): Promise<TranslationPayload> {
+    const source = buildSentenceSourceFile(payload.workingText, payload.path);
+    const existing = parseSentenceSourceFile(payload.sentenceSource);
+    const legacyState = parseTranslationState(
+      JSON.stringify(payload.translationState ?? {}),
+      payload.path,
+    );
+    const hasLegacyTranslations = Object.values(legacyState.entries).some(
+      (entry) => Object.keys(entry.translations).length > 0,
+    );
+    if (
+      existing?.sourceHash === source.sourceHash
+      && ((payload.sentenceTranslations?.length ?? 0) > 0 || !hasLegacyTranslations)
+    ) {
+      return payload;
+    }
+    const response = await fetch("/__workspace/translation/sentences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        chapterId: payload.chapterId,
+        expectedRevision: payload.revision,
+        source,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await responseError(response, "同步句子 JSON 失败"));
+    }
+    return response.json() as Promise<TranslationPayload>;
   }
 
   private async saveBoundary(input: ChapterSaveInput): Promise<ChapterSaveResult> {

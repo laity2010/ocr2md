@@ -17,7 +17,10 @@ import { TablePresentationEditor } from "./tablePresentationEditor";
 import { TableConfigurationGrid } from "./tableConfigurationGrid";
 import { TABLE_PRESENTATION_DEFAULT_SOURCE } from "./tablePresentationConfig";
 import { PersistentChapterRepository } from "./persistentChapterRepository";
-import type { ChapterWorkspaceData } from "./chapterRepository";
+import type {
+  CalibrationExportDestination,
+  ChapterWorkspaceData,
+} from "./chapterRepository";
 import { FeatureDebugMenu } from "./featureDebugMenu";
 import {
   FeatureDebugRunner,
@@ -31,6 +34,10 @@ import { EditorPreviewSplitter } from "./editorPreviewSplitter";
 import { SourceRegexSearch } from "./sourceRegexSearch";
 import { SourcePreviewScrollSync } from "./sourcePreviewScrollSync";
 import { deriveMediaCatalog } from "./mediaCatalog";
+import {
+  buildSentenceSourceFile,
+  sentenceCandidatesFromFiles,
+} from "../../../src/sentenceFiles";
 import type { Candidate } from "../../../src/types";
 import {
   ACTIVE_REVIEW_MODULES,
@@ -60,6 +67,18 @@ function chapterImageUrl(chapterId: string, relativePath: string): string {
     + encodeURIComponent(chapterId)
     + "&path="
     + encodeURIComponent(relativePath);
+}
+
+function sentenceCandidates(
+  chapter: ChapterWorkspaceData | undefined,
+): Candidate[] {
+  if (!chapter || chapter.kind !== "translation") return [];
+  const source = chapter.sentenceSource
+    ?? buildSentenceSourceFile(chapter.workingText, chapter.path);
+  return sentenceCandidatesFromFiles(
+    source,
+    chapter.sentenceTranslations ?? [],
+  );
 }
 
 function mediaCandidates(
@@ -126,6 +145,12 @@ const chapterElementTab =
   requireElement<HTMLButtonElement>("chapter-element-tab");
 const chapterElementMenu =
   requireElement<HTMLElement>("chapter-element-menu");
+const translationElementPicker =
+  requireElement<HTMLElement>("translation-element-picker");
+const translationElementTab =
+  requireElement<HTMLButtonElement>("translation-element-tab");
+const translationElementMenu =
+  requireElement<HTMLElement>("translation-element-menu");
 const reviewGridStatus = requireElement<HTMLElement>("review-grid-status");
 const sourceLocationStatus = requireElement<HTMLElement>("source-location-status");
 const regexSearchToggle =
@@ -211,6 +236,8 @@ const openBoundaryButton = requireElement<HTMLButtonElement>("open-boundary");
 const undoButton = requireElement<HTMLButtonElement>("undo");
 const redoButton = requireElement<HTMLButtonElement>("redo");
 const saveButton = requireElement<HTMLButtonElement>("save");
+const exportCalibrationButton =
+  requireElement<HTMLButtonElement>("export-calibration");
 const resetCalibrationButton =
   requireElement<HTMLButtonElement>("reset-calibration");
 const exportTransButton = requireElement<HTMLButtonElement>("export-trans");
@@ -227,6 +254,18 @@ const resetConfirmOverlay = requireElement<HTMLElement>("reset-confirm-overlay")
 const resetConfirmMessage = requireElement<HTMLElement>("reset-confirm-message");
 const resetCancelButton = requireElement<HTMLButtonElement>("reset-cancel");
 const resetConfirmButton = requireElement<HTMLButtonElement>("reset-confirm");
+const exportCalibrationOverlay =
+  requireElement<HTMLElement>("export-calibration-overlay");
+const exportCalibrationStatus =
+  requireElement<HTMLElement>("export-calibration-status");
+const exportDestinationTrans =
+  requireElement<HTMLInputElement>("export-destination-trans");
+const exportDestinationOutput =
+  requireElement<HTMLInputElement>("export-destination-output");
+const exportCalibrationCancelButton =
+  requireElement<HTMLButtonElement>("export-calibration-cancel");
+const exportCalibrationConfirmButton =
+  requireElement<HTMLButtonElement>("export-calibration-confirm");
 const featureDebugToggle =
   requireElement<HTMLButtonElement>("ui-debug-toggle");
 const featureDebugMenuElement =
@@ -312,6 +351,8 @@ let pendingCalibrationCommandId: string | undefined;
 let pendingCalibrationFocusCommandId: string | undefined;
 let catalogSignature = "";
 let resetConfirmVisible = false;
+let exportCalibrationVisible = false;
+let exportCalibrationPendingDestination: CalibrationExportDestination | undefined;
 let featureDebugEnvironmentReady = false;
 let featureDebugChapterId: string | undefined;
 let featureDebugBaselineRevision: string | undefined;
@@ -328,6 +369,12 @@ let mediaDownloadStatusText = "";
 let mediaDownloadStatusChapterId: string | undefined;
 
 const deviceDebugBridge = createDeviceDebugBridge();
+
+function selectedCalibrationExportDestination(): CalibrationExportDestination | undefined {
+  if (exportDestinationTrans.checked) return "trans";
+  if (exportDestinationOutput.checked) return "output";
+  return undefined;
+}
 
 function changedLineModuleButton(): HTMLButtonElement | undefined {
   return reviewModuleButtons.find(
@@ -777,10 +824,19 @@ const chapterElementModules = new Set<ActiveReviewModule>([
   "非法断行",
   "媒体",
 ]);
+const translationElementModules = new Set<ActiveReviewModule>([
+  "文本块",
+  "句子",
+]);
 
 function setChapterElementMenuOpen(open: boolean): void {
   chapterElementMenu.hidden = !open;
   chapterElementTab.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function setTranslationElementMenuOpen(open: boolean): void {
+  translationElementMenu.hidden = !open;
+  translationElementTab.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
 function syncChapterElementTabState(): void {
@@ -793,14 +849,26 @@ function syncChapterElementTabState(): void {
   chapterElementTab.setAttribute("aria-pressed", active ? "true" : "false");
 }
 
+function syncTranslationElementTabState(): void {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  const active = !configGridMode
+    && translationElementModules.has(view.activeReviewModule);
+  translationElementTab.textContent = active
+    ? `trans 翻译/${view.activeReviewModule} ▾`
+    : "trans 翻译 ▾";
+  translationElementTab.setAttribute("aria-pressed", active ? "true" : "false");
+}
+
 function setConfigGridMode(enabled: boolean): void {
   configGridMode = enabled;
   calibrationGridHost.hidden = enabled;
   tableConfigGridHost.hidden = !enabled;
   configModuleTab.setAttribute("aria-pressed", enabled ? "true" : "false");
   syncChapterElementTabState();
+  syncTranslationElementTabState();
   if (enabled) {
     setChapterElementMenuOpen(false);
+    setTranslationElementMenuOpen(false);
     for (const button of reviewModuleButtons) {
       button.setAttribute("aria-pressed", "false");
     }
@@ -818,6 +886,7 @@ function setConfigGridMode(enabled: boolean): void {
     );
   }
   syncChapterElementTabState();
+  syncTranslationElementTabState();
 }
 
 function syncRegexSearchTarget(mode = sourcePaneMode): void {
@@ -917,6 +986,10 @@ chapterElementTab.addEventListener("click", () => {
   if (chapterElementTab.disabled) return;
   setChapterElementMenuOpen(chapterElementMenu.hidden);
 });
+translationElementTab.addEventListener("click", () => {
+  if (translationElementTab.disabled) return;
+  setTranslationElementMenuOpen(translationElementMenu.hidden);
+});
 regexSearchToggle.addEventListener(
   "click",
   () => setRegexSearchOpen(!regexSearchOpen, !regexSearchOpen),
@@ -939,10 +1012,24 @@ document.addEventListener("pointerdown", (event) => {
   }
   setChapterElementMenuOpen(false);
 }, true);
+document.addEventListener("pointerdown", (event) => {
+  if (translationElementMenu.hidden) return;
+  if (
+    event.target instanceof Node
+    && translationElementPicker.contains(event.target)
+  ) {
+    return;
+  }
+  setTranslationElementMenuOpen(false);
+}, true);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !chapterElementMenu.hidden) {
     setChapterElementMenuOpen(false);
     chapterElementTab.focus();
+  }
+  if (event.key === "Escape" && !translationElementMenu.hidden) {
+    setTranslationElementMenuOpen(false);
+    translationElementTab.focus();
   }
 });
 cssSaveButton.addEventListener("click", () => customCssEditor.save());
@@ -1062,6 +1149,7 @@ function renderChapterSelect(view: ReturnType<typeof deriveWorkspaceView>): void
       chapter.name,
       chapter.ready,
       chapter.reason ?? "",
+      chapter.transReady === true,
     ]),
   });
 
@@ -1095,19 +1183,23 @@ function renderChapterSelect(view: ReturnType<typeof deriveWorkspaceView>): void
         ? "chapters/" + chapter.name
         : "chapters/" + chapter.name + " · " + (chapter.reason ?? "不可用");
       chapterSelect.append(option);
-    }
 
-    const transNode = document.createElement("option");
-    transNode.value = "__node_trans__";
-    transNode.textContent = "trans · 待规划";
-    transNode.disabled = true;
-    chapterSelect.append(transNode);
+      if (chapter.transReady) {
+        const transOption = document.createElement("option");
+        transOption.value = `__node_trans_${chapter.id}__`;
+        transOption.textContent = "\u3000\u3000└─ trans";
+        transOption.disabled = false;
+        chapterSelect.append(transOption);
+      }
+    }
   }
 
   chapterSelect.disabled = !view.canSelectChapter || mediaDownloadRunning;
   chapterSelect.value =
     view.workspaceKind === "boundary"
       ? "__node_ocr__"
+      : view.workspaceKind === "translation" && view.selectedChapterId
+        ? `__node_trans_${view.selectedChapterId}__`
       : view.workspaceKind === "chapter" && view.selectedChapterId
         ? view.selectedChapterId
         : "";
@@ -1117,8 +1209,9 @@ function renderChapterSelect(view: ReturnType<typeof deriveWorkspaceView>): void
   );
   const inChapter = view.workspaceKind === "chapter" && selected;
   const inBoundary = view.workspaceKind === "boundary";
-  chapterSelectionStatus.hidden = Boolean(inChapter || inBoundary);
-  chapterSelectionStatus.textContent = inChapter || inBoundary
+  const inTranslation = view.workspaceKind === "translation" && selected;
+  chapterSelectionStatus.hidden = Boolean(inChapter || inBoundary || inTranslation);
+  chapterSelectionStatus.textContent = inChapter || inBoundary || inTranslation
     ? ""
     : "工作目录 · "
       + (view.projectName ?? "—")
@@ -1140,9 +1233,11 @@ actor.subscribe((snapshot) => {
   workingEditor.setEditable(Boolean(chapter) && view.canEdit && !mediaDownloadRunning);
   markdownPreview.render(
     chapter?.workingText ?? "",
-    chapter && chapter.kind !== "boundary" && chapter.kind !== "translation"
-      ? chapter.id
-      : undefined,
+    chapter?.kind === "translation"
+      ? chapter.translationSourceChapterId
+      : chapter && chapter.kind !== "boundary"
+        ? chapter.id
+        : undefined,
   );
   sourcePreviewScrollSync.syncFromEditor();
   if (sourcePaneMode === "source") {
@@ -1153,7 +1248,9 @@ actor.subscribe((snapshot) => {
       ? mediaCandidates(chapter)
       : view.activeReviewModule === "变动行"
         ? changedLineAuditCandidates(view.changedLineRows)
-        : chapter?.rows ?? [],
+        : view.activeReviewModule === "句子"
+          ? sentenceCandidates(chapter)
+          : chapter?.rows ?? [],
     chapter?.workingText ?? "",
     view.activeReviewModule,
     view.headingNumberingEnabled,
@@ -1219,9 +1316,7 @@ actor.subscribe((snapshot) => {
       + " · segments " + view.boundarySegmentCount
     : "OCR 输入 " + view.boundarySourceFileCount + " 个";
   translationStatus.textContent = chapter?.kind === "translation"
-    ? (view.translationServiceId === "openai" ? "GPT" : "DeepL")
-      + " · " + view.translationCompleted + "/" + view.translationTotal
-      + " · 失败 " + view.translationFailed
+    ? `trans 工作稿 · ${view.activeReviewModule} ${view.activeModuleRows}`
     : "—";
   reviewGridStatus.textContent = chapter
     ? `${view.activeReviewModule} · ${view.activeModuleRows} 行`
@@ -1295,8 +1390,11 @@ actor.subscribe((snapshot) => {
     const moduleAllowed = chapter?.kind === "boundary"
       ? module === "章节定界"
       : chapter?.kind === "translation"
-        ? module === "翻译"
-        : module !== "章节定界" && module !== "翻译";
+        ? module !== undefined && translationElementModules.has(module)
+        : module !== "章节定界"
+          && module !== "翻译"
+          && module !== "文本块"
+          && module !== "句子";
     button.hidden = Boolean(chapter) && !moduleAllowed;
     button.disabled = !view.canSelectReviewModule || !moduleAllowed;
     button.setAttribute("aria-pressed", active ? "true" : "false");
@@ -1305,7 +1403,12 @@ actor.subscribe((snapshot) => {
   chapterElementPicker.hidden = Boolean(chapter) && !ordinaryChapter;
   chapterElementTab.disabled =
     !view.canSelectReviewModule || !ordinaryChapter;
+  const translationChapter = chapter?.kind === "translation";
+  translationElementPicker.hidden = !translationChapter;
+  translationElementTab.disabled =
+    !view.canSelectReviewModule || !translationChapter;
   syncChapterElementTabState();
+  syncTranslationElementTabState();
   configModuleTab.disabled = false;
   configModuleTab.hidden = false;
   configModuleTab.setAttribute(
@@ -1336,7 +1439,13 @@ actor.subscribe((snapshot) => {
   undoButton.disabled = !view.canUndo;
   redoButton.disabled = !view.canRedo;
   saveButton.disabled = !view.canSave;
+  saveButton.textContent = chapter?.kind === "translation"
+    ? "保存工作稿"
+    : "保存标定";
+  exportCalibrationButton.disabled = !view.canExportCalibration;
+  exportCalibrationButton.hidden = chapter?.kind === "translation";
   resetCalibrationButton.disabled = !view.canResetCalibration;
+  resetCalibrationButton.hidden = chapter?.kind === "translation";
   exportTransButton.disabled = !view.canExportTrans;
   closeButton.disabled = !view.canClose;
   enterDebugButton.disabled = !view.canEnterDebug;
@@ -1364,6 +1473,39 @@ actor.subscribe((snapshot) => {
   resetConfirmMessage.textContent = view.chapterName
     ? `「${view.chapterName}」的当前工作稿和全部人工标定将恢复到原始状态，并立即保存。此操作会清空撤销 / 重做历史。`
     : "当前工作稿和全部人工标定将恢复到原始状态，并立即保存。此操作会清空撤销 / 重做历史。";
+
+  const calibrationExportRunning =
+    view.session === "chapter-exporting"
+    && exportCalibrationPendingDestination != null;
+  if (!view.canExportCalibration && !calibrationExportRunning) {
+    exportCalibrationVisible = false;
+    exportCalibrationPendingDestination = undefined;
+  }
+  if (
+    exportCalibrationVisible
+    && exportCalibrationPendingDestination
+    && view.session === "chapter-clean"
+  ) {
+    if (view.saveError) {
+      exportCalibrationStatus.textContent = `导出失败：${view.saveError}`;
+      exportCalibrationPendingDestination = undefined;
+    } else if (
+      view.lastCalibrationExportDestination === exportCalibrationPendingDestination
+      && view.lastCalibrationExportPath
+    ) {
+      exportCalibrationStatus.textContent =
+        `已导出：当前章节/${view.lastCalibrationExportPath}`;
+      exportCalibrationPendingDestination = undefined;
+    }
+  }
+  exportCalibrationOverlay.hidden = !exportCalibrationVisible;
+  exportDestinationTrans.disabled = calibrationExportRunning;
+  exportDestinationOutput.disabled = calibrationExportRunning;
+  exportCalibrationCancelButton.disabled = calibrationExportRunning;
+  exportCalibrationConfirmButton.disabled =
+    calibrationExportRunning
+    || !view.canExportCalibration
+    || !selectedCalibrationExportDestination();
 
 });
 
@@ -7244,14 +7386,35 @@ chapterSelect.addEventListener("change", () => {
   if (target === "__node_ocr__") {
     const view = deriveWorkspaceView(actor.getSnapshot());
     if (view.session === "chapter-dirty") {
-      chapterSelect.value = view.workspaceKind === "chapter" && view.selectedChapterId
-        ? view.selectedChapterId
-        : "";
+      chapterSelect.value = view.workspaceKind === "translation" && view.selectedChapterId
+        ? `__node_trans_${view.selectedChapterId}__`
+        : view.workspaceKind === "chapter" && view.selectedChapterId
+          ? view.selectedChapterId
+          : "";
       sourceLocationStatus.textContent =
-        "当前章节有未保存修改 · 请先保存、撤销或关闭后再切换到 ocr";
+        "当前工作稿有未保存修改 · 请先保存、撤销或关闭后再切换到 ocr";
       return;
     }
     executeProductAction("open-boundary");
+    return;
+  }
+
+  const transMatch = /^__node_trans_(.+)__$/.exec(target);
+  if (transMatch) {
+    const view = deriveWorkspaceView(actor.getSnapshot());
+    if (view.session === "chapter-dirty") {
+      chapterSelect.value = view.workspaceKind === "translation" && view.selectedChapterId
+        ? `__node_trans_${view.selectedChapterId}__`
+        : view.workspaceKind === "chapter" && view.selectedChapterId
+          ? view.selectedChapterId
+          : "";
+      sourceLocationStatus.textContent =
+        "当前工作稿有未保存修改 · 请先保存、撤销或关闭后再进入 trans";
+      return;
+    }
+    lastUiAction = "open-translation";
+    lastCommandId = undefined;
+    actor.send({ type: "OPEN_TRANSLATION", chapterId: transMatch[1] });
     return;
   }
 
@@ -7271,6 +7434,9 @@ for (const button of reviewModuleButtons) {
     if (!module || !ACTIVE_REVIEW_MODULES.includes(module)) return;
     if (chapterElementModules.has(module)) {
       setChapterElementMenuOpen(false);
+    }
+    if (translationElementModules.has(module)) {
+      setTranslationElementMenuOpen(false);
     }
     if (configGridMode) setSourcePaneMode("source");
     lastUiAction = "select-review-module";
@@ -7419,6 +7585,41 @@ exportBoundaryButton.addEventListener("click", () => {
 undoButton.addEventListener("click", () => executeProductAction("undo"));
 redoButton.addEventListener("click", () => executeProductAction("redo"));
 saveButton.addEventListener("click", () => executeProductAction("save"));
+exportCalibrationButton.addEventListener("click", () => {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  if (!view.canExportCalibration) return;
+  exportCalibrationVisible = true;
+  exportCalibrationPendingDestination = undefined;
+  exportDestinationTrans.checked = false;
+  exportDestinationOutput.checked = false;
+  exportCalibrationStatus.textContent = "";
+  exportCalibrationConfirmButton.disabled = true;
+  exportCalibrationOverlay.hidden = false;
+});
+for (const input of [exportDestinationTrans, exportDestinationOutput]) {
+  input.addEventListener("change", () => {
+    const view = deriveWorkspaceView(actor.getSnapshot());
+    exportCalibrationConfirmButton.disabled =
+      !view.canExportCalibration || !selectedCalibrationExportDestination();
+  });
+}
+exportCalibrationCancelButton.addEventListener("click", () => {
+  if (exportCalibrationPendingDestination) return;
+  exportCalibrationVisible = false;
+  exportCalibrationOverlay.hidden = true;
+});
+exportCalibrationConfirmButton.addEventListener("click", () => {
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  const destination = selectedCalibrationExportDestination();
+  if (!view.canExportCalibration || !destination) return;
+  exportCalibrationPendingDestination = destination;
+  exportCalibrationStatus.textContent =
+    `正在导出到当前章节/${destination}…`;
+  exportCalibrationConfirmButton.disabled = true;
+  lastUiAction = "export-calibration";
+  lastCommandId = undefined;
+  actor.send({ type: "EXPORT_CALIBRATION", destination });
+});
 resetCalibrationButton.addEventListener("click", () => {
   const view = deriveWorkspaceView(actor.getSnapshot());
   if (!view.canResetCalibration) return;

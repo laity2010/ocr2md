@@ -2,6 +2,9 @@ import {
   AllCommunityModule,
   type ColDef,
   type ICellRendererParams,
+  type IDoesFilterPassParams,
+  type IFilterComp,
+  type IFilterParams,
   ModuleRegistry,
   type RowClickedEvent,
   colorSchemeDark,
@@ -9,6 +12,7 @@ import {
   themeQuartz,
 } from "ag-grid-community";
 import { locateCandidate } from "../../../src/rowIdentity";
+import { sentenceProviderLabel } from "../../../src/sentenceFiles";
 import type { AnnotationPair, Candidate, SourceRange } from "../../../src/types";
 import type { ActiveReviewModule } from "./workspaceMachine";
 import {
@@ -48,6 +52,123 @@ const CHAPTER_TITLE_LINE_TYPES = [
   IGNORED,
 ] as const;
 
+class LineTypeCheckboxFilter implements IFilterComp<Candidate> {
+  private params!: IFilterParams<Candidate>;
+  private readonly gui = document.createElement("div");
+  private selected: Set<string> | null = null;
+  private values: string[] = [];
+
+  init(params: IFilterParams<Candidate>): void {
+    this.params = params;
+    this.gui.className = "config-enum-filter";
+    this.refreshValues();
+    this.render();
+  }
+
+  getGui(): HTMLElement {
+    return this.gui;
+  }
+
+  isFilterActive(): boolean {
+    return this.selected !== null;
+  }
+
+  doesFilterPass(params: IDoesFilterPassParams<Candidate>): boolean {
+    if (this.selected === null) return true;
+    const value = String(this.params.getValue(params.node) ?? "");
+    return this.selected.has(value);
+  }
+
+  getModel(): { values: string[] } | null {
+    return this.selected === null ? null : { values: [...this.selected] };
+  }
+
+  setModel(model: { values?: string[] } | null): void {
+    this.selected = model?.values ? new Set(model.values) : null;
+    this.refreshValues();
+    this.render();
+  }
+
+  afterGuiAttached(): void {
+    this.refreshValues();
+    this.render();
+  }
+
+  onNewRowsLoaded(): void {
+    this.refreshValues();
+    this.normaliseSelection();
+    this.render();
+  }
+
+  private refreshValues(): void {
+    const values = new Set<string>();
+    this.params.api.forEachLeafNode((node) => {
+      values.add(String(this.params.getValue(node) ?? ""));
+    });
+    this.values = [...values].filter(Boolean).sort((left, right) =>
+      left.localeCompare(right, "zh-CN"),
+    );
+  }
+
+  private normaliseSelection(): void {
+    if (this.selected === null) return;
+    const available = new Set(this.values);
+    this.selected = new Set(
+      [...this.selected].filter((value) => available.has(value)),
+    );
+    if (this.values.length > 0 && this.selected.size === this.values.length) {
+      this.selected = null;
+    }
+  }
+
+  private render(): void {
+    this.gui.replaceChildren();
+
+    const allLabel = document.createElement("label");
+    allLabel.className = "config-enum-filter-option config-enum-filter-all";
+    const allInput = document.createElement("input");
+    allInput.type = "checkbox";
+    allInput.checked = this.selected === null;
+    allInput.setAttribute("aria-label", "All");
+    const allText = document.createElement("span");
+    allText.textContent = "All";
+    allInput.addEventListener("change", () => {
+      this.selected = allInput.checked ? null : new Set<string>();
+      this.params.filterChangedCallback();
+      this.render();
+    });
+    allLabel.append(allInput, allText);
+    this.gui.append(allLabel);
+
+    const divider = document.createElement("div");
+    divider.className = "config-enum-filter-divider";
+    this.gui.append(divider);
+
+    for (const value of this.values) {
+      const label = document.createElement("label");
+      label.className = "config-enum-filter-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = this.selected === null || this.selected.has(value);
+      input.setAttribute("aria-label", value);
+      const text = document.createElement("span");
+      text.textContent = value;
+      input.addEventListener("change", () => {
+        const next = this.selected === null
+          ? new Set(this.values)
+          : new Set(this.selected);
+        if (input.checked) next.add(value);
+        else next.delete(value);
+        this.selected = next.size === this.values.length ? null : next;
+        this.params.filterChangedCallback();
+        this.render();
+      });
+      label.append(input, text);
+      this.gui.append(label);
+    }
+  }
+}
+
 function firstCodePoints(text: string, count: number): string {
   return Array.from(text).slice(0, count).join("");
 }
@@ -80,7 +201,10 @@ function visibleRowsForModule(
   module: ActiveReviewModule,
 ): Candidate[] {
   return rows.filter((row) => {
-    if (row.typeLabel !== module) return false;
+    const moduleMatches = module === "句子"
+      ? row.typeLabel === "分句"
+      : row.typeLabel === module;
+    if (!moduleMatches) return false;
     if (row.lineType === IGNORED || row.lineType === DELETED) return false;
     if (module === "章节标题") {
       return /^[1-6]\s*级标题$/.test(row.lineType ?? "");
@@ -124,6 +248,7 @@ export class CalibrationGrid {
         suppressMovable: true,
       },
       suppressMovableColumns: true,
+      suppressColumnVirtualisation: true,
       rowHeight: 42,
       headerHeight: 38,
       animateRows: false,
@@ -358,6 +483,11 @@ export class CalibrationGrid {
         field: "lineType",
         colId: "lineType",
         headerName: this.module === "变动行" ? "变动" : "行类型",
+        sortable: this.module !== "文本块" && this.module !== "句子",
+        filter:
+          this.module === "文本块" || this.module === "句子"
+            ? LineTypeCheckboxFilter
+            : false,
         cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
           this.lineTypeRenderer(params),
       },
@@ -437,11 +567,20 @@ export class CalibrationGrid {
         },
       );
     }
+    if (this.module === "句子") {
+      columns.push({
+        field: "preview",
+        colId: "sentenceSource",
+        headerName: "原文",
+      });
+    }
 
     if (this.module === "变动行") {
       // Changed-line audit columns are already complete above.
     } else if (this.module === "翻译") {
       // Translation source/provider columns are already complete above.
+    } else if (this.module === "句子") {
+      // Sentence provider columns are discovered from the independent JSON files below.
     } else if (this.module === "章节标题") {
       columns.push({
         colId: "chapterHeadingPreview",
@@ -482,7 +621,7 @@ export class CalibrationGrid {
         column,
       ]),
     );
-    return this.presentation[this.module].columns.flatMap((presentation) => {
+    const configured = this.presentation[this.module].columns.flatMap((presentation) => {
       const base = baseById.get(presentation.colId);
       if (!base) return [];
       return [{
@@ -496,6 +635,25 @@ export class CalibrationGrid {
         sortIndex: undefined,
       }];
     });
+    if (this.module !== "句子") return configured;
+
+    const providerPriority = (provider: string) =>
+      provider === "deepl" ? 0 : provider === "chatgpt" || provider === "openai" ? 1 : 2;
+    const providers = Array.from(new Set(
+      this.rows.flatMap((row) => Object.keys(row.translationResults ?? {})),
+    )).sort((left, right) =>
+      providerPriority(left) - providerPriority(right)
+      || left.localeCompare(right));
+    const providerColumns: ColDef<Candidate>[] = providers.map((provider) => ({
+      colId: `sentenceTranslation:${provider}`,
+      headerName: sentenceProviderLabel(provider),
+      minWidth: 300,
+      flex: 1,
+      sortable: false,
+      filter: false,
+      valueGetter: (params) => this.translationResultText(params.data, provider),
+    }));
+    return [...configured, ...providerColumns];
   }
 
   private mediaThumbnailRenderer(
@@ -614,6 +772,10 @@ export class CalibrationGrid {
         return (row as Candidate & { changeOwner?: string }).changeOwner ?? "";
       case "baselineContent":
         return row.baselinePreview ?? "";
+      case "sentenceSource":
+        return row.preview ?? row.raw ?? "";
+      case "translationInput":
+        return row.translationText ?? "";
       case "translationDeepL":
         return this.translationResultText(row, "deepl");
       case "translationOpenAI":
@@ -623,7 +785,7 @@ export class CalibrationGrid {
 
   private translationResultText(
     row: Candidate | undefined,
-    serviceId: "deepl" | "openai",
+    serviceId: string,
   ): string {
     if (!row) return "";
     const result = row.translationResults?.[serviceId];
@@ -714,6 +876,13 @@ export class CalibrationGrid {
     if (this.module === "变动行") {
       const node = document.createElement("span");
       node.className = "changed-line-state";
+      node.textContent = String(params.value ?? "");
+      return node;
+    }
+
+    if (this.module === "文本块" || this.module === "句子") {
+      const node = document.createElement("span");
+      node.className = "calibration-line-type-readonly";
       node.textContent = String(params.value ?? "");
       return node;
     }

@@ -10,6 +10,7 @@ import {
 import {
   Decoration,
   type DecorationSet,
+  drawSelection,
   EditorView,
   WidgetType,
   highlightActiveLineGutter,
@@ -301,6 +302,7 @@ export class WorkingEditor {
           ]),
           markdown(),
           syntaxHighlighting(obsidianSyntaxHighlight),
+          drawSelection(),
           sourceHeadingField,
           latexHighlightField,
           regexHighlightField,

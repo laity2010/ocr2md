@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { protectMarkdownForTranslation } from "./markdownProtection";
 import { scanTextBlocks } from "./textBlocks";
 import type { Candidate, SourceRange } from "./types";
 
@@ -26,13 +27,15 @@ const TERMINAL_BEFORE_FOOTNOTE = /([.!?。！？])([ \t]*(?:\[\^[^\]\r\n]+\])+)/
 export function scanSentences(markdown: string, sourcePath: string): Candidate[] {
   const rows: Candidate[] = [];
   for (const [blockIndex, block] of scanTextBlocks(markdown, sourcePath).entries()) {
-    if (block.lineType === "内嵌") continue;
+    if (block.lineType === "内嵌" || block.lineType === "LaTeX块") continue;
     const slices = block.lineType === "标题"
       ? [{ start: 0, end: block.raw.length }]
       : segmentTranslatableSentenceSlices(block.raw);
     slices.forEach((slice, index) => {
       const raw = block.raw.slice(slice.start, slice.end);
       if (!raw.trim()) return;
+      const protectedSentence = protectMarkdownForTranslation(raw);
+      if (!hasTranslatableText(protectedSentence.text)) return;
       const hash = createHash("sha256")
         .update(`${block.id}\0${index + 1}\0${raw}`)
         .digest("hex")
@@ -45,6 +48,8 @@ export function scanSentences(markdown: string, sourcePath: string): Candidate[]
         label: normalizePreview(raw),
         raw,
         preview: normalizePreview(raw),
+        translationText: protectedSentence.text,
+        translationProtection: protectedSentence.replacements,
         range: blockSliceRange(block, slice.start, slice.end),
         typeLabel: "分句",
         lineType: block.lineType,
@@ -58,6 +63,14 @@ export function scanSentences(markdown: string, sourcePath: string): Candidate[]
     });
   }
   return rows;
+}
+
+function hasTranslatableText(value: string): boolean {
+  const withoutPlaceholders = value
+    .replace(/<ocr2md-protected\b[^>]*\/>/gi, " ")
+    .replace(/<ocr2md-protected\b[^>]*>\s*<\/ocr2md-protected\s*>/gi, " ")
+    .trim();
+  return /[\p{L}\p{N}]/u.test(withoutPlaceholders);
 }
 
 export function segmentSentences(text: string): string[] {

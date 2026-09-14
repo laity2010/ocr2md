@@ -6,6 +6,8 @@ export type TablePresentationModule =
   | "媒体"
   | "变动行"
   | "章节定界"
+  | "文本块"
+  | "句子"
   | "翻译";
 
 export type TableColumnId =
@@ -27,6 +29,8 @@ export type TableColumnId =
   | "changeOwner"
   | "changedContent"
   | "baselineContent"
+  | "sentenceSource"
+  | "translationInput"
   | "translationSource"
   | "translationDeepL"
   | "translationOpenAI";
@@ -133,6 +137,8 @@ const COLUMN_LABELS: Record<TableColumnId, string> = {
   changeOwner: "归属模块",
   changedContent: "变动内容",
   baselineContent: "原稿内容",
+  sentenceSource: "原文",
+  translationInput: "翻译输入",
   translationSource: "原文",
   translationDeepL: "DeepL",
   translationOpenAI: "GPT",
@@ -164,6 +170,8 @@ const MODULE_COLUMNS: Record<TablePresentationModule, readonly TableColumnId[]> 
     "baselineContent",
   ],
   章节定界: ["sourceLine", "lineType", "chapterFile", "preview"],
+  文本块: ["sourceLine", "lineType", "preview"],
+  句子: ["sourceLine", "lineType", "sentenceSource"],
   翻译: [
     "sourceLine",
     "lineType",
@@ -249,6 +257,8 @@ const DEFAULT_STYLES: Partial<Record<TableColumnId, TableColumnPresentation>> = 
   changeOwner: { width: 120, minWidth: 110 },
   changedContent: { minWidth: 360, flex: 1 },
   baselineContent: { minWidth: 300, flex: 1 },
+  sentenceSource: { minWidth: 320, flex: 1 },
+  translationInput: { minWidth: 360, flex: 1 },
   translationSource: { minWidth: 320, flex: 1 },
   translationDeepL: { minWidth: 300, flex: 1 },
   translationOpenAI: { minWidth: 300, flex: 1 },
@@ -300,6 +310,8 @@ const LEGACY_TABLE_PRESENTATION_DEFAULT: LegacyTablePresentationConfig = {
     媒体: defaultModule("媒体"),
     变动行: defaultModule("变动行"),
     章节定界: defaultModule("章节定界"),
+    文本块: defaultModule("文本块"),
+    句子: defaultModule("句子"),
     翻译: defaultModule("翻译"),
   },
 };

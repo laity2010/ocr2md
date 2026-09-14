@@ -6,7 +6,12 @@ test("catalog selects multiple real project chapters and persistence survives re
   const catalogResponse = await request.get("/__workspace/chapters");
   const catalog = await catalogResponse.json() as {
     projectName: string;
-    chapters: Array<{ id: string; name: string; ready: boolean }>;
+    chapters: Array<{
+      id: string;
+      name: string;
+      ready: boolean;
+      transReady?: boolean;
+    }>;
   };
   const chapterB = catalog.chapters.find((item) => item.name === "02 Appendix A")!;
   const chapterBResponse = await request.get(
@@ -21,12 +26,20 @@ test("catalog selects multiple real project chapters and persistence survives re
   await expect(page.locator("#project-name")).toHaveText(catalog.projectName);
   await expect(page.locator(".workspace-tab")).toHaveCount(0);
   await expect(page.locator("#chapter-select")).toHaveAttribute("aria-label", "项目导航");
+  const transNodeCount = catalog.chapters.filter((chapter) => chapter.transReady).length;
   await expect(page.locator("#chapter-select option")).toHaveCount(
-    catalog.chapters.length + 4,
+    catalog.chapters.length + transNodeCount + 3,
   );
   await expect(page.locator("#chapter-select option", { hasText: "ocr" })).toBeEnabled();
   await expect(page.locator("#chapter-select option", { hasText: "chapters" }).first()).toBeDisabled();
-  await expect(page.locator("#chapter-select option", { hasText: "trans · 待规划" })).toBeDisabled();
+  await expect(page.locator("#chapter-select option", { hasText: "trans · 待规划" })).toHaveCount(0);
+  for (const chapter of catalog.chapters.filter((item) => item.transReady)) {
+    const transOption = page.locator(
+      `#chapter-select option[value="__node_trans_${chapter.id}__"]`,
+    );
+    await expect(transOption).toBeEnabled();
+    await expect(transOption).toHaveText("\u3000\u3000└─ trans");
+  }
   await expect(page.locator("#chapter-select option", { hasText: "00 Incomplete" })).toBeDisabled();
   const readyCount = catalog.chapters.filter((chapter) => chapter.ready).length;
   await expect(page.locator("#chapter-selection-status")).toContainText(

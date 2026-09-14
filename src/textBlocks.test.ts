@@ -43,6 +43,13 @@ assert.ok(rows.every((row) => !row.raw.includes("ocr2md_format_calibrated")), "Y
 assert.strictEqual(classifyTextBlock("### Heading"), "标题");
 assert.strictEqual(classifyTextBlock("[^12]: note"), "注释正文");
 assert.strictEqual(classifyTextBlock(">\nTable\n><embed id=02></embed>"), "内嵌");
+assert.strictEqual(classifyTextBlock("$$\nE = mc^2\n$$"), "LaTeX块");
 assert.strictEqual(classifyTextBlock("plain text"), "文本");
+
+const latexRows = scanTextBlocks(
+  ["Before.", "<br>", "", "$$", "E = mc^2", "$$", "<br>", "", "After."].join("\n"),
+  "/ws/chapters/01/trans/01.md",
+);
+assert.deepStrictEqual(latexRows.map((row) => row.lineType), ["文本", "LaTeX块", "文本"]);
 
 console.log("textBlocks tests passed");

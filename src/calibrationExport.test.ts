@@ -49,7 +49,7 @@ const simple = [
 ];
 assert.strictEqual(
   formatEmbed(groupEmbeds(simple)[0]),
-  [">", "FIGURE 1.1 | Title", "内嵌图片链接: ![[imgs/a.jpg]]", "><embed id=01></embed>", "<br>"].join("\n"),
+  [">", "FIGURE 1.1 | Title", "![[imgs/a.jpg]]", "><embed id=01></embed>", "<br>"].join("\n"),
 );
 
 const tableRows = [
@@ -124,8 +124,7 @@ assert.strictEqual(
   [
     ">",
     "FIGURE 14.4 | Excess Returns around Earnings Announcements",
-    "内嵌图片链接: ![[imgs/xxx.jpg]]",
-    ">",
+    "![[imgs/xxx.jpg]]",
     "Source: D. Craig Nichols and James Whalen",
     "><embed id=05></embed>",
     "<br>",
@@ -141,7 +140,7 @@ const rowOrderedEmbed = [
 const rowOrderedBlock = formatEmbed(groupEmbeds(rowOrderedEmbed)[0]);
 assert.ok(
   rowOrderedBlock.indexOf("Source text appears first.") < rowOrderedBlock.indexOf("FIGURE 6 | Ordered")
-    && rowOrderedBlock.indexOf("FIGURE 6 | Ordered") < rowOrderedBlock.indexOf("内嵌图片链接: ![[imgs/order.jpg]]"),
+    && rowOrderedBlock.indexOf("FIGURE 6 | Ordered") < rowOrderedBlock.indexOf("![[imgs/order.jpg]]"),
   "embed export order must follow source line numbers rather than input array order or line type",
 );
 
@@ -181,7 +180,8 @@ assert.ok(exported.includes("See[^1] here.\n<br>\n\n"));
 assert.ok(exported.includes("Keep this paragraph.\n<br>\n\n[^1]: Footnote body\n<br>"));
 assert.ok(!exported.includes("1. Footnote body"));
 assert.ok(exported.endsWith("[^1]: Footnote body\n<br>\n"));
-assert.ok(exported.includes("内嵌图片链接: ![[imgs/a.jpg]]"));
+assert.ok(exported.includes("![[imgs/a.jpg]]"));
+assert.ok(!exported.includes("内嵌图片链接:"));
 assert.ok(exported.includes("><embed id=01></embed>"));
 assert.ok(!exported.includes("![image](https://cdn.example/a.jpg)"));
 

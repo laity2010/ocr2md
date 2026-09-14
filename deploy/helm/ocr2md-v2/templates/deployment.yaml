@@ -65,5 +65,11 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
         - name: workspace
+          {{- if .Values.workspace.hostPath }}
+          hostPath:
+            path: {{ .Values.workspace.hostPath | quote }}
+            type: Directory
+          {{- else }}
           persistentVolumeClaim:
             claimName: {{ default (printf "%s-workspace" .Release.Name) .Values.workspace.existingClaim | quote }}
+          {{- end }}
