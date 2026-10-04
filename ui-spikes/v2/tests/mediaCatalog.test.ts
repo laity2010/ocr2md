@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { deriveMediaCatalog } from "../src/mediaCatalog";
+import {
+  adoptedMediaLocalPath,
+  deriveAdoptedMediaRoutes,
+  deriveMediaCatalog,
+} from "../src/mediaCatalog";
 import type { ChapterWorkspaceData } from "../src/chapterRepository";
 
 const chapter: ChapterWorkspaceData = {
@@ -71,6 +75,27 @@ assert.deepEqual(
   mappedCatalog.map((item) => [item.group, item.displayName]),
   [["已采用", "used.png"]],
   "an existing sidecar localPath must adopt the real local media and suppress its old external URL",
+);
+const adoptedRoutes = deriveAdoptedMediaRoutes(sidecarAdopted);
+assert.equal(
+  adoptedMediaLocalPath("https://cdn.example.com/media/remote.png", adoptedRoutes),
+  "imgs/used.png",
+  "preview routing must honor the exact sidecar source target",
+);
+assert.equal(
+  adoptedMediaLocalPath("legacy/path/remote.png", adoptedRoutes),
+  "imgs/used.png",
+  "preview routing must fall back to a unique source basename for legacy rewritten paths",
+);
+const preservedLegacyRoutes = deriveAdoptedMediaRoutes({
+  ...sidecarAdopted,
+  rows: [],
+  mediaSourceRoutes: [{ source: "image.png", localPath: "imgs/used.png" }],
+});
+assert.equal(
+  adoptedMediaLocalPath("ocr2md/legacy/chapter/image.png", preservedLegacyRoutes),
+  "imgs/used.png",
+  "preview routing must preserve sidecar mappings even when refreshed rows no longer carry the old raw target",
 );
 
 console.log("mediaCatalog tests passed");

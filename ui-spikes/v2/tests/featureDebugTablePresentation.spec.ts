@@ -49,7 +49,7 @@ test("table presentation feature debug hot-applies persists guards invalid confi
   await action.click();
 
   await expect(page.locator("#feature-debug-progress-title")).toContainText(
-    "表格配置功能调试",
+    "配置功能调试",
   );
   await expect(page.locator("#feature-debug-progress-title")).toContainText(
     "5/5 通过",

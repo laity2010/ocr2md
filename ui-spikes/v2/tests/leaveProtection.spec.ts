@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 async function chapterByName(request: APIRequestContext, name: string) {
@@ -39,7 +40,7 @@ test("dirty close offers cancel, discard, and save-before-close", async ({ page,
   await editor.click();
   await page.keyboard.type("C");
   await expect(page.locator("#state-value")).toHaveText("chapter-dirty");
-  await page.locator("#close").click();
+  await closeChapter(page);
   await expect(page.locator("#state-value")).toHaveText("chapter-leave-confirm");
   await expect(page.locator("#leave-confirm-overlay")).toBeVisible();
   await expect(page.locator("#leave-confirm-message")).toContainText("关闭当前章节");
@@ -53,7 +54,7 @@ test("dirty close offers cancel, discard, and save-before-close", async ({ page,
   await expect(page.locator("#working-length")).toHaveText(String(baselineLength + 1));
 
   // Discard: close without persisting C.
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#leave-discard").click();
   await expect(page.locator("#state-value")).toHaveText("idle");
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
@@ -64,14 +65,14 @@ test("dirty close offers cancel, discard, and save-before-close", async ({ page,
   await editor.click();
   await page.keyboard.type("S");
   await expect(page.locator("#state-value")).toHaveText("chapter-dirty");
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#leave-save").click();
   await expect(page.locator("#state-value")).toHaveText("idle");
 
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#working-length")).toHaveText(String(baselineLength + 1));
-  await page.locator("#close").click();
+  await closeChapter(page);
 
   // Restore isolated test workspace baseline.
   const current = await workspace(request, chapter.id);
@@ -121,7 +122,7 @@ test("dirty chapter switch uses the same leave protection", async ({ page, reque
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#chapter-name")).toHaveText("02 Appendix A.md");
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#chapter-select").selectOption(chapterA.id);
   await expect(page.locator("#working-length")).toHaveText(
     String(baselineA.workingText.length),
@@ -136,12 +137,12 @@ test("dirty chapter switch uses the same leave protection", async ({ page, reque
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#chapter-name")).toHaveText("02 Appendix A.md");
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#chapter-select").selectOption(chapterA.id);
   await expect(page.locator("#working-length")).toHaveText(
     String(baselineA.workingText.length + 1),
   );
-  await page.locator("#close").click();
+  await closeChapter(page);
 
   const currentA = await workspace(request, chapterA.id);
   const restore = await request.post("/__workspace/chapter", {

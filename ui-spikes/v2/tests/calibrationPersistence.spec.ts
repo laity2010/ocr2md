@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test } from "@playwright/test";
 
 test("AG Grid ignored calibration saves to sidecar and survives reentry", async ({ page, request }) => {
@@ -60,7 +61,7 @@ test("AG Grid ignored calibration saves to sidecar and survives reentry", async 
   expect(savedRevision).not.toBe(changedRevision);
   expect(savedRevision).not.toBe(baseline.revision.slice(0, 16));
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#visible-calibration-rows")).toHaveText(
@@ -71,7 +72,7 @@ test("AG Grid ignored calibration saves to sidecar and survives reentry", async 
   );
   await expect(page.locator("#working-length")).toHaveText(workingLength!);
 
-  await page.locator("#close").click();
+  await closeChapter(page);
 
   const currentResponse = await request.get(
     `/__workspace/chapter?chapterId=${encodeURIComponent(chapter.id)}`,

@@ -61,6 +61,48 @@ with tempfile.TemporaryDirectory() as tmp:
     assert captured["body"]["ignore_tags"] == ["ocr2md-protected"]
     assert captured["headers"]["Authorization"] == "DeepL-Auth-Key deepl-secret-test"
 
+    captured.clear()
+    def fake_deepl_batch(endpoint, body, headers):
+        captured.update(endpoint=endpoint, body=body, headers=headers)
+        return {"translations": [
+            {"text": "第一句。"},
+            {"text": '第二句 <ocr2md-protected id="p0002"/>。'},
+        ]}
+    store._request_json = fake_deepl_batch
+    batch = store.translate_deepl_batch([
+        {"sourceText": "First sentence.", "translationText": "First sentence."},
+        {
+            "sourceText": "Second $R_t$ sentence.",
+            "translationText": 'Second <ocr2md-protected id="p0002"/> sentence.',
+        },
+    ], "First sentence. Second $R_t$ sentence. Surrounding paragraph context.")
+    assert len(batch["results"]) == 2
+    assert all(item["placeholderIntegrity"] for item in batch["results"])
+    assert captured["body"]["text"] == [
+        "First sentence.",
+        'Second <ocr2md-protected id="p0002"/> sentence.',
+    ]
+    assert captured["body"]["context"].endswith("Surrounding paragraph context.")
+    assert captured["body"]["split_sentences"] == "0"
+
+    captured.clear()
+    def fake_deepl_xml_safe(endpoint, body, headers):
+        captured.update(endpoint=endpoint, body=body, headers=headers)
+        return {"translations": [{"text": '研发 &amp; 价值 &lt; 10 <ocr2md-protected id="p0001"/>'}]}
+    store._request_json = fake_deepl_xml_safe
+    escaped = store.translate_deepl_batch([
+        {
+            "sourceText": "R&D value < 10 $R_t$",
+            "translationText": 'R&D value < 10 <ocr2md-protected id="p0001"/>',
+        },
+    ], "Context: R&D and A < B > C")
+    assert captured["body"]["text"] == [
+        'R&amp;D value &lt; 10 <ocr2md-protected id="p0001"/>',
+    ]
+    assert captured["body"]["context"] == "Context: R&amp;D and A &lt; B &gt; C"
+    assert escaped["results"][0]["translatedText"] == '研发 & 价值 < 10 <ocr2md-protected id="p0001"/>'
+    assert escaped["results"][0]["placeholderIntegrity"] is True
+
     saved = store.save_service("chatgpt", {
         "endpoint": "https://api.openai.com/v1/responses",
         "model": "gpt-5.6-luna",
@@ -141,6 +183,27 @@ with tempfile.TemporaryDirectory() as tmp:
     (chapter_dir / "01 Test.ocr2md.json").write_text("{}\n", encoding="utf-8")
     store = ChapterProjectStore(project)
     chapter_id = store.chapter_id(chapter_dir)
+
+    chapter_revision = store.read(chapter_id)["revision"]
+    old_source = "# Test\n\n>\n![[imgs/old.png]]\nText.\n"
+    exported = store.export_trans_source(chapter_id, chapter_revision, old_source)
+    assert exported["conflict"] is False
+    trans_dir = chapter_dir / "trans"
+    trans_working_path = trans_dir / "01 Test.working.md"
+    trans_source_path = trans_dir / "01 Test.md"
+    trans_working_path.write_text(
+        trans_working_path.read_text(encoding="utf-8").replace("Text.", "Text edited in trans."),
+        encoding="utf-8",
+    )
+    new_source = "# Test\n\n>\n![[imgs/new.png]]\nText.\n"
+    exported = store.export_trans_source(chapter_id, chapter_revision, new_source)
+    assert exported["conflict"] is False
+    refreshed_working = trans_working_path.read_text(encoding="utf-8")
+    assert "![[imgs/new.png]]" in refreshed_working
+    assert "![[imgs/old.png]]" not in refreshed_working
+    assert "Text edited in trans." in refreshed_working
+    assert trans_source_path.read_text(encoding="utf-8") == new_source
+
     first = {
         "id": "sentence-1",
         "sourceFingerprint": "source-1",

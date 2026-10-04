@@ -10,6 +10,10 @@ import {
   scanObsidianCalloutsForPreview,
   type ObsidianCalloutPreview,
 } from "./obsidianPreviewCompat";
+import {
+  adoptedMediaLocalPath,
+  type AdoptedMediaRoutes,
+} from "./mediaCatalog";
 
 const md = new MarkdownIt({
   html: true,
@@ -19,12 +23,16 @@ const md = new MarkdownIt({
 
 type PreviewEnvironment = {
   chapterId?: string;
+  mediaRoutes?: AdoptedMediaRoutes;
 };
 
 const FOOTNOTE_REFERENCE = /\[\^([^\]\r\n]+)\](?!:)/g;
 const FOOTNOTE_DEFINITION = /^\[\^([^\]]+)\]:[ \t]*(.*)$/;
 const FOOTNOTE_LONG_PRESS_MS = 450;
 const FOOTNOTE_PRESS_MOVE_TOLERANCE = 12;
+const TRANSLATION_POPOVER_DEFAULT_TAPS = 4;
+const TRANSLATION_POPOVER_MAX_TAPS = 6;
+const TRANSLATION_POPOVER_TAP_GAP_MS = 1800;
 
 function footnoteBodies(text: string): Map<string, string> {
   const result = new Map<string, string>();
@@ -108,15 +116,35 @@ function chapterImageUrl(
     + encodeURIComponent(normalized);
 }
 
+function routedChapterImageUrl(
+  chapterId: string | undefined,
+  source: string,
+  mediaRoutes?: AdoptedMediaRoutes,
+): string | undefined {
+  const direct = chapterImageUrl(chapterId, source);
+  if (direct) return direct;
+  const adopted = adoptedMediaLocalPath(source, mediaRoutes);
+  return adopted ? chapterImageUrl(chapterId, adopted) : undefined;
+}
+
+function mediaRouteSignature(routes: AdoptedMediaRoutes | undefined): string {
+  if (!routes) return "";
+  return JSON.stringify([
+    [...routes.exact.entries()].sort(([a], [b]) => a.localeCompare(b)),
+    [...routes.basename.entries()].sort(([a], [b]) => a.localeCompare(b)),
+  ]);
+}
+
 function rewriteObsidianImageEmbeds(
   text: string,
   chapterId: string | undefined,
+  mediaRoutes?: AdoptedMediaRoutes,
 ): string {
   if (!chapterId) return text;
   return text.replace(
     /!\[\[([^\]|\r\n]+\.(?:png|jpe?g|webp|gif))(?:\|[^\]\r\n]+)?\]\]/gi,
     (whole, source: string) => {
-      const url = chapterImageUrl(chapterId, source.trim());
+      const url = routedChapterImageUrl(chapterId, source.trim(), mediaRoutes);
       return url ? `![image](${url})` : whole;
     },
   );
@@ -131,9 +159,11 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const source = token.attrGet("src");
   if (source) {
-    const routed = chapterImageUrl(
-      (env as PreviewEnvironment).chapterId,
+    const previewEnv = env as PreviewEnvironment;
+    const routed = routedChapterImageUrl(
+      previewEnv.chapterId,
       String(source),
+      previewEnv.mediaRoutes,
     );
     if (routed) token.attrSet("src", routed);
   }
@@ -446,6 +476,7 @@ function annotateTranslationSentences(
 export class BasicMarkdownPreview {
   private lastText = "";
   private lastChapterId: string | undefined;
+  private lastMediaRouteSignature = "";
   private lastMode: "markdown" | "media" | "translation-document" | "translated-document" = "markdown";
   private footnoteBodies = new Map<string, string>();
   private footnotePressTimer: number | undefined;
@@ -458,6 +489,15 @@ export class BasicMarkdownPreview {
   private footnoteLongPressTriggered = false;
   private translationPopover: HTMLElement | undefined;
   private translationBySentenceId = new Map<string, { text?: string; title: string }>();
+  private translationPopoverTapCount = TRANSLATION_POPOVER_DEFAULT_TAPS;
+  private translationTapSentenceId = "";
+  private translationTapProgress = 0;
+  private translationLastTapAt = 0;
+  private readingLineTargets = new Map<number, HTMLElement>();
+  private readingLineLayoutFrame = 0;
+  private readingScrollFrame = 0;
+  private readingAnchorSourceLineValue: number | undefined;
+  private readingProgrammaticScrollActive = false;
 
   constructor(private readonly root: HTMLElement) {
     this.root.addEventListener("click", (event) => {
@@ -488,7 +528,13 @@ export class BasicMarkdownPreview {
       if (!target.closest("a, button")) {
         const sentence = target.closest<HTMLElement>(".ocr2md-translation-sentence");
         if (sentence) {
-          this.toggleTranslationPopover(sentence);
+          if (sentence.classList.contains("is-open")) {
+            this.toggleTranslationPopover(sentence);
+            return;
+          }
+          if (this.translationTapThresholdReached(sentence)) {
+            this.toggleTranslationPopover(sentence);
+          }
           return;
         }
       }
@@ -504,6 +550,10 @@ export class BasicMarkdownPreview {
       button.setAttribute("aria-expanded", String(collapsed));
     });
     this.root.addEventListener("pointerdown", (event) => {
+      const pointerTarget = event.target instanceof Element ? event.target : undefined;
+      if (!pointerTarget?.closest(".ocr2md-reading-line-button")) {
+        this.readingProgrammaticScrollActive = false;
+      }
       const reference = this.footnoteReferenceFromEvent(event);
       if (!reference || !event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
         return;
@@ -580,6 +630,30 @@ export class BasicMarkdownPreview {
         || event.pointerId === this.footnotePressPointerId
       ) this.cancelFootnotePress();
     });
+    this.root.addEventListener("scroll", () => {
+      if (!this.isReadingMode()) return;
+      cancelAnimationFrame(this.readingScrollFrame);
+      this.readingScrollFrame = requestAnimationFrame(() => {
+        if (this.readingProgrammaticScrollActive && this.readingAnchorSourceLineValue) {
+          this.root.dataset.readingSourceLine = String(this.readingAnchorSourceLineValue);
+          return;
+        }
+        const line = this.readingTopSourceLine();
+        if (!line) return;
+        this.readingAnchorSourceLineValue = line;
+        this.root.dataset.readingSourceLine = String(line);
+      });
+    }, { passive: true });
+    this.root.addEventListener("wheel", () => {
+      this.readingProgrammaticScrollActive = false;
+    }, { passive: true });
+    this.root.addEventListener("load", () => {
+      if (!this.isReadingMode()) return;
+      this.queueReadingLineLayout();
+      if (this.readingProgrammaticScrollActive && this.readingAnchorSourceLineValue) {
+        this.scrollReadingToSourceLine(this.readingAnchorSourceLineValue);
+      }
+    }, true);
   }
 
   private footnoteReferenceFromEvent(event: Event): HTMLElement | undefined {
@@ -643,9 +717,39 @@ export class BasicMarkdownPreview {
     this.footnotePopover = popover;
   }
 
+  setTranslationPopoverTapCount(value: number): void {
+    const normalized = Number.isFinite(value)
+      ? Math.min(TRANSLATION_POPOVER_MAX_TAPS, Math.max(1, Math.round(value)))
+      : TRANSLATION_POPOVER_DEFAULT_TAPS;
+    this.translationPopoverTapCount = normalized;
+    this.resetTranslationTapProgress();
+  }
+
+  private resetTranslationTapProgress(): void {
+    this.translationTapSentenceId = "";
+    this.translationTapProgress = 0;
+    this.translationLastTapAt = 0;
+  }
+
+  private translationTapThresholdReached(sentence: HTMLElement): boolean {
+    const sentenceId = sentence.dataset.sentenceId ?? "";
+    if (!sentenceId) return false;
+    const now = Date.now();
+    const continuesSequence =
+      this.translationTapSentenceId === sentenceId
+      && now - this.translationLastTapAt <= TRANSLATION_POPOVER_TAP_GAP_MS;
+    this.translationTapSentenceId = sentenceId;
+    this.translationTapProgress = continuesSequence ? this.translationTapProgress + 1 : 1;
+    this.translationLastTapAt = now;
+    if (this.translationTapProgress < this.translationPopoverTapCount) return false;
+    this.resetTranslationTapProgress();
+    return true;
+  }
+
   private closeTranslationPopover(): void {
     this.translationPopover?.remove();
     this.translationPopover = undefined;
+    this.resetTranslationTapProgress();
     for (const sentence of Array.from(
       this.root.querySelectorAll<HTMLElement>(".ocr2md-translation-sentence.is-open"),
     )) sentence.classList.remove("is-open");
@@ -685,6 +789,154 @@ export class BasicMarkdownPreview {
     popover.style.top = `${Math.round(top)}px`;
     sentence.classList.add("is-open");
     this.translationPopover = popover;
+  }
+
+  private isReadingMode(): boolean {
+    return this.lastMode === "translation-document" || this.lastMode === "translated-document";
+  }
+
+  private clearReadingLineButtons(): void {
+    cancelAnimationFrame(this.readingLineLayoutFrame);
+    this.readingLineLayoutFrame = 0;
+    this.readingLineTargets.clear();
+    this.readingAnchorSourceLineValue = undefined;
+    this.readingProgrammaticScrollActive = false;
+    this.root.classList.remove("ocr2md-reading-preview");
+    delete this.root.dataset.readingSourceLine;
+    for (const button of Array.from(
+      this.root.querySelectorAll<HTMLElement>(".ocr2md-reading-line-button"),
+    )) button.remove();
+  }
+
+  private readingTextTarget(sourceText: string): HTMLElement | undefined {
+    const body = sourceText.slice(translationSentenceContentStart(sourceText));
+    FOOTNOTE_REFERENCE.lastIndex = 0;
+    const expected = decodedRenderedText(
+      body.replace(FOOTNOTE_REFERENCE, "").replace(/[*_`~]/g, "").trim(),
+    );
+    if (!expected) return undefined;
+
+    const walker = document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const parent = node.parentElement;
+      if (!parent) continue;
+      if (parent.closest(
+        ".ocr2md-reading-line-button, .ocr2md-footnote-popover, .ocr2md-translation-popover, script, style, textarea",
+      )) continue;
+      if (node.data.includes(expected)) return parent;
+    }
+    return undefined;
+  }
+
+  private installReadingLineButtons(
+    pairs: readonly { id: string; line: number; sourceText: string }[],
+  ): void {
+    this.clearReadingLineButtons();
+    this.root.classList.add("ocr2md-reading-preview");
+
+    const uniqueLines = [...new Set(
+      pairs.map((pair) => pair.line).filter((line) => Number.isFinite(line) && line > 0),
+    )].sort((left, right) => left - right);
+
+    for (const line of uniqueLines) {
+      const linePairs = pairs.filter((pair) => pair.line === line);
+      let target: HTMLElement | undefined;
+      for (const pair of linePairs) {
+        target = Array.from(
+          this.root.querySelectorAll<HTMLElement>(".ocr2md-translation-sentence"),
+        ).find((node) => node.dataset.sentenceId === pair.id);
+        if (target) break;
+      }
+      target ??= Array.from(
+        this.root.querySelectorAll<HTMLElement>("[data-source-line]"),
+      ).find((node) => Number(node.dataset.sourceLine) === line);
+      if (!target) {
+        for (const pair of linePairs) {
+          target = this.readingTextTarget(pair.sourceText);
+          if (target) break;
+        }
+      }
+      if (!target) continue;
+
+      target.dataset.readingSourceLine = String(line);
+      this.readingLineTargets.set(line, target);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ocr2md-reading-line-button";
+      button.dataset.readingSourceLine = String(line);
+      button.title = `定位到源码第 ${line} 行`;
+      button.setAttribute("aria-label", `源码第 ${line} 行`);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.scrollReadingToSourceLine(line);
+      });
+      this.root.append(button);
+    }
+
+    const firstLine = this.readingTopSourceLine() ?? uniqueLines[0];
+    if (firstLine) {
+      this.readingAnchorSourceLineValue = firstLine;
+      this.root.dataset.readingSourceLine = String(firstLine);
+    }
+    this.queueReadingLineLayout();
+  }
+
+  private queueReadingLineLayout(): void {
+    cancelAnimationFrame(this.readingLineLayoutFrame);
+    this.readingLineLayoutFrame = requestAnimationFrame(() => {
+      this.readingLineLayoutFrame = 0;
+      const rootRect = this.root.getBoundingClientRect();
+      for (const button of Array.from(
+        this.root.querySelectorAll<HTMLButtonElement>(".ocr2md-reading-line-button"),
+      )) {
+        const line = Number(button.dataset.readingSourceLine);
+        const target = this.readingLineTargets.get(line);
+        if (!target) continue;
+        const targetRect = target.getBoundingClientRect();
+        const top = targetRect.top - rootRect.top + this.root.scrollTop;
+        button.style.top = `${Math.max(4, Math.round(top))}px`;
+      }
+    });
+  }
+
+  readingTopSourceLine(): number | undefined {
+    if (!this.readingLineTargets.size) return undefined;
+    const previewTop = this.root.getBoundingClientRect().top + 20;
+    const ordered = [...this.readingLineTargets.entries()]
+      .sort((left, right) => left[0] - right[0]);
+    let candidate = ordered[0]?.[0];
+    for (const [line, target] of ordered) {
+      if (target.getBoundingClientRect().top > previewTop) break;
+      candidate = line;
+    }
+    return candidate;
+  }
+
+  readingAnchorSourceLine(): number | undefined {
+    return this.readingAnchorSourceLineValue ?? this.readingTopSourceLine();
+  }
+
+  scrollReadingToSourceLine(line: number): boolean {
+    if (!this.readingLineTargets.size || !Number.isFinite(line)) return false;
+    const ordered = [...this.readingLineTargets.entries()]
+      .sort((left, right) => left[0] - right[0]);
+    let match = ordered[0];
+    for (const entry of ordered) {
+      if (entry[0] > line) break;
+      match = entry;
+    }
+    if (!match) return false;
+    const [matchedLine, target] = match;
+    const rootRect = this.root.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    this.readingAnchorSourceLineValue = matchedLine;
+    this.readingProgrammaticScrollActive = true;
+    this.root.scrollTop += targetRect.top - rootRect.top - 16;
+    this.root.dataset.readingSourceLine = String(matchedLine);
+    return true;
   }
 
   private renderCallout(
@@ -768,15 +1020,20 @@ export class BasicMarkdownPreview {
     text: string,
     chapterId?: string,
     footnoteText: string = text,
+    mediaRoutes?: AdoptedMediaRoutes,
   ): void {
+    if (this.isReadingMode()) this.clearReadingLineButtons();
+    const routeSignature = mediaRouteSignature(mediaRoutes);
     if (
       this.lastMode === "markdown"
       && text === this.lastText
       && chapterId === this.lastChapterId
+      && routeSignature === this.lastMediaRouteSignature
     ) return;
     this.lastMode = "markdown";
     this.lastText = text;
     this.lastChapterId = chapterId;
+    this.lastMediaRouteSignature = routeSignature;
     this.cancelFootnotePress();
     this.footnotePinnedNumber = undefined;
     this.footnoteLongPressTriggered = false;
@@ -790,10 +1047,10 @@ export class BasicMarkdownPreview {
       return;
     }
 
-    const env: PreviewEnvironment = { chapterId };
+    const env: PreviewEnvironment = { chapterId, mediaRoutes };
     const normalized = normalizeObsidianEmbedBlocksForPreview(
       maskLeadingYamlFrontmatter(
-        rewriteObsidianImageEmbeds(text, chapterId),
+        rewriteObsidianImageEmbeds(text, chapterId, mediaRoutes),
       ),
     );
     const callouts = scanObsidianCalloutsForPreview(normalized.markdown);
@@ -849,16 +1106,24 @@ export class BasicMarkdownPreview {
     displayMarkdown: string,
     annotatedMarkdown: string,
     chapterId: string | undefined,
+    readingLines: readonly { id: string; line: number; sourceText: string }[],
     decorateDomOnly: () => void,
     popovers: ReadonlyMap<string, { text?: string; title: string }>,
   ): void {
     if (this.lastMode === mode && this.lastText === signature) return;
+    const preservedSourceLine = this.isReadingMode()
+      ? this.readingAnchorSourceLine()
+      : undefined;
 
     // Reading in either direction uses exactly the same Markdown/Obsidian
     // renderer. Interactive sentence spans belong only to the rendered input;
     // footnote semantics always come from the clean display document.
     this.render(annotatedMarkdown, chapterId, displayMarkdown);
     decorateDomOnly();
+    this.installReadingLineButtons(readingLines);
+    if (preservedSourceLine) {
+      this.scrollReadingToSourceLine(preservedSourceLine);
+    }
     this.translationBySentenceId = new Map(popovers);
     this.closeTranslationPopover();
     this.lastMode = mode;
@@ -890,6 +1155,11 @@ export class BasicMarkdownPreview {
       text,
       annotated,
       chapterId,
+      pairs.map((pair) => ({
+        id: pair.id,
+        line: pair.range.line + 1,
+        sourceText: pair.sourceText,
+      })),
       () => decorateRenderedTranslationSentences(
         this.root,
         pairs.filter((pair) => pair.domOnly),
@@ -925,6 +1195,11 @@ export class BasicMarkdownPreview {
       displayMarkdown,
       annotatedMarkdown,
       chapterId,
+      pairs.map((pair) => ({
+        id: pair.id,
+        line: pair.range.line + 1,
+        sourceText: pair.sourceText,
+      })),
       () => decorateRenderedTranslatedSentences(
         this.root,
         pairs.filter((pair) => pair.domOnly),

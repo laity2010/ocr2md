@@ -1,0 +1,57 @@
+#!/bin/zsh
+set -euo pipefail
+umask 077
+
+PYTHON="${OCR2MD_PYTHON:-/opt/homebrew/bin/python3}"
+SCRIPT_DIR="${0:A:h}"
+ROOT="${SCRIPT_DIR:h:h}"
+WORKSPACE_ROOT="${OCR2MD_WORKSPACE_ROOT:-$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/ocr2md}"
+CONFIG_DIR="${OCR2MD_CONFIG_DIR:-$HOME/.ocr2md-private}"
+SELECTION_FILE="${OCR2MD_WORKSPACE_SELECTION_FILE:-$CONFIG_DIR/workspace-selection.json}"
+DEBUG_DIR="${OCR2MD_DEBUG_DIR:-$ROOT/.runtime/ocr2md-debug}"
+PORT="${OCR2MD_PORT:-4176}"
+
+if [[ ! -d "$WORKSPACE_ROOT" ]]; then
+  echo "workspace root missing: $WORKSPACE_ROOT" >&2
+  exit 2
+fi
+if [[ ! -f "$SELECTION_FILE" ]]; then
+  echo "workspace selection missing: $SELECTION_FILE" >&2
+  exit 2
+fi
+
+PROJECT_DIR=$("$PYTHON" - "$WORKSPACE_ROOT" "$SELECTION_FILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+root = Path(sys.argv[1]).expanduser().resolve()
+selection = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+relative = selection.get("path")
+if not isinstance(relative, str) or not relative:
+    raise SystemExit("workspace selection path is missing")
+project = (root / relative).resolve()
+project.relative_to(root)
+if not project.is_dir():
+    raise SystemExit(f"selected project does not exist: {project}")
+print(project)
+PY
+)
+
+if [[ "${OCR2MD_CHECK_ONLY:-0}" == "1" ]]; then
+  [[ -d "$CONFIG_DIR" ]] || { echo "config dir missing" >&2; exit 2; }
+  [[ -f "$CONFIG_DIR/translation-services.json" ]] || { echo "translation config missing" >&2; exit 2; }
+  "$PYTHON" -m py_compile "$ROOT/ui-spikes/v2/dev_server.py"
+  echo "OCR2MD_NATIVE_PREFLIGHT_OK"
+  exit 0
+fi
+
+/bin/mkdir -p "$DEBUG_DIR"
+exec "$PYTHON" "$ROOT/ui-spikes/v2/dev_server.py" \
+  --bind 127.0.0.1 \
+  --port "$PORT" \
+  --directory "$ROOT/ui-spikes/v2" \
+  --project-dir "$PROJECT_DIR" \
+  --workspace-root "$WORKSPACE_ROOT" \
+  --workspace-selection-file "$SELECTION_FILE" \
+  --config-dir "$CONFIG_DIR" \
+  --debug-dir "$DEBUG_DIR"

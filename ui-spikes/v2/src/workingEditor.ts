@@ -492,6 +492,26 @@ export class WorkingEditor {
     ).number;
   }
 
+  insertMediaReferenceAtLine(lineNumber: number, markdown: string): number {
+    const reference = markdown.replace(/[\r\n]+/g, "").trim();
+    if (!reference) return this.selectionLine();
+
+    const clamped = Math.max(1, Math.min(lineNumber, this.view.state.doc.lines));
+    const line = this.view.state.doc.line(clamped);
+    const lineIsBlank = line.text.trim().length === 0;
+    const insert = lineIsBlank ? reference : `${reference}\n`;
+    this.view.dispatch({
+      changes: lineIsBlank
+        ? { from: line.from, to: line.to, insert }
+        : { from: line.from, insert },
+      selection: { anchor: line.from + reference.length },
+      effects: EditorView.scrollIntoView(line.from, { y: "nearest" }),
+    });
+    this.view.requestMeasure();
+    this.view.focus();
+    return clamped;
+  }
+
   focusLine(lineNumber: number): number {
     const clamped = Math.max(1, Math.min(lineNumber, this.view.state.doc.lines));
     const line = this.view.state.doc.line(clamped);

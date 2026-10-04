@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test } from "@playwright/test";
 
 async function chapterFixture(request: import("@playwright/test").APIRequestContext) {
@@ -95,14 +96,14 @@ test("unified Undo/Redo restores working and calibration together", async ({ pag
   await expect(page.locator("#undo-depth")).toHaveText("0");
   await expect(page.locator("#redo-depth")).toHaveText("0");
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#working-length")).toHaveText(String(baselineLength + 1));
   await expect(page.locator("#visible-calibration-rows")).toHaveText(String(baselineVisible - 1));
   await expect(page.locator("#ignored-calibration-rows")).toHaveText(String(baselineIgnored + 1));
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   const currentResponse = await request.get(
     `/__workspace/chapter?chapterId=${encodeURIComponent(chapter.id)}`,
   );

@@ -2,6 +2,7 @@
 import argparse
 import base64
 import hashlib
+import html
 import ipaddress
 import json
 import os
@@ -67,6 +68,46 @@ def utc_now():
 
 MEDIA_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
 MEDIA_MIME_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+MEDIA_REFERENCE_PATTERN = re.compile(
+    r"!\[\[[^\]\r\n]+?\.(?:png|jpe?g|webp|gif)(?:\|[^\]\r\n]+)?\]\]"
+    r"|!\[[^\]\r\n]*\]\(\s*(?:<[^>\r\n]+>|[^\s)\r\n]+)(?:\s+[\"'][^\"']*[\"'])?\s*\)"
+    r"|<img\b[^>]*\bsrc\s*=\s*(?:\"[^\"]+\"|'[^']+'|[^\s>]+)[^>]*>",
+    re.IGNORECASE,
+)
+
+
+DEEPL_PROTECTED_TAG_PATTERN = re.compile(
+    r'(<ocr2md-protected\b[^>]*?(?:/\s*>|>\s*</ocr2md-protected\s*>))',
+    re.IGNORECASE,
+)
+
+
+def deepl_xml_safe_text(value):
+    """Escape XML text while preserving ocr2md placeholder elements."""
+    if not isinstance(value, str) or not value:
+        return value
+    parts = DEEPL_PROTECTED_TAG_PATTERN.split(value)
+    return "".join(
+        part if DEEPL_PROTECTED_TAG_PATTERN.fullmatch(part)
+        else html.escape(part, quote=False)
+        for part in parts
+    )
+
+
+
+def sync_media_references(source_text, working_text):
+    """Refresh structural media refs without overwriting trans working edits."""
+    source_refs = list(MEDIA_REFERENCE_PATTERN.finditer(source_text))
+    working_refs = list(MEDIA_REFERENCE_PATTERN.finditer(working_text))
+    if not source_refs or len(source_refs) != len(working_refs):
+        return working_text
+    output = working_text
+    for source_match, working_match in reversed(list(zip(source_refs, working_refs))):
+        source_ref = source_match.group(0)
+        if working_match.group(0) == source_ref:
+            continue
+        output = output[:working_match.start()] + source_ref + output[working_match.end():]
+    return output
 
 
 def validate_public_media_url(value):
@@ -181,16 +222,47 @@ def default_project_dir():
 
 
 class ChapterProjectStore:
-    def __init__(self, project_dir):
+    def __init__(self, project_dir, workspace_root=None):
         self.project_dir = Path(project_dir).expanduser().resolve()
         self.chapters_dir = (self.project_dir / "chapters").resolve()
+        self.workspace_root = (
+            Path(workspace_root).expanduser().resolve()
+            if workspace_root is not None
+            else None
+        )
         if not self.project_dir.is_dir():
             raise RuntimeError(f"project directory does not exist: {self.project_dir}")
-        if not self.chapters_dir.is_dir():
-            raise RuntimeError(f"chapters directory does not exist: {self.chapters_dir}")
+        if self.chapters_dir.exists() and not self.chapters_dir.is_dir():
+            raise RuntimeError(f"chapters path is not a directory: {self.chapters_dir}")
         if self.chapters_dir.parent != self.project_dir:
             raise RuntimeError("invalid chapters directory")
+        if self.workspace_root is not None:
+            if not self.workspace_root.is_dir():
+                raise RuntimeError(
+                    f"workspace root does not exist: {self.workspace_root}"
+                )
+            try:
+                self.project_dir.relative_to(self.workspace_root)
+            except ValueError as error:
+                raise RuntimeError(
+                    "project directory must be inside workspace root"
+                ) from error
         self.lock = threading.RLock()
+
+    def storage_path(self, path):
+        resolved = Path(path).resolve()
+        if self.workspace_root is None:
+            return str(resolved)
+        try:
+            relative = resolved.relative_to(self.workspace_root)
+        except ValueError as error:
+            raise RuntimeError("storage path escapes workspace root") from error
+        relative_text = relative.as_posix()
+        return "/data" + (
+            f"/{relative_text}"
+            if relative_text and relative_text != "."
+            else ""
+        )
 
     @property
     def project_name(self):
@@ -222,19 +294,19 @@ class ChapterProjectStore:
     def chapter_record(self, chapter_dir):
         working = self.first_file(chapter_dir, "*.working.md")
         sidecar = self.first_file(chapter_dir, "*.ocr2md.json")
+        if sidecar is None:
+            sidecar = chapter_dir / f"{chapter_dir.name}.ocr2md.json"
         trans_source = chapter_dir / "trans" / f"{chapter_dir.name}.md"
         missing = []
         if working is None:
             missing.append("working")
-        if sidecar is None:
-            missing.append("sidecar")
         return {
             "id": self.chapter_id(chapter_dir),
             "name": chapter_dir.name,
             "ready": not missing,
             "reason": f"缺少 {' + '.join(missing)}" if missing else None,
             "workingFile": working.name if working else None,
-            "sidecarFile": sidecar.name if sidecar else None,
+            "sidecarFile": sidecar.name if sidecar.is_file() else None,
             "transReady": trans_source.is_file(),
             "_dir": chapter_dir,
             "_working": working,
@@ -243,6 +315,8 @@ class ChapterProjectStore:
 
     def catalog(self):
         records = []
+        if not self.chapters_dir.is_dir():
+            return records
         for chapter_dir in sorted(
             (item for item in self.chapters_dir.iterdir() if item.is_dir()),
             key=lambda item: item.name,
@@ -301,7 +375,11 @@ class ChapterProjectStore:
             working_path = record["_working"]
             sidecar_path = record["_sidecar"]
             working_text = working_path.read_text(encoding="utf-8")
-            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            sidecar = (
+                json.loads(sidecar_path.read_text(encoding="utf-8"))
+                if sidecar_path.is_file()
+                else {}
+            )
             original_path = self.chapter_original_path(record, working_path, sidecar)
             original_text = (
                 original_path.read_text(encoding="utf-8")
@@ -319,9 +397,13 @@ class ChapterProjectStore:
                 "workingText": working_text,
                 "sidecar": sidecar,
                 "revision": self.revision(working_text, sidecar),
-                "storagePath": str(working_path),
-                "originalPath": str(original_path) if original_path is not None else None,
-                "sidecarPath": str(sidecar_path),
+                "storagePath": self.storage_path(working_path),
+                "originalPath": (
+                    self.storage_path(original_path)
+                    if original_path is not None
+                    else None
+                ),
+                "sidecarPath": self.storage_path(sidecar_path),
                 "media": self.list_chapter_media(chapter_id),
             }
 
@@ -345,8 +427,17 @@ class ChapterProjectStore:
             working_path = record["_working"]
             sidecar_path = record["_sidecar"]
             current_working = working_path.read_text(encoding="utf-8")
-            current_sidecar_text = sidecar_path.read_text(encoding="utf-8")
-            current_sidecar = json.loads(current_sidecar_text)
+            sidecar_existed = sidecar_path.is_file()
+            current_sidecar_text = (
+                sidecar_path.read_text(encoding="utf-8")
+                if sidecar_existed
+                else None
+            )
+            current_sidecar = (
+                json.loads(current_sidecar_text)
+                if current_sidecar_text is not None
+                else {}
+            )
             current_revision = self.revision(current_working, current_sidecar)
             if current_revision != expected_revision:
                 return {
@@ -373,7 +464,10 @@ class ChapterProjectStore:
                 if sidecar_temp.exists():
                     sidecar_temp.unlink()
                 self.write_text_fsync(working_path, current_working)
-                self.write_text_fsync(sidecar_path, current_sidecar_text)
+                if current_sidecar_text is not None:
+                    self.write_text_fsync(sidecar_path, current_sidecar_text)
+                elif sidecar_path.exists():
+                    sidecar_path.unlink()
                 raise
 
             persisted_working = working_path.read_text(encoding="utf-8")
@@ -497,6 +591,7 @@ class ChapterProjectStore:
             return {
                 "fileName": file_name,
                 "relativePath": f"imgs/{file_name}",
+                "media": self.list_chapter_media(chapter_id),
             }
 
     @staticmethod
@@ -686,21 +781,15 @@ class ChapterProjectStore:
                 **payload,
             }
 
-    def upsert_sentence_translation(
+    def upsert_sentence_translations(
         self,
         chapter_id,
         provider,
         label,
-        sentence,
-        status,
-        translated_text=None,
-        error=None,
-        model=None,
+        updates,
     ):
-        if not isinstance(sentence, dict) or not isinstance(sentence.get("id"), str):
-            raise ValueError("sentence is required")
-        if status not in ("translated", "error", "pending"):
-            raise ValueError("invalid sentence translation status")
+        if not isinstance(updates, list) or not updates:
+            raise ValueError("sentence translation updates are required")
         with self.lock:
             _, sentence_dir, _ = self.sentence_paths(chapter_id)
             sentence_dir.mkdir(parents=True, exist_ok=True)
@@ -717,21 +806,33 @@ class ChapterProjectStore:
             entries = payload.get("entries")
             if not isinstance(entries, dict):
                 entries = {}
-            sentence_id = sentence["id"]
-            entry = {
-                "sentenceId": sentence_id,
-                "sourceFingerprint": sentence.get("sourceFingerprint"),
-                "contextFingerprint": sentence.get("contextFingerprint"),
-                "status": status,
-                "updatedAt": utc_now(),
-            }
-            if translated_text is not None:
-                entry["translatedText"] = translated_text
-            if error:
-                entry["error"] = error
-            if model:
-                entry["model"] = model
-            entries[sentence_id] = entry
+            for update in updates:
+                if not isinstance(update, dict):
+                    raise ValueError("invalid sentence translation update")
+                sentence = update.get("sentence")
+                status = update.get("status")
+                if not isinstance(sentence, dict) or not isinstance(sentence.get("id"), str):
+                    raise ValueError("sentence is required")
+                if status not in ("translated", "error", "pending"):
+                    raise ValueError("invalid sentence translation status")
+                sentence_id = sentence["id"]
+                entry = {
+                    "sentenceId": sentence_id,
+                    "sourceFingerprint": sentence.get("sourceFingerprint"),
+                    "contextFingerprint": sentence.get("contextFingerprint"),
+                    "status": status,
+                    "updatedAt": utc_now(),
+                }
+                translated_text = update.get("translatedText")
+                error = update.get("error")
+                model = update.get("model")
+                if translated_text is not None:
+                    entry["translatedText"] = translated_text
+                if error:
+                    entry["error"] = error
+                if model:
+                    entry["model"] = model
+                entries[sentence_id] = entry
             payload = {
                 "version": 1,
                 "provider": provider,
@@ -754,6 +855,30 @@ class ChapterProjectStore:
                 "provider": provider,
                 "data": payload,
             }
+
+    def upsert_sentence_translation(
+        self,
+        chapter_id,
+        provider,
+        label,
+        sentence,
+        status,
+        translated_text=None,
+        error=None,
+        model=None,
+    ):
+        return self.upsert_sentence_translations(
+            chapter_id,
+            provider,
+            label,
+            [{
+                "sentence": sentence,
+                "status": status,
+                "translatedText": translated_text,
+                "error": error,
+                "model": model,
+            }],
+        )
 
     def read_translation(self, chapter_id):
         with self.lock:
@@ -801,9 +926,9 @@ class ChapterProjectStore:
                 "sentenceSource": sentence_source,
                 "sentenceTranslations": sentence_translations,
                 "revision": self.translation_revision(working_text, state),
-                "storagePath": str(working_path),
-                "sourceStoragePath": str(source_path),
-                "statePath": str(state_path),
+                "storagePath": self.storage_path(working_path),
+                "sourceStoragePath": self.storage_path(source_path),
+                "statePath": self.storage_path(state_path),
             }
 
     def save_translation_working(
@@ -909,19 +1034,36 @@ class ChapterProjectStore:
                     "currentRevision": current["revision"],
                 }
 
-            _, trans_dir, source_path, _, _ = self.translation_paths(chapter_id)
+            _, trans_dir, source_path, working_path, _ = self.translation_paths(chapter_id)
             trans_dir.mkdir(parents=True, exist_ok=True)
-            previous = source_path.read_bytes() if source_path.exists() else None
-            temp = source_path.with_name(
+            previous_source = source_path.read_bytes() if source_path.exists() else None
+            previous_working = working_path.read_bytes() if working_path.exists() else None
+            source_temp = source_path.with_name(
                 f".{source_path.name}.{uuid.uuid4().hex}.tmp"
             )
+            working_temp = None
+            synced_working = None
+            if working_path.is_file():
+                current_working = working_path.read_text(encoding="utf-8")
+                synced_working = sync_media_references(markdown, current_working)
+                if synced_working != current_working:
+                    working_temp = working_path.with_name(
+                        f".{working_path.name}.{uuid.uuid4().hex}.tmp"
+                    )
             try:
-                self.write_text_fsync(temp, markdown)
-                os.replace(temp, source_path)
+                self.write_text_fsync(source_temp, markdown)
+                if working_temp is not None:
+                    self.write_text_fsync(working_temp, synced_working)
+                os.replace(source_temp, source_path)
+                if working_temp is not None:
+                    os.replace(working_temp, working_path)
             except Exception:
-                if temp.exists():
-                    temp.unlink()
-                self._restore_file(source_path, previous)
+                if source_temp.exists():
+                    source_temp.unlink()
+                if working_temp is not None and working_temp.exists():
+                    working_temp.unlink()
+                self._restore_file(source_path, previous_source)
+                self._restore_file(working_path, previous_working)
                 raise
 
             payload = self.read_translation(chapter_id)
@@ -1305,9 +1447,9 @@ class ChapterProjectStore:
                     written.append(
                         {
                             "chapterFile": chapter_file,
-                            "originalPath": str(original_path),
-                            "workingPath": str(working_path),
-                            "sidecarPath": str(sidecar_path),
+                            "originalPath": self.storage_path(original_path),
+                            "workingPath": self.storage_path(working_path),
+                            "sidecarPath": self.storage_path(sidecar_path),
                         }
                     )
             except Exception:
@@ -1345,11 +1487,11 @@ class ChapterProjectStore:
                 return {
                     "exists": False,
                     "source": None,
-                    "storagePath": str(path),
+                    "storagePath": self.storage_path(path),
                 }
             source = path.read_text(encoding="utf-8")
             if len(source.encode("utf-8")) > 1_000_000:
-                raise RuntimeError("表格配置文件过大")
+                raise RuntimeError("配置文件过大")
             return {
                 "exists": True,
                 "source": source,
@@ -1360,7 +1502,7 @@ class ChapterProjectStore:
         if not isinstance(source, str):
             raise ValueError("source must be a string")
         if len(source.encode("utf-8")) > 1_000_000:
-            raise ValueError("表格配置文件过大")
+            raise ValueError("配置文件过大")
         path = self.table_presentation_config_path
         with self.lock:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1904,6 +2046,23 @@ class TranslationServiceStore:
             self._write(data)
             return self.public_payload()
 
+    @staticmethod
+    def _translation_result(provider, source_text, translation_text, translated, duration_ms):
+        expected_tokens = re.findall(r'<ocr2md-protected\b[^>]*\/>', translation_text)
+        returned_tokens = re.findall(r'<ocr2md-protected\b[^>]*\/>', translated)
+        missing = [token for token in expected_tokens if token not in returned_tokens]
+        unexpected = [token for token in returned_tokens if token not in expected_tokens]
+        return {
+            "provider": provider,
+            "sourceText": source_text,
+            "translationText": translation_text,
+            "translatedText": translated,
+            "durationMs": duration_ms,
+            "placeholderIntegrity": not missing and not unexpected,
+            "missingPlaceholders": missing,
+            "unexpectedPlaceholders": unexpected,
+        }
+
     def test_sentence(self, provider, source_text, translation_text):
         if provider not in self.DEFAULTS:
             raise ValueError("unsupported translation provider")
@@ -1921,19 +2080,47 @@ class TranslationServiceStore:
         else:
             translated = self._test_chatgpt(service, translation_text)
         duration_ms = round((time.perf_counter() - started) * 1000)
-        expected_tokens = re.findall(r'<ocr2md-protected\b[^>]*\/>', translation_text)
-        returned_tokens = re.findall(r'<ocr2md-protected\b[^>]*\/>', translated)
-        missing = [token for token in expected_tokens if token not in returned_tokens]
-        unexpected = [token for token in returned_tokens if token not in expected_tokens]
+        return self._translation_result(
+            provider, source_text, translation_text, translated, duration_ms,
+        )
+
+    def translate_deepl_batch(self, sentences, context=""):
+        if not isinstance(sentences, list) or not sentences:
+            raise ValueError("sentences must be a non-empty array")
+        if len(sentences) > 32:
+            raise ValueError("DeepL batch is limited to 32 sentences")
+        source_texts = []
+        translation_texts = []
+        for sentence in sentences:
+            if not isinstance(sentence, dict):
+                raise ValueError("invalid sentence batch item")
+            source_text = sentence.get("sourceText")
+            translation_text = sentence.get("translationText")
+            if not isinstance(source_text, str) or not isinstance(translation_text, str):
+                raise ValueError("sentence text is required")
+            source_texts.append(source_text)
+            translation_texts.append(translation_text)
+        if not isinstance(context, str):
+            raise ValueError("context must be a string")
+        with self.lock:
+            service = dict(self._load()["services"]["deepl"])
+        if not service.get("apiKey"):
+            raise ValueError("API Key 未配置")
+        self._validate_endpoint("deepl", service.get("endpoint", ""))
+        started = time.perf_counter()
+        translated = self._test_deepl_batch(service, translation_texts, context)
+        duration_ms = round((time.perf_counter() - started) * 1000)
         return {
-            "provider": provider,
-            "sourceText": source_text,
-            "translationText": translation_text,
-            "translatedText": translated,
+            "provider": "deepl",
             "durationMs": duration_ms,
-            "placeholderIntegrity": not missing and not unexpected,
-            "missingPlaceholders": missing,
-            "unexpectedPlaceholders": unexpected,
+            "contextCharacters": len(context),
+            "results": [
+                self._translation_result(
+                    "deepl", source_text, translation_text, translated_text, duration_ms,
+                )
+                for source_text, translation_text, translated_text
+                in zip(source_texts, translation_texts, translated)
+            ],
         }
 
     def _validate_endpoint(self, provider, endpoint):
@@ -1944,16 +2131,25 @@ class TranslationServiceStore:
             raise ValueError("endpoint must use the official HTTPS provider host")
 
     def _test_deepl(self, service, text):
+        return self._test_deepl_batch(service, [text])[0]
+
+    def _test_deepl_batch(self, service, texts, context=""):
         base = service["endpoint"].rstrip("/")
         endpoint = base + "/translate" if base.endswith("/v2") else base + "/v2/translate"
+        safe_texts = [deepl_xml_safe_text(text) for text in texts]
         body = {
-            "text": [text],
+            "text": safe_texts,
             "target_lang": service.get("targetLanguage") or "ZH-HANS",
             "split_sentences": "0",
             "preserve_formatting": True,
             "tag_handling": "xml",
             "ignore_tags": ["ocr2md-protected"],
         }
+        if context.strip():
+            # DeepL applies XML parsing to context when tag_handling=xml too.
+            # Source prose such as R&D or mathematical '<' must therefore be
+            # escaped even though context itself is not translated.
+            body["context"] = deepl_xml_safe_text(context.strip())
         source_lang = service.get("sourceLanguage")
         if source_lang:
             body["source_lang"] = source_lang
@@ -1969,11 +2165,17 @@ class TranslationServiceStore:
             },
         )
         translations = payload.get("translations") if isinstance(payload, dict) else None
-        if not isinstance(translations, list) or not translations:
-            raise RuntimeError("DeepL 返回中没有 translations")
-        translated = translations[0].get("text") if isinstance(translations[0], dict) else None
-        if not isinstance(translated, str):
-            raise RuntimeError("DeepL 返回中没有译文")
+        if not isinstance(translations, list) or len(translations) != len(texts):
+            raise RuntimeError("DeepL 返回的 translations 数量与请求不一致")
+        translated = []
+        for item in translations:
+            text = item.get("text") if isinstance(item, dict) else None
+            if not isinstance(text, str):
+                raise RuntimeError("DeepL 返回中没有译文")
+            # Undo only the XML entity escaping introduced for transport.
+            # Placeholder elements remain elements and are restored later by
+            # the normal Markdown-protection pipeline.
+            translated.append(html.unescape(text))
         return translated
 
     def _test_chatgpt(self, service, text):
@@ -2047,6 +2249,97 @@ class V2DevHandler(SimpleHTTPRequestHandler):
     project_store = None
     translation_service_store = None
     debug_dir = None
+    workspace_root = None
+    workspace_selection_path = None
+    project_store_lock = threading.RLock()
+
+    @classmethod
+    def _workspace_relative_path(cls, target):
+        if cls.workspace_root is None:
+            raise RuntimeError("workspace directory browsing is not configured")
+        root = cls.workspace_root.resolve()
+        resolved = Path(target).resolve()
+        try:
+            relative = resolved.relative_to(root)
+        except ValueError as error:
+            raise ValueError("workspace path escapes the configured root") from error
+        return "" if str(relative) == "." else relative.as_posix()
+
+    @classmethod
+    def _resolve_workspace_directory(cls, relative_path):
+        if cls.workspace_root is None:
+            raise RuntimeError("workspace directory browsing is not configured")
+        if relative_path is None:
+            relative_path = ""
+        if not isinstance(relative_path, str):
+            raise ValueError("path must be a string")
+        normalized = relative_path.strip().replace("\\", "/").strip("/")
+        root = cls.workspace_root.resolve()
+        target = (root / normalized).resolve() if normalized else root
+        cls._workspace_relative_path(target)
+        if not target.is_dir():
+            raise KeyError("workspace directory does not exist")
+        return target
+
+    @classmethod
+    def workspace_directory_payload(cls, relative_path=""):
+        target = cls._resolve_workspace_directory(relative_path)
+        relative = cls._workspace_relative_path(target)
+        root = cls.workspace_root.resolve()
+        current_project = cls.project_store.project_dir.resolve()
+        current_relative = cls._workspace_relative_path(current_project)
+        directories = []
+        for item in sorted(
+            (entry for entry in target.iterdir() if entry.is_dir()),
+            key=lambda entry: (entry.name.lower(), entry.name),
+        ):
+            try:
+                item_relative = cls._workspace_relative_path(item.resolve())
+            except ValueError:
+                continue
+            directories.append({
+                "name": item.name,
+                "path": item_relative,
+                "hasChapters": (item / "chapters").is_dir(),
+            })
+        parent = None
+        if target != root:
+            parent = cls._workspace_relative_path(target.parent)
+        display = "/data" + (f"/{relative}" if relative else "")
+        current_display = "/data" + (f"/{current_relative}" if current_relative else "")
+        return {
+            "root": "/data",
+            "path": relative,
+            "displayPath": display,
+            "parentPath": parent,
+            "directories": directories,
+            "currentProjectPath": current_relative,
+            "currentProjectDisplayPath": current_display,
+            "currentProjectName": cls.project_store.project_name,
+        }
+
+    @classmethod
+    def switch_workspace_directory(cls, relative_path):
+        target = cls._resolve_workspace_directory(relative_path)
+        store = ChapterProjectStore(target, workspace_root=cls.workspace_root)
+        with cls.project_store_lock:
+            cls.project_store = store
+            if cls.workspace_selection_path is not None:
+                selection_path = cls.workspace_selection_path
+                selection_path.parent.mkdir(parents=True, exist_ok=True)
+                temp = selection_path.with_name(
+                    f".{selection_path.name}.{uuid.uuid4().hex}.tmp"
+                )
+                temp.write_text(
+                    json.dumps(
+                        {"path": cls._workspace_relative_path(target)},
+                        ensure_ascii=False,
+                        indent=2,
+                    ) + "\n",
+                    encoding="utf-8",
+                )
+                os.replace(temp, selection_path)
+        return cls.workspace_directory_payload(cls._workspace_relative_path(target))
 
     def _write_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
@@ -2185,6 +2478,17 @@ class V2DevHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         route = parsed.path
+
+        if route == "/__workspace/directories":
+            relative_path = parse_qs(parsed.query).get("path", [""])[0]
+            try:
+                self._write_json(
+                    200,
+                    self.workspace_directory_payload(relative_path),
+                )
+            except Exception as error:
+                self._write_store_error(error)
+            return
 
         if route == "/__workspace/chapters":
             try:
@@ -2494,6 +2798,15 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             self._write_json(200, response)
             return
 
+        if route == "/__workspace/project-directory":
+            try:
+                switched = self.switch_workspace_directory(payload.get("path"))
+            except Exception as error:
+                self._write_store_error(error)
+                return
+            self._write_json(200, switched)
+            return
+
         if route == "/__workspace/chapter/media/download":
             chapter_id = payload.get("chapterId")
             expected_revision = payload.get("expectedRevision")
@@ -2661,6 +2974,175 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                 config = payload.get("config")
                 result = self.translation_service_store.save_service(provider, config)
                 self._write_json(200, result)
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/translation-services/translate-batch":
+            provider = payload.get("provider")
+            chapter_id = payload.get("chapterId")
+            sentence_ids = payload.get("sentenceIds")
+            metadata = None
+            pending = []
+            try:
+                if provider != "deepl":
+                    raise ValueError("batch translation currently supports DeepL only")
+                if (
+                    not isinstance(sentence_ids, list)
+                    or not sentence_ids
+                    or len(sentence_ids) > 32
+                    or any(not isinstance(item, str) or not item for item in sentence_ids)
+                ):
+                    raise ValueError("sentenceIds must contain 1-32 sentence ids")
+                metadata = self.translation_service_store.provider_metadata(provider)
+                translation = self.project_store.read_translation(chapter_id)
+                source = translation.get("sentenceSource")
+                entries = source.get("entries") if isinstance(source, dict) else None
+                if not isinstance(entries, list):
+                    raise RuntimeError("句子原文 JSON 尚未生成，请重新进入 trans 工作区")
+                by_id = {
+                    item.get("id"): item
+                    for item in entries
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                }
+                requested = []
+                for sentence_id in sentence_ids:
+                    sentence = by_id.get(sentence_id)
+                    if sentence is None:
+                        raise KeyError(f"unknown sentenceId: {sentence_id}")
+                    requested.append(sentence)
+
+                existing_file = None
+                existing_entries = {}
+                for item in translation.get("sentenceTranslations") or []:
+                    if not isinstance(item, dict) or item.get("provider") != provider:
+                        continue
+                    existing_file = item
+                    data = item.get("data")
+                    candidate_entries = data.get("entries") if isinstance(data, dict) else None
+                    if isinstance(candidate_entries, dict):
+                        existing_entries = candidate_entries
+                    break
+                pending = [
+                    sentence for sentence in requested
+                    if not (
+                        isinstance(existing_entries.get(sentence.get("id")), dict)
+                        and existing_entries[sentence.get("id")].get("status") == "translated"
+                    )
+                ]
+                if not pending:
+                    self._write_json(200, {
+                        "skipped": True,
+                        "provider": provider,
+                        "sentenceIds": sentence_ids,
+                        "translatedCount": 0,
+                        "failedCount": 0,
+                        "translationFile": existing_file,
+                    })
+                    return
+
+                index_by_id = {
+                    item.get("id"): index
+                    for index, item in enumerate(entries)
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                }
+                pending_indices = [index_by_id[item["id"]] for item in pending]
+                context_start = max(0, min(pending_indices) - 2)
+                context_end = min(len(entries), max(pending_indices) + 3)
+                # A shared DeepL context lets every text[] item see its nearby
+                # paragraph/chapter neighborhood while each returned translation
+                # still maps one-to-one to the original sentence.
+                context_parts = []
+                context_chars = 0
+                for item in entries[context_start:context_end]:
+                    if not isinstance(item, dict):
+                        continue
+                    text = item.get("sourceText")
+                    if not isinstance(text, str) or not text.strip():
+                        continue
+                    addition = text.strip()
+                    if context_chars + len(addition) + 1 > 12000:
+                        break
+                    context_parts.append(addition)
+                    context_chars += len(addition) + 1
+                context = "\n".join(context_parts)
+                result = self.translation_service_store.translate_deepl_batch(
+                    pending,
+                    context,
+                )
+                result_items = result.get("results") or []
+                if len(result_items) != len(pending):
+                    raise RuntimeError("DeepL 批量翻译结果数量不匹配")
+                updates = []
+                failed = 0
+                for sentence, translated in zip(pending, result_items):
+                    if translated.get("placeholderIntegrity"):
+                        updates.append({
+                            "sentence": sentence,
+                            "status": "translated",
+                            "translatedText": translated.get("translatedText"),
+                            "model": metadata.get("model"),
+                        })
+                    else:
+                        missing = len(translated.get("missingPlaceholders") or [])
+                        unexpected = len(translated.get("unexpectedPlaceholders") or [])
+                        message = f"占位符完整性检查失败：缺失 {missing} / 异常 {unexpected}"
+                        updates.append({
+                            "sentence": sentence,
+                            "status": "error",
+                            "error": message,
+                            "model": metadata.get("model"),
+                        })
+                        failed += 1
+                file_result = self.project_store.upsert_sentence_translations(
+                    chapter_id,
+                    provider,
+                    metadata["label"],
+                    updates,
+                )
+                self._write_json(424 if failed else 200, {
+                    **result,
+                    "skipped": False,
+                    "sentenceIds": [item["id"] for item in pending],
+                    "translatedCount": len(pending) - failed,
+                    "failedCount": failed,
+                    "translationFile": file_result,
+                    **({"error": f"DeepL 批次中有 {failed} 句占位符校验失败"} if failed else {}),
+                })
+            except TranslationProviderError as error:
+                status = error.provider_status
+                label = (metadata or {}).get("label") or "DeepL"
+                if status == 429:
+                    message = f"{label} 429 · {error}"
+                elif status:
+                    message = f"{label} HTTP {status} · {error}"
+                else:
+                    message = f"{label} · {error}"
+                file_result = None
+                if pending and isinstance(chapter_id, str):
+                    try:
+                        file_result = self.project_store.upsert_sentence_translations(
+                            chapter_id,
+                            "deepl",
+                            label,
+                            [{
+                                "sentence": sentence,
+                                "status": "error",
+                                "error": message,
+                                "model": (metadata or {}).get("model"),
+                            } for sentence in pending],
+                        )
+                    except Exception:
+                        file_result = None
+                self._write_json(424, {
+                    "error": message,
+                    "providerStatus": status,
+                    "provider": provider,
+                    "sentenceIds": [item.get("id") for item in pending],
+                    "translationFile": file_result,
+                })
+            except RuntimeError as error:
+                self._write_json(424, {"error": str(error), "provider": provider})
             except Exception as error:
                 self._write_store_error(error)
             return
@@ -3010,6 +3492,8 @@ def main():
     parser.add_argument("--port", type=int, default=4180)
     parser.add_argument("--directory", default=".")
     parser.add_argument("--project-dir")
+    parser.add_argument("--workspace-root")
+    parser.add_argument("--workspace-selection-file")
     parser.add_argument(
         "--workspace-upstream",
         default=os.environ.get("OCR2MD_WORKSPACE_UPSTREAM", ""),
@@ -3031,10 +3515,12 @@ def main():
         V2DevHandler.project_store = UpstreamChapterProjectStore(
             args.workspace_upstream
         )
+        V2DevHandler.workspace_root = None
+        V2DevHandler.workspace_selection_path = None
         store_label = f"upstream {args.workspace_upstream}"
     else:
         project_dir = (
-            Path(args.project_dir).expanduser()
+            Path(args.project_dir).expanduser().resolve()
             if args.project_dir
             else default_project_dir()
         )
@@ -3042,7 +3528,40 @@ def main():
             raise RuntimeError(
                 "could not discover the v2 real project; pass --project-dir explicitly"
             )
-        V2DevHandler.project_store = ChapterProjectStore(project_dir)
+        workspace_root = (
+            Path(args.workspace_root).expanduser().resolve()
+            if args.workspace_root
+            else project_dir
+        )
+        if not workspace_root.is_dir():
+            raise RuntimeError(f"workspace root does not exist: {workspace_root}")
+        V2DevHandler.workspace_root = workspace_root
+        V2DevHandler.workspace_selection_path = (
+            Path(args.workspace_selection_file).expanduser().resolve()
+            if args.workspace_selection_file
+            else None
+        )
+        try:
+            project_dir.relative_to(workspace_root)
+        except ValueError as error:
+            raise RuntimeError("project directory must be inside workspace root") from error
+        if (
+            V2DevHandler.workspace_selection_path is not None
+            and V2DevHandler.workspace_selection_path.is_file()
+        ):
+            try:
+                selected = json.loads(
+                    V2DevHandler.workspace_selection_path.read_text(encoding="utf-8")
+                )
+                selected_path = selected.get("path") if isinstance(selected, dict) else None
+                if isinstance(selected_path, str):
+                    project_dir = V2DevHandler._resolve_workspace_directory(selected_path)
+            except Exception as error:
+                print(f"ignoring invalid workspace selection: {error}", flush=True)
+        V2DevHandler.project_store = ChapterProjectStore(
+            project_dir,
+            workspace_root=workspace_root,
+        )
         store_label = str(V2DevHandler.project_store.project_dir)
 
     V2DevHandler.debug_dir = (

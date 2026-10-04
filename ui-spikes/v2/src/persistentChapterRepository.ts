@@ -15,6 +15,7 @@ import {
 import { scanTranslationUnits } from "../../../src/translationUnits";
 import { scanTextBlocks } from "../../../src/textBlocks";
 import { markdownFileKind } from "../../../src/workspaceFiles";
+import { mediaSourceRoutesFromRows } from "./mediaCatalog";
 import type {
   BoundaryExportResult,
   CalibrationExportInput,
@@ -127,6 +128,10 @@ export class PersistentChapterRepository implements ChapterRepository {
 
     const payload = await response.json() as LoadedPayload;
     const sidecar = candidatesFromSidecar(payload.sidecar);
+    const mediaSourceRoutes = mediaSourceRoutesFromRows(
+      sidecar.rows,
+      payload.media ?? [],
+    );
     const application = new ChapterReviewApplication({
       rows: sidecar.rows,
       annotationPairs: sidecar.annotationPairs,
@@ -198,6 +203,7 @@ export class PersistentChapterRepository implements ChapterRepository {
       sidecarSourceFile: sidecar.sourceFile,
       revision: payload.revision,
       media: payload.media ?? [],
+      mediaSourceRoutes,
     };
   }
 

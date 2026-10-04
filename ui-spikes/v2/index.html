@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ocr2md v2 · 产品壳重建</title>
+  <title>ocr2md v2 · native</title>
   <link rel="stylesheet" href="./dist/app.css">
   <style>
     :root {
@@ -187,7 +187,74 @@
       gap: 5px;
       min-width: 0;
     }
+    #workspace-directory-button {
+      max-width: min(310px, 30vw);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+    }
     #chapter-select { max-width: min(340px, 36vw); }
+    .workspace-directory-dialog { width: min(720px, 100%); }
+    .workspace-directory-dialog h2 { margin-bottom: 10px; }
+    .workspace-directory-current {
+      margin-bottom: 10px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .workspace-directory-breadcrumb {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .workspace-directory-breadcrumb button {
+      min-height: 30px;
+      padding: 4px 7px;
+    }
+    .workspace-directory-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      color: var(--muted);
+    }
+    #workspace-directory-path {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace-directory-list {
+      display: grid;
+      gap: 5px;
+      min-height: 120px;
+      max-height: min(52vh, 520px);
+      overflow: auto;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg);
+    }
+    .workspace-directory-entry {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      width: 100%;
+      min-height: 38px;
+      text-align: left;
+    }
+    .workspace-directory-entry small {
+      margin-left: auto;
+      color: var(--muted);
+    }
+    #workspace-directory-status {
+      min-height: 20px;
+      margin-top: 8px;
+      color: var(--muted);
+    }
 
     .workspace {
       min-width: 0;
@@ -483,6 +550,23 @@
       border-color: #d699b6;
       animation: module-change-flash 760ms ease-out 2;
     }
+    .translation-popover-trigger-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .translation-popover-trigger-control select {
+      min-width: 62px;
+      height: 28px;
+      padding: 2px 5px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--bg);
+      color: var(--fg);
+    }
     @keyframes module-change-flash {
       0%, 100% { box-shadow: 0 0 0 0 rgba(214, 153, 182, 0); }
       45% {
@@ -603,6 +687,44 @@
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
       cursor: pointer;
       font-weight: 700;
+    }
+    #working-editor.is-media-drop-target {
+      outline: 2px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+      outline-offset: -3px;
+    }
+    #working-editor.is-media-drop-ready {
+      outline-style: solid;
+      background: color-mix(in srgb, var(--accent) 6%, transparent);
+    }
+    #working-editor.is-media-drop-target .cm-lineNumbers .cm-gutterElement.cm-activeLineGutter {
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+    .media-drag-source {
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .media-file-drag-source {
+      display: inline-flex;
+      align-items: center;
+      width: 100%;
+      min-height: 36px;
+    }
+    .media-drag-ghost {
+      position: fixed;
+      z-index: 10000;
+      max-width: min(52vw, 360px);
+      padding: 7px 10px;
+      border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+      border-radius: 6px;
+      background: var(--bg-alt);
+      color: var(--fg);
+      box-shadow: 0 6px 18px rgb(0 0 0 / 28%);
+      pointer-events: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     #working-editor .cm-content { min-height: 100%; }
     #working-editor .cm-content::selection,
@@ -850,16 +972,23 @@
       height: auto;
     }
     #markdown-preview .media-preview-wrap {
-      min-height: 100%;
-      display: flex;
-      flex-direction: column;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
       align-items: center;
-      justify-content: center;
+      justify-items: center;
       gap: 10px;
     }
     #markdown-preview .media-preview-image {
+      display: block;
+      min-width: 0;
+      min-height: 0;
       max-width: 100%;
-      max-height: calc(100% - 42px);
+      max-height: 100%;
+      width: auto;
+      height: auto;
       object-fit: contain;
     }
     #markdown-preview .media-preview-caption {
@@ -878,9 +1007,43 @@
       padding: 4px 0;
     }
 
+    #markdown-preview.ocr2md-reading-preview {
+      position: relative;
+      padding-left: 62px;
+    }
+    #markdown-preview .ocr2md-reading-line-button {
+      position: absolute;
+      left: 10px;
+      z-index: 4;
+      width: 38px;
+      min-width: 38px;
+      height: 24px;
+      padding: 0 4px;
+      border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+      border-radius: 5px;
+      background: color-mix(in srgb, var(--bg-alt) 94%, transparent);
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      line-height: 22px;
+      text-align: right;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #markdown-preview .ocr2md-reading-line-button::before {
+      content: attr(data-reading-source-line);
+    }
+    #markdown-preview .ocr2md-reading-line-button:hover,
+    #markdown-preview .ocr2md-reading-line-button:focus-visible {
+      border-color: var(--accent);
+      color: var(--fg);
+      outline: none;
+    }
+
     #markdown-preview .ocr2md-translation-sentence {
       border-radius: 3px;
       cursor: pointer;
+      touch-action: manipulation;
       text-decoration-line: underline;
       text-decoration-style: dotted;
       text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
@@ -1258,8 +1421,9 @@
 </head>
 <body>
   <nav class="workspace-switcher" aria-label="项目导航">
-    <span class="workspace-brand">ocr2md <span class="workspace-version">v2 · private cloud</span></span>
+    <span class="workspace-brand">ocr2md <span class="workspace-version">v2 · native</span></span>
     <div class="project-navigation">
+      <button id="workspace-directory-button" type="button" aria-haspopup="dialog" aria-expanded="false" title="浏览 /data 并切换工作目录">/data/… ▾</button>
       <select id="chapter-select" aria-label="项目导航">
         <option value="" disabled selected>正在接入工作目录…</option>
       </select>
@@ -1346,11 +1510,10 @@
         <span class="source-tabs" role="tablist" aria-label="源码窗">
           <button id="editor-tab-source" class="source-tab" type="button" role="tab" aria-selected="true">源码</button>
           <button id="editor-tab-css" class="source-tab" type="button" role="tab" aria-selected="false">自定义 CSS</button>
-          <button id="editor-tab-table-config" class="source-tab" type="button" role="tab" aria-selected="false">表格配置</button>
+          <button id="editor-tab-table-config" class="source-tab" type="button" role="tab" aria-selected="false">配置</button>
         </span>
         <span class="workspace-spacer"></span>
         <button id="regex-search-toggle" type="button" aria-expanded="false" title="在当前编辑器中使用正则搜索">.* 正则搜索</button>
-        <button id="close">关闭章节</button>
       </div>
 
       <div id="working-editor" class="source-mode-panel" role="tabpanel" aria-label="源码" aria-labelledby="editor-tab-source"></div>
@@ -1365,14 +1528,25 @@
         <div id="custom-css-editor" aria-label="自定义 CSS 编辑器"></div>
       </section>
 
-      <section id="table-config-wrap" class="source-mode-panel css-editor-wrap" role="tabpanel" aria-label="表格配置" aria-labelledby="editor-tab-table-config" hidden>
+      <section id="table-config-wrap" class="source-mode-panel css-editor-wrap" role="tabpanel" aria-label="配置" aria-labelledby="editor-tab-table-config" hidden>
         <div class="table-config-toolbar">
           <span>左侧配置表负责分组 / 浏览 / 定位；JSON 是唯一配置源</span>
           <span class="workspace-spacer"></span>
+          <label id="translation-popover-trigger-control" class="translation-popover-trigger-control">
+            翻译弹窗
+            <select id="translation-popover-trigger" aria-label="翻译弹窗呼出点击次数">
+              <option value="1">1 击</option>
+              <option value="2">2 击</option>
+              <option value="3">3 击</option>
+              <option value="4" selected>4 击</option>
+              <option value="5">5 击</option>
+              <option value="6">6 击</option>
+            </select>
+          </label>
           <button id="table-config-save" type="button">保存</button>
           <button id="table-config-reset" type="button">恢复默认</button>
         </div>
-        <div id="table-config-editor" aria-label="表格配置 JSON 编辑器"></div>
+        <div id="table-config-editor" aria-label="配置 JSON 编辑器"></div>
       </section>
 
       <section id="regex-search-panel" role="search" aria-label="当前编辑器正则搜索" hidden>
@@ -1400,6 +1574,24 @@
       </div>
     </section>
   </main>
+
+  <div id="workspace-directory-overlay" class="leave-overlay" hidden>
+    <section class="leave-dialog workspace-directory-dialog" role="dialog" aria-modal="true" aria-labelledby="workspace-directory-title">
+      <h2 id="workspace-directory-title">选择工作目录</h2>
+      <div id="workspace-directory-current" class="workspace-directory-current">当前工作目录：正在读取…</div>
+      <nav id="workspace-directory-breadcrumb" class="workspace-directory-breadcrumb" aria-label="工作目录路径"></nav>
+      <div class="workspace-directory-toolbar">
+        <button id="workspace-directory-parent" type="button">↑ 上一级</button>
+        <span id="workspace-directory-path">/data</span>
+      </div>
+      <div id="workspace-directory-list" class="workspace-directory-list" role="list"></div>
+      <div id="workspace-directory-status" role="status" aria-live="polite"></div>
+      <div class="controls">
+        <button id="workspace-directory-cancel" type="button">取消</button>
+        <button id="workspace-directory-select" type="button">设为工作目录</button>
+      </div>
+    </section>
+  </div>
 
   <div id="source-line-menu" class="source-line-menu" role="menu" hidden>
     <div id="source-line-menu-title" class="source-line-menu-title"></div>
@@ -1532,8 +1724,8 @@
           <span class="feature-debug-spec"><b>效果</b>：源码↔预览按 Markdown source line 双向同步，不按滚动百分比硬绑；全程 clean、Undo/Redo 0/0、不写盘。</span>
         </button>
         <button id="ui-debug-table-config" class="ui-debug-action" type="button" role="menuitem" disabled>
-          <span class="feature-debug-title">表格配置</span>
-          <span class="feature-debug-spec"><b>操作</b>：通过真实“表格配置”编辑器临时改注释列序，验证热更新、非法配置保护、保存/重载，再恢复原项目配置。</span>
+          <span class="feature-debug-title">配置</span>
+          <span class="feature-debug-spec"><b>操作</b>：通过真实“配置”编辑器临时改注释列序，验证热更新、非法配置保护、保存/重载，再恢复原项目配置。</span>
           <span class="feature-debug-spec"><b>需要</b>：已运行“初始化工作稿”；安全副本注释表可用。</span>
           <span class="feature-debug-spec"><b>效果</b>：列序即时变化但章节始终 clean、Undo/Redo 0/0；最后项目配置文件精确恢复。</span>
         </button>

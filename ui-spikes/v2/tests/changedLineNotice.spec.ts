@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test } from "@playwright/test";
 
 test("changed-line notice tracks unseen live diffs and clears on visit", async ({ page, request }) => {
@@ -71,7 +72,7 @@ test("changed-line notice tracks unseen live diffs and clears on visit", async (
   await changedTab.click();
   await expect(changedTab).not.toHaveAttribute("data-change-notice", /.+/);
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await expect(page.locator("#state-value")).toHaveText("idle");
   const current = await (
     await request.get(

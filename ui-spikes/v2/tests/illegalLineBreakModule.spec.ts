@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test } from "@playwright/test";
 
 test("illegal line-break calibration drives real export merge decisions and survives save/reentry", async ({ page, request }) => {
@@ -94,7 +95,7 @@ test("illegal line-break calibration drives real export merge decisions and surv
 
   await page.locator("#save").click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await page.locator("#close").click();
+  await closeChapter(page);
 
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
@@ -105,7 +106,7 @@ test("illegal line-break calibration drives real export merge decisions and surv
   );
   await expect(page.locator("#working-length")).toHaveText(baselineWorkingLength!);
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   const currentResponse = await request.get(
     `/__workspace/chapter?chapterId=${encodeURIComponent(chapter.id)}`,
   );

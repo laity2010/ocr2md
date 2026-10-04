@@ -153,11 +153,11 @@ M8 将章节标题从“读取 sidecar 旧结果”升级为基于当前 working
 
 真实 iPad 实机使用 `01 Buffett’s Alpha 副本`：63,833 / 10 标题 / 10 导出标题 / 10 已编号 / revision `409011a8…` 起步；第一条 H1→H2 后 working 63,834 / undoDepth 1；Undo 回 clean 63,833，Redo 回 dirty 63,834；编号关闭后已编号 0 且 history 不增加，再开启回 10；保存后 revision `154c000d…`，关闭重开仍保持 H2，并直接读取持久化 working 确认 `# Buffett’s Alpha → ## Buffett’s Alpha`。验收结束恢复原 working + sidecar，最终精确回到原 revision `409011a882c808a17a4c6ffd9f31e62826036a86aa5f1fbe01a292b43aae751a`。
 
-## Mac 私有云迁移：5/5 完成（2026-09-06）
+## 历史：Mac 私有云迁移（2026-09-06，已于 2026-10-04 退役）
 
-v2 已从临时本机运行迁移到标准化 Mac 私有云运行边界，业务真相仍只在 `WorkspaceMachine / ChapterReviewApplication / core`。k3s release 为 `ocr2md-v2`，workspace 使用 PVC `ocr2md-workspace`；当前正式镜像为 `ocr2md/v2:mpc-final-20260906c`，Deployment 1/1 Ready。Helm chart 保持 host-neutral，Mac 专属 launchd / NodePort / loopback 适配只存在于 `deploy/private-cloud/`。
+这一节记录旧运行架构，仅用于历史追溯。当前生产已经收敛为单一 native OCR2MD Application Server：`Agent Link → 127.0.0.1:4176 → dev_server.py → Mac workspace / ~/.ocr2md-private`，由 `com.daisor.ocr2md` LaunchAgent 托管。旧 `preview_server.py`、4183 control、30418 NodePort、OCR2MD Helm/Deployment/Service 与 Docker 发布链均已退出运行；不要把下述旧拓扑当作当前部署说明。
 
-稳定入口为 `127.0.0.1:4176`：preview 负责当前 v2 静态前端，workspace 请求进入 k3s NodePort `30418`，debug 请求进入 launchd 托管的 `4183` control bridge。外网继续复用既有 Cloudflare named tunnel + Access；没有增加第二条长期 tunnel。
+旧架构曾使用 k3s release `ocr2md-v2`、PVC/hostPath workspace、4176 preview、30418 workspace NodePort 与 4183 debug/control bridge。外网始终复用既有 Agent Link/Cloudflare 入口；迁移到 native 后该公网入口保持不变。
 
 真实设备控制协议在迁移验收中补齐可靠性：命令 ACK 前不出队；`commandSequence` 去重保证 ACK 重试不会重复执行产品动作；命令终态 XState 与 ACK 原子上报；打开/保存等异步命令等待业务终态；UI paint 等待有 100ms 上限。普通 state telemetry 改为单一普通 fetch，移除了 `Beacon + keepalive fetch` 双发。此前偶发 Undo/Redo “状态已变但 ACK 丢失”的根因被确认是浏览器连接池被高频 keepalive/Beacon 调试请求挤满，而不是 WorkspaceMachine/history 错误；修复后完整远程链路无临时埋点连续 3/3 PASS。
 

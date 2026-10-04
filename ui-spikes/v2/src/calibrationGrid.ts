@@ -240,6 +240,10 @@ export class CalibrationGrid {
       located: SourceRange | undefined,
       activation?: "row" | "illegal-context" | "changed-deleted" | "media",
     ) => void,
+    private readonly onMediaDragStarted?: (
+      row: Candidate,
+      event: PointerEvent,
+    ) => void,
   ) {
     this.api = createGrid<Candidate>(host, {
       theme: calibrationTheme,
@@ -454,6 +458,8 @@ export class CalibrationGrid {
           colId: "mediaFileName",
           headerName: "文件名",
           valueGetter: (params) => params.data?.raw ?? "",
+          cellRenderer: (params: ICellRendererParams<Candidate>) =>
+            this.mediaFileNameRenderer(params),
         },
         {
           colId: "mediaSize",
@@ -681,7 +687,32 @@ export class CalibrationGrid {
     image.style.height = "52px";
     image.style.objectFit = "contain";
     image.style.borderRadius = "4px";
+    this.makeMediaDragSource(image, params.data);
     return image;
+  }
+
+  private mediaFileNameRenderer(
+    params: ICellRendererParams<Candidate>,
+  ): HTMLElement | string {
+    if (!params.data) return params.value ?? "";
+    const wrap = document.createElement("span");
+    wrap.className = "media-drag-source media-file-drag-source";
+    wrap.textContent = params.data.raw ?? "";
+    this.makeMediaDragSource(wrap, params.data);
+    return wrap;
+  }
+
+  private makeMediaDragSource(element: HTMLElement, row: Candidate | undefined): void {
+    if (!row || !this.onMediaDragStarted) return;
+    element.classList.add("media-drag-source");
+    element.title = "拖动到源码窗，插入到当前高亮行";
+    element.setAttribute("aria-label", `${row.raw} · 拖动到源码窗插入`);
+    element.addEventListener("pointerdown", (event) => {
+      if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.onMediaDragStarted?.(row, event);
+    });
   }
 
   private formatMediaSize(sizeBytes: number | undefined): string {

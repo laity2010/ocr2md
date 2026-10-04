@@ -4,7 +4,7 @@ test("source pane keeps three content tabs and exposes regex as a shared drawer"
   await page.goto("/");
 
   const tabs = page.locator("#editor-pane .source-tab");
-  await expect(tabs).toHaveText(["源码", "自定义 CSS", "表格配置"]);
+  await expect(tabs).toHaveText(["源码", "自定义 CSS", "配置"]);
 
   const sourceTab = page.locator("#editor-tab-source");
   const cssTab = page.locator("#editor-tab-css");
@@ -51,8 +51,10 @@ test("source pane keeps three content tabs and exposes regex as a shared drawer"
   await expect(cssPanel).toBeHidden();
   await expect(tableConfigPanel).toBeVisible();
   await expect(regexPanel).toBeVisible();
-  await expect(regexTarget).toHaveText("当前：表格配置");
+  await expect(regexTarget).toHaveText("当前：配置");
   await expect(page.locator("#table-config-editor .cm-content")).toContainText("\"版本\": 2");
+  await expect(page.locator("#translation-popover-trigger-control")).toBeVisible();
+  await expect(page.locator("#translation-popover-trigger")).toHaveValue("4");
   await expect(calibrationGrid).toBeHidden();
   await expect(tableConfigGrid).toBeVisible();
   await expect(configModuleTab).toHaveAttribute("aria-pressed", "true");

@@ -48,6 +48,7 @@ export interface ChapterWorkspaceData {
   translationSourceChapterId?: string;
   translationServiceId?: TranslationServiceId;
   media?: ChapterMediaItem[];
+  mediaSourceRoutes?: Array<{ source: string; localPath: string }>;
 }
 
 export interface ChapterMediaItem {
@@ -77,6 +78,7 @@ export interface ChapterImagePasteInput {
 export interface ChapterImagePasteResult {
   relativePath: string;
   fileName: string;
+  media: ChapterMediaItem[];
 }
 
 export interface ChapterMediaDownloadInput {

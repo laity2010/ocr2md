@@ -53,6 +53,8 @@ test("workspace splitter clamps an old wide split so iPad editor actions stay in
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-app-ready", "true");
 
+  await expect(page.locator("#close")).toHaveCount(0);
+
   const layout = await page.evaluate(() => {
     const rect = (selector: string) => {
       const box = document.querySelector(selector)!.getBoundingClientRect();
@@ -68,7 +70,6 @@ test("workspace splitter clamps an old wide split so iPad editor actions stay in
       workspace: rect("#cleaning-workspace"),
       editor: rect("#editor-pane"),
       regex: rect("#regex-search-toggle"),
-      close: rect("#close"),
       split: Number(
         document.querySelector("#workspace-splitter")
           ?.getAttribute("aria-valuenow"),
@@ -83,7 +84,6 @@ test("workspace splitter clamps an old wide split so iPad editor actions stay in
   expect(layout.stored).toBeLessThan(70);
   expect(layout.editor.right).toBeLessThanOrEqual(layout.workspace.right + 0.5);
   expect(layout.regex.right).toBeLessThanOrEqual(layout.editor.right + 0.5);
-  expect(layout.close.right).toBeLessThanOrEqual(layout.editor.right + 0.5);
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewport);
 
   await page.locator("#regex-search-toggle").click();
@@ -107,7 +107,6 @@ test("workspace splitter clamps an old wide split so iPad editor actions stay in
       editor: rect("#editor-pane"),
       menu: rect("#editor-pane > .pane-menu"),
       regex: rect("#regex-search-toggle"),
-      close: rect("#close"),
       panel: rect("#regex-search-panel"),
       toolbar: rect(".regex-panel-toolbar"),
     };
@@ -118,7 +117,6 @@ test("workspace splitter clamps an old wide split so iPad editor actions stay in
   );
   expect(openLayout.menu.right).toBeLessThanOrEqual(openLayout.editor.right + 0.5);
   expect(openLayout.regex.right).toBeLessThanOrEqual(openLayout.editor.right + 0.5);
-  expect(openLayout.close.right).toBeLessThanOrEqual(openLayout.editor.right + 0.5);
   expect(openLayout.panel.right).toBeLessThanOrEqual(openLayout.editor.right + 0.5);
   expect(openLayout.toolbar.scrollWidth).toBeLessThanOrEqual(
     openLayout.toolbar.clientWidth,

@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 test.describe.configure({ timeout: 90_000 });
@@ -87,7 +88,7 @@ test("embed ignore participates in unified undo/redo and survives save reentry",
 
   await page.locator("#save").click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await page.locator('[data-review-module="嵌入块"]').click();
@@ -97,6 +98,6 @@ test("embed ignore participates in unified undo/redo and survives save reentry",
     "总计 65 · 可见 50 · 组 11 · 未分组 0",
   );
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await restoreBaseline(request, chapter.id, baseline);
 });

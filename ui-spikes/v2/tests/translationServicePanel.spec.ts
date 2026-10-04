@@ -239,6 +239,57 @@ test("sentence toolbar follows selected provider and resumes untranslated senten
     await expect(page.locator("#review-grid-status")).toContainText("DeepL");
     await expect(page.locator("#review-grid-status")).toContainText("已翻 0/");
 
+    const deeplSourceJson = JSON.parse(await readFile(sentenceSourcePath, "utf8")) as {
+      entries: Array<{ id: string; sourceText: string }>;
+    };
+    const deeplIds = deeplSourceJson.entries.map((entry) => entry.id);
+    const deeplEntries: Record<string, Record<string, unknown>> = {};
+    const deeplBatchCalls: string[][] = [];
+    await page.route("**/__workspace/translation-services/translate-batch", async (route) => {
+      const body = route.request().postDataJSON() as {
+        provider: string;
+        sentenceIds: string[];
+      };
+      expect(body.provider).toBe("deepl");
+      deeplBatchCalls.push(body.sentenceIds);
+      for (const id of body.sentenceIds) {
+        deeplEntries[id] = {
+          sentenceId: id,
+          status: "translated",
+          translatedText: `DeepL 译文 ${id}`,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          provider: "deepl",
+          sentenceIds: body.sentenceIds,
+          translatedCount: body.sentenceIds.length,
+          failedCount: 0,
+          contextCharacters: 512,
+          translationFile: {
+            fileName: "deepl.json",
+            provider: "deepl",
+            data: {
+              version: 1,
+              provider: "deepl",
+              label: "DeepL",
+              sourceFile: "original.json",
+              entries: deeplEntries,
+            },
+          },
+        }),
+      });
+    });
+    await page.locator("#sentence-translate-button").click();
+    await expect(page.locator("#review-grid-status"))
+      .toContainText(`已翻 ${deeplIds.length}/${deeplIds.length}`);
+    expect(deeplBatchCalls).toHaveLength(1);
+    expect(deeplBatchCalls[0]).toEqual(deeplIds);
+    await page.unroute("**/__workspace/translation-services/translate-batch");
+
     await page.locator("#translation-element-tab").click();
     await page.locator('#translation-element-menu [data-review-module="翻译服务"]').click();
     await page.locator('[data-provider="chatgpt"]').click();

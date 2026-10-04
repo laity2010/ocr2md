@@ -34,6 +34,31 @@ Mac:  http://127.0.0.1:4176/
 iPad: http://192.168.1.10:4176/
 ```
 
+### 2026-10-04 当前生产运行基线
+
+OCR2MD 已完成从 Mac 私有云 k3s 包装层迁出，当前生产真链路为：
+
+```text
+ocr2md.laity.bid
+  → Agent Link application-main
+  → 127.0.0.1:4176
+  → LaunchAgent com.daisor.ocr2md
+  → deploy/native/run-ocr2md
+  → ui-spikes/v2/dev_server.py
+  → iCloud/Obsidian workspace + ~/.ocr2md-private
+```
+
+必须按当前基线理解：
+
+- 4176 已由 native `dev_server.py` 直接承担静态 UI、`/__workspace/*`、`/__debug/*`、translation、media、revision/conflict、workspace switching 和 device bridge。
+- 旧 `preview_server.py`、4183 control、30418 NodePort、OCR2MD Deployment/Service/Helm release 已退出运行；不要重新引入除非执行明确 rollback。
+- 正式 LaunchAgent 文件：`~/Library/LaunchAgents/com.daisor.ocr2md.plist`；仓库源文件：`deploy/native/com.daisor.ocr2md.plist`。
+- 旧 preview/control plist 已移出 LaunchAgents，备份于 `~/.ocr2md-migration/legacy-launchagents/`；旧 preview/control runtime、OCR2MD PVC 与 Helm release 已退出运行面。Git HEAD、最后 1 个 OCR2MD Docker 镜像与两份旧 LaunchAgent 备份继续作为冷回滚材料。
+- 浏览器 API 的存储路径保持历史兼容的 `/data/...` 虚拟路径；native 不得返回真实 `/Users/...` 宿主路径。
+- k3s/Colima 仍可被其他项目使用；“OCR2MD 离开 k3s”不等于停掉整套私有云。
+- Obsidian ↔ iCloud ↔ Unison ↔ Google Drive 同步链、Agent Link/Tunnel/DNS 均未改变。
+
+
 Integration UI 的正确验证目录：
 
 ```bash

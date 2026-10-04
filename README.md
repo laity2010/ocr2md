@@ -90,6 +90,27 @@ chapters/章节名称/trans/
 
 ## 技术决策
 
+### Native 生产运行架构（2026-10-04）
+
+OCR2MD 生产运行已从 Mac 私有云 k3s/Helm/NodePort 收敛为单一 macOS 原生服务：
+
+```text
+Mac / iPad / iPhone browser
+  → https://ocr2md.laity.bid
+  → Agent Link application-main
+  → 127.0.0.1:4176
+  → OCR2MD dev_server.py
+  → iCloud/Obsidian workspace + ~/.ocr2md-private
+```
+
+- 进程管理：LaunchAgent `com.daisor.ocr2md`，安装于 `~/Library/LaunchAgents/com.daisor.ocr2md.plist`，`KeepAlive=true`。
+- 正式启动入口：`deploy/native/run-ocr2md`；只监听 `127.0.0.1:4176`。
+- `/__workspace/*`、`/__debug/*`、translation、media、revision/conflict、device bridge 均由同一 Python 服务直接承担。
+- 浏览器可见的存储路径统一映射为历史兼容的 `/data/...`，不暴露宿主 `/Users/...` 路径。
+- 原 `preview_server.py → 30418 / 4183`、OCR2MD Helm release、Deployment、Service、NodePort 和私有云 Docker 发布链已经退役。
+- Obsidian ↔ iCloud ↔ Unison ↔ Google Drive 同步链不变；Agent Link/Tunnel 路由不变。
+- 冷回滚资产仍保留但不参与运行：Git HEAD 中的旧部署文件、最后 1 个 OCR2MD Docker 镜像，以及 `~/.ocr2md-migration/legacy-launchagents/` 下的两份旧 LaunchAgent 备份；旧 Helm release、OCR2MD PVC/runtime 已不在运行面。
+
 ### 云端开发执行链（2026-09-03）
 
 > 当前运行选择：日常开发已切回 Mac 本地执行；下述 AgentDock → Codespaces → GitHub 链路继续完整保留，作为需要云端开发/iPad 远程验收时可随时启用的备用路径。

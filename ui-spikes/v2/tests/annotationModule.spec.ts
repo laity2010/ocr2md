@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 test.describe.configure({ timeout: 90_000 });
@@ -125,7 +126,7 @@ test("ignored annotation survives annotation rescan and reentry while pair statu
 
   await page.locator("#save").click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await page.locator('[data-review-module="注释"]').click();
@@ -139,6 +140,6 @@ test("ignored annotation survives annotation rescan and reentry while pair statu
     }),
   ).toHaveCount(1);
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await restoreBaseline(request, chapter.id, baseline);
 });

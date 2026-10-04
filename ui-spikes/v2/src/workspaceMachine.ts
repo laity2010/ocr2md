@@ -111,6 +111,11 @@ export type WorkspaceEvent =
       savedAt: string;
       media: NonNullable<ChapterWorkspaceData["media"]>;
     }
+  | {
+      type: "MEDIA_CATALOG_REFRESHED";
+      chapterId: string;
+      media: NonNullable<ChapterWorkspaceData["media"]>;
+    }
   | { type: "CALIBRATION_LINE_TYPE_CHANGED"; rowId: string; lineType: string }
   | { type: "CHAPTER_FILE_CHANGED"; rowId: string; value: string }
   | { type: "ASSIGN_BOUNDARY_SEQUENCE"; start: string }
@@ -885,6 +890,19 @@ export const workspaceMachine = setup({
         saveError: undefined,
       };
     }),
+    applyMediaCatalog: assign(({ context, event }) => {
+      if (
+        !context.chapter
+        || event.type !== "MEDIA_CATALOG_REFRESHED"
+        || context.chapter.id !== event.chapterId
+      ) return {};
+      return {
+        chapter: {
+          ...context.chapter,
+          media: event.media,
+        },
+      };
+    }),
     addSourceLineToActiveModule: assign(({ context, event }) => {
       if (event.type !== "ADD_SOURCE_LINE_TO_ACTIVE_MODULE" || !context.chapter) {
         return {};
@@ -1293,6 +1311,9 @@ export const workspaceMachine = setup({
             MEDIA_DOWNLOAD_APPLIED: {
               actions: "applyMediaDownloadResult",
             },
+            MEDIA_CATALOG_REFRESHED: {
+              actions: "applyMediaCatalog",
+            },
             CALIBRATION_LINE_TYPE_CHANGED: {
               guard: "calibrationLineTypeChanged",
               target: "dirty",
@@ -1373,6 +1394,9 @@ export const workspaceMachine = setup({
             WORKING_CHANGED: {
               guard: "workingTextChanged",
               actions: "updateWorkingText",
+            },
+            MEDIA_CATALOG_REFRESHED: {
+              actions: "applyMediaCatalog",
             },
             CALIBRATION_LINE_TYPE_CHANGED: {
               guard: "calibrationLineTypeChanged",

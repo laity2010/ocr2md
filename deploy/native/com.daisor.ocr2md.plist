@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.daisor.ocr2md</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/daisor/AgentDock/ocr2md-codespaces-spike/deploy/native/run-ocr2md</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OCR2MD_PORT</key>
+    <string>4176</string>
+    <key>OCR2MD_DEBUG_DIR</key>
+    <string>/Users/daisor/AgentDock/ocr2md-codespaces-spike/.runtime/ocr2md-debug</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>/Users/daisor/AgentDock/ocr2md-codespaces-spike</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>/Users/daisor/Library/Logs/ocr2md/native.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/daisor/Library/Logs/ocr2md/native.log</string>
+</dict>
+</plist>

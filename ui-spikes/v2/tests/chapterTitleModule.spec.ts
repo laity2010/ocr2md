@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 test.describe.configure({ timeout: 90_000 });
@@ -174,7 +175,7 @@ test("chapter title level edit is one unified history action and numbering uses 
 
   await page.locator("#save").click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#active-module-rows")).toHaveText("10");
@@ -188,7 +189,7 @@ test("chapter title level edit is one unified history action and numbering uses 
   };
   expect(persistedPayload.workingText).toContain("### Data Sources");
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await restoreBaseline(request, chapter.id, baseline);
 });
 
@@ -211,7 +212,7 @@ test("ignored chapter heading survives title rescan and reentry", async ({ page,
 
   await page.locator("#save").click();
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await page.locator("#close").click();
+  await closeChapter(page);
   await page.locator("#open-chapter").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#active-module-rows")).toHaveText("9");
@@ -219,6 +220,6 @@ test("ignored chapter heading survives title rescan and reentry", async ({ page,
     "导出效果：9 个标题 · 导出标题 10 个 · 已编号 9 个",
   );
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await restoreBaseline(request, chapter.id, baseline);
 });

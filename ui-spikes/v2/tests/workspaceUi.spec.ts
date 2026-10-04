@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test } from "@playwright/test";
 
 test.describe.configure({ timeout: 90_000 });
@@ -134,7 +135,7 @@ test("catalog selects multiple real project chapters and persistence survives re
   await expect(page.locator("#working-length")).toHaveText(String(baselineLength + 1));
   await expect(page.locator("#revision")).toHaveText(savedRevision!);
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await expect(page.locator("#state-value")).toHaveText("idle");
 
   await page.locator("#chapter-select").selectOption({ label: "chapters/02 Appendix A" });

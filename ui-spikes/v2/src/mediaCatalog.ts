@@ -12,6 +12,11 @@ export interface MediaCatalogItem {
   mimeType?: string;
 }
 
+export interface AdoptedMediaRoutes {
+  exact: ReadonlyMap<string, string>;
+  basename: ReadonlyMap<string, string>;
+}
+
 const GROUP_ORDER: Record<MediaGroup, number> = {
   已采用: 0,
   未采用: 1,
@@ -67,6 +72,95 @@ function collectWikiImageTargets(text: string): string[] {
     if (target) targets.push(target);
   }
   return targets;
+}
+
+function mediaTargetBasename(value: string): string | undefined {
+  let normalized = value.trim().replace(/^<|>$/g, "").replace(/\\/g, "/");
+  try {
+    normalized = decodeURIComponent(normalized);
+  } catch {
+    // Keep the original target when percent-decoding is not valid.
+  }
+  try {
+    if (/^https?:\/\//i.test(normalized)) normalized = new URL(normalized).pathname;
+  } catch {
+    // Fall back to path-like basename parsing.
+  }
+  normalized = normalized.split(/[?#]/, 1)[0] ?? normalized;
+  const base = normalized.split("/").filter(Boolean).at(-1);
+  return base ? base.toLocaleLowerCase("en-US") : undefined;
+}
+
+export function mediaSourceRoutesFromRows(
+  rows: ChapterWorkspaceData["rows"],
+  media: ChapterWorkspaceData["media"],
+): Array<{ source: string; localPath: string }> {
+  const availableLocalPaths = new Set(
+    (media ?? []).map((item) => item.relativePath),
+  );
+  const routes: Array<{ source: string; localPath: string }> = [];
+  for (const row of rows) {
+    const local = row.localPath ? normalizeLocalImagePath(row.localPath) : undefined;
+    if (!local || !availableLocalPaths.has(local)) continue;
+    for (const source of [
+      ...collectWikiImageTargets(row.raw),
+      ...collectMarkdownImageTargets(row.raw),
+      ...collectHtmlImageTargets(row.raw),
+    ]) {
+      routes.push({ source, localPath: local });
+    }
+  }
+  return routes;
+}
+
+export function deriveAdoptedMediaRoutes(
+  chapter: ChapterWorkspaceData | undefined,
+): AdoptedMediaRoutes {
+  const exact = new Map<string, string>();
+  const basenameCandidates = new Map<string, Set<string>>();
+  if (!chapter || chapter.kind !== "chapter") {
+    return { exact, basename: new Map() };
+  }
+  const routeEntries = [
+    ...(chapter.mediaSourceRoutes ?? []),
+    ...mediaSourceRoutesFromRows(chapter.rows, chapter.media),
+  ];
+  for (const { source, localPath } of routeEntries) {
+    exact.set(source, localPath);
+    try {
+      exact.set(decodeURIComponent(source), localPath);
+    } catch {
+      // Exact encoded target remains available above.
+    }
+    const basename = mediaTargetBasename(source);
+    if (!basename) continue;
+    const candidates = basenameCandidates.get(basename) ?? new Set<string>();
+    candidates.add(localPath);
+    basenameCandidates.set(basename, candidates);
+  }
+  const basename = new Map<string, string>();
+  for (const [name, candidates] of basenameCandidates) {
+    if (candidates.size === 1) basename.set(name, [...candidates][0]);
+  }
+  return { exact, basename };
+}
+
+export function adoptedMediaLocalPath(
+  source: string,
+  routes: AdoptedMediaRoutes | undefined,
+): string | undefined {
+  if (!routes) return undefined;
+  const direct = routes.exact.get(source);
+  if (direct) return direct;
+  try {
+    const decoded = decodeURIComponent(source);
+    const decodedMatch = routes.exact.get(decoded);
+    if (decodedMatch) return decodedMatch;
+  } catch {
+    // Fall through to unique-basename matching.
+  }
+  const basename = mediaTargetBasename(source);
+  return basename ? routes.basename.get(basename) : undefined;
 }
 
 function externalDisplayName(url: string, index: number): string {

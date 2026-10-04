@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test } from "@playwright/test";
 import { ensureFeatureDebugCopy } from "./debugFixture";
 
@@ -23,7 +24,7 @@ test("chapter boundary feature debug assigns saves reenters and restores baselin
       inputs.map((input) => (input as HTMLInputElement).value),
     );
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await expect(page.locator("#state-value")).toHaveText("idle");
 
   const baselineBoundary = await request

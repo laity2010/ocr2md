@@ -168,8 +168,31 @@ test("source-to-translation keeps the normal document and opens sentence transla
     hasText: "Alpha value",
   }).first();
   await expect(sentence).toBeVisible();
-  await sentence.click();
+  const triggerControl = page.locator("#translation-popover-trigger-control");
+  const triggerSelect = page.locator("#translation-popover-trigger");
+  await expect(triggerControl).toBeHidden();
+
+  // Translation-popover interaction belongs to the shared 配置 workspace, not
+  // the reading toolbar. Opening 配置 exposes the setting without changing the
+  // active translation module; choosing the module again returns to reading.
+  await page.locator("#config-module-tab").click();
+  await expect(page.locator("#table-config-wrap")).toBeVisible();
+  await expect(triggerControl).toBeVisible();
+  await expect(triggerSelect).toHaveValue("4");
+  await page.locator("#translation-element-tab").click();
+  await page.locator('#translation-element-menu [data-review-module="原文to译文"]').click();
+  await expect(page.locator("#editor-pane")).toHaveClass(/translation-reading-layout/);
+  await expect(sentence).toBeVisible();
+
   const popover = page.locator(".ocr2md-translation-popover");
+  await sentence.click();
+  await page.waitForTimeout(120);
+  await sentence.click();
+  await page.waitForTimeout(120);
+  await sentence.click();
+  await expect(popover).toHaveCount(0);
+  await page.waitForTimeout(120);
+  await sentence.click();
   await expect(popover).toBeVisible();
   await expect(popover.locator(".ocr2md-translation-popover__title")).toHaveText("ChatGPT 译文");
   await expect(popover.locator(".ocr2md-translation-popover__body")).toContainText("阿尔法值 $R_t$ 上升。");
@@ -177,6 +200,16 @@ test("source-to-translation keeps the normal document and opens sentence transla
 
   await sentence.click();
   await expect(popover).toHaveCount(0);
+
+  await page.locator("#config-module-tab").click();
+  await expect(triggerControl).toBeVisible();
+  await triggerSelect.selectOption("1");
+  await expect.poll(() => page.evaluate(() =>
+    localStorage.getItem("ocr2md-v2-translation-popover-trigger-taps-v1"),
+  )).toBe("1");
+  await page.locator("#translation-element-tab").click();
+  await page.locator('#translation-element-menu [data-review-module="原文to译文"]').click();
+  await expect(page.locator("#editor-pane")).toHaveClass(/translation-reading-layout/);
 
   // Embedded HTML keeps its original table structure while visible text
   // participates in the same sentence translation popover flow.
@@ -238,6 +271,29 @@ test("source-to-translation keeps the normal document and opens sentence transla
     button: 0,
   });
 
+  // Reading previews expose source-line buttons. Pin the view to line 5 before
+  // switching direction; the reverse module must reopen at the same source line
+  // instead of reusing a raw pixel scroll offset.
+  await page.locator("#markdown-preview").evaluate((root: HTMLElement) => {
+    root.style.maxHeight = "180px";
+  });
+  const readingLineButtons = page.locator(
+    "#markdown-preview .ocr2md-reading-line-button",
+  );
+  expect(await readingLineButtons.count()).toBeGreaterThanOrEqual(5);
+  await expect(page.locator(
+    '#markdown-preview .ocr2md-reading-line-button[data-reading-source-line="3"]',
+  )).toHaveCount(1);
+  const line5 = page.locator(
+    '#markdown-preview .ocr2md-reading-line-button[data-reading-source-line="5"]',
+  );
+  await expect(line5).toHaveCount(1);
+  await line5.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.locator("#markdown-preview")).toHaveAttribute(
+    "data-reading-source-line",
+    "5",
+  );
+
   // Reverse reading mode renders the translated document while preserving the
   // original Markdown/Obsidian structure. Clicking translated text reveals the
   // source sentence.
@@ -247,6 +303,20 @@ test("source-to-translation keeps the normal document and opens sentence transla
   await expect(page.locator("#editor-pane")).toHaveClass(/translation-reading-layout/);
   await expect(page.locator("#working-editor")).toBeHidden();
   await expect(page.locator("#editor-preview-splitter")).toBeHidden();
+  await expect(page.locator("#markdown-preview")).toHaveAttribute(
+    "data-reading-source-line",
+    "5",
+  );
+  await expect(page.locator(
+    '#markdown-preview .ocr2md-reading-line-button[data-reading-source-line="5"]',
+  )).toHaveCount(1);
+  const syncedLinePosition = await page.locator("#markdown-preview").evaluate((root) => {
+    const target = root.querySelector<HTMLElement>('[data-reading-source-line="5"]:not(.ocr2md-reading-line-button)');
+    if (!target) return null;
+    return target.getBoundingClientRect().top - root.getBoundingClientRect().top;
+  });
+  expect(syncedLinePosition).not.toBeNull();
+  expect(Math.abs(syncedLinePosition! - 16)).toBeLessThan(12);
 
   const reversePreview = await page.locator("#markdown-preview").evaluate((root) => ({
     h1: root.querySelectorAll("h1").length,

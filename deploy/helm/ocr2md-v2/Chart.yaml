@@ -1,6 +1,0 @@
-apiVersion: v2
-name: ocr2md-v2
-description: Portable ocr2md v2 web/API workload
-type: application
-version: 0.1.0
-appVersion: "0.1.0"

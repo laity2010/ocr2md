@@ -1,3 +1,4 @@
+import { closeChapter } from "./productActions";
 import { expect, test } from "@playwright/test";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -134,7 +135,7 @@ test("chapter boundary merges OCR inputs, assigns files, survives history/save, 
   expect(savedRevision).toBeTruthy();
   expect(savedRevision).not.toBe(beforeSaveRevision);
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await expect(page.locator("#state-value")).toHaveText("idle");
   await navigation.selectOption("__node_ocr__");
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
@@ -196,7 +197,7 @@ test("chapter boundary merges OCR inputs, assigns files, survives history/save, 
     ).toMatchObject({ name, ready: true });
   }
 
-  await page.locator("#close").click();
+  await closeChapter(page);
   await expect(page.locator("#state-value")).toHaveText("idle");
   await page.locator("#refresh-catalog").click();
   await expect(page.locator("#state-value")).toHaveText("idle");

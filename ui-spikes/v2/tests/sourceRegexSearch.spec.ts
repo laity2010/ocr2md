@@ -75,7 +75,7 @@ test("shared regex drawer follows Source, Custom CSS, and Table Config targets",
   ).toBeVisible();
 
   await page.locator("#editor-tab-table-config").click();
-  await expect(targetLabel).toHaveText("当前：表格配置");
+  await expect(targetLabel).toHaveText("当前：配置");
   await input.fill("columns");
   await expect(status).toContainText("个匹配 · 1/");
   await expect(status).not.toHaveText("0 个匹配");

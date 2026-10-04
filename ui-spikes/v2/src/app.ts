@@ -33,7 +33,7 @@ import { BasicMarkdownPreview } from "./basicMarkdownPreview";
 import { EditorPreviewSplitter } from "./editorPreviewSplitter";
 import { SourceRegexSearch } from "./sourceRegexSearch";
 import { SourcePreviewScrollSync } from "./sourcePreviewScrollSync";
-import { deriveMediaCatalog } from "./mediaCatalog";
+import { deriveAdoptedMediaRoutes, deriveMediaCatalog } from "./mediaCatalog";
 import {
   TranslationServicePanel,
   type TranslationServiceSelection,
@@ -230,6 +230,26 @@ document.documentElement.dataset.deviceProfile = isIPadLike ? "ipad" : "mac";
 const pageLoadedAt = requireElement<HTMLElement>("page-loaded-at");
 const stateValue = requireElement<HTMLElement>("state-value");
 const projectName = requireElement<HTMLElement>("project-name");
+const workspaceDirectoryButton =
+  requireElement<HTMLButtonElement>("workspace-directory-button");
+const workspaceDirectoryOverlay =
+  requireElement<HTMLElement>("workspace-directory-overlay");
+const workspaceDirectoryCurrent =
+  requireElement<HTMLElement>("workspace-directory-current");
+const workspaceDirectoryBreadcrumb =
+  requireElement<HTMLElement>("workspace-directory-breadcrumb");
+const workspaceDirectoryParent =
+  requireElement<HTMLButtonElement>("workspace-directory-parent");
+const workspaceDirectoryPath =
+  requireElement<HTMLElement>("workspace-directory-path");
+const workspaceDirectoryList =
+  requireElement<HTMLElement>("workspace-directory-list");
+const workspaceDirectoryStatus =
+  requireElement<HTMLElement>("workspace-directory-status");
+const workspaceDirectoryCancel =
+  requireElement<HTMLButtonElement>("workspace-directory-cancel");
+const workspaceDirectorySelect =
+  requireElement<HTMLButtonElement>("workspace-directory-select");
 const chapterSelect = requireElement<HTMLSelectElement>("chapter-select");
 const chapterSelectionStatus = requireElement<HTMLElement>("chapter-selection-status");
 const boundarySelectionStatus = requireElement<HTMLElement>("boundary-selection-status");
@@ -338,6 +358,8 @@ const tableConfigResetButton =
 const regexSearchPanel = requireElement<HTMLElement>("regex-search-panel");
 const editorModeStatus = requireElement<HTMLElement>("editor-mode-status");
 const markdownPreviewHost = requireElement<HTMLElement>("markdown-preview");
+const translationPopoverTrigger =
+  requireElement<HTMLSelectElement>("translation-popover-trigger");
 const editorPane = requireElement<HTMLElement>("editor-pane");
 const editorPreviewSplitter =
   requireElement<HTMLElement>("editor-preview-splitter");
@@ -357,7 +379,6 @@ const exportCalibrationButton =
 const resetCalibrationButton =
   requireElement<HTMLButtonElement>("reset-calibration");
 const exportTransButton = requireElement<HTMLButtonElement>("export-trans");
-const closeButton = requireElement<HTMLButtonElement>("close");
 const enterDebugButton = requireElement<HTMLButtonElement>("enter-debug");
 const exitDebugButton = requireElement<HTMLButtonElement>("exit-debug");
 const leaveConfirmOverlay = requireElement<HTMLElement>("leave-confirm-overlay");
@@ -440,6 +461,33 @@ const workspaceSplitterControl =
 const editorPreviewSplitterControl =
   new EditorPreviewSplitter(editorPane, editorPreviewSplitter);
 const markdownPreview = new BasicMarkdownPreview(markdownPreviewHost);
+const TRANSLATION_POPOVER_TRIGGER_STORAGE_KEY =
+  "ocr2md-v2-translation-popover-trigger-taps-v1";
+const DEFAULT_TRANSLATION_POPOVER_TRIGGER_TAPS = 4;
+
+function loadTranslationPopoverTriggerTaps(): number {
+  const raw = window.localStorage.getItem(TRANSLATION_POPOVER_TRIGGER_STORAGE_KEY);
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 1 && value <= 6
+    ? value
+    : DEFAULT_TRANSLATION_POPOVER_TRIGGER_TAPS;
+}
+
+function setTranslationPopoverTriggerTaps(value: number, persist: boolean): void {
+  const normalized = Number.isInteger(value) && value >= 1 && value <= 6
+    ? value
+    : DEFAULT_TRANSLATION_POPOVER_TRIGGER_TAPS;
+  translationPopoverTrigger.value = String(normalized);
+  markdownPreview.setTranslationPopoverTapCount(normalized);
+  if (persist) {
+    window.localStorage.setItem(TRANSLATION_POPOVER_TRIGGER_STORAGE_KEY, String(normalized));
+  }
+}
+
+setTranslationPopoverTriggerTaps(loadTranslationPopoverTriggerTaps(), false);
+translationPopoverTrigger.addEventListener("change", () => {
+  setTranslationPopoverTriggerTaps(Number(translationPopoverTrigger.value), true);
+});
 
 const featureDebugMenu = new FeatureDebugMenu(
   featureDebugToggle,
@@ -491,6 +539,24 @@ let selectedTranslationService: TranslationServiceSelection = {
 let sentenceTranslationRunning = false;
 let sentenceTranslationRunToken = 0;
 const sentenceTranslationServiceStatus = new Map<string, string>();
+
+type WorkspaceDirectoryPayload = {
+  root: string;
+  path: string;
+  displayPath: string;
+  parentPath: string | null;
+  directories: Array<{
+    name: string;
+    path: string;
+    hasChapters?: boolean;
+  }>;
+  currentProjectPath: string;
+  currentProjectDisplayPath: string;
+  currentProjectName: string;
+};
+
+let workspaceDirectoryPayload: WorkspaceDirectoryPayload | undefined;
+let workspaceDirectoryLoading = false;
 
 const deviceDebugBridge = createDeviceDebugBridge();
 
@@ -657,6 +723,11 @@ const workingEditor = new WorkingEditor(
       chapterId: view.selectedChapterId,
       mimeType: file.type,
       dataBase64: await fileToBase64(file),
+    });
+    actor.send({
+      type: "MEDIA_CATALOG_REFRESHED",
+      chapterId: view.selectedChapterId,
+      media: saved.media,
     });
     return `![[${saved.relativePath}]]`;
   },
@@ -1051,7 +1122,7 @@ function syncRegexSearchTarget(mode = sourcePaneMode): void {
   }
 
   if (mode === "table-config") {
-    regexSearchTarget.textContent = "当前：表格配置";
+    regexSearchTarget.textContent = "当前：配置";
     sourceRegexSearch.updateTarget(
       tablePresentationEditor?.source() ?? "",
       ({ from, to }) => tablePresentationEditor?.revealOffsets(from, to, false),
@@ -1106,7 +1177,7 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
     mode === "css"
       ? "调整自定义 CSS 与预览高度"
       : mode === "table-config"
-        ? "调整表格配置与预览高度"
+        ? "调整配置与预览高度"
         : "调整源码与预览高度",
   );
 
@@ -1119,7 +1190,7 @@ function setSourcePaneMode(mode: SourcePaneMode): void {
     editorModeStatus.textContent = "自定义 CSS · 修改后实时预览";
     requestAnimationFrame(() => customCssEditor.focus());
   } else {
-    editorModeStatus.textContent = "表格配置 · 修改后实时预览";
+    editorModeStatus.textContent = "配置 · 修改后实时预览";
     requestAnimationFrame(() => tablePresentationEditor?.focus());
   }
 }
@@ -1197,6 +1268,10 @@ type SentenceTranslateEndpointPayload = {
   provider?: string;
   sentenceId?: string;
   skipped?: boolean;
+  sentenceIds?: string[];
+  translatedCount?: number;
+  failedCount?: number;
+  contextCharacters?: number;
   translationFile?: {
     fileName?: string;
     provider?: string;
@@ -1393,60 +1468,125 @@ async function translatePendingSentences(): Promise<void> {
   syncSentenceTranslationUi(chapter);
 
   try {
-    for (const sentence of source.entries) {
-      const currentSnapshot = actor.getSnapshot();
-      const currentChapter = currentSnapshot.context.chapter;
-      if (
-        runToken !== sentenceTranslationRunToken
-        || currentChapter?.id !== chapter.id
-        || currentSnapshot.context.activeReviewModule !== "句子"
-        || selectedTranslationService.id !== service.id
-      ) {
-        sentenceTranslationServiceStatus.set(service.id, "已暂停 · 离开句子模块或切换服务");
-        break;
-      }
+    if (service.id === "deepl") {
+      const batchSize = 16;
+      while (true) {
+        const currentSnapshot = actor.getSnapshot();
+        const currentChapter = currentSnapshot.context.chapter;
+        if (
+          runToken !== sentenceTranslationRunToken
+          || currentChapter?.id !== chapter.id
+          || currentSnapshot.context.activeReviewModule !== "句子"
+          || selectedTranslationService.id !== service.id
+        ) {
+          sentenceTranslationServiceStatus.set(service.id, "已暂停 · 离开句子模块或切换服务");
+          break;
+        }
 
-      const currentRow = sentenceCandidates(chapter).find((row) => row.id === sentence.id);
-      if (currentRow?.translationResults?.[service.id]?.status === "已翻译") continue;
-
-      const before = sentenceTranslationProgress(chapter, service.id);
-      sentenceTranslationServiceStatus.set(
-        service.id,
-        `翻译中 · 第 ${Math.min(before.translated + 1, before.total)}/${before.total} 句`,
-      );
-      syncSentenceTranslationUi(chapter);
-
-      const response = await fetch("/__workspace/translation-services/translate-sentence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          provider: service.id,
-          chapterId: chapter.translationSourceChapterId,
-          sentenceId: sentence.id,
-        }),
-      });
-      const payload = await sentenceTranslateResponse(response);
-      const translationFile = payload.translationFile;
-      if (translationFile?.data) {
-        updateSentenceTranslationCache(
-          chapter,
-          translationFile.provider ?? service.id,
-          translationFile.data,
+        const currentRows = new Map(
+          sentenceCandidates(chapter).map((row) => [row.id, row]),
         );
-        refreshSentenceTranslationGrid(chapter);
+        const pending = source.entries.filter(
+          (sentence) =>
+            currentRows.get(sentence.id)?.translationResults?.[service.id]?.status !== "已翻译",
+        );
+        if (!pending.length) break;
+        const batch = pending.slice(0, batchSize);
+        const before = sentenceTranslationProgress(chapter, service.id);
+        sentenceTranslationServiceStatus.set(
+          service.id,
+          `批量翻译中 · ${batch.length} 句/批 · 已完成 ${before.translated}/${before.total}`,
+        );
+        syncSentenceTranslationUi(chapter);
+
+        const response = await fetch("/__workspace/translation-services/translate-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({
+            provider: service.id,
+            chapterId: chapter.translationSourceChapterId,
+            sentenceIds: batch.map((sentence) => sentence.id),
+          }),
+        });
+        const payload = await sentenceTranslateResponse(response);
+        const translationFile = payload.translationFile;
+        if (translationFile?.data) {
+          updateSentenceTranslationCache(
+            chapter,
+            translationFile.provider ?? service.id,
+            translationFile.data,
+          );
+          refreshSentenceTranslationGrid(chapter);
+        }
+        if (!response.ok) {
+          throw new Error(payload.error || `翻译失败 · HTTP ${response.status}`);
+        }
+        const after = sentenceTranslationProgress(chapter, service.id);
+        sentenceTranslationServiceStatus.set(
+          service.id,
+          after.translated === after.total
+            ? "已完成"
+            : `批量翻译中 · 已完成 ${after.translated}/${after.total}`,
+        );
+        syncSentenceTranslationUi(chapter);
       }
-      if (!response.ok) {
-        throw new Error(payload.error || `翻译失败 · HTTP ${response.status}`);
-      }
-      const after = sentenceTranslationProgress(chapter, service.id);
-      sentenceTranslationServiceStatus.set(
-        service.id,
-        after.translated === after.total
-          ? "已完成"
-          : `翻译中 · 已完成 ${after.translated}/${after.total}`,
-      );
-      syncSentenceTranslationUi(chapter);
+    } else {
+          for (const sentence of source.entries) {
+            const currentSnapshot = actor.getSnapshot();
+            const currentChapter = currentSnapshot.context.chapter;
+            if (
+              runToken !== sentenceTranslationRunToken
+              || currentChapter?.id !== chapter.id
+              || currentSnapshot.context.activeReviewModule !== "句子"
+              || selectedTranslationService.id !== service.id
+            ) {
+              sentenceTranslationServiceStatus.set(service.id, "已暂停 · 离开句子模块或切换服务");
+              break;
+            }
+
+            const currentRow = sentenceCandidates(chapter).find((row) => row.id === sentence.id);
+            if (currentRow?.translationResults?.[service.id]?.status === "已翻译") continue;
+
+            const before = sentenceTranslationProgress(chapter, service.id);
+            sentenceTranslationServiceStatus.set(
+              service.id,
+              `翻译中 · 第 ${Math.min(before.translated + 1, before.total)}/${before.total} 句`,
+            );
+            syncSentenceTranslationUi(chapter);
+
+            const response = await fetch("/__workspace/translation-services/translate-sentence", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              cache: "no-store",
+              body: JSON.stringify({
+                provider: service.id,
+                chapterId: chapter.translationSourceChapterId,
+                sentenceId: sentence.id,
+              }),
+            });
+            const payload = await sentenceTranslateResponse(response);
+            const translationFile = payload.translationFile;
+            if (translationFile?.data) {
+              updateSentenceTranslationCache(
+                chapter,
+                translationFile.provider ?? service.id,
+                translationFile.data,
+              );
+              refreshSentenceTranslationGrid(chapter);
+            }
+            if (!response.ok) {
+              throw new Error(payload.error || `翻译失败 · HTTP ${response.status}`);
+            }
+            const after = sentenceTranslationProgress(chapter, service.id);
+            sentenceTranslationServiceStatus.set(
+              service.id,
+              after.translated === after.total
+                ? "已完成"
+                : `翻译中 · 已完成 ${after.translated}/${after.total}`,
+            );
+            syncSentenceTranslationUi(chapter);
+          }
     }
     const progress = sentenceTranslationProgress(chapter, service.id);
     if (runToken === sentenceTranslationRunToken && progress.translated === progress.total) {
@@ -1467,6 +1607,84 @@ async function translatePendingSentences(): Promise<void> {
 sentenceTranslateButton.addEventListener("click", () => {
   void translatePendingSentences();
 });
+
+function mediaReferenceMarkdown(row: Candidate): string | undefined {
+  if (row.mediaPath) return `![[${row.mediaPath}]]`;
+  if (row.mediaSourceUrl) return `![](${row.mediaSourceUrl})`;
+  return undefined;
+}
+
+function beginMediaSourceDrag(row: Candidate, startEvent: PointerEvent): void {
+  const snapshot = actor.getSnapshot();
+  const view = deriveWorkspaceView(snapshot);
+  const chapter = snapshot.context.chapter;
+  const markdown = mediaReferenceMarkdown(row);
+  if (!view.canEdit || chapter?.kind !== "chapter" || !markdown) {
+    sourceLocationStatus.textContent = "媒体拖放失败 · 当前媒体不可插入";
+    return;
+  }
+
+  const targetLine = workingEditor.selectionLine();
+  setSourcePaneMode("source");
+
+  const ghost = document.createElement("div");
+  ghost.className = "media-drag-ghost";
+  ghost.textContent = row.raw;
+  document.body.append(ghost);
+  workingEditorHost.classList.add("is-media-drop-target");
+  editorModeStatus.textContent = `源码 · 拖动媒体到高亮第 ${targetLine} 行`;
+
+  const pointerId = startEvent.pointerId;
+  let dropReady = false;
+  const updatePosition = (clientX: number, clientY: number) => {
+    ghost.style.left = `${clientX + 14}px`;
+    ghost.style.top = `${clientY + 14}px`;
+    const rect = workingEditorHost.getBoundingClientRect();
+    dropReady = !workingEditorHost.hidden
+      && clientX >= rect.left
+      && clientX <= rect.right
+      && clientY >= rect.top
+      && clientY <= rect.bottom;
+    workingEditorHost.classList.toggle("is-media-drop-ready", dropReady);
+  };
+  updatePosition(startEvent.clientX, startEvent.clientY);
+
+  const cleanup = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
+    workingEditorHost.classList.remove("is-media-drop-target", "is-media-drop-ready");
+    ghost.remove();
+  };
+  const onMove = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    event.preventDefault();
+    updatePosition(event.clientX, event.clientY);
+  };
+  const finish = (event: PointerEvent, cancelled: boolean) => {
+    if (event.pointerId !== pointerId) return;
+    updatePosition(event.clientX, event.clientY);
+    const shouldInsert = !cancelled && dropReady;
+    cleanup();
+    if (!shouldInsert) {
+      editorModeStatus.textContent = `源码 · 已取消媒体拖放 · 第 ${targetLine} 行未修改`;
+      window.requestAnimationFrame(() => workingEditor.focusLine(targetLine));
+      return;
+    }
+
+    const insertedLine = workingEditor.insertMediaReferenceAtLine(targetLine, markdown);
+    lastUiAction = "insert-media-reference";
+    lastCommandId = undefined;
+    editorModeStatus.textContent = `源码 · 已在第 ${insertedLine} 行插入媒体 · ${row.raw}`;
+    sourceLocationStatus.textContent = `媒体已插入：${markdown}`;
+  };
+  const onUp = (event: PointerEvent) => finish(event, false);
+  const onCancel = (event: PointerEvent) => finish(event, true);
+
+  window.addEventListener("pointermove", onMove, { passive: false });
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
+}
 
 const translationServicePanel = new TranslationServicePanel(
   translationServicePanelHost,
@@ -1546,6 +1764,7 @@ const calibrationGrid = new CalibrationGrid(
       sourceLine: line,
     });
   },
+  (row, event) => beginMediaSourceDrag(row, event),
 );
 
 tableConfigurationGrid = new TableConfigurationGrid(
@@ -1576,6 +1795,165 @@ tablePresentationEditor = new TablePresentationEditor(
 void tablePresentationEditor.load();
 
 pageLoadedAt.textContent = getPageLoadedAtDisplay();
+
+function closeWorkspaceDirectoryBrowser(): void {
+  workspaceDirectoryOverlay.hidden = true;
+  workspaceDirectoryButton.setAttribute("aria-expanded", "false");
+}
+
+function renderWorkspaceDirectoryBreadcrumb(payload: WorkspaceDirectoryPayload): void {
+  workspaceDirectoryBreadcrumb.replaceChildren();
+  const parts = payload.path ? payload.path.split("/").filter(Boolean) : [];
+  const crumbs: Array<{ label: string; path: string }> = [{ label: "/data", path: "" }];
+  let accumulated = "";
+  for (const part of parts) {
+    accumulated = accumulated ? `${accumulated}/${part}` : part;
+    crumbs.push({ label: part, path: accumulated });
+  }
+  crumbs.forEach((crumb, index) => {
+    if (index > 0) {
+      const separator = document.createElement("span");
+      separator.textContent = "/";
+      separator.setAttribute("aria-hidden", "true");
+      workspaceDirectoryBreadcrumb.append(separator);
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = crumb.label;
+    button.disabled = crumb.path === payload.path;
+    button.addEventListener("click", () => {
+      void loadWorkspaceDirectory(crumb.path, true);
+    });
+    workspaceDirectoryBreadcrumb.append(button);
+  });
+}
+
+function renderWorkspaceDirectory(payload: WorkspaceDirectoryPayload): void {
+  workspaceDirectoryPayload = payload;
+  workspaceDirectoryButton.textContent = `${payload.currentProjectDisplayPath} ▾`;
+  workspaceDirectoryButton.title = `当前工作目录：${payload.currentProjectDisplayPath}`;
+  workspaceDirectoryCurrent.textContent = `当前工作目录：${payload.currentProjectDisplayPath}`;
+  workspaceDirectoryPath.textContent = payload.displayPath;
+  workspaceDirectoryParent.disabled = payload.parentPath == null;
+  workspaceDirectorySelect.disabled = payload.path === payload.currentProjectPath;
+  renderWorkspaceDirectoryBreadcrumb(payload);
+  workspaceDirectoryList.replaceChildren();
+  if (!payload.directories.length) {
+    const empty = document.createElement("div");
+    empty.className = "status-secondary";
+    empty.textContent = "此目录没有子目录";
+    workspaceDirectoryList.append(empty);
+    return;
+  }
+  for (const directory of payload.directories) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace-directory-entry";
+    button.setAttribute("role", "listitem");
+    const label = document.createElement("span");
+    label.textContent = `📁 ${directory.name}`;
+    button.append(label);
+    if (directory.hasChapters) {
+      const marker = document.createElement("small");
+      marker.textContent = "ocr2md";
+      button.append(marker);
+    }
+    button.addEventListener("click", () => {
+      void loadWorkspaceDirectory(directory.path, true);
+    });
+    workspaceDirectoryList.append(button);
+  }
+}
+
+async function workspaceDirectoryError(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await response.json() as { error?: string };
+    return payload.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function loadWorkspaceDirectory(path = "", reveal = false): Promise<void> {
+  if (workspaceDirectoryLoading) return;
+  workspaceDirectoryLoading = true;
+  workspaceDirectoryStatus.textContent = "正在读取目录…";
+  workspaceDirectoryParent.disabled = true;
+  workspaceDirectorySelect.disabled = true;
+  try {
+    const response = await fetch(
+      `/__workspace/directories?path=${encodeURIComponent(path)}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(await workspaceDirectoryError(response, "读取工作目录失败"));
+    }
+    const payload = await response.json() as WorkspaceDirectoryPayload;
+    renderWorkspaceDirectory(payload);
+    workspaceDirectoryStatus.textContent = payload.path === payload.currentProjectPath
+      ? "当前浏览目录就是工作目录"
+      : "可进入子目录，或将当前目录设为工作目录";
+    if (reveal) {
+      workspaceDirectoryOverlay.hidden = false;
+      workspaceDirectoryButton.setAttribute("aria-expanded", "true");
+    }
+  } catch (error) {
+    workspaceDirectoryStatus.textContent = error instanceof Error
+      ? error.message
+      : "读取工作目录失败";
+    if (reveal) {
+      workspaceDirectoryOverlay.hidden = false;
+      workspaceDirectoryButton.setAttribute("aria-expanded", "true");
+    }
+  } finally {
+    workspaceDirectoryLoading = false;
+    if (workspaceDirectoryPayload) {
+      workspaceDirectoryParent.disabled = workspaceDirectoryPayload.parentPath == null;
+      workspaceDirectorySelect.disabled =
+        workspaceDirectoryPayload.path === workspaceDirectoryPayload.currentProjectPath;
+    }
+  }
+}
+
+async function switchWorkspaceDirectory(): Promise<void> {
+  const payload = workspaceDirectoryPayload;
+  if (!payload || workspaceDirectoryLoading) return;
+  const view = deriveWorkspaceView(actor.getSnapshot());
+  if (
+    view.canSave
+    || view.session === "chapter-dirty"
+    || sentenceTranslationRunning
+    || mediaDownloadRunning
+  ) {
+    workspaceDirectoryStatus.textContent =
+      "当前工作稿有未保存修改或任务正在运行 · 请先保存/撤销并结束任务后再切换工作目录";
+    return;
+  }
+  workspaceDirectoryLoading = true;
+  workspaceDirectorySelect.disabled = true;
+  workspaceDirectoryStatus.textContent = `正在切换到 ${payload.displayPath}…`;
+  try {
+    const response = await fetch("/__workspace/project-directory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ path: payload.path }),
+    });
+    if (!response.ok) {
+      throw new Error(await workspaceDirectoryError(response, "切换工作目录失败"));
+    }
+    const switched = await response.json() as WorkspaceDirectoryPayload;
+    workspaceDirectoryButton.textContent = `${switched.currentProjectDisplayPath} ▾`;
+    workspaceDirectoryStatus.textContent = "工作目录已切换 · 正在重新载入工作台";
+    window.location.reload();
+  } catch (error) {
+    workspaceDirectoryStatus.textContent = error instanceof Error
+      ? error.message
+      : "切换工作目录失败";
+    workspaceDirectoryLoading = false;
+    workspaceDirectorySelect.disabled = false;
+  }
+}
 
 function reportCurrentState(): void {
   reportDebugState(
@@ -1693,6 +2071,10 @@ actor.subscribe((snapshot) => {
         : chapter && chapter.kind !== "boundary"
           ? chapter.id
           : undefined,
+      chapter?.workingText ?? "",
+      chapter?.kind === "chapter"
+        ? deriveAdoptedMediaRoutes(chapter)
+        : undefined,
     );
   }
   if (!(chapter?.kind === "translation" && (view.activeReviewModule === "原文to译文" || view.activeReviewModule === "译文to原文"))) {
@@ -1939,7 +2321,6 @@ actor.subscribe((snapshot) => {
   resetCalibrationButton.disabled = !view.canResetCalibration;
   resetCalibrationButton.hidden = chapter?.kind === "translation";
   exportTransButton.disabled = !view.canExportTrans;
-  closeButton.disabled = !view.canClose;
   enterDebugButton.disabled = !view.canEnterDebug;
   exitDebugButton.disabled = !view.canExitDebug;
 
@@ -4084,7 +4465,7 @@ function createDirtyLeaveProtectionFeatureDebugSteps(): readonly FeatureDebugSte
           "制造关闭场景 dirty 失败",
         );
 
-        closeButton.click();
+        executeProductAction("close");
         await waitForLeaveSession("chapter-leave-confirm");
         view = deriveWorkspaceView(actor.getSnapshot());
         requireFeatureDebug(!leaveConfirmOverlay.hidden, "离开确认框没有显示");
@@ -4112,7 +4493,7 @@ function createDirtyLeaveProtectionFeatureDebugSteps(): readonly FeatureDebugSte
       label: "2 关闭保护：再次关闭 → 放弃修改，重开后磁盘仍是原基线",
       run: async () => {
         const context = currentDirtyLeaveDebugContext();
-        closeButton.click();
+        executeProductAction("close");
         await waitForLeaveSession("chapter-leave-confirm");
         leaveDiscardButton.click();
         await waitForWorkspaceSession("idle");
@@ -4602,7 +4983,7 @@ function createIllegalLineBreakFeatureDebugSteps(): readonly FeatureDebugStep[] 
           "非法断行保存后状态不 clean",
         );
 
-        closeButton.click();
+        executeProductAction("close");
         await waitForWorkspaceSession("idle");
         executeProductAction("open-chapter", undefined, featureDebugChapterId);
         await waitForWorkspaceSession("chapter-clean");
@@ -5017,7 +5398,7 @@ function createChangedLineFeatureDebugSteps(): readonly FeatureDebugStep[] {
           "变动行保存后 diff 或 +N 被错误清空",
         );
 
-        closeButton.click();
+        executeProductAction("close");
         await waitForWorkspaceSession("idle");
         executeProductAction("open-chapter", undefined, featureDebugChapterId);
         await waitForWorkspaceSession("chapter-clean");
@@ -5574,7 +5955,7 @@ function createChapterTitleFeatureDebugSteps(): readonly FeatureDebugStep[] {
           "章节标题保存后状态不 clean",
         );
 
-        closeButton.click();
+        executeProductAction("close");
         await waitForWorkspaceSession("idle");
         executeProductAction("open-chapter", undefined, featureDebugChapterId);
         await waitForWorkspaceSession("chapter-clean");
@@ -5969,7 +6350,7 @@ function createAnnotationFeatureDebugSteps(): readonly FeatureDebugStep[] {
             && nextRevision !== context.baselineRevision,
         );
 
-        closeButton.click();
+        executeProductAction("close");
         await waitForWorkspaceSession("idle");
         executeProductAction("open-chapter", undefined, featureDebugChapterId);
         await waitForWorkspaceSession("chapter-clean");
@@ -6374,7 +6755,7 @@ function createEmbedFeatureDebugSteps(): readonly FeatureDebugStep[] {
           "嵌入块保存后状态不 clean",
         );
 
-        closeButton.click();
+        executeProductAction("close");
         await waitForWorkspaceSession("idle");
         executeProductAction("open-chapter", undefined, featureDebugChapterId);
         await waitForWorkspaceSession("chapter-clean");
@@ -6539,12 +6920,12 @@ async function restoreChapterBoundaryRawBaseline(): Promise<void> {
 
   view = deriveWorkspaceView(actor.getSnapshot());
   if (view.session === "chapter-dirty") {
-    closeButton.click();
+    executeProductAction("close");
     await waitForLeaveSession("chapter-leave-confirm");
     leaveDiscardButton.click();
     await waitForWorkspaceSession("idle");
   } else if (view.session === "chapter-clean") {
-    closeButton.click();
+    executeProductAction("close");
     await waitForWorkspaceSession("idle");
   } else if (view.session !== "idle") {
     throw new Error("章节定界安全清理无法回到 idle");
@@ -6825,7 +7206,7 @@ function createChapterBoundaryFeatureDebugSteps(): readonly FeatureDebugStep[] {
           "章节定界保存后状态不 clean",
         );
 
-        closeButton.click();
+        executeProductAction("close");
         await waitForWorkspaceSession("idle");
         openBoundaryThroughProductNavigation();
 
@@ -7206,7 +7587,7 @@ function recoverSourcePreviewSyncFeatureDebug(error: Error): void {
 }
 
 function currentTableConfigDebugContext(): TableConfigDebugContext {
-  requireFeatureDebug(tableConfigDebugContext, "表格配置调试上下文不存在");
+  requireFeatureDebug(tableConfigDebugContext, "配置调试上下文不存在");
   return tableConfigDebugContext;
 }
 
@@ -7218,7 +7599,7 @@ async function readTablePresentationPayload(): Promise<{
     cache: "no-store",
     headers: { Accept: "application/json" },
   });
-  requireFeatureDebug(response.ok, "无法读取项目表格配置");
+  requireFeatureDebug(response.ok, "无法读取项目配置");
   const payload = await response.json() as {
     exists?: boolean;
     source?: string | null;
@@ -7252,7 +7633,7 @@ async function waitForTableConfigHeaderPrefix(
 
 async function restoreTableConfigDebugBaseline(): Promise<void> {
   const context = currentTableConfigDebugContext();
-  requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+  requireFeatureDebug(tablePresentationEditor, "配置编辑器不存在");
 
   tablePresentationEditor.setSource(TABLE_PRESENTATION_DEFAULT_SOURCE);
   await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
@@ -7270,7 +7651,7 @@ async function restoreTableConfigDebugBaseline(): Promise<void> {
         method: "DELETE",
         headers: { Accept: "application/json" },
       });
-  requireFeatureDebug(response.ok, "恢复原项目表格配置失败");
+  requireFeatureDebug(response.ok, "恢复原项目配置失败");
 
   await tablePresentationEditor.load();
   await new Promise<void>((resolve) => window.setTimeout(resolve, 120));
@@ -7278,18 +7659,18 @@ async function restoreTableConfigDebugBaseline(): Promise<void> {
   const restored = await readTablePresentationPayload();
   requireFeatureDebug(
     restored.exists === context.baselineExists,
-    "项目表格配置存在状态未恢复",
+    "项目配置存在状态未恢复",
   );
   requireFeatureDebug(
     !context.baselineExists || restored.source === context.baselineSource,
-    "项目表格配置文本未精确恢复",
+    "项目配置文本未精确恢复",
   );
 }
 
 async function prepareTableConfigFeatureDebug(): Promise<void> {
   featureDebugMenu.close();
   requireInitializedFeatureDebugWorkspace();
-  requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+  requireFeatureDebug(tablePresentationEditor, "配置编辑器不存在");
 
   const annotationButton = reviewModuleButtons.find(
     (button) => button.dataset.reviewModule === "注释",
@@ -7375,10 +7756,10 @@ function createTableConfigFeatureDebugSteps(): readonly FeatureDebugStep[] {
       },
     },
     {
-      label: "2 热更新：真实表格配置编辑器改列序，无需 build / reload",
+      label: "2 热更新：真实配置编辑器改列序，无需 build / reload",
       run: async () => {
         const context = currentTableConfigDebugContext();
-        requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+        requireFeatureDebug(tablePresentationEditor, "配置编辑器不存在");
         tablePresentationEditor.setSource(context.temporarySource);
         await waitForTableConfigHeaderPrefix(context.temporaryHeaders);
         requireFeatureDebug(
@@ -7399,7 +7780,7 @@ function createTableConfigFeatureDebugSteps(): readonly FeatureDebugStep[] {
       label: "3 非法配置：保留 last-known-good，不破坏当前表格",
       run: async () => {
         const context = currentTableConfigDebugContext();
-        requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+        requireFeatureDebug(tablePresentationEditor, "配置编辑器不存在");
         tablePresentationEditor.setSource("{ bad json");
         await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
         requireFeatureDebug(
@@ -7420,12 +7801,12 @@ function createTableConfigFeatureDebugSteps(): readonly FeatureDebugStep[] {
       label: "4 保存 / 重载：项目配置持久化并重新加载同一列序",
       run: async () => {
         const context = currentTableConfigDebugContext();
-        requireFeatureDebug(tablePresentationEditor, "表格配置编辑器不存在");
+        requireFeatureDebug(tablePresentationEditor, "配置编辑器不存在");
         tablePresentationEditor.setSource(context.temporarySource);
         await waitForTableConfigHeaderPrefix(context.temporaryHeaders);
         requireFeatureDebug(
           await tablePresentationEditor.save(),
-          "临时表格配置保存失败",
+          "临时配置保存失败",
         );
 
         tablePresentationEditor.setSource(defaultProbeSource);
@@ -7446,7 +7827,7 @@ function createTableConfigFeatureDebugSteps(): readonly FeatureDebugStep[] {
             && view.undoDepth === 0
             && view.redoDepth === 0
             && !view.canSave,
-          "保存表格配置意外污染章节状态",
+          "保存配置意外污染章节状态",
         );
       },
     },
@@ -7471,7 +7852,7 @@ function createTableConfigFeatureDebugSteps(): readonly FeatureDebugStep[] {
         );
         requireFeatureDebug(
           view.revision === featureDebugBaselineRevision,
-          "表格配置调试意外改变章节 revision",
+          "配置调试意外改变章节 revision",
         );
       },
     },
@@ -7486,7 +7867,7 @@ function recoverTableConfigFeatureDebug(error: Error): void {
       }
     } finally {
       sourceLocationStatus.textContent =
-        "表格配置功能调试失败 · 已尝试恢复原项目配置 · " + error.message;
+        "配置功能调试失败 · 已尝试恢复原项目配置 · " + error.message;
       tableConfigDebugContext = undefined;
     }
   })();
@@ -7871,6 +8252,23 @@ function recoverUndoRedoFeatureDebug(): void {
   }
 }
 
+workspaceDirectoryButton.addEventListener("click", () => {
+  const startPath = workspaceDirectoryPayload?.currentProjectPath ?? "";
+  void loadWorkspaceDirectory(startPath, true);
+});
+workspaceDirectoryParent.addEventListener("click", () => {
+  const parentPath = workspaceDirectoryPayload?.parentPath;
+  if (parentPath == null) return;
+  void loadWorkspaceDirectory(parentPath, true);
+});
+workspaceDirectoryCancel.addEventListener("click", closeWorkspaceDirectoryBrowser);
+workspaceDirectoryOverlay.addEventListener("click", (event) => {
+  if (event.target === workspaceDirectoryOverlay) closeWorkspaceDirectoryBrowser();
+});
+workspaceDirectorySelect.addEventListener("click", () => {
+  void switchWorkspaceDirectory();
+});
+
 chapterSelect.addEventListener("change", () => {
   const target = chapterSelect.value;
   if (!target) return;
@@ -8140,7 +8538,6 @@ exportTransButton.addEventListener("click", () => {
   lastCommandId = undefined;
   actor.send({ type: "EXPORT_TRANS" });
 });
-closeButton.addEventListener("click", () => executeProductAction("close"));
 leaveCancelButton.addEventListener("click", () => executeProductAction("leave-cancel"));
 leaveDiscardButton.addEventListener("click", () => executeProductAction("leave-discard"));
 leaveSaveButton.addEventListener("click", () => executeProductAction("leave-save"));
@@ -8410,14 +8807,14 @@ featureDebugRunner.register({
 
 featureDebugRunner.register({
   id: "table-config",
-  title: "表格配置",
+  title: "配置",
   button: featureDebugTableConfigButton,
   enabled: () => featureDebugEnvironmentReady,
   beforeRun: prepareTableConfigFeatureDebug,
   steps: createTableConfigFeatureDebugSteps,
   onSuccess: () => {
     sourceLocationStatus.textContent =
-      "表格配置功能调试通过 · 热更新→非法配置保护→保存重载→原项目配置精确恢复 · 章节全程 clean 0/0";
+      "配置功能调试通过 · 热更新→非法配置保护→保存重载→原项目配置精确恢复 · 章节全程 clean 0/0";
     tableConfigDebugContext = undefined;
   },
   onFailure: recoverTableConfigFeatureDebug,
@@ -8462,6 +8859,7 @@ deviceDebugBridge.install((event) => {
 });
 
 actor.start();
+void loadWorkspaceDirectory("", false);
 featureDebugRunner.refreshControls();
 featureDebugMenu.setEnabled(true);
 document.documentElement.dataset.featureDebugReady = "false";
