@@ -288,12 +288,26 @@ lineType === "已忽略"
 
 ### 注释
 
-注释引用与注释正文是**两个独立数据表行**，通过 `注释号` 配对；不要再做成“一组一行”。
+注释引用与注释正文是**两个独立数据表行**；不要再做成“一组一行”。
+
+MinerU JSON 页注释接入后的权威身份不是单独的 `注释号`，而是：
+
+```text
+document + page_idx + annotationNumber
+```
+
+其中 `page_idx` 使用 MinerU `pdf_info[].page_idx` 的 0-based 物理页索引；`annotationNumber` 必须归一为数值（例如 `①` / `¹` / `<sup>1</sup>` / `[^1]` 都对应 `1`）。章节中不同物理页重复出现的 `①` 必须保持为不同注释。
+
+同一物理页允许多个相同编号的正文引用共享一条页下注释正文；引用端用额外的 occurrence 区分。匹配失败的记录不得丢弃，必须能够表达 `MD引用缺失`、`注释正文缺失`、`共享注释`、`匹配歧义`，人工确认后可进入 `已确认`。
+
+标准派生 source map 同时保存：MinerU JSON 页码/block/bbox 原始定位、章节 Markdown 行/range 与内容 anchor、注释正文，以及匹配状态。MinerU JSON 保持只读；source map 属于可重建机器缓存，人工判断仍写 OCR2MD sidecar。
+
+注释表最终显示 `PDF页 / 注释号 / 行类型 / MD行号 / 预览 / 配对状态`。注释引用行点击预览定位对应 Markdown 引用；注释正文行点击预览也定位到与其配对的 Markdown 引用。即使 Markdown 引用缺失，JSON 中存在的注释正文仍必须作为审核行显示。
 
 默认排序：
 
 ```text
-注释号 → 行号
+PDF页 → 注释号 → 行号
 ```
 
 ### 嵌入块
