@@ -191,21 +191,24 @@ test("chapter boundary merges OCR inputs, assigns files, survives history/save, 
   const exportedCatalog = await exportedCatalogResponse.json() as {
     chapters: Array<{ name: string; ready: boolean; reason?: string }>;
   };
+  const firstReadyChapter = exportedCatalog.chapters.find((item) => item.ready);
+  expect(firstReadyChapter).toBeTruthy();
   for (const name of ["91 One", "92 Two", "93 Three"]) {
     expect(
       exportedCatalog.chapters.find((item) => item.name === name),
     ).toMatchObject({ name, ready: true });
   }
 
-  await closeChapter(page);
-  await expect(page.locator("#state-value")).toHaveText("idle");
-  await page.locator("#refresh-catalog").click();
-  await expect(page.locator("#state-value")).toHaveText("idle");
-  await page.locator("#chapter-select").selectOption({ label: "chapters/91 One" });
+  const chaptersNode = page.locator(
+    '#chapter-select option[value="__node_chapters__"]',
+  );
+  await expect(chaptersNode).toBeEnabled();
+  await expect(page.locator("#chapter-select")).toContainText("chapters/91 One");
+  await page.locator("#chapter-select").selectOption("__node_chapters__");
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
-  await expect(page.locator("#chapter-name")).toHaveText("91 One.md");
+  await expect(page.locator("#chapter-name")).toHaveText(`${firstReadyChapter!.name}.md`);
   await expect(page.locator("#active-review-module")).toHaveText("章节标题");
-  await expect(page.locator("#active-module-rows")).toHaveText("1");
+  await expect(page.locator("#active-module-rows")).not.toHaveText("0");
 
   const chapterOne = await import("node:fs/promises").then(({ readFile }) =>
     readFile(path.join(projectDir, "chapters", "91 One", "91 One.md"), "utf8"),

@@ -63,6 +63,11 @@ export type WorkspaceMachineInput = {
   chapterRepository: ChapterRepository;
 };
 
+type BoundaryExportActorOutput = {
+  exportResult: BoundaryExportResult;
+  catalog: ChapterCatalog;
+};
+
 export type PendingLeaveIntent =
   | { kind: "close" }
   | { kind: "open"; chapterId: string };
@@ -468,10 +473,12 @@ export const workspaceMachine = setup({
       if (!input.chapterRepository.exportBoundary) {
         throw new Error("当前 workspace repository 不支持章节定界导出");
       }
-      return input.chapterRepository.exportBoundary({
+      const exportResult = await input.chapterRepository.exportBoundary({
         chapter: input.chapter,
         workingText: input.chapter.workingText,
       });
+      const catalog = await input.chapterRepository.listChapters();
+      return { exportResult, catalog } satisfies BoundaryExportActorOutput;
     }),
     exportCalibration: fromPromise(
       async ({ input }: { input: ExportCalibrationActorInput }) => {
@@ -1137,19 +1144,28 @@ export const workspaceMachine = setup({
     }),
     applyBoundaryExportResult: assign(({ context, event }) => {
       if (!context.chapter || !("output" in event)) return {};
-      const output = event.output as BoundaryExportResult;
+      const { exportResult, catalog } = event.output as BoundaryExportActorOutput;
       const chapter = {
         ...context.chapter,
-        workingText: output.workingText,
-        revision: output.revision,
+        workingText: exportResult.workingText,
+        revision: exportResult.revision,
       };
       return {
         chapter,
+        projectName: catalog.projectName,
+        chapters: catalog.chapters,
+        boundary: catalog.boundary,
+        selectedChapterId: catalog.chapters.some(
+          (item) => item.id === context.selectedChapterId && item.ready,
+        )
+          ? context.selectedChapterId
+          : undefined,
         savedBaseline: historySnapshot(chapter),
         undoStack: [],
         redoStack: [],
-        lastSavedAt: output.savedAt,
-        lastExportedCount: output.exported.length,
+        lastSavedAt: exportResult.savedAt,
+        lastExportedCount: exportResult.exported.length,
+        catalogError: undefined,
         saveError: undefined,
       };
     }),

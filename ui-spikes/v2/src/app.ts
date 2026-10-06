@@ -1999,7 +1999,7 @@ function renderChapterSelect(view: ReturnType<typeof deriveWorkspaceView>): void
     const chaptersNode = document.createElement("option");
     chaptersNode.value = "__node_chapters__";
     chaptersNode.textContent = "chapters";
-    chaptersNode.disabled = true;
+    chaptersNode.disabled = !view.chapters.some((chapter) => chapter.ready);
     chapterSelect.append(chaptersNode);
 
     for (const chapter of view.chapters) {
@@ -8293,6 +8293,23 @@ chapterSelect.addEventListener("change", () => {
       return;
     }
     executeProductAction("open-boundary");
+    return;
+  }
+
+  if (target === "__node_chapters__") {
+    const view = deriveWorkspaceView(actor.getSnapshot());
+    const firstReady = view.chapters.find((chapter) => chapter.ready);
+    if (!firstReady) {
+      chapterSelect.value = view.workspaceKind === "boundary"
+        ? "__node_ocr__"
+        : view.workspaceKind === "translation" && view.selectedChapterId
+          ? `__node_trans_${view.selectedChapterId}__`
+          : view.workspaceKind === "chapter" && view.selectedChapterId
+            ? view.selectedChapterId
+            : "";
+      return;
+    }
+    executeProductAction("open-chapter", undefined, firstReady.id);
     return;
   }
 
