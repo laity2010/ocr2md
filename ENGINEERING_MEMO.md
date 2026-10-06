@@ -310,6 +310,8 @@ document + page_idx + annotationNumber
 PDF页 → 注释号 → 行号
 ```
 
+MinerU source discovery（WP1）固定约定：项目根目录只发现文件名中包含 `MinerU` 与 `markdown` 的根级 `.md` 作为 MinerU Markdown 候选；JSON 候选只来自 `project/json/*.json`。MD ↔ JSON 的权威配对依据是 MinerU `pdf_info[].para_blocks` 文本内容签名在 Markdown 中的匹配率，文件名前缀编号只用于展示/排序，不参与最终判定。无法达到阈值时返回 unmatched；多个 JSON 同时高置信度时返回 ambiguous，禁止按目录顺序或文件名猜测；无 JSON 与无效 JSON 也必须显式返回 missing-json / invalid-json。JSON 内容签名在进程内按 `size + mtime` 缓存，文件变化后自动失效。
+
 ### 嵌入块
 
 嵌入块每个元素仍是独立行，通过 `组号/embedNumber` 组织。
