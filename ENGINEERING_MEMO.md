@@ -329,6 +329,10 @@ MinerU Web 注释表（WP5）通过原生 `GET /__workspace/chapter/annotations?
 
 进入「注释」时按需异步加载、每次重新进入重新核对缓存指纹；以 `projectName + chapter.path + chapter.id` 为请求版本键，章节切换或离开模块使旧请求失效。JSON 注释模式使用**独立临时投影行**，不回填到 `chapter.rows`/sidecar；表格固定列 `PDF页 / MD行号 / 行类型 / 注释号 / 预览 / 配对状态`，按 JSON 来源页序、数字注释号和引用/正文排序；状态异常高亮。未归属记录明确标记「全书待定位」，不伪装成当前章节匹配。JSON 表只读；未识别 footnote / unverified reference 以审计计数警示，WP6 再完善全书异常审计入口。点击引用或注释正文预览在**当前工作稿**上用完整行文本/前后锚 hash 唯一定位到圈号起止字符；即使原稿和 working 行号偏移，表格「MD行号」也显示当前真实工作稿位置。若锚点失效或重复无法消歧，拒绝跳错行并明确提示。共享正文有多个 `navigationTargets`，再次点击循环定位；旧版五列表与数据流不变。真实浏览器回归脚本 `ui-spikes/v2/tests/mineruAnnotationRealSmoke.cjs` 只读运行，需对着独立测试 server 设 `OCR2MD_V2_REAL_BASE_URL`。
 
+MinerU 页注释全书审计（WP6）由 `auditMineruAnnotations(sourceMap)` 从每份 WP2 JSON facts 和 WP3 的引用定位结果独立生成，**以 documentKey + page_idx 隔离物理页**，不合并不同 JSON 的同页号、同圈号。每物理页在已识别注释号 `1…max` 中出现的间隙记作**序号疑似缺失**，不生成注释正文，也不把同页多引用一注释误报为缺号；页注释可能并不从 ① 开始，必须经原 PDF 人工核查。明确报告 `注释正文缺失 / 正文引用缺失 / 重复注释正文 / MD引用缺失 / 匹配歧义`，匹配歧义附全部候选行而不选第一处；不可靠页脚 `unidentifiedFootnotes`、纯 CIP 等 `unverifiedReferences` 和来源配对异常同样作为可审核证据独立保留。数据是派生事实，原始 JSON、OCR Markdown 和章节 source-map 均不会被审核操作修改。
+
+Web「注释」新增「注释审计」入口（显示全书待审核+需复核数），可跨章查看页号、来源 JSON、块索引、原文、候选行，按异常类型/审核状态/文本搜索；只有已可靠定位的引用支持安全跳转，跨章时先经工作稿未保存门禁、目标章白名单与 anchor 唯一性校验。人工结论区分 `待审核 / 已核查 / 疑似误报 / 需复核`：**已核查不是已修复**，不会对原文执行修补。审核备注最长 1000 字，存于 Mac 私有 `~/.ocr2md-private/mineru-audit-reviews/<project-realpath-sha256>.json`（0700 目录、0600 文件，原子覆盖）；提交同时必须匹配 projectId、整套源文件 SHA-256 fingerprint 和 revision，且经文件独占锁串行化，避免跨项目、过期确认与同时更新的静默覆盖。源 JSON、源 MD 或正式章节变化后旧决定保留为 `需复核`，需重新提交才恢复为已核查；审核和 source-map 缓存完全分离，不影响旧工作稿/sidecar/Undo/Redo。Server 的 GET/POST `/__workspace/chapter/annotation-audit` 只接受经过 `ChapterProjectStore.resolve()` 校验的章节 ID，并由受信 CLI 读写私有审计文件，不让浏览器选择本机文件路径。合成测试覆盖缺号、重复/缺失、歧义、跨 JSON 相同编号、源变更失效及持久化；《忏悔录》双 JSON 基线审计为 **23 条待审核证据 = 21 块未识别页脚 + 2 组 CIP 待验证引用**；当前两 JSON 已识别注释号没有页内缺号，正常引用仍为 **563/563** 唯一定位。浏览器审核测试须在专用 `/tmp/ocr2md-wp6-smoke-*` 副本中进行，脚本故意修改副本 JSON/MD，不得指向 iCloud 原本。
+
 ### 嵌入块
 
 嵌入块每个元素仍是独立行，通过 `组号/embedNumber` 组织。

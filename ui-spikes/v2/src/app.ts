@@ -11,6 +11,9 @@ import {
   reportDebugState,
 } from "./debugStateReporter";
 import { CalibrationGrid } from "./calibrationGrid";
+import { MineruAuditPanel } from "./mineruAuditPanel";
+import type { MineruAuditPayload, MineruAuditRow } from "../../../src/mineruAuditReviewStore";
+import type { MineruMarkdownLocator } from "../../../src/mineruAnnotationContract";
 import { locateMineruMarkdownReference } from "../../../src/mineruAnnotationLocate";
 import type { MineruWebChapterAnnotations } from "../../../src/mineruAnnotationWebCli";
 import type { MineruProjectedAnnotationRow } from "../../../src/mineruAnnotationProjection";
@@ -88,6 +91,7 @@ let mineruAnnotationPayload: MineruWebChapterAnnotations | undefined;
 let mineruAnnotationLoading = false;
 let mineruAnnotationError = "";
 const mineruBodyFocusIndex = new Map<string, number>();
+let pendingAuditNavigation: { target: MineruMarkdownLocator; evidence: MineruAuditRow } | undefined;
 
 function mineruChapterEntryKey(
   chapter: ChapterWorkspaceData | undefined,
@@ -147,6 +151,8 @@ function syncMineruGridProjection(): void {
   );
   calibrationGrid.setEditable(view.canEdit && !mineruAnnotationLoading
     && !mineruAnnotationError && !mineruAnnotationPayload?.available);
+  mineruAuditOpenButton.hidden =
+    !mineruAnnotationPayload?.available && !mineruAnnotationError;
   const status = mineruAnnotationStatusText();
   if (status) {
     reviewGridStatus.textContent = status;
@@ -164,6 +170,26 @@ function syncMineruGridProjection(): void {
   }
 }
 
+function displayMineruAuditCount(payload: MineruAuditPayload): void {
+  mineruAuditOpenButton.textContent =
+    "注释审计 (" + (payload.counts["待审核"] + payload.counts["需复核"]) + ")";
+}
+
+async function loadMineruAuditCount(
+  chapterId: string, requestKey: string, token: number,
+): Promise<void> {
+  try {
+    const response = await fetch(
+      "/__workspace/chapter/annotation-audit?chapterId=" + encodeURIComponent(chapterId),
+      { cache: "no-store" },
+    );
+    if (!response.ok) return;
+    const payload = await response.json() as MineruAuditPayload;
+    if (token !== mineruLoadToken || requestKey !== mineruActiveKey) return;
+    displayMineruAuditCount(payload);
+  } catch { /* Optional count: the full audit dialog surfaces errors. */ }
+}
+
 async function loadMineruAnnotations(chapterId: string, requestKey: string, token: number): Promise<void> {
   try {
     const response = await fetch(
@@ -175,6 +201,7 @@ async function loadMineruAnnotations(chapterId: string, requestKey: string, toke
     if (token !== mineruLoadToken || mineruActiveKey !== requestKey) return;
     mineruAnnotationPayload = payload;
     mineruAnnotationError = "";
+    if (payload.available) void loadMineruAuditCount(chapterId, requestKey, token);
   } catch (error) {
     if (token !== mineruLoadToken || mineruActiveKey !== requestKey) return;
     mineruAnnotationError = error instanceof Error ? error.message : String(error);
@@ -394,6 +421,7 @@ const translationElementTab =
 const translationElementMenu =
   requireElement<HTMLElement>("translation-element-menu");
 const reviewGridStatus = requireElement<HTMLElement>("review-grid-status");
+const mineruAuditOpenButton = requireElement<HTMLButtonElement>("mineru-audit-open");
 const sentenceTranslateToolbar = requireElement<HTMLElement>("sentence-translate-toolbar");
 const sentenceTranslateButton = requireElement<HTMLButtonElement>("sentence-translate-button");
 const sourceLocationStatus = requireElement<HTMLElement>("source-location-status");
@@ -1918,6 +1946,72 @@ const calibrationGrid = new CalibrationGrid(
   },
 );
 
+function focusMineruAuditEvidence(
+  target: MineruMarkdownLocator,
+  item: MineruAuditRow,
+): boolean {
+  const chapter = actor.getSnapshot().context.chapter;
+  if (chapter?.kind !== "chapter" || chapter.name !== target.chapterId + ".md") {
+    sourceLocationStatus.textContent = "尚未打开该审计证据所属章节：" + target.chapterId;
+    return false;
+  }
+  const located = locateMineruMarkdownReference(chapter.workingText, target);
+  if (!located) {
+    sourceLocationStatus.textContent = "原稿锚点已变化或重复，拒绝猜测 Markdown 位置";
+    return false;
+  }
+  setSourcePaneMode("source");
+  const line = workingEditor.revealRange(located);
+  if (!line) {
+    sourceLocationStatus.textContent = "无法定位 Markdown 引用";
+    return false;
+  }
+  lastUiAction = "focus-mineru-audit";
+  sourceLocationStatus.textContent =
+    "审计 · " + item.kind + " · PDF 第 " + (item.pageNumber ?? "—")
+    + " 页 → MD 第 " + line + " 行";
+  return true;
+}
+
+const mineruAuditPanel = new MineruAuditPanel(
+  requireElement<HTMLDialogElement>("mineru-audit-dialog"),
+  requireElement<HTMLElement>("mineru-audit-summary"),
+  requireElement<HTMLElement>("mineru-audit-items"),
+  requireElement<HTMLSelectElement>("mineru-audit-kind"),
+  requireElement<HTMLSelectElement>("mineru-audit-state"),
+  requireElement<HTMLInputElement>("mineru-audit-search"),
+  requireElement<HTMLElement>("mineru-audit-status"),
+  (target, item) => {
+    const current = actor.getSnapshot().context.chapter;
+    if (current?.kind === "chapter" && current.name === target.chapterId + ".md") {
+      if (focusMineruAuditEvidence(target, item)) mineruAuditPanel.close();
+      return;
+    }
+    const view = deriveWorkspaceView(actor.getSnapshot());
+    if (view.session === "chapter-dirty") {
+      sourceLocationStatus.textContent = "当前工作稿未保存，先保存再切换章节";
+      return;
+    }
+    const other = view.chapters.find((chapter) =>
+      chapter.ready && chapter.name === target.chapterId);
+    if (!other) {
+      sourceLocationStatus.textContent = "引用章节不可打开：" + target.chapterId;
+      return;
+    }
+    pendingAuditNavigation = { target, evidence: item };
+    mineruAuditPanel.close();
+    executeProductAction("open-chapter", undefined, other.id);
+  },
+  (payload) => {
+    if (mineruActiveKey) displayMineruAuditCount(payload);
+  },
+);
+mineruAuditOpenButton.addEventListener("click", () => {
+  const chapter = actor.getSnapshot().context.chapter;
+  if (chapter?.kind !== "chapter") return;
+  void mineruAuditPanel.open(chapter.id);
+});
+
 tableConfigurationGrid = new TableConfigurationGrid(
   tableConfigGridHost,
   (descriptor) => {
@@ -2205,6 +2299,8 @@ actor.subscribe((snapshot) => {
     mineruAnnotationError = "";
     mineruAnnotationLoading = Boolean(nextMineruKey);
     mineruBodyFocusIndex.clear();
+    mineruAuditOpenButton.textContent = "注释审计";
+    mineruAuditPanel?.close();
     if (nextMineruKey && chapter) {
       void loadMineruAnnotations(chapter.id, nextMineruKey, token);
     }
@@ -2221,6 +2317,14 @@ actor.subscribe((snapshot) => {
   void reportDebugState(view, lastUiAction, lastCommandId);
 
   workingEditor.setDocument(chapter?.workingText ?? "");
+  if (pendingAuditNavigation && chapter?.kind === "chapter"
+    && chapter.name === pendingAuditNavigation.target.chapterId + ".md") {
+    const requested = pendingAuditNavigation;
+    pendingAuditNavigation = undefined;
+    window.requestAnimationFrame(() => focusMineruAuditEvidence(
+      requested.target, requested.evidence,
+    ));
+  }
   workingEditor.setEditable(Boolean(chapter) && view.canEdit && !mediaDownloadRunning);
   if (chapter?.kind === "translation" && view.activeReviewModule === "原文to译文") {
     syncSourceToTranslationPreview(chapter);
@@ -2342,6 +2446,8 @@ actor.subscribe((snapshot) => {
   reviewGridStatus.textContent = chapter
     ? `${view.activeReviewModule} · ${view.activeModuleRows} 行`
     : "尚未打开章节";
+  mineruAuditOpenButton.hidden = !nextMineruKey
+    || (!mineruAnnotationPayload?.available && !mineruAnnotationError);
   if (nextMineruKey) {
     const status = mineruAnnotationStatusText();
     if (status) {

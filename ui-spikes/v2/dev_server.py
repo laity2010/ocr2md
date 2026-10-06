@@ -431,6 +431,30 @@ class ChapterProjectStore:
             raise RuntimeError("MinerU annotation source-map error: " + result.stderr.strip()[:800])
         return json.loads(result.stdout)
 
+    def mineru_audit(self, chapter_id, change=None):
+        # Validate an existing chapter against the selected project; the
+        # browser never supplies a filesystem path or a raw Node command.
+        self.resolve(chapter_id)
+        script_path = Path(__file__).resolve().parents[2] / "out" / "mineruAuditReviewCli.js"
+        node = shutil.which("node") or next(
+            (candidate for candidate in ("/opt/homebrew/bin/node", "/usr/local/bin/node")
+             if Path(candidate).is_file()), None
+        )
+        if not node or not script_path.is_file():
+            raise RuntimeError("MinerU annotation audit runtime is unavailable")
+        command = "update" if change is not None else "read"
+        result = subprocess.run(
+            [node, str(script_path), command, str(self.project_dir)],
+            input=json.dumps(change, ensure_ascii=False) if change is not None else None,
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("MinerU audit: " + result.stderr.strip()[:800])
+        return json.loads(result.stdout)
+
     @staticmethod
     def write_text_fsync(path, text):
         with path.open("w", encoding="utf-8", newline="") as stream:
@@ -2593,6 +2617,17 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                 self._write_store_error(error)
             return
 
+        if route == "/__workspace/chapter/annotation-audit":
+            chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
+            try:
+                if hasattr(self.project_store, "mineru_audit"):
+                    self._write_json(200, self.project_store.mineru_audit(chapter_id))
+                else:
+                    self._write_json(200, {"available": False, "entries": []})
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
         if route == "/__workspace/chapter/image":
             query = parse_qs(parsed.query)
             chapter_id = query.get("chapterId", [""])[0]
@@ -2877,6 +2912,19 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                 self._write_store_error(error)
                 return
             self._write_json(200, switched)
+            return
+
+        if route == "/__workspace/chapter/annotation-audit":
+            try:
+                if not hasattr(self.project_store, "mineru_audit"):
+                    raise RuntimeError("本项目不支持页注释人工审核")
+                chapter_id = payload.get("chapterId")
+                change = payload.get("change")
+                if not isinstance(change, dict):
+                    raise ValueError("change must be a JSON object")
+                self._write_json(200, self.project_store.mineru_audit(chapter_id, change))
+            except Exception as error:
+                self._write_store_error(error)
             return
 
         if route == "/__workspace/chapter/media/download":

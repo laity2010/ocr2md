@@ -1461,6 +1461,58 @@
       .translation-service-sample-grid { grid-template-columns: 1fr; }
       #translation-service-instruction-row { grid-column: auto; }
     }
+  .mineru-audit-dialog {
+    box-sizing: border-box;
+    width: min(860px, 95vw);
+    max-height: 88dvh;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--fg);
+    box-shadow: 0 18px 70px rgba(0, 0, 0, .55);
+  }
+  .mineru-audit-dialog::backdrop { background: rgba(0,0,0,.67); }
+  .mineru-audit-header, .mineru-audit-filters, .mineru-audit-item-title,
+  .mineru-audit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+  .mineru-audit-header { justify-content: space-between; }
+  .mineru-audit-header h2 { margin: 0; font-size: 18px; }
+  .mineru-audit-help, .mineru-audit-origin { font-size: 12px; color: var(--muted); }
+  .mineru-audit-summary { margin: 8px 0; font-weight: 600; }
+  .mineru-audit-filters { margin: 9px 0; }
+  .mineru-audit-filters input { flex: 1; min-width: 170px; }
+  .mineru-audit-dialog input, .mineru-audit-dialog textarea,
+  .mineru-audit-dialog select {
+    box-sizing: border-box; padding: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--fg); border-radius: 5px;
+  }
+  .mineru-audit-items {
+    overflow-y: auto; max-height: 54dvh;
+    border-top: 1px solid var(--border);
+    display: grid; gap: 10px; padding-top: 9px;
+  }
+  .mineru-audit-item {
+    border: 1px solid var(--border); border-radius: 7px; padding: 10px;
+    min-width: 0;
+  }
+  .mineru-audit-item-title { justify-content: space-between; }
+  .mineru-audit-item-title strong { font-size: 13px; }
+  .mineru-audit-review-state { font-size: 12px; color: var(--muted); }
+  .mineru-audit-origin {
+    overflow-wrap: anywhere; margin: 6px 0;
+  }
+  .mineru-audit-evidence {
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    max-height: 135px; overflow-y: auto; font-size: 12px;
+    background: rgba(120,120,120,.06); padding: 7px; border-radius: 4px;
+  }
+  .mineru-audit-actions textarea { flex: 1; min-width: 170px; }
+  .mineru-audit-candidates { color: var(--muted); font-size: 12px; }
+  @media (max-width: 760px) {
+    .mineru-audit-dialog { padding: 10px; }
+    .mineru-audit-filters > * { flex: 1; }
+    .mineru-audit-items { max-height: 52dvh; }
+  }
 </style>
 </head>
 <body>
@@ -1519,6 +1571,7 @@
           <button id="sentence-translate-button" type="button">DeepL 翻译</button>
         </span>
         <span class="grid-menu-spacer"></span>
+        <button id="mineru-audit-open" type="button" title="全书页注释序号、引用、OCR 异常及人工审核" hidden>注释审计</button>
       </div>
 
       <div id="heading-toolbar" class="review-toolbar" hidden>
@@ -1618,6 +1671,28 @@
       </div>
     </section>
   </main>
+
+  <dialog id="mineru-audit-dialog" class="mineru-audit-dialog" aria-labelledby="mineru-audit-title">
+    <header class="mineru-audit-header">
+      <h2 id="mineru-audit-title">MinerU 页注释完整性审计</h2>
+      <button id="mineru-audit-close" type="button">关闭</button>
+    </header>
+    <p class="mineru-audit-help">以原始 PDF 物理页为单位核对。缺号仅表示疑似异常；“已核查”不等于已修复，审核不会改动 OCR、Markdown 或标定文件。</p>
+    <div id="mineru-audit-summary" class="mineru-audit-summary" role="status"></div>
+    <div class="mineru-audit-filters">
+      <select id="mineru-audit-kind" aria-label="异常类型"><option value="">所有类型</option></select>
+      <select id="mineru-audit-state" aria-label="审核状态">
+        <option value="待审核">待审核</option>
+        <option value="">全部状态</option>
+        <option value="已核查">已核查</option>
+        <option value="疑似误报">疑似误报</option>
+        <option value="需复核">需复核</option>
+      </select>
+      <input id="mineru-audit-search" type="search" placeholder="搜索页码、注释号、证据…" aria-label="搜索审计证据">
+    </div>
+    <div id="mineru-audit-status" role="status" aria-live="polite"></div>
+    <div id="mineru-audit-items" class="mineru-audit-items"></div>
+  </dialog>
 
   <div id="workspace-directory-overlay" class="leave-overlay" hidden>
     <section class="leave-dialog workspace-directory-dialog" role="dialog" aria-modal="true" aria-labelledby="workspace-directory-title">
@@ -1996,6 +2071,6 @@
       }, { once: true });
     })();
   </script>
-  <script data-ocr2md-main type="module" src="./dist/app.js?v=20261006c"></script>
+  <script data-ocr2md-main type="module" src="./dist/app.js?v=20261006d"></script>
 </body>
 </html>
