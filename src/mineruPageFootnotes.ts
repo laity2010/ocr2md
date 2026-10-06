@@ -165,11 +165,26 @@ function extractPageReferences(
   pageIndex: number,
 ): Map<number, MineruAnnotationReference[]> {
   const groups = new Map<number, MineruAnnotationReference[]>();
+  const blockTexts = blocks.map((rawBlock) =>
+    isRecord(rawBlock) && Array.isArray(rawBlock.lines)
+      ? blockText(rawBlock as MineruBlock)
+      : "");
   for (const [blockPosition, rawBlock] of blocks.entries()) {
     if (!isRecord(rawBlock) || !Array.isArray(rawBlock.lines)) continue;
     const block = rawBlock as MineruBlock;
+    const blockContext = blockTexts[blockPosition] ?? "";
+    const previousTail = (blockTexts[blockPosition - 1] ?? "").slice(-80);
+    const nextHead = (blockTexts[blockPosition + 1] ?? "").slice(0, 80);
+    const contextPrefix = previousTail ? previousTail + "\n" : "";
+    const expandedContext = contextPrefix
+      + blockContext
+      + (nextHead ? "\n" + nextHead : "");
+    const blockBaseOffset = contextPrefix.length;
+    let lineOffset = 0;
     for (const [lineIndex, rawLine] of rawBlock.lines.entries()) {
       if (!isRecord(rawLine) || !Array.isArray(rawLine.spans)) continue;
+      const currentLineText = lineText(rawLine);
+      let spanOffset = 0;
       for (const [spanIndex, rawSpan] of rawLine.spans.entries()) {
         // MinerU often encodes a superscript citation as inline_equation:
         // { type: "inline_equation", content: "^{①}" }.
@@ -183,12 +198,17 @@ function extractPageReferences(
           const current = groups.get(number) ?? [];
           const spanStart = match.index;
           const spanEnd = spanStart + match[0].length;
+          const blockStart = blockBaseOffset + lineOffset + spanOffset + spanStart;
+          const blockEnd = blockBaseOffset + lineOffset + spanOffset + spanEnd;
           current.push({
             occurrence: current.length + 1,
             marker: match[0],
             spanStart,
             spanEnd,
-            context: text.slice(Math.max(0, spanStart - 50), Math.min(text.length, spanEnd + 50)),
+            context: expandedContext.slice(
+              Math.max(0, blockStart - 80),
+              Math.min(expandedContext.length, blockEnd + 80),
+            ),
             json: {
               ...blockLocator(block, "preproc_blocks", pageIndex, blockPosition),
               bbox: validBBox(rawSpan.bbox) ?? validBBox(rawLine.bbox)
@@ -199,7 +219,9 @@ function extractPageReferences(
           });
           groups.set(number, current);
         }
+        spanOffset += text.length;
       }
+      lineOffset += currentLineText.length + 1;
     }
   }
   return groups;
@@ -244,16 +266,20 @@ function parseFootnoteBody(
   };
 }
 
+function lineText(line: Record<string, unknown>): string {
+  return Array.isArray(line.spans)
+    ? line.spans.filter(isRecord)
+      .map((span) => (span.type === "text" || span.type === "inline_equation")
+        && typeof span.content === "string" ? span.content : "")
+      .join("")
+    : "";
+}
+
 function blockText(block: MineruBlock): string {
   if (!Array.isArray(block.lines)) return "";
   return block.lines
     .filter(isRecord)
-    .map((line) => Array.isArray(line.spans)
-      ? line.spans.filter(isRecord)
-        .map((span) => (span.type === "text" || span.type === "inline_equation")
-          && typeof span.content === "string" ? span.content : "")
-        .join("")
-      : "")
+    .map(lineText)
     .join("\n");
 }
 

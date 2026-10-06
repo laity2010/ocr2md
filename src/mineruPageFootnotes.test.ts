@@ -41,6 +41,7 @@ const data = {
             ],
           }],
         },
+        block("text", 3, "后续上下文用于短块定位。"),
       ],
       discarded_blocks: [
         block("page_footnote", 7, "① 见《旧约·诗篇》。"),
@@ -108,6 +109,11 @@ assert.strictEqual(shared.references[1].json.pageIndex, 0);
 assert.strictEqual(shared.bodies[0].json.collection, "discarded_blocks");
 assert.strictEqual(shared.bodies[0].json.blockIndex, 7);
 assert.strictEqual(shared.bodies[0].content, "见《旧约·诗篇》。");
+const inlineEquationReference = facts.annotations.find((note) =>
+  note.pageIndex === 0 && note.annotationNumber === 4)?.references[0];
+assert.ok(inlineEquationReference?.context.includes("某段引用"));
+assert.ok(inlineEquationReference?.context.includes("^{④}"));
+assert.ok(inlineEquationReference?.context.includes("后续上下文用于短块定位"));
 assert.strictEqual(facts.unidentifiedFootnotes.length, 3);
 assert.deepStrictEqual(facts.unidentifiedFootnotes.map((b) => b.reason), [
   "empty-body", "unrecognized-marker", "unsupported-numeric-marker",

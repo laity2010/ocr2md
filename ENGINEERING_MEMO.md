@@ -319,6 +319,8 @@ MinerU page footnotes（WP2）将页注释识别与 Markdown 匹配拆成**两�
 - WP2 不写用户数据、不生成 MD 行号、不触碰注释 UI；后续 WP3/4 才将 JSON 事实映射至章节 Markdown 并转换为最终审核状态。
 - 《忏悔录》双 JSON 验收基线：JSON01 共 200 页，279 组 matched、1 组 shared（page_idx=151）、4 块未识别页脚、6 个 CIP 引用待确认；JSON02 共 159 页，280 组 matched、1 组 shared（page_idx=84）、17 块未识别页脚。先前粗统计 `278+2` 未区分 `inline_equation` 的圈号与误识别的孤立 `①`，此处以 span 类型完整读取后的实测基线为准。
 
+MinerU annotation → chapter Markdown mapping（WP3）直接消费 WP2 `MineruJsonFootnoteFacts`，并保留原始 facts 以免 duplicate-body / unidentified evidence 丢失。映射目标只扫描 `chapters/<chapter>/<chapter>.md` 正式章节原文，不把 `.working.md` 当 source-map 权威来源。定位不得只搜注释号：必须用 JSON 正文引用中注释号两侧上下文窗口做内容匹配，并用 NFKC、空白及基础 Markdown/inline-equation 包装归一化消除格式差异；唯一命中时记录 `chapterId / chapterPath / lineIndex / start / end / anchorText` 以及与 rowIdentity 同语义的正文、前邻、后邻 hash。找不到转换为 `MD引用缺失`，多处命中转换为 `匹配歧义`，禁止选择最近行或第一项；WP2 的 `missing-reference` 保留为 `MD引用缺失`，`duplicate-body` 保留为 `匹配歧义`。`occurrence` 表示同一物理页同号引用顺序，同一 context 多次出现时分别定位；独立 block 只有一个标记时使用唯一标记。为支持 MinerU 把圈号单独输出为 `inline_equation`（如 `^{①}`），WP2 reference context 升级为同一 preproc block 的前后正文窗口，同时仍保留原始 spanIndex/bbox。真实《忏悔录》WP2→WP3 全链初始为 563 refs / 549 matched / 14 short-context missing / 0 ambiguous；经 block context、邻接 block anchor 与短 context 唯一命中门禁完善后，最终基线为 **563/563 matched、missing=0、ambiguous=0**（JSON01 281/281，JSON02 282/282），两个共享注释仍保持 `共享注释`。
+
 ### 嵌入块
 
 嵌入块每个元素仍是独立行，通过 `组号/embedNumber` 组织。
