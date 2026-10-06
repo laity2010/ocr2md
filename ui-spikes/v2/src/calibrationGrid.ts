@@ -235,6 +235,10 @@ export class CalibrationGrid {
       rowId: string,
       value: string,
     ) => void,
+    private readonly onChapterStandaloneChanged: (
+      rowId: string,
+      standalone: boolean,
+    ) => void,
     private readonly onRowActivated: (
       row: Candidate,
       located: SourceRange | undefined,
@@ -534,13 +538,22 @@ export class CalibrationGrid {
       });
     }
     if (this.module === "章节定界") {
-      columns.push({
-        field: "chapterFile",
-        colId: "chapterFile",
-        headerName: "章节文件",
-        cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
-          this.chapterFileRenderer(params),
-      });
+      columns.push(
+        {
+          colId: "chapterStandalone",
+          headerName: "单独成章",
+          sortable: false,
+          cellRenderer: (params: ICellRendererParams<Candidate>) =>
+            this.chapterStandaloneRenderer(params),
+        },
+        {
+          field: "chapterFile",
+          colId: "chapterFile",
+          headerName: "章节文件",
+          cellRenderer: (params: ICellRendererParams<Candidate, string>) =>
+            this.chapterFileRenderer(params),
+        },
+      );
     }
     if (this.module === "变动行") {
       columns.push(
@@ -781,6 +794,8 @@ export class CalibrationGrid {
         return this.groupNumberSortValue(row.embedNumber);
       case "lineType":
         return row.lineType ?? "";
+      case "chapterStandalone":
+        return this.boundaryStandalone(row) ? 1 : 0;
       case "chapterFile":
         return row.chapterFile ?? "";
       case "annotationPairStatus":
@@ -971,6 +986,58 @@ export class CalibrationGrid {
     return row.lineType === "注释引用" ? "待补正文" : "待补引用";
   }
 
+  private boundaryHeadingRows(): Candidate[] {
+    return this.rows
+      .filter(
+        (row) =>
+          row.typeLabel === "章节定界"
+          && row.lineType === "1 级标题",
+      )
+      .sort((left, right) => left.range.line - right.range.line);
+  }
+
+  private boundaryStandalone(row: Candidate | undefined): boolean {
+    if (
+      !row
+      || row.typeLabel !== "章节定界"
+      || row.lineType !== "1 级标题"
+    ) {
+      return false;
+    }
+    const headings = this.boundaryHeadingRows();
+    const index = headings.findIndex((candidate) => candidate.id === row.id);
+    if (index <= 0) return index === 0;
+    const current = String(headings[index].chapterFile ?? "").trim();
+    const previous = String(headings[index - 1].chapterFile ?? "").trim();
+    return !current || current !== previous;
+  }
+
+  private chapterStandaloneRenderer(
+    params: ICellRendererParams<Candidate>,
+  ): HTMLElement | string {
+    if (
+      !params.data
+      || params.data.typeLabel !== "章节定界"
+      || params.data.lineType !== "1 级标题"
+    ) {
+      return "";
+    }
+    const headings = this.boundaryHeadingRows();
+    const index = headings.findIndex((row) => row.id === params.data?.id);
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "chapter-standalone-input";
+    input.setAttribute("aria-label", "单独成章");
+    input.checked = this.boundaryStandalone(params.data);
+    input.disabled = !this.editable || index === 0;
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("change", () => {
+      if (!this.editable || input.disabled || !params.data) return;
+      this.onChapterStandaloneChanged(params.data.id, input.checked);
+    });
+    return input;
+  }
+
   private chapterFileRenderer(
     params: ICellRendererParams<Candidate, string>,
   ): HTMLElement {
@@ -983,7 +1050,8 @@ export class CalibrationGrid {
     input.disabled =
       !this.editable
       || params.data?.typeLabel !== "章节定界"
-      || params.data?.lineType !== "1 级标题";
+      || params.data?.lineType !== "1 级标题"
+      || !this.boundaryStandalone(params.data);
     input.addEventListener("click", (event) => event.stopPropagation());
     input.addEventListener("change", () => {
       if (!this.editable || !params.data || input.disabled) return;

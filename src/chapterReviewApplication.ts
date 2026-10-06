@@ -6,7 +6,7 @@ import {
   type ChapterBoundarySegment,
 } from "./chapterBoundary";
 import { extractAnnotationNumber } from "./annotation";
-import { assignChapterFiles, type ChapterAssignMode } from "./chapterFileAssign";
+import { assignChapterFiles, chapterFileParts, type ChapterAssignMode } from "./chapterFileAssign";
 import { activeCandidates, findReusableManualRow, IGNORED_LINE_TYPE } from "./candidateLifecycle";
 import { manualIllegalLineBreakAtLine, scanIllegalLineBreaks } from "./illegalLineBreaks";
 import { splitBlankLineBlocks, type TextBlock } from "./atoms";
@@ -215,6 +215,102 @@ export class ChapterReviewApplication {
       ...this.state,
       rows: this.state.rows.map((row) =>
         assigned.files[row.id] !== undefined ? { ...row, chapterFile: assigned.files[row.id] } : row),
+    };
+    return { ok: true, ...this.snapshot() };
+  }
+
+  setBoundaryChapterFile(rowId: string, value: string): AssignChapterFilesResult {
+    const headings = this.state.rows
+      .filter((row) => row.typeLabel === "章节定界" && row.lineType === "1 级标题")
+      .sort(compareRows);
+    const targetIndex = headings.findIndex((row) => row.id === rowId);
+    if (targetIndex < 0) return { ok: false, error: "未找到一级标题。" };
+    const current = String(headings[targetIndex].chapterFile ?? "").trim();
+    const previous = targetIndex > 0
+      ? String(headings[targetIndex - 1].chapterFile ?? "").trim()
+      : "";
+    if (targetIndex > 0 && current && current === previous) {
+      return { ok: false, error: "归并标题不能单独修改章节文件。" };
+    }
+
+    const ids = [headings[targetIndex].id];
+    if (current) {
+      for (let index = targetIndex + 1; index < headings.length; index += 1) {
+        if (String(headings[index].chapterFile ?? "").trim() !== current) break;
+        ids.push(headings[index].id);
+      }
+    }
+    this.state = {
+      ...this.state,
+      rows: applyChapterFile(this.state.rows, ids, value),
+    };
+    return { ok: true, ...this.snapshot() };
+  }
+
+  assignBoundarySequence(start: string): AssignChapterFilesResult {
+    const headings = this.state.rows
+      .filter((row) => row.typeLabel === "章节定界" && row.lineType === "1 级标题")
+      .sort(compareRows);
+    const standaloneFlags = headings.map((row, index) => {
+      if (index === 0) return true;
+      const current = String(row.chapterFile ?? "").trim();
+      const previous = String(headings[index - 1].chapterFile ?? "").trim();
+      return !current || current !== previous;
+    });
+    return this.assignBoundaryFilesByFlags(headings, standaloneFlags, start);
+  }
+
+  setChapterStandalone(rowId: string, standalone: boolean): AssignChapterFilesResult {
+    const headings = this.state.rows
+      .filter((row) => row.typeLabel === "章节定界" && row.lineType === "1 级标题")
+      .sort(compareRows);
+    const targetIndex = headings.findIndex((row) => row.id === rowId);
+    if (targetIndex < 0) return { ok: false, error: "未找到一级标题。" };
+    if (targetIndex === 0 && !standalone) {
+      return { ok: false, error: "首个一级标题必须单独成章。" };
+    }
+
+    const standaloneFlags = headings.map((row, index) => {
+      if (index === 0) return true;
+      const current = String(row.chapterFile ?? "").trim();
+      const previous = String(headings[index - 1].chapterFile ?? "").trim();
+      return !current || current !== previous;
+    });
+    standaloneFlags[targetIndex] = standalone;
+    const firstParts = chapterFileParts(headings[0]?.chapterFile ?? "");
+    const start = firstParts
+      ? String(firstParts.number).padStart(firstParts.width, "0")
+      : "01";
+    return this.assignBoundaryFilesByFlags(headings, standaloneFlags, start);
+  }
+
+  private assignBoundaryFilesByFlags(
+    headings: Candidate[],
+    standaloneFlags: boolean[],
+    start: string,
+  ): AssignChapterFilesResult {
+    const owners = headings.filter((_, index) => standaloneFlags[index]);
+    const assigned = assignChapterFiles({
+      mode: "sequence",
+      value: start.trim(),
+      rows: owners.map((row) => ({
+        id: row.id,
+        raw: row.raw,
+        chapterFile: row.chapterFile,
+      })),
+    });
+    if (!assigned.ok) return assigned;
+
+    const files = new Map<string, string>();
+    let ownerFile = "";
+    headings.forEach((row, index) => {
+      if (standaloneFlags[index]) ownerFile = assigned.files[row.id] ?? ownerFile;
+      if (ownerFile) files.set(row.id, ownerFile);
+    });
+    this.state = {
+      ...this.state,
+      rows: this.state.rows.map((row) =>
+        files.has(row.id) ? { ...row, chapterFile: files.get(row.id) } : row),
     };
     return { ok: true, ...this.snapshot() };
   }

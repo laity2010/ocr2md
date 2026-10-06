@@ -1714,6 +1714,11 @@ const calibrationGrid = new CalibrationGrid(
     lastCommandId = undefined;
     actor.send({ type: "CHAPTER_FILE_CHANGED", rowId, value });
   },
+  (rowId, standalone) => {
+    lastUiAction = "chapter-standalone";
+    lastCommandId = undefined;
+    actor.send({ type: "CHAPTER_STANDALONE_CHANGED", rowId, standalone });
+  },
   (row, located, activation = "row") => {
     if (activation === "media") {
       const chapter = actor.getSnapshot().context.chapter;
@@ -2165,7 +2170,8 @@ actor.subscribe((snapshot) => {
   boundaryStatus.textContent = chapter?.kind === "boundary"
     ? "OCR " + view.boundarySourceFileCount
       + " · 一级标题 " + view.boundaryHeadingCount
-      + " · 已分配 " + view.boundaryAssignedHeadingCount
+      + " · 独立章节 " + view.boundaryStandaloneHeadingCount
+      + " · 归并标题 " + view.boundaryMergedHeadingCount
       + " · segments " + view.boundarySegmentCount
     : "OCR 输入 " + view.boundarySourceFileCount + " 个";
   translationStatus.textContent = chapter?.kind === "translation"
@@ -2248,7 +2254,8 @@ actor.subscribe((snapshot) => {
     || chapter?.kind !== "boundary";
   boundaryExportStatus.textContent = chapter?.kind === "boundary"
     ? "一级标题 " + view.boundaryHeadingCount
-      + " · 已分配 " + view.boundaryAssignedHeadingCount
+      + " · 独立章节 " + view.boundaryStandaloneHeadingCount
+      + " · 归并标题 " + view.boundaryMergedHeadingCount
       + " · segments " + view.boundarySegmentCount
       + (view.lastExportedCount != null
         ? " · 上次导出 " + view.lastExportedCount + " 章"

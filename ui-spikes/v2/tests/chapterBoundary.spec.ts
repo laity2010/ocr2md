@@ -64,7 +64,7 @@ test("chapter boundary merges OCR inputs, assigns files, survives history/save, 
   await expect(page.locator("#active-review-module")).toHaveText("章节定界");
   await expect(page.locator("#active-module-rows")).toHaveText("3");
   await expect(page.locator("#boundary-status")).toHaveText(
-    "OCR 3 · 一级标题 3 · 已分配 0 · segments 0",
+    "OCR 3 · 一级标题 3 · 独立章节 3 · 归并标题 0 · segments 0",
   );
   await expect(page.locator("#boundary-toolbar")).toBeVisible();
   await expect(page.locator('[data-review-module="章节标题"]')).toBeHidden();
@@ -109,7 +109,7 @@ test("chapter boundary merges OCR inputs, assigns files, survives history/save, 
   await expect(chapterInputs.nth(1)).toHaveValue("92 Two.md");
   await expect(chapterInputs.nth(2)).toHaveValue("93 Three.md");
   await expect(page.locator("#boundary-status")).toHaveText(
-    "OCR 3 · 一级标题 3 · 已分配 3 · segments 3",
+    "OCR 3 · 一级标题 3 · 独立章节 3 · 归并标题 0 · segments 3",
   );
   await expect(page.locator("#export-boundary")).toBeEnabled();
 
@@ -140,7 +140,7 @@ test("chapter boundary merges OCR inputs, assigns files, survives history/save, 
   await navigation.selectOption("__node_ocr__");
   await expect(page.locator("#state-value")).toHaveText("chapter-clean");
   await expect(page.locator("#boundary-status")).toHaveText(
-    "OCR 3 · 一级标题 3 · 已分配 3 · segments 3",
+    "OCR 3 · 一级标题 3 · 独立章节 3 · 归并标题 0 · segments 3",
   );
   await expect(chapterInputs.nth(0)).toHaveValue("91 One.md");
   await expect(chapterInputs.nth(1)).toHaveValue("92 Two.md");
@@ -221,4 +221,84 @@ test("chapter boundary merges OCR inputs, assigns files, survives history/save, 
   expect(chapterTwo).toContain("# Two\nSecond body.");
   expect(chapterTwo).not.toContain("# Three");
   expect(chapterThree).toContain("# Three\nThird body.");
+});
+
+test("chapter boundary standalone checkbox merges headings into the previous output chapter", async ({
+  page,
+}) => {
+  await cleanupBoundaryFixture();
+
+  await page.goto("/");
+  await expect(page.locator("#state-value")).toHaveText("idle");
+  await page.locator("#chapter-select").selectOption("__node_ocr__");
+  await expect(page.locator("#state-value")).toHaveText("chapter-clean");
+
+  const standalone = page.locator(
+    "#calibration-grid input.chapter-standalone-input",
+  );
+  const chapterInputs = page.locator(
+    "#calibration-grid input.chapter-file-input",
+  );
+  await expect(standalone).toHaveCount(3);
+  await expect(chapterInputs).toHaveCount(3);
+  await expect(standalone.nth(0)).toBeChecked();
+  await expect(standalone.nth(0)).toBeDisabled();
+  await expect(standalone.nth(1)).toBeChecked();
+  await expect(standalone.nth(2)).toBeChecked();
+
+  await page.locator("#boundary-sequence-start").fill("91");
+  await page.locator("#assign-boundary-sequence").click();
+  await expect(chapterInputs.nth(0)).toHaveValue("91 One.md");
+  await expect(chapterInputs.nth(1)).toHaveValue("92 Two.md");
+  await expect(chapterInputs.nth(2)).toHaveValue("93 Three.md");
+
+  await standalone.nth(1).uncheck();
+  await expect(chapterInputs.nth(0)).toHaveValue("91 One.md");
+  await expect(chapterInputs.nth(1)).toHaveValue("91 One.md");
+  await expect(chapterInputs.nth(2)).toHaveValue("92 Three.md");
+  await expect(chapterInputs.nth(1)).toBeDisabled();
+  await expect(page.locator("#boundary-status")).toHaveText(
+    "OCR 3 · 一级标题 3 · 独立章节 2 · 归并标题 1 · segments 2",
+  );
+
+  await standalone.nth(2).uncheck();
+  await expect(chapterInputs.nth(0)).toHaveValue("91 One.md");
+  await expect(chapterInputs.nth(1)).toHaveValue("91 One.md");
+  await expect(chapterInputs.nth(2)).toHaveValue("91 One.md");
+  await expect(chapterInputs.nth(2)).toBeDisabled();
+  await expect(page.locator("#boundary-status")).toHaveText(
+    "OCR 3 · 一级标题 3 · 独立章节 1 · 归并标题 2 · segments 1",
+  );
+
+  await standalone.nth(1).check();
+  await expect(chapterInputs.nth(0)).toHaveValue("91 One.md");
+  await expect(chapterInputs.nth(1)).toHaveValue("92 Two.md");
+  await expect(chapterInputs.nth(2)).toHaveValue("92 Two.md");
+  await expect(chapterInputs.nth(1)).toBeEnabled();
+  await expect(chapterInputs.nth(2)).toBeDisabled();
+
+  await page.locator("#boundary-sequence-start").fill("10");
+  await page.locator("#assign-boundary-sequence").click();
+  await expect(chapterInputs.nth(0)).toHaveValue("10 One.md");
+  await expect(chapterInputs.nth(1)).toHaveValue("11 Two.md");
+  await expect(chapterInputs.nth(2)).toHaveValue("11 Two.md");
+
+  await chapterInputs.nth(1).fill("11 Front Matter.md");
+  await chapterInputs.nth(1).press("Tab");
+  await expect(chapterInputs.nth(1)).toHaveValue("11 Front Matter.md");
+  await expect(chapterInputs.nth(2)).toHaveValue("11 Front Matter.md");
+
+  await page.locator("#save").click();
+  await expect(page.locator("#state-value")).toHaveText("chapter-clean");
+  await closeChapter(page);
+  await expect(page.locator("#state-value")).toHaveText("idle");
+  await page.locator("#chapter-select").selectOption("__node_ocr__");
+  await expect(page.locator("#state-value")).toHaveText("chapter-clean");
+  await expect(standalone.nth(0)).toBeChecked();
+  await expect(standalone.nth(0)).toBeDisabled();
+  await expect(standalone.nth(1)).toBeChecked();
+  await expect(standalone.nth(2)).not.toBeChecked();
+  await expect(chapterInputs.nth(0)).toHaveValue("10 One.md");
+  await expect(chapterInputs.nth(1)).toHaveValue("11 Front Matter.md");
+  await expect(chapterInputs.nth(2)).toHaveValue("11 Front Matter.md");
 });

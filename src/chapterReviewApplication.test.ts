@@ -220,6 +220,53 @@ assert.deepStrictEqual(
   "host-independent chapter segmentation must follow the reviewed heading assignments",
 );
 
+const mergedSecond = boundaryApp.setChapterStandalone(boundaryHeadings[1].id, false);
+assert.strictEqual(mergedSecond.ok, true, "a later heading may join the previous output chapter");
+if (mergedSecond.ok) {
+  assert.deepStrictEqual(
+    boundaryHeadings.map((row) => mergedSecond.rows.find((candidate) => candidate.id === row.id)?.chapterFile),
+    ["01 One.md", "01 One.md", "02 Two.md"],
+    "joining one heading must inherit the previous file and compress later numbering",
+  );
+}
+const mergedThird = boundaryApp.setChapterStandalone(boundaryHeadings[2].id, false);
+assert.strictEqual(mergedThird.ok, true, "consecutive headings may join the same output chapter");
+if (mergedThird.ok) {
+  assert.deepStrictEqual(
+    boundaryHeadings.map((row) => mergedThird.rows.find((candidate) => candidate.id === row.id)?.chapterFile),
+    ["01 One.md", "01 One.md", "01 One.md"],
+  );
+}
+const firstCannotMerge = boundaryApp.setChapterStandalone(boundaryHeadings[0].id, false);
+assert.strictEqual(firstCannotMerge.ok, false, "the first level-one heading must always start a chapter");
+const restoredSecond = boundaryApp.setChapterStandalone(boundaryHeadings[1].id, true);
+assert.strictEqual(restoredSecond.ok, true, "a merged heading may become standalone again");
+if (restoredSecond.ok) {
+  assert.deepStrictEqual(
+    boundaryHeadings.map((row) => restoredSecond.rows.find((candidate) => candidate.id === row.id)?.chapterFile),
+    ["01 One.md", "02 Inserted.md", "02 Inserted.md"],
+  );
+}
+const renumberedMerged = boundaryApp.assignBoundarySequence("10");
+assert.strictEqual(renumberedMerged.ok, true, "renumbering must preserve merged headings");
+if (renumberedMerged.ok) {
+  assert.deepStrictEqual(
+    boundaryHeadings.map((row) => renumberedMerged.rows.find((candidate) => candidate.id === row.id)?.chapterFile),
+    ["10 One.md", "11 Inserted.md", "11 Inserted.md"],
+  );
+}
+const renamedOwner = boundaryApp.setBoundaryChapterFile(
+  boundaryHeadings[1].id,
+  "11 Front Matter.md",
+);
+assert.strictEqual(renamedOwner.ok, true, "renaming an owner chapter must update merged followers");
+if (renamedOwner.ok) {
+  assert.deepStrictEqual(
+    boundaryHeadings.map((row) => renamedOwner.rows.find((candidate) => candidate.id === row.id)?.chapterFile),
+    ["10 One.md", "11 Front Matter.md", "11 Front Matter.md"],
+  );
+}
+
 const movedTitleLines = source.replace(/\r\n?/g, "\n").split("\n");
 const movedEditorNote = movedTitleLines.splice(375, 3);
 movedTitleLines.splice(358, 0, ...movedEditorNote);

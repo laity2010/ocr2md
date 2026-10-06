@@ -118,6 +118,7 @@ export type WorkspaceEvent =
     }
   | { type: "CALIBRATION_LINE_TYPE_CHANGED"; rowId: string; lineType: string }
   | { type: "CHAPTER_FILE_CHANGED"; rowId: string; value: string }
+  | { type: "CHAPTER_STANDALONE_CHANGED"; rowId: string; standalone: boolean }
   | { type: "ASSIGN_BOUNDARY_SEQUENCE"; start: string }
   | { type: "UNDO" }
   | { type: "REDO" }
@@ -591,6 +592,15 @@ export const workspaceMachine = setup({
           && row.lineType === "1 级标题"
           && String(row.chapterFile ?? "").trim() !== event.value.trim(),
       ),
+    chapterStandaloneChanged: ({ context, event }) =>
+      event.type === "CHAPTER_STANDALONE_CHANGED"
+      && context.chapter?.kind === "boundary"
+      && context.chapter.rows.some(
+        (row) =>
+          row.id === event.rowId
+          && row.typeLabel === "章节定界"
+          && row.lineType === "1 级标题",
+      ),
     canAssignBoundarySequence: ({ context, event }) =>
       event.type === "ASSIGN_BOUNDARY_SEQUENCE"
       && context.chapter?.kind === "boundary"
@@ -977,7 +987,44 @@ export const workspaceMachine = setup({
         rows: context.chapter.rows,
         annotationPairs: context.chapter.annotationPairs,
       });
-      const next = application.setChapterFile([event.rowId], event.value.trim());
+      const next = application.setBoundaryChapterFile(
+        event.rowId,
+        event.value.trim(),
+      );
+      if (!next.ok) return { saveError: next.error };
+      return {
+        chapter: {
+          ...context.chapter,
+          rows: next.rows,
+          annotationPairs: next.annotationPairs,
+        },
+        undoStack: pushHistory(
+          context.undoStack,
+          historySnapshot(context.chapter),
+        ),
+        redoStack: [],
+        focusedReviewRowId: undefined,
+        focusedSourceLine: undefined,
+        saveError: undefined,
+      };
+    }),
+    updateChapterStandalone: assign(({ context, event }) => {
+      if (
+        !context.chapter
+        || context.chapter.kind !== "boundary"
+        || event.type !== "CHAPTER_STANDALONE_CHANGED"
+      ) {
+        return {};
+      }
+      const application = new ChapterReviewApplication({
+        rows: context.chapter.rows,
+        annotationPairs: context.chapter.annotationPairs,
+      });
+      const next = application.setChapterStandalone(
+        event.rowId,
+        event.standalone,
+      );
+      if (!next.ok) return { saveError: next.error };
       return {
         chapter: {
           ...context.chapter,
@@ -1006,16 +1053,7 @@ export const workspaceMachine = setup({
         rows: context.chapter.rows,
         annotationPairs: context.chapter.annotationPairs,
       });
-      const headingIds = context.chapter.rows
-        .filter(
-          (row) =>
-            row.typeLabel === "章节定界"
-            && row.lineType === "1 级标题",
-        )
-        .map((row) => row.id);
-      const next = application.assignChapterFiles(
-        headingIds,
-        "sequence",
+      const next = application.assignBoundarySequence(
         event.start.trim(),
       );
       if (!next.ok) {
@@ -1324,6 +1362,11 @@ export const workspaceMachine = setup({
               target: "dirty",
               actions: "updateChapterFile",
             },
+            CHAPTER_STANDALONE_CHANGED: {
+              guard: "chapterStandaloneChanged",
+              target: "dirty",
+              actions: "updateChapterStandalone",
+            },
             ASSIGN_BOUNDARY_SEQUENCE: {
               guard: "canAssignBoundarySequence",
               target: "dirty",
@@ -1405,6 +1448,10 @@ export const workspaceMachine = setup({
             CHAPTER_FILE_CHANGED: {
               guard: "chapterFileChanged",
               actions: "updateChapterFile",
+            },
+            CHAPTER_STANDALONE_CHANGED: {
+              guard: "chapterStandaloneChanged",
+              actions: "updateChapterStandalone",
             },
             ASSIGN_BOUNDARY_SEQUENCE: {
               guard: "canAssignBoundarySequence",
@@ -1694,6 +1741,8 @@ export type WorkspaceViewModel = {
   boundarySourceFileCount: number;
   boundaryHeadingCount: number;
   boundaryAssignedHeadingCount: number;
+  boundaryStandaloneHeadingCount: number;
+  boundaryMergedHeadingCount: number;
   boundarySegmentCount: number;
   canOpenBoundary: boolean;
   canExportBoundary: boolean;
@@ -1858,6 +1907,12 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
   const boundaryAssignedHeadings = boundaryHeadings.filter(
     (row) => Boolean(row.chapterFile?.trim()),
   );
+  const boundaryStandaloneHeadings = boundaryHeadings.filter((row, index) => {
+    if (index === 0) return true;
+    const current = String(row.chapterFile ?? "").trim();
+    const previous = String(boundaryHeadings[index - 1].chapterFile ?? "").trim();
+    return !current || current !== previous;
+  });
   let boundarySegmentCount = 0;
   if (chapter?.kind === "boundary") {
     try {
@@ -1957,6 +2012,9 @@ export function deriveWorkspaceView(snapshot: WorkspaceSnapshot): WorkspaceViewM
     boundarySourceFileCount: snapshot.context.boundary?.sourceFileCount ?? 0,
     boundaryHeadingCount: boundaryHeadings.length,
     boundaryAssignedHeadingCount: boundaryAssignedHeadings.length,
+    boundaryStandaloneHeadingCount: boundaryStandaloneHeadings.length,
+    boundaryMergedHeadingCount:
+      boundaryHeadings.length - boundaryStandaloneHeadings.length,
     boundarySegmentCount,
     canOpenBoundary:
       (idle || loadErrorState)

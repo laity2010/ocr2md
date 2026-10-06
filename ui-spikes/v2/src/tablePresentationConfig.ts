@@ -16,6 +16,7 @@ export type TableColumnId =
   | "annotationNumber"
   | "annotationPairStatus"
   | "embedNumber"
+  | "chapterStandalone"
   | "chapterFile"
   | "preview"
   | "chapterHeadingPreview"
@@ -124,6 +125,7 @@ const COLUMN_LABELS: Record<TableColumnId, string> = {
   annotationNumber: "注释号",
   annotationPairStatus: "配对状态",
   embedNumber: "组号",
+  chapterStandalone: "单独成章",
   chapterFile: "章节文件",
   preview: "预览",
   chapterHeadingPreview: "标题预览",
@@ -169,7 +171,7 @@ const MODULE_COLUMNS: Record<TablePresentationModule, readonly TableColumnId[]> 
     "changedContent",
     "baselineContent",
   ],
-  章节定界: ["sourceLine", "lineType", "chapterFile", "preview"],
+  章节定界: ["sourceLine", "lineType", "chapterStandalone", "chapterFile", "preview"],
   文本块: ["sourceLine", "lineType", "preview"],
   句子: ["sourceLine", "lineType", "sentenceSource"],
   翻译: [
@@ -244,6 +246,7 @@ const DEFAULT_STYLES: Partial<Record<TableColumnId, TableColumnPresentation>> = 
   annotationNumber: { width: 92, minWidth: 82 },
   annotationPairStatus: { width: 112, minWidth: 100 },
   embedNumber: { width: 78, minWidth: 68 },
+  chapterStandalone: { width: 118, minWidth: 108 },
   chapterFile: { width: 240, minWidth: 200 },
   preview: { minWidth: 360, flex: 1 },
   chapterHeadingPreview: { minWidth: 360, flex: 1 },
@@ -538,6 +541,15 @@ function resolveModule(
     orderedIds.push(colId);
   }
 
+  if (module === "章节定界" && !seen.has("单独成章")) {
+    const chapterFileIndex = orderedIds.indexOf("chapterFile");
+    orderedIds.splice(
+      chapterFileIndex >= 0 ? chapterFileIndex : orderedIds.length,
+      0,
+      "chapterStandalone",
+    );
+    seen.add("单独成章");
+  }
   for (const colId of MODULE_COLUMNS[module]) {
     const label = COLUMN_LABELS[colId];
     if (!seen.has(label)) orderedIds.push(colId);

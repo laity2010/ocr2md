@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ocr2md v2 · native</title>
-  <link rel="stylesheet" href="./dist/app.css?v=20261006a">
+  <link rel="stylesheet" href="./dist/app.css?v=20261006b">
   <style>
     :root {
       color-scheme: dark;
@@ -658,7 +658,22 @@
     #calibration-grid .ag-row.row-deleted-change { cursor: default; }
     .calibration-line-type,
     .annotation-number-input,
+    .chapter-standalone-input {
+      width: 22px;
+      height: 22px;
+      margin: 9px auto;
+      display: block;
+      cursor: pointer;
+    }
+    .chapter-standalone-input:disabled {
+      cursor: not-allowed;
+      opacity: 0.72;
+    }
     .chapter-file-input { width: 100%; min-height: 30px; box-sizing: border-box; }
+    .chapter-file-input:disabled {
+      opacity: 0.68;
+      cursor: not-allowed;
+    }
 
     #working-editor {
       min-width: 0;
@@ -1952,6 +1967,6 @@
       }, { once: true });
     })();
   </script>
-  <script data-ocr2md-main type="module" src="./dist/app.js?v=20261006a"></script>
+  <script data-ocr2md-main type="module" src="./dist/app.js?v=20261006b"></script>
 </body>
 </html>
