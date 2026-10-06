@@ -7,7 +7,9 @@ import ipaddress
 import json
 import os
 import re
+import shutil
 import socket
+import subprocess
 import threading
 import time
 import uuid
@@ -406,6 +408,28 @@ class ChapterProjectStore:
                 "sidecarPath": self.storage_path(sidecar_path),
                 "media": self.list_chapter_media(chapter_id),
             }
+
+    def read_mineru_annotations(self, chapter_id):
+        record = self.resolve(chapter_id)
+        script_path = Path(__file__).resolve().parents[2] / "out" / "mineruAnnotationWebCli.js"
+        node = shutil.which("node")
+        if not node:
+            for candidate in ("/opt/homebrew/bin/node", "/usr/local/bin/node"):
+                if Path(candidate).is_file():
+                    node = candidate
+                    break
+        if not node or not script_path.is_file():
+            raise RuntimeError("MinerU annotation source-map runtime is unavailable")
+        result = subprocess.run(
+            [node, str(script_path), str(self.project_dir), record["name"]],
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("MinerU annotation source-map error: " + result.stderr.strip()[:800])
+        return json.loads(result.stdout)
 
     @staticmethod
     def write_text_fsync(path, text):
@@ -2551,6 +2575,20 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
             try:
                 self._write_json(200, self.project_store.read(chapter_id))
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/chapter/annotations":
+            chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
+            try:
+                if hasattr(self.project_store, "read_mineru_annotations"):
+                    self._write_json(
+                        200, self.project_store.read_mineru_annotations(chapter_id)
+                    )
+                else:
+                    self.project_store.resolve(chapter_id)
+                    self._write_json(200, {"available": False, "chapterId": chapter_id, "rows": []})
             except Exception as error:
                 self._write_store_error(error)
             return

@@ -325,6 +325,10 @@ MinerU Source Map（WP4）将 WP1 发现、WP2 原始事实、WP3 Markdown 定�
 
 章节投影每个 JSON 的 `documentKey + page_idx + annotationNumber` 身份保持独立，输出 `chapterId / chapterPath / rows[]`，引用与注释正文各自一行，含数字号、源 JSON 页/block/bbox、预览、状态及 MD line/range/anchor；共享正文的 `navigationTargets[]` 保存同号全部引用位置。缺失/跨章无法确定的行进入 `unassignedRows`，原始重复正文与未识别/未验证页脚完整保存在 `documents[].facts` / `issues`，不猜章节、不静默丢弃；来源无法唯一配对时报告 `pairing / unpaired-json / load-error`。`getMineruChapterProjection(sourceMap, chapterIdOrPath)` 是提供给下一航点注释表的数据入口；**WP4 不改变现有 Web 注释 UI，Web/API 接线留 WP5**。
 
+MinerU Web 注释表（WP5）通过原生 `GET /__workspace/chapter/annotations?chapterId=<已验证章节ID>` 按需读取 Source Map，后端 `ChapterProjectStore.resolve()` 限制章节范围，再由 `out/mineruAnnotationWebCli.js` 只读返回**当前章节投影 + 全书待定位行 + 审计计数**，不通过浏览器指定文件路径，也不开放整份 JSON 原始内容。接口在无 `json/` 的旧项目返回 `available=false`，前端回到旧候选/正则注释表，不破坏旧 sidecar 的人工忽略、Undo/Redo 与保存。JSON 存在却不能可靠配对时显式报错，不能静默混入旧版配对结果。
+
+进入「注释」时按需异步加载、每次重新进入重新核对缓存指纹；以 `projectName + chapter.path + chapter.id` 为请求版本键，章节切换或离开模块使旧请求失效。JSON 注释模式使用**独立临时投影行**，不回填到 `chapter.rows`/sidecar；表格固定列 `PDF页 / MD行号 / 行类型 / 注释号 / 预览 / 配对状态`，按 JSON 来源页序、数字注释号和引用/正文排序；状态异常高亮。未归属记录明确标记「全书待定位」，不伪装成当前章节匹配。JSON 表只读；未识别 footnote / unverified reference 以审计计数警示，WP6 再完善全书异常审计入口。点击引用或注释正文预览在**当前工作稿**上用完整行文本/前后锚 hash 唯一定位到圈号起止字符；即使原稿和 working 行号偏移，表格「MD行号」也显示当前真实工作稿位置。若锚点失效或重复无法消歧，拒绝跳错行并明确提示。共享正文有多个 `navigationTargets`，再次点击循环定位；旧版五列表与数据流不变。真实浏览器回归脚本 `ui-spikes/v2/tests/mineruAnnotationRealSmoke.cjs` 只读运行，需对着独立测试 server 设 `OCR2MD_V2_REAL_BASE_URL`。
+
 ### 嵌入块
 
 嵌入块每个元素仍是独立行，通过 `组号/embedNumber` 组织。

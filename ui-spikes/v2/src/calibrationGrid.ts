@@ -12,6 +12,9 @@ import {
   themeQuartz,
 } from "ag-grid-community";
 import { locateCandidate } from "../../../src/rowIdentity";
+import { locateMineruMarkdownReference } from "../../../src/mineruAnnotationLocate";
+import { mineruAnnotationFromCandidate, mineruReviewCandidates } from "../../../src/mineruAnnotationReview";
+import type { MineruProjectedAnnotationRow } from "../../../src/mineruAnnotationProjection";
 import { sentenceProviderLabel } from "../../../src/sentenceFiles";
 import type { AnnotationPair, Candidate, SourceRange } from "../../../src/types";
 import type { ActiveReviewModule } from "./workspaceMachine";
@@ -219,6 +222,7 @@ export class CalibrationGrid {
   private editable = false;
   private rows: Candidate[] = [];
   private annotationPairs: AnnotationPair[] = [];
+  private mineruMode = false;
   private workingText = "";
   private module: GridReviewModule = "章节标题";
   private headingNumberingEnabled = true;
@@ -248,6 +252,9 @@ export class CalibrationGrid {
       row: Candidate,
       event: PointerEvent,
     ) => void,
+    private readonly onMineruRowActivated?: (
+      row: MineruProjectedAnnotationRow,
+    ) => void,
   ) {
     this.api = createGrid<Candidate>(host, {
       theme: calibrationTheme,
@@ -268,6 +275,12 @@ export class CalibrationGrid {
         "row-deleted-change": (params) =>
           this.module === "变动行"
           && params.data?.chapterBoundaryState === "deleted",
+        "mineru-note-unresolved": (params) => this.mineruMode
+          && (mineruAnnotationFromCandidate(params.data)?.status === "MD引用缺失"
+            || mineruAnnotationFromCandidate(params.data)?.status === "匹配歧义"
+            || mineruAnnotationFromCandidate(params.data)?.status === "注释正文缺失"),
+        "mineru-note-unassigned": (params) => this.mineruMode
+          && !mineruAnnotationFromCandidate(params.data)?.navigationTarget,
       },
       onRowClicked: (event: RowClickedEvent<Candidate>) => {
         if (!event.data) return;
@@ -282,8 +295,10 @@ export class CalibrationGrid {
     module: GridReviewModule,
     headingNumberingEnabled = true,
     annotationPairs: AnnotationPair[] = [],
+    mineruRows?: readonly MineruProjectedAnnotationRow[],
   ): void {
-    const moduleChanged = this.module !== module;
+    const nextMineruMode = module === "注释" && mineruRows !== undefined;
+    const moduleChanged = this.module !== module || this.mineruMode !== nextMineruMode;
     const numberingChanged =
       this.headingNumberingEnabled !== headingNumberingEnabled;
     const nextProviderSignature = module === "句子"
@@ -293,7 +308,8 @@ export class CalibrationGrid {
       : "";
     const providerColumnsChanged =
       module === "句子" && this.sentenceProviderSignature !== nextProviderSignature;
-    this.rows = rows;
+    this.rows = nextMineruMode ? mineruReviewCandidates(mineruRows ?? []) : rows;
+    this.mineruMode = nextMineruMode;
     this.annotationPairs = annotationPairs;
     this.workingText = workingText;
     this.module = module;
@@ -331,14 +347,23 @@ export class CalibrationGrid {
 
   private rebuildPresentationColumns(): void {
     this.api.setGridOption("columnDefs", this.columnDefs());
-    this.api.applyColumnState({
-      state: this.presentation[this.module].columns.map((column) => ({
+    const columnState = this.mineruMode
+      ? ["pdfPage", "sourceLine", "lineType", "annotationNumber", "preview", "annotationPairStatus"].map((colId) => ({
+        colId,
+        pinned: null,
+        hide: false,
+        sort: null,
+        sortIndex: null,
+      }))
+      : this.presentation[this.module].columns.map((column) => ({
         colId: column.colId,
         pinned: column.pinned ?? null,
         hide: column.hidden ?? false,
         sort: null,
         sortIndex: null,
-      })),
+      }));
+    this.api.applyColumnState({
+      state: columnState,
       applyOrder: true,
     });
   }
@@ -416,6 +441,11 @@ export class CalibrationGrid {
   }
 
   private activateRow(row: Candidate): void {
+    const mineru = this.mineruMode ? mineruAnnotationFromCandidate(row) : undefined;
+    if (mineru) {
+      this.onMineruRowActivated?.(mineru);
+      return;
+    }
     if (this.module === "媒体") {
       this.onRowActivated(row, undefined, "media");
       return;
@@ -438,6 +468,12 @@ export class CalibrationGrid {
 
   private locatedLine(row: Candidate | undefined): number | null {
     if (!row) return null;
+    if (this.mineruMode) {
+      const anchor = mineruAnnotationFromCandidate(row)?.navigationTarget;
+      if (!anchor) return null;
+      const located = locateMineruMarkdownReference(this.workingText, anchor);
+      return located ? located.line + 1 : null;
+    }
     if (this.module === "变动行") return row.range.line + 1;
     const located = locateCandidate(this.workingText, row);
     return located ? located.line + 1 : null;
@@ -497,7 +533,8 @@ export class CalibrationGrid {
     const columns: ColDef<Candidate>[] = [
       {
         colId: "sourceLine",
-        headerName: this.module === "非法断行" ? "断行处" : "行号",
+        headerName: this.module === "非法断行" ? "断行处"
+          : this.mineruMode ? "MD行号" : "行号",
         valueGetter: (params) => this.locatedLine(params.data),
       },
       {
@@ -515,6 +552,15 @@ export class CalibrationGrid {
     ];
 
     if (this.module === "注释") {
+      if (this.mineruMode) {
+        columns.push({
+          colId: "pdfPage",
+          headerName: "PDF页",
+          valueGetter: (params) => mineruAnnotationFromCandidate(params.data)?.pageNumber,
+          tooltipValueGetter: (params) =>
+            mineruAnnotationFromCandidate(params.data)?.sourceJsonPath ?? "",
+        });
+      }
       columns.push({
         field: "annotationNumber",
         colId: "annotationNumber",
@@ -643,6 +689,10 @@ export class CalibrationGrid {
         field: "preview",
         colId: "preview",
         headerName: "预览",
+        cellRenderer: this.mineruMode
+          ? (params: ICellRendererParams<Candidate>) =>
+            this.mineruPreviewRenderer(params)
+          : undefined,
       });
     }
     const baseById = new Map(
@@ -665,6 +715,16 @@ export class CalibrationGrid {
         sortIndex: undefined,
       }];
     });
+    if (this.mineruMode) {
+      const byId = new Map(columns.map((column) => [column.colId, column]));
+      return ["pdfPage", "sourceLine", "lineType", "annotationNumber", "preview", "annotationPairStatus"]
+        .flatMap((id) => {
+          const found = byId.get(id);
+          if (!found) return [];
+          const presentation = this.presentation["注释"].columns.find((item) => item.colId === id);
+          return [{ ...found, width: presentation?.width, minWidth: presentation?.minWidth, flex: presentation?.flex }];
+        });
+    }
     if (this.module !== "句子") return configured;
 
     const providerPriority = (provider: string) =>
@@ -744,6 +804,19 @@ export class CalibrationGrid {
   }
 
   private sortRowsForPresentation(rows: Candidate[]): Candidate[] {
+    if (this.mineruMode) {
+      return [...rows].sort((left, right) => {
+        const a = mineruAnnotationFromCandidate(left);
+        const b = mineruAnnotationFromCandidate(right);
+        if (!a || !b) return 0;
+        return a.sourceMarkdownPath.localeCompare(b.sourceMarkdownPath, "zh-CN", { numeric: true })
+          || a.pageIndex - b.pageIndex
+          || a.annotationNumber - b.annotationNumber
+          || Number(a.lineType === "注释正文") - Number(b.lineType === "注释正文")
+          || (a.referenceOccurrence ?? a.bodyOccurrence ?? 0)
+            - (b.referenceOccurrence ?? b.bodyOccurrence ?? 0);
+      });
+    }
     const rules = this.presentation[this.module].sort;
     if (!rules.length) return [...rows];
 
@@ -907,6 +980,23 @@ export class CalibrationGrid {
     return node;
   }
 
+  private mineruPreviewRenderer(
+    params: ICellRendererParams<Candidate>,
+  ): HTMLElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "mineru-note-preview";
+    button.textContent = String(params.data?.preview ?? "");
+    button.title = mineruAnnotationFromCandidate(params.data)?.navigationTarget
+      ? "点击定位到 Markdown 中的注释引用"
+      : "该注释尚未定位到 Markdown";
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (params.data) this.activateRow(params.data);
+    });
+    return button;
+  }
+
   private illegalContextRenderer(
     params: ICellRendererParams<Candidate, string>,
   ): HTMLElement {
@@ -937,7 +1027,7 @@ export class CalibrationGrid {
       return node;
     }
 
-    if (this.module === "文本块" || this.module === "句子") {
+    if (this.mineruMode || this.module === "文本块" || this.module === "句子") {
       const node = document.createElement("span");
       node.className = "calibration-line-type-readonly";
       node.textContent = String(params.value ?? "");
@@ -975,6 +1065,8 @@ export class CalibrationGrid {
 
   private annotationPairStatus(row: Candidate | undefined): string {
     if (!row || row.typeLabel !== "注释") return "";
+    const mineru = mineruAnnotationFromCandidate(row);
+    if (this.mineruMode && mineru) return mineru.status;
     if (row.lineType !== "注释引用" && row.lineType !== "注释正文") return "";
     if (!String(row.annotationNumber ?? "").trim()) return "待补注释号";
     const pair = this.annotationPairs.find(

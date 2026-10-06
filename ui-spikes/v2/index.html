@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ocr2md v2 · native</title>
-  <link rel="stylesheet" href="./dist/app.css?v=20261006b">
+  <link rel="stylesheet" href="./dist/app.css?v=20261006c">
   <style>
     :root {
       color-scheme: dark;
@@ -1129,6 +1129,31 @@
       margin-top: 5px;
       border-top: 1px solid var(--border);
     }
+    #calibration-grid .ag-row.mineru-note-unresolved {
+      background: rgba(229, 155, 100, .14);
+    }
+    #calibration-grid .ag-row.mineru-note-unassigned .mineru-note-preview {
+      color: #e69875;
+    }
+    .mineru-note-preview {
+      display: block;
+      width: 100%;
+      min-height: 30px;
+      padding: 2px 4px;
+      background: transparent;
+      color: inherit;
+      border: 0;
+      text-align: left;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .mineru-note-preview:hover,
+    .mineru-note-preview:focus-visible {
+      color: var(--accent, #83c092);
+      text-decoration: underline;
+    }
     .chapter-heading-preview {
       margin: 0;
       overflow: hidden;
@@ -1971,6 +1996,6 @@
       }, { once: true });
     })();
   </script>
-  <script data-ocr2md-main type="module" src="./dist/app.js?v=20261006b"></script>
+  <script data-ocr2md-main type="module" src="./dist/app.js?v=20261006c"></script>
 </body>
 </html>

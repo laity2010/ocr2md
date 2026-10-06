@@ -11,6 +11,9 @@ import {
   reportDebugState,
 } from "./debugStateReporter";
 import { CalibrationGrid } from "./calibrationGrid";
+import { locateMineruMarkdownReference } from "../../../src/mineruAnnotationLocate";
+import type { MineruWebChapterAnnotations } from "../../../src/mineruAnnotationWebCli";
+import type { MineruProjectedAnnotationRow } from "../../../src/mineruAnnotationProjection";
 import { changedLineAuditCandidates } from "./changedLineAudit";
 import { CustomCssEditor } from "./customCssEditor";
 import { TablePresentationEditor } from "./tablePresentationEditor";
@@ -78,6 +81,111 @@ function chapterImageUrl(chapterId: string, relativePath: string): string {
 }
 
 const sentenceTranslationCache = new Map<string, SentenceTranslationFile[]>();
+
+let mineruActiveKey = "";
+let mineruLoadToken = 0;
+let mineruAnnotationPayload: MineruWebChapterAnnotations | undefined;
+let mineruAnnotationLoading = false;
+let mineruAnnotationError = "";
+const mineruBodyFocusIndex = new Map<string, number>();
+
+function mineruChapterEntryKey(
+  chapter: ChapterWorkspaceData | undefined,
+  view: ReturnType<typeof deriveWorkspaceView>,
+): string {
+  return chapter?.kind === "chapter"
+    && view.activeReviewModule === "注释"
+    && !configGridMode
+    ? (view.projectName ?? "") + ":" + chapter.path + ":" + chapter.id
+    : "";
+}
+
+function currentMineruAnnotationRows(): MineruProjectedAnnotationRow[] | undefined {
+  // A broken JSON match must fail visibly, not quietly offer legacy pairs
+  // that ignore physical page identity.
+  if (mineruAnnotationLoading || mineruAnnotationError) return [];
+  if (!mineruAnnotationPayload?.available) return undefined;
+  return [
+    ...mineruAnnotationPayload.rows,
+    ...(mineruAnnotationPayload.unassignedRows ?? []).map((row) => ({
+      ...row,
+      preview: "【全书待定位｜" + row.sourceJsonPath + "】" + row.preview,
+    })),
+  ];
+}
+
+function mineruAnnotationStatusText(): string {
+  if (mineruAnnotationLoading) return "MinerU JSON · 正在读取页注释…";
+  if (mineruAnnotationError) return "MinerU JSON 读取失败 · " + mineruAnnotationError;
+  const payload = mineruAnnotationPayload;
+  if (!payload?.available) return "";
+  const pending = payload.unassignedRows?.length ?? payload.unassignedCount;
+  const issues = Object.entries(payload.issues).reduce((sum, [, count]) => sum + count, 0);
+  const references = payload.rows.filter((row) => row.lineType === "注释引用").length;
+  const bodies = payload.rows.length - references;
+  return "JSON 页注释 · 引用 " + references + " · 正文 " + bodies
+    + " · 全书定位 " + payload.references.matched + "/" + payload.references.total
+    + (pending ? " · 全书待定位 " + pending + " 行" : "")
+    + (issues ? " · 待审计证据 " + issues + " 项" : "");
+}
+
+function syncMineruGridProjection(): void {
+  const snapshot = actor.getSnapshot();
+  const chapter = snapshot.context.chapter;
+  const view = deriveWorkspaceView(snapshot);
+  if (chapter?.kind !== "chapter"
+    || view.activeReviewModule !== "注释"
+    || !mineruActiveKey
+    || mineruChapterEntryKey(chapter, view) !== mineruActiveKey) return;
+  calibrationGrid.setContext(
+    chapter.rows,
+    chapter.workingText,
+    "注释",
+    view.headingNumberingEnabled,
+    chapter.annotationPairs,
+    currentMineruAnnotationRows(),
+  );
+  calibrationGrid.setEditable(view.canEdit && !mineruAnnotationLoading
+    && !mineruAnnotationError && !mineruAnnotationPayload?.available);
+  const status = mineruAnnotationStatusText();
+  if (status) {
+    reviewGridStatus.textContent = status;
+    annotationMatchStatus.textContent = status;
+  } else {
+    // No MinerU JSON: restore the original review counters rather than
+    // leaving the table status stuck at "正在读取页注释".
+    reviewGridStatus.textContent = "注释 · " + view.activeModuleRows + " 行";
+    annotationMatchStatus.textContent =
+      "标定 " + view.annotationCalibratedRows
+      + " · 配对 " + view.annotationPairedCount
+      + " · 缺引用 " + view.annotationMissingRefCount
+      + " · 缺正文 " + view.annotationMissingBodyCount
+      + " · 缺号 " + view.annotationMissingNumberCount;
+  }
+}
+
+async function loadMineruAnnotations(chapterId: string, requestKey: string, token: number): Promise<void> {
+  try {
+    const response = await fetch(
+      "/__workspace/chapter/annotations?chapterId=" + encodeURIComponent(chapterId),
+      { cache: "no-store" },
+    );
+    if (!response.ok) throw new Error(await workspaceDirectoryError(response, "无法加载 MinerU JSON"));
+    const payload = await response.json() as MineruWebChapterAnnotations;
+    if (token !== mineruLoadToken || mineruActiveKey !== requestKey) return;
+    mineruAnnotationPayload = payload;
+    mineruAnnotationError = "";
+  } catch (error) {
+    if (token !== mineruLoadToken || mineruActiveKey !== requestKey) return;
+    mineruAnnotationError = error instanceof Error ? error.message : String(error);
+    mineruAnnotationPayload = undefined;
+  } finally {
+    if (token === mineruLoadToken && mineruActiveKey === requestKey) {
+      mineruAnnotationLoading = false;
+      syncMineruGridProjection();
+    }
+  }
+}
 let sentenceCacheWorkspaceKind: ChapterWorkspaceData["kind"] | undefined;
 let sentenceTranslationDiskRefreshInFlight = false;
 let sentenceTranslationDiskRefreshSignature = "";
@@ -1770,6 +1878,44 @@ const calibrationGrid = new CalibrationGrid(
     });
   },
   (row, event) => beginMediaSourceDrag(row, event),
+  (mineru) => {
+    const chapter = actor.getSnapshot().context.chapter;
+    if (chapter?.kind !== "chapter") return;
+    const targets = mineru.navigationTargets;
+    if (!targets.length) {
+      sourceLocationStatus.textContent =
+        "PDF 第 " + mineru.pageNumber + " 页 · " + mineru.status
+        + " · Markdown 引用位置尚未确认";
+      return;
+    }
+    const offset = mineruBodyFocusIndex.get(mineru.rowId) ?? 0;
+    const target = targets[offset % targets.length];
+    if (target.chapterId + ".md" !== chapter.name) {
+      sourceLocationStatus.textContent = "引用属于另一章节 · 拒绝跳转";
+      return;
+    }
+    const located = locateMineruMarkdownReference(chapter.workingText, target);
+    if (!located) {
+      sourceLocationStatus.textContent =
+        "Markdown 锚点已变化或存在多解 · 请重新匹配后再定位";
+      return;
+    }
+    lastUiAction = "focus-mineru-annotation";
+    lastCommandId = undefined;
+    setSourcePaneMode("source");
+    const line = workingEditor.revealRange(located);
+    if (!line) {
+      sourceLocationStatus.textContent = "Markdown 注释位置已失效";
+      return;
+    }
+    mineruBodyFocusIndex.set(mineru.rowId, offset + 1);
+    sourceLocationStatus.textContent =
+      "PDF 第 " + mineru.pageNumber + " 页 · 注释 "
+      + mineru.annotationNumber + " → MD 第 " + line + " 行"
+      + (targets.length > 1 ? " · 共享引用 "
+        + ((offset % targets.length) + 1) + "/" + targets.length
+        + "（再次点击切换）" : "");
+  },
 );
 
 tableConfigurationGrid = new TableConfigurationGrid(
@@ -2051,6 +2197,18 @@ function renderChapterSelect(view: ReturnType<typeof deriveWorkspaceView>): void
 actor.subscribe((snapshot) => {
   const view = deriveWorkspaceView(snapshot);
   const chapter = snapshot.context.chapter;
+  const nextMineruKey = mineruChapterEntryKey(chapter, view);
+  if (nextMineruKey !== mineruActiveKey) {
+    mineruActiveKey = nextMineruKey;
+    const token = ++mineruLoadToken;
+    mineruAnnotationPayload = undefined;
+    mineruAnnotationError = "";
+    mineruAnnotationLoading = Boolean(nextMineruKey);
+    mineruBodyFocusIndex.clear();
+    if (nextMineruKey && chapter) {
+      void loadMineruAnnotations(chapter.id, nextMineruKey, token);
+    }
+  }
   if (sentenceCacheWorkspaceKind === "translation" && chapter?.kind !== "translation") {
     sentenceTranslationCache.clear();
     sentenceTranslationDiskRefreshSignature = "";
@@ -2112,9 +2270,13 @@ actor.subscribe((snapshot) => {
       gridModule,
       view.headingNumberingEnabled,
       chapter?.annotationPairs ?? [],
+      gridModule === "注释" && nextMineruKey
+        ? currentMineruAnnotationRows()
+        : undefined,
     );
     calibrationGrid.setEditable(
-      Boolean(chapter) && view.canEdit && view.activeReviewModule !== "媒体",
+      Boolean(chapter) && view.canEdit && view.activeReviewModule !== "媒体"
+      && !(gridModule === "注释" && nextMineruKey && currentMineruAnnotationRows() !== undefined),
     );
   }
   window.requestAnimationFrame(() => {
@@ -2180,6 +2342,13 @@ actor.subscribe((snapshot) => {
   reviewGridStatus.textContent = chapter
     ? `${view.activeReviewModule} · ${view.activeModuleRows} 行`
     : "尚未打开章节";
+  if (nextMineruKey) {
+    const status = mineruAnnotationStatusText();
+    if (status) {
+      reviewGridStatus.textContent = status;
+      annotationMatchStatus.textContent = status;
+    }
+  }
   const sentenceEntryKey =
     chapter?.kind === "translation"
     && isSentenceBackedTranslationModule(view.activeReviewModule)
