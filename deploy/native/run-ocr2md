@@ -46,6 +46,13 @@ if [[ "${OCR2MD_CHECK_ONLY:-0}" == "1" ]]; then
 fi
 
 /bin/mkdir -p "$DEBUG_DIR"
+for asset in "$ROOT/ui-spikes/v2/dist/app.js" "$ROOT/ui-spikes/v2/dist/app.css"; do
+  if [[ -f "$asset" && ( ! -f "$asset.gz" || "$asset" -nt "$asset.gz" ) ]]; then
+    /usr/bin/gzip -kf "$asset"
+    /usr/bin/touch -r "$asset" "$asset.gz"
+  fi
+done
+
 exec "$PYTHON" "$ROOT/ui-spikes/v2/dev_server.py" \
   --bind 127.0.0.1 \
   --port "$PORT" \

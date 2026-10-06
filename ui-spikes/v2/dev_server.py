@@ -2253,6 +2253,40 @@ class V2DevHandler(SimpleHTTPRequestHandler):
     workspace_selection_path = None
     project_store_lock = threading.RLock()
 
+    def end_headers(self):
+        route = urlparse(self.path).path
+        if not route.startswith("/__"):
+            self.send_header("Cache-Control", "no-store, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        super().end_headers()
+
+    def send_head(self):
+        route = urlparse(self.path).path
+        accepts_gzip = "gzip" in self.headers.get("Accept-Encoding", "").lower()
+        if accepts_gzip and route in ("/dist/app.js", "/dist/app.css"):
+            source_path = Path(self.translate_path(route))
+            gzip_path = Path(f"{source_path}.gz")
+            if (
+                source_path.is_file()
+                and gzip_path.is_file()
+                and int(gzip_path.stat().st_mtime) >= int(source_path.stat().st_mtime)
+            ):
+                file_handle = gzip_path.open("rb")
+                stat_result = os.fstat(file_handle.fileno())
+                self.send_response(200)
+                self.send_header("Content-type", self.guess_type(str(source_path)))
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Vary", "Accept-Encoding")
+                self.send_header("Content-Length", str(stat_result.st_size))
+                self.send_header(
+                    "Last-Modified",
+                    self.date_time_string(source_path.stat().st_mtime),
+                )
+                self.end_headers()
+                return file_handle
+        return super().send_head()
+
     @classmethod
     def _workspace_relative_path(cls, target):
         if cls.workspace_root is None:
