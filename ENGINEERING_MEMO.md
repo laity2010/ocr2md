@@ -321,6 +321,10 @@ MinerU page footnotes（WP2）将页注释识别与 Markdown 匹配拆成**两�
 
 MinerU annotation → chapter Markdown mapping（WP3）直接消费 WP2 `MineruJsonFootnoteFacts`，并保留原始 facts 以免 duplicate-body / unidentified evidence 丢失。映射目标只扫描 `chapters/<chapter>/<chapter>.md` 正式章节原文，不把 `.working.md` 当 source-map 权威来源。定位不得只搜注释号：必须用 JSON 正文引用中注释号两侧上下文窗口做内容匹配，并用 NFKC、空白及基础 Markdown/inline-equation 包装归一化消除格式差异；唯一命中时记录 `chapterId / chapterPath / lineIndex / start / end / anchorText` 以及与 rowIdentity 同语义的正文、前邻、后邻 hash。找不到转换为 `MD引用缺失`，多处命中转换为 `匹配歧义`，禁止选择最近行或第一项；WP2 的 `missing-reference` 保留为 `MD引用缺失`，`duplicate-body` 保留为 `匹配歧义`。`occurrence` 表示同一物理页同号引用顺序，同一 context 多次出现时分别定位；独立 block 只有一个标记时使用唯一标记。为支持 MinerU 把圈号单独输出为 `inline_equation`（如 `^{①}`），WP2 reference context 升级为同一 preproc block 的前后正文窗口，同时仍保留原始 spanIndex/bbox。真实《忏悔录》WP2→WP3 全链初始为 563 refs / 549 matched / 14 short-context missing / 0 ambiguous；经 block context、邻接 block anchor 与短 context 唯一命中门禁完善后，最终基线为 **563/563 matched、missing=0、ambiguous=0**（JSON01 281/281，JSON02 282/282），两个共享注释仍保持 `共享注释`。
 
+MinerU Source Map（WP4）将 WP1 发现、WP2 原始事实、WP3 Markdown 定位拼成**项目级可重建派生快照**，由 `loadMineruProjectAnnotationSourceMap(projectRoot)` 统一读取。缓存默认写到 Mac 私有 `~/.ocr2md-private/mineru-source-maps/<project-path-sha256>.json`（目录 0700，文件 0600；临时文件+rename 原子替换），**不写入 Obsidian 工作目录、不改章节 sidecar、不保存人工判断**。每次读取对根级 MinerU Markdown、`json/*.json`、正式 `chapters/<chapter>/<chapter>.md` 按实际字节计算 SHA-256 指纹；命中缓存不重跑 JSON 解析。文件增删、内容变动或损坏缓存会自动重建，WP4 重建时同步刷新 WP1 的旧 size+mtime 签名，避免同长度且伪装旧 mtime 的内容变更漏检；算法变化需升级 `GENERATOR_VERSION`。`.working.md` 不参与原始引用定位，也不会触发这份证据缓存失效。
+
+章节投影每个 JSON 的 `documentKey + page_idx + annotationNumber` 身份保持独立，输出 `chapterId / chapterPath / rows[]`，引用与注释正文各自一行，含数字号、源 JSON 页/block/bbox、预览、状态及 MD line/range/anchor；共享正文的 `navigationTargets[]` 保存同号全部引用位置。缺失/跨章无法确定的行进入 `unassignedRows`，原始重复正文与未识别/未验证页脚完整保存在 `documents[].facts` / `issues`，不猜章节、不静默丢弃；来源无法唯一配对时报告 `pairing / unpaired-json / load-error`。`getMineruChapterProjection(sourceMap, chapterIdOrPath)` 是提供给下一航点注释表的数据入口；**WP4 不改变现有 Web 注释 UI，Web/API 接线留 WP5**。
+
 ### 嵌入块
 
 嵌入块每个元素仍是独立行，通过 `组号/embedNumber` 组织。

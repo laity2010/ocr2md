@@ -53,6 +53,16 @@ interface CachedMineruSignature {
 
 const signatureCache = new Map<string, CachedMineruSignature>();
 
+/** Invalidate candidate signatures when an upstream content-hash detects
+ * changes not visible through the legacy size + mtime signature key. */
+export function invalidateMineruSourceSignatures(jsonPaths?: readonly string[]): void {
+  if (!jsonPaths) {
+    signatureCache.clear();
+    return;
+  }
+  for (const jsonPath of jsonPaths) signatureCache.delete(path.resolve(jsonPath));
+}
+
 export function discoverMineruSourceFiles(projectRoot: string): MineruSourceFiles {
   const resolvedRoot = path.resolve(projectRoot);
   const markdownPaths = safeReadDirectory(resolvedRoot)
