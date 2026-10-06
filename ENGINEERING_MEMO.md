@@ -333,6 +333,10 @@ MinerU 页注释全书审计（WP6）由 `auditMineruAnnotations(sourceMap)` 从
 
 Web「注释」新增「注释审计」入口（显示全书待审核+需复核数），可跨章查看页号、来源 JSON、块索引、原文、候选行，按异常类型/审核状态/文本搜索；只有已可靠定位的引用支持安全跳转，跨章时先经工作稿未保存门禁、目标章白名单与 anchor 唯一性校验。人工结论区分 `待审核 / 已核查 / 疑似误报 / 需复核`：**已核查不是已修复**，不会对原文执行修补。审核备注最长 1000 字，存于 Mac 私有 `~/.ocr2md-private/mineru-audit-reviews/<project-realpath-sha256>.json`（0700 目录、0600 文件，原子覆盖）；提交同时必须匹配 projectId、整套源文件 SHA-256 fingerprint 和 revision，且经文件独占锁串行化，避免跨项目、过期确认与同时更新的静默覆盖。源 JSON、源 MD 或正式章节变化后旧决定保留为 `需复核`，需重新提交才恢复为已核查；审核和 source-map 缓存完全分离，不影响旧工作稿/sidecar/Undo/Redo。Server 的 GET/POST `/__workspace/chapter/annotation-audit` 只接受经过 `ChapterProjectStore.resolve()` 校验的章节 ID，并由受信 CLI 读写私有审计文件，不让浏览器选择本机文件路径。合成测试覆盖缺号、重复/缺失、歧义、跨 JSON 相同编号、源变更失效及持久化；《忏悔录》双 JSON 基线审计为 **23 条待审核证据 = 21 块未识别页脚 + 2 组 CIP 待验证引用**；当前两 JSON 已识别注释号没有页内缺号，正常引用仍为 **563/563** 唯一定位。浏览器审核测试须在专用 `/tmp/ocr2md-wp6-smoke-*` 副本中进行，脚本故意修改副本 JSON/MD，不得指向 iCloud 原本。
 
+**注释审计 AG 数据表与原文附件定位（WP6 UI 更新）：** 全书异常审计由弹窗移入「数据表 → 注释 → 注释审计」的同尺寸 **AG Grid**，表格可排序/按类型、审核状态、OCR 内容筛选，单击行加载证据和审核编辑栏；人工状态、备注仍只通过原来的 projectId + fingerprint + revision 受控 API 存储，不进入 Markdown 或校对 sidecar。点击有明确附件映射的异常时，右下部位切换为**只读原 PDF 附件页**，右上 Markdown working 保持可编辑，供对照后人工修正；可用「返回 MD 预览」恢复。若异常有 WP3 唯一 MD anchor，则额外提供「定位 MD」跨章定位，原来的工作稿未保存门禁和 anchor 唯一性校验保留。
+
+原 PDF 页码**不能直接使用 JSON 的局部 page_idx**。《忏悔录》原 PDF 经 CoreGraphics 确认为 359 页，两份 MinerU JSON 是 `01:200 页` 与 `02:159 页`，必须先校验项目只有一个根级 PDF、PDF 真实页数等于所有连续命名 JSON 片段的 `pdf_info` 页数总和、各段 `page_idx` 从 0 顺序递增，才允许标注全书 `pdfPageNumber`；这样 JSON01 的 p0 对应 PDF1，JSON02 的 p0 对应 PDF201。文件缺失、多 PDF、片段乱序、JSON 缺页、总页数不一致**全部拒绝自动跳页**，不按文件名随意猜测。后端仅提供经过 chapterId 白名单校验的 `GET /__workspace/original-pdf` 只读 PDF，并流式响应 `Range`（206/416），不读取整份百兆文件入内存，不允许前端提供任意文件路径。独立测试目录通过 Mac `cp -c` 写时复制原 PDF，验收不得修改 iCloud 原件。浏览器冒烟脚本 `ui-spikes/v2/tests/mineruAuditAgGridSmoke.cjs`；页数及失配门禁测试 `ui-spikes/v2/tests/mineruPdfAttachmentSmoke.py`。
+
 ### 嵌入块
 
 嵌入块每个元素仍是独立行，通过 `组号/embedNumber` 组织。

@@ -23,6 +23,8 @@ interface ReviewFile {
 }
 
 export interface MineruAuditRow extends MineruAuditEvidence {
+  /** Validated original (whole-book) PDF page, assigned only by the native server. */
+  pdfPageNumber?: number;
   state: MineruAuditReviewState;
   reviewNote: string;
   reviewedAt?: string;
@@ -30,6 +32,13 @@ export interface MineruAuditRow extends MineruAuditEvidence {
 }
 
 export interface MineruAuditPayload {
+  /** Original PDF is optional. PDF page offsets are never inferred without verification. */
+  pdfAttachment?: {
+    available: boolean;
+    pageCount?: number;
+    name?: string;
+    reason: string;
+  };
   available: boolean;
   projectId: string;
   sourceFingerprint: string;

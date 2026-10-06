@@ -290,7 +290,51 @@
     #heading-toolbar,
     #boundary-toolbar { grid-area: toolbar; }
     #calibration-grid,
+    #mineru-audit-workspace,
     #table-config-grid { grid-area: grid; }
+    #mineru-audit-workspace[hidden], #calibration-grid[hidden],
+    #original-pdf-preview[hidden], #markdown-preview[hidden] { display: none !important; }
+    #mineru-audit-workspace {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      gap: 5px;
+      padding: 5px;
+    }
+    #mineru-audit-items { min-height: 0; min-width: 0; }
+    #mineru-audit-review-editor {
+      display: grid;
+      gap: 6px;
+      padding: 7px;
+      border-top: 1px solid var(--border);
+    }
+    #mineru-audit-review-editor[hidden] { display: none !important; }
+    #mineru-audit-evidence {
+      font-size: 12px;
+      max-height: 75px;
+      overflow: auto;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    .mineru-audit-review-controls {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .mineru-audit-review-controls textarea { flex: 1; min-width: 0; }
+    #original-pdf-preview {
+      grid-column: 1; grid-row: 5;
+      display: grid; grid-template-rows: auto minmax(0,1fr);
+      overflow: hidden; background: var(--bg);
+      min-width: 0; min-height: 0;
+    }
+    .original-pdf-toolbar {
+      display: flex; gap: 7px; align-items: center; padding: 5px;
+      font-size: 12px; background: var(--bg-alt);
+    }
+    #original-pdf-frame {
+      width: 100%; height: 100%; border: 0;
+      background: #fff;
+    }
     .grid-pane > .pane-status { grid-area: status; }
     .editor-pane {
       grid-template-columns: minmax(0, 1fr);
@@ -1461,57 +1505,23 @@
       .translation-service-sample-grid { grid-template-columns: 1fr; }
       #translation-service-instruction-row { grid-column: auto; }
     }
-  .mineru-audit-dialog {
-    box-sizing: border-box;
-    width: min(860px, 95vw);
-    max-height: 88dvh;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    background: var(--bg);
-    color: var(--fg);
-    box-shadow: 0 18px 70px rgba(0, 0, 0, .55);
+  .mineru-audit-filters {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: 6px; margin: 3px 0;
   }
-  .mineru-audit-dialog::backdrop { background: rgba(0,0,0,.67); }
-  .mineru-audit-header, .mineru-audit-filters, .mineru-audit-item-title,
-  .mineru-audit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
-  .mineru-audit-header { justify-content: space-between; }
-  .mineru-audit-header h2 { margin: 0; font-size: 18px; }
-  .mineru-audit-help, .mineru-audit-origin { font-size: 12px; color: var(--muted); }
-  .mineru-audit-summary { margin: 8px 0; font-weight: 600; }
-  .mineru-audit-filters { margin: 9px 0; }
-  .mineru-audit-filters input { flex: 1; min-width: 170px; }
-  .mineru-audit-dialog input, .mineru-audit-dialog textarea,
-  .mineru-audit-dialog select {
-    box-sizing: border-box; padding: 6px; border: 1px solid var(--border);
+  .mineru-audit-summary { color: var(--muted); font-size: 12px; }
+  .mineru-audit-filters input { flex: 1; min-width: 120px; }
+  #mineru-audit-workspace input,
+  #mineru-audit-workspace select,
+  #mineru-audit-workspace textarea {
+    box-sizing: border-box; padding: 6px;
+    border: 1px solid var(--border);
     background: var(--bg); color: var(--fg); border-radius: 5px;
   }
-  .mineru-audit-items {
-    overflow-y: auto; max-height: 54dvh;
-    border-top: 1px solid var(--border);
-    display: grid; gap: 10px; padding-top: 9px;
-  }
-  .mineru-audit-item {
-    border: 1px solid var(--border); border-radius: 7px; padding: 10px;
-    min-width: 0;
-  }
-  .mineru-audit-item-title { justify-content: space-between; }
-  .mineru-audit-item-title strong { font-size: 13px; }
-  .mineru-audit-review-state { font-size: 12px; color: var(--muted); }
-  .mineru-audit-origin {
-    overflow-wrap: anywhere; margin: 6px 0;
-  }
-  .mineru-audit-evidence {
-    white-space: pre-wrap; overflow-wrap: anywhere;
-    max-height: 135px; overflow-y: auto; font-size: 12px;
-    background: rgba(120,120,120,.06); padding: 7px; border-radius: 4px;
-  }
-  .mineru-audit-actions textarea { flex: 1; min-width: 170px; }
-  .mineru-audit-candidates { color: var(--muted); font-size: 12px; }
+  #mineru-audit-status { color: var(--muted); font-size: 12px; }
   @media (max-width: 760px) {
-    .mineru-audit-dialog { padding: 10px; }
-    .mineru-audit-filters > * { flex: 1; }
-    .mineru-audit-items { max-height: 52dvh; }
+    .mineru-audit-filters > * { min-width: 0; flex: 1; }
+    .mineru-audit-review-controls { flex-wrap: wrap; }
   }
 </style>
 </head>
@@ -1588,6 +1598,37 @@
       </div>
 
       <div id="calibration-grid" aria-label="真实标定表"></div>
+      <section id="mineru-audit-workspace" class="mineru-audit-workspace" aria-label="MinerU 注释审计 AG 数据表" hidden>
+        <div class="mineru-audit-filters">
+          <button id="mineru-audit-close" type="button">← 返回注释表</button>
+          <select id="mineru-audit-kind" aria-label="异常类型"><option value="">所有异常类型</option></select>
+          <select id="mineru-audit-state" aria-label="审核状态">
+            <option value="待审核">待审核</option>
+            <option value="">全部状态</option>
+            <option value="已核查">已核查</option>
+            <option value="疑似误报">疑似误报</option>
+            <option value="需复核">需复核</option>
+          </select>
+          <input id="mineru-audit-search" type="search" placeholder="搜页码 / OCR 内容" aria-label="搜索审计证据">
+        </div>
+        <div id="mineru-audit-summary" class="mineru-audit-summary" role="status"></div>
+        <div id="mineru-audit-items" class="mineru-audit-ag-grid" aria-label="全书注释审计表"></div>
+        <section id="mineru-audit-review-editor" class="mineru-audit-review-editor" hidden>
+          <div id="mineru-audit-evidence"></div>
+          <div class="mineru-audit-review-controls">
+            <select id="mineru-audit-decision" aria-label="审核结论">
+              <option value="待审核">待审核</option>
+              <option value="已核查">已核查</option>
+              <option value="疑似误报">疑似误报</option>
+            </select>
+            <textarea id="mineru-audit-note" rows="2" maxlength="1000" placeholder="审核备注，保存在 Mac 私有目录" aria-label="审核备注"></textarea>
+            <button id="mineru-audit-save" type="button">保存审核</button>
+            <select id="mineru-audit-target-select" aria-label="选择 Markdown 引用" hidden></select>
+            <button id="mineru-audit-locate-md" type="button" hidden>定位 MD</button>
+          </div>
+        </section>
+        <div id="mineru-audit-status" role="status" aria-live="polite"></div>
+      </section>
       <div id="translation-service-panel" class="translation-service-panel" aria-label="翻译服务工作台" hidden></div>
       <div id="table-config-grid" aria-label="配置数据表" hidden></div>
       <div class="pane-status" role="status" aria-live="polite">
@@ -1664,6 +1705,15 @@
       <article id="markdown-preview" aria-label="Markdown 预览">
         <div class="preview-empty">打开章节后显示 Markdown 预览</div>
       </article>
+      <section id="original-pdf-preview" aria-label="原始 PDF 附件" hidden>
+        <div class="original-pdf-toolbar">
+          <span id="original-pdf-page-label">PDF 原文附件</span>
+          <span class="workspace-spacer"></span>
+          <a id="original-pdf-new-tab" href="#" target="_blank" rel="noopener">新窗口查看</a>
+          <button id="original-pdf-close" type="button">返回 MD 预览</button>
+        </div>
+        <iframe id="original-pdf-frame" title="原始 PDF 页面（只读）" referrerpolicy="same-origin"></iframe>
+      </section>
       <div class="pane-status" role="status" aria-live="polite">
         <span id="source-location-status">源码定位：—</span>
         <span id="editor-mode-status" class="status-secondary"></span>
@@ -1672,27 +1722,7 @@
     </section>
   </main>
 
-  <dialog id="mineru-audit-dialog" class="mineru-audit-dialog" aria-labelledby="mineru-audit-title">
-    <header class="mineru-audit-header">
-      <h2 id="mineru-audit-title">MinerU 页注释完整性审计</h2>
-      <button id="mineru-audit-close" type="button">关闭</button>
-    </header>
-    <p class="mineru-audit-help">以原始 PDF 物理页为单位核对。缺号仅表示疑似异常；“已核查”不等于已修复，审核不会改动 OCR、Markdown 或标定文件。</p>
-    <div id="mineru-audit-summary" class="mineru-audit-summary" role="status"></div>
-    <div class="mineru-audit-filters">
-      <select id="mineru-audit-kind" aria-label="异常类型"><option value="">所有类型</option></select>
-      <select id="mineru-audit-state" aria-label="审核状态">
-        <option value="待审核">待审核</option>
-        <option value="">全部状态</option>
-        <option value="已核查">已核查</option>
-        <option value="疑似误报">疑似误报</option>
-        <option value="需复核">需复核</option>
-      </select>
-      <input id="mineru-audit-search" type="search" placeholder="搜索页码、注释号、证据…" aria-label="搜索审计证据">
-    </div>
-    <div id="mineru-audit-status" role="status" aria-live="polite"></div>
-    <div id="mineru-audit-items" class="mineru-audit-items"></div>
-  </dialog>
+
 
   <div id="workspace-directory-overlay" class="leave-overlay" hidden>
     <section class="leave-dialog workspace-directory-dialog" role="dialog" aria-modal="true" aria-labelledby="workspace-directory-title">

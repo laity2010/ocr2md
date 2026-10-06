@@ -92,6 +92,7 @@ let mineruAnnotationLoading = false;
 let mineruAnnotationError = "";
 const mineruBodyFocusIndex = new Map<string, number>();
 let pendingAuditNavigation: { target: MineruMarkdownLocator; evidence: MineruAuditRow } | undefined;
+let mineruAuditVisible = false;
 
 function mineruChapterEntryKey(
   chapter: ChapterWorkspaceData | undefined,
@@ -151,6 +152,9 @@ function syncMineruGridProjection(): void {
   );
   calibrationGrid.setEditable(view.canEdit && !mineruAnnotationLoading
     && !mineruAnnotationError && !mineruAnnotationPayload?.available);
+  if (mineruAuditPanel.isOpen) {
+    reviewGridStatus.textContent = "注释审计 · 全书异常列表（点击行查看原文附件）";
+  }
   mineruAuditOpenButton.hidden =
     !mineruAnnotationPayload?.available && !mineruAnnotationError;
   const status = mineruAnnotationStatusText();
@@ -1213,7 +1217,7 @@ function setConfigGridMode(enabled: boolean): void {
   const currentView = deriveWorkspaceView(actor.getSnapshot());
   const serviceActive = currentView.activeReviewModule === "翻译服务"
     && actor.getSnapshot().context.chapter?.kind === "translation";
-  calibrationGridHost.hidden = enabled || serviceActive;
+  calibrationGridHost.hidden = enabled || serviceActive || mineruAuditVisible;
   translationServicePanelHost.hidden = enabled || !serviceActive;
   tableConfigGridHost.hidden = !enabled;
   configModuleTab.setAttribute("aria-pressed", enabled ? "true" : "false");
@@ -1973,15 +1977,56 @@ function focusMineruAuditEvidence(
   return true;
 }
 
-const mineruAuditPanel = new MineruAuditPanel(
-  requireElement<HTMLDialogElement>("mineru-audit-dialog"),
-  requireElement<HTMLElement>("mineru-audit-summary"),
-  requireElement<HTMLElement>("mineru-audit-items"),
-  requireElement<HTMLSelectElement>("mineru-audit-kind"),
-  requireElement<HTMLSelectElement>("mineru-audit-state"),
-  requireElement<HTMLInputElement>("mineru-audit-search"),
-  requireElement<HTMLElement>("mineru-audit-status"),
-  (target, item) => {
+const originalPdfPreview = requireElement<HTMLElement>("original-pdf-preview");
+const originalPdfFrame = requireElement<HTMLIFrameElement>("original-pdf-frame");
+const originalPdfLabel = requireElement<HTMLElement>("original-pdf-page-label");
+const originalPdfNewTab = requireElement<HTMLAnchorElement>("original-pdf-new-tab");
+
+function closeOriginalPdf(): void {
+  originalPdfPreview.hidden = true;
+  markdownPreviewHost.hidden = false;
+  originalPdfFrame.removeAttribute("src");
+  originalPdfNewTab.removeAttribute("href");
+}
+
+function openAuditOriginalPdf(item: MineruAuditRow, payload: MineruAuditPayload): void {
+  const chapter = actor.getSnapshot().context.chapter;
+  if (chapter?.kind !== "chapter") return;
+  if (!payload.pdfAttachment?.available || !item.pdfPageNumber) {
+    sourceLocationStatus.textContent =
+      "不能确定原 PDF 页码：" + (payload.pdfAttachment?.reason ?? "缺少原 PDF");
+    return;
+  }
+  const url = "/__workspace/original-pdf?chapterId="
+    + encodeURIComponent(chapter.id) + "#page=" + item.pdfPageNumber;
+  setSourcePaneMode("source");
+  originalPdfPreview.hidden = false;
+  markdownPreviewHost.hidden = true;
+  originalPdfFrame.src = url;
+  originalPdfNewTab.href = url;
+  originalPdfLabel.textContent =
+    "原文附件 · 全书 PDF 第 " + item.pdfPageNumber
+    + " / " + payload.pdfAttachment.pageCount
+    + " 页 · 请在上方 MD 工作稿中修正";
+  sourceLocationStatus.textContent =
+    "原 PDF 第 " + item.pdfPageNumber + " 页 · "
+    + item.kind + " · " + item.summary;
+}
+
+requireElement<HTMLButtonElement>("original-pdf-close")
+  .addEventListener("click", closeOriginalPdf);
+
+const mineruAuditPanel = new MineruAuditPanel({
+  onInspectPdf: openAuditOriginalPdf,
+  onVisibleChange: (visible) => {
+    mineruAuditVisible = visible;
+    calibrationGridHost.hidden = visible || configGridMode;
+    reviewGridStatus.textContent = visible
+      ? "注释审计 · 全书异常列表（点击行查看原文附件）"
+      : mineruAnnotationStatusText();
+  },
+  onLocate: (target, item) => {
+    closeOriginalPdf();
     const current = actor.getSnapshot().context.chapter;
     if (current?.kind === "chapter" && current.name === target.chapterId + ".md") {
       if (focusMineruAuditEvidence(target, item)) mineruAuditPanel.close();
@@ -2002,11 +2047,15 @@ const mineruAuditPanel = new MineruAuditPanel(
     mineruAuditPanel.close();
     executeProductAction("open-chapter", undefined, other.id);
   },
-  (payload) => {
+  onCountChange: (payload) => {
     if (mineruActiveKey) displayMineruAuditCount(payload);
   },
-);
+});
 mineruAuditOpenButton.addEventListener("click", () => {
+  if (mineruAuditPanel.isOpen) {
+    mineruAuditPanel.close();
+    return;
+  }
   const chapter = actor.getSnapshot().context.chapter;
   if (chapter?.kind !== "chapter") return;
   void mineruAuditPanel.open(chapter.id);
@@ -2301,6 +2350,7 @@ actor.subscribe((snapshot) => {
     mineruBodyFocusIndex.clear();
     mineruAuditOpenButton.textContent = "注释审计";
     mineruAuditPanel?.close();
+    closeOriginalPdf();
     if (nextMineruKey && chapter) {
       void loadMineruAnnotations(chapter.id, nextMineruKey, token);
     }
@@ -2354,7 +2404,8 @@ actor.subscribe((snapshot) => {
     view.activeReviewModule === "翻译服务" && chapter?.kind === "translation";
   translationServicePanel.setContext(chapter, translationServiceActive && !configGridMode);
   syncTranslationServiceWorkspaceLayout();
-  calibrationGridHost.hidden = configGridMode || translationServiceActive;
+  calibrationGridHost.hidden =
+    configGridMode || translationServiceActive || mineruAuditVisible;
   tableConfigGridHost.hidden = !configGridMode;
   const gridModule = view.activeReviewModule === "翻译服务"
     ? undefined
@@ -2451,7 +2502,9 @@ actor.subscribe((snapshot) => {
   if (nextMineruKey) {
     const status = mineruAnnotationStatusText();
     if (status) {
-      reviewGridStatus.textContent = status;
+      reviewGridStatus.textContent = mineruAuditPanel.isOpen
+        ? "注释审计 · 全书异常列表（点击行查看原文附件）"
+        : status;
       annotationMatchStatus.textContent = status;
     }
   }

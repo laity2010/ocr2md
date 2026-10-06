@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from mineru_pdf_attachment import original_pdf, enrich_pdf_audit
 
 states = {}
 state_history = {}
@@ -453,7 +454,7 @@ class ChapterProjectStore:
         )
         if result.returncode != 0:
             raise RuntimeError("MinerU audit: " + result.stderr.strip()[:800])
-        return json.loads(result.stdout)
+        return enrich_pdf_audit(self.project_dir, json.loads(result.stdout))
 
     @staticmethod
     def write_text_fsync(path, text):
@@ -2440,6 +2441,62 @@ class V2DevHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_original_pdf(self, chapter_id):
+        """Stream one validated project PDF, including browser Range requests."""
+        if not isinstance(self.project_store, ChapterProjectStore):
+            raise RuntimeError("原 PDF 附件仅允许原生项目")
+        self.project_store.resolve(chapter_id)
+        pdf = original_pdf(self.project_store.project_dir)
+        if pdf is None:
+            raise KeyError("原 PDF 附件缺失或存在多个候选")
+        size = pdf.stat().st_size
+        start, end = 0, size - 1
+        partial = False
+        raw_range = self.headers.get("Range")
+        if raw_range:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", raw_range.strip())
+            if not match or not (match.group(1) or match.group(2)):
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+            left, right = match.groups()
+            if not left:
+                count = int(right)
+                start = max(0, size - count)
+            else:
+                start = int(left)
+                if right:
+                    end = min(int(right), size - 1)
+            if start >= size or end < start:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+            partial = True
+        self.send_response(206 if partial else 200)
+        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Disposition", "inline")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "private, no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.end_headers()
+        try:
+            with pdf.open("rb") as stream:
+                stream.seek(start)
+                left_to_send = end - start + 1
+                while left_to_send:
+                    chunk = stream.read(min(left_to_send, 256 * 1024))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    left_to_send -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def _read_json(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length > 2_000_000:
@@ -2613,6 +2670,14 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                 else:
                     self.project_store.resolve(chapter_id)
                     self._write_json(200, {"available": False, "chapterId": chapter_id, "rows": []})
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/original-pdf":
+            chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
+            try:
+                self._serve_original_pdf(chapter_id)
             except Exception as error:
                 self._write_store_error(error)
             return
