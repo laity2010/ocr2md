@@ -312,6 +312,13 @@ PDF页 → 注释号 → 行号
 
 MinerU source discovery（WP1）固定约定：项目根目录只发现文件名中包含 `MinerU` 与 `markdown` 的根级 `.md` 作为 MinerU Markdown 候选；JSON 候选只来自 `project/json/*.json`。MD ↔ JSON 的权威配对依据是 MinerU `pdf_info[].para_blocks` 文本内容签名在 Markdown 中的匹配率，文件名前缀编号只用于展示/排序，不参与最终判定。无法达到阈值时返回 unmatched；多个 JSON 同时高置信度时返回 ambiguous，禁止按目录顺序或文件名猜测；无 JSON 与无效 JSON 也必须显式返回 missing-json / invalid-json。JSON 内容签名在进程内按 `size + mtime` 缓存，文件变化后自动失效。
 
+MinerU page footnotes（WP2）将页注释识别与 Markdown 匹配拆成**两个阶段**，禁止在尚未搜索 MD 时标记 `MD引用缺失`：
+- JSON 事实层从同一 `pdf_info[page_idx]` 的 `preproc_blocks` 搜正文引用，包括 `text` 与 `inline_equation` span（实际数据存在 `^{①}`），从 `discarded_blocks[type=page_footnote]` 搜注释正文；统一归一数字，并记录 page/block/line/span、bbox、引用所在 span 的字符 offset 和附近上下文。
+- 分组键为 `documentKey + page_idx + annotationNumber`；`page_idx` 是**该 JSON 内部**的 0-based 物理页索引，不是多份 JSON 拼接后的整书页码。不同 JSON 从 0 重新计页，绝不可因同页同号混配。
+- JSON 内先报告 `matched / shared / missing-reference / missing-body / duplicate-body`；同时保留未识别编号、孤立标号、模糊纯数字页脚和无可信页注释页面的引用（如 CIP），不把 `page_footnote` 这个 MinerU 标签无条件视为真实注释。
+- WP2 不写用户数据、不生成 MD 行号、不触碰注释 UI；后续 WP3/4 才将 JSON 事实映射至章节 Markdown 并转换为最终审核状态。
+- 《忏悔录》双 JSON 验收基线：JSON01 共 200 页，279 组 matched、1 组 shared（page_idx=151）、4 块未识别页脚、6 个 CIP 引用待确认；JSON02 共 159 页，280 组 matched、1 组 shared（page_idx=84）、17 块未识别页脚。先前粗统计 `278+2` 未区分 `inline_equation` 的圈号与误识别的孤立 `①`，此处以 span 类型完整读取后的实测基线为准。
+
 ### 嵌入块
 
 嵌入块每个元素仍是独立行，通过 `组号/embedNumber` 组织。

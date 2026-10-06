@@ -56,6 +56,9 @@ export interface MineruAnnotationReference {
   occurrence: number;
   marker: string;
   context: string;
+  /** Offsets within the originating MinerU text span (not Markdown). */
+  spanStart?: number;
+  spanEnd?: number;
   json: MineruJsonLocator & { collection: "preproc_blocks" };
   markdown?: MineruMarkdownLocator;
 }
@@ -92,6 +95,51 @@ export interface MineruAnnotationSourceMap {
   sourceJsonPath: string;
   sourceMarkdownPath: string;
   annotations: MineruPageAnnotation[];
+}
+
+/**
+ * WP2 JSON-only fact state. This is deliberately separate from the Markdown
+ * matching status: not yet searched in Markdown != MD reference missing.
+ */
+export type MineruJsonPairStatus =
+  | "matched"
+  | "shared"
+  | "missing-reference"
+  | "missing-body"
+  | "duplicate-body";
+
+export interface MineruJsonAnnotationGroup {
+  documentKey: string;
+  pageIndex: number;
+  annotationNumber: number;
+  references: MineruAnnotationReference[];
+  /** All candidate bodies are kept, even if MinerU produced duplicates. */
+  bodies: MineruAnnotationBody[];
+  status: MineruJsonPairStatus;
+}
+
+export interface MineruUnidentifiedFootnote {
+  pageIndex: number;
+  raw: string;
+  reason: "unrecognized-marker" | "empty-body" | "unsupported-numeric-marker";
+  json: MineruJsonLocator & { collection: "discarded_blocks" };
+}
+
+export interface MineruUnverifiedReferenceGroup {
+  /** Physical page with references but no reliable page_footnote number. */
+  pageIndex: number;
+  annotationNumber: number;
+  references: MineruAnnotationReference[];
+}
+
+export interface MineruJsonFootnoteFacts {
+  documentKey: string;
+  sourceJsonPath: string;
+  sourceMarkdownPath: string;
+  pageCount: number;
+  annotations: MineruJsonAnnotationGroup[];
+  unidentifiedFootnotes: MineruUnidentifiedFootnote[];
+  unverifiedReferences: MineruUnverifiedReferenceGroup[];
 }
 
 /**
