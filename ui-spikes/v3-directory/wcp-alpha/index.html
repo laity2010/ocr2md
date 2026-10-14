@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark"><title>OCR2MD · WCP Alpha 集成测试</title>
+<style>
+:root{color-scheme:dark;font:14px/1.5 "Sarasa Fixed SC",ui-monospace,monospace;background:#1d2732;color:#e1e7ef}
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{padding:6px 10px;display:flex;flex-direction:column;gap:5px;overflow:hidden}
+header{min-height:38px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid #475258}
+strong{font-size:15px}small,#state{color:#aebdd2;font-size:11px}button,a{font:inherit;color:#d7eaff;background:#253343;border:1px solid #52647c;border-radius:6px;padding:5px 9px;text-decoration:none;cursor:pointer}
+button:hover,a:hover{background:#324259}button:disabled{opacity:.5}#wcp-region{flex:1;min-height:320px;overflow:hidden}
+.notice{color:#9fb7d3;font-size:11px}.grow{flex:1}#status{font-size:11px;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(pointer:coarse){button,a{min-height:40px}}@media(max-width:700px){small{display:none}header{gap:5px}body{padding:4px}}
+</style></head><body>
+<header><strong>OCR2MD · WCP 集成试点</strong><small>独立 Alpha · 不读取或修改正式工作目录</small>
+<span id="status" class="grow">加载中央版本中…</span><button id="refresh" type="button">检查更新</button>
+<button id="rollback" type="button">回退版本</button><button id="latest" type="button">恢复最新版</button>
+<a href="/v3-directory/">返回 OCR2MD v3</a></header>
+<div id="wcp-region" aria-label="WCP 独立组件试点"></div>
+<div class="notice">组件运行与版本更新由 WCP 中央 Loader 管理；这是隔离试点，原 OCR2MD v3 不变。<span id="state"></span></div>
+<script type="module" src="./debug-bridge.js"></script>
+<script type="module">
+import {mountWcp,loaderVersion} from 'https://wcp.laity.bid/components/v1/loader.js';
+import {modules,contracts} from './modules/entry.js';
+const status=document.querySelector('#status'),details=document.querySelector('#state');
+const region=document.querySelector('#wcp-region');
+const buttons={refresh:document.querySelector('#refresh'),rollback:document.querySelector('#rollback'),latest:document.querySelector('#latest')};
+try {
+  const instance=await mountWcp(region,{
+    appId:'ocr2md-wcp-alpha',modules,contracts,settingsSchemaUrl:'/v3-directory/wcp-alpha/settings.schema.json',
+    checkIntervalMs:60000,autoApply:true,
+    onState({event,version,error,dirty}){
+      status.textContent='WCP '+(version||'—')+' · '+event+(dirty?' · 存在未保存修改':'');
+      if(error)details.textContent=error;
+    },
+  });
+  window.__ocrWcpAlpha=instance;
+  status.textContent='WCP '+instance.version+' · Loader v'+loaderVersion+' · 已连接';
+  buttons.refresh.onclick=()=>void instance.checkUpdates().catch(error=>details.textContent=String(error));
+  buttons.rollback.onclick=()=>void instance.rollback().catch(error=>details.textContent=String(error));
+  buttons.latest.onclick=()=>void instance.followLatest().catch(error=>details.textContent=String(error));
+} catch(error){status.textContent='中央组件加载失败';details.textContent=String(error)}
+</script></body></html>

@@ -1,0 +1,153 @@
+{
+  "caseId": "ocr2md-v3-pdf-md-wp0-buffett-alpha",
+  "schemaVersion": 1,
+  "inputs": {
+    "pdf": {
+      "relativePath": "Buffett s Alpha.pdf",
+      "bytes": 1474904,
+      "sha256": "be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab"
+    },
+    "json": {
+      "relativePath": "json/MinerU_Buffett s Alpha__20261008112941.json",
+      "bytes": 2347546,
+      "sha256": "e7371434b168a68c77e8b26370327670abb150aed63f2989c9f5e7e4336ee4a5"
+    },
+    "md": {
+      "relativePath": "md/MinerU_markdown_Buffett_s_Alpha_2108158143412957184.md",
+      "bytes": 83966,
+      "sha256": "0554d4d574b9be83b0a22d03f969b3fa88f30cdcfed8420b97c36f8590569da4"
+    }
+  },
+  "metadata": {
+    "backend": "hybrid",
+    "mineruVersion": "3.4.4",
+    "ocrEnabled": false
+  },
+  "pages": 22,
+  "firstPageIdx": 0,
+  "lastPageIdx": 21,
+  "paragraphBlocks": 224,
+  "discardedBlocks": 91,
+  "bodyLines": 999,
+  "bodySpans": 1041,
+  "bodyTypes": {
+    "title": 21,
+    "text": 143,
+    "image": 7,
+    "table": 9,
+    "chart": 4,
+    "interline_equation": 20,
+    "ref_text": 20
+  },
+  "discardedTypes": {
+    "header": 24,
+    "footer": 39,
+    "page_number": 21,
+    "page_footnote": 1,
+    "aside_text": 6
+  },
+  "rotatedPdfPages": [
+    8,
+    11
+  ],
+  "pageSizeExamples": {
+    "1": [
+      634,
+      833
+    ],
+    "4": [
+      594,
+      783
+    ],
+    "6": [
+      594,
+      783
+    ],
+    "8": [
+      783,
+      594
+    ],
+    "11": [
+      783,
+      594
+    ],
+    "22": [
+      594,
+      783
+    ]
+  },
+  "elementExamples": [
+    {
+      "page": 1,
+      "collection": "para_blocks",
+      "position": 0,
+      "type": "title",
+      "bbox": [
+        95,
+        169,
+        226,
+        190
+      ]
+    },
+    {
+      "page": 4,
+      "collection": "para_blocks",
+      "position": 0,
+      "type": "table",
+      "bbox": [
+        68,
+        111,
+        538,
+        458
+      ]
+    },
+    {
+      "page": 6,
+      "collection": "para_blocks",
+      "position": 5,
+      "type": "interline_equation",
+      "bbox": [
+        71,
+        649,
+        164,
+        680
+      ]
+    },
+    {
+      "page": 8,
+      "collection": "para_blocks",
+      "position": 0,
+      "type": "table",
+      "bbox": [
+        57,
+        112,
+        697,
+        473
+      ]
+    },
+    {
+      "page": 11,
+      "collection": "para_blocks",
+      "position": 0,
+      "type": "table",
+      "bbox": [
+        57,
+        134,
+        697,
+        415
+      ]
+    },
+    {
+      "page": 22,
+      "collection": "para_blocks",
+      "position": 1,
+      "type": "ref_text",
+      "bbox": [
+        69,
+        110,
+        298,
+        130
+      ]
+    }
+  ]
+}

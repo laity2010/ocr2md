@@ -1,0 +1,9 @@
+{
+  "name": "Laity Shared Source Surface",
+  "version": "0.1.0",
+  "owner": "agent-link-monitor",
+  "component": "/shared-source/v1/source-surface.js",
+  "tag": "laity-source-surface",
+  "contract": "/shared-source/v1/contract.json",
+  "engine": "CodeMirror 6"
+}

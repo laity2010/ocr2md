@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:workspace",
+  "entry": "index.js",
+  "kind": "ui",
+  "order": 10,
+  "tab": "工作目录",
+  "home": true,
+  "bundles": [
+    {
+      "entry": "workspace-grid.ts",
+      "output": "workspace-grid.js"
+    }
+  ]
+}

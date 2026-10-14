@@ -72,3 +72,48 @@ function leadingFrontmatterEnd(lines: string[]): number {
   }
   return 0;
 }
+
+/** V3 chapter-cleaning heading audit. Only *real* ATX headings in one chapter;
+ * fenced Markdown and frontmatter do not generate chapter title candidates.
+ * Ordinal prefixes are a UI concern, never inserted into Markdown content.
+ */
+export function scanChapterHeadingCandidates(markdown:string,sourcePath:string):Candidate[]{
+  const lines=markdown.replace(/\r\n?/g,"\n").split("\n");
+  const rows:Candidate[]=[];
+  let frontmatter=false;
+  let from=0;
+  if(lines[0]?.replace(/^\uFEFF/,"").trim()==="---"){
+    frontmatter=true;
+    for(let index=1;index<lines.length;index++){
+      if(/^---[ \t]*$/.test(lines[index]??"")){
+        from=index+1;frontmatter=false;break;
+      }
+    }
+  }
+  if(frontmatter)return rows; // Unclosed frontmatter: no confident titles.
+  let fence:"`"|"~"|undefined;
+  let fenceWidth=0;
+  for(let index=from;index<lines.length;index++){
+    const line=lines[index]??"";
+    const matchFence=/^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if(fence){
+      if(matchFence&&matchFence[1][0]===fence&&matchFence[1].length>=fenceWidth&&
+        /^[ \t]*$/.test(matchFence[2]??""))fence=undefined;
+      continue;
+    }
+    if(matchFence){fence=matchFence[1][0] as "`"|"~";fenceWidth=matchFence[1].length;continue;}
+    const heading=/^ {0,3}(#{1,6})(?:[ \t]+(.*)|[ \t]*)$/.exec(line);
+    if(!heading)continue;
+    const text=(heading[2]??"").replace(/[ \t]+#+[ \t]*$/,"").trim();
+    const level=heading[1].length;
+    const hash=createHash("sha256").update(`${index}\0${line}`).digest("hex").slice(0,16);
+    rows.push({
+      id:`chapter-heading-${index}-${hash}`,rowId:`chapter-heading-${index}-${hash}`,
+      kind:"regex",label:text,raw:line,preview:line,
+      range:{line:index,start:0,end:line.length},
+      typeLabel:"章节标题",lineType:`${level} 级标题`,sourcePath,
+      sourceLabel:sourcePath.split(/[\\/]/).pop()??sourcePath,status:"候选",
+    });
+  }
+  return rows;
+}

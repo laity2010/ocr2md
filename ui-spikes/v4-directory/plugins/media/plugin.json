@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:media",
+  "entry": "index.js",
+  "kind": "ui",
+  "tab": "媒体",
+  "order": 40,
+  "enabled": false
+}

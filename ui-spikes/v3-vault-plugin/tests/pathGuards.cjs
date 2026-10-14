@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {transformSync}=require('esbuild');
+const src=fs.readFileSync('src/pathGuards.ts','utf8');
+const js=transformSync(src,{loader:'ts',format:'cjs',target:'es2022'}).code;
+const moduleObject={exports:{}};
+new Function('module','exports',js)(moduleObject,moduleObject.exports);
+const g=moduleObject.exports;
+assert.equal(g.isTargetVault('ocr2md'),true);
+assert.equal(g.isTargetVault('ocr2md-backup'),false);
+assert.equal(g.isProtectedPath('.obsidian/plugins'),true);
+assert.equal(g.isProtectedPath('ocr2md/book.md'),false);
+assert.equal(g.testNotePath(123456),'ocr2md/_wp2_vault_probe_123456.md');
+assert.throws(()=>g.testNotePath(-1));
+console.log('vault path guard checks OK');

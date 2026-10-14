@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "source": "wcp",
+  "version": "1.0.0",
+  "assets": {
+    "resident.js": {
+      "size": 1495,
+      "sha256": "76294ed4462911613b01c96f3d8447b5e4642be557b1b221712b28f709e72775"
+    }
+  }
+}

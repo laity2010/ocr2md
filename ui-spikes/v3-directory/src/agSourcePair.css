@@ -1,0 +1,73 @@
+/* One presentation contract for every V3 AG + CodeMirror composition. The
+   owning scene supplies only scoped CSS variables, never duplicated rules. */
+.v3-ag-source-pair{
+  --ag-source-grid-font-size:var(--grid-font-size,14px);
+  --ag-source-font-size:var(--v3-source-font-size,13px);
+  --ag-source-line-height:var(--v3-source-line-height,1.5);
+  --ag-source-hard-return-color:var(--ocr2md-hard-return-color,#839ab5);
+  --ag-source-panel-bg:var(--v3-ui-bg,#1d2732);
+  --ag-source-panel-fg:var(--v3-ui-fg,#e1e7ef);
+  --ag-source-panel-border:var(--v3-ui-border,#475258);
+  --ag-source-caret:var(--v3-ios-caret-color,#0a84ff);
+  min-width:0;
+}
+.v3-ag-source-pair .v3-ag-source-grid{
+  --grid-font-size:var(--ag-source-grid-font-size);
+  --ag-font-size:var(--ag-source-grid-font-size);
+  --ag-background-color:var(--ag-source-panel-bg);
+  --ag-foreground-color:var(--ag-source-panel-fg);
+  --ag-border-color:var(--ag-source-panel-border);
+  --ag-header-background-color:var(--v3-ui-panel,#253343);
+  --ag-header-foreground-color:var(--ag-source-panel-fg);
+  --ag-accent-color:var(--v3-ui-accent,#83c092);
+  min-width:0;
+}
+.v3-ag-source-pair .v3-ag-source-editor{
+  min-width:0;min-height:0;
+  --ocr2md-hard-return-color:var(--ag-source-hard-return-color);
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-editor{
+  background:var(--ag-source-panel-bg);
+  color:var(--ag-source-panel-fg);
+  font-size:var(--ag-source-font-size);
+  line-height:var(--ag-source-line-height);
+  font-family:var(--v3-md-font-family,ui-monospace,monospace);
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-scroller{
+  font-family:var(--v3-md-font-family,ui-monospace,monospace);
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-content{
+  line-height:var(--ag-source-line-height);
+  caret-color:var(--ag-source-caret);
+  -webkit-user-select:text;user-select:text;
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-content::selection,
+.v3-ag-source-pair .v3-ag-source-editor .cm-content *::selection{
+  background:color-mix(in srgb,var(--ag-source-caret) 32%,transparent);
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-gutters{
+  background:var(--bg-alt,#272f34);
+  color:color-mix(in srgb,var(--fg,#d3c6aa) 62%,transparent);
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-hard-return-marker{
+  color:var(--ag-source-hard-return-color);font-size:.83em;
+  margin-left:.22em;font-weight:600;opacity:.95;
+  pointer-events:none;-webkit-user-select:none;user-select:none;
+}
+/* Bidirectional AG <-> source linkage. Both are visible even when iPad
+   focus moves from AG to CodeMirror, and inherit the scene's single accent. */
+.v3-ag-source-pair .v3-ag-source-grid .ag-row.v3-ag-source-linked-row{
+  background:color-mix(in srgb,var(--v3-ui-accent,#83c092) 22%,var(--ag-source-panel-bg))!important;
+  box-shadow:inset 3px 0 var(--v3-ui-accent,#83c092);
+}
+.v3-ag-source-pair .v3-ag-source-grid .ag-row.v3-ag-source-linked-row .ag-cell{
+  background:transparent!important;
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-ag-source-linked-line{
+  background:color-mix(in srgb,var(--v3-ui-accent,#83c092) 15%,transparent);
+}
+.v3-ag-source-pair .v3-ag-source-editor .cm-ag-source-linked-key{
+  background:color-mix(in srgb,var(--v3-ui-accent,#83c092) 32%,transparent);
+  border-bottom:2px solid var(--v3-ui-accent,#83c092);
+  border-radius:2px;
+}

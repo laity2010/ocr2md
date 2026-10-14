@@ -1,0 +1,9 @@
+{
+  "id": "ocr2md-v3-vault-probe",
+  "name": "ocr2md v3 Vault Root Probe",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.7",
+  "description": "Read the actual current Obsidian vault root and optionally write one user-confirmed verification note.",
+  "author": "ocr2md",
+  "isDesktopOnly": false
+}

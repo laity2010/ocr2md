@@ -1,0 +1,84 @@
+{
+  "caseId": "ocr2md-v3-buffett-alpha-wp3",
+  "schemaVersion": 1,
+  "expectedChapters": 6,
+  "excludedChapterDirectoryNames": [
+    "01 Buffett’s Alpha 副本"
+  ],
+  "statusCounts": {
+    "candidate-complete": 123,
+    "candidate-partial": 47,
+    "ambiguous": 9,
+    "unmatched": 36,
+    "unavailable": 9
+  },
+  "chapters": [
+    {
+      "chapterId": "00 Bufett’s Alpha",
+      "source": {
+        "path": "chapters/00 Bufett’s Alpha/00 Bufett’s Alpha.md",
+        "sha256": "176c57ec808ef3eb83925e1fab553e1c3e9f0627c1aee05cecfc19704693da1a"
+      },
+      "working": {
+        "path": "chapters/00 Bufett’s Alpha/00 Bufett’s Alpha.working.md",
+        "sha256": "176c57ec808ef3eb83925e1fab553e1c3e9f0627c1aee05cecfc19704693da1a"
+      }
+    },
+    {
+      "chapterId": "01 Buffett’s Alpha",
+      "source": {
+        "path": "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.md",
+        "sha256": "a128fbe8bd63f162f1740454f3a1f040567e5130a42a7df7d00a18317295f09b"
+      },
+      "working": {
+        "path": "chapters/01 Buffett’s Alpha/01 Buffett’s Alpha.working.md",
+        "sha256": "f30d98610b077135125f870cfc871f46cdc8065013177d458b55476deb9cec89"
+      }
+    },
+    {
+      "chapterId": "02 Appendix A Data Sources and Methodology",
+      "source": {
+        "path": "chapters/02 Appendix A Data Sources and Methodology/02 Appendix A Data Sources and Methodology.md",
+        "sha256": "19a5c7411c727cec2ec331b433c4a77e0ab2fe5723c8ce93daefb29162df8339"
+      },
+      "working": {
+        "path": "chapters/02 Appendix A Data Sources and Methodology/02 Appendix A Data Sources and Methodology.working.md",
+        "sha256": "b935eff547eca0c7231c2ae3beb8d51b8ac2fe26ba506338e50c950ac3f1dc2d"
+      }
+    },
+    {
+      "chapterId": "03 Appendix B Decomposing Berkshire Hathaway’s Returns",
+      "source": {
+        "path": "chapters/03 Appendix B Decomposing Berkshire Hathaway’s Returns/03 Appendix B Decomposing Berkshire Hathaway’s Returns.md",
+        "sha256": "e82f931d5b3bc51dbf67608683813c9186fd7ea2920dcc8308ca83a89c2713ba"
+      },
+      "working": {
+        "path": "chapters/03 Appendix B Decomposing Berkshire Hathaway’s Returns/03 Appendix B Decomposing Berkshire Hathaway’s Returns.working.md",
+        "sha256": "94da120d5cb82133eedeaea66f86de8e1c01dbfe8548e1917cbbe4b322c52459"
+      }
+    },
+    {
+      "chapterId": "04 Appendix C Implementable Systematic Buffett Strategies",
+      "source": {
+        "path": "chapters/04 Appendix C Implementable Systematic Buffett Strategies/04 Appendix C Implementable Systematic Buffett Strategies.md",
+        "sha256": "56513df9e338384280abe76bf74d925dfc1a4d2af429da2f628628c4a68bc792"
+      },
+      "working": {
+        "path": "chapters/04 Appendix C Implementable Systematic Buffett Strategies/04 Appendix C Implementable Systematic Buffett Strategies.working.md",
+        "sha256": "17d30389c2745a936664f676bca58135b7f44b13c342c00ed8d11c80046e547a"
+      }
+    },
+    {
+      "chapterId": "05 References",
+      "source": {
+        "path": "chapters/05 References/05 References.md",
+        "sha256": "9f877542307a303a61d188c962a23d010264a0c4aa915fcf9dcc627b8b805b4c"
+      },
+      "working": {
+        "path": "chapters/05 References/05 References.working.md",
+        "sha256": "0f0bf95e148cc98b662380689e99bf68e23f669164c405137fcda49485b03241"
+      }
+    }
+  ],
+  "approvedPdfMdMatches": 0
+}

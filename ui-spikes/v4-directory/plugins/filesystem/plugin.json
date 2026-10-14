@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:filesystem",
+  "entry": "index.js",
+  "kind": "service",
+  "order": 100,
+  "bundles": [
+    {
+      "entry": "workspace-fs.ts",
+      "output": "workspace-fs.js"
+    }
+  ]
+}

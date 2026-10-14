@@ -1,0 +1,9 @@
+{
+  "name": "ocr2md-v3-vault-probe",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "../../node_modules/.bin/esbuild src/main.ts --bundle --platform=browser --format=cjs --target=es2019 --external:obsidian --outfile=main.js",
+    "test": "node tests/pathGuards.cjs"
+  }
+}

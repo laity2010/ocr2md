@@ -210,7 +210,7 @@ function hardReturnDecorations(doc: EditorState["doc"]): DecorationSet {
   return builder.finish();
 }
 
-const hardReturnField = StateField.define<DecorationSet>({
+export const hardReturnField = StateField.define<DecorationSet>({
   create(state) {
     return hardReturnDecorations(state.doc);
   },
@@ -224,6 +224,8 @@ const hardReturnField = StateField.define<DecorationSet>({
 
 export class WorkingEditor {
   private readonly editableCompartment = new Compartment();
+  private readonly readOnlyCompartment = new Compartment();
+  private readOnlyNow = false;
   private readonly hardReturnCompartment = new Compartment();
   private syncing = false;
   private readonly view: EditorView;
@@ -240,6 +242,8 @@ export class WorkingEditor {
       lineNumber: number,
       anchor: { x: number; y: number },
     ) => void,
+    private readonly lineActionsOnAnyLine = false,
+    private readonly useNativeSelection = false,
   ) {
     this.view = new EditorView({
       parent,
@@ -254,7 +258,7 @@ export class WorkingEditor {
                 const activeLine = view.state.doc.lineAt(
                   view.state.selection.main.head,
                 ).number;
-                if (lineNumber !== activeLine) return false;
+                if (!this.lineActionsOnAnyLine && lineNumber !== activeLine) return false;
                 const mouse = event as MouseEvent;
                 const target = event.currentTarget instanceof HTMLElement
                   ? event.currentTarget
@@ -302,7 +306,7 @@ export class WorkingEditor {
           ]),
           markdown(),
           syntaxHighlighting(obsidianSyntaxHighlight),
-          drawSelection(),
+          ...(this.useNativeSelection ? [] : [drawSelection()]),
           sourceHeadingField,
           latexHighlightField,
           regexHighlightField,
@@ -341,6 +345,7 @@ export class WorkingEditor {
             },
           }),
           this.editableCompartment.of(EditorView.editable.of(false)),
+          this.readOnlyCompartment.of(EditorState.readOnly.of(false)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || this.syncing) return;
             this.onDocumentChanged(update.state.doc.toString());
@@ -364,6 +369,37 @@ export class WorkingEditor {
     } finally {
       this.syncing = false;
     }
+  }
+
+  /** Replace a regenerated projection without snapping the user's caret to
+   * document start. The diff is a single middle span (usually an IR marker). */
+  setDocumentPreservingCursor(text:string):void {
+    const old=this.view.state.doc.toString();
+    if(old===text)return;
+    let prefix=0;
+    while(prefix<old.length&&prefix<text.length&&old[prefix]===text[prefix])prefix++;
+    let suffix=0;
+    while(suffix<old.length-prefix&&suffix<text.length-prefix&&
+      old[old.length-1-suffix]===text[text.length-1-suffix])suffix++;
+    const fromOld=old.length-suffix,fromNew=text.length-suffix;
+    const translate=(position:number)=>position<=prefix?position:
+      position>=fromOld?position+(text.length-old.length):
+      prefix+Math.min(position-prefix,fromNew-prefix);
+    const selection=this.view.state.selection.main;
+    const anchor=Math.max(0,Math.min(text.length,translate(selection.anchor)));
+    const head=Math.max(0,Math.min(text.length,translate(selection.head)));
+    const scroll=this.view.scrollDOM.scrollTop;
+    const wasFocused=this.view.hasFocus;
+    this.syncing=true;
+    try{
+      // Replace only the changed span, not the entire document. A full
+      // replacement destroys native iOS WebKit selection nodes and may send
+      // the blue insertion caret to line 1 during a rejected source edit.
+      this.view.dispatch({changes:{from:prefix,to:fromOld,
+        insert:text.slice(prefix,fromNew)},selection:{anchor,head}});
+      this.view.scrollDOM.scrollTop=scroll;
+    }finally{this.syncing=false;}
+    if(wasFocused)this.view.focus();
   }
 
   clear(): void {
@@ -393,9 +429,80 @@ export class WorkingEditor {
     });
   }
 
+  /** V3 can block editing while saving without toggling contenteditable,
+   * which would blur iOS's native insertion caret. */
+  setReadOnly(readOnly: boolean): void {
+    if (this.readOnlyNow === readOnly) return;
+    this.readOnlyNow = readOnly;
+    this.view.dispatch({
+      effects: this.readOnlyCompartment.reconfigure(EditorState.readOnly.of(readOnly)),
+    });
+  }
+
+  /** Snapshot the real source cursor before the Save button steals focus. */
+  captureFocusedCaret(): { anchor: number; head: number; scrollTop: number } | undefined {
+    if (!this.view.hasFocus) return undefined;
+    const selection = this.view.state.selection.main;
+    return { anchor: selection.anchor, head: selection.head,
+      scrollTop: this.view.scrollDOM.scrollTop };
+  }
+
+  /** Restore the native selection and viewport without scrolling to the top. */
+  restoreFocusedCaret(caret: { anchor: number; head: number; scrollTop: number }): void {
+    const length = this.view.state.doc.length;
+    const anchor = Math.max(0, Math.min(length, caret.anchor));
+    const head = Math.max(0, Math.min(length, caret.head));
+    this.view.dispatch({ selection: { anchor, head } });
+    this.view.focus();
+    this.view.scrollDOM.scrollTop = caret.scrollTop;
+  }
+
   getText(): string {
     return this.view.state.doc.toString();
   }
+
+  /** V2 gutter line actions: exact CodeMirror UTF-16 line beginning. */
+  offsetForLine(lineNumber:number):number|undefined {
+    if (!Number.isInteger(lineNumber)||lineNumber<1||lineNumber>this.view.state.doc.lines)return;
+    return this.view.state.doc.line(lineNumber).from;
+  }
+
+  /** Read-only navigation hook for v3 PDF↔MD anchors; UTF-16 CodeMirror offsets. */
+  selectionOffsets(): {from:number;to:number} {
+    const {from,to}=this.view.state.selection.main;
+    return {from,to};
+  }
+
+  /** Pointer hit-test for navigation in a read-only CodeMirror instance.
+   * A native click may move DOM selection without updating EditorState.selection. */
+  offsetAtClientPoint(x:number,y:number):number|undefined {
+    if(!Number.isFinite(x)||!Number.isFinite(y))return undefined;
+    return this.view.posAtCoords({x,y})??undefined;
+  }
+
+  nativeCaretOffset():number|undefined {
+    const selection=this.view.dom.ownerDocument.getSelection();
+    if(!selection||!selection.anchorNode||
+       !this.view.contentDOM.contains(selection.anchorNode))return undefined;
+    try{return this.view.posAtDOM(selection.anchorNode,selection.anchorOffset);}
+    catch{return undefined;}
+  }
+
+  /** User-made selection in the real CodeMirror DOM (not a programmatic
+   * navigation selection, and never document-level Ctrl/Meta+A). */
+  nativeSelectionOffsets(): {from:number;to:number}|undefined {
+    const selected=this.view.dom.ownerDocument.getSelection();
+    if(!selected||selected.isCollapsed||!selected.anchorNode||!selected.focusNode||
+      !this.view.contentDOM.contains(selected.anchorNode)||
+      !this.view.contentDOM.contains(selected.focusNode))return undefined;
+    try{
+      const a=this.view.posAtDOM(selected.anchorNode,selected.anchorOffset);
+      const b=this.view.posAtDOM(selected.focusNode,selected.focusOffset);
+      const from=Math.min(a,b),to=Math.max(a,b);
+      return from<to?{from,to}:undefined;
+    }catch{return undefined;}
+  }
+
 
   insertDebugCharacter(character = "※"): void {
     const position = this.view.state.doc.length;
@@ -430,7 +537,8 @@ export class WorkingEditor {
     if (focus) this.view.focus();
   }
 
-  revealRange(range: SourceRange): number | undefined {
+  /** Navigate without taking keyboard focus unless the caller intends editing. */
+  revealRange(range: SourceRange, focus = true): number | undefined {
     const lineNumber = range.line + 1;
     if (lineNumber < 1 || lineNumber > this.view.state.doc.lines) return undefined;
 
@@ -453,7 +561,7 @@ export class WorkingEditor {
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),
     });
-    this.view.focus();
+    if (focus) this.view.focus();
     return lineNumber;
   }
 

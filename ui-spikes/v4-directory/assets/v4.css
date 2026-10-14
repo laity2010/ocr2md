@@ -1,0 +1,132 @@
+/* V4 contributes only the generic host bridge. All geometry/visual tokens are
+   snapshotted from V3; module-owned styles stay with the settings module. */
+#panel-modules #v4-module-mount{position:relative;display:flex;flex:1;
+  min-height:0;min-width:0;height:100%;width:100%;overflow:hidden}
+#panel-modules #v4-module-mount>.wcp-loader-host{width:100%;height:100%;min-height:0}
+#v4-top-actions button{font-size:12px}
+
+/* Keep the V3 header geometry; replace the version text with a focusable button. */
+#v4-version-trigger{display:inline-flex;align-items:baseline;gap:9px;flex:0 0 auto;
+  background:transparent;border:0;padding:2px 5px;margin-left:-5px;
+  color:inherit;white-space:nowrap;cursor:pointer;text-align:left}
+#v4-version-trigger:hover{background:#31445a}
+#v4-version-trigger:focus-visible{outline:2px solid #83b9f0;outline-offset:2px}
+#v4-version-trigger .v3-brand-name{font-size:15px;font-weight:650}
+#v4-component-dialog{position:fixed;inset:0;margin:auto;box-sizing:border-box;
+  width:min(470px,calc(100vw - 26px));max-width:calc(100vw - 26px);
+  max-height:calc(100dvh - 38px);overflow:auto;padding:14px 17px 15px;
+  border:1px solid #52647c;border-radius:10px;background:#1d2732;color:#e1e7ef;
+  box-shadow:0 16px 50px #000a;font:13px/1.5 var(--v3-ui-font,ui-monospace,monospace)}
+#v4-component-dialog::backdrop{background:#080e19ba}
+.v4-component-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.v4-component-head strong{font-size:15px}
+#v4-component-close{font-size:12px;padding:5px 10px}
+.v4-component-hint{font-size:11px;margin:7px 0;color:#aebdd2}
+#v4-component-list{list-style:none;margin:0;padding:0;border-top:1px solid #43536b}
+.v4-component-item{display:flex;justify-content:space-between;align-items:center;
+  min-height:47px;padding:8px 0;gap:12px;border-bottom:1px solid #37485b}
+.v4-component-name{min-width:0;font-weight:600;overflow-wrap:anywhere}
+.v4-component-name small{display:block;font-size:10px;font-weight:400;color:#93a7c1}
+.v4-component-version{flex:0 0 auto;font:600 12px/1.35 ui-monospace,monospace;
+  color:#c2d9fb;font-variant-numeric:tabular-nums;white-space:nowrap}
+.v4-component-pending{padding:8px 0;color:#e2b279}
+@media(max-width:710px){#v4-version-trigger{gap:5px}
+  #v4-version-trigger .v3-build{max-width:38vw;overflow:hidden;text-overflow:ellipsis}
+  #v4-component-dialog{max-height:calc(100dvh - 30px);padding:12px}}
+
+/* App top bar contains module-specific actions only in Settings mode. */
+.v4-module-actions[hidden]{display:none!important}
+
+/* V4 shell owns viewport height. V3's generic .workbench-layout was allowed
+   to shrink to a 320px content box, leaving the lower half of iPad blank.
+   Only the V4 mount is changed; V3 and child components remain untouched. */
+html:has(#v4-module-mount){height:100%;min-height:0}
+body:has(#v4-module-mount){
+  display:flex;flex-direction:column;width:100%;height:100dvh;
+  min-height:0;max-width:none;margin:0;
+  padding:6px 10px 8px;overflow:hidden;
+}
+body:has(#v4-module-mount)>h1{flex:0 0 auto;margin:0 0 2px;font-size:1rem}
+body:has(#v4-module-mount)>.v3-top-row{flex:0 0 auto;margin:0 0 5px}
+body:has(#v4-module-mount)>.v3-top-row .tabs button{padding:4px 14px;font-size:13px}
+#panel-modules{display:flex;flex:1 1 0%;min-width:0;min-height:0;
+  height:auto;max-height:none;overflow:hidden}
+#panel-modules #v3-shared-config-layout{display:flex;flex:1 1 0%;
+  width:100%;height:auto;min-height:0;max-height:none;overflow:hidden}
+#panel-modules #v4-module-mount{flex:1 1 0%;height:100%;min-height:0}
+/* One WCP-owned status surface, shared by every plugin. Not an app-header
+ * activity summary; the active module alone owns the visible message. */
+#v4-framework-status{display:inline-flex;align-items:center;gap:10px;flex:1 1 0;
+ min-height:24px;margin:0;padding:2px 0 2px 10px;min-width:0;
+ border-left:1px solid #43536b;background:transparent;color:#a9c9e7;
+ font:11px/1.45 var(--laity-ui-font,ui-monospace,monospace)}
+#v4-framework-status #v4-status-module{flex:0 0 auto;font-weight:650;
+ color:#d1deec;padding-right:10px;border-right:1px solid #465970}
+#v4-framework-status #status{display:block!important;min-width:0;flex:1 1 auto;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:none;
+ color:inherit;font:inherit;margin:0;padding:0;position:static!important;
+ width:auto!important;height:auto!important;clip-path:none!important}
+#v4-framework-status[data-level=error]{color:#ffb1a6}
+#v4-framework-status[data-level=busy]{color:#a8ccfb}
+#v4-framework-status[data-level=dirty]{color:#e3c38b}
+
+#v4-tabs button:disabled{opacity:.45;cursor:wait}
+/* V3's old header guard hides actions unless the removed V3 workbench exists.
+   V4 module-scoped action groups control visibility instead. */
+body:has(#v4-module-mount) .v3-top-row>#v4-top-actions{display:flex!important}
+
+/* AG Grid column headers remain. Only the redundant pane-specific title bar
+ * is removed; workflows and filters are still available in the module strip. */
+.v4-chapter-boundary #boundary-ag>.boundary-title{display:none!important}
+.v4-cleaning #chapter-clean-ag>.clean-preview-title{display:none!important}
+/* Shared settings title rows are ornamental in the host three-pane layout. */
+laity-settings-panel[data-wcp-layout=tripane] .las-grid-col>.las-head{display:none!important}
+
+/* One visible framework status: underlying V3 components keep their original
+ * status state for subscribers but never render their own status strip. */
+.v4-workspace [data-testid=workspace-status],
+.v4-chapter-boundary #ir-status,
+.v4-chapter-boundary #ir-dirty-indicator,
+.v4-cleaning #chapter-clean-status,
+#v4-workbench-nav-status{display:none!important}
+.v4-cleaning>.clean-top{display:none!important}
+#v4-framework-status{padding-bottom:2px}
+body:has(#v4-module-mount) #panel-modules{height:auto!important;flex:1 1 0%!important}
+
+/* Status shares the single app header row with the version popup trigger.
+ * The V3 brand is never a full-width multi-line activity dashboard. */
+body:has(#v4-module-mount)>h1.v3-brand{
+ display:flex;align-items:center;gap:9px;min-width:0;width:100%;overflow:hidden;
+ flex-wrap:nowrap;white-space:nowrap;
+}
+body:has(#v4-module-mount)>h1.v3-brand #v4-version-trigger{flex:0 0 auto}
+body:has(#v4-module-mount)>h1.v3-brand #v4-framework-status{min-width:0;max-width:100%;overflow:hidden}
+
+/* Safe update prompt is non-modal; never displaces the WCP status bar. */
+#v4-update-ready{flex:0 1 auto;max-width:210px;min-width:0;padding:3px 7px;
+ font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ border:1px solid #748eae;background:#243e54;color:#d9eafb}
+#v4-update-ready:disabled{opacity:.72;cursor:default}
+
+/* Shell-only startup failure; no duplicate status bar or business module CSS. */
+#v4-startup-failure:not([hidden]){display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:8px 12px;border:1px solid #a78a55;background:#322b23;color:#ffe6bf;font-size:12px}
+#v4-startup-retry{background:#25394b;color:#ecf5ff;border:1px solid #9baabd;
+  padding:5px 9px;border-radius:5px;cursor:pointer}
+
+/* TOPBAR-01: Workbench alone inserts the path select + refresh action.
+ * Their intrinsic height used to stretch the flex top row by 5–7px and push
+ * all three tabs / undo / redo / save down by 2–3px. Match the tab height
+ * without changing module navigation or Dockview geometry. */
+.v3-top-row #v4-workflow-controls{
+  box-sizing:border-box;
+  height:28px;min-height:28px;max-height:28px;
+  align-self:center;
+}
+.v3-top-row #v4-workflow-controls select,
+.v3-top-row #v4-workflow-controls button{
+  box-sizing:border-box;
+  height:28px;min-height:0;max-height:28px;
+  padding-top:3px;padding-bottom:3px;
+  line-height:18px;
+}

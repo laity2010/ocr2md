@@ -1,0 +1,17 @@
+/* Canonical UI font contract for Shared Settings and consumers.
+ * The local macOS face wins when installed; other devices use the OFL subset.
+ * Sarasa Fixed SC is a monospaced Chinese font; fallback remains monospace.
+ * Source: Sarasa Fixed SC v1.0.36; credits/OFL license in font/OFL.txt.
+ */
+@font-face {
+  font-family: "Laity Sarasa Fixed SC";
+  src: local("Sarasa Fixed SC"), local("Sarasa-Fixed-SC-Regular"),
+    url("./font/sarasa-fixed-sc-gb2312-regular-v1.0.36.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+:root {
+  --laity-ui-font: "Laity Sarasa Fixed SC", "Sarasa Fixed SC", "Sarasa Mono SC",
+    "Noto Sans Mono CJK SC", "Microsoft YaHei Mono", ui-monospace, monospace;
+}

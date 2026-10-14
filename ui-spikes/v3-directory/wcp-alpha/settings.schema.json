@@ -1,0 +1,7 @@
+{
+  "settings": [
+    {"id":"alpha.layout","theme":"OCR2MD","category":"WCP 试点","group":"布局","label":"工作台风格","description":"独立试点的界面偏好，不修改 OCR2MD v3 正式设置。","type":"string","defaultValue":"v3-dark","options":["v3-dark","v3-blue"],"target":{"type":"runtime","key":"alpha-layout"}},
+    {"id":"alpha.accent","theme":"OCR2MD","category":"WCP 试点","group":"颜色","label":"强调色","description":"仅测试组件的显示配置与保存，不影响 OCR 正式数据。","type":"string","defaultValue":"#83c092","options":["#83c092","#83b9f0"],"cssProperty":"color","target":{"type":"css-var","key":"--wcp-alpha-accent"}},
+    {"id":"alpha.safety","theme":"平台","category":"隔离","group":"权限","label":"文件访问权限","description":"当前试点禁止对 Obsidian/Vault、DIRjson、章节文件和 SQLite 读写。","type":"string","defaultValue":"disabled","readOnly":true,"target":{"type":"runtime","key":"alpha-safety"}}
+  ]
+}

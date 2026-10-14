@@ -7,9 +7,7 @@ import {
   type IFilterParams,
   ModuleRegistry,
   type RowClickedEvent,
-  colorSchemeDark,
   createGrid,
-  themeQuartz,
 } from "ag-grid-community";
 import { locateCandidate } from "../../../src/rowIdentity";
 import { locateMineruMarkdownReference } from "../../../src/mineruAnnotationLocate";
@@ -29,21 +27,8 @@ import {
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-export const calibrationTheme = themeQuartz
-  .withPart(colorSchemeDark)
-  .withParams({
-    backgroundColor: "#2f383e",
-    foregroundColor: "#d3c6aa",
-    chromeBackgroundColor: "#272f34",
-    borderColor: "#475258",
-    accentColor: "#83c092",
-    headerTextColor: "#d3c6aa",
-    oddRowBackgroundColor: "#2c353a",
-    rowHoverColor: "rgba(131, 192, 146, 0.12)",
-    selectedRowBackgroundColor: "rgba(131, 192, 146, 0.18)",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-    fontSize: "var(--grid-font-size)",
-  });
+export { calibrationTheme } from "./calibrationTheme";
+import { calibrationTheme } from "./calibrationTheme";
 
 const IGNORED = "已忽略";
 const DELETED = "已删除";
@@ -226,6 +211,12 @@ export class CalibrationGrid {
   private workingText = "";
   private module: GridReviewModule = "章节标题";
   private headingNumberingEnabled = true;
+  // Opt-in V3 chapter-cleaning presentation; V2 table settings stay unchanged.
+  private chapterHierarchyHeight?: (level: number) => number;
+  /** Generic host-injected columns; V2 does not know their business semantics. */
+  private extensionColumns:ColDef<Candidate>[]=[];
+  private extensionAfterColId?:string;
+  private extensionColumnOrder?:readonly string[];
   private presentation = resolveDefaultTablePresentation();
   private presentationRowOrderSignature = "";
   private sentenceProviderSignature = "";
@@ -268,6 +259,11 @@ export class CalibrationGrid {
       suppressMovableColumns: true,
       suppressColumnVirtualisation: true,
       rowHeight: 42,
+      getRowHeight: (params) => {
+        if (this.module !== "章节标题" || !this.chapterHierarchyHeight) return undefined;
+        const level = this.headingLevel(params.data);
+        return level ? this.chapterHierarchyHeight(level) : undefined;
+      },
       headerHeight: 38,
       animateRows: false,
       getRowId: (params) => params.data.rowId ?? params.data.id,
@@ -287,6 +283,21 @@ export class CalibrationGrid {
         this.activateRow(event.data);
       },
     });
+  }
+
+  /** V3 opt-in: mirror DIRjson heading typography and hierarchical title layout. */
+  setChapterHierarchyView(rowHeight: (level: number) => number): void {
+    this.chapterHierarchyHeight = rowHeight;
+    if (this.module === "章节标题") {
+      this.rebuildPresentationColumns();
+      this.api.resetRowHeights();
+      this.api.refreshCells({ force: true });
+    }
+  }
+
+  private headingLevel(row?: Candidate): number | undefined {
+    const match = /^([1-6])\s*级标题$/.exec(String(row?.lineType ?? ""));
+    return match ? Number(match[1]) : undefined;
   }
 
   setContext(
@@ -319,6 +330,7 @@ export class CalibrationGrid {
     if (moduleChanged || providerColumnsChanged) {
       this.api.setGridOption("rowHeight", module === "媒体" ? 64 : 42);
       this.rebuildPresentationColumns();
+      this.api.resetRowHeights();
     }
 
     this.refreshPresentationRows(moduleChanged || providerColumnsChanged);
@@ -344,10 +356,25 @@ export class CalibrationGrid {
     this.api.refreshHeader();
     this.api.redrawRows();
   }
+  /** Owning V3 module provides its own AG column configuration. The shared
+   * instance still owns lifecycle, row navigation, selection and layout. */
+  setColumnExtensions(columns:readonly ColDef<Candidate>[],afterColId?:string,
+    columnOrder?:readonly string[]):void{
+    this.extensionColumns=[...columns];
+    this.extensionAfterColId=afterColId;
+    this.extensionColumnOrder=columnOrder;
+    this.rebuildPresentationColumns();
+    this.api.refreshHeader();
+  }
 
   private rebuildPresentationColumns(): void {
     this.api.setGridOption("columnDefs", this.columnDefs());
-    const columnState = this.mineruMode
+    const columnState = this.chapterHierarchyHeight && this.module === "章节标题"
+      ? ["sourceLine", "lineType", "chapterHeadingPreview"].map(colId => ({
+          colId, pinned: colId === "sourceLine" ? "left" as const : null,
+          hide: false, sort: null, sortIndex: null,
+        }))
+      : this.mineruMode
       ? ["pdfPage", "sourceLine", "lineType", "annotationNumber", "preview", "annotationPairStatus"].map((colId) => ({
         colId,
         pinned: null,
@@ -362,6 +389,20 @@ export class CalibrationGrid {
         sort: null,
         sortIndex: null,
       }));
+    if(this.chapterHierarchyHeight&&this.extensionColumns.length&&this.module==="媒体"){
+      const i=columnState.findIndex(c=>c.colId===this.extensionAfterColId);
+      columnState.splice(i<0?columnState.length:i+1,0,...this.extensionColumns.map(column=>({
+        colId:String(column.colId??column.field??""),pinned:column.pinned??null,
+        hide:column.hide??false,sort:null,sortIndex:null,
+      })));
+      if(this.extensionColumnOrder?.length){
+        const rank=(id:string):number=>{
+          const position=this.extensionColumnOrder!.indexOf(id);
+          return position<0?Number.MAX_SAFE_INTEGER:position;
+        };
+        columnState.sort((a,b)=>rank(a.colId)-rank(b.colId));
+      }
+    }
     this.api.applyColumnState({
       state: columnState,
       applyOrder: true,
@@ -372,7 +413,12 @@ export class CalibrationGrid {
     const visibleRows = visibleRowsForModule(this.rows, this.module);
     const gridRows = this.sortRowsForPresentation(visibleRows);
     const signature = this.presentationRowSignature(gridRows);
-    if (forceRebuild || signature !== this.presentationRowOrderSignature) {
+    // The V3 chapter-cleaning editor refreshes on every typed character.
+    // Clearing the AG table before every row-data update makes the heading
+    // vanish mid-keystroke and breaks selection/keyboard focus on iPad.
+    // Apply the next snapshot directly; legacy module reset semantics stay.
+    if (!(this.chapterHierarchyHeight && this.module === "章节标题") &&
+        (forceRebuild || signature !== this.presentationRowOrderSignature)) {
       this.api.setGridOption("rowData", []);
     }
     this.api.setGridOption("rowData", gridRows);
@@ -480,6 +526,23 @@ export class CalibrationGrid {
   }
 
   private columnDefs(): ColDef<Candidate>[] {
+    if (this.chapterHierarchyHeight && this.module === "章节标题") {
+      return [
+        { colId: "sourceLine", headerName: "行号", width: 86, minWidth: 72,
+          pinned: "left", lockPinned: true,
+          valueGetter: params => this.locatedLine(params.data) },
+        { colId: "lineType", headerName: "MD 层级", width: 108,
+          valueGetter: params => params.data?.lineType ?? "",
+          filter: LineTypeCheckboxFilter,
+          cellRenderer: (params: ICellRendererParams<Candidate>) => {
+            const level = this.headingLevel(params.data);
+            return level ? "#".repeat(level) : "";
+          } },
+        { colId: "chapterHeadingPreview", headerName: "章节标题", minWidth: 185, flex: 1,
+          editable: false, sortable: false,
+          cellRenderer: (params: ICellRendererParams<Candidate>) => this.chapterHeadingPreviewRenderer(params) },
+      ];
+    }
     if (this.module === "媒体") {
       const mediaColumns: ColDef<Candidate>[] = [
         {
@@ -514,7 +577,7 @@ export class CalibrationGrid {
           column,
         ]),
       );
-      return this.presentation[this.module].columns.flatMap((presentation) => {
+      const configured = this.presentation[this.module].columns.flatMap((presentation) => {
         const base = mediaById.get(presentation.colId);
         if (!base) return [];
         return [{
@@ -528,6 +591,11 @@ export class CalibrationGrid {
           sortIndex: undefined,
         }];
       });
+      if(!this.chapterHierarchyHeight||!this.extensionColumns.length)return configured;
+      const i=configured.findIndex(column=>column.colId===this.extensionAfterColId);
+      const all=[...configured];
+      all.splice(i<0?all.length:i+1,0,...this.extensionColumns);
+      return all;
     }
 
     const columns: ColDef<Candidate>[] = [
@@ -974,6 +1042,18 @@ export class CalibrationGrid {
         ? `(${String(ordinal).padStart(3, "0")}) `
         : "";
 
+    if (this.chapterHierarchyHeight) {
+      // Same H1-H6 colors, font sizes and markers as V3 chapter delimitation.
+      const node = document.createElement("span");
+      node.className = "v3-heading-cell v3-clean-heading-cell";
+      node.dataset.headingLevel = String(level);
+      node.style.paddingInlineStart = `${(level - 1) * 14}px`;
+      node.textContent = `${prefix}${"#".repeat(level)} ${content}`;
+      // Read-only outline. Row activation navigates; Markdown edits happen
+      // only in the separate CodeMirror source pane.
+      node.title = "只读标题目录；请在源码窗增删改";
+      return node;
+    }
     const node = document.createElement(`h${level}`);
     node.className = "chapter-heading-preview";
     node.textContent = prefix + content;

@@ -1,0 +1,67 @@
+[
+  {
+    "id": "sourceFontSize",
+    "label": "源码字号",
+    "theme": "ocr2md",
+    "category": "源码外观",
+    "group": "设置界面",
+    "description": "通用设置 UI 源码窗口字号（11–24 px）",
+    "type": "integer",
+    "defaultValue": 13,
+    "readOnly": false,
+    "component": "通用设置 UI",
+    "featureGroup": "源码外观"
+  },
+  {
+    "id": "sourceLineHeight",
+    "label": "源码行距",
+    "theme": "ocr2md",
+    "category": "源码外观",
+    "group": "设置界面",
+    "description": "通用设置 UI 源码行距倍率（1–2.5）",
+    "type": "number",
+    "defaultValue": 1.5,
+    "readOnly": false,
+    "component": "通用设置 UI",
+    "featureGroup": "源码外观"
+  },
+  {
+    "id": "sourceComments",
+    "label": "源码注释",
+    "theme": "ocr2md",
+    "category": "源码外观",
+    "group": "设置界面",
+    "description": "在通用设置 UI 的源码中显示说明注释",
+    "type": "boolean",
+    "defaultValue": true,
+    "readOnly": false,
+    "component": "通用设置 UI",
+    "featureGroup": "源码外观"
+  },
+  {
+    "id": "previewHeight",
+    "label": "预览窗高度",
+    "theme": "ocr2md",
+    "category": "面板布局",
+    "group": "设置界面",
+    "description": "横向布局时参数预览区域所占高度（20–45%）",
+    "type": "integer",
+    "defaultValue": 30,
+    "readOnly": false,
+    "component": "通用设置 UI",
+    "featureGroup": "面板布局"
+  },
+  {
+    "id": "accentColor",
+    "label": "强调色",
+    "theme": "ocr2md",
+    "category": "色彩",
+    "group": "设置界面",
+    "description": "通用设置 UI 强调色（#RRGGBB）",
+    "type": "string",
+    "defaultValue": "#83c092",
+    "readOnly": false,
+    "component": "通用设置 UI",
+    "featureGroup": "色彩"
+  }
+]

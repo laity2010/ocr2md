@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ocr2md v4 · WCP 工作台</title>
+  <style>
+    :root { --bg:#2f383e;--bg-alt:#272f34;--fg:#d3c6aa;--muted:#859289;--border:#475258;--accent:#83c092;
+      --grid-font-size:14px; --obsidian-code-comment:#8298a4; --obsidian-code-link:#89c7ff;
+      --obsidian-code-url:#a6a2e8; --obsidian-code-function:#a7c893; --obsidian-code-keyword:#c39bd3;
+      --obsidian-code-operator:#d6a6a2; --obsidian-code-property:#a8bfe5; --obsidian-code-string:#9bc79d;
+      --obsidian-code-tag:#83b6cc; --obsidian-code-value:#e2b279; --obsidian-code-punctuation:#a2b3c8; color-scheme:dark; font:15px/1.55 var(--laity-ui-font,"Sarasa Fixed SC","Sarasa Mono SC",ui-monospace,monospace); background:#12171e; color:#edf1f6 }
+    /* One V3 theme for source editors, AG grids and all tab/tag controls.
+       Component-local overrides below consume these same tokens. */
+    :root{--v3-ui-bg:#1d2732;--v3-ui-panel:#253343;
+      --v3-ui-fg:#e1e7ef;--v3-ui-border:#475258;
+      --v3-ui-accent:#83c092;--v3-ui-muted:#aebdd2;
+      --v3-ios-caret-color:#0a84ff;--ocr2md-hard-return-color:#839ab5}
+    * { box-sizing:border-box }
+    [hidden] { display:none!important }
+    body { margin:0 auto; max-width:1280px; padding:16px 22px 48px }
+    h1 { font-size:1.3rem; margin:0 0 12px; font-weight:650; letter-spacing:.01em }
+    h2 { font-size:1.08rem; margin:0 0 8px }
+    h3 { font-size:1rem; margin:0 0 12px }
+    p { color:#9eb0c5; margin:5px 0 12px }
+    code { font-family:var(--laity-ui-font,"Sarasa Fixed SC",ui-monospace,monospace); overflow-wrap:anywhere }
+    .tabs { display:flex; gap:4px; border-bottom:1px solid #3e4b5b; margin:0 0 18px }
+    .v3-brand {display:flex;align-items:baseline;gap:10px;min-width:0}
+    .v3-build{font-size:11px;font-weight:500;color:#99acc3;letter-spacing:0;white-space:nowrap;display:inline-block;vertical-align:baseline;font-variant-numeric:tabular-nums}
+    .v3-top-row{display:flex;align-items:stretch;min-width:0;gap:8px;border-bottom:1px solid #3e4b5b;margin-bottom:18px}
+    .v3-top-row>.tabs{border-bottom:0;margin:0;flex:0 0 auto;min-width:0}
+    .v3-top-row>.workbench-ir-header-actions{margin:0 0 2px auto;border:0;padding:0;gap:5px;flex:0 0 auto;align-self:center}
+    .v3-top-row>.workbench-ir-header-actions button{padding:4px 8px;font-size:12px;white-space:nowrap}
+    /* Keep the navigator immediately after Workbench, not separated by a full-width tab row. */
+    /* Tab positions stay fixed even while switching to Workspace/Settings. */
+    #workbench-path-nav{align-self:center;flex:0 1 235px;min-width:100px;max-width:min(36vw,310px);
+      font-size:12px;padding:5px 7px;white-space:nowrap;text-overflow:ellipsis}
+    #workbench-clean-actions #clean-status{font-size:11px;max-width:190px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+    @media(max-width:920px){#workbench-path-nav{flex:1 1 150px;max-width:42vw}}
+    @media(max-width:710px){#workbench-path-nav{max-width:54vw;margin-left:auto}}
+
+    /* Keep workbench-only editing controls hidden on Workspace/Settings tabs. */
+    body:not(:has(#panel-workbench:not([hidden]))) .v3-top-row>.workbench-ir-header-actions{display:none!important}
+    /* Preserve source toolbar DOM for existing selectors but reclaim editor height. */
+    #workbench-source-pane>.wb-pane-head{display:none!important}
+    @media(max-width:710px){
+      .v3-top-row{flex-wrap:wrap;gap:0}
+      .v3-top-row>.tabs{flex:0 0 auto;justify-content:flex-start}
+      .v3-top-row>.tabs button{flex:0 0 auto;padding:7px 9px}
+      .v3-top-row>.workbench-ir-header-actions{flex:1 0 100%;justify-content:flex-end;flex-wrap:wrap;padding:1px 0 4px}
+    }
+
+    .tabs button { border:0; border-radius:7px 7px 0 0; background:transparent; padding:10px 22px; color:#9cafc3; font-weight:600 }
+    .tabs button[aria-selected=true] { color:#d7eaff; box-shadow:inset 0 -3px #83b9f0; background:#202d3b }
+    .toolbar,.actions { display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin:9px 0 }
+    button,input,select,textarea { background:#1e2935; color:#edf1f6; border:1px solid #52647c; border-radius:6px; padding:7px 10px; font:inherit }
+    button { cursor:pointer }
+    button:hover:not(:disabled) { background:#324259 }
+    button:disabled { opacity:.45; cursor:not-allowed }
+    input[type=checkbox] { width:auto; accent-color:#83b9f0 }
+    input[type=number] { width:80px }
+    input[type=text] { min-width:180px }
+    .muted,.label { color:#9cadc2; font-size:13px }
+    .pathbar { display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; margin:10px 0 7px; min-width:0 }
+    #directory-path { font:600 14px/1.6 var(--v3-ui-font); overflow-wrap:anywhere }
+    .row-count { margin-left:auto; color:#9cadc2; font-size:13px }
+    .directory-grid-shell { position:relative; flex:1; min-height:0; overflow:hidden }
+    #directory-list { width:100%; height:100%; min-width:0; min-height:280px; border:1px solid #44556b; border-radius:6px; overflow:hidden }
+    #directory-loading { position:absolute; inset:0; z-index:10; display:flex; gap:10px; justify-content:center; align-items:center; background:rgba(17,25,34,.76); font-size:15px; font-weight:650; color:#c8dcfa; pointer-events:all; cursor:wait }
+    #directory-loading::before { content:""; display:inline-block; width:16px; height:16px; border:2px solid #566c87; border-top-color:#a7cefa; border-radius:50%; animation:v3-directory-spin .7s linear infinite }
+    @keyframes v3-directory-spin { to { transform:rotate(360deg) } }
+    .directory-split-layout { --left-pane-width:43%; display:flex; width:100%; min-width:0; height:min(72vh,800px); min-height:440px; gap:0; overflow:hidden }
+    .directory-grid-pane { flex:0 0 var(--left-pane-width); min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden }
+    .directory-source-pane { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; background:#1d2732; border:1px solid #425269; overflow:hidden }
+    .workspace-splitter { flex:0 0 8px; background:#364659; cursor:col-resize; touch-action:none; position:relative }
+    .workspace-splitter:hover,.workspace-splitter.is-dragging { background:#8cbef4 }
+    .pane-title { background:#253343; border-bottom:1px solid #425269; color:#d4e2f3; padding:7px 10px; font-size:13px; font-weight:650 }
+    #working-editor { flex:1; min-height:150px; min-width:0; overflow:hidden }
+    #working-editor .cm-editor { height:100%; font-size:13px; background:#1d2732; color:#e1e7ef }
+    #working-editor .cm-scroller { overflow:auto; font-family:var(--v3-ui-font) }
+    #working-editor .cm-obsidian-h1 { background:rgba(130,178,226,.13);font-weight:bold }
+    #working-editor .cm-obsidian-h2 { background:rgba(130,178,226,.08) }
+    @media(max-width:760px){.directory-split-layout{display:flex;flex-direction:column;height:auto;min-height:0;overflow:visible}.directory-grid-pane{flex:none;height:46vh;min-height:310px}.workspace-splitter{display:none}.directory-source-pane{flex:none;min-height:420px;height:55vh;margin-top:12px}}
+
+    .ag-cell .directory-entry { display:block; width:100%; height:100%; background:transparent; border:0; padding:0 3px; text-align:left; color:inherit; font:inherit; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .ag-cell .directory-entry:hover { color:#a6ccff }
+    .ag-cell .directory-entry:focus-visible { outline:2px solid #9acdfb; outline-offset:-2px }
+    .directory-parent-row .ag-cell { background:#233246!important; font-weight:650 }
+    .directory-selected-row .ag-cell { background:rgba(128,184,245,.13)!important }
+    .notice { border:1px solid #4c6078; border-radius:7px; background:#1c2939; padding:12px; margin:12px 0 }
+    .group { padding:17px 0; border-bottom:1px solid #354355 }
+    .config-item { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:10px 0; min-height:30px }
+    .config-item>label:first-child { width:172px; max-width:100%; color:#bacbe0 }
+    .checkset { display:flex; flex-wrap:wrap; gap:15px }
+    #config-json { width:100%; min-height:245px; font:13px/1.5 var(--v3-ui-font); resize:vertical }
+    #vault-key { width:min(100%,370px); flex:1 }
+    #file-content { width:min(100%,620px); min-height:88px; resize:vertical }
+    #status.v3-main-status{color:#a4cdff;min-width:0;max-width:135px;margin:0;
+      font-size:11px;font-weight:400;line-height:1.35;white-space:nowrap;overflow:hidden;
+      text-overflow:ellipsis;flex:1 1 auto;align-self:baseline;overflow-wrap:normal}
+    .v3-brand{overflow:hidden;align-items:center;white-space:nowrap}
+    .v3-brand-name{flex:0 0 auto;white-space:nowrap}
+    .v3-activity-summary{display:flex;align-items:center;flex:1 1 auto;min-width:0;gap:0;
+      overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#51617b transparent;
+      font-size:11px;font-weight:400;line-height:1.4;letter-spacing:0}
+    .v3-activity-entry{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;max-width:175px;
+      min-width:0;padding:2px 9px;border-left:1px solid #415064;color:#b8c5d5}
+    .v3-activity-name{color:#d6dfed;flex:0 0 auto}
+    .v3-activity-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .v3-activity-entry[data-level="busy"] .v3-activity-value{color:#a7cafa}
+    .v3-activity-entry[data-level="dirty"] .v3-activity-value{color:#dfc18d}
+    .v3-activity-entry[data-level="error"] .v3-activity-value{color:#ffb1a6}
+    .v3-activity-entry[data-level="error"]{max-width:225px}
+    .v3-activity-entry[data-module-status="workbench"][data-media-download="true"]{
+      max-width:min(66vw,670px);flex:0 1 auto}
+    .v3-activity-entry[data-module-status="workbench"][data-media-download="true"] .v3-activity-value{
+      min-width:0;overflow:hidden;text-overflow:ellipsis}
+    @media(max-width:760px){
+      .v3-brand{gap:6px}
+      .v3-activity-entry{max-width:132px;padding:2px 6px}
+      #status.v3-main-status{display:none}
+    }
+    .workbench-bookbar{display:none!important}
+    #clean-status,#ir-status,#ir-dirty-indicator,#workbench-status,#md-pdf-status,
+    #workbench-pdf-status,#workbench-ocr-json-status,#pdf-element-locator-status,
+    #pdf-md-review-status,#settings-parse-status,#workspace-connection,#row-count{display:none!important}
+    #wb-clean-modules[hidden],#wb-clean-heading-numbers-label[hidden],#wb-clean-module-tools[hidden]{display:none!important}
+    #panel-workbench .workbench-grid-pane>.wb-pane-head [hidden]{display:none!important}
+    /* A late IR panel refresh must never revive chapter delimitation controls
+       in the chapter-cleaning toolbar, even when it resets their hidden props. */
+    #panel-workbench[data-work-mode="cleaning"] :is(#ir-heading-filters,#ir-sequence-start-control,#ir-ocr-source-choice){display:none!important}
+    #wb-clean-modules{order:-1;flex:0 0 auto;min-width:165px;max-width:240px;
+      background:#314761;color:#e2eafa;border:1px solid #617995;border-radius:6px;
+      padding:5px 8px;font-size:13px;font-weight:500;cursor:pointer;
+      -webkit-appearance:menulist;appearance:auto;color-scheme:dark}
+    #wb-clean-modules option{color:CanvasText;background:Canvas}
+    #wb-clean-module-tools{display:inline-flex;align-items:center;gap:5px;min-width:0}
+    #panel-workbench[data-work-mode="cleaning"] .workbench-grid-pane>.wb-pane-head{
+      flex-wrap:wrap;align-content:flex-start;row-gap:5px}
+    .wb-clean-heading-numbers{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;
+      border:1px solid #52647c;border-radius:6px;font-size:12px;white-space:nowrap}
+    .wb-clean-heading-numbers input{margin:0}
+    body:has(#panel-workbench:not([hidden])) #panel-workbench{height:calc(100dvh - 45px)}
+    @media(max-width:710px){body:has(#panel-workbench:not([hidden])) #panel-workbench{height:calc(100dvh - 95px)}}
+
+    #file-actions { padding:14px 0; border-top:1px solid #354355; margin-top:15px }
+    #file-actions details>summary { cursor:pointer; font-weight:600; margin-bottom:12px }
+    .danger { border-color:#bd6464 }
+    /* Same variable-driven splitters as v2; each v3 workspace has its own storage key. */
+    .workbench-layout { --left-pane-width:43%; display:flex; width:100%; height:min(76vh,820px);min-height:440px;gap:0;overflow:hidden }
+    .workbench-grid-pane { flex:0 0 var(--left-pane-width);min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #43536b }
+    #workbench-review-grid {flex:1;min-height:0;width:100%}
+    .workbench-review-toolbar {display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid #425269}
+    .workbench-review-toolbar button {font-size:12px;padding:5px 8px}
+    #pdf-md-review-note {width:100%;min-height:60px;max-height:110px;font-size:12px;resize:vertical}
+    #pdf-md-review-status {font-size:12px;line-height:1.4;min-height:24px;padding:4px 8px;color:#d2dcf0}
+    .pdf-md-review-cell-status {font-size:12px;width:100%;min-width:0;padding:3px 2px;background:#263444;color:inherit}
+
+    .workbench-right-pane { --editor-top-percent:55%;flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #43536b }
+    #workbench-calibration-grid { flex:1;min-width:0;min-height:0 }
+    .workbench-source-pane { flex:0 0 var(--editor-top-percent);min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden }
+    .workbench-preview-pane { flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden }
+    #workbench-source,#workbench-preview { flex:1;min-height:0;overflow:auto;padding:7px 10px }
+    #workbench-source .cm-editor { height:100%;background:#1d2732;color:#e1e7ef }
+    #workbench-preview { background:#1d2732;color:#e1e7ef;overflow-wrap:anywhere }
+    #workbench-preview img { max-width:100% }
+    .workbench-splitter { flex:0 0 8px;background:#364659;position:relative;touch-action:none;user-select:none;cursor:col-resize }
+    .workbench-splitter:hover,.workbench-splitter.is-dragging { background:#8cbef4 }
+    .workbench-splitter:focus-visible { outline:2px solid #9eccff;outline-offset:-2px }
+    .workbench-row-splitter { flex:0 0 8px;cursor:row-resize }
+    #workbench-mobile-splitter { display:none }
+    body.is-resizing-editor-preview,body.is-resizing-workspace { user-select:none }
+    @media(max-width:760px){
+      .workbench-layout{flex-direction:column;height:min(115vh,1050px);min-height:690px}
+      .workbench-grid-pane{flex:0 0 var(--editor-top-percent,34%);min-height:130px}
+      #workbench-column-splitter{display:none}
+      #workbench-mobile-splitter{display:block;flex:0 0 8px;cursor:row-resize}
+      .workbench-right-pane{flex:1;min-height:250px}
+    }
+    .workbench-preview-tabs { display:flex;flex:0 0 auto;gap:5px;padding:5px 8px;background:#253343;border-bottom:1px solid #43536b }
+    .workbench-preview-tabs button {border:0;background:transparent;color:#aebdd2;padding:5px 13px;border-radius:5px}
+    .workbench-preview-tabs button[aria-selected="true"]{background:#3b5269;color:#f0f7ff}
+    .preview-content-pane{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+    .preview-content-pane[hidden]{display:none}
+    /* PDF.js keeps real geometry for range-backed first-page rendering while
+       MD is in front. Global [hidden] uses !important, so override only PDF. */
+    .workbench-preview-pane{position:relative}
+    #preview-panel-pdf[hidden]{display:flex!important;position:absolute;inset:0;
+      visibility:hidden;pointer-events:none}
+    /* Color transformation only on the PDF pixels, not the transparent OCR
+       bbox overlay. PDF coordinates, page size and Range requests stay real. */
+    #workbench-pdf-canvas[data-pdf-theme="dark"] .pdfViewer .page{background:#121820}
+    #workbench-pdf-canvas[data-pdf-theme="dark"] .pdfViewer .page canvas{filter:invert(1) hue-rotate(180deg)}
+    #workbench-pdf-canvas[data-pdf-theme="light"] .pdfViewer .page canvas{filter:none}
+    #ir-markdown-preview .v3-ir-preview-target{background:rgba(127,187,179,.12);
+      outline:2px solid rgba(127,187,179,.72);outline-offset:2px;border-radius:3px}
+    #workbench-preview,#ir-markdown-preview{flex:1;overflow:auto;min-height:0;
+      background:#1d2732;color:#e1e7ef;padding:7px 10px;overflow-wrap:anywhere}
+    #workbench-preview[hidden],#ir-markdown-preview[hidden]{display:none}
+    .workbench-pdf-controls {display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:7px;border-bottom:1px solid #425269}
+    #workbench-pdf-file{max-width:260px;min-width:115px;flex:1;font-size:12px}
+    #pdf-page-number{width:68px;min-width:58px;font-size:12px}
+    .workbench-pdf-controls button{font-size:12px}
+    #workbench-pdf-status,#workbench-ocr-json-status{font-size:12px;padding:4px 10px}
+    #workbench-pdf-canvas{flex:1;min-height:100px;overflow:auto;text-align:center;background:#29323a;padding:10px;position:relative}
+    #workbench-pdf-canvas .pdfViewer .page{margin:8px auto;box-shadow:0 3px 16px #0007}\n    #workbench-pdf-canvas .pdfViewer canvas{max-width:none;vertical-align:top}
+    #workbench-pdf-canvas .ocr2md-pdf-region-overlay {position:absolute;z-index:12;pointer-events:none;
+      border:3px solid #f2ac42;background:rgba(255,177,55,.20);border-radius:3px;
+      box-shadow:0 0 0 1px rgba(25,35,47,.9),0 0 0 4px rgba(255,199,91,.27)}
+    .md-element-controls {display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:4px 0}
+    .md-element-controls select {min-width:150px;max-width:min(420px,80vw);flex:1;font-size:12px}
+    #pdf-md-target {min-width:130px;max-width:100%;flex:1;font-size:12px}
+    #md-pdf-status {font-size:12px;word-break:break-word}
+    .pdf-element-controls {display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;
+      border-top:1px solid #425269;border-bottom:1px solid #425269}
+    #pdf-element-select {min-width:115px;max-width:100%;flex:1;font-size:12px}
+    #pdf-element-locator-status {font-size:12px;padding:4px 10px;word-break:break-word}
+\n    #workbench-pdf-canvas .pdfViewerContainer{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+    #v3-shared-config-layout{display:flex;--left-pane-width:43%;gap:0;min-width:0;align-items:stretch}
+    #table-config-grid{flex:0 0 var(--left-pane-width);width:auto;height:min(67vh,740px);min-height:350px;min-width:0;border:1px solid #46566b;border-radius:8px;overflow:hidden}
+    .config-source-panel{display:flex;flex:1;flex-direction:column;min-width:0;min-height:350px}
+    #table-config-editor{flex:1;min-height:300px;border:1px solid #46566b;border-radius:8px;overflow:hidden}
+    #table-config-editor .cm-editor{height:100%;background:var(--v3-ui-bg);color:var(--v3-ui-fg);
+      font-size:var(--ag-source-font-size,var(--v3-source-font-size,13px));
+      line-height:var(--ag-source-line-height,var(--v3-source-line-height,1.5))}
+    #table-config-editor .cm-scroller{overflow:auto;font-family:var(--v3-ui-font)}
+    .config-grid-toggle { display:inline-flex; align-items:center; gap:7px }
+    .config-grid-value { overflow:hidden; white-space:nowrap; text-overflow:ellipsis }
+    .config-enum-filter { min-width:185px; max-width:min(350px,80vw); max-height:50vh; overflow:auto; padding:8px; background:#222e3d; color:#edf1f6 }
+    .config-enum-filter-option { display:flex; gap:9px; align-items:center; min-height:32px; cursor:pointer; word-break:break-word }
+    .config-enum-filter-divider { height:1px; background:#46566b; margin:7px 0 }
+    @media(max-width:760px){#v3-shared-config-layout{flex-direction:column}#v3-settings-splitter{display:none}#table-config-grid{flex:none;width:100%;height:38dvh;min-height:260px}#table-config-editor{height:40dvh;min-height:260px}.config-source-panel{min-height:290px}}
+    @media(max-width:650px){body{padding:12px}h1{font-size:1.18rem}.tabs button{flex:1;padding:10px}.toolbar button{min-height:40px}.config-item>label:first-child{width:auto;min-width:110px}#directory-list{border-radius:4px}}
+    /* WP7 manual-audit focus: three panes and zero permanent secondary tool rows. */
+    body:has(#panel-workbench:not([hidden])) {max-width:none;padding:6px 10px 8px;overflow:hidden}
+    body:has(#panel-workbench:not([hidden]))>h1 {font-size:1rem;margin:0 0 2px}
+    body:has(#panel-workbench:not([hidden]))>.v3-top-row {margin:0 0 5px}
+    body:has(#panel-workbench:not([hidden]))>.v3-top-row .tabs button{padding:4px 14px;font-size:13px}
+
+    #panel-workbench{height:calc(100dvh - 79px);min-height:460px;display:flex;flex-direction:column;gap:4px}
+    @media(max-width:710px){#panel-workbench{height:calc(100dvh - 123px)}}
+    .workbench-bookbar {height:34px;min-height:34px;display:flex;align-items:center;gap:8px;padding:0 5px;font-size:12px;min-width:0}
+    .workbench-bookbar>strong{font-size:13px;white-space:nowrap}
+    .workbench-bookbar #workbench-file{max-width:170px;min-width:80px;font-size:11px;padding:3px 4px}
+    .workbench-bookbar #workbench-status{font-size:11px;max-width:210px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+    #wb-ir-details .wb-popover #ir-md-file{width:100%;min-width:0;font-size:12px}
+    #wb-ir-details .wb-popover #ir-export-md,#wb-ir-details .wb-popover #ir-export-zip{font-size:12px;padding:4px 8px}
+
+    #workbench-folder{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .workbench-ir-header-actions{display:flex;align-items:center;gap:5px}
+    #ir-save[data-dirty="true"]:not(:disabled){border-color:#83c092;background:#344e42;
+      color:#e6f7e9;font-weight:650}
+    @media(max-width:560px){
+      .workbench-ir-header-actions{gap:3px}
+      .v3-top-row>.workbench-ir-header-actions button{padding:4px 6px;font-size:11px}
+
+    }
+    #panel-workbench .workbench-layout {flex:1;height:auto;min-height:0;max-height:none}
+    .workbench-grid-pane,.workbench-right-pane,.workbench-source-pane,.workbench-preview-pane{overflow:visible}
+    .wb-pane-head {display:flex;align-items:center;gap:5px;flex:0 0 auto;min-height:35px;padding:3px 7px;min-width:0;position:relative;z-index:25}
+    .wb-heading{font-size:12px;white-space:nowrap;font-weight:650}
+    .wb-pane-head button,.wb-pane-head summary,.wb-pane-head select,.wb-pane-head input{padding:4px 7px;font-size:12px;line-height:1.4}
+    .wb-segment{display:flex;gap:2px;flex-shrink:0}
+    .wb-segment button{border:1px solid transparent;background:transparent}
+    .wb-segment button[aria-pressed="true"]{background:#3b5169;border-color:#5b7694;color:#e6f3ff}
+    .wb-review-actions{display:flex;gap:3px;align-items:center;flex:0 0 auto}
+    #wb-module-menu .wb-popover{left:0;right:auto;width:210px;gap:5px}
+    #wb-module-menu .wb-popover button{text-align:left}
+    #ir-chapter-edit-details .wb-popover{left:0;right:auto;width:min(340px,calc(100vw - 30px))}
+    .wb-chapter-popover input,.wb-chapter-popover select{width:100%;min-width:0}
+    .wb-v2-assignment{display:flex;align-items:center;gap:4px;flex:0 0 auto;font-size:11px}
+    .wb-v2-assignment>input{width:49px;min-width:44px;text-align:center;padding:3px;font-size:11px}
+    .wb-v2-assignment>button{padding:3px 6px;font-size:11px}
+    #workbench-ir-grid .chapter-file-input{width:100%;height:30px;min-width:0;padding:3px 6px;
+      font-size:var(--grid-font-size);background:transparent;border:1px solid transparent}
+    #workbench-ir-grid .chapter-file-input:not(:disabled):focus{border-color:#86afdb;background:#202c3a}
+    #workbench-ir-grid .chapter-file-input:disabled{opacity:.65}
+    #workbench-ir-grid .chapter-standalone-cell{display:flex;align-items:center;justify-content:center;
+      gap:5px;width:100%;min-height:36px;cursor:pointer;touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+    #workbench-ir-grid .chapter-standalone-input{width:22px;height:22px;min-width:22px;
+      margin:0;accent-color:#83c092;cursor:pointer}
+    #workbench-ir-grid .chapter-standalone-cell[data-file-cut-locked="true"]{cursor:not-allowed}
+    #workbench-ir-grid .chapter-standalone-cell[data-file-cut-locked="true"] .chapter-standalone-input{cursor:not-allowed}
+    #workbench-ir-grid .chapter-standalone-lock{font-size:12px;line-height:1;opacity:.72}
+    #workbench-ir-grid .chapter-standalone-lock[hidden]{display:none}
+    .wb-ir-line-menu{position:fixed;z-index:1500;max-width:min(330px,calc(100vw - 20px));width:270px;
+      padding:10px;border:1px solid #526475;border-radius:8px;background:#263440;color:#e2e9ee;
+      box-shadow:0 10px 26px #0009;font-size:12px}
+    .wb-ir-line-menu[hidden],.wb-ir-line-menu form[hidden]{display:none}
+    .wb-ir-line-menu form{display:grid;gap:5px;margin-top:8px}
+    .wb-ir-line-menu :is(input:not([type=checkbox]),select){width:100%;min-width:0;box-sizing:border-box}
+    .wb-ir-line-menu .wb-ir-title-confirm{display:flex;align-items:center;gap:8px}
+    .wb-ir-title-buttons{display:flex;gap:6px;flex-wrap:wrap}
+    .wb-ir-line-caption{font-weight:600;opacity:.8;margin-bottom:6px}
+    /* V2 working-editor gutter palette and active-line indicator, shared by V3 source editors. */
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-gutters{
+      background:var(--bg-alt)!important;
+      color:color-mix(in srgb,var(--fg) 62%,transparent)!important;
+      border-right:0!important
+    }
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-lineNumbers .cm-gutterElement.cm-activeLineGutter{
+      color:var(--accent)!important;
+      background:color-mix(in srgb,var(--accent) 18%,var(--bg-alt))!important;
+      border-radius:4px;
+      box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent);
+      cursor:pointer;
+      font-weight:700
+    }
+    /* IR preserves the V2 line-number action on every line (not only the active line). */
+    #workbench-ir-source .cm-lineNumbers .cm-gutterElement{cursor:pointer}
+
+
+    #workbench-mode-chapters[aria-pressed="true"]{background:#3b5169;border-color:#5b7694;color:#e6f3ff}
+    .workbench-grid-pane>.wb-pane-head:has(#workbench-mode-chapters[aria-pressed="true"]){flex-wrap:wrap;align-content:flex-start;z-index:35}
+    /* Chapter delimitation is a single mode: show its title, not a second tab button. */
+    /* IR has additional actions: wrap inside AG pane rather than covering the source pane.
+       No fixed coordinates; keyboard and iPad layouts remain available. */
+    .workbench-grid-pane>.wb-pane-head:has(#workbench-mode-ir[aria-pressed="true"]){flex-wrap:wrap;align-content:flex-start;z-index:35}
+    #wb-ir-actions{flex-wrap:wrap;max-width:100%;min-width:0;flex:0 1 auto}
+    .workbench-grid-pane>.wb-pane-head:has(#workbench-mode-ir[aria-pressed="true"]) #ir-status{flex:1 1 100%;min-width:0}
+
+    .wb-review-actions>[data-testid=pdf-md-review-save]:not(:disabled){background:#344e68;border-color:#6488a9}
+    .wb-inline-status{min-width:0;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;opacity:.75;font-size:10px;font-weight:400}
+    #workbench-file{flex:1;min-width:85px;max-width:50%;padding:4px 6px;font-size:12px;font-weight:400}
+    #workbench-review-panel {flex:1;min-height:0;display:flex;flex-direction:column}
+    #workbench-review-grid{flex:1;min-height:0}
+    #workbench-source{padding:1px 3px}
+    .workbench-right-pane{--editor-top-percent:38%}
+    .workbench-preview-tabs{gap:4px;padding:3px 6px;min-height:35px}
+    .workbench-preview-tabs>button{padding:4px 8px;font-size:12px}
+    #workbench-pdf-canvas{padding:3px;min-height:0}
+    #workbench-pdf-canvas .pdfViewer .page{margin:4px auto}
+    .wb-pdf-tools{display:flex;align-items:center;gap:3px;margin-left:auto;min-width:0}
+    .wb-pdf-tools button{min-width:25px;padding:3px 6px}
+    .wb-pdf-zoom{display:flex;align-items:center;gap:2px;min-width:0}
+    #pdf-zoom-value{width:70px;min-width:61px;padding:3px 2px;font-size:11px}
+    #pdf-zoom-value option{background:#253343}
+    @media(max-width:940px){#pdf-zoom-value{width:61px}}
+    @media(max-width:560px){#pdf-zoom-value{width:57px}.wb-pdf-zoom button{min-width:23px;padding:2px 4px}}
+    .wb-pdf-tools #pdf-page-number{width:46px;min-width:42px;text-align:center;padding:3px;font-size:12px}
+    #pdf-page-total{font-size:11px;white-space:nowrap;color:#bfcde0}
+    .wb-dropdown{flex-shrink:0;position:relative;font-weight:400}
+    .wb-dropdown>summary{display:block;list-style:none;cursor:pointer;border:1px solid #52647c;background:#273849;color:#dce6f2;padding:4px 6px;border-radius:5px;white-space:nowrap}
+    .wb-dropdown>summary::-webkit-details-marker{display:none}
+    .wb-dropdown[open]>summary{background:#38516d;border-color:#85a5c6}
+    .wb-popover{position:absolute;right:0;top:calc(100% + 5px);z-index:100;display:flex;flex-direction:column;gap:8px;
+      width:min(440px,calc(100vw - 35px));padding:12px;border:1px solid #657b96;border-radius:7px;background:#1b2938;
+      box-shadow:0 10px 35px #080b10cc;color:#e0eafa;font-weight:400;max-height:min(65dvh,550px);overflow:auto}
+    #wb-review-details .wb-popover{right:auto;left:0;width:min(390px,calc(100vw - 35px))}
+    .wb-popover-title{font-weight:650;font-size:13px}
+    .wb-popover label{font-size:12px;color:#c3d2e7}
+    .wb-popover select,.wb-popover input,.wb-popover button,.wb-popover textarea{font-size:12px;padding:5px}
+    .wb-popover-line{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+    .wb-popover-line>select{flex:1;min-width:120px;max-width:none}
+    .wb-popover-line>label{flex:0 0 auto}
+    .wb-popover-actions{display:flex;gap:5px;flex-wrap:wrap}
+    #pdf-md-review-note{width:100%;min-height:65px;max-height:130px}
+    #pdf-md-review-status{display:inline-block}
+    #md-pdf-status,#pdf-element-locator-status{font-size:12px;line-height:1.4;white-space:normal}
+    .md-element-controls{margin:0;flex-wrap:wrap}
+    .md-element-controls select{flex:1;min-width:140px;max-width:none}
+    @media(max-width:940px){
+      .workbench-layout{flex-direction:column}
+      .workbench-grid-pane{flex:0 0 var(--editor-top-percent,34%);min-height:110px}
+      #workbench-column-splitter{display:none}
+      #workbench-mobile-splitter{display:block;flex:0 0 8px;cursor:row-resize}
+      .workbench-right-pane{flex:1;min-height:220px}
+      #panel-workbench{min-height:490px}
+      #workbench-file{max-width:57%}
+    }
+    @media(max-width:560px){
+      .workbench-bookbar{height:31px;min-height:31px}
+      .wb-inline-status{display:none}
+      .wb-pane-head{gap:3px;padding:3px 4px}
+      .wb-heading{font-size:11px}
+      #workbench-file{max-width:none}
+      .wb-review-actions button{padding:4px}
+      .wb-pdf-tools{gap:2px}
+    }
+    #workbench-ir-panel{flex:1;min-height:0;display:flex;flex-direction:column}
+    #workbench-ir-grid{flex:1;min-height:0;min-width:0}
+    .wb-ir-grid-filters{display:flex;align-items:center;gap:10px;padding:0 0 0 8px;
+      margin-left:auto;flex:0 0 auto;border:0;font-size:12px;color:var(--fg,#edf1f6)}
+    .wb-ir-grid-filters[hidden]{display:none!important}
+    .wb-ir-ocr-source-choice{display:inline-flex;align-items:center;gap:5px;font-size:12px;
+      white-space:nowrap;min-width:0;color:var(--fg,#edf1f6)}
+    .wb-ir-ocr-source-choice select{flex:0 1 200px;min-width:110px;max-width:28vw}
+    @media(max-width:700px){.wb-ir-ocr-source-choice{flex:1 1 100%;order:2}
+      .wb-ir-ocr-source-choice select{max-width:65vw}
+      #ir-heading-filters{margin-left:auto}}
+
+    .wb-ir-grid-h1-toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+    .wb-ir-grid-h1-toggle input{margin:0;width:16px;height:16px;accent-color:#83b9f0;cursor:pointer}
+    .wb-ir-start-control{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
+      flex:0 0 auto;font-size:12px;color:var(--fg,#edf1f6)}
+    .wb-ir-start-control[hidden]{display:none}
+    .wb-ir-start-control input{box-sizing:border-box;width:64px;min-width:0;padding:5px 7px;
+      border:1px solid var(--border,#3c4c5f);border-radius:5px;background:var(--field-bg,#12171e);
+      color:inherit;font:inherit;font-variant-numeric:tabular-nums;text-align:center}
+    .wb-ir-start-control input:disabled{opacity:.55}
+    .wb-ir-start-control input:focus-visible{outline:2px solid #83b9f0;outline-offset:1px}
+    #workbench-ir-source{flex:1;min-height:0;min-width:0}
+    #workbench-ir-source .cm-editor{height:100%;background:#1d2732;color:#e1e7ef}
+    /* V3 iOS editing: show the system native caret and selection handles,
+       not CodeMirror's synthetic cursor layer. Leave V2 untouched. */
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content{
+      caret-color:var(--v3-ios-caret-color);-webkit-user-select:text;user-select:text}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content::selection,
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content *::selection{
+      background:color-mix(in srgb,var(--v3-ios-caret-color) 32%,transparent)}
+    /* Shared surfaces include directory source, both workbench source modes,
+       JSON configuration source, all AG grids and all navigation/preview tags. */
+    :is(#working-editor,#workbench-source,#workbench-ir-source) .cm-editor{
+      background:var(--v3-ui-bg);color:var(--v3-ui-fg);
+      --cm-cursor-color:var(--v3-ios-caret-color)}
+    :is(#working-editor,#workbench-source,#workbench-ir-source) .cm-gutters{
+      background:var(--v3-ui-panel);color:var(--v3-ui-muted);
+      border-right:1px solid var(--v3-ui-border)}
+    :is(#working-editor,#workbench-source,#workbench-ir-source) .cm-hard-return-marker{
+      color:var(--ocr2md-hard-return-color);font-size:.83em;opacity:.95;
+      margin-left:.22em;font-weight:600;user-select:none;-webkit-user-select:none;
+      pointer-events:none}
+    :is(#directory-list,#table-config-grid,#workbench-calibration-grid,#workbench-ir-grid,#workbench-review-grid){
+      --ag-background-color:var(--v3-ui-bg);
+      --ag-foreground-color:var(--v3-ui-fg);
+      --ag-header-background-color:var(--v3-ui-panel);
+      --ag-header-foreground-color:var(--v3-ui-fg);
+      --ag-border-color:var(--v3-ui-border);
+      --ag-accent-color:var(--v3-ui-accent)}
+    :is(.v3-top-row>.tabs,.workbench-preview-tabs) button[role=tab],
+    .v3-top-row>.tabs button{color:var(--v3-ui-muted);font-family:inherit}
+    :is(.v3-top-row>.tabs,.workbench-preview-tabs) button[aria-selected=true]{
+      color:var(--v3-ui-fg);background:var(--v3-ui-panel);
+      box-shadow:inset 0 -2px var(--v3-ui-accent)}
+    :is(.v3-top-row>.tabs,.workbench-preview-tabs) button:focus-visible,
+    :is(#directory-list,#table-config-grid,#workbench-calibration-grid,#workbench-ir-grid,#workbench-review-grid) :focus-visible{
+      outline:2px solid var(--v3-ios-caret-color);outline-offset:-2px}
+    /* V2 CodeMirror + V2 Markdown preview: one palette and one H1–H6 scale. */
+    #workbench-ir-source .cm-editor,#workbench-source .cm-editor,#working-editor .cm-editor{
+      font-size:var(--ag-source-font-size,var(--v3-source-font-size,13px));
+      line-height:var(--ag-source-line-height,var(--v3-source-line-height,1.5));
+      font-family:var(--v3-md-font-family,ui-monospace,monospace)
+    }
+    #workbench-ir-source .cm-scroller,#workbench-source .cm-scroller,#working-editor .cm-scroller{
+      font-family:var(--v3-md-font-family,ui-monospace,monospace)
+    }
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content{
+      line-height:var(--ag-source-line-height,var(--v3-source-line-height,1.5))
+    }
+    #ir-markdown-preview,#workbench-preview{font-size:var(--v3-preview-font-size,14px);
+      font-family:var(--v3-md-font-family,ui-monospace,monospace);
+      line-height:var(--v3-preview-line-height,1.65)}
+    #ir-markdown-preview>:first-child,#workbench-preview>:first-child{margin-top:0}
+    #ir-markdown-preview :is(h1,h2,h3,h4,h5,h6),#workbench-preview :is(h1,h2,h3,h4,h5,h6){
+      font-weight:500;line-height:1.3
+    }
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line[class*="cm-obsidian-h"]{
+      font-weight:500;line-height:1.3
+    }
+    /* V2 AG heading cells: class is resolved from generated Markdown, never guessed from OCR level. */
+    .v3-heading-cell{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+      white-space:nowrap;font-weight:500;line-height:1.3;font-family:var(--v3-md-font-family,ui-monospace,monospace)}
+    .v3-heading-cell[data-heading-level]{font-synthesis:none}
+    /* Chapter cleaning shares the chapter-boundary heading presentation. */
+    #workbench-calibration-grid .v3-clean-heading-cell{box-sizing:border-box}
+    #workbench-calibration-grid .ag-cell:has(.v3-clean-heading-cell){display:flex;align-items:center}
+    #workbench-preview .v3-clean-preview-target{
+      outline:1px solid var(--accent,#83c092);outline-offset:2px;
+      background:color-mix(in srgb,var(--accent,#83c092) 11%,transparent)
+    }
+
+    /* V2 element rendering styles are synced by build script into
+       v2MarkdownPreview.css and reused by both V3 preview windows. */
+    #ir-chapter-filter{max-width:21%;min-width:92px;font-size:11px;padding:3px}
+    #ir-md-file{flex:1;min-width:95px;max-width:39%;font-size:11px;padding:3px}
+    #ir-export-md,#ir-export-zip{font-size:11px;padding:4px 5px}
+    #ir-markdown-preview{flex:1;overflow:auto;min-height:0;background:#1d2732;padding:10px;color:#dce8f4;overflow-wrap:anywhere}
+    /* V2 preview foreground and background take precedence over old V3 overrides. */
+    :is(#ir-markdown-preview,#workbench-preview){
+      background:color-mix(in srgb,var(--bg) 88%,black);color:var(--fg);
+      padding:14px 18px 28px
+    }
+    :is(#ir-markdown-preview,#workbench-preview) p{color:inherit}
+    #ir-markdown-preview img{max-width:100%}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h6{color:var(--obsidian-h6);font-size:var(--obsidian-h6-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h6{color:var(--obsidian-h6);font-size:var(--obsidian-h6-size)}
+    .v3-heading-cell[data-heading-level="6"]{color:var(--obsidian-h6);font-size:var(--v3-heading-6-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h5{color:var(--obsidian-h5);font-size:var(--obsidian-h5-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h5{color:var(--obsidian-h5);font-size:var(--obsidian-h5-size)}
+    .v3-heading-cell[data-heading-level="5"]{color:var(--obsidian-h5);font-size:var(--v3-heading-5-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h4{color:var(--obsidian-h4);font-size:var(--obsidian-h4-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h4{color:var(--obsidian-h4);font-size:var(--obsidian-h4-size)}
+    .v3-heading-cell[data-heading-level="4"]{color:var(--obsidian-h4);font-size:var(--v3-heading-4-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h3{color:var(--obsidian-h3);font-size:var(--obsidian-h3-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h3{color:var(--obsidian-h3);font-size:var(--obsidian-h3-size)}
+    .v3-heading-cell[data-heading-level="3"]{color:var(--obsidian-h3);font-size:var(--v3-heading-3-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h2{color:var(--obsidian-h2);font-size:var(--obsidian-h2-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h2{color:var(--obsidian-h2);font-size:var(--obsidian-h2-size)}
+    .v3-heading-cell[data-heading-level="2"]{color:var(--obsidian-h2);font-size:var(--v3-heading-2-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h1{color:var(--obsidian-h1);font-size:var(--obsidian-h1-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h1{color:var(--obsidian-h1);font-size:var(--obsidian-h1-size)}
+    .v3-heading-cell[data-heading-level="1"]{color:var(--obsidian-h1);font-size:var(--v3-heading-1-absolute-size)}
+    #ir-ocr-select{max-width:18%;min-width:95px;font-size:11px;padding:3px}
+    #ir-source-label{font-size:12px;color:#b6d4fa}
+    #ir-edit-text{width:100%;min-height:100px;resize:vertical}
+    #ir-edit-reason{width:100%}
+    .ir-chapter-tree{display:flex;flex-direction:column;max-height:210px;overflow:auto;background:#172737;border-radius:5px;padding:3px}
+    .ir-chapter-link{display:block;text-align:left;border:0;background:transparent;color:#d4e4f8;padding:5px 6px;white-space:normal}
+    .ir-chapter-link:hover{background:#354a63}
+    #wb-ir-details .wb-popover{width:min(420px,calc(100vw - 35px));right:auto;left:0}
+    #ir-dirty-indicator{font-size:11px}
+    /* All legacy status nodes remain for internal event subscribers but must
+       never paint another status bar or duplicate live announcement. */
+    #clean-status,#ir-status,#ir-dirty-indicator,#workbench-status,#md-pdf-status,
+    #workbench-pdf-status,#workbench-ocr-json-status,#pdf-element-locator-status,
+    #pdf-md-review-status,#settings-parse-status,#workspace-connection,#row-count,
+    #workbench-folder{display:none!important}
+  </style>
+</head>
+<body>
+  <h1 class="v3-brand"><button id="v4-version-trigger" data-testid="v4-version-trigger" type="button" aria-haspopup="dialog" aria-controls="v4-component-dialog" aria-label="查看 OCR2MD v4 应用组件和版本"><span class="v3-brand-name">ocr2md</span><span id="v4-build-label" data-testid="v4-build-label" class="v3-build" data-build-id="v4-261014-2310">v4-261014-2310</span></button>
+    <span id="v4-framework-status" data-testid="v4-framework-status" aria-label="WCP 框架状态栏" data-level="ready">
+      <span id="v4-status-module" data-testid="v4-status-module">工作目录</span>
+      <span id="status" role="status" data-testid="status" aria-live="polite">正在启动工作目录…</span>
+    </span>
+    <button id="v4-update-ready" data-testid="v4-update-ready" type="button" hidden aria-label="应用新版本">新版待更新</button>
+  </h1>
+  <div id="v4-startup-failure" data-testid="v4-startup-failure" role="alert" hidden>应用组件未能完成加载。<button id="v4-startup-retry" data-testid="v4-startup-retry" type="button">重新加载应用</button></div>
+  <dialog id="v4-component-dialog" data-testid="v4-component-dialog" aria-labelledby="v4-component-dialog-title">
+    <div class="v4-component-head"><strong id="v4-component-dialog-title">应用组件与版本</strong><button id="v4-component-close" type="button" aria-label="关闭组件清单">关闭</button></div>
+    <p id="workbench-build" data-testid="workbench-build" class="v4-component-hint" data-app-version="4.7.5" data-build-id="v4-261014-2310">构建版本：v4-261014-2310 · 生成时间：261014-231034 (UTC+08)</p>
+    <p id="v4-access-route" data-testid="v4-access-route" class="v4-component-hint">访问入口：正在识别…</p>
+    <p id="v4-startup-diagnostic" data-testid="v4-startup-diagnostic" class="v4-component-hint">启动诊断：等待入口加载</p>
+    <p class="v4-component-hint">以下为当前实际接入的组件；未迁移模块不列入。</p>
+    <ul id="v4-component-list" data-testid="v4-component-list" aria-live="polite"></ul>
+  </dialog>
+  <div class="v3-top-row" data-testid="v3-top-row">
+  <nav id="v4-tabs" class="tabs" role="tablist" aria-label="已接入模块"></nav><div id="v4-workflow-controls" data-testid="v4-workflow-controls" hidden></div>
+  <div id="v4-global-actions" data-testid="v4-global-actions" role="group" aria-label="全局编辑操作">
+    <button id="v4-global-undo" type="button" data-testid="global-undo" disabled title="撤销当前模块操作">撤销</button>
+    <button id="v4-global-redo" type="button" data-testid="global-redo" disabled title="重做当前模块操作">重做</button>
+    <button id="v4-global-save" type="button" data-testid="global-save" disabled title="保存当前模块标定">保存标定</button>
+  </div>
+  </div>
+  <div id="v4-module-toolbar" data-testid="v4-module-toolbar" role="toolbar" aria-label="当前模块功能操作">
+    <span class="v4-module-toolbar-label" id="v4-module-toolbar-label">工作目录</span>
+    <div id="v4-top-actions" data-testid="v4-top-actions"></div>
+  </div>
+  <div id="v4-action-origins" aria-hidden="true" hidden></div>
+  <section id="panel-modules" class="v3-template-panel" role="tabpanel" aria-labelledby="tab-workspace">
+    <div id="v3-shared-config-layout" class="workbench-layout v3-template-layout v3-template-no-preview" data-testid="settings-template-layout">
+      <div id="v4-module-mount" data-testid="v4-module-mount" aria-label="WCP 业务模块挂载点"></div>
+    </div>
+  </section>
+    </details>
+    <span id="settings-parse-status" class="muted" hidden>等待共享设置组件</span>
+  </section>
+  <style>
+    #v4-workflow-controls{display:flex;align-items:center;gap:7px;flex:0 1 min(56vw,680px);min-width:0}
+    #v4-workflow-controls[hidden]{display:none!important}
+    #v4-workflow-controls select{width:min(54vw,660px);min-width:110px;max-width:100%;background:#263746;
+      color:#e1e7ef;border:1px solid #52647c;border-radius:5px;font:13px var(--laity-ui-font,ui-monospace,monospace);padding:5px 8px}
+    #v4-workflow-controls button{color:#d7e3ed;background:#263746;border:1px solid #52647c;border-radius:4px;padding:5px 9px}
+  </style>
+  <style>
+    .v3-top-row{display:flex!important;align-items:center;flex-wrap:nowrap;gap:7px;min-width:0}
+    #v4-tabs{display:flex;flex:0 0 auto;gap:4px}
+    #v4-workflow-controls{flex:1 1 0;max-width:none!important;min-width:90px!important}
+    #v4-workflow-controls select{flex:1 1 auto;width:100%!important;min-width:0;max-width:650px;text-overflow:ellipsis;white-space:nowrap}
+    #v4-workflow-controls #v4-workbench-nav-status{display:none}
+    #v4-global-actions{display:flex;gap:5px;align-items:center;flex:0 0 auto;margin-left:auto}
+    #v4-global-actions button,#v4-module-toolbar button,#v4-module-toolbar select,#v4-module-toolbar input{
+       font:12px/1.4 var(--laity-ui-font,system-ui,sans-serif);background:#253343;color:#e1e7ef;
+       padding:5px 9px;border:1px solid #52647c;border-radius:5px}
+    #v4-global-actions button:disabled,#v4-module-toolbar button:disabled{opacity:.43}
+    #v4-global-actions button:not(:disabled):active{background:#3b5269}
+    #v4-module-toolbar{display:flex;align-items:center;gap:10px;min-height:33px;max-height:75px;
+       overflow-x:auto;overflow-y:visible;padding:3px 7px;box-sizing:border-box;
+       background:#233141;border:1px solid #43536b;margin-bottom:4px;white-space:nowrap}
+    #v4-module-toolbar .v4-module-toolbar-label{flex:0 0 auto;font-size:12px;font-weight:700;color:#c8d7e9;
+       padding-right:10px;border-right:1px solid #52647c}
+    #v4-top-actions,.v4-module-actions,[data-module-actions-owner]{display:flex;align-items:center;gap:7px;min-width:0}
+    #v4-top-actions [hidden],[data-module-actions-owner][hidden],.v4-module-actions[hidden]{display:none!important}
+    #v4-action-origins{display:none!important}
+    #v4-module-toolbar details{position:relative;font:12px var(--laity-ui-font,system-ui,sans-serif)}
+    #v4-module-toolbar details summary{cursor:pointer;padding:5px 8px;border:1px solid #52647c;
+       border-radius:5px;background:#253343;list-style:none}
+    #v4-module-toolbar details .wb-popover{z-index:5000;position:fixed;top:112px;left:15px;
+       max-height:60vh;overflow-y:auto;border:1px solid #52647c;border-radius:6px;
+       background:#253343;padding:9px;max-width:min(410px,calc(100vw - 35px))}
+    .v4-chapter-boundary>.boundary-bar{display:none!important}
+    .v4-cleaning>.clean-top{min-height:25px;padding:2px 7px}
+    #panel-modules{height:calc(100dvh - 119px)!important;min-height:0!important}
+    @media(max-width:850px){
+      .v3-top-row{gap:3px}
+      #v4-tabs button{padding:4px 7px!important}
+      #v4-global-actions{gap:2px}
+      #v4-global-actions button{padding:4px 5px;font-size:11px}
+      #v4-workflow-controls button{padding:4px 6px;flex:0 0 auto}
+      #v4-module-toolbar{min-height:31px}
+    }
+  </style>
+  <link rel="stylesheet" href="./assets/v3-app.css" />
+  <link rel="stylesheet" href="./assets/v4.css?build=v4-261014-2310" />
+  <script id="v4-bootstrap" data-testid="v4-bootstrap" data-entry="./app.js?build=v4-261014-2310">
+  (()=>{
+    'use strict';
+    // This boot boundary has no remote dependencies. It must execute even when
+    // the WCP CDN or any bundled plugin import cannot be reached.
+    const node=document.getElementById('v4-bootstrap');
+    const label=document.getElementById('v4-build-label');
+    const indicator=document.getElementById('status');
+    const bar=document.getElementById('v4-framework-status');
+    const failure=document.getElementById('v4-startup-failure');
+    const retry=document.getElementById('v4-startup-retry');
+    const diagnostic=document.getElementById('v4-startup-diagnostic');
+    const build=label?.dataset.buildId||'unknown';
+    const started=performance.now();
+    const session={build,phase:'loading',stage:'document',errorCode:'',resourceOrigin:'',attempt:0};
+    const whitelist=new Set(['ocr2md.laity.bid','wcp.laity.bid','agent-link.laity.bid']);
+    const state=()=>({...session,elapsedMs:Math.round(performance.now()-started),
+      navigationType:performance.getEntriesByType('navigation')[0]?.type||'unknown'});
+    const output=()=>{
+      const item=state();
+      diagnostic.textContent='启动诊断：'+item.build+' / '+item.phase+' / '+item.stage+
+        (item.errorCode?' / '+item.errorCode:'')+(item.resourceOrigin?' / '+item.resourceOrigin:'');
+    };
+    const dirty=()=>bar?.dataset.level==='dirty'||Boolean(
+      document.querySelector('#v4-module-mount [data-unsaved]'))||
+      Boolean(document.activeElement?.closest('textarea,input,[contenteditable="true"],.cm-editor'));
+    function failed(code){
+      if(session.phase==='ready')return;
+      session.phase='error';session.stage='bootstrap';session.errorCode=code;
+      window.__ocr2mdV4={phase:'error',stage:'bootstrap',error:code};
+      bar.dataset.level='error';indicator.textContent='应用启动失败（'+code+'），请重试';
+      indicator.title=indicator.textContent;
+      failure.hidden=false;output();
+    }
+    function classify(error){
+      const kind=error?.name;
+      return kind==='TypeError'?'DEPENDENCY_LOAD_FAILED':
+        kind==='SyntaxError'?'MODULE_PARSE_FAILED':'APPLICATION_START_FAILED';
+    }
+    window.__v4Startup={state,mark(stage){
+      if(session.phase!=='loading')return;
+      session.stage=stage;output();
+    },ready(){
+      session.phase='ready';session.stage='mounted';session.errorCode='';
+      failure.hidden=true;output();
+    },fail:failed};
+    window.__ocr2mdV4={phase:'loading',stage:'document'};
+    window.addEventListener('error',event=>{
+      const url=event.target?.src||event.target?.href;
+      if(!url||session.phase==='ready')return;
+      try{const u=new URL(url,location.href);if(whitelist.has(u.hostname)){
+        session.resourceOrigin=u.origin;output();
+      }}catch{}
+    },true);
+    retry.addEventListener('click',()=>{
+      if(dirty()){indicator.textContent='存在未保存内容，已停止重新加载';return}
+      const next=new URL(location.href);
+      next.searchParams.set('recover',String(Date.now()));
+      location.replace(next.href);
+    });
+    // No promise from WCP imports may escape this boundary without a visible
+    // failure. Do not treat the HTML build label as a successful app startup.
+    session.stage='entry-import';session.attempt++;
+    output();
+    import(new URL(node.dataset.entry,location.href).href).catch(error=>{
+      failed(classify(error));
+    });
+    // A slow CDN must remain diagnosable even if the import never settles.
+    setTimeout(()=>{
+      if(session.phase==='loading'){
+        session.stage='slow-startup';
+        indicator.textContent='应用仍在启动；若长时间无响应，请检查网络后重试';
+        bar.dataset.level='busy';failure.hidden=false;output();
+      }
+    },35000);
+  })();
+  </script>
+</body>
+</html>

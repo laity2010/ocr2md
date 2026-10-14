@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ocr2md v3 · Obsidian 工作目录</title>
+  <style>
+    :root { --bg:#2f383e;--bg-alt:#272f34;--fg:#d3c6aa;--muted:#859289;--border:#475258;--accent:#83c092;
+      --grid-font-size:14px; --obsidian-code-comment:#8298a4; --obsidian-code-link:#89c7ff;
+      --obsidian-code-url:#a6a2e8; --obsidian-code-function:#a7c893; --obsidian-code-keyword:#c39bd3;
+      --obsidian-code-operator:#d6a6a2; --obsidian-code-property:#a8bfe5; --obsidian-code-string:#9bc79d;
+      --obsidian-code-tag:#83b6cc; --obsidian-code-value:#e2b279; --obsidian-code-punctuation:#a2b3c8; color-scheme:dark; font:15px/1.55 var(--laity-ui-font,"Sarasa Fixed SC","Sarasa Mono SC",ui-monospace,monospace); background:#12171e; color:#edf1f6 }
+    /* One V3 theme for source editors, AG grids and all tab/tag controls.
+       Component-local overrides below consume these same tokens. */
+    :root{--v3-ui-bg:#1d2732;--v3-ui-panel:#253343;
+      --v3-ui-fg:#e1e7ef;--v3-ui-border:#475258;
+      --v3-ui-accent:#83c092;--v3-ui-muted:#aebdd2;
+      --v3-ios-caret-color:#0a84ff;--ocr2md-hard-return-color:#839ab5}
+    * { box-sizing:border-box }
+    [hidden] { display:none!important }
+    body { margin:0 auto; max-width:1280px; padding:16px 22px 48px }
+    h1 { font-size:1.3rem; margin:0 0 12px; font-weight:650; letter-spacing:.01em }
+    h2 { font-size:1.08rem; margin:0 0 8px }
+    h3 { font-size:1rem; margin:0 0 12px }
+    p { color:#9eb0c5; margin:5px 0 12px }
+    code { font-family:var(--laity-ui-font,"Sarasa Fixed SC",ui-monospace,monospace); overflow-wrap:anywhere }
+    .tabs { display:flex; gap:4px; border-bottom:1px solid #3e4b5b; margin:0 0 18px }
+    .v3-brand {display:flex;align-items:baseline;gap:10px;min-width:0}
+    .v3-build{font-size:11px;font-weight:450;color:#99acc3;letter-spacing:0;white-space:nowrap}
+    .v3-top-row{display:flex;align-items:stretch;min-width:0;gap:8px;border-bottom:1px solid #3e4b5b;margin-bottom:18px}
+    .v3-top-row>.tabs{border-bottom:0;margin:0;flex:0 0 auto;min-width:0}
+    .v3-top-row>.workbench-ir-header-actions{margin:0 0 2px auto;border:0;padding:0;gap:5px;flex:0 0 auto;align-self:center}
+    .v3-top-row>.workbench-ir-header-actions button{padding:4px 8px;font-size:12px;white-space:nowrap}
+    /* Keep the navigator immediately after Workbench, not separated by a full-width tab row. */
+    /* Tab positions stay fixed even while switching to Workspace/Settings. */
+    #workbench-path-nav{align-self:center;flex:0 1 235px;min-width:100px;max-width:min(36vw,310px);
+      font-size:12px;padding:5px 7px;white-space:nowrap;text-overflow:ellipsis}
+    #workbench-clean-actions #clean-status{font-size:11px;max-width:190px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+    @media(max-width:920px){#workbench-path-nav{flex:1 1 150px;max-width:42vw}}
+    @media(max-width:710px){#workbench-path-nav{max-width:54vw;margin-left:auto}}
+
+    /* Keep workbench-only editing controls hidden on Workspace/Settings tabs. */
+    body:not(:has(#panel-workbench:not([hidden]))) .v3-top-row>.workbench-ir-header-actions{display:none!important}
+    /* Preserve source toolbar DOM for existing selectors but reclaim editor height. */
+    #workbench-source-pane>.wb-pane-head{display:none!important}
+    @media(max-width:710px){
+      .v3-top-row{flex-wrap:wrap;gap:0}
+      .v3-top-row>.tabs{flex:0 0 auto;justify-content:flex-start}
+      .v3-top-row>.tabs button{flex:0 0 auto;padding:7px 9px}
+      .v3-top-row>.workbench-ir-header-actions{flex:1 0 100%;justify-content:flex-end;flex-wrap:wrap;padding:1px 0 4px}
+    }
+
+    .tabs button { border:0; border-radius:7px 7px 0 0; background:transparent; padding:10px 22px; color:#9cafc3; font-weight:600 }
+    .tabs button[aria-selected=true] { color:#d7eaff; box-shadow:inset 0 -3px #83b9f0; background:#202d3b }
+    .toolbar,.actions { display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin:9px 0 }
+    button,input,select,textarea { background:#1e2935; color:#edf1f6; border:1px solid #52647c; border-radius:6px; padding:7px 10px; font:inherit }
+    button { cursor:pointer }
+    button:hover:not(:disabled) { background:#324259 }
+    button:disabled { opacity:.45; cursor:not-allowed }
+    input[type=checkbox] { width:auto; accent-color:#83b9f0 }
+    input[type=number] { width:80px }
+    input[type=text] { min-width:180px }
+    .muted,.label { color:#9cadc2; font-size:13px }
+    .pathbar { display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; margin:10px 0 7px; min-width:0 }
+    #directory-path { font:600 14px/1.6 var(--v3-ui-font); overflow-wrap:anywhere }
+    .row-count { margin-left:auto; color:#9cadc2; font-size:13px }
+    .directory-grid-shell { position:relative; flex:1; min-height:0; overflow:hidden }
+    #directory-list { width:100%; height:100%; min-width:0; min-height:280px; border:1px solid #44556b; border-radius:6px; overflow:hidden }
+    #directory-loading { position:absolute; inset:0; z-index:10; display:flex; gap:10px; justify-content:center; align-items:center; background:rgba(17,25,34,.76); font-size:15px; font-weight:650; color:#c8dcfa; pointer-events:all; cursor:wait }
+    #directory-loading::before { content:""; display:inline-block; width:16px; height:16px; border:2px solid #566c87; border-top-color:#a7cefa; border-radius:50%; animation:v3-directory-spin .7s linear infinite }
+    @keyframes v3-directory-spin { to { transform:rotate(360deg) } }
+    .directory-split-layout { --left-pane-width:43%; display:flex; width:100%; min-width:0; height:min(72vh,800px); min-height:440px; gap:0; overflow:hidden }
+    .directory-grid-pane { flex:0 0 var(--left-pane-width); min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden }
+    .directory-source-pane { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; background:#1d2732; border:1px solid #425269; overflow:hidden }
+    .workspace-splitter { flex:0 0 8px; background:#364659; cursor:col-resize; touch-action:none; position:relative }
+    .workspace-splitter:hover,.workspace-splitter.is-dragging { background:#8cbef4 }
+    .pane-title { background:#253343; border-bottom:1px solid #425269; color:#d4e2f3; padding:7px 10px; font-size:13px; font-weight:650 }
+    #working-editor { flex:1; min-height:150px; min-width:0; overflow:hidden }
+    #working-editor .cm-editor { height:100%; font-size:13px; background:#1d2732; color:#e1e7ef }
+    #working-editor .cm-scroller { overflow:auto; font-family:var(--v3-ui-font) }
+    #working-editor .cm-obsidian-h1 { background:rgba(130,178,226,.13);font-weight:bold }
+    #working-editor .cm-obsidian-h2 { background:rgba(130,178,226,.08) }
+    @media(max-width:760px){.directory-split-layout{display:flex;flex-direction:column;height:auto;min-height:0;overflow:visible}.directory-grid-pane{flex:none;height:46vh;min-height:310px}.workspace-splitter{display:none}.directory-source-pane{flex:none;min-height:420px;height:55vh;margin-top:12px}}
+
+    .ag-cell .directory-entry { display:block; width:100%; height:100%; background:transparent; border:0; padding:0 3px; text-align:left; color:inherit; font:inherit; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .ag-cell .directory-entry:hover { color:#a6ccff }
+    .ag-cell .directory-entry:focus-visible { outline:2px solid #9acdfb; outline-offset:-2px }
+    .directory-parent-row .ag-cell { background:#233246!important; font-weight:650 }
+    .directory-selected-row .ag-cell { background:rgba(128,184,245,.13)!important }
+    .notice { border:1px solid #4c6078; border-radius:7px; background:#1c2939; padding:12px; margin:12px 0 }
+    .group { padding:17px 0; border-bottom:1px solid #354355 }
+    .config-item { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:10px 0; min-height:30px }
+    .config-item>label:first-child { width:172px; max-width:100%; color:#bacbe0 }
+    .checkset { display:flex; flex-wrap:wrap; gap:15px }
+    #config-json { width:100%; min-height:245px; font:13px/1.5 var(--v3-ui-font); resize:vertical }
+    #vault-key { width:min(100%,370px); flex:1 }
+    #file-content { width:min(100%,620px); min-height:88px; resize:vertical }
+    #status.v3-main-status{color:#a4cdff;min-width:0;max-width:135px;margin:0;
+      font-size:11px;font-weight:400;line-height:1.35;white-space:nowrap;overflow:hidden;
+      text-overflow:ellipsis;flex:1 1 auto;align-self:baseline;overflow-wrap:normal}
+    .v3-brand{overflow:hidden;align-items:center;white-space:nowrap}
+    .v3-brand-name{flex:0 0 auto;white-space:nowrap}
+    .v3-activity-summary{display:flex;align-items:center;flex:1 1 auto;min-width:0;gap:0;
+      overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#51617b transparent;
+      font-size:11px;font-weight:400;line-height:1.4;letter-spacing:0}
+    .v3-activity-entry{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;max-width:175px;
+      min-width:0;padding:2px 9px;border-left:1px solid #415064;color:#b8c5d5}
+    .v3-activity-name{color:#d6dfed;flex:0 0 auto}
+    .v3-activity-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .v3-activity-entry[data-level="busy"] .v3-activity-value{color:#a7cafa}
+    .v3-activity-entry[data-level="dirty"] .v3-activity-value{color:#dfc18d}
+    .v3-activity-entry[data-level="error"] .v3-activity-value{color:#ffb1a6}
+    .v3-activity-entry[data-level="error"]{max-width:225px}
+    .v3-activity-entry[data-module-status="workbench"][data-media-download="true"]{
+      max-width:min(66vw,670px);flex:0 1 auto}
+    .v3-activity-entry[data-module-status="workbench"][data-media-download="true"] .v3-activity-value{
+      min-width:0;overflow:hidden;text-overflow:ellipsis}
+    @media(max-width:760px){
+      .v3-brand{gap:6px}
+      .v3-activity-entry{max-width:132px;padding:2px 6px}
+      #status.v3-main-status{display:none}
+    }
+    .workbench-bookbar{display:none!important}
+    #clean-status,#ir-status,#ir-dirty-indicator,#workbench-status,#md-pdf-status,
+    #workbench-pdf-status,#workbench-ocr-json-status,#pdf-element-locator-status,
+    #pdf-md-review-status,#settings-parse-status,#workspace-connection,#row-count{display:none!important}
+    #wb-clean-modules[hidden],#wb-clean-heading-numbers-label[hidden],#wb-clean-module-tools[hidden]{display:none!important}
+    #panel-workbench .workbench-grid-pane>.wb-pane-head [hidden]{display:none!important}
+    /* A late IR panel refresh must never revive chapter delimitation controls
+       in the chapter-cleaning toolbar, even when it resets their hidden props. */
+    #panel-workbench[data-work-mode="cleaning"] :is(#ir-heading-filters,#ir-sequence-start-control,#ir-ocr-source-choice){display:none!important}
+    #wb-clean-modules{order:-1;flex:0 0 auto;min-width:165px;max-width:240px;
+      background:#314761;color:#e2eafa;border:1px solid #617995;border-radius:6px;
+      padding:5px 8px;font-size:13px;font-weight:500;cursor:pointer;
+      -webkit-appearance:menulist;appearance:auto;color-scheme:dark}
+    #wb-clean-modules option{color:CanvasText;background:Canvas}
+    #wb-clean-module-tools{display:inline-flex;align-items:center;gap:5px;min-width:0}
+    #panel-workbench[data-work-mode="cleaning"] .workbench-grid-pane>.wb-pane-head{
+      flex-wrap:wrap;align-content:flex-start;row-gap:5px}
+    .wb-clean-heading-numbers{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;
+      border:1px solid #52647c;border-radius:6px;font-size:12px;white-space:nowrap}
+    .wb-clean-heading-numbers input{margin:0}
+    body:has(#panel-workbench:not([hidden])) #panel-workbench{height:calc(100dvh - 45px)}
+    @media(max-width:710px){body:has(#panel-workbench:not([hidden])) #panel-workbench{height:calc(100dvh - 95px)}}
+
+    #file-actions { padding:14px 0; border-top:1px solid #354355; margin-top:15px }
+    #file-actions details>summary { cursor:pointer; font-weight:600; margin-bottom:12px }
+    .danger { border-color:#bd6464 }
+    /* Same variable-driven splitters as v2; each v3 workspace has its own storage key. */
+    .workbench-layout { --left-pane-width:43%; display:flex; width:100%; height:min(76vh,820px);min-height:440px;gap:0;overflow:hidden }
+    .workbench-grid-pane { flex:0 0 var(--left-pane-width);min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #43536b }
+    #workbench-review-grid {flex:1;min-height:0;width:100%}
+    .workbench-review-toolbar {display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid #425269}
+    .workbench-review-toolbar button {font-size:12px;padding:5px 8px}
+    #pdf-md-review-note {width:100%;min-height:60px;max-height:110px;font-size:12px;resize:vertical}
+    #pdf-md-review-status {font-size:12px;line-height:1.4;min-height:24px;padding:4px 8px;color:#d2dcf0}
+    .pdf-md-review-cell-status {font-size:12px;width:100%;min-width:0;padding:3px 2px;background:#263444;color:inherit}
+
+    .workbench-right-pane { --editor-top-percent:55%;flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #43536b }
+    #workbench-calibration-grid { flex:1;min-width:0;min-height:0 }
+    .workbench-source-pane { flex:0 0 var(--editor-top-percent);min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden }
+    .workbench-preview-pane { flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden }
+    #workbench-source,#workbench-preview { flex:1;min-height:0;overflow:auto;padding:7px 10px }
+    #workbench-source .cm-editor { height:100%;background:#1d2732;color:#e1e7ef }
+    #workbench-preview { background:#1d2732;color:#e1e7ef;overflow-wrap:anywhere }
+    #workbench-preview img { max-width:100% }
+    .workbench-splitter { flex:0 0 8px;background:#364659;position:relative;touch-action:none;user-select:none;cursor:col-resize }
+    .workbench-splitter:hover,.workbench-splitter.is-dragging { background:#8cbef4 }
+    .workbench-splitter:focus-visible { outline:2px solid #9eccff;outline-offset:-2px }
+    .workbench-row-splitter { flex:0 0 8px;cursor:row-resize }
+    #workbench-mobile-splitter { display:none }
+    body.is-resizing-editor-preview,body.is-resizing-workspace { user-select:none }
+    @media(max-width:760px){
+      .workbench-layout{flex-direction:column;height:min(115vh,1050px);min-height:690px}
+      .workbench-grid-pane{flex:0 0 var(--editor-top-percent,34%);min-height:130px}
+      #workbench-column-splitter{display:none}
+      #workbench-mobile-splitter{display:block;flex:0 0 8px;cursor:row-resize}
+      .workbench-right-pane{flex:1;min-height:250px}
+    }
+    .workbench-preview-tabs { display:flex;flex:0 0 auto;gap:5px;padding:5px 8px;background:#253343;border-bottom:1px solid #43536b }
+    .workbench-preview-tabs button {border:0;background:transparent;color:#aebdd2;padding:5px 13px;border-radius:5px}
+    .workbench-preview-tabs button[aria-selected="true"]{background:#3b5269;color:#f0f7ff}
+    .preview-content-pane{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+    .preview-content-pane[hidden]{display:none}
+    /* PDF.js keeps real geometry for range-backed first-page rendering while
+       MD is in front. Global [hidden] uses !important, so override only PDF. */
+    .workbench-preview-pane{position:relative}
+    #preview-panel-pdf[hidden]{display:flex!important;position:absolute;inset:0;
+      visibility:hidden;pointer-events:none}
+    /* Color transformation only on the PDF pixels, not the transparent OCR
+       bbox overlay. PDF coordinates, page size and Range requests stay real. */
+    #workbench-pdf-canvas[data-pdf-theme="dark"] .pdfViewer .page{background:#121820}
+    #workbench-pdf-canvas[data-pdf-theme="dark"] .pdfViewer .page canvas{filter:invert(1) hue-rotate(180deg)}
+    #workbench-pdf-canvas[data-pdf-theme="light"] .pdfViewer .page canvas{filter:none}
+    #ir-markdown-preview .v3-ir-preview-target{background:rgba(127,187,179,.12);
+      outline:2px solid rgba(127,187,179,.72);outline-offset:2px;border-radius:3px}
+    #workbench-preview,#ir-markdown-preview{flex:1;overflow:auto;min-height:0;
+      background:#1d2732;color:#e1e7ef;padding:7px 10px;overflow-wrap:anywhere}
+    #workbench-preview[hidden],#ir-markdown-preview[hidden]{display:none}
+    .workbench-pdf-controls {display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:7px;border-bottom:1px solid #425269}
+    #workbench-pdf-file{max-width:260px;min-width:115px;flex:1;font-size:12px}
+    #pdf-page-number{width:68px;min-width:58px;font-size:12px}
+    .workbench-pdf-controls button{font-size:12px}
+    #workbench-pdf-status,#workbench-ocr-json-status{font-size:12px;padding:4px 10px}
+    #workbench-pdf-canvas{flex:1;min-height:100px;overflow:auto;text-align:center;background:#29323a;padding:10px;position:relative}
+    #workbench-pdf-canvas .pdfViewer .page{margin:8px auto;box-shadow:0 3px 16px #0007}\n    #workbench-pdf-canvas .pdfViewer canvas{max-width:none;vertical-align:top}
+    #workbench-pdf-canvas .ocr2md-pdf-region-overlay {position:absolute;z-index:12;pointer-events:none;
+      border:3px solid #f2ac42;background:rgba(255,177,55,.20);border-radius:3px;
+      box-shadow:0 0 0 1px rgba(25,35,47,.9),0 0 0 4px rgba(255,199,91,.27)}
+    .md-element-controls {display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:4px 0}
+    .md-element-controls select {min-width:150px;max-width:min(420px,80vw);flex:1;font-size:12px}
+    #pdf-md-target {min-width:130px;max-width:100%;flex:1;font-size:12px}
+    #md-pdf-status {font-size:12px;word-break:break-word}
+    .pdf-element-controls {display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;
+      border-top:1px solid #425269;border-bottom:1px solid #425269}
+    #pdf-element-select {min-width:115px;max-width:100%;flex:1;font-size:12px}
+    #pdf-element-locator-status {font-size:12px;padding:4px 10px;word-break:break-word}
+\n    #workbench-pdf-canvas .pdfViewerContainer{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+    #v3-shared-config-layout{display:flex;--left-pane-width:43%;gap:0;min-width:0;align-items:stretch}
+    #table-config-grid{flex:0 0 var(--left-pane-width);width:auto;height:min(67vh,740px);min-height:350px;min-width:0;border:1px solid #46566b;border-radius:8px;overflow:hidden}
+    .config-source-panel{display:flex;flex:1;flex-direction:column;min-width:0;min-height:350px}
+    #table-config-editor{flex:1;min-height:300px;border:1px solid #46566b;border-radius:8px;overflow:hidden}
+    #table-config-editor .cm-editor{height:100%;background:var(--v3-ui-bg);color:var(--v3-ui-fg);
+      font-size:var(--ag-source-font-size,var(--v3-source-font-size,13px));
+      line-height:var(--ag-source-line-height,var(--v3-source-line-height,1.5))}
+    #table-config-editor .cm-scroller{overflow:auto;font-family:var(--v3-ui-font)}
+    .config-grid-toggle { display:inline-flex; align-items:center; gap:7px }
+    .config-grid-value { overflow:hidden; white-space:nowrap; text-overflow:ellipsis }
+    .config-enum-filter { min-width:185px; max-width:min(350px,80vw); max-height:50vh; overflow:auto; padding:8px; background:#222e3d; color:#edf1f6 }
+    .config-enum-filter-option { display:flex; gap:9px; align-items:center; min-height:32px; cursor:pointer; word-break:break-word }
+    .config-enum-filter-divider { height:1px; background:#46566b; margin:7px 0 }
+    @media(max-width:760px){#v3-shared-config-layout{flex-direction:column}#v3-settings-splitter{display:none}#table-config-grid{flex:none;width:100%;height:38dvh;min-height:260px}#table-config-editor{height:40dvh;min-height:260px}.config-source-panel{min-height:290px}}
+    @media(max-width:650px){body{padding:12px}h1{font-size:1.18rem}.tabs button{flex:1;padding:10px}.toolbar button{min-height:40px}.config-item>label:first-child{width:auto;min-width:110px}#directory-list{border-radius:4px}}
+    /* WP7 manual-audit focus: three panes and zero permanent secondary tool rows. */
+    body:has(#panel-workbench:not([hidden])) {max-width:none;padding:6px 10px 8px;overflow:hidden}
+    body:has(#panel-workbench:not([hidden]))>h1 {font-size:1rem;margin:0 0 2px}
+    body:has(#panel-workbench:not([hidden]))>.v3-top-row {margin:0 0 5px}
+    body:has(#panel-workbench:not([hidden]))>.v3-top-row .tabs button{padding:4px 14px;font-size:13px}
+
+    #panel-workbench{height:calc(100dvh - 79px);min-height:460px;display:flex;flex-direction:column;gap:4px}
+    @media(max-width:710px){#panel-workbench{height:calc(100dvh - 123px)}}
+    .workbench-bookbar {height:34px;min-height:34px;display:flex;align-items:center;gap:8px;padding:0 5px;font-size:12px;min-width:0}
+    .workbench-bookbar>strong{font-size:13px;white-space:nowrap}
+    .workbench-bookbar #workbench-file{max-width:170px;min-width:80px;font-size:11px;padding:3px 4px}
+    .workbench-bookbar #workbench-status{font-size:11px;max-width:210px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+    #wb-ir-details .wb-popover #ir-md-file{width:100%;min-width:0;font-size:12px}
+    #wb-ir-details .wb-popover #ir-export-md,#wb-ir-details .wb-popover #ir-export-zip{font-size:12px;padding:4px 8px}
+
+    #workbench-folder{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .workbench-ir-header-actions{display:flex;align-items:center;gap:5px}
+    #ir-save[data-dirty="true"]:not(:disabled){border-color:#83c092;background:#344e42;
+      color:#e6f7e9;font-weight:650}
+    @media(max-width:560px){
+      .workbench-ir-header-actions{gap:3px}
+      .v3-top-row>.workbench-ir-header-actions button{padding:4px 6px;font-size:11px}
+
+    }
+    #panel-workbench .workbench-layout {flex:1;height:auto;min-height:0;max-height:none}
+    .workbench-grid-pane,.workbench-right-pane,.workbench-source-pane,.workbench-preview-pane{overflow:visible}
+    .wb-pane-head {display:flex;align-items:center;gap:5px;flex:0 0 auto;min-height:35px;padding:3px 7px;min-width:0;position:relative;z-index:25}
+    .wb-heading{font-size:12px;white-space:nowrap;font-weight:650}
+    .wb-pane-head button,.wb-pane-head summary,.wb-pane-head select,.wb-pane-head input{padding:4px 7px;font-size:12px;line-height:1.4}
+    .wb-segment{display:flex;gap:2px;flex-shrink:0}
+    .wb-segment button{border:1px solid transparent;background:transparent}
+    .wb-segment button[aria-pressed="true"]{background:#3b5169;border-color:#5b7694;color:#e6f3ff}
+    .wb-review-actions{display:flex;gap:3px;align-items:center;flex:0 0 auto}
+    #wb-module-menu .wb-popover{left:0;right:auto;width:210px;gap:5px}
+    #wb-module-menu .wb-popover button{text-align:left}
+    #ir-chapter-edit-details .wb-popover{left:0;right:auto;width:min(340px,calc(100vw - 30px))}
+    .wb-chapter-popover input,.wb-chapter-popover select{width:100%;min-width:0}
+    .wb-v2-assignment{display:flex;align-items:center;gap:4px;flex:0 0 auto;font-size:11px}
+    .wb-v2-assignment>input{width:49px;min-width:44px;text-align:center;padding:3px;font-size:11px}
+    .wb-v2-assignment>button{padding:3px 6px;font-size:11px}
+    #workbench-ir-grid .chapter-file-input{width:100%;height:30px;min-width:0;padding:3px 6px;
+      font-size:var(--grid-font-size);background:transparent;border:1px solid transparent}
+    #workbench-ir-grid .chapter-file-input:not(:disabled):focus{border-color:#86afdb;background:#202c3a}
+    #workbench-ir-grid .chapter-file-input:disabled{opacity:.65}
+    #workbench-ir-grid .chapter-standalone-cell{display:flex;align-items:center;justify-content:center;
+      gap:5px;width:100%;min-height:36px;cursor:pointer;touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+    #workbench-ir-grid .chapter-standalone-input{width:22px;height:22px;min-width:22px;
+      margin:0;accent-color:#83c092;cursor:pointer}
+    #workbench-ir-grid .chapter-standalone-cell[data-file-cut-locked="true"]{cursor:not-allowed}
+    #workbench-ir-grid .chapter-standalone-cell[data-file-cut-locked="true"] .chapter-standalone-input{cursor:not-allowed}
+    #workbench-ir-grid .chapter-standalone-lock{font-size:12px;line-height:1;opacity:.72}
+    #workbench-ir-grid .chapter-standalone-lock[hidden]{display:none}
+    .wb-ir-line-menu{position:fixed;z-index:1500;max-width:min(330px,calc(100vw - 20px));width:270px;
+      padding:10px;border:1px solid #526475;border-radius:8px;background:#263440;color:#e2e9ee;
+      box-shadow:0 10px 26px #0009;font-size:12px}
+    .wb-ir-line-menu[hidden],.wb-ir-line-menu form[hidden]{display:none}
+    .wb-ir-line-menu form{display:grid;gap:5px;margin-top:8px}
+    .wb-ir-line-menu :is(input:not([type=checkbox]),select){width:100%;min-width:0;box-sizing:border-box}
+    .wb-ir-line-menu .wb-ir-title-confirm{display:flex;align-items:center;gap:8px}
+    .wb-ir-title-buttons{display:flex;gap:6px;flex-wrap:wrap}
+    .wb-ir-line-caption{font-weight:600;opacity:.8;margin-bottom:6px}
+    /* V2 working-editor gutter palette and active-line indicator, shared by V3 source editors. */
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-gutters{
+      background:var(--bg-alt)!important;
+      color:color-mix(in srgb,var(--fg) 62%,transparent)!important;
+      border-right:0!important
+    }
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-lineNumbers .cm-gutterElement.cm-activeLineGutter{
+      color:var(--accent)!important;
+      background:color-mix(in srgb,var(--accent) 18%,var(--bg-alt))!important;
+      border-radius:4px;
+      box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent);
+      cursor:pointer;
+      font-weight:700
+    }
+    /* IR preserves the V2 line-number action on every line (not only the active line). */
+    #workbench-ir-source .cm-lineNumbers .cm-gutterElement{cursor:pointer}
+
+
+    #workbench-mode-chapters[aria-pressed="true"]{background:#3b5169;border-color:#5b7694;color:#e6f3ff}
+    .workbench-grid-pane>.wb-pane-head:has(#workbench-mode-chapters[aria-pressed="true"]){flex-wrap:wrap;align-content:flex-start;z-index:35}
+    /* Chapter delimitation is a single mode: show its title, not a second tab button. */
+    /* IR has additional actions: wrap inside AG pane rather than covering the source pane.
+       No fixed coordinates; keyboard and iPad layouts remain available. */
+    .workbench-grid-pane>.wb-pane-head:has(#workbench-mode-ir[aria-pressed="true"]){flex-wrap:wrap;align-content:flex-start;z-index:35}
+    #wb-ir-actions{flex-wrap:wrap;max-width:100%;min-width:0;flex:0 1 auto}
+    .workbench-grid-pane>.wb-pane-head:has(#workbench-mode-ir[aria-pressed="true"]) #ir-status{flex:1 1 100%;min-width:0}
+
+    .wb-review-actions>[data-testid=pdf-md-review-save]:not(:disabled){background:#344e68;border-color:#6488a9}
+    .wb-inline-status{min-width:0;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;opacity:.75;font-size:10px;font-weight:400}
+    #workbench-file{flex:1;min-width:85px;max-width:50%;padding:4px 6px;font-size:12px;font-weight:400}
+    #workbench-review-panel {flex:1;min-height:0;display:flex;flex-direction:column}
+    #workbench-review-grid{flex:1;min-height:0}
+    #workbench-source{padding:1px 3px}
+    .workbench-right-pane{--editor-top-percent:38%}
+    .workbench-preview-tabs{gap:4px;padding:3px 6px;min-height:35px}
+    .workbench-preview-tabs>button{padding:4px 8px;font-size:12px}
+    #workbench-pdf-canvas{padding:3px;min-height:0}
+    #workbench-pdf-canvas .pdfViewer .page{margin:4px auto}
+    .wb-pdf-tools{display:flex;align-items:center;gap:3px;margin-left:auto;min-width:0}
+    .wb-pdf-tools button{min-width:25px;padding:3px 6px}
+    .wb-pdf-zoom{display:flex;align-items:center;gap:2px;min-width:0}
+    #pdf-zoom-value{width:70px;min-width:61px;padding:3px 2px;font-size:11px}
+    #pdf-zoom-value option{background:#253343}
+    @media(max-width:940px){#pdf-zoom-value{width:61px}}
+    @media(max-width:560px){#pdf-zoom-value{width:57px}.wb-pdf-zoom button{min-width:23px;padding:2px 4px}}
+    .wb-pdf-tools #pdf-page-number{width:46px;min-width:42px;text-align:center;padding:3px;font-size:12px}
+    #pdf-page-total{font-size:11px;white-space:nowrap;color:#bfcde0}
+    .wb-dropdown{flex-shrink:0;position:relative;font-weight:400}
+    .wb-dropdown>summary{display:block;list-style:none;cursor:pointer;border:1px solid #52647c;background:#273849;color:#dce6f2;padding:4px 6px;border-radius:5px;white-space:nowrap}
+    .wb-dropdown>summary::-webkit-details-marker{display:none}
+    .wb-dropdown[open]>summary{background:#38516d;border-color:#85a5c6}
+    .wb-popover{position:absolute;right:0;top:calc(100% + 5px);z-index:100;display:flex;flex-direction:column;gap:8px;
+      width:min(440px,calc(100vw - 35px));padding:12px;border:1px solid #657b96;border-radius:7px;background:#1b2938;
+      box-shadow:0 10px 35px #080b10cc;color:#e0eafa;font-weight:400;max-height:min(65dvh,550px);overflow:auto}
+    #wb-review-details .wb-popover{right:auto;left:0;width:min(390px,calc(100vw - 35px))}
+    .wb-popover-title{font-weight:650;font-size:13px}
+    .wb-popover label{font-size:12px;color:#c3d2e7}
+    .wb-popover select,.wb-popover input,.wb-popover button,.wb-popover textarea{font-size:12px;padding:5px}
+    .wb-popover-line{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+    .wb-popover-line>select{flex:1;min-width:120px;max-width:none}
+    .wb-popover-line>label{flex:0 0 auto}
+    .wb-popover-actions{display:flex;gap:5px;flex-wrap:wrap}
+    #pdf-md-review-note{width:100%;min-height:65px;max-height:130px}
+    #pdf-md-review-status{display:inline-block}
+    #md-pdf-status,#pdf-element-locator-status{font-size:12px;line-height:1.4;white-space:normal}
+    .md-element-controls{margin:0;flex-wrap:wrap}
+    .md-element-controls select{flex:1;min-width:140px;max-width:none}
+    @media(max-width:940px){
+      .workbench-layout{flex-direction:column}
+      .workbench-grid-pane{flex:0 0 var(--editor-top-percent,34%);min-height:110px}
+      #workbench-column-splitter{display:none}
+      #workbench-mobile-splitter{display:block;flex:0 0 8px;cursor:row-resize}
+      .workbench-right-pane{flex:1;min-height:220px}
+      #panel-workbench{min-height:490px}
+      #workbench-file{max-width:57%}
+    }
+    @media(max-width:560px){
+      .workbench-bookbar{height:31px;min-height:31px}
+      .wb-inline-status{display:none}
+      .wb-pane-head{gap:3px;padding:3px 4px}
+      .wb-heading{font-size:11px}
+      #workbench-file{max-width:none}
+      .wb-review-actions button{padding:4px}
+      .wb-pdf-tools{gap:2px}
+    }
+    #workbench-ir-panel{flex:1;min-height:0;display:flex;flex-direction:column}
+    #workbench-ir-grid{flex:1;min-height:0;min-width:0}
+    .wb-ir-grid-filters{display:flex;align-items:center;gap:10px;padding:0 0 0 8px;
+      margin-left:auto;flex:0 0 auto;border:0;font-size:12px;color:var(--fg,#edf1f6)}
+    .wb-ir-grid-filters[hidden]{display:none!important}
+    .wb-ir-ocr-source-choice{display:inline-flex;align-items:center;gap:5px;font-size:12px;
+      white-space:nowrap;min-width:0;color:var(--fg,#edf1f6)}
+    .wb-ir-ocr-source-choice select{flex:0 1 200px;min-width:110px;max-width:28vw}
+    @media(max-width:700px){.wb-ir-ocr-source-choice{flex:1 1 100%;order:2}
+      .wb-ir-ocr-source-choice select{max-width:65vw}
+      #ir-heading-filters{margin-left:auto}}
+
+    .wb-ir-grid-h1-toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+    .wb-ir-grid-h1-toggle input{margin:0;width:16px;height:16px;accent-color:#83b9f0;cursor:pointer}
+    .wb-ir-start-control{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
+      flex:0 0 auto;font-size:12px;color:var(--fg,#edf1f6)}
+    .wb-ir-start-control[hidden]{display:none}
+    .wb-ir-start-control input{box-sizing:border-box;width:64px;min-width:0;padding:5px 7px;
+      border:1px solid var(--border,#3c4c5f);border-radius:5px;background:var(--field-bg,#12171e);
+      color:inherit;font:inherit;font-variant-numeric:tabular-nums;text-align:center}
+    .wb-ir-start-control input:disabled{opacity:.55}
+    .wb-ir-start-control input:focus-visible{outline:2px solid #83b9f0;outline-offset:1px}
+    #workbench-ir-source{flex:1;min-height:0;min-width:0}
+    #workbench-ir-source .cm-editor{height:100%;background:#1d2732;color:#e1e7ef}
+    /* V3 iOS editing: show the system native caret and selection handles,
+       not CodeMirror's synthetic cursor layer. Leave V2 untouched. */
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content{
+      caret-color:var(--v3-ios-caret-color);-webkit-user-select:text;user-select:text}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content::selection,
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content *::selection{
+      background:color-mix(in srgb,var(--v3-ios-caret-color) 32%,transparent)}
+    /* Shared surfaces include directory source, both workbench source modes,
+       JSON configuration source, all AG grids and all navigation/preview tags. */
+    :is(#working-editor,#workbench-source,#workbench-ir-source) .cm-editor{
+      background:var(--v3-ui-bg);color:var(--v3-ui-fg);
+      --cm-cursor-color:var(--v3-ios-caret-color)}
+    :is(#working-editor,#workbench-source,#workbench-ir-source) .cm-gutters{
+      background:var(--v3-ui-panel);color:var(--v3-ui-muted);
+      border-right:1px solid var(--v3-ui-border)}
+    :is(#working-editor,#workbench-source,#workbench-ir-source) .cm-hard-return-marker{
+      color:var(--ocr2md-hard-return-color);font-size:.83em;opacity:.95;
+      margin-left:.22em;font-weight:600;user-select:none;-webkit-user-select:none;
+      pointer-events:none}
+    :is(#directory-list,#table-config-grid,#workbench-calibration-grid,#workbench-ir-grid,#workbench-review-grid){
+      --ag-background-color:var(--v3-ui-bg);
+      --ag-foreground-color:var(--v3-ui-fg);
+      --ag-header-background-color:var(--v3-ui-panel);
+      --ag-header-foreground-color:var(--v3-ui-fg);
+      --ag-border-color:var(--v3-ui-border);
+      --ag-accent-color:var(--v3-ui-accent)}
+    :is(.v3-top-row>.tabs,.workbench-preview-tabs) button[role=tab],
+    .v3-top-row>.tabs button{color:var(--v3-ui-muted);font-family:inherit}
+    :is(.v3-top-row>.tabs,.workbench-preview-tabs) button[aria-selected=true]{
+      color:var(--v3-ui-fg);background:var(--v3-ui-panel);
+      box-shadow:inset 0 -2px var(--v3-ui-accent)}
+    :is(.v3-top-row>.tabs,.workbench-preview-tabs) button:focus-visible,
+    :is(#directory-list,#table-config-grid,#workbench-calibration-grid,#workbench-ir-grid,#workbench-review-grid) :focus-visible{
+      outline:2px solid var(--v3-ios-caret-color);outline-offset:-2px}
+    /* V2 CodeMirror + V2 Markdown preview: one palette and one H1–H6 scale. */
+    #workbench-ir-source .cm-editor,#workbench-source .cm-editor,#working-editor .cm-editor{
+      font-size:var(--ag-source-font-size,var(--v3-source-font-size,13px));
+      line-height:var(--ag-source-line-height,var(--v3-source-line-height,1.5));
+      font-family:var(--v3-md-font-family,ui-monospace,monospace)
+    }
+    #workbench-ir-source .cm-scroller,#workbench-source .cm-scroller,#working-editor .cm-scroller{
+      font-family:var(--v3-md-font-family,ui-monospace,monospace)
+    }
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-content{
+      line-height:var(--ag-source-line-height,var(--v3-source-line-height,1.5))
+    }
+    #ir-markdown-preview,#workbench-preview{font-size:var(--v3-preview-font-size,14px);
+      font-family:var(--v3-md-font-family,ui-monospace,monospace);
+      line-height:var(--v3-preview-line-height,1.65)}
+    #ir-markdown-preview>:first-child,#workbench-preview>:first-child{margin-top:0}
+    #ir-markdown-preview :is(h1,h2,h3,h4,h5,h6),#workbench-preview :is(h1,h2,h3,h4,h5,h6){
+      font-weight:500;line-height:1.3
+    }
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line[class*="cm-obsidian-h"]{
+      font-weight:500;line-height:1.3
+    }
+    /* V2 AG heading cells: class is resolved from generated Markdown, never guessed from OCR level. */
+    .v3-heading-cell{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+      white-space:nowrap;font-weight:500;line-height:1.3;font-family:var(--v3-md-font-family,ui-monospace,monospace)}
+    .v3-heading-cell[data-heading-level]{font-synthesis:none}
+    /* Chapter cleaning shares the chapter-boundary heading presentation. */
+    #workbench-calibration-grid .v3-clean-heading-cell{box-sizing:border-box}
+    #workbench-calibration-grid .ag-cell:has(.v3-clean-heading-cell){display:flex;align-items:center}
+    #workbench-preview .v3-clean-preview-target{
+      outline:1px solid var(--accent,#83c092);outline-offset:2px;
+      background:color-mix(in srgb,var(--accent,#83c092) 11%,transparent)
+    }
+
+    /* V2 element rendering styles are synced by build script into
+       v2MarkdownPreview.css and reused by both V3 preview windows. */
+    #ir-chapter-filter{max-width:21%;min-width:92px;font-size:11px;padding:3px}
+    #ir-md-file{flex:1;min-width:95px;max-width:39%;font-size:11px;padding:3px}
+    #ir-export-md,#ir-export-zip{font-size:11px;padding:4px 5px}
+    #ir-markdown-preview{flex:1;overflow:auto;min-height:0;background:#1d2732;padding:10px;color:#dce8f4;overflow-wrap:anywhere}
+    /* V2 preview foreground and background take precedence over old V3 overrides. */
+    :is(#ir-markdown-preview,#workbench-preview){
+      background:color-mix(in srgb,var(--bg) 88%,black);color:var(--fg);
+      padding:14px 18px 28px
+    }
+    :is(#ir-markdown-preview,#workbench-preview) p{color:inherit}
+    #ir-markdown-preview img{max-width:100%}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h6{color:var(--obsidian-h6);font-size:var(--obsidian-h6-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h6{color:var(--obsidian-h6);font-size:var(--obsidian-h6-size)}
+    .v3-heading-cell[data-heading-level="6"]{color:var(--obsidian-h6);font-size:var(--v3-heading-6-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h5{color:var(--obsidian-h5);font-size:var(--obsidian-h5-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h5{color:var(--obsidian-h5);font-size:var(--obsidian-h5-size)}
+    .v3-heading-cell[data-heading-level="5"]{color:var(--obsidian-h5);font-size:var(--v3-heading-5-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h4{color:var(--obsidian-h4);font-size:var(--obsidian-h4-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h4{color:var(--obsidian-h4);font-size:var(--obsidian-h4-size)}
+    .v3-heading-cell[data-heading-level="4"]{color:var(--obsidian-h4);font-size:var(--v3-heading-4-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h3{color:var(--obsidian-h3);font-size:var(--obsidian-h3-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h3{color:var(--obsidian-h3);font-size:var(--obsidian-h3-size)}
+    .v3-heading-cell[data-heading-level="3"]{color:var(--obsidian-h3);font-size:var(--v3-heading-3-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h2{color:var(--obsidian-h2);font-size:var(--obsidian-h2-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h2{color:var(--obsidian-h2);font-size:var(--obsidian-h2-size)}
+    .v3-heading-cell[data-heading-level="2"]{color:var(--obsidian-h2);font-size:var(--v3-heading-2-absolute-size)}
+    :is(#workbench-ir-source,#workbench-source,#working-editor) .cm-line.cm-obsidian-h1{color:var(--obsidian-h1);font-size:var(--obsidian-h1-size)}
+    :is(#ir-markdown-preview,#workbench-preview) h1{color:var(--obsidian-h1);font-size:var(--obsidian-h1-size)}
+    .v3-heading-cell[data-heading-level="1"]{color:var(--obsidian-h1);font-size:var(--v3-heading-1-absolute-size)}
+    #ir-ocr-select{max-width:18%;min-width:95px;font-size:11px;padding:3px}
+    #ir-source-label{font-size:12px;color:#b6d4fa}
+    #ir-edit-text{width:100%;min-height:100px;resize:vertical}
+    #ir-edit-reason{width:100%}
+    .ir-chapter-tree{display:flex;flex-direction:column;max-height:210px;overflow:auto;background:#172737;border-radius:5px;padding:3px}
+    .ir-chapter-link{display:block;text-align:left;border:0;background:transparent;color:#d4e4f8;padding:5px 6px;white-space:normal}
+    .ir-chapter-link:hover{background:#354a63}
+    #wb-ir-details .wb-popover{width:min(420px,calc(100vw - 35px));right:auto;left:0}
+    #ir-dirty-indicator{font-size:11px}
+    /* All legacy status nodes remain for internal event subscribers but must
+       never paint another status bar or duplicate live announcement. */
+    #clean-status,#ir-status,#ir-dirty-indicator,#workbench-status,#md-pdf-status,
+    #workbench-pdf-status,#workbench-ocr-json-status,#pdf-element-locator-status,
+    #pdf-md-review-status,#settings-parse-status,#workspace-connection,#row-count,
+    #workbench-folder{display:none!important}
+  </style>
+</head>
+<body>
+  <h1 class="v3-brand"><span class="v3-brand-name">ocr2md v3</span> <span id="workbench-build" data-testid="workbench-build" class="v3-build" title="页面代码版本">v3-media-module-ag-owned-20261012br</span><span id="v3-activity-summary" class="v3-activity-summary" role="group" aria-label="五个模块后台活动摘要"><span class="v3-activity-entry" data-module-status="settings" data-testid="activity-settings" data-level="busy" title="设置"><span class="v3-activity-name">设置</span><span class="v3-activity-value" data-activity-value>等待初始化</span></span><span class="v3-activity-entry" data-module-status="workspace" data-testid="activity-workspace" data-level="busy" title="工作目录"><span class="v3-activity-name">工作目录</span><span class="v3-activity-value" data-activity-value>等待初始化</span></span><span class="v3-activity-entry" data-module-status="workbench" data-testid="activity-workbench" data-level="idle" hidden title="工作台"><span class="v3-activity-name">工作台</span><span class="v3-activity-value" data-activity-value>等待初始化</span></span><span class="v3-activity-entry" data-module-status="dirjson" data-testid="activity-dirjson" data-level="idle" hidden title="DIRjson"><span class="v3-activity-name">DIRjson</span><span class="v3-activity-value" data-activity-value>等待初始化</span></span><span class="v3-activity-entry" data-module-status="pdf" data-testid="activity-pdf" data-level="idle" hidden title="PDF"><span class="v3-activity-name">PDF</span><span class="v3-activity-value" data-activity-value>等待初始化</span></span></span><span id="status" role="status" data-testid="status" class="v3-main-status" aria-live="polite"></span></h1>
+  <div class="v3-top-row" data-testid="v3-top-row">
+  <nav class="tabs" role="tablist" aria-label="工作台模块">
+    <button id="tab-settings" type="button" role="tab" aria-controls="panel-settings" aria-selected="false" aria-disabled="true" data-settings-state="pending" data-testid="tab-settings" disabled title="工作目录优先启动；设置将在后台加载完成后开放">设置</button>
+    <button id="tab-workspace" type="button" role="tab" aria-controls="panel-workspace" aria-selected="true" data-testid="tab-workspace">工作目录</button>
+    <button id="tab-workbench" type="button" role="tab" aria-controls="panel-workbench" aria-selected="false" data-testid="tab-workbench" disabled title="请先设置工作目录">工作台</button>
+  </nav>
+  <select id="workbench-path-nav" data-testid="workbench-path-nav" aria-label="书籍与章节文件导航" title="当前书籍为章节定界；选择 chapters 下的 MD 文件进入章节清洗" disabled>
+    <option value="">选择工作目录…</option>
+  </select>
+  <div id="workspace-top-actions" class="workbench-ir-header-actions v3-template-top-actions" role="group" aria-label="工作目录全局操作">
+    <button type="button" disabled>撤销</button><button type="button" disabled>重做</button>
+    <button type="button" disabled>保存</button><button type="button" disabled>发布</button>
+  </div>
+  <div id="settings-top-actions" class="workbench-ir-header-actions v3-template-top-actions" role="group" aria-label="设置全局操作" hidden>
+    <button type="button" id="settings-undo" data-testid="settings-undo" disabled title="撤销设置修改（⌘/Ctrl+Z）">撤销</button>
+    <button type="button" id="settings-redo" data-testid="settings-redo" disabled title="重做设置修改（⌘/Ctrl+Shift+Z）">重做</button>
+    <button type="button" id="settings-reset" data-testid="settings-reset" disabled>恢复默认</button>
+    <button type="button" id="settings-save" data-testid="settings-save">保存配置</button>
+    <button type="button" disabled>发布</button>
+  </div>
+  <div id="workbench-inactive-actions" class="workbench-ir-header-actions v3-template-top-actions" role="group" aria-label="当前工作模式不可用的操作" hidden>
+    <button type="button" disabled>撤销</button><button type="button" disabled>重做</button>
+    <button type="button" disabled>保存</button><button type="button" disabled>发布</button>
+  </div>
+  <div id="workbench-clean-actions" class="workbench-ir-header-actions" data-testid="workbench-clean-actions" role="group" aria-label="章节清洗编辑操作" hidden>
+    <button id="clean-undo" data-testid="clean-undo" type="button" disabled>撤销</button>
+    <button id="clean-redo" data-testid="clean-redo" type="button" disabled>重做</button>
+    <button id="clean-save" data-testid="clean-save" type="button" disabled>保存章节</button>
+    <button type="button" disabled title="章节清洗中不可再次发布">发布</button>
+    <span id="clean-status" data-testid="clean-status" class="muted" role="status" aria-live="polite"></span>
+  </div>
+  <div id="workbench-ir-header-actions" class="workbench-ir-header-actions" role="group" aria-label="DIRjson 编辑操作" hidden>
+    <button type="button" id="ir-undo" data-testid="ir-undo" title="撤销上一项 DIRjson 修改（⌘/Ctrl+Z）" disabled>撤销</button>
+    <button type="button" id="ir-redo" data-testid="ir-redo" title="重做已撤销的 DIRjson 修改（⌘/Ctrl+Shift+Z）" disabled>重做</button>
+    <button type="button" id="ir-save" data-testid="ir-save" disabled title="保存当前 DIRjson 修改到 Obsidian，不覆盖原 PDF/OCR/旧 MD">保存标定</button>
+    <button type="button" id="ir-publish-chapters" data-testid="ir-publish-chapters" disabled title="先完成独立章节文件命名并保存标定；待审核 OCR 标题可留到逐章清洗，旧版章节自动备份后由 Obsidian 新版覆盖">发布章节</button>
+  </div>
+  </div>
+  <section id="panel-workspace" class="v3-template-panel" role="tabpanel" aria-labelledby="tab-workspace">
+    <div id="v3-workspace-split" class="workbench-layout v3-template-layout v3-template-no-preview" data-testid="workspace-template-layout">
+      <section class="workbench-grid-pane" aria-label="工作目录数据表">
+        <div class="pane-title wb-pane-head">
+          <span class="wb-heading">工作目录</span>
+          <button id="refresh" type="button" data-testid="directory-refresh">刷新</button>
+          <button id="set-working-directory" type="button" data-testid="set-working-directory" disabled>设为工作目录</button>
+          <span id="directory-path" data-testid="directory-path" class="v3-compact-path">/</span>
+          <span id="row-count" class="row-count"></span>
+          <span id="workspace-connection" class="muted"></span>
+        </div>
+        <div class="directory-grid-shell" id="directory-grid-shell" aria-busy="false">
+          <div id="directory-list" data-testid="directory-list" aria-label="工作目录 AG Grid"></div>
+          <div id="directory-loading" data-testid="directory-loading" role="status" aria-live="polite" hidden>正在加载目录…</div>
+        </div>
+        <button id="more" type="button" data-testid="directory-more" hidden>加载下一页</button>
+      </section>
+      <div id="v3-workspace-splitter" class="workbench-splitter" role="separator" aria-orientation="vertical"
+           aria-label="调整 AG 表与源码的宽度" aria-valuemin="25" aria-valuemax="70" aria-valuenow="43" tabindex="0"></div>
+      <div id="v3-workspace-mobile-splitter" class="workbench-splitter v3-template-mobile-splitter" role="separator" aria-orientation="horizontal"
+           aria-label="调整窄屏 AG 表与源码的高度" aria-valuemin="25" aria-valuemax="75" aria-valuenow="34" tabindex="0"></div>
+      <section id="workspace-right-pane" class="workbench-right-pane" aria-label="源码">
+        <div id="workspace-source-pane" class="workbench-source-pane">
+          <div class="pane-title wb-pane-head"><span class="wb-heading">源码</span></div>
+          <div id="working-editor" data-testid="working-source-editor" aria-label="源码与选中行详细信息（只读）"></div>
+    <section id="file-actions" aria-label="文件操作">
+      <details><summary>文件操作（真实 Mac Obsidian 库）</summary>
+        <div class="actions"><input id="create-name" aria-label="新建名称" placeholder="文件或目录名称" />
+          <button id="mkdir" data-testid="create-folder">新建目录</button>
+          <button id="mkfile" data-testid="create-file">新建文件</button></div>
+        <div class="actions"><textarea id="file-content" aria-label="本地文件内容" rows="3" placeholder="新文件内容；选中文件后可读取到此处"></textarea>
+          <button id="read-file" data-testid="read-file">读取选中文件</button></div>
+        <div class="actions"><input id="target" aria-label="重命名或复制名称" placeholder="新名称" />
+          <button id="rename" data-testid="rename">重命名</button>
+          <button id="copy" data-testid="copy-file">复制文件</button>
+          <input id="destination" aria-label="目标目录" placeholder="移动到 /路径" />
+          <button id="move" data-testid="move">移动</button>
+          <button id="remove" class="danger" data-testid="remove">删除（不可恢复）</button></div>
+        <p class="muted">安全限制：不能操作 .obsidian/，不能覆盖已有文件、递归删除或批量提交。</p>
+      </details>
+    </section>
+        </div>
+      </section>
+    </div>
+  </section>
+  <section id="panel-workbench" class="v3-template-panel" role="tabpanel" aria-labelledby="tab-workbench" hidden>
+    <div class="workbench-bookbar" hidden aria-label="当前工作书籍">
+      <strong>工作台</strong><span id="workbench-folder" data-testid="workbench-folder" class="muted" title="当前书籍"></span>
+            <select id="workbench-file" data-testid="workbench-file" aria-label="选择 Markdown 文件"><option value="">请选择文件</option></select>
+            <details id="wb-md-details" class="wb-dropdown">
+              <summary aria-label="Markdown 到 PDF 定位工具">定位</summary>
+              <div class="wb-popover">
+                <div class="wb-popover-title">MD → PDF 定位</div>
+                <div class="md-element-controls" aria-label="Markdown 到 PDF 定位">
+                  <label for="md-element-select">MD 元素</label>
+                  <select id="md-element-select" data-testid="md-element-select" disabled><option value="">选择已映射元素</option></select>
+                  <button type="button" id="md-jump-pdf" data-testid="md-jump-pdf" disabled>定位到 PDF</button>
+                </div>
+                <span id="md-pdf-status" data-testid="md-pdf-status" role="status">选择 Markdown 元素或单击源码/AG 行定位 PDF。</span>
+              </div>
+            </details>
+            <span id="workbench-status" data-testid="workbench-status" class="wb-inline-status" role="status" title="文件加载状态">尚未选择工作目录</span>
+
+    </div>
+    <div id="workbench-layout" class="workbench-layout v3-template-layout" data-testid="workbench-template-layout">
+      <section class="workbench-grid-pane" aria-label="文本校对及关联审核 AG 表">
+        <div class="pane-title wb-pane-head">
+          <span class="wb-heading" id="workbench-module-title" data-testid="workbench-module-title">章节定界</span>
+          <label id="ir-ocr-source-choice" class="wb-ir-ocr-source-choice" for="ir-ocr-select" hidden>
+            OCR 来源
+            <select id="ir-ocr-select" data-testid="ir-ocr-select" aria-label="选择用于初始化 DIRjson 的 OCR JSON 来源" disabled><option value="">请选择 OCR JSON…</option></select>
+          </label>
+          <div class="wb-ir-grid-filters" id="ir-heading-filters" data-testid="ir-heading-filters" hidden>
+            <label class="wb-ir-grid-h1-toggle" for="ir-only-h1">
+              <input type="checkbox" id="ir-only-h1" data-testid="ir-only-h1" checked />只看一级标题
+            </label>
+          </div>
+          <label id="ir-sequence-start-control" class="wb-ir-start-control" for="ir-v2-sequence-start" hidden>
+            起始序号
+            <input id="ir-v2-sequence-start" data-testid="ir-v2-sequence-start" type="text" value="01"
+              inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" autocomplete="off" disabled
+              aria-label="起始章节序号" title="Enter 或失焦后按该序号重新编号独立章节文件；仅暂存，不自动保存" />
+          </label>
+          <select id="wb-clean-modules" data-testid="wb-clean-modules" aria-label="章节清洗模块" hidden>
+            <option value="章节标题">章节清洗 · 章节标题</option>
+            <option value="媒体">章节清洗 · 媒体</option>
+            <option value="表格">章节清洗 · 表格</option>
+            <option value="LaTeX">章节清洗 · LaTeX</option>
+          </select>
+          <div id="wb-clean-module-tools" data-testid="wb-clean-module-tools" role="group" aria-label="当前章节清洗模块工具" hidden>
+            <label id="wb-clean-heading-numbers-label" class="wb-clean-heading-numbers" for="wb-clean-heading-numbers" data-testid="wb-clean-heading-numbers-label" hidden>
+              <input id="wb-clean-heading-numbers" data-testid="wb-clean-heading-numbers" type="checkbox" checked />标题序号
+            </label>
+            <button id="wb-clean-download-media" data-testid="wb-clean-download-media" type="button" hidden disabled
+              title="沿用 V2 安全下载；保存到 chapters/imgs 并采用本地相对路径">下载图片</button>
+          </div>
+          <button id="workbench-mode-chapters" data-testid="workbench-mode-chapters" type="button" aria-pressed="true" title="第一个工作模块：按原始 OCR 标题审定章节边界和文件名">章节定界</button>
+          <details id="wb-module-menu" class="wb-dropdown">
+            <summary aria-label="切换工作模块">其他模块</summary>
+            <div class="wb-popover wb-module-popover" role="group" aria-label="其他工作模块（按需打开）">
+              <button id="workbench-mode-ir" data-testid="workbench-mode-ir" type="button" aria-pressed="false">逻辑块清洗（IR）</button>
+              <button id="workbench-mode-text" data-testid="workbench-mode-text" type="button" aria-pressed="false">旧版文本块</button>
+              <button id="workbench-mode-review" data-testid="workbench-mode-review" type="button" aria-pressed="false">旧版关联审核</button>
+            </div>
+          </details>
+          <div class="wb-review-actions" id="wb-review-actions" hidden>
+            <button type="button" id="pdf-md-review-save" data-testid="pdf-md-review-save" disabled>保存审核</button>
+            <details id="wb-review-details" class="wb-dropdown">
+              <summary aria-label="审核备注和人工校正">校正/备注</summary>
+              <div class="wb-popover wb-review-popover">
+                <div class="wb-popover-title">当前审核元素</div>
+                <label for="pdf-md-review-note">说明（失焦后暂存）</label>
+                <textarea id="pdf-md-review-note" data-testid="pdf-md-review-note" maxlength="2000" disabled placeholder="对照原 PDF 记录 OCR 错误或关联歧义"></textarea>
+                <div class="wb-popover-actions">
+                  <button type="button" id="pdf-md-review-capture" data-testid="pdf-md-review-capture" disabled>使用 MD 选区校正</button>
+                  <button type="button" id="pdf-md-review-clear-anchor" data-testid="pdf-md-review-clear-anchor" disabled>撤销校正</button>
+                </div>
+              </div>
+            </details>
+          </div>
+          <div id="wb-ir-actions" class="wb-review-actions" hidden>
+            <div id="ir-v2-assignment" class="wb-v2-assignment" data-testid="ir-v2-assignment" role="group" aria-label="V2 章节文件顺序分配">
+              <button id="ir-v2-sequence" data-testid="ir-v2-sequence" type="button" disabled>顺序编号</button>
+            </div>
+            <details id="ir-chapter-edit-details" class="wb-dropdown">
+              <summary aria-label="审核章节标题与文件名">标定章节</summary>
+              <div class="wb-popover wb-chapter-popover">
+                <strong>章节候选人工判定</strong>
+                <label for="ir-chapter-role">标题用途</label>
+                <select id="ir-chapter-role" data-testid="ir-chapter-role" disabled>
+                  <option value="root">主章节（生成独立 MD）</option>
+                  <option value="section">章节内小节</option>
+                  <option value="exclude">不是章节标题</option>
+                </select>
+                <label for="ir-chapter-file-name">主章节文件名（包含 .md）</label>
+                <input id="ir-chapter-file-name" data-testid="ir-chapter-file-name" placeholder="例如：01-正文.md" disabled />
+                <label for="ir-chapter-reason">人工审核依据</label>
+                <input id="ir-chapter-reason" data-testid="ir-chapter-reason" placeholder="对照原 PDF 后填写" disabled />
+                <button id="ir-chapter-apply" data-testid="ir-chapter-apply" type="button" disabled>暂存章节标定</button>
+                <small>仅改变章节归属与生成文件名；原始 OCR/PDF 不变。保存后仍需逐章清洗。</small>
+              </div>
+            </details>
+            <button type="button" id="ir-export" data-testid="ir-export" disabled title="仅下载本地草稿，不写入 Obsidian">导出草稿</button>
+            <span id="ir-dirty-indicator" title="IR 保存状态">只读来源</span>
+            <details id="wb-ir-details" class="wb-dropdown">
+              <summary aria-label="IR 目录树及逻辑文本块操作">目录/编辑</summary>
+              <div class="wb-popover wb-ir-popover" aria-label="IR 目录树与草稿操作">
+                <div class="wb-popover-title">Document IR · 章节目录（待审核）</div>
+            <select id="ir-md-file" data-testid="ir-md-file" aria-label="选择 DIRjson Markdown 源码视图" hidden disabled><option value="">待生成…</option></select>
+            <button id="ir-export-md" data-testid="ir-export-md" type="button" hidden disabled title="下载当前章节 Markdown，不写入 Obsidian">下载 MD</button>
+            <button id="ir-export-zip" data-testid="ir-export-zip" type="button" hidden disabled title="下载全部章节 Markdown、来源索引及完整 IR">导出 ZIP</button>
+
+                <div id="ir-chapter-tree" data-testid="ir-chapter-tree" class="ir-chapter-tree"></div>
+                <label for="ir-edit-text">当前文本块草稿</label>
+                <details><summary>当前块 OCR 来源证据</summary><pre id="ir-source-evidence" data-testid="ir-source-evidence" style="white-space:pre-wrap;word-break:break-word;font-size:10px"></pre></details>
+                <textarea id="ir-edit-text" data-testid="ir-edit-text" rows="4" disabled></textarea>
+                <label for="ir-edit-reason">修改依据（必填）</label>
+                <input id="ir-edit-reason" data-testid="ir-edit-reason" placeholder="对照 PDF 的判断依据" disabled />
+                <div class="wb-popover-actions">
+                  <button type="button" id="ir-apply-text" data-testid="ir-apply-text" disabled>暂存正文校正</button>
+                  <button type="button" id="ir-merge" data-testid="ir-merge" disabled>合并下一块</button>
+                  <label for="ir-split-offset">UTF-16 拆分位置</label>
+                  <input id="ir-split-offset" data-testid="ir-split-offset" type="number" min="1" disabled style="width:75px" />
+                  <button type="button" id="ir-split" data-testid="ir-split" disabled>拆分</button>
+                  <button type="button" id="ir-move-up" data-testid="ir-move-up" disabled>上移一块</button>
+                  <button type="button" id="ir-move-down" data-testid="ir-move-down" disabled>下移一块</button>
+                  <button type="button" id="ir-boundary" data-testid="ir-boundary" disabled>以当前块为章节起点</button>
+                </div>
+              </div>
+            </details>
+          </div>
+          <select id="ir-chapter-filter" data-testid="ir-chapter-filter" aria-label="IR 章节筛选" hidden disabled><option value="">全部章节</option></select>
+          <span id="ir-status" data-testid="ir-status" class="wb-inline-status" role="status" hidden>IR 尚未加载</span>
+          <span id="pdf-md-review-status" data-testid="pdf-md-review-status" class="wb-inline-status" role="status" aria-live="polite" title="审核状态">尚未加载人工关联审核。</span>
+        </div>
+        <div id="workbench-calibration-grid" data-testid="workbench-calibration-grid"></div>
+        <div id="workbench-review-panel" data-testid="workbench-review-panel" hidden>
+          <div id="workbench-review-grid" data-testid="workbench-review-grid"></div>
+        </div>
+        <div id="workbench-ir-panel" data-testid="workbench-ir-panel" hidden>
+          <div id="workbench-ir-grid" data-testid="workbench-ir-grid" aria-label="Document IR 逻辑文本块 AG 表"></div>
+        </div>
+      </section>
+      <div id="workbench-column-splitter" class="workbench-splitter" role="separator" tabindex="0" aria-orientation="vertical"
+           data-testid="workbench-column-splitter" aria-label="调整 AG 表与源码、PDF 原文的宽度" aria-valuemin="25" aria-valuemax="70" aria-valuenow="43"></div>
+      <div id="workbench-mobile-splitter" class="workbench-splitter" role="separator" tabindex="0" aria-orientation="horizontal"
+           data-testid="workbench-mobile-splitter" aria-label="调整窄屏 AG 表与源码预览区域的高度" aria-valuemin="25" aria-valuemax="75" aria-valuenow="34"></div>
+      <section id="workbench-right-pane" class="workbench-right-pane" aria-label="Markdown 源码及 PDF 原文">
+        <div id="workbench-source-pane" class="workbench-source-pane">
+          <div class="pane-title wb-pane-head">
+            <span class="wb-heading">MD 源码</span>
+            <span id="ir-source-label" hidden title="章节定界：源码可直接改标题、OCR 正文或 # 层级；每个来源锚点必须保留。Ctrl/⌘+Z 撤销，保存时才写 DIRjson。">DIRjson · 全书连续源码（可编辑） · OCR 章界待审核</span>
+          </div>
+          <div id="workbench-source" data-testid="workbench-source"></div>
+          <div id="workbench-ir-source" data-testid="workbench-ir-source" hidden></div>
+          <div id="ir-line-actions" data-testid="ir-line-actions" class="wb-ir-line-menu" hidden role="dialog" aria-label="源码行号操作">
+            <div id="ir-line-action-caption" data-testid="ir-line-action-caption" class="wb-ir-line-caption"></div>
+            <button type="button" id="ir-line-add-title" data-testid="ir-line-add-title">补录标题</button>
+            <button type="button" id="ir-line-delete-title" data-testid="ir-line-delete-title" hidden>删除补录标题</button>
+            <form id="ir-line-title-form" data-testid="ir-line-title-form" hidden>
+              <label for="ir-line-title-text">标题文字</label>
+              <input id="ir-line-title-text" data-testid="ir-line-title-text" maxlength="350" required placeholder="按 PDF 原文输入缺失标题" />
+              <label for="ir-line-title-level">标题层级</label>
+              <select id="ir-line-title-level" data-testid="ir-line-title-level"><option value="1">H1 · 独立章节</option><option value="2">H2 · 小节</option></select>
+              <label for="ir-line-title-page">原 PDF 页码（无 OCR 坐标）</label>
+              <input id="ir-line-title-page" data-testid="ir-line-title-page" type="number" min="1" step="1" required />
+              <label class="wb-ir-title-confirm"><input id="ir-line-title-confirm" data-testid="ir-line-title-confirm" type="checkbox" required /> 已对照 PDF 核实标题文字和页码</label>
+              <div class="wb-ir-title-buttons"><button id="ir-line-title-commit" data-testid="ir-line-title-commit" type="submit">插入到 DIRjson 草稿</button><button id="ir-line-title-cancel" data-testid="ir-line-title-cancel" type="button">取消</button></div>
+            </form>
+          </div>
+        </div>
+        <div id="workbench-row-splitter" class="workbench-splitter workbench-row-splitter" role="separator" tabindex="0" aria-orientation="horizontal"
+             data-testid="workbench-row-splitter" aria-label="调整 Markdown 源码与 PDF 原文的高度" aria-valuemin="25" aria-valuemax="75" aria-valuenow="38"></div>
+        <div class="workbench-preview-pane">
+          <div class="workbench-preview-tabs wb-pane-head" role="tablist" aria-label="原文预览类型">
+            <button type="button" role="tab" id="preview-tab-markdown" data-testid="preview-tab-markdown" aria-controls="preview-panel-markdown" aria-selected="true">MD 预览</button>
+            <button type="button" role="tab" id="preview-tab-pdf" data-testid="preview-tab-pdf" aria-controls="preview-panel-pdf" aria-selected="false">PDF 原文</button>
+            <div id="wb-pdf-tools" class="wb-pdf-tools" hidden>
+              <button type="button" id="pdf-page-prev" data-testid="pdf-page-prev" aria-label="上一页" title="上一页" disabled>‹</button>
+              <input id="pdf-page-number" data-testid="pdf-page-number" aria-label="PDF 页码" type="number" min="1" value="1" disabled />
+              <span id="pdf-page-total" data-testid="pdf-page-total">/ 0</span>
+              <button type="button" id="pdf-page-next" data-testid="pdf-page-next" aria-label="下一页" title="下一页" disabled>›</button>
+              <div id="wb-pdf-zoom" class="wb-pdf-zoom" role="group" aria-label="PDF 缩放">
+                <button type="button" id="pdf-zoom-out" data-testid="pdf-zoom-out" aria-label="缩小 PDF" title="缩小" disabled>−</button>
+                <select id="pdf-zoom-value" data-testid="pdf-zoom-value" aria-label="PDF 缩放比例" disabled>
+                  <option value="page-width">适宽</option>
+                  <option value="page-fit">整页</option>
+                  <option value="50">50%</option><option value="75">75%</option>
+                  <option value="100">100%</option><option value="125">125%</option>
+                  <option value="150">150%</option><option value="200">200%</option>
+                  <option value="300">300%</option>
+                </select>
+                <button type="button" id="pdf-zoom-in" data-testid="pdf-zoom-in" aria-label="放大 PDF" title="放大" disabled>+</button>
+              </div>
+              <details id="wb-pdf-details" class="wb-dropdown">
+                <summary aria-label="PDF 文件、OCR 元素与双向定位工具">定位/文件</summary>
+                <div class="wb-popover wb-pdf-popover">
+                  <div class="wb-popover-title">PDF 文件及定位</div>
+                  <div class="wb-popover-line">
+                    <label for="workbench-pdf-file">原文</label>
+                    <select id="workbench-pdf-file" data-testid="workbench-pdf-file" aria-label="选择 PDF 原文"><option value="">暂无 PDF</option></select>
+                    <button type="button" id="pdf-reload" data-testid="pdf-reload" disabled>重载</button>
+                  </div>
+                  <div class="wb-popover-line">
+                    <label for="pdf-element-select">当前页 OCR 元素</label>
+                    <select id="pdf-element-select" data-testid="pdf-element-select" disabled><option>等待映射加载</option></select>
+                    <button type="button" id="pdf-element-focus" data-testid="pdf-element-focus" disabled>框选</button>
+                    <button type="button" id="pdf-element-clear" data-testid="pdf-element-clear" disabled>清除</button>
+                  </div>
+                  <div class="wb-popover-line">
+                    <label for="pdf-md-target">PDF → MD</label>
+                    <select id="pdf-md-target" data-testid="pdf-md-target" aria-label="选择 MD 锚点" disabled><option value="">无唯一 MD 锚点</option></select>
+                    <button type="button" id="pdf-jump-md" data-testid="pdf-jump-md" disabled>定位 MD</button>
+                  </div>
+                  <div id="pdf-element-locator-status" data-testid="pdf-element-locator-status" role="status" aria-live="polite">候选位置需人工审核。</div>
+                  <div id="workbench-ocr-json-status" data-testid="workbench-ocr-json-status" class="muted">OCR JSON：尚未扫描</div>
+                  <div id="workbench-pdf-status" data-testid="workbench-pdf-status" role="status">尚未选择工作目录</div>
+                </div>
+              </details>
+            </div>
+          </div>
+          <div id="preview-panel-markdown" class="preview-content-pane" role="tabpanel" aria-labelledby="preview-tab-markdown">
+            <div id="workbench-preview" data-testid="workbench-preview"></div>
+            <div id="ir-markdown-preview" data-testid="ir-markdown-preview" hidden></div>
+          </div>
+          <div id="preview-panel-pdf" class="preview-content-pane" role="tabpanel" aria-labelledby="preview-tab-pdf" hidden>
+            <div id="workbench-pdf-canvas" data-testid="workbench-pdf-canvas" aria-label="PDF 按页预览"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+  <section id="panel-settings" class="v3-template-panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
+    <div id="v3-shared-config-layout" class="workbench-layout v3-template-layout v3-template-no-preview" data-testid="settings-template-layout">
+      <div id="shared-settings-mount" data-testid="shared-settings-mount"></div>
+    </div>
+    <!-- Independent application tools live OUTSIDE the shared AG/source component.
+         They must not consume a grid column or source-editor track. -->
+    <details id="settings-connection-details" class="v3-settings-connection" data-testid="settings-vault-tools">
+      <summary>Mac Obsidian 库 · 连接与授权</summary>
+    <section class="group"><h2>真实库连接与授权</h2>
+      <p id="storage-kind" class="muted">检查 Mac Obsidian 连接中…</p>
+      <div id="access-panel" class="notice" hidden><strong>连接需要授权</strong><p>Mac Safari 本机访问无需密钥；公网 iPad 首次从 Mac 取得配对密钥，再在这里连接。</p></div>
+      <div class="toolbar"><input id="vault-key" aria-label="Mac Vault 配对密钥" placeholder="输入或更新访问密钥" autocomplete="off" type="password" />
+        <button id="connect-vault" data-testid="connect-vault">连接真实 Obsidian 库</button><button id="pair-code" data-testid="pair-code" hidden>在 Mac 显示配对密钥</button><button id="forget-key" data-testid="forget-key">清除本设备授权</button></div>
+      <label><input type="checkbox" id="remember-device" /> 在此设备记住授权（仅限个人可信设备）</label>
+      <p>访问密钥与目录配置分别保存；密钥默认仅当前标签页有效，勾选后记住在当前浏览器，不写进配置 JSON 或网址。</p>
+    </section>
+    </details>
+    <span id="settings-parse-status" class="muted" role="status" hidden>等待共享设置组件</span>
+  </section>
+  <link rel="stylesheet" href="./dist/app.css?rev=v3-media-module-ag-owned-20261012br" />
+  <script type="module" src="./dist/app.js?rev=v3-media-module-ag-owned-20261012br"></script>
+</body>
+</html>

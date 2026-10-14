@@ -9,7 +9,7 @@ import {
   type RowClickedEvent,
   createGrid,
 } from "ag-grid-community";
-import { calibrationTheme } from "./calibrationGrid";
+import { calibrationTheme } from "./calibrationTheme";
 import {
   TABLE_PRESENTATION_SETTINGS,
   tablePresentationEntryKey,
@@ -32,13 +32,13 @@ export interface TableConfigurationRow {
   descriptor: TablePresentationSettingDescriptor;
 }
 
-class EnumCheckboxFilter implements IFilterComp<TableConfigurationRow> {
-  private params!: IFilterParams<TableConfigurationRow>;
+export class EnumCheckboxFilter<TData = TableConfigurationRow> implements IFilterComp<TData> {
+  private params!: IFilterParams<TData>;
   private readonly gui = document.createElement("div");
   private selected: Set<string> | null = null;
   private values: string[] = [];
 
-  init(params: IFilterParams<TableConfigurationRow>): void {
+  init(params: IFilterParams<TData>): void {
     this.params = params;
     this.gui.className = "config-enum-filter";
     this.refreshValues();
@@ -53,7 +53,7 @@ class EnumCheckboxFilter implements IFilterComp<TableConfigurationRow> {
     return this.selected !== null;
   }
 
-  doesFilterPass(params: IDoesFilterPassParams<TableConfigurationRow>): boolean {
+  doesFilterPass(params: IDoesFilterPassParams<TData>): boolean {
     if (this.selected === null) return true;
     const value = String(this.params.getValue(params.node) ?? "");
     return this.selected.has(value);
@@ -159,7 +159,10 @@ class EnumCheckboxFilter implements IFilterComp<TableConfigurationRow> {
 
 export class TableConfigurationGrid {
   private config: TablePresentationConfig | undefined;
+  /** Optional generic settings rows for consumers beyond v2 table presentation. */
+  private externalRows: TableConfigurationRow[] | undefined;
   private readonly api;
+  private activeKey:string|null=null;
 
   constructor(
     host: HTMLElement,
@@ -185,6 +188,7 @@ export class TableConfigurationGrid {
       headerHeight: 38,
       animateRows: false,
       getRowId: (params) => params.data.id,
+      getRowClass:params=>params.data?.key===this.activeKey?"v3-ag-source-linked-row":undefined,
       onRowClicked: (event: RowClickedEvent<TableConfigurationRow>) => {
         if (!event.data) return;
         this.onActivate(event.data.descriptor);
@@ -193,16 +197,53 @@ export class TableConfigurationGrid {
   }
 
   setConfig(config: TablePresentationConfig): void {
+    // The existing v2 API remains authoritative for v2 table presentation.
+    this.externalRows = undefined;
     this.config = structuredClone(config);
     this.api.setGridOption("rowData", this.rows());
     this.api.refreshCells({ force: true });
   }
 
+  /** Reuse v2's SAME generic AG Grid component with another settings schema. */
+  setRows(rows: readonly TableConfigurationRow[]): void {
+    this.config = undefined;
+    this.externalRows = rows.map((row) => ({ ...row, descriptor: { ...row.descriptor } }));
+    this.api.setGridOption("rowData", this.rows());
+    this.api.refreshCells({ force: true });
+  }
+
+  /** Shared AG/source contract: mark the active row even without grid focus.
+   * When caret navigation points to a filtered-out key, clear filters only for
+   * explicit source-origin navigation so the corresponding row is actually
+   * visible. No data or draft mutation occurs. */
+  highlightKey(key:string|null,reveal=false):void{
+    if(key===this.activeKey&&!reveal)return;
+    this.activeKey=key;
+    if(reveal&&key){
+      let target=this.findSettingNode(key);
+      if(target?.rowIndex==null&&this.api.isAnyFilterPresent()){
+        this.api.setFilterModel(null);
+        target=this.findSettingNode(key);
+      }
+      if(target?.rowIndex!=null)this.api.ensureIndexVisible(target.rowIndex,"middle");
+    }
+    this.api.redrawRows();
+  }
+  private findSettingNode(key:string){
+    let node:ReturnType<typeof this.api.getRowNode>;
+    this.api.forEachNode(candidate=>{if(candidate.data?.key===key)node=candidate;});
+    return node;
+  }
+
+  /** Re-measure after the Settings tab becomes visible. */
+  refresh(): void { this.api.sizeColumnsToFit(); }
+
   rowCount(): number {
-    return this.config?.配置.length ?? TABLE_PRESENTATION_SETTINGS.length;
+    return this.externalRows?.length ?? this.config?.配置.length ?? TABLE_PRESENTATION_SETTINGS.length;
   }
 
   private rows(): TableConfigurationRow[] {
+    if (this.externalRows) return this.externalRows;
     const entries = this.config?.配置 ?? [];
     return entries.flatMap((entry) => {
       const key = tablePresentationEntryKey(entry);
@@ -282,6 +323,7 @@ export class TableConfigurationGrid {
     const container = document.createElement("div");
     container.className = "config-grid-value";
     if (!row) return container;
+    container.dataset.settingKey = row.key;
 
     if (row.kind === "boolean") {
       const label = document.createElement("label");
@@ -295,6 +337,7 @@ export class TableConfigurationGrid {
       input.addEventListener("click", (event) => event.stopPropagation());
       input.addEventListener("change", (event) => {
         event.stopPropagation();
+        this.highlightKey(row.key);
         state.textContent = input.checked ? "true" : "false";
         this.onBooleanChanged(row.descriptor, input.checked);
       });

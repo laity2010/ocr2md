@@ -40,6 +40,9 @@ export interface Candidate {
   mediaMimeType?: string;
   imageDownloadStatus?: "pending" | "done" | "failed";
   imageDownloadError?: string;
+  /** V3 chapter-cleaning UI-only media download outcome. */
+  mediaTaskStatus?: "等待" | "下载中" | "已下载" | "失败" | "未处理";
+  mediaTaskReason?: string;
   embedNumber?: number;
   parentBlockId?: string;
   parentBlockIndex?: number;

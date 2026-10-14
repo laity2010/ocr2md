@@ -7,6 +7,7 @@ import ipaddress
 import json
 import os
 import re
+import select
 import shutil
 import socket
 import subprocess
@@ -14,13 +15,15 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from functools import partial
+from functools import partial, lru_cache
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
-from mineru_pdf_attachment import original_pdf, enrich_pdf_audit
+from mineru_pdf_attachment import original_pdf, original_pdf_page_count, enrich_pdf_audit
+from mineru_page_compare import compare_audit_page
+from v3_mac_vault import V3MacVault, handle_v3_get, handle_v3_post
 
 states = {}
 state_history = {}
@@ -212,6 +215,8 @@ def download_public_media(source_url):
         raise RuntimeError(f"媒体下载失败：HTTP {error.code}") from error
     except URLError as error:
         raise RuntimeError(f"媒体下载失败：{error.reason}") from error
+    except TimeoutError as error:
+        raise RuntimeError("媒体下载网络连接或读取超时（30 秒）") from error
 
 
 def default_project_dir():
@@ -222,6 +227,87 @@ def default_project_dir():
     )
     matches = sorted(home.glob(pattern))
     return matches[0] if matches else None
+
+
+_pdf_worker_lock = threading.Lock()
+_pdf_worker = {}
+
+
+def ensure_original_pdf_worker(pdf_path, size, mtime_ns):
+    """Ensure one resident PDF renderer is ready without rendering a page."""
+    node = shutil.which("node") or next(
+        (p for p in ("/opt/homebrew/bin/node", "/usr/local/bin/node")
+         if Path(p).is_file()), None
+    )
+    script = Path(__file__).with_name("mineru_pdf_page_renderer.mjs")
+    if not node or not script.is_file():
+        raise RuntimeError("PDF 页面渲染服务尚未安装")
+    key = (pdf_path, size, mtime_ns)
+    with _pdf_worker_lock:
+        process = _pdf_worker.get("process")
+        if (_pdf_worker.get("key") != key or process is None or
+                process.poll() is not None):
+            if process is not None:
+                try:
+                    process.stdin.close()
+                    process.terminate()
+                    process.wait(timeout=2)
+                except (OSError, subprocess.TimeoutExpired):
+                    process.kill()
+            token = uuid.uuid4().hex
+            env = dict(os.environ, OCR2MD_PDF_WORKER_TOKEN=token)
+            process = subprocess.Popen(
+                [node, str(script), "--serve", pdf_path],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, env=env, bufsize=0,
+            )
+            try:
+                ready, _, _ = select.select([process.stdout], [], [], 20)
+                if not ready:
+                    raise RuntimeError("PDF 常驻渲染器启动超时")
+                greeting = process.stdout.readline().decode(
+                    "utf-8", "replace"
+                ).strip()
+                parts = greeting.split(" ")
+                if (len(parts) != 3 or parts[0] != "READY" or
+                        not parts[1].isdigit() or not parts[2].isdigit()):
+                    raise RuntimeError("PDF 常驻渲染器初始化失败")
+                port = int(parts[1])
+                page_count = int(parts[2])
+                if not 1 <= port <= 65535 or page_count < 1:
+                    raise RuntimeError("PDF 常驻渲染器握手数据无效")
+            except Exception:
+                process.terminate()
+                raise
+            _pdf_worker.update(
+                key=key, process=process, port=port,
+                token=token, page_count=page_count,
+            )
+        return {
+            "port": _pdf_worker["port"],
+            "token": _pdf_worker["token"],
+            "page_count": _pdf_worker["page_count"],
+        }
+
+
+@lru_cache(maxsize=64)
+def cached_original_pdf_page(pdf_path, size, mtime_ns, page):
+    """Serve JPEG from one authenticated resident PDF worker, 64-page LRU."""
+    worker = ensure_original_pdf_worker(pdf_path, size, mtime_ns)
+    request = Request(
+        f"http://127.0.0.1:{worker['port']}/{page}",
+        headers={"X-Ocr2md-Worker-Token": worker["token"]},
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            if int(response.headers.get("Content-Length", "0")) > 15_000_000:
+                raise RuntimeError("PDF 页图像过大")
+            png = response.read(15_000_001)
+    except (HTTPError, URLError, TimeoutError) as error:
+        raise RuntimeError("PDF 页渲染失败：" + str(error)) from error
+    if len(png) > 15_000_000 or not png.startswith(b"\xff\xd8\xff"):
+        raise RuntimeError("PDF 原 PDF 页 JPEG 数据异常")
+    return png
 
 
 class ChapterProjectStore:
@@ -443,7 +529,12 @@ class ChapterProjectStore:
         )
         if not node or not script_path.is_file():
             raise RuntimeError("MinerU annotation audit runtime is unavailable")
-        command = "update" if change is not None else "read"
+        command = (
+            "update-batch"
+            if isinstance(change, dict) and isinstance(change.get("changes"), list)
+            else "update" if change is not None
+            else "read"
+        )
         result = subprocess.run(
             [node, str(script_path), command, str(self.project_dir)],
             input=json.dumps(change, ensure_ascii=False) if change is not None else None,
@@ -455,6 +546,17 @@ class ChapterProjectStore:
         if result.returncode != 0:
             raise RuntimeError("MinerU audit: " + result.stderr.strip()[:800])
         return enrich_pdf_audit(self.project_dir, json.loads(result.stdout))
+
+    def mineru_audit_page(self, chapter_id, evidence_id):
+        # Evidence is re-read from the server's audited set. No path or
+        # page number from a browser request is trusted.
+        audit = self.mineru_audit(chapter_id)
+        if not audit.get("pdfAttachment", {}).get("available"):
+            raise ValueError("原 PDF 与 JSON 分页尚未验证，不能对照")
+        entry = next((item for item in audit["entries"] if item["id"] == evidence_id), None)
+        if entry is None or not entry.get("pdfPageNumber"):
+            raise KeyError("当前审计项不存在或 PDF 页码不可验证")
+        return compare_audit_page(self.project_dir, entry)
 
     @staticmethod
     def write_text_fsync(path, text):
@@ -2300,11 +2402,25 @@ class V2DevHandler(SimpleHTTPRequestHandler):
     debug_dir = None
     workspace_root = None
     workspace_selection_path = None
+    v3_mac_vault = None
     project_store_lock = threading.RLock()
 
     def end_headers(self):
-        route = urlparse(self.path).path
-        if not route.startswith("/__"):
+        parsed = urlparse(self.path)
+        route = parsed.path
+        # Only PUBLIC, versioned static assets may be cached by Cloudflare.
+        # The live HTML, service worker, Vault API, PDF and DIRjson MUST never
+        # gain a CDN cache lifetime. app.js and app.css have a per-build ?rev.
+        is_v3_dist = route.startswith("/v3-directory/dist/")
+        leaf = route.rsplit("/", 1)[-1]
+        rev = parse_qs(parsed.query).get("rev", [""])[0]
+        is_versioned_bundle = (is_v3_dist and leaf in ("app.js", "app.css") and
+                               bool(re.fullmatch(r"v3-[a-zA-Z0-9-]{8,96}", rev)))
+        is_hashed_asset = (is_v3_dist and
+            bool(re.fullmatch(r"[A-Za-z0-9_.-]+-[A-Z2-7]{8}\.(?:woff2?|ttf|svg|gif|png)", leaf)))
+        if is_versioned_bundle or is_hashed_asset:
+            self.send_header("Cache-Control", "public, max-age=86400, s-maxage=604800, immutable")
+        elif not route.startswith("/__"):
             self.send_header("Cache-Control", "no-store, max-age=0")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
@@ -2433,13 +2549,58 @@ class V2DevHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _write_binary(self, status, body, content_type):
+    def _write_binary(self, status, body, content_type, cache_seconds=0):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control",
+                         f"private, max-age={cache_seconds}" if cache_seconds else "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Safari may abort an in-flight adjacent-page prefetch while
+            # selecting another audit row; this is not a PDF render failure.
+            pass
+
+    def _serve_original_pdf_page(self, chapter_id, page_text):
+        """Return only one audited book page as PNG; Safari never loads 109 MB."""
+        if not isinstance(self.project_store, ChapterProjectStore):
+            raise RuntimeError("原 PDF 页预览仅允许原生项目")
+        self.project_store.resolve(chapter_id)
+        pdf = original_pdf(self.project_store.project_dir)
+        if pdf is None:
+            raise KeyError("原 PDF 附件缺失或存在多个候选")
+        if not isinstance(page_text, str) or not page_text.isdecimal():
+            raise ValueError("无效原 PDF 页码")
+        page = int(page_text)
+        total = original_pdf_page_count(pdf)
+        if not total or page < 1 or page > total:
+            raise ValueError("原 PDF 页码超出范围")
+        stat = pdf.stat()
+        image = cached_original_pdf_page(str(pdf), stat.st_size, stat.st_mtime_ns, page)
+        # The URL carries the PDF revision, so a long private browser cache is
+        # safe and keeps audit-page prewarming useful throughout the session.
+        self._write_binary(200, image, "image/jpeg", cache_seconds=3600)
+
+    def _warm_original_pdf(self, chapter_id):
+        """Start the resident PDF document worker without rendering any page."""
+        if not isinstance(self.project_store, ChapterProjectStore):
+            raise RuntimeError("原 PDF 预热仅允许原生项目")
+        self.project_store.resolve(chapter_id)
+        pdf = original_pdf(self.project_store.project_dir)
+        if pdf is None:
+            raise KeyError("原 PDF 附件缺失或存在多个候选")
+        stat = pdf.stat()
+        started = time.perf_counter()
+        worker = ensure_original_pdf_worker(
+            str(pdf), stat.st_size, stat.st_mtime_ns
+        )
+        self._write_json(200, {
+            "ready": True,
+            "pageCount": worker["page_count"],
+            "elapsedMs": round((time.perf_counter() - started) * 1000),
+        })
 
     def _serve_original_pdf(self, chapter_id):
         """Stream one validated project PDF, including browser Range requests."""
@@ -2499,8 +2660,9 @@ class V2DevHandler(SimpleHTTPRequestHandler):
 
     def _read_json(self):
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 2_000_000:
-            raise ValueError("payload too large")
+        cap = 24_000_000 if urlparse(self.path).path == "/__v3/ir/commit" else 2_000_000
+        if length <= 0 or length > cap:
+            raise ValueError("payload too large or missing")
         raw = self.rfile.read(length)
         return json.loads(raw.decode("utf-8"))
 
@@ -2618,6 +2780,42 @@ class V2DevHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = parsed.path
 
+        if route == "/__v3/ir/markings":
+            from v3_ir_persistence import load_markings
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:self._write_json(503,{"code":"EOFFLINE","error":"Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.require_auth(self)
+                    book=parse_qs(parsed.query).get('book',[''])[0]
+                    self._write_json(200,load_markings(self.v3_mac_vault,book))
+                except VaultError as error:self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:self._write_json(500,{"code":"EIO","error":"Marking read failed"})
+            return
+
+        if route == "/__v3/ir":
+            from v3_ir_persistence import load_snapshot
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:
+                self._write_json(503, {"code": "EOFFLINE", "error": "Mac Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.require_auth(self)
+                    book=parse_qs(parsed.query).get('book',[''])[0]
+                    self._write_json(200,load_snapshot(self.v3_mac_vault,book))
+                except VaultError as error:
+                    self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:
+                    self._write_json(500,{"code":"EIO","error":"IR read failed"})
+            return
+
+        if route == "/__v3/fs":
+            if self.v3_mac_vault is None:
+                self._write_json(503, {"code": "EOFFLINE", "error": "Mac Vault Root not configured"})
+            else:
+                handle_v3_get(self)
+            return
+
         if route == "/__workspace/directories":
             relative_path = parse_qs(parsed.query).get("path", [""])[0]
             try:
@@ -2674,10 +2872,42 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                 self._write_store_error(error)
             return
 
+        if route == "/__workspace/original-pdf/warm":
+            chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
+            try:
+                self._warm_original_pdf(chapter_id)
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/original-pdf/page":
+            query = parse_qs(parsed.query)
+            try:
+                self._serve_original_pdf_page(
+                    query.get("chapterId", [""])[0],
+                    query.get("page", [""])[0],
+                )
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
         if route == "/__workspace/original-pdf":
             chapter_id = parse_qs(parsed.query).get("chapterId", [""])[0]
             try:
                 self._serve_original_pdf(chapter_id)
+            except Exception as error:
+                self._write_store_error(error)
+            return
+
+        if route == "/__workspace/chapter/annotation-audit/page":
+            query = parse_qs(parsed.query)
+            try:
+                if not isinstance(self.project_store, ChapterProjectStore):
+                    raise RuntimeError("页级对照仅支持本机原始 OCR 项目")
+                self._write_json(200, self.project_store.mineru_audit_page(
+                    query.get("chapterId", [""])[0],
+                    query.get("evidenceId", [""])[0],
+                ))
             except Exception as error:
                 self._write_store_error(error)
             return
@@ -2871,6 +3101,103 @@ class V2DevHandler(SimpleHTTPRequestHandler):
             payload = self._read_json()
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as error:
             self._write_json(400, {"error": str(error)})
+            return
+
+        if route == "/__v3/chapters/media/download":
+            from v3_ir_persistence import download_cleaning_image
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:
+                self._write_json(503,{"code":"EOFFLINE","error":"Mac Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.check_post_origin(self)
+                    self.v3_mac_vault.require_auth(self)
+                    self._write_json(200,download_cleaning_image(
+                        self.v3_mac_vault,payload,download_public_media))
+                except VaultError as error:
+                    self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except (ValueError, RuntimeError, TimeoutError, OSError) as error:
+                    # The frontend must distinguish an invalid/private source,
+                    # remote HTTP failure, timeout and Mac-side I/O failure.
+                    # Strip full URLs: external links can contain signed keys.
+                    reason = re.sub(r'https?://[^\s"\x27<>]+', '[媒体地址]', str(error))[:280]
+                    if isinstance(error, ValueError):
+                        status, code = 422, "EINVAL"
+                    elif isinstance(error, TimeoutError):
+                        status, code = 504, "EOFFLINE"
+                    elif isinstance(error, OSError):
+                        status, code = 502, "EOFFLINE"
+                    else:
+                        status, code = 502, "EOFFLINE"
+                    self._write_json(status, {"code":code,
+                        "error":"图片来源获取或保存失败："+(reason or "媒体服务未返回具体原因")})
+                except Exception:
+                    self._write_json(500,{"code":"EOFFLINE",
+                        "error":"媒体服务发生未预期错误（请检查 Mac 服务日志）"})
+            return
+        if route == "/__v3/chapters/commit":
+            from v3_ir_persistence import save_cleaned_chapter
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:
+                self._write_json(503,{"code":"EOFFLINE","error":"Mac Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.check_post_origin(self)
+                    self.v3_mac_vault.require_auth(self)
+                    self._write_json(200,save_cleaned_chapter(self.v3_mac_vault,payload))
+                except VaultError as error:
+                    self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:
+                    self._write_json(500,{"code":"EIO","error":"Chapter save failed"})
+            return
+        if route == "/__v3/ir/publish-chapters":
+            from v3_ir_persistence import publish_saved_chapters
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:
+                self._write_json(503,{"code":"EOFFLINE","error":"Mac Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.check_post_origin(self)
+                    self.v3_mac_vault.require_auth(self)
+                    self._write_json(200,publish_saved_chapters(self.v3_mac_vault,payload))
+                except VaultError as error:
+                    self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:
+                    self._write_json(500,{"code":"EIO","error":"Chapter publication failed"})
+            return
+
+        if route == "/__v3/ir/markings/commit":
+            from v3_ir_persistence import save_markings
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:self._write_json(503,{"code":"EOFFLINE","error":"Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.check_post_origin(self)
+                    self._write_json(200,save_markings(self.v3_mac_vault,payload))
+                except VaultError as error:self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:self._write_json(500,{"code":"EIO","error":"Marking save failed"})
+            return
+
+        if route == "/__v3/ir/commit":
+            from v3_ir_persistence import save_snapshot
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:
+                self._write_json(503,{"code":"EOFFLINE","error":"Mac Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.check_post_origin(self)
+                    self._write_json(200,save_snapshot(self.v3_mac_vault,payload))
+                except VaultError as error:
+                    self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:
+                    self._write_json(500,{"code":"EIO","error":"IR commit failed"})
+            return
+
+        if route == "/__v3/fs/commit":
+            if self.v3_mac_vault is None:
+                self._write_json(503, {"code": "EOFFLINE", "error": "Mac Vault Root not configured"})
+            else:
+                handle_v3_post(self, payload)
             return
 
         if route == "/__debug/ack":
@@ -3721,6 +4048,10 @@ def main():
         if not workspace_root.is_dir():
             raise RuntimeError(f"workspace root does not exist: {workspace_root}")
         V2DevHandler.workspace_root = workspace_root
+        V2DevHandler.v3_mac_vault = V3MacVault(
+            workspace_root,
+            Path(args.config_dir) / "v3-vault-access-key",
+        )
         V2DevHandler.workspace_selection_path = (
             Path(args.workspace_selection_file).expanduser().resolve()
             if args.workspace_selection_file

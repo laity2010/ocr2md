@@ -1,0 +1,68 @@
+{
+  "name": "Laity Shared App Settings",
+  "version": "0.1.17",
+  "owner": "agent-link-monitor",
+  "component": "/shared-settings/v1/settings-panel.js",
+  "preload": "/shared-settings/v1/settings-grid.js",
+  "tag": "laity-settings-panel",
+  "contract": "/shared-settings/v1/schema-contract.json",
+  "schemaVersion": 2,
+  "stable": "0.1.17",
+  "previous": "0.1.16",
+  "releases": [
+    {
+      "version": "0.1.17",
+      "panel": {
+        "file": "settings-panel.js",
+        "sha256": "9671ecd03755578e21410e56146257abd228ac1a568b2cc2fda692699b06ccc0",
+        "size": 66184
+      },
+      "grid": {
+        "file": "settings-grid.js",
+        "sha256": "db7500332bcac206dc9c83c1143044791e469e760d536b1fb62bc647e10c18e3",
+        "size": 867179
+      },
+      "css": {
+        "file": "sarasa-ui.css",
+        "sha256": "bd425fc094b91daf813b83225466b44af86cf1bafc5857ba921eb85e7423b3fc",
+        "size": 733
+      }
+    },
+    {
+      "version": "0.1.16",
+      "panel": {
+        "file": "settings-panel.js",
+        "sha256": "8858aea0b5075ba5c91adc56d375f8da59f85062685aaa8522b42f9a9da9ca84",
+        "size": 58396
+      },
+      "grid": {
+        "file": "settings-grid.js",
+        "sha256": "db7500332bcac206dc9c83c1143044791e469e760d536b1fb62bc647e10c18e3",
+        "size": 867179
+      },
+      "css": {
+        "file": "sarasa-ui.css",
+        "sha256": "bd425fc094b91daf813b83225466b44af86cf1bafc5857ba921eb85e7423b3fc",
+        "size": 733
+      }
+    },
+    {
+      "version": "0.1.15",
+      "panel": {
+        "file": "settings-panel.js",
+        "sha256": "b8f9231a5f1e4b8c0f791592c6d23a12f1ef95570fc5fd97849beb418d8e406c",
+        "size": 58340
+      },
+      "grid": {
+        "file": "settings-grid.js",
+        "sha256": "db7500332bcac206dc9c83c1143044791e469e760d536b1fb62bc647e10c18e3",
+        "size": 867179
+      },
+      "css": {
+        "file": "sarasa-ui.css",
+        "sha256": "bd425fc094b91daf813b83225466b44af86cf1bafc5857ba921eb85e7423b3fc",
+        "size": 733
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:chapter-cleaning",
+  "entry": "index.js",
+  "kind": "ui",
+  "tab": "章节清洗",
+  "tabGroup": "workbench",
+  "hiddenTab": true,
+  "order": 31,
+  "activateOn": "workbench.cleaning",
+  "bundles": [
+    {
+      "entry": "legacy.ts",
+      "output": "legacy.js"
+    }
+  ],
+  "actions": [
+    {
+      "id": "chapter-clean-undo",
+      "label": "撤销",
+      "globalRole": "undo"
+    },
+    {
+      "id": "chapter-clean-redo",
+      "label": "重做",
+      "globalRole": "redo"
+    },
+    {
+      "id": "chapter-clean-save",
+      "label": "保存章节",
+      "globalRole": "save"
+    }
+  ]
+}

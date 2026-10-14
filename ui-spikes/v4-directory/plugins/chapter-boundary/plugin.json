@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:chapter-boundary",
+  "entry": "index.js",
+  "kind": "ui",
+  "tab": "工作台",
+  "tabGroup": "workbench",
+  "order": 30,
+  "activateOn": "workspace.selected",
+  "bundles": [
+    {
+      "entry": "legacy.ts",
+      "output": "legacy.js"
+    }
+  ],
+  "actions": [
+    {
+      "id": "ir-undo",
+      "label": "撤销",
+      "title": "撤销上一项 DIRjson 修改",
+      "globalRole": "undo"
+    },
+    {
+      "id": "ir-redo",
+      "label": "重做",
+      "title": "重做已撤销的 DIRjson 修改",
+      "globalRole": "redo"
+    },
+    {
+      "id": "ir-save",
+      "label": "保存标定",
+      "title": "提交 DIRjson 快照并读回校验",
+      "globalRole": "save"
+    },
+    {
+      "id": "ir-publish-chapters",
+      "label": "发布章节",
+      "title": "根据已保存 DIRjson 生成 Obsidian 兼容章节 MD"
+    }
+  ]
+}

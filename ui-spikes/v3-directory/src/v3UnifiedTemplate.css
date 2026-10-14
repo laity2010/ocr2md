@@ -1,0 +1,160 @@
+/* V3 Workbench is the only page template. Each scene shares top controls,
+   AG + source tracks, splitters, styles and navigation. The optional preview
+   track is mounted ONLY in Workbench; Directory and Settings use two panes. */
+body{max-width:none;padding:6px 10px 8px;overflow:hidden}
+body>h1{font-size:1rem;margin:0 0 2px}
+body>.v3-top-row{margin:0 0 5px}
+body>.v3-top-row .tabs button{padding:4px 14px;font-size:13px}
+#panel-workspace,#panel-settings,#panel-workbench{
+  height:calc(100dvh - 79px);
+  min-height:460px;
+  display:flex;flex-direction:column;gap:4px;
+}
+#panel-workspace .workbench-layout,#panel-settings .workbench-layout,
+#panel-workbench .workbench-layout{
+  flex:1;height:auto;min-height:0;max-height:none;
+}
+/* AG/source geometry and responsive splitter are shared. Workbench alone
+   mounts the extra source/preview track and its horizontal handle. */
+.v3-template-layout{display:flex;--left-pane-width:43%;width:100%;gap:0;overflow:hidden}
+.v3-template-layout>.workbench-grid-pane{
+  flex:0 0 var(--left-pane-width);display:flex;flex-direction:column;
+  min-width:0;min-height:0;overflow:hidden;
+}
+.v3-template-layout>.workbench-right-pane{
+  --editor-top-percent:38%;flex:1;min-width:0;min-height:0;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.v3-template-layout .workbench-source-pane{
+  flex:0 0 var(--editor-top-percent);min-height:0;min-width:0;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.v3-template-layout .workbench-preview-pane{
+  flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;
+  overflow:hidden;
+}
+/* Settings and Directory share AG + source geometry with Workbench. */
+#v3-shared-config-layout{display:flex;gap:0;height:auto;min-height:0}
+#table-config-grid{flex:1 1 auto;width:100%;height:auto;min-height:0;border:0;border-radius:0}
+#directory-grid-shell{flex:1;min-height:0;overflow:hidden}
+#directory-list{height:100%;min-height:0;width:100%;border:0;border-radius:0}
+#working-editor,#table-config-editor{
+  flex:1;min-height:0;min-width:0;overflow:hidden;border:0;border-radius:0;
+}
+#working-editor .cm-editor,#table-config-editor .cm-editor{height:100%}
+.v3-template-layout .config-source-panel{flex:0 0 var(--editor-top-percent);min-height:0}
+#settings-source-pane,#workspace-source-pane{min-height:0}
+.v3-compact-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  flex:1;min-width:35px;max-width:240px;font-size:11px;color:var(--muted)}
+/* Directory operations are attached to the source pane's compact footer. */
+#file-actions{
+  flex:0 1 auto;min-height:0;overflow:auto;margin:0;
+  padding:5px 12px 7px;border-top:1px solid var(--v3-ui-border,#475258);
+}
+#panel-settings #vault-key{width:100%;min-width:0}
+.v3-template-mobile-splitter{display:none}
+/* Same 940px breakpoint and vertically stacked panes as Workbench; no
+   separate Directory/Settings responsive layout contract. */
+@media(max-width:940px){
+  .v3-template-layout{flex-direction:column}
+  .v3-template-layout>.workbench-grid-pane{
+    flex:0 0 var(--editor-top-percent,34%);min-height:110px;
+  }
+  .v3-template-layout>.workbench-right-pane{flex:1;min-height:220px}
+  .v3-template-layout>.workbench-splitter[aria-orientation=vertical]{display:none}
+  .v3-template-layout>.v3-template-mobile-splitter{
+    display:block;flex:0 0 8px;cursor:row-resize;
+  }
+}
+@media(max-width:710px){
+  #panel-workspace,#panel-settings,#panel-workbench{
+    height:calc(100dvh - 123px);min-height:490px;
+  }
+}
+/* Old CSS hid all workbench action groups when the workbench tab was not
+   selected. The global four-slot template must instead remain in every tab. */
+body:not(:has(#panel-workbench:not([hidden]))) .v3-top-row>
+  #workspace-top-actions:not([hidden]),
+body:not(:has(#panel-workbench:not([hidden]))) .v3-top-row>
+  #settings-top-actions:not([hidden]){display:flex!important}
+body:has(#panel-workbench:not([hidden])) #panel-workbench,
+body:not(:has(#panel-workbench:not([hidden]))) :is(#panel-settings,#panel-workspace){
+  height:calc(100dvh - 79px);
+}
+@media(max-width:710px){
+  body:has(#panel-workbench:not([hidden])) #panel-workbench,
+  body:not(:has(#panel-workbench:not([hidden]))) :is(#panel-settings,#panel-workspace){
+    height:calc(100dvh - 123px);
+  }
+}
+/* Directory has AG + source only; Settings has AG + source + an intrinsic
+   parameter-preview inside Shared Settings, never the MD/PDF track. */
+.v3-template-no-preview>.workbench-right-pane>.workbench-source-pane,
+.v3-template-no-preview>.workbench-right-pane>.config-source-panel{
+  flex:1 1 auto;
+  height:100%;
+  min-height:0;
+}
+.v3-template-no-preview>.workbench-right-pane>.workbench-source-pane>.cm-editor,
+.v3-template-no-preview>.workbench-right-pane .cm-editor{
+  height:100%;
+}
+/* Directory operations remain available without a third pane. They occupy
+   space only when enabled and opened; source gets the remaining height. */
+#workspace-source-pane #file-actions{
+  flex:0 1 auto;
+  min-height:0;
+  max-height:48%;
+  overflow:auto;
+  margin:0;
+  padding:3px 9px 4px;
+}
+#workspace-source-pane #file-actions:not(:has(details[open])){
+  flex:0 0 auto;
+}
+/* App-owned capability panels are siblings BELOW the generic AG/source
+   frame, not settings rows, AG footers, or CodeMirror/editor content. */
+#panel-settings > #settings-connection-details{
+  flex:0 0 auto;max-height:min(36dvh,240px);min-height:0;
+  overflow:auto;border:1px solid var(--v3-ui-border,#475258);
+  border-radius:5px;background:var(--v3-ui-panel,#253343);
+  padding:0 9px;font-size:12px;
+}
+#settings-connection-details > summary{
+  cursor:pointer;position:sticky;top:0;z-index:2;
+  background:var(--v3-ui-panel,#253343);
+  padding:5px 1px;font-size:12px;font-weight:600;
+}
+#settings-connection-details > .group{margin:0;padding:5px 0 7px}
+#settings-connection-details > .group > h2{display:none}
+#settings-connection-details > .group p{margin:4px 0;font-size:11px}
+#settings-connection-details > .group .toolbar{display:flex;flex-wrap:wrap;gap:6px}
+#settings-connection-details > .group button,
+#settings-connection-details > .group input{font-size:12px}
+#settings-connection-details #vault-key{flex:1 1 190px;min-width:160px;width:auto}
+/* Shared App Settings v1.0 integration: one canonical Agent Link component. */
+#shared-settings-mount{display:flex;flex:1;min-width:0;min-height:0;width:100%;height:100%}
+#settings-shared{display:block;width:100%;height:100%;min-height:0;min-width:0;
+  --las-panel-bg:#1d2732;--las-control-bg:#253343;
+  --las-border:#43536b;--las-fg:#e1e7ef;
+  --las-accent:var(--v3-ui-accent,#83c092);
+}
+#settings-shared .las-shell{height:100%;min-height:0}
+#settings-shared .las-grid-col,#settings-shared .las-source-col{min-height:0}
+#settings-shared .las-app-footer{display:none}
+#settings-shared .las-source-col laity-source-surface{height:100%;width:100%}
+
+/* Shared font contract: default Sarasa Fixed SC for the entire host UI,
+   AG data tables, forms and CodeMirror; explicit user typography settings
+   still take precedence where their scene opts out of the default. */
+:root{--v3-ui-font:var(--laity-ui-font,"Sarasa Fixed SC","Sarasa Mono SC",ui-monospace,monospace)}
+html body,body .v3-top-row,body .tabs,
+body :is(button,input,select,textarea),body :is(code,pre){
+  font-family:var(--v3-ui-font);
+}
+#panel-workspace .ag-root-wrapper,#panel-workbench .ag-root-wrapper,
+#panel-workspace .ag-root,#panel-workbench .ag-root{
+  --ag-font-family:var(--v3-ui-font);
+  font-family:var(--v3-ui-font);
+}
+#settings-shared{--las-font-family:var(--v3-ui-font)}
