@@ -32,6 +32,26 @@ export function createBoundaryFs(bus,MacVaultHttpFS,onProgress=()=>{}){
     const combined=new Uint8Array(length);let ptr=0;for(const part of chunks){combined.set(part,ptr);ptr+=part.length}
     return {base64:chars(combined),revision,totalBytes};
    }
+   if(parsed.pathname==='/__v3/ir/cache'&&(!init.method||init.method==='GET')){
+     const book=assertBook(query.get('book')||''),part=query.get('part')||'status';
+     if(!['status','index','md'].includes(part))throw Error('不支持的章节缓存视图');
+     const response=throwIfError(await bus.query('boundary.ir.cache.load',{book,part}));
+     const meta=JSON.parse(response.meta);
+     if(response.size>0){
+       const pieces=[];for(let offset=0;offset<response.size;offset+=60000){
+         const chunk=throwIfError(await bus.query('boundary.ir.cache.chunk',{book,part,offset})).data;
+         if(!chunk)throw Error('章节缓存分段读取提前结束');
+         pieces.push(chunk);
+       }
+       meta.base64=pieces.join('');
+       if(meta.base64.length!==response.size)throw Error('章节缓存分段校验失败');
+     }
+     return meta;
+   }
+   if(parsed.pathname==='/__v3/ir/cache/prepare'&&init.method==='POST'){
+     const payload=JSON.parse(init.body);assertBook(payload.book);
+     return parse(await bus.command('boundary.ir.cache.prepare',payload));
+   }
    if(parsed.pathname==='/__v3/ir'&&(!init.method||init.method==='GET')){
     const book=assertBook(query.get('book')||'');
     const response=throwIfError(await bus.query('boundary.ir.load',{book}));

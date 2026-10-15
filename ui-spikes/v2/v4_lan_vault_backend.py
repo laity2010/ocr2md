@@ -12,10 +12,10 @@ from urllib.parse import urlparse
 from dev_server import V2DevHandler
 from v3_mac_vault import V3MacVault
 
-READ_ROUTES = frozenset(('/__v3/fs','/__v3/ir','/__v3/ir/markings'))
+READ_ROUTES = frozenset(('/__v3/fs','/__v3/ir','/__v3/ir/markings','/__v3/ir/cache'))
 WRITE_ROUTES = frozenset(('/__v3/ir/commit','/__v3/ir/markings/commit',
                           '/__v3/ir/publish-chapters','/__v3/chapters/commit',
-                          '/__v3/chapters/media/download'))
+                          '/__v3/chapters/media/download','/__v3/ir/cache/prepare'))
 
 class Handler(V2DevHandler):
     def do_GET(self):

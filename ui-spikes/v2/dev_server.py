@@ -2780,6 +2780,21 @@ class V2DevHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = parsed.path
 
+        if route == "/__v3/ir/cache":
+            from v3_ir_work_cache import load_work_cache
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:self._write_json(503,{"code":"EOFFLINE","error":"Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.require_auth(self)
+                    query=parse_qs(parsed.query)
+                    book=query.get('book',[''])[0]
+                    part=query.get('part',['status'])[0]
+                    self._write_json(200,load_work_cache(self.v3_mac_vault,book,part))
+                except VaultError as error:self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:self._write_json(500,{"code":"EIO","error":"Chapter cache read failed"})
+            return
+
         if route == "/__v3/ir/markings":
             from v3_ir_persistence import load_markings
             from v3_mac_vault import VaultError
@@ -3164,6 +3179,19 @@ class V2DevHandler(SimpleHTTPRequestHandler):
                     self._write_json(error.status,{"code":error.code,"error":str(error)})
                 except Exception:
                     self._write_json(500,{"code":"EIO","error":"Chapter publication failed"})
+            return
+
+        if route == "/__v3/ir/cache/prepare":
+            from v3_ir_work_cache import prepare_work_cache
+            from v3_mac_vault import VaultError
+            if self.v3_mac_vault is None:self._write_json(503,{"code":"EOFFLINE","error":"Vault unavailable"})
+            else:
+                try:
+                    self.v3_mac_vault.check_post_origin(self)
+                    self.v3_mac_vault.require_auth(self)
+                    self._write_json(200,prepare_work_cache(self.v3_mac_vault,payload))
+                except VaultError as error:self._write_json(error.status,{"code":error.code,"error":str(error)})
+                except Exception:self._write_json(500,{"code":"EIO","error":"Chapter cache prepare failed"})
             return
 
         if route == "/__v3/ir/markings/commit":

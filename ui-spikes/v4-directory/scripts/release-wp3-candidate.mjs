@@ -18,13 +18,14 @@ const candidateName='v4-wp3-candidate';
 const deployed=join(root,candidateName);
 const isUpgrade=process.argv.includes('--upgrade');
 const isDiagnostic=process.argv.includes('--diagnostic');
+const isChapterFastload=process.argv.includes('--chapter-fastload');
 const isThemeFix=process.argv.includes('--theme-fix');
 const isSettingsThemeFix=process.argv.includes('--settings-theme-fix');
 const isLocalFastStart=process.argv.includes('--local-fast-start');
 const isHeaderGeometryFix=process.argv.includes('--header-geometry-fix');
-if((isDiagnostic||isThemeFix||isSettingsThemeFix||isLocalFastStart||isHeaderGeometryFix)&&!isUpgrade)throw Error('WP3_THEME_FIX_OR_DIAGNOSTIC_REQUIRES_CANDIDATE_UPGRADE');
-if([isDiagnostic,isThemeFix,isSettingsThemeFix,isLocalFastStart,isHeaderGeometryFix].filter(Boolean).length>1)throw Error('WP3_RELEASE_MODES_ARE_MUTUALLY_EXCLUSIVE');
-if(process.argv.slice(2).some(flag=>!['--upgrade','--diagnostic','--theme-fix','--settings-theme-fix','--local-fast-start','--header-geometry-fix'].includes(flag)))throw Error('WP3_UNKNOWN_RELEASE_FLAG');
+if((isDiagnostic||isChapterFastload||isThemeFix||isSettingsThemeFix||isLocalFastStart||isHeaderGeometryFix)&&!isUpgrade)throw Error('WP3_THEME_FIX_OR_DIAGNOSTIC_REQUIRES_CANDIDATE_UPGRADE');
+if([isDiagnostic,isChapterFastload,isThemeFix,isSettingsThemeFix,isLocalFastStart,isHeaderGeometryFix].filter(Boolean).length>1)throw Error('WP3_RELEASE_MODES_ARE_MUTUALLY_EXCLUSIVE');
+if(process.argv.slice(2).some(flag=>!['--upgrade','--diagnostic','--chapter-fastload','--theme-fix','--settings-theme-fix','--local-fast-start','--header-geometry-fix'].includes(flag)))throw Error('WP3_UNKNOWN_RELEASE_FLAG');
 const internal='http://127.0.0.1:4176/'+candidateName+'/';
 const publicUrl='https://ocr2md.laity.bid/'+candidateName+'/';
 const data=JSON.parse(await readFile(join(source,'build-info.json'),'utf8'));
@@ -64,7 +65,32 @@ if(isUpgrade){
  const allowedDiagnostic=new Set(['index.html','app.js','plugins/workspace/workspace.js','plugins/workspace/workspace-grid.js','plugins/workspace/ag-grid-base.min.css','plugins/chapter-boundary/boundary.js','plugins/chapter-boundary/legacy.js']);
  const normalize=source=>source.replace(/v4-\d{6}-\d{4}/g,'v4-RELEASE')
    .replace(/生成时间：\d{6}-\d{6}/g,'生成时间：TIMESTAMP');
- if(isThemeFix){
+ if(isChapterFastload){
+  // WP0-WP6 isolated source fastload: only the boundary plugin and the
+  // authorized filesystem adapter may change. NO stable/app-core changes.
+  const allowed=new Set(['index.html','app.js','build-info.json',
+    'plugins/chapter-boundary/boundary.js',
+    'plugins/chapter-boundary/contracts.js',
+    'plugins/chapter-boundary/template.js',
+    'plugins/chapter-boundary/transport.js',
+    'plugins/chapter-boundary/legacy.js',
+    'plugins/filesystem/workspace-fs.js']);
+  const differences=[];
+  for(const name of files){
+   let earlier;try{earlier=await readFile(join(deployed,name))}catch{earlier=null}
+   if(!earlier||!earlier.equals(await readFile(join(source,name))))differences.push(name);
+  }
+  for(const name of differences)if(!allowed.has(name))throw Error('WP3_FASTLOAD_UNRELATED_RUNTIME_CHANGE '+name);
+  for(const required of ['plugins/chapter-boundary/legacy.js','plugins/chapter-boundary/transport.js',
+    'plugins/chapter-boundary/contracts.js','plugins/filesystem/workspace-fs.js'])
+   if(!differences.includes(required))throw Error('WP3_FASTLOAD_MISSING_CHANGE '+required);
+  for(const name of ['app.js','index.html']){
+   if(normalize(await readFile(join(deployed,name),'utf8'))!==
+      normalize(await readFile(join(source,name),'utf8')))
+    throw Error('WP3_FASTLOAD_ENTRY_CHANGED '+name);
+  }
+  console.log('WP3_FASTLOAD_CODE_WHITELIST_PASS',JSON.stringify({from:predecessor.id,to:data.id,differences}));
+ }else if(isThemeFix){
   // Explicit CSS-only UIC fix: preserve every code asset byte-for-byte apart
   // from stamped entry HTML/app JS; do not relax the original WP3 policy.
   const allowed=new Set(['app.js','index.html','build-info.json','plugins/chapter-boundary/legacy-theme.css']);
@@ -201,6 +227,13 @@ const run=(file,env={},timeout=260000)=>{
 // Already-built candidate is tested as-is, never restamp or modify it here.
 // Diagnostic changes to the boundary adapter require the real-document retry
 // regression; boot-only and global-DOM row counts cannot detect orphan views.
+if(isChapterFastload){
+ const smoke=spawnSync('python3',['ui-spikes/v2/tests/v3IrWorkCacheSmoke.py'],
+    {cwd:repo,stdio:'inherit',timeout:120000});
+ if(smoke.status!==0)throw Error('WP3_FASTLOAD_VAULT_SMOKE_FAILED');
+ run('ui-spikes/v4-directory/tests/chapterFastloadBrowser.mjs',{},360000);
+ run('ui-spikes/v4-directory/tests/markingsReadback.test.mjs');
+}
 if(isDiagnostic&&
  (await readFile(join(source,'plugins/chapter-boundary/boundary.js'),'utf8'))!==
  (await readFile(join(deployed,'plugins/chapter-boundary/boundary.js'),'utf8'))){
@@ -216,7 +249,7 @@ if(isDiagnostic&&
 }
 run('ui-spikes/v4-directory/tests/wp2UpgradeGate.mjs',
  isUpgrade?{WP2_STABLE:deployed,WP2_CANDIDATE:source}:{});
-if(isUpgrade&&(isDiagnostic||isThemeFix||isSettingsThemeFix||isLocalFastStart||isHeaderGeometryFix)){
+if(isUpgrade&&(isDiagnostic||isChapterFastload||isThemeFix||isSettingsThemeFix||isLocalFastStart||isHeaderGeometryFix)){
  // WP2's boot test cannot catch the iPhone issue where the grid is healthy
  // but the rows are physically outside its visible viewport. Hard gate it.
  run('ui-spikes/v4-directory/tests/wp3DirectoryRowsUpgradeBrowser.mjs',{

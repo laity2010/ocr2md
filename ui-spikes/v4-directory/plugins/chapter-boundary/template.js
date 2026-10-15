@@ -27,7 +27,7 @@ export function createBoundaryView(root){
  .v4-chapter-boundary .boundary-popover input[type=text],.v4-chapter-boundary .boundary-popover textarea{max-width:100%;box-sizing:border-box}
  </style>
  <header class="boundary-bar" data-testid="boundary-toolbar">
- <strong>章节定界</strong><span id="boundary-book-label" data-testid="boundary-book-label">请先设为工作目录</span><button id="boundary-retry" type="button" data-testid="boundary-retry" title="重新读取已设定工作目录的 DIRjson，不会自动保存">重试加载</button><select id="boundary-pdf-file" data-testid="boundary-pdf-file" aria-label="PDF 原文文件" title="选择对应的 PDF 原文"><option value="">等待 PDF</option></select>
+ <strong>章节定界</strong><span id="boundary-book-label" data-testid="boundary-book-label">请先设为工作目录</span><button id="boundary-cache-prepare" type="button" data-testid="boundary-cache-prepare" hidden>准备工作数据</button><button id="boundary-edit-full" type="button" data-testid="boundary-edit-full" hidden>启用源码编辑</button><button id="boundary-retry" type="button" data-testid="boundary-retry" title="重新读取已设定工作目录的 DIRjson，不会自动保存">重试加载</button><select id="boundary-pdf-file" data-testid="boundary-pdf-file" aria-label="PDF 原文文件" title="选择对应的 PDF 原文"><option value="">等待 PDF</option></select>
  <label id="ir-heading-filters"> <input id="ir-only-h1" data-testid="ir-only-h1" type="checkbox" checked> 只看一级标题</label>
  <label id="ir-sequence-start-control">起始序号 <input id="ir-v2-sequence-start" data-testid="ir-v2-sequence-start" type="text" inputmode="numeric" value="01" size="3"></label>
  <button type="button" id="ir-v2-sequence" data-testid="ir-v2-sequence" hidden disabled>顺序编号</button>
@@ -96,7 +96,7 @@ export function createBoundaryView(root){
    group.dataset.moduleActionsOwner='ocr2md:chapter-boundary';group.hidden=true;
    toolbarHost.append(group);
   }
-  for(const id of ['ir-ocr-source-choice','ir-heading-filters','ir-sequence-start-control','boundary-pdf-file','boundary-retry','ir-chapter-edit-details','wb-ir-details']){
+  for(const id of ['ir-ocr-source-choice','ir-heading-filters','ir-sequence-start-control','boundary-pdf-file','boundary-retry','boundary-cache-prepare','boundary-edit-full','ir-chapter-edit-details','wb-ir-details']){
     const node=root.querySelector('#'+id);if(node)group.append(node);
   }
  }

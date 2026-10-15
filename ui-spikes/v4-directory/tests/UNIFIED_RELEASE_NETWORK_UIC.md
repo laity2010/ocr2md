@@ -71,3 +71,15 @@
 - **NET-04 实体 iPad 开启成功：PASS**。本轮仅确认可读、可展示，不把此截图视为对章节保存/发布写入行为的验收。
 - **UI 回归待修**：章节定界 AG 表为明显白底，WCP 框架/MD 源码/PDF 显示区域采用深色主题；应归入章节定界模块的局部 CSS/AG 主题修复，不因此再次分叉公网与 LAN 发布目录。
 - WP4 正式晋级仍需其自身审批门禁；候选 `1453` 的 LAN 读写显示验收不代表正式 `/v4-directory/` 已晋级。
+
+
+## NET-07 · WP6 章节缓存接口局域网路由修复（2026-10-15）
+
+- **故障现象**：用户 iPad Safari 显示 192.168.1.10 的标准 HTTP 404，但压缩地址栏未给出完整端口/路径；不能由截图直接断定 4443 候选页面丢失。Mac 实测完整 `https://192.168.1.10:4443/v4-wp3-candidate/` 始终 200，正确 URL 需带 `:4443` 与完整 `/v4-wp3-candidate/`。Safari 的“不安全”字样亦需核对是否误走 HTTP 4292，实体 iPad 重试尚待确认。
+- **独立实因**：WP6 新增的 `GET /__v3/ir/cache?book=...&part=status|index|md` 与 `POST /__v3/ir/cache/prepare` 虽已进入公网 4176 后端和候选前端，但没有加入局域网 4443 HTTPS TLS、4292 FastDev 代理、4337 LAN 独立 Vault 后端各自的明确路由白名单；默认返回 404。这是首次打开工作台后“准备工作数据/缓存命中”会失效的另一故障。
+- **修复范围**：三层已有服务各新增上述只读/显式准备路由的精确白名单，不增加泛路径代理；4292 对缓存 GET 限定 `book`/`part` 单值与三种合法 part；prepare POST 限 4096 B；保持原有三层授权、CSRF Origin、代理 forwarded header 与 TLS 保护。没有修改 WCP 内核、其它应用、静态构建、证书/私钥或书库。
+- **实机服务**：仅对 launchd 管理的 4337、4292、4443 各进行一次受控重启，三个服务均自动恢复。4176 公网服务未重启。
+- **自动验收**：`python3 ui-spikes/v4-directory/tests/lanChapterCacheRouteSmoke.py` PASS。使用 Mac 实际本地根 CA 验证 TLS 和 192.168.1.10 SAN；正式 `v4-261014-0816` 与候选 `v4-261015-0114` 的 HTML、build-info 和关键 asset SHA 均相同；4443 未授权缓存 GET 401、旧 markings GET 401、伪造 Origin prepare POST 403、正确 Origin 但无 key 的 POST 401、未知子路径 404，测试没有写入真实 Vault。手动额外验证正确密钥的只读 cache status 经 4443 返回 HTTP 200，`exists=false`（真实书籍未执行准备）。现有 `link-lan-origin.mjs --check` 静态同源验收通过。
+- **人工关口**：iPad Safari 重新使用完整 HTTPS 候选 URL，确认页面与“准备工作数据”读取流程后再判定真机通过；不自动对真实 Vault 执行 prepare，不推进正式版。
+
+- **跨项目源码备份**：4292 代理属于当前没有 Git 元数据的 `web-component-platform` 工作目录，本次将五处路由白名单的纯代码补丁保存在 OCR2MD 的 `scripts/patches/wcp-fastdev-chapter-cache-routes.patch`，后续需要恢复时先核实 WCP 脚本版本，再在 WCP 根目录运行 `git apply --unidiff-zero --check <补丁绝对路径>` 与 `git apply --unidiff-zero <补丁绝对路径>`；不将 WCP 整个工作目录纳入 OCR2MD 仓库。

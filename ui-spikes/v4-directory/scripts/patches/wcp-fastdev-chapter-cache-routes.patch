@@ -1,0 +1,23 @@
+--- a/scripts/fastdev-lan-server.py
++++ b/scripts/fastdev-lan-server.py
+@@ -32 +32 @@
+-chapter_posts = frozenset(('/__v3/ir/commit', '/__v3/ir/publish-chapters', '/__v3/chapters/commit', '/__v3/chapters/media/download', '/__v3/ir/markings/commit'))
++chapter_posts = frozenset(('/__v3/ir/commit', '/__v3/ir/publish-chapters', '/__v3/chapters/commit', '/__v3/chapters/media/download', '/__v3/ir/markings/commit','/__v3/ir/cache/prepare'))
+@@ -84 +84 @@
+-        if parsed.path not in ('/__v3/fs', '/__v3/ir', '/__v3/ir/markings'):
++        if parsed.path not in ('/__v3/fs', '/__v3/ir', '/__v3/ir/markings', '/__v3/ir/cache'):
+@@ -92 +92 @@
+-        if parsed.path in ('/__v3/ir', '/__v3/ir/markings'):
++        if parsed.path in ('/__v3/ir', '/__v3/ir/markings', '/__v3/ir/cache'):
+@@ -96 +96,6 @@
+-            if set(parse_qs(parsed.query)) != {'book'}:
++            query = parse_qs(parsed.query)
++            if parsed.path == '/__v3/ir/cache':
++                if set(query) != {'book','part'} or any(len(v)!=1 for v in query.values()) or query['part'][0] not in ('status','index','md'):
++                    self.send_error(400, 'Invalid chapter cache query')
++                    return
++            elif set(query) != {'book'} or len(query['book']) != 1:
+@@ -123,0 +129,3 @@
++                return
++            if self.path == '/__v3/ir/cache/prepare' and size > 4096:
++                self.send_error(413, 'Chapter cache preparation request is too large')

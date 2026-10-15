@@ -155,6 +155,23 @@ export class MacVaultHttpFS implements WorkspaceFSV3 {
         revision:range.expectedRevision ?? "",offset:String(range.offset), length:String(range.length)}));
     return {bytes:base64ToBody(data.base64), revision:data.revision, totalBytes:data.totalBytes};
   }
+  /** Read-only derived chapter work data: never substitutes for a canonical DIRjson save. */
+  async loadIrWorkCache(book:string,part:'status'|'index'|'md'='status'):Promise<{
+    exists:boolean;generation:string|null;irSha256?:string;markings?:unknown;
+    markingsRevision?:string;base64?:string;sha256?:string
+  }>{
+    this.ensureOpen();
+    return this.registry.fetchJson('/__v3/ir/cache?'+new URLSearchParams({book,part}));
+  }
+  /** Explicitly prepare a disposable cache; no implicit writes while opening books. */
+  async prepareIrWorkCache(book:string,expectedGeneration:string):Promise<{
+    prepared:boolean;alreadyCurrent:boolean;generation:string;bytesWritten?:number
+  }>{
+    this.ensureOpen();
+    return this.registry.fetchJson('/__v3/ir/cache/prepare',{
+      method:'POST',body:JSON.stringify({book,expectedGeneration})
+    });
+  }
   /** IR-WP7 dedicated transaction; never generic WorkspaceFS multi-op commit. */
   async loadIrSnapshot(book:string):Promise<{
     exists:boolean;generation:string|null;parentGeneration?:string|null;

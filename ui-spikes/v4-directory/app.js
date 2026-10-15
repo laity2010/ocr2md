@@ -6,7 +6,7 @@ let wcpLoader;
 try{wcpLoader=await import('./vendor/wcp/components/v1/loader.js')}
 catch(_missingLocalLoader){wcpLoader=await import('https://wcp.laity.bid/components/v1/loader.js?v=2')}
 const {mountWcp,loaderVersion}=wcpLoader;
-import {plugins} from './plugins/registry.generated.js?build=v4-261014-2310';
+import {plugins} from './plugins/registry.generated.js?build=v4-261015-0114';
 import {mountComponentInventory} from './component-inventory.js';
 window.__v4Startup?.mark('entry-imports-ready');
 const mount=document.getElementById('v4-module-mount');

@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 ALLOWED_PATHS = ('/v4-directory/', '/v4-wp3-candidate/', '/__v3/fs', '/__v3/ir', '/__v3/ir/markings')
 ALLOWED_POSTS = frozenset(('/__v3/ir/commit', '/__v3/ir/publish-chapters',
                           '/__v3/chapters/commit', '/__v3/chapters/media/download',
+                          '/__v3/ir/cache/prepare',
                           '/__v3/ir/markings/commit'))
 MAX_POST = 24 * 1024 * 1024
 MAX_RESPONSE = 64 * 1024 * 1024
@@ -67,7 +68,7 @@ def main():
             if self.command in ('GET', 'HEAD'):
                 allowed = (route.startswith('/v4-directory/') or
                            route.startswith('/v4-wp3-candidate/') or
-                           route in ('/__v3/fs', '/__v3/ir', '/__v3/ir/markings'))
+                           route in ('/__v3/fs', '/__v3/ir', '/__v3/ir/markings', '/__v3/ir/cache'))
             elif self.command == 'POST':
                 allowed = route in ALLOWED_POSTS
             else:
@@ -88,7 +89,7 @@ def main():
                     count = int(self.headers.get('Content-Length', '0'))
                 except ValueError:
                     return self._reply(400, b'Bad request length')
-                if count < 2 or count > MAX_POST:
+                if count < 2 or count > MAX_POST or (route == '/__v3/ir/cache/prepare' and count > 4096):
                     return self._reply(413, b'Request too large')
                 payload = self.rfile.read(count)
             headers = {'Host': f'{options.bind}:{options.upstream_port}',

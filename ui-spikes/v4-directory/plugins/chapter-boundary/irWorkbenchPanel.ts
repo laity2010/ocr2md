@@ -195,6 +195,10 @@ export class IrWorkbenchPanel {
   // revision-only change may be safely rebased only if the content matches it.
   private savedMarkings:ChapterMarkings|null=null;
   private fileCutsOnly=false;
+  /** Verified compact projection: no complete DIRjson bytes cross CQE on a cache hit. */
+  private cacheView?:{bookMd:IrMarkdownChapterFile;irSha256:string;generation:string};
+  private hydratingFull=false;
+  private cachePrepared=false;
   private bundleNeedsRefresh=false;
   private activeMd?:IrMarkdownChapterFile;
   private wholeBook?:IrMarkdownChapterFile;
@@ -410,8 +414,8 @@ export class IrWorkbenchPanel {
         const doc=this.doc;
         const value=input.value.trim();
         if(value===row.fileName)return;
-        this.perform(()=>this.apply(v2IrSetChapterFile(doc,row.id,value),
-          "章节文件名已暂存，原 Markdown 标题等级不变",true));
+        this.perform(()=>this.applyFileLayoutUpdate(v2IrSetChapterFile(doc,row.id,value),
+          "章节文件名已暂存，原 Markdown 标题等级不变"));
         if(this.doc===doc)input.value=row.fileName??"";
       });
       span.append(input);return span;
@@ -510,6 +514,8 @@ export class IrWorkbenchPanel {
       void this.saveSnapshot(caret);
     });
     this.publishButton.addEventListener("click",()=>void this.publishChapters());
+    $('boundary-cache-prepare').addEventListener('click',()=>void this.prepareWorkData());
+    $('boundary-edit-full').addEventListener('click',()=>void this.hydrateFullIr());
     this.undoButton.addEventListener("click",()=>this.undoSource());
     this.redoButton.addEventListener("click",()=>this.redoSource());
     this.reset();
@@ -559,6 +565,7 @@ export class IrWorkbenchPanel {
     this.lineAfterBlockId="";
   }
   private openLineMenu(line:number,anchor:{x:number;y:number}):void{
+    if(this.cacheView){this.status.textContent='补录标题前请先点「启用源码编辑」';return;}
     if(this.stage!=="chapters"||!this.doc||!this.activeMd||this.busy)return;
     if(!this.flushSource())return;
     const position=this.editor.offsetForLine(line);
@@ -701,6 +708,7 @@ export class IrWorkbenchPanel {
     this.wholeBook=undefined;this.closeLineMenu();
     this.bundle=undefined;this.bundleNeedsRefresh=false;this.activeMd=undefined;
     this.immutableBaseline=undefined;this.baseOperationCount=0;
+    this.cacheView=undefined;this.hydratingFull=false;this.cachePrepared=false;
     this.markingsRevision='';this.savedMarkings=null;this.fileCutsOnly=false;
     this.mdFile.replaceChildren(new Option("未生成 MD",""));this.mdFile.disabled=true;
     delete this.previewHost.dataset.irBlockId;
@@ -761,6 +769,112 @@ export class IrWorkbenchPanel {
     this.status.textContent=message;
     this.renderControls();
   }
+  /** Cache hit: validate a source-bound *derived* IR subset and projected MD.
+   * Complex source edits must hydrate the full immutable source before writing. */
+  private async restoreWorkCache(fs:MacVaultHttpFS,book:string,pdf:WorkspaceNode):Promise<boolean>{
+    const status=await fs.loadIrWorkCache(book,'status');
+    if(!status.exists||!status.generation||!status.irSha256)return false;
+    const [indexResponse,mdResponse]=await Promise.all([
+      fs.loadIrWorkCache(book,'index'),fs.loadIrWorkCache(book,'md')]);
+    if(indexResponse.generation!==status.generation||mdResponse.generation!==status.generation||
+       !sameMarkings(status.markings,indexResponse.markings)||
+       !sameMarkings(status.markings,mdResponse.markings)||
+       !indexResponse.base64||!mdResponse.base64||!indexResponse.sha256||!mdResponse.sha256)
+      throw Error('章节缓存与标定代际不同步');
+    const decode=(encoded:string)=>Uint8Array.from(atob(encoded),x=>x.charCodeAt(0));
+    const indexBytes=decode(indexResponse.base64),mdBytes=decode(mdResponse.base64);
+    const sha=(data:Uint8Array)=>createHash('sha256').update(data).digest('hex');
+    if(sha(indexBytes)!==indexResponse.sha256||sha(mdBytes)!==mdResponse.sha256)
+      throw Error('章节工作缓存读取 SHA 校验失败');
+    const index=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(indexBytes));
+    const md=new TextDecoder('utf-8',{fatal:true}).decode(mdBytes);
+    if(index.kind!=='ocr2md/chapter-work-index'||index.schemaVersion!==1||
+       index.book!==book||index.baseGeneration!==status.generation||
+       index.irSha256!==status.irSha256||
+       !Array.isArray(index.ranges)||!Array.isArray(index.headings))
+      throw Error('章节工作缓存格式或来源版本错误');
+    const base=index.document as DocumentIrV1;
+    validateDocumentIrV1(base);
+    if(base.pdf.path!==pdf.path||!base.ocr.path.startsWith(book+'/')||
+       index.ranges.length!==base.blocks.length||
+       index.ranges.some((r:{blockId:string;contentFrom:number;contentTo:number;from:number;to:number})=>
+         !base.blocks.some(b=>b.blockId===r.blockId)||r.from<0||r.to>md.length||
+         r.contentFrom<r.from||r.contentTo>r.to||
+         !md.slice(r.from,r.contentFrom).includes(r.blockId)))
+      throw Error('章节工作缓存存在缺失块或来源锚点');
+    this.cacheView={irSha256:status.irSha256,generation:status.generation,
+      bookMd:{chapterId:DIR_WHOLE_BOOK_ID,
+        path:book+'/ir-generated/whole-book-draft.md',
+        label:'全书连续 MD · OCR 章界待审核',content:md,sha256:sha(mdBytes),
+        ranges:index.ranges,status:'provisional'}};
+    this.persistenceReady=true;this.generation=status.generation;this.cachePrepared=true;
+    this.ocr={path:base.ocr.path};
+    this.ocrSelect.replaceChildren(new Option(base.ocr.path.split('/').at(-1)??base.ocr.path,base.ocr.path));
+    this.ocrSelect.disabled=true;
+    this.immutableBaseline=base;
+    this.baseOperationCount=base.chapterStructure?.operations.length??0;
+    this.markingsRevision=mdResponse.markingsRevision??'';
+    this.savedMarkings=(status.markings as ChapterMarkings|null)??null;
+    this.doc=status.markings?applyChapterMarkings(base,status.markings as ChapterMarkings):base;
+    this.fileCutsOnly=true;
+    this.baselineHash=createHash('sha256').update(encodeDocumentIrV1(this.doc)).digest('hex');
+    this.dirty=false;this.rebuild();
+    $('workbench-ir-source').dataset.irRestoreSource='chapter-work-cache';
+    this.status.textContent='已从章节工作缓存恢复 · '+base.blocks.length+
+      ' 块 · 未读取完整 DIRjson · 点击源码可按需启用结构编辑';
+    return true;
+  }
+  /** Only a source-structure edit needs the complete DIRjson. Never overwrite
+   * unsaved chapter map changes when hydrating. */
+  private async prepareWorkData():Promise<void>{
+    if(!(this.fs instanceof MacVaultHttpFS)||!this.generation||this.dirty||this.busy)return;
+    this.busy=true;this.status.textContent='正在准备章节工作索引及全书 MD（不修改 DIRjson）…';
+    this.renderControls();
+    try{
+      const result=await this.fs.prepareIrWorkCache(this.folder,this.generation);
+      if(!result.prepared||result.generation!==this.generation)throw Error('缓存准备的代际不一致');
+      const checked=await this.fs.loadIrWorkCache(this.folder,'status');
+      if(!checked.exists||checked.generation!==this.generation)
+        throw Error('章节工作数据未通过只读状态复核');
+      this.cachePrepared=true;
+      this.status.textContent='章节工作数据准备完成 · 下次进入优先加载小索引和全文 MD';
+    }catch(error){this.status.textContent='章节工作数据准备未成功；原 DIRjson 和章节保存不受影响：'+String(error);}
+    finally{this.busy=false;this.renderControls();}
+  }
+  private async hydrateFullIr():Promise<void>{
+    if(!this.cacheView||this.hydratingFull||!(this.fs instanceof MacVaultHttpFS)||
+       !this.doc||this.busy)return;
+    this.hydratingFull=true;
+    const book=this.folder,expected=this.generation,original=this.doc;
+    const pending=chapterMap(original),wasDirty=this.dirty;
+    this.status.textContent='正在按需读取完整 DIRjson，供补录标题和源码校对…';
+    this.renderControls();
+    try{
+      const state=await this.fs.loadIrSnapshot(book);
+      if(!state.exists||state.generation!==expected||!state.sourcesCurrent||!state.irBase64||
+         state.markingsRevision!==this.markingsRevision)
+        throw Error('DIRjson 版本已改变；无法加载结构编辑');
+      const bytes=Uint8Array.from(atob(state.irBase64),x=>x.charCodeAt(0));
+      const full=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)) as DocumentIrV1;
+      validateDocumentIrV1(full);
+      if(full.pdf.path!==this.pdf?.path||
+         createHash('sha256').update(bytes).digest('hex')!==this.cacheView.irSha256)
+        throw Error('按需加载的 DIRjson 与章节缓存不一致');
+      if(this.doc!==original||this.folder!==book)throw Error('等待期间已切换书籍或修改标定');
+      this.immutableBaseline=full;
+      this.doc=applyChapterMarkings(full,pending);
+      this.cacheView=undefined;
+      $('workbench-ir-source').dataset.irRestoreSource='saved-dirjson';
+      this.fileCutsOnly=true;
+      this.dirty=wasDirty;
+      this.baselineHash=createHash('sha256').update(encodeDocumentIrV1(
+        state.markings?applyChapterMarkings(full,state.markings as ChapterMarkings):full)).digest('hex');
+      this.rebuild(true);
+      this.status.textContent='完整 DIRjson 已按需载入 · 可以补录标题或编辑源码';
+    }catch(error){
+      this.status.textContent='未能启用完整结构编辑（缓存仍可阅读/标定）：'+String(error);
+    }finally{this.hydratingFull=false;this.renderControls();}
+  }
   /** Explicitly bound to one book folder and its selected PDF; no hidden writes. */
   async open(fs:WorkspaceFSV3,folder:string,pdf:WorkspaceNode,selectedOcrPath?:string):Promise<void>{
     if(this.isDirty())throw Error("IR 草稿未导出；请先导出或明确放弃更改");
@@ -774,6 +888,13 @@ export class IrWorkbenchPanel {
       // temporarily unavailable even while the immutable snapshot is intact.
       // Never ask the user to regenerate a book that has a valid saved pointer.
       if(fs instanceof MacVaultHttpFS){
+        if(!selectedOcrPath){
+          try{if(await this.restoreWorkCache(fs,folder,pdf))return;}
+          catch(error){
+            this.cacheView=undefined;this.cachePrepared=false;this.doc=undefined;
+            this.status.textContent='章节缓存不可用，正在回退 DIRjson 可信加载：'+String(error);
+          }
+        }
         try{
           const state=await fs.loadIrSnapshot(folder);
           if(epoch!==this.sourceEpoch)return;
@@ -861,7 +982,7 @@ export class IrWorkbenchPanel {
     const numbered=first?chapterFileParts(first.fileName):undefined;
     this.v2Start.value=numbered?String(numbered.number).padStart(numbered.width,"0"):"01";
     this.v2Start.setCustomValidity("");
-    this.wholeBook=generateIrWholeBookMarkdown(doc,this.bundle);
+    this.wholeBook=this.cacheView?.bookMd??generateIrWholeBookMarkdown(doc,this.bundle);
     this.mdFile.replaceChildren();
     if(this.stage==="chapters"){
       this.mdFile.add(new Option(this.wholeBook.label,this.wholeBook.chapterId));
@@ -1139,7 +1260,7 @@ export class IrWorkbenchPanel {
     this.renderControls();
     try{
       const expectedGeneration=this.generation!;
-      const expectedIrSha256=createHash('sha256').update(
+      const expectedIrSha256=this.cacheView?.irSha256??createHash('sha256').update(
         encodeDocumentIrV1(this.immutableBaseline??doc)).digest('hex');
       const result=await fs.publishIrChapters(book,expectedGeneration,expectedIrSha256,this.markingsRevision);
       if(!result.published)throw Error("服务端没有确认章节文件发布");
@@ -1289,8 +1410,14 @@ export class IrWorkbenchPanel {
     setTimeout(()=>{if(this.selectedId===blockId)align();},160);
   }
   private renderControls():void{
+    const prepare=$<HTMLButtonElement>('boundary-cache-prepare');
+    prepare.hidden=!this.generation||this.cachePrepared;
+    prepare.disabled=this.busy||this.dirty||!this.generation;
+    const full=$<HTMLButtonElement>('boundary-edit-full');
+    full.hidden=!this.cacheView;
+    full.disabled=this.busy||this.hydratingFull;
     const enabled=Boolean(this.doc&&this.selectedId&&!this.busy);
-    for(const id of this.changeButtons)($<HTMLButtonElement>(id)).disabled=!enabled;
+    for(const id of this.changeButtons)($<HTMLButtonElement>(id)).disabled=!enabled||!!this.cacheView;
     this.exportButton.disabled=!this.doc||this.busy;
     // First-time DIRjson can be explicitly persisted before any title edits;
     // subsequent snapshots still require a real change. Never auto-save on open.
@@ -1314,14 +1441,14 @@ export class IrWorkbenchPanel {
     this.v2Sequence.disabled=!this.doc||this.busy||this.stage!=="chapters"||
       !v2IrChapterHeadings(this.doc).length;
     const canMark=this.stage==="chapters"&&Boolean(this.doc&&this.selectedId&&!this.busy);
-    this.chapterRole.disabled=!canMark;
-    this.chapterName.disabled=!canMark||this.chapterRole.value!=="root";
+    this.chapterRole.disabled=!canMark||!!this.cacheView;
+    this.chapterName.disabled=!canMark||!!this.cacheView||this.chapterRole.value!=="root";
     this.chapterReason.disabled=!canMark;
-    this.chapterApply.disabled=!canMark;
+    this.chapterApply.disabled=!canMark||!!this.cacheView;
     this.mdFile.disabled=!this.bundle||this.busy;
     this.exportMdButton.disabled=!this.activeMd||this.busy;
-    this.exportZipButton.disabled=!this.bundle||this.busy;
-    const canEditSource=this.stage==="chapters"&&!!this.doc;
+    this.exportZipButton.disabled=!this.bundle||this.busy||!!this.cacheView;
+    const canEditSource=this.stage==="chapters"&&!!this.doc&&!this.cacheView;
     if(this.editorEditable!==canEditSource){
       this.editor.setEditable(canEditSource);this.editorEditable=canEditSource;
     }

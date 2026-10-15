@@ -78,6 +78,7 @@ export const filesystemModule={
  description:'目录浏览只读，章节定界保存/发布使用授权且版本校验的专用 CQE 事务；无通用文件写接口。',
  setup(bus:any){
   let irCache:{book:string;body:string}|null=null;
+  const chapterCache=new Map<string,string>();
   let upload:{book:string;requestId:string;expectedGeneration:string|null;expectedMarkingsRevision:string;segments:string[];size:number}|null=null;
   let chapterUpload:{book:string;filename:string;nodeId:string;expectedRevision:string;requestId:string;segments:string[];size:number}|null=null;
   const clip=(v:unknown)=>JSON.stringify(v);
@@ -151,6 +152,35 @@ export const filesystemModule={
        if(meta.length>64000)throw Error('DIRjson 元信息超限');
        return {meta,size:body.length,error:''};
      }catch(e){irCache=null;return {meta:'',size:0,error:fail(e)}}
+   }),
+   bus.handle('boundary.ir.cache.load',async({book,part}:{book:string;part:string})=>{
+     try{
+       boundBook(book);
+       if(!['status','index','md'].includes(part))throw Error('未知章节工作缓存种类');
+       const response=await vault.request<any>('/__v3/ir/cache?'+new URLSearchParams({book,part}));
+       const body=String(response.base64||'');
+       if(body.length>17_000_000)throw Error('章节工作缓存超出上限');
+       chapterCache.set(book+'\0'+part,body);delete response.base64;
+       return {meta:clip(response),size:body.length,error:''};
+     }catch(e){chapterCache.delete(book+'\0'+part);return {meta:'',size:0,error:fail(e)}}
+   }),
+   bus.handle('boundary.ir.cache.chunk',({book,part,offset}:{book:string;part:string;offset:number})=>{
+     try{
+       boundBook(book);
+       const body=chapterCache.get(book+'\0'+part);
+       if(body===undefined||!Number.isInteger(offset)||offset<0||offset>body.length)
+         throw Error('章节工作缓存读取会话不存在');
+       return {data:body.slice(offset,offset+60000),error:''};
+     }catch(e){return boundaryFail(e)}
+   }),
+   bus.handle('boundary.ir.cache.prepare',async({book,expectedGeneration}:{book:string;expectedGeneration:string})=>{
+     try{
+       boundBook(book);
+       if(!/^[a-f0-9]{64}$/.test(expectedGeneration))throw Error('非法的 DIRjson 版本');
+       const response=await vault.post('/__v3/ir/cache/prepare',{book,expectedGeneration});
+       chapterCache.clear();
+       return okData(response,6000);
+     }catch(e){return boundaryFail(e)}
    }),
    bus.handle('boundary.ir.markings.read',async({book}:{book:string})=>{
      try{boundBook(book);return okData(await vault.request('/__v3/ir/markings?'+new URLSearchParams({book})),64000)}
