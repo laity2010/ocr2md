@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:bootstrap",
+  "entry": "index.js",
+  "kind": "ui",
+  "tab": "底座状态",
+  "home": true,
+  "order": 1,
+  "actions": []
+}
+

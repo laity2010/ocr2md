@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>OCR2MD V5 · WP0 继承底座</title>
+  <style>
+   :root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif}
+   *{box-sizing:border-box}
+   body{margin:0;color:#e0e9f3;background:#1b2733;min-height:100dvh}
+   header{height:49px;display:flex;align-items:center;gap:14px;padding:0 14px;background:#253343;border-bottom:1px solid #43556a}
+   header strong{font-size:16px;white-space:nowrap}
+   #v5-tabs{display:flex;align-items:center;gap:6px}
+   #v5-tabs button{font:inherit;font-size:13px;color:#d7e3ef;background:#304254;border:1px solid #52647c;padding:6px 10px;border-radius:5px}
+   #v5-tabs button[aria-selected=true]{background:#405b74;border-color:#98abc0}
+   #v5-status{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#abc3d5;font-size:12px}
+   #v5-status[data-level=error]{color:#ffad9f}
+   #v5-app{height:calc(100dvh - 49px);min-height:320px}
+   #v5-mount{width:100%;height:100%}
+  </style>
+</head>
+<body>
+ <header><strong>ocr2md v5</strong><nav id="v5-tabs" aria-label="V5 业务模块"></nav>
+  <span id="v5-status" role="status" data-level="busy">WCP 加载中…</span></header>
+ <main id="v5-app"><div id="v5-mount" aria-label="WCP 模块挂载点"></div></main>
+ <script type="module" src="./app.js"></script>
+</body>
+</html>
+

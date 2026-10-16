@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "stable": "0.1.7",
+  "previous": "0.1.6",
+  "releases": [
+    {
+      "version": "0.1.7",
+      "entry": "releases/0.1.7/wcp-workbench.js",
+      "sha256": "3c29e2f526628c0aad95c5416e3dab736467a3510745d519e28489f94d040fa4",
+      "size": 747141,
+      "tag": "laity-wcp-workbench-v0-1-7"
+    },
+    {
+      "version": "0.1.6",
+      "entry": "releases/0.1.6/wcp-workbench.js",
+      "sha256": "eb252c0b1dec0039a0a65c1e9600cdeaaf49e29f3df893a0598cee0b4dd15f0d",
+      "size": 746837,
+      "tag": "laity-wcp-workbench-v0-1-6"
+    }
+  ]
+}

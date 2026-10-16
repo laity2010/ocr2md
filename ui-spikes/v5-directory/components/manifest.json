@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "source": "wcp",
+  "version": "0.2.1",
+  "assets": {
+    "tripane.js": {
+      "sha256": "9db000e17248d81c4d3af2a7caea93562645b294c579908dc20bc685148b40b4",
+      "size": 367024
+    },
+    "dockview.css": {
+      "sha256": "72a757b4d2d0d0f1e38b928b1343c85a7b09766bb2dc2c16c9e3c880f231545d",
+      "size": 159552
+    }
+  }
+}

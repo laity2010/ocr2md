@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "kind": "ocr2md/v5-pinned-public-ui-components",
+  "source": "V4 published SHA-verified WCP independent components",
+  "triPaneVersion": "0.2.1",
+  "residentVersion": "1.0.0",
+  "files": {
+    "tripane.js": "9db000e17248d81c4d3af2a7caea93562645b294c579908dc20bc685148b40b4",
+    "dockview.css": "72a757b4d2d0d0f1e38b928b1343c85a7b09766bb2dc2c16c9e3c880f231545d",
+    "resident.js": "76294ed4462911613b01c96f3d8447b5e4642be557b1b221712b28f709e72775",
+    "manifest.json": "2809781ff351dc3e0880c0c28628c54bc90f2875c7c8ddab26f130f30e9a7afa",
+    "resident-manifest.json": "d4cb46fdd6f96c6c46b1a966400a432a59a3f60a467354ae794d8f9e65fdde3b"
+  },
+  "runtimeDependenciesAreOnlyPinnedPublishedAssets": true
+}

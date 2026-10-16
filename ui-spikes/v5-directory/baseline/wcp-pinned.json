@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "WCP published SHA-verified assets from V4",
+  "stable": "0.1.7",
+  "previous": "0.1.6",
+  "files": {
+    "vendor/wcp/components/v1/loader.js": "232a0841d3fa40f3befdcfd6c2c2847e5a9991b745a01c66651882391d707044",
+    "vendor/wcp/components/v1/releases/0.1.7/wcp-workbench.js": "3c29e2f526628c0aad95c5416e3dab736467a3510745d519e28489f94d040fa4",
+    "vendor/wcp/components/v1/releases/0.1.6/wcp-workbench.js": "eb252c0b1dec0039a0a65c1e9600cdeaaf49e29f3df893a0598cee0b4dd15f0d"
+  },
+  "note": "Only immutable signed-by-sha published bytes; WCP implementation never copied from src/."
+}

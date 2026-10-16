@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "kind": "ocr2md/v5-ael-reference",
+  "sourceModule": "@ocr2md/mopjo",
+  "sourceReference": "packages/mopjo/AEL_REFERENCE_V1.json",
+  "sourceReferenceSha256": "c1fe46abec8dc619505839fd13398f74be74c0941d3577f53bd6556351adb91e",
+  "referenceTests": 369,
+  "referenceBoundaryViolations": 0,
+  "referenceIsolatedTestSeconds": 95.48,
+  "referenceMigrationSpreadWarnings": 1,
+  "comparisonPolicy": "reference only, not a general test count or timing threshold"
+}

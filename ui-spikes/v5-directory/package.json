@@ -1,0 +1,16 @@
+{
+  "name": "@ocr2md/v5-shell",
+  "version": "0.0.0-wp0",
+  "private": true,
+  "description": "V4 WCP architecture inheritance baseline and module-specific AEL shell",
+  "scripts": {
+    "build": "node scripts/build-registry.mjs",
+    "verify:boundary": "node scripts/check-plugin-boundaries.mjs",
+    "verify:freeze": "node scripts/verify-v4-freeze.mjs",
+    "test:wp0": "node scripts/verify-wp0.mjs && npm run verify:boundary && npm run verify:freeze && python3 tests/wp0-ael.test.py && node tests/wp0-browser.mjs",
+    "test:isolated": "bash tests/run-isolated-wp0.sh"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
