@@ -1,0 +1,32 @@
+{
+  "name": "@ocr2md/mopjo",
+  "version": "0.6.0-wp6",
+  "private": true,
+  "description": "Standalone MOPJO immutable document IR, operations and PDF/Markdown projection",
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/cli.mjs",
+    "build:port": "esbuild src/v4Port.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/v4Port.mjs",
+    "test": "npm run verify:boundary && npm run typecheck && npm run test:unit && npm run test:buffett && npm run test:wp3 && npm run test:wp4 && npm run test:wp5",
+    "typecheck": "tsc --noEmit --strict --skipLibCheck --esModuleInterop --types node --target ES2022 --module commonjs --moduleResolution node src/core.ts src/cli.ts src/operations.ts src/elements.ts src/chapters.ts src/chapterCli.ts src/chapterV4Ops.ts src/chapterLocate.ts src/chapterSegments.ts tests/roundtrip.test.ts tests/realBookReadOnly.test.ts tests/buffettWp2.test.ts tests/buffettWp3.test.ts tests/buffettWp4.test.ts tests/buffettWp4Cli.test.ts src/v4Port.ts tests/buffettWp5.test.ts",
+    "build:real-test": "esbuild tests/realBookReadOnly.test.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/realBookReadOnly.test.mjs",
+    "build:buffett-test": "esbuild tests/buffettWp2.test.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/buffettWp2.test.mjs",
+    "test:unit": "npm run build && esbuild tests/roundtrip.test.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/roundtrip.test.mjs && node dist/roundtrip.test.mjs",
+    "test:buffett": "npm run build && npm run build:buffett-test && bash tests/run-buffett-wp2.sh",
+    "build:wp3-test": "esbuild tests/buffettWp3.test.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/buffettWp3.test.mjs",
+    "test:wp3": "npm run build && npm run build:wp3-test && bash tests/run-buffett-wp3.sh",
+    "build:wp4-test": "esbuild tests/buffettWp4.test.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/buffettWp4.test.mjs && esbuild tests/buffettWp4Cli.test.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/buffettWp4Cli.test.mjs",
+    "test:wp4": "npm run build && npm run build:wp4-test && bash tests/run-buffett-wp4.sh",
+    "build:wp5-test": "esbuild tests/buffettWp5.test.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/buffettWp5.test.mjs",
+    "test:wp5": "npm run build:port && npm run build:wp5-test && bash tests/run-buffett-wp5.sh && node -e \"import('./dist/v4Port.mjs').then(x => {if(!x.MopjoV4ChapterSession || x.MOPJO_V4_PORT_VERSION !== 1) process.exit(2);console.log('MOPJO_WP5_PORT_BUNDLE_OK')})\"",
+    "verify:boundary": "node scripts/verify-isolation.mjs",
+    "test:isolated": "bash tests/run-isolated-wp6.sh"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}

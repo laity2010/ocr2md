@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "kind": "ocr2md/ael-module-reference",
+  "name": "MOPJO WP06 standalone data core",
+  "capturedDate": "2026-10-16",
+  "packagePath": "packages/mopjo",
+  "packageVersion": "0.6.0-wp6",
+  "evidence": {
+    "source": "MOPJO SQLite AEL and WP06 frozen source/test results",
+    "aelTask": "WP06 standalone source extraction",
+    "commands": [
+      "python3 scripts/ael.py report",
+      "python3 scripts/ael.py check",
+      "npm run verify:boundary",
+      "npm run test:isolated"
+    ],
+    "runtimeDbExcludedFromGit": true
+  },
+  "scope": {
+    "dependencyPolicy": "No private imports outside the package; explicitly declared third-party tools allowed",
+    "sourceTsFilesBefore": 10,
+    "sourceLinesBefore": 1512,
+    "copiedAlgorithmModules": 9,
+    "copiedAlgorithmLines": 2208,
+    "sourceTsFilesAfter": 19,
+    "sourceLinesAfter": 3720,
+    "thirdPartyDevDependencies": 3,
+    "nodeRequirement": ">=20.11.0"
+  },
+  "boundary": {
+    "tsFilesScanned": 26,
+    "importsInspected": 108,
+    "privateImportsOutsidePackage": 0,
+    "legacyAlgorithmShaParity": "9/9",
+    "boundaryWarnings": 0
+  },
+  "tests": {
+    "preExistingRegressionChecks": 369,
+    "result": "passed",
+    "testedFixture": "Buffett’s Alpha",
+    "fixturePdfPages": 22,
+    "fixtureChapters": 6,
+    "fixtureLogicalBlocks": 224,
+    "fixtureOriginalOcrEvidence": 315,
+    "fullIsolatedTestExitCode": 0,
+    "fullIsolatedTestSeconds": 95.48,
+    "fullIsolatedTestEnvironment": "External /private/tmp copy; npm ci --offline on Mac; source data read-only",
+    "productionUiAndConcurrentVaultCasVerified": false
+  },
+  "ael": {
+    "completedTasksAtCapture": 1,
+    "taskElapsedSeconds": 335.6,
+    "changedFiles": 25,
+    "productionFilesChanged": 16,
+    "spreadWarnings": 1,
+    "spreadReason": "Intentional one-time migration of nine shared IR algorithms into MOPJO",
+    "boundaryWarnings": 0,
+    "unrecordedChangesAfterClose": 0
+  },
+  "distribution": {
+    "cliBundleBytes": 161675,
+    "v4PortBundleBytes": 41822
+  },
+  "comparison": {
+    "sampleType": "one-time dependency-extraction migration",
+    "automaticPassThresholds": false,
+    "compareBoundaryImports": "compare absolute violations, target zero",
+    "compareChurn": "normalize by change category; migrations are exceptional",
+    "compareRuntime": "same hardware, fixture, npm cache and test scope required",
+    "compareTests": "compare required functional coverage, not raw assertion counts",
+    "productionClaim": "standalone core only; V4 UI and production CAS not certified"
+  }
+}

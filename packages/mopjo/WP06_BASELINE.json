@@ -1,0 +1,36 @@
+{
+  "phase": "WP06.0-before-migration",
+  "sourceFiles": {
+    "src/chapterCli.ts": "ced0ab92067f3375d04c27d1bda5fdfd85a356d3092b54aabced27ee22e85dbf",
+    "src/chapterLocate.ts": "506f037000b7682e8e44d6e24b1cd60cfd9a04207960fa02d591b2214006844a",
+    "src/chapterSegments.ts": "fd461b3a4b6c7fd599c57a762396cf2e6ca313cf2d6108e2097fe4e64cf4afb0",
+    "src/chapterV4Ops.ts": "2ffc0ba9d19a10fd044f67c5d2ae669506c82f63140cf469628d2d4dfde586bb",
+    "src/chapters.ts": "0d961f3310ee4e7a1f7e49ffe73d89e134830e03dc35df1f1766847d172547f0",
+    "src/cli.ts": "660fbe0c5e535861c5ce3084a821f2ce69cf8e53ba0488e4d225163518455772",
+    "src/core.ts": "7adca2bd40b0aa167466fb430df4617b786d268a826700b436b64c88991bb5c7",
+    "src/elements.ts": "320806309ebf2e09603cdf2b243c0d1bd4445662ff494ae8dd59d266e012e41f",
+    "src/operations.ts": "527c908cc4441d16ac9e7196e15dc89b38df941f75041d308cb6ab905c57e152",
+    "src/v4Port.ts": "25a965c7d5600fdd3d6e38c7827c68e15230e177c7f4a7eec24fadc9ae280adf",
+    "tests/buffettWp2.test.ts": "fa5a558002d49f7b02f963f4067c18c4b8d7f8869fc4944d270cae46c1b25f68",
+    "tests/buffettWp3.test.ts": "72e09adeb4dc8410703cc0d224b3ad24c556c95f464a13b8201f232b0cebb6db",
+    "tests/buffettWp4.test.ts": "a9a2d9e234a6385482608e41e9ce94e7060bb7c79f6335510ef5523f5cef99da",
+    "tests/buffettWp4Cli.test.ts": "ea3f4524144b0f216eb1d41f3876834a7a227f787c63a25eb0718727d7d9b9c3",
+    "tests/buffettWp5.test.ts": "47e5d1746de476d8fb699bbd0707939ac7fa17aae6e3dfa27b316154c5e633fb",
+    "tests/realBookReadOnly.test.ts": "18821dd7102391d7c2e005d0093204916c850a1c273ab792d9f92902ed6fb698",
+    "tests/roundtrip.test.ts": "98ebc87eb5e0155895664e13b78b80d3899bab642fbadfb95ff697a2da7a9b72"
+  },
+  "packageJsonSha256": "cbfad90b5031e1cacffc7a0c8ac9f4841f7929b594dabff76a80f7bca39daad2",
+  "importedSharedModules": {
+    "chapterFileAssign": "b194e0441bcf81c46c90703d9e083ec7d25a1ca6f1b6ca3d1090dba60b8c01cc",
+    "dirSourceEditing": "783c498c20326acdc9d9dc351bd92cdbdf4881afb479f556f3b861e6d2232d8b",
+    "documentIrChapters": "ee8ee6c9fbda9c4e923c6d1ae6b9f2fe6110e73fc08030aae57186503d840ea0",
+    "documentIrImport": "1edf4d2cf66877662967aeb27b77cf3b43eb9b6a406c29ea046d2cb814b27595",
+    "documentIrMarkdown": "bad31853a27eec999f6c033f6695f0b46219ad15626de45062453a2746d52ffa",
+    "documentIrReconstruction": "1195a48b7cf50f28789c13bc8fed6dfb1796d822b8fe51bf1064b4a5fe100457",
+    "documentIrV1": "154883fcb24d91746eb8f853c633957d182cfd7b55ed1655fab43d13a5cffcb8",
+    "mineruElementExtractor": "d312e9aac3c882a9a544b32e434042091e942396507c835b6376a22927697bfc",
+    "obsidianTableSanitize": "ab98d3172e300b97ed49c4499519ee22518b584556f33dae45066b3ec85c5ad8"
+  },
+  "minimumPreMigrationRegressionAssertions": 369,
+  "modulesInTransitiveClosure": 9
+}
