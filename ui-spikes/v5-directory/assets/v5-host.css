@@ -1,0 +1,198 @@
+/* V5 inherits V4 host styling and only the generic host bridge. All geometry/visual tokens are
+   snapshotted from V3; module-owned styles stay with the settings module. */
+#v5-app #v5-mount{position:relative;display:flex;flex:1;
+  min-height:0;min-width:0;height:100%;width:100%;overflow:hidden}
+#v5-app #v5-mount>.wcp-loader-host{width:100%;height:100%;min-height:0}
+#v5-top-actions button{font-size:12px}
+
+/* Keep the V3 header geometry; replace the version text with a focusable button. */
+#v5-version-trigger{display:inline-flex;align-items:baseline;gap:9px;flex:0 0 auto;
+  background:transparent;border:0;padding:2px 5px;margin-left:-5px;
+  color:inherit;white-space:nowrap;cursor:pointer;text-align:left}
+#v5-version-trigger:hover{background:#31445a}
+#v5-version-trigger:focus-visible{outline:2px solid #83b9f0;outline-offset:2px}
+#v5-version-trigger .v3-brand-name{font-size:15px;font-weight:650}
+#v5-component-dialog{position:fixed;inset:0;margin:auto;box-sizing:border-box;
+  width:min(470px,calc(100vw - 26px));max-width:calc(100vw - 26px);
+  max-height:calc(100dvh - 38px);overflow:auto;padding:14px 17px 15px;
+  border:1px solid #52647c;border-radius:10px;background:#1d2732;color:#e1e7ef;
+  box-shadow:0 16px 50px #000a;font:13px/1.5 var(--v3-ui-font,ui-monospace,monospace)}
+#v5-component-dialog::backdrop{background:#080e19ba}
+.v5-component-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.v5-component-head strong{font-size:15px}
+#v5-component-close{font-size:12px;padding:5px 10px}
+.v5-component-hint{font-size:11px;margin:7px 0;color:#aebdd2}
+#v5-component-list{list-style:none;margin:0;padding:0;border-top:1px solid #43536b}
+.v5-component-item{display:flex;justify-content:space-between;align-items:center;
+  min-height:47px;padding:8px 0;gap:12px;border-bottom:1px solid #37485b}
+.v5-component-name{min-width:0;font-weight:600;overflow-wrap:anywhere}
+.v5-component-name small{display:block;font-size:10px;font-weight:400;color:#93a7c1}
+.v5-component-version{flex:0 0 auto;font:600 12px/1.35 ui-monospace,monospace;
+  color:#c2d9fb;font-variant-numeric:tabular-nums;white-space:nowrap}
+.v5-component-pending{padding:8px 0;color:#e2b279}
+@media(max-width:710px){#v5-version-trigger{gap:5px}
+  #v5-version-trigger .v3-build{max-width:38vw;overflow:hidden;text-overflow:ellipsis}
+  #v5-component-dialog{max-height:calc(100dvh - 30px);padding:12px}}
+
+/* App top bar contains module-specific actions only in Settings mode. */
+.v5-module-actions[hidden]{display:none!important}
+
+/* V5 shell owns viewport height. V3's generic .workbench-layout was allowed
+   to shrink to a 320px content box, leaving the lower half of iPad blank.
+   Only the V5 mount is changed; V3 and child components remain untouched. */
+html:has(#v5-mount){height:100%;min-height:0}
+body:has(#v5-mount){
+  display:flex;flex-direction:column;width:100%;height:100dvh;
+  min-height:0;max-width:none;margin:0;
+  padding:6px 10px 8px;overflow:hidden;
+}
+body:has(#v5-mount)>h1{flex:0 0 auto;margin:0 0 2px;font-size:1rem}
+body:has(#v5-mount)>.v3-top-row{flex:0 0 auto;margin:0 0 5px}
+body:has(#v5-mount)>.v3-top-row .tabs button{padding:4px 14px;font-size:13px}
+#v5-app{display:flex;flex:1 1 0%;min-width:0;min-height:0;
+  height:auto;max-height:none;overflow:hidden}
+#v5-app #v5-workbench-layout{display:flex;flex:1 1 0%;
+  width:100%;height:auto;min-height:0;max-height:none;overflow:hidden}
+#v5-app #v5-mount{flex:1 1 0%;height:100%;min-height:0}
+/* One WCP-owned status surface, shared by every plugin. Not an app-header
+ * activity summary; the active module alone owns the visible message. */
+#v5-framework-status{display:inline-flex;align-items:center;gap:10px;flex:1 1 0;
+ min-height:24px;margin:0;padding:2px 0 2px 10px;min-width:0;
+ border-left:1px solid #43536b;background:transparent;color:#a9c9e7;
+ font:11px/1.45 var(--laity-ui-font,ui-monospace,monospace)}
+#v5-framework-status #v5-status-module{flex:0 0 auto;font-weight:650;
+ color:#d1deec;padding-right:10px;border-right:1px solid #465970}
+#v5-framework-status #v5-status{display:block!important;min-width:0;flex:1 1 auto;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:none;
+ color:inherit;font:inherit;margin:0;padding:0;position:static!important;
+ width:auto!important;height:auto!important;clip-path:none!important}
+#v5-framework-status[data-level=error]{color:#ffb1a6}
+#v5-framework-status[data-level=busy]{color:#a8ccfb}
+#v5-framework-status[data-level=dirty]{color:#e3c38b}
+
+#v5-tabs button:disabled{opacity:.45;cursor:wait}
+/* V3's old header guard hides actions unless the removed V3 workbench exists.
+   V5 module-scoped action groups control visibility instead. */
+body:has(#v5-mount) .v3-top-row>#v5-top-actions{display:flex!important}
+
+/* AG Grid column headers remain. Only the redundant pane-specific title bar
+ * is removed; workflows and filters are still available in the module strip. */
+.v5-chapter-boundary #boundary-ag>.boundary-title{display:none!important}
+.v5-cleaning #chapter-clean-ag>.clean-preview-title{display:none!important}
+/* Shared settings title rows are ornamental in the host three-pane layout. */
+laity-settings-panel[data-wcp-layout=tripane] .las-grid-col>.las-head{display:none!important}
+
+/* One visible framework status: underlying V3 components keep their original
+ * status state for subscribers but never render their own status strip. */
+.v5-workspace [data-testid=workspace-status],
+.v5-chapter-boundary #ir-status,
+.v5-chapter-boundary #ir-dirty-indicator,
+.v5-cleaning #chapter-clean-status,
+#v5-workbench-nav-status{display:none!important}
+.v5-cleaning>.clean-top{display:none!important}
+#v5-framework-status{padding-bottom:2px}
+body:has(#v5-mount) #v5-app{height:auto!important;flex:1 1 0%!important}
+
+/* Status shares the single app header row with the version popup trigger.
+ * The V3 brand is never a full-width multi-line activity dashboard. */
+body:has(#v5-mount)>h1.v3-brand{
+ display:flex;align-items:center;gap:9px;min-width:0;width:100%;overflow:hidden;
+ flex-wrap:nowrap;white-space:nowrap;
+}
+body:has(#v5-mount)>h1.v3-brand #v5-version-trigger{flex:0 0 auto}
+body:has(#v5-mount)>h1.v3-brand #v5-framework-status{min-width:0;max-width:100%;overflow:hidden}
+
+/* Safe update prompt is non-modal; never displaces the WCP status bar. */
+#v5-update-ready{flex:0 1 auto;max-width:210px;min-width:0;padding:3px 7px;
+ font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ border:1px solid #748eae;background:#243e54;color:#d9eafb}
+#v5-update-ready:disabled{opacity:.72;cursor:default}
+
+/* Shell-only startup failure; no duplicate status bar or business module CSS. */
+#v5-startup-failure:not([hidden]){display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:8px 12px;border:1px solid #a78a55;background:#322b23;color:#ffe6bf;font-size:12px}
+#v5-startup-retry{background:#25394b;color:#ecf5ff;border:1px solid #9baabd;
+  padding:5px 9px;border-radius:5px;cursor:pointer}
+
+/* TOPBAR-01: Workbench alone inserts the path select + refresh action.
+ * Their intrinsic height used to stretch the flex top row by 5–7px and push
+ * all three tabs / undo / redo / save down by 2–3px. Match the tab height
+ * without changing module navigation or Dockview geometry. */
+.v3-top-row #v5-workflow-controls{
+  box-sizing:border-box;
+  height:28px;min-height:28px;max-height:28px;
+  align-self:center;
+}
+.v3-top-row #v5-workflow-controls select,
+.v3-top-row #v5-workflow-controls button{
+  box-sizing:border-box;
+  height:28px;min-height:0;max-height:28px;
+  padding-top:3px;padding-bottom:3px;
+  line-height:18px;
+}
+
+
+/* V4 three-row header, spacing and dark AG/Source visual tokens.
+ * Host-only CSS copied/scoped from V4; business module styles stay in plugins. */
+:root{--bg:#2f383e;--bg-alt:#272f34;--fg:#d3c6aa;--muted:#859289;
+  --border:#475258;--accent:#83c092;--grid-font-size:14px;
+  --v3-ui-bg:#1d2732;--v3-ui-panel:#253343;--v3-ui-fg:#e1e7ef;
+  --v3-ui-border:#475258;--v3-ui-accent:#83c092;--v3-ui-muted:#aebdd2;
+  --v3-ios-caret-color:#0a84ff;color-scheme:dark;
+  font:15px/1.55 var(--laity-ui-font,"Sarasa Fixed SC","Sarasa Mono SC",ui-monospace,monospace);
+  background:#12171e;color:#edf1f6}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;max-width:none;padding:6px 10px 8px;overflow:hidden;background:#12171e}
+button,input,select,textarea{background:#1e2935;color:#edf1f6;border:1px solid #52647c;
+  border-radius:6px;padding:7px 10px;font:inherit}
+button{cursor:pointer}button:hover:not(:disabled){background:#324259}
+button:disabled{opacity:.45;cursor:not-allowed}
+.v3-brand{display:flex;align-items:center;gap:9px;min-width:0;white-space:nowrap}
+.v3-brand-name{flex:0 0 auto;white-space:nowrap}
+.v3-build{font-size:11px;font-weight:500;color:#99acc3;letter-spacing:0;
+  white-space:nowrap;font-variant-numeric:tabular-nums}
+.v3-top-row{display:flex;align-items:center;gap:7px;min-width:0;
+  border-bottom:1px solid #3e4b5b;margin:0 0 5px;flex:0 0 auto}
+.tabs{display:flex;gap:4px;margin:0;border-bottom:0;flex:0 0 auto;min-width:0}
+.tabs button{border:0;border-radius:7px 7px 0 0;background:transparent;
+  padding:4px 14px;color:#9cafc3;font-weight:600;font-size:13px}
+.tabs button[aria-selected=true]{color:var(--v3-ui-fg);
+  box-shadow:inset 0 -2px var(--v3-ui-accent);background:var(--v3-ui-panel)}
+.tabs button:focus-visible{outline:2px solid var(--v3-ios-caret-color);outline-offset:-2px}
+#v5-global-actions{display:flex;gap:5px;align-items:center;flex:0 0 auto;margin-left:auto}
+#v5-global-actions button,#v5-module-toolbar button,#v5-module-toolbar select{
+  font:12px/1.4 var(--laity-ui-font,system-ui,sans-serif);
+  background:#253343;color:#e1e7ef;padding:5px 9px;
+  border:1px solid #52647c;border-radius:5px}
+#v5-global-actions button:disabled,#v5-module-toolbar button:disabled{opacity:.43}
+#v5-module-toolbar{display:flex;align-items:center;gap:10px;min-height:33px;max-height:75px;
+  overflow-x:auto;overflow-y:visible;padding:3px 7px;box-sizing:border-box;
+  background:#233141;border:1px solid #43536b;margin-bottom:4px;white-space:nowrap;
+  flex:0 0 auto}
+#v5-module-toolbar-label{flex:0 0 auto;font-size:12px;font-weight:700;color:#c8d7e9;
+  padding-right:10px;border-right:1px solid #52647c}
+#v5-actions{display:flex;align-items:center;gap:7px;min-width:0}
+#v5-actions:empty{display:none}
+#v5-app{flex:1 1 0%;min-width:0;min-height:0;height:auto;max-height:none;
+  overflow:hidden;display:flex;flex-direction:column}
+#v5-workbench-layout{display:flex;flex:1 1 0%;width:100%;height:auto;min-width:0;
+  min-height:0;overflow:hidden}
+#v5-mount{position:relative;display:flex;flex:1 1 0%;width:100%;height:100%;
+  min-height:0;min-width:0;overflow:hidden}
+#v5-mount>.wcp-loader-host{height:100%;width:100%;min-height:0}
+#v5-version-dialog{position:fixed;inset:0;margin:auto;box-sizing:border-box;
+  width:min(470px,calc(100vw - 26px));max-height:calc(100dvh - 38px);
+  overflow:auto;padding:14px 17px;border:1px solid #52647c;
+  border-radius:10px;background:#1d2732;color:#e1e7ef;
+  box-shadow:0 16px 50px #000a;font:13px/1.5 var(--laity-ui-font,ui-monospace,monospace)}
+#v5-version-dialog::backdrop{background:#080e19ba}
+.v5-component-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.v5-component-hint{font-size:11px;color:#aebdd2}
+#v5-component-list{list-style:none;padding:0;margin:0;border-top:1px solid #43536b}
+#v5-component-list li{padding:8px 0;border-bottom:1px solid #37485b}
+@media(max-width:850px){.v3-top-row{gap:3px}
+  #v5-tabs button{padding:4px 7px}
+  #v5-global-actions{gap:2px}
+  #v5-global-actions button{padding:4px 5px;font-size:11px}
+  #v5-module-toolbar{min-height:31px}}

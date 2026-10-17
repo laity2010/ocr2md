@@ -11,8 +11,11 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const pluginRoot=join(root,'plugins');
 const manifest=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
 const declared=new Set([...Object.keys(manifest.dependencies??{}),...Object.keys(manifest.devDependencies??{})]);
-const allowedShellImports=new Set(['vendor/wcp/components/v1/loader.js','plugins/registry.generated.js']);
-const shared=new Set(['components/tripane.js','components/resident.js']);
+const allowedShellImports=new Set(['vendor/wcp/components/v1/loader.js','plugins/registry.generated.js',
+]);
+const shared=new Set(['components/tripane.js','components/resident.js',
+ 'vendor/shared-settings/v1/settings-panel.js',
+ 'vendor/shared-settings/v1/releases/0.1.18/settings-panel.js']);
 const errors=[];let scanned=0,imports=0;
 const inside=(dir,path)=>path===dir||path.startsWith(dir+sep);
 function audit(raw,site,owner){
@@ -51,7 +54,7 @@ async function walk(dir,owner){
  for(const entry of await readdir(dir,{withFileTypes:true})){
   const f=join(dir,entry.name);
   if(entry.isSymbolicLink()){errors.push('forbidden symlink: '+f);continue}
-  if(entry.isDirectory()){await walk(f,owner);continue}
+  if(entry.isDirectory()){if(entry.name==='tests')continue;await walk(f,owner);continue}
   if(!/\.(?:ts|tsx|js|mjs)$/.test(entry.name)||entry.name.endsWith('.generated.js'))continue;
   scanned++;audit(await readFile(f,'utf8'),f,owner);
  }

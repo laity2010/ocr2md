@@ -1,52 +1,57 @@
-/** V5 composition root inherits the V4 WCP/CQE manifest protocol.
- * No V4 imports, no Vault IO, no business-module IDs wired into the shell.
+/** OCR2MD V5 composition: no shared chrome or settings internals owned here.
+ * WCP app-frame creates all chrome; app only declares modules and commands.
  */
-import {mountWcp} from './vendor/wcp/components/v1/loader.js';
+import {mountWcp,createWcpAppFrame} from './vendor/wcp/components/v1/loader.js';
 import {plugins} from './plugins/registry.generated.js';
-
-const mount=document.getElementById('v5-mount');
-const navigation=document.getElementById('v5-tabs');
-const status=document.getElementById('v5-status');
-const enabled=plugins.filter(p=>p.manifest.kind==='ui');
-const modules=plugins.flatMap(p=>p.modules);
-const contracts=plugins.flatMap(p=>p.contracts);
-const home=enabled.find(p=>p.manifest.home);
-const setStatus=(message,level='ready')=>{status.textContent=message;status.dataset.level=level};
-if(!home||!modules.some(m=>m.id===home.manifest.id))throw Error('V5_HOME_PLUGIN_MISSING');
-const tabs=new Map();
+const modules=plugins.flatMap(plugin=>plugin.modules);
+const contracts=plugins.flatMap(plugin=>plugin.contracts);
+const visible=plugins.filter(plugin=>plugin.manifest.kind==='ui').map(plugin=>({
+  id:plugin.manifest.id,tab:plugin.manifest.tab,home:plugin.manifest.home,
+  actions:plugin.manifest.actions||[],kind:plugin.manifest.kind,
+}));
+const home=visible.find(item=>item.home)||visible[0];
+if(!home)throw Error('WCP_APP_NO_HOME_MODULE');
 let runtime=null,changing=false;
-for(const item of enabled){
- const tab=document.createElement('button');
- tab.type='button';tab.dataset.testid='v5-tab-'+item.manifest.id.split(':')[1];
- tab.textContent=item.manifest.tab;tab.setAttribute('role','tab');
- tab.setAttribute('aria-selected',String(item===home));
- tab.addEventListener('click',async()=>{
-  if(changing||!runtime)return;
+// Version is release metadata, not handmaintained HTML and not a second source.
+const buildId=document.getElementById('app-host').dataset.buildId||'v5-development';
+const frame=await createWcpAppFrame(document.getElementById('app-host'),{
+ appName:'ocr2md',buildId,modules:visible,
+ onSelect:async id=>{
+  if(!runtime||changing)return;
   changing=true;
-  try{
-   await runtime.selectModule(item.manifest.id);
-   for(const [id,node] of tabs)node.setAttribute('aria-selected',String(id===item.manifest.id));
-   setStatus('已进入 '+item.manifest.tab);
-  }catch(error){setStatus('模块切换失败：'+String(error),'error')}
-  finally{changing=false}
- });
- tabs.set(item.manifest.id,tab);navigation.append(tab);
-}
-document.addEventListener('wcp:module-status',event=>{
- const {moduleId,message,level}=event.detail||{};
- if(tabs.get(moduleId)&&typeof message==='string')setStatus(message.slice(0,300),level);
+  try{await runtime.selectModule(id);frame.setActive(id);frame.setStatus('已进入 '+id)}
+  catch(error){frame.setStatus('模块切换失败：'+error,'error')}finally{changing=false}
+ },
+ onAction:id=>document.dispatchEvent(new CustomEvent('wcp:app-action',{detail:{id}})),
+ onCatalog:()=>frame.setCatalog(runtime?.getComponents?.()??[]),
 });
-window.__ocr2mdV5={phase:'loading',modules:modules.map(x=>x.id),contracts:contracts.length};
+document.addEventListener('wcp:module-status',e=>{
+ const {moduleId,message,level}=e.detail||{};
+ if(typeof message==='string'&&moduleId===frame.activeModule)frame.setStatus(message.slice(0,300),level);
+});
+document.addEventListener('wcp:app-action-state',e=>{
+ if(e.detail?.id)frame.setActionState(e.detail.id,e.detail.disabled);
+});
+window.__ocr2mdV5={phase:'loading',modules:modules.map(m=>m.id),contracts:contracts.length};
 try{
- runtime=await mountWcp(mount,{appId:'ocr2md-v5',modules,contracts,hostChrome:'external',
-  allowedBuiltinPlugins:[],initialModuleId:home.manifest.id,autoApply:false,
+ runtime=await mountWcp(frame.mount,{appId:'ocr2md-v5',modules,contracts,
+  hostChrome:'external',allowedBuiltinPlugins:[],initialModuleId:home.id,autoApply:false,
   isDirty:()=>modules.some(m=>typeof m.isDirty==='function'&&m.isDirty())});
- if(!runtime.version||!mount.querySelector('[class=wcp-loader-host]'))throw Error('V5_WCP_NOT_MOUNTED');
- window.__ocr2mdV5={phase:'ready',modules:modules.map(x=>x.id),
-  contracts:contracts.length,wcpVersion:runtime.version,instance:runtime};
- mount.dataset.wcpVersion=runtime.version;
- setStatus('WP0 已就绪 · WCP '+runtime.version+' · 业务模块待迁移');
-}catch(error){
- window.__ocr2mdV5={phase:'error',error:String(error),modules:modules.map(x=>x.id)};
- setStatus('V5 启动失败：'+String(error),'error');
-}
+ window.__ocr2mdV5={phase:'ready',modules:modules.map(m=>m.id),contracts:contracts.length,
+  wcpVersion:runtime.version,instance:runtime};
+ // WCP is the SOLE authority for installed components; Settings receives a
+ // view of this catalog, never a business-maintained second component list.
+ const syncComponents=()=>{
+   const components=runtime.getComponents();
+   document.dispatchEvent(new CustomEvent('wcp:component-catalog',{detail:{components}}));
+ };
+ syncComponents();
+ frame.mount.addEventListener('wcp:active',syncComponents);
+ frame.setStatus('V5 已就绪 · WCP '+runtime.version);
+ // AppFrame owns browser release watching, HTML/metadata parity, draft/focus
+ // protection and Safari foreground checks; app only supplies public data.
+ frame.watchBuild({metadataUrl:'./release-info.json',htmlUrl:'./',
+  htmlBuildSelector:'#app-host',saveEvent:'ocr2md:v5:ui-settings-saved',
+  isDirty:()=>changing||modules.some(m=>m.isDirty?.()),
+  onPending:()=>frame.setStatus('发现新构建：保存修改或退出编辑后自动更新','dirty')});
+}catch(error){window.__ocr2mdV5={phase:'error',error:String(error)};frame.setStatus('V5 启动失败：'+String(error),'error')}

@@ -50,6 +50,22 @@ def warnings(paths, module):
         problems.append(f'SPREAD {production} production files (review deliberate migrations separately)')
     return problems
 
+def show_findings(c):
+    # Compatible with old isolated test fixtures which intentionally copy only
+    # ael.py. In the full V5 tree the advisory module is always present.
+    try:
+        from ael_findings import print_open_summary
+    except ModuleNotFoundError as error:
+        if error.name != 'ael_findings':
+            raise
+        return
+    print_open_summary(c)
+    try:
+        from ael_ownership import show
+    except ModuleNotFoundError as error:
+        if error.name!='ael_ownership':raise
+    else:show(c)
+
 def connection():
     DB.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB)
@@ -65,6 +81,7 @@ def main():
     sub.add_parser('init')
     sub.add_parser('check')
     sub.add_parser('report')
+    sub.add_parser('review')
     beg=sub.add_parser('begin')
     beg.add_argument('--module',required=True)
     beg.add_argument('--category',required=True,choices=('inheritance','feature','fix','migration','refactor','tooling'))
@@ -95,6 +112,16 @@ def main():
             if active:
                 for w in warnings(changed,active[3]):print(' WARNING',w)
             elif changed:raise SystemExit(2)
+            show_findings(c)
+            return
+        if args.action=='review':
+            from ael_findings import review
+            review(c, ROOT, record=True)
+            try:
+                from ael_ownership import review as architecture_review
+            except ModuleNotFoundError as error:
+                if error.name!='ael_ownership':raise
+            else:architecture_review(c, ROOT, record=True)
             return
         if args.action=='report':
             rows=c.execute("SELECT task,module,category,elapsed_seconds,changed_files,warnings,tests,result FROM changes WHERE status='finished' ORDER BY id").fetchall()
@@ -105,6 +132,7 @@ def main():
                     'boundaryWarnings':sum(x.startswith('BOUNDARY') for x in json.loads(warn)),
                     'spreadWarnings':sum(x.startswith('SPREAD') for x in json.loads(warn)),
                     'tests':json.loads(tests)},ensure_ascii=False))
+            show_findings(c)
             return
         if args.action=='begin':
             if active or changed:raise ValueError('AEL active or unrecorded change; no silent rebaseline')
@@ -147,6 +175,7 @@ def main():
             print('AEL_V5_FINISHED',args.result,'changedFiles='+str(len(changed)),'boundary='+str(sum(x.startswith('BOUNDARY') for x in issues)),
                 'spread='+str(sum(x.startswith('SPREAD') for x in issues)),'seconds='+str(seconds))
             for issue in issues:print(' WARNING',issue)
+            show_findings(c)
 
 if __name__=='__main__':
     try:main()

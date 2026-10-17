@@ -1,14 +1,21 @@
 {
   "name": "@ocr2md/v5-shell",
-  "version": "0.0.0-wp0",
+  "version": "0.0.0-wp2",
   "private": true,
-  "description": "V4 WCP architecture inheritance baseline and module-specific AEL shell",
+  "description": "V5 single-entry public shell with migrated Settings UI and isolated read-only Filesystem CQE service",
   "scripts": {
     "build": "node scripts/build-registry.mjs",
     "verify:boundary": "node scripts/check-plugin-boundaries.mjs",
     "verify:freeze": "node scripts/verify-v4-freeze.mjs",
     "test:wp0": "node scripts/verify-wp0.mjs && npm run verify:boundary && npm run verify:freeze && python3 tests/wp0-ael.test.py && node tests/wp0-browser.mjs",
-    "test:isolated": "bash tests/run-isolated-wp0.sh"
+    "test:isolated": "bash tests/run-isolated-wp0.sh",
+    "test:wp1": "node tests/wp1-browser.mjs",
+    "test:wp2": "npm run verify:boundary && npm run verify:freeze && node tests/wp2-contract-isolation.mjs && node tests/wp2-browser.mjs",
+    "test:public": "npm run test:lan",
+    "test:lan": "NODE_EXTRA_CA_CERTS=\"$HOME/Library/Application Support/ocr2md/lan-tls/root-ca.crt\" node tests/wp2-public-browser.mjs",
+    "test:remote": "OCR2MD_V5_PUBLIC_ORIGIN=https://ocr2md.laity.bid node tests/wp2-public-browser.mjs",
+    "test:parity": "python3 tests/single-release-parity.py",
+    "test:component-candidate": "node tests/wp2-component-candidate.mjs"
   },
   "devDependencies": {
     "typescript": "5.9.3"

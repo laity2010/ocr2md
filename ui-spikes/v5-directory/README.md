@@ -1,3 +1,13 @@
+## 当前阶段（V5 WP2 · 唯一线上入口）
+
+**https://ocr2md.laity.bid/** 是唯一对外入口；详情见 [SINGLE_RELEASE.md](./SINGLE_RELEASE.md)。
+
+WP1 Settings、WP2 Filesystem CQE 已迁入，Chromium/WebKit 的独立与公网测试通过；真实 iPad Safari 已验证 https 根地址并取得 2064×1284 实机截图。Settings 保留 AG/源码/预览与本地保存；Filesystem 是服务插件，不显示额外顶层页面，章节接口尚未开放。V4 旧公网路径均返回 HTTP 410，4443 旧 LAN V4 网关已停止。尚未迁入 Workspace、章节定界/清洗、Media。
+
+单次升级发布：`python3 scripts/publish-single-release.py`；发布目录为项目 `.runtime/ocr2md-public`，采用原子目录切换。验证：`npm run test:wp2` 与 `npm run test:public`。
+
+---
+
 # OCR2MD V5 · WP0 技术继承底座
 
 V5 是 V4 架构的渐进式继承，不从头重建 WCP，业务模块逐一接入。

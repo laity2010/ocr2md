@@ -13,10 +13,53 @@ async function manifest(){
   if(!response.ok)throw Error('WCP_MANIFEST_HTTP_'+response.status);
   const data=await response.json();
   if(data.schemaVersion!==1||!versionRe.test(data.stable)||!Array.isArray(data.releases))throw Error('WCP_MANIFEST_UNSUPPORTED');
-  data.releases.forEach(assertRelease);
+  data.releases.forEach(item=>{assertRelease(item);if(item.frame)assertFrame(item)});
   if(!data.releases.some(item=>item.version===data.stable))throw Error('WCP_MANIFEST_STABLE_MISSING');
   return data;
 }
+function assertFrame(item){
+  const f=item?.frame;
+  if(!f||!/^releases\/\d+\.\d+\.\d+\/app-frame\.js$/.test(f.entry)||
+    !/^releases\/\d+\.\d+\.\d+\/app-frame\.css$/.test(f.style)||
+    ![f.sha256,f.styleSha256].every(x=>/^[a-f0-9]{64}$/.test(x))||
+    f.entry.split('/')[1]!==item.version||f.style.split('/')[1]!==item.version)
+    throw Error('WCP_FRAME_MANIFEST_INVALID');
+}
+async function digestVerified(url,expected){
+  const res=await fetch(url,{credentials:'omit',mode:'cors'});
+  if(!res.ok)throw Error('WCP_ASSET_HTTP_'+res.status);
+  const bytes=await res.arrayBuffer();
+  if(bytes.byteLength>2000000)throw Error('WCP_ASSET_OVERSIZE');
+  const sha=await crypto.subtle.digest('SHA-256',bytes);
+  const hex=Array.from(new Uint8Array(sha),x=>x.toString(16).padStart(2,'0')).join('');
+  if(hex!==expected)throw Error('WCP_ASSET_INTEGRITY_FAILED');
+  return bytes;
+}
+/** Single WCP public loader: both Core and AppFrame follow manifest.stable.
+ * Retained old releases can still be used by existing pinned consumers.
+ */
+export async function createWcpAppFrame(host,options={}){
+  if(!(host instanceof HTMLElement))throw TypeError('WCP_APP_FRAME_HOST_REQUIRED');
+  const data=await manifest();
+  const item=data.releases.find(x=>x.version===data.stable);
+  assertFrame(item);
+  const entry=new URL(item.frame.entry,origin);
+  const style=new URL(item.frame.style,origin);
+  if([entry,style].some(url=>url.origin!==origin.origin||!url.pathname.startsWith(origin.pathname+'releases/')))
+    throw Error('WCP_FRAME_URL_UNTRUSTED');
+  const [code]=await Promise.all([
+    digestVerified(entry,item.frame.sha256),
+    digestVerified(style,item.frame.styleSha256)
+  ]);
+  const objectUrl=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+  let module;
+  try{module=await import(/* @vite-ignore */ objectUrl)}
+  finally{URL.revokeObjectURL(objectUrl)}
+  if(module.appFrameVersion!==item.version||typeof module.createAppFrame!=='function')
+    throw Error('WCP_FRAME_VERSION_INVALID');
+  return module.createAppFrame(host,{...options,styleUrl:style.href});
+}
+
 async function verifiedImport(item){
   const url=new URL(item.entry,origin);
   if(url.origin!==origin.origin||!url.pathname.startsWith(origin.pathname+'releases/'))throw Error('WCP_ENTRY_UNTRUSTED');

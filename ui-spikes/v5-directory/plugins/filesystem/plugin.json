@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:filesystem",
+  "entry": "index.js",
+  "kind": "service",
+  "order": 100,
+  "enabled": false,
+  "retirementReason": "Not owned by workspace; legacy mixed DIRjson/chapter handlers must not be active"
+}
