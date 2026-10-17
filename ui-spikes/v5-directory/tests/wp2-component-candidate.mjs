@@ -4,18 +4,27 @@ import {readFile} from 'node:fs/promises';
 import {resolve,dirname,extname,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
+import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const require=createRequire(import.meta.url);
 const {chromium,webkit}=require(resolve(root,'../../../web-component-platform/node_modules/playwright'));
+// Candidate tests must load a fresh authoritative Shared Settings build, not
+// the last stable mirror or a potentially stale deployed release.
+const settingsBuildOutput=execFileSync('npm',['run','build'],{
+ cwd:resolve(root,'../../../agent-link-monitor/shared-settings'),encoding:'utf8',timeout:90000});
+const settingsBuildDir=resolve(JSON.parse(settingsBuildOutput.match(/FASTDEV_CANDIDATE_BUILD_OK\s+(\{[^\n]+\})/)[1]).directory);
 const mime={'.html':'text/html','.js':'text/javascript','.json':'application/json','.css':'text/css'};
 let external=0,writes=0;
 const server=createServer(async(req,res)=>{
  if(req.method!=='GET'){writes++;res.writeHead(405).end();return}
  try{
   const path=decodeURIComponent(new URL(req.url,'http://local').pathname);
-  const file=resolve(root,'.'+(path==='/'?'/index.html':path));
-  if(!file.startsWith(root+sep))throw Error('unsafe');
+  const builtPrefix='/vendor/shared-settings/v1/releases/0.1.18/';
+  const builtFile=path.startsWith(builtPrefix)?path.slice(builtPrefix.length):'';
+  const file=['settings-panel.js','settings-grid.js'].includes(builtFile)
+   ?resolve(settingsBuildDir,builtFile):resolve(root,'.'+(path==='/'?'/index.html':path));
+  if(!file.startsWith(root+sep)&&!file.startsWith(settingsBuildDir+sep))throw Error('unsafe');
   const data=await readFile(file);
   res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream'}).end(data);
  }catch{res.writeHead(404).end()}
@@ -56,18 +65,20 @@ try{
    });
    assert.deepEqual(state.components,['wcp:app-frame-v1']);
    assert.equal(state.version,'0.1.18');assert.equal(state.publicReady,true);
-   assert.deepEqual(state.shown,['sourceFontSize','sourceLineHeight','sourceComments','previewHeight','accentColor']);
-   assert.deepEqual(state.parameterNames,state.shown);
+   assert.deepEqual(state.shown,['sourceFontSize','sourceLineHeight','sourceComments','previewHeight','accentColor','workspaceRemember30Days']);
+   assert.equal(state.parameterNames.at(-1),'记住此设备 30 天');
+   assert(state.parameterNames.includes('源码字号'));
    assert.equal(state.layoutSlots,true);assert.equal(state.frameHeight>400,true);
-   // WCP runtime, not app manifests, exclusively owns the list. Settings
-   // must account for every inventory item with settings or a single empty row.
+   // WCP owns the complete inventory; Settings displays only user-facing
+   // entries. Internal services remain registered and visible in WCP diagnostics.
    assert(state.inventory.some(c=>c.id==='platform:wcp'),'WCP missing from real catalog');
-   for(const item of state.inventory){
+   for(const item of state.inventory.filter(c=>c.id!=='ocr2md:directory')){
      const rows=state.componentRows.filter(r=>r.componentModule===item.name);
+     assert(rows.every(r=>r.componentVersion===item.version),'registered version missing: '+item.id);
      assert(rows.length>0,'registered component not represented: '+item.id);
      if(rows.every(r=>r.placeholder)){
        assert.equal(rows.length,1,'exactly one blank row per setting-less component');
-       assert.deepEqual(rows[0],{componentModule:item.name,featureGroup:'',enabled:null,
+       assert.deepEqual(rows[0],{componentModule:item.name,componentVersion:item.version,featureGroup:'',enabled:null,
          parameterName:'',value:'',placeholder:true});
      }
    }
@@ -77,13 +88,19 @@ try{
    assert.equal(state.blankEnabledCellCount,state.componentRows.filter(r=>r.placeholder).length);
    assert.equal(state.enabledToggleCount,state.shown.length,'blank component rows cannot have enable checkboxes');
    assert(!state.inventory.some(r=>r.id==='ocr2md:filesystem'),'unconsumed mixed filesystem must not register');
+   assert(state.inventory.some(r=>r.id==='ocr2md:workspace'),'workspace UI must be registered');
+   assert(state.inventory.some(r=>r.id==='ocr2md:directory'),'directory service must be registered');
+   assert(!state.componentRows.some(r=>r.componentModule==='只读工作目录服务'),
+     'internal directory service must not create a Settings placeholder row');
+   assert(state.componentRows.some(row=>row.componentModule==='工作目录'&&row.parameterName==='记住此设备 30 天'&&row.value==='false'),
+    'Workspace setting must appear as a real editable AG row rather than an empty placeholder');
+   const fields=await page.locator('laity-settings-panel').evaluate(e=>e._gridApi.getColumnDefs().map(c=>c.headerName));
+   assert.deepEqual([...fields].sort(),['启用','组件模块','版本号','功能组','参数名','参数值'].sort(),
+     'Settings must display an editable VALUE column');
 
-   assert.equal(state.actions.length,5);assert.deepEqual(state.tabs,['设置']);
-   await page.locator('.wcp-app-version').click();
-   const openedCatalog=await page.locator('.wcp-app-catalog-items li').evaluateAll(
-     items=>items.map(item=>item.dataset.componentId));
-   assert.deepEqual(openedCatalog,invIds,'WCP component list must use runtime getComponents only');
-   await page.locator('.wcp-app-catalog [data-action="close"]').click();
+   assert.equal(state.actions.length,5);assert.deepEqual(state.tabs,['工作目录','设置']);
+   assert.equal(await page.locator('.wcp-app-catalog').count(),0,'version badge no longer opens component list');
+   assert.equal(await page.locator('.wcp-app-version').evaluate(el=>el.tagName),'DIV');
    assert.deepEqual(errors,[]);
    await page.screenshot({path:'/private/tmp/ocr2md-v5-wcp-component-candidate-'+name+'-20261017.png'});
    await page.locator('[data-action="settings-save"]').click();

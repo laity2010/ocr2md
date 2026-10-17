@@ -23,7 +23,7 @@ V5 只声明应用名称、版本号、模块元数据、配置 schema、路由�
 1. WCP AppFrame 组件目录里出现。V5 `onCatalog` 只把 WCP `getComponents()` 原样交给 `frame.setCatalog`，不再手工补加 filesystem/service。
 2. Shared Settings 必须有对应行。没有设置定义时由其公开 `setComponentCatalog` 自动补 **只有组件模块列为名称，其他列全空** 的只读占位行；不创造假参数/复选框，不改写 schema/源码/存储。
 
-V5 通过 `wcp:component-catalog` 事件原样转发 WCP 已加载清单，初始化后和 WCP `wcp:active` 时均同步；业务插件不直接接触 Settings AG/CodeMirror。此前 V5 过早注册 `ocr2md:filesystem`。在本次 AEL 整改中它已从当前注册列表撤下；实际组件清单为 `platform:wcp`、`shared:settings`、`wcp:tripane`。工作目录 UI 未接入，故不需此旧混合文件服务。
+V5 通过 `wcp:component-catalog` 事件原样转发 WCP 已加载清单，初始化后和 WCP `wcp:active` 时均同步；业务插件不直接接触 Settings AG/CodeMirror。此前 V5 过早注册 `ocr2md:filesystem`。在本次 AEL 整改中它已从当前注册列表撤下；工作目录接入后实际组件清单为 `platform:wcp`、`ocr2md:workspace`、`ocr2md:directory`、`shared:settings`、`wcp:tripane`。目录服务只列举目录和发布路径，不执行文件内容读取或 DIRjson 处理，旧混合 filesystem 继续禁用。
 
 Settings 0.1.18 已从权威源码直接构建并部署为 OCR2MD V5 当前开发版（中央稳定版指针保持 0.1.17，不要求先推广它）。`node tests/wp2-component-candidate.mjs` 用于预检，`tests/live-dev-ui.mjs` 在 LAN 实际入口作 Chromium/WebKit 验收，`tests/single-release-parity.py` 比较内外网 9 个实际资源 SHA。
 
@@ -45,6 +45,6 @@ WCP `src/component/app-frame/index.js` 是唯一版本监听/更新实现，发�
 
 WCP 实现负责每15秒轮询与 Safari 恢复前台、按真实 `data-build-id` 复核 HTML/清单的一致性、编辑输入焦点保护、草稿延迟以及提示。**继承旧 V4 已验证更新语义，V4冻结源码不变。** WCP 自己的 Chromium/WebKit 端到端测试为权威实现测试，V5 `tests/app-auto-update-browser.mjs` 仅验证引用与SHA边界，LAN 浏览器测试验证真实自动检查请求。开发版新构建直接上线唯一入口。
 
-## WCP 统一 0.1.8 发布（2026-10-17）
+## WCP 统一 0.1.11 发布（2026-10-17）
 
-WCP Core 与 AppFrame 只有一个**平台版本** `0.1.8` 和一个权威 `published/components/v1/manifest.json`。V5 只从 `vendor/wcp/components/v1/loader.js` 导入公共 `mountWcp` 与 `createWcpAppFrame`；二者通过同一 stable 清单和各自 SHA 验证加载。`frame.watchBuild` 自动更新 API 继续来自 AppFrame 内部。此前独立发布的 AppFrame 1.0.1/1.0.2 仅保留历史兼容，不再对外计版本或进入 V5 发布包。版本标牌应显示 WCP Core/Frame **相同的** 0.1.8，而不是多套版本。若本文件更早段落仍写 AppFrame 1.0.x，请以本节为准。
+WCP Core 与 AppFrame 只有一个**平台版本** `0.1.11` 和一个权威 `published/components/v1/manifest.json`。V5 只从 `vendor/wcp/components/v1/loader.js` 导入公共 `mountWcp` 与 `createWcpAppFrame`；二者通过同一 stable 清单和各自 SHA 验证加载。`frame.watchBuild` 自动更新 API 继续来自 AppFrame 内部。此前独立发布的 AppFrame 1.0.1/1.0.2 仅保留历史兼容，不再对外计版本或进入 V5 发布包。版本标牌应显示 WCP Core/Frame **相同的** 0.1.11，而不是多套版本。若本文件更早段落仍写 AppFrame 1.0.x，请以本节为准。

@@ -1,8 +1,8 @@
 {
   "name": "@ocr2md/v5-shell",
-  "version": "0.0.0-wp2",
+  "version": "0.0.0-workspace",
   "private": true,
-  "description": "V5 single-entry public shell with migrated Settings UI and isolated read-only Filesystem CQE service",
+  "description": "V5 single-entry WCP shell with Settings and independently scoped Workspace directory navigation",
   "scripts": {
     "build": "node scripts/build-registry.mjs",
     "verify:boundary": "node scripts/check-plugin-boundaries.mjs",
@@ -15,7 +15,16 @@
     "test:lan": "NODE_EXTRA_CA_CERTS=\"$HOME/Library/Application Support/ocr2md/lan-tls/root-ca.crt\" node tests/wp2-public-browser.mjs",
     "test:remote": "OCR2MD_V5_PUBLIC_ORIGIN=https://ocr2md.laity.bid node tests/wp2-public-browser.mjs",
     "test:parity": "python3 tests/single-release-parity.py",
-    "test:component-candidate": "node tests/wp2-component-candidate.mjs"
+    "test:component-candidate": "node tests/wp2-component-candidate.mjs",
+    "test:visual": "node scripts/capture-release-visual.mjs",
+    "ael:check": "python3 ../../../web-component-platform/tools/ael/ael.py --root . --policy ael-policy.json check",
+    "ael:begin": "python3 ../../../web-component-platform/tools/ael/ael.py --root . --policy ael-policy.json begin",
+    "ael:build": "python3 ../../../web-component-platform/tools/ael/ael.py --root . --policy ael-policy.json build",
+    "ael:test": "python3 ../../../web-component-platform/tools/ael/ael.py --root . --policy ael-policy.json test",
+    "ael:finish": "python3 ../../../web-component-platform/tools/ael/ael.py --root . --policy ael-policy.json finish",
+    "ael:report": "python3 ../../../web-component-platform/tools/ael/ael.py --root . --policy ael-policy.json report",
+    "component:prepare-settings": "python3 scripts/prepare-shared-settings.py",
+    "release:publish": "python3 scripts/publish-single-release.py"
   },
   "devDependencies": {
     "typescript": "5.9.3"

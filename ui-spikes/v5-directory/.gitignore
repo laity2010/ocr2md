@@ -6,3 +6,6 @@ test-results/
 
 __pycache__/
 *.pyc
+
+# Unified AEL ledger is local runtime state (historical SQLite retained separately)
+.ael/

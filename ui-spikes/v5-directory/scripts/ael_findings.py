@@ -131,9 +131,17 @@ def proof(root:Path,kind:str):
         manifest_match=bool(release and release.get('buildId')==badge_value)
         source_app=(root/'app.js').read_text()
         published_app=(published/'app.js').read_text() if (published/'app.js').is_file() else ''
-        code_has_shared_frame=('createAppFrame' in source_app and 'wcp:app-action' in source_app and
-           (root/'vendor/wcp/components/v1/releases/0.1.8/app-frame.js').is_file())
-        released_with_shared_frame=code_has_shared_frame and 'createAppFrame' in published_app
+        # Read the published WCP stable version, not a hardcoded early 0.1.8
+        # API signature. V5 now composes through createWcpAppFrame.
+        manifest_path=root/'vendor/wcp/components/v1/manifest.json'
+        stable=''
+        if manifest_path.is_file():
+            stable=json.loads(manifest_path.read_text()).get('stable','')
+        released_frame=bool(stable and
+            (root/'vendor/wcp/components/v1/releases'/stable/'app-frame.js').is_file())
+        code_has_shared_frame=('createWcpAppFrame' in source_app and
+            'wcp:app-action' in source_app and released_frame)
+        released_with_shared_frame=code_has_shared_frame and 'createWcpAppFrame' in published_app
         fixed=bool(timestamped and manifest_match and released_with_shared_frame)
         outcome=('CODE_CORRECTED_VISUAL_REVIEW_PENDING' if fixed else
           'APP_FRAME_CANDIDATE_NOT_DEPLOYED' if code_has_shared_frame else 'DEVIATION_REQUIRES_REVIEW')

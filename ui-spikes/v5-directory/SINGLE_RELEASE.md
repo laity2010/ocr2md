@@ -4,9 +4,11 @@
 
 唯一实际对外发布目录是仓库 `.runtime/ocr2md-public/`，**不由 Git 跟踪**。V5 源码位于 `ui-spikes/v5-directory/`，其中 `scripts/publish-single-release.py` 只复制运行资产并原子切换发布目录，旧目录备份移动到 `.runtime/ocr2md-release-rollback/`（仅供回退，不对外提供）。唯一静态网关是 `scripts/release_gateway.py`，LaunchAgent 为 `bid.laity.ocr2md-v5-single-gateway`，仅侦听 Mac 回环 `127.0.0.1:4385`。Cloudflared 原有共享 tunnel `ocr2md.laity.bid` 的 ingress 仅从 4176 改至 4385，未触碰其他主机名。
 
-V4 原开发源码、未提交 WIP 与原正式/候选发布快照仍然保留，`verify-v4-freeze.mjs` 核验 287 个冻结 SHA 文件和历史发布资产。V4 公网 `/v4-directory/`、`/v4-wp3-candidate/` 以及历史 `/v5-directory/` 返回 410；不可通过发布服务访问旧资产。V5 通过 [UI_V4_INHERITANCE.md](./UI_V4_INHERITANCE.md) 继承 V4 顶部三层布局和组件样式。V5 当前开发版只有 `settings` UI 处于注册状态。旧 `filesystem` 混合服务因工作目录尚未接入且含越界文档语义已停用注册，并由发布器从可访问文件中剔除；历史源码留档供审计。
+V4 原开发源码、未提交 WIP 与原正式/候选发布快照仍然保留，`verify-v4-freeze.mjs` 核验 287 个冻结 SHA 文件和历史发布资产。V4 公网 `/v4-directory/`、`/v4-wp3-candidate/` 以及历史 `/v5-directory/` 返回 410；不可通过发布服务访问旧资产。V5 通过 [UI_V4_INHERITANCE.md](./UI_V4_INHERITANCE.md) 继承 V4 顶部三层布局和组件样式。V5 当前开发版已注册 `settings` 和独立 `workspace` UI，以及只读 `ocr2md:directory` 服务。旧 `filesystem` 混合服务因含越界文档语义而继续停用，并由发布器从可访问文件中剔除；历史源码留档供审计。
 
-V5 WP2 无书籍修改入口。网关只转发 `/__v3/fs?op=status`（授权状态，不含目录信息）；`list`、`stat`、`read`、`pair`、`bootstrap`、其他 API 和任何写请求全部被拒绝，因为后端把 loopback 连接视为本地授权，绝不可由公网代理直通。后续 WP3+ 若要增加命令，必须先编写功能契约、授权与 CSRF/来源验收，再显式增加代理白名单，不准笼统转发 `/__v3/`。
+V5 当前仅提供目录导航，不提供书籍修改入口。网关只转发 `/__v3/fs?op=status` 和 `op=list&path=/ocr2md/...`；显式指定非本机 Host 和 Forwarded 标记，迫使旧后端按 Vault 密钥认证，而不能继承 loopback 免密特权。未带密钥的目录列举返回 401，`stat`、`read`、`pair`、`bootstrap`、其他 API 和所有写请求仍被拒绝。工作目录不分类 PDF、不读取文件正文、不涉及 DIRjson 或 MOPJO。
+
+V5「工作目录 / 记住此设备 30 天」为 Settings 中默认关闭的可选布尔参数。成功提供 Vault 密钥后，专用同源 POST `/__v5/auth/remember` 签发 `__Host-` 前缀的 30 天 HttpOnly/Secure/SameSite=Lax Cookie。网关只在验证签名和到期时间后，使用 Mac 既有私有 Vault 密钥完成 **status/list**，不将原始密钥存入持久客户端存储。取消设置保存即清除本浏览器 Cookie；旧的页面 sessionStorage 临时登录不受影响。Cookie 按内网 IP 和公网域名分别隔离，用户需分别授权。网关凭据源 `~/.ocr2md-private/v3-vault-access-key` 由 Mac OS 权限 0600 保护；签名受 Vault 密钥轮换影响。唯一额外 POST 不转发到 V3，也不具备文件写权限。
 
 验证：`node tests/wp2-contract-isolation.mjs`、`node tests/wp2-browser.mjs`、`npm run test:lan`（默认）及需要远程回归时 `npm run test:remote`；公网 `GET /` 200，旧 URL 410，`GET /__v3/fs?op=pair` 403，`GET /release-info.json` 显示两模块。实机截图使用仓库 `scripts/ipad_safari_capture.py --url-contains 'https://ocr2md.laity.bid/'`，其内页面标题必须是 V5。
 
@@ -17,6 +19,8 @@ V5 WP2 无书籍修改入口。网关只转发 `/__v3/fs?op=status`（授权状�
 开发和实机验收的**默认入口始终是内网 HTTPS** `https://192.168.1.10:4443/`；iPad 离开局域网时才切换 `https://ocr2md.laity.bid/`。两个入口是同一个 V5 网关发布进程的两个网络到达路径，不是独立部署，也不对用户展示 `/v5-directory/` 等版本目录。
 
 调整模块：先在 V5 源码目录运行模块测试与 `npm run test:lan`；验收通过后只运行一次 `python3 scripts/publish-single-release.py` 更新唯一发布目录。发布后运行 `npm run test:parity` 确认 LAN 和 Cloudflare 的页面、脚本、V4 继承样式、共享组件及发布哈希全一致。最后用 `scripts/ipad_safari_capture.py --url-contains 'https://192.168.1.10:4443/'` 截取真实 iPad Safari 的内网页面，AgentDock 原生图片卡验收。公网只做必要的远程连通复验，不再作为每次开发默认访问地址。
+
+**每次发布后必须截图并自行核实（2026-10-17）：** V5 发布脚本在原子上线之后同步调用 `scripts/capture-release-visual.mjs <buildId>`。它在独立、无用户授权的 WebKit 浏览器中使用 1032×642 iPad 视窗打开真实内网 HTTPS 页面，分别截图「设置」和「工作目录」，核对可见版本号等于本次 buildId、核心组件真实加载、AG 中有实际工作目录设置行、工作目录可见、页面无 JS 异常。每一版的图片及 `report.json` 保存在私有的 `.runtime/ocr2md-build-evidence/<buildId>/`，权限为 0700/0600，不发布、不进 Git。截图是**必须检查的视觉证据**，模型还须主动通过 AgentDock 查看两张图片是否有错位、空白、加载异常，然后才宣布验收成功。如未取得截图或检查失败，明确报告「已上线但截图验收失败」，不得把仅有发布日志当作完工。实体 iPad Safari 若可连接仍需补充截图，不用真实 iPad 是否连接作为每次发布的硬依赖。
 
 只有一个 release 根目录 `.runtime/ocr2md-public/`，LAN TLS 仅负责代理，不存在独立的 LAN 构建目录。TLS 使用既有受信任的 Mac LAN 根证书，不重新签发、不降级 HTTPS。公网通过已有共享 Cloudflare 隧道；其他项目的隧道配置保持不变。
 
@@ -42,6 +46,6 @@ V5 WP2 无书籍修改入口。网关只转发 `/__v3/fs?op=status`（授权状�
 
 此版本起原 `assets/app-live-update.js` 已移除；自动更新由 WCP AppFrame 公共 `frame.watchBuild()` 完全负责。之前本文件描述的版本检测、Safari 恢复、草稿保护仍有效，但**唯一权威代码**是 WCP 仓 `src/component/app-frame/index.js`。发布时检查 WCP 1.0.2 的 JS/CSS 中心不可变SHA、V5 镜像完全匹配，并保证不存在另一份更新器源码。
 
-## WCP Core + AppFrame 一份清单（0.1.8）
+## WCP Core + AppFrame 一份清单（0.1.11）
 
-部署器校验 `web-component-platform/published/components/v1/manifest.json` 的 `stable=0.1.8`；同一条 `releases/0.1.8` 内包含 `wcp-workbench.js`、`app-frame.js`、`app-frame.css` 的真实 SHA。V5 使用唯一 `vendor/wcp/components/v1/loader.js` 启动两种内部模块，旧独立 AppFrame `components/app-frame` 历史镜像不进入线上发布；`release-info.json` 统一记录 `wcpVersion`。WCP 发布只运行 `node scripts/publish.mjs 0.1.8`。此前提及两个独立 WCP 版本的章节仅为历史开发记录。
+部署器校验 `web-component-platform/published/components/v1/manifest.json` 的 `stable=0.1.11`；同一条 `releases/0.1.11` 内包含 `wcp-workbench.js`、`app-frame.js`、`app-frame.css` 的真实 SHA。V5 使用唯一 `vendor/wcp/components/v1/loader.js` 启动两种内部模块，旧独立 AppFrame `components/app-frame` 历史镜像不进入线上发布；`release-info.json` 统一记录 `wcpVersion`。WCP 发布只运行 `node scripts/publish.mjs 0.1.11`。此前提及两个独立 WCP 版本的章节仅为历史开发记录。

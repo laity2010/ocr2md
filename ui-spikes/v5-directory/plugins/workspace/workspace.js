@@ -2,7 +2,8 @@
  * cross-component API is its scoped CQE endpoint. No file reads/writes here.
  */
 import {WorkspaceView} from './workspace-grid.js';
-import {TriPane,triPaneVersion} from '../../components/tripane.js';
+import {TriPane} from '../../components/tripane.js';
+import {ResidentHost} from '../../components/resident.js';
 const HOME='/ocr2md';
 // Same versioned module URL as Shared Settings; one CodeMirror implementation.
 // Fixed, same-origin, published public component dependency (not an import
@@ -22,25 +23,45 @@ function requireSourceSurface(){
 }
 const own=(root,tag,attrs={},text='')=>{const el=document.createElement(tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));if(text)el.textContent=text;root.append(el);return el;};
 const safe=x=>String(x||'').slice(0,500);
-// WCP hosts own each mount; avoid V4 page anchors and resident overlays.
+// Module-owned resident view; never use V4 page anchors or manipulate WCP internals.
 const instances=new WeakMap();
+// The public ResidentHost keeps the original Web Components CONNECTED between
+// WCP tab switches (CodeMirror destroys its editor on DOM disconnection).
+let parkedView=null;
+// Cache the current directory for this page session. Switching WCP tabs
+// remounts the view, but is NOT a request to refresh directory contents.
+const navigation={path:HOME,selectedDirectory:null,cache:null};
+const sourceHint='单击左侧 AG 行查看文件元数据；双击目录名称进入下级目录。不读取文件内容。';
+const describeRow=row=>['名称：'+row.name,'类型：'+(row.kind==='directory'?'目录':'文件'),
+ '路径：'+row.path,'大小：'+row.size,'修改时间：'+row.modifiedAt].join('\n');
 export const workspaceModule={
- id:'ocr2md:workspace',name:'工作目录',version:'1.3.0',order:1,presentation:'full',
- description:'工作目录只读导航：AG＋共享源码；CQE 文件服务与布局组件自治。',
- inspectComponents(){return [{id:'wcp:tripane',name:'WCP TriPane 布局',version:triPaneVersion}];},
+ id:'ocr2md:workspace',name:'工作目录',version:'1.3.3',order:1,presentation:'full',
+ description:'工作目录只读导航：AG＋元数据详情；CQE 目录服务与布局组件自治。',
  async mount(host,bus){
-  // Scope AG, editor, navigation and state to the WCP host; remount is fresh.
   if(instances.has(host))return;
-  const abort=new AbortController(),state={path:HOME,selected:null,selectedDirectory:null,epoch:0,previewEpoch:0,pending:false,connected:false};
-  const viewRoot=own(host,'section',{class:'workspace-view', 'data-testid':'workspace-component'});
-  viewRoot.style.cssText='width:100%;height:100%;min-height:0';
+  if(parkedView){
+   const view=parkedView;parkedView=null;
+   view.resume(host,bus);
+   instances.set(host,view);
+   return;
+  }
+  // First mount creates one resident view; further mounts only show it.
+  const abort=new AbortController(),state={path:navigation.path,selected:null,selectedDirectory:navigation.selectedDirectory,epoch:0,pending:false,connected:false};
   let tri,grid;
+  const resident=new ResidentHost({id:'ocr2md-workspace-resident',onResize:()=>tri?.resize()});
+  resident.element.dataset.moduleOwner='ocr2md:workspace';
+  const viewRoot=own(resident.element,'section',{class:'workspace-view', 'data-testid':'workspace-component'});
+  viewRoot.style.cssText='width:100%;height:100%;min-height:0';
+  resident.show(host);
   try{
   const style=own(viewRoot,'style');style.textContent=`
   .workspace-view{width:100%;height:100%;display:flex;flex-direction:column;min-height:0;gap:8px;color:#e1e7ef;font:14px/1.55 var(--laity-ui-font,"Sarasa Fixed SC","Sarasa Mono SC",ui-monospace,monospace);background:#1d2732;padding:6px;box-sizing:border-box}
+  .workspace-view .ws-connect,.workspace-view [data-testid="workspace-status"]{flex:0 0 auto}
+  .workspace-view [data-testid="workspace-status"][hidden]{display:none!important}
   .workspace-view button,.workspace-view input{border:1px solid #52647c;border-radius:5px;background:#253343;color:#e1e7ef;font:inherit;padding:6px 10px}
   .workspace-view button:disabled{opacity:.5}
   .workspace-view .ws-connect{padding:10px;border:1px solid #52647c;border-radius:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .workspace-view .ws-connect[hidden]{display:none!important}
   .workspace-view .ws-connect input{flex:1;min-width:190px}
   .workspace-view .ws-layout{flex:1;min-height:0;position:relative;border:1px solid #475258;overflow:hidden}
   .workspace-view .ws-grid{width:100%;height:100%;min-width:0;min-height:0}
@@ -92,15 +113,7 @@ export const workspaceModule={
   .workspace-view [data-level=busy]{color:#a8ccfb}
   .workspace-view .dv-theme-dark{--dv-background-color:#1d2732}
   `;
-  const actions=own(viewRoot,'div',{'data-module-actions-owner':'ocr2md:workspace',
-    'data-testid':'workspace-module-tools'});
-  actions.style.cssText='flex:1 1 auto;min-width:0;gap:7px';
-  const parent=own(actions,'button',{'data-testid':'workspace-parent',type:'button'},'返回上级');
-  const refresh=own(actions,'button',{'data-testid':'workspace-refresh',type:'button'},'刷新目录');
-  const layoutButton=own(actions,'button',{'data-testid':'workspace-layout-mode',type:'button'},'Full 模式');
-  const pathDisplay=own(actions,'strong',{'data-testid':'workspace-path',title:'Obsidian/ocr2md/ocr2md'},'Obsidian/ocr2md/ocr2md');
-  pathDisplay.style.cssText='flex:1 1 auto;min-width:85px;max-width:55vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500;color:#c8d7e9';
-  const set=own(actions,'button',{'data-testid':'workspace-set-root',type:'button'},'设为工作目录');
+  // WCP AppFrame owns the common toolbar; paths are reported as read-only context.
   const status=own(viewRoot,'div',{'data-testid':'workspace-status',role:'status','aria-live':'polite'},'检查 Mac Vault…');
   const gridHealth=own(viewRoot,'div',{'data-testid':'workspace-grid-health'});
   gridHealth.hidden=true;
@@ -116,7 +129,6 @@ export const workspaceModule={
   const reuse=own(login,'button',{type:'button','data-testid':'workspace-reuse-v3'},'沿用 v3 授权');
   const secureAuth=own(login,'a',{href:new URL('/',location.href).href,'data-testid':'workspace-https-handoff'},'使用 HTTPS 同源授权');
   secureAuth.style.cssText='padding:6px 12px;border:1px solid #52647c;border-radius:5px;color:#a9d1ff;white-space:nowrap';
-  const pair=own(login,'button',{type:'button','data-testid':'workspace-pair'},'Mac 本机授权');pair.hidden=true;
   const region=own(viewRoot,'div',{class:'ws-layout'});
   const ag=own(region,'div',{class:'ws-grid','data-testid':'workspace-ag'});
   const source=own(region,'div',{class:'ws-source','data-testid':'workspace-source'});
@@ -125,15 +137,28 @@ export const workspaceModule={
   // Preload the official AG Grid Community structural stylesheet before AG
   // construction. WebKit occasionally delays generated theme styles after
   // hard navigation; rows then exist in DOM but appear outside the viewport.
-  const agCss=own(viewRoot,'link',{rel:'stylesheet',href:'./plugins/workspace/ag-grid-base.min.css'});
+  // This legacy AG stylesheet has GLOBAL light-theme selectors. ResidentHost
+  // keeps its link connected while inactive, so scope its applicability to
+  // active Workspace only; otherwise it turns Settings AG white on tab return.
+  const agCss=own(viewRoot,'link',{rel:'stylesheet',href:'./plugins/workspace/ag-grid-base.min.css',media:'all'});
   await new Promise((ok,fail)=>{agCss.addEventListener('load',ok,{once:true});agCss.addEventListener('error',()=>fail(Error('AG_GRID_CSS_NOT_LOADED')),{once:true})});
   const css=own(viewRoot,'link',{rel:'stylesheet',href:'./components/dockview.css'});
   await new Promise((ok,fail)=>{css.addEventListener('load',ok,{once:true});css.addEventListener('error',()=>fail(Error('DOCKVIEW_CSS_NOT_LOADED')),{once:true})});
   host.dataset.moduleOwner='ocr2md:workspace';
   tri=new TriPane(region,{slots:{ag,source},panes:['ag','source'],mode:'compact',storage:sessionStorage,storageKey:'ocr2md-v5-workspace-dual-v1'});
-  layoutButton.addEventListener('click',()=>{tri.setMode(tri.mode==='compact'?'full':'compact');layoutButton.textContent=tri.mode==='compact'?'Full 模式':'Compact 模式'},{signal:abort.signal});
+  const updateAction=(id,disabled)=>document.dispatchEvent(new CustomEvent('wcp:app-action-state',
+    {detail:{id,disabled:Boolean(disabled)}}));
+  const syncChrome=()=>{
+    updateAction('workspace-parent',!state.connected||state.pending||state.path===HOME);
+    updateAction('workspace-refresh',!state.connected||state.pending);
+    updateAction('workspace-set-root',!state.connected||state.pending);
+    updateAction('workspace-layout-mode',false);
+  };
   const output=(msg,level='ready')=>{
    status.dataset.level=level;status.textContent=safe(msg);
+   // Normal navigation feedback lives in AG/source; don't allocate a redundant
+   // row above AG. Busy/error/authorization prompts remain visible.
+   status.hidden=level==='ready';
    document.dispatchEvent(new CustomEvent('wcp:module-status',{
      detail:{moduleId:'ocr2md:workspace',message:status.textContent,level}}));
   };
@@ -168,29 +193,57 @@ export const workspaceModule={
   const recheck=(count,epoch)=>{
    for(const ms of [350,1400,3000])setTimeout(()=>checkGrid(count,epoch),ms);
   };
+  const restore=()=>{
+   const cached=navigation.cache;
+   if(!cached||cached.path!==state.path)return false;
+   state.selected=cached.selected;
+   state.selectedDirectory=cached.selected?.kind==='directory'?cached.selected.path:null;
+   navigation.selectedDirectory=state.selectedDirectory;
+   grid.setRows(cached.entries);
+   grid.setSource(cached.selected?describeRow(cached.selected):sourceHint);
+   if(state.selectedDirectory)grid.selectDirectory(state.selectedDirectory);
+   output('已加载 '+cached.entries.length+' 项（保留目录数据）');
+   recheck(cached.entries.length,state.epoch);
+   syncChrome();
+   return true;
+  };
   const go=async(path,cursor='')=>{
    if(abort.signal.aborted||state.pending)return;
-   state.pending=true;const epoch=++state.epoch;++state.previewEpoch;ag.inert=true;output('正在读取目录…','busy');
+   state.pending=true;const epoch=++state.epoch;ag.inert=true;output('正在读取目录…','busy');
    try{
-    const result=await bus.query('workspace.list',{path,cursor});if(epoch!==state.epoch||abort.signal.aborted)return;
-    if(result.error)throw Error(result.error);
-    state.path=result.path;state.selected=null;state.selectedDirectory=null;
-    pathDisplay.textContent='Obsidian/ocr2md'+result.path;
-    pathDisplay.title=pathDisplay.textContent;
-    grid.setRows(result.entries);grid.setSource('选择左侧 AG 行查看该项详细信息；双击目录名称进入下级目录。');
-    parent.disabled=result.path===HOME;
-    output('已加载 '+result.entries.length+' 项'+(result.truncated?' · 本页只显示前 160 项':'')+(result.cursor?' · 还有下一页':''));
-    recheck(result.entries.length,epoch);
+    // The backend paginates at 80 rows; do not silently omit later entries.
+    const entries=[],visited=new Set();let next=cursor,partial=false;
+    for(let pageNo=0;pageNo<64;pageNo++){
+     const result=await bus.query('workspace.list',{path,cursor:next});
+     if(epoch!==state.epoch||abort.signal.aborted)return;
+     if(result.error)throw Error(result.error);
+     entries.push(...result.entries);
+     if(!result.cursor){next='';break}
+     if(visited.has(result.cursor))throw Error('目录分页游标重复');
+     visited.add(result.cursor);next=result.cursor;
+     if(pageNo===63)partial=true;
+    }
+    const retain=path===state.path?state.selected?.path:null;
+    state.path=path;state.selected=null;state.selectedDirectory=null;
+    const retained=entries.find(entry=>entry.path===retain);
+    if(retained){state.selected=retained;state.selectedDirectory=retained.kind==='directory'?retained.path:null;}
+    navigation.path=path;navigation.selectedDirectory=state.selectedDirectory;
+    navigation.cache={path,entries,selected:retained||null};
+    syncChrome();
+    grid.setRows(entries);grid.setSource(retained?describeRow(retained):sourceHint);
+    if(state.selectedDirectory)grid.selectDirectory(state.selectedDirectory);
+    output('已加载 '+entries.length+' 项'+(partial?' · 条目过多，仅显示前 64 页':''));
+    recheck(entries.length,epoch);
    }catch(e){output('读取失败：'+safe(e),'error')}
-   finally{state.pending=false;ag.inert=false}
+   finally{state.pending=false;ag.inert=false;syncChrome()}
   };
   try{grid=new WorkspaceView(ag,source,async row=>{
    state.selected=row;
-   if(row.kind==='directory'){state.selectedDirectory=row.path;grid.selectDirectory(row.path)}
-   const epoch=++state.previewEpoch;output('读取所选项…','busy');
-   const data=await bus.query('workspace.preview',{path:row.path,nodeId:row.nodeId,revision:row.revision}).catch(e=>({error:String(e)}));
-   if(epoch!==state.previewEpoch||abort.signal.aborted)return;
-   grid.setSource(data.error?'读取失败：'+safe(data.error):data.text+(data.truncated?'\n\n（仅显示前段内容）':''));
+   state.selectedDirectory=row.kind==='directory'?row.path:null;
+   navigation.selectedDirectory=state.selectedDirectory;
+   if(navigation.cache?.path===state.path)navigation.cache.selected=row;
+   if(state.selectedDirectory)grid.selectDirectory(state.selectedDirectory);
+   grid.setSource(describeRow(row));
    output('已选择 '+row.name);
   },row=>{if(row.kind==='directory')void go(row.path)});}catch(e){output('AG/源码组件加载失败：'+safe(e),'error');throw e}
   repaint.addEventListener('click',()=>{
@@ -198,19 +251,21 @@ export const workspaceModule={
    grid.redraw();
    recheck(grid.rowHealth().total,state.epoch);
   },{signal:abort.signal});
-  const disabled=()=>{parent.disabled=!state.connected;refresh.disabled=!state.connected;set.disabled=!state.connected};
-  disabled();
+  syncChrome();
   async function statusCheck(){
    try{const s=await bus.query('workspace.status',{});if(abort.signal.aborted)return;
-    state.connected=s.authorized;login.hidden=s.authorized;pair.hidden=!s.canPairLocally;
-    disabled();if(s.authorized)await go(HOME);else output(s.error||'等待 Vault 授权；只读访问，不修改原文件','busy');
+    state.connected=s.authorized;login.hidden=s.authorized;
+    syncChrome();
+    if(s.authorized){if(!restore())await go(state.path);}
+    else{navigation.cache=null;output(s.error||'等待 Vault 授权；只读访问，不修改原文件','busy');}
    }catch(e){output('连接失败：'+safe(e),'error')}
   }
-  const authorize=async(pairOnMac=false)=>{
+  const authorize=async()=>{
    const value=key.value;key.value='';output('验证 Vault 访问权限…','busy');
-   try{const s=await bus.command('workspace.authorize',{key:value,pairOnMac});
+   try{const s=await bus.command('workspace.authorize',{key:value});
     if(abort.signal.aborted)return;state.connected=s.authorized;login.hidden=s.authorized;
-    disabled();if(s.authorized)await go(HOME);else output(s.error||'授权失败','error');
+    syncChrome();if(s.authorized){await go(state.path);if(s.error)output(s.error,'error')}
+    else output(s.error||'授权失败','error');
    }catch(e){output('授权失败：'+safe(e),'error')}
   };
   reuse.addEventListener('click',async()=>{
@@ -219,38 +274,76 @@ export const workspaceModule={
    try{
      const result=await bus.command('workspace.reuse-v3',{});
      if(abort.signal.aborted)return;
-     state.connected=result.authorized;login.hidden=result.authorized;disabled();
-     if(result.authorized)await go(HOME);
+     state.connected=result.authorized;login.hidden=result.authorized;syncChrome();
+     if(result.authorized){await go(state.path);if(result.error)output(result.error,'error')}
      else output(result.error||'无法沿用 v3 授权','error');
    }catch(e){if(!abort.signal.aborted)output('v3 授权复用失败：'+safe(e),'error')}
    finally{reuse.disabled=false}
   },{signal:abort.signal});
-  connect.addEventListener('click',()=>void authorize(false),{signal:abort.signal});
-  pair.addEventListener('click',()=>void authorize(true),{signal:abort.signal});
-  parent.addEventListener('click',()=>{const p=state.path.slice(0,state.path.lastIndexOf('/'))||HOME;void go(p.startsWith(HOME)?p:HOME)}, {signal:abort.signal});
-  refresh.addEventListener('click',()=>void go(state.path),{signal:abort.signal});
-  set.addEventListener('click',async()=>{
+  connect.addEventListener('click',()=>void authorize(),{signal:abort.signal});
+  const setWorkingDirectory=async()=>{
+    if(!state.connected||state.pending)return;
     const path=state.selectedDirectory??state.path;
-    output('验证书籍文件夹及 PDF…','busy');
-    try{const result=await bus.command('workspace.activate',{path});output(result.selected?'工作目录已选定：'+result.path+' · PDF '+result.pdfCount+' 项（仅选择目录；文档由后续模块处理）':'设置失败：'+result.error,result.selected?'ready':'error')}
+    output('确认所选目录…','busy');
+    try{const result=await bus.command('workspace.activate',{path});output(result.selected?'工作目录已选定：'+result.path+'（仅选择目录）':'设置失败：'+result.error,result.selected?'ready':'error')}
     catch(e){output('设置失败：'+safe(e),'error')}
+  };
+  // Buttons belong to the WCP AppFrame module toolbar. No duplicate toolbar
+  // is mounted within the content pane or directly on document.body.
+  document.addEventListener('wcp:app-action',event=>{
+    if(!instance.active)return;
+    switch(event.detail?.id){
+      case 'workspace-parent':{
+        if(!state.connected||state.pending||state.path===HOME)return;
+        const p=state.path.slice(0,state.path.lastIndexOf('/'))||HOME;
+        void go(p.startsWith(HOME)?p:HOME);break;
+      }
+      case 'workspace-refresh':if(state.connected&&!state.pending)void go(state.path);break;
+      case 'workspace-set-root':void setWorkingDirectory();break;
+      case 'workspace-layout-mode':tri.setMode(tri.mode==='compact'?'full':'compact');break;
+    }
   },{signal:abort.signal});
-  const unsubscribe=bus.subscribe('workspace.selected',()=>{});
-  const instance={host,tri,grid,dispose:()=>{
-   abort.abort();unsubscribe();tri.dispose();grid.destroy();
-   actions.remove();viewRoot.remove();
-  }};
+  let unsubscribe=bus.subscribe('workspace.selected',()=>{});
+  const instance={host,tri,grid,active:true,
+   resume(nextHost,nextBus){
+    bus=nextBus;
+    this.host=nextHost;this.active=true;
+    nextHost.dataset.moduleOwner='ocr2md:workspace';
+    agCss.media='all';
+    resident.show(nextHost);
+    unsubscribe=bus.subscribe('workspace.selected',()=>{});
+    tri.resize();syncChrome();
+    requestAnimationFrame(()=>{
+     if(!this.active)return;
+     tri.resize();
+     recheck(grid.rowHealth().total,state.epoch);
+    });
+   },
+   park(){
+    this.active=false;
+    unsubscribe?.();unsubscribe=null;
+    agCss.media='not all'; // no global AG theme leakage into Settings
+    resident.hide();
+    parkedView=this;
+   },
+   destroy(){
+    abort.abort();unsubscribe?.();tri.dispose();grid.destroy();
+    resident.dispose();
+   }
+  };
   instances.set(host,instance);
   instance.tri.resize();
   await statusCheck();
+  // AppFrame installs declared buttons after the module has finished mounting.
+  requestAnimationFrame(()=>{if(!abort.signal.aborted)syncChrome()});
   }catch(error){
     // Mount failures must not leave a half-installed AG/CodeMirror/toolbar.
     abort.abort();instances.delete(host);
     try{grid?.destroy()}catch{}
     try{tri?.dispose()}catch{}
-    viewRoot.remove();throw error;
+    resident.dispose();throw error;
   }
  },
- unmount(host){const instance=instances.get(host);if(instance){instances.delete(host);instance.dispose();}}
+ unmount(host){const instance=instances.get(host);if(instance){instances.delete(host);instance.park();}}
 
 };

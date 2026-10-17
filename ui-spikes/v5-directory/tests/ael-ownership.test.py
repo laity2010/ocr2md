@@ -18,9 +18,15 @@ with sqlite3.connect(':memory:') as c:
  assert c.execute('select count(*) from architecture_findings').fetchone()[0]==2
  assert c.execute('select count(*) from architecture_reviews').fetchone()[0]==2
  assert c.execute("select status from architecture_findings where finding_id='V5-OWN-002'").fetchone()[0]=='open'
- assert resolve_retracted_proposal(c,root) is True
- assert resolve_retracted_proposal(c,root) is False
- assert c.execute("SELECT status FROM architecture_findings WHERE finding_id='V5-OWN-001'").fetchone()[0]=='resolved'
+ # The workspace is now live. The historical one-time resolver intentionally
+ # rejects this scenario rather than inventing proof that no code was touched.
+ try:
+  resolve_retracted_proposal(c,root)
+ except ValueError as exc:
+  assert str(exc)=='AEL_PROPOSAL_BOUNDARY_NOT_PROVEN'
+ else:
+  raise AssertionError('stale proposal resolver must not declare success')
+ assert c.execute("SELECT status FROM architecture_findings WHERE finding_id='V5-OWN-001'").fetchone()[0]=='open'
  assert c.execute("SELECT status FROM architecture_findings WHERE finding_id='V5-OWN-002'").fetchone()[0]=='open'
  assert c.execute('pragma integrity_check').fetchone()[0]=='ok'
- print('AEL_OWNERSHIP_ADVISORY_PASS open=2 reviews=2 proposalAndCodeSeparated=true rootUnchanged=true')
+ print('AEL_OWNERSHIP_ADVISORY_PASS open=2 reviews=2 staleProposalResolverRejected=true rootUnchanged=true')

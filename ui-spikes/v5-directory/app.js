@@ -8,7 +8,14 @@ const contracts=plugins.flatMap(plugin=>plugin.contracts);
 const visible=plugins.filter(plugin=>plugin.manifest.kind==='ui').map(plugin=>({
   id:plugin.manifest.id,tab:plugin.manifest.tab,home:plugin.manifest.home,
   actions:plugin.manifest.actions||[],kind:plugin.manifest.kind,
+  toolbarTitleVisible:plugin.manifest.toolbarTitleVisible!==false,
 }));
+// Declarative Settings registration happens once at composition time.
+// Adding a plugin requires zero Settings or WCP source changes.
+const settingsRegistrations=plugins.filter(plugin=>Array.isArray(plugin.settings)&&plugin.settings.length)
+ .map(plugin=>({ownerId:plugin.manifest.id,schema:plugin.settings}));
+document.dispatchEvent(new CustomEvent('wcp:settings:catalog-v1',
+ {detail:{registrations:settingsRegistrations}}));
 const home=visible.find(item=>item.home)||visible[0];
 if(!home)throw Error('WCP_APP_NO_HOME_MODULE');
 let runtime=null,changing=false;
@@ -23,7 +30,7 @@ const frame=await createWcpAppFrame(document.getElementById('app-host'),{
   catch(error){frame.setStatus('模块切换失败：'+error,'error')}finally{changing=false}
  },
  onAction:id=>document.dispatchEvent(new CustomEvent('wcp:app-action',{detail:{id}})),
- onCatalog:()=>frame.setCatalog(runtime?.getComponents?.()??[]),
+ catalogVisible:false,
 });
 document.addEventListener('wcp:module-status',e=>{
  const {moduleId,message,level}=e.detail||{};
@@ -39,10 +46,12 @@ try{
   isDirty:()=>modules.some(m=>typeof m.isDirty==='function'&&m.isDirty())});
  window.__ocr2mdV5={phase:'ready',modules:modules.map(m=>m.id),contracts:contracts.length,
   wcpVersion:runtime.version,instance:runtime};
- // WCP is the SOLE authority for installed components; Settings receives a
- // view of this catalog, never a business-maintained second component list.
+ // WCP remains the sole authority for the complete installed inventory.
+ // Settings is a user-facing view: hide explicitly internal components there
+ // without changing WCP registration, routing or its diagnostic catalog.
+ const internalIds=new Set(modules.filter(m=>m.inventoryRole==='internal').map(m=>m.id));
  const syncComponents=()=>{
-   const components=runtime.getComponents();
+   const components=runtime.getComponents().filter(item=>!internalIds.has(item.id));
    document.dispatchEvent(new CustomEvent('wcp:component-catalog',{detail:{components}}));
  };
  syncComponents();

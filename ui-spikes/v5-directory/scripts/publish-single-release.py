@@ -13,14 +13,13 @@ backup_root=repo/'.runtime/ocr2md-release-rollback'
 stage=release.with_name('ocr2md-public-stage-'+str(os.getpid()))
 
 
-# Development builds deploy immediately after functional/security checks,
-# without modifying the central shared-settings stable pointer. This routine
-# builds the ONE authoritative component source into the app-only stage.
+# Publishing assembles ONLY previously built, source-hash-verified components.
+# Compiling Settings is a separate operation in its own repository; no rebuild here.
 def stage_development_components(stage_root):
-    # ONE public WCP manifest owns both runtime and AppFrame 0.1.8.
+    # ONE public WCP manifest owns both runtime and AppFrame 0.1.11.
     central_wcp=repo.parent/'web-component-platform/published/components/v1'
     wcp_manifest=json.loads((central_wcp/'manifest.json').read_text())
-    if wcp_manifest['stable']!='0.1.8':raise RuntimeError('WCP_PLATFORM_VERSION_MISMATCH')
+    if wcp_manifest['stable']!='0.1.11':raise RuntimeError('WCP_PLATFORM_VERSION_MISMATCH')
     wcp_root=v5/'vendor/wcp/components/v1'
     for name in ('loader.js','manifest.json'):
         if (central_wcp/name).read_bytes()!=(wcp_root/name).read_bytes():
@@ -42,12 +41,21 @@ def stage_development_components(stage_root):
     settings_root=repo.parent/'agent-link-monitor/shared-settings'
     version=json.loads((settings_root/'package.json').read_text())['version']
     if version!='0.1.18':raise RuntimeError('V5_SETTINGS_SOURCE_VERSION_MISMATCH '+version)
-    result=subprocess.run(['npm','run','build'],cwd=settings_root,capture_output=True,text=True,timeout=90)
-    if result.returncode:raise RuntimeError('CENTRAL_SETTINGS_DEV_BUILD_FAILED '+result.stderr[-1200:])
-    match=re.search(r'FASTDEV_CANDIDATE_BUILD_OK\s+(\{[^\n]+\})',result.stdout)
-    if not match:raise RuntimeError('CENTRAL_SETTINGS_DEV_BUILD_REPORT_MISSING')
-    build_dir=Path(json.loads(match.group(1))['directory']).resolve()
-    if not build_dir.is_dir():raise RuntimeError('CENTRAL_SETTINGS_DEV_BUILD_NOT_FOUND')
+    # Explicit separate module build: scripts/prepare-shared-settings.py.
+    from importlib.util import spec_from_file_location,module_from_spec
+    spec=spec_from_file_location('v5_settings_candidate',v5/'scripts/prepare-shared-settings.py')
+    if not spec or not spec.loader:raise RuntimeError('SETTINGS_CANDIDATE_READER_UNAVAILABLE')
+    component=module_from_spec(spec);spec.loader.exec_module(component)
+    pointer=repo/'.runtime/ocr2md-component-candidates/shared-settings-current.json'
+    if not pointer.is_file():raise RuntimeError('SHARED_SETTINGS_CANDIDATE_REQUIRED: run python3 scripts/prepare-shared-settings.py')
+    candidate=json.loads(pointer.read_text())
+    if candidate['version']!=version or candidate['sourceDigest']!=component.digest_source():
+        raise RuntimeError('SHARED_SETTINGS_CANDIDATE_STALE: rebuild module before publishing')
+    build_dir=repo/'.runtime/ocr2md-component-candidates/shared-settings'/candidate['artifact']
+    if not build_dir.is_dir():raise RuntimeError('SHARED_SETTINGS_CANDIDATE_FILES_MISSING')
+    for name,expected in candidate['files'].items():
+        content=(build_dir/name).read_bytes()
+        if hashlib.sha256(content).hexdigest()!=expected:raise RuntimeError('SHARED_SETTINGS_CANDIDATE_DIGEST_MISMATCH')
     target=stage_root/'vendor/shared-settings/v1/releases'/version
     target.mkdir(parents=True,exist_ok=True)
     checks={}
@@ -69,8 +77,20 @@ def stage_development_components(stage_root):
       'grid':checks['settings-grid.js'],'css':checks['sarasa-ui.css']},
       *(x for x in snapshot['releases'] if x.get('version')!=version)]
     manifest_path.write_text(json.dumps(snapshot,ensure_ascii=False,indent=2)+'\n')
-    print('DEV_COMPONENT_SOURCE_BUILT',version,checks['settings-panel.js']['sha256'])
+    print('DEV_COMPONENT_CANDIDATE_VERIFIED',version,checks['settings-panel.js']['sha256'])
     return version,checks['settings-panel.js']['sha256'],wcp_manifest['stable']
+
+# AEL verifies module scope before the immutable release assembly begins.
+ael_db=v5/'.ael/ledger.sqlite'
+if ael_db.is_file():
+    ael=repo.parent/'web-component-platform/tools/ael/ael.py'
+    if not ael.is_file():raise RuntimeError('AEL_AUTHORITY_UNAVAILABLE')
+    gate=subprocess.run(['python3',str(ael),'--root',str(v5),'--policy',str(v5/'ael-policy.json'),'check'],
+                        text=True,capture_output=True,timeout=25)
+    if gate.returncode or '"active": null' not in gate.stdout or '"files": 0' not in gate.stdout:
+        raise RuntimeError('AEL_RELEASE_GATE_NOT_CLEAN '+(gate.stdout+gate.stderr)[-600:])
+elif (v5/'ael-policy.json').is_file():
+    raise RuntimeError('AEL_V5_NOT_INITIALIZED')
 
 items=('index.html','app.js','plugins','components','vendor')
 try:
@@ -126,7 +146,7 @@ try:
     if template.count(token)!=1:raise RuntimeError('APP_FRAME_BUILD_PLACEHOLDER_INVALID')
     html.write_text(template.replace(token,'data-build-id="'+build_id+'"'))
     files=sorted(p for p in stage.rglob('*') if p.is_file())
-    info={'release':'ocr2md-v5-wp2','buildId':build_id,
+    info={'release':'ocr2md-v5-workspace','buildId':build_id,
           'buildTime':built_at.isoformat(timespec='seconds'),
           'wcpVersion':wcp_version,
           'sharedSettings':{'version':settings_version,'sourceBuiltSha256':settings_source_sha},'modules':registered_ids,
@@ -141,6 +161,22 @@ try:
         os.replace(release,frozen)
     os.replace(stage,release)
     print('OCR2MD_V5_SINGLE_RELEASE_PUBLISHED',json.dumps(info,ensure_ascii=False),'dir='+str(release))
+    # One build = one immediately published V5 release = one screenshot gate.
+    # The gate uses fresh WebKit (iPad-sized) and captures BOTH real modules.
+    # It does not read private Vault data or capture an authenticated browser.
+    # The minimal offline publisher fixture deliberately omits the optional
+    # visual module; the REAL V5 repo always includes it.
+    visual=v5/'scripts/capture-release-visual.mjs'
+    if visual.is_file():
+        result=subprocess.run(['node',str(visual),build_id],cwd=v5,
+                              text=True,timeout=125,capture_output=True)
+        if result.stdout:print(result.stdout.rstrip(),flush=True)
+        if result.returncode:
+            print('V5_PUBLISHED_BUT_VISUAL_UNVERIFIED',build_id,
+                  (result.stderr or '')[-1200:],flush=True)
+            raise RuntimeError('V5 visual screenshot verification failed; release is live but NOT accepted')
+    else:
+        print('V5_VISUAL_GATE_OMITTED_IN_ISOLATED_FIXTURE',flush=True)
 except Exception:
     if stage.exists():shutil.rmtree(stage)
     raise

@@ -41,8 +41,11 @@ with tempfile.TemporaryDirectory(prefix='ael-migration-review-') as tmp:
  r=cmd('review')
  assert r.count(' FINDING ')==3,r
  for key in ('V5-MIG-UI-001','V5-MIG-SET-002','V5-MIG-SET-003'):assert key in r
- assert 'CODE_FILTERED_BROWSER_REVIEW_PENDING' in r
- assert 'DISPLAY_ID_PROJECTION_PRESENT_BROWSER_REVIEW_PENDING' in r
+ # These older probe expectations were for the V4-inheritance candidate.
+ # Current V5 has six Settings entries, uses label presentation explicitly,
+ # and still requires a real V4-vs-V5 review before resolving the finding.
+ assert 'CONFIG_NOT_IN_SCHEMA_VERIFY_RUNTIME' in r
+ assert 'RUNTIME_V4_V5_COMPARISON_REQUIRED' in r
  assert 'DEVIATION_REQUIRES_REVIEW' in r
  assert 'AEL_MIGRATION_FINDINGS_OPEN 3' in cmd('check')
  assert 'AEL_MIGRATION_FINDINGS_OPEN 3' in cmd('report')

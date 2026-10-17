@@ -3,3 +3,5 @@ import {directoryModule} from './directory-service.js';
 import {directoryContracts} from './directory-contracts.js';
 export const modules=[directoryModule,workspaceModule];
 export const contracts=directoryContracts;
+
+export {settings} from './settings.schema.js';

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline development publisher fixture: true source-build, no central promotion, inactive plugin excluded."""
+"""Offline development publisher fixture: prebuilt Settings, no cross-component build on publish."""
 import hashlib,json,re,shutil,subprocess,tempfile
 from pathlib import Path
 src=Path(__file__).resolve().parents[1]
@@ -9,6 +9,7 @@ with tempfile.TemporaryDirectory(prefix='v5-dev-publish-contract-') as temp:
   'vendor/shared-settings/v1/releases/0.1.18'):(v5/folder).mkdir(parents=True,exist_ok=True)
  for name in ('index.html','app.js'):shutil.copy2(src/name,v5/name)
  shutil.copy2(src/'scripts/publish-single-release.py',v5/'scripts/publish-single-release.py')
+ shutil.copy2(src/'scripts/prepare-shared-settings.py',v5/'scripts/prepare-shared-settings.py')
  shutil.copy2(src/'plugins/registry.generated.js',v5/'plugins/registry.generated.js')
  for name in ('settings','filesystem'):
   shutil.copy2(src/f'plugins/{name}/plugin.json',v5/f'plugins/{name}/plugin.json')
@@ -44,6 +45,20 @@ await writeFile(resolve(p,'settings-panel.js'),'export const fromAuthoritativeSo
 await writeFile(resolve(p,'settings-grid.js'),'export const grid=1;');
 console.log('FASTDEV_CANDIDATE_BUILD_OK '+JSON.stringify({directory:p,productionUntouched:true}));''')
  original=(v5/'index.html').read_bytes()
+ first=subprocess.run(['python3',str(v5/'scripts/publish-single-release.py')],text=True,capture_output=True,timeout=25)
+ assert first.returncode!=0 and 'SHARED_SETTINGS_CANDIDATE_REQUIRED' in first.stderr,(first.stdout,first.stderr)
+ assert not (repo/'.runtime/ocr2md-public').exists(),'no publication before separate component build'
+ candidate=subprocess.run(['python3',str(v5/'scripts/prepare-shared-settings.py')],text=True,capture_output=True,timeout=25)
+ assert candidate.returncode==0,(candidate.stdout,candidate.stderr)
+ assert 'SHARED_SETTINGS_MODULE_CANDIDATE_READY' in candidate.stdout
+ candidate_record=json.loads((repo/'.runtime/ocr2md-component-candidates/shared-settings-current.json').read_text())
+ assert candidate_record['version']=='0.1.18'
+ fake_source=shared/'scripts/build.mjs'
+ saved=fake_source.read_text()
+ fake_source.write_text(saved+'\n// changed source invalidates previous candidate\n')
+ outdated=subprocess.run(['python3',str(v5/'scripts/publish-single-release.py')],text=True,capture_output=True,timeout=25)
+ assert outdated.returncode!=0 and 'SHARED_SETTINGS_CANDIDATE_STALE' in outdated.stderr,(outdated.stdout,outdated.stderr)
+ fake_source.write_text(saved)
  out=subprocess.run(['python3',str(v5/'scripts/publish-single-release.py')],text=True,capture_output=True,timeout=25)
  assert out.returncode==0,(out.stdout,out.stderr)
  release=repo/'.runtime/ocr2md-public';info=json.loads((release/'release-info.json').read_text());bid=info['buildId']
@@ -53,10 +68,10 @@ console.log('FASTDEV_CANDIDATE_BUILD_OK '+JSON.stringify({directory:p,production
  assert hashlib.sha256((release/'vendor/shared-settings/v1/releases/0.1.18/settings-panel.js').read_bytes()).hexdigest()==info['sharedSettings']['sourceBuiltSha256']
  assert not (release/'plugins/filesystem').exists()
  assert 'frame.watchBuild(' in (release/'app.js').read_text()
- assert info['wcpVersion']=='0.1.8'
+ assert info['wcpVersion']=='0.1.11'
  assert not (release/'vendor/wcp/components/app-frame').exists()
  assert 'data-build-id="'+bid+'"' in (release/'index.html').read_text()
  assert (v5/'index.html').read_bytes()==original
  assert not (base/'agent-link-monitor/web').exists(),'must not write authoritative central publication'
  print('V5_DEV_PUBLISHER_ISOLATED_PASS',json.dumps({'version':bid,'registeredModules':info['modules'],
-   'inactiveLegacyExcluded':True,'centralStableUntouched':True,'sourceBuildUsed':True}))
+   'inactiveLegacyExcluded':True,'centralStableUntouched':True,'prebuiltCandidateUsed':True}))

@@ -1,0 +1,27 @@
+/* WCP owns all generic chrome; consumer owns business modules only. */
+:root{color-scheme:dark;--wcp-app-bg:#12171e;--wcp-app-panel:#253343;--wcp-app-fg:#e1e7ef;--wcp-app-border:#475258;--wcp-app-accent:#83c092}
+.wcp-app-frame,.wcp-app-frame *{box-sizing:border-box}
+.wcp-app-frame{display:flex;flex-direction:column;min-width:0;min-height:0;width:100%;height:100%;overflow:hidden;background:var(--wcp-app-bg);color:var(--wcp-app-fg);font:13px/1.55 var(--laity-ui-font,ui-monospace,monospace)}
+.wcp-app-frame button{cursor:pointer;border:1px solid #52647c;border-radius:5px;padding:5px 9px;background:var(--wcp-app-panel);color:var(--wcp-app-fg);font:inherit}
+.wcp-app-frame button:disabled{opacity:.44;cursor:not-allowed}
+.wcp-app-brand{min-height:29px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #3e4b5b}
+.wcp-app-version{display:flex;align-items:center;gap:9px;background:transparent!important;border:0!important;padding:2px 0!important;white-space:nowrap}
+.wcp-app-name{font-size:17px;color:#e1e7ef}.wcp-app-build{font-size:11px;color:#99acc3;font-variant-numeric:tabular-nums}
+.wcp-app-status{display:flex;align-items:center;gap:8px;font-size:11px;color:#aebdd2}
+.wcp-app-tabs-row{display:flex;align-items:center;min-height:30px;border-bottom:1px solid #3e4b5b}
+.wcp-app-tabs{display:flex;align-items:center;gap:4px}
+.wcp-app-tabs button{border:0;border-radius:7px 7px 0 0;background:transparent;padding:4px 14px;font-weight:600}
+.wcp-app-tabs button[aria-selected=true]{background:var(--wcp-app-panel);box-shadow:inset 0 -2px var(--wcp-app-accent)}
+.wcp-app-global-actions{display:flex;align-items:center;gap:5px;margin-left:auto}
+.wcp-app-toolbar{display:flex;align-items:center;gap:8px;min-height:37px;padding:3px 7px;margin:4px 0;background:#233141;border:1px solid #43536b}
+.wcp-app-toolbar-title{border-right:1px solid #52647c;padding-right:10px}
+.wcp-app-module-actions{display:flex;gap:7px;align-items:center}
+.wcp-app-workspace{display:flex;min-width:0;min-height:0;flex:1 1 0%;overflow:hidden}.wcp-app-mount{position:relative;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden}
+.wcp-app-catalog{position:fixed;inset:0;margin:auto;box-sizing:border-box;width:min(470px,calc(100vw - 26px));max-height:calc(100dvh - 38px);overflow:auto;padding:14px 17px;border:1px solid #52647c;border-radius:10px;background:#1d2732;color:#e1e7ef}
+.wcp-app-catalog::backdrop{background:#080e19ba}.wcp-app-catalog-header{display:flex;align-items:center;justify-content:space-between;gap:12px}.wcp-app-catalog-items{list-style:none;padding:0}.wcp-app-catalog-items li{padding:8px 0;border-bottom:1px solid #37485b}
+@media(max-width:850px){.wcp-app-tabs button{padding:4px 8px}.wcp-app-global-actions{gap:2px}.wcp-app-global-actions button{padding:4px 5px;font-size:11px}}
+
+/* WCP owns the release update notice and input-safe refresh status. */
+.wcp-app-update{margin-left:auto!important;font-size:11px!important;border-color:var(--wcp-app-accent)!important}
+.wcp-app-update[hidden]{display:none!important}
+.wcp-app-update:disabled{opacity:.85!important;cursor:default!important}

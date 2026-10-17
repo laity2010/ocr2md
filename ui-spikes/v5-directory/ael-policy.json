@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "excludeDirs": [".ael", ".runtime", ".git", "node_modules", "__pycache__"],
+  "owners": {
+    "workspace": ["plugins/workspace/"],
+    "settings": ["plugins/settings/"],
+    "filesystem": ["plugins/filesystem/"],
+    "shell": ["app.js", "index.html", "components/", "plugins/registry.generated.js"],
+    "platform": ["vendor/", "assets/"],
+    "tooling": ["scripts/", "tests/", "baseline/", "ael-policy.json", "package.json", "package-lock.json", ".gitignore", "README.md", "SINGLE_RELEASE.md", "COMPONENT_BINDINGS.md", "INHERITANCE_CONTRACT.md", "UI_V4_INHERITANCE.md", "WP0_ACCEPTANCE.md"]
+  },
+  "buildDirs": {
+    "workspace": "plugins/workspace",
+    "settings": "plugins/settings"
+  },
+  "requiredTests": {
+    "workspace": ["module-build", "workspace-contract-v1"],
+    "settings": ["module-build", "settings-contract-v1"]
+  }
+}

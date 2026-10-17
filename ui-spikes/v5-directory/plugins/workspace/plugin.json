@@ -5,7 +5,14 @@
   "kind": "ui",
   "order": 10,
   "tab": "工作目录",
+  "toolbarTitleVisible": false,
+  "actions": [
+    {"id":"workspace-parent","label":"上级","title":"返回上级目录"},
+    {"id":"workspace-refresh","label":"刷新","title":"刷新当前目录"},
+    {"id":"workspace-set-root","label":"设为工作目录","title":"将选中的目录设为工作目录"},
+    {"id":"workspace-layout-mode","label":"布局","title":"在完整与紧凑布局之间切换"}
+  ],
   "home": false,
-  "enabled": false,
-  "wp0": "independent candidate; do not include in live V5 registry before explicit acceptance"
+  "enabled": true,
+  "wp0": "accepted independent workspace; live V5 registration"
 }

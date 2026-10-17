@@ -2,7 +2,7 @@
  * persistence and top actions for a shared component, but is not itself
  * a reusable WCP component. WCP retains its lifecycle.
  */
-import {DEFAULT_UI_SETTINGS,parseUiSettings} from './ui-settings-model.js';
+import {createSettingsModel} from './ui-settings-model.js';
 import {TriPane,triPaneVersion} from '../../components/tripane.js';
 import {ResidentHost,residentVersion} from '../../components/resident.js';
 // Separate from the old 24-item v3 migration snapshot; leave that store intact.
@@ -13,18 +13,18 @@ const SHARED_MANIFEST=new URL('../../vendor/shared-settings/v1/manifest.json',im
 const SHARED_SOURCE=new URL('../../vendor/shared-source/v1/source-surface.js?v=0.2.5',import.meta.url).href;
 const SHARED_MANIFEST_UPSTREAM=SHARED_MANIFEST;
 const SHARED_COMPONENT_UPSTREAM=SHARED_COMPONENT;
-const clone=value=>structuredClone(value);
-// The original V4 schema is immutable evidence. Runtime visibility is not
-// inheritance: only registered business modules may expose live settings.
-// This table belongs to Settings alone; it never imports chapter internals.
-const SETTINGS_GROUP_OWNERS=Object.freeze({'章节定界':'ocr2md:chapter-boundary'});
-const runtimeSchema=(all,registeredIds=globalThis.__ocr2mdV5?.modules??[])=>{
-  const available=new Set(registeredIds);
-  return all.filter(item=>{
-    const owner=SETTINGS_GROUP_OWNERS[item.group]||SETTINGS_GROUP_OWNERS[item.component];
-    return !owner||available.has(owner);
-  });
-};
+// Settings Contract v1: the app composition publishes *declarative* plugin
+// settings, not business services or filesystem objects. No business ID,
+// storage key, or plugin type is embedded in this adapter.
+let coreSchema=[];
+let registrations=[];
+let model=createSettingsModel([]);
+const rebuildModel=()=>{model=createSettingsModel(coreSchema,registrations)};
+document.addEventListener('wcp:settings:catalog-v1',event=>{
+  if(!Array.isArray(event.detail?.registrations))throw Error('SETTINGS_CATALOG_INVALID');
+  registrations=structuredClone(event.detail.registrations);
+  rebuildModel();
+});
 // WCP owns ALL splitters. Shared Settings retains its existing AG, editor,
 // preview, history and persistence; only their host DOM nodes change parent.
 const SETTINGS_TRI_KEY='ocr2md-v5-settings-tri-v2';
@@ -79,12 +79,20 @@ function revealParking(anchor){
  if(!anchor?.isConnected)throw Error('SETTINGS_DISPLAY_HOST_MISSING');
  ensureParking();resident.show(anchor);
 }
-function loadValues(){
+function readStored(){
   try{
     const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(V4_READONLY_SETTINGS_KEY);
-    return parseUiSettings(raw?JSON.parse(raw):clone(DEFAULT_UI_SETTINGS));
-  }catch{return parseUiSettings(clone(DEFAULT_UI_SETTINGS))}
+    const value=raw?JSON.parse(raw):{};
+    return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+  }catch{return{}}
 }
+function loadValues(){return model.fromStored(readStored())}
+// Stable public API: read and saved notifications are scoped to the caller's
+// registered ownerId. Business modules never import or inspect Settings internals.
+document.addEventListener('wcp:settings:read-v1',event=>{
+  const {ownerId,reply}=event.detail||{};
+  if(typeof ownerId==='string'&&typeof reply==='function')reply(model.forOwner(ownerId,loadValues()));
+});
 export const settingsModule={
   id:'ocr2md:settings',name:'设置',version:'1.1.0',
   description:'通用设置 UI 的配置数据适配器：仅设置页面自身的样式与编辑偏好；无目录、章节或文件权限。',
@@ -162,24 +170,28 @@ export const settingsModule={
         panel.setAttribute('app-id','ocr2md-v5');
         panel.setAttribute('title','ocr2md 设置');
         panel.setAttribute('layout','horizontal');
-        panel.setAttribute('table-layout','components');
+        // Real Settings AG must expose values, not merely parameter IDs and
+        // the unrelated "enabled" checkbox. Existing consumers keep
+        // the original components-only layout unless they opt in.
+        panel.setAttribute('table-layout','components-values');
         panel.setAttribute('source-editor','codemirror');
         panel.setAttribute('source-module-url',SHARED_SOURCE);
         panel.setAttribute('source-comments','true');
         panel.setAttribute('storage','none');
         panel.setAttribute('commit-mode','explicit');
         panel.setAttribute('chrome','external');
-        const visibleSchema=runtimeSchema(schema);
-        panel.setParameterNameMode('id');
+        coreSchema=schema;rebuildModel();
+        const visibleSchema=model.schema;
+        panel.setParameterNameMode('label');
         panel.setComponentCatalog(componentCatalog);
         panel.settingsSchema=visibleSchema;
         // Preserve hidden chapter values in the V5 storage even when no
         // chapter plugin is present. No change to V4 schema or storage keys.
         panel.initialValues=loadValues();
-        panel.validateValues=value=>parseUiSettings({...loadValues(),...value});
+        panel.validateValues=value=>model.validate(value,{strict:true});
         panel.style.cssText='display:block;width:100%;height:100%;min-height:0;--las-panel-bg:#1d2732;--las-control-bg:#253343;--las-border:#43536b;--las-fg:#e1e7ef;--las-accent:#83c092;--las-font-family:var(--laity-ui-font,"Sarasa Fixed SC",ui-monospace,monospace)';
         const applyUiSettings=()=>{
-          const options=parseUiSettings(panel.values);
+          const options=model.validate(panel.values,{strict:true});
           panel.style.setProperty('--las-source-font-size',options.sourceFontSize+'px');
           panel.style.setProperty('--las-source-line-height',String(options.sourceLineHeight));
           panel.style.setProperty('--las-preview-height',options.previewHeight+'%');
@@ -195,7 +207,7 @@ export const settingsModule={
         };
         // The central Settings component owns AG and exports its column API.
         const orderColumns=()=>panel.setColumnOrder([
-          'componentModule','featureGroup','enabled','parameterName']);
+          'componentModule','componentVersion','featureGroup','enabled','parameterName']);
         let triInstalling=false;
         const maybeInstallTriPane=()=>{
           if(abort.signal.aborted||triInstalling||triPanes.has(panel)||!panel.isLayoutReady)return;
@@ -220,13 +232,16 @@ export const settingsModule={
         panel.addEventListener('laity-settings-history',()=>{applyUiSettings();buttons();setState(panel.canUndo?'草稿待保存':'AG / 源码已就绪',panel.canUndo?'dirty':'ready');},{signal:abort.signal});
         panel.addEventListener('laity-settings-saved',e=>{
           try{
-            const value=parseUiSettings({...loadValues(),...e.detail.values});
-            localStorage.setItem(STORAGE_KEY,JSON.stringify(value));
+            // Unknown inactive legacy settings are kept as inert storage
+            // values, never fed into the live Schema, source editor or events.
+            const value=model.validate(e.detail.values,{strict:true});
+            localStorage.setItem(STORAGE_KEY,JSON.stringify({...readStored(),...value}));
             savedSettingsSnapshot=settingsSnapshot();
             // Settings is the single authority for saved visual preferences;
             // notify resident business modules without importing their code.
-            document.dispatchEvent(new CustomEvent('ocr2md:v5:ui-settings-saved',
-              {detail:{values:value}}));
+            for(const {ownerId,values} of model.byOwner(value))
+              document.dispatchEvent(new CustomEvent('wcp:settings:changed-v1',
+                {detail:{ownerId,values}}));
             setState('配置已保存');
           }catch(error){setState('保存失败：'+String(error),'error');}
           buttons();

@@ -1,9 +1,48 @@
 {
   "schemaVersion": 1,
   "channel": "stable",
-  "stable": "0.1.8",
-  "previous": "0.1.7",
+  "stable": "0.1.11",
+  "previous": "0.1.10",
   "releases": [
+    {
+      "version": "0.1.11",
+      "frame": {
+        "entry": "releases/0.1.11/app-frame.js",
+        "sha256": "e9ea8e8c73a5e524ad505f9825a115f1ba66f3a0588aedd488ed836552f14758",
+        "style": "releases/0.1.11/app-frame.css",
+        "styleSha256": "6c043050c778543d81abc933073425e400adb1ecfa8ab58bd8ac9378596294c8"
+      },
+      "entry": "releases/0.1.11/wcp-workbench.js",
+      "sha256": "b67f9c09faa36480e6e0b14a6b2fadbacca9d0e35ba64650d3bb446dd12a65c7",
+      "size": 747142,
+      "tag": "laity-wcp-workbench-v0-1-11"
+    },
+    {
+      "version": "0.1.10",
+      "frame": {
+        "entry": "releases/0.1.10/app-frame.js",
+        "sha256": "75707d161be1da7b40d000bd4065629160177c3acf317f8f9a7654d1f1bcac7e",
+        "style": "releases/0.1.10/app-frame.css",
+        "styleSha256": "6c043050c778543d81abc933073425e400adb1ecfa8ab58bd8ac9378596294c8"
+      },
+      "entry": "releases/0.1.10/wcp-workbench.js",
+      "sha256": "68af2dfc0896dc05b37965d29ff408ef3b423e92f35b7388ef64760a848b3d00",
+      "size": 747142,
+      "tag": "laity-wcp-workbench-v0-1-10"
+    },
+    {
+      "version": "0.1.9",
+      "frame": {
+        "entry": "releases/0.1.9/app-frame.js",
+        "sha256": "4cdf2c1d4904ecb60857ae5d9bf8b4ac22e26993827ab3b6c946ef5cb8d3db2e",
+        "style": "releases/0.1.9/app-frame.css",
+        "styleSha256": "381b9b9d39ab404956909e34c06a20a25484c1d123ee5e9875e325ff854daed2"
+      },
+      "entry": "releases/0.1.9/wcp-workbench.js",
+      "sha256": "7ea0b0751ec66ff96ce1d41ce0018d24900875ef0a4efb72df8d756de9bc334a",
+      "size": 747141,
+      "tag": "laity-wcp-workbench-v0-1-9"
+    },
     {
       "version": "0.1.8",
       "frame": {
