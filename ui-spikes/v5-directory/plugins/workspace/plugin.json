@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "ocr2md:workspace",
+  "entry": "index.js",
+  "kind": "ui",
+  "order": 10,
+  "tab": "工作目录",
+  "home": false,
+  "enabled": false,
+  "wp0": "independent candidate; do not include in live V5 registry before explicit acceptance"
+}
