@@ -27,8 +27,8 @@ try {
  assert(await p.locator('#unlock-dialog').evaluate(el=>el.open),'Missing unlock dialog');
  await p.locator('#unlock-code').fill('incorrect-code');
  await p.locator('#unlock-form button[type=submit]').click();
- await p.waitForFunction(()=>document.querySelector('#unlock-error')?.textContent.includes('授权码错误'),{timeout:10000});
- assert.match(await p.locator('#unlock-error').innerText(),/授权码错误/);
+ await p.waitForFunction(()=>document.querySelector('#unlock-error')?.textContent.includes('授权码不匹配'),{timeout:10000});
+ assert.match(await p.locator('#unlock-error').innerText(),/授权码不匹配/);
  await p.locator('#unlock-code').fill(code);
  await p.locator('#unlock-form button[type=submit]').click();
  await p.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),{timeout:20000});

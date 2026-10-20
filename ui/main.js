@@ -133,17 +133,26 @@ async function main() {
   $('unlock-form').addEventListener('submit',async event=>{
     event.preventDefault();
     $('unlock-error').textContent='';
-    const code=$('unlock-code').value.trim();
+    const code=$('unlock-code').value.trim().replace(/[\u200b-\u200d\ufeff]/gi,'');
     try {
       const res=await fetch('/api/unlock',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({code})
       });
       if (res.status === 403) {
-        $('unlock-error').textContent='授权码错误，请重新输入';
+        // The server rejects both invalid codes and invalid origins with 403.
+        // Keep those errors distinct instead of blaming the user's code.
+        const reason = await res.text();
+        if (reason.includes('Invalid origin')) {
+          $('unlock-error').textContent='访问地址校验失败，请使用 https://ocr2md.laity.bid/ 重新进入';
+        } else if (reason.includes('Invalid code')) {
+          $('unlock-error').textContent=`授权码不匹配（当前输入 ${code.length} 位，应为 12 位）；请重新复制授权码`;
+        } else {
+          $('unlock-error').textContent='授权请求被拒绝（HTTP 403），请确认访问地址';
+        }
         return;
       }
-      if (!res.ok) throw Error(`HTTP ${res.status}`);
+      if (!res.ok) throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,120)}`);
       canSave = true;
       $('unlock-code').value='';
       $('unlock-dialog').close();
