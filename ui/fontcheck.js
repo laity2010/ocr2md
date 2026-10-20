@@ -7,11 +7,16 @@ export async function showFontCheck() {
     localStatus = loaded.length ? '已匹配' : '未匹配';
   } catch (_) {localStatus = '字体加载失败';}
   await document.fonts.ready;
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
+  // WebKit can return an incorrect Canvas measureText width for quoted
+  // multi-family stacks. DOM layout width is the actual editor glyph metric.
   const width = family => {
-    context.font = `400 16px ${family}`;
-    return context.measureText(sample).width.toFixed(1);
+    const span = document.createElement('span');
+    span.textContent = sample;
+    span.style.cssText = `position:fixed;left:-30000px;top:0;white-space:pre;font:400 16px ${family};`;
+    document.body.appendChild(span);
+    const measured = span.getBoundingClientRect().width.toFixed(1);
+    span.remove();
+    return measured;
   };
   const editor = document.querySelector('.cm-content');
   const computed = getComputedStyle(editor);
