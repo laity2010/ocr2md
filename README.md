@@ -1,6 +1,6 @@
 # OCR2MD V6（从零开始）
 
-这是独立于 V5 的**全新空白源码仓库**。当前只有 Git 开发流程，没有继承 V5 代码、页面、服务或发布入口。
+这是独立于 V5 的**全新空白源码仓库**。不继承 V5 代码、页面、服务或发布入口。首个独立验证组件是 `packages/minerujson-md/`，负责 MinerU JSON ↔ 标准 Markdown（含 HTML 注释）转换；不提供用户界面。
 
 ## 每日流程
 
@@ -18,3 +18,7 @@
 6. 次日：`python3 scripts/v6_git.py next-day`，基于已审查的 `v6` 新建当日开发分支。
 
 Git 能回溯文件改动和差异，但目的需要写在 commit message，编译结果及产物需要另存。每日审查不能由构建脚本擅自代替人工批准。
+
+## WP0 转换组件
+
+唯一组件位于 `packages/minerujson-md/`，三项公开 API 为 `toMarkdown()`、`toMineruJSON()`、`version()`。首次转换的 Buffett’s Alpha 样本、格式限制和自动验收说明见 [组件 README](./packages/minerujson-md/README.md)。
