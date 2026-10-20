@@ -98,6 +98,7 @@ npm run test:ui
 - AG 表的五列固定为 **PDF页码、层级、标题、独立章节、章节文件**；全部采用 AG Grid Community 官方 `IFilterComp` 扩展接口接入的 `EnumCheckboxFilter`，在 AG Grid 筛选弹窗中列出 `all` 和各列实际不同值，支持多选。默认 `all`（AG Grid 空筛选模型）。实现独立放在 `ui/enum-checkbox-filter.js`，不需要 Enterprise、不另做表头控件，也不使用外部行筛选逻辑。
 - PDF 页码首列原生固定在左侧，标题列沿用 Everforest 字号与颜色、单行省略不自动折行。AG Grid 本身管理筛选弹窗、模型、行过滤及更新通知；源码/预览定位继续由现有 Zustand 与 CM6 协调。
 - 标题颜色/字号与当前 Everforest 的 H1–H6 源码样式一致，字体始终为完整 Sarasa Fixed SC。大纲在 CM6 文档变化后按 Markdown 语法树重新构建；不把 AG 行当作可写文档数据源。
+- 修改已有标题的 `#` 层级时，即使标题文字不变，AG 标题单元格也会即时刷新对应 H1–H6 样式，并按需更新 H1 行高；不依赖保存或重新加载，不重建整个 AG Grid。
 - PDF 页码来自当前 MinerU 无损注释 `minerujson:block:v1:pageIndex:blockIndex` 中真实的 0-based 页索引，展示时加 1；无法确定页码时显示 `—`，不推断不伪造。
 - 当前 Buffett’s Alpha 识别出 21 项标题（2 个 H1、19 个 H2）。`独立章节` 默认全部勾选，首项不可取消，**其余勾选只是当前页面草稿，没有写回 Markdown 或 MOPJO**；`章节文件` 没有导出记录时明确显示“未导出”，不生成假文件名。
 - Zustand Vanilla 的 `focusTarget` 仅传递 `sourceLine`、`sourceEnd`、`origin`、`elementId`、`revision` 与事件序号。点击 AG 行定位 CM6 与预览、点击预览元素反向定位 CM6 和 AG、CM6 光标切换定位 AG/预览；随原有双窗滚动同步更新 AG 活动行。高亮由 CM6 Decoration / 预览 CSS / AG 选中行实现，**不修改源码文本、选区历史或保存内容**。

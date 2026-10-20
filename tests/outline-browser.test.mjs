@@ -95,6 +95,38 @@ try{
       assert.equal(initial.titleLayout.overflow,'hidden');
       console.log('OUTLINE_LAYOUT_OK',name,JSON.stringify(initial));
 
+      // Regression: an existing heading retains its title and MinerU row ID
+      // when only the Markdown heading marker changes. AG Grid must repaint
+      // the Everforest title class even if the 'title' field is unchanged.
+      const relevelLine=reference.find(row=>row.level===1).sourceLine;
+      const originalHeading=await page.evaluate(line=>window.__v6cm6.view.state.doc.line(line).text,relevelLine);
+      const assertRelevel=async level=>{
+        await page.evaluate(({line,level})=>{
+          const view=window.__v6cm6.view;
+          const current=view.state.doc.line(line);
+          view.dispatch({changes:{from:current.from,to:current.to,
+            insert:'#'.repeat(level)+current.text.replace(/^#{1,6}/,'')}});
+        },{line:relevelLine,level});
+        await page.waitForFunction(({line,level})=>
+          window.__v6cm6.outline.rows.find(row=>row.sourceLine===line)?.level===level,
+        {line:relevelLine,level},{timeout:12000});
+        await page.evaluate(line=>{
+          const outline=window.__v6cm6.outline;
+          const row=outline.rows.find(r=>r.sourceLine===line);
+          outline.api.ensureNodeVisible(outline.api.getRowNode(row.id));
+        },relevelLine);
+        const observed=await page.locator(`[data-heading-source-line="${relevelLine}"]`)
+          .evaluate(node=>({className:node.className,fontSize:getComputedStyle(node).fontSize,text:node.textContent}));
+        assert(observed.className.includes('ocr-outline-h'+level),
+          `${name}: H${level} outline cell kept stale style: ${JSON.stringify(observed)}`);
+        return observed;
+      };
+      for(const level of [2,3,4,5,6,1]){
+        const observation=await assertRelevel(level);
+        console.log('HEADING_LEVEL_LIVE_OK',name,level,observation.fontSize);
+      }
+      assert.equal(await page.evaluate(line=>window.__v6cm6.view.state.doc.line(line).text,relevelLine),originalHeading);
+
       // A real header tap/click must open the AG-owned filter popup, not just
       // a programmatic API call (important on the simulated iPad viewport).
       await page.locator('.ag-header-cell[col-id="level"] .ag-header-cell-filter-button').click();

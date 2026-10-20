@@ -82,8 +82,23 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
   }
   function refresh(){
     if(disposed || !api)return;
+    const previousById=new Map(rows.map(row=>[row.id,row]));
     rows=buildOutline(getMarkdown(),drafts);
     api.setGridOption('rowData',rows);
+    // AG Grid's normal value comparison only sees the unchanged title text.
+    // The title renderer also depends on *level* (Everforest H1-H6 styles).
+    // Repaint only headings whose level changed without recreating the grid.
+    const changedLevels=rows.filter(row=>{
+      const old=previousById.get(row.id);
+      return old && old.level!==row.level;
+    });
+    if(changedLevels.length){
+      const nodes=changedLevels.map(row=>api.getRowNode(row.id)).filter(Boolean);
+      if(nodes.length)api.refreshCells({rowNodes:nodes,columns:['title'],force:true});
+      // H1 rows are taller than H2-H6, so recalculate their measured heights.
+      if(changedLevels.some(row=>(previousById.get(row.id).level===1)!==(row.level===1)))
+        api.resetRowHeights();
+    }
     const state=viewStore.getState();
     const focus=state.focusTarget?.revision===state.documentRevision
       ? state.focusTarget : null;

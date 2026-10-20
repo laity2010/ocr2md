@@ -103,3 +103,9 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 更正第 12 项的筛选结论：AG Grid 自带的 Enterprise **Set Filter** 需要授权，但通过官方 `IFilterComp` 扩展接口创建的 **EnumCheckboxFilter** 不需要。V4 原本就用 `getGui`、`getModel/setModel`、`doesFilterPass`、`onNewRowsLoaded`、`params.getValue`、`params.api.forEachLeafNode` 和 `filterChangedCallback` 实现列值 checkbox/All；V6 在本仓独立实现同一公开接口，避免跨版本模块依赖。
 - 从 V6 AG 模块彻底删除 `ValueFilterHeader`、手写 `select`、`isExternalFilterPresent/doesExternalFilterPass` 和独立 `filters` 状态，由 AG Grid 管理筛选图标、弹窗、筛选模型、筛选结果。五列均默认无筛选（`all`），支持多值勾选；标题层级经 `filterValueGetter` 显示 `H1`/`H2`，章节标定草稿改变时使用 `api.onFilterChanged()` 通知 AG Grid 重新判定。
 - 保留已经验收的 PDF 页码 `pinned/lockPinned`、标题单行、Dockview 三窗和 Zustand 三窗定位；Chrome/WebKit 使用项目隔离的 Buffett’s Alpha 样本验证真实 AG 弹窗、五列筛选、选择、标题修改、撤销和脚本无异常。
+
+## 14. 修复 CM6 标题层级修改后 AG 标题样式未实时更新（2026-10-20）
+
+- 故障根因：`outline-grid.js` 已在文档变更后通过 `buildOutline` 得到更新的标题层级和 AG 行数据，但相同 MinerU 行 ID 的标题文本未变时，AG Grid 的正常值相等检查会跳过 `titleCell` 的重绘；旧的 `ocr-outline-h1` 样式留在 DOM 中。新增标题会创建新行，因此此前新增标题正常。
+- 修复遵守 AG Grid API：对比刷新前后相同 ID 的 `level`，只对变更层级的行调用 `api.refreshCells({rowNodes,columns:['title'],force:true})`；仅在跨越 H1 行高边界时调用 `api.resetRowHeights()`。不重新创建 AG Grid，不修改 CM6、Zustand、文件保存或 MOPJO。
+- 用隔离的 Buffett’s Alpha 实际文档复现旧版 H1→H2 样式残留，修复后 Chrome 和 WebKit 验收 H1→H2→H3→H4→H5→H6→H1，各步 AG DOM 层级样式和字体大小即时更新，随后原有筛选、三窗定位、撤销和文档不落盘测试全部通过。
