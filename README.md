@@ -30,7 +30,7 @@ Git 能回溯文件改动和差异，但目的需要写在 commit message，编�
 ```bash
 npm ci
 npm run dev                  # Mac 本机 http://127.0.0.1:5196/
-npm run build                # 生产静态前端产物，尚未接入正式发布服务
+npm run build                # 生产静态前端产物，由固定A/B槽发布
 ```
 
 `ui/` 为唯一浏览器界面。`vite.config.mjs` 的 `/api/document` 仅实现一个固定路径的 GET/PUT 文件 I/O；默认首次从 WP0 的只读测试样本加载，第一次保存写到 `.v6/workspace/buffetts-alpha.minerujson.md`，后续打开该工作文件；不改写原样本，也不在服务端维护额外 MD 状态。实际界面直接从 `view.state.doc` 读取全文保存，保存后不重建 `EditorView`。
@@ -43,4 +43,14 @@ V6_DOCUMENT_PATH="$PWD/.v6/tests/wp1-document-test.md" npm run dev -- --port 519
 npm run test:ui
 ```
 
-测试覆盖读取真实 314KB Markdown、撤销/重做、Syntax Tree 全文元素计数、磁盘保存、滚动与选区保持、刷新还原，截图位于 `.v6/evidence/wp1/`（不进 Git）。命令要求本机已安装 Chrome。WP1 无 A/B 服务与对外发布机制。
+测试覆盖读取真实 314KB Markdown、撤销/重做、Syntax Tree 全文元素计数、磁盘保存、滚动与选区保持、刷新还原，截图位于 `.v6/evidence/wp1/`（不进 Git）。命令要求本机已安装 Chrome。WP1 的 CM6 源码仍仅负责编辑；正式对外发布现已由下文的 V6 最小发布服务独立承担。
+
+## V6 正式公网发布（2026-10-20）
+
+沿用 `https://ocr2md.laity.bid/` 和既有共享应用 Cloudflare Tunnel；Agent Link 拥有唯一的网络路由配置。现行路由指向本机 `127.0.0.1:4396`（V6），原 V5 `127.0.0.1:4385` 保留供立即回退。
+
+- `scripts/v6_serve.py`：macOS LaunchAgent `bid.laity.ocr2md-v6-server`，仅服务已构建的静态资源及 `/api/document` 读/保存。未授权写入返回 403。
+- `scripts/v6_publish.py`：两个固定 A/B 槽位，构建成功后写到非活动槽，再原子切换 `.v6/current`。可用 `python3 scripts/v6_publish.py A` 或 `B` 即时退回上个已验收静态构建。
+- 所有机密、工作 MD、运行槽、证据和路由备份仅存 Git 忽略的 `.v6/`。公开网页能读取示例 MD；写入需经过私有链接 `/access/<token>` 设置安全 Cookie（token 位于 `.v6/private/editor-token`，**禁止提交**）。正式服务从不启动 Vite dev 作为发布源。
+- 构建继续经 `python3 scripts/v6_git.py build --change "..." --purpose "..." -- npm run build`，每次生成本地 Git 提交；之后 `python3 scripts/v6_publish.py`。无需 GitHub push。
+- 如果新静态版本故障：先用 `scripts/v6_publish.py A|B` 切回保留槽；若源码需要复原，用 Git 已记录的构建提交独立恢复。若 V6 整个服务故障：在 Agent Link 网络仓库里**只把** `ocr2md.laity.bid` ingress 从 `4396` 改回 `4385`（同时把注册表 OCR2MD 诊断 URL 恢复旧值），验证配置并仅重启共享 application-main 隧道；备份在 `.v6/rollback/`，不影响其他业务。
