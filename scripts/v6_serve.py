@@ -64,8 +64,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
         if path == '/healthz':
-            slot = (RUNTIME / 'current').resolve()
-            self.response(200, json.dumps({'service':'ocr2md-v6','release':slot.name}), 'application/json')
+            slot = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'current').resolve()
+            version_file = slot / 'release-version.json'
+            try:
+                version = json.loads(version_file.read_text())['version']
+            except (OSError, ValueError, KeyError):
+                version = None
+            self.response(200, json.dumps({'service':'ocr2md-v6','release':slot.name,'version':version}), 'application/json')
             return
         if path == '/access/' + KEY:
             self.send_response(302)

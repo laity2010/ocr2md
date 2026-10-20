@@ -20,7 +20,11 @@ export default defineConfig({
   define: {'__V6_BUILD_VERSION__': JSON.stringify(buildVersion)},
   root: 'ui',
   build: {outDir: '../dist', emptyOutDir: true},
-  plugins: [{name: 'single-file-io', configureServer(server) {
+  plugins: [
+    {name:'release-identity',generateBundle() {
+      this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({version:buildVersion})+'\n'});
+    }},
+    {name: 'single-file-io', configureServer(server) {
     server.middlewares.use('/api/document', async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');

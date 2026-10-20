@@ -11,6 +11,33 @@ let view;
 let savedRevision = 0;
 let revision = 0;
 let canSave = import.meta.env.DEV ? true : null;
+let pendingUpdate = false;
+let checkingVersion = false;
+// This is only a release identifier; CM6 remains the sole editor state.
+const currentBuild = __V6_BUILD_VERSION__;
+
+function applyPendingUpdate() {
+  if (!pendingUpdate) return;
+  if (revision !== savedRevision || buttons.save.disabled || $('unlock-dialog').open) {
+    status('● 新版本待更新，请先保存','warning');
+    return;
+  }
+  window.location.reload();
+}
+async function checkForNewBuild() {
+  if (checkingVersion || !view || document.hidden) return;
+  checkingVersion = true;
+  try {
+    const res = await fetch('/healthz', {cache:'no-store'});
+    if (!res.ok) return;
+    const {version} = await res.json();
+    if (version && version !== currentBuild) {
+      pendingUpdate = true;
+      applyPendingUpdate();
+    }
+  } catch { /* Transient tunnel/network failures must not disturb the editor. */ }
+  finally {checkingVersion = false;}
+}
 $('build-version').textContent = __V6_BUILD_VERSION__;
 
 function status(text, kind='ok') {
@@ -37,7 +64,8 @@ function refreshToolbar() {
   buttons.undo.disabled = !undoDepth(view.state);
   buttons.redo.disabled = !redoDepth(view.state);
   $('count').textContent = view.state.doc.lines.toLocaleString() + ' 行 · ' + view.state.doc.length.toLocaleString() + ' 字符';
-  if (revision !== savedRevision) status('● 未保存','warning');
+  if (pendingUpdate) applyPendingUpdate();
+  else if (revision !== savedRevision) status('● 未保存','warning');
 }
 function extract() {
   const last = view.state.doc.length;
@@ -76,6 +104,7 @@ async function save() {
     if (!res.ok) throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,120)}`);
     savedRevision = atRevision;
     status(revision === atRevision ? '✓ 已保存' : '● 保存期间有新修改');
+    if (pendingUpdate) applyPendingUpdate();
     // Deliberately no new EditorState, no view.dispatch, no reloading of document.
   } catch (error) {status('保存失败：'+error.message,'error');}
   finally {buttons.save.disabled = false;}
@@ -133,5 +162,11 @@ async function main() {
   }
   // Read-only test seam for verifying *CM6 public APIs*, not an app document cache.
   if (import.meta.env.DEV) window.__v6cm6 = {get view(){return view;},extract};
+  // A/B publication changes /healthz immediately; no extra store or WebSocket.
+  setInterval(checkForNewBuild, 5000);
+  document.addEventListener('visibilitychange',() => {
+    if (!document.hidden) void checkForNewBuild();
+  });
+  void checkForNewBuild();
 }
 main().catch(error=>{status('加载失败');$('summary').textContent=error.stack||String(error);});
