@@ -36,3 +36,19 @@ dialog input {width:100%;padding:10px;border:1px solid #64748b;border-radius:5px
 footer { min-height:29px; padding:5px 16px; border-top:1px solid #334155; color:#94a3b8; background:#1f2937; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 @media (max-width:800px) { #count {display:none;} .toolbar {padding:0 9px;} .identity {gap:6px;} .brand {font-size:13px;} .build-badge {font-size:10px;padding:3px 4px;} .status{max-width:130px;font-size:11px;} button{padding:6px 8px;} }
 @media (max-width:520px) { .toolbar {height:80px;min-height:80px;flex-direction:column;align-items:stretch;justify-content:center;gap:3px;padding:4px 9px;} .actions {gap:6px;justify-content:flex-end;} .actions button {font-size:12px;padding:4px 8px;} .brand {font-size:12px;} .status {max-width:calc(100vw - 218px);flex-shrink:1;} .build-badge {font-size:9px;} }
+
+/* Uniform typography on Mac and iPad: 12pt Sarasa fixed-width Simplified Chinese.
+   Keep these declarations after responsive rules to avoid device-dependent sizes.
+   Requires Sarasa Fixed SC installed on each device; never silently scale iOS text. */
+:root {
+  font: 12pt/1.5 "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+.brand, .build-badge, .status, .subbar, footer,
+button, dialog h2, dialog p, dialog label, dialog input, #unlock-error {
+  font-size: 12pt;
+  font-family: "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
+}
+#editor .cm-editor { font-size:12pt; line-height:1.5; }
+#editor .cm-scroller { font-family:"Sarasa Fixed SC", "Sarasa Mono SC", monospace; }
