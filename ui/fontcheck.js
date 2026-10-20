@@ -24,7 +24,7 @@ export async function showFontCheck() {
     'V6 字体验收 · iPad 实测',
     `视窗 ${innerWidth}×${innerHeight} · DPR ${devicePixelRatio}`,
     `字体 ${computed.fontSize} · 行高 ${computed.lineHeight}`,
-    `Sarasa 本地匹配：${localStatus}`,
+    `Sarasa Web字体：${localStatus}`,
     `实际样例宽：${width(computed.fontFamily)}px`,
     `Sarasa 别名宽：${width('"OCR2MD Sarasa"')}px`,
     `系统等宽宽：${width('monospace')}px`,
