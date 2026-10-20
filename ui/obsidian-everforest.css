@@ -57,6 +57,28 @@
 #editor .cm-scroller::-webkit-scrollbar-thumb {
   background: #4a555b;
 }
+/* Exact Everforest --hN-size ratios relative to the 16px Sarasa body. */
+#editor .cm-ob-heading-line-1 { font-size: 2.125em; }
+#editor .cm-ob-heading-line-2 { font-size: 1.625em; }
+#editor .cm-ob-heading-line-3 { font-size: 1.375em; }
+#editor .cm-ob-heading-line-4 { font-size: 1.25em; }
+#editor .cm-ob-heading-line-5 { font-size: 1.125em; }
+#editor .cm-ob-heading-line-6 { font-size: 1.125em; }
+/* LineWrapping from CM6: soft wraps adapt to the pane, without editing text. */
+#editor .cm-content.cm-lineWrapping { overflow-wrap: anywhere; }
+/* A zero-width indicator for actual newlines only: no character is saved. */
+#editor .cm-ob-hard-return {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  white-space: nowrap;
+  overflow: visible;
+  vertical-align: baseline;
+  color: #83c092;
+  opacity: .85;
+  pointer-events: none;
+  user-select: none;
+}
 /* Obsidian's enabled daisor snippet makes heading # markers match the text. */
 #editor .cm-ob-heading-marker-1, #editor .cm-ob-heading-marker-1 span { color: #da6362 !important; }
 #editor .cm-ob-heading-marker-2, #editor .cm-ob-heading-marker-2 span { color: #d77f48 !important; }

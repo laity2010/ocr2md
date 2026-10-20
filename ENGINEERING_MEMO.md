@@ -60,3 +60,9 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - V6 第一阶段只将 Mac OCR2MD Obsidian 库的 Everforest 暗色主题 Markdown 源码配色与启用的 daisor snippet 相关规则接入 CM6，不另起 Markdown 阅读渲染器，也不改 MinerU/CM6 唯一编辑状态。
 - **Sarasa Fixed SC 完整 WOFF2、12pt/16px 与原行距为固定约束**；Obsidian 的桌面/平板字号设置不能覆盖。
 - 样式局部作用于编辑器，独立 CSS 和 CM6 语法高亮扩展；保留 Git 测试，Chrome/WebKit 使用相同 1032×642 视口检查。此阶段不宣称已完整复刻 Obsidian Live Preview 或 Reading View。
+
+## 8. Everforest 标题比例、CM6 软换行与硬回车可视化（2026-10-20）
+
+- 标题使用 Everforest 原始六级比例，16px 的 Sarasa Fixed SC 为基线；标题文字和 `#` 标记统一放大，保留 Markdown 源码，不转换 HTML。
+- 仅启用 CM6 原生自动折行；每个真实换行以视口范围内的零宽、不可编辑 `↵` Widget 着色提示。窗口宽度改变只影响布局，不改 `view.state.doc`、保存文件、撤销历史或逻辑行号。
+- Chrome 与 WebKit 验证标题精确字号、缩窄视窗后的折行变化和硬回车数量；继续对 3,560 行 Buffett’s Alpha 文档验收撤销/重做、保存、选区、滚动和刷新恢复。

@@ -72,6 +72,8 @@ npm run test:ui
 - **字体不随 Obsidian 主题改变**：始终使用 V6 已验收、服务器托管的完整 Sarasa Fixed SC WOFF2，12pt / 16px；CM6 行高不改。
 - 仅影响 CM6 Markdown **源码窗**的暗色背景、文字、六级标题、引用、链接、代码与标记等样式。不导入 Obsidian 的窗口/侧栏 CSS，不实现 Live Preview、独立 HTML 阅读渲染或第二份文档状态；Obsidian 改主题后也不会自动重载本地主题 CSS。
 - 隔离测试：`npm run test:ob-theme`，在独立端口与独立测试文档上验证 Chrome / WebKit 的标题、字体、背景与原始标记保留；截图位于 `.v6/evidence/obsidian-everforest-*.png`。
+- 标题字号沿用 Everforest `--h1-size`～`--h6-size`：相对 16px 正文为 2.125 / 1.625 / 1.375 / 1.25 / 1.125 / 1.125 倍（34 / 26 / 22 / 20 / 18 / 18px），**所有字号依旧使用 Sarasa Fixed SC**。
+- 源码窗启用 CM6 `EditorView.lineWrapping`，随视窗宽度软换行，不新增 Markdown 换行符；真实换行处增加青绿色 `↵` 视觉标记，代码保存在 `ui/obsidian-heading-markers.js` 的视口装饰中。该标记不进入 `view.state.doc`、不增加行数或改变保存数据；测试还验证改变视口宽度后同一长段落软换行数量变化。
 
 ## V6 发布后浏览器自动更新
 

@@ -121,6 +121,7 @@ async function main() {
     parent:$('editor'), doc:markdownText,
     extensions:[
       basicSetup,
+      EditorView.lineWrapping,
       markdown({base:markdownLanguage}),
       obsidianMarkdown,
       obsidianHeadingMarkers,
