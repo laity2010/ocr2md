@@ -50,6 +50,7 @@ npm run test:ui
 唯一公网入口 `https://ocr2md.laity.bid/` → 共享 Cloudflare Tunnel → V6 本地 `127.0.0.1:4396`。唯一正式发布目录 `.v6/release/`，不保留 A/B 或 V5 运行版本。
 
 - `scripts/v6_serve.py` 运行于独立 macOS LaunchAgent，静态服务只访问 `.v6/release/`，工作文档存 `.v6/workspace/`。
+- 局域网 HTTPS：同一 V6 服务另外监听 `192.168.1.10:4443`，沿用 Mac 既有 `ocr2md/lan-tls` 证书；公网仍指向 `127.0.0.1:4396`。证书由本地 CA 签发，需用户主动信任 CA 才能在 Safari 无警告打开，不能假定证书已被系统信任。
 - 开发：`python3 scripts/v6_git.py build --change "..." --purpose "..." -- npm run build`。
 - 发布：`python3 scripts/v6_publish.py`。临时准备并替换唯一发布目录。
 - Git 回退：`python3 scripts/v6_git.py rollback --to <已验收Git提交>`，使用临时 Git worktree 重建发布，不重写当前分支。

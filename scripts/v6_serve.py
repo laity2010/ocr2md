@@ -4,6 +4,8 @@ import hmac
 import json
 import os
 import secrets
+import ssl
+import threading
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from mimetypes import guess_type
@@ -17,6 +19,10 @@ FIXTURE = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md'
 TOKEN = RUNTIME / 'private' / 'editor-token'
 HOST = os.environ.get('V6_BIND', '127.0.0.1')
 PORT = int(os.environ.get('V6_PORT', '4396'))
+LAN_TLS_HOST = os.environ.get('V6_LAN_TLS_HOST', '')
+LAN_TLS_PORT = int(os.environ.get('V6_LAN_TLS_PORT', '4443'))
+LAN_TLS_CERT = os.environ.get('V6_LAN_TLS_CERT', '')
+LAN_TLS_KEY = os.environ.get('V6_LAN_TLS_KEY', '')
 STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT')
 LIMIT = 8 * 1024 * 1024
 
@@ -107,7 +113,10 @@ class Handler(BaseHTTPRequestHandler):
         self.response(200, asset.read_bytes(), content_type)
 
     def same_origin(self):
-        return self.headers.get('Origin', '') in ('https://ocr2md.laity.bid', f'http://127.0.0.1:{PORT}')
+        allowed = {'https://ocr2md.laity.bid', f'http://127.0.0.1:{PORT}'}
+        if LAN_TLS_HOST:
+            allowed.add(f'https://{LAN_TLS_HOST}:{LAN_TLS_PORT}')
+        return self.headers.get('Origin', '') in allowed
 
     def do_POST(self):
         if urlsplit(self.path).path != '/api/unlock':
@@ -173,5 +182,20 @@ class Handler(BaseHTTPRequestHandler):
         os.replace(tmp, DOC)
         self.response(200, 'saved')
 
-print(f'V6 RELEASE READY: http://{HOST}:{PORT}/', flush=True)
+def start_lan_tls():
+    if not LAN_TLS_HOST:
+        return
+    if not LAN_TLS_CERT or not LAN_TLS_KEY:
+        raise RuntimeError('LAN TLS enabled but certificate/key not configured')
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(LAN_TLS_CERT, LAN_TLS_KEY)
+    https = ThreadingHTTPServer((LAN_TLS_HOST, LAN_TLS_PORT), Handler)
+    https.socket = context.wrap_socket(https.socket, server_side=True)
+    thread = threading.Thread(target=https.serve_forever, name='v6-lan-https', daemon=True)
+    thread.start()
+    print(f'V6 LAN HTTPS READY: https://{LAN_TLS_HOST}:{LAN_TLS_PORT}/', flush=True)
+
+start_lan_tls()
+print(f'V6 PUBLIC ORIGIN READY: http://{HOST}:{PORT}/', flush=True)
 ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
