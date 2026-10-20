@@ -1,0 +1,26 @@
+:root { color-scheme: dark; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #111827; color: #e5e7eb; }
+* { box-sizing: border-box; }
+html, body, .app { margin: 0; width:100%; height:100%; overflow: hidden; }
+.app { display:flex; flex-direction:column; }
+.toolbar { height:54px; min-height:54px; display:flex; gap:16px; align-items:center; justify-content:space-between; padding:0 16px; background:#1f2937; border-bottom:1px solid #364152; }
+.brand { font-size:16px; letter-spacing:.3px; white-space:nowrap; font-weight:650; }
+.brand b { font-size:12px; padding:3px 6px; border-radius:5px; background:#334155; }
+.subtitle { font-size:12px; color:#a9b5c7; font-weight:400; margin-left:8px; }
+.actions { display:flex; gap:7px; }
+button { border:1px solid #475569; background:#273549; color:#e5e7eb; padding:7px 12px; border-radius:6px; font:inherit; cursor:pointer; white-space:nowrap; }
+button:hover { background:#37465c; }
+button:disabled { opacity:.45; cursor:default; }
+button.primary { background:#2563eb; border-color:#2563eb; }
+.subbar { display:flex; align-items:center; gap:20px; height:37px; min-height:37px; padding:0 16px; border-bottom:1px solid #334155; background:#182132; font-size:12px; }
+.muted { color:#94a3b8; }
+.status { margin-left:auto; color:#9fd2a3; }
+main { flex:1; min-height:0; display:flex; }
+#editor { height:100%; width:100%; min-width:0; }
+#editor .cm-editor { height:100%; font-size:14px; background:#111827; }
+#editor .cm-scroller { overflow:auto; font-family: "SFMono-Regular", Menlo, Consolas, monospace; }
+#editor .cm-gutters { background:#182132; border-right:1px solid #2f3a4b; color:#64748b; }
+#editor .cm-activeLine { background:#24314280; }
+#editor .cm-cursor { border-left-color:#a7cdfd; }
+#editor .cm-selectionBackground { background:#324f72 !important; }
+footer { min-height:29px; padding:5px 16px; border-top:1px solid #334155; color:#94a3b8; background:#1f2937; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:690px) { .subtitle, #count {display:none;} .toolbar {padding:0 8px;} button{padding:6px 8px;} }

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OCR2MD V6 · CM6 验证</title>
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="brand">OCR2MD <b>V6</b> <span class="subtitle">CM6 编辑验证 · WP1</span></div>
+      <div class="actions">
+        <button id="undo" title="撤销 ⌘Z" type="button">↶ 撤销</button>
+        <button id="redo" title="重做 ⇧⌘Z" type="button">↷ 重做</button>
+        <button id="extract" type="button">提取结构</button>
+        <button id="save" class="primary" type="button">保存</button>
+      </div>
+    </header>
+    <div class="subbar"><span>Buffett’s Alpha.minerujson.md</span><span id="count" class="muted">正在加载...</span><span id="status" class="status" role="status">正在加载</span></div>
+    <main><div id="editor" aria-label="CodeMirror 6 Markdown 编辑器"></div></main>
+    <footer id="summary">CodeMirror 6 管理全文、选区、撤销历史；磁盘 I/O 仅在按下保存时发生。</footer>
+  </div>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
