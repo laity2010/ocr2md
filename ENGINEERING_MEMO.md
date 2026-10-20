@@ -54,3 +54,9 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 将已验证的**发布流程、Git 构建检查点与回退、Mac 原生 Chrome iPad 模拟环境**固定为本地 Git 初始化标签 `ocr2md-init-v1`。后续 V7/V8 从此标签克隆到独立目录，而不是复制当前运行目录或临时缓存。
 - 该标签是完整 V6 源码基线，不是业务无关模板；启动新版本必须改独立端口、域名、Profile、调试端口、版本标识及运行凭据，不得覆盖现有 V6。
 - 精确克隆步骤和边界以 `PROJECT_INIT.md` 为准。GitHub 推送、当日 squash 以及正式发布仍须用户分别批准，不能因创建初始化标签而自动执行。
+
+## 7. Obsidian 外观先接 CM6 源码窗（2026-10-20）
+
+- V6 第一阶段只将 Mac OCR2MD Obsidian 库的 Everforest 暗色主题 Markdown 源码配色与启用的 daisor snippet 相关规则接入 CM6，不另起 Markdown 阅读渲染器，也不改 MinerU/CM6 唯一编辑状态。
+- **Sarasa Fixed SC 完整 WOFF2、12pt/16px 与原行距为固定约束**；Obsidian 的桌面/平板字号设置不能覆盖。
+- 样式局部作用于编辑器，独立 CSS 和 CM6 语法高亮扩展；保留 Git 测试，Chrome/WebKit 使用相同 1032×642 视口检查。此阶段不宣称已完整复刻 Obsidian Live Preview 或 Reading View。

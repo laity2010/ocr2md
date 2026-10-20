@@ -1,0 +1,66 @@
+/*
+ * OCR2MD V6: Obsidian source-editor appearance, drawn from the *installed*
+ * Everforest dark theme 0.0.0 in the Mac ocr2md Obsidian vault.
+ * Scope to CM6 only: do not import Obsidian's workspace/sidebar CSS.
+ * Sarasa Fixed SC 12pt WOFF2 and the existing CM6 line geometry stay fixed.
+ *
+ * Palette source: .obsidian/themes/Everforest/theme.css
+ * Highlight convention: .obsidian/snippets/daisor.css
+ */
+#editor {
+  --ob-bg: #2f383e;
+  --ob-bg-alt: #272f34;
+  --ob-fg: #d3c6aa;
+  --ob-muted: #9aa79d;
+  --ob-faint: #859289;
+  --ob-border: #525c62;
+  --ob-accent: #569d79;
+  --ob-caret: #7fbbb3;
+  --ob-highlight: rgba(255, 170, 0, .3);
+}
+
+#editor .cm-editor {
+  background: var(--ob-bg);
+  color: var(--ob-fg);
+}
+#editor .cm-content {
+  caret-color: var(--ob-caret);
+}
+#editor .cm-scroller {
+  /* The web-hosted Sarasa declaration in styles.css remains authoritative. */
+  color: var(--ob-fg);
+}
+#editor .cm-gutters {
+  background: var(--ob-bg-alt);
+  border-right: 1px solid var(--ob-border);
+  color: var(--ob-faint);
+}
+#editor .cm-activeLine,
+#editor .cm-activeLineGutter {
+  background: rgba(131, 192, 146, .08);
+}
+#editor .cm-cursor {
+  border-left-color: var(--ob-caret);
+}
+#editor .cm-selectionBackground,
+#editor .cm-content ::selection {
+  background: #525c62 !important;
+}
+#editor .cm-panels,
+#editor .cm-tooltip {
+  background: var(--ob-bg-alt);
+  color: var(--ob-fg);
+}
+#editor .cm-foldGutter .cm-gutterElement {
+  color: var(--ob-faint);
+}
+#editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: #4a555b;
+}
+/* Obsidian's enabled daisor snippet makes heading # markers match the text. */
+#editor .cm-ob-heading-marker-1, #editor .cm-ob-heading-marker-1 span { color: #da6362 !important; }
+#editor .cm-ob-heading-marker-2, #editor .cm-ob-heading-marker-2 span { color: #d77f48 !important; }
+#editor .cm-ob-heading-marker-3, #editor .cm-ob-heading-marker-3 span { color: #bf983d !important; }
+#editor .cm-ob-heading-marker-4, #editor .cm-ob-heading-marker-4 span { color: #899c40 !important; }
+#editor .cm-ob-heading-marker-5, #editor .cm-ob-heading-marker-5 span { color: #569d79 !important; }
+#editor .cm-ob-heading-marker-6, #editor .cm-ob-heading-marker-6 span { color: #b87b9d !important; }

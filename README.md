@@ -66,6 +66,13 @@ npm run test:ui
 - Chrome 进程与启动命令分离，但**保持 iPad 模拟仍需要轻量 CDP 连接在线**；脱开后 Chrome 不会退出，设备模拟可能恢复为 Mac 默认值。
 - 真实 iPad Safari 的截图才是最终视觉验收依据；此工具仅用于 Mac 本机快速对照。
 
+## Obsidian Everforest → CM6 源码样式
+
+- 样式取自 Mac 的 OCR2MD Obsidian 仓库：当前主题 `Everforest`（dark），并参考已启用的 `daisor.css`。独立样式文件是 `ui/obsidian-everforest.css`，Markdown 高亮映射在 `ui/obsidian-markdown.js`，标题 `#` 标记同色扩展在 `ui/obsidian-heading-markers.js`。
+- **字体不随 Obsidian 主题改变**：始终使用 V6 已验收、服务器托管的完整 Sarasa Fixed SC WOFF2，12pt / 16px；CM6 行高不改。
+- 仅影响 CM6 Markdown **源码窗**的暗色背景、文字、六级标题、引用、链接、代码与标记等样式。不导入 Obsidian 的窗口/侧栏 CSS，不实现 Live Preview、独立 HTML 阅读渲染或第二份文档状态；Obsidian 改主题后也不会自动重载本地主题 CSS。
+- 隔离测试：`npm run test:ob-theme`，在独立端口与独立测试文档上验证 Chrome / WebKit 的标题、字体、背景与原始标记保留；截图位于 `.v6/evidence/obsidian-everforest-*.png`。
+
 ## V6 发布后浏览器自动更新
 
 Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，唯一发布目录的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。

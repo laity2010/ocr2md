@@ -1,8 +1,11 @@
 import './styles.css';
+import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
 import {ensureSyntaxTree} from '@codemirror/language';
 import {undo, redo, undoDepth, redoDepth} from '@codemirror/commands';
+import {obsidianMarkdown} from './obsidian-markdown.js';
+import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 
 const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save'),extract:$('extract')};
@@ -119,6 +122,8 @@ async function main() {
     extensions:[
       basicSetup,
       markdown({base:markdownLanguage}),
+      obsidianMarkdown,
+      obsidianHeadingMarkers,
       EditorView.updateListener.of(update=>{
         if (update.docChanged) revision++;
         if (update.docChanged || update.transactions.some(tx=>tx.selection)) refreshToolbar();

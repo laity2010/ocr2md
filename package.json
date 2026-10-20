@@ -7,12 +7,15 @@
     "dev":"vite --host 127.0.0.1 --port 5196 --strictPort",
     "build":"vite build",
     "preview":"vite preview --host 127.0.0.1 --port 5197 --strictPort",
-    "test:ui":"node tests/cm6-browser.test.mjs"
+    "test:ui":"node tests/cm6-browser.test.mjs",
+    "test:ob-theme":"node tests/obsidian-cm6-theme.test.mjs"
   },
   "dependencies":{
     "codemirror":"^6.0.2",
     "@codemirror/lang-markdown":"^6.3.4",
     "@codemirror/language":"^6.11.0",
+    "@codemirror/view":"6.43.15",
+    "@lezer/highlight":"1.2.5",
     "@codemirror/commands":"^6.8.1"
   },
   "devDependencies":{"vite":"^7.1.0","playwright":"^1.56.0"}
