@@ -56,6 +56,14 @@ npm run test:ui
 - Git 回退：`python3 scripts/v6_git.py rollback --to <已验收Git提交>`，使用临时 Git worktree 重建发布，不重写当前分支。
 - 密钥位于 `.v6/private/`，不提交 Git；GitHub 推送需要另行授权。
 
+## Mac 原生 Chrome · iPad 布局验收
+
+运行 `node scripts/v6_ipad_chrome.mjs`。使用独立 Chrome Profile 和正常 GPU 渲染启动参数，**不通过 Playwright 启动浏览器**；由常驻轻量 CDP 连接维持 iPad 1032×642、DPR 2、触控模拟。再次运行会复用原窗口和字体缓存，不重复打开页面。
+
+- 验收窗口直达局域网 HTTPS `https://192.168.1.10:4443/`。调试端口仅绑定本机 `127.0.0.1:19396`，截图工具按需连接，不负责浏览器生命周期；不要覆盖这个窗口的设备模拟设置。
+- Chrome 进程与启动命令分离，但**保持 iPad 模拟仍需要轻量 CDP 连接在线**；脱开后 Chrome 不会退出，设备模拟可能恢复为 Mac 默认值。
+- 真实 iPad Safari 的截图才是最终视觉验收依据；此工具仅用于 Mac 本机快速对照。
+
 ## V6 发布后浏览器自动更新
 
 Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，唯一发布目录的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。

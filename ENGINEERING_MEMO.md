@@ -42,3 +42,9 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - V6 统一由页面加载**完整字形**的 Sarasa Fixed SC Regular / Bold WOFF2，不再依赖 iPad 用户安装字体，也不使用字形子集。保留 SIL OFL 授权文件。
 - 字体文件名包含内容哈希；仅此类字体资源设置 `Cache-Control: public, max-age=31536000, immutable`，其他页面及文档接口仍不缓存。文件内容改变必须换 URL。
 - 在 Mac Chrome / WebKit 模拟 iPad 的视口与字体度量，继续以真机 Safari 截图作最终验收依据。
+
+## 5. 原生 Chrome iPad 模拟：滚动性能优先（2026-10-20）
+
+- 手工验收浏览器以**普通 Google Chrome 进程**启动，保留其原生 GPU/Metal 加速，不使用 Playwright 的 Chromium 启动器及其自动化启动参数。
+- 独立 Profile + 本地回环 CDP 小连接仅负责 iPad 视口/触控模拟；截图工具按需连接，不接管或关闭浏览器。新控制器重连现有窗口不得刷新未保存内容。
+- 滚动流畅度以用户在 Mac 上直接操作为验收依据；页面加载时间不能替代滚动体验的评估。
