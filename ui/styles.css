@@ -35,4 +35,4 @@ dialog input {width:100%;padding:10px;border:1px solid #64748b;border-radius:5px
 #editor .cm-selectionBackground { background:#324f72 !important; }
 footer { min-height:29px; padding:5px 16px; border-top:1px solid #334155; color:#94a3b8; background:#1f2937; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 @media (max-width:800px) { #count {display:none;} .toolbar {padding:0 9px;} .identity {gap:6px;} .brand {font-size:13px;} .build-badge {font-size:10px;padding:3px 4px;} .status{max-width:130px;font-size:11px;} button{padding:6px 8px;} }
-@media (max-width:520px) { .actions {gap:3px;} .actions button {font-size:12px;padding:5px 5px;} .brand {font-size:12px;} .status {max-width:77px;} .build-badge {font-size:9px;} }
+@media (max-width:520px) { .toolbar {height:80px;min-height:80px;flex-direction:column;align-items:stretch;justify-content:center;gap:3px;padding:4px 9px;} .actions {gap:6px;justify-content:flex-end;} .actions button {font-size:12px;padding:4px 8px;} .brand {font-size:12px;} .status {max-width:calc(100vw - 218px);flex-shrink:1;} .build-badge {font-size:9px;} }
