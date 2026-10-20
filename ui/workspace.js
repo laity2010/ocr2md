@@ -6,6 +6,7 @@ import {createDockview, themeAbyss} from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import {viewStore} from './view-store.js';
 import {renderMarkdown} from './markdown-preview.js';
+import {createScrollSync} from './scroll-sync.js';
 import './workspace.css';
 
 const sourceHost = document.createElement('div');
@@ -15,6 +16,8 @@ sourceHost.setAttribute('aria-label','CodeMirror 6 Markdown 编辑器');
 let getMarkdown = () => '';
 let getEditor = () => null;
 let refreshPreview = () => {};
+let currentPreview=null;
+let scrollSync=null;
 
 class SourcePanel {
   constructor() {
@@ -40,6 +43,7 @@ class PreviewPanel {
     this.element.append(this.body);
     this.timer=null;
     this.disposed=false;
+    currentPreview=this;
   }
   init() {
     this.unsubscribe=viewStore.subscribe((next,prior) => {
@@ -59,16 +63,22 @@ class PreviewPanel {
     const source=getMarkdown();
     if (!source) return; // CM6 may not be initialized yet.
     const pane=this.element;
+    const preserved=scrollSync?.beforeRender();
     const scrollRatio=pane.scrollHeight>pane.clientHeight
       ? pane.scrollTop/(pane.scrollHeight-pane.clientHeight) : 0;
     this.body.innerHTML=renderMarkdown(source);
-    // Keep the visible position on edit rather than snapping to the top.
-    pane.scrollTop=scrollRatio*Math.max(0,pane.scrollHeight-pane.clientHeight);
+    if(scrollSync) scrollSync.afterRender(preserved);
+    else {
+      pane.scrollTop=scrollRatio*Math.max(0,pane.scrollHeight-pane.clientHeight);
+    }
   }
   dispose() {
     this.disposed=true;
     clearTimeout(this.timer);
     this.unsubscribe?.();
+    scrollSync?.dispose();
+    scrollSync=null;
+    if(currentPreview===this) currentPreview=null;
     if (refreshPreview) refreshPreview=()=>{};
   }
 }
@@ -90,5 +100,16 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
   dockview.onDidActivePanelChange(event => {
     viewStore.setState({activePanel:event.panel?.id||null});
   });
-  return {dockview, editorHost:sourceHost, refreshPreview:()=>refreshPreview()};
+  return {
+    dockview, editorHost:sourceHost,
+    refreshPreview:()=>refreshPreview(),
+    startScrollSync() {
+      if(scrollSync) return scrollSync;
+      if(!currentPreview || !getEditor()) return null;
+      scrollSync=createScrollSync(getEditor,currentPreview.element,currentPreview.body);
+      scrollSync.afterRender(null);
+      return scrollSync;
+    },
+    get scrollSync(){return scrollSync;},
+  };
 }

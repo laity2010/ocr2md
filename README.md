@@ -83,6 +83,15 @@ npm run test:ui
 - 11 张原始图片对应的外部 URL 是否仍可访问，不属于预览器保证范围；后续需媒体模块处理本地化。尚不支持完整 Obsidian 插件、公式所有方言和双向元素定位。
 - 回归测试：npm run test:preview。使用隔离工作文件及 Mac Chrome / WebKit 视口验证图片、HTML 表格、数学公式、实时更新、撤销、布局和 HTML 安全。
 
+## 双窗 Markdown 元素级滚动同步
+
+- 独立模块 ui/scroll-sync.js 利用 markdown-it 的 token.map，为预览标题、段落、HTML 表格、数学块标注 data-source-start/end 行范围。按元素位置插值，而不是让两个滚动条保持相同百分比。
+- Zustand Vanilla 的 viewStore.scrollTarget **仅传输** sourceLine、fraction、origin、revision 和事件序号；不复制 Markdown、HTML 或 CM6 状态。CM6 利用官方 scrollIntoView 配合虚拟布局稳定后的少量修正，预览只使用自己的滚动 API，不改变光标/撤销历史。
+- 左右窗都能成为主控窗口：滚轮、触控、鼠标或键盘操作优先，程序跟随滚动不能反向抢占；以 RAF 合并事件，并用 ResizeObserver/图片加载后更新元素位置。
+- 顶栏「⇅ 同步滚动」默认开启，关闭后两窗可以独立滚动，重新开启则对齐到 CM6 源码。开关不写入 Markdown。
+- **元数据边界**：Buffett’s Alpha 的可读正文在约第 1423 行结束。第 1427～3560 行是 minerujson:source 压缩原始数据注释，应在 CM6 留存以保证无损，但不会出现在阅读预览；源码进入这一区域时，预览保持在正文末尾，不能伪称仍有逐行对应的预览元素。
+- npm run test:scroll-sync：隔离的 Buffett’s Alpha 副本、1032×642 Chrome 和 WebKit 验收正反同步、防循环、开关、编辑后重建及窗宽变化，不动实际工作文件。
+
 ## V6 发布后浏览器自动更新
 
 Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，唯一发布目录的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。

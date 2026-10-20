@@ -73,3 +73,11 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 预览为可重建的只读 HTML 投影，采用 markdown-it、KaTeX 和 DOMPurify。验证当前 Buffett’s Alpha 的图片、HTML 表格和 math fenced 数学块；远程媒体链接、inline LaTeX 和跨窗元素定位留给后续独立验收。
 - 各组件互不越界：布局在 workspace，视图通知在 view-store，渲染在 markdown-preview，main.js 仅连接它们并保留原 CM6/保存逻辑。不增加新文档内核。
 - Mac Chrome 与 WebKit 1032×642 回归双窗显示、编辑同步、撤销、布局和 HTML 安全过滤；真实 iPad Safari 仍需要视觉验收。
+
+## 10. 元素锚点与 Zustand Vanilla 双向滚动同步（2026-10-20）
+
+- 同步位置以 Markdown **逻辑行及行内比例**描述，而不是滚动条百分比。markdown-it 的块级 token.map 给标题、段落、公式、HTML 表格生成源码范围锚点；MinerU 的无损注释只在邻近内容间插值，不生成大量不可见预览元素。
+- ui/scroll-sync.js 负责元素位置索引和坐标转换。Zustand Vanilla 只发布 origin、revision、sequence 与位置；两种 View 各用自己的 API 处理滚动，不复制文档状态或重新实现编辑器。
+- CM6 虚拟行高在远距定位时采用官方 scrollIntoView，再做少量稳定位置修正。跟随引起的滚动事件短暂屏蔽，用户输入立即接管控制权。RAF 合并滚动，ResizeObserver 处理视口宽度和媒体高度变化。
+- Buffett’s Alpha 的第 1427～3560 行是 minerujson:source 无损压缩数据，阅读预览只对应前约 1423 行的真实正文。这是数据格式边界，而非预览正文丢失。
+- Chrome/WebKit 真样本验收双向定位、关闭与重新开启、编辑同步、Dockview 缩放及无循环；上线后真实 iPad Safari 的手工滚动仍需用户确认。

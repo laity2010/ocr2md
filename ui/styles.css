@@ -12,6 +12,7 @@ html, body, .app { margin: 0; width:100%; height:100%; overflow: hidden; }
 .actions { display:flex; gap:7px; }
 button { border:1px solid #475569; background:#273549; color:#e5e7eb; padding:7px 12px; border-radius:6px; font:inherit; cursor:pointer; white-space:nowrap; }
 button:hover { background:#37465c; }
+button[aria-pressed="true"] { border-color:#569d79; color:#a3d3b2; }
 button:disabled { opacity:.45; cursor:default; }
 button.primary { background:#2563eb; border-color:#2563eb; }
 .subbar { display:flex; align-items:center; gap:20px; height:37px; min-height:37px; padding:0 16px; border-bottom:1px solid #334155; background:#182132; font-size:12px; }

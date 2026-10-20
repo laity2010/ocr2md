@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1 --port 5197 --strictPort",
     "test:ui": "node tests/cm6-browser.test.mjs",
     "test:ob-theme": "node tests/obsidian-cm6-theme.test.mjs",
-    "test:preview": "node tests/dockview-preview-browser.test.mjs"
+    "test:preview": "node tests/dockview-preview-browser.test.mjs",
+    "test:scroll-sync": "node tests/scroll-sync-browser.test.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",

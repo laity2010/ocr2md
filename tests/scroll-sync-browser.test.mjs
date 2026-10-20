@@ -1,0 +1,195 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {copyFileSync,mkdirSync,readFileSync} from 'node:fs';
+import {chromium,webkit,devices} from 'playwright';
+import {homedir} from 'node:os';
+
+const fixture='packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md';
+const testFile='.v6/tests/scroll-sync-browser-test.md';
+const port=5202,url='http://127.0.0.1:'+port+'/';
+mkdirSync('.v6/tests',{recursive:true});
+mkdirSync('.v6/evidence',{recursive:true});
+const original=readFileSync(fixture);
+copyFileSync(fixture,testFile);
+const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
+  '--port',String(port),'--strictPort'],{
+  env:{...process.env,V6_DOCUMENT_PATH:process.cwd()+'/'+testFile},
+  stdio:'ignore',
+});
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const getState=()=>({source:window.__v6cm6.scrollSync.currentSource,
+  preview:window.__v6cm6.scrollSync.currentPreview,
+  origin:window.__v6cm6.scrollState.scrollTarget?.origin,
+  driver:window.__v6cm6.scrollSync.lastDriver,
+  seq:window.__v6cm6.scrollState.scrollTarget?.sequence,
+  sourceY:window.__v6cm6.view.scrollDOM.scrollTop,
+  previewY:document.querySelector('.ocr-preview-pane').scrollTop,
+});
+const engines=[
+  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
+  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
+];
+try{
+  let ready=false;
+  for(let i=0;i<180;i++){try{ready=(await fetch(url)).ok;if(ready)break;}catch{}await delay(100);}
+  assert(ready,'isolated Vite server unavailable');
+  for(const [name,engine,launch] of engines){
+    if(process.env.V6_ONLY_CHROME && name!=='Chrome') continue;
+    if(process.env.V6_ONLY_WEBKIT && name!=='WebKit') continue;
+    const browser=await engine.launch({headless:true,...launch});
+    try{
+      const page=await browser.newPage({...devices['iPad Pro 11 landscape'],
+        viewport:{width:1032,height:642}});
+      await page.route('**/*',route=>route.request().url().startsWith('http://127.0.0.1:'+port)
+        ?route.continue():route.abort());
+      const errors=[];
+      page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+      await page.waitForFunction(()=>window.__v6cm6?.scrollSync?.anchorCount>150,{timeout:60000});
+      const initial=await page.evaluate(()=>{
+        const els=[...document.querySelectorAll('[data-source-start][data-source-end]')];
+        return {anchors:els.length,lastEnd:Math.max(...els.map(e=>+e.dataset.sourceEnd)),
+          lines:window.__v6cm6.view.state.doc.lines,
+          tableAnchors:document.querySelectorAll('.ocr-source-block[data-source-start]').length,
+          previewHTML:document.querySelector('.ocr-markdown').textContent.length,
+          docLength:window.__v6cm6.view.state.doc.length};
+      });
+      assert(initial.anchors>200);
+      assert(initial.lastEnd>=1400&&initial.lastEnd<1500,
+        'Opaque minerujson:source footer must not appear in Markdown preview');
+      assert.equal(initial.lines,3560);
+      console.log('SCROLL_INIT',name,JSON.stringify(initial));
+
+      // Source → preview: real rendered body around source line 600.
+      await page.evaluate(()=>{
+        const view=window.__v6cm6.view;
+        view.scrollDOM.scrollTop=view.lineBlockAt(view.state.doc.line(600).from).top;
+      });
+      await page.waitForFunction(()=>{
+        const s=window.__v6cm6.scrollSync;
+        const a=s?.currentSource,b=s?.currentPreview;
+        return a&&b&&a.sourceLine>470&&a.sourceLine<700 &&
+          Math.abs((a.sourceLine+a.fraction)-(b.sourceLine+b.fraction))<12 &&
+          s.lastDriver==='cm6';
+      },{timeout:25000});
+      const sourceResult=await page.evaluate(getState);
+      console.log('SOURCE_TO_PREVIEW_OK',name,JSON.stringify(sourceResult));
+
+      // Two structurally different blocks: an HTML table and a KaTeX fence.
+      // These have very different rendered/source heights from paragraphs.
+      for(const [kind,line] of [['table',275],['formula',339]]) {
+        await page.evaluate(line=>{
+          const view=window.__v6cm6.view;
+          view.scrollDOM.scrollTop=view.lineBlockAt(view.state.doc.line(line).from).top;
+        },line);
+        await page.waitForFunction(()=>{
+          const s=window.__v6cm6.scrollSync;
+          const a=s?.currentSource,b=s?.currentPreview;
+          return a&&b&&s.lastDriver==='cm6' &&
+            Math.abs(a.sourceLine+a.fraction-b.sourceLine-b.fraction)<12;
+        },null,{timeout:25000});
+        const position=await page.evaluate(getState);
+        assert(position.source.sourceLine>=200&&position.source.sourceLine<460);
+        console.log('BLOCK_SCROLL_OK',name,kind,JSON.stringify({
+          source:position.source,preview:position.preview,
+        }));
+      }
+
+      // Preview → source: choose a distinct later paragraph section.
+      await page.evaluate(()=>{
+        const pane=document.querySelector('.ocr-preview-pane');
+        pane.dispatchEvent(new Event('wheel')); // actual user scroll intent
+        pane.scrollTop=.77*(pane.scrollHeight-pane.clientHeight);
+      });
+      await page.waitForTimeout(1200);
+      const reverse=await page.evaluate(getState);
+      console.log('PREVIEW_TO_SOURCE_RAW',name,JSON.stringify(reverse));
+      assert.equal(reverse.driver,'preview',name+' preview must retain scroll leadership');
+      assert(Math.abs(reverse.source.sourceLine+reverse.source.fraction-
+        reverse.preview.sourceLine-reverse.preview.fraction)<12,
+        name+' preview/source locations differ');
+      assert(reverse.source.sourceLine>sourceResult.source.sourceLine+30);
+      await delay(450);
+      const stable=await page.evaluate(getState);
+      assert((stable.seq||0)-(reverse.seq||0)<6,name+' recursive scroll feedback');
+      console.log('PREVIEW_TO_SOURCE_OK',name,JSON.stringify(stable));
+
+      // Switch off: both scrollbars operate independently. Re-enable and
+      // the preview re-aligns to source without selection/history mutations.
+      await page.locator('#sync-scroll').click();
+      assert.equal(await page.locator('#sync-scroll').getAttribute('aria-pressed'),'false');
+      const frozen=await page.evaluate(()=>document.querySelector('.ocr-preview-pane').scrollTop);
+      const frozenAnchor=await page.evaluate(()=>window.__v6cm6.scrollSync.currentPreview);
+      await page.evaluate(()=>{
+        const view=window.__v6cm6.view;
+        view.scrollDOM.scrollTop=view.lineBlockAt(view.state.doc.line(170).from).top;
+      });
+      await delay(350);
+      const disconnected=await page.evaluate(()=>document.querySelector('.ocr-preview-pane').scrollTop);
+      assert(Math.abs(disconnected-frozen)<3,name+' synchronization toggle OFF must freeze follower');
+      await page.evaluate(()=>{
+        const v=window.__v6cm6.view;
+        v.dispatch({changes:{from:v.state.doc.line(85).from,
+          insert:'<!-- sync disabled preview rerender -->\n'}});
+      });
+      await page.waitForFunction(()=>window.__v6cm6.scrollState.documentRevision>=1,
+        null,{timeout:10000});
+      await delay(350);
+      const afterDisabledEdit=await page.evaluate(()=>document.querySelector('.ocr-preview-pane').scrollTop);
+      const afterAnchor=await page.evaluate(()=>window.__v6cm6.scrollSync.currentPreview);
+      console.log('SYNC_OFF_EDIT_POSITION',name,JSON.stringify({
+        pixelBefore:frozen,pixelAfter:afterDisabledEdit,
+        anchorBefore:frozenAnchor,anchorAfter:afterAnchor,
+      }));
+      // Inserting a source line above can legitimately change rendered pixel
+      // height. The same visible paragraph, not the old scrollTop, is stable.
+      assert(Math.abs(afterAnchor.sourceLine+afterAnchor.fraction-
+        frozenAnchor.sourceLine-frozenAnchor.fraction)<3,
+        name+' independent preview semantic position changed');
+      await page.locator('#sync-scroll').click();
+      assert.equal(await page.locator('#sync-scroll').getAttribute('aria-pressed'),'true');
+      await page.waitForFunction(()=>{
+        const s=window.__v6cm6.scrollSync;
+        const a=s.currentSource,b=s.currentPreview;
+        return a&&b&&Math.abs(a.sourceLine+a.fraction-b.sourceLine-b.fraction)<12;
+      },{timeout:25000});
+
+      // Edits near the top are reflected in the preview; no extra CM6
+      // document owner, no second persisted Markdown and no cursor relocation.
+      const before=await page.evaluate(()=>({length:window.__v6cm6.view.state.doc.length,
+        head:window.__v6cm6.view.state.selection.main.head}));
+      await page.evaluate(()=>{
+        const v=window.__v6cm6.view;
+        v.dispatch({changes:{from:v.state.doc.line(85).from,insert:'## SCROLL_SYNC_EDIT_CHECK\n\n'}});
+      });
+      await page.waitForFunction(()=>document.querySelector('.ocr-markdown')
+        ?.textContent.includes('SCROLL_SYNC_EDIT_CHECK'),{timeout:30000});
+      const edit=await page.evaluate(()=>({length:window.__v6cm6.view.state.doc.length,
+        anchorCount:window.__v6cm6.scrollSync.anchorCount,
+        lastRevision:window.__v6cm6.scrollState.documentRevision,
+        head:window.__v6cm6.view.state.selection.main.head}));
+      assert(edit.length>before.length);
+      assert.equal(edit.head,before.head);
+      assert(edit.anchorCount>200);
+
+      const stableEditor=await page.evaluate(()=>{
+        const view=window.__v6cm6.view;
+        window.__v6cm6.dockview.layout(900,500);
+        window.__v6cm6.dockview.layout(1032,550);
+        return window.__v6cm6.view===view;
+      });
+      assert(stableEditor,'Dockview resize must not recreate CM6');
+      await page.waitForTimeout(250);
+      assert.deepEqual(errors,[],name+' browser errors');
+      assert.equal(readFileSync(fixture).compare(original),0,'real MinerU original modified');
+      await page.screenshot({path:`.v6/evidence/scroll-sync-${name.toLowerCase()}.png`});
+      console.log('SCROLL_SYNC_PASS',name,JSON.stringify({
+        anchors:initial.anchors,bodyToPreview:sourceResult.source.sourceLine,
+        previewToSource:reverse.source.sourceLine,feedbackLoops:false,
+        toggle:true,edit:true,resize:true,errors:errors.length,
+      }));
+    }finally{
+      await Promise.race([browser.close(),delay(6000)]);
+    }
+  }
+}finally{server.kill('SIGTERM');}

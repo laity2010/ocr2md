@@ -7,7 +7,7 @@ import {undo, redo, undoDepth, redoDepth} from '@codemirror/commands';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {createWorkspace} from './workspace.js';
-import {documentChanged, selectionChanged} from './view-store.js';
+import {documentChanged, selectionChanged, viewStore, setScrollSyncEnabled} from './view-store.js';
 
 const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save'),extract:$('extract')};
@@ -140,6 +140,14 @@ async function main() {
     ]
   });
   workspace.refreshPreview();
+  workspace.startScrollSync();
+  const syncButton=$('sync-scroll');
+  syncButton.addEventListener('click',()=>{
+    const enabled=!viewStore.getState().scrollSyncEnabled;
+    setScrollSyncEnabled(enabled);
+    syncButton.setAttribute('aria-pressed',String(enabled));
+    syncButton.title=enabled?'关闭同步滚动':'开启同步滚动';
+  });
   buttons.undo.addEventListener('click',()=>{undo(view);refreshToolbar();view.focus();});
   buttons.redo.addEventListener('click',()=>{redo(view);refreshToolbar();view.focus();});
   buttons.extract.addEventListener('click',extract);
@@ -188,6 +196,8 @@ async function main() {
   if (import.meta.env.DEV) window.__v6cm6 = {
     get view(){return view;},
     get dockview(){return workspace?.dockview;},
+    get scrollSync(){return workspace?.scrollSync;},
+    get scrollState(){return viewStore.getState();},
     extract,
   };
   // Opt-in, on-page font diagnostics so a real iPad screenshot can establish

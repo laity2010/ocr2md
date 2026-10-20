@@ -48,6 +48,7 @@
 }
 .ocr-preview-pane {
   overflow: auto;
+  scroll-behavior: auto;
   overscroll-behavior: contain;
   scrollbar-color: #4a555b #272f34;
 }
