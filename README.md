@@ -10,7 +10,7 @@
    python3 scripts/v6_git.py build --change "修改章节按钮" --purpose "使章节操作可用" --artifact dist -- npm run build
    ```
 
-   目前 V6 尚未编写应用，也没有 `npm run build`，以上是**日后实际开发时的调用示例**。
+   V6 现已提供 `npm run build`（WP1 CM6 浏览器验证）。上面的构建指令中的改动说明仍是示例。
 2. 故障先选已验收构建：`python3 scripts/v6_git.py rollback --to v6-构建ID`。运行入口后续应指向 `.v6/current`；当前尚未接入服务器，命令目前只切换本地构建产物指针。
 3. 需要查看旧源码：`python3 scripts/v6_git.py recover-source --build-id v6-构建ID`，会在 `.v6/recovery/` 生成独立 worktree，不修改现有源码。
 4. 日终先看提交和文件差异：`python3 scripts/v6_git.py review`。用户审查批准后执行：`python3 scripts/v6_git.py review --approved --summary "今日开发成果"`；会把当天小提交汇成 `v6` 分支的一个提交，同时保留本地细历史分支。
@@ -22,3 +22,25 @@ Git 能回溯文件改动和差异，但目的需要写在 commit message，编�
 ## WP0 转换组件
 
 唯一组件位于 `packages/minerujson-md/`，三项公开 API 为 `toMarkdown()`、`toMineruJSON()`、`version()`。首次转换的 Buffett’s Alpha 样本、格式限制和自动验收说明见 [组件 README](./packages/minerujson-md/README.md)。
+
+## WP1 · CM6 单窗浏览器验证
+
+仅以 `codemirror`、`@codemirror/lang-markdown`、`@codemirror/language` 的公开 API 管理单一编辑器。Dockview/Zustand 将分别在后续验证，不在 WP1 引入。
+
+```bash
+npm ci
+npm run dev                  # Mac 本机 http://127.0.0.1:5196/
+npm run build                # 生产静态前端产物，尚未接入正式发布服务
+```
+
+`ui/` 为唯一浏览器界面。`vite.config.mjs` 的 `/api/document` 仅实现一个固定路径的 GET/PUT 文件 I/O；默认首次从 WP0 的只读测试样本加载，第一次保存写到 `.v6/workspace/buffetts-alpha.minerujson.md`，后续打开该工作文件；不改写原样本，也不在服务端维护额外 MD 状态。实际界面直接从 `view.state.doc` 读取全文保存，保存后不重建 `EditorView`。
+
+UI 原生 API 验收使用独立文件及端口，以免污染用户工作文档：
+
+```bash
+V6_DOCUMENT_PATH="$PWD/.v6/tests/wp1-document-test.md" npm run dev -- --port 5198
+# 另一个 shell
+npm run test:ui
+```
+
+测试覆盖读取真实 314KB Markdown、撤销/重做、Syntax Tree 全文元素计数、磁盘保存、滚动与选区保持、刷新还原，截图位于 `.v6/evidence/wp1/`（不进 Git）。命令要求本机已安装 Chrome。WP1 无 A/B 服务与对外发布机制。
