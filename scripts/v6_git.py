@@ -36,6 +36,11 @@ def branch():
 def build(args):
     if not branch().startswith('build/'):
         raise RuntimeError('Please build on a local build/YYYY-MM-DD branch')
+    cmd = list(args.command)
+    if cmd and cmd[0] == '--':
+        cmd.pop(0)
+    if not cmd:
+        raise RuntimeError('Actual build command required after --')
     # Snapshot before executing the build, even if that build is about to fail.
     git('add', '-A')
     git('commit', '--allow-empty', '-m', f'build(v6): {args.change}',
@@ -43,11 +48,6 @@ def build(args):
     commit = git('rev-parse', 'HEAD')
     ident = 'v6-' + dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '-' + commit[:8]
     print('V6_BUILD_CHECKPOINT', ident, commit, flush=True)
-    cmd = list(args.command)
-    if cmd and cmd[0] == '--':
-        cmd.pop(0)
-    if not cmd:
-        raise RuntimeError('Actual build command required after --')
     result = subprocess.run(cmd, cwd=ROOT, check=False).returncode
     record = {'buildId': ident, 'commit': commit, 'changed': args.change,
               'purpose': args.purpose, 'command': cmd, 'exitCode': result,
