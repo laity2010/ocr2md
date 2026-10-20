@@ -19,6 +19,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   let disposed=false;
   let measureFrame=0, sourceFrame=0, previewFrame=0;
   let sourceCorrectionFrame=0, sourceCorrectionTries=0, desiredSource=null;
+  let explicitNavigation=false;
   // Programmatically moved followers generate 'scroll' events too.
   // Ignore exactly that movement, but allow immediate real user input.
   let ignoredSource=null,ignoredPreview=null;
@@ -140,7 +141,8 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
 
   function adjustSource(position) {
     const view=getEditor();
-    if(!position || !view || !view.scrollDOM.isConnected || !viewStore.getState().scrollSyncEnabled) return;
+    if(!position || !view || !view.scrollDOM.isConnected ||
+       (!viewStore.getState().scrollSyncEnabled && !explicitNavigation)) return;
     const sourceLine=clamp(Math.floor(position.sourceLine),1,view.state.doc.lines);
     const block=view.lineBlockAt(view.state.doc.line(sourceLine).from);
     const scroller=view.scrollDOM;
@@ -156,7 +158,8 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   }
   function correctSource() {
     sourceCorrectionFrame=0;
-    if(disposed || lastDriver!=='preview' || !viewStore.getState().scrollSyncEnabled ||
+    if(disposed || (lastDriver!=='preview' && !explicitNavigation) ||
+       (!viewStore.getState().scrollSyncEnabled && !explicitNavigation) ||
        !desiredSource) return;
     const actual=readSource();
     const error=(desiredSource.sourceLine+desiredSource.fraction)-
@@ -165,9 +168,11 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     adjustSource(desiredSource);
     sourceCorrectionFrame=requestAnimationFrame(correctSource);
   }
-  function moveSource(position) {
+  function moveSource(position,force=false) {
     const view=getEditor();
-    if(!position || !view || !view.scrollDOM.isConnected || !viewStore.getState().scrollSyncEnabled) return;
+    if(!position || !view || !view.scrollDOM.isConnected ||
+       (!viewStore.getState().scrollSyncEnabled && !force)) return;
+    explicitNavigation=force;
     desiredSource=position;
     sourceCorrectionTries=0;
     if(sourceCorrectionFrame) cancelAnimationFrame(sourceCorrectionFrame);
@@ -177,6 +182,10 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     // offsets. This effect never touches the selection or undo history.
     view.dispatch({effects:EditorView.scrollIntoView(view.state.doc.line(line).from,
       {y:'start',yMargin:leadingOffset})});
+    // A short Dockview source pane may expose stale virtual line heights on
+    // the first frame. Apply the best available pixel estimate immediately,
+    // then continue correcting as CM6's height map settles.
+    adjustSource(position);
     sourceCorrectionFrame=requestAnimationFrame(correctSource);
   }
 
@@ -216,6 +225,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   const source=sourceElement();
   function sourceUserInput() {
     suppressSourceUntil=0; ignoredSource=null; desiredSource=null;
+    explicitNavigation=false;
     if(sourceCorrectionFrame) cancelAnimationFrame(sourceCorrectionFrame);
     sourceCorrectionFrame=0;
   }
@@ -243,6 +253,26 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
        state.scrollTarget.revision===state.documentRevision) {
       if(state.scrollTarget.origin==='cm6') movePreview(state.scrollTarget);
       else if(state.scrollTarget.origin==='preview') moveSource(state.scrollTarget);
+    }
+  });
+
+  // Explicit three-pane navigation operates even with continuous sync off.
+  // The initiating pane does not scroll itself; only the other panes follow.
+  const unsubscribeFocus=viewStore.subscribe((state,previous)=>{
+    const target=state.focusTarget;
+    if(target===previous.focusTarget || !target ||
+       target.revision!==state.documentRevision)return;
+    const position={sourceLine:target.sourceLine,fraction:0};
+    if(target.origin==='outline'){
+      lastDriver='outline';
+      moveSource(position,true);
+      movePreview(position,true);
+    } else if(target.origin==='cm6'){
+      lastDriver='cm6';
+      movePreview(position,true);
+    } else if(target.origin==='preview'){
+      lastDriver='preview';
+      moveSource(position,true);
     }
   });
 
@@ -274,6 +304,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     previewPane.removeEventListener('load',measureLater,true);
     observer.disconnect();
     unsubscribe();
+    unsubscribeFocus();
     [measureFrame,sourceFrame,previewFrame,sourceCorrectionFrame].forEach(x=>x&&cancelAnimationFrame(x));
   }
 
@@ -283,5 +314,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     get lastDriver(){return lastDriver;},
     get currentSource(){return readSource();},
     get currentPreview(){return readPreview();},
+    get pendingSource(){return desiredSource;},
+    get correctionAttempts(){return sourceCorrectionTries;},
   };
 }

@@ -6,8 +6,9 @@ import {ensureSyntaxTree} from '@codemirror/language';
 import {undo, redo, undoDepth, redoDepth} from '@codemirror/commands';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
+import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
-import {documentChanged, selectionChanged, viewStore, setScrollSyncEnabled} from './view-store.js';
+import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
 
 const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save'),extract:$('extract')};
@@ -129,18 +130,34 @@ async function main() {
       markdown({base:markdownLanguage}),
       obsidianMarkdown,
       obsidianHeadingMarkers,
+      outlineLineHighlight,
       EditorView.updateListener.of(update=>{
         if (update.docChanged) {
           revision++;
           documentChanged();
         }
-        if (update.selectionSet) selectionChanged(update.state.selection.main.head);
+        if (update.selectionSet) {
+          const offset=update.state.selection.main.head;
+          selectionChanged(offset);
+          // A deliberate cursor change locates the same element in both
+          // read-only views. Typing must not steal reading scroll.
+          if(!update.docChanged) {
+            const line=update.state.doc.lineAt(offset);
+            publishFocus({sourceLine:line.number,origin:'cm6'});
+          }
+        }
         if (update.docChanged || update.transactions.some(tx=>tx.selection)) refreshToolbar();
       })
     ]
   });
   workspace.refreshPreview();
+  workspace.refreshOutline();
   workspace.startScrollSync();
+  const unsubscribeOutlineFocus=viewStore.subscribe((next,previous)=>{
+    if(next.focusTarget===previous.focusTarget || !next.focusTarget)return;
+    // Presentation effect only; never affects Markdown or undo history.
+    view.dispatch({effects:markOutlineLine.of(next.focusTarget.sourceLine)});
+  });
   const syncButton=$('sync-scroll');
   syncButton.addEventListener('click',()=>{
     const enabled=!viewStore.getState().scrollSyncEnabled;
@@ -187,6 +204,7 @@ async function main() {
   window.addEventListener('beforeunload',event=>{
     if (revision !== savedRevision) {event.preventDefault(); event.returnValue='';}
   });
+  window.addEventListener('pagehide',()=>unsubscribeOutlineFocus(),{once:true});
   refreshToolbar();
   status('✓ 已加载');
   if ((await checkPermission()) === false && revision === savedRevision) {
@@ -198,6 +216,7 @@ async function main() {
     get dockview(){return workspace?.dockview;},
     get scrollSync(){return workspace?.scrollSync;},
     get scrollState(){return viewStore.getState();},
+    get outline(){return workspace?.outlineGrid;},
     extract,
   };
   // Opt-in, on-page font diagnostics so a real iPad screenshot can establish

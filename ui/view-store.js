@@ -10,6 +10,8 @@ export const viewStore = createStore(() => ({
   sourceOffset: 0,
   scrollSyncEnabled: true,
   scrollTarget: null,
+  // Explicit cross-pane navigation; ephemeral location, not document data.
+  focusTarget: null,
 }));
 
 export function documentChanged() {
@@ -35,4 +37,13 @@ export function publishScroll(sourceLine, fraction, origin) {
 
 export function setScrollSyncEnabled(enabled) {
   viewStore.setState({scrollSyncEnabled:Boolean(enabled)});
+}
+
+export function publishFocus({sourceLine,sourceEnd=sourceLine+1,origin,elementId=null}) {
+  if(!Number.isInteger(sourceLine)||sourceLine<1)return;
+  viewStore.setState(state=>({
+    focusTarget:{sourceLine,sourceEnd,origin,elementId,
+      revision:state.documentRevision,
+      sequence:(state.focusTarget?.sequence||0)+1},
+  }));
 }

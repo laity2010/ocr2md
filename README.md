@@ -92,6 +92,16 @@ npm run test:ui
 - **元数据边界**：Buffett’s Alpha 的可读正文在约第 1423 行结束。第 1427～3560 行是 minerujson:source 压缩原始数据注释，应在 CM6 留存以保证无损，但不会出现在阅读预览；源码进入这一区域时，预览保持在正文末尾，不能伪称仍有逐行对应的预览元素。
 - npm run test:scroll-sync：隔离的 Buffett’s Alpha 副本、1032×642 Chrome 和 WebKit 验收正反同步、防循环、开关、编辑后重建及窗宽变化，不动实际工作文件。
 
+## AG Grid 三窗章节大纲（V6）
+
+- Dockview 布局为 **左侧整个 AG Grid，右上 CM6 源码、右下 Markdown 阅读预览**。三窗仍共享一份 CM6 Markdown，不创建第二套文本状态。
+- AG 表的五列固定为 **PDF页码、层级、标题、独立章节、章节文件**；所有列头都提供按实际列值下拉筛选，默认 `all`。使用 AG Grid Community 的外部过滤接口，不使用 Enterprise 专属 Set Filter。
+- 标题颜色/字号与当前 Everforest 的 H1–H6 源码样式一致，字体始终为完整 Sarasa Fixed SC。大纲在 CM6 文档变化后按 Markdown 语法树重新构建；不把 AG 行当作可写文档数据源。
+- PDF 页码来自当前 MinerU 无损注释 `minerujson:block:v1:pageIndex:blockIndex` 中真实的 0-based 页索引，展示时加 1；无法确定页码时显示 `—`，不推断不伪造。
+- 当前 Buffett’s Alpha 识别出 21 项标题（2 个 H1、19 个 H2）。`独立章节` 默认全部勾选，首项不可取消，**其余勾选只是当前页面草稿，没有写回 Markdown 或 MOPJO**；`章节文件` 没有导出记录时明确显示“未导出”，不生成假文件名。
+- Zustand Vanilla 的 `focusTarget` 仅传递 `sourceLine`、`sourceEnd`、`origin`、`elementId`、`revision` 与事件序号。点击 AG 行定位 CM6 与预览、点击预览元素反向定位 CM6 和 AG、CM6 光标切换定位 AG/预览；随原有双窗滚动同步更新 AG 活动行。高亮由 CM6 Decoration / 预览 CSS / AG 选中行实现，**不修改源码文本、选区历史或保存内容**。
+- Chrome 和 WebKit 的 1032×642 隔离浏览器验收命令为 `npm run test:outline`。章节定界保存与导出要等后续正式接入 MOPJO，当前仍是**三窗导航阶段**。
+
 ## V6 发布后浏览器自动更新
 
 Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，唯一发布目录的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。

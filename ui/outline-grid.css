@@ -1,0 +1,119 @@
+/*
+ * Everforest source-heading treatment for the AG Grid Community outline.
+ * Shared Sarasa Fixed SC 16px baseline; H1-H6 keep the same CM6 scaling.
+ */
+.ocr-outline-pane {
+  display:flex;
+  flex-direction:column;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+  background:#2f383e;
+}
+.ocr-outline-grid {
+  flex:1;
+  min-height:0;
+  min-width:0;
+}
+.ocr-outline-note {
+  flex:none;
+  font:12px/1.45 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+  color:#9aa79d;
+  padding:5px 8px;
+  border-top:1px solid #525c62;
+  background:#272f34;
+  white-space:normal;
+}
+.ocr-outline-pane .ag-root-wrapper {
+  border:none;
+  border-radius:0;
+}
+.ocr-outline-pane .ag-header-cell {
+  padding-left:3px;
+  padding-right:3px;
+}
+.ocr-outline-pane .ag-header-cell-label {width:100%;min-width:0;}
+.ocr-outline-header {
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:stretch;
+  gap:3px;
+  width:100%;
+  height:100%;
+  min-width:0;
+}
+.ocr-outline-header-title {
+  display:block;
+  width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font:12px/1.1 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+}
+.ocr-outline-filter {
+  display:block;
+  width:100%;
+  height:22px;
+  padding:0 1px;
+  border:1px solid #525c62;
+  border-radius:2px;
+  background:#2f383e;
+  color:#d3c6aa;
+  font:12px "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+  cursor:pointer;
+  min-width:0;
+  appearance:auto;
+}
+.ocr-outline-filter:focus-visible {
+  outline:1px solid #83c092;
+}
+.ocr-outline-pane .ag-cell {
+  padding-left:5px;
+  padding-right:5px;
+  line-height:1.25;
+}
+.ocr-outline-pane .ag-cell[col-id="title"] {
+  display:flex;
+  align-items:center;
+  white-space:normal;
+  line-height:normal;
+}
+.ocr-outline-title {
+  display:block;
+  width:100%;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  font-family:"OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+  font-weight:500;
+  line-height:1.18;
+  padding:4px 0;
+}
+.ocr-outline-h1 { font-size:34px; color:#da6362; }
+.ocr-outline-h2 { font-size:26px; color:#d77f48; }
+.ocr-outline-h3 { font-size:22px; color:#bf983d; }
+.ocr-outline-h4 { font-size:20px; color:#899c40; }
+.ocr-outline-h5 { font-size:18px; color:#569d79; }
+.ocr-outline-h6 { font-size:18px; color:#b87b9d; }
+.ocr-outline-checkbox {
+  display:block;
+  width:17px;
+  height:17px;
+  margin:auto;
+  accent-color:#83c092;
+  cursor:pointer;
+}
+.ocr-outline-checkbox:disabled {opacity:.72;cursor:default;}
+.ocr-outline-pane .ag-row-selected .ocr-outline-title {
+  text-shadow:0 0 0 currentColor;
+}
+#editor .cm-outline-focused-line {
+  background:rgba(131,192,146,.15);
+  box-shadow:inset 3px 0 #83c092;
+}
+.ocr-markdown [data-source-start].ocr-outline-focused-element {
+  background:rgba(131,192,146,.10);
+  box-shadow:inset 3px 0 #83c092;
+}
