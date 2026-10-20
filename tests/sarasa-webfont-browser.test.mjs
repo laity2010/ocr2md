@@ -15,7 +15,7 @@ for (const [label,type,launchOptions] of runtimes) {
     const errors=[];
     const fonts=[];
     page.on('pageerror',error=>errors.push(error.message));
-    page.on('response',response=>{if(response.url().includes('ocr2md-sarasa-'))fonts.push({status:response.status(),url:response.url()});});
+    page.on('response',response=>{if(response.url().includes('/fonts/sarasa-fixed-sc-'))fonts.push({status:response.status(),url:response.url(),cache:response.headers()['cache-control'],type:response.headers()['content-type']});});
     await page.goto(url+'?fontcheck=1',{waitUntil:'domcontentloaded',timeout:35000});
     await page.locator('#v6-fontcheck').waitFor({timeout:25000});
     await page.evaluate(()=>document.fonts.ready);
@@ -31,6 +31,8 @@ for (const [label,type,launchOptions] of runtimes) {
     assert(Math.abs(result.actualWidth-448)<2,`${label} editor fallback detected ${result.actualWidth}`);
     assert(result.panel.includes('Web字体：已匹配'));
     assert(fonts.filter(r=>r.status===200).length>=2,`${label} webfont not loaded: ${JSON.stringify(fonts)}`);
+    assert(fonts.every(r=>r.cache==='public, max-age=31536000, immutable'),`${label} font cache headers: ${JSON.stringify(fonts)}`);
+    assert(fonts.every(r=>r.type?.startsWith('font/woff2')),`${label} font MIME types: ${JSON.stringify(fonts)}`);
     assert.equal(errors.length,0,errors.join('\n'));
     console.log('V6_SARASA_WEBFONT_PASS',JSON.stringify({browser:label,metrics:result,assets:fonts.map(f=>f.status)}));
   } finally {await browser.close();}

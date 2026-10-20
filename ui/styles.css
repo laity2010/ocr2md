@@ -39,7 +39,7 @@ footer { min-height:29px; padding:5px 16px; border-top:1px solid #334155; color:
 
 /* Uniform typography on Mac and iPad: 12pt Sarasa fixed-width Simplified Chinese.
    Keep these declarations after responsive rules to avoid device-dependent sizes.
-   Requires Sarasa Fixed SC installed on each device; never silently scale iOS text. */
+   Full webfont below overrides the local font fallback; do not scale iOS text. */
 :root {
   font: 12pt/1.5 "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
   -webkit-text-size-adjust: 100%;
@@ -53,18 +53,18 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error {
 #editor .cm-editor { font-size:12pt; line-height:1.5; }
 #editor .cm-scroller { font-family:"Sarasa Fixed SC", "Sarasa Mono SC", monospace; }
 
-/* Explicit Sarasa Web fonts avoid Safari silently ignoring iOS-installed fonts.
-   Locally hosted, subsetted under SIL OFL 1.1 (see public/fonts/). */
+/* Complete Sarasa Fixed SC Web fonts, identical on Mac and iPad.
+   Immutable content-hashed WOFF2 under SIL OFL 1.1 (see public/fonts/). */
 @font-face {
   font-family: "OCR2MD Sarasa";
-  src: url("/fonts/ocr2md-sarasa-regular-subset.ttf") format("truetype");
+  src: url("/fonts/sarasa-fixed-sc-regular-b10e9f5cb1015a3a.woff2") format("woff2");
   font-display: swap;
   font-style: normal;
   font-weight: 400;
 }
 @font-face {
   font-family: "OCR2MD Sarasa";
-  src: url("/fonts/ocr2md-sarasa-bold-subset.ttf") format("truetype");
+  src: url("/fonts/sarasa-fixed-sc-bold-2b6cfa487119e67b.woff2") format("woff2");
   font-display: swap;
   font-style: normal;
   font-weight: 700;

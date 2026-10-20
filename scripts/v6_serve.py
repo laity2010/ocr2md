@@ -3,6 +3,7 @@
 import hmac
 import json
 import os
+import re
 import secrets
 import ssl
 import threading
@@ -39,19 +40,19 @@ class Handler(BaseHTTPRequestHandler):
         # No access codes, document text, or URLs logged.
         pass
 
-    def headers_only(self, status, content_type, length=0):
+    def headers_only(self, status, content_type, length=0, cache_control='no-store, max-age=0'):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
-        self.send_header('Cache-Control', 'no-store, max-age=0')
+        self.send_header('Cache-Control', cache_control)
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('X-OCR2MD-Release', 'v6')
         self.send_header('Content-Length', str(length))
         self.end_headers()
 
-    def response(self, status, data, content_type='text/plain; charset=utf-8'):
+    def response(self, status, data, content_type='text/plain; charset=utf-8', cache_control='no-store, max-age=0'):
         if isinstance(data, str):
             data = data.encode('utf-8')
-        self.headers_only(status, content_type, len(data))
+        self.headers_only(status, content_type, len(data), cache_control)
         if self.command != 'HEAD':
             self.wfile.write(data)
 
@@ -110,7 +111,11 @@ class Handler(BaseHTTPRequestHandler):
         content_type = guess_type(asset.name)[0] or 'application/octet-stream'
         if content_type.startswith('text/') or content_type == 'application/javascript':
             content_type += '; charset=utf-8'
-        self.response(200, asset.read_bytes(), content_type)
+        # Only content-hashed, immutable font assets may be cached long-term.
+        # HTML, JS, APIs and release manifests retain their no-store behavior.
+        font_asset = re.fullmatch(r'/fonts/sarasa-fixed-sc-(?:regular|bold)-[0-9a-f]{16}\.woff2', path)
+        cache = 'public, max-age=31536000, immutable' if font_asset else 'no-store, max-age=0'
+        self.response(200, asset.read_bytes(), content_type, cache_control=cache)
 
     def same_origin(self):
         allowed = {'https://ocr2md.laity.bid', f'http://127.0.0.1:{PORT}'}
