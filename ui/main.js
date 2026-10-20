@@ -10,13 +10,34 @@ let view;
 // Only a save-revision marker, never a second copy of the Markdown document.
 let savedRevision = 0;
 let revision = 0;
+let canSave = import.meta.env.DEV ? true : null;
+$('build-version').textContent = __V6_BUILD_VERSION__;
 
-function status(text) { $('status').textContent = text; }
+function status(text, kind='ok') {
+  $('status').textContent = text;
+  $('status').dataset.kind = kind;
+  $('status').title = text;
+}
+function showUnlock() {
+  $('unlock-error').textContent = '';
+  $('unlock-code').value = '';
+  if (!$('unlock-dialog').open) $('unlock-dialog').showModal();
+  $('unlock-code').focus();
+}
+async function checkPermission() {
+  if (import.meta.env.DEV) return true;
+  try {
+    const res = await fetch('/api/session', {cache:'no-store'});
+    if (!res.ok) throw Error(`HTTP ${res.status}`);
+    canSave = Boolean((await res.json()).canSave);
+  } catch { canSave = null; } // A failed probe must not discard any local edits.
+  return canSave;
+}
 function refreshToolbar() {
   buttons.undo.disabled = !undoDepth(view.state);
   buttons.redo.disabled = !redoDepth(view.state);
   $('count').textContent = view.state.doc.lines.toLocaleString() + ' 行 · ' + view.state.doc.length.toLocaleString() + ' 字符';
-  if (revision !== savedRevision) status('● 未保存');
+  if (revision !== savedRevision) status('● 未保存','warning');
 }
 function extract() {
   const last = view.state.doc.length;
@@ -39,17 +60,24 @@ function extract() {
 }
 async function save() {
   if (!view) return;
+  if (canSave === false) { status('🔒 保存需授权','warning'); showUnlock(); return; }
   const snapshot = view.state.doc.toString(); // CM6 is the single source of document text
   const atRevision = revision;
   buttons.save.disabled = true;
   status('正在保存');
   try {
     const res = await fetch('/api/document',{method:'PUT',headers:{'Content-Type':'text/plain; charset=utf-8'},body:snapshot});
-    if (!res.ok) throw Error(await res.text());
+    if (res.status === 403) {
+      canSave = false;
+      status('🔒 保存需授权', 'warning');
+      showUnlock();
+      return;
+    }
+    if (!res.ok) throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,120)}`);
     savedRevision = atRevision;
     status(revision === atRevision ? '✓ 已保存' : '● 保存期间有新修改');
     // Deliberately no new EditorState, no view.dispatch, no reloading of document.
-  } catch (error) {status('保存失败：'+error.message);}
+  } catch (error) {status('保存失败：'+error.message,'error');}
   finally {buttons.save.disabled = false;}
 }
 
@@ -72,11 +100,37 @@ async function main() {
   buttons.redo.addEventListener('click',()=>{redo(view);refreshToolbar();view.focus();});
   buttons.extract.addEventListener('click',extract);
   buttons.save.addEventListener('click',save);
+  $('unlock-cancel').addEventListener('click',()=>$('unlock-dialog').close());
+  $('unlock-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    $('unlock-error').textContent='';
+    const code=$('unlock-code').value.trim();
+    try {
+      const res=await fetch('/api/unlock',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({code})
+      });
+      if (res.status === 403) {
+        $('unlock-error').textContent='授权码错误，请重新输入';
+        return;
+      }
+      if (!res.ok) throw Error(`HTTP ${res.status}`);
+      canSave = true;
+      $('unlock-code').value='';
+      $('unlock-dialog').close();
+      await save(); // Retry with the CURRENT CM6 document, not a second cached copy.
+    } catch(error) {
+      $('unlock-error').textContent='授权失败：'+error.message;
+    }
+  });
   window.addEventListener('beforeunload',event=>{
     if (revision !== savedRevision) {event.preventDefault(); event.returnValue='';}
   });
   refreshToolbar();
   status('✓ 已加载');
+  if ((await checkPermission()) === false && revision === savedRevision) {
+    status('🔒 保存需授权','warning');
+  }
   // Read-only test seam for verifying *CM6 public APIs*, not an app document cache.
   if (import.meta.env.DEV) window.__v6cm6 = {get view(){return view;},extract};
 }

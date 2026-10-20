@@ -12,11 +12,12 @@ from urllib.parse import urlsplit, unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / '.v6'
-DOC = RUNTIME / 'workspace' / 'buffetts-alpha.minerujson.md'
+DOC = Path(os.environ.get('V6_DOCUMENT_PATH', RUNTIME / 'workspace' / 'buffetts-alpha.minerujson.md')).resolve()
 FIXTURE = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md'
 TOKEN = RUNTIME / 'private' / 'editor-token'
 HOST = os.environ.get('V6_BIND', '127.0.0.1')
 PORT = int(os.environ.get('V6_PORT', '4396'))
+STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT')
 LIMIT = 8 * 1024 * 1024
 
 TOKEN.parent.mkdir(parents=True, exist_ok=True)
@@ -74,11 +75,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', '0')
             self.end_headers()
             return
+        if path == '/api/session':
+            self.response(200, json.dumps({'canSave': self.authorized()}), 'application/json; charset=utf-8')
+            return
         if path == '/api/document':
             self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
             return
         # Static artifacts are read only from the active A/B slot; never from source.
-        static_root = (RUNTIME / 'current').resolve()
+        static_root = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'current').resolve()
         if not static_root.is_dir():
             self.response(503, 'No V6 release')
             return
@@ -93,13 +97,46 @@ class Handler(BaseHTTPRequestHandler):
             content_type += '; charset=utf-8'
         self.response(200, asset.read_bytes(), content_type)
 
+    def same_origin(self):
+        return self.headers.get('Origin', '') in ('https://ocr2md.laity.bid', f'http://127.0.0.1:{PORT}')
+
+    def do_POST(self):
+        if urlsplit(self.path).path != '/api/unlock':
+            self.response(404, 'Not found')
+            return
+        if not self.same_origin():
+            self.response(403, 'Invalid origin')
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            length = -1
+        if length < 2 or length > 160:
+            self.response(413, 'Invalid request size')
+            return
+        try:
+            code = json.loads(self.rfile.read(length).decode('utf-8')).get('code')
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            self.response(400, 'Invalid request')
+            return
+        if not isinstance(code, str) or not hmac.compare_digest(code, KEY[:12]):
+            self.response(403, 'Invalid code')
+            return
+        self.send_response(200)
+        self.send_header('Set-Cookie', f'v6edit={KEY}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', '11')
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
+
     def do_PUT(self):
         if urlsplit(self.path).path != '/api/document':
             self.response(404, 'Not found')
             return
         # Both cookie authorization and same-origin guard protect public writes.
         origin = self.headers.get('Origin', '')
-        if not self.authorized() or origin not in ('https://ocr2md.laity.bid', 'http://127.0.0.1:4396'):
+        if not self.authorized() or not self.same_origin():
             self.response(403, 'Editor authorization required')
             return
         try:

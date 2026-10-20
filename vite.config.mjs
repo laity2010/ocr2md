@@ -2,6 +2,13 @@ import {defineConfig} from 'vite';
 import {readFile, mkdir, rename, writeFile} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
 import {existsSync} from 'node:fs';
+// A build version is fixed at bundle creation, never generated from page-load time.
+const stamp = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
+  hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+}).formatToParts(new Date());
+const part = key => stamp.find(x => x.type===key).value;
+const buildVersion = `v6-${part('year')}${part('month')}${part('day')}-${part('hour')}${part('minute')}${part('second')}`;
 const fixture = resolve('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const file = resolve(process.env.V6_DOCUMENT_PATH || '.v6/workspace/buffetts-alpha.minerujson.md');
 
@@ -10,6 +17,7 @@ async function readDocument() {
   return readFile(existsSync(file) ? file : fixture, 'utf8');
 }
 export default defineConfig({
+  define: {'__V6_BUILD_VERSION__': JSON.stringify(buildVersion)},
   root: 'ui',
   build: {outDir: '../dist', emptyOutDir: true},
   plugins: [{name: 'single-file-io', configureServer(server) {

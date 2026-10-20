@@ -8,7 +8,7 @@
 <body>
   <div class="app">
     <header class="toolbar">
-      <div class="brand">OCR2MD <b>V6</b> <span class="subtitle">CM6 编辑验证 · WP1</span></div>
+      <div class="identity"><div class="brand">OCR2MD V6</div><span id="build-version" class="build-badge">v6-载入中</span><span id="status" class="status" role="status" aria-live="polite">正在加载</span></div>
       <div class="actions">
         <button id="undo" title="撤销 ⌘Z" type="button">↶ 撤销</button>
         <button id="redo" title="重做 ⇧⌘Z" type="button">↷ 重做</button>
@@ -16,10 +16,20 @@
         <button id="save" class="primary" type="button">保存</button>
       </div>
     </header>
-    <div class="subbar"><span>Buffett’s Alpha.minerujson.md</span><span id="count" class="muted">正在加载...</span><span id="status" class="status" role="status">正在加载</span></div>
+    <div class="subbar"><span>Buffett’s Alpha.minerujson.md</span><span id="count" class="muted">正在加载...</span></div>
     <main><div id="editor" aria-label="CodeMirror 6 Markdown 编辑器"></div></main>
     <footer id="summary">CodeMirror 6 管理全文、选区、撤销历史；磁盘 I/O 仅在按下保存时发生。</footer>
   </div>
+  <dialog id="unlock-dialog" aria-labelledby="unlock-heading">
+    <form id="unlock-form" method="dialog">
+      <h2 id="unlock-heading">授权保存</h2>
+      <p>首次保存需要编辑授权码。授权后可直接使用首页保存。</p>
+      <label for="unlock-code">编辑授权码</label>
+      <input id="unlock-code" name="code" type="password" autocomplete="off" spellcheck="false" required />
+      <div id="unlock-error" role="alert"></div>
+      <div class="dialog-actions"><button id="unlock-cancel" type="button">取消</button><button class="primary" type="submit">授权并保存</button></div>
+    </form>
+  </dialog>
   <script type="module" src="/main.js"></script>
 </body>
 </html>
