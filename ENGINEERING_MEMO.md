@@ -97,3 +97,9 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 
 - PDF 页码列使用 AG Grid `pinned:'left'`、`lockPinned:true`、`lockPosition:'left'` 固定；标题列移除自动行高/自动换行，CSS 改为单行省略，仍按 Everforest 标题层级着色。Chrome/WebKit 1032×642 三窗原功能回归通过。
 - 上一版列值 `all` 下拉是工程自定义 `ValueFilterHeader` + `isExternalFilterPresent/doesExternalFilterPass`，**不是 AG Grid 原生列筛选**。AG Grid 36 的官方按列枚举值 `agSetColumnFilter` 属于 Enterprise，需要授权，目前仓库只有 Community 包，未配置授权。必须与用户明确选择许可证/Community 原生 Text/Number 条件筛选后再更换，不应自作主张另造筛选器或者部署无授权水印。未确定前不覆盖已经发布的三窗版本。
+
+## 13. 采用 V4 同款 AG Grid Community 自定义列值筛选（2026-10-20）
+
+- 更正第 12 项的筛选结论：AG Grid 自带的 Enterprise **Set Filter** 需要授权，但通过官方 `IFilterComp` 扩展接口创建的 **EnumCheckboxFilter** 不需要。V4 原本就用 `getGui`、`getModel/setModel`、`doesFilterPass`、`onNewRowsLoaded`、`params.getValue`、`params.api.forEachLeafNode` 和 `filterChangedCallback` 实现列值 checkbox/All；V6 在本仓独立实现同一公开接口，避免跨版本模块依赖。
+- 从 V6 AG 模块彻底删除 `ValueFilterHeader`、手写 `select`、`isExternalFilterPresent/doesExternalFilterPass` 和独立 `filters` 状态，由 AG Grid 管理筛选图标、弹窗、筛选模型、筛选结果。五列均默认无筛选（`all`），支持多值勾选；标题层级经 `filterValueGetter` 显示 `H1`/`H2`，章节标定草稿改变时使用 `api.onFilterChanged()` 通知 AG Grid 重新判定。
+- 保留已经验收的 PDF 页码 `pinned/lockPinned`、标题单行、Dockview 三窗和 Zustand 三窗定位；Chrome/WebKit 使用项目隔离的 Buffett’s Alpha 样本验证真实 AG 弹窗、五列筛选、选择、标题修改、撤销和脚本无异常。

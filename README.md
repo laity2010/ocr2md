@@ -95,7 +95,8 @@ npm run test:ui
 ## AG Grid 三窗章节大纲（V6）
 
 - Dockview 布局为 **左侧整个 AG Grid，右上 CM6 源码、右下 Markdown 阅读预览**。三窗仍共享一份 CM6 Markdown，不创建第二套文本状态。
-- AG 表的五列固定为 **PDF页码、层级、标题、独立章节、章节文件**；所有列头都提供按实际列值下拉筛选，默认 `all`。使用 AG Grid Community 的外部过滤接口，不使用 Enterprise 专属 Set Filter。
+- AG 表的五列固定为 **PDF页码、层级、标题、独立章节、章节文件**；全部采用 AG Grid Community 官方 `IFilterComp` 扩展接口接入的 `EnumCheckboxFilter`，在 AG Grid 筛选弹窗中列出 `all` 和各列实际不同值，支持多选。默认 `all`（AG Grid 空筛选模型）。实现独立放在 `ui/enum-checkbox-filter.js`，不需要 Enterprise、不另做表头控件，也不使用外部行筛选逻辑。
+- PDF 页码首列原生固定在左侧，标题列沿用 Everforest 字号与颜色、单行省略不自动折行。AG Grid 本身管理筛选弹窗、模型、行过滤及更新通知；源码/预览定位继续由现有 Zustand 与 CM6 协调。
 - 标题颜色/字号与当前 Everforest 的 H1–H6 源码样式一致，字体始终为完整 Sarasa Fixed SC。大纲在 CM6 文档变化后按 Markdown 语法树重新构建；不把 AG 行当作可写文档数据源。
 - PDF 页码来自当前 MinerU 无损注释 `minerujson:block:v1:pageIndex:blockIndex` 中真实的 0-based 页索引，展示时加 1；无法确定页码时显示 `—`，不推断不伪造。
 - 当前 Buffett’s Alpha 识别出 21 项标题（2 个 H1、19 个 H2）。`独立章节` 默认全部勾选，首项不可取消，**其余勾选只是当前页面草稿，没有写回 Markdown 或 MOPJO**；`章节文件` 没有导出记录时明确显示“未导出”，不生成假文件名。

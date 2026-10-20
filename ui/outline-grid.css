@@ -35,40 +35,35 @@
   padding-right:3px;
 }
 .ocr-outline-pane .ag-header-cell-label {width:100%;min-width:0;}
-.ocr-outline-header {
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  align-items:stretch;
-  gap:3px;
-  width:100%;
-  height:100%;
-  min-width:0;
+/* AG Grid owns the filter icon/popup and its model; the component styles only
+   its V4-like checkbox options. Popups are mounted outside the grid pane. */
+.ocr-enum-filter {
+  min-width:190px;
+  max-width:min(320px,90vw);
+  max-height:min(310px,70vh);
+  overflow-y:auto;
+  padding:5px 8px;
+  background:#2f383e;
+  color:#d3c6aa;
+  font:14px/1.35 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
 }
-.ocr-outline-header-title {
-  display:block;
-  width:100%;
+.ocr-enum-filter-option {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:30px;
+  cursor:pointer;
+}
+.ocr-enum-filter-option:hover {background:#37464b;}
+.ocr-enum-filter-option input {accent-color:#83c092;flex:none;}
+.ocr-enum-filter-option span {
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-  font:12px/1.1 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
 }
-.ocr-outline-filter {
-  display:block;
-  width:100%;
-  height:22px;
-  padding:0 1px;
-  border:1px solid #525c62;
-  border-radius:2px;
-  background:#2f383e;
-  color:#d3c6aa;
-  font:12px "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
-  cursor:pointer;
-  min-width:0;
-  appearance:auto;
-}
-.ocr-outline-filter:focus-visible {
-  outline:1px solid #83c092;
+.ocr-enum-filter-separator {
+  margin:4px 0;
+  border-top:1px solid #525c62;
 }
 .ocr-outline-pane .ag-cell {
   padding-left:5px;

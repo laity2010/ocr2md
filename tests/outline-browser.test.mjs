@@ -57,9 +57,10 @@ try{
           groups:document.querySelectorAll('.dv-groupview').length,
           ag:rect('.ocr-outline-pane'),source:rect('.ocr-source-pane'),
           preview:rect('.ocr-preview-pane'),
-          filters:[...document.querySelectorAll('select[data-outline-filter]')]
-            .map(x=>({name:x.dataset.outlineFilter,value:x.value,
-              first:x.options[0]?.value,count:x.options.length})),
+          filters:window.__v6cm6.outline.api.getFilterModel(),
+          filterColumns:['pdfPage','level','title','independent','chapterFile']
+            .map(field=>({field,enabled:window.__v6cm6.outline.api.getColumn(field).isFilterAllowed()})),
+          customHeaderCount:document.querySelectorAll('select[data-outline-filter]').length,
           pdfPages:window.__v6cm6.outline.rows.slice(0,4).map(x=>x.pdfPage),
           levels:window.__v6cm6.outline.rows.slice(0,4).map(x=>x.level),
           exported:window.__v6cm6.outline.rows.some(x=>x.chapterFile),
@@ -80,8 +81,10 @@ try{
       assert(initial.source.x>initial.ag.x+initial.ag.width-5);
       assert(initial.preview.y>initial.source.y+80);
       assert(Math.abs(initial.preview.x-initial.source.x)<3);
-      assert.equal(initial.filters.length,5);
-      assert(initial.filters.every(x=>x.value==='all'&&x.first==='all'&&x.count>=2));
+      assert.deepEqual(initial.filters,{},'all five AG Grid filter models must default to All');
+      assert.equal(initial.filterColumns.length,5);
+      assert(initial.filterColumns.every(x=>x.enabled),'all five columns have native AG filter API');
+      assert.equal(initial.customHeaderCount,0,'old custom header selects must be removed');
       assert.deepEqual(initial.pdfPages,[1,1,2,2]);
       assert.deepEqual(initial.levels,[2,2,1,1]);
       assert.equal(initial.exported,false);
@@ -92,9 +95,45 @@ try{
       assert.equal(initial.titleLayout.overflow,'hidden');
       console.log('OUTLINE_LAYOUT_OK',name,JSON.stringify(initial));
 
+      // A real header tap/click must open the AG-owned filter popup, not just
+      // a programmatic API call (important on the simulated iPad viewport).
+      await page.locator('.ag-header-cell[col-id="level"] .ag-header-cell-filter-button').click();
+      const headerPopup=page.locator('.ocr-enum-filter[aria-label="层级 筛选"]:visible');
+      await headerPopup.waitFor({timeout:10000});
+      assert(await headerPopup.locator('[data-filter-value="all"] input').isChecked());
+      await page.evaluate(()=>window.__v6cm6.outline.api.hideColumnFilter());
+
+      // The AG Grid filter button owns the popup. Verify the actual
+      // IFilterComp GUI, its all checkbox, and multiple-choice behavior.
+      for(const field of ['pdfPage','level','title','independent','chapterFile']){
+        await page.evaluate(field=>window.__v6cm6.outline.api.showColumnFilter(field),field);
+        const label={pdfPage:'PDF页码',level:'层级',title:'标题',
+          independent:'独立章节',chapterFile:'章节文件'}[field];
+        const popup=page.locator(`.ocr-enum-filter[aria-label="${label} 筛选"]:visible`);
+        await popup.waitFor({timeout:10000});
+        assert(await popup.locator('[data-filter-value="all"] input').isChecked(),field+' default all');
+        assert((await popup.locator('.ocr-enum-filter-option').count())>=2,field+' distinct values');
+        await page.evaluate(()=>window.__v6cm6.outline.api.hideColumnFilter());
+      }
+      await page.evaluate(()=>window.__v6cm6.outline.api.showColumnFilter('level'));
+      const levelPopup=page.locator('.ocr-enum-filter[aria-label="层级 筛选"]:visible');
+      await levelPopup.waitFor();
+      await levelPopup.locator('[data-filter-value="all"] input').uncheck();
+      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.api.getDisplayedRowCount()),0);
+      await levelPopup.locator('[data-filter-value="H1"] input').check();
+      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.api.getDisplayedRowCount()),2);
+      await levelPopup.locator('[data-filter-value="H2"] input').check();
+      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.api.getDisplayedRowCount()),21);
+      assert.deepEqual(await page.evaluate(()=>window.__v6cm6.outline.api.getFilterModel()),{},
+        'selecting all values must reset to an inactive AG Grid filter');
+      await page.evaluate(()=>window.__v6cm6.outline.api.hideColumnFilter());
+
       const selectFilter=async(field,value)=>{
-        await page.locator(`select[data-outline-filter="${field}"]`).selectOption(value);
-        await page.waitForTimeout(80);
+        await page.evaluate(async ({field,value})=>{
+          const api=window.__v6cm6.outline.api;
+          await api.setColumnFilterModel(field,value==='all'?null:{values:[value]});
+          api.onFilterChanged();
+        },{field,value});
         return page.evaluate(()=>window.__v6cm6.outline.api.getDisplayedRowCount());
       };
       assert.equal(await selectFilter('level','H1'),2);
@@ -115,6 +154,9 @@ try{
       assert(await firstCheckbox.isDisabled());
       await page.evaluate(()=>window.__v6cm6.outline.api.ensureIndexVisible(1,'top'));
       await page.locator('.ag-row[row-index="1"] .ocr-outline-checkbox').uncheck();
+      await page.evaluate(()=>window.__v6cm6.outline.api.showColumnFilter('independent'));
+      await page.locator('.ocr-enum-filter[aria-label="独立章节 筛选"]:visible [data-filter-value="否"]').waitFor();
+      await page.evaluate(()=>window.__v6cm6.outline.api.hideColumnFilter());
       assert.equal(await selectFilter('independent','否'),1);
       assert.equal(await selectFilter('independent','all'),21);
       assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows[1].independent),false);
