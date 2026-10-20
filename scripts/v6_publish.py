@@ -1,46 +1,86 @@
 #!/usr/bin/env python3
-"""Install exactly two fixed release slots and atomically select one."""
-from pathlib import Path
+"""Publish one V6 release directory; rebuild a Git commit to roll back.
+
+The only durable publication is .v6/release/. Staging and swap protection
+are temporary and are not independently addressable releases or A/B slots.
+"""
+import argparse
+import fcntl
+import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
-import json
 import time
+
 ROOT = Path(__file__).resolve().parents[1]
 STATE = ROOT / '.v6'
-SLOTS = STATE / 'slots'
-CURRENT = STATE / 'current'
+RELEASE = STATE / 'release'
+STAGING = STATE / '.release-staging'
+OLD = STATE / '.release-replacing'
 
-def activate(slot):
-    target = SLOTS / slot
-    if slot not in ('A','B') or not target.is_dir():
-        raise RuntimeError('Unknown/missing release slot')
-    tmp = STATE / ('.next-current-' + str(os.getpid()))
-    tmp.symlink_to(Path('slots') / slot)
-    os.replace(tmp, CURRENT)
-    print('V6_ACTIVE_RELEASE',slot)
 
-if len(sys.argv)==2 and sys.argv[1] in ('A','B'):
-    activate(sys.argv[1]);sys.exit(0)
-if len(sys.argv)!=1:
-    raise SystemExit('Usage: python3 scripts/v6_publish.py [A|B]')
-source=ROOT/'dist'
-if not (source/'index.html').is_file():
-    raise RuntimeError('Missing V6 dist/index.html; build first')
-SLOTS.mkdir(parents=True,exist_ok=True)
-active=CURRENT.resolve().name if CURRENT.is_symlink() else ''
-slot='B' if active=='A' else 'A'
-target=SLOTS/slot
-staging=SLOTS/(slot+'.incoming')
-if staging.exists():
-    raise RuntimeError('Unexpected staging data; refusing overwrite')
-shutil.copytree(source,staging)
-commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
-(staging/'release.json').write_text(json.dumps({'commit':commit,'time':int(time.time()),'slot':slot})+'\n')
-if target.exists():
-    # Replace only the inactive slot after a complete successful copy.
-    shutil.rmtree(target)
-os.replace(staging,target)
-activate(slot)
-print('V6_RELEASE_COMMIT',commit)
+def git(*args, cwd=ROOT):
+    return subprocess.run(['git', *args], cwd=cwd, check=True,
+                          text=True, capture_output=True).stdout.strip()
+
+
+def install(source, commit):
+    if not (source / 'index.html').is_file() or not (source / 'release-version.json').is_file():
+        raise RuntimeError('Incomplete V6 output, refusing publication')
+    if STAGING.exists() or OLD.exists():
+        raise RuntimeError('Stale temporary publication found; manual review required')
+    shutil.copytree(source, STAGING)
+    build = json.loads((STAGING / 'release-version.json').read_text())['version']
+    (STAGING / 'release.json').write_text(json.dumps({
+        'commit': commit, 'version': build, 'publishedAt': int(time.time())
+    }) + '\n')
+    replaced = False
+    try:
+        if RELEASE.exists():
+            os.rename(RELEASE, OLD)
+            replaced = True
+        os.rename(STAGING, RELEASE)
+    except BaseException:
+        if replaced and not RELEASE.exists() and OLD.exists():
+            os.rename(OLD, RELEASE)
+        raise
+    if replaced:
+        shutil.rmtree(OLD)
+    print('V6_PUBLISHED_ONE_RELEASE', build, commit)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--git', dest='commit', help='Rebuild this ancestor Git commit to restore it without rewriting HEAD')
+    args = parser.parse_args()
+    STATE.mkdir(exist_ok=True)
+    with (STATE / '.publish.lock').open('w') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if args.commit:
+            commit = git('rev-parse', '--verify', args.commit + '^{commit}')
+            subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'HEAD'],
+                           cwd=ROOT, check=True)
+            temp = STATE / '.git-publish-worktree'
+            if temp.exists():
+                raise RuntimeError('Temporary Git build path already exists')
+            git('worktree', 'add', '--detach', str(temp), commit)
+            try:
+                subprocess.run(['npm', 'ci', '--no-audit', '--no-fund'], cwd=temp, check=True)
+                subprocess.run(['npm', 'run', 'build'], cwd=temp, check=True)
+                install(temp / 'dist', commit)
+            finally:
+                # Successful checkout/compilation uses only a disposable worktree.
+                git('worktree', 'remove', str(temp))
+        else:
+            if git('status', '--porcelain'):
+                raise RuntimeError('Commit the change and build first: Git worktree not clean')
+            install(ROOT / 'dist', git('rev-parse', 'HEAD'))
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, subprocess.CalledProcessError, RuntimeError, ValueError) as error:
+        print('V6_PUBLISH_ERROR', error, file=sys.stderr)
+        sys.exit(2)

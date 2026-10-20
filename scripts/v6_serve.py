@@ -64,18 +64,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
         if path == '/healthz':
-            slot = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'current').resolve()
+            slot = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'release').resolve()
             version_file = slot / 'release-version.json'
             try:
                 version = json.loads(version_file.read_text())['version']
             except (OSError, ValueError, KeyError):
-                # Older A/B artifacts predate the version asset; rollback must
-                # still cause the new browser to detect the release change.
+                # Older Git-based assets may predate the version manifest.
                 try:
                     version = 'git:' + json.loads((slot / 'release.json').read_text())['commit']
                 except (OSError, ValueError, KeyError):
                     version = None
-            self.response(200, json.dumps({'service':'ocr2md-v6','release':slot.name,'version':version}), 'application/json')
+            self.response(200, json.dumps({'service':'ocr2md-v6','release':'single','version':version}), 'application/json')
             return
         if path == '/access/' + KEY:
             self.send_response(302)
@@ -91,8 +90,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/document':
             self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
             return
-        # Static artifacts are read only from the active A/B slot; never from source.
-        static_root = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'current').resolve()
+        # Static artifacts live only in the one V6 release directory.
+        static_root = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'release').resolve()
         if not static_root.is_dir():
             self.response(503, 'No V6 release')
             return

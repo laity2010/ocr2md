@@ -52,40 +52,12 @@ def build(args):
     record = {'buildId': ident, 'commit': commit, 'changed': args.change,
               'purpose': args.purpose, 'command': cmd, 'exitCode': result,
               'artifactSaved': False, 'time': dt.datetime.now().isoformat()}
-    if result == 0 and args.artifact:
-        source = Path(args.artifact)
-        if not source.is_absolute():
-            source = ROOT / source
-        dest = STATE / 'releases' / ident
-        if not source.is_dir() or source.is_symlink() or any(p.is_symlink() for p in source.rglob('*')):
-            record['artifactError'] = 'Artifact directory missing or contains symlinks'
-            result = 1
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source, dest)
-            record['artifactSaved'] = True
-            pointer(ident)
     record['resultCode'] = result
     logs = STATE / 'builds'
     logs.mkdir(parents=True, exist_ok=True)
     (logs / f'{ident}.json').write_text(json.dumps(record, ensure_ascii=False, indent=2) + '\n')
     print('V6_BUILD_RESULT', json.dumps(record, ensure_ascii=False), flush=True)
     return result
-
-
-def pointer(build_id):
-    dest = STATE / 'releases' / build_id
-    if not dest.is_dir():
-        raise RuntimeError(f'Unknown or missing V6 artifact: {build_id}')
-    target = STATE / 'current'
-    if target.exists() and not target.is_symlink():
-        raise RuntimeError('V6 current is unexpectedly not a symlink')
-    temp = STATE / ('.new-current-' + str(os.getpid()))
-    if temp.exists() or temp.is_symlink():
-        raise RuntimeError('Temporary pointer already exists')
-    temp.symlink_to(Path('releases') / build_id)
-    os.replace(temp, target)
-    print('V6_CURRENT_ARTIFACT', build_id, '(pointer only; no V5 service affected)')
 
 
 def recovered_source(build_id):
@@ -152,7 +124,6 @@ def main():
     p = subs.add_parser('build')
     p.add_argument('--change', required=True, help='What was built or changed')
     p.add_argument('--purpose', required=True, help='Why this change was made')
-    p.add_argument('--artifact', help='Build output directory to archive when successful')
     p.add_argument('command', nargs=argparse.REMAINDER)
     p = subs.add_parser('rollback')
     p.add_argument('--to', required=True)
@@ -168,7 +139,7 @@ def main():
     if args.action == 'build':
         return build(args)
     if args.action == 'rollback':
-        pointer(args.to)
+        subprocess.run([sys.executable, str(ROOT / 'scripts/v6_publish.py'), '--git', args.to], cwd=ROOT, check=True)
     if args.action == 'recover-source':
         recovered_source(args.build_id)
     if args.action == 'review':
@@ -178,7 +149,7 @@ def main():
     if args.action == 'status':
         print('V6_BRANCH', branch())
         print('V6_REVIEWED', git('rev-parse', '--short', 'v6'))
-        print('V6_CURRENT', os.readlink(STATE / 'current') if (STATE / 'current').is_symlink() else '(none)')
+        print('V6_RELEASE', json.loads((STATE / 'release' / 'release.json').read_text()) if (STATE / 'release' / 'release.json').is_file() else '(none)')
     return 0
 
 
