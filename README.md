@@ -54,3 +54,9 @@ npm run test:ui
 - 所有机密、工作 MD、运行槽、证据和路由备份仅存 Git 忽略的 `.v6/`。公开网页能读取示例 MD；写入需经过私有链接 `/access/<token>` 设置安全 Cookie（token 位于 `.v6/private/editor-token`，**禁止提交**）。正式服务从不启动 Vite dev 作为发布源。
 - 构建继续经 `python3 scripts/v6_git.py build --change "..." --purpose "..." -- npm run build`，每次生成本地 Git 提交；之后 `python3 scripts/v6_publish.py`。无需 GitHub push。
 - 如果新静态版本故障：先用 `scripts/v6_publish.py A|B` 切回保留槽；若源码需要复原，用 Git 已记录的构建提交独立恢复。若 V6 整个服务故障：在 Agent Link 网络仓库里**只把** `ocr2md.laity.bid` ingress 从 `4396` 改回 `4385`（同时把注册表 OCR2MD 诊断 URL 恢复旧值），验证配置并仅重启共享 application-main 隧道；备份在 `.v6/rollback/`，不影响其他业务。
+
+## V6 发布后浏览器自动更新
+
+Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，活动 A/B 槽的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。
+
+**以前已经打开的旧版页面未包含自动更新代码，需要首次手动刷新一次以启用后续自动更新**；后续切换 A/B 无需手动刷新。此机制只检测发布版本，不新增 Markdown 副本或后台状态管理。

@@ -69,7 +69,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 version = json.loads(version_file.read_text())['version']
             except (OSError, ValueError, KeyError):
-                version = None
+                # Older A/B artifacts predate the version asset; rollback must
+                # still cause the new browser to detect the release change.
+                try:
+                    version = 'git:' + json.loads((slot / 'release.json').read_text())['commit']
+                except (OSError, ValueError, KeyError):
+                    version = None
             self.response(200, json.dumps({'service':'ocr2md-v6','release':slot.name,'version':version}), 'application/json')
             return
         if path == '/access/' + KEY:
