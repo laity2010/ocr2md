@@ -91,3 +91,4 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 使用 Buffett’s Alpha 21 个真实标题验收五列筛选、三向定位、标题编辑后重建、撤销及 Dockview 三窗几何，Chrome/WebKit 模拟 iPad 截图；未通过之前不修改正式发布。
 - 三窗专项 Chrome/WebKit 已实测通过；旧双窗滚动回归在缩小的 CM6 视口下暴露远距反向定位问题，已加立即像素估值纠偏且在较小文档实测对应行号。完整 3560 行回归因 Mac 负载过高发生过行号不一致及后续测试初始化超时，**不能记为通过**；未经完整回归不得发布此变更。
 - **后续正式复验（2026-10-20 22:34 后）**：Mac 负载下降后，以实际 3560 行 Buffett’s Alpha 隔离副本分别跑 `V6_ONLY_CHROME=1` / `V6_ONLY_WEBKIT=1` 的 `tests/scroll-sync-browser.test.mjs`，两者均为 `SCROLL_SYNC_PASS`：源码→预览、预览→源码、HTML 表格、公式、同步开关、编辑后元素锚点保持、Dockview 缩放及无浏览器错误全部通过。另 `npm run test:preview` 的 Chrome/WebKit 均为 `DOCKVIEW_PREVIEW_PASS`（11 图片、8 表格、20 math、撤销和 DOMPurify）。上述回归阻塞已解除，允许按 V6 既定单目录发布流程发布；仍需真 iPad Safari 人工体验流畅度。
+- **发布后模拟器维护**：Chrome 155 原生 Mac iPad 模拟 CDP 虽已成功注入 `maxTouchPoints=5`，但不再保证 `ontouchstart in window` 为 true；旧控制脚本会误判失败并退出、使视口恢复 Mac 尺寸。改为接受 `navigator.maxTouchPoints>0` 为有效触控模拟信号，保持本机控制器长连接。此项只是 Mac 测试环境修复，无需更改网页正式版或重新部署。

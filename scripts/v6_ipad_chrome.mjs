@@ -100,7 +100,7 @@ let state = null;
 for (let attempt = 0; attempt < 100; attempt++) {
   try {
     const result = await send('Runtime.evaluate', {
-      expression:'JSON.stringify({ready:!!document.querySelector(".cm-content"),width:innerWidth,height:innerHeight,dpr:devicePixelRatio,touch:("ontouchstart" in window),version:document.querySelector("#build-version")?.textContent,fonts:document.fonts.status})',
+      expression:'JSON.stringify({ready:!!document.querySelector(".cm-content"),width:innerWidth,height:innerHeight,dpr:devicePixelRatio,touch:("ontouchstart" in window),touchPoints:navigator.maxTouchPoints,version:document.querySelector("#build-version")?.textContent,fonts:document.fonts.status})',
       returnByValue:true,
     });
     state = JSON.parse(result.result.value);
@@ -108,7 +108,9 @@ for (let attempt = 0; attempt < 100; attempt++) {
   } catch { /* Page is still navigating. */ }
   await delay(200);
 }
-if (!state?.ready || state.width !== viewport.width || state.height !== viewport.height || !state.touch) {
+// Chrome 155 may omit window.ontouchstart even with CDP touch emulation
+// correctly reporting navigator.maxTouchPoints=5.
+if (!state?.ready || state.width !== viewport.width || state.height !== viewport.height || !(state.touch || state.touchPoints>0)) {
   throw Error('Native Chrome iPad emulation failed: ' + JSON.stringify(state));
 }
 console.log('V6_NATIVE_IPAD_CHROME_READY', JSON.stringify({url:page.url, ...state}));
