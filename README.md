@@ -2,6 +2,8 @@
 
 这是唯一 OCR2MD V6 源码仓库。V5 不再运行或充当回退，历史只由 V6 Git 提交回溯。首个独立验证组件是 `packages/minerujson-md/`，负责 MinerU JSON ↔ 标准 Markdown（含 HTML 注释）转换；不提供用户界面。
 
+**供未来 V7/V8 复用的项目初始化基线**：本地 Git 标签 `ocr2md-init-v1`，保留发布流程、Git 回退与 Mac 原生 Chrome iPad 模拟环境；克隆命令、版本隔离要求及不包含的运行凭据详见 [PROJECT_INIT.md](./PROJECT_INIT.md)。该标签是初始化源码快照，不代表已发布到 GitHub 或无需改配置即可运行。
+
 ## 每日流程
 
 1. 每次编译/构建都通过以下命令，`--change` 和 `--purpose` 缺一不可。构建失败也保存 Git 检查点：
