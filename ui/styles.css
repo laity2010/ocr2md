@@ -52,3 +52,23 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error {
 }
 #editor .cm-editor { font-size:12pt; line-height:1.5; }
 #editor .cm-scroller { font-family:"Sarasa Fixed SC", "Sarasa Mono SC", monospace; }
+
+/* Match the installed local font using its verified PostScript name, not
+   a guessed CSS family alias. No font binaries are shipped by this app. */
+@font-face {
+  font-family: "OCR2MD Sarasa";
+  src: local("Sarasa-Fixed-SC-Regular"), local("Sarasa Fixed SC"), local("SarasaFixedSC-Regular");
+  font-style: normal;
+  font-weight: 400;
+}
+@font-face {
+  font-family: "OCR2MD Sarasa";
+  src: local("Sarasa-Fixed-SC-Bold"), local("Sarasa Fixed SC Bold"), local("SarasaFixedSC-Bold");
+  font-style: normal;
+  font-weight: 700;
+}
+:root, .brand, .build-badge, .status, .subbar, footer,
+button, dialog h2, dialog p, dialog label, dialog input, #unlock-error,
+#editor .cm-scroller {
+  font-family: "OCR2MD Sarasa", "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
+}

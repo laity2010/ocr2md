@@ -171,7 +171,12 @@ async function main() {
   }
   // Read-only test seam for verifying *CM6 public APIs*, not an app document cache.
   if (import.meta.env.DEV) window.__v6cm6 = {get view(){return view;},extract};
-  // A/B publication changes /healthz immediately; no extra store or WebSocket.
+  // Opt-in, on-page font diagnostics so a real iPad screenshot can establish
+  // font availability and measured glyph width without remote debugging.
+  if (new URLSearchParams(location.search).has('fontcheck')) {
+    void import('./fontcheck.js').then(({showFontCheck}) => showFontCheck());
+  }
+  // Git publication changes /healthz immediately; no extra store or WebSocket.
   setInterval(checkForNewBuild, 5000);
   document.addEventListener('visibilitychange',() => {
     if (!document.hidden) void checkForNewBuild();
