@@ -78,14 +78,17 @@
 .ocr-outline-pane .ag-cell[col-id="title"] {
   display:flex;
   align-items:center;
-  white-space:normal;
+  white-space:nowrap;
+  overflow:hidden;
   line-height:normal;
 }
 .ocr-outline-title {
   display:block;
   width:100%;
-  white-space:normal;
-  overflow-wrap:anywhere;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
   font-family:"OCR2MD Sarasa","Sarasa Fixed SC",monospace;
   font-weight:500;
   line-height:1.18;

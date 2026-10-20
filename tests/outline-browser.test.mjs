@@ -65,6 +65,14 @@ try{
           exported:window.__v6cm6.outline.rows.some(x=>x.chapterFile),
           status:document.querySelector('#status')?.textContent,
           font:getComputedStyle(document.querySelector('.ocr-outline-title')).fontFamily,
+          pdfPinned:window.__v6cm6.outline.api.getColumn('pdfPage').getPinned(),
+          titleLayout:(()=>{
+            const title=document.querySelector('.ocr-outline-title');
+            const style=getComputedStyle(title);
+            return {whiteSpace:style.whiteSpace,textOverflow:style.textOverflow,
+              overflow:style.overflow,scrollHeight:title.scrollHeight,
+              clientHeight:title.clientHeight};
+          })(),
         };
       });
       assert.equal(initial.groups,3);
@@ -78,6 +86,10 @@ try{
       assert.deepEqual(initial.levels,[2,2,1,1]);
       assert.equal(initial.exported,false);
       assert.match(initial.font,/OCR2MD Sarasa/);
+      assert.equal(initial.pdfPinned,'left');
+      assert.equal(initial.titleLayout.whiteSpace,'nowrap');
+      assert.equal(initial.titleLayout.textOverflow,'ellipsis');
+      assert.equal(initial.titleLayout.overflow,'hidden');
       console.log('OUTLINE_LAYOUT_OK',name,JSON.stringify(initial));
 
       const selectFilter=async(field,value)=>{

@@ -149,11 +149,12 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
 
   const columns=[
     {field:'pdfPage',headerName:headerLabels.pdfPage,width:78,minWidth:70,
+      pinned:'left',lockPinned:true,lockPosition:'left',
       valueFormatter:params=>params.value??'—'},
     {field:'level',headerName:headerLabels.level,width:58,minWidth:55,
       valueFormatter:params=>'H'+params.value},
     {field:'title',headerName:headerLabels.title,flex:1,minWidth:140,
-      cellRenderer:titleCell,wrapText:true,autoHeight:true},
+      cellRenderer:titleCell,wrapText:false,autoHeight:false},
     {field:'independent',headerName:headerLabels.independent,width:91,minWidth:87,
       cellRenderer:params=>{
         if(!params.data)return '';
