@@ -109,3 +109,10 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 故障根因：`outline-grid.js` 已在文档变更后通过 `buildOutline` 得到更新的标题层级和 AG 行数据，但相同 MinerU 行 ID 的标题文本未变时，AG Grid 的正常值相等检查会跳过 `titleCell` 的重绘；旧的 `ocr-outline-h1` 样式留在 DOM 中。新增标题会创建新行，因此此前新增标题正常。
 - 修复遵守 AG Grid API：对比刷新前后相同 ID 的 `level`，只对变更层级的行调用 `api.refreshCells({rowNodes,columns:['title'],force:true})`；仅在跨越 H1 行高边界时调用 `api.resetRowHeights()`。不重新创建 AG Grid，不修改 CM6、Zustand、文件保存或 MOPJO。
 - 用隔离的 Buffett’s Alpha 实际文档复现旧版 H1→H2 样式残留，修复后 Chrome 和 WebKit 验收 H1→H2→H3→H4→H5→H6→H1，各步 AG DOM 层级样式和字体大小即时更新，随后原有筛选、三窗定位、撤销和文档不落盘测试全部通过。
+
+## 15. 紧凑单一全局状态栏（2026-10-21）
+
+- 顶栏 Mac/iPad 1032×642 视口固定 40px，只保留撤销、重做、保存；移除原 37px 文件副栏、29px 页脚状态栏和 AG 内部状态提示，Dockview 填满腾出的高度。窄屏必要时让三按钮与构建状态在同一顶栏内紧凑换行，不增加额外状态栏。
+- 全部可见状态由构建号右侧唯一 #status 汇总：加载、授权、保存、更新、错误、CM6 行数字数、文档名、AG 标题数、章节草稿未保存和同步状态。AG 只将 outlineCount 作为 Zustand 展示元数据，绝不复制文档。过长状态单行截断，完整文本保留 title。
+- 删除顶部的结构提取和同步滚动按钮，但后端结构提取仍可向全局状态汇报，现有滚动协调及 Zustand 开关仍正常，默认保持开启。CM6、AG Grid 自定义列筛选、Dockview 三窗不重构。
+- 独立的 tests/compact-shell-browser.test.mjs 在 Chrome 与 WebKit iPad 模拟视口核验 40px 顶栏、完整三窗、只三个按钮、全部状态信息、撤销/保存和滚动状态；旧同步测试改为调用 Zustand API，而不是点击已删除的按钮。保存只使用隔离测试样本。

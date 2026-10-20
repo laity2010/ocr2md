@@ -18,13 +18,13 @@ try {
   const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:25000});
-  await page.waitForFunction(()=>!!window.__v6cm6?.view && document.querySelector('#status')?.textContent==='✓ 已加载',{timeout:20000});
+  await page.waitForFunction(()=>!!window.__v6cm6?.view && document.querySelector('#status')?.textContent.includes('✓ 已加载'),{timeout:20000});
   const initial=await page.evaluate(()=>({length:window.__v6cm6.view.state.doc.length,lines:window.__v6cm6.view.state.doc.lines,doc:window.__v6cm6.view.state.doc.sliceString(0,40)}));
   assert(initial.length>300000,'real sample should be loaded');
   assert(initial.doc.includes('minerujson:block'),'sample is real MinerU JSON Markdown');
   await page.screenshot({path:`${evidence}/desktop.png`,fullPage:true});
-  await page.locator('#extract').click();
-  const report=await page.locator('#summary').textContent();
+  await page.evaluate(()=>window.__v6cm6.extract());
+  const report=await page.locator('#status').textContent();
   assert(!report.includes('尚未解析完成'),`full parse not ready: ${report}`);
   assert(report.includes('标题'),`CM6 parser result missing: ${report}`);
   // Use CM6's own transaction and history; browser UI remains the same editor.
@@ -52,7 +52,7 @@ try {
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   previous.scrollTop=await page.evaluate(()=>window.__v6cm6.view.scrollDOM.scrollTop);
   await page.locator('#save').click();
-  await page.waitForFunction(()=>document.querySelector('#status')?.textContent==='✓ 已保存');
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('✓ 已保存'));
   const after=await page.evaluate(()=>{
     const v=window.__v6cm6.view;
     return {anchor:v.state.selection.main.anchor,scrollTop:v.scrollDOM.scrollTop,length:v.state.doc.length,sameView:v===window.__v6testOriginalView};

@@ -61,10 +61,6 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
   const host=document.createElement('div');
   host.className='ocr-outline-grid';
   element.append(host);
-  const note=document.createElement('div');
-  note.className='ocr-outline-note';
-  note.textContent='章节标记：界面草稿（尚未接入 MOPJO 保存）';
-  element.append(note);
 
   function chooseRow(row,ensureVisible=true) {
     if(!row||!api||activeId===row.id)return;
@@ -106,8 +102,10 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     else if(state.scrollTarget?.revision===state.documentRevision)
       chooseLine(state.scrollTarget.sourceLine);
     else if(getEditor())chooseLine(getEditor().state.doc.lineAt(state.sourceOffset).number,false);
-    if(rows.length)note.textContent=`大纲 ${rows.length} 项 · 独立章节标记仅为界面草稿（未保存）`;
-    else note.textContent='未识别到 Markdown 标题';
+    // Presentation metadata only. The sole visible status bar is the global
+    // one beside the build version; this pane uses all its height for AG.
+    if(viewStore.getState().outlineCount!==rows.length)
+      viewStore.setState({outlineCount:rows.length});
   }
   function schedule(){
     clearTimeout(refreshTimer);

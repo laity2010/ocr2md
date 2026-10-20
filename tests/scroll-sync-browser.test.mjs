@@ -114,10 +114,10 @@ try{
       assert((stable.seq||0)-(reverse.seq||0)<6,name+' recursive scroll feedback');
       console.log('PREVIEW_TO_SOURCE_OK',name,JSON.stringify(stable));
 
-      // Switch off: both scrollbars operate independently. Re-enable and
-      // the preview re-aligns to source without selection/history mutations.
-      await page.locator('#sync-scroll').click();
-      assert.equal(await page.locator('#sync-scroll').getAttribute('aria-pressed'),'false');
+      // Only Undo/Redo/Save remain visible in the compact toolbar. The
+      // coordinator retains its public state API, including off/on regression.
+      await page.evaluate(()=>window.__v6cm6.setScrollSyncEnabled(false));
+      assert.equal(await page.evaluate(()=>window.__v6cm6.scrollState.scrollSyncEnabled),false);
       const frozen=await page.evaluate(()=>document.querySelector('.ocr-preview-pane').scrollTop);
       const frozenAnchor=await page.evaluate(()=>window.__v6cm6.scrollSync.currentPreview);
       await page.evaluate(()=>{
@@ -146,8 +146,8 @@ try{
       assert(Math.abs(afterAnchor.sourceLine+afterAnchor.fraction-
         frozenAnchor.sourceLine-frozenAnchor.fraction)<3,
         name+' independent preview semantic position changed');
-      await page.locator('#sync-scroll').click();
-      assert.equal(await page.locator('#sync-scroll').getAttribute('aria-pressed'),'true');
+      await page.evaluate(()=>window.__v6cm6.setScrollSyncEnabled(true));
+      assert.equal(await page.evaluate(()=>window.__v6cm6.scrollState.scrollSyncEnabled),true);
       await page.waitForFunction(()=>{
         const s=window.__v6cm6.scrollSync;
         const a=s.currentSource,b=s.currentPreview;

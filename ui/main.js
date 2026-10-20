@@ -11,7 +11,7 @@ import {createWorkspace} from './workspace.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
 
 const $ = (id) => document.getElementById(id);
-const buttons = {undo: $('undo'),redo:$('redo'),save:$('save'),extract:$('extract')};
+const buttons = {undo: $('undo'),redo:$('redo'),save:$('save')};
 let view;
 let workspace;
 // Only a save-revision marker, never a second copy of the Markdown document.
@@ -22,6 +22,29 @@ let pendingUpdate = false;
 let checkingVersion = false;
 // This is only a release identifier; CM6 remains the sole editor state.
 const currentBuild = __V6_BUILD_VERSION__;
+// One visible status channel beside the release badge. Former subbar, AG
+// footer and page footer metadata all converge here without extra UI rows.
+const documentLabel='Buffett’s Alpha.minerujson.md';
+let statusMessage='正在加载';
+let statusKind='ok';
+let documentLines=null,documentChars=null;
+
+function renderGlobalStatus() {
+  const store=viewStore.getState();
+  const segments=[statusMessage];
+  if(documentLines!==null && documentChars!==null)
+    segments.push(`${documentLines.toLocaleString()}行 / ${documentChars.toLocaleString()}字`);
+  if(store.outlineCount!==null)
+    segments.push(`大纲${store.outlineCount}项`);
+  segments.push('章节标记草稿（未保存）');
+  segments.push(store.scrollSyncEnabled?'⇅滚动同步':'⇅独立滚动');
+  segments.push(documentLabel);
+  const text=segments.join(' · ');
+  const element=$('status');
+  element.textContent=text;
+  element.dataset.kind=statusKind;
+  element.title=text;
+}
 
 function applyPendingUpdate() {
   if (!pendingUpdate) return;
@@ -48,9 +71,9 @@ async function checkForNewBuild() {
 $('build-version').textContent = __V6_BUILD_VERSION__;
 
 function status(text, kind='ok') {
-  $('status').textContent = text;
-  $('status').dataset.kind = kind;
-  $('status').title = text;
+  statusMessage=text;
+  statusKind=kind;
+  renderGlobalStatus();
 }
 function showUnlock() {
   $('unlock-error').textContent = '';
@@ -70,14 +93,18 @@ async function checkPermission() {
 function refreshToolbar() {
   buttons.undo.disabled = !undoDepth(view.state);
   buttons.redo.disabled = !redoDepth(view.state);
-  $('count').textContent = view.state.doc.lines.toLocaleString() + ' 行 · ' + view.state.doc.length.toLocaleString() + ' 字符';
+  if(documentLines!==view.state.doc.lines || documentChars!==view.state.doc.length){
+    documentLines=view.state.doc.lines;
+    documentChars=view.state.doc.length;
+    renderGlobalStatus();
+  }
   if (pendingUpdate) applyPendingUpdate();
   else if (revision !== savedRevision) status('● 未保存','warning');
 }
 function extract() {
   const last = view.state.doc.length;
   const tree = ensureSyntaxTree(view.state,last,2500);
-  if (!tree) { $('summary').textContent = '全文尚未解析完成，稍后重试。';return; }
+  if (!tree) { status('全文尚未解析完成，稍后重试','warning');return; }
   const count = {headings:0,images:0,tables:0,comments:0,formulas:0};
   tree.iterate({enter(node) {
     const type = node.type.name;
@@ -90,7 +117,7 @@ function extract() {
       if (code.startsWith('```math')) count.formulas++;
     }
   }});
-  $('summary').textContent = `CM6 全文语法树：标题 ${count.headings} · 图片 ${count.images} · GFM 表格 ${count.tables} · HTML 节点 ${count.comments} · math 代码块 ${count.formulas}`;
+  status(`CM6 结构：标题${count.headings} · 图片${count.images} · 表格${count.tables} · HTML${count.comments} · 数学${count.formulas}`);
   return count;
 }
 async function save() {
@@ -121,6 +148,11 @@ async function main() {
   const response = await fetch('/api/document',{cache:'no-store'});
   if (!response.ok) throw Error('文档读取失败 '+response.status);
   const markdownText = await response.text();
+  const unsubscribeGlobalStatus=viewStore.subscribe((next,previous)=>{
+    if(next.outlineCount!==previous.outlineCount ||
+       next.scrollSyncEnabled!==previous.scrollSyncEnabled)
+      renderGlobalStatus();
+  });
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view);
   view = new EditorView({
     parent:workspace.editorHost, doc:markdownText,
@@ -158,16 +190,8 @@ async function main() {
     // Presentation effect only; never affects Markdown or undo history.
     view.dispatch({effects:markOutlineLine.of(next.focusTarget.sourceLine)});
   });
-  const syncButton=$('sync-scroll');
-  syncButton.addEventListener('click',()=>{
-    const enabled=!viewStore.getState().scrollSyncEnabled;
-    setScrollSyncEnabled(enabled);
-    syncButton.setAttribute('aria-pressed',String(enabled));
-    syncButton.title=enabled?'关闭同步滚动':'开启同步滚动';
-  });
   buttons.undo.addEventListener('click',()=>{undo(view);refreshToolbar();view.focus();});
   buttons.redo.addEventListener('click',()=>{redo(view);refreshToolbar();view.focus();});
-  buttons.extract.addEventListener('click',extract);
   buttons.save.addEventListener('click',save);
   $('unlock-cancel').addEventListener('click',()=>$('unlock-dialog').close());
   $('unlock-form').addEventListener('submit',async event=>{
@@ -204,7 +228,10 @@ async function main() {
   window.addEventListener('beforeunload',event=>{
     if (revision !== savedRevision) {event.preventDefault(); event.returnValue='';}
   });
-  window.addEventListener('pagehide',()=>unsubscribeOutlineFocus(),{once:true});
+  window.addEventListener('pagehide',()=>{
+    unsubscribeOutlineFocus();
+    unsubscribeGlobalStatus();
+  },{once:true});
   refreshToolbar();
   status('✓ 已加载');
   if ((await checkPermission()) === false && revision === savedRevision) {
@@ -217,6 +244,8 @@ async function main() {
     get scrollSync(){return workspace?.scrollSync;},
     get scrollState(){return viewStore.getState();},
     get outline(){return workspace?.outlineGrid;},
+    // Regression seam for the existing scroll coordinator; no fourth button.
+    setScrollSyncEnabled,
     extract,
   };
   // Opt-in, on-page font diagnostics so a real iPad screenshot can establish
@@ -231,4 +260,4 @@ async function main() {
   });
   void checkForNewBuild();
 }
-main().catch(error=>{status('加载失败');$('summary').textContent=error.stack||String(error);});
+main().catch(error=>status('加载失败：'+(error?.message||String(error)),'error'));

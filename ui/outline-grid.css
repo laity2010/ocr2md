@@ -17,15 +17,6 @@
   min-height:0;
   min-width:0;
 }
-.ocr-outline-note {
-  flex:none;
-  font:12px/1.45 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
-  color:#9aa79d;
-  padding:5px 8px;
-  border-top:1px solid #525c62;
-  background:#272f34;
-  white-space:normal;
-}
 .ocr-outline-pane .ag-root-wrapper {
   border:none;
   border-radius:0;

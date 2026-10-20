@@ -12,6 +12,7 @@ export const viewStore = createStore(() => ({
   scrollTarget: null,
   // Explicit cross-pane navigation; ephemeral location, not document data.
   focusTarget: null,
+  outlineCount: null,
 }));
 
 export function documentChanged() {
