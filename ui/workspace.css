@@ -1,0 +1,53 @@
+/* Dockview owns only the layout; Everforest colors and Sarasa remain local. */
+#workspace {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  --dv-background-color: #272f34;
+  --dv-paneview-active-outline-color: #569d79;
+  --dv-activegroup-visiblepanel-tab-background-color: #2f383e;
+  --dv-activegroup-hiddenpanel-tab-background-color: #272f34;
+  --dv-inactivegroup-visiblepanel-tab-background-color: #272f34;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #22282c;
+  --dv-tabs-and-actions-container-background-color: #272f34;
+  --dv-tab-divider-color: #525c62;
+  --dv-separator-border: #525c62;
+  --dv-activegroup-visiblepanel-tab-color: #d3c6aa;
+  --dv-activegroup-hiddenpanel-tab-color: #9aa79d;
+  --dv-inactivegroup-visiblepanel-tab-color: #9aa79d;
+  --dv-inactivegroup-hiddenpanel-tab-color: #859289;
+  --dv-group-view-background-color: #2f383e;
+  --dv-tabs-container-scrollbar-color: #525c62;
+}
+#workspace .dockview-theme-abyss,
+#workspace .dv-dockview,
+#workspace .dv-root {
+  height: 100%;
+  min-height: 0;
+}
+#workspace .dv-tab {
+  font-family: "OCR2MD Sarasa", monospace;
+  font-size: 12px;
+}
+/* Core panes must remain movable and resizable, never accidentally closed. */
+#workspace .dv-default-tab-action { display:none !important; }
+.ocr-source-pane,
+.ocr-preview-pane {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #2f383e;
+}
+.ocr-source-pane #editor {
+  height: 100%;
+  width: 100%;
+}
+.ocr-preview-pane {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #4a555b #272f34;
+}

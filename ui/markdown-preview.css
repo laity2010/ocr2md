@@ -1,0 +1,78 @@
+/* Obsidian Everforest reading colors. Source text remains CM6-only. */
+.ocr-markdown {
+  color: #d3c6aa;
+  background: #2f383e;
+  font: 16px/1.55 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px 22px 56px;
+  overflow-wrap: anywhere;
+}
+.ocr-markdown > :first-child { margin-top: 0; }
+.ocr-markdown h1,.ocr-markdown h2,.ocr-markdown h3,
+.ocr-markdown h4,.ocr-markdown h5,.ocr-markdown h6 {
+  line-height: 1.32;
+  font-weight: 500;
+  margin: 1.2em 0 .5em;
+  overflow-wrap: break-word;
+}
+.ocr-markdown h1 {font-size:2.125em;color:#da6362;}
+.ocr-markdown h2 {font-size:1.625em;color:#d77f48;}
+.ocr-markdown h3 {font-size:1.375em;color:#bf983d;}
+.ocr-markdown h4 {font-size:1.25em;color:#899c40;}
+.ocr-markdown h5 {font-size:1.125em;color:#569d79;}
+.ocr-markdown h6 {font-size:1.125em;color:#b87b9d;}
+.ocr-markdown p { margin:.7em 0 1.1em; }
+.ocr-markdown a {color:#7fbbb3;overflow-wrap:anywhere;}
+.ocr-markdown a:hover {color:#83c092;}
+.ocr-markdown strong {font-weight:700;}
+.ocr-markdown mark {background:rgba(255,170,0,.3);color:inherit;}
+.ocr-markdown blockquote {border-left:3px solid #5a93a2;color:#9aa79d;margin:1em 0;padding:.15em 0 .15em 1em;}
+.ocr-markdown ul,.ocr-markdown ol {padding-left:2.1em;}
+.ocr-markdown li {margin:.35em 0;}
+.ocr-markdown li::marker {color:#569d79;}
+.ocr-markdown hr {border:0;border-top:1px solid #525c62;margin:1.7em 0;}
+.ocr-markdown :not(pre)>code {background:#272f34;padding:.12em .25em;border-radius:3px;}
+.ocr-markdown pre {
+  background:#272f34;
+  border:1px solid #404c51;
+  padding:12px;
+  border-radius:4px;
+  white-space:pre;
+  overflow-x:auto;
+  max-width:100%;
+  font:inherit;
+}
+.ocr-markdown pre code {font:inherit;}
+.ocr-markdown img {max-width:100%;height:auto;display:block;margin:1em auto;}
+.ocr-markdown table {
+  border-collapse:collapse;
+  font-size:.92em;
+  width:max-content;
+  max-width:100%;
+  margin:1em 0;
+  display:block;
+  overflow-x:auto;
+}
+.ocr-markdown th,.ocr-markdown td {
+  padding:7px 9px;
+  border:1px solid #525c62;
+  vertical-align:top;
+}
+.ocr-markdown th {background:#404c51;}
+.ocr-markdown tr:nth-child(even) {background:rgba(255,255,255,.025);}
+.ocr-markdown .ocr-math {
+  overflow-x:auto;
+  overflow-y:hidden;
+  max-width:100%;
+  background:#272f34;
+  padding:12px 10px;
+  margin:1em 0;
+}
+.ocr-markdown .katex-display {margin:0;}
+.ocr-markdown .katex-error {color:#e67e80;}
+.ocr-markdown .footnotes {border-top:1px solid #525c62;margin-top:1.8em;font-size:.9em;}
+.ocr-markdown input[type=checkbox] {accent-color:#7fbbb3;}
+@media(max-width:800px) {
+  .ocr-markdown {padding:9px 12px 40px;}
+}

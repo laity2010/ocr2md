@@ -75,6 +75,14 @@ npm run test:ui
 - 标题字号沿用 Everforest `--h1-size`～`--h6-size`：相对 16px 正文为 2.125 / 1.625 / 1.375 / 1.25 / 1.125 / 1.125 倍（34 / 26 / 22 / 20 / 18 / 18px），**所有字号依旧使用 Sarasa Fixed SC**。
 - 源码窗启用 CM6 `EditorView.lineWrapping`，随视窗宽度软换行，不新增 Markdown 换行符；真实换行处增加青绿色 `↵` 视觉标记，代码保存在 `ui/obsidian-heading-markers.js` 的视口装饰中。该标记不进入 `view.state.doc`、不增加行数或改变保存数据；测试还验证改变视口宽度后同一长段落软换行数量变化。
 
+## Dockview 双窗 / Markdown 预览（V6）
+
+- UI 采用官方 JavaScript Dockview 左右两窗：左侧保持原 CodeMirror 6 实例，右侧是 markdown-it 的只读 HTML 预览。窗格可拖动和调整宽度，关闭按钮暂隐藏，避免误关必要的工作窗格。
+- Zustand Vanilla 只传递文档修订号、活动窗和位置通知；不保存 Markdown 全文、HTML 或撤销历史。预览在编辑后合并更新，重新读取 CM6 的当前文档。
+- 预览使用 Markdown-it、HTML 表格、脚注和任务列表，KaTeX 渲染 math/latex/tex fenced 数学块，DOMPurify 过滤 HTML。原 MinerU 注释在源码中保留，但预览隐藏；采用原 Everforest 深色主题和完整 Sarasa Fixed SC 字体。
+- 11 张原始图片对应的外部 URL 是否仍可访问，不属于预览器保证范围；后续需媒体模块处理本地化。尚不支持完整 Obsidian 插件、公式所有方言和双向元素定位。
+- 回归测试：npm run test:preview。使用隔离工作文件及 Mac Chrome / WebKit 视口验证图片、HTML 表格、数学公式、实时更新、撤销、布局和 HTML 安全。
+
 ## V6 发布后浏览器自动更新
 
 Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，唯一发布目录的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。

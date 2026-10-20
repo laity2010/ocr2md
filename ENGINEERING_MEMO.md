@@ -66,3 +66,10 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 标题使用 Everforest 原始六级比例，16px 的 Sarasa Fixed SC 为基线；标题文字和 `#` 标记统一放大，保留 Markdown 源码，不转换 HTML。
 - 仅启用 CM6 原生自动折行；每个真实换行以视口范围内的零宽、不可编辑 `↵` Widget 着色提示。窗口宽度改变只影响布局，不改 `view.state.doc`、保存文件、撤销历史或逻辑行号。
 - Chrome 与 WebKit 验证标题精确字号、缩窄视窗后的折行变化和硬回车数量；继续对 3,560 行 Buffett’s Alpha 文档验收撤销/重做、保存、选区、滚动和刷新恢复。
+
+## 9. Dockview + CM6 + Zustand Vanilla + Markdown-it（2026-10-20）
+
+- V6 新增 Dockview 左源码/右预览双窗；文档、撤销历史和保存流程只存在于 CM6。Dockview 只负责布局，Zustand Vanilla 只发出跨视图修订、活动窗和选区位置通知，不复制全文。
+- 预览为可重建的只读 HTML 投影，采用 markdown-it、KaTeX 和 DOMPurify。验证当前 Buffett’s Alpha 的图片、HTML 表格和 math fenced 数学块；远程媒体链接、inline LaTeX 和跨窗元素定位留给后续独立验收。
+- 各组件互不越界：布局在 workspace，视图通知在 view-store，渲染在 markdown-preview，main.js 仅连接它们并保留原 CM6/保存逻辑。不增加新文档内核。
+- Mac Chrome 与 WebKit 1032×642 回归双窗显示、编辑同步、撤销、布局和 HTML 安全过滤；真实 iPad Safari 仍需要视觉验收。

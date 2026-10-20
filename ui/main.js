@@ -6,10 +6,13 @@ import {ensureSyntaxTree} from '@codemirror/language';
 import {undo, redo, undoDepth, redoDepth} from '@codemirror/commands';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
+import {createWorkspace} from './workspace.js';
+import {documentChanged, selectionChanged} from './view-store.js';
 
 const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save'),extract:$('extract')};
 let view;
+let workspace;
 // Only a save-revision marker, never a second copy of the Markdown document.
 let savedRevision = 0;
 let revision = 0;
@@ -117,8 +120,9 @@ async function main() {
   const response = await fetch('/api/document',{cache:'no-store'});
   if (!response.ok) throw Error('文档读取失败 '+response.status);
   const markdownText = await response.text();
+  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view);
   view = new EditorView({
-    parent:$('editor'), doc:markdownText,
+    parent:workspace.editorHost, doc:markdownText,
     extensions:[
       basicSetup,
       EditorView.lineWrapping,
@@ -126,11 +130,16 @@ async function main() {
       obsidianMarkdown,
       obsidianHeadingMarkers,
       EditorView.updateListener.of(update=>{
-        if (update.docChanged) revision++;
+        if (update.docChanged) {
+          revision++;
+          documentChanged();
+        }
+        if (update.selectionSet) selectionChanged(update.state.selection.main.head);
         if (update.docChanged || update.transactions.some(tx=>tx.selection)) refreshToolbar();
       })
     ]
   });
+  workspace.refreshPreview();
   buttons.undo.addEventListener('click',()=>{undo(view);refreshToolbar();view.focus();});
   buttons.redo.addEventListener('click',()=>{redo(view);refreshToolbar();view.focus();});
   buttons.extract.addEventListener('click',extract);
@@ -176,7 +185,11 @@ async function main() {
     status('🔒 保存需授权','warning');
   }
   // Read-only test seam for verifying *CM6 public APIs*, not an app document cache.
-  if (import.meta.env.DEV) window.__v6cm6 = {get view(){return view;},extract};
+  if (import.meta.env.DEV) window.__v6cm6 = {
+    get view(){return view;},
+    get dockview(){return workspace?.dockview;},
+    extract,
+  };
   // Opt-in, on-page font diagnostics so a real iPad screenshot can establish
   // font availability and measured glyph width without remote debugging.
   if (new URLSearchParams(location.search).has('fontcheck')) {
