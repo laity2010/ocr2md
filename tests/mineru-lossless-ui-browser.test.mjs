@@ -32,7 +32,7 @@ for(let i=0;i<engines.length;i++){
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
   await page.waitForFunction(()=>document.querySelectorAll('.ag-row').length>=10&&
     document.querySelector('.cm-content[contenteditable="true"]')&&
-    document.querySelector('.ocr-markdown')?.textContent?.includes('Bufett'),null,{timeout:80000});
+    document.querySelector('.ocr-markdown')?.textContent?.includes('Bufett')&&document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:120000});
   const state=await page.evaluate(()=>({
     mdLength:document.querySelector('.cm-content').textContent?.length,
     agRowCount:document.querySelectorAll('.ag-row').length,
@@ -48,7 +48,7 @@ for(let i=0;i<engines.length;i++){
   await page.locator('.ocr-preview-mode').selectOption('pdf');
   await page.locator('.ag-row[row-index="3"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]'),
-    null,{timeout:23000});
+    null,{timeout:34000});
   assert.deepEqual(errors,[],`${name} browser errors`);
   assert.equal(readFileSync(file,'utf8'),staged,'test changed staged document');
   console.log('MINERU_LOSSLESS_UI_PASS',name,JSON.stringify({ag:state.agRowCount,title:state.title,

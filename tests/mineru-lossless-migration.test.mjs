@@ -10,7 +10,10 @@ const hash=x=>createHash('sha256').update(x).digest('hex');
 const root=mkdtempSync(join(tmpdir(),'ocr2md-lossless-'));
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
-const current=readFileSync('.v6/workspace/buffetts-alpha.minerujson.md','utf8');
+// Isolated synthetic user edits; never rely on or modify the live workfile.
+const current=fixture
+  .replace('## Bufett’s Alpha','### Bufett’s Alpha')
+  .replace('## Data Sources','<!-- ocr2md:chapter:v1 id="mineru:2:4:0" independent="0" -->\n## Data Sources');
 const cli=resolve('scripts/v6_annotate_document.mjs');
 function run(args){return execFileSync(process.execPath,[cli,...args],{encoding:'utf8'});}
 function make(name,content){const path=join(root,name);writeFileSync(path,content);return path;}

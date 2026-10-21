@@ -184,8 +184,8 @@ function patchSlot(oldSlot: Slot, next: RootContent, block: Block): void {
  * Unicode escapes; JSON decoding exactly reproduces the original payload.
  */
 const AUDIT_VERSION = '<!-- minerujson:audit:v1:complete -->';
-function safeJson(value: unknown): string {
-  return JSON.stringify(value,null,2)
+function safeJson(value: unknown, pretty = false): string {
+  return JSON.stringify(value,null,pretty ? 2 : undefined)
     .replace(/</g,'\\u003c').replace(/>/g,'\\u003e')
     .replace(/--/g,'\\u002d\\u002d');
 }
@@ -202,7 +202,7 @@ function auditBlock(kind: 'discarded'|'preproc-diff'|'unmapped', pageIndex: numb
   // evidence. The summary itself must not carry unescaped HTML delimiters.
   const summary={pdfPage:pageIndex+1,type:block.type || 'unknown',
     bbox:block.bbox??null,text:textOf(block)};
-  return `<!-- minerujson:${kind}:v1:${pageIndex}:${index}\nsummary: ${safeJson(summary)}\noriginal: ${safeJson(block)}\n-->`;
+  return `<!-- minerujson:${kind}:v1:${pageIndex}:${index}\nsummary: ${safeJson(summary,true)}\noriginal: ${safeJson(block)}\n-->`;
 }
 function pageAudit(page: Page,pageIndex: number): string {
   const evidence: string[]=[];
