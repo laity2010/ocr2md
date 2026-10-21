@@ -27,6 +27,8 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   // additional scroll events at a different pixel offset. A short follower
   // suppression window prevents those corrections from stealing leadership.
   // Actual wheel/touch/pointer/keyboard input clears it immediately.
+  // Direction ownership persists beyond the timeout: late CM6 layout scrolls
+  // must never turn a follower into a new driver without a user gesture.
   let suppressSourceUntil=0, suppressPreviewUntil=0;
 
   const sourceElement=()=>getEditor()?.scrollDOM;
@@ -181,13 +183,13 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     if(sourceCorrectionFrame) cancelAnimationFrame(sourceCorrectionFrame);
     const line=clamp(Math.floor(position.sourceLine),1,view.state.doc.lines);
     suppressSourceUntil=performance.now()+700;
-    // CM6 handles its virtualized layout before correcting finer intra-line
-    // offsets. This effect never touches the selection or undo history.
-    view.dispatch({effects:EditorView.scrollIntoView(view.state.doc.line(line).from,
+    // Only explicit AG/PDF/preview clicks need CM6's jump-to-line effect.
+    // For continuous preview scrolling, scrollIntoView plus scrollTop creates
+    // two competing scroll commands as CM6 measures its folded/virtual rows.
+    if(force) view.dispatch({effects:EditorView.scrollIntoView(view.state.doc.line(line).from,
       {y:'start',yMargin:leadingOffset})});
-    // A short Dockview source pane may expose stale virtual line heights on
-    // the first frame. Apply the best available pixel estimate immediately,
-    // then continue correcting as CM6's height map settles.
+    // Continuous sync uses one pixel-space driver with bounded follow-up
+    // correction while CM6 settles its height map. No selection is changed.
     adjustSource(position);
     sourceCorrectionFrame=requestAnimationFrame(correctSource);
   }
@@ -203,7 +205,8 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   }
   function sourceScrolled() {
     const scroller=sourceElement();
-    if(!scroller || disposed || !viewStore.getState().scrollSyncEnabled) return;
+    if(!scroller || disposed || !viewStore.getState().scrollSyncEnabled ||
+       lastDriver!=='cm6') return;
     if(performance.now()<suppressSourceUntil) return;
     if(ignoredSource!==null && Math.abs(scroller.scrollTop-ignoredSource)<3) {
       ignoredSource=null;
@@ -214,7 +217,8 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     sourceFrame=requestAnimationFrame(()=>{sourceFrame=0;publishFrom('cm6');});
   }
   function previewScrolled() {
-    if(disposed || !viewStore.getState().scrollSyncEnabled) return;
+    if(disposed || !viewStore.getState().scrollSyncEnabled ||
+       lastDriver!=='preview') return;
     if(performance.now()<suppressPreviewUntil) return;
     if(ignoredPreview!==null && Math.abs(previewPane.scrollTop-ignoredPreview)<3) {
       ignoredPreview=null;
@@ -227,12 +231,19 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
 
   const source=sourceElement();
   function sourceUserInput() {
+    if(viewStore.getState().scrollSyncEnabled) lastDriver='cm6';
     suppressSourceUntil=0; ignoredSource=null; desiredSource=null;
     explicitNavigation=false;
     if(sourceCorrectionFrame) cancelAnimationFrame(sourceCorrectionFrame);
     sourceCorrectionFrame=0;
   }
-  function previewUserInput() { suppressPreviewUntil=0; ignoredPreview=null; }
+  function previewUserInput() {
+    if(viewStore.getState().scrollSyncEnabled) lastDriver='preview';
+    suppressPreviewUntil=0; ignoredPreview=null;
+    // Stop any stale source correction from a previous navigation gesture.
+    if(sourceCorrectionFrame) cancelAnimationFrame(sourceCorrectionFrame);
+    sourceCorrectionFrame=0;desiredSource=null;explicitNavigation=false;
+  }
   const inputEvents=['wheel','touchstart','pointerdown','keydown'];
   for(const event of inputEvents) {
     source?.addEventListener(event,sourceUserInput,{capture:true,passive:true});
