@@ -9,6 +9,7 @@ import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
 import {CMDocument} from './cm-document.js';
+import {mineruCommentFolding,foldInitialMineruComments} from './mineru-comment-folding.js';
 import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
 import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './chapter-files.js';
@@ -290,6 +291,7 @@ async function main() {
       nativeIOSSelection ? nativeIOSBasicSetup : basicSetup,
       EditorView.lineWrapping,
       markdown({base:markdownLanguage}),
+      mineruCommentFolding,
       obsidianMarkdown,
       obsidianHeadingMarkers,
       outlineLineHighlight,
@@ -313,6 +315,7 @@ async function main() {
     ]
   });
   view=cm.view;
+  foldInitialMineruComments(view);
   view.contentDOM.addEventListener('click',()=>{
     const sourceLine=view.state.doc.lineAt(view.state.selection.main.head).number;
     publishFocus({sourceLine,origin:'cm6',intent:'click'});
