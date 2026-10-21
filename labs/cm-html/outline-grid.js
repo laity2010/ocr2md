@@ -39,7 +39,7 @@ function titleCell(params){
 
 export function createOutlineGrid(element,getMarkdown,getEditor) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
-  let indexedRevision=-1;
+  let indexedRevision=-1,pendingFocusFrame=0;
   element.classList.add('ocr-outline-pane');
   const host=document.createElement('div');
   host.className='ocr-outline-grid';
@@ -103,6 +103,21 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     if(indexedRevision!==viewStore.getState().documentRevision)refresh();
     return rows.find(row=>row.id===id)||null;
   }
+  function stopPendingFocus(){
+    if(pendingFocusFrame)cancelAnimationFrame(pendingFocusFrame);
+    pendingFocusFrame=0;
+  }
+  function focusLatestCheckbox(id){
+    // Several edits can happen in one browser task. Let AG selection update
+    // immediately but send just the last navigation to V6's scroll synchronizer.
+    stopPendingFocus();
+    pendingFocusFrame=requestAnimationFrame(()=>{
+      pendingFocusFrame=0;
+      const row=liveRow(id);
+      if(row)publishFocus({sourceLine:row.sourceLine,sourceEnd:row.sourceEnd,
+        origin:'outline',elementId:id});
+    });
+  }
 
   const columns=fields.map((field,i)=>{
     const def={field,headerName:labels[i],filter:EnumCheckboxFilter,
@@ -151,8 +166,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
             const updated=liveRow(id);
             if(!updated)throw Error('标定后找不到章节标题');
             choose(updated);
-            publishFocus({sourceLine:updated.sourceLine,sourceEnd:updated.sourceEnd,
-              origin:'outline',elementId:id});
+            focusLatestCheckbox(id);
           }catch(error){
             input.checked=liveRow(id)?.independent??!checked;
             document.dispatchEvent(new CustomEvent('cm-html:error',{detail:error.message}));
@@ -175,6 +189,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     onRowClicked:p=>{
       const row=p.data && liveRow(p.data.id);
       if(!row)return;
+      stopPendingFocus();
       choose(row);
       publishFocus({sourceLine:row.sourceLine,sourceEnd:row.sourceEnd,
         origin:'outline',elementId:row.id});
@@ -194,7 +209,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     api,get rows(){return rows;},get filters(){return api?.getFilterModel()||{};},
     refresh,schedule,
     dispose(){
-      disposed=true;clearTimeout(timer);unsub();api?.destroy();
+      disposed=true;clearTimeout(timer);stopPendingFocus();unsub();api?.destroy();
       element.replaceChildren();
     },
   };
