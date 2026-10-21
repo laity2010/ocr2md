@@ -11,6 +11,7 @@ import {outlineLineHighlight,markOutlineLine} from '../../ui/outline-focus.js';
 import {createWorkspace} from '../../ui/workspace.js';
 import {viewStore,documentChanged,selectionChanged,publishFocus} from '../../ui/view-store.js';
 import {countMarkers,markerForHeading,convertMarkers} from './metadata.js';
+import {buildChapterFiles} from './chapters.js';
 
 const BASE='/labs/cm-html/';
 const api=BASE+'api/';
@@ -21,13 +22,13 @@ let message='正在加载隔离文档',kind='ok';
 // in-flight save: an unexpected refresh would silently destroy user work.
 const CHECK_INTERVAL_MS=6000;
 let pendingLabVersion=null,checkingVersion=false,reloading=false,saving=false;
-let allowDiscardForUpdate=false;
+let allowDiscardForUpdate=false,exporting=false,afterUnlock=null;
 // Compare actual immutable CM6 Text content against its last saved version.
 // Revision counters are not dirty flags: an undo can restore identical text.
 const hasUnsavedEdits=()=>Boolean(view)&&Boolean(savedDocument)&&
   !view.state.doc.eq(savedDocument);
 function applyAvailableRelease(){
-  if(!pendingLabVersion||reloading||!view||hasUnsavedEdits()||saving||
+  if(!pendingLabVersion||reloading||!view||hasUnsavedEdits()||saving||exporting||
      $('unlock-dialog').open||document.hidden)return;
   reloading=true;
   window.location.reload();
@@ -89,6 +90,7 @@ function renderStatus(){
 function controls(){
   $('undo').disabled=!view||!undoDepth(view.state);
   $('redo').disabled=!view||!redoDepth(view.state);
+  $('export-chapters').disabled=!view||exporting;
   if(hasUnsavedEdits())status('● 未保存实验标定','warning');
   else renderStatus();
   applyAvailableRelease();
@@ -158,8 +160,8 @@ function openUnlock(){
   if(!$('unlock-dialog').open)$('unlock-dialog').showModal();
 }
 async function save(){
-  if(!view)return;
-  if(!canSave){status('🔒 实验保存需要独立授权','warning');openUnlock();return;}
+  if(!view)return false;
+  if(!canSave){status('🔒 实验保存需要独立授权','warning');openUnlock();return false;}
   const snapshotDoc=view.state.doc;
   const snapshot=snapshotDoc.toString();
   saving=true;
@@ -170,16 +172,68 @@ async function save(){
       method:'PUT',headers:{'Content-Type':'text/plain; charset=utf-8'},body:snapshot,
     });
     if(res.status===403){
-      canSave=false;status('🔒 实验授权过期','warning');openUnlock();return;
+      canSave=false;status('🔒 实验授权过期','warning');openUnlock();return false;
     }
     if(!res.ok)throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,120)}`);
     savedDocument=snapshotDoc;
     const clean=!hasUnsavedEdits();
     status(clean?'✓ 实验已保存':'● 保存期间有新修改',clean?'ok':'warning');
-  }catch(error){status('实验保存失败：'+error.message,'error');}
+    return clean;
+  }catch(error){status('实验保存失败：'+error.message,'error');return false;}
   finally{
     saving=false;
     $('save').disabled=false;
+    applyAvailableRelease();
+  }
+}
+async function sourceSha256(markdownText){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(markdownText));
+  return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+async function restoreExportMapping(){
+  try{
+    const res=await fetch(api+'chapters',{cache:'no-store'});
+    if(!res.ok)return;
+    const manifest=await res.json();
+    if(manifest.sourceSha256!==await sourceSha256(view.state.doc.toString()))return;
+    workspace.outlineGrid.setExported(view.state.doc,manifest.files.map(item=>item.name));
+    status(`✓ 已找到 ${manifest.files.length} 份匹配当前文档的章节文件`);
+  }catch{/* A missing or unreadable previous export must not block editing. */}
+}
+async function exportChapters(){
+  if(!view||exporting)return;
+  if(!canSave){
+    afterUnlock='export';
+    status('🔒 导出章节需要实验独立授权','warning');
+    openUnlock();
+    return;
+  }
+  exporting=true;
+  $('export-chapters').disabled=true;
+  try{
+    if(hasUnsavedEdits()){
+      if(!await save())throw Error('请先成功保存标定，才能导出章节');
+    }
+    const doc=view.state.doc;
+    workspace.refreshOutline();
+    const list=buildChapterFiles(doc.toString(),workspace.outlineGrid.rows);
+    const sourceHash=await sourceSha256(doc.toString());
+    status(`正在导出 ${list.length} 个章节到隔离目录`);
+    const res=await fetch(api+'export-chapters',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sourceSha256:sourceHash,files:list.map(file=>({name:file.name,content:file.content}))}),
+    });
+    if(res.status===403){canSave=false;throw Error('实验授权过期，请重新授权');}
+    if(!res.ok)throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,160)}`);
+    const manifest=await res.json();
+    if(manifest.sourceSha256!==sourceHash||manifest.files?.length!==list.length)
+      throw Error('服务器导出清单与当前源文档不匹配');
+    workspace.outlineGrid.setExported(doc,manifest.files.map(file=>file.name));
+    status(`✓ 已导出 ${list.length} 个章节 · 点击 AG「章节文件」可查看`);
+  }catch(error){status('章节导出失败：'+error.message,'error');}
+  finally{
+    exporting=false;
+    $('export-chapters').disabled=false;
     applyAvailableRelease();
   }
 }
@@ -224,6 +278,7 @@ async function main(){
   $('undo').addEventListener('click',()=>runHistory(undo));
   $('redo').addEventListener('click',()=>runHistory(redo));
   $('save').addEventListener('click',save);
+  $('export-chapters').addEventListener('click',exportChapters);
   $('update-release').addEventListener('click',()=>{
     if(!pendingLabVersion||reloading||saving)return;
     if(hasUnsavedEdits()){
@@ -240,7 +295,10 @@ async function main(){
     if(!changed)status(`使用${mode==='comment'?'HTML 注释':'HTML 标签'}标定`);
   });
   $('inspect').addEventListener('click',inspect);
-  $('unlock-cancel').addEventListener('click',()=>$('unlock-dialog').close());
+  $('unlock-cancel').addEventListener('click',()=>{
+    afterUnlock=null;
+    $('unlock-dialog').close();
+  });
   $('unlock-form').addEventListener('submit',async event=>{
     event.preventDefault();
     const code=$('unlock-code').value.trim();
@@ -256,7 +314,10 @@ async function main(){
       canSave=true;
       $('unlock-code').value='';
       $('unlock-dialog').close();
-      await save();
+      const action=afterUnlock;
+      afterUnlock=null;
+      if(action==='export')await exportChapters();
+      else await save();
     }catch(error){$('unlock-error').textContent='授权失败：'+error.message;}
   });
   window.addEventListener('beforeunload',event=>{
@@ -269,13 +330,14 @@ async function main(){
   controls();
   status(canSave?'✓ 实验已加载':'✓ 已加载 · 保存需实验授权',canSave?'ok':'warning');
   watchLabRelease();
+  await restoreExportMapping();
   // Inspection seam; no second copy of Markdown or persistence authority.
   window.__cmHtmlLab={
     get view(){return view;},
     get outline(){return workspace?.outlineGrid;},
     get workspace(){return workspace;},
     get revision(){return revision;},
-    inspect,save,checkForUpdate,
+    inspect,save,checkForUpdate,exportChapters,
     get dirty(){return hasUnsavedEdits();},
     get pendingVersion(){return pendingLabVersion;},
     noteId(id){lastMarkedId=id;},

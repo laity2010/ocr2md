@@ -10,6 +10,10 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from mimetypes import guess_type
 import hmac
+import hashlib
+import shutil
+import uuid
+from datetime import datetime, timezone
 import json
 import os
 import re
@@ -42,6 +46,51 @@ TOKEN = AUTH.read_text().strip()
 HOST = '127.0.0.1'
 PORT = int(os.getenv('CMHTML_PORT', '4408'))
 MAX_BYTES = 2 * 1024 * 1024
+# Tests using CMHTML_WORKFILE get isolated chapter exports as well as a separate DOC.
+CHAPTERS = RUNTIME / ('chapters' if name == 'document.md' else Path(name).stem + '-chapters')
+CHAPTER_NAME = re.compile(r'[0-9]{3}-[\w-]{1,110}\.md')
+
+
+def allowed_chapter_filename(name):
+    return isinstance(name, str) and CHAPTER_NAME.fullmatch(name) is not None
+
+
+def replace_chapter_directory(files, source_hash):
+    # Stage all outputs before changing the visible export generation. Never
+    # touch the mother DOC, fixture, or V6 mainline document/release.
+    if CHAPTERS.is_symlink():
+        raise ValueError('Invalid lab chapter directory')
+    stage = Path(tempfile.mkdtemp(prefix='.chapters-stage-', dir=RUNTIME))
+    backup = RUNTIME / ('.chapters-previous-' + uuid.uuid4().hex)
+    swapped = False
+    try:
+        manifest = {'sourceSha256': source_hash, 'generatedAt':
+                    datetime.now(timezone.utc).isoformat(), 'files': []}
+        for name, content in files:
+            encoded = content.encode('utf-8')
+            with (stage / name).open('xb') as out:
+                out.write(encoded)
+                out.flush()
+                os.fsync(out.fileno())
+            manifest['files'].append({'name': name, 'bytes': len(encoded),
+                'sha256': hashlib.sha256(encoded).hexdigest()})
+        (stage / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False), encoding='utf-8')
+        if CHAPTERS.exists():
+            os.replace(CHAPTERS, backup)
+            swapped = True
+        try:
+            os.replace(stage, CHAPTERS)
+        except OSError:
+            if swapped:
+                os.replace(backup, CHAPTERS)
+                swapped = False
+            raise
+        if swapped:
+            shutil.rmtree(backup)
+        return manifest
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -108,6 +157,24 @@ class Handler(BaseHTTPRequestHandler):
         if relative == 'api/document':
             self.reply(200, (DOC if DOC.is_file() else FIXTURE).read_bytes())
             return
+        if relative == 'api/chapters':
+            manifest = CHAPTERS / 'manifest.json'
+            if not manifest.is_file() or CHAPTERS.is_symlink():
+                self.reply(404, 'No chapter export yet')
+            else:
+                self.reply(200, manifest.read_bytes(), 'application/json; charset=utf-8')
+            return
+        if relative.startswith('api/chapters/'):
+            name = relative[len('api/chapters/'):]
+            if not allowed_chapter_filename(name) or CHAPTERS.is_symlink():
+                self.reply(404, 'Unknown chapter file')
+                return
+            file = CHAPTERS / name
+            if not file.is_file() or file.is_symlink():
+                self.reply(404, 'Unknown chapter file')
+                return
+            self.reply(200, file.read_bytes(), 'text/markdown; charset=utf-8')
+            return
         if not relative:
             relative = 'index.html'
         if relative.startswith('api/'):
@@ -123,6 +190,9 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, asset.read_bytes(), ctype)
 
     def do_POST(self):
+        if urlsplit(self.path).path == PREFIX+'api/export-chapters':
+            self.export_chapters()
+            return
         if urlsplit(self.path).path != PREFIX+'api/unlock':
             self.reply(404)
             return
@@ -153,6 +223,49 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+    def export_chapters(self):
+        if not self.has_auth() or not self.allowed_origin():
+            self.reply(403, 'Lab export authorization required')
+            return
+        try:
+            size = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            size = -1
+        if size < 1 or size > MAX_BYTES:
+            self.reply(413, 'Chapter payload out of bounds')
+            return
+        try:
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+            source_hash = payload.get('sourceSha256')
+            files = payload.get('files')
+            if not isinstance(source_hash, str) or not re.fullmatch(r'[a-f0-9]{64}', source_hash):
+                raise ValueError('Invalid source checksum')
+            if not isinstance(files, list) or not 1 <= len(files) <= 200:
+                raise ValueError('Invalid chapter count')
+            seen, entries = set(), []
+            for entry in files:
+                name = entry.get('name') if isinstance(entry, dict) else None
+                content = entry.get('content') if isinstance(entry, dict) else None
+                if not allowed_chapter_filename(name) or name in seen:
+                    raise ValueError('Invalid or duplicate chapter filename')
+                if (not isinstance(content, str) or not content.strip() or
+                        '<!-- minerujson:source:v1:' in content):
+                    raise ValueError('Invalid chapter Markdown content')
+                if '<!-- minerujson:block:v1:' not in content:
+                    raise ValueError('Chapter is missing its MinerU evidence')
+                seen.add(name)
+                entries.append((name, content))
+        except (ValueError, TypeError, UnicodeDecodeError, AttributeError) as error:
+            self.reply(400, 'Invalid chapter export: ' + str(error))
+            return
+        try:
+            manifest = replace_chapter_directory(entries, source_hash)
+        except (OSError, ValueError) as error:
+            self.reply(500, 'Failed to publish lab chapters: ' + str(error))
+            return
+        self.reply(200, json.dumps(manifest, ensure_ascii=False),
+                   'application/json; charset=utf-8')
 
     def do_PUT(self):
         if urlsplit(self.path).path != PREFIX+'api/document':

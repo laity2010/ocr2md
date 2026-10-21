@@ -41,3 +41,6 @@
   font-weight:650;
 }
 .toolbar #update-release[hidden] {display:none}
+
+.ocr-outline-pane .cm-html-chapter-pending {color:#b5ac91;white-space:nowrap}
+.ocr-outline-pane .cm-html-chapter-link {color:#86c3ac;text-decoration:underline;white-space:nowrap}

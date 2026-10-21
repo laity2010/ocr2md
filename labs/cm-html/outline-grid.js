@@ -8,6 +8,7 @@ import {viewStore,publishFocus} from '../../ui/view-store.js';
 import {buildOutline,headingAtLine} from '../../ui/outline-index.js';
 import {EnumCheckboxFilter} from '../../ui/enum-checkbox-filter.js';
 import {markerForHeading,putMarker} from './metadata.js';
+import {chapterAssignments} from './chapters.js';
 import '../../ui/outline-grid.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -40,6 +41,9 @@ function titleCell(params){
 export function createOutlineGrid(element,getMarkdown,getEditor) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
   let indexedRevision=-1,pendingFocusFrame=0;
+  let exportedDoc=null,exportedNames=new Set();
+  const isExportCurrent=()=>Boolean(exportedDoc)&&Boolean(getEditor())&&
+    getEditor().state.doc.eq(exportedDoc);
   element.classList.add('ocr-outline-pane');
   const host=document.createElement('div');
   host.className='ocr-outline-grid';
@@ -88,15 +92,16 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
       row.independent=marker?.independent??true;
       row.markerFormat=marker?.format||null;
     }
+    chapterAssignments(rows);
     api.setGridOption('rowData',rows);
     const changed=rows.filter(row=>{
       const old=previous.get(row.id);
       return old&&(old.level!==row.level||old.markerFormat!==row.markerFormat||
-        old.independent!==row.independent);
+        old.independent!==row.independent||old.chapterFile!==row.chapterFile);
     });
     if(changed.length){
       const nodes=changed.map(row=>api.getRowNode(row.id)).filter(Boolean);
-      if(nodes.length)api.refreshCells({rowNodes:nodes,columns:['title','independent'],force:true});
+      if(nodes.length)api.refreshCells({rowNodes:nodes,columns:['title','independent','chapterFile'],force:true});
       if(changed.some(row=>(previous.get(row.id).level===1)!==(row.level===1)))
         api.resetRowHeights();
     }
@@ -195,7 +200,25 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
         return hit;
       }});
     if(field==='chapterFile')
-      Object.assign(def,{width:94,minWidth:86,valueFormatter:p=>p.value||'未导出'});
+      Object.assign(def,{width:195,minWidth:150,cellRenderer:p=>{
+        if(!p.data?.chapterFile)return '';
+        const name=p.data.chapterFile;
+        if(!isExportCurrent()||!exportedNames.has(name)){
+          const span=document.createElement('span');
+          span.className='cm-html-chapter-pending';
+          span.textContent=name;
+          span.title='章节归属已计算，尚未导出当前版本';
+          return span;
+        }
+        const link=document.createElement('a');
+        link.className='cm-html-chapter-link';
+        link.href='/labs/cm-html/api/chapters/'+encodeURIComponent(name);
+        link.target='_blank';link.rel='noopener noreferrer';
+        link.download=name;link.textContent=name;
+        link.title='已导出，点击查看当前章节 Markdown';
+        link.addEventListener('click',e=>e.stopPropagation());
+        return link;
+      }});
     return def;
   });
   api=createGrid(host,{
@@ -227,6 +250,11 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
   });
   return {
     api,get rows(){return rows;},get filters(){return api?.getFilterModel()||{};},
+    setExported(doc,names){
+      exportedDoc=doc;
+      exportedNames=new Set(names);
+      api.refreshCells({columns:['chapterFile'],force:true});
+    },
     refresh,schedule,
     dispose(){
       disposed=true;clearTimeout(timer);stopPendingFocus();unsub();api?.destroy();
