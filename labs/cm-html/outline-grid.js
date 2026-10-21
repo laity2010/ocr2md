@@ -45,15 +45,33 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
   host.className='ocr-outline-grid';
   element.append(host);
 
+  function ensureFullyVisible(node){
+    if(node?.rowIndex==null)return;
+    // Let AG Grid perform its native virtualized-row navigation first.
+    // "auto" leaves a visible row where it is (unlike "middle").
+    api.ensureIndexVisible(node.rowIndex,'auto');
+    const viewport=host.querySelector('.ag-grid-viewport');
+    const body=host.querySelector('.ag-body-vertical-scroll-viewport');
+    if(!viewport||!body||!Number.isFinite(node.rowTop)||!node.rowHeight)return;
+    const bodyRect=body.getBoundingClientRect();
+    const hBar=host.querySelector('.ag-body-horizontal-scroll');
+    const barRect=hBar?.getBoundingClientRect();
+    const visibleBottom=barRect?.height>0
+      ? Math.min(bodyRect.bottom,barRect.top):bodyRect.bottom;
+    // AG Grid's native auto check treats the area under the horizontal
+    // scrollbar as visible. Correct only the remaining covered pixels.
+    const rowTop=bodyRect.top+node.rowTop-viewport.scrollTop;
+    const rowBottom=rowTop+node.rowHeight;
+    if(rowTop<bodyRect.top-1)viewport.scrollTop+=rowTop-bodyRect.top;
+    else if(rowBottom>visibleBottom+1)viewport.scrollTop+=rowBottom-visibleBottom;
+  }
   function choose(row,ensureVisible=true){
     if(!row||!api)return;
     if(activeId && activeId!==row.id)api.getRowNode(activeId)?.setSelected(false);
     activeId=row.id;
     const node=api.getRowNode(row.id);
     node?.setSelected(true);
-    // AG Grid auto preserves a fully visible row and scrolls only the minimum
-    // required to reveal a clipped/off-screen row. Never force centering.
-    if(ensureVisible&&node?.rowIndex!=null)api.ensureIndexVisible(node.rowIndex,'auto');
+    if(ensureVisible)ensureFullyVisible(node);
   }
   function chooseLine(line,ensureVisible=true) {
     choose(headingAtLine(rows,line)||rows[0],ensureVisible);
