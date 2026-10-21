@@ -13,6 +13,7 @@ import hmac
 import hashlib
 import shutil
 import uuid
+import subprocess
 from datetime import datetime, timezone
 import json
 import os
@@ -46,6 +47,7 @@ TOKEN = AUTH.read_text().strip()
 HOST = '127.0.0.1'
 PORT = int(os.getenv('CMHTML_PORT', '4408'))
 MAX_BYTES = 2 * 1024 * 1024
+MAX_CONVERT_BYTES = 4 * 1024 * 1024
 # Tests using CMHTML_WORKFILE get isolated chapter exports as well as a separate DOC.
 CHAPTERS = RUNTIME / ('chapters' if name == 'document.md' else Path(name).stem + '-chapters')
 CHAPTER_NAME = re.compile(r'[0-9]{3}-[\w-]{1,110}\.md')
@@ -190,6 +192,9 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, asset.read_bytes(), ctype)
 
     def do_POST(self):
+        if urlsplit(self.path).path == PREFIX+'api/convert-mineru':
+            self.convert_mineru()
+            return
         if urlsplit(self.path).path == PREFIX+'api/export-chapters':
             self.export_chapters()
             return
@@ -223,6 +228,45 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+    def convert_mineru(self):
+        # The already-built V6 converter uses Node core crypto/zlib. Keep it
+        # on the server, do not duplicate the algorithm in the browser or
+        # change its source. Conversion itself is memory-only, no file writes.
+        if not self.has_auth() or not self.allowed_origin():
+            self.reply(403, 'Lab conversion authorization required')
+            return
+        try:
+            size = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            size = -1
+        if size < 2 or size > MAX_CONVERT_BYTES:
+            self.reply(413, 'MinerU JSON payload out of bounds')
+            return
+        raw = self.rfile.read(size)
+        if len(raw) != size:
+            self.reply(400, 'Incomplete MinerU JSON')
+            return
+        node = '/opt/homebrew/bin/node'
+        if not Path(node).is_file():
+            self.reply(503, 'Conversion runtime unavailable')
+            return
+        script = ("import {toMarkdown} from './packages/minerujson-md/dist/index.js';" 
+                  "let s='';for await(const c of process.stdin)s+=c;"
+                  "process.stdout.write(toMarkdown(s));")
+        try:
+            result = subprocess.run([node, '--input-type=module', '-e', script],
+                input=raw,cwd=ROOT,capture_output=True,timeout=20,check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            self.reply(503, 'MinerU conversion unavailable')
+            return
+        if result.returncode != 0:
+            self.reply(422, 'Invalid MinerU JSON or unsupported content')
+            return
+        if len(result.stdout) > MAX_CONVERT_BYTES:
+            self.reply(413, 'Converted Markdown too large')
+            return
+        self.reply(200, result.stdout, 'text/markdown; charset=utf-8')
 
     def export_chapters(self):
         if not self.has_auth() or not self.allowed_origin():

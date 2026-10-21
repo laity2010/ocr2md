@@ -1,7 +1,8 @@
 import '../../ui/styles.css';
 import '../../ui/obsidian-everforest.css';
 import './style.css';
-import {EditorView,basicSetup} from 'codemirror';
+import {basicSetup} from 'codemirror';
+import {CMDocument} from './cm-document.js';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
 import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
@@ -16,7 +17,7 @@ import {buildChapterFiles} from './chapters.js';
 const BASE='/labs/cm-html/';
 const api=BASE+'api/';
 const $=id=>document.getElementById(id);
-let workspace,view,savedDocument=null,revision=0,canSave=false,lastMarkedId=null;
+let workspace,view,cm,savedDocument=null,revision=0,canSave=false,lastMarkedId=null;
 let message='正在加载隔离文档',kind='ok';
 // Lab-only release polling. Never reload an edited CM6 document or an
 // in-flight save: an unexpected refresh would silently destroy user work.
@@ -242,14 +243,23 @@ async function main(){
   if(!response.ok)throw Error('实验文档读取失败 HTTP '+response.status);
   const markdownText=await response.text();
   workspace=createWorkspace($('workspace'),()=>view?.state.doc.toString()||'',()=>view);
-  view=new EditorView({
-    parent:workspace.editorHost,doc:markdownText,
+  cm=new CMDocument({
+    parent:workspace.editorHost,markdown:markdownText,
+    convertMineruJson:async input=>{
+      const raw=typeof input==='string'?input:JSON.stringify(input);
+      const result=await fetch(api+'convert-mineru',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:raw,
+      });
+      if(!result.ok)throw Error(`MinerU conversion HTTP ${result.status}`);
+      return result.text();
+    },
     extensions:[
       basicSetup,EditorView.lineWrapping,markdown({base:markdownLanguage}),
       obsidianMarkdown,obsidianHeadingMarkers,outlineLineHighlight,
       EditorView.updateListener.of(onDocChange),
     ],
   });
+  view=cm.view;
   savedDocument=view.state.doc;
   const initialMarkers=countMarkers(view.state.doc);
   if(initialMarkers.tag>0&&initialMarkers.comment===0)$('marker-format').value='tag';
@@ -334,6 +344,7 @@ async function main(){
   // Inspection seam; no second copy of Markdown or persistence authority.
   window.__cmHtmlLab={
     get view(){return view;},
+    get cm(){return cm;},
     get outline(){return workspace?.outlineGrid;},
     get workspace(){return workspace;},
     get revision(){return revision;},

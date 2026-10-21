@@ -3,6 +3,8 @@
  * serializations and applies all edits through EditorView.dispatch().
  * Original MinerU evidence and the main V6 workspace remain immutable.
  */
+import {CMDocument} from './cm-document.js';
+
 export const formats = ['comment','tag'];
 
 const comment=/^<!-- ocr2md:chapter:v1 id="([\w:.-]+)" independent="([01])" -->$/;
@@ -54,15 +56,11 @@ export function putMarker(view,row,independent,format) {
   const previous=markerForHeading(doc,row);
   const lineDelta=previous?0:1;
   const rendered=encodeMarker(row.id,independent,format);
-  if(previous){
-    view.dispatch({changes:{from:previous.from,to:previous.to,insert:rendered},
-      userEvent:'input'});
-  }else{
-    // A standalone marker line immediately before the heading preserves
-    // markdown-it heading recognition and MinerU's enclosing evidence block.
-    view.dispatch({changes:{from:heading.from,to:heading.from,insert:rendered+'\n'},
-      userEvent:'input'});
-  }
+  // The chapter module decides WHAT to write. The wrapper owns HOW to
+  // transactionally insert or replace HTML in the CM6 document.
+  const cm=new CMDocument({view});
+  cm.writeHtml({html:rendered,beforeLine:row.sourceLine,
+    replaceLine:previous?.line??null});
   // CM6 is the authority for line positions: an inserted standalone marker
   // shifts the title by one line; replacing a marker does not.
   return {id:row.id,format,independent,
