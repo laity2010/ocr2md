@@ -48,6 +48,10 @@ markedRows[5].independent=false;
 const markedParts=buildChapterFiles(annotated,markedRows);
 assert(!markedParts.some(x=>x.content.includes(marker)));
 assert.equal(markedParts.map(x=>x.content).join(''),body);
+// The alternative HTML-tag annotation is also a lab-only control, not an
+// exported chapter's visible content.
+const tagged=annotated.replace(marker,encodeMarker(rows[5].id,false,'tag'));
+assert.equal(buildChapterFiles(tagged,markedRows).map(x=>x.content).join(''),body);
 
 // Two independent headings in a single MinerU block cannot be safely split.
 const badText=fixture.replace('## Bufett’s Alpha\n','## Bufett’s Alpha\n\n### Invented Heading\n');

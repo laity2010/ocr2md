@@ -163,12 +163,12 @@ for(let index=0;index<engines.length;index++){
     assert.deepEqual(rootAPI,[],name+' accessed mainline API');
     await page.screenshot({path:join(evidence,`cm-html-chapters-${name.toLowerCase()}.png`)});
     console.log('CHAPTER_EXPORT_REOPEN_AND_REEXPORT_PASS',name,'OK');
-    passed++;
+    passes++;
   }finally{
     if(browser)await browser.close();
     server.kill('SIGTERM');
   }
 }
-assert(passed>0);
+assert(passes>0);
 assert.deepEqual(protectedFiles.map(hash),beforeHashes,'V6 protected files changed');
-console.log('CHAPTER_EXPORT_ISOLATION_PASS',JSON.stringify({engines:passed}));
+console.log('CHAPTER_EXPORT_ISOLATION_PASS',JSON.stringify({engines:passes}));
