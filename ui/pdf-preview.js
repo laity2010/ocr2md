@@ -83,6 +83,7 @@ export class PdfPreview {
     this.map=[];this.anchors=[];this.lastDriver='cm6';
     this.disposed=false;this.explicitUserUntil=0;this.suppressScrollUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
+    this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
       if(next.documentRevision!==prev.documentRevision)
@@ -135,7 +136,7 @@ export class PdfPreview {
       });
       bus.on('pagerendered',e=>{
         if(e.error){this.setStatus('PDF 页面渲染错误');return;}
-        this.drawOverlay();
+        this.scheduleOverlay();
       });
       this.viewer.setDocument(pdf);
       this.ready=true;
@@ -155,7 +156,7 @@ export class PdfPreview {
     if(!this.ready)return;
     this.zoomMode=mode;
     this.viewer.currentScaleValue=mode;
-    this.viewer.update();this.updateZoom();this.drawOverlay();
+    this.viewer.update();this.updateZoom();this.scheduleOverlay();
   }
   zoomStep(direction){
     if(!this.ready)return;
@@ -165,10 +166,21 @@ export class PdfPreview {
     this.setZoom(String((next??(direction>0?300:50))/100));
   }
   onResize(){
-    if(this.ready&&this.zoomMode==='page-width'){
+    if(this.disposed)return;
+    const width=this.scroller.clientWidth,height=this.scroller.clientHeight;
+    if(!width||!height||(width===this.lastLayoutWidth&&height===this.lastLayoutHeight))return;
+    const widthChanged=width!==this.lastLayoutWidth;
+    this.lastLayoutWidth=width;this.lastLayoutHeight=height;
+    // PDF.js reflows its page tree on update; do not update for each new
+    // canvas or scroll paint. Only a real Dockview width change needs scaling.
+    if(this.ready&&widthChanged&&this.zoomMode==='page-width'){
       this.viewer.currentScaleValue='page-width';this.viewer.update();this.updateZoom();
     }
-    this.drawOverlay();
+    this.scheduleOverlay();
+  }
+  scheduleOverlay(){
+    clearTimeout(this.overlayTimer);
+    this.overlayTimer=setTimeout(()=>this.drawOverlay(),140);
   }
   onClick(event){
     if(!this.ready||!(event.target instanceof Element))return;
@@ -227,7 +239,7 @@ export class PdfPreview {
       this.suppressScrollUntil=performance.now()+900;
       this.viewer.scrollPageIntoView({pageNumber:source.pageIndex+1});
     }
-    this.drawOverlay();
+    this.scheduleOverlay();
   }
   async drawOverlay(){
     this.pages.querySelectorAll('.ocr-pdf-region-overlay').forEach(e=>e.remove());
@@ -256,6 +268,7 @@ export class PdfPreview {
   dispose(){
     this.disposed=true;this.unsubscribe?.();this.resizeObserver.disconnect();
     clearTimeout(this.userScrollTimer);
+    clearTimeout(this.overlayTimer);
     this.viewer?.setDocument(null);
     void this.task?.destroy();
   }

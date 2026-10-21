@@ -71,8 +71,18 @@ for(const [i,[name,engine,options]] of engines.entries()){
   await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]'),
     null,{timeout:18000});
-  let rect=await page.locator('.ocr-pdf-region-overlay').boundingBox();
-  assert(rect&&rect.width>3&&rect.height>3,'OCR text rectangle invisible');
+  await page.waitForTimeout(700);
+  const rect=await page.evaluate(()=>{
+    const el=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]');
+    const scroller=document.querySelector('.ocr-pdf-scroller');
+    if(!el||!scroller)return null;
+    const r=el.getBoundingClientRect(),clip=scroller.getBoundingClientRect();
+    return {x:r.x,y:r.y,width:r.width,height:r.height,
+      inViewport:r.bottom>clip.top&&r.top<clip.bottom&&r.right>clip.left&&r.left<clip.right,
+      display:getComputedStyle(el).display};
+  });
+  assert(rect&&rect.width>3&&rect.height>3&&rect.inViewport,
+    'OCR text rectangle must be visible in PDF viewport: '+JSON.stringify(rect));
   await page.screenshot({path:`.v6/evidence/four-pane-pdf-${name.toLowerCase()}.png`,timeout:20000});
   // page 8 is rotated; viewport and OCR geometry must still align.
   const target=map[7].regions[0];
