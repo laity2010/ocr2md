@@ -73,7 +73,8 @@ for(let index=0;index<engines.length;index++){
     const initial=await page.evaluate(()=>({
       rows:window.__cmHtmlLab.outline.rows.length,
       panels:document.querySelectorAll('.dv-groupview').length,
-      buttons:[...document.querySelectorAll('header.toolbar button')].map(b=>b.id),
+      buttons:[...document.querySelectorAll('header.toolbar button')].filter(b=>!b.hidden).map(b=>b.id),
+      updateHidden:document.querySelector('#update-release')?.hidden,
       length:window.__cmHtmlLab.view.state.doc.length,
       firstDisabled:document.querySelector('.ag-row[row-index="0"] .ocr-outline-checkbox')?.disabled,
       status:document.querySelector('#status').textContent,
@@ -83,6 +84,7 @@ for(let index=0;index<engines.length;index++){
     console.log('CM_HTML_INIT',name,JSON.stringify(initial));
     assert.equal(initial.rows,21);assert.equal(initial.panels,3);
     assert.deepEqual(initial.buttons,['undo','redo','save']);
+    assert.equal(initial.updateHidden,true);
     assert.equal(initial.firstDisabled,true);
     assert(initial.length>300000);
     assert.equal(initial.markers,false);
