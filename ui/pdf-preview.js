@@ -213,7 +213,7 @@ export class PdfPreview {
   }
   clearHighlight(){
     this.selected=null;
-    this.pages.querySelectorAll('.ocr-pdf-region-overlay').forEach(node=>node.remove());
+    this.scroller.querySelectorAll('.ocr-pdf-region-overlay').forEach(node=>node.remove());
   }
   sendPdfNavigation(pageNumber){
     const anchor=this.anchors.find(a=>a.pageIndex===pageNumber-1);
@@ -242,7 +242,7 @@ export class PdfPreview {
     this.scheduleOverlay();
   }
   async drawOverlay(){
-    this.pages.querySelectorAll('.ocr-pdf-region-overlay').forEach(e=>e.remove());
+    this.scroller.querySelectorAll('.ocr-pdf-region-overlay').forEach(e=>e.remove());
     const selection=this.selected;
     if(!selection||!this.ready)return;
     const page=this.viewer.getPageView(selection.pageIndex);
@@ -259,10 +259,19 @@ export class PdfPreview {
       overlay.className='ocr-pdf-region-overlay';
       overlay.dataset.pdfPage=String(selection.pageIndex+1);
       overlay.dataset.blockIndex=String(selection.blockIndex);
-      overlay.style.left=rect.left+'%';overlay.style.top=rect.top+'%';
-      overlay.style.width=rect.width+'%';overlay.style.height=rect.height+'%';
+      // Host overlays at the SCROLL CONTENT level instead of inside a
+      // PDF.js page: PDFViewer may replace its page DOM on rerender/zoom.
+      // Coordinates are calculated from the rotated visual page rectangle.
+      const paper=page.div.getBoundingClientRect();
+      const scroll=this.scroller.getBoundingClientRect();
+      overlay.style.left=(paper.left-scroll.left+this.scroller.scrollLeft+
+        paper.width*rect.left/100)+'px';
+      overlay.style.top=(paper.top-scroll.top+this.scroller.scrollTop+
+        paper.height*rect.top/100)+'px';
+      overlay.style.width=(paper.width*rect.width/100)+'px';
+      overlay.style.height=(paper.height*rect.height/100)+'px';
       overlay.title='OCR 对应文本区域（待人工复核）';
-      page.div.append(overlay);
+      this.scroller.append(overlay);
     }catch(error){this.setStatus(error.message);}
   }
   dispose(){
