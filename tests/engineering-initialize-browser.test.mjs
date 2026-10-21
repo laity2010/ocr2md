@@ -9,6 +9,7 @@ import {chromium,webkit,devices} from 'playwright';
 
 const root=process.cwd();
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
+mkdirSync('.v6/evidence',{recursive:true});
 const protectedPaths=['packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   '.v6/workspace/buffetts-alpha.minerujson.md','.v6/release/index.html'];
 const sha=b=>createHash('sha256').update(b).digest('hex');
@@ -65,6 +66,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
       document.querySelector('#status')?.textContent.includes('已加载'),null,{timeout:45000});
     await page.locator('#build-version').click();
     await page.locator('#engineering-dialog').waitFor({state:'visible'});
+    await page.screenshot({path:`.v6/evidence/engineering-menu-${name.toLowerCase()}.png`,timeout:15000});
     assert.deepEqual(await page.locator('.engineering-menu-actions button').allTextContents(),
       ['初始化数据文档','关闭']);
     await page.locator('#initialize-document').click();
@@ -76,6 +78,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
     await page.locator('#initialize-dialog').waitFor({state:'visible',timeout:10000});
     assert.equal(await page.locator('#initialize-confirm').isDisabled(),true);
     assert.match(await page.locator('#initialize-dialog').textContent(),/已保存文档会先备份/);
+    await page.screenshot({path:`.v6/evidence/initialize-confirm-${name.toLowerCase()}.png`,timeout:15000});
     assert(readFileSync(doc).equals(changed));
     await page.locator('#initialize-phrase').fill('test');
     assert.equal(await page.locator('#initialize-confirm').isDisabled(),true);

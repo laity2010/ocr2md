@@ -252,7 +252,7 @@ async function initializeDataDocument(){
     // an ordinary save and prevents undoing into pre-initialization data.
     allowInitializeReload=true;
     const url=new URL(window.location.href);
-    url.searchParams.set('initialized','1');
+    url.searchParams.set('initialized',result.unchanged?'unchanged':'restored');
     window.location.assign(url.toString());
   }catch(error){
     $('initialize-error').textContent='初始化失败：'+error.message;
@@ -422,8 +422,11 @@ async function main() {
   },{once:true});
   refreshToolbar();
   status('✓ 已加载');
-  if(new URLSearchParams(location.search).has('initialized')){
-    status('✓ 数据文档已初始化 · 原已保存文档已备份');
+  const initialized=new URLSearchParams(location.search).get('initialized');
+  if(initialized==='unchanged'||initialized==='restored'){
+    status(initialized==='restored'
+      ?'✓ 数据文档已初始化 · 旧存盘文档已备份'
+      :'✓ 数据文档已是原始状态，无须更改');
     const cleanUrl=new URL(location.href);
     cleanUrl.searchParams.delete('initialized');
     window.history.replaceState(null,'',cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
