@@ -119,6 +119,7 @@ export class PdfPreview {
       if(this.disposed){await pdf.destroy();return;}
       if(this.map.length!==pdf.numPages)throw Error('PDF 页数与 OCR 页数不一致');
       this.pdf=pdf;
+      this.host.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
       const bus=new EventBus();
       this.viewer=new PDFViewer({container:this.scroller,viewer:this.pages,eventBus:bus,
         maxCanvasPixels:/(iPad|iPhone|iPod)/i.test(navigator.userAgent)?1_500_000:6_000_000,
