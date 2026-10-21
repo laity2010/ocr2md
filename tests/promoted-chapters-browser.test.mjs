@@ -43,6 +43,26 @@ for(const [n,[name,engine,options]] of engines.entries()){
   const first=await page.locator('.ag-row[row-index="0"] [col-id="chapterFile"]').textContent();
   const second=await grid.locator('[col-id="chapterFile"]').textContent();
   assert.notEqual(first,second);
+  assert(first.startsWith('000-'),name+' default chapter start must be 000');
+  assert(second.startsWith('001-'),name+' second chapter must be 001');
+  assert.deepEqual(await page.locator('#module-select option').allTextContents(),['章节定界']);
+  assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
+  assert.deepEqual(await page.locator('#module-actions button').allTextContents(),['导出章节']);
+  assert.equal(await page.locator('#chapter-start-number').inputValue(),'000');
+  assert.equal(await page.locator('#inspect').count(),0);
+  const originalSource=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
+  await page.locator('#chapter-start-number').fill('025');
+  await page.waitForFunction(()=>window.__v6cm6.outline.rows[0].chapterFile.startsWith('025-') &&
+    window.__v6cm6.outline.rows[1].chapterFile.startsWith('026-'),null,{timeout:12000});
+  assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),originalSource,
+    'renumber must never modify CM6');
+  assert.equal(await page.evaluate(()=>window.__v6cm6.dirty),false,
+    'renumber must not mark the Markdown dirty');
+  await page.locator('#chapter-start-number').fill('bad');
+  assert.equal(await page.locator('#chapter-start-number').getAttribute('aria-invalid'),'true');
+  assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows[0].chapterFile.startsWith('025-')),true);
+  await page.locator('#chapter-start-number').blur();
+  assert.equal(await page.locator('#chapter-start-number').inputValue(),'025');
   assert.equal(await page.locator('.ag-row[row-index="0"] input.ocr-outline-checkbox').isDisabled(),true);
   await grid.locator('.ocr-outline-checkbox').uncheck();
   await page.waitForFunction(()=>{
@@ -68,6 +88,9 @@ for(const [n,[name,engine,options]] of engines.entries()){
   assert(existsSync(chapters));
   const manifest=JSON.parse(readFileSync(join(chapters,'manifest.json'),'utf8'));
   assert.equal(manifest.files.length,20);
+  assert(manifest.files[0].name.startsWith('025-'));
+  assert(manifest.files[1].name.startsWith('026-'));
+  assert(manifest.files.at(-1).name.startsWith('044-'));
   assert.equal(manifest.sourceSha256,hash(readFileSync(doc)));
   assert.equal(readdirSync(chapters).length,21);
   const url0=await page.locator('.ag-row[row-index="0"] .ocr-chapter-link').getAttribute('href');
@@ -79,11 +102,25 @@ for(const [n,[name,engine,options]] of engines.entries()){
   console.log('V6_PROMOTED_CHAPTER_EXPORT_PASS',name,JSON.stringify({count:manifest.files.length,filename:manifest.files[0].name,firstChars:result.text.length}));
   await page.reload({waitUntil:'domcontentloaded'});
   await page.locator('.ag-row[row-index="0"] .ocr-chapter-link').waitFor({state:'visible',timeout:25000});
+  assert.equal(await page.locator('#chapter-start-number').inputValue(),'025',
+    'exported numbering must be restored on reopening');
+  // Changing ONLY start number invalidates the old export, never modifies source.
+  const savedSource=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
+  await page.locator('#chapter-start-number').fill('090');
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length===0,
+    null,{timeout:12000});
+  assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),savedSource);
+  await page.locator('#chapter-start-number').fill('025');
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length>0,
+    null,{timeout:12000});
   await page.locator('.ag-row[row-index="2"] input.ocr-outline-checkbox').uncheck();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length===0,null,{timeout:20000});
   await page.locator('#export-chapters').click();
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已导出19个章节'),null,{timeout:25000});
-  assert.equal(JSON.parse(readFileSync(join(chapters,'manifest.json'),'utf8')).files.length,19);
+  const secondManifest=JSON.parse(readFileSync(join(chapters,'manifest.json'),'utf8'));
+  assert.equal(secondManifest.files.length,19);
+  assert(secondManifest.files[0].name.startsWith('025-'));
+  assert(secondManifest.files.at(-1).name.startsWith('043-'));
   assert.equal(readdirSync(chapters).length,20);
   // Confirm no accidental mutation of the main workspace/fixture.
   assert.deepEqual(files.map(f=>hash(readFileSync(f))),hashes);

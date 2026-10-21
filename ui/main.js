@@ -9,7 +9,7 @@ import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
 import {CMDocument} from './cm-document.js';
-import {countMarkers,markerForHeading,convertMarkers} from './chapter-markers.js';
+import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
 
@@ -21,7 +21,6 @@ let workspace;
 // CM6 immutable document handle, not a shadow Markdown string.
 let savedDoc = null;
 let revision = 0;
-let lastMarkedId = null;
 let saving = false, exporting = false, afterUnlock = null;
 let canSave = import.meta.env.DEV ? true : null;
 let pendingUpdate = false;
@@ -169,6 +168,14 @@ async function restoreExport(){
     if(!res.ok)return;
     const manifest=await res.json();
     if(manifest.sourceSha256!==await sourceHash(view.state.doc.toString()))return;
+    const match=/^(\d{3,6})-/.exec(manifest.files?.[0]?.name||'');
+    if(match){
+      const restored=Number(match[1]);
+      if(restored>=0&&restored<=99999){
+        workspace.outlineGrid.setStartNumber(restored);
+        $('chapter-start-number').value=String(restored).padStart(3,'0');
+      }
+    }
     workspace.outlineGrid.setExported(view.state.doc,manifest.files.map(file=>file.name));
   }catch{ /* Missing previous export is ordinary. */ }
 }
@@ -183,7 +190,8 @@ async function exportChapters(){
     if(hasUnsavedEdits() && !await save())throw Error('请先保存标定再导出章节');
     const doc=view.state.doc;
     workspace.refreshOutline();
-    const files=buildChapterFiles(doc.toString(),workspace.outlineGrid.rows);
+    const startNumber=workspace.outlineGrid.startNumber;
+    const files=buildChapterFiles(doc.toString(),workspace.outlineGrid.rows,startNumber);
     const hash=await sourceHash(doc.toString());
     status(`正在导出${files.length}个章节`);
     const res=await fetch('/api/export-chapters',{
@@ -197,22 +205,12 @@ async function exportChapters(){
     if(manifest.sourceSha256!==hash||manifest.files?.length!==files.length)
       throw Error('导出清单与当前文档不一致');
     if(!view.state.doc.eq(doc))throw Error('导出时文档发生变化，请重新导出');
+    if(workspace.outlineGrid.startNumber!==startNumber)
+      throw Error('导出期间起始编号变化，请重新导出');
     workspace.outlineGrid.setExported(doc,manifest.files.map(item=>item.name));
     status(`✓ 已导出${files.length}个章节 · AG文件名可点击`);
   }catch(error){status('导出失败：'+error.message,'error');}
   finally{exporting=false;$('export-chapters').disabled=false;applyPendingUpdate();}
-}
-function inspectChapter(){
-  const rows=workspace?.outlineGrid?.rows||[];
-  const selected=workspace?.outlineGrid?.api.getSelectedNodes()?.[0]?.data;
-  const row=(selected&&markerForHeading(view.state.doc,selected)?selected:null)
-    ||rows.find(x=>x.id===lastMarkedId&&markerForHeading(view.state.doc,x))
-    ||rows.find(x=>markerForHeading(view.state.doc,x));
-  if(!row){$('parse-report').textContent='当前没有章节 HTML 标定';return null;}
-  const marker=markerForHeading(view.state.doc,row);
-  const result=cm.readHtml(marker.line);
-  $('parse-report').textContent=`${marker.format==='comment'?'HTML 注释':'HTML 标签'} · 行${marker.line} · ${result.syntax.join(' / ')}`;
-  return result;
 }
 async function main() {
   const response = await fetch('/api/document',{cache:'no-store'});
@@ -262,8 +260,6 @@ async function main() {
   });
   view=cm.view;
   savedDoc=view.state.doc;
-  const initialMarkers=countMarkers(view.state.doc);
-  if(initialMarkers.tag>0&&initialMarkers.comment===0)$('marker-format').value='tag';
   workspace.refreshPreview();
   workspace.refreshOutline();
   workspace.startScrollSync();
@@ -286,12 +282,26 @@ async function main() {
   buttons.redo.addEventListener('click',()=>history(redo));
   buttons.save.addEventListener('click',save);
   $('export-chapters').addEventListener('click',exportChapters);
-  $('marker-format').addEventListener('change',()=>{
-    const mode=$('marker-format').value;
-    const n=convertMarkers(view,mode);
-    $('parse-report').textContent=`${mode==='comment'?'HTML 注释':'HTML 标签'} · 转换${n}项`;
+  // The selected module owns the command area. More modules can register
+  // their own data-module container without changing the global toolbar.
+  const showModule=()=>{
+    const selected=$('module-select').value;
+    for(const panel of document.querySelectorAll('.module-actions[data-module]'))
+      panel.hidden=panel.dataset.module!==selected;
+  };
+  $('module-select').addEventListener('change',showModule);
+  showModule();
+  const numberInput=$('chapter-start-number');
+  numberInput.addEventListener('input',()=>{
+    const raw=numberInput.value;
+    const valid=/^\d{1,5}$/.test(raw);
+    numberInput.setAttribute('aria-invalid',String(!valid));
+    if(valid)workspace.outlineGrid.setStartNumber(Number(raw));
   });
-  $('inspect').addEventListener('click',inspectChapter);
+  numberInput.addEventListener('blur',()=>{
+    numberInput.value=String(workspace.outlineGrid.startNumber).padStart(3,'0');
+    numberInput.setAttribute('aria-invalid','false');
+  });
   document.addEventListener('ocr2md:chapter-error',e=>status(e.detail||'标定失败','error'));
   $('unlock-cancel').addEventListener('click',()=>{afterUnlock=null;$('unlock-dialog').close();});
   $('unlock-form').addEventListener('submit',async event=>{
@@ -343,7 +353,7 @@ async function main() {
   if (import.meta.env.DEV) window.__v6cm6 = {
     get view(){return view;},
     get cm(){return cm;},
-    exportChapters,save,inspectChapter,
+    exportChapters,save,
     get dirty(){return hasUnsavedEdits();},
     get dockview(){return workspace?.dockview;},
     get scrollSync(){return workspace?.scrollSync;},

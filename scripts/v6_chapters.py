@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import uuid
 
-CHAPTER_NAME = re.compile(r'[0-9]{3}-[\w-]{1,110}\.md')
+CHAPTER_NAME = re.compile(r'[0-9]{3,6}-[\w-]{1,110}\.md')
 MAX_EXPORT_BYTES = 8 * 1024 * 1024
 
 

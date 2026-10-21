@@ -40,9 +40,11 @@ function titleCell(params){
 export function createOutlineGrid(element,getMarkdown,getEditor) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
   let indexedRevision=-1,pendingFocusFrame=0;
-  let exportedDoc=null,exportedNames=new Set();
+  let startNumber=0;
+  let exportedDoc=null,exportedNames=new Set(),exportedMapping=null;
   const isExportCurrent=()=>Boolean(exportedDoc)&&Boolean(getEditor())&&
-    getEditor().state.doc.eq(exportedDoc);
+    getEditor().state.doc.eq(exportedDoc)&&Boolean(exportedMapping)&&
+    rows.every(row=>exportedMapping.get(row.id)===row.chapterFile);
   element.classList.add('ocr-outline-pane');
   const host=document.createElement('div');
   host.className='ocr-outline-grid';
@@ -91,7 +93,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
       row.independent=marker?.independent??true;
       row.markerFormat=marker?.format||null;
     }
-    chapterAssignments(rows);
+    chapterAssignments(rows,startNumber);
     api.setGridOption('rowData',rows);
     const changed=rows.filter(row=>{
       const old=previous.get(row.id);
@@ -185,8 +187,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
             if(!current)throw Error('章节已变化，请重新选择标题');
             // CM6 is the only editable source of truth. Do not write through
             // p.data: its sourceLine may belong to an older AG renderer.
-            putMarker(getEditor(),current,checked,
-              document.querySelector('#marker-format')?.value||'comment');
+            putMarker(getEditor(),current,checked,'comment');
             // Reindex synchronously before the next tap. Debounced redraws
             // are fine for typing, but cannot guard consecutive checkbox edits.
             refresh();
@@ -252,9 +253,20 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
   });
   return {
     api,get rows(){return rows;},get filters(){return api?.getFilterModel()||{};},
+    get startNumber(){return startNumber;},
+    setStartNumber(value){
+      if(!Number.isInteger(value)||value<0||value>99999)throw Error('Invalid chapter number');
+      if(startNumber===value)return;
+      startNumber=value;
+      // Numbering is a pure AG projection; never dispatch an edit to CM6.
+      chapterAssignments(rows,startNumber);
+      api.refreshCells({columns:['chapterFile'],force:true});
+      api.onFilterChanged();
+    },
     setExported(doc,names){
       exportedDoc=doc;
       exportedNames=new Set(names);
+      exportedMapping=new Map(rows.map(row=>[row.id,row.chapterFile]));
       api.refreshCells({columns:['chapterFile'],force:true});
     },
     refresh,schedule,

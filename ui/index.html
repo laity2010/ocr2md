@@ -15,13 +15,14 @@
         <button id="save" class="primary" type="button">保存</button>
       </div>
     </header>
-    <nav class="module-controls" aria-label="章节定界操作">
-      <strong>章节定界</strong>
-      <label for="marker-format">标定格式</label>
-      <select id="marker-format"><option value="comment">HTML 注释</option><option value="tag">HTML 标签</option></select>
-      <button id="inspect" type="button">检查 HTML 节点</button>
-      <button id="export-chapters" type="button">导出章节</button>
-      <span id="parse-report" title="CM6 对应标定语法节点">选择标题后可检查 HTML 标定</span>
+    <nav class="module-controls" aria-label="工作台模块工具条">
+      <select id="module-select" aria-label="选择模块"><option value="chapter-boundary">章节定界</option></select>
+      <div id="module-actions" class="module-actions" data-module="chapter-boundary">
+        <button id="export-chapters" type="button">导出章节</button>
+        <label for="chapter-start-number">起始编号</label>
+        <input id="chapter-start-number" type="text" inputmode="numeric" pattern="[0-9]{1,5}"
+          maxlength="5" value="000" autocomplete="off" spellcheck="false" aria-label="章节文件起始编号" />
+      </div>
     </nav>
     <main><div id="workspace" aria-label="OCR2MD 源码与 Markdown 预览工作区"></div></main>
   </div>

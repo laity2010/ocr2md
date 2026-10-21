@@ -176,7 +176,7 @@ try{
       assert.equal(await selectFilter('title','all'),21);
       assert.equal(await selectFilter('independent','是'),21);
       assert.equal(await selectFilter('independent','all'),21);
-      assert.equal(await selectFilter('chapterFile','001-Bufett-s-Alpha.md'),1);
+      assert.equal(await selectFilter('chapterFile','000-Bufett-s-Alpha.md'),1);
       assert.equal(await selectFilter('chapterFile','all'),21);
 
       // First heading cannot be unchecked. Others write into CM6 as HTML.

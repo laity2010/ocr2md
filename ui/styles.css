@@ -73,17 +73,22 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error,
   font-family: "OCR2MD Sarasa", "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
 }
 
-/* Mainline chapter module controls, below shared global toolbar. */
+/* Module-driven command strip. Each module owns the controls to its right. */
 .module-controls {display:flex;flex:none;align-items:center;gap:9px;min-height:37px;height:37px;
   padding:2px 9px;background:#27352f;border-bottom:1px solid #525c62;
   font:12px/1.3 "OCR2MD Sarasa",monospace;white-space:nowrap;overflow:hidden}
-.module-controls strong {color:#a7d0ae;font-size:12px;flex:none}
-.module-controls label {flex:none;color:#d3c6aa}
-.module-controls select {flex:none;max-width:142px;background:#293b3c;color:#d3c6aa;
-  border:1px solid #60766b;border-radius:4px;font:12px/1.3 "OCR2MD Sarasa",monospace;height:28px;padding:2px}
+.module-controls select,.module-controls input {background:#293b3c;color:#d3c6aa;
+  border:1px solid #60766b;border-radius:4px;font:12px/1.3 "OCR2MD Sarasa",monospace;
+  height:28px;padding:2px 6px;min-width:0}
+#module-select {width:130px;flex:none}
+.module-actions {display:flex;align-items:center;gap:9px;min-width:0}
+.module-actions label {color:#d3c6aa}
+#chapter-start-number {width:65px;text-align:center;font-variant-numeric:tabular-nums}
+#chapter-start-number[aria-invalid="true"] {border-color:#fca5a5}
 .module-controls button {font-size:12px;flex:none;padding:3px 7px;height:28px;
   background:#344a40;border-color:#60766b}
-#parse-report {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#b9bda6;font-size:12px}
-@media(max-width:720px){.module-controls{gap:4px;padding:2px 5px}
-  .module-controls strong{display:none}.module-controls select{max-width:98px}
-  .module-controls button{padding:2px 4px}}
+@media(max-width:720px){.module-controls{gap:5px;padding:2px 5px}
+  #module-select{width:102px}.module-actions{gap:5px}
+  .module-controls button{padding:2px 5px}}
+
+.module-controls .module-actions[hidden] {display:none !important}

@@ -16,11 +16,13 @@ function fileName(title,number){
 }
 
 /** Calculate only chapter association; safe to use every time AG refreshes. */
-export function chapterAssignments(rows){
+export function chapterAssignments(rows,startNumber=0){
+  if(!Number.isInteger(startNumber)||startNumber<0||startNumber>99999)
+    throw Error('Invalid starting chapter number');
   const chapters=[];
   for(const [index,row] of rows.entries()){
     if(index===0||row.independent){
-      chapters.push({id:row.id,title:row.title,file:fileName(row.title,chapters.length+1),
+      chapters.push({id:row.id,title:row.title,file:fileName(row.title,startNumber+chapters.length),
         firstHeadingIndex:index});
     }
     row.chapterFile=chapters.at(-1).file;
@@ -33,9 +35,9 @@ export function chapterAssignments(rows){
  * Text before first title remains with chapter 1. The long raw JSON source
  * comment remains in the mother document and is never duplicated.
  */
-export function buildChapterFiles(markdown,rows){
+export function buildChapterFiles(markdown,rows,startNumber=0){
   if(!rows.length)throw Error('文档没有章节标题');
-  const chapters=chapterAssignments(rows);
+  const chapters=chapterAssignments(rows,startNumber);
   const lines=markdown.split('\n');
   const sourceAt=lines.findIndex(line=>sourceHeader.test(line));
   const bodyEnd=sourceAt===-1?lines.length:sourceAt;
