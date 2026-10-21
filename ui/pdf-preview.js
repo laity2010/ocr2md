@@ -8,6 +8,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {viewStore,publishFocus} from './view-store.js';
 import './pdf-preview.css';
+import {blockAnchor} from './mineru-anchors.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 
@@ -23,12 +24,11 @@ export function pdfOverlayRect(region,viewport){
   return {left:x0/w*100,top:y0/h*100,width:(x1-x0)/w*100,height:(y1-y0)/h*100};
 }
 
-function sourceBlocks(text){
+export function sourceBlocks(text){
   const anchors=[];
-  const rx=/^<!-- minerujson:block:v1:(\d+):(\d+) -->$/gm;
-  for(const match of text.matchAll(rx)){
-    const line=1+text.slice(0,match.index).split('\n').length-1;
-    anchors.push({pageIndex:Number(match[1]),blockIndex:Number(match[2]),sourceLine:line});
+  for(const [index,line] of text.split('\n').entries()){
+    const anchor=blockAnchor(line);
+    if(anchor)anchors.push({...anchor,sourceLine:index+1});
   }
   return anchors;
 }

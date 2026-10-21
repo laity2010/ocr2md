@@ -11,7 +11,7 @@ import type {Root, RootContent} from 'mdast';
 const VERSION = '0.1.0';
 const parser = unified().use(remarkParse).use(remarkGfm);
 const writer = unified().use(remarkStringify).use(remarkGfm);
-const blockStart = /^<!-- minerujson:block:v1:(\d+):(\d+) -->$/gm;
+const blockStart = /^((?: {0,3}>[ \t]?)*)(?: {0,3})<!-- minerujson:block:v1:(\d+):(\d+) -->[ \t]*$/gm;
 const sourcePattern = /<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\n]+)\n-->\s*$/;
 
 type Span = {type?: string; content?: string; html?: string; image_path?: string; [key: string]: unknown};
@@ -276,7 +276,7 @@ export function toMineruJSON(markdown: string): string {
     const {pageNo,blockNo,block}=blocks[i];
     const start=markers[i];
     assert(start.index!==undefined,'missing block marker');
-    assert(Number(start[1])===pageNo && Number(start[2])===blockNo,'block order/anchor changed');
+    assert(Number(start[2])===pageNo && Number(start[3])===blockNo,'block order/anchor changed');
     const next=markers[i+1];
     const nextPage=next?blocks[i+1].pageNo:data.pdf_info.length;
     const gap=visible.slice(start.index+start[0].length,next?.index??visible.length).trim();
@@ -285,6 +285,23 @@ export function toMineruJSON(markdown: string): string {
     const evidence=auditBetween(pageNo+1,Math.min(nextPage+1,data.pdf_info.length));
     if(evidence)assert(gap.endsWith(evidence),'page evidence missing, changed or misplaced');
     let fragment=(evidence?gap.slice(0,-evidence.length):gap).trim();
+    // Quote prefixes around an OCR block express Markdown presentation, not
+    // a new MinerU source identity. Strip only the anchored block's outer
+    // quote depth, while leaving independent page evidence untouched.
+    const outerDepth=(start[1].match(/>/g)||[]).length;
+    if(outerDepth){
+      const stripLine=(line: string): string=>{
+        if(!line.trim())return '';
+        let value=line;
+        for(let depth=0;depth<outerDepth;depth++){
+          const match=/^ {0,3}>[ \t]?/.exec(value);
+          assert(match,`block ${pageNo}:${blockNo} has inconsistent quote depth`);
+          value=value.slice(match[0].length);
+        }
+        return value;
+      };
+      fragment=fragment.split('\n').map(stripLine).join('\n').trim();
+    }
     // A chapter marker is an editor annotation on its own heading, not
     // text to be projected back into the original MinerU OCR span.
     if(block.type==='title'){

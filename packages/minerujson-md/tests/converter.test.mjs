@@ -187,3 +187,15 @@ test('zero-block pages and chapter annotations preserve strict source data',()=>
   assert.equal(toMineruJSON(annotated),raw);
   assert.throws(()=>toMineruJSON(annotated.replace('id="mineru:0:0:0"','id="mineru:0:1:0"')),/INVALID/);
 });
+
+test('quoted MinerU anchors and their contents still reverse to the same original JSON',()=>{
+  const quoted=saved.replace('<!-- minerujson:block:v1:0:0 -->\n\n## Bufett’s Alpha',
+    '> <!-- minerujson:block:v1:0:0 -->\n\n> ## Bufett’s Alpha');
+  assert.notEqual(quoted,saved);
+  assert.equal(toMineruJSON(quoted),raw);
+  const nested=quoted.replace('> <!-- minerujson:block:v1:0:0 -->',
+    '>> <!-- minerujson:block:v1:0:0 -->').replace('> ## Bufett’s Alpha','>> ## Bufett’s Alpha');
+  assert.equal(toMineruJSON(nested),raw);
+  assert.throws(()=>toMineruJSON(nested.replace('>> ## Bufett’s Alpha','> ## Bufett’s Alpha')),
+    /inconsistent quote depth/);
+});

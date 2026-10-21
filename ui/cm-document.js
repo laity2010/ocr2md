@@ -5,6 +5,8 @@
  */
 import {EditorView} from '@codemirror/view';
 import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
+import {unquotePrefix} from './mineru-anchors.js';
+import {isolateHistory} from '@codemirror/commands';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -43,6 +45,43 @@ export class CMDocument {
     return omitMineruEnd ? CMDocument.withoutMineruEnds(source) : source;
   }
 
+  /** Increase/decrease one Markdown blockquote level for every selected line.
+   * One CM6 transaction = one undo step; selection maps through the changes.
+   * The original MinerU JSON/evidence payload is never eligible for editing.
+   */
+  adjustQuoteIndent(direction){
+    if(direction!==1&&direction!==-1)throw Error('Quote indent direction must be +1 or -1');
+    const state=this.view.state,doc=state.doc,lines=new Set();
+    for(const range of state.selection.ranges){
+      const start=doc.lineAt(range.from).number;
+      const end=doc.lineAt(range.empty?range.to:Math.max(range.from,range.to-1)).number;
+      for(let n=start;n<=end;n++)lines.add(n);
+    }
+    // Whole evidence comments, including their payload lines, are read-only;
+    // block identity anchors are short independent comments and ARE editable.
+    const forbidden=new Set();let inEvidence=false;
+    for(let n=1;n<=doc.lines;n++){
+      const value=doc.line(n).text;
+      if(!inEvidence && /^\s*<!-- minerujson:(?!block:v1:)/.test(value)){
+        inEvidence=!value.includes('-->');forbidden.add(n);
+      }else if(inEvidence){
+        forbidden.add(n);
+        if(value.includes('-->'))inEvidence=false;
+      }
+    }
+    if([...lines].some(n=>forbidden.has(n)))
+      throw Error('原始 MinerU JSON／PDF 证据注释不能修改引用层级');
+    const changes=[];
+    for(const n of [...lines].sort((a,b)=>a-b)){
+      const line=doc.line(n);
+      if(direction===1){changes.push({from:line.from,insert:'>'});continue;}
+      if(line.text.startsWith('>'))changes.push({from:line.from,to:line.from+1});
+    }
+    if(changes.length)this.view.dispatch({changes,userEvent:'input',
+      annotations:isolateHistory.of('full')});
+    return {changed:changes.length,lines:lines.size};
+  }
+
   loadMarkdown(markdown){
     if(typeof markdown!=='string')throw Error('Markdown must be a string');
     const doc=this.doc;
@@ -65,8 +104,10 @@ export class CMDocument {
    * content of an existing HTML line. No marker namespace is hard-coded.
    * Changes always go through CM6 transactions (undo/redo compatible).
    */
-  writeHtml({html,beforeLine,replaceLine=null}){
-    const markup=requireMarkup(html),doc=this.doc;
+  writeHtml({html,beforeLine,replaceLine=null,quotePrefix=''}){
+    if(quotePrefix && !/^(?: {0,3}>[ \t]?)+$/.test(quotePrefix))
+      throw Error('Invalid Markdown quote prefix');
+    const markup=quotePrefix+requireMarkup(html),doc=this.doc;
     if(!Number.isInteger(beforeLine)||beforeLine<1||beforeLine>doc.lines)
       throw Error('Invalid target line');
     const target=doc.line(beforeLine);
@@ -74,7 +115,7 @@ export class CMDocument {
       if(!Number.isInteger(replaceLine)||replaceLine<1||replaceLine>=beforeLine)
         throw Error('Invalid HTML replacement line');
       const old=doc.line(replaceLine);
-      if(!old.text.trim().startsWith('<'))
+      if(!unquotePrefix(old.text).trim().startsWith('<'))
         throw Error('Refusing to replace a non-HTML line');
       this.view.dispatch({changes:{from:old.from,to:old.to,insert:markup},userEvent:'input'});
       return {line:replaceLine,sourceLine:beforeLine};
@@ -96,7 +137,7 @@ export class CMDocument {
     if(!Number.isInteger(lineNumber)||lineNumber<1||lineNumber>this.doc.lines)
       throw Error('Invalid HTML line');
     const line=this.doc.line(lineNumber);
-    if(!line.text.trim().startsWith('<'))return null;
+    if(!unquotePrefix(line.text).trim().startsWith('<'))return null;
     const tree=ensureSyntaxTree(this.view.state,line.to,500)||syntaxTree(this.view.state);
     const nodes=[];
     tree.iterate({from:line.from,to:line.to,

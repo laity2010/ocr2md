@@ -15,6 +15,9 @@ button:hover { background:#37465c; }
 button:disabled { opacity:.45; cursor:default; }
 button.primary { background:#2563eb; border-color:#2563eb; }
 .toolbar .actions button {height:30px; padding:2px 8px; border-radius:4px; line-height:1.2;}
+.quote-indent-tools {display:flex;gap:4px;margin-right:4px;border-right:1px solid #52605a;padding-right:8px}
+.toolbar .quote-indent-tools button {font-variant-numeric:tabular-nums;min-width:34px;padding:2px 5px}
+
 
 main { flex:1; min-height:0; display:flex; }
 dialog { border:1px solid #64748b; border-radius:11px; background:#1f2937; color:#e5e7eb; box-shadow:0 15px 45px #0009; max-width:min(440px,calc(100vw - 32px)); width:100%; padding:20px; }

@@ -78,7 +78,8 @@ try {
           },
         };
       });
-      assert.deepEqual(initial.buttons,['undo','redo','save'],name+' only three toolbar buttons');
+      assert.deepEqual(initial.buttons,['quote-outdent','quote-indent','undo','redo','save'],
+        name+' must keep source quote tools beside global history buttons');
       assert(initial.toolbar.height<=42,name+' toolbar must be compact');
       assert.equal(initial.main.top,initial.toolbar.bottom+37,'module toolbar must sit between top bar and workspace');
       assert(Math.abs(initial.main.bottom-initial.viewport.height)<1.5,'workspace fills to bottom edge');

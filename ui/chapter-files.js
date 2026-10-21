@@ -3,9 +3,8 @@
  * Full MinerU raw source remains ONLY in the original mother document.
  */
 import {decodeMarker} from './chapter-markers.js';
+import {blockAnchor,pageHeader,sourceHeader} from './mineru-anchors.js';
 
-const openBlock=/^<!-- minerujson:block:v1:(\d+):(\d+) -->$/;
-const sourceHeader=/^<!-- minerujson:source:v1:/;
 
 // A typed start such as "00", "0000", or "007" defines both the numeric
 // starting point and the exact minimum width of the exported filenames.
@@ -49,7 +48,7 @@ export function buildChapterFiles(markdown,rows,startNumber=0){
   if(!rows.length)throw Error('文档没有章节标题');
   const chapters=chapterAssignments(rows,startNumber);
   const lines=markdown.split('\n');
-  const sourceAt=lines.findIndex(line=>sourceHeader.test(line));
+  const sourceAt=lines.findIndex(sourceHeader);
   const bodyEnd=sourceAt===-1?lines.length:sourceAt;
   const spans=[];
   for(let i=0;i<chapters.length;i++){
@@ -61,10 +60,10 @@ export function buildChapterFiles(markdown,rows,startNumber=0){
       throw Error(`章节「${row.title}」超出母文档正文边界`);
     let opener=-1;
     for(let j=row.sourceLine-2;j>=0;j--){
-      if(/^<!-- minerujson:page:v1:/.test(lines[j]))break;
-      const match=openBlock.exec(lines[j]);
+      if(pageHeader(lines[j]))break;
+      const match=blockAnchor(lines[j]);
       if(match){
-        if(match[1]!==id[1]||match[2]!==id[2])
+        if(match.pageIndex!==Number(id[1])||match.blockIndex!==Number(id[2]))
           throw Error(`章节「${row.title}」的证据块编号不匹配`);
         opener=j;break;
       }

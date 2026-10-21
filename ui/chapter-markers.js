@@ -4,6 +4,7 @@
  * Original MinerU evidence and the main V6 workspace remain immutable.
  */
 import {CMDocument} from './cm-document.js';
+import {quotePrefix,unquotePrefix} from './mineru-anchors.js';
 
 export const formats = ['comment','tag'];
 
@@ -11,10 +12,12 @@ const comment=/^<!-- ocr2md:chapter:v1 id="([\w:.-]+)" independent="([01])" -->$
 const tag=/^<ocr2md-chapter data-id="([\w:.-]+)" data-independent="([01])"><\/ocr2md-chapter>$/;
 
 export function decodeMarker(source) {
+  const prefix=quotePrefix(source);
+  source=unquotePrefix(source).trim();
   let match=comment.exec(source);
-  if(match) return {id:match[1],independent:match[2]==='1',format:'comment'};
+  if(match) return {id:match[1],independent:match[2]==='1',format:'comment',quotePrefix:prefix};
   match=tag.exec(source);
-  if(match) return {id:match[1],independent:match[2]==='1',format:'tag'};
+  if(match) return {id:match[1],independent:match[2]==='1',format:'tag',quotePrefix:prefix};
   return null;
 }
 
@@ -51,7 +54,7 @@ export function putMarker(view,row,independent,format) {
   if(!/^[\w:.-]+$/.test(row.id))throw Error('Heading lacks a stable ID');
   const doc=view.state.doc;
   const heading=doc.line(row.sourceLine);
-  if(!/^\s*#{1,6}\s+/.test(heading.text))
+  if(!/^\s*#{1,6}\s+/.test(unquotePrefix(heading.text)))
     throw Error('Heading has moved; refresh the AG outline first');
   const previous=markerForHeading(doc,row);
   const lineDelta=previous?0:1;
@@ -60,7 +63,8 @@ export function putMarker(view,row,independent,format) {
   // transactionally insert or replace HTML in the CM6 document.
   const cm=new CMDocument({view});
   cm.writeHtml({html:rendered,beforeLine:row.sourceLine,
-    replaceLine:previous?.line??null});
+    replaceLine:previous?.line??null,
+    quotePrefix:previous?.quotePrefix??quotePrefix(heading.text)});
   // CM6 is the authority for line positions: an inserted standalone marker
   // shifts the title by one line; replacing a marker does not.
   return {id:row.id,format,independent,
@@ -74,7 +78,7 @@ export function convertMarkers(view,format){
     const line=doc.line(n),found=decodeMarker(line.text.trim());
     if(found&&found.format!==format){
       changes.push({from:line.from,to:line.to,
-        insert:encodeMarker(found.id,found.independent,format)});
+        insert:found.quotePrefix+encodeMarker(found.id,found.independent,format)});
     }
   }
   if(changes.length)view.dispatch({changes,userEvent:'input'});

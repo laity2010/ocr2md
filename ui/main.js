@@ -346,6 +346,18 @@ async function main() {
     })});
     refreshToolbar();
   }
+  // Toolbar controls use the live CM6 selection (also on iPad). They do not
+  // reselect an AG heading or move the editor's scroll position.
+  function quoteIndent(direction){
+    try{
+      const result=cm.adjustQuoteIndent(direction);
+      if(result.changed)status(`✓ 已${direction>0?'增加':'减少'} ${result.changed} 行引用缩进`);
+    }catch(error){status(error.message,'warning');}
+  }
+  for(const id of ['quote-indent','quote-outdent'])
+    $(id).addEventListener('mousedown',event=>event.preventDefault());
+  $('quote-indent').addEventListener('click',()=>quoteIndent(1));
+  $('quote-outdent').addEventListener('click',()=>quoteIndent(-1));
   buttons.undo.addEventListener('click',()=>history(undo));
   buttons.redo.addEventListener('click',()=>history(redo));
   buttons.save.addEventListener('click',save);

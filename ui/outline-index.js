@@ -7,20 +7,19 @@
  * chapter annotations and exported file paths live in separate modules.
  */
 import MarkdownIt from 'markdown-it';
+import {blockAnchor,pageHeader,sourceHeader} from './mineru-anchors.js';
 
 const parser=new MarkdownIt({html:true,linkify:false});
-const blockOpen=/^<!-- minerujson:block:v1:(\d+):(\d+) -->$/;
-const sourceStart=/^<!-- minerujson:source:v1:/;
 
 export function buildOutline(markdown,independentDrafts=new Map()) {
   const lines=markdown.split('\n');
   const evidenceByLine=new Array(lines.length+1);
   let active=null;
   for(let i=0;i<lines.length;i++){
-    const opening=blockOpen.exec(lines[i].trim());
-    if(opening) active={pageIndex:Number(opening[1]),blockIndex:Number(opening[2])};
-    else if(/^<!-- minerujson:page:v1:/.test(lines[i].trim())) active=null;
-    else if(sourceStart.test(lines[i].trim())) break;
+    const opening=blockAnchor(lines[i]);
+    if(opening) active=opening;
+    else if(pageHeader(lines[i])) active=null;
+    else if(sourceHeader(lines[i])) break;
     evidenceByLine[i+1]=active;
   }
   const seen=new Map(),rows=[];

@@ -10,6 +10,10 @@
     <header class="toolbar">
       <div class="identity"><div class="brand">OCR2MD V6</div><button id="build-version" class="build-badge" type="button" aria-haspopup="dialog" aria-controls="engineering-dialog" title="打开工程菜单">v6-载入中</button><span id="status" class="status" role="status" aria-live="polite">正在加载</span></div>
       <div class="actions">
+        <div class="quote-indent-tools" role="group" aria-label="源码引用缩进">
+          <button id="quote-outdent" type="button" title="选中行减少一层 Markdown 引用缩进">&gt;−</button>
+          <button id="quote-indent" type="button" title="选中行增加一层 Markdown 引用缩进">&gt;+</button>
+        </div>
         <button id="undo" title="撤销 ⌘Z" type="button">↶ 撤销</button>
         <button id="redo" title="重做 ⇧⌘Z" type="button">↷ 重做</button>
         <button id="save" class="primary" type="button">保存</button>
