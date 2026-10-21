@@ -15,24 +15,30 @@ import {countMarkers,markerForHeading,convertMarkers} from './metadata.js';
 const BASE='/labs/cm-html/';
 const api=BASE+'api/';
 const $=id=>document.getElementById(id);
-let workspace,view,revision=0,savedRevision=0,canSave=false,lastMarkedId=null;
+let workspace,view,savedDocument=null,revision=0,canSave=false,lastMarkedId=null;
 let message='正在加载隔离文档',kind='ok';
 // Lab-only release polling. Never reload an edited CM6 document or an
 // in-flight save: an unexpected refresh would silently destroy user work.
 const CHECK_INTERVAL_MS=6000;
 let pendingLabVersion=null,checkingVersion=false,reloading=false,saving=false;
-const hasUnsavedEdits=()=>Boolean(view) && revision!==savedRevision;
+let allowDiscardForUpdate=false;
+// Compare actual immutable CM6 Text content against its last saved version.
+// Revision counters are not dirty flags: an undo can restore identical text.
+const hasUnsavedEdits=()=>Boolean(view)&&Boolean(savedDocument)&&
+  !view.state.doc.eq(savedDocument);
 function applyAvailableRelease(){
   if(!pendingLabVersion||reloading||!view||hasUnsavedEdits()||saving||
-     $('unlock-dialog').open)return;
+     $('unlock-dialog').open||document.hidden)return;
   reloading=true;
   window.location.reload();
 }
 async function checkForUpdate(){
   if(checkingVersion||reloading)return;
   checkingVersion=true;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),8000);
   try{
-    const response=await fetch(BASE+'healthz',{cache:'no-store'});
+    const response=await fetch(BASE+'healthz',{cache:'no-store',signal:controller.signal});
     if(!response.ok)return;
     const data=await response.json();
     if(data.scope!==BASE||typeof data.version!=='string'||
@@ -40,8 +46,8 @@ async function checkForUpdate(){
     pendingLabVersion=data.version;
     renderStatus();
     applyAvailableRelease();
-  }catch{/* Offline checks should never interrupt editing. */}
-  finally{checkingVersion=false;}
+  }catch{/* Offline/slow checks should never interrupt editing or block future checks. */}
+  finally{clearTimeout(timeout);checkingVersion=false;}
 }
 function watchLabRelease(){
   setInterval(()=>{if(!document.hidden)void checkForUpdate();},CHECK_INTERVAL_MS);
@@ -59,6 +65,12 @@ function status(text,level='ok'){
   renderStatus();
 }
 function renderStatus(){
+  const updateButton=$('update-release');
+  updateButton.hidden=!pendingLabVersion;
+  if(pendingLabVersion){
+    updateButton.textContent=hasUnsavedEdits()?'新版 · 待保存':'新版 · 更新';
+    updateButton.title=`${pendingLabVersion}：${hasUnsavedEdits()?'有未保存修改，可保存后更新，或确认放弃修改':'立即加载新版本'}`;
+  }
   const data=view?countMarkers(view.state.doc):{comment:0,tag:0};
   const notice=pendingLabVersion
     ? (hasUnsavedEdits()||saving||$('unlock-dialog').open
@@ -148,7 +160,8 @@ function openUnlock(){
 async function save(){
   if(!view)return;
   if(!canSave){status('🔒 实验保存需要独立授权','warning');openUnlock();return;}
-  const snapshot=view.state.doc.toString(),atRevision=revision;
+  const snapshotDoc=view.state.doc;
+  const snapshot=snapshotDoc.toString();
   saving=true;
   $('save').disabled=true;
   status('正在保存实验文档');
@@ -160,9 +173,9 @@ async function save(){
       canSave=false;status('🔒 实验授权过期','warning');openUnlock();return;
     }
     if(!res.ok)throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,120)}`);
-    savedRevision=atRevision;
-    status(atRevision===revision?'✓ 实验已保存':'● 保存期间有新修改',
-      atRevision===revision?'ok':'warning');
+    savedDocument=snapshotDoc;
+    const clean=!hasUnsavedEdits();
+    status(clean?'✓ 实验已保存':'● 保存期间有新修改',clean?'ok':'warning');
   }catch(error){status('实验保存失败：'+error.message,'error');}
   finally{
     saving=false;
@@ -183,6 +196,7 @@ async function main(){
       EditorView.updateListener.of(onDocChange),
     ],
   });
+  savedDocument=view.state.doc;
   const initialMarkers=countMarkers(view.state.doc);
   if(initialMarkers.tag>0&&initialMarkers.comment===0)$('marker-format').value='tag';
   workspace.refreshPreview();
@@ -210,6 +224,15 @@ async function main(){
   $('undo').addEventListener('click',()=>runHistory(undo));
   $('redo').addEventListener('click',()=>runHistory(redo));
   $('save').addEventListener('click',save);
+  $('update-release').addEventListener('click',()=>{
+    if(!pendingLabVersion||reloading||saving)return;
+    if(hasUnsavedEdits()){
+      if(!window.confirm('当前实验有未保存的章节修改。放弃未保存修改并更新页面？'))return;
+      allowDiscardForUpdate=true;
+      reloading=true;
+      window.location.reload();
+    }else applyAvailableRelease();
+  });
   $('marker-format').addEventListener('change',()=>{
     const mode=$('marker-format').value;
     const changed=convertMarkers(view,mode);
@@ -237,7 +260,9 @@ async function main(){
     }catch(error){$('unlock-error').textContent='授权失败：'+error.message;}
   });
   window.addEventListener('beforeunload',event=>{
-    if(revision!==savedRevision){event.preventDefault();event.returnValue='';}
+    if(hasUnsavedEdits()&&!allowDiscardForUpdate){
+      event.preventDefault();event.returnValue='';
+    }
   });
   window.addEventListener('pagehide',()=>unsubFocus(),{once:true});
   await permission();
@@ -251,6 +276,8 @@ async function main(){
     get workspace(){return workspace;},
     get revision(){return revision;},
     inspect,save,checkForUpdate,
+    get dirty(){return hasUnsavedEdits();},
+    get pendingVersion(){return pendingLabVersion;},
     noteId(id){lastMarkedId=id;},
   };
 }

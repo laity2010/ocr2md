@@ -76,6 +76,19 @@ for(let index=0;index<engines.length;index++){
       probeCount:cleanProbeCount,version:pageVersion}));
     await page.unroute('**/labs/cm-html/healthz');
 
+    // Undo returning exactly to the saved CM6 text must clear the dirty state.
+    // Older versions compared ever-increasing revision numbers and remained
+    // permanently dirty even when the user reverted all their edits.
+    await page.evaluate(()=>{
+      const view=window.__cmHtmlLab.view;
+      view.dispatch({changes:{from:view.state.doc.length,insert:'\nTEMP_UNDO\n'},userEvent:'input'});
+    });
+    assert.equal(await page.evaluate(()=>window.__cmHtmlLab.dirty),true);
+    await page.locator('#undo').click();
+    assert.equal(await page.evaluate(()=>window.__cmHtmlLab.dirty),false,
+      name+' undo failed to clear dirty state');
+    console.log('CM_HTML_UNDO_CLEARS_DIRTY_PASS',name);
+
     // Dirty editor: new release must never clobber an unsaved CM6 transaction.
     const dirtyText='\nLAB_UNSAVED_PROTECTION_'+name+'\n';
     await page.evaluate(text=>{
@@ -92,11 +105,19 @@ for(let index=0;index<engines.length;index++){
     });
     await page.evaluate(()=>window.__cmHtmlLab.checkForUpdate());
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('新版已发布'));
+    await page.locator('#update-release').waitFor({state:'visible'});
+    assert.match(await page.locator('#update-release').textContent(),/待保存/);
+    assert.equal(await page.evaluate(()=>window.__cmHtmlLab.dirty),true);
     await wait(300);
     assert.equal(await page.evaluate(()=>window.__cmHtmlLab.view.state.doc.length),dirtyLength);
     assert(!existsSync(savedPath),'unsaved buffer was written before authorization');
     assert.equal(await page.locator('#build-version').textContent(),pageVersion);
     assert.equal(dirtyProbeCount,1);
+    // User may inspect the prominently visible update control without losing
+    // edits: rejecting its discard confirmation must keep the page untouched.
+    page.once('dialog',dialog=>dialog.dismiss());
+    await page.locator('#update-release').click();
+    assert.equal(await page.evaluate(()=>window.__cmHtmlLab.view.state.doc.length),dirtyLength);
     console.log('CM_HTML_DIRTY_UPDATE_BLOCKED',name,'OK');
 
     // Authorized save clears the dirty guard; pending release then reloads.
@@ -114,6 +135,33 @@ for(let index=0;index<engines.length;index++){
     assert(readFileSync(savedPath,'utf8').endsWith(dirtyText),'new release discarded unsaved changes');
     assert.equal(await page.locator('#build-version').textContent(),pageVersion);
     assert((await page.evaluate(()=>window.__cmHtmlLab.view.state.doc.toString())).endsWith(dirtyText));
+
+    // Explicitly accepting a discard is the other recovery path when the
+    // experimental save credentials are unavailable. It must never overwrite
+    // the last saved file and must require a user confirmation.
+    await page.unroute('**/labs/cm-html/healthz');
+    await page.evaluate(()=>{
+      const view=window.__cmHtmlLab.view;
+      view.dispatch({changes:{from:view.state.doc.length,insert:'\nDISCARD_ME\n'},userEvent:'input'});
+    });
+    await page.route('**/labs/cm-html/healthz',route=>route.fulfill({
+      status:200,contentType:'application/json',
+      body:JSON.stringify({service:'cm-html-lab',scope:'/labs/cm-html/',version:newVersion}),
+    }));
+    await page.evaluate(()=>window.__cmHtmlLab.checkForUpdate());
+    await page.locator('#update-release').waitFor({state:'visible'});
+    const discardReload=page.waitForEvent('framenavigated',{
+      predicate:frame=>frame===page.mainFrame()&&frame.url()===base,timeout:20000,
+    });
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#update-release').click();
+    await discardReload;
+    await load();
+    assert((await page.evaluate(()=>window.__cmHtmlLab.view.state.doc.toString())).endsWith(dirtyText),
+      name+' explicit discard changed saved content');
+    assert(!readFileSync(savedPath,'utf8').includes('DISCARD_ME'));
+    assert.equal(await page.evaluate(()=>window.__cmHtmlLab.dirty),false);
+    console.log('CM_HTML_EXPLICIT_DISCARD_RELOAD_PASS',name,'OK');
     assert.deepEqual(errors,[],name+' page errors');
     assert.deepEqual(rootCalls,[],name+' consulted the mainline API');
     console.log('CM_HTML_SAVE_THEN_RELOAD_PASS',name,'OK');
