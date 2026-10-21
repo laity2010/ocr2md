@@ -8,15 +8,21 @@ import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
+import {CMDocument} from './cm-document.js';
+import {countMarkers,markerForHeading,convertMarkers} from './chapter-markers.js';
+import {buildChapterFiles} from './chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
 
 const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save')};
 let view;
+let cm;
 let workspace;
-// Only a save-revision marker, never a second copy of the Markdown document.
-let savedRevision = 0;
+// CM6 immutable document handle, not a shadow Markdown string.
+let savedDoc = null;
 let revision = 0;
+let lastMarkedId = null;
+let saving = false, exporting = false, afterUnlock = null;
 let canSave = import.meta.env.DEV ? true : null;
 let pendingUpdate = false;
 let checkingVersion = false;
@@ -36,7 +42,8 @@ function renderGlobalStatus() {
     segments.push(`${documentLines.toLocaleString()}行 / ${documentChars.toLocaleString()}字`);
   if(store.outlineCount!==null)
     segments.push(`大纲${store.outlineCount}项`);
-  segments.push('章节标记草稿（未保存）');
+  const markers=view?countMarkers(view.state.doc):{comment:0,tag:0};
+  segments.push(`章节标定 注释${markers.comment}/标签${markers.tag}`);
   segments.push(store.scrollSyncEnabled?'⇅滚动同步':'⇅独立滚动');
   segments.push(documentLabel);
   const text=segments.join(' · ');
@@ -46,9 +53,10 @@ function renderGlobalStatus() {
   element.title=text;
 }
 
+const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));
 function applyPendingUpdate() {
   if (!pendingUpdate) return;
-  if (revision !== savedRevision || buttons.save.disabled || $('unlock-dialog').open) {
+  if (hasUnsavedEdits() || buttons.save.disabled || exporting || $('unlock-dialog').open) {
     status('● 新版本待更新，请先保存','warning');
     return;
   }
@@ -99,7 +107,8 @@ function refreshToolbar() {
     renderGlobalStatus();
   }
   if (pendingUpdate) applyPendingUpdate();
-  else if (revision !== savedRevision) status('● 未保存','warning');
+  else if (hasUnsavedEdits()) status('● 未保存','warning');
+  else renderGlobalStatus();
 }
 function extract() {
   const last = view.state.doc.length;
@@ -121,10 +130,15 @@ function extract() {
   return count;
 }
 async function save() {
-  if (!view) return;
-  if (canSave === false) { status('🔒 保存需授权','warning'); showUnlock(); return; }
-  const snapshot = view.state.doc.toString(); // CM6 is the single source of document text
-  const atRevision = revision;
+  if (!view) return false;
+  if (canSave !== true) {
+    status('🔒 保存需授权','warning');
+    if (!$('unlock-dialog').open) showUnlock();
+    return false;
+  }
+  const snapshotDoc = view.state.doc;
+  const snapshot = snapshotDoc.toString();
+  saving = true;
   buttons.save.disabled = true;
   status('正在保存');
   try {
@@ -133,17 +147,73 @@ async function save() {
       canSave = false;
       status('🔒 保存需授权', 'warning');
       showUnlock();
-      return;
+      return false;
     }
     if (!res.ok) throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,120)}`);
-    savedRevision = atRevision;
-    status(revision === atRevision ? '✓ 已保存' : '● 保存期间有新修改');
+    savedDoc = snapshotDoc;
+    status(!hasUnsavedEdits() ? '✓ 已保存' : '● 保存期间有新修改');
     if (pendingUpdate) applyPendingUpdate();
     // Deliberately no new EditorState, no view.dispatch, no reloading of document.
-  } catch (error) {status('保存失败：'+error.message,'error');}
-  finally {buttons.save.disabled = false;}
+    return !hasUnsavedEdits();
+  } catch (error) {status('保存失败：'+error.message,'error');return false;}
+  finally {saving=false;buttons.save.disabled = false;applyPendingUpdate();}
 }
 
+async function sourceHash(source){
+  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source));
+  return [...new Uint8Array(bytes)].map(n=>n.toString(16).padStart(2,'0')).join('');
+}
+async function restoreExport(){
+  try {
+    const res=await fetch('/api/chapters',{cache:'no-store'});
+    if(!res.ok)return;
+    const manifest=await res.json();
+    if(manifest.sourceSha256!==await sourceHash(view.state.doc.toString()))return;
+    workspace.outlineGrid.setExported(view.state.doc,manifest.files.map(file=>file.name));
+  }catch{ /* Missing previous export is ordinary. */ }
+}
+async function exportChapters(){
+  if(!view||exporting)return;
+  if(canSave!==true){
+    afterUnlock='export';status('🔒 导出章节需要保存授权','warning');showUnlock();return;
+  }
+  exporting=true;
+  $('export-chapters').disabled=true;
+  try {
+    if(hasUnsavedEdits() && !await save())throw Error('请先保存标定再导出章节');
+    const doc=view.state.doc;
+    workspace.refreshOutline();
+    const files=buildChapterFiles(doc.toString(),workspace.outlineGrid.rows);
+    const hash=await sourceHash(doc.toString());
+    status(`正在导出${files.length}个章节`);
+    const res=await fetch('/api/export-chapters',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sourceSha256:hash,
+        files:files.map(file=>({name:file.name,content:file.content}))}),
+    });
+    if(res.status===403){canSave=false;throw Error('授权过期，请重新授权');}
+    if(!res.ok)throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,140)}`);
+    const manifest=await res.json();
+    if(manifest.sourceSha256!==hash||manifest.files?.length!==files.length)
+      throw Error('导出清单与当前文档不一致');
+    if(!view.state.doc.eq(doc))throw Error('导出时文档发生变化，请重新导出');
+    workspace.outlineGrid.setExported(doc,manifest.files.map(item=>item.name));
+    status(`✓ 已导出${files.length}个章节 · AG文件名可点击`);
+  }catch(error){status('导出失败：'+error.message,'error');}
+  finally{exporting=false;$('export-chapters').disabled=false;applyPendingUpdate();}
+}
+function inspectChapter(){
+  const rows=workspace?.outlineGrid?.rows||[];
+  const selected=workspace?.outlineGrid?.api.getSelectedNodes()?.[0]?.data;
+  const row=(selected&&markerForHeading(view.state.doc,selected)?selected:null)
+    ||rows.find(x=>x.id===lastMarkedId&&markerForHeading(view.state.doc,x))
+    ||rows.find(x=>markerForHeading(view.state.doc,x));
+  if(!row){$('parse-report').textContent='当前没有章节 HTML 标定';return null;}
+  const marker=markerForHeading(view.state.doc,row);
+  const result=cm.readHtml(marker.line);
+  $('parse-report').textContent=`${marker.format==='comment'?'HTML 注释':'HTML 标签'} · 行${marker.line} · ${result.syntax.join(' / ')}`;
+  return result;
+}
 async function main() {
   const response = await fetch('/api/document',{cache:'no-store'});
   if (!response.ok) throw Error('文档读取失败 '+response.status);
@@ -154,8 +224,16 @@ async function main() {
       renderGlobalStatus();
   });
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view);
-  view = new EditorView({
-    parent:workspace.editorHost, doc:markdownText,
+  cm = new CMDocument({
+    parent:workspace.editorHost, markdown:markdownText,
+    convertMineruJson: async input=>{
+      const raw=typeof input==='string'?input:JSON.stringify(input);
+      const res=await fetch('/api/convert-mineru',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:raw,
+      });
+      if(!res.ok)throw Error(`MinerU conversion HTTP ${res.status}`);
+      return res.text();
+    },
     extensions:[
       basicSetup,
       EditorView.lineWrapping,
@@ -182,6 +260,10 @@ async function main() {
       })
     ]
   });
+  view=cm.view;
+  savedDoc=view.state.doc;
+  const initialMarkers=countMarkers(view.state.doc);
+  if(initialMarkers.tag>0&&initialMarkers.comment===0)$('marker-format').value='tag';
   workspace.refreshPreview();
   workspace.refreshOutline();
   workspace.startScrollSync();
@@ -190,10 +272,28 @@ async function main() {
     // Presentation effect only; never affects Markdown or undo history.
     view.dispatch({effects:markOutlineLine.of(next.focusTarget.sourceLine)});
   });
-  buttons.undo.addEventListener('click',()=>{undo(view);refreshToolbar();view.focus();});
-  buttons.redo.addEventListener('click',()=>{redo(view);refreshToolbar();view.focus();});
+  function history(command){
+    const selectedId=workspace.outlineGrid?.api.getSelectedNodes()?.[0]?.id;
+    if(command(view)&&selectedId){
+      workspace.refreshOutline();
+      const row=workspace.outlineGrid.rows.find(x=>x.id===selectedId);
+      if(row)publishFocus({sourceLine:row.sourceLine,sourceEnd:row.sourceEnd,
+        origin:'outline',elementId:row.id});
+    }
+    refreshToolbar();
+  }
+  buttons.undo.addEventListener('click',()=>history(undo));
+  buttons.redo.addEventListener('click',()=>history(redo));
   buttons.save.addEventListener('click',save);
-  $('unlock-cancel').addEventListener('click',()=>$('unlock-dialog').close());
+  $('export-chapters').addEventListener('click',exportChapters);
+  $('marker-format').addEventListener('change',()=>{
+    const mode=$('marker-format').value;
+    const n=convertMarkers(view,mode);
+    $('parse-report').textContent=`${mode==='comment'?'HTML 注释':'HTML 标签'} · 转换${n}项`;
+  });
+  $('inspect').addEventListener('click',inspectChapter);
+  document.addEventListener('ocr2md:chapter-error',e=>status(e.detail||'标定失败','error'));
+  $('unlock-cancel').addEventListener('click',()=>{afterUnlock=null;$('unlock-dialog').close();});
   $('unlock-form').addEventListener('submit',async event=>{
     event.preventDefault();
     $('unlock-error').textContent='';
@@ -220,13 +320,15 @@ async function main() {
       canSave = true;
       $('unlock-code').value='';
       $('unlock-dialog').close();
-      await save(); // Retry with the CURRENT CM6 document, not a second cached copy.
+      const action=afterUnlock;afterUnlock=null;
+      if(action==='export')await exportChapters();
+      else await save();
     } catch(error) {
       $('unlock-error').textContent='授权失败：'+error.message;
     }
   });
   window.addEventListener('beforeunload',event=>{
-    if (revision !== savedRevision) {event.preventDefault(); event.returnValue='';}
+    if (hasUnsavedEdits()) {event.preventDefault(); event.returnValue='';}
   });
   window.addEventListener('pagehide',()=>{
     unsubscribeOutlineFocus();
@@ -234,12 +336,15 @@ async function main() {
   },{once:true});
   refreshToolbar();
   status('✓ 已加载');
-  if ((await checkPermission()) === false && revision === savedRevision) {
+  if ((await checkPermission()) === false && !hasUnsavedEdits()) {
     status('🔒 保存需授权','warning');
   }
   // Read-only test seam for verifying *CM6 public APIs*, not an app document cache.
   if (import.meta.env.DEV) window.__v6cm6 = {
     get view(){return view;},
+    get cm(){return cm;},
+    exportChapters,save,inspectChapter,
+    get dirty(){return hasUnsavedEdits();},
     get dockview(){return workspace?.dockview;},
     get scrollSync(){return workspace?.scrollSync;},
     get scrollState(){return viewStore.getState();},
@@ -253,6 +358,7 @@ async function main() {
   if (new URLSearchParams(location.search).has('fontcheck')) {
     void import('./fontcheck.js').then(({showFontCheck}) => showFontCheck());
   }
+  await restoreExport();
   // Git publication changes /healthz immediately; no extra store or WebSocket.
   setInterval(checkForNewBuild, 5000);
   document.addEventListener('visibilitychange',() => {

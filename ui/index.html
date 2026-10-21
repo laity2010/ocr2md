@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>OCR2MD V6 · CM6 验证</title>
+  <title>OCR2MD V6 · 章节定界</title>
 </head>
 <body>
   <div class="app">
@@ -15,6 +15,14 @@
         <button id="save" class="primary" type="button">保存</button>
       </div>
     </header>
+    <nav class="module-controls" aria-label="章节定界操作">
+      <strong>章节定界</strong>
+      <label for="marker-format">标定格式</label>
+      <select id="marker-format"><option value="comment">HTML 注释</option><option value="tag">HTML 标签</option></select>
+      <button id="inspect" type="button">检查 HTML 节点</button>
+      <button id="export-chapters" type="button">导出章节</button>
+      <span id="parse-report" title="CM6 对应标定语法节点">选择标题后可检查 HTML 标定</span>
+    </nav>
     <main><div id="workspace" aria-label="OCR2MD 源码与 Markdown 预览工作区"></div></main>
   </div>
   <dialog id="unlock-dialog" aria-labelledby="unlock-heading">

@@ -106,3 +106,13 @@
   background:rgba(131,192,146,.10);
   box-shadow:inset 3px 0 #83c092;
 }
+
+/* Promoted CMDocument chapter marking: full-cell iPad touch area. */
+.ocr-outline-pane .ag-cell[col-id="independent"] {padding-left:0;padding-right:0}
+.ocr-chapter-checkbox-hit {
+  display:flex;align-items:center;justify-content:center;
+  width:100%;height:100%;min-height:36px;cursor:pointer;
+}
+.ocr-chapter-checkbox-hit:has(input:disabled) {cursor:default}
+.ocr-outline-pane .ocr-chapter-pending {color:#b5ac91;white-space:nowrap}
+.ocr-outline-pane .ocr-chapter-link {color:#86c3ac;text-decoration:underline;white-space:nowrap}

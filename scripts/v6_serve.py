@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """V6 static release + single-document I/O. No Vite runtime, no MD cache."""
 import hmac
+import hashlib
+import subprocess
+from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 import json
 import os
 import re
@@ -97,6 +100,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/document':
             self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
             return
+        if path == '/api/chapters':
+            try:
+                manifest = read_manifest(DOC)
+            except (ValueError, OSError, KeyError, json.JSONDecodeError):
+                manifest = None
+            if manifest is None:
+                self.response(404, 'No published chapter files')
+            else:
+                self.response(200, json.dumps(manifest, ensure_ascii=False), 'application/json')
+            return
+        if path.startswith('/api/chapters/'):
+            try:
+                content=read_chapter(DOC,path[len('/api/chapters/'):])
+            except (OSError, ValueError, KeyError):
+                self.response(404, 'Unknown chapter file')
+            else:
+                self.response(200, content, 'text/markdown; charset=utf-8')
+            return
         # Static artifacts live only in the one V6 release directory.
         static_root = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'release').resolve()
         if not static_root.is_dir():
@@ -124,6 +145,12 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get('Origin', '') in allowed
 
     def do_POST(self):
+        if urlsplit(self.path).path == '/api/export-chapters':
+            self.post_chapters()
+            return
+        if urlsplit(self.path).path == '/api/convert-mineru':
+            self.convert_mineru()
+            return
         if urlsplit(self.path).path != '/api/unlock':
             self.response(404, 'Not found')
             return
@@ -152,6 +179,61 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '11')
         self.end_headers()
         self.wfile.write(b'{"ok":true}')
+
+    def post_chapters(self):
+        if not self.authorized() or not self.same_origin():
+            self.response(403, 'Editor authorization required')
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            length = -1
+        if length < 2 or length > MAX_EXPORT_BYTES:
+            self.response(413, 'Invalid chapter export size')
+            return
+        try:
+            body = json.loads(self.rfile.read(length).decode('utf-8'))
+            manifest = export_chapters(DOC, body)
+        except (ValueError, TypeError, AttributeError, UnicodeDecodeError, KeyError) as error:
+            self.response(400, 'Invalid chapter export: '+str(error))
+            return
+        except OSError:
+            self.response(500, 'Unable to publish chapters')
+            return
+        self.response(200, json.dumps(manifest, ensure_ascii=False), 'application/json')
+
+    def convert_mineru(self):
+        if not self.authorized() or not self.same_origin():
+            self.response(403, 'Editor authorization required')
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            length = -1
+        if length < 2 or length > 4 * 1024 * 1024:
+            self.response(413, 'Invalid MinerU JSON size')
+            return
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            self.response(400, 'Incomplete MinerU JSON')
+            return
+        node = '/opt/homebrew/bin/node'
+        if not Path(node).is_file():
+            self.response(503, 'Conversion runtime unavailable')
+            return
+        script = ("import {toMarkdown} from './packages/minerujson-md/dist/index.js';"
+                  "const chunks=[];for await(const c of process.stdin)chunks.push(c);"
+                  "process.stdout.write(toMarkdown(Buffer.concat(chunks).toString('utf8')));")
+        try:
+            result = subprocess.run([node,'--input-type=module','-e',script],
+                input=raw,cwd=ROOT,capture_output=True,timeout=20,check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            self.response(503,'MinerU conversion unavailable')
+            return
+        if result.returncode != 0:
+            self.response(422,'Invalid MinerU JSON or unsupported content')
+            return
+        self.response(200, result.stdout, 'text/markdown; charset=utf-8')
 
     def do_PUT(self):
         if urlsplit(self.path).path != '/api/document':
