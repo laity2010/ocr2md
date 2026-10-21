@@ -143,7 +143,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
     agTo:await page.locator('.ag-row[aria-selected="true"]').first().getAttribute('row-index'),page:8}));
   assert.deepEqual(errors,[],name+' browser errors');
   assert.equal(hash(readFileSync(path)),sourceHash,'PDF browsing changed CM6 original');
-  console.log('FOUR_PANE_PDF_PASS',name,JSON.stringify({groups:4,highlighter:!!rect,page8Selected:true,zoom}));
+  console.log('FOUR_PANE_PDF_PASS',name,JSON.stringify({groups:3,logicalViews:4,highlighter:!!rect,page8Selected:true,zoom}));
  }finally{if(browser)await browser.close();server.kill('SIGTERM');}
 }
 assert.equal(hash(readFileSync(pdf)),pdfHash);

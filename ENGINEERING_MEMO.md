@@ -155,4 +155,5 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - **四个逻辑视图始终存在并接收定位事件**：`PreviewPanel` 同时拥有 Markdown DOM 阅读层和单一 PDF.js 实例，切换用 `visibility:hidden`，不能 `display:none`、销毁或重新构造 PDF.js，否则 PDF 页面尺寸、已绘制页面、缩放及高亮会丢失。CM6 始终是唯一文本编辑状态，Zustand 只传递临时位置；正常 MD 预览重绘与 PDF 模式切换不清空 CM6 Undo/Redo。
 - 滚动同步 `lastDriver` 必须严格区分 `cm6`、`preview`、`outline`、`pdf`：仅 **preview** 实际用户滚动才可把 MD 位置反向用于纠正 CM6；PDF/AG 的主动位置是源码坐标驱动，绝不可从旧 MD 预览滚动状态反向覆盖 PDF 跳转。`scroll-sync` 绑定持续存在的 `.ocr-preview-md-scroll`，即使隐藏仍保持 DOM 几何。
 - PDF 收到定位时不可只比较页码，必须同时比较 `pageIndex + blockIndex`，同一 PDF 页的不同文字块也须切换高亮。PDF 切到可见时，立刻依据最新 CM6/AG/MD/PDF 位置事件恢复对应 OCR bbox 高亮；较小的高亮框必须完整可见；高亮框大于预览窗（如第 8 页宽大的图表）时应居中显示最大可见部分，**不能为了完整容纳强制改动用户保存的缩放比例**。PDF.js 重绘后应恢复独立高亮层，不能指望 Canvas DOM 不发生替换。
+- PDF.js 在缩放后可能发生迟到的页面滚动校正，程序性滚动结束时必须重新定位/展示高亮；用户自己滚动时不得强迫预览跳回选区。
 - PDF 只读源、当前 Markdown 母文档以及冻结 Lab 均不得由布局和定位测试改写。`tests/shared-preview-browser.test.mjs` 用 Chrome、WebKit 验收 3 个实际窗格、4 个逻辑视图、唯一模式下拉、MD/PDF 互切、工具栏、PDF 对象复用、缩放保持、隐藏状态同步、同页 block4→6 以及跨页至第 8 页后切回仍可见。既有三窗/四窗回归同步修改为此约束；实体 iPad Safari 仍须人工视觉验收。
