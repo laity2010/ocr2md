@@ -251,9 +251,9 @@ class Handler(BaseHTTPRequestHandler):
         if not Path(node).is_file():
             self.reply(503, 'Conversion runtime unavailable')
             return
-        script = ("import {toMarkdown} from './packages/minerujson-md/dist/index.js';" 
-                  "let s='';for await(const c of process.stdin)s+=c;"
-                  "process.stdout.write(toMarkdown(s));")
+        script = ("import {toMarkdown} from './packages/minerujson-md/dist/index.js';"
+                  "const chunks=[];for await(const c of process.stdin)chunks.push(c);"
+                  "process.stdout.write(toMarkdown(Buffer.concat(chunks).toString('utf8')));")
         try:
             result = subprocess.run([node, '--input-type=module', '-e', script],
                 input=raw,cwd=ROOT,capture_output=True,timeout=20,check=False)

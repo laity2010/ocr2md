@@ -1,7 +1,7 @@
 import '../../ui/styles.css';
 import '../../ui/obsidian-everforest.css';
 import './style.css';
-import {basicSetup} from 'codemirror';
+import {EditorView,basicSetup} from 'codemirror';
 import {CMDocument} from './cm-document.js';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
