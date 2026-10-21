@@ -75,7 +75,10 @@ export class PdfPreview {
         this.sendPdfNavigation(n);
       }else this.pageInput.value=String(this.viewer?.currentPageNumber||1);
     });
-    const userInput=()=>{this.explicitUserUntil=performance.now()+1250;};
+    const userInput=()=>{
+      this.explicitUserUntil=performance.now()+1250;
+      this.revealPending=false;
+    };
     for(const type of ['wheel','touchstart','pointerdown','keydown'])
       this.scroller.addEventListener(type,userInput,{passive:true});
     this.scroller.addEventListener('scroll',()=>this.onScroll(),{passive:true});
@@ -85,16 +88,21 @@ export class PdfPreview {
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
     this.active=false;this.lastSourceLine=null;this.overlayDrawId=0;
+    this.revealPending=false;this.revealUntil=0;
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
       if(next.documentRevision!==prev.documentRevision)
         this.anchors=sourceBlocks(this.getMarkdown());
+      // PDF pages and Markdown lines have unrelated visual geometry. React
+      // ONLY to an explicit click-navigation event, never a scrollTarget,
+      // editor cursor movement by keyboard, or an Undo/Redo side effect.
       if(next.focusTarget!==prev.focusTarget && next.focusTarget){
         const target=next.focusTarget;
-        if(target.origin!=='pdf')void this.focusLine(target.sourceLine,true);
-      }else if(next.scrollTarget!==prev.scrollTarget && next.scrollTarget &&
-          next.scrollSyncEnabled && next.scrollTarget.origin!=='pdf'){
-        void this.focusLine(next.scrollTarget.sourceLine,false);
+        if(target.origin!=='pdf' &&
+           (target.intent==='click' ||
+            ((target.origin==='outline'||target.origin==='preview') &&
+             target.intent!=='command')))
+          void this.focusLine(target.sourceLine,true);
       }
     });
     this.anchors=sourceBlocks(this.getMarkdown());
@@ -104,22 +112,21 @@ export class PdfPreview {
   // The owning preview pane places the active viewer's toolbar immediately
   // to the right of the shared MD/PDF dropdown.
   moveToolbarTo(container){container.append(this.toolbar);}
-  setActive(active){this.active=Boolean(active);}
+  setActive(active){
+    this.active=Boolean(active);
+    // Merely opening the PDF preview never performs source-line navigation.
+    // If an explicit click arrived while PDF was hidden, reveal its anchor.
+    if(this.active&&this.revealPending)this.scheduleOverlay();
+  }
   revealCurrentLocation(){
-    const state=viewStore.getState();
-    const line=this.lastSourceLine??state.focusTarget?.sourceLine??
-      state.scrollTarget?.sourceLine??1;
-    if(this.ready){
-      this.onResize();
-      void this.focusLine(line,true);
-      // A page canvas may be painted after focusLine; pagerendered redraws
-      // the overlay and repeats its visibility check.
-    } else this.pendingFocus={line,explicit:true};
+    // Mode switching is presentation-only. A pending click may have been
+    // received while hidden; the selection is already in PDF coordinates.
+    if(this.revealPending)this.scheduleOverlay();
   }
   setStatus(s){this.statusNode.textContent=s;}
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
-    this.revealCurrentLocation();
+    this.scheduleOverlay();
   }
   async open(){
     try{
@@ -156,12 +163,10 @@ export class PdfPreview {
       this.viewer.setDocument(pdf);
       this.ready=true;
       this.setStatus('就绪');
-      const focus=viewStore.getState().focusTarget;
-      if(focus)await this.focusLine(focus.sourceLine,true);
       if(this.pendingFocus){
         const request=this.pendingFocus;this.pendingFocus=null;
         await this.focusLine(request.line,request.explicit);
-      } else if(this.active) this.revealCurrentLocation();
+      }
     }catch(err){this.ready=false;this.setStatus('PDF 失败：'+err.message);}
   }
   updateZoom(){
@@ -240,21 +245,18 @@ export class PdfPreview {
   }
   onScroll(){
     if(this.disposed||!this.ready)return;
-    // PDFViewer can finish its page/zoom layout after our first focus jump.
-    // Recalculate the independent overlay at the end of programmatic scroll,
-    // never compete with the user's own wheel/touch navigation.
-    if(this.active&&this.selected&&performance.now()>this.explicitUserUntil)
+    // PDF reading scrolls are independent and never generate MD navigation.
+    // Only settle an explicit click's pending highlight, not old selections.
+    if(this.active&&this.revealPending&&performance.now()>this.explicitUserUntil)
       this.scheduleOverlay();
-    if(performance.now()>this.explicitUserUntil||
-       performance.now()<this.suppressScrollUntil)return;
-    clearTimeout(this.userScrollTimer);
-    this.userScrollTimer=setTimeout(()=>{
-      if(!this.disposed&&this.viewer)this.sendPdfNavigation(this.viewer.currentPageNumber);
-    },165);
   }
   async focusLine(line,explicit){
     if(!Number.isInteger(line)||line<1)return;
     this.lastSourceLine=line;
+    if(explicit){
+      this.revealPending=true;
+      this.revealUntil=performance.now()+1700;
+    }
     if(!this.ready){this.pendingFocus={line,explicit};return;}
     const source=sourceAnchor(this.anchors,line);
     if(!source)return;
@@ -327,12 +329,16 @@ export class PdfPreview {
       overlay.style.height=(paper.height*rect.height/100)+'px';
       overlay.title='OCR 对应文本区域（待人工复核）';
       this.scroller.append(overlay);
-      this.ensureVisible(overlay);
+      if(this.revealPending && this.active){
+        this.ensureVisible(overlay);
+        // Keep a short window for PDF.js late layout/scroll correction,
+        // then let the user scroll independently without snapping back.
+        if(performance.now()>this.revealUntil)this.revealPending=false;
+      }
     }catch(error){this.setStatus(error.message);}
   }
   dispose(){
     this.disposed=true;this.unsubscribe?.();this.resizeObserver.disconnect();
-    clearTimeout(this.userScrollTimer);
     clearTimeout(this.overlayTimer);
     this.viewer?.setDocument(null);
     void this.task?.destroy();

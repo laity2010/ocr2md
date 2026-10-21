@@ -125,7 +125,7 @@ class PreviewPanel {
     this.pdfTools.setAttribute('aria-hidden',String(mode!=='pdf'));
     if(this.pdf){
       this.pdf.setActive(mode==='pdf');
-      if(mode==='pdf')this.pdf.revealCurrentLocation();
+      if(mode==='pdf')this.pdf.revealCurrentLocation(); // only pending explicit click
       // Hidden MD viewport retains its geometry and synchronized scroll.
     }
   }

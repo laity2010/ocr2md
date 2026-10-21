@@ -310,6 +310,10 @@ async function main() {
     ]
   });
   view=cm.view;
+  view.contentDOM.addEventListener('click',()=>{
+    const sourceLine=view.state.doc.lineAt(view.state.selection.main.head).number;
+    publishFocus({sourceLine,origin:'cm6',intent:'click'});
+  });
   savedDoc=view.state.doc;
   workspace.refreshPreview();
   workspace.refreshOutline();
@@ -326,7 +330,7 @@ async function main() {
       workspace.refreshOutline();
       const row=workspace.outlineGrid.rows.find(x=>x.id===selectedId);
       if(row)publishFocus({sourceLine:row.sourceLine,sourceEnd:row.sourceEnd,
-        origin:'outline',elementId:row.id});
+        origin:'outline',elementId:row.id,intent:'command'});
     }
     refreshToolbar();
   }
