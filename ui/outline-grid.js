@@ -40,7 +40,7 @@ function titleCell(params){
 export function createOutlineGrid(element,getMarkdown,getEditor) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
   let indexedRevision=-1,pendingFocusFrame=0;
-  let startNumber=0;
+  let startText='000';
   let exportedDoc=null,exportedNames=new Set(),exportedMapping=null;
   const isExportCurrent=()=>Boolean(exportedDoc)&&Boolean(getEditor())&&
     getEditor().state.doc.eq(exportedDoc)&&Boolean(exportedMapping)&&
@@ -93,7 +93,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
       row.independent=marker?.independent??true;
       row.markerFormat=marker?.format||null;
     }
-    chapterAssignments(rows,startNumber);
+    chapterAssignments(rows,startText);
     api.setGridOption('rowData',rows);
     const changed=rows.filter(row=>{
       const old=previous.get(row.id);
@@ -253,13 +253,16 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
   });
   return {
     api,get rows(){return rows;},get filters(){return api?.getFilterModel()||{};},
-    get startNumber(){return startNumber;},
+    get startNumber(){return Number(startText);},
+    get startText(){return startText;},
     setStartNumber(value){
-      if(!Number.isInteger(value)||value<0||value>99999)throw Error('Invalid chapter number');
-      if(startNumber===value)return;
-      startNumber=value;
-      // Numbering is a pure AG projection; never dispatch an edit to CM6.
-      chapterAssignments(rows,startNumber);
+      const next=typeof value==='number'?String(value).padStart(3,'0'):value;
+      if(typeof next!=='string'||!/^\d{1,5}$/.test(next)||Number(next)>99999)
+        throw Error('Invalid chapter number');
+      if(startText===next)return;
+      startText=next;
+      // Same number at a different width is a new file naming projection.
+      chapterAssignments(rows,startText);
       api.refreshCells({columns:['chapterFile'],force:true});
       api.onFilterChanged();
     },

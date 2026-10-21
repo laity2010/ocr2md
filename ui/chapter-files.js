@@ -8,21 +8,32 @@ const openBlock=/^<!-- minerujson:block:v1:(\d+):(\d+) -->$/;
 const endBlock=/^<!-- minerujson:end:v1:(\d+):(\d+) -->$/;
 const sourceHeader=/^<!-- minerujson:source:v1:/;
 
-function fileName(title,number){
+// A typed start such as "00", "0000", or "007" defines both the numeric
+// starting point and the exact minimum width of the exported filenames.
+// Numeric callers retain the historical 3-digit default.
+export function chapterStartFormat(value=0){
+  const text=typeof value==='number'?String(value).padStart(3,'0'):value;
+  if(typeof text!=='string'||!/^\d{1,5}$/.test(text))
+    throw Error('Invalid starting chapter number');
+  const number=Number(text);
+  if(!Number.isSafeInteger(number)||number<0||number>99999)
+    throw Error('Invalid starting chapter number');
+  return {text,number,width:text.length};
+}
+function fileName(title,number,width){
   const slug=title.normalize('NFKD').replace(/\p{Mark}/gu,'')
     .replace(/[^\p{Letter}\p{Number}]+/gu,'-')
     .replace(/^-+|-+$/g,'').slice(0,72).replace(/-+$/,'')||'chapter';
-  return `${String(number).padStart(3,'0')}-${slug}.md`;
+  return `${String(number).padStart(width,'0')}-${slug}.md`;
 }
 
 /** Calculate only chapter association; safe to use every time AG refreshes. */
 export function chapterAssignments(rows,startNumber=0){
-  if(!Number.isInteger(startNumber)||startNumber<0||startNumber>99999)
-    throw Error('Invalid starting chapter number');
+  const {number,width}=chapterStartFormat(startNumber);
   const chapters=[];
   for(const [index,row] of rows.entries()){
     if(index===0||row.independent){
-      chapters.push({id:row.id,title:row.title,file:fileName(row.title,startNumber+chapters.length),
+      chapters.push({id:row.id,title:row.title,file:fileName(row.title,number+chapters.length,width),
         firstHeadingIndex:index});
     }
     row.chapterFile=chapters.at(-1).file;

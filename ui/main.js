@@ -168,13 +168,11 @@ async function restoreExport(){
     if(!res.ok)return;
     const manifest=await res.json();
     if(manifest.sourceSha256!==await sourceHash(view.state.doc.toString()))return;
-    const match=/^(\d{3,6})-/.exec(manifest.files?.[0]?.name||'');
-    if(match){
-      const restored=Number(match[1]);
-      if(restored>=0&&restored<=99999){
-        workspace.outlineGrid.setStartNumber(restored);
-        $('chapter-start-number').value=String(restored).padStart(3,'0');
-      }
+    const match=/^(\d{1,6})-/.exec(manifest.files?.[0]?.name||'');
+    if(match&&match[1].length<=5&&Number(match[1])<=99999){
+      // The filename records the exact original zero-padding width.
+      workspace.outlineGrid.setStartNumber(match[1]);
+      $('chapter-start-number').value=match[1];
     }
     workspace.outlineGrid.setExported(view.state.doc,manifest.files.map(file=>file.name));
   }catch{ /* Missing previous export is ordinary. */ }
@@ -190,8 +188,8 @@ async function exportChapters(){
     if(hasUnsavedEdits() && !await save())throw Error('请先保存标定再导出章节');
     const doc=view.state.doc;
     workspace.refreshOutline();
-    const startNumber=workspace.outlineGrid.startNumber;
-    const files=buildChapterFiles(doc.toString(),workspace.outlineGrid.rows,startNumber);
+    const startText=workspace.outlineGrid.startText;
+    const files=buildChapterFiles(doc.toString(),workspace.outlineGrid.rows,startText);
     const hash=await sourceHash(doc.toString());
     status(`正在导出${files.length}个章节`);
     const res=await fetch('/api/export-chapters',{
@@ -205,7 +203,7 @@ async function exportChapters(){
     if(manifest.sourceSha256!==hash||manifest.files?.length!==files.length)
       throw Error('导出清单与当前文档不一致');
     if(!view.state.doc.eq(doc))throw Error('导出时文档发生变化，请重新导出');
-    if(workspace.outlineGrid.startNumber!==startNumber)
+    if(workspace.outlineGrid.startText!==startText)
       throw Error('导出期间起始编号变化，请重新导出');
     workspace.outlineGrid.setExported(doc,manifest.files.map(item=>item.name));
     status(`✓ 已导出${files.length}个章节 · AG文件名可点击`);
@@ -296,10 +294,10 @@ async function main() {
     const raw=numberInput.value;
     const valid=/^\d{1,5}$/.test(raw);
     numberInput.setAttribute('aria-invalid',String(!valid));
-    if(valid)workspace.outlineGrid.setStartNumber(Number(raw));
+    if(valid)workspace.outlineGrid.setStartNumber(raw);
   });
   numberInput.addEventListener('blur',()=>{
-    numberInput.value=String(workspace.outlineGrid.startNumber).padStart(3,'0');
+    numberInput.value=workspace.outlineGrid.startText;
     numberInput.setAttribute('aria-invalid','false');
   });
   document.addEventListener('ocr2md:chapter-error',e=>status(e.detail||'标定失败','error'));

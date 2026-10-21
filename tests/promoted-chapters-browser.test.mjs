@@ -50,6 +50,22 @@ for(const [n,[name,engine,options]] of engines.entries()){
   assert.deepEqual(await page.locator('#module-actions button').allTextContents(),['导出章节']);
   assert.equal(await page.locator('#chapter-start-number').inputValue(),'000');
   assert.equal(await page.locator('#inspect').count(),0);
+  // Leading zeros are formatting, not numeric noise. Each width is visible
+  // immediately and remains unchanged after blur, with no CM6 transaction.
+  for(const [input,firstFile,secondFile] of [
+    ['0','0-','1-'], ['00','00-','01-'],
+    ['0000','0000-','0001-'],['007','007-','008-'],
+    ['00000','00000-','00001-'],
+  ]){
+    await page.locator('#chapter-start-number').fill(input);
+    await page.waitForFunction(([a,b])=>{
+      const text=i=>document.querySelector(`.ag-row[row-index="${i}"] [col-id="chapterFile"]`)?.textContent;
+      return text(0)?.startsWith(a)&&text(1)?.startsWith(b);
+    },[firstFile,secondFile],{timeout:12000});
+    await page.locator('#chapter-start-number').blur();
+    assert.equal(await page.locator('#chapter-start-number').inputValue(),input,
+      `width lost after blur: ${input}`);
+  }
   const originalSource=readFileSync(doc);
   await page.locator('#chapter-start-number').fill('025');
   await page.waitForFunction(()=>{
@@ -106,9 +122,13 @@ for(const [n,[name,engine,options]] of engines.entries()){
     'exported numbering must be restored on reopening');
   // Changing ONLY start number invalidates the old export, never modifies source.
   const savedSource=readFileSync(doc);
-  await page.locator('#chapter-start-number').fill('090');
-  await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length===0,
+  // Same numeric 25 but extra leading zero must invalidate old file links.
+  await page.locator('#chapter-start-number').fill('0025');
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length===0 &&
+    document.querySelector('.ag-row[row-index="0"] [col-id="chapterFile"]')?.textContent.startsWith('0025-'),
     null,{timeout:12000});
+  await page.locator('#chapter-start-number').blur();
+  assert.equal(await page.locator('#chapter-start-number').inputValue(),'0025');
   assert(readFileSync(doc).equals(savedSource));
   await page.locator('#chapter-start-number').fill('025');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length>0,
