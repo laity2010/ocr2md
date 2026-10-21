@@ -91,13 +91,13 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     for(const row of rows) {
       const marker=editor?markerForHeading(editor.state.doc,row):null;
       row.independent=marker?.independent??true;
-      row.markerFormat=marker?.format||null;
+      row.markerHtmlKind=marker?.htmlKind||null;
     }
     chapterAssignments(rows,startText);
     api.setGridOption('rowData',rows);
     const changed=rows.filter(row=>{
       const old=previous.get(row.id);
-      return old&&(old.level!==row.level||old.markerFormat!==row.markerFormat||
+      return old&&(old.level!==row.level||old.markerHtmlKind!==row.markerHtmlKind||
         old.independent!==row.independent||old.chapterFile!==row.chapterFile);
     });
     if(changed.length){
@@ -187,7 +187,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
             if(!current)throw Error('章节已变化，请重新选择标题');
             // CM6 is the only editable source of truth. Do not write through
             // p.data: its sourceLine may belong to an older AG renderer.
-            putMarker(getEditor(),current,checked,'comment');
+            putMarker(getEditor(),current,checked);
             // Reindex synchronously before the next tap. Debounced redraws
             // are fine for typing, but cannot guard consecutive checkbox edits.
             refresh();

@@ -1,7 +1,8 @@
-/** Lab-only thin CM6 document facade.
- * CM6 EditorState is the only editable Markdown; this class holds no copy.
- * MinerU conversion is injected, so the Node-only existing converter stays
- * outside the browser bundle. Business plugins own their HTML semantics.
+/** CMD: one CM6 editor state for Markdown and embedded HTML source.
+ * Standard HTML elements, custom elements and HTML comments all use the same
+ * readHtml()/writeHtml() transactions; business modules interpret semantics.
+ * No separate HTML document or marker-format-specific state is maintained.
+ * MinerU conversion is injected, keeping Node-only tools out of the bundle.
  */
 import {EditorView} from '@codemirror/view';
 import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
@@ -124,7 +125,7 @@ export class CMDocument {
     this.view.dispatch({changes:{from:target.from,to:target.from,insert:prefix},userEvent:'input'});
     return {line:beforeLine,sourceLine:beforeLine+prefix.split('\n').length-1};
   }
-  /** HTML comments are the default control annotation. */
+  /** Convenience for callers constructing comments; delegates to writeHtml. */
   writeComment({text,...location}){
     if(typeof text!=='string'||!text.trim()||text.includes('--')||text.includes('-->'))
       throw Error('Invalid HTML comment content');
