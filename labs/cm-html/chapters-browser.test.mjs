@@ -150,6 +150,8 @@ for(let index=0;index<engines.length;index++){
       const r=window.__cmHtmlLab.outline.rows;
       return r[2].independent===false && r[2].chapterFile===r[0].chapterFile;
     },null,{timeout:18000});
+    await page.waitForFunction(()=>document.querySelectorAll('.cm-html-chapter-link').length===0,
+      null,{timeout:10000});
     assert.equal(await page.locator('.cm-html-chapter-link').count(),0,'links did not become stale');
     await page.locator('#export-chapters').click();
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('✓ 已导出 19 个章节'),

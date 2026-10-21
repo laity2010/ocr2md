@@ -106,6 +106,9 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
         api.resetRowHeights();
     }
     api.onFilterChanged();
+    // Even rows whose planned filename did not change must lose their old
+    // download link as soon as the CM6 document differs from the export.
+    api.refreshCells({columns:['chapterFile'],force:true});
     const state=viewStore.getState();
     if(state.focusTarget?.revision===state.documentRevision)
       chooseLine(state.focusTarget.sourceLine);
