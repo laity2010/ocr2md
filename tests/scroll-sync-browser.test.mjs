@@ -10,6 +10,11 @@ const port=5202,url='http://127.0.0.1:'+port+'/';
 mkdirSync('.v6/tests',{recursive:true});
 mkdirSync('.v6/evidence',{recursive:true});
 const original=readFileSync(fixture);
+const fixtureLines=original.toString('utf8').split('\n');
+const sourceStart=fixtureLines.findIndex(x=>x.startsWith('<!-- minerujson:source:v1'))+1;
+const tableLine=fixtureLines.findIndex(x=>x.startsWith('<table'))+1;
+const mathLine=fixtureLines.findIndex(x=>x.startsWith('```math'))+1;
+assert(tableLine>0&&mathLine>0);
 copyFileSync(fixture,testFile);
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
   '--port',String(port),'--strictPort'],{
@@ -55,9 +60,9 @@ try{
           docLength:window.__v6cm6.view.state.doc.length};
       });
       assert(initial.anchors>200);
-      assert(initial.lastEnd>=1400&&initial.lastEnd<1500,
+      assert(initial.lastEnd>=sourceStart-80&&initial.lastEnd<sourceStart,
         'Opaque minerujson:source footer must not appear in Markdown preview');
-      assert.equal(initial.lines,3560);
+      assert.equal(initial.lines,fixtureLines.length);
       console.log('SCROLL_INIT',name,JSON.stringify(initial));
 
       // Source → preview: real rendered body around source line 600.
@@ -77,7 +82,7 @@ try{
 
       // Two structurally different blocks: an HTML table and a KaTeX fence.
       // These have very different rendered/source heights from paragraphs.
-      for(const [kind,line] of [['table',275],['formula',339]]) {
+      for(const [kind,line] of [['table',tableLine],['formula',mathLine]]) {
         await page.evaluate(line=>{
           const view=window.__v6cm6.view;
           view.scrollDOM.scrollTop=view.lineBlockAt(view.state.doc.line(line).from).top;
@@ -89,7 +94,7 @@ try{
             Math.abs(a.sourceLine+a.fraction-b.sourceLine-b.fraction)<12;
         },null,{timeout:25000});
         const position=await page.evaluate(getState);
-        assert(position.source.sourceLine>=200&&position.source.sourceLine<460);
+        assert(Math.abs(position.source.sourceLine-line)<80,kind+' expected local source block');
         console.log('BLOCK_SCROLL_OK',name,kind,JSON.stringify({
           source:position.source,preview:position.preview,
         }));
