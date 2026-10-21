@@ -285,6 +285,27 @@ for(let index=0;index<engines.length;index++){
     assert.deepEqual(errors,[],name+' rapid check browser errors');
     console.log('CM_HTML_RAPID_CHECKBOX_PASS',name,JSON.stringify(burst.map(x=>({id:x.id,
       selected:x.selected,independent:x.independent}))));
+
+    // Tap near the edge of the whole cell, outside the 17px native checkbox.
+    // This is the accessible iPad target that was previously hard to hit.
+    const touchId=burst[0].id;
+    await page.evaluate(id=>{
+      const l=window.__cmHtmlLab;
+      l.outline.api.ensureIndexVisible(l.outline.api.getRowNode(id).rowIndex,'middle');
+    },touchId);
+    const hit=page.locator(`.ag-row[row-id="${touchId}"] .cm-html-checkbox-hit`);
+    await hit.waitFor({state:'visible'});
+    const hitBounds=await hit.boundingBox();
+    assert(hitBounds.width>=70 && hitBounds.height>=35,'iPad tap target is still too small');
+    await page.touchscreen.tap(Math.round(hitBounds.x+7),Math.round(hitBounds.y+hitBounds.height/2));
+    await page.waitForFunction(id=>{
+      const l=window.__cmHtmlLab,row=l.outline.rows.find(x=>x.id===id);
+      return row?.independent===true &&
+        l.outline.api.getSelectedNodes()?.[0]?.id===id &&
+        l.view.state.doc.line(row.sourceLine-1).text.includes('independent="1"');
+    },touchId,{timeout:15000});
+    console.log('CM_HTML_IPAD_CELL_TAP_PASS',name,JSON.stringify({id:touchId,
+      targetWidth:Math.round(hitBounds.width),targetHeight:Math.round(hitBounds.height)}));
     await page.screenshot({path:join(evidence,`cm-html-${name.toLowerCase()}.png`)});
     console.log('CM_HTML_LAB_PASS',name,JSON.stringify({
       originalHeadings:21,commentNode:comment.syntax.syntax,

@@ -127,6 +127,12 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
         input.disabled=first;
         input.title=first?'首项必须独立成章':'写入隔离 Markdown 的 CM6 标定注释';
         input.setAttribute('aria-label',p.data.title+' 独立章节');
+        const hit=document.createElement('label');
+        hit.className='cm-html-checkbox-hit';
+        hit.append(input);
+        // Full-cell touch target; do not let AG treat the checkbox tap as a
+        // second row-click navigation event.
+        hit.addEventListener('click',e=>e.stopPropagation());
         input.addEventListener('click',e=>e.stopPropagation());
         input.addEventListener('change',e=>{
           e.stopPropagation();
@@ -152,7 +158,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
             document.dispatchEvent(new CustomEvent('cm-html:error',{detail:error.message}));
           }
         });
-        return input;
+        return hit;
       }});
     if(field==='chapterFile')
       Object.assign(def,{width:94,minWidth:86,valueFormatter:p=>p.value||'未导出'});
