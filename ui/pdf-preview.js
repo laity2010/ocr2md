@@ -83,11 +83,11 @@ export class PdfPreview {
       this.scroller.addEventListener(type,userInput,{passive:true});
     this.scroller.addEventListener('scroll',()=>this.onScroll(),{passive:true});
     this.pages.addEventListener('click',e=>this.onClick(e));
-    this.map=[];this.anchors=[];this.lastDriver='cm6';
-    this.disposed=false;this.explicitUserUntil=0;this.suppressScrollUntil=0;
+    this.map=[];this.anchors=[];
+    this.disposed=false;this.explicitUserUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
-    this.active=false;this.lastSourceLine=null;this.overlayDrawId=0;
+    this.active=false;this.overlayDrawId=0;
     this.revealPending=false;this.revealUntil=0;
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
@@ -252,7 +252,6 @@ export class PdfPreview {
   }
   async focusLine(line,explicit){
     if(!Number.isInteger(line)||line<1)return;
-    this.lastSourceLine=line;
     if(explicit){
       this.revealPending=true;
       this.revealUntil=performance.now()+1700;
@@ -267,7 +266,6 @@ export class PdfPreview {
     if(!block)return;
     this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex};
     if(explicit || this.viewer.currentPageNumber!==source.pageIndex+1){
-      this.suppressScrollUntil=performance.now()+900;
       this.viewer.scrollPageIntoView({pageNumber:source.pageIndex+1});
     }
     this.scheduleOverlay();
@@ -296,7 +294,6 @@ export class PdfPreview {
     const dy=(target.top+target.bottom)/2-(top+bottom)/2;
     const dx=(target.left+target.right)/2-(left+right)/2;
     if(Math.abs(dx)>2||Math.abs(dy)>2){
-      this.suppressScrollUntil=performance.now()+1100;
       const old=this.scroller.style.scrollBehavior;
       this.scroller.style.scrollBehavior='auto';
       this.scroller.scrollLeft+=dx;

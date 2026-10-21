@@ -2,7 +2,6 @@ import './styles.css';
 import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
-import {ensureSyntaxTree} from '@codemirror/language';
 import {undo, redo, undoDepth, redoDepth} from '@codemirror/commands';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
@@ -112,25 +111,6 @@ function refreshToolbar() {
   if (pendingUpdate) applyPendingUpdate();
   else if (hasUnsavedEdits()) status('● 未保存','warning');
   else renderGlobalStatus();
-}
-function extract() {
-  const last = view.state.doc.length;
-  const tree = ensureSyntaxTree(view.state,last,2500);
-  if (!tree) { status('全文尚未解析完成，稍后重试','warning');return; }
-  const count = {headings:0,images:0,tables:0,comments:0,formulas:0};
-  tree.iterate({enter(node) {
-    const type = node.type.name;
-    if (/^ATXHeading\d|^SetextHeading/.test(type)) count.headings++;
-    if (type === 'Image') count.images++;
-    if (type === 'Table') count.tables++;
-    if (type === 'HTMLBlock' || type === 'HTMLComment') count.comments++;
-    if (type === 'FencedCode') {
-      const code = view.state.doc.sliceString(node.from, Math.min(node.to,node.from+80));
-      if (code.startsWith('```math')) count.formulas++;
-    }
-  }});
-  status(`CM6 结构：标题${count.headings} · 图片${count.images} · 表格${count.tables} · HTML${count.comments} · 数学${count.formulas}`);
-  return count;
 }
 async function save() {
   if (!view) return false;
@@ -476,7 +456,6 @@ async function main() {
     get pdf(){return workspace?.pdf;},
     // Regression seam for the existing scroll coordinator; no fourth button.
     setScrollSyncEnabled,
-    extract,
   };
   // Opt-in, on-page font diagnostics so a real iPad screenshot can establish
   // font availability and measured glyph width without remote debugging.

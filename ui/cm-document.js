@@ -31,20 +31,8 @@ export class CMDocument {
   get markdown(){return this.view.state.doc.toString();}
   get doc(){return this.view.state.doc;}
 
-  /** Read-only Markdown projection. Raw CM6 document is always authoritative.
-   * Optional MinerU end-marker filtering is strictly output-only: no dispatch,
-   * editor state changes, undo history edits, or filesystem writes.
-   */
-  static withoutMineruEnds(markdown){
-    if(typeof markdown!=='string')throw Error('Markdown must be a string');
-    // Strict complete-line filter, shared by CMD's read-only projection and
-    // the SHA-guarded one-time disk migration. Never touches editor state.
-    return markdown.replace(/^<!-- minerujson:end:v1:\d+:\d+ -->[ \t]*(?:\r?\n(?:\r?\n)?|$)/gm,'');
-  }
-  getMarkdown({omitMineruEnd=false}={}){
-    const source=this.markdown;
-    return omitMineruEnd ? CMDocument.withoutMineruEnds(source) : source;
-  }
+  /** Read the only authoritative Markdown source, without a legacy output mode. */
+  getMarkdown(){return this.markdown;}
 
   /** Increase/decrease one Markdown blockquote level for every selected line.
    * One CM6 transaction = one undo step; selection maps through the changes.

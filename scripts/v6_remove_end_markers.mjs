@@ -6,7 +6,6 @@ import {readFileSync,writeFileSync,mkdirSync,openSync,closeSync,fsyncSync,rename
 import {createHash,randomBytes} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
 import {resolve,join,dirname,basename} from 'node:path';
-import {CMDocument} from '../ui/cm-document.js';
 import {buildOutline} from '../ui/outline-index.js';
 import {buildChapterFiles} from '../ui/chapter-files.js';
 
@@ -40,7 +39,7 @@ function transform(old){
     if(open.index>=end.index||(blocks[i+1]&&end.index>=blocks[i+1].index))
       fail(`end marker does not close original block ${expected[i]}`);
   }
-  const next=CMDocument.withoutMineruEnds(old);
+  const next=old.replace(deletion,'');
   if([...next.matchAll(ends)].length)fail('end marker not followed by expected blank line');
   if([...next.matchAll(starts)].length!==blocks.length)fail('block start positions changed');
   const afterSource=embeddedSource(next);

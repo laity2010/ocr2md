@@ -1,4 +1,4 @@
-/** CMD read-only Markdown projection: raw and optional MinerU end-free output. */
+/** CMD returns the sole CM6 Markdown source without legacy output projections. */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
@@ -41,46 +41,32 @@ try {
     const before=cm.doc;
     const original=cm.markdown;
     const raw=cm.getMarkdown();
-    const explicitRaw=cm.getMarkdown({omitMineruEnd:false});
-    const projected=cm.getMarkdown({omitMineruEnd:true});
-    const expected=original.replace(/^<!-- minerujson:end:v1:\d+:\d+ -->[ \t]*(?:\r?\n(?:\r?\n)?|$)/gm,'');
+    const anchors=(raw.match(/^<!-- minerujson:block:v1:/gm)||[]).length;
     const originalEnds=(original.match(/^<!-- minerujson:end:v1:/gm)||[]).length;
-    const outputEnds=(projected.match(/^<!-- minerujson:end:v1:/gm)||[]).length;
-    const anchors=(projected.match(/^<!-- minerujson:block:v1:/gm)||[]).length;
     const dirtyAfter=window.__v6cm6.dirty;
-    // Exercise this CMD class independently on a small hand-authored document.
     const {CMDocument}=await import('/cm-document.js');
     const container=document.createElement('div');
     container.style.display='none';document.body.append(container);
-    const synthetic='Beginning\n\n<!-- minerujson:end:v1:0:0 -->\n\n<!-- minerujson:block:v1:0:1 -->\n\n'+
-      'Literal <!-- minerujson:end:v1:0:2 --> inside text\n\n<!-- minerujson:end:v1:0:3 -->\n';
+    const synthetic='Beginning\n\n<!-- minerujson:end:v1:0:0 -->\n\n<!-- minerujson:block:v1:0:1 -->\n';
     const independent=new CMDocument({parent:container,markdown:synthetic});
-    const smallOutput=independent.getMarkdown({omitMineruEnd:true});
-    const smallRaw=independent.getMarkdown();
+    const smallOutput=independent.getMarkdown();
     const smallDocIntact=independent.doc.toString()===synthetic;
     independent.destroy();container.remove();
-    return {rawIsOriginal:raw===original,explicitRawIsOriginal:explicitRaw===original,
-      projectedMatches:projected===expected,originalEnds,outputEnds,anchors,
+    return {rawIsOriginal:raw===original,originalEnds,anchors,
       originalUnchanged:cm.markdown===original,docIdentityUnchanged:cm.doc===before,
-      sourceStillContainsEnds:cm.doc.toString().includes('minerujson:end:v1:0:0'),
-      dirtyAfter,smallOutput,smallRawUnchanged:smallRaw===synthetic,smallDocIntact};
+      dirtyAfter,smallOutput,smallDocIntact};
    });
    assert.equal(result.rawIsOriginal,true);
-   assert.equal(result.explicitRawIsOriginal,true);
-   assert.equal(result.projectedMatches,true);
-   assert.equal(result.originalEnds,0);assert.equal(result.outputEnds,0);
+   assert.equal(result.originalEnds,0);
    assert.equal(result.anchors,224);
-   assert(result.originalUnchanged&&result.docIdentityUnchanged&&!result.sourceStillContainsEnds);
+   assert(result.originalUnchanged&&result.docIdentityUnchanged);
    assert.equal(result.dirtyAfter,false);
-   assert(result.smallOutput.includes('Literal <!-- minerujson:end:v1:0:2 --> inside text'));
-   assert(!result.smallOutput.includes('<!-- minerujson:end:v1:0:0 -->'));
-   assert(!result.smallOutput.includes('<!-- minerujson:end:v1:0:3 -->'));
-   assert(result.smallRawUnchanged&&result.smallDocIntact);
-   assert.equal(result.smallOutput,(await import('../ui/cm-document.js')).CMDocument.withoutMineruEnds(result.smallOutput));
+   assert(result.smallOutput.includes('<!-- minerujson:end:v1:0:0 -->'),
+     'CMD must never mutate legacy bytes implicitly');
+   assert(result.smallDocIntact);
    assert.deepEqual(errors,[],'unexpected browser errors');
-   console.log('CMD_MARKDOWN_OUTPUT_PASS',name,JSON.stringify({blocks:result.anchors,
-     originalEnds:result.originalEnds,outputEnds:result.outputEnds,
-     rawAndEditorUnchanged:true,dirty:false,errors:errors.length}));
+   console.log('CMD_SINGLE_SOURCE_PASS',name,JSON.stringify({blocks:result.anchors,
+     ends:result.originalEnds,rawAndEditorUnchanged:true,dirty:false,errors:errors.length}));
   }finally{await browser.close()}
  }
  assert.deepEqual(readFileSync(documentPath),fixture,'test wrote its own source fixture');

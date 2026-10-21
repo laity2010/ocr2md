@@ -23,10 +23,11 @@ try {
   assert(initial.length>300000,'real sample should be loaded');
   assert(initial.doc.includes('minerujson:block'),'sample is real MinerU JSON Markdown');
   await page.screenshot({path:`${evidence}/desktop.png`,fullPage:true});
-  await page.evaluate(()=>window.__v6cm6.extract());
   const report=await page.locator('#status').textContent();
-  assert(!report.includes('尚未解析完成'),`full parse not ready: ${report}`);
-  assert(report.includes('标题'),`CM6 parser result missing: ${report}`);
+  assert(report.includes('大纲'),'CM6 source headings not projected to AG');
+  assert.equal(await page.evaluate(()=>window.__v6cm6.cm.getMarkdown()===
+    window.__v6cm6.view.state.doc.toString()),true,
+    'CMD must return CM6 authoritative Markdown, without a diagnostic shadow');
   // Use CM6's own transaction and history; browser UI remains the same editor.
   const edit=await page.evaluate(()=>{
     const view=window.__v6cm6.view;
