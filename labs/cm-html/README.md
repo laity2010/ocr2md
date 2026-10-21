@@ -45,3 +45,23 @@
 - 点击「导出章节」后，如有未保存修改先按实验授权保存母文档，再切分成 `labs/cm-html/.runtime/chapters/*.md`。用暂存目录整体替换上次生成结果（只管理生成文件），并生成 `manifest.json`。
 - 在完整 `minerujson:block` 起点切分以保留证据配对，CM-HTML 标定注释不写入章节成品。尾部的 `minerujson:source` 原始压缩 JSON **只留在母文档**：这些章节是 Obsidian 可阅读的投影，**不具备各自独立逆转 MinerU JSON 的能力**。如果切分点不能安全定位块边界则拒绝导出。
 - GET `/labs/cm-html/api/chapters` 查看清单，`/api/chapters/<文件名>` 查看 Markdown；POST `/api/export-chapters` 必须有独立 Lab 授权及同源校验，绝不覆盖 V6 主线或母文档。
+
+## CMDocument 包装类（实验候选组件）
+
+`cm-document.js` 只包装现有 CM6 `EditorView`，不维护第二份 Markdown、章节状态或文件副本。包装类向业务提供下面的最小接口：
+
+```js
+const cm = new CMDocument({parent, markdown, extensions, convertMineruJson});
+await cm.loadMineruJson(rawMineruJSON);      // 先转换成功，再通过 CM6 transaction 替换正文
+cm.loadMarkdown(existingMarkdown);           // 导入已有 Markdown
+cm.writeComment({text: 'ocr2md:chapter:v1 id="mineru:0:1:0" independent="0"', beforeLine: 9});
+cm.writeHtml({html: '<ocr2md-chapter data-id="mineru:0:1:0" data-independent="0"></ocr2md-chapter>', beforeLine: 10, replaceLine: 9});
+const source = cm.readHtml(9);               // 精确原文、行位置、Lezer 节点
+const markdown = cm.markdown;                // 始终直接来自 cm.view.state.doc
+```
+
+- `writeComment()` 默认生成 **HTML 注释**；`writeHtml()` 接收业务提供的普通 HTML（含 HTML 标签和注释），不解析业务字段。调用者应提供合法 HTML；包装类不声称代替 HTML 校验器。
+- 章节的 `independent`、ID、标注归属、序列化决定仍由 `metadata.js` 负责。两种标注均交给同一个 CM6 写入接口；Lezer 的 `CommentBlock` / `HTMLTag` 节点仍不同。
+- `loadMineruJson()` 使用注入的 `convertMineruJson`，因此不会把 Node.js 专属的 `crypto` / `zlib` 塞进 Safari。Lab 适配器经**单独授权**的 `/labs/cm-html/api/convert-mineru` 在内存中调用既有 `@ocr2md/minerujson-md` 的 `toMarkdown()`；无磁盘写入。转换失败绝不替换 CM6 正文。
+- 对外只输出 CM6 当前文档，不绑定 Lab 的保存接口、Zustand、AG、Dockview 或章节文件导出；这些由使用方自行组合。HTML 写入、替换及整篇加载都通过 CM6 transaction，因此可撤销重做。
+- 验收命令：`node labs/cm-html/cm-document.test.mjs`。Chrome / WebKit 使用真实 Buffett’s Alpha 原始 MinerU JSON，比较转换出的 Markdown 是否与既有 fixture 完全一致；同时检查注释、标签、撤销、未授权及转换失败不污染正文。
