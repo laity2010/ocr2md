@@ -67,10 +67,10 @@ for(const [n,[name,engine,options]] of engines.entries()){
       `width lost after blur: ${input}`);
   }
   const originalSource=readFileSync(doc);
-  await page.locator('#chapter-start-number').fill('025');
+  await page.locator('#chapter-start-number').fill('0025');
   await page.waitForFunction(()=>{
     const file=index=>document.querySelector(`.ag-row[row-index="${index}"] [col-id="chapterFile"]`)?.textContent;
-    return file(0)?.startsWith('025-') && file(1)?.startsWith('026-');
+    return file(0)?.startsWith('0025-') && file(1)?.startsWith('0026-');
   },null,{timeout:12000});
   assert(readFileSync(doc).equals(originalSource),
     'renumber must never write the Markdown');
@@ -78,9 +78,9 @@ for(const [n,[name,engine,options]] of engines.entries()){
     'renumber must not mark Markdown dirty');
   await page.locator('#chapter-start-number').fill('bad');
   assert.equal(await page.locator('#chapter-start-number').getAttribute('aria-invalid'),'true');
-  assert((await page.locator('.ag-row[row-index="0"] [col-id="chapterFile"]').textContent()).startsWith('025-'));
+  assert((await page.locator('.ag-row[row-index="0"] [col-id="chapterFile"]').textContent()).startsWith('0025-'));
   await page.locator('#chapter-start-number').blur();
-  assert.equal(await page.locator('#chapter-start-number').inputValue(),'025');
+  assert.equal(await page.locator('#chapter-start-number').inputValue(),'0025');
   assert.equal(await page.locator('.ag-row[row-index="0"] input.ocr-outline-checkbox').isDisabled(),true);
   await grid.locator('.ocr-outline-checkbox').uncheck();
   await page.waitForFunction(()=>{
@@ -104,9 +104,9 @@ for(const [n,[name,engine,options]] of engines.entries()){
   assert(existsSync(chapters));
   const manifest=JSON.parse(readFileSync(join(chapters,'manifest.json'),'utf8'));
   assert.equal(manifest.files.length,20);
-  assert(manifest.files[0].name.startsWith('025-'));
-  assert(manifest.files[1].name.startsWith('026-'));
-  assert(manifest.files.at(-1).name.startsWith('044-'));
+  assert(manifest.files[0].name.startsWith('0025-'));
+  assert(manifest.files[1].name.startsWith('0026-'));
+  assert(manifest.files.at(-1).name.startsWith('0044-'));
   assert.equal(manifest.sourceSha256,hash(readFileSync(doc)));
   assert.equal(readdirSync(chapters).length,21);
   const url0=await page.locator('.ag-row[row-index="0"] .ocr-chapter-link').getAttribute('href');
@@ -118,19 +118,19 @@ for(const [n,[name,engine,options]] of engines.entries()){
   console.log('V6_PROMOTED_CHAPTER_EXPORT_PASS',name,JSON.stringify({count:manifest.files.length,filename:manifest.files[0].name,firstChars:result.text.length}));
   await page.reload({waitUntil:'domcontentloaded'});
   await page.locator('.ag-row[row-index="0"] .ocr-chapter-link').waitFor({state:'visible',timeout:25000});
-  assert.equal(await page.locator('#chapter-start-number').inputValue(),'025',
-    'exported numbering must be restored on reopening');
+  assert.equal(await page.locator('#chapter-start-number').inputValue(),'0025',
+    'exported numbering must preserve four digits on reopening');
   // Changing ONLY start number invalidates the old export, never modifies source.
   const savedSource=readFileSync(doc);
-  // Same numeric 25 but extra leading zero must invalidate old file links.
-  await page.locator('#chapter-start-number').fill('0025');
+  // Same numeric 25 but removing a leading zero must invalidate old links.
+  await page.locator('#chapter-start-number').fill('025');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length===0 &&
-    document.querySelector('.ag-row[row-index="0"] [col-id="chapterFile"]')?.textContent.startsWith('0025-'),
+    document.querySelector('.ag-row[row-index="0"] [col-id="chapterFile"]')?.textContent.startsWith('025-'),
     null,{timeout:12000});
   await page.locator('#chapter-start-number').blur();
-  assert.equal(await page.locator('#chapter-start-number').inputValue(),'0025');
+  assert.equal(await page.locator('#chapter-start-number').inputValue(),'025');
   assert(readFileSync(doc).equals(savedSource));
-  await page.locator('#chapter-start-number').fill('025');
+  await page.locator('#chapter-start-number').fill('0025');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length>0,
     null,{timeout:12000});
   await page.locator('.ag-row[row-index="2"] input.ocr-outline-checkbox').uncheck();
@@ -139,8 +139,8 @@ for(const [n,[name,engine,options]] of engines.entries()){
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已导出19个章节'),null,{timeout:25000});
   const secondManifest=JSON.parse(readFileSync(join(chapters,'manifest.json'),'utf8'));
   assert.equal(secondManifest.files.length,19);
-  assert(secondManifest.files[0].name.startsWith('025-'));
-  assert(secondManifest.files.at(-1).name.startsWith('043-'));
+  assert(secondManifest.files[0].name.startsWith('0025-'));
+  assert(secondManifest.files.at(-1).name.startsWith('0043-'));
   assert.equal(readdirSync(chapters).length,20);
   // Confirm no accidental mutation of the main workspace/fixture.
   assert.deepEqual(files.map(f=>hash(readFileSync(f))),hashes);
