@@ -57,6 +57,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
   }
   function refresh(){
     if(disposed||!api)return;
+    clearTimeout(timer);timer=null;
     const previous=new Map(rows.map(row=>[row.id,row]));
     const editor=getEditor();
     rows=buildOutline(getMarkdown());

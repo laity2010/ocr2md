@@ -148,8 +148,21 @@ async function main(){
   });
   document.addEventListener('cm-html:error',e=>status(e.detail||'标定失败','error'));
   document.addEventListener('cm-html:outline-refreshed',()=>renderStatus());
-  $('undo').addEventListener('click',()=>{undo(view);controls();view.focus();});
-  $('redo').addEventListener('click',()=>{redo(view);controls();view.focus();});
+  function runHistory(command){
+    const selectedId=workspace.outlineGrid?.api.getSelectedNodes()?.[0]?.id;
+    if(command(view)&&selectedId){
+      // Undo/redo may restore a different CM6 selection (often offset 0).
+      // Rebuild the derived index once, then navigate using the stable ID,
+      // not pre-edit line numbers or a second Markdown/state copy.
+      workspace.refreshOutline();
+      const row=workspace.outlineGrid.rows.find(item=>item.id===selectedId);
+      if(row)publishFocus({sourceLine:row.sourceLine,sourceEnd:row.sourceEnd,
+        origin:'outline',elementId:row.id});
+    }
+    controls();
+  }
+  $('undo').addEventListener('click',()=>runHistory(undo));
+  $('redo').addEventListener('click',()=>runHistory(redo));
   $('save').addEventListener('click',save);
   $('marker-format').addEventListener('change',()=>{
     const mode=$('marker-format').value;
