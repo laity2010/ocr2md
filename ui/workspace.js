@@ -150,11 +150,18 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     },
   });
   // Left AG fills the entire left height; right side is split top/bottom.
-  dockview.addPanel({id:'outline',component:'outline',title:'章节大纲 · AG'});
-  dockview.addPanel({id:'source',component:'source',title:'Markdown 源码',
+  const outlinePanel=dockview.addPanel({id:'outline',component:'outline',title:'章节大纲 · AG'});
+  const sourcePanel=dockview.addPanel({id:'source',component:'source',title:'Markdown 源码',
     position:{referencePanel:'outline',direction:'right'}});
   dockview.addPanel({id:'preview',component:'preview',title:'Markdown 预览',
     position:{referencePanel:'source',direction:'below'}});
+  // Dockview's native group header visibility reflows the panel content;
+  // do not hide tabs with CSS (that leaves an unused titlebar gap).
+  // Preview keeps its tab for identification; AG + CM6 use all their height.
+  for(const panel of [outlinePanel,sourcePanel]) {
+    panel.group.header.hidden=true;
+    panel.group.relayout();
+  }
   dockview.onDidActivePanelChange(event => {
     viewStore.setState({activePanel:event.panel?.id||null});
   });
