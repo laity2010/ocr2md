@@ -60,9 +60,20 @@ function inspect(){
   const types=[];
   tree.iterate({from:marker.from,to:marker.to,
     enter(node){if(!types.includes(node.name))types.push(node.name);}});
+  // Markdown's outer parser sees HTMLTag/CommentBlock; its mixed HTML
+  // sub-parser distinguishes TagName, AttributeName and AttributeValue.
+  // These are actual CM6/Lezer syntax nodes, not OCR2MD regex guesses.
+  const source=view.state.doc.sliceString(marker.from,marker.to);
+  const parts={};
+  for(const [name,needle] of [
+    ['element','ocr2md-chapter'],['id','data-id'],['independent','data-independent'],
+  ]){
+    const offset=source.indexOf(needle);
+    if(offset>=0)parts[name]=tree.resolveInner(marker.from+offset+2,1).name;
+  }
   const result={id:row.id,format:marker.format,independent:marker.independent,
-    syntax:types,line:marker.line};
-  setParserReport(`${marker.format==='comment'?'HTML 注释':'HTML 标签'} · 第${marker.line}行 · ${types.join(' / ')}`);
+    syntax:types,parts,line:marker.line};
+  setParserReport(`${marker.format==='comment'?'HTML 注释':'HTML 标签'} · 第${marker.line}行 · ${[...types,...Object.values(parts)].join(' / ')}`);
   return result;
 }
 function onDocChange(update){
