@@ -126,7 +126,7 @@ class PreviewPanel {
     if(this.pdf){
       this.pdf.setActive(mode==='pdf');
       if(mode==='pdf')this.pdf.revealCurrentLocation();
-      else scrollSync?.measureLater();
+      // Hidden MD viewport retains its geometry and synchronized scroll.
     }
   }
   layout(){this.pdf?.onResize();scrollSync?.measureLater();}

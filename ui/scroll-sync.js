@@ -57,8 +57,11 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
       // A new image height or Dockview width changes the visual positions.
       // Keep the driver pane still; only adjust the follower.
       if(viewStore.getState().scrollSyncEnabled && anchors.length) {
-        if(lastDriver==='cm6') movePreview(readSource());
-        else moveSource(readPreview());
+        // PDF and AG explicit location events are source-document driven.
+        // Only an actual Markdown preview scroll may drive the CM6 follower;
+        // treating 'pdf' as 'preview' pulls everyone back to stale MD text.
+        if(lastDriver==='preview')moveSource(readPreview());
+        else movePreview(readSource());
       }
     });
   }
