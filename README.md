@@ -9,7 +9,7 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 ## 当前工作台
 
 - **三个 Dockview 窗格，四个逻辑视图**：左侧 AG Grid 章节表、右上 CodeMirror 6（CM6）源码、右下共用预览窗；下拉选择 Markdown 阅读预览或 PDF.js 原文。两个预览实例持续保留，切换时不重建。
-- **单一编辑状态**：只有 CM6 持有 Markdown 正文和 Undo/Redo 历史；iOS/iPadOS 使用 Safari 原生光标与文本选区，Mac 保留既有 CM6 选区。AG 与 Markdown 预览从正文派生，Zustand Vanilla 只传递修订号及定位事件。正常保存不清空 CM6 撤销历史。
+- **CMD / CM6 单一编辑状态**：CMD（`CMDocument`）是围绕 CodeMirror 6 的轻量文档接口；CM6 EditorState 持有唯一可编辑的 Markdown 正文及 Undo/Redo 历史。CMD 已提供只读 `getMarkdown()` 输出及可选的 `omitMineruEnd` 过滤；该选项目前**仅改变返回内容，不改变编辑器或磁盘文件**。iOS/iPadOS 使用 Safari 原生光标与文本选区，Mac 保留既有 CM6 选区。AG 与 Markdown 预览从正文派生，Zustand Vanilla 只传递修订号及定位事件。正常保存不清空撤销历史。
 - **章节定界**：AG 按顺序显示标题（固定首列）、层级、PDF 页码、独立成章、章节文件；勾选通过 CM6 的 HTML 注释标定正文。修改标题和勾选实时更新大纲，保存后持久化。起始编号默认 `000`，保留用户输入的位数及前导零。
 - **章节导出**：使用模块栏的「导出章节」，按当前勾选和编号生成母文档旁的 `chapters/*.md` 与 `manifest.json`。更改编号只重算显示，不自动写文件；章节文件与当前母文档匹配时可在 AG 中打开。
 - **滚动与定位**：CM6 ↔ Markdown 阅读预览可按文本元素同步滚动；**PDF 不跟随 Markdown 连续滚动**。明确点击 AG、Markdown 内容或 CM6 源码时，PDF 才跳到相应 OCR 区域并显示可见高亮。直接滚动 PDF 不反向牵动其他窗格；预览下拉切换不改变 PDF 当前阅读位置。
@@ -93,6 +93,10 @@ python3 scripts/v6_git.py recover-source --build-id <构建ID>
 上述回退使用独立 Git worktree 重建发布，不改当前开发分支。**日终 squash 与 GitHub 推送均需用户另行明确批准**；具体工程原则见 `AGENTS.md`。
 
 ## 边界与参考
+
+- **现行文档体系**：V6 不使用 MOPJO，也没有 MOPJO 模块或数据库作为编辑数据源。文档编辑由 CMD/CM6 承接，MinerU JSON ↔ Markdown 转换器仍是独立组件；AG、预览和 PDF 定位读取文档派生结果。历史文档中的 MOPJO 称谓不代表 V6 现行模块。
+- **文本块身份设计（已确定、尚未实施）**：原始 OCR 块以文档内的 `pageIndex:blockIndex`（`minerujson:block:v1`）作为稳定身份，无需逐块额外生成 UID；只有人工增补、复制为独立块或拆分出来的新块，才在创建时自动分配 UID（拟用 `ocr2md:block:v1:<UUID>`）。移动块时连同身份锚点一起移动，不重编原始 OCR 来源编号；PDF 来源另行关联，不伪造 MinerU 块。此规则是后续 CMD 文本块编辑功能的设计，不代表当前版本已支持增补或移动。
+- **单起始锚点目标（尚未实施）**：后续由转换和持久化链路统一生成、保存无 `minerujson:end` 的 `.minerujson.md`，并支持块移动后重新打开及 PDF 定位。**当前已发布 V6 仍在母文档中保留 `minerujson:end`**；CMD 现有的 `omitMineruEnd` 只是只读输出选项，不能代替正式格式迁移。
 
 - 当前只实现章节定界业务；未声称已完成章节清洗、媒体本地化、通用多目录工作台或完整 Obsidian 功能。
 - V6 的 MinerU 映射与 PDF 只读证据使用 Buffett’s Alpha 样本；扩大到新文档或动态 PDF 绑定，需要另行实现与验证。MinerU JSON 严格逆转换的可编辑范围见组件 README。
