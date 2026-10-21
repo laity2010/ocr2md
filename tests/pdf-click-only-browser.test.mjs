@@ -49,6 +49,9 @@ for(let i=0;i<engines.length;i++){
     const a=e.getBoundingClientRect(),b=s.getBoundingClientRect();
     return a.width>1&&a.height>1&&a.top>=b.top-4&&a.bottom<=b.bottom+4;
   },null,{timeout:18500});
+  // Allow PDF.js to finish the one explicit click's layout correction before
+  // testing the independent-scrolling invariant.
+  await page.waitForTimeout(2250);
   const chosen=await stable();
   assert.equal(chosen.page,'3');
 
@@ -71,10 +74,28 @@ for(let i=0;i<engines.length;i++){
 
   // Explicit click at a distant chapter is still a real PDF navigation.
   await page.locator('.ag-row[row-index="10"] [col-id="title"]').click();
-  await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="13"]') ||
-    document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="16"]'),null,{timeout:18000});
+  await page.waitForFunction(()=>{
+    const region=document.querySelector('.ocr-pdf-region-overlay');
+    return region && region.dataset.pdfPage!=='3';
+  },null,{timeout:18000});
   const next=await stable();
   assert.notEqual(next.page,'3');
+
+  // Programmatic caret changes and keyboard navigation are NOT clicks.
+  // The editor may still sync with the MD preview, never with PDF.
+  await page.locator('.cm-scroller').evaluate(el=>{el.scrollTop=0;});
+  await page.waitForTimeout(850);
+  const beforeSourceClick=await stable();
+  assert.equal(beforeSourceClick.page,next.page,'CodeMirror scroll moved PDF');
+  // A real click on CM6 text is deliberate navigation into the PDF.
+  await page.locator('.cm-line').first().click({force:true});
+  await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="1"]'),
+    null,{timeout:19500});
+  const afterSourceClick=await stable();
+  assert.equal(afterSourceClick.page,'1','CM6 real text click did not locate PDF');
+  await page.locator('.cm-content').press('ArrowDown');
+  await page.waitForTimeout(350);
+  assert.equal((await pdfSnapshot()).page,'1','Keyboard cursor move incorrectly navigated PDF');
 
   // PDF reading scroll must not move the source/AG selection or force back
   // the old highlight into view when the user is freely reading.
@@ -82,7 +103,14 @@ for(let i=0;i<engines.length;i++){
     source:document.querySelector('.cm-scroller').scrollTop,
     selected:document.querySelector('.ag-row[aria-selected="true"]')?.getAttribute('row-index'),
   }));
-  await page.locator('.ocr-pdf-scroller').evaluate(el=>{el.scrollTop+=2100;});
+  if(name==='WebKit'){
+    // Mobile WebKit has no wheel event; a touch begins real user-scrolling.
+    await page.locator('.ocr-pdf-scroller').dispatchEvent('touchstart');
+    await page.locator('.ocr-pdf-scroller').evaluate(el=>{el.scrollTop+=2100;});
+  }else{
+    await page.locator('.ocr-pdf-scroller').hover();
+    await page.mouse.wheel(0,2100);
+  }
   await page.waitForTimeout(1250);
   const afterReading=await page.evaluate(()=>({
     source:document.querySelector('.cm-scroller').scrollTop,
