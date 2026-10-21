@@ -14,6 +14,7 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 - **章节导出**：使用模块栏的「导出章节」，按当前勾选和编号生成母文档旁的 `chapters/*.md` 与 `manifest.json`。更改编号只重算显示，不自动写文件；章节文件与当前母文档匹配时可在 AG 中打开。
 - **滚动与定位**：CM6 ↔ Markdown 阅读预览可按文本元素同步滚动；**PDF 不跟随 Markdown 连续滚动**。明确点击 AG、Markdown 内容或 CM6 源码时，PDF 才跳到相应 OCR 区域并显示可见高亮。直接滚动 PDF 不反向牵动其他窗格；预览下拉切换不改变 PDF 当前阅读位置。
 - **PDF 阅读**：官方 PDF.js Viewer、深色显示、连续页面、缩放与页码跳转。高亮根据 MinerU `page_size` / `bbox` 定位的是 **OCR 文本区域**，不是 PDF 逐字字形匹配；PDF 只读。
+- **MinerU 无损审阅注释**：原始 JSON 的 `discarded_blocks`（页眉、页脚、页码、侧栏、页脚注释等）、与正文不同的 `preproc_blocks` 及版面元数据，按 PDF 页附于 Markdown 的 HTML 注释中，包含 OCR 文字、坐标和完整结构；正文不混入未审阅的附属内容。原始 JSON 仍压缩保留、可逆还原。对现有已编辑母文档采取仅插入注释的迁移，保留原有章节标定。
 - **工程菜单**：点击顶栏版本标牌可以选择「初始化数据文档」。经编辑授权和确认后，先备份已保存的母文档，再恢复原始转换样本并重载工作台（撤销历史重新开始）；未保存的编辑不在备份中。此前导出的 `chapters/` 不会被此操作删除。
 
 当前界面使用 Everforest 深色风格和完整 Sarasa Fixed SC 字体；Mac Chrome/WebKit 支持模拟 iPad 横屏检查，最终触控体验仍以真实 iPad Safari 验收为准。
@@ -54,6 +55,15 @@ python3 scripts/v6_publish.py      # 将 dist/ 发布至 .v6/release/
 
 正式站点通过 Cloudflare Tunnel 指向 Mac 的 V6 服务 `127.0.0.1:4396`；发布 Python 服务端代码后，还需要单独重启 V6 LaunchAgent 才能生效。页面通过 `/healthz` 检查构建版本并在安全时自动刷新。发布本身不执行数据初始化。
 
+旧母文档无损注释升级是**一次性、显式、增量**操作，不能用重新生成的样本覆盖已编辑正文。先编译转换器，再用只读预检和 SHA 条件保护；应用前自动保留原文备份：
+
+```bash
+npm --prefix packages/minerujson-md run build
+node scripts/v6_annotate_document.mjs --document .v6/workspace/buffetts-alpha.minerujson.md
+# 仅在核对预检结果和当前 SHA 后执行；会留下 .lossless-audit-backups/ 备份：
+node scripts/v6_annotate_document.mjs --document .v6/workspace/buffetts-alpha.minerujson.md --apply --expected-sha <当前母文档SHA256>
+```
+
 测试须使用 `.v6/tests/` 的隔离母文档及测试端口，**不要对正式 `.v6/workspace/` 执行初始化或写入测试**。常用回归入口：
 
 ```bash
@@ -65,6 +75,8 @@ node tests/promoted-chapters-browser.test.mjs
 node tests/shared-preview-browser.test.mjs
 node tests/pdf-click-only-browser.test.mjs
 node tests/engineering-initialize-browser.test.mjs
+node --test tests/mineru-lossless-migration.test.mjs
+node tests/mineru-lossless-ui-browser.test.mjs
 ```
 
 部分 `node tests/*.mjs` 直接读取已构建的 `dist/`，应在本地完成构建后执行。测试中的 Chrome/WebKit 均应检查；真实 iPad Safari 的视觉/滚动仍需人工确认。Mac 上原生 Chrome iPad 模拟入口为 `node scripts/v6_ipad_chrome.mjs`（使用独立 Profile/CDP，不替代真实 iPad）。

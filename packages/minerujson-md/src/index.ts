@@ -18,7 +18,7 @@ const sourcePattern = /<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\
 type Span = {type?: string; content?: string; html?: string; image_path?: string; [key: string]: unknown};
 type Line = {spans?: Span[]};
 type Block = {type?: string; level?: number; lines?: Line[]; blocks?: Block[]; [key: string]: unknown};
-type Page = {para_blocks: Block[]; [key: string]: unknown};
+type Page = {para_blocks: Block[]; preproc_blocks?: Block[]; discarded_blocks?: Block[]; [key: string]: unknown};
 type Mineru = {pdf_info: Page[]; [key: string]: unknown};
 type Slot = {node: RootContent; spans: Span[]; kind: 'text'|'html'|'image'|'code'|'literal'};
 
@@ -78,14 +78,21 @@ function contentSlot(block: Block, kind: 'image'|'chart'|'table'): Slot[] {
   if (!slots.length) slots.push({kind:'literal',spans:[],node:childrenOfText(`[MinerU ${kind}: source metadata only]`)});
   return slots;
 }
-function project(block: Block): Slot[] {
+function project(block: Block,pageIndex=0,index=0,audited=false): Slot[] {
   switch (block.type) {
     case 'title': return [textSlot(block,true)];
     case 'text': case 'ref_text': case 'list': case 'index': return [textSlot(block)];
     case 'interline_equation': return [{kind:'code',spans:spansFrom(block),node:{type:'code',lang:'math',value:spanString(block)}}];
-    case 'image': case 'table': case 'chart': return contentSlot(block,block.type);
+    case 'image': case 'table': case 'chart': {
+      const slots=contentSlot(block,block.type);
+      return audited&&slots.every(s=>s.kind==='literal')
+        ? [{kind:'literal',spans:[],node:{type:'html',value:auditBlock('unmapped',pageIndex,index,block)}}]
+        : slots;
+    }
     default:
-      return [textSlot(block)];
+      return audited
+        ? [{kind:'literal',spans:[],node:{type:'html',value:auditBlock('unmapped',pageIndex,index,block)}}]
+        : [textSlot(block)];
   }
 }
 function serialize(nodes: RootContent[]): string {
@@ -170,14 +177,61 @@ function patchSlot(oldSlot: Slot, next: RootContent, block: Block): void {
 }
 
 
+/** Audit-only HTML comments. The original JSON remains authoritative in the
+ * source comment; the readable copies preserve type, bbox, OCR text and ALL
+ * original fields without introducing any new rendered Markdown paragraphs.
+ * Escape prohibited HTML-comment sequences (and angle brackets) as JSON
+ * Unicode escapes; JSON decoding exactly reproduces the original payload.
+ */
+const AUDIT_VERSION = '<!-- minerujson:audit:v1:complete -->';
+function safeJson(value: unknown): string {
+  return JSON.stringify(value,null,2)
+    .replace(/</g,'\\u003c').replace(/>/g,'\\u003e')
+    .replace(/--/g,'\\u002d\\u002d');
+}
+function textOf(block: Block): string {
+  const own=spanString(block);
+  const nested=(block.blocks || []).map(textOf).filter(Boolean).join(' | ');
+  const media=(block.lines || []).flatMap(l=>l.spans || [])
+    .flatMap(s=>[s.image_path,s.html].filter(v=>typeof v==='string'));
+  return [own,nested,...media].filter(Boolean).join(' | ');
+}
+function auditBlock(kind: 'discarded'|'preproc-diff'|'unmapped', pageIndex: number,
+                    index: number, block: Block): string {
+  // The compact summary is for human inspection, the JSON for exhaustive
+  // evidence. The summary itself must not carry unescaped HTML delimiters.
+  const summary={pdfPage:pageIndex+1,type:block.type || 'unknown',
+    bbox:block.bbox??null,text:textOf(block)};
+  return `<!-- minerujson:${kind}:v1:${pageIndex}:${index}\nsummary: ${safeJson(summary)}\noriginal: ${safeJson(block)}\n-->`;
+}
+function pageAudit(page: Page,pageIndex: number): string {
+  const evidence: string[]=[];
+  const pageMeta: Record<string,unknown>={};
+  for(const [key,value] of Object.entries(page))
+    if(key!=='para_blocks'&&key!=='preproc_blocks'&&key!=='discarded_blocks')pageMeta[key]=value;
+  evidence.push(`<!-- minerujson:page:v1:${pageIndex}\n${safeJson(pageMeta)}\n-->`);
+  for(const [index,block] of (page.discarded_blocks||[]).entries())
+    evidence.push(auditBlock('discarded',pageIndex,index,block));
+  // preproc_blocks are normally identical to para_blocks. Keep the 1:1
+  // duplicates only in the embedded source, surface every differing block.
+  for(const [index,block] of (page.preproc_blocks||[]).entries())
+    if(JSON.stringify(block)!==JSON.stringify(page.para_blocks[index]))
+      evidence.push(auditBlock('preproc-diff',pageIndex,index,block));
+  return evidence.join('\n\n');
+}
+
 /** API 1: MinerU JSON -> a standard CommonMark+GFM document with HTML comments. */
 export function toMarkdown(input: string | Mineru): string {
   const raw = typeof input === 'string' ? input : JSON.stringify(input);
   const data = parseMineru(raw);
-  const pieces: string[] = [];
+  const meta: Record<string,unknown>={};
+  for(const [key,value] of Object.entries(data))if(key!=='pdf_info')meta[key]=value;
+  const pieces: string[] = [AUDIT_VERSION,
+    `<!-- minerujson:document-meta:v1\n${safeJson(meta)}\n-->`];
   for (const [pageIndex,page] of data.pdf_info.entries()) {
+    pieces.push(pageAudit(page,pageIndex));
     for (const [index,block] of page.para_blocks.entries()) {
-      const slots = project(block);
+      const slots = project(block,pageIndex,index,true);
       const body = serialize(slots.map(s => s.node));
       // Anchor identifiers are regular HTML comments, not custom Markdown syntax.
       pieces.push(`<!-- minerujson:block:v1:${pageIndex}:${index} -->\n\n${body}\n\n${blockEnd(pageIndex,index)}`);
@@ -207,11 +261,30 @@ export function toMineruJSON(markdown: string): string {
   let cursor = 0;
   let counter = 0;
   let modified = false;
+  const audited=visible.startsWith(AUDIT_VERSION);
+  if(audited){
+    const meta: Record<string,unknown>={};
+    for(const [key,value] of Object.entries(data))if(key!=='pdf_info')meta[key]=value;
+    const expected=`${AUDIT_VERSION}\n\n<!-- minerujson:document-meta:v1\n${safeJson(meta)}\n-->`;
+    assert(visible.startsWith(expected),'document metadata audit was changed');
+    cursor=expected.length;
+  }
   for (const [pageNo,page] of data.pdf_info.entries()) {
+    const expected=audited ? pageAudit(page,pageNo) : '';
+    if(page.para_blocks.length===0){
+      if(audited){
+        assert(visible.slice(cursor).trimStart().startsWith(expected),
+          'page evidence missing or changed');
+        const where=visible.indexOf(expected,cursor);
+        cursor=where+expected.length;
+      }
+      continue;
+    }
     for (const [blockNo,block] of page.para_blocks.entries()) {
       const start = markers[counter++];
       assert(start.index !== undefined,'missing block marker');
-      assert(visible.slice(cursor,start.index).trim()==='', 'unexpected content outside anchored blocks');
+      assert(visible.slice(cursor,start.index).trim()===(blockNo===0 ? expected : ''),
+        'unexpected or modified page evidence outside anchored blocks');
       assert(Number(start[1])===pageNo && Number(start[2])===blockNo, 'block order/anchor changed');
       const end = blockEnd(pageNo,blockNo);
       const from = start.index+start[0].length;
@@ -219,9 +292,15 @@ export function toMineruJSON(markdown: string): string {
       assert(endAt >= 0,'end anchor missing');
       const fragment = visible.slice(from,endAt).trim();
       cursor = endAt+end.length;
-      const oldSlots = project(block);
+      const oldSlots = project(block,pageNo,blockNo,audited);
       const oldFragment = serialize(oldSlots.map(x => x.node));
       if (fragment === oldFragment) continue;
+      // Additive upgrades must preserve existing user document bytes. Early
+      // V6 documents used a text placeholder for a metadata-only table; the
+      // new converter renders its original block as an opaque HTML comment.
+      // Accept that *exact* original placeholder, never arbitrary edits.
+      if(audited && oldSlots.every(s=>s.kind==='literal') &&
+        fragment===serialize(project(block,pageNo,blockNo,false).map(s=>s.node)))continue;
       const parsed = parser.parse(fragment) as Root;
       assert(parsed.children.length === oldSlots.length,'block element count changed');
       for (let i=0;i<parsed.children.length;i++) {

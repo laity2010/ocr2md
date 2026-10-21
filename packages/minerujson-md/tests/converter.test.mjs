@@ -22,15 +22,25 @@ test('only three public APIs, version',async()=>{
 
 test('real Buffett Alpha fixture: no loss of even JSON whitespace',()=>{
   assert.equal(original.pdf_info.length,22);
-  assert.equal(toMarkdown(raw),saved);
+  const audited=toMarkdown(raw);
+  assert(audited.startsWith('<!-- minerujson:audit:v1:complete -->'));
+  assert.equal(toMineruJSON(audited),raw);
   assert.equal(toMineruJSON(saved),raw);
   const count = original.pdf_info.reduce((sum,p)=>sum+p.para_blocks.length,0);
   assert.equal(saved.match(/<!-- minerujson:block:v1:/g)?.length,count);
   assert.equal(count,224);
+  assert.equal(audited.match(/<!-- minerujson:block:v1:/g)?.length,count);
+  assert.equal(audited.match(/<!-- minerujson:page:v1:/g)?.length,22);
+  assert.equal(audited.match(/<!-- minerujson:discarded:v1:/g)?.length,91);
+  assert.equal(audited.match(/<!-- minerujson:preproc-diff:v1:/g)?.length,18);
+  assert(audited.includes('Volume 74 Number 4'));
+  assert(audited.includes('We thank Clif Asness'));
+  assert(audited.includes('Financial Analysts Journal'));
+  assert.equal(toMineruJSON(saved),raw,'the old legacy fixture must remain compatible');
 });
 
 test('valid GFM / HTML comments / images / math code / tables',()=>{
-  const tree=parse.parse(saved);
+  const tree=parse.parse(toMarkdown(raw));
   assert.equal(tree.type,'root');
   const types = new Set(tree.children.map(node=>node.type));
   assert(types.has('heading'));
@@ -99,6 +109,47 @@ test('missing anchors, metadata corruption and added free text are rejected',()=
   assert.throws(()=>toMineruJSON(saved.replace('<!-- minerujson:end:v1:0:0 -->','')),/INVALID/);
   assert.throws(()=>toMineruJSON(saved.replace(/(<!-- minerujson:source:v1:)[a-f0-9]/,'$1f')),/INVALID/);
   assert.throws(()=>toMineruJSON('# untracked\n\n'+saved),/INVALID/);
+});
+
+test('audited comments remain part of valid Markdown and are tamper-evident',()=>{
+  const md=toMarkdown(raw);
+  const mdast=parse.parse(md);
+  assert(mdast.children.filter(x=>x.type==='html').length>=100);
+  const marker='<!-- minerujson:discarded:v1:2:0';
+  assert(md.includes(marker));
+  assert.throws(()=>toMineruJSON(md.replace(marker,'<!-- minerujson:discarded:v1:2:8')),/INVALID/);
+  assert.throws(()=>toMineruJSON(md.replace('Volume 74 Number 4','Volume 74 Number 5')),/INVALID/);
+  assert.throws(()=>toMineruJSON(md.replace('minerujson:audit:v1:complete','minerujson:audit:v1:partial')),/INVALID/);
+  assert.throws(()=>toMineruJSON(md+'injected'),/INVALID/);
+});
+
+test('audited conversion preserves editable OCR spans without touching discarded metadata',()=>{
+  const md=toMarkdown(raw);
+  const changed=md.replace('## Bufett’s Alpha','### Buffett’s Alpha');
+  const restored=JSON.parse(toMineruJSON(changed));
+  assert.equal(restored.pdf_info[0].para_blocks[0].level,3);
+  assert.equal(restored.pdf_info[0].para_blocks[0].lines[0].spans[0].content,'Buffett’s Alpha');
+  assert.deepEqual(restored.pdf_info[0].discarded_blocks,original.pdf_info[0].discarded_blocks);
+  assert.deepEqual(restored.pdf_info[2].preproc_blocks,original.pdf_info[2].preproc_blocks);
+});
+
+test('source strings that look like HTML cannot break an evidence comment',()=>{
+  const data=structuredClone(original);
+  data.pdf_info[0].discarded_blocks[0].lines[0].spans[0].content='weird --> <script>unsafe</script> -- --!>';
+  const audited=toMarkdown(data);
+  assert(audited.includes('\\u003cscript\\u003e'));
+  assert(!audited.includes('weird --> <script>'));
+  assert.equal(JSON.parse(toMineruJSON(audited)).pdf_info[0].discarded_blocks[0]
+    .lines[0].spans[0].content,'weird --> <script>unsafe</script> -- --!>');
+});
+
+test('unknown/unrepresentable blocks are commented instead of fabricated markdown',()=>{
+  const data={pdf_info:[{page_idx:0,page_size:[200,300],preproc_blocks:[],discarded_blocks:[],
+    para_blocks:[{type:'vector_shape',bbox:[0,0,4,5],customData:'vector',lines:[]}]}]};
+  const md=toMarkdown(data);
+  assert(md.includes('minerujson:unmapped:v1:0:0'));
+  assert(!md.includes('[MinerU vector_shape:'));
+  assert.deepEqual(JSON.parse(toMineruJSON(md)),data);
 });
 
 test('input can also be parsed JSON object; corrupted JSON rejected',()=>{
