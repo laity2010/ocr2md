@@ -274,26 +274,33 @@ export class PdfPreview {
   }
   ensureVisible(overlay){
     if(!this.active)return;
-    const visible=this.scroller.getBoundingClientRect();
+    const port=this.scroller.getBoundingClientRect();
     const target=overlay.getBoundingClientRect();
-    if(!visible.height||!target.height)return;
-    const margin=14;
-    // Keep an already-visible region still. Move only when it crosses an edge.
-    let dx=0,dy=0;
-    if(target.width>visible.width-2*margin||target.height>visible.height-2*margin){
-      dx=(target.left+target.width/2)-(visible.left+visible.width/2);
-      dy=(target.top+target.height/2)-(visible.top+visible.height/2);
-    }else{
-      if(target.left<visible.left+margin)dx=target.left-visible.left-margin;
-      else if(target.right>visible.right-margin)dx=target.right-visible.right+margin;
-      if(target.top<visible.top+margin)dy=target.top-visible.top-margin;
-      else if(target.bottom>visible.bottom-margin)dy=target.bottom-visible.bottom+margin;
-    }
-    if(Math.abs(dx)>1||Math.abs(dy)>1){
+    if(!port.height||!port.width||!target.height||!target.width)return;
+    // Safari/iPad may position the scrollport partly BEHIND the bottom of the
+    // visual viewport. A bbox within the scrollport is not necessarily visible
+    // to the person. Intersect the PDF clip with the actual screen viewport.
+    const vv=window.visualViewport;
+    const screenTop=Math.max(0,vv?.offsetTop??0);
+    const screenLeft=Math.max(0,vv?.offsetLeft??0);
+    const top=Math.max(port.top,screenTop);
+    const bottom=Math.min(port.bottom,screenTop+(vv?.height??window.innerHeight),
+      window.innerHeight);
+    const left=Math.max(port.left,screenLeft);
+    const right=Math.min(port.right,screenLeft+(vv?.width??window.innerWidth),
+      window.innerWidth);
+    if(bottom-top<20||right-left<20)return;
+    // Deliberate click locates the OCR block near the CENTER of the actual
+    // visible PDF area. This works even when the PDF page number is unchanged
+    // and prevents small title bboxes from hiding below Safari's bottom bar.
+    const dy=(target.top+target.bottom)/2-(top+bottom)/2;
+    const dx=(target.left+target.right)/2-(left+right)/2;
+    if(Math.abs(dx)>2||Math.abs(dy)>2){
       this.suppressScrollUntil=performance.now()+1100;
       const old=this.scroller.style.scrollBehavior;
       this.scroller.style.scrollBehavior='auto';
-      this.scroller.scrollLeft+=dx;this.scroller.scrollTop+=dy;
+      this.scroller.scrollLeft+=dx;
+      this.scroller.scrollTop+=dy;
       requestAnimationFrame(()=>{if(!this.disposed)this.scroller.style.scrollBehavior=old;});
     }
   }
