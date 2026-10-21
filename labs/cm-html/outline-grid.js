@@ -82,6 +82,11 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
       chooseLine(state.focusTarget.sourceLine);
     else if(state.scrollTarget?.revision===state.documentRevision)
       chooseLine(state.scrollTarget.sourceLine);
+    // A CM6 text edit invalidates older location revisions, not the user's
+    // selected chapter. Never fall back to the initial CM6 caret (offset 0)
+    // while that chapter still exists in this rebuilt outline.
+    else if(activeId && api.getRowNode(activeId))
+      choose(rows.find(row=>row.id===activeId),false);
     else if(editor)chooseLine(editor.state.doc.lineAt(state.sourceOffset).number,false);
     if(state.outlineCount!==rows.length)viewStore.setState({outlineCount:rows.length});
     document.dispatchEvent(new CustomEvent('cm-html:outline-refreshed'));
@@ -115,9 +120,15 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
         input.addEventListener('change',e=>{
           e.stopPropagation();
           try{
-            putMarker(getEditor(),p.data,input.checked,
+            const result=putMarker(getEditor(),p.data,input.checked,
               document.querySelector('#marker-format')?.value||'comment');
             p.data.independent=input.checked;
+            // A checkbox is an explicit navigation action just like clicking
+            // the heading row: route it through V6's shared focus contract.
+            // Use the post-edit CM6 line: inserting a marker shifts the heading.
+            choose(p.data);
+            publishFocus({sourceLine:result.sourceLine,sourceEnd:result.sourceEnd,
+              origin:'outline',elementId:p.data.id});
             api.refreshCells({rowNodes:[p.node],columns:['independent'],force:true});
             api.onFilterChanged();
           }catch(error){

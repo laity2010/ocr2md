@@ -87,6 +87,51 @@ for(let index=0;index<engines.length;index++){
     assert(initial.length>300000);
     assert.equal(initial.markers,false);
     assert.equal(initial.fonts,true);
+
+    // A checkbox edit must select that heading and navigate both CM6 and AG,
+    // even after its new metadata line shifts every subsequent source line.
+    // Reproduce the reported 'jump back to row 0' on non-adjacent headings.
+    for(const rowIndex of [9,13]){
+      const target=await page.evaluate(index=>{
+        const l=window.__cmHtmlLab,row=l.outline.rows[index];
+        l.outline.api.ensureIndexVisible(l.outline.api.getRowNode(row.id).rowIndex,'middle');
+        return {id:row.id,line:row.sourceLine};
+      },rowIndex);
+      const checkbox=page.locator(`.ag-row[row-id="${target.id}"] .ocr-outline-checkbox`);
+      await checkbox.uncheck();
+      await page.waitForFunction(({id})=>{
+        const l=window.__cmHtmlLab;
+        const focus=l.workspace.scrollSync?.currentSource;
+        const selected=l.outline.api.getSelectedNodes()?.[0]?.id;
+        const target=l.outline.rows.find(row=>row.id===id);
+        const shared=l.workspace.scrollSync?.lastDriver;
+        return target?.independent===false && selected===id &&
+          Math.abs((focus?.sourceLine||0)-target.sourceLine)<=6 &&
+          shared==='outline' &&
+          l.view.state.doc.line(target.sourceLine-1).text.includes('ocr2md:chapter');
+      },target,{timeout:20000});
+      await wait(550); // document/preview asynchronous refresh must not steal the selection
+      const after=await page.evaluate(id=>{
+        const l=window.__cmHtmlLab,row=l.outline.rows.find(row=>row.id===id);
+        return {selected:l.outline.api.getSelectedNodes()?.[0]?.id,
+          source:l.workspace.scrollSync?.currentSource?.sourceLine,
+          focus:l.workspace.scrollSync?.lastDriver,
+          line:row.sourceLine,revision:l.revision,
+          sharedFocus:document.querySelector('.cm-outline-focused-line')!==null};
+      },target.id);
+      console.log('CM_HTML_CHECKBOX_FOCUS',name,JSON.stringify(after));
+      assert.equal(after.selected,target.id,'AG selection reverted after checkbox change');
+      assert(Math.abs(after.source-after.line)<=6,'CM6 source jumped away from selected heading');
+      assert(after.sharedFocus,'CM6 should highlight the focused heading');
+      await page.screenshot({path:join(evidence,`cm-html-focus-${name.toLowerCase()}-${rowIndex}.png`)});
+      await page.locator('#undo').click();
+      await page.waitForFunction(id=>{
+        const l=window.__cmHtmlLab,row=l.outline.rows.find(row=>row.id===id);
+        return row?.independent===true &&
+          !l.view.state.doc.toString().includes('ocr2md:chapter') &&
+          l.outline.api.getSelectedNodes()?.[0]?.id===id;
+      },target.id,{timeout:15000});
+    }
     const second=page.locator('.ag-row[row-index="1"] .ocr-outline-checkbox');
     await second.uncheck();
     await page.waitForFunction(()=>{

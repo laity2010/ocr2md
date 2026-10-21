@@ -52,6 +52,7 @@ export function putMarker(view,row,independent,format) {
   if(!/^\s*#{1,6}\s+/.test(heading.text))
     throw Error('Heading has moved; refresh the AG outline first');
   const previous=markerForHeading(doc,row);
+  const lineDelta=previous?0:1;
   const rendered=encodeMarker(row.id,independent,format);
   if(previous){
     view.dispatch({changes:{from:previous.from,to:previous.to,insert:rendered},
@@ -62,7 +63,10 @@ export function putMarker(view,row,independent,format) {
     view.dispatch({changes:{from:heading.from,to:heading.from,insert:rendered+'\n'},
       userEvent:'input'});
   }
-  return {id:row.id,format,independent};
+  // CM6 is the authority for line positions: an inserted standalone marker
+  // shifts the title by one line; replacing a marker does not.
+  return {id:row.id,format,independent,
+    sourceLine:row.sourceLine+lineDelta,sourceEnd:row.sourceEnd+lineDelta};
 }
 
 export function convertMarkers(view,format){
