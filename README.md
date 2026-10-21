@@ -1,126 +1,86 @@
-# OCR2MD V6（从零开始）
+# OCR2MD V6 · 技术手册
 
-这是唯一 OCR2MD V6 源码仓库。V5 不再运行或充当回退，历史只由 V6 Git 提交回溯。首个独立验证组件是 `packages/minerujson-md/`，负责 MinerU JSON ↔ 标准 Markdown（含 HTML 注释）转换；不提供用户界面。
+OCR2MD V6 是运行于 Mac 的 Markdown 校阅工作台，当前业务模块为**章节定界**。使用 MinerU JSON 转换出的 `.minerujson.md` 作为可编辑母文档，结合原始 PDF 进行定位核对。公网入口：[https://ocr2md.laity.bid/](https://ocr2md.laity.bid/)。
 
-**供未来 V7/V8 复用的项目初始化基线**：本地 Git 标签 `ocr2md-init-v1`，保留发布流程、Git 回退与 Mac 原生 Chrome iPad 模拟环境；克隆命令、版本隔离要求及不包含的运行凭据详见 [PROJECT_INIT.md](./PROJECT_INIT.md)。该标签是初始化源码快照，不代表已发布到 GitHub 或无需改配置即可运行。
+跨版本工程原则以 [`AGENTS.md`](./AGENTS.md) 为准；本文件只描述 **V6 当前实现和操作方法**。功能演进、问题溯源见 Git Commit，不在 README 中追加开发流水账。
 
-## 每日流程
+## 当前工作台
 
-1. 每次编译/构建都通过以下命令，`--change` 和 `--purpose` 缺一不可。构建失败也保存 Git 检查点：
+- **三个 Dockview 窗格，四个逻辑视图**：左侧 AG Grid 章节表、右上 CodeMirror 6（CM6）源码、右下共用预览窗；下拉选择 Markdown 阅读预览或 PDF.js 原文。两个预览实例持续保留，切换时不重建。
+- **单一编辑状态**：只有 CM6 持有 Markdown 正文和 Undo/Redo 历史。AG 与 Markdown 预览从正文派生，Zustand Vanilla 只传递修订号及定位事件。正常保存不清空 CM6 撤销历史。
+- **章节定界**：AG 显示 PDF 页码、标题层级、标题、独立成章勾选和章节文件名；勾选通过 CM6 的 HTML 注释标定正文。修改标题和勾选实时更新大纲，保存后持久化。起始编号默认 `000`，保留用户输入的位数及前导零。
+- **章节导出**：使用模块栏的「导出章节」，按当前勾选和编号生成母文档旁的 `chapters/*.md` 与 `manifest.json`。更改编号只重算显示，不自动写文件；章节文件与当前母文档匹配时可在 AG 中打开。
+- **滚动与定位**：CM6 ↔ Markdown 阅读预览可按文本元素同步滚动；**PDF 不跟随 Markdown 连续滚动**。明确点击 AG、Markdown 内容或 CM6 源码时，PDF 才跳到相应 OCR 区域并显示可见高亮。直接滚动 PDF 不反向牵动其他窗格；预览下拉切换不改变 PDF 当前阅读位置。
+- **PDF 阅读**：官方 PDF.js Viewer、深色显示、连续页面、缩放与页码跳转。高亮根据 MinerU `page_size` / `bbox` 定位的是 **OCR 文本区域**，不是 PDF 逐字字形匹配；PDF 只读。
+- **工程菜单**：点击顶栏版本标牌可以选择「初始化数据文档」。经编辑授权和确认后，先备份已保存的母文档，再恢复原始转换样本并重载工作台（撤销历史重新开始）；未保存的编辑不在备份中。此前导出的 `chapters/` 不会被此操作删除。
 
-   ```bash
-   python3 scripts/v6_git.py build --change "修改功能" --purpose "修改原因" -- npm run build
-   ```
+当前界面使用 Everforest 深色风格和完整 Sarasa Fixed SC 字体；Mac Chrome/WebKit 支持模拟 iPad 横屏检查，最终触控体验仍以真实 iPad Safari 验收为准。
 
-   V6 现已提供 `npm run build`（WP1 CM6 浏览器验证）。上面的构建指令中的改动说明仍是示例。
-2. 出错从 Git 提交重新编译发布：`python3 scripts/v6_git.py rollback --to <Git提交>`，只替换 `.v6/release/`，不改当前 HEAD。
-3. 需要查看旧源码：`python3 scripts/v6_git.py recover-source --build-id v6-构建ID`，会在 `.v6/recovery/` 生成独立 worktree，不修改现有源码。
-4. 日终先看提交和文件差异：`python3 scripts/v6_git.py review`。用户审查批准后执行：`python3 scripts/v6_git.py review --approved --summary "今日开发成果"`；会把当天小提交汇成 `v6` 分支的一个提交，同时保留本地细历史分支。
-5. **另经明确批准**后手动执行 `git push origin v6`。未明确批准不可推送。
-6. 次日：`python3 scripts/v6_git.py next-day`，基于已审查的 `v6` 新建当日开发分支。
+## 结构与数据
 
-Git 能回溯文件改动和差异，但目的需要写在 commit message，编译结果及产物需要另存。每日审查不能由构建脚本擅自代替人工批准。
+| 位置 | 职责 |
+| --- | --- |
+| `ui/main.js`、`ui/workspace.js` | 应用入口、操作编排、三个 Dockview 窗格与共用预览下拉 |
+| `ui/cm-document.js`、`ui/chapter-markers.js` | CM6 文档封装及章节 HTML 标定 |
+| `ui/outline-index.js`、`ui/outline-grid.js`、`ui/chapter-files.js` | 章节索引、AG 表、文件归属及导出内容 |
+| `ui/markdown-preview.js`、`ui/pdf-preview.js` | Markdown 只读投影、PDF.js 原文及 OCR 区域高亮 |
+| `ui/scroll-sync.js`、`ui/view-store.js` | CM6/Markdown 连续滚动及跨视图点击定位事件 |
+| `packages/minerujson-md/` | MinerU JSON ↔ Markdown 转换；格式限制见[组件说明](./packages/minerujson-md/README.md) |
+| `scripts/v6_serve.py`、`scripts/v6_chapters.py`、`scripts/v6_initialize.py` | 正式静态服务、授权文件接口、章节发布与工程初始化 |
+| `scripts/v6_git.py`、`scripts/v6_publish.py`、`tests/` | Git 构建/回退、唯一发布目录及隔离测试 |
 
-## WP0 转换组件
+默认运行数据在 Git 忽略的 `.v6/` 中：
 
-唯一组件位于 `packages/minerujson-md/`，三项公开 API 为 `toMarkdown()`、`toMineruJSON()`、`version()`。首次转换的 Buffett’s Alpha 样本、格式限制和自动验收说明见 [组件 README](./packages/minerujson-md/README.md)。
+- `.v6/workspace/buffetts-alpha.minerujson.md`：可保存的工作母文档；首次不存在时从仓库中**只读** Buffett’s Alpha 转换样本加载。
+- `.v6/workspace/buffetts-alpha.original.pdf`：原始 PDF 的经哈希校验的**只读工作区副本**，供 macOS 后台服务读取；不是同步编辑中的 PDF。
+- 母文档所在目录的 `chapters/`：导出章节及 manifest；`.initialize-backups/`：工程初始化之前已保存母文档的备份。
+- `.v6/release/`：唯一正式静态发布目录；`.v6/private/`：本机编辑授权资料，不能提交 Git。
 
-## WP1 · CM6 单窗浏览器验证
+`V6_DOCUMENT_PATH`、`V6_PDF_PATH` 可将服务指向**独立测试母文档/PDF**。正式服务默认读取上述工作区文件；浏览器通过 `/api/document`、`/api/pdf`（支持 HTTP Range）、`/api/pdf-map` 和 `/api/chapters` 获取当前数据，保存、导出、初始化需通过编辑授权及同源校验。
 
-仅以 `codemirror`、`@codemirror/lang-markdown`、`@codemirror/language` 的公开 API 管理单一编辑器。Dockview/Zustand 将分别在后续验证，不在 WP1 引入。
+## 开发、测试、发布
+
+本机需 Node.js/npm、Python 3；浏览器测试需 Mac 上的 Chrome 与已安装的 Playwright WebKit。
 
 ```bash
 npm ci
-npm run dev                  # Mac 本机 http://127.0.0.1:5196/
-npm run build                # 编译后发布到唯一 release 目录
+npm run dev                         # Vite 本机开发，http://127.0.0.1:5196/
+# 有意义的正式构建必须经过 Git 检查点（包含修改目的）：
+python3 scripts/v6_git.py build --change "改动摘要" --purpose "原因与验收" -- npm run build
+python3 scripts/v6_publish.py      # 将 dist/ 发布至 .v6/release/
 ```
 
-`ui/` 为唯一浏览器界面。`vite.config.mjs` 的 `/api/document` 仅实现一个固定路径的 GET/PUT 文件 I/O；默认首次从 WP0 的只读测试样本加载，第一次保存写到 `.v6/workspace/buffetts-alpha.minerujson.md`，后续打开该工作文件；不改写原样本，也不在服务端维护额外 MD 状态。实际界面直接从 `view.state.doc` 读取全文保存，保存后不重建 `EditorView`。
+正式站点通过 Cloudflare Tunnel 指向 Mac 的 V6 服务 `127.0.0.1:4396`；发布 Python 服务端代码后，还需要单独重启 V6 LaunchAgent 才能生效。页面通过 `/healthz` 检查构建版本并在安全时自动刷新。发布本身不执行数据初始化。
 
-UI 原生 API 验收使用独立文件及端口，以免污染用户工作文档：
+测试须使用 `.v6/tests/` 的隔离母文档及测试端口，**不要对正式 `.v6/workspace/` 执行初始化或写入测试**。常用回归入口：
 
 ```bash
-V6_DOCUMENT_PATH="$PWD/.v6/tests/wp1-document-test.md" npm run dev -- --port 5198
-# 另一个 shell
-npm run test:ui
+npm run test:outline                 # AG/章节定界、CM6/预览定位
+npm run test:scroll-sync             # CM6 ↔ Markdown 元素级滚动
+npm run test:preview                 # Markdown 渲染
+npm run test:shell                   # 顶栏、布局、Undo/保存
+node tests/promoted-chapters-browser.test.mjs
+node tests/shared-preview-browser.test.mjs
+node tests/pdf-click-only-browser.test.mjs
+node tests/engineering-initialize-browser.test.mjs
 ```
 
-测试覆盖读取真实 314KB Markdown、撤销/重做、Syntax Tree 全文元素计数、磁盘保存、滚动与选区保持、刷新还原，截图位于 `.v6/evidence/wp1/`（不进 Git）。命令要求本机已安装 Chrome。WP1 的 CM6 源码仍仅负责编辑；正式对外发布现已由下文的 V6 最小发布服务独立承担。
+部分 `node tests/*.mjs` 直接读取已构建的 `dist/`，应在本地完成构建后执行。测试中的 Chrome/WebKit 均应检查；真实 iPad Safari 的视觉/滚动仍需人工确认。Mac 上原生 Chrome iPad 模拟入口为 `node scripts/v6_ipad_chrome.mjs`（使用独立 Profile/CDP，不替代真实 iPad）。
 
-## V6 正式公网发布
+故障与版本管理：
 
-唯一公网入口 `https://ocr2md.laity.bid/` → 共享 Cloudflare Tunnel → V6 本地 `127.0.0.1:4396`。唯一正式发布目录 `.v6/release/`，不保留 A/B 或 V5 运行版本。
+```bash
+python3 scripts/v6_git.py status
+python3 scripts/v6_git.py review                  # 本地提交和差异，尚不合并
+python3 scripts/v6_git.py rollback --to <已知正常的Git提交>
+python3 scripts/v6_git.py recover-source --build-id <构建ID>
+```
 
-- `scripts/v6_serve.py` 运行于独立 macOS LaunchAgent，静态服务只访问 `.v6/release/`，工作文档存 `.v6/workspace/`。
-- 局域网 HTTPS：同一 V6 服务另外监听 `192.168.1.10:4443`，沿用 Mac 既有 `ocr2md/lan-tls` 证书；公网仍指向 `127.0.0.1:4396`。证书由本地 CA 签发，需用户主动信任 CA 才能在 Safari 无警告打开，不能假定证书已被系统信任。
-- 开发：`python3 scripts/v6_git.py build --change "..." --purpose "..." -- npm run build`。
-- 发布：`python3 scripts/v6_publish.py`。临时准备并替换唯一发布目录。
-- Git 回退：`python3 scripts/v6_git.py rollback --to <已验收Git提交>`，使用临时 Git worktree 重建发布，不重写当前分支。
-- 密钥位于 `.v6/private/`，不提交 Git；GitHub 推送需要另行授权。
+上述回退使用独立 Git worktree 重建发布，不改当前开发分支。**日终 squash 与 GitHub 推送均需用户另行明确批准**；具体工程原则见 `AGENTS.md`。
 
-## Mac 原生 Chrome · iPad 布局验收
+## 边界与参考
 
-运行 `node scripts/v6_ipad_chrome.mjs`。使用独立 Chrome Profile 和正常 GPU 渲染启动参数，**不通过 Playwright 启动浏览器**；由常驻轻量 CDP 连接维持 iPad 1032×642、DPR 2、触控模拟。再次运行会复用原窗口和字体缓存，不重复打开页面。
-
-- 验收窗口直达局域网 HTTPS `https://192.168.1.10:4443/`。调试端口仅绑定本机 `127.0.0.1:19396`，截图工具按需连接，不负责浏览器生命周期；不要覆盖这个窗口的设备模拟设置。
-- Chrome 进程与启动命令分离，但**保持 iPad 模拟仍需要轻量 CDP 连接在线**；脱开后 Chrome 不会退出，设备模拟可能恢复为 Mac 默认值。
-- 真实 iPad Safari 的截图才是最终视觉验收依据；此工具仅用于 Mac 本机快速对照。
-
-## Obsidian Everforest → CM6 源码样式
-
-- 样式取自 Mac 的 OCR2MD Obsidian 仓库：当前主题 `Everforest`（dark），并参考已启用的 `daisor.css`。独立样式文件是 `ui/obsidian-everforest.css`，Markdown 高亮映射在 `ui/obsidian-markdown.js`，标题 `#` 标记同色扩展在 `ui/obsidian-heading-markers.js`。
-- **字体不随 Obsidian 主题改变**：始终使用 V6 已验收、服务器托管的完整 Sarasa Fixed SC WOFF2，12pt / 16px；CM6 行高不改。
-- 仅影响 CM6 Markdown **源码窗**的暗色背景、文字、六级标题、引用、链接、代码与标记等样式。不导入 Obsidian 的窗口/侧栏 CSS，不实现 Live Preview、独立 HTML 阅读渲染或第二份文档状态；Obsidian 改主题后也不会自动重载本地主题 CSS。
-- 隔离测试：`npm run test:ob-theme`，在独立端口与独立测试文档上验证 Chrome / WebKit 的标题、字体、背景与原始标记保留；截图位于 `.v6/evidence/obsidian-everforest-*.png`。
-- 标题字号沿用 Everforest `--h1-size`～`--h6-size`：相对 16px 正文为 2.125 / 1.625 / 1.375 / 1.25 / 1.125 / 1.125 倍（34 / 26 / 22 / 20 / 18 / 18px），**所有字号依旧使用 Sarasa Fixed SC**。
-- 源码窗启用 CM6 `EditorView.lineWrapping`，随视窗宽度软换行，不新增 Markdown 换行符；真实换行处增加青绿色 `↵` 视觉标记，代码保存在 `ui/obsidian-heading-markers.js` 的视口装饰中。该标记不进入 `view.state.doc`、不增加行数或改变保存数据；测试还验证改变视口宽度后同一长段落软换行数量变化。
-
-## Dockview 双窗 / Markdown 预览（V6）
-
-- UI 采用官方 JavaScript Dockview 左右两窗：左侧保持原 CodeMirror 6 实例，右侧是 markdown-it 的只读 HTML 预览。窗格可拖动和调整宽度，关闭按钮暂隐藏，避免误关必要的工作窗格。
-- Zustand Vanilla 只传递文档修订号、活动窗和位置通知；不保存 Markdown 全文、HTML 或撤销历史。预览在编辑后合并更新，重新读取 CM6 的当前文档。
-- 预览使用 Markdown-it、HTML 表格、脚注和任务列表，KaTeX 渲染 math/latex/tex fenced 数学块，DOMPurify 过滤 HTML。原 MinerU 注释在源码中保留，但预览隐藏；采用原 Everforest 深色主题和完整 Sarasa Fixed SC 字体。
-- 11 张原始图片对应的外部 URL 是否仍可访问，不属于预览器保证范围；后续需媒体模块处理本地化。尚不支持完整 Obsidian 插件、公式所有方言和双向元素定位。
-- 回归测试：npm run test:preview。使用隔离工作文件及 Mac Chrome / WebKit 视口验证图片、HTML 表格、数学公式、实时更新、撤销、布局和 HTML 安全。
-
-## V6 紧凑单一全局状态栏（2026-10-21）
-
-- 工具栏由 54px 收缩为 40px（1032×642 Mac 模拟 iPad 横屏），顶部**只保留撤销、重做、保存**三个按钮。移除文件信息副栏、AG 下方提示栏和页面最下方状态栏；Dockview 占用释放出的垂直空间。
-- 构建号右侧唯一全局状态区域统一显示加载、授权、保存、更新、错误提示，当前文档文件名、CM6 行数字数、AG 大纲项数、章节标记草稿未保存提示、滚动同步状态。超宽状态文本在视觉上省略，完整信息保留在状态栏 title 属性中。
-- 同步滚动仍默认开启、由原有 Zustand Vanilla API 管理；因顶部只允许三个按钮，不显示同步切换按钮。结构提取按钮移除，内部提取功能仍能把结果写入全局状态。
-- 用完整 Buffett’s Alpha 隔离副本进行 Chrome / WebKit 1032×642 几何、三按钮、唯一状态、撤销、保存和同步状态测试；运行 npm run test:shell。原始文档始终只读。
-
-## 双窗 Markdown 元素级滚动同步
-
-- 独立模块 ui/scroll-sync.js 利用 markdown-it 的 token.map，为预览标题、段落、HTML 表格、数学块标注 data-source-start/end 行范围。按元素位置插值，而不是让两个滚动条保持相同百分比。
-- Zustand Vanilla 的 viewStore.scrollTarget **仅传输** sourceLine、fraction、origin、revision 和事件序号；不复制 Markdown、HTML 或 CM6 状态。CM6 利用官方 scrollIntoView 配合虚拟布局稳定后的少量修正，预览只使用自己的滚动 API，不改变光标/撤销历史。
-- 左右窗都能成为主控窗口：滚轮、触控、鼠标或键盘操作优先，程序跟随滚动不能反向抢占；以 RAF 合并事件，并用 ResizeObserver/图片加载后更新元素位置。
-- 顶栏「⇅ 同步滚动」默认开启，关闭后两窗可以独立滚动，重新开启则对齐到 CM6 源码。开关不写入 Markdown。
-- **元数据边界**：Buffett’s Alpha 的可读正文在约第 1423 行结束。第 1427～3560 行是 minerujson:source 压缩原始数据注释，应在 CM6 留存以保证无损，但不会出现在阅读预览；源码进入这一区域时，预览保持在正文末尾，不能伪称仍有逐行对应的预览元素。
-- npm run test:scroll-sync：隔离的 Buffett’s Alpha 副本、1032×642 Chrome 和 WebKit 验收正反同步、防循环、开关、编辑后重建及窗宽变化，不动实际工作文件。
-
-## AG Grid 三窗章节大纲（V6）
-
-- Dockview 布局为 **左侧整个 AG Grid，右上 CM6 源码、右下 Markdown 阅读预览**。三窗仍共享一份 CM6 Markdown，不创建第二套文本状态。
-- AG 表的五列固定为 **PDF页码、层级、标题、独立章节、章节文件**；全部采用 AG Grid Community 官方 `IFilterComp` 扩展接口接入的 `EnumCheckboxFilter`，在 AG Grid 筛选弹窗中列出 `all` 和各列实际不同值，支持多选。默认 `all`（AG Grid 空筛选模型）。实现独立放在 `ui/enum-checkbox-filter.js`，不需要 Enterprise、不另做表头控件，也不使用外部行筛选逻辑。
-- PDF 页码首列原生固定在左侧，标题列沿用 Everforest 字号与颜色、单行省略不自动折行。AG Grid 本身管理筛选弹窗、模型、行过滤及更新通知；源码/预览定位继续由现有 Zustand 与 CM6 协调。
-- 标题颜色/字号与当前 Everforest 的 H1–H6 源码样式一致，字体始终为完整 Sarasa Fixed SC。大纲在 CM6 文档变化后按 Markdown 语法树重新构建；不把 AG 行当作可写文档数据源。
-- 修改已有标题的 `#` 层级时，即使标题文字不变，AG 标题单元格也会即时刷新对应 H1–H6 样式，并按需更新 H1 行高；不依赖保存或重新加载，不重建整个 AG Grid。
-- PDF 页码来自当前 MinerU 无损注释 `minerujson:block:v1:pageIndex:blockIndex` 中真实的 0-based 页索引，展示时加 1；无法确定页码时显示 `—`，不推断不伪造。
-- 当前 Buffett’s Alpha 识别出 21 项标题（2 个 H1、19 个 H2）。`独立章节` 默认全部勾选，首项不可取消，**其余勾选只是当前页面草稿，没有写回 Markdown 或 MOPJO**；`章节文件` 没有导出记录时明确显示“未导出”，不生成假文件名。
-- Zustand Vanilla 的 `focusTarget` 仅传递 `sourceLine`、`sourceEnd`、`origin`、`elementId`、`revision` 与事件序号。点击 AG 行定位 CM6 与预览、点击预览元素反向定位 CM6 和 AG、CM6 光标切换定位 AG/预览；随原有双窗滚动同步更新 AG 活动行。高亮由 CM6 Decoration / 预览 CSS / AG 选中行实现，**不修改源码文本、选区历史或保存内容**。
-- Chrome 和 WebKit 的 1032×642 隔离浏览器验收命令为 `npm run test:outline`。章节定界保存与导出要等后续正式接入 MOPJO，当前仍是**三窗导航阶段**。
-
-## V6 发布后浏览器自动更新
-
-Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，唯一发布目录的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。
-
-**以前已经打开的旧版页面未包含自动更新代码，需要首次手动刷新一次以启用后续自动更新**；后续 Git 构建发布无需手动刷新。此机制只检测发布版本，不新增 Markdown 副本或后台状态管理。
-
-### CMDocument 与章节定界（2026-10-21 晋升）
-
-`labs/cm-html/` 已冻结：本地标签 `cm-html-lab-frozen-20261021`（`c9a9764`），只保留参考访问，不再从主线运行时引用。正式版本由 `ui/cm-document.js`、`ui/chapter-markers.js`、`ui/chapter-files.js` 与 `ui/outline-grid.js` 独立组成。编辑状态仅在 CM6；HTML 注释是默认标定格式，业务模块仍可选择合法 HTML 标签。
-
-用户改变「独立章节」后，AG「章节文件」列实时显示归属；保存用于持久化母文档，点击「导出章节」后才实际生成 `{V6_DOCUMENT_PATH 所在目录}/chapters/` 及 `manifest.json`。已保存并匹配当前 CM6 的文件以链接显示。每次再导出都将由此模块管理的已有文件整体替换；存在不带 manifest 的 `chapters/` 时拒绝覆盖。压缩源 JSON 仅留于母文档。新接口 `/api/chapters`、`/api/chapters/<文件>`、`/api/export-chapters` 和 `/api/convert-mineru` 均由 V6 服务处理，写入/转换需主线登录授权。
-
-新回归：`node tests/promoted-chapters-browser.test.mjs`（Chrome + WebKit，隔离 Python 服务 + 测试母文档）和 `node tests/promoted-converter.test.mjs`。主线旧三窗、AG 筛选及布局回归随正式标定行为更新。GitHub 推送仍需单独审批。
+- 当前只实现章节定界业务；未声称已完成章节清洗、媒体本地化、通用多目录工作台或完整 Obsidian 功能。
+- V6 的 MinerU 映射与 PDF 只读证据使用 Buffett’s Alpha 样本；扩大到新文档或动态 PDF 绑定，需要另行实现与验证。MinerU JSON 严格逆转换的可编辑范围见组件 README。
+- `labs/cm-html/` 是已冻结的旁路实验（标签 `cm-html-lab-frozen-20261021`）；V6 主线不依赖其运行时文件。
+- [`PROJECT_INIT.md`](./PROJECT_INIT.md) 记录早期 V7/V8 初始化 Git 标签的使用方式，是历史起点，不覆盖当前的 `AGENTS.md`；实现变更查 Git 历史。
