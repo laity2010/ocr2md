@@ -51,7 +51,9 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     activeId=row.id;
     const node=api.getRowNode(row.id);
     node?.setSelected(true);
-    if(ensureVisible&&node?.rowIndex!=null)api.ensureIndexVisible(node.rowIndex,'middle');
+    // AG Grid auto preserves a fully visible row and scrolls only the minimum
+    // required to reveal a clipped/off-screen row. Never force centering.
+    if(ensureVisible&&node?.rowIndex!=null)api.ensureIndexVisible(node.rowIndex,'auto');
   }
   function chooseLine(line,ensureVisible=true) {
     choose(headingAtLine(rows,line)||rows[0],ensureVisible);
