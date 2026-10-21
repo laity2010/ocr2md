@@ -97,10 +97,32 @@ for(const [i,[name,engine,options]] of engines.entries()){
     return true;
   },[target.blockIndex]);
   // Production has no dev seam; page-number UI is still an independent route.
+  const selectedBefore=await page.locator('.ag-row[aria-selected="true"]').first().getAttribute('row-index');
+  const sourceBefore=await page.locator('.cm-scroller').evaluate(el=>el.scrollTop);
+  const previewBefore=await page.locator('.ocr-preview-pane').evaluate(el=>el.scrollTop);
   await page.locator('.ocr-pdf-page').fill('8');
   await page.locator('.ocr-pdf-page').press('Enter');
-  await page.waitForFunction(()=>document.querySelector('.ocr-pdf-page')?.value==='8',null,{timeout:10000});
-  assert(!String(await page.locator('.ocr-pdf-status').textContent()).includes('旋转不一致'));
+  await page.waitForFunction(()=>{
+    const p=document.querySelector('.ocr-pdf-scroller .page[data-page-number="8"] canvas');
+    const s=document.querySelector('.ocr-pdf-scroller');
+    if(!p?.width||!s)return false;
+    const a=p.getBoundingClientRect(),b=s.getBoundingClientRect();
+    return a.bottom>b.top&&a.top<b.bottom;
+  },null,{timeout:22000});
+  const canvas8=page.locator('.ocr-pdf-scroller .page[data-page-number="8"] canvas');
+  const dims=await canvas8.evaluate(el=>({w:el.getBoundingClientRect().width,h:el.getBoundingClientRect().height}));
+  await canvas8.click({position:{x:Math.max(10,dims.w*.52),y:Math.max(10,dims.h*.25)},force:true});
+  await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="8"]'),
+    null,{timeout:15000});
+  await page.waitForFunction(previous=>{
+    const ag=document.querySelector('.ag-row[aria-selected="true"]')?.getAttribute('row-index');
+    const source=document.querySelector('.cm-scroller')?.scrollTop||0;
+    const preview=document.querySelector('.ocr-preview-pane')?.scrollTop||0;
+    return ag!==previous.ag && (Math.abs(source-previous.source)>8||Math.abs(preview-previous.preview)>8);
+  },{ag:selectedBefore,source:sourceBefore,preview:previewBefore},{timeout:17000});
+  assert(!String(await page.locator('.ocr-pdf-status').textContent()).includes('不一致'));
+  console.log('FOUR_PANE_PDF_REVERSE_PASS',name,JSON.stringify({agFrom:selectedBefore,
+    agTo:await page.locator('.ag-row[aria-selected="true"]').first().getAttribute('row-index'),page:8}));
   assert.deepEqual(errors,[],name+' browser errors');
   assert.equal(hash(readFileSync(path)),sourceHash,'PDF browsing changed CM6 original');
   console.log('FOUR_PANE_PDF_PASS',name,JSON.stringify({groups:4,highlighter:!!rect,page8Selected:true,zoom}));

@@ -51,7 +51,7 @@ try {
           const r=el.getBoundingClientRect();
           return {top:r.top,bottom:r.bottom,height:r.height,width:r.width};
         };
-        const buttons=[...document.querySelectorAll('header.toolbar button')].map(b=>b.id);
+        const buttons=[...document.querySelectorAll('header.toolbar .actions button')].map(b=>b.id);
         const status=document.querySelector('#status');
         const toolbar=document.querySelector('.toolbar');
         const main=document.querySelector('main');
@@ -80,7 +80,7 @@ try {
       assert.equal(initial.main.top,initial.toolbar.bottom+37,'module toolbar must sit between top bar and workspace');
       assert(Math.abs(initial.main.bottom-initial.viewport.height)<1.5,'workspace fills to bottom edge');
       assert(initial.ag.height>520,'AG must remain full-height below chapter controls');
-      assert.equal(initial.panes,3);
+      assert.equal(initial.panes,4);
       assert(Object.values(initial.removed).every(n=>n===0),'no duplicate status bars');
       assert.equal(initial.adjacent,'build-version','global status immediately follows build number');
       assert.equal(initial.outlineCount,21);

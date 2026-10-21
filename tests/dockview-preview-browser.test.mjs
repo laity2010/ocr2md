@@ -67,7 +67,7 @@ try {
           editor:window.__v6cm6.view,
         };
       });
-      assert.equal(snapshot.panes,3,label+' Dockview must contain outline + source + preview groups');
+      assert.equal(snapshot.panes,4,label+' Dockview must contain AG, source, MD preview and PDF groups');
       assert(snapshot.sourceExists && snapshot.sourceSize>300000);
       assert.equal(snapshot.images,11);
       assert.equal(snapshot.lazyImages,11);

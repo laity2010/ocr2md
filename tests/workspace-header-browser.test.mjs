@@ -30,7 +30,7 @@ try{
      document.querySelector('.ocr-markdown [data-source-start]'),null,{timeout:50000});
    const info=await page.evaluate(()=>{
     const api=window.__v6cm6.dockview;
-    return Object.fromEntries(['outline','source','preview'].map(id=>{
+    return Object.fromEntries(['outline','source','preview','pdf'].map(id=>{
       const group=api.getPanel(id).group;
       const container=group.element;
       const header=container.querySelector('.dv-tabs-and-actions-container');
@@ -49,6 +49,8 @@ try{
     assert(Math.abs(info[id].content.y-info[id].group.y)<3,`${id} left a titlebar gap`);
    }
    assert.equal(info.preview.hidden,false,'preview tab must remain visible');
+   assert.equal(info.pdf.hidden,false,'PDF preview tab must remain visible');
+   assert(info.pdf.header?.h>20,'PDF header collapsed');
    assert(info.preview.header?.h>20,'preview header collapsed');
    assert(info.preview.content.y>=info.preview.header.b-2,'preview must keep titlebar');
    assert.equal(await page.locator('.ocr-outline-checkbox').count(),21);
