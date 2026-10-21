@@ -23,7 +23,7 @@ const getState=()=>({source:window.__v6cm6.scrollSync.currentSource,
   driver:window.__v6cm6.scrollSync.lastDriver,
   seq:window.__v6cm6.scrollState.scrollTarget?.sequence,
   sourceY:window.__v6cm6.view.scrollDOM.scrollTop,
-  previewY:document.querySelector('.ocr-preview-pane').scrollTop,
+  previewY:document.querySelector('.ocr-preview-md-scroll').scrollTop,
 });
 const engines=[
   ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
@@ -97,7 +97,7 @@ try{
 
       // Preview → source: choose a distinct later paragraph section.
       await page.evaluate(()=>{
-        const pane=document.querySelector('.ocr-preview-pane');
+        const pane=document.querySelector('.ocr-preview-md-scroll');
         pane.dispatchEvent(new Event('wheel')); // actual user scroll intent
         pane.scrollTop=.77*(pane.scrollHeight-pane.clientHeight);
       });
@@ -118,14 +118,14 @@ try{
       // coordinator retains its public state API, including off/on regression.
       await page.evaluate(()=>window.__v6cm6.setScrollSyncEnabled(false));
       assert.equal(await page.evaluate(()=>window.__v6cm6.scrollState.scrollSyncEnabled),false);
-      const frozen=await page.evaluate(()=>document.querySelector('.ocr-preview-pane').scrollTop);
+      const frozen=await page.evaluate(()=>document.querySelector('.ocr-preview-md-scroll').scrollTop);
       const frozenAnchor=await page.evaluate(()=>window.__v6cm6.scrollSync.currentPreview);
       await page.evaluate(()=>{
         const view=window.__v6cm6.view;
         view.scrollDOM.scrollTop=view.lineBlockAt(view.state.doc.line(170).from).top;
       });
       await delay(350);
-      const disconnected=await page.evaluate(()=>document.querySelector('.ocr-preview-pane').scrollTop);
+      const disconnected=await page.evaluate(()=>document.querySelector('.ocr-preview-md-scroll').scrollTop);
       assert(Math.abs(disconnected-frozen)<3,name+' synchronization toggle OFF must freeze follower');
       await page.evaluate(()=>{
         const v=window.__v6cm6.view;
@@ -135,7 +135,7 @@ try{
       await page.waitForFunction(()=>window.__v6cm6.scrollState.documentRevision>=1,
         null,{timeout:10000});
       await delay(350);
-      const afterDisabledEdit=await page.evaluate(()=>document.querySelector('.ocr-preview-pane').scrollTop);
+      const afterDisabledEdit=await page.evaluate(()=>document.querySelector('.ocr-preview-md-scroll').scrollTop);
       const afterAnchor=await page.evaluate(()=>window.__v6cm6.scrollSync.currentPreview);
       console.log('SYNC_OFF_EDIT_POSITION',name,JSON.stringify({
         pixelBefore:frozen,pixelAfter:afterDisabledEdit,

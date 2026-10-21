@@ -80,7 +80,7 @@ try {
       assert.equal(initial.main.top,initial.toolbar.bottom+37,'module toolbar must sit between top bar and workspace');
       assert(Math.abs(initial.main.bottom-initial.viewport.height)<1.5,'workspace fills to bottom edge');
       assert(initial.ag.height>520,'AG must remain full-height below chapter controls');
-      assert.equal(initial.panes,4);
+      assert.equal(initial.panes,3);
       assert(Object.values(initial.removed).every(n=>n===0),'no duplicate status bars');
       assert.equal(initial.adjacent,'build-version','global status immediately follows build number');
       assert.equal(initial.outlineCount,21);
@@ -127,7 +127,7 @@ try {
       assert.deepEqual(errors,[],name+' page errors');
       console.log('COMPACT_SHELL_PASS',name,JSON.stringify({
         toolbarHeight:initial.toolbar.height,freedWorkspaceHeight:initial.main.height,
-        panes:4,buttons:initial.buttons,metadata:'global only',
+        panes:3,buttons:initial.buttons,metadata:'global only',
         undo:true,save:true,syncState:true,errors:errors.length,
       }));
     } finally {

@@ -239,8 +239,14 @@ export class PdfPreview {
     }
   }
   onScroll(){
-    if(this.disposed||performance.now()>this.explicitUserUntil||
-       performance.now()<this.suppressScrollUntil||!this.ready)return;
+    if(this.disposed||!this.ready)return;
+    // PDFViewer can finish its page/zoom layout after our first focus jump.
+    // Recalculate the independent overlay at the end of programmatic scroll,
+    // never compete with the user's own wheel/touch navigation.
+    if(this.active&&this.selected&&performance.now()>this.explicitUserUntil)
+      this.scheduleOverlay();
+    if(performance.now()>this.explicitUserUntil||
+       performance.now()<this.suppressScrollUntil)return;
     clearTimeout(this.userScrollTimer);
     this.userScrollTimer=setTimeout(()=>{
       if(!this.disposed&&this.viewer)this.sendPdfNavigation(this.viewer.currentPageNumber);

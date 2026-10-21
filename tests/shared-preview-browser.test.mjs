@@ -78,8 +78,7 @@ for(let i=0;i<engines.length;i++){
   assert.equal(await page.locator('.ocr-preview-md-scroll').evaluate(el=>getComputedStyle(el).visibility),'visible');
   assert.equal(await page.locator('.ocr-preview-pdf-host').evaluate(el=>getComputedStyle(el).visibility),'hidden');
   await page.locator('.ag-row[row-index="5"] [col-id="title"]').click();
-  await page.waitForTimeout(1300);
-  console.log('MODE_HIDDEN_DIAG',name,JSON.stringify(await page.evaluate(()=>({overlays:[...document.querySelectorAll('.ocr-pdf-region-overlay')].map(x=>({page:x.dataset.pdfPage,block:x.dataset.blockIndex})),selected:[...document.querySelectorAll('.ag-row[aria-selected="true"]')].map(x=>x.getAttribute('row-index')),sourceScroll:document.querySelector('.cm-scroller')?.scrollTop,mode:document.querySelector('.ocr-preview-mode')?.value,hidden:getComputedStyle(document.querySelector('.ocr-preview-pdf-host')).visibility}))));
+  await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]')?.dataset.blockIndex==='6',null,{timeout:16000});
   await page.locator('.ocr-preview-mode').selectOption('pdf');
   await page.waitForFunction(()=>{
     const el=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]');
@@ -104,7 +103,14 @@ for(let i=0;i<engines.length;i++){
     const scroller=document.querySelector('.ocr-pdf-scroller');
     if(!el||!scroller)return false;
     const r=el.getBoundingClientRect(),c=scroller.getBoundingClientRect();
-    return r.top>=c.top-3&&r.bottom<=c.bottom+3;
+    // Oversized OCR regions cannot physically fit; their center must remain
+    // visible. Smaller regions must be fully within the PDF viewport.
+    const fitsHeight=r.height<=c.height-28, fitsWidth=r.width<=c.width-28;
+    const visibleY=fitsHeight?(r.top>=c.top-4&&r.bottom<=c.bottom+4)
+      :((r.top+r.bottom)/2>=c.top&&(r.top+r.bottom)/2<=c.bottom);
+    const visibleX=fitsWidth?(r.left>=c.left-4&&r.right<=c.right+4)
+      :((r.left+r.right)/2>=c.left&&(r.left+r.right)/2<=c.right);
+    return visibleY&&visibleX;
   },null,{timeout:16000});
   assert.deepEqual(errors,[],name+' browser errors');
   assert.equal(hash(readFileSync(document)),hash(fixture));

@@ -76,7 +76,7 @@ try{
           })(),
         };
       });
-      assert.equal(initial.groups,4);
+      assert.equal(initial.groups,3);
       assert(initial.ag.height>initial.source.height*1.7);
       assert(initial.source.x>initial.ag.x+initial.ag.width-5);
       assert(initial.preview.y>initial.source.y+80);

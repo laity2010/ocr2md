@@ -44,7 +44,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
   page.on('requestfailed',r=>{if(!r.failure()?.errorText?.includes('ERR_ABORTED'))failures.push(r.url()+' '+r.failure()?.errorText)});
   await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-  await page.waitForFunction(()=>document.querySelectorAll('.dv-groupview').length===4&&
+  await page.waitForFunction(()=>document.querySelectorAll('.dv-groupview').length===3&&
     document.querySelectorAll('.ocr-outline-checkbox').length===21,
     null,{timeout:50000});
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪' &&
@@ -58,9 +58,10 @@ for(const [i,[name,engine,options]] of engines.entries()){
     canvas:document.querySelector('.ocr-pdf-pane .page canvas').getBoundingClientRect().toJSON(),
     scale:document.querySelector('.ocr-pdf-zoom').textContent,
   }));
-  assert.equal(initial.groups,4);assert.equal(initial.dark,'dark');
+  assert.equal(initial.groups,3);assert.equal(initial.dark,'dark');
   assert.match(initial.pages,/22/);
-  assert.deepEqual(initial.tabs.sort(),['Markdown 预览','PDF 原文'].sort());
+  assert.deepEqual(initial.tabs,[],'all pane tabs hidden; shared preview uses own dropdown');
+  await page.locator('.ocr-preview-mode').selectOption('pdf');
   await page.locator('.ocr-pdf-plus').click();
   await page.waitForFunction(old=>document.querySelector('.ocr-pdf-zoom')?.textContent!==old,
     initial.scale,{timeout:10000});
@@ -99,7 +100,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
   // Production has no dev seam; page-number UI is still an independent route.
   const selectedBefore=await page.locator('.ag-row[aria-selected="true"]').first().getAttribute('row-index');
   const sourceBefore=await page.locator('.cm-scroller').evaluate(el=>el.scrollTop);
-  const previewBefore=await page.locator('.ocr-preview-pane').evaluate(el=>el.scrollTop);
+  const previewBefore=await page.locator('.ocr-preview-md-scroll').evaluate(el=>el.scrollTop);
   await page.locator('.ocr-pdf-page').fill('8');
   await page.locator('.ocr-pdf-page').press('Enter');
   await page.waitForFunction(()=>{
@@ -117,7 +118,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
   await page.waitForFunction(previous=>{
     const ag=document.querySelector('.ag-row[aria-selected="true"]')?.getAttribute('row-index');
     const source=document.querySelector('.cm-scroller')?.scrollTop||0;
-    const preview=document.querySelector('.ocr-preview-pane')?.scrollTop||0;
+    const preview=document.querySelector('.ocr-preview-md-scroll')?.scrollTop||0;
     return ag!==previous.ag && (Math.abs(source-previous.source)>8||Math.abs(preview-previous.preview)>8);
   },{ag:selectedBefore,source:sourceBefore,preview:previewBefore},{timeout:17000});
   assert(!String(await page.locator('.ocr-pdf-status').textContent()).includes('不一致'));

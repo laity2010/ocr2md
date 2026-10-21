@@ -30,7 +30,7 @@ try{
      document.querySelector('.ocr-markdown [data-source-start]'),null,{timeout:50000});
    const info=await page.evaluate(()=>{
     const api=window.__v6cm6.dockview;
-    return Object.fromEntries(['outline','source','preview','pdf'].map(id=>{
+    return Object.fromEntries(['outline','source','preview'].map(id=>{
       const group=api.getPanel(id).group;
       const container=group.element;
       const header=container.querySelector('.dv-tabs-and-actions-container');
@@ -43,16 +43,13 @@ try{
     }));
    });
    console.log('V6_WORKSPACE_HEADERS',name,JSON.stringify(info));
-   for(const id of ['outline','source']){
+   for(const id of ['outline','source','preview']){
     assert.equal(info[id].hidden,true,`${id} header not hidden`);
     assert(info[id].content?.h>220,`${id} content invisible`);
     assert(Math.abs(info[id].content.y-info[id].group.y)<3,`${id} left a titlebar gap`);
    }
-   assert.equal(info.preview.hidden,false,'preview tab must remain visible');
-   assert.equal(info.pdf.hidden,false,'PDF preview tab must remain visible');
-   assert(info.pdf.header?.h>20,'PDF header collapsed');
-   assert(info.preview.header?.h>20,'preview header collapsed');
-   assert(info.preview.content.y>=info.preview.header.b-2,'preview must keep titlebar');
+   assert.equal(info.preview.hidden,true,'shared preview must use its own dropdown, not a Dockview header');
+   assert.equal(await page.locator('.ocr-preview-mode').count(),1,'one shared preview dropdown');
    assert.equal(await page.locator('.ocr-outline-checkbox').count(),21);
    assert.deepEqual(errors,[],name+' runtime errors');
    await page.screenshot({path:`.v6/evidence/workspace-headers-${name.toLowerCase()}.png`,timeout:25000});

@@ -148,3 +148,11 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - PDF.js 重绘可能销毁自己托管的 `.page` DOM。V6 高亮挂在独立滚动容器层，位置由当前 PDF 页 DOM 视觉坐标推导，页面重绘或 Dockview 尺寸变化重新定位；只在实际宽度变化时重排 PDF Viewer，防止持续重绘丢高亮。高亮仅在对应 PDF 块坐标经过严格有效性和页面宽高比校验后显示。
 - 自动测试 `tests/four-pane-pdf-browser.test.mjs` 在 Chrome 和 WebKit 分别验证：22 页、224 块、深色显示、Range、缩放、AG→PDF bbox 框选、旋转页 8 PDF 点击→AG/CM6/Markdown 回跳、PDF 和 MD 原件不修改；旧 AG/三窗测试同步升级为四窗检查。冻结 Lab 不能修改，实体 iPad Safari 视觉验收仍须用户完成。
 - 正式 V6 LaunchAgent 的 macOS TCC 权限无法直接读取 iCloud Obsidian PDF：先送出 Range 响应头再读取会导致连接中断及 Cloudflare 520。已将原始 PDF 逐字节 SHA-256 校验复制为 `.v6/workspace/buffetts-alpha.original.pdf`（只读、Git 忽略），默认由正式 V6 服务从工作区快照只读提供 Range；源 iCloud PDF 不修改。服务在发送 HTTP 200/206 之前必须先成功打开证据文件，失败统一明确返回 503，不能伪装 PDF 加载成功。变更工作区 PDF 时须显式更新该受控副本及哈希，而不是在组件内绕开 macOS 授权。
+
+## 20. 共用预览窗：三 Dockview 窗格、四个持续同步的视图（2026-10-21）
+
+- 顶层 Dockview **永远只有 AG、CM6 源码、共用预览这三个窗格**。共用预览窗自己的工具条左端是 `Markdown 预览 / PDF 原文` 下拉；切换哪种预览，就在下拉右侧呈现该预览独有的功能按钮（当前 Markdown 无独立功能按钮，PDF 有缩小、适宽、放大、倍率、页码与状态）。共用预览不再使用 Dockview 原生标签，AG 和 CM6 也继续没有标签栏。
+- **四个逻辑视图始终存在并接收定位事件**：`PreviewPanel` 同时拥有 Markdown DOM 阅读层和单一 PDF.js 实例，切换用 `visibility:hidden`，不能 `display:none`、销毁或重新构造 PDF.js，否则 PDF 页面尺寸、已绘制页面、缩放及高亮会丢失。CM6 始终是唯一文本编辑状态，Zustand 只传递临时位置；正常 MD 预览重绘与 PDF 模式切换不清空 CM6 Undo/Redo。
+- 滚动同步 `lastDriver` 必须严格区分 `cm6`、`preview`、`outline`、`pdf`：仅 **preview** 实际用户滚动才可把 MD 位置反向用于纠正 CM6；PDF/AG 的主动位置是源码坐标驱动，绝不可从旧 MD 预览滚动状态反向覆盖 PDF 跳转。`scroll-sync` 绑定持续存在的 `.ocr-preview-md-scroll`，即使隐藏仍保持 DOM 几何。
+- PDF 收到定位时不可只比较页码，必须同时比较 `pageIndex + blockIndex`，同一 PDF 页的不同文字块也须切换高亮。PDF 切到可见时，立刻依据最新 CM6/AG/MD/PDF 位置事件恢复对应 OCR bbox 高亮；较小的高亮框必须完整可见；高亮框大于预览窗（如第 8 页宽大的图表）时应居中显示最大可见部分，**不能为了完整容纳强制改动用户保存的缩放比例**。PDF.js 重绘后应恢复独立高亮层，不能指望 Canvas DOM 不发生替换。
+- PDF 只读源、当前 Markdown 母文档以及冻结 Lab 均不得由布局和定位测试改写。`tests/shared-preview-browser.test.mjs` 用 Chrome、WebKit 验收 3 个实际窗格、4 个逻辑视图、唯一模式下拉、MD/PDF 互切、工具栏、PDF 对象复用、缩放保持、隐藏状态同步、同页 block4→6 以及跨页至第 8 页后切回仍可见。既有三窗/四窗回归同步修改为此约束；实体 iPad Safari 仍须人工视觉验收。
