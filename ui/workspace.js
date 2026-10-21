@@ -22,6 +22,7 @@ let currentPreview=null;
 let scrollSync=null;
 let currentOutline=null;
 let currentPdf=null;
+let toggleSplitPreview=()=>{};
 
 class OutlinePanel {
   constructor(){
@@ -69,6 +70,13 @@ class PreviewPanel {
     this.switcher.setAttribute('aria-label','预览类型');
     this.switcher.innerHTML='<option value="md">Markdown 预览</option><option value="pdf">PDF 原文</option>';
     this.toolbar.append(this.switcher);
+    this.splitLabel=document.createElement('label');
+    this.splitLabel.className='ocr-preview-split-toggle';
+    this.splitCheckbox=document.createElement('input');
+    this.splitCheckbox.type='checkbox';
+    this.splitCheckbox.setAttribute('aria-label','拆分 PDF 预览');
+    this.splitLabel.append(this.splitCheckbox,document.createTextNode('拆分'));
+    this.toolbar.append(this.splitLabel);
     this.mdTools=document.createElement('div');
     this.mdTools.className='ocr-preview-mode-tools';
     this.mdTools.dataset.mode='md';
@@ -100,6 +108,7 @@ class PreviewPanel {
         sourceEnd:Number(target.dataset.sourceEnd),origin:'preview'});
     };
     this.switcher.addEventListener('change',()=>this.setMode(this.switcher.value));
+    this.splitCheckbox.addEventListener('change',()=>toggleSplitPreview(this.splitCheckbox.checked));
     currentPreview=this;
   }
   init(){
@@ -117,6 +126,7 @@ class PreviewPanel {
   }
   setMode(mode){
     if(mode!=='md'&&mode!=='pdf')return;
+    if(this.splitCheckbox.checked && mode==='pdf')return;
     this.mode=mode;
     this.switcher.value=mode;
     this.element.dataset.previewMode=mode;
@@ -128,6 +138,16 @@ class PreviewPanel {
       if(mode==='pdf')this.pdf.revealCurrentLocation(); // only pending explicit click
       // Hidden MD viewport retains its geometry and synchronized scroll.
     }
+  }
+  detachPdf(panel){
+    panel.pdfHost.append(this.pdfPane);
+    this.pdf.moveToolbarTo(panel.pdfTools);
+    this.pdf.setActive(true);
+  }
+  reattachPdf(){
+    if(this.pdfPane.parentElement!==this.element)this.element.append(this.pdfPane);
+    this.pdf?.moveToolbarTo(this.pdfTools);
+    this.pdf?.setActive(this.mode==='pdf');
   }
   layout(){this.pdf?.onResize();scrollSync?.measureLater();}
   schedule(immediate=false){
@@ -181,6 +201,39 @@ class PreviewPanel {
   }
 }
 
+/** Dockview wrapper: PDF.js and its scroller survive detaching and merging.
+ * This component never owns or disposes the viewer, only its layout host. */
+class DetachedPdfPanel {
+  constructor(){
+    this.element=document.createElement('div');
+    this.element.className='ocr-detached-pdf-pane';
+    this.element.setAttribute('aria-label','独立 PDF 原文预览');
+    this.toolbar=document.createElement('div');
+    this.toolbar.className='ocr-detached-pdf-toolbar';
+    const name=document.createElement('span');
+    name.className='ocr-detached-pdf-title';
+    name.textContent='PDF';
+    this.pdfTools=document.createElement('div');
+    this.pdfTools.className='ocr-detached-pdf-tools';
+    this.toolbar.append(name,this.pdfTools);
+    this.pdfHost=document.createElement('div');
+    this.pdfHost.className='ocr-detached-pdf-host';
+    this.element.append(this.toolbar,this.pdfHost);
+    this.preview=null;
+  }
+  init(){
+    this.preview=currentPreview;
+    if(!this.preview?.pdf)throw Error('PDF 预览尚未初始化');
+    this.preview.detachPdf(this);
+  }
+  layout(){this.preview?.pdf?.onResize();}
+  dispose(){
+    // Emergency restoration also covers external Dockview panel removal.
+    this.preview?.reattachPdf();
+    this.preview=null;
+  }
+}
+
 export function createWorkspace(container, getDocument, getCurrentEditor) {
   getMarkdown=getDocument;
   getEditor=getCurrentEditor;
@@ -190,6 +243,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
       if (name==='outline') return new OutlinePanel();
       if (name==='source') return new SourcePanel();
       if (name==='preview') return new PreviewPanel();
+      if (name==='pdf') return new DetachedPdfPanel();
       throw new Error('Unknown pane '+name);
     },
   });
@@ -206,6 +260,41 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     panel.group.header.hidden=true;
     panel.group.relayout();
   }
+  let split=false;
+  toggleSplitPreview=(enabled)=>{
+    if(!currentPreview || enabled===split)return;
+    const preview=currentPreview;
+    if(enabled){
+      preview.setMode('md');
+      try{
+        const panel=dockview.addPanel({id:'pdf',component:'pdf',title:'PDF 原文',
+          position:{referencePanel:'preview',direction:'right'}});
+        panel.group.header.hidden=true;
+        panel.group.relayout();
+        split=true;
+        preview.splitCheckbox.checked=true;
+        preview.switcher.disabled=true;
+      }catch(error){
+        preview.reattachPdf();
+        preview.splitCheckbox.checked=false;
+        preview.switcher.disabled=false;
+        throw error;
+      }
+    }else{
+      // Return the persistent PDF.js DOM before Dockview removes its host.
+      preview.reattachPdf();
+      split=false;
+      preview.splitCheckbox.checked=false;
+      preview.switcher.disabled=false;
+      const panel=dockview.getPanel('pdf');
+      if(panel)dockview.removePanel(panel);
+      preview.setMode('md');
+    }
+    requestAnimationFrame(()=>{
+      preview.pdf?.onResize();
+      scrollSync?.measureLater();
+    });
+  };
   dockview.onDidActivePanelChange(event => {
     viewStore.setState({activePanel:event.panel?.id||null});
   });
@@ -216,6 +305,8 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     get outlineGrid(){return currentOutline?.grid;},
     get pdf(){return currentPdf?.pdf;},
     get previewMode(){return currentPreview?.mode;},
+    get previewSplit(){return split;},
+    setPreviewSplit(enabled){toggleSplitPreview(Boolean(enabled));},
     setPreviewMode(mode){currentPreview?.setMode(mode);},
     refreshPdf(){currentPdf?.pdf?.refreshAnchors();},
     startScrollSync() {

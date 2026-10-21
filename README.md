@@ -8,7 +8,7 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 ## 当前工作台
 
-- **三个 Dockview 窗格，四个逻辑视图**：左侧 AG Grid 章节表、右上 CodeMirror 6（CM6）源码、右下共用预览窗；下拉选择 Markdown 阅读预览或 PDF.js 原文。两个预览实例持续保留，切换时不重建。
+- **Dockview 三窗／四窗切换**：左侧 AG Grid 章节表、右上 CodeMirror 6（CM6）源码、右下共用预览窗。预览栏默认用下拉框切换 Markdown 阅读预览或 PDF.js 原文；勾选「拆分」后 PDF 成为右下独立 Dockview 窗格，与 Markdown 预览左右并排，可拖动分隔线调宽；取消勾选回到原共用窗。PDF.js 实例、缩放和 OCR 定位保持不变，切换无需重新创建 PDF Viewer。
 - **CMD / CM6 单一编辑状态**：CMD（`CMDocument`）是围绕 CodeMirror 6 的轻量文档接口；CM6 EditorState 持有唯一可编辑的 Markdown 正文及 Undo/Redo 历史。CMD 已提供只读 `getMarkdown()` 输出及可选的 `omitMineruEnd` 过滤；该选项目前**对返回内容进行过滤，不直接修改编辑器或磁盘文件**。iOS/iPadOS 使用 Safari 原生光标与文本选区，Mac 保留既有 CM6 选区。AG 与 Markdown 预览从正文派生，Zustand Vanilla 只传递修订号及定位事件。正常保存不清空撤销历史。
 - **源码引用缩进**：顶栏 `>+` / `>−` 按钮针对 CM6 光标行或选区覆盖的多行，各增加或移除一个前导 `>`；整组选区变化为一次撤销步骤，不重新定位源码滚动。`minerujson:block` 锚点允许带一层或多层引用前缀，AG、PDF 和章节导出仍按原 ID 定位；多行原始 JSON／PDF 证据注释不允许缩进以保护原文。
 - **章节定界**：AG 按顺序显示标题（固定首列）、层级、PDF 页码、独立成章、章节文件；勾选通过 CM6 的 HTML 注释标定正文。修改标题和勾选实时更新大纲，保存后持久化。起始编号默认 `000`，保留用户输入的位数及前导零。
@@ -24,7 +24,7 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 | 位置 | 职责 |
 | --- | --- |
-| `ui/main.js`、`ui/workspace.js` | 应用入口、操作编排、三个 Dockview 窗格与共用预览下拉 |
+| `ui/main.js`、`ui/workspace.js` | 应用入口、操作编排、Dockview 三窗／四窗预览拆分与恢复 |
 | `ui/cm-document.js`、`ui/chapter-markers.js` | CM6 文档封装及章节 HTML 标定 |
 | `ui/outline-index.js`、`ui/outline-grid.js`、`ui/chapter-files.js` | 章节索引、AG 表、文件归属及导出内容 |
 | `ui/markdown-preview.js`、`ui/pdf-preview.js` | Markdown 只读投影、PDF.js 原文及 OCR 区域高亮 |
@@ -74,6 +74,8 @@ npm run test:preview                 # Markdown 渲染
 npm run test:shell                   # 顶栏、布局、Undo/保存
 node tests/promoted-chapters-browser.test.mjs
 node tests/shared-preview-browser.test.mjs
+node tests/preview-split-browser.test.mjs
+node tests/preview-split-browser.test.mjs
 node tests/pdf-click-only-browser.test.mjs
 node tests/engineering-initialize-browser.test.mjs
 node --test tests/mineru-lossless-migration.test.mjs

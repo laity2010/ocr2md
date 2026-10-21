@@ -71,3 +71,23 @@
 .ocr-preview-pane[data-preview-mode="md"] .ocr-preview-md-scroll {
   visibility:visible;pointer-events:auto}
 
+
+/* Optional two-pane preview: MD and PDF are neighboring Dockview groups.
+   Their bodies remain alive when switching; only PDF's DOM parent changes. */
+.ocr-preview-split-toggle {display:flex;align-items:center;gap:5px;
+  font:12px/1.3 "OCR2MD Sarasa",monospace;color:#d3c6aa;
+  white-space:nowrap;cursor:pointer;user-select:none}
+.ocr-preview-split-toggle input {margin:0;accent-color:#569d79;width:15px;height:15px}
+.ocr-preview-mode:disabled {opacity:.7}
+.ocr-detached-pdf-pane {position:relative;width:100%;height:100%;min-width:0;
+  min-height:0;overflow:hidden;background:#252d32}
+.ocr-detached-pdf-toolbar {position:absolute;top:0;left:0;right:0;height:34px;
+  display:flex;align-items:center;gap:5px;padding:2px 4px;background:#283238;
+  border-bottom:1px solid #4d585d;overflow:hidden}
+.ocr-detached-pdf-title {flex:none;font:12px "OCR2MD Sarasa",monospace;color:#d3c6aa}
+.ocr-detached-pdf-tools {display:flex;align-items:center;flex:1;min-width:0}
+.ocr-detached-pdf-tools .ocr-pdf-tools {position:static;height:28px;
+  padding:0;border:0;background:transparent;z-index:auto;width:100%}
+.ocr-detached-pdf-host {position:absolute;inset:34px 0 0 0;min-width:0;min-height:0}
+.ocr-detached-pdf-host .ocr-preview-pdf-host {top:0;bottom:0}
+@media(max-width:950px){.ocr-detached-pdf-title {display:none}}
