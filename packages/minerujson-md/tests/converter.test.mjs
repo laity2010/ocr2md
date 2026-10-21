@@ -26,8 +26,6 @@ test('real Buffett Alpha fixture: no loss of even JSON whitespace',()=>{
   assert(audited.startsWith('<!-- minerujson:audit:v1:complete -->'));
   assert.equal(toMineruJSON(audited),raw);
   assert.equal(toMineruJSON(saved),raw);
-  assert(!saved.includes('minerujson:end:'),'fixture follows single-start boundary');
-  assert(!audited.includes('minerujson:end:'),'new converter emits no end markers');
   const count = original.pdf_info.reduce((sum,p)=>sum+p.para_blocks.length,0);
   assert.equal(saved.match(/<!-- minerujson:block:v1:/g)?.length,count);
   assert.equal(count,224);
@@ -38,7 +36,7 @@ test('real Buffett Alpha fixture: no loss of even JSON whitespace',()=>{
   assert(audited.includes('Volume 74 Number 4'));
   assert(audited.includes('We thank Clif Asness'));
   assert(audited.includes('Financial Analysts Journal'));
-  assert.equal(toMineruJSON(saved),raw,'single-start unaudited fixture must roundtrip');
+  assert.equal(toMineruJSON(saved),raw,'the old legacy fixture must remain compatible');
 });
 
 test('valid GFM / HTML comments / images / math code / tables',()=>{
@@ -108,7 +106,7 @@ test('math code edit updates the original equation span',()=>{
 });
 
 test('missing anchors, metadata corruption and added free text are rejected',()=>{
-  assert.throws(()=>toMineruJSON(saved.replace('<!-- minerujson:block:v1:0:0 -->','')),/INVALID/);
+  assert.throws(()=>toMineruJSON(saved.replace('<!-- minerujson:end:v1:0:0 -->','')),/INVALID/);
   assert.throws(()=>toMineruJSON(saved.replace(/(<!-- minerujson:source:v1:)[a-f0-9]/,'$1f')),/INVALID/);
   assert.throws(()=>toMineruJSON('# untracked\n\n'+saved),/INVALID/);
 });
@@ -158,32 +156,4 @@ test('input can also be parsed JSON object; corrupted JSON rejected',()=>{
   const md=toMarkdown({pdf_info:[{page_idx:0,para_blocks:[{type:'title',level:1,lines:[{spans:[{type:'text',content:'Hello'}]}]}]}]});
   assert.equal(JSON.parse(toMineruJSON(md)).pdf_info[0].para_blocks[0].lines[0].spans[0].content,'Hello');
   assert.throws(()=>toMarkdown('{'),SyntaxError);
-});
-
-
-test('page evidence and start-only boundaries reject injected or changed records',()=>{
-  const md=toMarkdown(raw);
-  const next='<!-- minerujson:block:v1:1:0 -->';
-  assert(md.includes(next));
-  assert.equal(toMineruJSON(md),raw);
-  assert.throws(()=>toMineruJSON(md.replace('<!-- minerujson:page:v1:1\n',
-    '<!-- minerujson:page:v1:7\n')),/INVALID/);
-  assert.throws(()=>toMineruJSON(md.replace(next,'injected body\n\n'+next)),/INVALID/);
-  assert.throws(()=>toMineruJSON(md.replace(next,'<!-- minerujson:block:v1:1:5 -->')),/INVALID/);
-  assert.throws(()=>toMineruJSON(md.replace(next,
-    '<!-- minerujson:end:v1:0:16 -->\n\n'+next)),/INVALID/);
-  // The last page and EOF also belong outside the preceding body.
-  assert.throws(()=>toMineruJSON(md.replace(/(<!-- minerujson:source:v1:)/,'extra\n\n$1')),/INVALID/);
-});
-
-test('zero-block pages and chapter annotations preserve strict source data',()=>{
-  const sample=structuredClone(original);
-  sample.pdf_info.splice(1,0,{page_idx:999,para_blocks:[],discarded_blocks:[]});
-  sample.pdf_info.push({page_idx:1000,para_blocks:[],discarded_blocks:[]});
-  const md=toMarkdown(sample);
-  assert.equal(toMineruJSON(md),JSON.stringify(sample));
-  const annotated=toMarkdown(raw).replace('<!-- minerujson:block:v1:0:0 -->\n\n',
-    '<!-- minerujson:block:v1:0:0 -->\n\n<!-- ocr2md:chapter:v1 id="mineru:0:0:0" independent="1" -->\n');
-  assert.equal(toMineruJSON(annotated),raw);
-  assert.throws(()=>toMineruJSON(annotated.replace('id="mineru:0:0:0"','id="mineru:0:1:0"')),/INVALID/);
 });

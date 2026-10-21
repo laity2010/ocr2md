@@ -11,7 +11,8 @@ import type {Root, RootContent} from 'mdast';
 const VERSION = '0.1.0';
 const parser = unified().use(remarkParse).use(remarkGfm);
 const writer = unified().use(remarkStringify).use(remarkGfm);
-const blockStart = /^<!-- minerujson:block:v1:(\d+):(\d+) -->$/gm;
+const blockStart = /<!-- minerujson:block:v1:(\d+):(\d+) -->/g;
+const blockEnd = (page: number, index: number) => `<!-- minerujson:end:v1:${page}:${index} -->`;
 const sourcePattern = /<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\n]+)\n-->\s*$/;
 
 type Span = {type?: string; content?: string; html?: string; image_path?: string; [key: string]: unknown};
@@ -233,7 +234,7 @@ export function toMarkdown(input: string | Mineru): string {
       const slots = project(block,pageIndex,index,true);
       const body = serialize(slots.map(s => s.node));
       // Anchor identifiers are regular HTML comments, not custom Markdown syntax.
-      pieces.push(`<!-- minerujson:block:v1:${pageIndex}:${index} -->\n\n${body}`);
+      pieces.push(`<!-- minerujson:block:v1:${pageIndex}:${index} -->\n\n${body}\n\n${blockEnd(pageIndex,index)}`);
     }
   }
   const bytes = Buffer.from(raw, 'utf8');
@@ -257,61 +258,62 @@ export function toMineruJSON(markdown: string): string {
   const markers = [...visible.matchAll(blockStart)];
   const total = data.pdf_info.reduce((n,page)=>n+page.para_blocks.length,0);
   assert(markers.length === total, `block anchor count ${markers.length} != ${total}`);
+  let cursor = 0;
+  let counter = 0;
   let modified = false;
   const audited=visible.startsWith(AUDIT_VERSION);
-  const meta: Record<string,unknown>={};
-  for(const [key,value] of Object.entries(data))if(key!=='pdf_info')meta[key]=value;
-  const documentHeader=audited
-    ? `${AUDIT_VERSION}\n\n<!-- minerujson:document-meta:v1\n${safeJson(meta)}\n-->` : '';
-  const blocks=data.pdf_info.flatMap((page,pageNo)=>page.para_blocks.map((block,blockNo)=>
-    ({pageNo,blockNo,block})));
-  const auditBetween=(start: number,end: number): string=>audited
-    ? data.pdf_info.slice(start,end).map((page,index)=>pageAudit(page,start+index)).join('\n\n')
-    : '';
-  const beforeFirst=auditBetween(0,blocks[0]?.pageNo===undefined?data.pdf_info.length:blocks[0].pageNo+1);
-  assert(visible.slice(0,markers[0]?.index??visible.length).trim()===
-    [documentHeader,beforeFirst].filter(Boolean).join('\n\n').trim(),
-    'document/page evidence before first block was modified');
-  for(let i=0;i<blocks.length;i++){
-    const {pageNo,blockNo,block}=blocks[i];
-    const start=markers[i];
-    assert(start.index!==undefined,'missing block marker');
-    assert(Number(start[1])===pageNo && Number(start[2])===blockNo,'block order/anchor changed');
-    const next=markers[i+1];
-    const nextPage=next?blocks[i+1].pageNo:data.pdf_info.length;
-    const gap=visible.slice(start.index+start[0].length,next?.index??visible.length).trim();
-    // Page evidence belongs BETWEEN blocks, never to the preceding block.
-    // Include skipped empty pages and the final page, if any.
-    const evidence=auditBetween(pageNo+1,Math.min(nextPage+1,data.pdf_info.length));
-    if(evidence)assert(gap.endsWith(evidence),'page evidence missing, changed or misplaced');
-    let fragment=(evidence?gap.slice(0,-evidence.length):gap).trim();
-    // A chapter marker is an editor annotation on its own heading, not
-    // text to be projected back into the original MinerU OCR span.
-    if(block.type==='title'){
-      const prefix=/^<!-- ocr2md:chapter:v1 id="mineru:(\d+):(\d+):0" independent="[01]" -->\s*/.exec(fragment);
-      if(prefix){
-        assert(Number(prefix[1])===pageNo&&Number(prefix[2])===blockNo,
-          'chapter marker belongs to another MinerU block');
-        fragment=fragment.slice(prefix[0].length).trim();
-      }
-    }
-    const oldSlots=project(block,pageNo,blockNo,audited);
-    const oldFragment=serialize(oldSlots.map(x=>x.node));
-    if(fragment===oldFragment)continue;
-    // Earlier V6 files used a placeholder instead of a metadata-only block.
-    if(audited&&oldSlots.every(s=>s.kind==='literal')&&
-      fragment===serialize(project(block,pageNo,blockNo,false).map(s=>s.node)))continue;
-    const parsed=parser.parse(fragment) as Root;
-    assert(parsed.children.length===oldSlots.length,'block element count changed');
-    for(let n=0;n<parsed.children.length;n++){
-      const prev=oldSlots[n],nextSlot=parsed.children[n];
-      if(distinctCanonical([prev.node])!==distinctCanonical([nextSlot])){
-        assert(prev.node.type===nextSlot.type,`block ${pageNo}:${blockNo} expected ${prev.node.type}, got ${nextSlot.type}`);
-        patchSlot(prev,nextSlot,block);
-      }
-    }
-    modified=true;
+  if(audited){
+    const meta: Record<string,unknown>={};
+    for(const [key,value] of Object.entries(data))if(key!=='pdf_info')meta[key]=value;
+    const expected=`${AUDIT_VERSION}\n\n<!-- minerujson:document-meta:v1\n${safeJson(meta)}\n-->`;
+    assert(visible.startsWith(expected),'document metadata audit was changed');
+    cursor=expected.length;
   }
+  for (const [pageNo,page] of data.pdf_info.entries()) {
+    const expected=audited ? pageAudit(page,pageNo) : '';
+    if(page.para_blocks.length===0){
+      if(audited){
+        assert(visible.slice(cursor).trimStart().startsWith(expected),
+          'page evidence missing or changed');
+        const where=visible.indexOf(expected,cursor);
+        cursor=where+expected.length;
+      }
+      continue;
+    }
+    for (const [blockNo,block] of page.para_blocks.entries()) {
+      const start = markers[counter++];
+      assert(start.index !== undefined,'missing block marker');
+      assert(visible.slice(cursor,start.index).trim()===(blockNo===0 ? expected : ''),
+        'unexpected or modified page evidence outside anchored blocks');
+      assert(Number(start[1])===pageNo && Number(start[2])===blockNo, 'block order/anchor changed');
+      const end = blockEnd(pageNo,blockNo);
+      const from = start.index+start[0].length;
+      const endAt = visible.indexOf(end,from);
+      assert(endAt >= 0,'end anchor missing');
+      const fragment = visible.slice(from,endAt).trim();
+      cursor = endAt+end.length;
+      const oldSlots = project(block,pageNo,blockNo,audited);
+      const oldFragment = serialize(oldSlots.map(x => x.node));
+      if (fragment === oldFragment) continue;
+      // Additive upgrades must preserve existing user document bytes. Early
+      // V6 documents used a text placeholder for a metadata-only table; the
+      // new converter renders its original block as an opaque HTML comment.
+      // Accept that *exact* original placeholder, never arbitrary edits.
+      if(audited && oldSlots.every(s=>s.kind==='literal') &&
+        fragment===serialize(project(block,pageNo,blockNo,false).map(s=>s.node)))continue;
+      const parsed = parser.parse(fragment) as Root;
+      assert(parsed.children.length === oldSlots.length,'block element count changed');
+      for (let i=0;i<parsed.children.length;i++) {
+        const prev = oldSlots[i];
+        const next = parsed.children[i];
+        if (distinctCanonical([prev.node])!==distinctCanonical([next])) {
+          patchSlot(prev,next,block);
+        }
+      }
+      modified = true;
+    }
+  }
+  assert(visible.slice(cursor).trim()==='', 'unexpected extra content after last anchor');
   return modified ? JSON.stringify(data,null,2) : restored;
 }
 

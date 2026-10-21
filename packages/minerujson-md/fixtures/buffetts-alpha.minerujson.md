@@ -2,181 +2,271 @@
 
 ## Bufett’s Alpha
 
+<!-- minerujson:end:v1:0:0 -->
+
 <!-- minerujson:block:v1:0:1 -->
 
 ## Andrea Frazzini, David Kabiller & Lasse Heje Pedersen
+
+<!-- minerujson:end:v1:0:1 -->
 
 <!-- minerujson:block:v1:0:2 -->
 
 To cite this article: Andrea Frazzini, David Kabiller & Lasse Heje Pedersen (2018) Bufett’s Alpha, Financial Analysts Journal, 74:4, 35-55, DOI: 10.2469/faj.v74.n4.3
 
+<!-- minerujson:end:v1:0:2 -->
+
 <!-- minerujson:block:v1:0:3 -->
 
 To link to this article: https\://doi.org/10.2469/faj.v74.n4.3
+
+<!-- minerujson:end:v1:0:3 -->
 
 <!-- minerujson:block:v1:0:4 -->
 
 © 2018 The Author(s). Published with license by Taylor & Francis Group, LLC.
 
+<!-- minerujson:end:v1:0:4 -->
+
 <!-- minerujson:block:v1:0:5 -->
 
 ![image](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/902dda6f5df0dd237d86729fbc60d096425d7def87f5c2450f455611d67ff5de.jpg)
+
+<!-- minerujson:end:v1:0:5 -->
 
 <!-- minerujson:block:v1:0:6 -->
 
 Published online: 12 Dec 2018.
 
+<!-- minerujson:end:v1:0:6 -->
+
 <!-- minerujson:block:v1:0:7 -->
 
 ![image](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/23aa24ce5f358f8fff7cc549d86fc9cedd8dd2de46bebc8ffa691d7d6dd15af7.jpg)
+
+<!-- minerujson:end:v1:0:7 -->
 
 <!-- minerujson:block:v1:0:8 -->
 
 Submit your article to this journal
 
+<!-- minerujson:end:v1:0:8 -->
+
 <!-- minerujson:block:v1:0:9 -->
 
 ![image](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/6252116d645cd544f9605ee824f74fe6b2bac4ae9291d3faf55aeca7fa066662.jpg)
+
+<!-- minerujson:end:v1:0:9 -->
 
 <!-- minerujson:block:v1:0:10 -->
 
 Article views: 106776
 
+<!-- minerujson:end:v1:0:10 -->
+
 <!-- minerujson:block:v1:0:11 -->
 
 ![image](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/031c3604faba0185351e74636223745105cd88a2ef7a04222d4ef74ee00e2311.jpg)
+
+<!-- minerujson:end:v1:0:11 -->
 
 <!-- minerujson:block:v1:0:12 -->
 
 View related articles
 
+<!-- minerujson:end:v1:0:12 -->
+
 <!-- minerujson:block:v1:0:13 -->
 
 ![image](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/74b37c7ed6bdf2d2cdd41b8c8e1beb832107175266b474535cfb3670a97a28f8.jpg)
+
+<!-- minerujson:end:v1:0:13 -->
 
 <!-- minerujson:block:v1:0:14 -->
 
 View Crossmark data
 
+<!-- minerujson:end:v1:0:14 -->
+
 <!-- minerujson:block:v1:0:15 -->
 
 ![image](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/79fd8fbae52f77b86a6ada939e5e2e96c659d73f0866b881f7cc472dede28f4d.jpg)
+
+<!-- minerujson:end:v1:0:15 -->
 
 <!-- minerujson:block:v1:0:16 -->
 
 Citing articles: 23 View citing articles
 
+<!-- minerujson:end:v1:0:16 -->
+
 <!-- minerujson:block:v1:1:0 -->
 
 ∂ OPEN ACCESS
+
+<!-- minerujson:end:v1:1:0 -->
 
 <!-- minerujson:block:v1:1:1 -->
 
 # Buffett’s Alpha
 
+<!-- minerujson:end:v1:1:1 -->
+
 <!-- minerujson:block:v1:1:2 -->
 
 # Andrea Frazzini, David Kabiller, CFA, and Lasse Heje Pedersen
+
+<!-- minerujson:end:v1:1:2 -->
 
 <!-- minerujson:block:v1:1:3 -->
 
 ![image](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/18c9c5a0d9ebee3b69353c18dfbfbd28d304ae546b1a5d060cb67269885573e5.jpg)
 
+<!-- minerujson:end:v1:1:3 -->
+
 <!-- minerujson:block:v1:1:4 -->
 
 Andrea Frazzini is a principal at AQR Capital Management, Greenwich, Connecticut. David Kabiller, CFA, is a founding principal at AQR Capital Management, Greenwich, Connecticut. Lasse Heje Pedersen is a principal at AQR Capital Management and professor at Copenhagen Business School, Frederiksberg, Denmark.
+
+<!-- minerujson:end:v1:1:4 -->
 
 <!-- minerujson:block:v1:1:5 -->
 
 Top Award
 
+<!-- minerujson:end:v1:1:5 -->
+
 <!-- minerujson:block:v1:1:6 -->
 
 Warren Bufet’s Berkshire Hathaway has realized a Sharpe ratio of 0.79 with significant alpha to traditional risk factors. The alpha became insignificant, however, when we controlled for exposure to the factors “beting against beta” and “quality minus junk.” Furthermore, we estimate that Bufet’s leverage is about 1.7 to 1, on average. Therefore, Bufet’s returns appear to be neither luck nor magic but, rather, a reward for leveraging cheap, safe, high-quality stocks. Decomposing Berkshire’s portfolio into publicly traded stocks and wholly owned private companies, we found that the public stocks have performed the best, which suggests that Bufet’s returns are more the result of stock selection than of his efect on management.
+
+<!-- minerujson:end:v1:1:6 -->
 
 <!-- minerujson:block:v1:1:7 -->
 
 Editor’s Note: The original version had an error in Table 1, which has been corrected here.
 
+<!-- minerujson:end:v1:1:7 -->
+
 <!-- minerujson:block:v1:1:8 -->
 
 Disclosure: The authors are principals at AQR Capital Management, a global investment management firm, which may or may not apply investment techniques or methods of analysis similar to those described in this article. The views expressed here are those of the authors and not necessarily those of AQR.
+
+<!-- minerujson:end:v1:1:8 -->
 
 <!-- minerujson:block:v1:1:9 -->
 
 M\<sup>uch\</sup> \<sup>has\</sup> \<sup>been\</sup> \<sup>said\</sup> \<sup>and\</sup> \<sup>writen\</sup> \<sup>about\</sup> \<sup>Warren\</sup> \<sup>Bufet\</sup> \<sup>and\</sup> \<sup>his\</sup>investment style, but litle rigorous empirical analysis hasinvestment style, but little rigorous empirical analysis has been conducted to explain his performance. Every investor has a view on how Bufet has done it and the practical implications of his success, but we sought the answer via a thorough empirical analysis of Bufet’s results in light of some of the latest research on the drivers of returns.\<sup>1\</sup>
 
+<!-- minerujson:end:v1:1:9 -->
+
 <!-- minerujson:block:v1:1:10 -->
 
 Bufet’s success has become the focal point of the debate on market eficiency that continues to be at the heart of financial economics. Eficient market supporters suggest that his success may simply be luck; Bufet is the happy winner of a coin-flipping contest, as articu- lated by Michael Jensen at a famous 1984 conference at Columbia Business School celebrating the 50th anniversary of the classic text by Graham and Dodd (1934).\<sup>2\</sup> Tests of this argument via a statisti- cal analysis of Bufet’s performance cannot fully resolve the issue. Instead, Bufet countered at the conference that it is no coincidence that many of the winners in the stock market come from the same intellectual village—that is, “Graham-and-Doddsville” (Bufet 1984). How can Bufet’s counterargument be tested? Selecting successfu investors who are informally classified as belonging to Graham-and- Doddsville ex post is subject to biases.
+
+<!-- minerujson:end:v1:1:10 -->
 
 <!-- minerujson:block:v1:1:11 -->
 
 In our study, we used a diferent strategy to rigorously examine this issue. The standard academic factors that capture the market, size, value, and momentum premiums cannot explain Bufet’s performance, so his success has to date been a mystery (Martin and Puthenpurackal 2008). We show that accounting for the general tendency of high-qual- ity, safe, and cheap stocks to outperform can explain much of Bufet’s performance.\<sup>3\</sup> This finding is consistent with the idea that investors from Graham-and-Doddsville follow similar strategies to achieve similar results and inconsistent with stocks being chosen based on coin flips. Hence, Bufet’s success appears not to be luck; rather, Bufet personal- izes the success of value and quality investment, providing real-world out-of-sample evidence on the ideas of Graham and Dodd (1934).
 
+<!-- minerujson:end:v1:1:11 -->
+
 <!-- minerujson:block:v1:1:12 -->
 
 Open Access: This is an Open Access article distributed under the terms of the Creative Commons Atribution License (htp\:// creativecommons.org/licenses/by/4.0/), which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited.
+
+<!-- minerujson:end:v1:1:12 -->
 
 <!-- minerujson:block:v1:1:13 -->
 
 CE Credits: 1
 
+<!-- minerujson:end:v1:1:13 -->
+
 <!-- minerujson:block:v1:2:0 -->
 
 Bufet’s record is remarkable in many ways, but we also examined just how spectacular the performance of Berkshire Hathaway has been when compared with that of other stocks or mutual funds.
+
+<!-- minerujson:end:v1:2:0 -->
 
 <!-- minerujson:block:v1:2:1 -->
 
 To illustrate the practical relevance of our findings, we created a portfolio that tracked Bufet’s market exposure and active stock-selection themes, lever- aged to the same active risk as that of Berkshire Hathaway. We found that this systematic Bufet- style portfolio performed comparably to Berkshire.
 
+<!-- minerujson:end:v1:2:1 -->
+
 <!-- minerujson:block:v1:2:2 -->
 
 Of course, explaining Bufet’s performance with the benefit of hindsight does not diminish his outstanding accomplishment. He decided half a century ago to base his investments on the Graham and Dodd principles, and he found a way to apply leverage. Finally, he managed to stick to his prin- ciples and continue operating at high risk even after experiencing some ups and downs that have caused many other investors to rethink and retreat from their original strategies.
+
+<!-- minerujson:end:v1:2:2 -->
 
 <!-- minerujson:block:v1:2:3 -->
 
 Finally, we consider whether Bufet’s skill is the result of his ability to buy the right stocks or his abil- ity as a CEO.
 
+<!-- minerujson:end:v1:2:3 -->
+
 <!-- minerujson:block:v1:2:4 -->
 
 ## Data Sources
+
+<!-- minerujson:end:v1:2:4 -->
 
 <!-- minerujson:block:v1:2:5 -->
 
 Our data come from several sources. We used stock return data from the CRSP database, balance sheet data from the Compustat North America database as well as hand-collected annual reports, holdings data for Berkshire Hathaway from the Thomson Reuters Institutional (13F) Holdings Database (based on Berkshire’s US SEC filings), the size and cost of the insurance float from hand-collected comments in Berkshire Hathaway’s annual reports, and mutual fund data from the CRSP Mutual Fund Database. We also used factor returns from Kenneth French’s website and from Frazzini and Pedersen (2014) and Asness, Frazzini, and Pedersen (forthcoming 2018).\<sup>4\</sup> We describe our data sources and data filters in more detail in Appendix A.
 
+<!-- minerujson:end:v1:2:5 -->
+
 <!-- minerujson:block:v1:2:6 -->
 
 ## Bufet’s Track Record
+
+<!-- minerujson:end:v1:2:6 -->
 
 <!-- minerujson:block:v1:2:7 -->
 
 Warren Bufet’s track record is clearly outstanding. A dollar invested in Berkshire Hathaway in October 1976 (when our data sample starts) would have been worth more than $3,685 in March 2017 (when our data sample ends). Over this time period, Berkshire realized an average annual return of 18.6% in excess of the US T-bill rate, significantly outperforming the general stock market’s average excess return of 7.5%.
 
+<!-- minerujson:end:v1:2:7 -->
+
 <!-- minerujson:block:v1:2:8 -->
 
 
+
+<!-- minerujson:end:v1:2:8 -->
 
 <!-- minerujson:block:v1:2:9 -->
 
 Berkshire Hathaway stock also entailed more risk than the market; it realized a volatility of 23.5%, higher than the market volatility of 15.3%. Berkshire’s excess return was high even relative to its risk, however; it earned a Sharpe ratio of 18.6%/23.5% = 0.79, 1.6 times higher than the market’s Sharpe ratio of 0.49. Berkshire realized a market beta of only 0.69, an important point that we discuss in more detail when we analyze the types of stocks that Bufet buys. Adjusting Berkshire’s performance for market expo- sure, we computed its information ratio to be 0.64.
 
+<!-- minerujson:end:v1:2:9 -->
+
 <!-- minerujson:block:v1:2:10 -->
 
 These performance measures reflect Bufet’s impres- sive returns but also the fact that Berkshire Hathaway has been associated with some risk. Berkshire has had a number of down years and drawdown periods. For example, from 30 June 1998 to 29 February 2000, Berkshire lost 44% of its market value while the overall stock market was gaining 32%. Many fund managers might have had trouble surviving a short- fall of 76%, but Bufet’s impeccable reputation and unique structure as a corporation allowed him to stay the course and rebound as the internet bubble burst.
+
+<!-- minerujson:end:v1:2:10 -->
 
 <!-- minerujson:block:v1:2:11 -->
 
 To put Bufet’s performance in perspective, we com- pared Berkshire’s Sharpe and information ratios with those of all other US common stocks. If Bufet is more of a stock picker than a manager, then an even beter reference group than other stocks might be the uni- verse of actively managed mutual funds. Table 1 shows a comparison of Berkshire with both of these groups.
 
+<!-- minerujson:end:v1:2:11 -->
+
 <!-- minerujson:block:v1:2:12 -->
 
 Bufet is in the top 3% among all mutual funds and the top 7% among all stocks. The stocks and mutual funds with the highest Sharpe ratios, however, are often ones that have existed only for short time periods and had a good run, which is associated with a large degree of randomness.
 
+<!-- minerujson:end:v1:2:12 -->
+
 <!-- minerujson:block:v1:2:13 -->
 
 To minimize the efect of randomness, Table 1 also provides a comparison of Berkshire Hathaway with all stocks and mutual funds with at least 10-year, 30-year, and 40-year histories. Bufet’s performance is truly outstanding from this perspective. Among all stocks with at least a 40-year history from 1976 to 2017, Berkshire realized the highest Sharpe ratio and infor- mation ratio. If you could travel back in time and pick one stock in 1976, Berkshire would be your pick. Figure 1 and Figure 2 also illustrate how Bufet lies in the very best tail of the performance distribution of mutual funds and stocks that have survived at least 40 years.
+
+<!-- minerujson:end:v1:2:13 -->
 
 <!-- minerujson:block:v1:3:0 -->
 
@@ -184,15 +274,21 @@ Table 1. Bufet’s Performance Relative to All Other Stocks and Mutual Funds, 
 
 <table><tr><td rowspan="2">Stock/Fund Measure</td><td colspan="5">A. Sample Distribution of Sharpe Ratios</td><td colspan="2">Buffett Performance</td></tr><tr><td>Number of Stocks/ Funds</td><td>Median</td><td>95th Percentile</td><td>99th Percentile</td><td>Maximum</td><td>Rank</td><td>Percentile</td></tr><tr><td colspan="8">Sharpe ratio of equity mutual funds</td></tr><tr><td>All funds in CRSP data</td><td>4,585</td><td>0.36</td><td>0.69</td><td>1.10</td><td>3.20</td><td>137</td><td>97.0%</td></tr><tr><td>All funds alive in 1976 and 2017</td><td>133</td><td>0.36</td><td>0.54</td><td>0.63</td><td>0.79</td><td>1</td><td>100.0%</td></tr><tr><td>All funds alive in 1976 with at least 10-year history</td><td>304</td><td>0.30</td><td>0.49</td><td>0.61</td><td>0.79</td><td>1</td><td>100.0%</td></tr><tr><td>All funds with at least 10-year history</td><td>2,872</td><td>0.39</td><td>0.62</td><td>0.74</td><td>0.99</td><td>11</td><td>99.7%</td></tr><tr><td>All funds with at least 30-year history</td><td>432</td><td>0.38</td><td>0.59</td><td>0.73</td><td>0.93</td><td>3</td><td>99.5%</td></tr><tr><td>All funds with at least 40-year history</td><td>186</td><td>0.33</td><td>0.52</td><td>0.63</td><td>0.79</td><td>1</td><td>100.0%</td></tr><tr><td colspan="8">Sharpe ratio of common stocks</td></tr><tr><td>All stocks in CRSP data</td><td>23,257</td><td>0.21</td><td>0.88</td><td>1.47</td><td>2.68</td><td>1,454</td><td>93.8%</td></tr><tr><td>All stocks alive in 1976 and 2017</td><td>504</td><td>0.36</td><td>0.51</td><td>0.57</td><td>0.79</td><td>1</td><td>100.0%</td></tr><tr><td>All stocks alive in 1976 with at least 10-year history</td><td>3,774</td><td>0.28</td><td>0.51</td><td>0.62</td><td>0.89</td><td>8</td><td>99.8%</td></tr><tr><td>All stocks with at least 10-year history</td><td>9,523</td><td>0.28</td><td>0.57</td><td>0.75</td><td>1.12</td><td>57</td><td>99.4%</td></tr><tr><td>All stocks with at least 30-year history</td><td>2,021</td><td>0.32</td><td>0.52</td><td>0.61</td><td>0.81</td><td>2</td><td>100.0%</td></tr><tr><td>All stocks with at least 40-year history</td><td>1,111</td><td>0.34</td><td>0.50</td><td>0.55</td><td>0.79</td><td>1</td><td>100.0%</td></tr></table>
 
+<!-- minerujson:end:v1:3:0 -->
+
 <!-- minerujson:block:v1:3:1 -->
 
 <table><tr><td rowspan="2">Stock/Fund Measure</td><td colspan="5">B. Sample Distribution of Information Ratios</td><td colspan="2">Buffett Performance</td></tr><tr><td>Number of Stocks/ Funds</td><td>Median</td><td>95th Percentile</td><td>99th Percentile</td><td>Maximum</td><td>Rank</td><td>Percentile</td></tr><tr><td colspan="8">Information ratio of equity mutual funds</td></tr><tr><td>All funds in CRSP data</td><td>4,585</td><td>-0.11</td><td>0.44</td><td>0.78</td><td>2.79</td><td>83</td><td>98.2%</td></tr><tr><td>All funds alive in 1976 and 2017</td><td>133</td><td>0.03</td><td>0.40</td><td>0.49</td><td>0.64</td><td>1</td><td>100.0%</td></tr><tr><td>All funds alive in 1976 with at least 10-year history</td><td>304</td><td>-0.05</td><td>0.34</td><td>0.48</td><td>0.64</td><td>1</td><td>100.0%</td></tr><tr><td>All funds with at least 10-year history</td><td>2,872</td><td>-0.05</td><td>0.39</td><td>0.61</td><td>0.89</td><td>20</td><td>99.3%</td></tr><tr><td>All funds with at least 30-year history</td><td>432</td><td>-0.01</td><td>0.35</td><td>0.49</td><td>0.78</td><td>3</td><td>99.5%</td></tr><tr><td>All funds with at least 40-year history</td><td>186</td><td>-0.01</td><td>0.39</td><td>0.49</td><td>0.64</td><td>1</td><td>100.0%</td></tr><tr><td colspan="8">Information ratio of common stocks</td></tr><tr><td>All stocks in CRSP data</td><td>23,257</td><td>0.08</td><td>0.76</td><td>1.39</td><td>3.04</td><td>1,655</td><td>92.9%</td></tr><tr><td>All stocks alive in 1976 and 2017</td><td>504</td><td>0.18</td><td>0.37</td><td>0.43</td><td>0.64</td><td>1</td><td>100.0%</td></tr><tr><td>All stocks alive in 1976 with at least 10-year history</td><td>3,774</td><td>0.14</td><td>0.43</td><td>0.58</td><td>0.81</td><td>17</td><td>99.6%</td></tr><tr><td>All stocks with at least 10-year history</td><td>9,523</td><td>0.13</td><td>0.45</td><td>0.60</td><td>1.03</td><td>70</td><td>99.3%</td></tr><tr><td>All stocks with at least 30-year history</td><td>2,021</td><td>0.13</td><td>0.35</td><td>0.45</td><td>0.64</td><td>1</td><td>100.0%</td></tr><tr><td>All stocks with at least 40-year history</td><td>1,111</td><td>0.13</td><td>0.33</td><td>0.42</td><td>0.64</td><td>1</td><td>100.0%</td></tr></table>
 
 Notes: The information ratio is defined as the intercept in a regression of monthly excess returns on the excess return of the value- weighted market portfolio, divided by the standard deviation of the residuals. Sharpe ratios and information ratios are annualized.
 
+<!-- minerujson:end:v1:3:1 -->
+
 <!-- minerujson:block:v1:4:0 -->
 
 \[MinerU table: source metadata only]
+
+<!-- minerujson:end:v1:4:0 -->
 
 <!-- minerujson:block:v1:4:1 -->
 
@@ -202,6 +298,8 @@ Figure 1. How Berkshire Stacks Up in the Mutual Fund Universe
 
 Notes: This figure shows the distribution of annualized information ratios of all actively man- aged equity funds in the CRSP mutual fund database with at least 40 years of return history. See also definitions in the notes to Table 1.
 
+<!-- minerujson:end:v1:4:1 -->
+
 <!-- minerujson:block:v1:5:0 -->
 
 ![chart](https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/70c4d17948a6fbe29674df91b80d56d86f8843d06878e1fe699b5c48aeb4ebc2.jpg)
@@ -210,21 +308,31 @@ Figure 2. How Berkshire Stacks Up in the Common Stocks Universe
 
 Notes: This figure shows the distribution of annualized information ratios of all common stocks in the CRSP database with at least 40 years of return history. See also definitions in the notes to Table 1.
 
+<!-- minerujson:end:v1:5:0 -->
+
 <!-- minerujson:block:v1:5:1 -->
 
 If an investment in Berkshire Hathaway were combined with an investment in the market, the optimal combination would put about 72% of the money in Berkshire, giving rise to a Sharpe ratio of 0.81. Hence, puting 100% of the money in Berkshire (rather than 72%) gives a result that is nearly the optimal Sharpe ratio.\<sup>5\</sup>
+
+<!-- minerujson:end:v1:5:1 -->
 
 <!-- minerujson:block:v1:5:2 -->
 
 ## Bufet’s Leverage: Magnitude and Cost
 
+<!-- minerujson:end:v1:5:2 -->
+
 <!-- minerujson:block:v1:5:3 -->
 
 Warren Bufet’s large returns come from both his high Sharpe ratio and his ability to leverage his performance to achieve large returns at high risk. Bufet uses leverage to magnify returns, but how much leverage does he use? Furthermore, what are Bufet’s sources of leverage, their terms, and their costs? To answer these questions, we studied Berkshire Hathaway’s balance sheet, which can be summarized as in Exhibit 1.
 
+<!-- minerujson:end:v1:5:3 -->
+
 <!-- minerujson:block:v1:5:4 -->
 
 We can compute Bufet’s leverage, L, as follows:
+
+<!-- minerujson:end:v1:5:4 -->
 
 <!-- minerujson:block:v1:5:5 -->
 
@@ -232,13 +340,19 @@ We can compute Bufet’s leverage, L, as follows:
 L _ {t} = \frac {\mathsf {T A} _ {t} ^ {M V} - \mathsf {C a s h} _ {t} ^ {M V}}{\mathsf {E q u i t y} _ {t} ^ {M V}},
 ```
 
+<!-- minerujson:end:v1:5:5 -->
+
 <!-- minerujson:block:v1:5:6 -->
 
 where\mathsf { T A } \_ { t }is total assets, Cash\<sub>t\</sub> is cash that Berkshire Hathaway owns, and Equity is Berkshire’s equity value. The superscript MV is market value. We computed this measure of leverage for each month. We wanted to compute the leverage always using market values, but for some variables, we could observe only book values (indicated with superscript BV). We considered the market value of Berkshire’s equity to be the stock price multiplied by the shares outstanding. Cash holdings are from Berkshire’s consolidated balance sheet (see Appendix A). The balance sheet also provides the book value of the total assets,\mathsf { T A } \_ { t } ^ { B V }, and the book value of equity, value of the total assets as
 
+<!-- minerujson:end:v1:5:6 -->
+
 <!-- minerujson:block:v1:5:7 -->
 
 
+
+<!-- minerujson:end:v1:5:7 -->
 
 <!-- minerujson:block:v1:5:8 -->
 
@@ -246,59 +360,87 @@ where\mathsf { T A } \_ { t }is total assets, Cash\<sub>t\</sub> is cash that Be
 \mathsf {T A} _ {t} ^ {M V} = \mathsf {T A} _ {t} ^ {B V} + \mathsf {E q u i t y} _ {t} ^ {M V} - \mathsf {E q u i t y} _ {t} ^ {B V}.
 ```
 
+<!-- minerujson:end:v1:5:8 -->
+
 <!-- minerujson:block:v1:5:9 -->
 
 Exhibit 1. Stylized Balance Sheet of Berkshire Hathaway
 
 <table><tr><td>Assets</td><td>Liabilities and Shareholders’ Equity</td></tr><tr><td>Publicly traded equities</td><td>Liabilities</td></tr><tr><td>Privately held companies</td><td>Equity</td></tr><tr><td>Cash</td><td></td></tr><tr><td>Total assets</td><td>Total liabilities</td></tr></table>
 
+<!-- minerujson:end:v1:5:9 -->
+
 <!-- minerujson:block:v1:6:0 -->
 
 Using this method, we estimated Bufet’s average leverage to be 1.7 to 1. This amount is a nontrivial use of leverage and helps explain why Berkshire Hathaway experiences high volatility despite invest- ing in a number of relatively stable businesses.
+
+<!-- minerujson:end:v1:6:0 -->
 
 <!-- minerujson:block:v1:6:1 -->
 
 By focusing on total assets to equity, we captured all kinds of liabilities. We found, as we discuss later, that Berkshire Hathaway’s financing arises from various types of liability. The two main liabilities are debt and insurance float. If we computed leverage, instead, as
 
+<!-- minerujson:end:v1:6:1 -->
+
 <!-- minerujson:block:v1:6:2 -->
 
 { \left( \mathsf { E q u i t y } \_ { t } ^ { M V } + \mathsf { D e b t } \_ { t } + \mathsf { F l o a t } \_ { t } \right) } \mathord { \left/ { \vphantom { \left( \mathsf { E q u i t y } \_ { t } ^ { M V } + \mathsf { D e b t } \_ { t } + \mathsf { F l o a t } \_ { t } \right) } } \right. \kern - delimiterspace } \mathsf { E q u i t y } \_ { t } ^ { M V }, then we found an average leverage of 1.4 to 1. In any event, note that our measure of leverage is subject to measurement noise.
+
+<!-- minerujson:end:v1:6:2 -->
 
 <!-- minerujson:block:v1:6:3 -->
 
 Another expression of Bufet’s use of leverage is shown in Berkshire Hathaway’s stock price, which is significantly more volatile than the portfolio of publicly traded stocks that it owns, as we depict in Table 2. In fact, Berkshire’s 23.5% stock volatility is 1.4 times higher than the 16.2% volatility of the portfolio of public stocks, which corresponds to a leverage of 1.4 if Berkshire’s private assets are assumed to have similar volatility and if diversifica- tion efects are ignored. This leverage is similar to the leverage computed on the basis of balance sheet variables.
 
+<!-- minerujson:end:v1:6:3 -->
+
 <!-- minerujson:block:v1:6:4 -->
 
 The magnitude of Bufet’s leverage partly explains how he outperforms the market—but only partly. For example, if one applies 1.7-to-1 leverage to the mar- ket, it magnifies the market’s average excess return to about 12.7%. Such a leveraged market return still falls far short, however, of Berkshire’s 18.6% aver- age excess return (and would result in a riskier and higher-beta portfolio than Bufet’s).
+
+<!-- minerujson:end:v1:6:4 -->
 
 <!-- minerujson:block:v1:6:5 -->
 
 In addition to the magnitude of Bufet’s leverage, his sources of leverage, including their terms and costs, are interesting. Berkshire Hathaway’s debt, enjoying a AAA rating from 1989 to 2009, has benefited from being highly rated. An illustration of the low financ- ing rates enjoyed by Bufet is that Berkshire issued the first ever negative-coupon security in 2002, a senior note with a warrant.\<sup>6\</sup>
 
+<!-- minerujson:end:v1:6:5 -->
+
 <!-- minerujson:block:v1:6:6 -->
 
 Berkshire Hathaway’s anomalous cost of leverage arises, however, from its insurance float. Collecting insurance premiums up front and later paying a diversified set of claims is like taking a “loan.” Table 3 shows that the estimated average annual cost of Berkshire’s insurance float is only 1.72%, about
+
+<!-- minerujson:end:v1:6:6 -->
 
 <!-- minerujson:block:v1:6:7 -->
 
 3 percentage points below the average T-bill rate. Hence, Bufet’s low-cost insurance and reinsurance businesses have given him a significant advantage in terms of unique access to cheap, term lever- age. After hand-collecting the float data from Berkshire’s annual reports, we estimated that 35% of Berkshire’s liabilities, on average, consist of insur- ance float.\<sup>7\</sup>
 
+<!-- minerujson:end:v1:6:7 -->
+
 <!-- minerujson:block:v1:6:8 -->
 
 Based on the balance sheet data, Berkshire also appears to finance part of its capital expenditures with tax deductions for accelerated depreciation of property, plant, and equipment as provided for under US Internal Revenue Service rules. For exam- ple, Berkshire reported $28 billion of such deferred tax liabilities in 2011 (p. 49 of the 2011 Annual Report). Accelerated depreciation is similar to an interest-free loan in the sense that (1) Berkshire enjoys a tax saving earlier than it otherwise would and (2) the dollar amount of the tax when it is paid in the future is the same as the earlier saving (i.e., the tax liability does not accrue interest or com- pound). Of course, Berkshire does pay taxes, which we discuss in a later section.
+
+<!-- minerujson:end:v1:6:8 -->
 
 <!-- minerujson:block:v1:6:9 -->
 
 Berkshire Hathaway’s remaining liabilities include accounts payable and derivative contract liabilities. Indeed, Berkshire has sold a number of derivative contracts, including writing index options on several major equity indexes—notably, put options and credit default obligations. For example, Berkshire stated in the 2011 Annual Report (p. 45),
 
+<!-- minerujson:end:v1:6:9 -->
+
 <!-- minerujson:block:v1:6:10 -->
 
 We received the premiums on these contracts in full at the contract inception dates. . . . With limited exceptions, our equity index put option and credit default contracts contain no collateral posting requirements with respect to changes in either the fair value or intrinsic value of the contracts and/or a downgrade of Berkshire’s credit ratings.
 
+<!-- minerujson:end:v1:6:10 -->
+
 <!-- minerujson:block:v1:6:11 -->
 
 Hence, Berkshire’s sale of derivatives may serve both as a source of financing and as a source of revenue because such derivatives tend to be expensive (Frazzini and Pedersen 2012). Frazzini and Pedersen showed that investors that are either unable or unwilling to use leverage will pay a premium for instruments that embed the leverage, such as option contracts and levered exchange- traded funds. Bufet can profit by supplying this embedded leverage because he has unique access to stable and cheap financing.
+
+<!-- minerujson:end:v1:6:11 -->
 
 <!-- minerujson:block:v1:7:0 -->
 
@@ -306,9 +448,13 @@ Ta ble 2\<sub>.\</sub> Berkshire Hathawa\<sub>y\</sub> Retu rn Decom \<sub>p\<
 
 <table><tr><td rowspan="2"></td><td colspan="3">Performance</td><td rowspan="2">Overall Stock Market Performance</td><td colspan="3">Buffett-Style Portfolio</td><td colspan="3">Buffett-Style Long-Only Portfolio</td></tr><tr><td>Berkshire Hathaway</td><td>Public US Stocks (from 13F filings)</td><td>Private Holdings</td><td>Berkshire Hathaway</td><td>Public US Stocks (from 13F filings)</td><td>Private Holdings</td><td>Berkshire Hathaway</td><td>Public US Stocks (from 13F filings)</td><td>Private Holdings</td></tr><tr><td>Sample</td><td>1976–2017</td><td>1980–2017</td><td>1984–2017</td><td>1976–2017</td><td>1976–2017</td><td>1980–2017</td><td>1984–2017</td><td>1976–2017</td><td>1980–2017</td><td>1984–2017</td></tr><tr><td>Beta</td><td>0.69</td><td>0.77</td><td>0.29</td><td>1.00</td><td>0.69</td><td>0.77</td><td>0.29</td><td>0.85</td><td>0.86</td><td>0.87</td></tr><tr><td>Average excess return</td><td>18.6%</td><td>12.0%</td><td>9.3%</td><td>7.5%</td><td>28.5%</td><td>19.0%</td><td>18.1%</td><td>8.4%</td><td>8.6%</td><td>8.3%</td></tr><tr><td>Total volatility</td><td>23.5%</td><td>16.2%</td><td>20.6%</td><td>15.3%</td><td>23.5%</td><td>16.2%</td><td>20.6%</td><td>13.7%</td><td>13.8%</td><td>14.3%</td></tr><tr><td>Idiosyncratic volatility</td><td>21.1%</td><td>11.2%</td><td>20.1%</td><td>0.0%</td><td>21.1%</td><td>11.2%</td><td>20.1%</td><td>4.4%</td><td>4.5%</td><td>5.1%</td></tr><tr><td>Sharpe ratio</td><td>0.79</td><td>0.74</td><td>0.45</td><td>0.49</td><td>1.21</td><td>1.17</td><td>0.88</td><td>0.61</td><td>0.62</td><td>0.58</td></tr><tr><td>Information ratio</td><td>0.64</td><td>0.51</td><td>0.35</td><td>0.00</td><td>1.11</td><td>1.13</td><td>0.78</td><td>0.45</td><td>0.38</td><td>0.25</td></tr><tr><td>Leverage</td><td>1.71</td><td>1.00</td><td>1.00</td><td>1.00</td><td>5.09</td><td>2.99</td><td>4.14</td><td>1.00</td><td>1.00</td><td>1.00</td></tr><tr><td colspan="11">Subperiod excess returns</td></tr><tr><td>1976–1980</td><td>41.2%</td><td>31.5%</td><td></td><td>7.3%</td><td>5.8%</td><td>27.3%</td><td></td><td>7.9%</td><td>30.5%</td><td></td></tr><tr><td>1981–1985</td><td>28.6</td><td>21.3</td><td>18.4%</td><td>4.8</td><td>52.5</td><td>28.1</td><td>38.2%</td><td>7.0</td><td>6.3</td><td>9.7%</td></tr><tr><td>1986–1990</td><td>17.3</td><td>12.6</td><td>9.6</td><td>5.7</td><td>23.2</td><td>14.0</td><td>18.1</td><td>9.5</td><td>10.7</td><td>8.3</td></tr><tr><td>1991–1995</td><td>29.7</td><td>18.8</td><td>22.9</td><td>12.6</td><td>38.1</td><td>23.2</td><td>25.9</td><td>11.5</td><td>11.5</td><td>12.0</td></tr><tr><td>1996–2000</td><td>14.9</td><td>12.1</td><td>8.7</td><td>12.1</td><td>37.1</td><td>23.1</td><td>26.0</td><td>16.2</td><td>16.2</td><td>14.1</td></tr><tr><td>2001–2005</td><td>3.2</td><td>2.2</td><td>1.8</td><td>0.9</td><td>28.0</td><td>14.2</td><td>13.8</td><td>-0.8</td><td>-1.6</td><td>1.1</td></tr><tr><td>2006–2010</td><td>6.1</td><td>4.1</td><td>4.0</td><td>2.5</td><td>1.9</td><td>3.6</td><td>-5.7</td><td>2.7</td><td>1.1</td><td>1.0</td></tr><tr><td>2011–2015</td><td>10.8</td><td>9.9</td><td>5.0</td><td>12.1</td><td>33.8</td><td>21.8</td><td>21.8</td><td>11.2</td><td>11.5</td><td>11.0</td></tr><tr><td>2016–2017</td><td>19.3</td><td>13.6</td><td>11.1</td><td>15.0</td><td>45.3</td><td>32.9</td><td>20.3</td><td>15.0</td><td>14.6</td><td>14.5</td></tr></table>
 
+<!-- minerujson:end:v1:7:0 -->
+
 <!-- minerujson:block:v1:7:1 -->
 
 N\<sub>o\</sub>t\<sub>es:\</sub> E\<sub>xcess\</sub> r\<sub>e\</sub>t\<sub>u\</sub> rn i\<sub>s\</sub> i n \<sub>excess o\</sub>f th\<sub>e\</sub> U S T- bi l l r\<sub>a\</sub>t\<sub>e\</sub> T\<sub>o co\</sub> n\<sub>s\</sub>tr\<sub>u c\</sub>t th\<sub>e\</sub> m i m i\<sub>c\</sub>ki n\<sub>g po\</sub> rtf\<sub>o\</sub> l i\<sub>o o\</sub>f B\<sub>e\</sub> rk\<sub>s\</sub> h i r\<sub>e\</sub>\<sup>’\</sup>\<sub>s p u\</sub> b l i\<sub>c\</sub>l\<sub>y\</sub> tr\<sub>a\</sub> d \<sub>e\</sub>d \<sub>s\</sub>t\<sub>oc\</sub>k\<sub>s a\</sub>t th\<sub>e e\</sub> n d \<sub>o\</sub>f \<sub>ea c\</sub>h \<sub>ca\</sub> l \<sub>e\</sub> n d\<sub>a\</sub> r \<sub>q ua\</sub> rt\<sub>e\</sub> r \<sub>u\</sub> n d \<sub>e\</sub> r th\<sub>e assu\</sub> m \<sub>p\</sub>- ti\<sub>o\</sub> n th\<sub>a\</sub>t th\<sub>e\</sub> fi rm d id n\<sub>o\</sub>t \<sub>c\</sub>h\<sub>a\</sub> n\<sub>ge\</sub> h\<sub>o\</sub> l d i n\<sub>gs\</sub> b\<sub>e\</sub>t\<sub>wee\</sub>n r\<sub>epo\</sub> rt\<sub>s we co\</sub> l l \<sub>ec\</sub>t\<sub>e\</sub>d B\<sub>e\</sub>rk\<sub>s\</sub>h i r\<sub>e\</sub>\<sup>’\</sup>\<sub>s co\</sub> m m\<sub>o\</sub> n \<sub>s\</sub>t\<sub>oc\</sub>k h\<sub>o\</sub> l d i n\<sub>gs\</sub> fr\<sub>o\</sub> m it\<sub>s\</sub> 13 F fi l i n\<sub>gs a\</sub> n d \<sub>co\</sub> m \<sub>pu\</sub>t\<sub>e\</sub>d \<sub>po\</sub> rtf\<sub>o\</sub> l i\<sub>o\</sub> m\<sub>o\</sub> nth l\<sub>y\</sub> r\<sub>e\</sub>t\<sub>u\</sub> rn\<sub>s we\</sub>i\<sub>g\</sub>ht\<sub>e\</sub>d b\<sub>y\</sub> B\<sub>e\</sub>rk\<sub>s\</sub>h i r\<sub>e\</sub>\<sup>’\</sup>\<sub>s\</sub> d \<sub>o\</sub> l l\<sub>a\</sub> r h\<sub>o\</sub> l d i n\<sub>gs.\</sub> Th\<sub>e s\</sub>t\<sub>oc\</sub>k\<sub>s\</sub> i n th\<sub>e po\</sub> rtf\<sub>o\</sub> l i\<sub>o we\</sub>r\<sub>e\</sub> r\<sub>e\</sub>fr\<sub>es\</sub>h\<sub>e\</sub>d \<sub>q ua\</sub> rt\<sub>e\</sub>rl\<sub>y o\</sub> n th\<sub>e\</sub> b\<sub>as\</sub>i\<sub>s o\</sub>f th\<sub>e\</sub> l\<sub>a\</sub>t\<sub>es\</sub>t 13 F \<sub>a\</sub> n d th\<sub>e po\</sub> rtf\<sub>o\</sub> l i\<sub>o was\</sub> r\<sub>e\</sub>b\<sub>a\</sub> l\<sub>a\</sub> n\<sub>ce\</sub>d m\<sub>o\</sub> nth l\<sub>y\</sub> t\<sub>o\</sub> k\<sub>eep co\</sub> n\<sub>s\</sub>t\<sub>a\</sub> nt \<sub>we\</sub>i\<sub>g\</sub>ht\<sub>s.\</sub> Th\<sub>e\</sub> m i m icki n\<sub>g p\</sub>o rtfo l io of Berksh i re\<sup>’\</sup>s \<sub>p\</sub> ri\<sub>v\</sub>ate ho l d i n\<sub>g\</sub>s \<sub>w\</sub>as co nstr\<sub>u\</sub> cted \<sub>w\</sub>ith the \<sub>p\</sub> roced \<sub>u\</sub> re d escri bed i n A\<sub>p p\</sub>en d i\<sub>x\</sub> B The s\<sub>y\</sub>stematic B \<sub>u\</sub>fet-st\<sub>y\</sub>l e \<sub>p\</sub>o rtfo l ios \<sub>w\</sub>ere co nstr\<sub>u\</sub> cted fro m a re\<sub>g\</sub>res- sio n of mo nth l\<sub>y\</sub> excess retu rns\<sub>.\</sub> The ex\<sub>p\</sub> la nato r\<sub>y\</sub> va ria b l es a re the mo nth l\<sub>y\</sub> retu rns of the sta n da rd size va l u e a n d mo mentu m facto rs ( Fa ma a n d French 1993 ; Asness 1994; Ca rha rt 1997; J e\<sub>g\</sub>a d ees h a n d Titma n 19 93)\<sub>,\</sub> th e beti n\<sub>g\</sub>-a\<sub>g\</sub>a i nst- beta fa cto r ( Frazzi n i a n d Ped e rse n 2014)\<sub>,\</sub> a n d th e \<sub>q\</sub> ua l it\<sub>y\</sub>- m i n us-j u n k fa cto r (As n ess\<sub>,\</sub> Frazzi n i \<sub>,\</sub> a n d Ped e rse n \<sub>,\</sub> fo rth co m i n\<sub>g\</sub> 2018)\<sub>.\</sub> Retu rns\<sub>,\</sub> vo lati l ities a n d S ha r\<sub>p\</sub>e ratios a re a n n \<sub>u\</sub>a l ized \<sup>“\</sup> I d ios\<sub>y\</sub>ncratic vo lati l it\<sub>y\</sub>\<sup>”\</sup> is the vo lati l it\<sub>y\</sub> of the resid \<sub>u\</sub>a l of a re\<sub>g\</sub>ressio n of mo nth l\<sub>y\</sub> excess ret\<sub>u\</sub> rns o n ma rket excess ret\<sub>u\</sub> rns
+
+<!-- minerujson:end:v1:7:1 -->
 
 <!-- minerujson:block:v1:8:0 -->
 
@@ -318,25 +464,37 @@ Table 3. Bufet’s Cost of Leverage: The Case of His Insurance Float
 
 \<sup>a\</sup>In years when cost of funds is reported as “less than zero” and no numerical value is available, we set the cost of funds to zero. Notes: The data were hand-collected from Warren Bufet’s comments in Berkshire Hathaway’s annual reports. Rates are annual ized, in percentage points.
 
+<!-- minerujson:end:v1:8:0 -->
+
 <!-- minerujson:block:v1:8:1 -->
 
 ## Decomposing Bufet: Public Stocks vs. Private Companies
+
+<!-- minerujson:end:v1:8:1 -->
 
 <!-- minerujson:block:v1:8:2 -->
 
 Berkshire Hathaway’s stock return can be decomposed into the performance of the publicly traded companies that it owns, the performance of the privately held companies that it owns, and the leverage it uses. The performance of the publicly traded companies is a measure of Warren Bufet’s stock-selection ability, whereas the performance of the privately held compa- nies may additionally capture his success as a manager.
 
+<!-- minerujson:end:v1:8:2 -->
+
 <!-- minerujson:block:v1:8:3 -->
 
 To evaluate Bufet’s pure stock-selection ability, we used Berkshire Hathaway’s 13F filings to collect the portfolio of publicly held companies and constructed a monthly time series of the market value of all Berkshire’s public stocks,\mathsf { P u b l i c } \_ { t } ^ { M V }, and the monthly return on this mimicking portfolio,r \_ { t + 1 } ^ { P u b I i c } Specifically, at the end of each calendar quarter (under the assumption that the firm did not change holdings between reports), we collected Berkshire’s common stock holdings from its 13F filing and computed portfolio monthly returns, weighted by Berkshire’s dollar holdings. The stocks in the portfo- lio were refreshed quarterly on the basis of the latest
+
+<!-- minerujson:end:v1:8:3 -->
 
 <!-- minerujson:block:v1:8:4 -->
 
 13F, and the portfolio was rebalanced monthly to keep the weights constant.
 
+<!-- minerujson:end:v1:8:4 -->
+
 <!-- minerujson:block:v1:8:5 -->
 
 We could not directly observe the value and perfor- mance of Bufet’s private companies, but based on what we do know, we could back them out. First, we could infer the market value of private holdings, \mathsf { P r i v a t e } \_ { t } ^ { M V }, as the residual because we could observe the value of the total assets, the value of the publicly traded stocks, and the cash (see Bufet’s balance sheet in Exhibit 1):
+
+<!-- minerujson:end:v1:8:5 -->
 
 <!-- minerujson:block:v1:8:6 -->
 
@@ -344,9 +502,13 @@ We could not directly observe the value and perfor- mance of Bufet’s private c
 \text { Private } _ {t} ^ {M V} = \text { TA } _ {t} ^ {M V} - \text { Public } _ {t} ^ {M V} - \text { Cash } _ {t} ^ {M V}.
 ```
 
+<!-- minerujson:end:v1:8:6 -->
+
 <!-- minerujson:block:v1:8:7 -->
 
 We then computed the return of these private holdings,r \_ { t + 1 } ^ { P r i \dot { v } a t e }, in a way that is immune to changes in the public stock portfolio and to splits/issuances by using split-adjusted returns as follows:
+
+<!-- minerujson:end:v1:8:7 -->
 
 <!-- minerujson:block:v1:8:8 -->
 
@@ -354,9 +516,13 @@ We then computed the return of these private holdings,r \_ { t + 1 } ^ { P r i \
 \begin{array}{l} r _ {t + 1} ^ {\text {Private}} = \frac {\Delta \text {Private} _ {t + 1} ^ {M V}}{\text {Private} _ {t} ^ {M V}} \\ = \frac {r _ {t + 1} ^ {f} \text {Liabilities} _ {t} ^ {M V} + r _ {t + 1} ^ {\text {Equity}} \text {Equity} _ {t} ^ {M V} - r _ {t + 1} ^ {\text {Public}} \text {Public} _ {t} ^ {M V} - r _ {t + 1} ^ {f} \text {Cash} _ {t} ^ {M V}}{\text {Private} _ {t} ^ {M V}}, \end{array}
 ```
 
+<!-- minerujson:end:v1:8:8 -->
+
 <!-- minerujson:block:v1:9:0 -->
 
 wherer \_ { t + 1 } ^ { f }is the risk-free T-bill return,r \_ { t + 1 } ^ { E q u i t y }is the return on Berkshire’s stock, and the market value of liabilities is estimated as
+
+<!-- minerujson:end:v1:9:0 -->
 
 <!-- minerujson:block:v1:9:1 -->
 
@@ -364,13 +530,19 @@ wherer \_ { t + 1 } ^ { f }is the risk-free T-bill return,r \_ { t + 1 } ^ { E q
 \text { Liabilities } _ {t} ^ {M V} = \text { TA } _ {t} ^ {M V} - \text { Equity } _ {t} ^ {M V}.
 ```
 
+<!-- minerujson:end:v1:9:1 -->
+
 <!-- minerujson:block:v1:9:2 -->
 
 Note that our estimate of the value of Berkshire Hathaway’s private companies includes the value that the market ataches to Bufet himself (because it is based on the overall value of Berkshire Hathaway). To the extent that Berkshire’s stock price is subject to randomness or mispricing (e.g., because of the Bufet-specific element), the estimated value and return of the private companies may be noisy.
 
+<!-- minerujson:end:v1:9:2 -->
+
 <!-- minerujson:block:v1:9:3 -->
 
 Given our estimates for Bufet’s public and private returns as well as his leverage, we could decompose Berkshire’s performance; see Appendix B for a rigorous derivation. Berkshire’s excess return can be decomposed into a weighted average of the return of the public stocks and the return of the private companies, leveraged up by L:
+
+<!-- minerujson:end:v1:9:3 -->
 
 <!-- minerujson:block:v1:9:4 -->
 
@@ -378,9 +550,13 @@ Given our estimates for Bufet’s public and private returns as well as his leve
 \begin{array}{l} r _ {t + 1} ^ {\text {Equity}} - r _ {t + 1} ^ {f} = \\ \left[ w _ {t} \Big (r _ {t + 1} ^ {\text {Private}} - r _ {t + 1} ^ {f} \Big) + (1 - w _ {t}) \Big (r _ {t + 1} ^ {\text {Public}} - r _ {t + 1} ^ {f} \Big) \right] L _ {t}. \end{array}
 ```
 
+<!-- minerujson:end:v1:9:4 -->
+
 <!-- minerujson:block:v1:9:5 -->
 
 Berkshire’s relative weight,w \_ { t } ,on the private hold- ings is naturally given by
+
+<!-- minerujson:end:v1:9:5 -->
 
 <!-- minerujson:block:v1:9:6 -->
 
@@ -388,25 +564,37 @@ Berkshire’s relative weight,w \_ { t } ,on the private hold- ings is naturally
 w _ {t} = \frac {\text { Private } _ {t} ^ {M V}}{\text { Private } _ {t} ^ {M V} + \text { Public } _ {t} ^ {M V}}.
 ```
 
+<!-- minerujson:end:v1:9:6 -->
+
 <!-- minerujson:block:v1:9:7 -->
 
 Empirically, we found that Berkshire owned 65% private companies, on average, from 1980 to 2017, the remaining 35% being invested in public stocks. Berkshire’s reliance on private companies has been increasing steadily over time—from less than 20% in the early 1980s to more than 78% in 2017.
+
+<!-- minerujson:end:v1:9:7 -->
 
 <!-- minerujson:block:v1:9:8 -->
 
 Table 2 shows the performance of Bufet’s public and private positions. Both have performed well. Bufet’s public and private portfolios have exceeded the overall stock market in terms of average excess return, risk, and Sharpe ratio. The public stocks have a higher Sharpe ratio than the private stocks, suggesting that Bufet’s skill comes mostly from his ability to pick stocks, not necessarily his added value as a manager (but keep in mind that our imputed returns may be subject to noise).
 
+<!-- minerujson:end:v1:9:8 -->
+
 <!-- minerujson:block:v1:9:9 -->
 
 Berkshire Hathaway’s overall stock return is far above the returns of both the private and public portfolios. The reason is that Berkshire is not simply a weighted average of the public and private components. It is also leveraged, which magnifies returns. Furthermore, Berkshire’s Sharpe ratio is higher than those of the public and private parts, which reflects the benefits of diversification (and possibly benefits from time-vary- ing leverage and time-varying public/private weights).
+
+<!-- minerujson:end:v1:9:9 -->
 
 <!-- minerujson:block:v1:9:10 -->
 
 ## Bufet's Alpha and Investment Style: What Types of Stock?
 
+<!-- minerujson:end:v1:9:10 -->
+
 <!-- minerujson:block:v1:9:11 -->
 
 We have noted that Warren Bufet’s returns can be atributed to his stock selection and his ability to apply leverage, but how does he select his com- panies? To address this question, we considered Bufet’s factor exposures:
+
+<!-- minerujson:end:v1:9:11 -->
 
 <!-- minerujson:block:v1:9:12 -->
 
@@ -414,13 +602,19 @@ We have noted that Warren Bufet’s returns can be atributed to his stock select
 \begin{array}{r} r _ {t} - r _ {t} ^ {f} = \alpha + \beta_ {1} \mathsf {M K T} _ {t} + \beta_ {2} \mathsf {S M B} _ {t} + \beta_ {3} \mathsf {H M L} _ {t} \\ + \beta_ {4} \mathsf {U M D} _ {t} + \beta_ {5} \mathsf {B A B} _ {t} + \beta_ {6} \mathsf {Q M J} _ {t} + \varepsilon_ {t}, \end{array}
 ```
 
+<!-- minerujson:end:v1:9:12 -->
+
 <!-- minerujson:block:v1:9:13 -->
 
 where MKT is the excess return of the overall equity market, SMB is the size factor (small minus big), HML is the value versus growth factor (high book to market minus low book to market), UMD is the momentum factor (up minus down), BAB is beting against beta, and QMJ is quality minus junk.
 
+<!-- minerujson:end:v1:9:13 -->
+
 <!-- minerujson:block:v1:9:14 -->
 
 As shown in Table 4, we ran this regression for the excess return,r \_ { t } - r \_ { t } ^ { f }, of Berkshire Hathaway stock, the portfolio of publicly held stocks inferred from the 13F filings, and the portfolio of private companies computed as described previously. For each of these returns, we first ran a regression on the market return (MKT). Berkshire has a beta of less than 1 and a significant alpha. We next controlled for the standard factors that capture the efects of size and value (Fama and French 1993) and momentum (Asness 1994; Carhart 1997; Jegadeesh and Titman 1993). The size factor, SMB, is a strategy of going long small-capitalization stocks and short large-cap stocks. Hence, a positive loading on SMB reflects a tendency to buy small-cap stocks, so Berkshire’s negative loading reflects a tendency to buy large-cap stocks. The value factor, HML, is a strategy of buying stocks of high book value to market value while shorting stocks of low book value to market value. Berkshire’s positive loading thus reflects a tendency of buying stocks that are cheap—in the sense of having high book value relative to their market value.
+
+<!-- minerujson:end:v1:9:14 -->
 
 <!-- minerujson:block:v1:10:0 -->
 
@@ -430,45 +624,67 @@ Ta ble 4\<sub>.\</sub> What Ki nds of Com pa nies Does Berkshi re Hathaway Own
 
 N\<sub>o\</sub>t\<sub>es:\</sub> T h i\<sub>s\</sub> t\<sub>a\</sub> b l \<sub>e\</sub> \<sub>s\</sub> h \<sub>ows\</sub> \<sub>ca\</sub> l \<sub>e\</sub> n d \<sub>a\</sub> r-ti m \<sub>e\</sub> \<sub>p o\</sub> rtf\<sub>o\</sub> l i \<sub>o\</sub> r\<sub>e\</sub>t\<sub>u\</sub> rn \<sub>s .\</sub> A l \<sub>p\</sub> h \<sub>a s\</sub> \<sub>a\</sub> r\<sub>e\</sub> \<sub>a\</sub> n n \<sub>u a\</sub> l i\<sub>ze\</sub>d \<sub>.\</sub> B \<sub>o\</sub> l d f\<sub>a ce\</sub> i n d i \<sub>ca\</sub>t\<sub>es\</sub> \<sub>s\</sub>t\<sub>a\</sub>ti\<sub>s\</sub>ti \<sub>ca\</sub> l \<sub>s\</sub> i\<sub>g\</sub> n ifi \<sub>ca\</sub> n \<sub>ce\</sub> \<sub>a\</sub>t t h \<sub>e\</sub> 5 % l \<sub>eve\</sub> l \<sub>.\</sub> S \<sub>ee\</sub> \<sub>a\</sub> l \<sub>so\</sub> th \<sub>e\</sub> n \<sub>o\</sub>t\<sub>es\</sub> t\<sub>o\</sub> T\<sub>a\</sub> b l \<sub>e\</sub> 2 \<sub>.\</sub>
 
+<!-- minerujson:end:v1:10:0 -->
+
 <!-- minerujson:block:v1:11:0 -->
 
 The last of the four “standard” factors is the momen- tum factor, UMD, which corresponds to buying stocks that have performed well relative to peers over the past year (winners) while shorting the stocks that are relative underperformers (losers). Berkshire’s insignificant loading on UMD means that Bufet is not chasing trends in his stock selection.
+
+<!-- minerujson:end:v1:11:0 -->
 
 <!-- minerujson:block:v1:11:1 -->
 
 Collectively, these four standard factors do not explain much of the alpha shown in Table 4. Because Bufet’s alpha cannot be explained by standard factors studied by academics, his success has to date been considered a sign of his unique skill or simply a mystery.
 
+<!-- minerujson:end:v1:11:1 -->
+
 <!-- minerujson:block:v1:11:2 -->
 
 Our innovation for this study was to also control for the factors beting against beta, BAB, described in Frazzini and Pedersen (2014) and quality, QMJ, of Asness, Frazzini, and Pedersen (forthcoming 2018). A loading on the BAB factor reflects a tendency to buy safe (i.e., low-beta) stocks while shying away from risky (i.e., high-beta) stocks. Similarly, a loading on the QMJ factor reflects a tendency to buy high-qual- ity companies—that is, companies that are profitable, growing, and safe and have high payout.\<sup>8\</sup>
+
+<!-- minerujson:end:v1:11:2 -->
 
 <!-- minerujson:block:v1:11:3 -->
 
 Table 4 reveals that Berkshire Hathaway loads sig- nificantly on the BAB and QMJ factors, indicating that Bufet likes to buy safe, high-quality stocks. Controlling for these factors drives the alpha of Berkshire’s public stock portfolio down to a statis- tically insignificant annualized 0.3%. That is, these factors almost completely explain the performance of Bufet’s public portfolio. Hence, a significant part of the secret behind Bufet’s success is the strategy of buying safe, high-quality, value stocks. These factors also explain a large part of Berkshire’s overall stock return and of the private part in that their alphas become statistically insig- nificant when BAB and QJM are controlled for. The point estimate of Berkshire’s alpha, however, drops only by about half.
 
+<!-- minerujson:end:v1:11:3 -->
+
 <!-- minerujson:block:v1:11:4 -->
 
 Although Warren Bufet is known as the ultimate value investor, we find that his focus on safe, high- quality stocks may be at least as important to his per- formance. Our statistical finding is consistent with Bufet’s own words from the Berkshire Hathaway 2008 Annual Report: “Whether we’re talking about socks or stocks, I like buying quality merchandise when it is marked down.”
+
+<!-- minerujson:end:v1:11:4 -->
 
 <!-- minerujson:block:v1:11:5 -->
 
 We emphasize again that being able to explain Bufet’s returns by using factors from academic papers writen decades after Bufet put the strate- gies into practice does not make Bufet’s success any less impressive. It is interesting, however, to discover the importance of leveraging low-beta, high- quality stocks for the person known as the “ultimate value investor.”
 
+<!-- minerujson:end:v1:11:5 -->
+
 <!-- minerujson:block:v1:11:6 -->
 
 
+
+<!-- minerujson:end:v1:11:6 -->
 
 <!-- minerujson:block:v1:11:7 -->
 
 ## A Systematic Bufet Strategy
 
+<!-- minerujson:end:v1:11:7 -->
+
 <!-- minerujson:block:v1:11:8 -->
 
 Given that we can atribute Warren Bufet’s performance to leverage and his focus on safe, high-quality, value stocks, we naturally wanted to consider how well one could do by implement- ing these investment themes in a systematic way. Bufet is known as an active stock picker, but we tried to go back to Bufet’s roots and, in the spirit of Graham and Dodd (1934), focused on systemati- cally implemented screens.
 
+<!-- minerujson:end:v1:11:8 -->
+
 <!-- minerujson:block:v1:11:9 -->
 
 We considered systematic Bufet-style portfolios that tracked Bufet’s market exposure and active stock-selection themes. First, we captured Bufet’s market exposure, β\<sup>Bufet\</sup>, as the slope of a univariate regression of Berkshire Hathaway’s excess returns on the market portfolio. Second, we captured Bufet’s stock-selection tilts by running a regres- sion of Berkshire’s monthly beta-adjusted returns on the factors that help explain its performance, as described in the previous section:
+
+<!-- minerujson:end:v1:11:9 -->
 
 <!-- minerujson:block:v1:11:10 -->
 
@@ -476,9 +692,13 @@ We considered systematic Bufet-style portfolios that tracked Bufet’s market ex
 \begin{array}{l} {r _ {t} - r _ {t} ^ {f} - \beta^ {B u f f e t t} M K T _ {t} =} \\ {\alpha + m M K T _ {t} + s S M B _ {t} + h H M L _ {t}} \\ {+ u U M D _ {t} + b B A B _ {t} + q Q M J _ {t} + \varepsilon_ {t}.} \end{array}
 ```
 
+<!-- minerujson:end:v1:11:10 -->
+
 <!-- minerujson:block:v1:11:11 -->
 
 The regression coeficients are equal to those in the fifth column of Table 4, with the exception that the market loading is reduced by an amount equal to β\<sup>Bufet\</sup>. The right-hand side excluding the alpha and the error term captures Bufet’s active stock- selection tilts:
+
+<!-- minerujson:end:v1:11:11 -->
 
 <!-- minerujson:block:v1:11:12 -->
 
@@ -486,9 +706,13 @@ The regression coeficients are equal to those in the fifth column of Table 4, wi
 \begin{array}{r} r _ {t} ^ {A} = m \mathrm{MKT} _ {t} + s \mathrm{SMB} _ {t} + h \mathrm{HML} _ {t} \\ + u \mathrm{UMD} _ {t} + b \mathrm{BAB} _ {t} + q \mathrm{QMJ} _ {t}. \end{array}
 ```
 
+<!-- minerujson:end:v1:11:12 -->
+
 <!-- minerujson:block:v1:11:13 -->
 
 We rescaled this active return series to match Berkshire’s idiosyncratic volatility,\sigma \_ { I } ,to simulate the use of leverage and to counter any atenuation bias:
+
+<!-- minerujson:end:v1:11:13 -->
 
 <!-- minerujson:block:v1:11:14 -->
 
@@ -496,9 +720,13 @@ We rescaled this active return series to match Berkshire’s idiosyncratic volat
 r _ {t} ^ {\text {Active}} = r _ {t} ^ {A} \frac {\sigma_ {I}}{\sigma_ {r _ {t} ^ {A}}}.
 ```
 
+<!-- minerujson:end:v1:11:14 -->
+
 <!-- minerujson:block:v1:12:0 -->
 
 Finally, we added back Berkshire’s market exposure and the risk-free return,r \_ { t } ^ { f }, to construct our system- atic Bufet-style portfolio:
+
+<!-- minerujson:end:v1:12:0 -->
 
 <!-- minerujson:block:v1:12:1 -->
 
@@ -506,29 +734,43 @@ Finally, we added back Berkshire’s market exposure and the risk-free return,r 
 r _ {t} ^ {\text {Buffett   style }} = r _ {t} ^ {f} + \beta^ {\text {Buffett}} \mathsf {M K T} _ {t} + r _ {t} ^ {\text {Active}}.
 ```
 
+<!-- minerujson:end:v1:12:1 -->
+
 <!-- minerujson:block:v1:12:2 -->
 
 This systematic Bufet-style strategy is a diversified portfolio that matches Berkshire’s beta, idiosyncratic volatility, total volatility, and relative active loadings.
+
+<!-- minerujson:end:v1:12:2 -->
 
 <!-- minerujson:block:v1:12:3 -->
 
 We similarly constructed a Bufet-style portfolio based on the loadings and volatility of Berkshire Hathaway’s public and private equity holdings. Table 2 reports the performance of our systematic Bufet- style portfolios, and Figure 3 shows the cumulative return of Berkshire, Bufet’s public stocks, and our systematic Bufet-style strategies. Finally, Table 5 reports correlations, alphas, and loadings for our systematic Bufet-style portfolios and their actual Bufet counterparts.
 
+<!-- minerujson:end:v1:12:3 -->
+
 <!-- minerujson:block:v1:12:4 -->
 
 The performance of the systematic Bufet-style portfolios is comparable to Bufet’s actual return. Because the simulated Bufet-style portfolios do not account for transaction costs and other costs and benefit from hindsight, their apparent outperformance should be discounted. The main insight here is the high covariation between Bufet’s actual performance and the performance of a diver- sified Bufet-style strategy.
+
+<!-- minerujson:end:v1:12:4 -->
 
 <!-- minerujson:block:v1:12:5 -->
 
 
 
+<!-- minerujson:end:v1:12:5 -->
+
 <!-- minerujson:block:v1:12:6 -->
 
 The Bufet-style portfolio matched the public stock portfolio especially closely, perhaps because this pub- lic portfolio was observed directly and its returns were calculated from public stock returns in a method that used the same methodology as our systematic portfo- lios. Berkshire’s overall stock price, however, may have idiosyncratic price variation (e.g., because of the value of Bufet himself) that cannot be replicated by using other stocks. This idiosyncratic Berkshire variation is even more severe for the private part, which may also sufer from measurement issues.
 
+<!-- minerujson:end:v1:12:6 -->
+
 <!-- minerujson:block:v1:12:7 -->
 
 The comparison of Berkshire Hathaway’s public stock portfolio and the corresponding Bufet- style portfolio is also the cleaner test of Bufet’s stock selection because both are simulated returns without any transaction costs or taxes. Indeed, the correlation between our systematic portfolio and Berkshire’s public stock portfolio (shown in Table 5) is 73%, meaning that our systematic portfolio explains 53% of the variance of the public stock portfolio. The correlations between the systematic
+
+<!-- minerujson:end:v1:12:7 -->
 
 <!-- minerujson:block:v1:12:8 -->
 
@@ -540,9 +782,13 @@ A. Berkshire Hathaway’s Public Stocks and Bufe-Style Porolio March 1980 = $1
 
 (continued)
 
+<!-- minerujson:end:v1:12:8 -->
+
 <!-- minerujson:block:v1:13:0 -->
 
 Figure 3. Performance of the Equity Market, Berkshire Hathaway, and a Systematic Bufet-Style Portfolio (continued)
+
+<!-- minerujson:end:v1:13:0 -->
 
 <!-- minerujson:block:v1:13:1 -->
 
@@ -552,21 +798,31 @@ B. Berkshire Hathaway Stock and Bufe -Style Porolio October 1976 = $1
 
 Notes: Panel A shows the cumulative return of Berkshire Hathaway’s portfolio of publicly traded stocks (as reported in its 13F filings), a corresponding systematic Bufet-mimicking portfolio, and the CRSP value-weighted market return (leveraged to the same volatility as Berkshire’s public stocks). Panel B shows the cumulative return of Berkshire Hathaway, a corresponding systematic Bufet-mimicking portfolio, and the CRSP value-weighted market return (leveraged to the same volatility as Berkshire). The systematic Bufet-style strat- egy was constructed from a regression of monthly excess returns of Berkshire Hathaway stock and the portfolio of publicly held stocks inferred from the 13F filings (columns 5 and 9, respectively, in Table 4). The explanatory variables are the monthly returns of the six factors. The systematic Bufet-style portfolio excess return is the sum of the explanatory variables multiplied by the respective regression coeficients, rescaled to match the volatil- ity of Berkshire’s return.
 
+<!-- minerujson:end:v1:13:1 -->
+
 <!-- minerujson:block:v1:13:2 -->
 
 portfolio and Berkshire’s stock price and between the systematic portfolio and Bufet’s private invest- ments are lower (48% and 26%, respectively) but still large in magnitude. Table 5 also shows that our systematic portfolios have significant alphas with respect to their corresponding Bufet counterparts, whereas none of the Bufet portfolios have statisti- cally significant alphas with respect to their sys- tematic counterparts. This result may have arisen because our systematic portfolios have factor tilts similar to Bufet’s but hold a much larger number of securities, thus benefiting from diversification.
+
+<!-- minerujson:end:v1:13:2 -->
 
 <!-- minerujson:block:v1:13:3 -->
 
 The Berkshire Hathaway stock return does reflect incurred transaction costs and possibly additional taxes, so Bufet’s performance is all the more impressive. Given Berkshire’s modest turnover
 
+<!-- minerujson:end:v1:13:3 -->
+
 <!-- minerujson:block:v1:13:4 -->
 
 initially, transaction costs were probably small in the early days. As Berkshire grew, so did transaction costs, which could account for some of Berkshire’s diminishing returns over time. Furthermore, Berkshire initially focused on small companies, which is reflected in a positive SMB loading in the first half of the time period (not shown), but may have been increasingly forced to focus on large-cap stocks. Indeed, Table 4 shows that Berkshire has a nega- tive loading on the SMB factor. Hence, Berkshire’s diminishing returns could also be related to capacity constraints.
 
+<!-- minerujson:end:v1:13:4 -->
+
 <!-- minerujson:block:v1:13:5 -->
 
 Assessing the impact of taxes on Berkshire Hathaway’s performance is complicated. For Berkshire’s private holdings, the joint ownership in a multinational com- pany is associated with tax advantages. For the public stocks, Berkshire could face double corporate taxes— that is, the need to pay tax both indirectly in the port- folio companies’ earnings and in Berkshire as it receives dividends or realizes capital gains. However, Berkshire can deduct 70%–80% of the dividends received, defer capital gains taxes by holding on to the positions so that gains remain unrealized,\<sup>9\</sup> and minimize taxes by allocating earnings abroad as a multinational.\<sup>10\</sup> Hence, assessing whether Berkshire is at a tax disadvantage overall is dificult.
+
+<!-- minerujson:end:v1:13:5 -->
 
 <!-- minerujson:block:v1:14:0 -->
 
@@ -576,197 +832,295 @@ Table 5. Bufet’s Returns vs. a Systematic Bufet Strategy (t-statistics in pa
 
 Notes: This table shows calendar-time portfolio returns. Alpha is the intercept in a regression of monthly excess returns. Alphas are annualized. Boldface indicates statistical significance at the 5% level. See also the notes to Table 2.
 
+<!-- minerujson:end:v1:14:0 -->
+
 <!-- minerujson:block:v1:14:1 -->
 
 
+
+<!-- minerujson:end:v1:14:1 -->
 
 <!-- minerujson:block:v1:14:2 -->
 
 In addition to the systematic long–short portfolios, we computed a long-only, unleveraged, systematic Bufet-style strategy. At the end of each calendar month, we sorted securities on the basis of the portfolio weights corresponding to our active tilts, r\<sub>t\</sub>\<sup>Active\</sup> , and constructed an equal-weighted portfolio that held the top 50 stocks with the highest portfolio weights. Table 2 shows that these simple Bufet- style portfolios also performed well, albeit not as well as when we allowed short-selling.
 
+<!-- minerujson:end:v1:14:2 -->
+
 <!-- minerujson:block:v1:14:3 -->
 
 As a final robustness check, we considered Bufet- style portfolios that did not rely on in-sample regression coeficients. Specifically, we created an implementable Bufet-style strategy by using only information up to month t to construct portfolio weights for the next month, t + 1. These portfolios performed similarly to our full-sample Bufet-style portfolios and had similar alphas, as described in Appendix C.
+
+<!-- minerujson:end:v1:14:3 -->
 
 <!-- minerujson:block:v1:14:4 -->
 
 
 
+<!-- minerujson:end:v1:14:4 -->
+
 <!-- minerujson:block:v1:14:5 -->
 
 In summary, if one had applied leverage to a portfolio of safe, high-quality, value stocks consistently over this time period, one would have achieved a remark- able return, as Bufet did. Of course, he started doing it more than half a century before we wrote this paper!
+
+<!-- minerujson:end:v1:14:5 -->
 
 <!-- minerujson:block:v1:14:6 -->
 
 ## Conclusion and Practical Implications of the Oracle’s Alpha
 
+<!-- minerujson:end:v1:14:6 -->
+
 <!-- minerujson:block:v1:14:7 -->
 
 We have showed just how spectacular the per- formance of Berkshire Hathaway has been when compared with that of other stocks or mutual funds. Indeed, for the sample we studied, we found that Berkshire Hathaway had the highest Sharpe ratio among all and a higher Sharpe ratio than all US mutual funds that have been around for more than 40 years. We found that the Sharpe ratio of Berkshire Hathaway was 0.79 over the period 1976– 2017. Although this Sharpe ratio is nearly double that of the overall stock market, it is lower than many investors imagine. Adjusting for the market exposure, Bufet’s information ratio is lower, 0.64. The Sharpe ratio reflects high average returns but also significant risk and periods of losses and significant drawdowns.
+
+<!-- minerujson:end:v1:14:7 -->
 
 <!-- minerujson:block:v1:15:0 -->
 
 
 
+<!-- minerujson:end:v1:15:0 -->
+
 <!-- minerujson:block:v1:15:1 -->
 
 If his Sharpe ratio is very good but not superhuman, then how did Bufet become among the richest in the world? The answer is that he stuck to a good strategy—buying cheap, safe, quality stocks—for a long time period, surviving rough periods where oth- ers might have been forced into a fire sale or a career shift, and he boosted his returns by using leverage. We estimated that Bufet applies a leverage of about 1.7 to 1, boosting both his risk and excess return in that proportion. Thus, his many accomplish- ments include having the conviction, wherewithal, and skill to operate with leverage and significant risk over a number of decades.
+
+<!-- minerujson:end:v1:15:1 -->
 
 <!-- minerujson:block:v1:15:2 -->
 
 We identified several general features of Bufet’s chosen portfolio: He buys stocks that are safe (with low beta and low volatility), cheap (i.e., value stocks with low price-to-book ratios), and of high quality (profitable, stable, and growing stocks with high payout ratios). Interestingly, stocks with these char- acteristics tend to perform well in general, so these characteristics help explain Bufet’s investment.
 
+<!-- minerujson:end:v1:15:2 -->
+
 <!-- minerujson:block:v1:15:3 -->
 
 We created a portfolio that tracked Bufet’s market exposure and active stock-selection themes and was leveraged to the same active risk as Berkshire Hathaway. We found that this systematic Bufet- style portfolio performed comparably to Berkshire. Bufet’s genius thus appears to be at least partly in recognizing early on that these investment themes work, applying leverage without ever having a fire sale, and sticking to his principles. Perhaps this is what he means by his comment in the Berkshire Hathaway 1994 Annual Report: “Ben Graham taught me 45 years ago that in investing it is not necessary to do extraordinary things to get extraordinary results.”
+
+<!-- minerujson:end:v1:15:3 -->
 
 <!-- minerujson:block:v1:15:4 -->
 
 Finally, we considered whether Bufet’s skill is the result of his ability to buy the right stocks or his abil- ity as a CEO. We decomposed Berkshire Hathaway’s returns into two parts—investments in publicly traded stocks and the private companies run within Berkshire. We found that both public and private companies contribute to Bufet’s performance but the portfolio of public stocks performs beter, sug- gesting that Bufet’s skill is mostly in stock selection.
 
+<!-- minerujson:end:v1:15:4 -->
+
 <!-- minerujson:block:v1:15:5 -->
 
 We then asked why he relies heavily on private companies, including the insurance and reinsurance businesses. One reason might be taxes, and another might be that this structure provides a steady
+
+<!-- minerujson:end:v1:15:5 -->
 
 <!-- minerujson:block:v1:15:6 -->
 
 source of financing that allows him to leverage his stock-selection ability. Indeed, we found that 35% of Bufet’s liabilities consist of insurance float (i.e., insurance premiums paid up front) with an average cost below the T-bill rate.
 
+<!-- minerujson:end:v1:15:6 -->
+
 <!-- minerujson:block:v1:15:7 -->
 
 In summary, we found that Bufet has developed a unique access to leverage; that he has invested in safe, high-quality, cheap stocks; and that these key characteristics can largely explain his impressive performance.
+
+<!-- minerujson:end:v1:15:7 -->
 
 <!-- minerujson:block:v1:15:8 -->
 
 Our results have the following three notable practi- cal implications.
 
+<!-- minerujson:end:v1:15:8 -->
+
 <!-- minerujson:block:v1:15:9 -->
 
 First, we shed new light on the eficiency of capital markets by studying in a novel way the famous coin flipping debate at the 1984 Columbia conference between Michael Jensen representing the eficient market economists and Warren Bufet representing Graham-and-Doddsville. The 2013 and 2017 Nobel prizes reignited this debate; as a prototypical example, see the Forbes article “What Is Market Eficiency?” (Heakal 2013): “In the real world of investments, however, there are obvious arguments against the \[eficient market hypothesis]. There are investors who have beaten the market—Warren Bufet.”
+
+<!-- minerujson:end:v1:15:9 -->
 
 <!-- minerujson:block:v1:15:10 -->
 
 The eficient market counterargument is that Bufet was simply lucky. Our findings suggest that Bufet’s success is neither luck nor magic but is a reward for a successful implementation of value and quality exposures that have historically produced high returns. Second, we illustrated how Bufet’s record can be viewed as an expression of the practical implementability of academic factor returns after transaction costs and financing costs. We simulated how investors can try to take advan- tage of similar investment principles. Bufet’s success shows that the high returns of these academic factors are not simply “paper” returns; these returns can be realized in the real world after transaction costs and funding costs, at least by Warren Bufet. Furthermore, Bufet’s exposure to the BAB factor and his unique access to leverage are consistent with the idea that the BAB factor represents reward to the use of leverage.
 
+<!-- minerujson:end:v1:15:10 -->
+
 <!-- minerujson:block:v1:15:11 -->
 
 Third, our results illustrate what investment suc- cess looks like in the real world. Although optimistic asset managers often claim to be able to achieve Sharpe ratios above 1 or 2 and many chief invest- ment oficers seek similarly high performance num- bers, our results suggest that long-term investors
+
+<!-- minerujson:end:v1:15:11 -->
 
 <!-- minerujson:block:v1:16:0 -->
 
 might do well to set a realistic performance goal and brace themselves for the tough periods that even Bufet has experienced. Indeed, because Bufet became one of the richest people in the world with a Sharpe ratio of 0.79, most investors should seek to actually deliver a Sharpe ratio somewhere between this number and the market’s Sharpe ratio, which was around 0.5 during this sample period, rather than making suboptimal investments in a
 
+<!-- minerujson:end:v1:16:0 -->
+
 <!-- minerujson:block:v1:16:1 -->
 
 ## Notes
+
+<!-- minerujson:end:v1:16:1 -->
 
 <!-- minerujson:block:v1:16:2 -->
 
 1\. Based on the original insights of Black (1972) and Black, Jensen, and Scholes (1972), Frazzini and Pedersen (2014) showed that leverage and margin requirements change equilibrium risk premiums. They demonstrated that investors without binding leverage constraints can profit from beting against beta—that is, buying low-risk assets and shorting risky assets. Frazzini and Pedersen (2012) extended this finding to derivatives with embedded leverage, and Asness, Frazzini, and Pedersen (2012) added the risk–return relation- ship across asset classes. Asness, Frazzini, and Pedersen (forthcoming 2018) considered fundamental measures of risk and other accounting-based measures of “quality”—that is, characteristics that increase a company’s value.
 
+<!-- minerujson:end:v1:16:2 -->
+
 <!-- minerujson:block:v1:16:3 -->
 
 2\. Graham and Dodd’s Security Analysis (1934) is credited with laying the foundation for investing based on value and quality, and Benjamin Graham and David Dodd were Bufet’s professors at Columbia Business School.
+
+<!-- minerujson:end:v1:16:3 -->
 
 <!-- minerujson:block:v1:16:4 -->
 
 3\. Value stocks, on average, outperform growth stocks, as documented by Statman (1980), Rosenberg, Reid, and Lanstein (1985), and Fama and French (1993), and high-quality stocks outperform junk stocks, on average, as documented by Asness, Frazzini, and Pedersen (forthcom- ing 2018) and references therein.
 
+<!-- minerujson:end:v1:16:4 -->
+
 <!-- minerujson:block:v1:16:5 -->
 
 4\. The French website is htp\://mba.tuck.dartmouth.edu/ pages/faculty/ken.french/data_library.html.
+
+<!-- minerujson:end:v1:16:5 -->
 
 <!-- minerujson:block:v1:16:6 -->
 
 5\. This result can be seen directly by optimizing numerically among these combinations or via the theoretical result of Treynor and Black (1973) that the highest Sharpe ratio arises as the square root of the sum of the squared market Sharpe ratio and the squared information ratio. See also the generalized result of Clarke, de Silva, and Thorley (2016).
 
+<!-- minerujson:end:v1:16:6 -->
+
 <!-- minerujson:block:v1:16:7 -->
 
 6\. See the Berkshire Hathaway news release of 22 May 2002 at www\.berkshirehathaway.com/news/may2202.html.
+
+<!-- minerujson:end:v1:16:7 -->
 
 <!-- minerujson:block:v1:16:8 -->
 
 7\. For example, the 2017 Annual Report provides the float number on p. 7 and states on pp. 6 and 7, “Before I discuss our 2017 insurance results, let me remind you of how and why we entered the field. We began by purchasing National Indemnity and a smaller sister company for $8.6 million in early 1967 . . . , insurance business that usually delivered an futile atempt to consistently reach a much higher number.
 
+<!-- minerujson:end:v1:16:8 -->
+
 <!-- minerujson:block:v1:16:9 -->
 
 
+
+<!-- minerujson:end:v1:16:9 -->
 
 <!-- minerujson:block:v1:16:10 -->
 
 ## Editor’s Note
 
+<!-- minerujson:end:v1:16:10 -->
+
 <!-- minerujson:block:v1:16:11 -->
 
 Submited 24 April 2018 Accepted 15 June 2018 by Stephen J. Brown
+
+<!-- minerujson:end:v1:16:11 -->
 
 <!-- minerujson:block:v1:16:12 -->
 
 underwriting profit. Even more important, the insurance operation carried with it $19.4 million of ‘float’—money that belonged to others but was held by our two insurers. Ever since, float has been of great importance to Berkshire. . . . Premiums are generally paid to the company upfront whereas losses occur over the life of the policy. . . . As a result of our emphasizing that sort of business, Berkshire’s growth in float has been extraordinary. We are now the country’s second largest p/c \[property and casualty insurance] company measured by premium volume and its leader, by far, in float.”
 
+<!-- minerujson:end:v1:16:12 -->
+
 <!-- minerujson:block:v1:16:13 -->
 
 8\. See Asness, Frazzini, and Pedersen (forthcoming 2018) for details.
+
+<!-- minerujson:end:v1:16:13 -->
 
 <!-- minerujson:block:v1:16:14 -->
 
 9\. For a corporation, capital gains are subject to corporate taxes (with no special provision for long-term capital gains). Capital gains taxes can be deferred from a cash flow perspective as long as the gains are unrealized, but the accrued capital gains tax does lead to an expense from the perspective of generally accepted accounting principles. That is, Berkshire Hathaway does not pay any taxes for unrealized capital gains, but such unrealized capital gains do lower its reported earnings and hence its book value of equity while raising the accounting liability called “princi- pally deferred income taxes.”
 
+<!-- minerujson:end:v1:16:14 -->
+
 <!-- minerujson:block:v1:16:15 -->
 
 10\. For instance, Berkshire Hathaway’s 2011 Annual Report states, “We have not established deferred income taxes with respect to undistributed earnings of certain foreign subsidiaries. Earnings expected to remain reinvested indef- initely were approximately $6.6 billion as of December 31, 2011. Upon distribution as dividends or otherwise, such amounts would be subject to taxation in the U.S. as well as foreign countries. However, U.S. income tax liabilities would be ofset, in whole or in part, by allowable tax cred its with respect to income taxes previously paid to foreign jurisdictions. Further, repatriation of all earnings of foreign subsidiaries would be impracticable to the extent that such earnings represent capital needed to support normal business operations in those jurisdictions. As a result, we currently believe that any incremental U.S. income tax liabilities arising from the repatriation of distributable earnings of foreign subsidiaries would not be material.”
+
+<!-- minerujson:end:v1:16:15 -->
 
 <!-- minerujson:block:v1:17:0 -->
 
 ## Appendix A: Data Sources and Methodology
 
+<!-- minerujson:end:v1:17:0 -->
+
 <!-- minerujson:block:v1:17:1 -->
 
 ## Stock Return Data
+
+<!-- minerujson:end:v1:17:1 -->
 
 <!-- minerujson:block:v1:17:2 -->
 
 Stock return and price data are from the CRSP database. Our data include all domestic common stocks (share codes 10 and 11) on the CRSP tape between December 1925 and March 2017. To compute Berkshire Hathaway’s stock returns, we value-weighted share classes A and B on the basis of lagged market capitalization (Berkshire Hathaway introduced a share class B in April 1996).
 
+<!-- minerujson:end:v1:17:2 -->
+
 <!-- minerujson:block:v1:17:3 -->
 
 The stock return data for Berkshire Hathaway on the CRSP tape start in 1976. Hence, we have data only for the last 41 years of Warren Bufet’s record. He ran various private investment partnership from 1957 to 1969, started trading Berkshire in 1962, took control of Berkshire in 1965, and started using Berkshire as his main investment vehicle after he closed his partnerships in 1969 (Lowenstein 2008). At the time of this writing, we have been unable to collect data on Berkshire’s stock price prior to its introduction on the CRSP tape and Bufet’s partnership performance, so our study covers the period 1976 to 2017, which can be viewed as a conservative estimate of Bufet’s complete track record and out-of-sample evidence relative to his first almost 20 years of success.
+
+<!-- minerujson:end:v1:17:3 -->
 
 <!-- minerujson:block:v1:17:4 -->
 
 ## Balance Sheet Data
 
+<!-- minerujson:end:v1:17:4 -->
+
 <!-- minerujson:block:v1:17:5 -->
 
 Our main source of balance sheet data is the Compustat North America database. Because of several errors in the cash item (especially in the quarterly reports in the early part of the sample period), however, we checked and corrected these data with information extracted from the original Form 10-K filings as well as information from Berkshire Hathaway’s annual leter to shareholders. Berkshire holds a significant amount of cash on its balance sheet, which we hand-collected from Berkshire’s annual reports and Form 10-K filings.
+
+<!-- minerujson:end:v1:17:5 -->
 
 <!-- minerujson:block:v1:17:6 -->
 
 We made the following adjustments: For the end of 1985, the oficial cash number included a significant amount of cash set aside for the purchases of Capital Cities Communications and the Scot Fetzer Company. Therefore, we used the pro forma consolidated balance sheet presented in note 18 on p. 42 of the 1985 Annual Report. For the end of 1987, we used the restated cash figure mentioned in the 1988 Annual Report, note 1(b), p. 25. For other balance sheet items, we also focused on annual balance sheet data.
 
+<!-- minerujson:end:v1:17:6 -->
+
 <!-- minerujson:block:v1:17:7 -->
 
 ## 13F Holdings Data
+
+<!-- minerujson:end:v1:17:7 -->
 
 <!-- minerujson:block:v1:17:8 -->
 
 We downloaded holdings data for Berkshire Hathaway from the Thomson Reuters Institutional (13F) Holdings Database, which includes holdings of all US entities exercising investment discretion over $100 million or more and filed with the SEC. The data on Berkshire’s public stock holdings run from 1980 to 2017.
 
+<!-- minerujson:end:v1:17:8 -->
+
 <!-- minerujson:block:v1:17:9 -->
 
 ## Mutual Fund Data
+
+<!-- minerujson:end:v1:17:9 -->
 
 <!-- minerujson:block:v1:17:10 -->
 
 We collected mutual fund returns from the CRSP Mutual Fund Database. The data run from 1976 to 2017. We focused our analysis on open-end actively managed domestic equity mutual funds. Our sample-selection pro- cedure followed that of Kacperczyk, Sialm, and Zheng (2008); see their appendix for details about the screens that were used and summary statistics of the data.
 
+<!-- minerujson:end:v1:17:10 -->
+
 <!-- minerujson:block:v1:18:0 -->
 
 ## Appendix B: Decomposing Berkshire Hathaway’s Returns
 
+<!-- minerujson:end:v1:18:0 -->
+
 <!-- minerujson:block:v1:18:1 -->
 
 To decompose Berkshire Hathaway’s returns into a public equity part, a private equity part, and leverage, we first defined the private equity return as
+
+<!-- minerujson:end:v1:18:1 -->
 
 <!-- minerujson:block:v1:18:2 -->
 
@@ -774,9 +1128,13 @@ To decompose Berkshire Hathaway’s returns into a public equity part, a private
 r _ {t + 1} ^ {\text {Private}} = \frac {r _ {t + 1} ^ {f} \text {Liabilities} _ {t} ^ {M V} + r _ {t + 1} ^ {\text {Equity}} \text {Equity} _ {t} ^ {M V} - r _ {t + 1} ^ {\text {Public}} \text {Public} _ {t} ^ {M V} - r _ {t + 1} ^ {f} \text {Cash} _ {t} ^ {M V}}{\text {Private} _ {t} ^ {M V}}.
 ```
 
+<!-- minerujson:end:v1:18:2 -->
+
 <!-- minerujson:block:v1:18:3 -->
 
 Rearranging this expression so that the overall Berkshire return is on the left side yields
+
+<!-- minerujson:end:v1:18:3 -->
 
 <!-- minerujson:block:v1:18:4 -->
 
@@ -784,9 +1142,13 @@ Rearranging this expression so that the overall Berkshire return is on the left 
 \begin{array}{l} r _ {t + 1} ^ {\text {Equity}} = r _ {t + 1} ^ {\text {Private}} \frac {\text {Private} _ {t} ^ {M V}}{\text {Equity} _ {t} ^ {M V}} + r _ {t + 1} ^ {\text {Public}} \frac {\text {Public} _ {t} ^ {M V}}{\text {Equity} _ {t} ^ {M V}} - r _ {t + 1} ^ {f} \frac {\text {Liabilities} _ {t} ^ {M V} - \text {Cash} _ {t} ^ {M V}}{\text {Equity} _ {t} ^ {M V}} \\ = \left(r _ {t + 1} ^ {\text {Private}} \frac {\text {Public} _ {t} ^ {M V}}{\text {Private} _ {t} ^ {M V} + \text {Public} _ {t} ^ {M V}} + r _ {t + 1} ^ {\text {Public}} \frac {\text {Public} _ {t} ^ {M V}}{\text {Public} _ {t} ^ {M V} + \text {Public} _ {t} ^ {M V}}\right) L _ {t} - r _ {t + 1} ^ {f} \frac {\text {Liabilities} _ {t} ^ {M V} - \text {Cash} _ {t} ^ {M V}}{\text {Equity} _ {t} ^ {M V}}, \end{array}
 ```
 
+<!-- minerujson:end:v1:18:4 -->
+
 <!-- minerujson:block:v1:18:5 -->
 
 where we used
+
+<!-- minerujson:end:v1:18:5 -->
 
 <!-- minerujson:block:v1:18:6 -->
 
@@ -794,13 +1156,19 @@ where we used
 \begin{array}{c} L _ {t} = \frac {\mathsf {T A} _ {t} ^ {M V} - \mathsf {C a s h} _ {t} ^ {M V}}{\mathsf {E q u i t y} _ {t} ^ {M V}} \\ = \frac {\mathsf {P r i v a t e} _ {t} ^ {M V} + \mathsf {P u b l i c} _ {t} ^ {M V}}{\mathsf {E q u i t y} _ {t} ^ {M V}}. \end{array}
 ```
 
+<!-- minerujson:end:v1:18:6 -->
+
 <!-- minerujson:block:v1:18:7 -->
 
 The excess return of Berkshire could now be writen in terms of the weight of the private holdings,
 
+<!-- minerujson:end:v1:18:7 -->
+
 <!-- minerujson:block:v1:18:8 -->
 
 { \pmb w } \_ { t } = \mathsf { P r i v a t e } \_ { t } ^ { M V } \Bigl / \Bigl ( \mathsf { P r i v a t e } \_ { t } ^ { M V } + \mathsf { P u b l i c } \_ { t } ^ { M V } \Bigr ) ,, as follows:
+
+<!-- minerujson:end:v1:18:8 -->
 
 <!-- minerujson:block:v1:18:9 -->
 
@@ -808,25 +1176,37 @@ The excess return of Berkshire could now be writen in terms of the weight of the
 \begin{array}{r l} & r _ {t + 1} ^ {E q u i t y} - r _ {t + 1} ^ {f} = \Big [ w _ {t} r _ {t + 1} ^ {P r i v a t e} + (1 - w _ {t}) r _ {t + 1} ^ {P u b l i c} \Big ] L _ {t} - r _ {t + 1} ^ {f} \Bigg (\frac {\mathrm{Liabilities} _ {t} ^ {M V} - \mathrm{Cash} _ {t} ^ {M V}}{\mathrm{Equity} _ {t} ^ {M V}} + 1 \Bigg) \\ & \qquad = \Big [ w _ {t} \Big (r _ {t + 1} ^ {P r i v a t e} - r _ {t + 1} ^ {f} \Big) + (1 - w _ {t}) \Big (r _ {t + 1} ^ {P u b l i c} - r _ {t + 1} ^ {f} \Big) \Big ] L _ {t} - r _ {t + 1} ^ {f} \Bigg (\frac {\mathrm{Liabilities} _ {t} ^ {M V} - \mathrm{Cash} _ {t} ^ {M V}}{\mathrm{Equity} _ {t} ^ {M V}} + 1 - L _ {t} \Bigg) \\ & \qquad = \Big [ w _ {t} \Big (r _ {t + 1} ^ {P r i v a t e} - r _ {t + 1} ^ {f} \Big) + (1 - w _ {t}) \Big (r _ {t + 1} ^ {P u b l i c} - r _ {t + 1} ^ {f} \Big ] \Big ] L _ {t}. \end{array}
 ```
 
+<!-- minerujson:end:v1:18:9 -->
+
 <!-- minerujson:block:v1:18:10 -->
 
 The Berkshire equity excess return, therefore, depends on the excess returns of private and public holdings, their relative importance, and the degree of leverage.
+
+<!-- minerujson:end:v1:18:10 -->
 
 <!-- minerujson:block:v1:18:11 -->
 
 Note that the 13F holdings data and mimicking portfolio returns,r \_ { t + 1 } ^ { P u b I i c }, start in 1980. Our way of estimating returns from private holdings, however, produced very noisy estimates for the first three years of the sample. Also, there were several outliers in the imputedr \_ { t + 1 } ^ { P r i v a t e }in the first years of the sample, with several returns exceeding +100% monthly. Therefore, we focused most of the analysis onr \_ { t + 1 } ^ { P r i v a t e }in the period 1984–2017, for which our method produced less noisy estimates.
 
+<!-- minerujson:end:v1:18:11 -->
+
 <!-- minerujson:block:v1:19:0 -->
 
 ## Appendix C: Implementable Systematic Buffett Strategies
+
+<!-- minerujson:end:v1:19:0 -->
 
 <!-- minerujson:block:v1:19:1 -->
 
 We constructed systematic Bufet-style portfolios that tracked Warren Bufet’s market exposure and active stock-selection themes. We did this step as in Table 2, except here, the analysis is implementable in real time (i.e., out of sample).
 
+<!-- minerujson:end:v1:19:1 -->
+
 <!-- minerujson:block:v1:19:2 -->
 
 At the end of each calendar month t, using data up to month t, we first captured Bufet’s market exposure, \beta ^ { B u f f e t t }, as the slope of a univariate regression of Berkshire Hathaway’s excess returns on the market portfolio. Second, we captured Bufet’s stock-selection tilts by running a regression of his monthly beta-adjusted returns on the factors that help explain his performance:
+
+<!-- minerujson:end:v1:19:2 -->
 
 <!-- minerujson:block:v1:19:3 -->
 
@@ -834,9 +1214,13 @@ At the end of each calendar month t, using data up to month t, we first captured
 r - r ^ {f} - \beta^ {B u f f e t t} M K T = \alpha + m M K T + s S M B + h H M L + u U M D + b B A B + q Q M J + \varepsilon .
 ```
 
+<!-- minerujson:end:v1:19:3 -->
+
 <!-- minerujson:block:v1:19:4 -->
 
 We required at least 60 monthly observations to run the time-series regressions. The regression coeficients have the same interpretation as those in column 3 of Table 4, with the exception that the market loading is reduced by an amount equal to β\<sup>Bufet\</sup>. The right-hand side excluding the alpha and the error term captures Bufet’s active stock-selection tilts:
+
+<!-- minerujson:end:v1:19:4 -->
 
 <!-- minerujson:block:v1:19:5 -->
 
@@ -844,9 +1228,13 @@ We required at least 60 monthly observations to run the time-series regressions.
 \tilde {r} _ {t + 1} ^ {A} = m _ {t} \mathsf {M K T} _ {t + 1} + s _ {t} \mathsf {S M B} _ {t + 1} + h _ {t} \mathsf {H M L} _ {t + 1} + u _ {t} \mathsf {U M D} _ {t + 1} + b _ {t} \mathsf {B A B} _ {t + 1} + q _ {t} \mathsf {Q M J} _ {t + 1}.
 ```
 
+<!-- minerujson:end:v1:19:5 -->
+
 <!-- minerujson:block:v1:19:6 -->
 
 We rescaled this active return series to match Berkshire’s idiosyncratic volatility to simulate the use of leverage and to counter any atenuation bias:
+
+<!-- minerujson:end:v1:19:6 -->
 
 <!-- minerujson:block:v1:19:7 -->
 
@@ -854,13 +1242,19 @@ We rescaled this active return series to match Berkshire’s idiosyncratic volat
 r _ {t + 1} ^ {\text {Active}} = \tilde {r} _ {t + 1} ^ {A} \frac {\sigma_ {t , I}}{\sigma_ {t , \tilde {r} ^ {A}}},
 ```
 
+<!-- minerujson:end:v1:19:7 -->
+
 <!-- minerujson:block:v1:19:8 -->
 
 where\sigma \_ { t , I }is Berkshire’s idiosyncratic volatility, estimated from data up to month t.
 
+<!-- minerujson:end:v1:19:8 -->
+
 <!-- minerujson:block:v1:19:9 -->
 
 Finally, we added back Bufet’s market exposure and the risk-free return,r \_ { t } ^ { f }, to construct our systematic Bufet-style portfolio:
+
+<!-- minerujson:end:v1:19:9 -->
 
 <!-- minerujson:block:v1:19:10 -->
 
@@ -868,21 +1262,31 @@ Finally, we added back Bufet’s market exposure and the risk-free return,r \_ {
 r _ {t + 1} ^ {\text {Buffett   style }} = r ^ {f} + \beta_ {t} ^ {\text {Buffett}} \mathsf {M K T} _ {t + 1} + r _ {t + 1} ^ {\text {Active}}.
 ```
 
+<!-- minerujson:end:v1:19:10 -->
+
 <!-- minerujson:block:v1:19:11 -->
 
 Note that in our notation, the subscript t indicates that quantities are known at portfolio formation date t.
+
+<!-- minerujson:end:v1:19:11 -->
 
 <!-- minerujson:block:v1:19:12 -->
 
 Our systematic Bufet-style return,r \_ { t + 1 } ^ { B u f f e t t \ s t y l e }, is a diversified portfolio that matches Berkshire Hathaway’s beta, idiosyncratic volatility, total volatility, and relative active loadings. These portfolios use only information up to month t to construct portfolio weights for the next month, t + 1.
 
+<!-- minerujson:end:v1:19:12 -->
+
 <!-- minerujson:block:v1:19:13 -->
 
 We similarly constructed a Bufet-style portfolio from the loadings and volatility of Berkshire’s public and private equity holdings. Table C1 shows the results for these Bufet-style portfolios.
 
+<!-- minerujson:end:v1:19:13 -->
+
 <!-- minerujson:block:v1:19:14 -->
 
 In addition to the systematic long–short portfolios, we computed a long-only, unleveraged, systematic Bufet- style strategy. At the end of each calendar month, we sorted securities on the basis of the portfolio weights corresponding to our active tilts,r \_ { t } ^ { A c t i v e }, from data up to month t and constructed an equal-weighted portfolio that held the top 50 stocks with the highest portfolio weights, also shown in Table C1.
+
+<!-- minerujson:end:v1:19:14 -->
 
 <!-- minerujson:block:v1:20:0 -->
 
@@ -892,89 +1296,133 @@ Table C1. Implementable Bufet-Style Strategies
 
 Note: See the notes to Table 2.
 
+<!-- minerujson:end:v1:20:0 -->
+
 <!-- minerujson:block:v1:21:0 -->
 
 ## References
+
+<!-- minerujson:end:v1:21:0 -->
 
 <!-- minerujson:block:v1:21:1 -->
 
 Asness, C.S. 1994. “Variables That Explain Stock Returns.” PhD dissertation, University of Chicago.
 
+<!-- minerujson:end:v1:21:1 -->
+
 <!-- minerujson:block:v1:21:2 -->
 
 Asness, C.S., A. Frazzini, and L.H. Pedersen. 2012. “Leverage Aversion and Risk Parity.” Financial Analysts Journal 68 (1): 47–59.
+
+<!-- minerujson:end:v1:21:2 -->
 
 <!-- minerujson:block:v1:21:3 -->
 
 ———. Forthcoming 2018. “Quality Minus Junk.” Review of Accounting Studies.
 
+<!-- minerujson:end:v1:21:3 -->
+
 <!-- minerujson:block:v1:21:4 -->
 
 Black, F. 1972. “Capital Market Equilibrium with Restricted Borrowing.” Journal of Business 45 (3): 444–55.
+
+<!-- minerujson:end:v1:21:4 -->
 
 <!-- minerujson:block:v1:21:5 -->
 
 Black, F., M.C. Jensen, and M. Scholes. 1972. “The Capital Asset Pricing Model: Some Empirical Tests.” In Studies in the Theory of Capital Markets, edited by Michael C. Jensen, 79–121. New York: Praeger.
 
+<!-- minerujson:end:v1:21:5 -->
+
 <!-- minerujson:block:v1:21:6 -->
 
 Bufet, W\.E. 1984. “The Superinvestors of Graham-and- Doddsville.” Columbia Business School Magazine (17 May): 4–15.
+
+<!-- minerujson:end:v1:21:6 -->
 
 <!-- minerujson:block:v1:21:7 -->
 
 Carhart, M. 1997. “On Persistence in Mutual Fund Performance.” Journal of Finance 52 (1): 57–82.
 
+<!-- minerujson:end:v1:21:7 -->
+
 <!-- minerujson:block:v1:21:8 -->
 
 Clarke, R., H. de Silva, and S. Thorley. 2016. “Fundamentals of Eficient Factor Investing.” Financial Analysts Journal 72 (6): 9–26.
+
+<!-- minerujson:end:v1:21:8 -->
 
 <!-- minerujson:block:v1:21:9 -->
 
 Fama, E.F., and K.R. French. 1993. “Common Risk Factors in the Returns on Stocks and Bonds.” Journal of Financial Economics 33 (1): 3–56.
 
+<!-- minerujson:end:v1:21:9 -->
+
 <!-- minerujson:block:v1:21:10 -->
 
 Frazzini, A., and L.H. Pedersen. 2012. “Embedded Leverage.” Working paper, AQR Capital Management (November).
+
+<!-- minerujson:end:v1:21:10 -->
 
 <!-- minerujson:block:v1:21:11 -->
 
 ———. 2014. “Beting against Beta.” Journal of Financial Economics 111 (1): 1–25.
 
+<!-- minerujson:end:v1:21:11 -->
+
 <!-- minerujson:block:v1:21:12 -->
 
 Graham, B., and D. L. Dodd. 1934. Security Analysis. New York: McGraw-Hill.
+
+<!-- minerujson:end:v1:21:12 -->
 
 <!-- minerujson:block:v1:21:13 -->
 
 Heakal, Reem. 2013. “What Is Market Eficiency?” Forbes (1 November): www\.forbes.com/sites/investopedia/2013/11/01/ what-is-market-eficiency/.
 
+<!-- minerujson:end:v1:21:13 -->
+
 <!-- minerujson:block:v1:21:14 -->
 
 Jegadeesh, N., and S. Titman. 1993. “Returns to Buying Winners and Selling Losers: Implications for Stock Market Eficiency.” Journal of Finance 48 (1): 65–91.
+
+<!-- minerujson:end:v1:21:14 -->
 
 <!-- minerujson:block:v1:21:15 -->
 
 Kacperczyk, M., C. Sialm, and L. Zheng. 2008. “Unobserved Actions of Mutual Funds.” Review of Financial Studies 21 (6): 2379–416.
 
+<!-- minerujson:end:v1:21:15 -->
+
 <!-- minerujson:block:v1:21:16 -->
 
 Lowenstein, R. 2008. Bufet: The Biography. London: Duckworth Press.
+
+<!-- minerujson:end:v1:21:16 -->
 
 <!-- minerujson:block:v1:21:17 -->
 
 Martin, G.S., and J. Puthenpurackal. 2008. “Imitation Is the Sincerest Form of Flatery: Warren Bufet and Berkshire Hathaway.” Working paper, American University.
 
+<!-- minerujson:end:v1:21:17 -->
+
 <!-- minerujson:block:v1:21:18 -->
 
 Rosenberg, B., K. Reid, and R. Lanstein. 1985. “Persuasive Evidence of Market Ineficiency.” Journal of Portfolio Management 11 (3): 9–16.
+
+<!-- minerujson:end:v1:21:18 -->
 
 <!-- minerujson:block:v1:21:19 -->
 
 Statman, D. 1980. “Book Values and Stock Returns.” Chicago MBA: A Journal of Selected Papers 5: 25–45.
 
+<!-- minerujson:end:v1:21:19 -->
+
 <!-- minerujson:block:v1:21:20 -->
 
 Treynor, J., and F. Black. 1973. “How to Use Security Analysis to Improve Portfolio Selection.” Journal of Business 46 (1): 66–88.
+
+<!-- minerujson:end:v1:21:20 -->
 
 <!-- minerujson:source:v1:e7371434b168a68c77e8b26370327670abb150aed63f2989c9f5e7e4336ee4a5
 H4sIAAAAAAAAE-y97W4cSZIl-v8-haOwvSgBJJXxnVnTOwOWPqrUXSXVSKrpGVxcNDwjPJleiozIjg-yWLsLNPbXPsD-WWDmAfY1

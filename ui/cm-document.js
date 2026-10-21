@@ -28,6 +28,18 @@ export class CMDocument {
   get markdown(){return this.view.state.doc.toString();}
   get doc(){return this.view.state.doc;}
 
+  /** Read-only Markdown projection. Raw CM6 document is always authoritative.
+   * Optional MinerU end-marker filtering is strictly output-only: no dispatch,
+   * editor state changes, undo history edits, or filesystem writes.
+   */
+  getMarkdown({omitMineruEnd=false}={}){
+    const source=this.markdown;
+    if(!omitMineruEnd)return source;
+    // Match complete, standalone end-marker lines only. Also remove their
+    // following separator so adjacent blocks keep normal Markdown spacing.
+    return source.replace(/^<!-- minerujson:end:v1:\d+:\d+ -->[ \t]*(?:\r?\n(?:\r?\n)?|$)/gm,'');
+  }
+
   loadMarkdown(markdown){
     if(typeof markdown!=='string')throw Error('Markdown must be a string');
     const doc=this.doc;

@@ -10,6 +10,7 @@ import MarkdownIt from 'markdown-it';
 
 const parser=new MarkdownIt({html:true,linkify:false});
 const blockOpen=/^<!-- minerujson:block:v1:(\d+):(\d+) -->$/;
+const blockClose=/^<!-- minerujson:end:v1:(\d+):(\d+) -->$/;
 const sourceStart=/^<!-- minerujson:source:v1:/;
 
 export function buildOutline(markdown,independentDrafts=new Map()) {
@@ -18,8 +19,9 @@ export function buildOutline(markdown,independentDrafts=new Map()) {
   let active=null;
   for(let i=0;i<lines.length;i++){
     const opening=blockOpen.exec(lines[i].trim());
+    const closing=blockClose.exec(lines[i].trim());
     if(opening) active={pageIndex:Number(opening[1]),blockIndex:Number(opening[2])};
-    else if(/^<!-- minerujson:page:v1:/.test(lines[i].trim())) active=null;
+    else if(closing) active=null;
     else if(sourceStart.test(lines[i].trim())) break;
     evidenceByLine[i+1]=active;
   }

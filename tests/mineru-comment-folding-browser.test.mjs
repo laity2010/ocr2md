@@ -34,7 +34,7 @@ try{
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
-   await page.waitForFunction(()=>window.__v6cm6?.view?.state?.doc?.lines>=4800 &&
+   await page.waitForFunction(()=>window.__v6cm6?.view?.state?.doc?.lines>=5300 &&
      document.querySelectorAll('#editor .cm-foldPlaceholder').length>=2,null,{timeout:90000});
    const initial=await page.evaluate(()=>({
     fileMatches:window.__v6cm6.view.state.doc.toString().length,

@@ -5,6 +5,7 @@
 import {decodeMarker} from './chapter-markers.js';
 
 const openBlock=/^<!-- minerujson:block:v1:(\d+):(\d+) -->$/;
+const endBlock=/^<!-- minerujson:end:v1:(\d+):(\d+) -->$/;
 const sourceHeader=/^<!-- minerujson:source:v1:/;
 
 // A typed start such as "00", "0000", or "007" defines both the numeric
@@ -61,7 +62,7 @@ export function buildChapterFiles(markdown,rows,startNumber=0){
       throw Error(`章节「${row.title}」超出母文档正文边界`);
     let opener=-1;
     for(let j=row.sourceLine-2;j>=0;j--){
-      if(/^<!-- minerujson:page:v1:/.test(lines[j]))break;
+      if(endBlock.test(lines[j]))break;
       const match=openBlock.exec(lines[j]);
       if(match){
         if(match[1]!==id[1]||match[2]!==id[2])
