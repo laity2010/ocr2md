@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OCR2MD V6 · CM-HTML 旁路实验</title>
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="identity">
+        <div class="brand">OCR2MD V6 · 实验</div>
+        <span id="build-version" class="build-badge">cm-html</span>
+        <span id="status" class="status" role="status" aria-live="polite">正在加载隔离文档</span>
+      </div>
+      <div class="actions">
+        <button id="undo" type="button" title="撤销 ⌘Z">↶ 撤销</button>
+        <button id="redo" type="button" title="重做 ⇧⌘Z">↷ 重做</button>
+        <button id="save" type="button" class="primary">保存</button>
+      </div>
+    </header>
+    <nav class="lab-controls" aria-label="独立实验控制">
+      <strong>章节标定实验</strong>
+      <label for="marker-format">写入格式</label>
+      <select id="marker-format">
+        <option value="comment">HTML 注释</option>
+        <option value="tag">HTML 标签</option>
+      </select>
+      <button id="inspect" type="button">检查 CM6 语法节点</button>
+      <span id="parse-report" title="检查被选中的章节标定">请选择章节或取消“独立章节”勾选</span>
+    </nav>
+    <main><div id="workspace" aria-label="只读复用 V6 Dockview 的独立技术实验"></div></main>
+  </div>
+  <dialog id="unlock-dialog" aria-labelledby="unlock-heading">
+    <form id="unlock-form" method="dialog">
+      <h2 id="unlock-heading">实验独立保存授权</h2>
+      <p>此授权只用于 cm-html 实验文档，不会访问或覆盖 V6 主线文件。</p>
+      <label for="unlock-code">实验专用授权码</label>
+      <input id="unlock-code" type="password" autocomplete="off" spellcheck="false" required/>
+      <div id="unlock-error" role="alert"></div>
+      <div class="dialog-actions">
+        <button id="unlock-cancel" type="button">取消</button>
+        <button type="submit" class="primary">授权并保存</button>
+      </div>
+    </form>
+  </dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

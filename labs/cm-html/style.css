@@ -1,0 +1,28 @@
+/* All mainline CSS is imported unchanged. These lab-only controls do not
+   affect the V6 root UI or shared component stylesheet. */
+.lab-controls {
+  display:flex;flex:none;align-items:center;gap:9px;
+  min-height:37px;height:37px;padding:2px 9px;
+  background:#27352f;border-bottom:1px solid #525c62;
+  font:12px/1.3 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+  white-space:nowrap;overflow:hidden;
+}
+.lab-controls strong {color:#a7d0ae;font-size:12px;flex:none}
+.lab-controls label {flex:none;color:#d3c6aa}
+.lab-controls select {
+  flex:none;max-width:142px;background:#293b3c;color:#d3c6aa;
+  border:1px solid #60766b;border-radius:4px;
+  font:12px/1.3 "OCR2MD Sarasa",monospace;
+  height:28px;padding:2px;
+}
+.lab-controls button {
+  font-size:12px;flex:none;padding:3px 7px;height:28px;
+  background:#344a40;border-color:#60766b;
+}
+#parse-report {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#b9bda6;font-size:12px}
+@media(max-width:720px){
+ .lab-controls {gap:4px;padding:2px 5px}
+ .lab-controls strong {display:none}
+ .lab-controls select {max-width:98px}
+ .lab-controls button{padding:2px 4px}
+}
