@@ -12,7 +12,9 @@ const release = version();            // '0.1.0'
 
 ## 格式契约
 
-输出文件使用后缀 `.minerujson.md`，正文只有 Markdown/GFM 原生节点：标题、段落、图片、HTML 表格，以及带 `math` 语言标记的普通围栏代码块；不自创 Markdown 语法。MinerU 页面/段落锚点与压缩的完整原始 JSON 仅存于 HTML 注释。原始 JSON 从未被改变：`preproc_blocks`、`discarded_blocks`、坐标、分数、布局和额外字段仍可恢复。
+输出文件使用后缀 `.minerujson.md`，正文只有 Markdown/GFM 原生节点：标题、段落、图片、HTML 表格，以及带 `math` 语言标记的普通围栏代码块；不自创 Markdown 语法。MinerU 页面/段落单起点块锚点与压缩的完整原始 JSON 仅存于 HTML 注释。原始 JSON 从未被改变：`preproc_blocks`、`discarded_blocks`、坐标、分数、布局和额外字段仍可恢复。
+
+**单起始锚点定界**：每个 `<!-- minerujson:block:v1:pageIndex:blockIndex -->` 标识原始 OCR 块的开始；正文到下一 `block` 起始锚点为止。跨页时先结束上一块，再独立验证下一页 `minerujson:page` 等原始证据注释；最后一个块到 `minerujson:source` 原文备份之前结束。格式不再生成 `minerujson:end`。不自动合并跨页、跨栏块，人工段落续接属后续阶段。
 
 **当前无损注释投影**：`toMarkdown()` 在每个 PDF 页的正文块之前追加普通 HTML 注释，记录该页原始元数据、所有 `discarded_blocks`（含页眉、页脚、印刷页码、页脚注释和侧栏）、以及与最终 `para_blocks` 不一致的前处理块。注释包含 PDF 页码、块类型、bbox、识别文字和完整块 JSON。相同的 `preproc_blocks` 与正文只保留一份可见投影，原始字节仍在文档末尾 `minerujson:source:v1` 中；没有未知类型被悄悄改写成正文。
 
@@ -26,7 +28,7 @@ const release = version();            // '0.1.0'
 
 ## 内置真实样本与验收
 
-`fixtures/buffetts-alpha.mineru.json` 是只读样本（22 页，2,347,546 字节）；对应的 `fixtures/buffetts-alpha.minerujson.md` 是旧版只读基线，新版可由原 JSON 动态生成，不覆盖旧样本。`npm test` 验证逐字节往返、全部块、Markdown 语法、可支持的各种编辑和数据损坏的拒绝。
+`fixtures/buffetts-alpha.mineru.json` 是只读样本（22 页，2,347,546 字节）；对应的 `fixtures/buffetts-alpha.minerujson.md` 是单起点、尚未附加页级审计的只读基线，新版可由原 JSON 动态生成，不覆盖旧样本。`npm test` 验证逐字节往返、全部块、Markdown 语法、可支持的各种编辑和数据损坏的拒绝。
 
 ```bash
 npm ci

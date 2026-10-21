@@ -8,7 +8,7 @@ import {chromium,webkit,devices} from 'playwright';
 
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const sample=fixture.toString('utf8');
-assert.equal((sample.match(/^<!-- minerujson:end:v1:/gm)||[]).length,224);
+assert.equal((sample.match(/^<!-- minerujson:end:v1:/gm)||[]).length,0);
 const documentPath=resolve(`.v6/tests/cmd-output-${process.pid}.md`);
 mkdirSync('.v6/tests',{recursive:true});
 writeFileSync(documentPath,fixture);
@@ -68,14 +68,15 @@ try {
    assert.equal(result.rawIsOriginal,true);
    assert.equal(result.explicitRawIsOriginal,true);
    assert.equal(result.projectedMatches,true);
-   assert.equal(result.originalEnds,224);assert.equal(result.outputEnds,0);
+   assert.equal(result.originalEnds,0);assert.equal(result.outputEnds,0);
    assert.equal(result.anchors,224);
-   assert(result.originalUnchanged&&result.docIdentityUnchanged&&result.sourceStillContainsEnds);
+   assert(result.originalUnchanged&&result.docIdentityUnchanged&&!result.sourceStillContainsEnds);
    assert.equal(result.dirtyAfter,false);
    assert(result.smallOutput.includes('Literal <!-- minerujson:end:v1:0:2 --> inside text'));
    assert(!result.smallOutput.includes('<!-- minerujson:end:v1:0:0 -->'));
    assert(!result.smallOutput.includes('<!-- minerujson:end:v1:0:3 -->'));
    assert(result.smallRawUnchanged&&result.smallDocIntact);
+   assert.equal(result.smallOutput,(await import('../ui/cm-document.js')).CMDocument.withoutMineruEnds(result.smallOutput));
    assert.deepEqual(errors,[],'unexpected browser errors');
    console.log('CMD_MARKDOWN_OUTPUT_PASS',name,JSON.stringify({blocks:result.anchors,
      originalEnds:result.originalEnds,outputEnds:result.outputEnds,

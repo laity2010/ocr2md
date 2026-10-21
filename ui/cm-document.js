@@ -32,12 +32,15 @@ export class CMDocument {
    * Optional MinerU end-marker filtering is strictly output-only: no dispatch,
    * editor state changes, undo history edits, or filesystem writes.
    */
+  static withoutMineruEnds(markdown){
+    if(typeof markdown!=='string')throw Error('Markdown must be a string');
+    // Strict complete-line filter, shared by CMD's read-only projection and
+    // the SHA-guarded one-time disk migration. Never touches editor state.
+    return markdown.replace(/^<!-- minerujson:end:v1:\d+:\d+ -->[ \t]*(?:\r?\n(?:\r?\n)?|$)/gm,'');
+  }
   getMarkdown({omitMineruEnd=false}={}){
     const source=this.markdown;
-    if(!omitMineruEnd)return source;
-    // Match complete, standalone end-marker lines only. Also remove their
-    // following separator so adjacent blocks keep normal Markdown spacing.
-    return source.replace(/^<!-- minerujson:end:v1:\d+:\d+ -->[ \t]*(?:\r?\n(?:\r?\n)?|$)/gm,'');
+    return omitMineruEnd ? CMDocument.withoutMineruEnds(source) : source;
   }
 
   loadMarkdown(markdown){
