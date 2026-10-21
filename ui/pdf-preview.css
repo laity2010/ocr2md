@@ -19,3 +19,6 @@
 .ocr-pdf-region-overlay {position:absolute;z-index:8;pointer-events:none;
   background:rgba(255,205,60,.30);border:2px solid rgba(255,185,45,.93);
   box-shadow:0 0 0 2px #111a inset;border-radius:2px}
+
+/* Embedded in the single shared preview pane: toolbar now lives in its header. */
+.ocr-preview-pdf-host .ocr-pdf-scroller {top:0}

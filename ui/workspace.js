@@ -54,59 +54,101 @@ class SourcePanel {
   }
 }
 
+/** One Dockview pane, two persistent read-only projections. Neither is
+ * re-created when the user changes the dropdown: PDF.js continues to receive
+ * location events while Markdown is visible, and vice versa. */
 class PreviewPanel {
-  constructor() {
+  constructor(){
     this.element=document.createElement('div');
     this.element.className='ocr-preview-pane';
-    this.element.setAttribute('aria-label','Markdown 阅读预览');
+    this.element.setAttribute('aria-label','Markdown / PDF 共用预览');
+    this.toolbar=document.createElement('div');
+    this.toolbar.className='ocr-preview-switchbar';
+    this.switcher=document.createElement('select');
+    this.switcher.className='ocr-preview-mode';
+    this.switcher.setAttribute('aria-label','预览类型');
+    this.switcher.innerHTML='<option value="md">Markdown 预览</option><option value="pdf">PDF 原文</option>';
+    this.toolbar.append(this.switcher);
+    this.mdTools=document.createElement('div');
+    this.mdTools.className='ocr-preview-mode-tools';
+    this.mdTools.dataset.mode='md';
+    this.toolbar.append(this.mdTools);
+    this.pdfTools=document.createElement('div');
+    this.pdfTools.className='ocr-preview-mode-tools';
+    this.pdfTools.dataset.mode='pdf';
+    this.toolbar.append(this.pdfTools);
+    this.mdPane=document.createElement('div');
+    this.mdPane.className='ocr-preview-md-scroll';
+    this.mdPane.setAttribute('aria-label','Markdown 阅读预览');
     this.body=document.createElement('article');
     this.body.className='ocr-markdown';
-    this.element.append(this.body);
+    this.mdPane.append(this.body);
+    this.pdfPane=document.createElement('div');
+    this.pdfPane.className='ocr-preview-pdf-host';
+    this.pdfPane.setAttribute('aria-label','PDF 原文阅读预览');
+    this.element.append(this.toolbar,this.mdPane,this.pdfPane);
+    this.pdf=null;
     this.timer=null;
     this.disposed=false;
+    this.mode='md';
     this.lastFocusElement=null;
     this.onClick=event=>{
       if(!(event.target instanceof Element) || event.target.closest('a[href]'))return;
       const target=event.target.closest('[data-source-start][data-source-end]');
       if(!target)return;
-      publishFocus({
-        sourceLine:Number(target.dataset.sourceStart),
-        sourceEnd:Number(target.dataset.sourceEnd),
-        origin:'preview',
-      });
+      publishFocus({sourceLine:Number(target.dataset.sourceStart),
+        sourceEnd:Number(target.dataset.sourceEnd),origin:'preview'});
     };
+    this.switcher.addEventListener('change',()=>this.setMode(this.switcher.value));
     currentPreview=this;
   }
-  init() {
-    this.unsubscribe=viewStore.subscribe((next,prior) => {
-      if (next.documentRevision !== prior.documentRevision) this.schedule();
-      if (next.focusTarget!==prior.focusTarget) this.highlight(next.focusTarget);
+  init(){
+    this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown());
+    this.pdf.moveToolbarTo(this.pdfTools);
+    currentPdf=this;
+    this.setMode('md');
+    this.unsubscribe=viewStore.subscribe((next,prior)=>{
+      if(next.documentRevision!==prior.documentRevision)this.schedule();
+      if(next.focusTarget!==prior.focusTarget)this.highlight(next.focusTarget);
     });
     this.body.addEventListener('click',this.onClick);
     refreshPreview=()=>this.schedule();
     this.schedule(true);
   }
-  schedule(immediate=false) {
-    if (this.disposed) return;
+  setMode(mode){
+    if(mode!=='md'&&mode!=='pdf')return;
+    this.mode=mode;
+    this.switcher.value=mode;
+    this.element.dataset.previewMode=mode;
+    this.mdPane.setAttribute('aria-hidden',String(mode!=='md'));
+    this.pdfPane.setAttribute('aria-hidden',String(mode!=='pdf'));
+    this.pdfTools.setAttribute('aria-hidden',String(mode!=='pdf'));
+    if(this.pdf){
+      this.pdf.setActive(mode==='pdf');
+      if(mode==='pdf')this.pdf.revealCurrentLocation();
+      else scrollSync?.measureLater();
+    }
+  }
+  layout(){this.pdf?.onResize();scrollSync?.measureLater();}
+  schedule(immediate=false){
+    if(this.disposed)return;
     clearTimeout(this.timer);
-    if (immediate) this.render();
+    if(immediate)this.render();
     else this.timer=setTimeout(()=>this.render(),180);
   }
-  render() {
-    if (this.disposed) return;
+  render(){
+    if(this.disposed)return;
     const source=getMarkdown();
-    if (!source) return; // CM6 may not be initialized yet.
-    const pane=this.element;
+    if(!source)return;
+    const pane=this.mdPane;
     const preserved=scrollSync?.beforeRender();
-    const scrollRatio=pane.scrollHeight>pane.clientHeight
-      ? pane.scrollTop/(pane.scrollHeight-pane.clientHeight) : 0;
+    const ratio=pane.scrollHeight>pane.clientHeight
+      ?pane.scrollTop/(pane.scrollHeight-pane.clientHeight):0;
     this.body.innerHTML=renderMarkdown(source);
     this.lastFocusElement=null;
     this.highlight(viewStore.getState().focusTarget);
-    if(scrollSync) scrollSync.afterRender(preserved);
-    else {
-      pane.scrollTop=scrollRatio*Math.max(0,pane.scrollHeight-pane.clientHeight);
-    }
+    if(scrollSync)scrollSync.afterRender(preserved);
+    else pane.scrollTop=ratio*Math.max(0,pane.scrollHeight-pane.clientHeight);
   }
   highlight(focus){
     this.lastFocusElement?.classList.remove('ocr-outline-focused-element');
@@ -117,39 +159,26 @@ class PreviewPanel {
     for(const element of elements){
       const start=Number(element.dataset.sourceStart);
       const end=Number(element.dataset.sourceEnd);
-      if(start<=focus.sourceLine && focus.sourceLine<end &&
-         (!selected || end-start < Number(selected.dataset.sourceEnd)-Number(selected.dataset.sourceStart))){
+      if(start<=focus.sourceLine&&focus.sourceLine<end&&
+        (!selected||end-start<Number(selected.dataset.sourceEnd)-Number(selected.dataset.sourceStart)))
         selected=element;
-      }
     }
     if(selected){
       selected.classList.add('ocr-outline-focused-element');
       this.lastFocusElement=selected;
     }
   }
-  dispose() {
+  dispose(){
     this.disposed=true;
     clearTimeout(this.timer);
     this.unsubscribe?.();
     this.body.removeEventListener('click',this.onClick);
-    scrollSync?.dispose();
-    scrollSync=null;
-    if(currentPreview===this) currentPreview=null;
-    if (refreshPreview) refreshPreview=()=>{};
+    this.pdf?.dispose();
+    scrollSync?.dispose();scrollSync=null;
+    if(currentPdf===this)currentPdf=null;
+    if(currentPreview===this)currentPreview=null;
+    refreshPreview=()=>{};
   }
-}
-
-class PdfPanel {
-  constructor(){
-    this.element=document.createElement('div');
-    this.element.className='ocr-pdf-pane';
-    this.element.setAttribute('aria-label','原 PDF 连续阅读与文本定位');
-    this.controller=null;
-    currentPdf=this;
-  }
-  init(){this.controller=new PdfPreview(this.element,()=>getMarkdown());}
-  layout(){this.controller?.onResize();}
-  dispose(){this.controller?.dispose();if(currentPdf===this)currentPdf=null;}
 }
 
 export function createWorkspace(container, getDocument, getCurrentEditor) {
@@ -161,7 +190,6 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
       if (name==='outline') return new OutlinePanel();
       if (name==='source') return new SourcePanel();
       if (name==='preview') return new PreviewPanel();
-      if (name==='pdf') return new PdfPanel();
       throw new Error('Unknown pane '+name);
     },
   });
@@ -171,12 +199,10 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     position:{referencePanel:'outline',direction:'right'}});
   dockview.addPanel({id:'preview',component:'preview',title:'Markdown 预览',
     position:{referencePanel:'source',direction:'below'}});
-  dockview.addPanel({id:'pdf',component:'pdf',title:'PDF 原文',
-    position:{referencePanel:'preview',direction:'right'}});
   // Dockview's native group header visibility reflows the panel content;
   // do not hide tabs with CSS (that leaves an unused titlebar gap).
-  // Preview keeps its tab for identification; AG + CM6 use all their height.
-  for(const panel of [outlinePanel,sourcePanel]) {
+  // The preview supplies its own switcher; no Dockview tabs are needed.
+  for(const panel of [outlinePanel,sourcePanel,dockview.getPanel('preview')]) {
     panel.group.header.hidden=true;
     panel.group.relayout();
   }
@@ -188,12 +214,14 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
     get outlineGrid(){return currentOutline?.grid;},
-    get pdf(){return currentPdf?.controller;},
-    refreshPdf(){currentPdf?.controller?.refreshAnchors();},
+    get pdf(){return currentPdf?.pdf;},
+    get previewMode(){return currentPreview?.mode;},
+    setPreviewMode(mode){currentPreview?.setMode(mode);},
+    refreshPdf(){currentPdf?.pdf?.refreshAnchors();},
     startScrollSync() {
       if(scrollSync) return scrollSync;
       if(!currentPreview || !getEditor()) return null;
-      scrollSync=createScrollSync(getEditor,currentPreview.element,currentPreview.body);
+      scrollSync=createScrollSync(getEditor,currentPreview.mdPane,currentPreview.body);
       scrollSync.afterRender(null);
       return scrollSync;
     },

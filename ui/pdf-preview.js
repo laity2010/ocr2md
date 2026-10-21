@@ -58,19 +58,19 @@ export class PdfPreview {
       <div class="ocr-pdf-scroller pdfViewerContainer" tabindex="0" aria-label="PDF 连续页面">
         <div class="pdfViewer"></div>
       </div>`;
+    this.toolbar=this.host.querySelector('.ocr-pdf-tools');
     this.scroller=this.host.querySelector('.ocr-pdf-scroller');
     this.pages=this.host.querySelector('.pdfViewer');
     this.statusNode=this.host.querySelector('.ocr-pdf-status');
     this.pageInput=this.host.querySelector('.ocr-pdf-page');
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
-    this.host.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
-    this.host.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
-    this.host.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
+    this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
+    this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
+    this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
     this.pageInput.addEventListener('change',()=>{
       const n=Number(this.pageInput.value);
       if(Number.isInteger(n)&&n>=1&&n<=this.pdf?.numPages){
         this.explicitUserUntil=performance.now()+1000;
-        this.clearHighlight();
         this.viewer.scrollPageIntoView({pageNumber:n});
         this.sendPdfNavigation(n);
       }else this.pageInput.value=String(this.viewer?.currentPageNumber||1);
@@ -84,6 +84,7 @@ export class PdfPreview {
     this.disposed=false;this.explicitUserUntil=0;this.suppressScrollUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
+    this.active=false;this.lastSourceLine=null;this.overlayDrawId=0;
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
       if(next.documentRevision!==prev.documentRevision)
@@ -100,11 +101,25 @@ export class PdfPreview {
     this.resizeObserver=new ResizeObserver(()=>this.onResize());
     this.resizeObserver.observe(this.scroller);
   }
+  // The owning preview pane places the active viewer's toolbar immediately
+  // to the right of the shared MD/PDF dropdown.
+  moveToolbarTo(container){container.append(this.toolbar);}
+  setActive(active){this.active=Boolean(active);}
+  revealCurrentLocation(){
+    const state=viewStore.getState();
+    const line=this.lastSourceLine??state.focusTarget?.sourceLine??
+      state.scrollTarget?.sourceLine??1;
+    if(this.ready){
+      this.onResize();
+      void this.focusLine(line,true);
+      // A page canvas may be painted after focusLine; pagerendered redraws
+      // the overlay and repeats its visibility check.
+    } else this.pendingFocus={line,explicit:true};
+  }
   setStatus(s){this.statusNode.textContent=s;}
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
-    const focus=viewStore.getState().focusTarget;
-    if(focus)void this.focusLine(focus.sourceLine,true);
+    this.revealCurrentLocation();
   }
   async open(){
     try{
@@ -120,7 +135,7 @@ export class PdfPreview {
       if(this.disposed){await pdf.destroy();return;}
       if(this.map.length!==pdf.numPages)throw Error('PDF 页数与 OCR 页数不一致');
       this.pdf=pdf;
-      this.host.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
+      this.toolbar.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
       const bus=new EventBus();
       this.viewer=new PDFViewer({container:this.scroller,viewer:this.pages,eventBus:bus,
         maxCanvasPixels:/(iPad|iPhone|iPod)/i.test(navigator.userAgent)?1_500_000:6_000_000,
@@ -132,7 +147,7 @@ export class PdfPreview {
       });
       bus.on('pagechanging',e=>{
         this.pageInput.value=String(e.pageNumber);
-        this.host.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
+        this.toolbar.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
       });
       bus.on('pagerendered',e=>{
         if(e.error){this.setStatus('PDF 页面渲染错误');return;}
@@ -146,7 +161,7 @@ export class PdfPreview {
       if(this.pendingFocus){
         const request=this.pendingFocus;this.pendingFocus=null;
         await this.focusLine(request.line,request.explicit);
-      }
+      } else if(this.active) this.revealCurrentLocation();
     }catch(err){this.ready=false;this.setStatus('PDF 失败：'+err.message);}
   }
   updateZoom(){
@@ -212,12 +227,16 @@ export class PdfPreview {
     }
   }
   clearHighlight(){
+    ++this.overlayDrawId;
     this.selected=null;
     this.scroller.querySelectorAll('.ocr-pdf-region-overlay').forEach(node=>node.remove());
   }
   sendPdfNavigation(pageNumber){
     const anchor=this.anchors.find(a=>a.pageIndex===pageNumber-1);
-    if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf'});
+    if(anchor){
+      void this.focusLine(anchor.sourceLine+2,true);
+      publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf'});
+    }
   }
   onScroll(){
     if(this.disposed||performance.now()>this.explicitUserUntil||
@@ -228,10 +247,14 @@ export class PdfPreview {
     },165);
   }
   async focusLine(line,explicit){
+    if(!Number.isInteger(line)||line<1)return;
+    this.lastSourceLine=line;
     if(!this.ready){this.pendingFocus={line,explicit};return;}
     const source=sourceAnchor(this.anchors,line);
     if(!source)return;
-    if(!explicit&&this.selected?.pageIndex===source.pageIndex)return;
+    // Never skip another block merely because it lies on the same PDF page.
+    if(!explicit&&this.selected?.pageIndex===source.pageIndex&&
+      this.selected?.blockIndex===source.blockIndex)return;
     const block=this.map[source.pageIndex]?.regions?.find(r=>r.blockIndex===source.blockIndex);
     if(!block)return;
     this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex};
@@ -241,7 +264,33 @@ export class PdfPreview {
     }
     this.scheduleOverlay();
   }
+  ensureVisible(overlay){
+    if(!this.active)return;
+    const visible=this.scroller.getBoundingClientRect();
+    const target=overlay.getBoundingClientRect();
+    if(!visible.height||!target.height)return;
+    const margin=14;
+    // Keep an already-visible region still. Move only when it crosses an edge.
+    let dx=0,dy=0;
+    if(target.width>visible.width-2*margin||target.height>visible.height-2*margin){
+      dx=(target.left+target.width/2)-(visible.left+visible.width/2);
+      dy=(target.top+target.height/2)-(visible.top+visible.height/2);
+    }else{
+      if(target.left<visible.left+margin)dx=target.left-visible.left-margin;
+      else if(target.right>visible.right-margin)dx=target.right-visible.right+margin;
+      if(target.top<visible.top+margin)dy=target.top-visible.top-margin;
+      else if(target.bottom>visible.bottom-margin)dy=target.bottom-visible.bottom+margin;
+    }
+    if(Math.abs(dx)>1||Math.abs(dy)>1){
+      this.suppressScrollUntil=performance.now()+1100;
+      const old=this.scroller.style.scrollBehavior;
+      this.scroller.style.scrollBehavior='auto';
+      this.scroller.scrollLeft+=dx;this.scroller.scrollTop+=dy;
+      requestAnimationFrame(()=>{if(!this.disposed)this.scroller.style.scrollBehavior=old;});
+    }
+  }
   async drawOverlay(){
+    const drawId=++this.overlayDrawId;
     this.scroller.querySelectorAll('.ocr-pdf-region-overlay').forEach(e=>e.remove());
     const selection=this.selected;
     if(!selection||!this.ready)return;
@@ -252,7 +301,7 @@ export class PdfPreview {
     if(!block)return;
     try{
       const pdfPage=await this.pdf.getPage(selection.pageIndex+1);
-      if(this.disposed||this.selected!==selection)return;
+      if(this.disposed||this.selected!==selection||this.overlayDrawId!==drawId)return;
       const viewport=pdfPage.getViewport({scale:1});
       const rect=pdfOverlayRect({...block,pageSize:region.pageSize},viewport);
       const overlay=document.createElement('div');
@@ -272,6 +321,7 @@ export class PdfPreview {
       overlay.style.height=(paper.height*rect.height/100)+'px';
       overlay.title='OCR 对应文本区域（待人工复核）';
       this.scroller.append(overlay);
+      this.ensureVisible(overlay);
     }catch(error){this.setStatus(error.message);}
   }
   dispose(){

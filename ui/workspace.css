@@ -46,9 +46,28 @@
   height: 100%;
   width: 100%;
 }
-.ocr-preview-pane {
-  overflow: auto;
-  scroll-behavior: auto;
-  overscroll-behavior: contain;
-  scrollbar-color: #4a555b #272f34;
-}
+/* One Dockview pane for two long-lived read-only views; visibility keeps
+   geometry so PDF.js and MD line maps can sync while hidden. */
+.ocr-preview-pane {position:relative;overflow:hidden}
+.ocr-preview-switchbar {position:absolute;inset:0 0 auto 0;height:34px;
+  display:flex;align-items:center;gap:6px;padding:3px 7px;z-index:5;
+  background:#283238;border-bottom:1px solid #4d585d}
+.ocr-preview-mode {height:27px;min-width:140px;max-width:46%;
+  background:#344349;color:#d3c6aa;border:1px solid #64736d;
+  border-radius:4px;font:12px "OCR2MD Sarasa",monospace;padding:2px 7px}
+.ocr-preview-mode-tools {display:flex;align-items:center;gap:5px;min-width:0}
+.ocr-preview-mode-tools[data-mode="pdf"] .ocr-pdf-tools {position:static;
+  height:28px;padding:0;border:0;background:transparent;z-index:auto}
+.ocr-preview-mode-tools[aria-hidden="true"] {visibility:hidden;pointer-events:none;
+  width:0;height:0;overflow:hidden}
+.ocr-preview-md-scroll,.ocr-preview-pdf-host {position:absolute;top:34px;
+  bottom:0;left:0;right:0;min-height:0;min-width:0}
+.ocr-preview-md-scroll {overflow:auto;scroll-behavior:auto;
+  overscroll-behavior:contain;scrollbar-color:#4a555b #272f34}
+.ocr-preview-pane[data-preview-mode="md"] .ocr-preview-pdf-host,
+.ocr-preview-pane[data-preview-mode="pdf"] .ocr-preview-md-scroll {
+  visibility:hidden;pointer-events:none}
+.ocr-preview-pane[data-preview-mode="pdf"] .ocr-preview-pdf-host,
+.ocr-preview-pane[data-preview-mode="md"] .ocr-preview-md-scroll {
+  visibility:visible;pointer-events:auto}
+
