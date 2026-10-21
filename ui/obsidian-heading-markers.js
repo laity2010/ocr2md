@@ -8,7 +8,8 @@ class HardReturnMarker extends WidgetType {
   toDOM() {
     const span=document.createElement('span');
     span.className='cm-ob-hard-return';
-    span.textContent='↵';
+    // Render the glyph with CSS ::before: WebKit must not include a
+    // display-only hard-return symbol in native text selections.
     span.setAttribute('aria-hidden','true');
     span.title='硬回车（真实换行）';
     return span;

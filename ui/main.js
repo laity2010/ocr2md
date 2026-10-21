@@ -9,6 +9,7 @@ import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
 import {CMDocument} from './cm-document.js';
+import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
 import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
@@ -273,6 +274,8 @@ async function main() {
       renderGlobalStatus();
   });
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view);
+  const nativeIOSSelection=isIOSWebKit();
+  workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   cm = new CMDocument({
     parent:workspace.editorHost, markdown:markdownText,
     convertMineruJson: async input=>{
@@ -284,7 +287,7 @@ async function main() {
       return res.text();
     },
     extensions:[
-      basicSetup,
+      nativeIOSSelection ? nativeIOSBasicSetup : basicSetup,
       EditorView.lineWrapping,
       markdown({base:markdownLanguage}),
       obsidianMarkdown,
