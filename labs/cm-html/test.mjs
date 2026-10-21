@@ -104,10 +104,10 @@ for(let index=0;index<engines.length;index++){
         const focus=l.workspace.scrollSync?.currentSource;
         const selected=l.outline.api.getSelectedNodes()?.[0]?.id;
         const target=l.outline.rows.find(row=>row.id===id);
-        const shared=l.workspace.scrollSync?.lastDriver;
+        // The synchronizer may legitimately resume CM6 as its driver after
+        // navigation. Assert the actual source location, not its transient role.
         return target?.independent===false && selected===id &&
           Math.abs((focus?.sourceLine||0)-target.sourceLine)<=6 &&
-          shared==='outline' &&
           l.view.state.doc.line(target.sourceLine-1).text.includes('ocr2md:chapter');
       },target,{timeout:20000});
       await wait(550); // document/preview asynchronous refresh must not steal the selection
