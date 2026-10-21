@@ -22,7 +22,7 @@ RUNTIME = ROOT / '.v6'
 DOC = Path(os.environ.get('V6_DOCUMENT_PATH', RUNTIME / 'workspace' / 'buffetts-alpha.minerujson.md')).resolve()
 FIXTURE = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md'
 ORIGINAL_JSON = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'
-PDF_PATH = Path(os.environ.get('V6_PDF_PATH', str(Path.home() / 'Library/Mobile Documents/iCloud~md~obsidian/Documents/ocr2md/ocr2md/Bufett’s Alpha/Buffett s Alpha.pdf'))).resolve()
+PDF_PATH = Path(os.environ.get('V6_PDF_PATH', RUNTIME / 'workspace' / 'buffetts-alpha.original.pdf')).resolve()
 TOKEN = RUNTIME / 'private' / 'editor-token'
 HOST = os.environ.get('V6_BIND', '127.0.0.1')
 PORT = int(os.environ.get('V6_PORT', '4396'))
@@ -163,36 +163,41 @@ class Handler(BaseHTTPRequestHandler):
         self.response(200, asset.read_bytes(), content_type, cache_control=cache)
 
     def get_pdf(self):
-        # Immutable PDF evidence is read-only. Range requests allow PDF.js
-        # continuous Viewer to fetch pages without buffering the whole file.
-        if not PDF_PATH.is_file():
-            self.response(404, 'Original PDF not found')
-            return
-        size=PDF_PATH.stat().st_size
-        header=self.headers.get('Range')
-        start,end=0,size-1
-        if header:
-            matched=re.fullmatch(r'bytes=(\d+)-(\d*)',header)
-            if not matched:
-                self.response(416,'Unsupported PDF range')
-                return
-            start=int(matched[1]);end=min(size-1,int(matched[2]) if matched[2] else size-1)
-            if start>=size or end<start:
-                self.response(416,'Invalid PDF range')
-                return
-        count=end-start+1
-        self.send_response(206 if header else 200)
-        self.send_header('Content-Type','application/pdf')
-        self.send_header('Cache-Control','no-store, max-age=0')
-        self.send_header('Accept-Ranges','bytes')
-        self.send_header('Content-Length',str(count))
-        self.send_header('X-Content-Type-Options','nosniff')
-        if header:
-            self.send_header('Content-Range',f'bytes {start}-{end}/{size}')
-        self.end_headers()
-        if self.command=='HEAD':return
+        # Serve a read-only evidence snapshot. A LaunchAgent may not have TCC
+        # permission to read the user's iCloud vault directly. Open BEFORE
+        # headers so a failure is a proper 503, never a broken 200/206 or 520.
         try:
-            with PDF_PATH.open('rb') as pdf:
+            file = PDF_PATH.open('rb')
+        except OSError:
+            self.response(503, 'Original PDF evidence is not readable by V6 service')
+            return
+        with file as pdf:
+            pdf.seek(0, 2)
+            size = pdf.tell()
+            header = self.headers.get('Range')
+            start, end = 0, size - 1
+            if header:
+                match = re.fullmatch(r'bytes=(\d+)-(\d*)', header)
+                if not match:
+                    self.response(416, 'Unsupported PDF range')
+                    return
+                start = int(match[1])
+                end = min(size - 1, int(match[2]) if match[2] else size - 1)
+                if start >= size or end < start:
+                    self.response(416, 'Invalid PDF range')
+                    return
+            count=end-start+1
+            self.send_response(206 if header else 200)
+            self.send_header('Content-Type','application/pdf')
+            self.send_header('Cache-Control','no-store, max-age=0')
+            self.send_header('Accept-Ranges','bytes')
+            self.send_header('Content-Length',str(count))
+            self.send_header('X-Content-Type-Options','nosniff')
+            if header:
+                self.send_header('Content-Range',f'bytes {start}-{end}/{size}')
+            self.end_headers()
+            if self.command=='HEAD':return
+            try:
                 pdf.seek(start)
                 remaining=count
                 while remaining>0:
@@ -200,8 +205,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not chunk:break
                     self.wfile.write(chunk)
                     remaining-=len(chunk)
-        except (BrokenPipeError,ConnectionResetError):
-            pass
+            except (BrokenPipeError,ConnectionResetError):
+                pass
 
     def same_origin(self):
         allowed = {'https://ocr2md.laity.bid', f'http://127.0.0.1:{PORT}'}

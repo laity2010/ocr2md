@@ -147,3 +147,4 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - V6 的 `/api/pdf` 只读取**被指定的**原始 PDF 并支持 HTTP 206 Range，`/api/pdf-map` 只从受控 MinerU JSON 生成页尺寸及块 bbox 派生数据；通过 `V6_PDF_PATH` 可选路径覆盖。没有 PDF 或页面尺寸/旋转不兼容时明确报告失败，不画假高亮。Vite 开发服务提供相同两个**只读**接口，避免开发测试与正式环境分歧。
 - PDF.js 重绘可能销毁自己托管的 `.page` DOM。V6 高亮挂在独立滚动容器层，位置由当前 PDF 页 DOM 视觉坐标推导，页面重绘或 Dockview 尺寸变化重新定位；只在实际宽度变化时重排 PDF Viewer，防止持续重绘丢高亮。高亮仅在对应 PDF 块坐标经过严格有效性和页面宽高比校验后显示。
 - 自动测试 `tests/four-pane-pdf-browser.test.mjs` 在 Chrome 和 WebKit 分别验证：22 页、224 块、深色显示、Range、缩放、AG→PDF bbox 框选、旋转页 8 PDF 点击→AG/CM6/Markdown 回跳、PDF 和 MD 原件不修改；旧 AG/三窗测试同步升级为四窗检查。冻结 Lab 不能修改，实体 iPad Safari 视觉验收仍须用户完成。
+- 正式 V6 LaunchAgent 的 macOS TCC 权限无法直接读取 iCloud Obsidian PDF：先送出 Range 响应头再读取会导致连接中断及 Cloudflare 520。已将原始 PDF 逐字节 SHA-256 校验复制为 `.v6/workspace/buffetts-alpha.original.pdf`（只读、Git 忽略），默认由正式 V6 服务从工作区快照只读提供 Range；源 iCloud PDF 不修改。服务在发送 HTTP 200/206 之前必须先成功打开证据文件，失败统一明确返回 503，不能伪装 PDF 加载成功。变更工作区 PDF 时须显式更新该受控副本及哈希，而不是在组件内绕开 macOS 授权。
