@@ -4,6 +4,7 @@ import hmac
 import hashlib
 import subprocess
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
+from v6_initialize import initialize_document
 import json
 import os
 import re
@@ -29,6 +30,7 @@ LAN_TLS_CERT = os.environ.get('V6_LAN_TLS_CERT', '')
 LAN_TLS_KEY = os.environ.get('V6_LAN_TLS_KEY', '')
 STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT')
 LIMIT = 8 * 1024 * 1024
+DOC_WRITE_LOCK = threading.RLock()
 
 TOKEN.parent.mkdir(parents=True, exist_ok=True)
 if not TOKEN.is_file():
@@ -145,6 +147,9 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get('Origin', '') in allowed
 
     def do_POST(self):
+        if urlsplit(self.path).path == '/api/initialize-document':
+            self.post_initialize()
+            return
         if urlsplit(self.path).path == '/api/export-chapters':
             self.post_chapters()
             return
@@ -179,6 +184,38 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '11')
         self.end_headers()
         self.wfile.write(b'{"ok":true}')
+
+    def post_initialize(self):
+        if not self.authorized() or not self.same_origin():
+            self.response(403, 'Editor authorization required')
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            length = -1
+        if length < 2 or length > 512:
+            self.response(413, 'Invalid reset request size')
+            return
+        try:
+            request = json.loads(self.rfile.read(length).decode('utf-8'))
+            expected = request.get('expectedSha256')
+            if (request.get('confirmation') != '初始化' or
+                not isinstance(expected, str) or
+                re.fullmatch('[a-f0-9]{64}', expected) is None):
+                self.response(400, 'Initialization confirmation and source checksum required')
+                return
+            with DOC_WRITE_LOCK:
+                result = initialize_document(DOC, FIXTURE, expected)
+        except (ValueError, AttributeError, TypeError, UnicodeDecodeError) as error:
+            if 'Document changed' in str(error):
+                self.response(409, 'Document changed; reload before initialization')
+            else:
+                self.response(400, 'Invalid initialization: '+str(error))
+            return
+        except OSError:
+            self.response(500, 'Initialization failed; previous document retained')
+            return
+        self.response(200, json.dumps(result, ensure_ascii=False), 'application/json')
 
     def post_chapters(self):
         if not self.authorized() or not self.same_origin():
@@ -260,13 +297,18 @@ class Handler(BaseHTTPRequestHandler):
         except UnicodeDecodeError:
             self.response(400, 'Invalid UTF-8')
             return
-        DOC.parent.mkdir(parents=True, exist_ok=True)
-        tmp = DOC.with_name('.' + str(os.getpid()) + '-' + secrets.token_hex(4) + '.tmp')
-        with tmp.open('xb') as out:
-            out.write(value)
-            out.flush()
-            os.fsync(out.fileno())
-        os.replace(tmp, DOC)
+        with DOC_WRITE_LOCK:
+            DOC.parent.mkdir(parents=True, exist_ok=True)
+            tmp = DOC.with_name('.' + str(os.getpid()) + '-' + secrets.token_hex(4) + '.tmp')
+            try:
+                with tmp.open('xb') as out:
+                    out.write(value)
+                    out.flush()
+                    os.fsync(out.fileno())
+                os.replace(tmp, DOC)
+            finally:
+                if tmp.exists():
+                    tmp.unlink()
         self.response(200, 'saved')
 
 def start_lan_tls():

@@ -21,7 +21,8 @@ let workspace;
 // CM6 immutable document handle, not a shadow Markdown string.
 let savedDoc = null;
 let revision = 0;
-let saving = false, exporting = false, afterUnlock = null;
+let saving = false, exporting = false, initializing = false, afterUnlock = null;
+let allowInitializeReload = false;
 let canSave = import.meta.env.DEV ? true : null;
 let pendingUpdate = false;
 let checkingVersion = false;
@@ -55,7 +56,8 @@ function renderGlobalStatus() {
 const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));
 function applyPendingUpdate() {
   if (!pendingUpdate) return;
-  if (hasUnsavedEdits() || buttons.save.disabled || exporting || $('unlock-dialog').open) {
+  if (hasUnsavedEdits() || buttons.save.disabled || exporting || initializing ||
+      $('unlock-dialog').open || $('engineering-dialog').open || $('initialize-dialog').open) {
     status('● 新版本待更新，请先保存','warning');
     return;
   }
@@ -210,6 +212,57 @@ async function exportChapters(){
   }catch(error){status('导出失败：'+error.message,'error');}
   finally{exporting=false;$('export-chapters').disabled=false;applyPendingUpdate();}
 }
+function openInitializeDialog(){
+  $('engineering-dialog').close();
+  $('initialize-phrase').value='';
+  $('initialize-error').textContent='';
+  $('initialize-confirm').disabled=true;
+  $('initialize-dialog').showModal();
+  $('initialize-phrase').focus();
+}
+async function initializeDataDocument(){
+  if(initializing || $('initialize-phrase').value.trim()!=='初始化')return;
+  if(!view||!savedDoc)return;
+  if(canSave!==true){
+    $('initialize-dialog').close();
+    afterUnlock='initialize';
+    status('🔒 初始化需要编辑授权','warning');
+    showUnlock();
+    return;
+  }
+  initializing=true;
+  $('initialize-confirm').disabled=true;
+  $('initialize-cancel').disabled=true;
+  $('initialize-error').textContent='正在备份并初始化，请勿关闭页面…';
+  try{
+    const expectedSha256=await sourceHash(savedDoc.toString());
+    const res=await fetch('/api/initialize-document',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({confirmation:'初始化',expectedSha256}),
+    });
+    if(res.status===403){
+      canSave=false;
+      throw Error('授权已过期，请关闭窗口后重新授权');
+    }
+    if(res.status===409)throw Error('工作文档已被其他操作修改，请刷新页面后重试');
+    if(!res.ok)throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,130)}`);
+    const result=await res.json();
+    if(result.initialized!==true)throw Error('服务器没有确认初始化成功');
+    // Reload creates a new CM6 History. This is intentionally different from
+    // an ordinary save and prevents undoing into pre-initialization data.
+    allowInitializeReload=true;
+    const url=new URL(window.location.href);
+    url.searchParams.set('initialized','1');
+    window.location.assign(url.toString());
+  }catch(error){
+    $('initialize-error').textContent='初始化失败：'+error.message;
+    status('初始化未完成：'+error.message,'error');
+  }finally{
+    initializing=false;
+    $('initialize-cancel').disabled=false;
+    $('initialize-confirm').disabled=$('initialize-phrase').value.trim()!=='初始化';
+  }
+}
 async function main() {
   const response = await fetch('/api/document',{cache:'no-store'});
   if (!response.ok) throw Error('文档读取失败 '+response.status);
@@ -279,6 +332,30 @@ async function main() {
   buttons.undo.addEventListener('click',()=>history(undo));
   buttons.redo.addEventListener('click',()=>history(redo));
   buttons.save.addEventListener('click',save);
+  $('build-version').addEventListener('click',()=>{
+    $('engineering-dialog').showModal();
+  });
+  $('engineering-close').addEventListener('click',()=>$('engineering-dialog').close());
+  $('initialize-document').addEventListener('click',()=>{
+    if(saving||exporting||initializing){status('当前有操作正在进行，请稍后重试','warning');return;}
+    if(canSave!==true){
+      $('engineering-dialog').close();
+      afterUnlock='initialize';
+      status('🔒 初始化需要编辑授权','warning');
+      showUnlock();
+      return;
+    }
+    openInitializeDialog();
+  });
+  $('initialize-cancel').addEventListener('click',()=>$('initialize-dialog').close());
+  $('initialize-phrase').addEventListener('input',()=>{
+    $('initialize-confirm').disabled=$('initialize-phrase').value.trim()!=='初始化';
+  });
+  $('initialize-form').addEventListener('submit',event=>{
+    event.preventDefault();
+    void initializeDataDocument();
+  });
+
   $('export-chapters').addEventListener('click',exportChapters);
   // The selected module owns the command area. More modules can register
   // their own data-module container without changing the global toolbar.
@@ -330,13 +407,14 @@ async function main() {
       $('unlock-dialog').close();
       const action=afterUnlock;afterUnlock=null;
       if(action==='export')await exportChapters();
+      else if(action==='initialize')openInitializeDialog();
       else await save();
     } catch(error) {
       $('unlock-error').textContent='授权失败：'+error.message;
     }
   });
   window.addEventListener('beforeunload',event=>{
-    if (hasUnsavedEdits()) {event.preventDefault(); event.returnValue='';}
+    if (hasUnsavedEdits()&&!allowInitializeReload) {event.preventDefault(); event.returnValue='';}
   });
   window.addEventListener('pagehide',()=>{
     unsubscribeOutlineFocus();
@@ -344,6 +422,12 @@ async function main() {
   },{once:true});
   refreshToolbar();
   status('✓ 已加载');
+  if(new URLSearchParams(location.search).has('initialized')){
+    status('✓ 数据文档已初始化 · 原已保存文档已备份');
+    const cleanUrl=new URL(location.href);
+    cleanUrl.searchParams.delete('initialized');
+    window.history.replaceState(null,'',cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
+  }
   if ((await checkPermission()) === false && !hasUnsavedEdits()) {
     status('🔒 保存需授权','warning');
   }

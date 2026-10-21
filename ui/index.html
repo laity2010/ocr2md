@@ -8,7 +8,7 @@
 <body>
   <div class="app">
     <header class="toolbar">
-      <div class="identity"><div class="brand">OCR2MD V6</div><span id="build-version" class="build-badge">v6-载入中</span><span id="status" class="status" role="status" aria-live="polite">正在加载</span></div>
+      <div class="identity"><div class="brand">OCR2MD V6</div><button id="build-version" class="build-badge" type="button" aria-haspopup="dialog" aria-controls="engineering-dialog" title="打开工程菜单">v6-载入中</button><span id="status" class="status" role="status" aria-live="polite">正在加载</span></div>
       <div class="actions">
         <button id="undo" title="撤销 ⌘Z" type="button">↶ 撤销</button>
         <button id="redo" title="重做 ⇧⌘Z" type="button">↷ 重做</button>
@@ -26,6 +26,28 @@
     </nav>
     <main><div id="workspace" aria-label="OCR2MD 源码与 Markdown 预览工作区"></div></main>
   </div>
+  <dialog id="engineering-dialog" aria-labelledby="engineering-heading">
+    <h2 id="engineering-heading">工程菜单</h2>
+    <p>当前 V6 数据文档的工程操作。</p>
+    <div class="engineering-menu-actions">
+      <button id="initialize-document" type="button">初始化数据文档</button>
+      <button id="engineering-close" type="button">关闭</button>
+    </div>
+  </dialog>
+  <dialog id="initialize-dialog" aria-labelledby="initialize-heading">
+    <h2 id="initialize-heading">初始化数据文档</h2>
+    <p>将当前 Markdown 母文档恢复到最初的 MinerU 转换状态。当前已保存文档会先备份；未保存的修改无法备份。此前导出的章节文件不会删除，但可能不再对应恢复后的正文。</p>
+    <p>初始化完成后重新加载编辑器，并重新开始撤销历史。请输入 <strong>初始化</strong> 以确认。</p>
+    <form id="initialize-form" method="dialog">
+      <label for="initialize-phrase">确认操作</label>
+      <input id="initialize-phrase" type="text" autocomplete="off" spellcheck="false" placeholder="输入 初始化" required />
+      <div id="initialize-error" class="engineering-error" role="alert"></div>
+      <div class="dialog-actions">
+        <button id="initialize-cancel" type="button">取消</button>
+        <button id="initialize-confirm" class="danger" type="submit" disabled>确认初始化</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="unlock-dialog" aria-labelledby="unlock-heading">
     <form id="unlock-form" method="dialog">
       <h2 id="unlock-heading">授权保存</h2>
