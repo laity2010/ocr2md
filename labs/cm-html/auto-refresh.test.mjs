@@ -144,10 +144,14 @@ for(let index=0;index<engines.length;index++){
       const view=window.__cmHtmlLab.view;
       view.dispatch({changes:{from:view.state.doc.length,insert:'\nDISCARD_ME\n'},userEvent:'input'});
     });
-    await page.route('**/labs/cm-html/healthz',route=>route.fulfill({
-      status:200,contentType:'application/json',
-      body:JSON.stringify({service:'cm-html-lab',scope:'/labs/cm-html/',version:newVersion}),
-    }));
+    let discardProbeCount=0;
+    await page.route('**/labs/cm-html/healthz',route=>{
+      if(discardProbeCount++===0)return route.fulfill({
+        status:200,contentType:'application/json',
+        body:JSON.stringify({service:'cm-html-lab',scope:'/labs/cm-html/',version:newVersion}),
+      });
+      return route.continue();
+    });
     await page.evaluate(()=>window.__cmHtmlLab.checkForUpdate());
     await page.locator('#update-release').waitFor({state:'visible'});
     const discardReload=page.waitForEvent('framenavigated',{
