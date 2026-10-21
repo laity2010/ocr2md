@@ -237,6 +237,54 @@ for(let index=0;index<engines.length;index++){
     assert.equal(await page.locator('.ag-row[row-index="1"] .ocr-outline-checkbox').isChecked(),false);
     assert.deepEqual(errors,[],name+' browser errors');
     assert.deepEqual(rootApi,[],name+' browser contacted production API');
+
+    // Regression for real iPad report: quickly check several later headings
+    // before a 160ms deferred AG refresh. A stale cell renderer must never
+    // edit or navigate by an older sourceLine after a marker inserts a line.
+    await page.locator('#marker-format').selectOption('comment');
+    await page.evaluate(()=>{
+      const l=window.__cmHtmlLab,api=l.outline.api;
+      const target=l.outline.rows[5];
+      api.ensureIndexVisible(api.getRowNode(target.id).rowIndex,'middle');
+    });
+    await page.waitForFunction(()=>[4,5,6,7].every(i=>{
+      const row=window.__cmHtmlLab.outline.rows[i];
+      return document.querySelector(`.ag-row[row-id="${row.id}"] .ocr-outline-checkbox`);
+    }),null,{timeout:10000});
+    const burst=await page.evaluate(()=>{
+      const l=window.__cmHtmlLab,ids=l.outline.rows.slice(4,8).map(r=>r.id);
+      const results=[];
+      for(const id of ids){
+        const input=document.querySelector(`.ag-row[row-id="${id}"] .ocr-outline-checkbox`);
+        if(!input)throw Error('rapid checkbox disappeared for '+id);
+        input.click();
+        const row=l.outline.rows.find(r=>r.id===id),doc=l.view.state.doc;
+        results.push({id,independent:row.independent,heading:doc.line(row.sourceLine).text,
+          marker:doc.line(row.sourceLine-1).text,
+          selected:l.outline.api.getSelectedNodes()?.[0]?.id,
+          status:document.querySelector('#status').textContent});
+      }
+      return results;
+    });
+    for(const click of burst){
+      assert.equal(click.independent,false,`rapid click failed on ${click.id}`);
+      assert.equal(click.selected,click.id,`rapid click lost AG focus on ${click.id}`);
+      assert.match(click.heading,/^#{1,6} /,`rapid click landed on a non-heading ${click.id}`);
+      assert(click.marker.includes(`id="${click.id}"`) && click.marker.includes('independent="0"'),
+        `rapid click wrote wrong marker for ${click.id}`);
+      assert(!click.status.includes('Heading has moved'),`stale heading error on ${click.id}`);
+    }
+    await page.waitForTimeout(350);
+    await page.waitForFunction(id=>{
+      const l=window.__cmHtmlLab,row=l.outline.rows.find(x=>x.id===id);
+      const pos=l.workspace.scrollSync?.currentSource?.sourceLine||0;
+      return row?.independent===false &&
+        l.outline.api.getSelectedNodes()?.[0]?.id===id &&
+        Math.abs(pos-row.sourceLine)<=6;
+    },burst.at(-1).id,{timeout:20000});
+    assert.deepEqual(errors,[],name+' rapid check browser errors');
+    console.log('CM_HTML_RAPID_CHECKBOX_PASS',name,JSON.stringify(burst.map(x=>({id:x.id,
+      selected:x.selected,independent:x.independent}))));
     await page.screenshot({path:join(evidence,`cm-html-${name.toLowerCase()}.png`)});
     console.log('CM_HTML_LAB_PASS',name,JSON.stringify({
       originalHeadings:21,commentNode:comment.syntax.syntax,

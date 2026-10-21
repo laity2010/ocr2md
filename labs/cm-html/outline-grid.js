@@ -39,14 +39,15 @@ function titleCell(params){
 
 export function createOutlineGrid(element,getMarkdown,getEditor) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
+  let indexedRevision=-1;
   element.classList.add('ocr-outline-pane');
   const host=document.createElement('div');
   host.className='ocr-outline-grid';
   element.append(host);
 
   function choose(row,ensureVisible=true){
-    if(!row||!api||activeId===row.id)return;
-    if(activeId)api.getRowNode(activeId)?.setSelected(false);
+    if(!row||!api)return;
+    if(activeId && activeId!==row.id)api.getRowNode(activeId)?.setSelected(false);
     activeId=row.id;
     const node=api.getRowNode(row.id);
     node?.setSelected(true);
@@ -61,6 +62,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     const previous=new Map(rows.map(row=>[row.id,row]));
     const editor=getEditor();
     rows=buildOutline(getMarkdown());
+    indexedRevision=viewStore.getState().documentRevision;
     for(const row of rows) {
       const marker=editor?markerForHeading(editor.state.doc,row):null;
       row.independent=marker?.independent??true;
@@ -69,7 +71,8 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     api.setGridOption('rowData',rows);
     const changed=rows.filter(row=>{
       const old=previous.get(row.id);
-      return old&&(old.level!==row.level||old.markerFormat!==row.markerFormat);
+      return old&&(old.level!==row.level||old.markerFormat!==row.markerFormat||
+        old.independent!==row.independent);
     });
     if(changed.length){
       const nodes=changed.map(row=>api.getRowNode(row.id)).filter(Boolean);
@@ -93,6 +96,13 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     document.dispatchEvent(new CustomEvent('cm-html:outline-refreshed'));
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(refresh,160);}
+  // AG Grid may reuse an existing cell renderer after replacing rowData. The
+  // renderer's captured params.data is only an identity hint, not a live row.
+  // On every user interaction resolve the ID against the current CM6 revision.
+  function liveRow(id){
+    if(indexedRevision!==viewStore.getState().documentRevision)refresh();
+    return rows.find(row=>row.id===id)||null;
+  }
 
   const columns=fields.map((field,i)=>{
     const def={field,headerName:labels[i],filter:EnumCheckboxFilter,
@@ -120,20 +130,25 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
         input.addEventListener('click',e=>e.stopPropagation());
         input.addEventListener('change',e=>{
           e.stopPropagation();
+          const id=p.data.id;
+          const checked=input.checked;
           try{
-            const result=putMarker(getEditor(),p.data,input.checked,
+            const current=liveRow(id);
+            if(!current)throw Error('章节已变化，请重新选择标题');
+            // CM6 is the only editable source of truth. Do not write through
+            // p.data: its sourceLine may belong to an older AG renderer.
+            putMarker(getEditor(),current,checked,
               document.querySelector('#marker-format')?.value||'comment');
-            p.data.independent=input.checked;
-            // A checkbox is an explicit navigation action just like clicking
-            // the heading row: route it through V6's shared focus contract.
-            // Use the post-edit CM6 line: inserting a marker shifts the heading.
-            choose(p.data);
-            publishFocus({sourceLine:result.sourceLine,sourceEnd:result.sourceEnd,
-              origin:'outline',elementId:p.data.id});
-            api.refreshCells({rowNodes:[p.node],columns:['independent'],force:true});
-            api.onFilterChanged();
+            // Reindex synchronously before the next tap. Debounced redraws
+            // are fine for typing, but cannot guard consecutive checkbox edits.
+            refresh();
+            const updated=liveRow(id);
+            if(!updated)throw Error('标定后找不到章节标题');
+            choose(updated);
+            publishFocus({sourceLine:updated.sourceLine,sourceEnd:updated.sourceEnd,
+              origin:'outline',elementId:id});
           }catch(error){
-            input.checked=!input.checked;
+            input.checked=liveRow(id)?.independent??!checked;
             document.dispatchEvent(new CustomEvent('cm-html:error',{detail:error.message}));
           }
         });
@@ -152,10 +167,11 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     suppressCellFocus:true,animateRows:false,
     defaultColDef:{resizable:true},enableFilterHandlers:false,
     onRowClicked:p=>{
-      if(!p.data)return;
-      choose(p.data);
-      publishFocus({sourceLine:p.data.sourceLine,sourceEnd:p.data.sourceEnd,
-        origin:'outline',elementId:p.data.id});
+      const row=p.data && liveRow(p.data.id);
+      if(!row)return;
+      choose(row);
+      publishFocus({sourceLine:row.sourceLine,sourceEnd:row.sourceEnd,
+        origin:'outline',elementId:row.id});
     },
   });
   const unsub=viewStore.subscribe((next,prev)=>{
