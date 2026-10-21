@@ -17,6 +17,41 @@ const api=BASE+'api/';
 const $=id=>document.getElementById(id);
 let workspace,view,revision=0,savedRevision=0,canSave=false,lastMarkedId=null;
 let message='正在加载隔离文档',kind='ok';
+// Lab-only release polling. Never reload an edited CM6 document or an
+// in-flight save: an unexpected refresh would silently destroy user work.
+const CHECK_INTERVAL_MS=6000;
+let pendingLabVersion=null,checkingVersion=false,reloading=false,saving=false;
+const hasUnsavedEdits=()=>Boolean(view) && revision!==savedRevision;
+function applyAvailableRelease(){
+  if(!pendingLabVersion||reloading||!view||hasUnsavedEdits()||saving||
+     $('unlock-dialog').open)return;
+  reloading=true;
+  window.location.reload();
+}
+async function checkForUpdate(){
+  if(checkingVersion||reloading)return;
+  checkingVersion=true;
+  try{
+    const response=await fetch(BASE+'healthz',{cache:'no-store'});
+    if(!response.ok)return;
+    const data=await response.json();
+    if(data.scope!==BASE||typeof data.version!=='string'||
+       !data.version.startsWith('lab-cm-html-')||data.version===__LAB_VERSION__)return;
+    pendingLabVersion=data.version;
+    renderStatus();
+    applyAvailableRelease();
+  }catch{/* Offline checks should never interrupt editing. */}
+  finally{checkingVersion=false;}
+}
+function watchLabRelease(){
+  setInterval(()=>{if(!document.hidden)void checkForUpdate();},CHECK_INTERVAL_MS);
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden)void checkForUpdate();
+  });
+  window.addEventListener('pageshow',()=>void checkForUpdate());
+  void checkForUpdate();
+}
+
 
 $('build-version').textContent=__LAB_VERSION__;
 function status(text,level='ok'){
@@ -25,20 +60,26 @@ function status(text,level='ok'){
 }
 function renderStatus(){
   const data=view?countMarkers(view.state.doc):{comment:0,tag:0};
-  const parts=[message,'独立实验文件'];
+  const notice=pendingLabVersion
+    ? (hasUnsavedEdits()||saving||$('unlock-dialog').open
+      ? '⚠ 新版已发布，先保存实验修改后自动更新'
+      : '↻ 实验正在更新')
+    : null;
+  const parts=[...(notice?[notice]:[]),message,'独立实验文件'];
   if(view)parts.push(`${view.state.doc.lines.toLocaleString()}行`);
   parts.push(`注释${data.comment} / 标签${data.tag}`);
   parts.push('主线只读');
   const text=parts.join(' · ');
   $('status').textContent=text;
   $('status').title=text;
-  $('status').dataset.kind=kind;
+  $('status').dataset.kind=notice?'warning':kind;
 }
 function controls(){
   $('undo').disabled=!view||!undoDepth(view.state);
   $('redo').disabled=!view||!redoDepth(view.state);
-  if(revision!==savedRevision)status('● 未保存实验标定','warning');
+  if(hasUnsavedEdits())status('● 未保存实验标定','warning');
   else renderStatus();
+  applyAvailableRelease();
 }
 function setParserReport(text){
   $('parse-report').textContent=text;
@@ -108,6 +149,7 @@ async function save(){
   if(!view)return;
   if(!canSave){status('🔒 实验保存需要独立授权','warning');openUnlock();return;}
   const snapshot=view.state.doc.toString(),atRevision=revision;
+  saving=true;
   $('save').disabled=true;
   status('正在保存实验文档');
   try{
@@ -122,7 +164,11 @@ async function save(){
     status(atRevision===revision?'✓ 实验已保存':'● 保存期间有新修改',
       atRevision===revision?'ok':'warning');
   }catch(error){status('实验保存失败：'+error.message,'error');}
-  finally{$('save').disabled=false;}
+  finally{
+    saving=false;
+    $('save').disabled=false;
+    applyAvailableRelease();
+  }
 }
 async function main(){
   const response=await fetch(api+'document',{cache:'no-store'});
@@ -197,13 +243,14 @@ async function main(){
   await permission();
   controls();
   status(canSave?'✓ 实验已加载':'✓ 已加载 · 保存需实验授权',canSave?'ok':'warning');
+  watchLabRelease();
   // Inspection seam; no second copy of Markdown or persistence authority.
   window.__cmHtmlLab={
     get view(){return view;},
     get outline(){return workspace?.outlineGrid;},
     get workspace(){return workspace;},
     get revision(){return revision;},
-    inspect,save,
+    inspect,save,checkForUpdate,
     noteId(id){lastMarkedId=id;},
   };
 }

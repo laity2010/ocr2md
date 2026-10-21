@@ -30,4 +30,10 @@
 
 实验 URL：https://ocr2md.laity.bid/labs/cm-html/
 
-浏览器实测：node labs/cm-html/test.mjs。独立截图放到 labs/cm-html/.runtime/evidence/，不提交用户文档和授权令牌。标签渲染/清洗器兼容性必须实测，不预先假设标签优于注释。未获用户验收批准不并入主线。
+浏览器实测：node labs/cm-html/test.mjs；版本检测与未保存保护测试：node labs/cm-html/auto-refresh.test.mjs。独立截图放到 labs/cm-html/.runtime/evidence/，不提交用户文档和授权令牌。标签渲染/清洗器兼容性必须实测，不预先假设标签优于注释。未获用户验收批准不并入主线。
+
+## 实验版自动更新（仅 Lab）
+- 页面每 6 秒通过只属于实验的 `/labs/cm-html/healthz` 查询构建版本，Safari 从后台回到前台时也会检查。
+- 无未保存修改、无保存请求时自动重新载入新构建。
+- CM6 存在未保存修改、授权弹窗或保存请求时绝不自动刷新；顶栏提示新版已发布，保存成功且修改均已落盘才可自动更新。
+- 只读检查版本，不访问 V6 主线 API；版本检测失败不影响编辑。
