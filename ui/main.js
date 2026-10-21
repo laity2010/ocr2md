@@ -331,13 +331,19 @@ async function main() {
     view.dispatch({effects:markOutlineLine.of(next.focusTarget.sourceLine)});
   });
   function history(command){
-    const selectedId=workspace.outlineGrid?.api.getSelectedNodes()?.[0]?.id;
-    if(command(view)&&selectedId){
-      workspace.refreshOutline();
-      const row=workspace.outlineGrid.rows.find(x=>x.id===selectedId);
-      if(row)publishFocus({sourceLine:row.sourceLine,sourceEnd:row.sourceEnd,
-        origin:'outline',elementId:row.id,intent:'command'});
-    }
+    // Keep CM6's own history event (changes, selection, effects, annotations)
+    // but do not force-scroll to its restored selection. AG edits can be made
+    // while the caret remains at offset 0 although a later page is visible.
+    // Native history's scrollIntoView:true would jump the source to page one.
+    // The change listener rebuilds AG and preview; it must not navigate us to
+    // the AG-selected heading either.
+    command({state:view.state,dispatch:transaction=>view.dispatch({
+      changes:transaction.changes,
+      selection:transaction.selection,
+      effects:transaction.effects,
+      annotations:transaction.annotations,
+      filter:false,
+    })});
     refreshToolbar();
   }
   buttons.undo.addEventListener('click',()=>history(undo));

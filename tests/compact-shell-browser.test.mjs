@@ -10,6 +10,9 @@ const port=5216,url=`http://127.0.0.1:${port}/`;
 mkdirSync('.v6/tests',{recursive:true});
 mkdirSync('.v6/evidence',{recursive:true});
 const original=readFileSync(fixture);
+const originalText=original.toString('utf8');
+const expectedLines=originalText.split('\n').length;
+const formatCount=n=>n.toLocaleString('en-US');
 copyFileSync(fixture,testFile);
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
   '--port',String(port),'--strictPort'],{
@@ -84,7 +87,7 @@ try {
       assert(Object.values(initial.removed).every(n=>n===0),'no duplicate status bars');
       assert.equal(initial.adjacent,'build-version','global status immediately follows build number');
       assert.equal(initial.outlineCount,21);
-      for(const text of ['✓ 已加载','3,560行','314,218字','大纲21项','章节标定 注释0/标签0','⇅滚动同步',
+      for(const text of ['✓ 已加载',`${formatCount(expectedLines)}行`,`${formatCount(originalText.length)}字`,'大纲21项','章节标定 注释0/标签0','⇅滚动同步',
         'Buffett’s Alpha.minerujson.md']){
         assert(initial.status.includes(text),name+' global status missing '+text);
         assert(initial.statusTitle.includes(text));
@@ -99,13 +102,13 @@ try {
         const view=window.__v6cm6.view;
         view.dispatch({changes:{from:view.state.doc.line(25).from,insert:'\n'}});
       });
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('未保存') &&
-        document.querySelector('#status')?.textContent.includes('3,561行'),
-        null,{timeout:12000});
+      await page.waitForFunction(expected=>document.querySelector('#status')?.textContent.includes('未保存') &&
+        document.querySelector('#status')?.textContent.includes(expected),
+        `${formatCount(expectedLines+1)}行`,{timeout:12000});
       assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.lines),lineBefore+1);
       await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('3,560行'),
-        null,{timeout:12000});
+      await page.waitForFunction(expected=>document.querySelector('#status')?.textContent.includes(expected),
+        `${formatCount(expectedLines)}行`,{timeout:12000});
 
       // Sync stays implemented even though there is no fourth toolbar button.
       await page.evaluate(()=>window.__v6cm6.setScrollSyncEnabled(false));
