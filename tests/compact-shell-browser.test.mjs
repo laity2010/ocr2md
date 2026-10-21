@@ -77,14 +77,14 @@ try {
       });
       assert.deepEqual(initial.buttons,['undo','redo','save'],name+' only three toolbar buttons');
       assert(initial.toolbar.height<=42,name+' toolbar must be compact');
-      assert.equal(initial.main.top,initial.toolbar.bottom,'workspace directly below toolbar');
+      assert.equal(initial.main.top,initial.toolbar.bottom+37,'module toolbar must sit between top bar and workspace');
       assert(Math.abs(initial.main.bottom-initial.viewport.height)<1.5,'workspace fills to bottom edge');
-      assert(initial.ag.height>540,'left AG uses freed vertical space');
+      assert(initial.ag.height>520,'AG must remain full-height below chapter controls');
       assert.equal(initial.panes,3);
       assert(Object.values(initial.removed).every(n=>n===0),'no duplicate status bars');
       assert.equal(initial.adjacent,'build-version','global status immediately follows build number');
       assert.equal(initial.outlineCount,21);
-      for(const text of ['✓ 已加载','3,560行','314,218字','大纲21项','章节标记草稿','⇅滚动同步',
+      for(const text of ['✓ 已加载','3,560行','314,218字','大纲21项','章节标定 注释0/标签0','⇅滚动同步',
         'Buffett’s Alpha.minerujson.md']){
         assert(initial.status.includes(text),name+' global status missing '+text);
         assert(initial.statusTitle.includes(text));

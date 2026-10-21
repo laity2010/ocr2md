@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {readFileSync,writeFileSync,mkdirSync,existsSync,readdirSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {createHash} from 'node:crypto';
+import {homedir} from 'node:os';
+import {chromium,webkit,devices} from 'playwright';
+const root=process.cwd(),fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
+const files=['packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  '.v6/workspace/buffetts-alpha.minerujson.md','.v6/release/index.html'];
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const hashes=files.map(f=>hash(readFileSync(f)));
+const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
+  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
+for(const [n,[name,engine,options]] of engines.entries()){
+ if(process.env.V6_ONLY_CHROME && name!=='Chrome')continue;
+ if(process.env.V6_ONLY_WEBKIT && name!=='WebKit')continue;
+ const port=4511+n,url=`http://127.0.0.1:${port}/`;
+ const work=resolve(`.v6/tests/promoted-${name.toLowerCase()}-${process.pid}`);
+ mkdirSync(work,{recursive:true});
+ const doc=join(work,'document.md');writeFileSync(doc,fixture);
+ const chapters=join(work,'chapters');assert(!existsSync(chapters));
+ const server=spawn('python3',['scripts/v6_serve.py'],{
+  cwd:root,env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:doc,V6_STATIC_ROOT:resolve('dist')},stdio:'ignore',
+ });
+ let browser;
+ try{
+  let ready=false;
+  for(let t=0;t<130;t++){
+   try{if((await fetch(url+'healthz')).ok){ready=true;break;}}catch{}await wait(150);
+  }
+  assert(ready,`V6 test server ${name} not ready`);
+  assert.equal((await fetch(url+'api/export-chapters',{method:'POST',headers:{'Origin':url.slice(0,-1)},body:'{}'})).status,403);
+  browser=await engine.launch({headless:true,...options});
+  const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
+  await page.goto(url,{waitUntil:'domcontentloaded',timeout:40000});
+  const grid=page.locator('.ag-row[row-index="1"]');
+  await page.locator('.ocr-chapter-checkbox-hit').first().waitFor({state:'visible',timeout:50000});
+  const first=await page.locator('.ag-row[row-index="0"] [col-id="chapterFile"]').textContent();
+  const second=await grid.locator('[col-id="chapterFile"]').textContent();
+  assert.notEqual(first,second);
+  assert.equal(await page.locator('.ag-row[row-index="0"] input.ocr-outline-checkbox').isDisabled(),true);
+  await grid.locator('.ocr-outline-checkbox').uncheck();
+  await page.waitForFunction(()=>{
+    const r0=document.querySelector('.ag-row[row-index="0"] [col-id="chapterFile"]')?.textContent;
+    const r1=document.querySelector('.ag-row[row-index="1"] [col-id="chapterFile"]')?.textContent;
+    return r0&&r0===r1;
+  },null,{timeout:16000});
+  assert(!existsSync(chapters));
+  assert.match(await page.locator('#status').textContent(),/未保存/);
+  assert.match(await page.locator('#marker-format').inputValue(),/comment/);
+  await page.locator('#inspect').click();
+  assert.match(await page.locator('#parse-report').textContent(),/HTML 注释/);
+  await page.locator('#save').click();
+  await page.locator('#unlock-dialog').waitFor({state:'visible',timeout:10000});
+  const code=readFileSync('.v6/private/editor-token','utf8').trim().slice(0,12);
+  await page.locator('#unlock-code').fill(code);
+  await page.locator('#unlock-form button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),null,{timeout:15000});
+  assert(readFileSync(doc,'utf8').includes('<!-- ocr2md:chapter:v1'));
+  assert.equal(await page.locator('.ocr-chapter-link').count(),0);
+  await page.locator('#export-chapters').click();
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已导出20个章节'),null,{timeout:25000});
+  assert(existsSync(chapters));
+  const manifest=JSON.parse(readFileSync(join(chapters,'manifest.json'),'utf8'));
+  assert.equal(manifest.files.length,20);
+  assert.equal(manifest.sourceSha256,hash(readFileSync(doc)));
+  assert.equal(readdirSync(chapters).length,21);
+  const url0=await page.locator('.ag-row[row-index="0"] .ocr-chapter-link').getAttribute('href');
+  assert(url0.startsWith('/api/chapters/'));
+  const result=await page.evaluate(path=>fetch(path).then(async r=>({status:r.status,text:await r.text()})),url0);
+  assert.equal(result.status,200);
+  assert(result.text.includes('## Bufett’s Alpha'));
+  assert(!result.text.includes('minerujson:source:v1:'));
+  console.log('V6_PROMOTED_CHAPTER_EXPORT_PASS',name,JSON.stringify({count:manifest.files.length,filename:manifest.files[0].name,firstChars:result.text.length}));
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.locator('.ag-row[row-index="0"] .ocr-chapter-link').waitFor({state:'visible',timeout:25000});
+  await page.locator('.ag-row[row-index="2"] input.ocr-outline-checkbox').uncheck();
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length===0,null,{timeout:20000});
+  await page.locator('#export-chapters').click();
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已导出19个章节'),null,{timeout:25000});
+  assert.equal(JSON.parse(readFileSync(join(chapters,'manifest.json'),'utf8')).files.length,19);
+  assert.equal(readdirSync(chapters).length,20);
+  // Confirm no accidental mutation of the main workspace/fixture.
+  assert.deepEqual(files.map(f=>hash(readFileSync(f))),hashes);
+  assert.deepEqual(errors,[],name+' page errors');
+  await page.screenshot({path:`.v6/evidence/promoted-chapters-${name.toLowerCase()}.png`,timeout:12000});
+  console.log('V6_PROMOTED_CHAPTER_REOPEN_REEXPORT_PASS',name);
+ }finally{if(browser)await browser.close();server.kill('SIGTERM');}
+}
+console.log('V6_PROMOTION_ISOLATION_PASS');

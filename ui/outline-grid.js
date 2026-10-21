@@ -1,7 +1,6 @@
-/**
- * Lab-only replacement for the one V6 component that needs new behavior:
- * the AG Grid chapter checkbox. Workspace, filters, styles and CM6 extensions
- * are imported unchanged from the V6 mainline.
+/** V6 mainline chapter outline: a pure AG projection of CM6 marker metadata.
+ * Stable MinerU IDs route clicks through the shared Zustand focus contract.
+ * Chapter file names are derived projections, not an editable AG data copy.
  */
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import {viewStore,publishFocus} from './view-store.js';
@@ -168,7 +167,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
         input.checked=p.data.independent;
         const first=rows[0]?.id===p.data.id;
         input.disabled=first;
-        input.title=first?'首项必须独立成章':'写入隔离 Markdown 的 CM6 标定注释';
+        input.title=first?'首项必须独立成章':'写入当前 V6 Markdown 的 CM6 HTML 标定';
         input.setAttribute('aria-label',p.data.title+' 独立章节');
         const hit=document.createElement('label');
         hit.className='ocr-chapter-checkbox-hit';

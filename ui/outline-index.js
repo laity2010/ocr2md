@@ -3,8 +3,8 @@
  * The PDF page is the actual 0-based pageIndex embedded by toMarkdown() in
  * <!-- minerujson:block:v1:pageIndex:blockIndex -->, displayed as pageIndex+1.
  *
- * No chapters or exported file paths are invented here. Chapter checkbox
- * selections are UI drafts until MOPJO owns their persistence.
+ * This module only detects headings and stable MinerU IDs. The independent
+ * chapter annotations and exported file paths live in separate modules.
  */
 import MarkdownIt from 'markdown-it';
 

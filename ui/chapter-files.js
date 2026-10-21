@@ -29,7 +29,7 @@ export function chapterAssignments(rows){
 }
 
 /** Strict export: split at MinerU block-open boundaries, never inside a block.
- * Filter only cm-html control markers; retain existing per-block provenance.
+ * Filter only OCR2MD control markers; retain existing per-block provenance.
  * Text before first title remains with chapter 1. The long raw JSON source
  * comment remains in the mother document and is never duplicated.
  */

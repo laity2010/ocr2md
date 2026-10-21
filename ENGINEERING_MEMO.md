@@ -116,3 +116,11 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 全部可见状态由构建号右侧唯一 #status 汇总：加载、授权、保存、更新、错误、CM6 行数字数、文档名、AG 标题数、章节草稿未保存和同步状态。AG 只将 outlineCount 作为 Zustand 展示元数据，绝不复制文档。过长状态单行截断，完整文本保留 title。
 - 删除顶部的结构提取和同步滚动按钮，但后端结构提取仍可向全局状态汇报，现有滚动协调及 Zustand 开关仍正常，默认保持开启。CM6、AG Grid 自定义列筛选、Dockview 三窗不重构。
 - 独立的 tests/compact-shell-browser.test.mjs 在 Chrome 与 WebKit iPad 模拟视口核验 40px 顶栏、完整三窗、只三个按钮、全部状态信息、撤销/保存和滚动状态；旧同步测试改为调用 Zustand API，而不是点击已删除的按钮。保存只使用隔离测试样本。
+
+## 16. cm-html Lab 冻结、CMDocument 晋升 V6 主线（2026-10-21）
+
+- 用户确认 cm-html 技术验证通过并授权晋升。已创建**本地不可改写基线标签** `cm-html-lab-frozen-20261021`，指向提交 `c9a9764`；`labs/cm-html/` 后续不再参与 V6 业务开发、构建迁移或修复，保留独立 URL 作为参考实验。不修改原 Lab 文件、不以运行时引用它替代主线模块。未经用户单独批准，不删除该目录及其持久文件。
+- V6 主线独立拥有 `ui/cm-document.js`（唯一 CM6 编辑状态的薄包装）、`ui/chapter-markers.js`（HTML 注释/标签业务编码）、`ui/chapter-files.js`（章节归属/安全切分）、`ui/outline-grid.js`（AG 交互）。不建立第二份 Markdown，不在 CM 包装类里增加章节业务逻辑。新写入默认 HTML 注释；原始 MinerU JSON → Markdown 继续调用已验收的 Node 转换器，V6 只做代理适配而不重写。
+- AG 的“独立章节”不再是临时草稿：勾选经 CM6 事务写入标定；标题行号每次按 MinerU 稳定 ID 解析；AG 选中行原位优先、必要时最小滚动；保存授权与母文档机制沿用主线。章节文件名实时投影，只有点击“导出章节”才经过授权生成实际 Markdown 和 manifest。
+- `scripts/v6_chapters.py` 将导出产物限制于当前**主线母文档所在目录下** `chapters/`，只替换已存在合法 manifest 的托管目录，拒绝覆盖不受管理的目录；先校验保存文件 SHA256 再分块暂存与整体替换。导出章节保留 MinerU block 锚点、不复制尾部原始压缩 JSON。与 Lab 的 `.runtime/chapters/` 完全隔离。
+- V6 升级须同时通过 Chrome/WebKit 真实 Buffy Alpha 的章节勾选、重开、20→19 文件导出、越界保护、三窗定位、布局与公共 `/` 服务测试，再使用既有 Git 构建检查点及单目录发布；实体 iPad Safari 人工视觉验收仍由用户完成。

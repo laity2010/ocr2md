@@ -116,3 +116,11 @@ npm run test:ui
 Vite 每次编译生成唯一 `v6-YYYYMMDD-HHMMSS` 标牌和 `release-version.json`，唯一发布目录的 `/healthz` 直接提供相同的 `version`。已载入新版的浏览器以 5 秒间隔检查构建变化；切回前台时也立即检查。没有未保存修改则自动刷新；有未保存修改、保存请求正在进行或授权对话框未关闭时不会中断编辑，成功保存后才自动刷新。临时网络故障不触发刷新。测试命令：隔离服务运行在 4397 时执行 `node tests/auto-refresh-browser.test.mjs`。
 
 **以前已经打开的旧版页面未包含自动更新代码，需要首次手动刷新一次以启用后续自动更新**；后续 Git 构建发布无需手动刷新。此机制只检测发布版本，不新增 Markdown 副本或后台状态管理。
+
+### CMDocument 与章节定界（2026-10-21 晋升）
+
+`labs/cm-html/` 已冻结：本地标签 `cm-html-lab-frozen-20261021`（`c9a9764`），只保留参考访问，不再从主线运行时引用。正式版本由 `ui/cm-document.js`、`ui/chapter-markers.js`、`ui/chapter-files.js` 与 `ui/outline-grid.js` 独立组成。编辑状态仅在 CM6；HTML 注释是默认标定格式，业务模块仍可选择合法 HTML 标签。
+
+用户改变「独立章节」后，AG「章节文件」列实时显示归属；保存用于持久化母文档，点击「导出章节」后才实际生成 `{V6_DOCUMENT_PATH 所在目录}/chapters/` 及 `manifest.json`。已保存并匹配当前 CM6 的文件以链接显示。每次再导出都将由此模块管理的已有文件整体替换；存在不带 manifest 的 `chapters/` 时拒绝覆盖。压缩源 JSON 仅留于母文档。新接口 `/api/chapters`、`/api/chapters/<文件>`、`/api/export-chapters` 和 `/api/convert-mineru` 均由 V6 服务处理，写入/转换需主线登录授权。
+
+新回归：`node tests/promoted-chapters-browser.test.mjs`（Chrome + WebKit，隔离 Python 服务 + 测试母文档）和 `node tests/promoted-converter.test.mjs`。主线旧三窗、AG 筛选及布局回归随正式标定行为更新。GitHub 推送仍需单独审批。

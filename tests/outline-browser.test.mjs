@@ -87,7 +87,7 @@ try{
       assert.equal(initial.customHeaderCount,0,'old custom header selects must be removed');
       assert.deepEqual(initial.pdfPages,[1,1,2,2]);
       assert.deepEqual(initial.levels,[2,2,1,1]);
-      assert.equal(initial.exported,false);
+      assert.equal(initial.exported,true,'chapter filenames are planned before export');
       assert.match(initial.font,/OCR2MD Sarasa/);
       assert.equal(initial.pdfPinned,'left');
       assert.equal(initial.titleLayout.whiteSpace,'nowrap');
@@ -176,10 +176,10 @@ try{
       assert.equal(await selectFilter('title','all'),21);
       assert.equal(await selectFilter('independent','是'),21);
       assert.equal(await selectFilter('independent','all'),21);
-      assert.equal(await selectFilter('chapterFile','未导出'),21);
+      assert.equal(await selectFilter('chapterFile','001-Bufett-s-Alpha.md'),1);
       assert.equal(await selectFilter('chapterFile','all'),21);
 
-      // First heading cannot be unchecked. Others are UI-only drafts.
+      // First heading cannot be unchecked. Others write into CM6 as HTML.
       const checkBefore=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
       await page.evaluate(()=>window.__v6cm6.outline.api.ensureIndexVisible(0,'top'));
       const firstCheckbox=page.locator('.ag-row[row-index="0"] .ocr-outline-checkbox');
@@ -192,6 +192,15 @@ try{
       assert.equal(await selectFilter('independent','否'),1);
       assert.equal(await selectFilter('independent','all'),21);
       assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows[1].independent),false);
+      const annotated=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
+      assert.notEqual(annotated,checkBefore);
+      assert(annotated.includes('<!-- ocr2md:chapter:v1'));
+      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows[1].chapterFile),
+        await page.evaluate(()=>window.__v6cm6.outline.rows[0].chapterFile));
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>window.__v6cm6.outline.rows[1].independent &&
+        !window.__v6cm6.view.state.doc.toString().includes('ocr2md:chapter:v1'),
+        null,{timeout:15000});
       assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),checkBefore);
 
       // AG → other two panes. Locate Data Sources by immutable MinerU identity.
@@ -271,7 +280,7 @@ try{
         headings:21,columns:5,filters:'all+values',layout:'left-full/right-top-bottom',
         agToViews:true,previewToAg:true,cm6ToAg:true,
         editorPreserved:true,documentUnmodified:true,
-        chapterDraftNotPersisted:true,errors:errors.length,
+        chapterMarkerCM6Undoable:true,errors:errors.length,
       }));
     }finally{await Promise.race([browser.close(),sleep(9000)]);}
   }
