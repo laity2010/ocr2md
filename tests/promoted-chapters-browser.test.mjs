@@ -50,17 +50,19 @@ for(const [n,[name,engine,options]] of engines.entries()){
   assert.deepEqual(await page.locator('#module-actions button').allTextContents(),['导出章节']);
   assert.equal(await page.locator('#chapter-start-number').inputValue(),'000');
   assert.equal(await page.locator('#inspect').count(),0);
-  const originalSource=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
+  const originalSource=readFileSync(doc);
   await page.locator('#chapter-start-number').fill('025');
-  await page.waitForFunction(()=>window.__v6cm6.outline.rows[0].chapterFile.startsWith('025-') &&
-    window.__v6cm6.outline.rows[1].chapterFile.startsWith('026-'),null,{timeout:12000});
-  assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),originalSource,
-    'renumber must never modify CM6');
-  assert.equal(await page.evaluate(()=>window.__v6cm6.dirty),false,
-    'renumber must not mark the Markdown dirty');
+  await page.waitForFunction(()=>{
+    const file=index=>document.querySelector(`.ag-row[row-index="${index}"] [col-id="chapterFile"]`)?.textContent;
+    return file(0)?.startsWith('025-') && file(1)?.startsWith('026-');
+  },null,{timeout:12000});
+  assert(readFileSync(doc).equals(originalSource),
+    'renumber must never write the Markdown');
+  assert(!(/未保存/.test(await page.locator('#status').textContent())),
+    'renumber must not mark Markdown dirty');
   await page.locator('#chapter-start-number').fill('bad');
   assert.equal(await page.locator('#chapter-start-number').getAttribute('aria-invalid'),'true');
-  assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows[0].chapterFile.startsWith('025-')),true);
+  assert((await page.locator('.ag-row[row-index="0"] [col-id="chapterFile"]').textContent()).startsWith('025-'));
   await page.locator('#chapter-start-number').blur();
   assert.equal(await page.locator('#chapter-start-number').inputValue(),'025');
   assert.equal(await page.locator('.ag-row[row-index="0"] input.ocr-outline-checkbox').isDisabled(),true);
@@ -72,9 +74,7 @@ for(const [n,[name,engine,options]] of engines.entries()){
   },null,{timeout:16000});
   assert(!existsSync(chapters));
   assert.match(await page.locator('#status').textContent(),/未保存/);
-  assert.match(await page.locator('#marker-format').inputValue(),/comment/);
-  await page.locator('#inspect').click();
-  assert.match(await page.locator('#parse-report').textContent(),/HTML 注释/);
+  assert.equal(await page.locator('#marker-format,#inspect,#parse-report').count(),0);
   await page.locator('#save').click();
   await page.locator('#unlock-dialog').waitFor({state:'visible',timeout:10000});
   const code=readFileSync('.v6/private/editor-token','utf8').trim().slice(0,12);
@@ -105,11 +105,11 @@ for(const [n,[name,engine,options]] of engines.entries()){
   assert.equal(await page.locator('#chapter-start-number').inputValue(),'025',
     'exported numbering must be restored on reopening');
   // Changing ONLY start number invalidates the old export, never modifies source.
-  const savedSource=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
+  const savedSource=readFileSync(doc);
   await page.locator('#chapter-start-number').fill('090');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length===0,
     null,{timeout:12000});
-  assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),savedSource);
+  assert(readFileSync(doc).equals(savedSource));
   await page.locator('#chapter-start-number').fill('025');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-chapter-link').length>0,
     null,{timeout:12000});
