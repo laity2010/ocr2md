@@ -276,7 +276,7 @@ try{
       assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),checkBefore);
       assert.deepEqual(errors,[],name+' page errors');
       await page.screenshot({path:`.v6/evidence/three-pane-outline-${name.toLowerCase()}.png`});
-      console.log('THREE_PANE_PASS',name,JSON.stringify({
+      console.log('FOUR_PANE_AG_PASS',name,JSON.stringify({
         headings:21,columns:5,filters:'all+values',layout:'left-full/right-top-bottom',
         agToViews:true,previewToAg:true,cm6ToAg:true,
         editorPreserved:true,documentUnmodified:true,

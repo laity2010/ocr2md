@@ -121,6 +121,23 @@ for(const [i,[name,engine,options]] of engines.entries()){
     return ag!==previous.ag && (Math.abs(source-previous.source)>8||Math.abs(preview-previous.preview)>8);
   },{ag:selectedBefore,source:sourceBefore,preview:previewBefore},{timeout:17000});
   assert(!String(await page.locator('.ocr-pdf-status').textContent()).includes('不一致'));
+  // The second landscape/rotated page must also accept normalized OCR
+  // geometry, rather than applying an erroneous second rotation.
+  await page.locator('.ocr-pdf-page').fill('11');
+  await page.locator('.ocr-pdf-page').press('Enter');
+  await page.waitForFunction(()=>{
+    const canvas=document.querySelector('.ocr-pdf-scroller .page[data-page-number="11"] canvas');
+    const scroller=document.querySelector('.ocr-pdf-scroller');
+    if(!canvas?.width||!scroller)return false;
+    const a=canvas.getBoundingClientRect(),b=scroller.getBoundingClientRect();
+    return a.bottom>b.top&&a.top<b.bottom;
+  },null,{timeout:22000});
+  const canvas11=page.locator('.ocr-pdf-scroller .page[data-page-number="11"] canvas');
+  const extent=await canvas11.evaluate(el=>({w:el.getBoundingClientRect().width,h:el.getBoundingClientRect().height}));
+  await canvas11.click({position:{x:Math.max(10,extent.w*.5),y:Math.max(10,extent.h*.28)},force:true});
+  await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="11"]'),null,{timeout:15000});
+  assert(!String(await page.locator('.ocr-pdf-status').textContent()).includes('不一致'));
+  console.log('FOUR_PANE_ROTATED_PAGE_PASS',name,'8+11');
   console.log('FOUR_PANE_PDF_REVERSE_PASS',name,JSON.stringify({agFrom:selectedBefore,
     agTo:await page.locator('.ag-row[aria-selected="true"]').first().getAttribute('row-index'),page:8}));
   assert.deepEqual(errors,[],name+' browser errors');

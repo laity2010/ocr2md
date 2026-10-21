@@ -138,3 +138,12 @@ V6 从零开始；旧项目的工程备忘不适用于 V6，也不导入此文�
 - 初始化只操作**当前 V6 母文档**（`V6_DOCUMENT_PATH`），用仓库受保护的 Buffett's Alpha MinerU→Markdown 原始 fixture 恢复。恢复前先把**已经保存的**旧母文档字节逐字节备份到同级 `.initialize-backups/`；尚未保存的 CM6 编辑无法由服务端备份，必须在确认框显式告知。采用 SHA-256 乐观并发校验、同源检查、服务器写入互斥与原子替换。原文件已经等于初始数据时不重复写入或生成新备份。
 - `chapters/` 生成物不归初始化功能清理、不会删除或覆盖；已导出章节因内容哈希不匹配而失效。初始化成功后重载当前页面并重新创建 CM6 EditorState，历史 Undo/Redo 从零开始，这是显式的工程重置边界，与日常保存不清历史不同。
 - 测试必须使用临时 V6 文档路径，不对公共 `.v6/workspace/` 执行初始化。Chrome/WebKit 检查标牌、授权、确认取消、备份、新版重载和源 fixture/主线文档哈希隔离。Lab 冻结版本不得修改。
+
+## 19. V6 四窗 PDF 原文对照与 V4 方案只读参考（2026-10-21）
+
+- 用户要求在 V6 正式主线增加**第四窗 PDF 原文**，与 AG、CM6 Markdown 源码、Markdown 渲染预览构成四个实际 Dockview 面板。保持 AG/源码原生无标签头；底部的 Markdown 预览与 PDF 原文各有自己的标签头、可拖动调整大小，不退回 V4 的旧业务数据与存储接口。
+- 只读参考 V4 `ui-spikes/v4-directory/plugins/chapter-cleaning/pdfPreview.ts` 及 `src/pdfMdRegionGeometry.ts`：沿用 Mozilla 官方 PDF.js `PDFViewer + EventBus` 连续分页/优先渲染、OCR 视觉页面 `page_size + bbox` 归一化高亮，**绝不可对已旋转页再次旋转 OCR 坐标**。首阶段使用 Buffett's Alpha 的 22 页、224 个正文块；第 8、11 页旋转方向及尺寸须专项验收；高亮属于 OCR 候选区域，不声称逐字 PDF 字形校对或人工审计完成。
+- `ui/pdf-preview.js` 单独处理 PDF 浏览器只读显示、深色 Canvas、50–300% 缩放和滚动，不拥有可编辑文档；`ui/view-store.js` 仍只传递 transient focus/scroll 事件（`origin:pdf`），`ui/scroll-sync.js` 把 PDF 点击送回 CM6 和 Markdown，AG 仍根据源码行号映射章节，不维护第四份 Markdown 文本。`ui/workspace.js` 仅负责在 Dockview 创建第四组和面板挂接。
+- V6 的 `/api/pdf` 只读取**被指定的**原始 PDF 并支持 HTTP 206 Range，`/api/pdf-map` 只从受控 MinerU JSON 生成页尺寸及块 bbox 派生数据；通过 `V6_PDF_PATH` 可选路径覆盖。没有 PDF 或页面尺寸/旋转不兼容时明确报告失败，不画假高亮。Vite 开发服务提供相同两个**只读**接口，避免开发测试与正式环境分歧。
+- PDF.js 重绘可能销毁自己托管的 `.page` DOM。V6 高亮挂在独立滚动容器层，位置由当前 PDF 页 DOM 视觉坐标推导，页面重绘或 Dockview 尺寸变化重新定位；只在实际宽度变化时重排 PDF Viewer，防止持续重绘丢高亮。高亮仅在对应 PDF 块坐标经过严格有效性和页面宽高比校验后显示。
+- 自动测试 `tests/four-pane-pdf-browser.test.mjs` 在 Chrome 和 WebKit 分别验证：22 页、224 块、深色显示、Range、缩放、AG→PDF bbox 框选、旋转页 8 PDF 点击→AG/CM6/Markdown 回跳、PDF 和 MD 原件不修改；旧 AG/三窗测试同步升级为四窗检查。冻结 Lab 不能修改，实体 iPad Safari 视觉验收仍须用户完成。

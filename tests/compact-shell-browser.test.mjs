@@ -127,7 +127,7 @@ try {
       assert.deepEqual(errors,[],name+' page errors');
       console.log('COMPACT_SHELL_PASS',name,JSON.stringify({
         toolbarHeight:initial.toolbar.height,freedWorkspaceHeight:initial.main.height,
-        panes:3,buttons:initial.buttons,metadata:'global only',
+        panes:4,buttons:initial.buttons,metadata:'global only',
         undo:true,save:true,syncState:true,errors:errors.length,
       }));
     } finally {
