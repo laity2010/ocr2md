@@ -199,6 +199,10 @@ export class PdfPreview {
         elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
     }
   }
+  clearHighlight(){
+    this.selected=null;
+    this.pages.querySelectorAll('.ocr-pdf-region-overlay').forEach(node=>node.remove());
+  }
   sendPdfNavigation(pageNumber){
     const anchor=this.anchors.find(a=>a.pageIndex===pageNumber-1);
     if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf'});
