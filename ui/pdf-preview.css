@@ -1,0 +1,21 @@
+.ocr-pdf-pane {position:relative;width:100%;height:100%;min-width:0;min-height:0;
+  overflow:hidden;background:#252d32;color:#d3c6aa;font:12px/1.4 "OCR2MD Sarasa",monospace}
+.ocr-pdf-tools {position:absolute;top:0;left:0;right:0;height:32px;z-index:5;
+  display:flex;align-items:center;gap:3px;padding:2px 4px;background:#283238;
+  border-bottom:1px solid #4d585d;white-space:nowrap;overflow:hidden}
+.ocr-pdf-tools button {padding:0 6px;height:25px;border-radius:4px;font-size:13px;background:#35474a}
+.ocr-pdf-tools label {display:flex;align-items:center;gap:3px;font-size:12px}
+.ocr-pdf-page {width:43px;height:24px;font-size:12px;padding:1px 2px;
+  border:1px solid #617077;background:#1d272e;color:#d3c6aa;text-align:center}
+.ocr-pdf-count,.ocr-pdf-zoom {font-size:11px;font-variant-numeric:tabular-nums}
+.ocr-pdf-status {font-size:11px;color:#9db19f;overflow:hidden;text-overflow:ellipsis}
+.ocr-pdf-scroller {position:absolute;top:32px;left:0;right:0;bottom:0;
+  overflow:auto;direction:ltr;scroll-behavior:smooth;overscroll-behavior:contain;
+  --scale-factor:1;scrollbar-color:#52605f #263136}
+.ocr-pdf-scroller .pdfViewer {padding:8px 0 16px}
+.ocr-pdf-scroller .page {--page-border:1px solid #435055;margin:0 auto 10px;
+  box-shadow:0 3px 9px #0007;position:relative}
+.ocr-pdf-pane[data-pdf-theme="dark"] .page canvas {filter:invert(1) hue-rotate(180deg)}
+.ocr-pdf-region-overlay {position:absolute;z-index:8;pointer-events:none;
+  background:rgba(255,205,60,.30);border:2px solid rgba(255,185,45,.93);
+  box-shadow:0 0 0 2px #111a inset;border-radius:2px}

@@ -8,6 +8,7 @@ import {viewStore,publishFocus} from './view-store.js';
 import {renderMarkdown} from './markdown-preview.js';
 import {createScrollSync} from './scroll-sync.js';
 import {createOutlineGrid} from './outline-grid.js';
+import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
 
 const sourceHost = document.createElement('div');
@@ -20,6 +21,7 @@ let refreshPreview = () => {};
 let currentPreview=null;
 let scrollSync=null;
 let currentOutline=null;
+let currentPdf=null;
 
 class OutlinePanel {
   constructor(){
@@ -137,6 +139,19 @@ class PreviewPanel {
   }
 }
 
+class PdfPanel {
+  constructor(){
+    this.element=document.createElement('div');
+    this.element.className='ocr-pdf-pane';
+    this.element.setAttribute('aria-label','原 PDF 连续阅读与文本定位');
+    this.controller=null;
+    currentPdf=this;
+  }
+  init(){this.controller=new PdfPreview(this.element,()=>getMarkdown());}
+  layout(){this.controller?.onResize();}
+  dispose(){this.controller?.dispose();if(currentPdf===this)currentPdf=null;}
+}
+
 export function createWorkspace(container, getDocument, getCurrentEditor) {
   getMarkdown=getDocument;
   getEditor=getCurrentEditor;
@@ -146,6 +161,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
       if (name==='outline') return new OutlinePanel();
       if (name==='source') return new SourcePanel();
       if (name==='preview') return new PreviewPanel();
+      if (name==='pdf') return new PdfPanel();
       throw new Error('Unknown pane '+name);
     },
   });
@@ -155,6 +171,8 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     position:{referencePanel:'outline',direction:'right'}});
   dockview.addPanel({id:'preview',component:'preview',title:'Markdown 预览',
     position:{referencePanel:'source',direction:'below'}});
+  dockview.addPanel({id:'pdf',component:'pdf',title:'PDF 原文',
+    position:{referencePanel:'preview',direction:'right'}});
   // Dockview's native group header visibility reflows the panel content;
   // do not hide tabs with CSS (that leaves an unused titlebar gap).
   // Preview keeps its tab for identification; AG + CM6 use all their height.
@@ -170,6 +188,8 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
     get outlineGrid(){return currentOutline?.grid;},
+    get pdf(){return currentPdf?.controller;},
+    refreshPdf(){currentPdf?.controller?.refreshAnchors();},
     startScrollSync() {
       if(scrollSync) return scrollSync;
       if(!currentPreview || !getEditor()) return null;

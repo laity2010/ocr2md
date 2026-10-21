@@ -313,6 +313,7 @@ async function main() {
   savedDoc=view.state.doc;
   workspace.refreshPreview();
   workspace.refreshOutline();
+  workspace.refreshPdf();
   workspace.startScrollSync();
   const unsubscribeOutlineFocus=viewStore.subscribe((next,previous)=>{
     if(next.focusTarget===previous.focusTarget || !next.focusTarget)return;
@@ -444,6 +445,7 @@ async function main() {
     get scrollSync(){return workspace?.scrollSync;},
     get scrollState(){return viewStore.getState();},
     get outline(){return workspace?.outlineGrid;},
+    get pdf(){return workspace?.pdf;},
     // Regression seam for the existing scroll coordinator; no fourth button.
     setScrollSyncEnabled,
     extract,

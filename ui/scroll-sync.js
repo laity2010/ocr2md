@@ -273,6 +273,10 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     } else if(target.origin==='preview'){
       lastDriver='preview';
       moveSource(position,true);
+    } else if(target.origin==='pdf'){
+      lastDriver='pdf';
+      moveSource(position,true);
+      movePreview(position,true);
     }
   });
 
