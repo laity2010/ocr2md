@@ -52,16 +52,23 @@ try {
       const initial=await page.evaluate(()=>{
         const rect=el=>{
           const r=el.getBoundingClientRect();
-          return {top:r.top,bottom:r.bottom,height:r.height,width:r.width};
+          return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height,width:r.width};
         };
-        const buttons=[...document.querySelectorAll('header.toolbar .actions button')].map(b=>b.id);
+        const buttons=[...document.querySelectorAll('.module-controls .source-actions button')].map(b=>b.id);
         const status=document.querySelector('#status');
         const toolbar=document.querySelector('.toolbar');
         const main=document.querySelector('main');
         const ag=document.querySelector('.ocr-outline-pane');
+        const moduleToolbar=document.querySelector('.module-controls');
+        const sourceActions=document.querySelector('.source-actions');
+        const sourcePane=document.querySelector('.ocr-source-pane');
+        const moduleActions=document.querySelector('#module-actions');
         return {
           viewport:{width:innerWidth,height:innerHeight},
           buttons,toolbar:rect(toolbar),main:rect(main),ag:rect(ag),
+          moduleToolbar:rect(moduleToolbar),sourceActions:rect(sourceActions),
+          sourcePane:rect(sourcePane),moduleActions:rect(moduleActions),
+          globalButtons:document.querySelectorAll('header.toolbar button:not(#build-version)').length,
           status:status.textContent,statusTitle:status.title,
           adjacent:status.previousElementSibling?.id,
           build:document.querySelector('#build-version')?.textContent,
@@ -79,8 +86,18 @@ try {
         };
       });
       assert.deepEqual(initial.buttons,['quote-outdent','quote-indent','undo','redo','save'],
-        name+' must keep source quote tools beside global history buttons');
-      assert(initial.toolbar.height<=42,name+' toolbar must be compact');
+        name+' source actions must remain in module toolbar');
+      assert(initial.toolbar.height<=42,name+' status bar must be compact');
+      assert.equal(initial.globalButtons,0,'status row must not contain CMD action buttons');
+      assert.equal(initial.sourceActions.top,initial.moduleToolbar.top+4,'CMD controls should share module strip');
+      assert(Math.abs(initial.sourceActions.bottom-initial.moduleToolbar.bottom)<=6,
+        'CMD controls must fit entirely inside module strip');
+      assert(Math.abs(initial.sourceActions.right-initial.viewport.width)<=12,
+        'CMD controls must be flush right alongside the source pane');
+      assert(initial.sourceActions.left>=initial.moduleActions.right,
+        'CMD controls must be to the right of module-specific actions');
+      assert(initial.sourceActions.left>initial.sourcePane.width/2,
+        'CMD controls must be placed near right-side source pane');
       assert.equal(initial.main.top,initial.toolbar.bottom+37,'module toolbar must sit between top bar and workspace');
       assert(Math.abs(initial.main.bottom-initial.viewport.height)<1.5,'workspace fills to bottom edge');
       assert(initial.ag.height>520,'AG must remain full-height below chapter controls');
@@ -94,6 +111,25 @@ try {
         assert(initial.statusTitle.includes(text));
       }
       await page.screenshot({path:`.v6/evidence/compact-shell-${name.toLowerCase()}.png`});
+      // The same controls must stay on the right of the single strip on Mac,
+      // iPad portrait/landscape and narrow browser windows without clipping.
+      for(const width of [834,768,610,430,390]){
+        await page.setViewportSize({width,height:642});
+        const g=await page.evaluate(()=>{
+          const nav=document.querySelector('.module-controls');
+          const left=document.querySelector('#module-actions').getBoundingClientRect();
+          const source=document.querySelector('.source-actions').getBoundingClientRect();
+          const last=document.querySelector('#save').getBoundingClientRect();
+          const b=document.querySelector('.module-controls').getBoundingClientRect();
+          return {leftEnd:left.right,sourceLeft:source.left,sourceRight:source.right,
+            buttonRight:last.right,navWidth:b.width,overflow:nav.scrollWidth>nav.clientWidth};
+        });
+        assert(!g.overflow,`${name} module strip overflow at ${width}px`);
+        assert(g.sourceLeft>=g.leftEnd,`${name} source and module actions overlap at ${width}px`);
+        assert(Math.abs(g.buttonRight-width)<=12,`${name} save no longer right aligned at ${width}px`);
+        if(width===834)await page.screenshot({path:`.v6/evidence/compact-shell-portrait-${name.toLowerCase()}.png`});
+      }
+      await page.setViewportSize({width:1032,height:642});
       console.log('COMPACT_SHELL_LAYOUT_OK',name,JSON.stringify(initial));
 
       // Only CM6 changes the document; counts and save state migrate to the

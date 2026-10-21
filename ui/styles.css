@@ -9,15 +9,10 @@ html, body, .app { margin: 0; width:100%; height:100%; overflow: hidden; }
 .status { flex:1; min-width:0; font-size:12px; color:#9fd2a3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .status[data-kind="error"] { color:#fca5a5; }
 .status[data-kind="warning"] { color:#facc80; }
-.actions { display:flex; flex:none; gap:5px; }
 button { border:1px solid #475569; background:#273549; color:#e5e7eb; padding:7px 12px; border-radius:6px; font:inherit; cursor:pointer; white-space:nowrap; }
 button:hover { background:#37465c; }
 button:disabled { opacity:.45; cursor:default; }
 button.primary { background:#2563eb; border-color:#2563eb; }
-.toolbar .actions button {height:30px; padding:2px 8px; border-radius:4px; line-height:1.2;}
-.quote-indent-tools {display:flex;gap:4px;margin-right:4px;border-right:1px solid #52605a;padding-right:8px}
-.toolbar .quote-indent-tools button {font-variant-numeric:tabular-nums;min-width:34px;padding:2px 5px}
-
 
 main { flex:1; min-height:0; display:flex; }
 dialog { border:1px solid #64748b; border-radius:11px; background:#1f2937; color:#e5e7eb; box-shadow:0 15px 45px #0009; max-width:min(440px,calc(100vw - 32px)); width:100%; padding:20px; }
@@ -36,7 +31,6 @@ dialog input {width:100%;padding:10px;border:1px solid #64748b;border-radius:5px
 #editor .cm-cursor { border-left-color:#a7cdfd; }
 #editor .cm-selectionBackground { background:#324f72 !important; }
 @media (max-width:800px) { .identity {gap:5px;} .build-badge {padding:2px 4px;} }
-@media (max-width:610px) { .toolbar {height:66px;min-height:66px;flex-wrap:wrap;gap:0;padding:3px 9px;} .identity {flex-basis:100%;} .actions {width:100%;justify-content:flex-end;} .toolbar .actions button {height:25px;padding:1px 8px;} }
 
 /* Uniform typography on Mac and iPad: 12pt Sarasa fixed-width Simplified Chinese.
    Keep these declarations after responsive rules to avoid device-dependent sizes.
@@ -93,6 +87,28 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error,
 @media(max-width:720px){.module-controls{gap:5px;padding:2px 5px}
   #module-select{width:102px}.module-actions{gap:5px}
   .module-controls button{padding:2px 5px}}
+
+/* CMD commands belong at the far right of the module strip, aligned with
+   the right-side source editor. The global status line remains status-only. */
+.source-actions {display:flex;align-items:center;gap:5px;flex:none;
+  margin-left:auto;padding-left:12px;border-left:1px solid #52605a}
+.quote-indent-tools {display:flex;gap:4px;margin-right:4px;
+  border-right:1px solid #52605a;padding-right:8px}
+.source-actions button {font-variant-numeric:tabular-nums}
+.module-controls .source-actions button.primary {background:#2563eb;border-color:#2563eb;color:#fff}
+@media(max-width:720px){
+  .source-actions {gap:3px;padding-left:6px}
+  .quote-indent-tools {gap:3px;margin-right:2px;padding-right:5px}
+  .module-controls .source-actions button {padding:2px 4px}
+}
+@media(max-width:560px){
+  .module-controls {gap:3px;padding:2px 3px}
+  #module-select {width:88px}
+  .module-actions {gap:3px}
+  .module-actions label {display:none}
+  #chapter-start-number {width:45px}
+  .source-actions .button-caption {display:none}
+}
 
 .module-controls .module-actions[hidden] {display:none !important}
 
