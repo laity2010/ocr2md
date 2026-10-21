@@ -11,6 +11,12 @@ const reference=buildOutline(original.toString());
 assert.equal(reference.length,21);
 assert.deepEqual(reference.slice(0,4).map(x=>x.pdfPage),[1,1,2,2]);
 assert.deepEqual(reference.slice(0,4).map(x=>x.level),[2,2,1,1]);
+// Source line numbers shift when migrating away from paired end markers.
+// Resolve regression targets by stable heading identity, never historic lines.
+const dataRow=reference.find(row=>row.title==='Data Sources');
+const previewRow=reference.find(row=>row.sourceLine>dataRow.sourceLine);
+const sourceRow=reference.find(row=>row.sourceLine>previewRow.sourceLine);
+assert(dataRow&&previewRow&&sourceRow);
 
 mkdirSync('.v6/tests',{recursive:true});
 mkdirSync('.v6/evidence',{recursive:true});
@@ -208,14 +214,13 @@ try{
       assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),checkBefore);
 
       // AG → other two panes. Locate Data Sources by immutable MinerU identity.
-      await page.evaluate(()=>{
+      await page.evaluate(id=>{
         const outline=window.__v6cm6.outline;
-        const row=outline.rows.find(x=>x.sourceLine===213);
-        outline.api.ensureNodeVisible(outline.api.getRowNode(row.id));
-      });
-      await page.locator('[data-heading-source-line="213"]').click();
-      await page.waitForFunction(()=>window.__v6cm6.scrollState.focusTarget?.sourceLine===213,
-        null,{timeout:16000});
+        outline.api.ensureNodeVisible(outline.api.getRowNode(id));
+      },dataRow.id);
+      await page.locator(`[data-heading-source-line="${dataRow.sourceLine}"]`).click();
+      await page.waitForFunction(line=>window.__v6cm6.scrollState.focusTarget?.sourceLine===line,
+        dataRow.sourceLine,{timeout:16000});
       await page.waitForFunction(()=>!!document.querySelector('.ocr-markdown h2.ocr-outline-focused-element')
         &&!!document.querySelector('.cm-outline-focused-line'),null,{timeout:18000});
       const firstNavigation=await page.evaluate(()=>({
@@ -226,15 +231,15 @@ try{
       }));
       assert.equal(firstNavigation.origin,'outline');
       assert.equal(firstNavigation.title,'Data Sources');
-      assert(Math.abs(firstNavigation.source.sourceLine-213)<10);
-      assert(Math.abs(firstNavigation.preview.sourceLine-213)<10);
+      assert(Math.abs(firstNavigation.source.sourceLine-dataRow.sourceLine)<10);
+      assert(Math.abs(firstNavigation.preview.sourceLine-dataRow.sourceLine)<10);
       console.log('AG_NAV_OK',name,JSON.stringify(firstNavigation));
 
       // Preview → AG + CM6, with the outline containing the active heading.
-      await page.locator('.ocr-markdown h2[data-source-start="225"]').click();
-      await page.waitForFunction(()=>window.__v6cm6.scrollState.focusTarget?.origin==='preview'
-        &&window.__v6cm6.scrollState.focusTarget?.sourceLine===225,
-        null,{timeout:18000});
+      await page.locator(`.ocr-markdown h2[data-source-start="${previewRow.sourceLine}"]`).click();
+      await page.waitForFunction(line=>window.__v6cm6.scrollState.focusTarget?.origin==='preview'
+        &&window.__v6cm6.scrollState.focusTarget?.sourceLine===line,
+        previewRow.sourceLine,{timeout:18000});
       await page.waitForTimeout(800);
       console.log('PREVIEW_AG_DIAGNOSTIC',name,JSON.stringify(await page.evaluate(()=>({
         focus:window.__v6cm6.scrollState.focusTarget,
@@ -243,37 +248,37 @@ try{
         source:window.__v6cm6.scrollSync.currentSource,
         preview:window.__v6cm6.scrollSync.currentPreview,
       }))));
-      await page.waitForFunction(()=>window.__v6cm6.outline.api.getSelectedRows()[0]?.sourceLine===225,
-        null,{timeout:18000});
+      await page.waitForFunction(line=>window.__v6cm6.outline.api.getSelectedRows()[0]?.sourceLine===line,
+        previewRow.sourceLine,{timeout:18000});
       const reverse=await page.evaluate(()=>({
         selected:window.__v6cm6.outline.api.getSelectedRows()[0]?.sourceLine,
         source:window.__v6cm6.scrollSync.currentSource,
         preview:window.__v6cm6.scrollSync.currentPreview,
       }));
-      assert(Math.abs(reverse.source.sourceLine-225)<12);
+      assert(Math.abs(reverse.source.sourceLine-previewRow.sourceLine)<12);
       console.log('PREVIEW_NAV_OK',name,JSON.stringify(reverse));
 
       // CM6 → AG + preview; only selection movement, no file edits.
-      await page.evaluate(()=>{
+      await page.evaluate(line=>{
         const view=window.__v6cm6.view;
-        view.dispatch({selection:{anchor:view.state.doc.line(321).from}});
-      });
-      await page.waitForFunction(()=>window.__v6cm6.scrollState.focusTarget?.origin==='cm6'
-        &&window.__v6cm6.scrollState.focusTarget.sourceLine===321,
-        null,{timeout:18000});
-      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.api.getSelectedRows()[0]?.sourceLine),321);
-      assert.equal(await page.locator('.ocr-markdown [data-source-start="321"].ocr-outline-focused-element').count(),1);
+        view.dispatch({selection:{anchor:view.state.doc.line(line).from}});
+      },sourceRow.sourceLine);
+      await page.waitForFunction(line=>window.__v6cm6.scrollState.focusTarget?.origin==='cm6'
+        &&window.__v6cm6.scrollState.focusTarget.sourceLine===line,
+        sourceRow.sourceLine,{timeout:18000});
+      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.api.getSelectedRows()[0]?.sourceLine),sourceRow.sourceLine);
+      assert.equal(await page.locator(`.ocr-markdown [data-source-start="${sourceRow.sourceLine}"].ocr-outline-focused-element`).count(),1);
 
       // Outline is rebuilt, not cached, after a document transaction.
-      await page.evaluate(()=>{
+      await page.evaluate(lineNumber=>{
         const view=window.__v6cm6.view;
-        const line=view.state.doc.line(213);
+        const line=view.state.doc.line(lineNumber);
         view.dispatch({changes:{from:line.from,to:line.to,insert:'## Data Sources REVISED'}});
-      });
+      },dataRow.sourceLine);
       await page.waitForFunction(()=>window.__v6cm6.outline.rows.some(x=>x.title==='Data Sources REVISED'),
         null,{timeout:22000});
       assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows.length),21);
-      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows.find(x=>x.sourceLine===213)?.pdfPage),3);
+      assert.equal(await page.evaluate(()=>window.__v6cm6.outline.rows.find(x=>x.title==='Data Sources REVISED')?.pdfPage),3);
       await page.locator('#undo').click();
       await page.waitForFunction(()=>window.__v6cm6.outline.rows.some(x=>x.title==='Data Sources'),
         null,{timeout:22000});

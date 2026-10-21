@@ -35,6 +35,7 @@ try {
     ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
   ];
   for(const [name,engine,launchOptions] of variants) {
+    if(process.env.V6_ONLY_WEBKIT&&name!=='WebKit')continue;
     const browser = await engine.launch({headless:true,...launchOptions});
     try {
       const page = await browser.newPage({
@@ -44,7 +45,7 @@ try {
       const pageErrors=[];
       page.on('pageerror',error=>pageErrors.push(error.message));
       await page.goto('http://127.0.0.1:5198/',{waitUntil:'domcontentloaded'});
-      await page.waitForFunction(()=>document.querySelector('#count')?.textContent.includes('行'));
+      await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('行'));
       await page.evaluate(()=>document.fonts.ready);
       const result=await page.evaluate(()=>{
         const css=el=>getComputedStyle(el);
@@ -68,7 +69,7 @@ try {
           docSource:window.__v6cm6.view.state.doc.toString(),
           softWrap:css(content).whiteSpace,
           hardReturnMarkers:document.querySelectorAll('.cm-ob-hard-return').length,
-          docRows:document.querySelector('#count').textContent,
+          docRows:document.querySelector('#status').textContent,
         };
       });
       assert.deepEqual(result.viewport,[1032,642]);
@@ -100,11 +101,19 @@ try {
       assert(wrapTest.height>45,name+' long line should wrap in wide viewport');
       assert.equal(wrapTest.hardMarkers,1,'a wrapped logical line needs one real EOL marker');
       await page.setViewportSize({width:760,height:642});
-      await page.waitForTimeout(150);
+      await page.evaluate(()=>window.__v6cm6.view.requestMeasure());
+      // CM6 remeasures wrapped lines asynchronously after Dockview resizing.
+      // Wait for actual geometry rather than racing WebKit's next layout frame.
+      await page.waitForFunction(previous=>{
+        const line=[...document.querySelectorAll('.cm-line')]
+          .find(el=>el.textContent.includes('A deliberately long paragraph'));
+        return line?.getBoundingClientRect().height>previous+1;
+      },wrapTest.height,{timeout:16000});
       const narrow=await page.evaluate(()=>{
         const el=[...document.querySelectorAll('.cm-line')].find(el=>el.textContent.includes('A deliberately long paragraph'));
-        return {height:el?.getBoundingClientRect().height,hardMarkers:el?.querySelectorAll('.cm-ob-hard-return').length,source:window.__v6cm6.view.state.doc.toString()};
+        return {height:el?.getBoundingClientRect().height,hardMarkers:el?.querySelectorAll('.cm-ob-hard-return').length,source:window.__v6cm6.view.state.doc.toString(),width:document.querySelector('#editor .cm-scroller').getBoundingClientRect().width,viewport:innerWidth};
       });
+      console.log('THEME_WRAP_MEASURE',name,JSON.stringify({wide:wrapTest.height,narrow:narrow.height,width:narrow.width,viewport:narrow.viewport}));
       assert(narrow.height>wrapTest.height,name+' narrow window should cause more soft wrapping');
       assert.equal(narrow.hardMarkers,1,'soft line wrapping must not create extra hard-return markers');
       assert.equal(narrow.source,result.docSource,'resizing window must never rewrite Markdown');
