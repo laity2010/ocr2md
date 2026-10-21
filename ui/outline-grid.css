@@ -26,6 +26,28 @@
   padding-right:3px;
 }
 .ocr-outline-pane .ag-header-cell-label {width:100%;min-width:0;}
+
+/* Reserve independent touch targets for the native AG filter button and
+   resize handle. The default 8px resize strip overlapped the 16px filter
+   icon by 2px. Keep the original AG handlers, only improve geometry. */
+.ocr-outline-pane .ag-header-cell-filter-button {
+  display:flex;align-items:center;justify-content:center;
+  width:22px;min-width:22px;height:26px;
+  margin-right:19px;
+  cursor:pointer;
+}
+.ocr-outline-pane .ag-header-cell-resize {
+  width:16px;right:-5px;z-index:2;
+  cursor:col-resize;touch-action:none;
+}
+.ocr-outline-pane .ag-header-cell-resize::after {
+  width:3px;height:20px;border-radius:2px;
+  background:#859c94;opacity:.9;
+}
+.ocr-outline-pane .ag-header-cell-resize:hover::after {
+  background:#b5e3c5;
+}
+
 /* AG Grid owns the filter icon/popup and its model; the component styles only
    its V4-like checkbox options. Popups are mounted outside the grid pane. */
 .ocr-enum-filter {

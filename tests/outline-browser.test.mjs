@@ -58,7 +58,7 @@ try{
           ag:rect('.ocr-outline-pane'),source:rect('.ocr-source-pane'),
           preview:rect('.ocr-preview-pane'),
           filters:window.__v6cm6.outline.api.getFilterModel(),
-          filterColumns:['pdfPage','level','title','independent','chapterFile']
+          filterColumns:['title','level','pdfPage','independent','chapterFile']
             .map(field=>({field,enabled:window.__v6cm6.outline.api.getColumn(field).isFilterAllowed()})),
           customHeaderCount:document.querySelectorAll('select[data-outline-filter]').length,
           pdfPages:window.__v6cm6.outline.rows.slice(0,4).map(x=>x.pdfPage),
@@ -67,6 +67,8 @@ try{
           status:document.querySelector('#status')?.textContent,
           font:getComputedStyle(document.querySelector('.ocr-outline-title')).fontFamily,
           pdfPinned:window.__v6cm6.outline.api.getColumn('pdfPage').getPinned(),
+          titlePinned:window.__v6cm6.outline.api.getColumn('title').getPinned(),
+          visualColumns:window.__v6cm6.outline.api.getAllDisplayedColumns().map(c=>c.getColId()),
           titleLayout:(()=>{
             const title=document.querySelector('.ocr-outline-title');
             const style=getComputedStyle(title);
@@ -89,7 +91,9 @@ try{
       assert.deepEqual(initial.levels,[2,2,1,1]);
       assert.equal(initial.exported,true,'chapter filenames are planned before export');
       assert.match(initial.font,/OCR2MD Sarasa/);
-      assert.equal(initial.pdfPinned,'left');
+      assert.equal(initial.pdfPinned,null);
+      assert.equal(initial.titlePinned,'left');
+      assert.deepEqual(initial.visualColumns,['title','level','pdfPage','independent','chapterFile']);
       assert.equal(initial.titleLayout.whiteSpace,'nowrap');
       assert.equal(initial.titleLayout.textOverflow,'ellipsis');
       assert.equal(initial.titleLayout.overflow,'hidden');
@@ -140,7 +144,7 @@ try{
       for(const field of ['pdfPage','level','title','independent','chapterFile']){
         await page.evaluate(field=>window.__v6cm6.outline.api.showColumnFilter(field),field);
         const label={pdfPage:'PDF页码',level:'层级',title:'标题',
-          independent:'独立章节',chapterFile:'章节文件'}[field];
+          independent:'独立成章',chapterFile:'章节文件'}[field];
         const popup=page.locator(`.ocr-enum-filter[aria-label="${label} 筛选"]:visible`);
         await popup.waitFor({timeout:10000});
         assert(await popup.locator('[data-filter-value="all"] input').isChecked(),field+' default all');
@@ -187,7 +191,7 @@ try{
       await page.evaluate(()=>window.__v6cm6.outline.api.ensureIndexVisible(1,'top'));
       await page.locator('.ag-row[row-index="1"] .ocr-outline-checkbox').uncheck();
       await page.evaluate(()=>window.__v6cm6.outline.api.showColumnFilter('independent'));
-      await page.locator('.ocr-enum-filter[aria-label="独立章节 筛选"]:visible [data-filter-value="否"]').waitFor();
+      await page.locator('.ocr-enum-filter[aria-label="独立成章 筛选"]:visible [data-filter-value="否"]').waitFor();
       await page.evaluate(()=>window.__v6cm6.outline.api.hideColumnFilter());
       assert.equal(await selectFilter('independent','否'),1);
       assert.equal(await selectFilter('independent','all'),21);

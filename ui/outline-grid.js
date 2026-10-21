@@ -20,8 +20,8 @@ const theme=themeQuartz.withParams({
   oddRowBackgroundColor:'#2d363c',fontFamily:'"OCR2MD Sarasa",monospace',
   fontSize:16,spacing:3,
 });
-const fields=['pdfPage','level','title','independent','chapterFile'];
-const labels=['PDF页码','层级','标题','独立章节','章节文件'];
+const fields=['title','level','pdfPage','independent','chapterFile'];
+const labels=['标题','层级','PDF页码','独立成章','章节文件'];
 const valueOf=(row,field)=>{
   if(field==='level')return 'H'+row.level;
   if(field==='independent')return row.independent?'是':'否';
@@ -153,16 +153,16 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
       filterValueGetter:p=>p.data?valueOf(p.data,field):'',
       sortable:false,resizable:true,suppressMovable:true,
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false};
-    if(field==='pdfPage')
-      Object.assign(def,{width:78,minWidth:70,pinned:'left',
-        lockPinned:true,lockPosition:'left',valueFormatter:p=>p.value??'—'});
-    if(field==='level')
-      Object.assign(def,{width:58,minWidth:55,valueFormatter:p=>'H'+p.value});
     if(field==='title')
-      Object.assign(def,{flex:1,minWidth:140,cellRenderer:titleCell,
+      Object.assign(def,{width:235,minWidth:185,pinned:'left',
+        lockPinned:true,lockPosition:'left',cellRenderer:titleCell,
         wrapText:false,autoHeight:false});
+    if(field==='level')
+      Object.assign(def,{width:88,minWidth:78,valueFormatter:p=>'H'+p.value});
+    if(field==='pdfPage')
+      Object.assign(def,{width:112,minWidth:100,valueFormatter:p=>p.value??'—'});
     if(field==='independent')
-      Object.assign(def,{width:91,minWidth:87,cellRenderer:p=>{
+      Object.assign(def,{width:122,minWidth:112,cellRenderer:p=>{
         if(!p.data)return '';
         const input=document.createElement('input');
         input.type='checkbox';input.className='ocr-outline-checkbox';
