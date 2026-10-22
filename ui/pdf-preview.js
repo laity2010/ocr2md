@@ -295,7 +295,7 @@ export class PdfPreview {
     if(!clip||!target.height||!target.width)return;
     // No page jump, no recenter and no scroll for a block already in view.
     // For a nearby off-screen block, move the minimum distance necessary.
-    const margin=12;
+    const margin=18; // subpixel rounding + iPad visual-viewport safety margin
     const shift=(a,b,start,end)=>{
       const innerStart=start+margin,innerEnd=end-margin;
       if(a>=innerStart&&b<=innerEnd)return 0;
