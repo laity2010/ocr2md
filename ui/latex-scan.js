@@ -64,11 +64,17 @@ export function findLatex(source){
     if(!matched){i++;continue;}
     const {open,close,kind}=matched;
     const from=i,body=i+open.length;
+    if(open==='\\['){
+      const firstLine=source.slice(body,source.indexOf('\n',body)<0?source.length:source.indexOf('\n',body));
+      const bracket=firstLine.indexOf(']');
+      if(bracket>=0&&bracket<160&&!firstLine.slice(0,bracket).includes('\\')){i=body;continue;}
+    }
     let closing=-1,search=body;
     while(search<masked.length){
       const test=masked.indexOf(close,search);
       if(test<0)break;
-      if(open==='$'&&masked.slice(body,test).includes('\n'))break;
+      if((open==='$'||open==='\\(')&&masked.slice(body,test).includes('\n'))break;
+      if(open==='\\['&&test-body>3000)break;
       if(!isEscaped(masked,test)&&!(open==='$'&&masked[test+1]==='$')){closing=test;break;}
       search=test+1;
     }

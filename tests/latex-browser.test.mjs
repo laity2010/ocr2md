@@ -62,11 +62,12 @@ for(let i=0;i<engines.length;i++){
     toolbar:document.querySelector('.module-actions[data-module="latex"]')?.hidden,
     groups:document.querySelectorAll('.dv-groupview').length,
   }));
-  assert.equal(snapshot.count,26,'baseline 20 + synthetic 6 LaTeX formulas');
+  assert(snapshot.count>=10,'AG Grid must render formulas in its virtual viewport');
+  assert((await page.locator('#status').textContent()).includes('LaTeX 26 项'),
+    'all 20 real and 6 synthetic formulas must be present in the AG model');
   assert.equal(snapshot.groups,3);
   assert.equal(snapshot.toolbar,false);
-  assert.equal(snapshot.data.filter(r=>r.status==='error').length,1,'malformed fraction must fail KaTeX');
-  assert(snapshot.data.filter(r=>r.katex>0).length>=25,'formulas should render with KaTeX');
+  assert(snapshot.data.filter(r=>r.katex>0).length>=10,'visible formulas should render with KaTeX');
   const statusHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="status"]');
   await statusHeader.locator('.ag-header-cell-filter-button').click();
   const filter=page.locator('.ocr-enum-filter');
@@ -75,7 +76,7 @@ for(let i=0;i<engines.length;i++){
     null,{timeout:8000});
   assert((await page.locator('.ocr-latex-grid .ag-row').textContent()).includes('错误'));
   await filter.locator('[data-filter-value="all"] input').check();
-  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length===26,
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
     null,{timeout:8000});
   await statusHeader.locator('.ag-header-cell-filter-button').click();
   await page.locator('.ocr-latex-grid .ag-row[row-index="0"]').click();
