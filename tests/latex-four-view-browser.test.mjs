@@ -8,7 +8,7 @@ import {resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
-const markdown=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+const markdown=readFileSync('.v6/workspace/buffetts-alpha.minerujson.md','utf8');
 const pdf=resolve('/Users/daisor/Library/Mobile Documents/iCloud~md~obsidian/Documents/ocr2md/ocr2md/Bufett’s Alpha/Buffett s Alpha.pdf');
 const math=findLatex(markdown);
 assert.equal(math.length,20);
