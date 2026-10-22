@@ -4,6 +4,8 @@ import {createServer} from 'node:http';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {homedir} from 'node:os';
+import {randomBytes} from 'node:crypto';
+import {deflateSync} from 'node:zlib';
 import {chromium,webkit,devices} from 'playwright';
 import {buildChapterFiles} from '../ui/chapter-files.js';
 import {buildOutline} from '../ui/outline-index.js';
@@ -12,16 +14,32 @@ const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.miner
 const originalPdf=resolve('.v6/workspace/buffetts-alpha.original.pdf');
 const first=fixture.match(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/);
 assert(first,'fixture image missing');
-// Valid decodable JPEG, padded beyond one downloader chunk. The browser can
-// test actual pixels while the backend separately tests interrupted transfers.
+// Generate a genuine large JPEG so native browser preview and resumable
+// Range transfer are tested against the *same* decodable image.
 mkdirSync('.v6/tests',{recursive:true});
 const tinyPng=resolve('.v6/tests/media-thumbnail-fixture.png');
 const tinyJpeg=resolve('.v6/tests/media-thumbnail-fixture.jpg');
-writeFileSync(tinyPng,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9hCeEEsAAAAASUVORK5CYII=','base64'));
-execFileSync('sips',['-s','format','jpeg',tinyPng,'--out',tinyJpeg],{stdio:'ignore'});
-const jpeg=readFileSync(tinyJpeg);
-const data=Buffer.alloc(800000,0x42);
-jpeg.copy(data);
+function pngChunk(kind,content){
+ const type=Buffer.from(kind),length=Buffer.alloc(4);length.writeUInt32BE(content.length);
+ const body=Buffer.concat([type,content]);let crc=0xffffffff;
+ for(const byte of body){
+   crc^=byte;
+   for(let i=0;i<8;i++)crc=(crc>>>1)^(crc&1?0xedb88320:0);
+ }
+ const checksum=Buffer.alloc(4);checksum.writeUInt32BE((crc^0xffffffff)>>>0);
+ return Buffer.concat([length,body,checksum]);
+}
+const side=1024,raw=randomBytes(side*(side*3+1));
+for(let y=0;y<side;y++)raw[y*(side*3+1)]=0;
+const dimensions=Buffer.alloc(13);
+dimensions.writeUInt32BE(side,0);dimensions.writeUInt32BE(side,4);
+dimensions[8]=8;dimensions[9]=2;
+writeFileSync(tinyPng,Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),
+ pngChunk('IHDR',dimensions),pngChunk('IDAT',deflateSync(raw)),
+ pngChunk('IEND',Buffer.alloc(0))]));
+execFileSync('sips',['-s','format','jpeg','-s','formatOptions','best',tinyPng,'--out',tinyJpeg],{stdio:'ignore'});
+const data=readFileSync(tinyJpeg);
+assert(data.length>512*1024,'test JPEG must span multiple resumable chunks');
 
 const requests=[];
 const upstream=createServer((req,res)=>{
@@ -109,21 +127,23 @@ try{
    });
    await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-checkbox').length===21,null,{timeout:60000});
-   assert.equal(thumbnailRequests.length,0,'hidden Media AG fetched remote preview before selection');
+   const inactiveImages=await page.locator('.ocr-media-grid .ocr-media-thumb').evaluateAll(
+     images=>images.filter(image=>image.hasAttribute('src')).length);
+   assert.equal(inactiveImages,0,'hidden Media thumbnails have src before activation');
    await page.locator('#module-select').selectOption('media');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===11,null,{timeout:20000});
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('已下载'),null,{timeout:16000});
    assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').textContent(),'续传');
    const header=page.locator('.ocr-media-grid .ag-header-cell[col-id="preview"]');
    assert.equal(await header.count(),1,'Media AG preview column is missing');
-   assert.equal(await header.textContent(),'预览');
-   assert(await header.evaluate(el=>Boolean(el.closest('.ag-pinned-left-header'))),
+   assert.equal((await header.textContent()).trim(),'预览');
+   assert(await header.evaluate(el=>Boolean(el.closest('.ag-grid-pinned-left-cells'))),
      'Media preview column is not pinned to left');
    const thumbnail=page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
    await page.waitForFunction(()=>{
      const img=document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
      return img?.complete && img.naturalWidth>0;
-   },null,{timeout:25000});
+   },null,{timeout:14000});
    assert.equal(await thumbnail.getAttribute('loading'),'lazy');
    assert.equal(await thumbnail.getAttribute('decoding'),'async');
    assert.equal(await thumbnail.getAttribute('referrerpolicy'),'no-referrer');
