@@ -33,6 +33,20 @@ export class CMDocument {
 
   /** Read the only authoritative Markdown source, without a legacy output mode. */
   getMarkdown(){return this.markdown;}
+  /** Stable, read-only CMD boundary for heading and marker consumers. */
+  readLine(number){
+    if(!Number.isInteger(number)||number<1||number>this.doc.lines)
+      throw Error('Invalid document line');
+    const line=this.doc.line(number);
+    return {number:line.number,text:line.text,from:line.from,to:line.to};
+  }
+  lineAtOffset(offset){
+    if(!Number.isInteger(offset)||offset<0||offset>this.doc.length)
+      throw Error('Invalid source offset');
+    return this.doc.lineAt(offset).number;
+  }
+  matchesSnapshot(token){return Boolean(token)&&this.doc.eq(token);}
+  requestMeasure(){this.view.requestMeasure();}
 
   /** Increase/decrease one Markdown blockquote level for every selected line.
    * One CM6 transaction = one undo step; selection maps through the changes.

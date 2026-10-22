@@ -37,13 +37,13 @@ function titleCell(params){
   return span;
 }
 
-export function createOutlineGrid(element,getMarkdown,getEditor) {
+export function createOutlineGrid(element,getMarkdown,getCMD) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
   let indexedRevision=-1,pendingFocusFrame=0;
   let startText='000';
   let exportedDoc=null,exportedNames=new Set(),exportedMapping=null;
-  const isExportCurrent=()=>Boolean(exportedDoc)&&Boolean(getEditor())&&
-    getEditor().state.doc.eq(exportedDoc)&&Boolean(exportedMapping)&&
+  const isExportCurrent=()=>Boolean(exportedDoc)&&Boolean(getCMD())&&
+    getCMD().matchesSnapshot(exportedDoc)&&Boolean(exportedMapping)&&
     rows.every(row=>exportedMapping.get(row.id)===row.chapterFile);
   element.classList.add('ocr-outline-pane');
   const host=document.createElement('div');
@@ -85,11 +85,11 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     if(disposed||!api)return;
     clearTimeout(timer);timer=null;
     const previous=new Map(rows.map(row=>[row.id,row]));
-    const editor=getEditor();
+    const cmd=getCMD();
     rows=buildOutline(getMarkdown());
     indexedRevision=viewStore.getState().documentRevision;
     for(const row of rows) {
-      const marker=editor?markerForHeading(editor.state.doc,row):null;
+      const marker=cmd?markerForHeading(cmd,row):null;
       row.independent=marker?.independent??true;
       row.markerHtmlKind=marker?.htmlKind||null;
     }
@@ -120,7 +120,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
     // while that chapter still exists in this rebuilt outline.
     else if(activeId && api.getRowNode(activeId))
       choose(rows.find(row=>row.id===activeId),false);
-    else if(editor)chooseLine(editor.state.doc.lineAt(state.sourceOffset).number,false);
+    else if(cmd)chooseLine(cmd.lineAtOffset(state.sourceOffset),false);
     if(state.outlineCount!==rows.length)viewStore.setState({outlineCount:rows.length});
     
   }
@@ -187,7 +187,7 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
             if(!current)throw Error('章节已变化，请重新选择标题');
             // CM6 is the only editable source of truth. Do not write through
             // p.data: its sourceLine may belong to an older AG renderer.
-            putMarker(getEditor(),current,checked);
+            putMarker(getCMD(),current,checked);
             // Reindex synchronously before the next tap. Debounced redraws
             // are fine for typing, but cannot guard consecutive checkbox edits.
             refresh();
@@ -248,8 +248,8 @@ export function createOutlineGrid(element,getMarkdown,getEditor) {
       chooseLine(next.focusTarget.sourceLine);
     }else if(next.scrollTarget!==prev.scrollTarget&&next.scrollTarget&&
       performance.now()>=focusUntil)chooseLine(next.scrollTarget.sourceLine);
-    else if(next.sourceOffset!==prev.sourceOffset&&getEditor()&&!next.focusTarget)
-      chooseLine(getEditor().state.doc.lineAt(next.sourceOffset).number);
+    else if(next.sourceOffset!==prev.sourceOffset&&getCMD()&&!next.focusTarget)
+      chooseLine(getCMD().lineAtOffset(next.sourceOffset));
   });
   return {
     api,get rows(){return rows;},get filters(){return api?.getFilterModel()||{};},

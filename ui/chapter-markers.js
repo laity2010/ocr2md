@@ -3,7 +3,6 @@
  * CMD handles their source edits through one generic HTML read/write API.
  * This module owns chapter semantics, not a second HTML storage format.
  */
-import {CMDocument} from './cm-document.js';
 import {quotePrefix,unquotePrefix} from './mineru-anchors.js';
 
 const comment=/^<!-- ocr2md:chapter:v1 id="([\w:.-]+)" independent="([01])" -->$/;
@@ -26,11 +25,11 @@ export function encodeMarker(id,independent) {
   return `<!-- ocr2md:chapter:v1 id="${id}" independent="${independent?1:0}" -->`;
 }
 
-export function markerForHeading(doc,row) {
+export function markerForHeading(reader,row) {
   if(!row?.sourceLine||row.sourceLine<2)return null;
   // A marker belongs only to the immediately following heading. The
   // association follows CM6's live document positions, never saved line IDs.
-  const line=doc.line(row.sourceLine-1);
+  const line=reader.readLine(row.sourceLine-1);
   const data=decodeMarker(line.text.trim());
   if(!data || data.id!==row.id)return null;
   return {...data,from:line.from,to:line.to,line:line.number};
@@ -45,19 +44,17 @@ export function countMarkers(doc){
   return counts;
 }
 
-export function putMarker(view,row,independent) {
-  if(!view||!row)throw Error('Missing editor or heading');
+export function putMarker(cm,row,independent) {
+  if(!cm||!row)throw Error('Missing CMD interface or heading');
   if(!/^[\w:.-]+$/.test(row.id))throw Error('Heading lacks a stable ID');
-  const doc=view.state.doc;
-  const heading=doc.line(row.sourceLine);
+  const heading=cm.readLine(row.sourceLine);
   if(!/^\s*#{1,6}\s+/.test(unquotePrefix(heading.text)))
     throw Error('Heading has moved; refresh the AG outline first');
-  const previous=markerForHeading(doc,row);
+  const previous=markerForHeading(cm,row);
   const lineDelta=previous?0:1;
   const rendered=encodeMarker(row.id,independent);
   // The chapter module decides WHAT to write. The wrapper owns HOW to
   // transactionally insert or replace HTML in the CM6 document.
-  const cm=new CMDocument({view});
   cm.writeHtml({html:rendered,beforeLine:row.sourceLine,
     replaceLine:previous?.line??null,
     quotePrefix:previous?.quotePrefix??quotePrefix(heading.text)});

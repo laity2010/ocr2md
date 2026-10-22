@@ -17,6 +17,15 @@ sourceHost.setAttribute('aria-label','CodeMirror 6 Markdown 编辑器');
 
 let getMarkdown = () => '';
 let getEditor = () => null;
+let getCMD = () => null;
+// AG receives only the CMD capabilities needed for chapter projection/marking.
+// In particular, this port has no EditorView or other editor internals.
+const chapterCMD=Object.freeze({
+  readLine:n=>getCMD().readLine(n),
+  lineAtOffset:n=>getCMD().lineAtOffset(n),
+  matchesSnapshot:token=>getCMD().matchesSnapshot(token),
+  writeHtml:options=>getCMD().writeHtml(options),
+});
 let refreshPreview = () => {};
 let currentPreview=null;
 let scrollSync=null;
@@ -32,7 +41,7 @@ class OutlinePanel {
     currentOutline=this;
   }
   init(){
-    this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getEditor());
+    this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
   }
   layout() {}
   dispose(){
@@ -48,7 +57,7 @@ class SourcePanel {
     this.element.append(sourceHost);
   }
   init() {}
-  layout() { getEditor()?.requestMeasure(); }
+  layout() { getCMD()?.requestMeasure(); }
   dispose() {
     // Dockview may reparent a tab during drag/drop. Do not destroy the CM6
     // instance or its history; it will reattach to the next source pane.
@@ -234,9 +243,10 @@ class DetachedPdfPanel {
   }
 }
 
-export function createWorkspace(container, getDocument, getCurrentEditor) {
+export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument) {
   getMarkdown=getDocument;
   getEditor=getCurrentEditor;
+  getCMD=getCommandDocument;
   const dockview=createDockview(container, {
     theme:themeAbyss,
     createComponent: ({name}) => {
@@ -299,16 +309,20 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
     viewStore.setState({activePanel:event.panel?.id||null});
   });
   return {
-    dockview, editorHost:sourceHost,
+    editorHost:sourceHost,
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
-    get outlineGrid(){return currentOutline?.grid;},
-    get pdf(){return currentPdf?.pdf;},
+    refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
+    getChapterState(){
+      const grid=currentOutline?.grid;
+      return {rows:grid?.rows.map(row=>({...row}))||[], startText:grid?.startText||'000'};
+    },
+    setChapterStartNumber(value){currentOutline?.grid?.setStartNumber(value);},
+    setChaptersExported(doc,names){currentOutline?.grid?.setExported(doc,names);},
     get previewMode(){return currentPreview?.mode;},
     get previewSplit(){return split;},
     setPreviewSplit(enabled){toggleSplitPreview(Boolean(enabled));},
     setPreviewMode(mode){currentPreview?.setMode(mode);},
-    refreshPdf(){currentPdf?.pdf?.refreshAnchors();},
     startScrollSync() {
       if(scrollSync) return scrollSync;
       if(!currentPreview || !getEditor()) return null;
@@ -316,6 +330,13 @@ export function createWorkspace(container, getDocument, getCurrentEditor) {
       scrollSync.afterRender(null);
       return scrollSync;
     },
-    get scrollSync(){return scrollSync;},
+    // The raw third-party objects exist ONLY in Vite DEV as test instrumentation.
+    // Normal production consumers receive only the semantic Workspace facade.
+    ...(import.meta.env.DEV ? {debug: {
+      get dockview(){return dockview;},
+      get outline(){return currentOutline?.grid;},
+      get pdf(){return currentPdf?.pdf;},
+      get scrollSync(){return scrollSync;},
+    }} : {}),
   };
 }

@@ -155,10 +155,10 @@ async function restoreExport(){
     const match=/^(\d{1,6})-/.exec(manifest.files?.[0]?.name||'');
     if(match&&match[1].length<=5&&Number(match[1])<=99999){
       // The filename records the exact original zero-padding width.
-      workspace.outlineGrid.setStartNumber(match[1]);
+      workspace.setChapterStartNumber(match[1]);
       $('chapter-start-number').value=match[1];
     }
-    workspace.outlineGrid.setExported(view.state.doc,manifest.files.map(file=>file.name));
+    workspace.setChaptersExported(view.state.doc,manifest.files.map(file=>file.name));
   }catch{ /* Missing previous export is ordinary. */ }
 }
 async function exportChapters(){
@@ -172,8 +172,8 @@ async function exportChapters(){
     if(hasUnsavedEdits() && !await save())throw Error('请先保存标定再导出章节');
     const doc=view.state.doc;
     workspace.refreshOutline();
-    const startText=workspace.outlineGrid.startText;
-    const files=buildChapterFiles(doc.toString(),workspace.outlineGrid.rows,startText);
+    const {rows,startText}=workspace.getChapterState();
+    const files=buildChapterFiles(doc.toString(),rows,startText);
     const hash=await sourceHash(doc.toString());
     status(`正在导出${files.length}个章节`);
     const res=await fetch('/api/export-chapters',{
@@ -187,9 +187,9 @@ async function exportChapters(){
     if(manifest.sourceSha256!==hash||manifest.files?.length!==files.length)
       throw Error('导出清单与当前文档不一致');
     if(!view.state.doc.eq(doc))throw Error('导出时文档发生变化，请重新导出');
-    if(workspace.outlineGrid.startText!==startText)
+    if(workspace.getChapterState().startText!==startText)
       throw Error('导出期间起始编号变化，请重新导出');
-    workspace.outlineGrid.setExported(doc,manifest.files.map(item=>item.name));
+    workspace.setChaptersExported(doc,manifest.files.map(item=>item.name));
     status(`✓ 已导出${files.length}个章节 · AG文件名可点击`);
   }catch(error){status('导出失败：'+error.message,'error');}
   finally{exporting=false;$('export-chapters').disabled=false;applyPendingUpdate();}
@@ -254,7 +254,7 @@ async function main() {
        next.scrollSyncEnabled!==previous.scrollSyncEnabled)
       renderGlobalStatus();
   });
-  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view);
+  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm);
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   cm = new CMDocument({
@@ -380,10 +380,10 @@ async function main() {
     const raw=numberInput.value;
     const valid=/^\d{1,5}$/.test(raw);
     numberInput.setAttribute('aria-invalid',String(!valid));
-    if(valid)workspace.outlineGrid.setStartNumber(raw);
+    if(valid)workspace.setChapterStartNumber(raw);
   });
   numberInput.addEventListener('blur',()=>{
-    numberInput.value=workspace.outlineGrid.startText;
+    numberInput.value=workspace.getChapterState().startText;
     numberInput.setAttribute('aria-invalid','false');
   });
   document.addEventListener('ocr2md:chapter-error',e=>status(e.detail||'标定失败','error'));
@@ -449,11 +449,11 @@ async function main() {
     get cm(){return cm;},
     exportChapters,save,
     get dirty(){return hasUnsavedEdits();},
-    get dockview(){return workspace?.dockview;},
-    get scrollSync(){return workspace?.scrollSync;},
+    get dockview(){return workspace?.debug?.dockview;},
+    get scrollSync(){return workspace?.debug?.scrollSync;},
     get scrollState(){return viewStore.getState();},
-    get outline(){return workspace?.outlineGrid;},
-    get pdf(){return workspace?.pdf;},
+    get outline(){return workspace?.debug?.outline;},
+    get pdf(){return workspace?.debug?.pdf;},
     // Regression seam for the existing scroll coordinator; no fourth button.
     setScrollSyncEnabled,
   };

@@ -16,8 +16,12 @@ INSERT INTO apis VALUES
  ('C06','C','CMDocument.writeComment','ui/cm-document.js','export','text + writeHtml position','line/sourceLine','delegates to writeHtml',0),
  ('C07','C','CMDocument.adjustQuoteIndent','ui/cm-document.js','export','direction +/-1','changed/lines','one CM6 transaction; protects original evidence',1),
  ('C08','C','CMDocument.destroy','ui/cm-document.js','export','none','void','destroys owned EditorView',0),
- ('C09','C','CMDocument.view','ui/cm-document.js','raw','none','EditorView instance','exposes editor internals to other modules',0),
- ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getEditor','grid wrapper','mounts AG; subscribes viewStore',1),
+ ('C09','C','CMDocument.view','ui/cm-document.js','raw','none','EditorView instance','owned by composition root, not AG or Layout business APIs',0),
+ ('C10','C','CMDocument.readLine','ui/cm-document.js','export','1-based line','immutable line number/text/range','read only, no EditorView exposure',1),
+ ('C11','C','CMDocument.lineAtOffset','ui/cm-document.js','export','CM6 text offset','1-based line number','read only, no EditorView exposure',0),
+ ('C12','C','CMDocument.matchesSnapshot','ui/cm-document.js','export','opaque immutable text snapshot','boolean','compare document identity without exposing current EditorView',1),
+ ('C13','C','CMDocument.requestMeasure','ui/cm-document.js','export','none','void','requests CM6 layout pass through CMD boundary',0),
+ ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
  ('G04','G','returned.setStartNumber','ui/outline-grid.js','returned','string/number','void','recalculates filenames',1),
@@ -46,7 +50,7 @@ INSERT INTO apis VALUES
  ('P10','P','sourceBlocks','ui/pdf-preview.js','export','Markdown:string','OCR source anchors','parses stable MinerU IDs',1),
  ('P11','P','PdfPreview.revealCurrentLocation','ui/pdf-preview.js','export','none','void','reveals only pending explicit click',0),
  ('P12','P','PdfPreview.clearHighlight','ui/pdf-preview.js','export','none','void','removes OCR overlay',0),
- ('L01','L','createWorkspace','ui/workspace.js','export','host,getDocument,getCurrentEditor','workspace facade','builds Dockview panels and wiring',1),
+ ('L01','L','createWorkspace','ui/workspace.js','export','host,getDocument,getCurrentEditor,getCommandDocument','workspace facade','builds Dockview panels and wiring',1),
  ('L02','L','returned.refreshPreview','ui/workspace.js','returned','none','void','requests Markdown re-render',1),
  ('L03','L','returned.refreshOutline','ui/workspace.js','returned','none','void','requests AG reindex',1),
  ('L04','L','returned.refreshPdf','ui/workspace.js','returned','none','void','requests PDF anchor refresh',0),
@@ -54,11 +58,14 @@ INSERT INTO apis VALUES
  ('L06','L','returned.setPreviewMode','ui/workspace.js','returned','md|pdf','void','switches preview',1),
  ('L07','L','returned.startScrollSync','ui/workspace.js','returned','none','scrollSync object|null','installs scroll coordinator once',1),
  ('L08','L','returned.editorHost','ui/workspace.js','returned','none','DOM element','CM6 mounting hook',0),
- ('L09','L','returned.outlineGrid','ui/workspace.js','returned','none','AG wrapper','exposes external wrapper instance',0),
- ('L10','L','returned.pdf','ui/workspace.js','returned','none','PdfPreview instance','exposes external preview instance',0),
- ('L11','L','returned.dockview','ui/workspace.js','raw','none','Dockview native instance','third-party object exposed',0),
+ ('L09','L','returned.debug.outline','ui/workspace.js','internal','DEV only','AG wrapper','test-only introspection; absent from production facade',0),
+ ('L10','L','returned.debug.pdf','ui/workspace.js','internal','DEV only','PdfPreview instance','test-only introspection; absent from production facade',0),
+ ('L11','L','returned.debug.dockview','ui/workspace.js','internal','DEV only','Dockview native instance','test-only introspection; absent from production facade',0),
  ('L12','L','returned.previewSplit','ui/workspace.js','returned','none','boolean','read only',0),
- ('L13','L','returned.scrollSync','ui/workspace.js','returned','none','scrollSync object','exposes scroll coordinator instance',0);
+ ('L13','L','returned.debug.scrollSync','ui/workspace.js','internal','DEV only','scrollSync object','test-only introspection; absent from production facade',0),
+ ('L14','L','returned.getChapterState','ui/workspace.js','returned','none','detached {rows,startText} projection','source shell reads snapshot without AG wrapper',1),
+ ('L15','L','returned.setChapterStartNumber','ui/workspace.js','returned','number|string','void','sets AG filename projection via Layout',1),
+ ('L16','L','returned.setChaptersExported','ui/workspace.js','returned','opaque doc snapshot,names','void','sets AG published files via Layout',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -241,12 +248,25 @@ SELECT 'TC-'||id,id,script,
 -- inventory, NOT permission to depend on raw third-party objects. Audit the
 -- source diff for NEW edges separately; this is not a complete static analyzer.
 INSERT INTO access_edges VALUES
- ('X01','G','C','ui/outline-grid.js','putMarker(getEditor(),current,checked)','C09','debt','AG directly edits CM6 via EditorView rather than a CMD facade call'),
- ('X02','G','C','ui/outline-grid.js','editor.state.doc','C09','debt','AG reads CM6 internal document and marker metadata'),
- ('X03','L','C','ui/workspace.js','getEditor()?.requestMeasure()','C09','debt','Layout reaches directly into CM6 instance'),
- ('X04',NULL,'G','ui/main.js','workspace.outlineGrid.rows','G07','debt','App shell reaches AG projection via exposed OutlineGrid instance'),
- ('X05',NULL,'L','ui/main.js','workspace?.dockview','L11','debt','DEV-only seam exposes raw Dockview; not production API authorization'),
+ ('X01','G','C','ui/outline-grid.js','putMarker(getCMD(),current,checked)','C05','registered','Chapter semantics uses CMD.writeHtml through CMDocument adapter'),
+ ('X02','G','C','ui/outline-grid.js','markerForHeading(cmd,row)','C10','registered','Chapter marker read through CMD.readLine immutable line snapshot'),
+ ('X03','L','C','ui/workspace.js','getCMD()?.requestMeasure()','C13','registered','Layout requests CM6 measurement through CMD API'),
+ ('X04',NULL,'L','ui/main.js','workspace.getChapterState()','L14','registered','App shell reads detached chapter state via Workspace API'),
+ ('X05',NULL,'L','ui/main.js','workspace?.debug?.dockview','L11','test_only','Only Vite DEV diagnostics see raw Dockview, never production facade'),
  ('X06','L','G','ui/workspace.js','createOutlineGrid(this.element','G01','registered','Layout invokes registered AG constructor to mount panel'),
  ('X07','L','M','ui/workspace.js','renderMarkdown(source)','M01','registered','Layout renders a read-only MD projection using public renderer'),
  ('X08','L','P','ui/workspace.js','this.pdf.moveToolbarTo(this.pdfTools)','P07','registered','Layout coordinates PDF toolbar through exposed method'),
  ('X09','L','P','ui/workspace.js','currentPdf?.pdf?.refreshAnchors()','P03','registered','Layout requests PDF anchor refresh through published method');
+
+-- Added interface acceptance references for completed boundary isolation.
+WITH mapped(id,script,expected,evidence) AS (VALUES
+ ('C10','tests/am/contracts-browser.test.mjs','Read-only source line snapshot; no mutable CM6 EditorView','direct'),
+ ('C11','tests/am/contracts-browser.test.mjs','Offset maps to correct 1-based line','direct'),
+ ('C12','tests/am/contracts-browser.test.mjs','Snapshot equality remains valid across no-op layout and rejects different snapshot','direct'),
+ ('C13','tests/am/contracts-browser.test.mjs','Request measurement without exposing native editor','direct'),
+ ('L14','tests/promoted-chapters-browser.test.mjs','Chapter export consumes detached rows and startText','integration'),
+ ('L15','tests/promoted-chapters-browser.test.mjs','Starting number changes AG file projections via Layout','integration'),
+ ('L16','tests/promoted-chapters-browser.test.mjs','Published chapter links tracked via Layout facade','integration'))
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,script,
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,evidence FROM mapped;

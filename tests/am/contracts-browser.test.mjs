@@ -35,6 +35,17 @@ try{
         const {PdfPreview}=await import('/pdf-preview.js');
         const {viewStore,setScrollSyncEnabled}=await import('/view-store.js');
         const original=window.__v6cm6.cm.markdown;
+        const primaryCM=window.__v6cm6.cm;
+        const snapshot=primaryCM.doc;
+        const sampleLine=window.__v6cm6.outline.rows[1].sourceLine;
+        const readLine=primaryCM.readLine(sampleLine);
+        const lineApiValid=readLine.number===sampleLine&&readLine.text.includes('#')&&
+          primaryCM.lineAtOffset(readLine.from)===sampleLine&&
+          Object.isFrozen(readLine)===false&&
+          primaryCM.matchesSnapshot(snapshot)&&
+          !primaryCM.matchesSnapshot(null);
+        primaryCM.requestMeasure();
+        const sourceStillIdentical=primaryCM.matchesSnapshot(snapshot);
         const tiny='<!-- minerujson:block:v1:0:0 -->\n# Demo';
         const host=document.createElement('div');host.style.width='500px';host.style.height='200px';
         document.body.append(host);
@@ -53,7 +64,7 @@ try{
         // Separate AG instance: invoke its real dispose and ensure DOM/unsubscribe cleanup.
         const agHost=document.createElement('div');agHost.style.width='500px';agHost.style.height='250px';
         document.body.append(agHost);
-        const ag=createOutlineGrid(agHost,()=>original,()=>window.__v6cm6.view);
+        const ag=createOutlineGrid(agHost,()=>original,()=>window.__v6cm6.cm);
         const agMounted=Boolean(ag.api)&&agHost.querySelectorAll('.ag-root-wrapper').length>0;
         ag.refresh();
         const agRows=ag.rows.length;
@@ -104,7 +115,7 @@ try{
           document.querySelector('#status').textContent.includes('章节已变化');
         window.__v6cm6.cm.loadMarkdown(original);
         return {history,agMounted,agRows,agDestroyed,hadSelection,cleared,secondaryWasReady,
-          secondaryDisposed,stateBefore,activeAfter,activeSet:activeAfter==='outline',
+          secondaryDisposed,lineApiValid,sourceStillIdentical,stateBefore,activeAfter,activeSet:activeAfter==='outline',
           errorStatus:errorStatus.includes(errorMessage),realAgError,syncOff,syncOn,
           sourcePreserved:window.__v6cm6.cm.markdown===original,revisionStable};
       });
@@ -114,6 +125,7 @@ try{
       assert(result.agMounted&&result.agRows===21&&result.agDestroyed,`${name} AG dispose failed`);
       assert(result.hadSelection&&result.cleared,`${name} PDF highlight clear failed`);
       assert(result.secondaryWasReady&&result.secondaryDisposed,`${name} PDF dispose failed`);
+      assert(result.lineApiValid&&result.sourceStillIdentical,`${name} CMD semantic boundary failed`);
       assert(result.activeSet&&result.errorStatus&&result.realAgError&&result.syncOff&&result.syncOn,`${name} event routes failed`);
       assert(result.sourcePreserved&&result.revisionStable,`${name} business doc edited by tests`);
       assert.deepEqual(errors,[],`${name} console exceptions`);

@@ -34,7 +34,7 @@ CREATE TABLE access_edges(
   source_file TEXT NOT NULL,
   source_needle TEXT NOT NULL,
   api_id TEXT REFERENCES apis(id),
-  classification TEXT NOT NULL CHECK(classification IN ('registered','debt')),
+  classification TEXT NOT NULL CHECK(classification IN ('registered','debt','test_only')),
   rationale TEXT NOT NULL
 );
 CREATE INDEX edges_by_target ON access_edges(target_module,classification);
