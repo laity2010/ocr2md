@@ -87,7 +87,7 @@ export class PdfPreview {
     this.disposed=false;this.explicitUserUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
-    this.active=false;this.overlayDrawId=0;
+    this.active=false;this.overlayDrawId=0;this.pageViewportCache=new Map();
     this.revealPending=false;this.revealUntil=0;
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
@@ -234,7 +234,7 @@ export class PdfPreview {
   clearHighlight(){
     ++this.overlayDrawId;
     this.selected=null;
-    this.scroller.querySelectorAll('.ocr-pdf-region-overlay').forEach(node=>node.remove());
+    this.overlay?.remove();this.overlay=null;
   }
   sendPdfNavigation(pageNumber){
     const anchor=this.anchors.find(a=>a.pageIndex===pageNumber-1);
@@ -264,35 +264,47 @@ export class PdfPreview {
       this.selected?.blockIndex===source.blockIndex)return;
     const block=this.map[source.pageIndex]?.regions?.find(r=>r.blockIndex===source.blockIndex);
     if(!block)return;
+    const samePage=this.selected?.pageIndex===source.pageIndex;
     this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex};
-    if(explicit || this.viewer.currentPageNumber!==source.pageIndex+1){
-      this.viewer.scrollPageIntoView({pageNumber:source.pageIndex+1});
+    // PDF.js page navigation resets the scroll position. Never invoke it for
+    // another OCR block on the same page; the overlay will scroll only if the
+    // target falls outside the physical viewport (including iPad screen crop).
+    if(!samePage && this.viewer.currentPageNumber!==source.pageIndex+1){
+      const pageRect=this.viewer.getPageView(source.pageIndex)?.div?.getBoundingClientRect();
+      const clip=this.visibleClip();
+      if(!pageRect||!clip||pageRect.bottom<=clip.top||pageRect.top>=clip.bottom)
+        this.viewer.scrollPageIntoView({pageNumber:source.pageIndex+1});
     }
-    this.scheduleOverlay();
+    clearTimeout(this.overlayTimer);
+    void this.drawOverlay();
+  }
+  visibleClip(){
+    const port=this.scroller.getBoundingClientRect();
+    const vv=window.visualViewport;
+    const top=Math.max(port.top,0,vv?.offsetTop??0);
+    const bottom=Math.min(port.bottom,window.innerHeight,
+      (vv?.offsetTop??0)+(vv?.height??window.innerHeight));
+    const left=Math.max(port.left,0,vv?.offsetLeft??0);
+    const right=Math.min(port.right,window.innerWidth,
+      (vv?.offsetLeft??0)+(vv?.width??window.innerWidth));
+    return bottom-top>=20&&right-left>=20?{top,bottom,left,right}:null;
   }
   ensureVisible(overlay){
     if(!this.active)return;
-    const port=this.scroller.getBoundingClientRect();
-    const target=overlay.getBoundingClientRect();
-    if(!port.height||!port.width||!target.height||!target.width)return;
-    // Safari/iPad may position the scrollport partly BEHIND the bottom of the
-    // visual viewport. A bbox within the scrollport is not necessarily visible
-    // to the person. Intersect the PDF clip with the actual screen viewport.
-    const vv=window.visualViewport;
-    const screenTop=Math.max(0,vv?.offsetTop??0);
-    const screenLeft=Math.max(0,vv?.offsetLeft??0);
-    const top=Math.max(port.top,screenTop);
-    const bottom=Math.min(port.bottom,screenTop+(vv?.height??window.innerHeight),
-      window.innerHeight);
-    const left=Math.max(port.left,screenLeft);
-    const right=Math.min(port.right,screenLeft+(vv?.width??window.innerWidth),
-      window.innerWidth);
-    if(bottom-top<20||right-left<20)return;
-    // Deliberate click locates the OCR block near the CENTER of the actual
-    // visible PDF area. This works even when the PDF page number is unchanged
-    // and prevents small title bboxes from hiding below Safari's bottom bar.
-    const dy=(target.top+target.bottom)/2-(top+bottom)/2;
-    const dx=(target.left+target.right)/2-(left+right)/2;
+    const clip=this.visibleClip(),target=overlay.getBoundingClientRect();
+    if(!clip||!target.height||!target.width)return;
+    // No page jump, no recenter and no scroll for a block already in view.
+    // For a nearby off-screen block, move the minimum distance necessary.
+    const margin=12;
+    const shift=(a,b,start,end)=>{
+      const innerStart=start+margin,innerEnd=end-margin;
+      if(a>=innerStart&&b<=innerEnd)return 0;
+      if(b-a>innerEnd-innerStart)return (a+b-start-end)/2;
+      if(a<innerStart)return a-innerStart;
+      return b-innerEnd;
+    };
+    const dy=shift(target.top,target.bottom,clip.top,clip.bottom);
+    const dx=shift(target.left,target.right,clip.left,clip.right);
     if(Math.abs(dx)>2||Math.abs(dy)>2){
       const old=this.scroller.style.scrollBehavior;
       this.scroller.style.scrollBehavior='auto';
@@ -303,26 +315,30 @@ export class PdfPreview {
   }
   async drawOverlay(){
     const drawId=++this.overlayDrawId;
-    this.scroller.querySelectorAll('.ocr-pdf-region-overlay').forEach(e=>e.remove());
     const selection=this.selected;
-    if(!selection||!this.ready)return;
+    if(!selection||!this.ready){this.overlay?.remove();this.overlay=null;return;}
     const page=this.viewer.getPageView(selection.pageIndex);
     if(!page?.div)return;
     const region=this.map[selection.pageIndex];
     const block=region.regions.find(x=>x.blockIndex===selection.blockIndex);
     if(!block)return;
     try{
-      const pdfPage=await this.pdf.getPage(selection.pageIndex+1);
+      let viewportPromise=this.pageViewportCache.get(selection.pageIndex);
+      if(!viewportPromise){
+        viewportPromise=this.pdf.getPage(selection.pageIndex+1)
+          .then(pdfPage=>pdfPage.getViewport({scale:1}));
+        this.pageViewportCache.set(selection.pageIndex,viewportPromise);
+        viewportPromise.catch(()=>this.pageViewportCache.delete(selection.pageIndex));
+      }
+      const viewport=await viewportPromise;
       if(this.disposed||this.selected!==selection||this.overlayDrawId!==drawId)return;
-      const viewport=pdfPage.getViewport({scale:1});
       const rect=pdfOverlayRect({...block,pageSize:region.pageSize},viewport);
-      const overlay=document.createElement('div');
+      // Reuse the same overlay DOM node across adjacent selections, avoiding
+      // highlight flashes while PDF.js reflows or loads a distant page.
+      const overlay=this.overlay||document.createElement('div');
       overlay.className='ocr-pdf-region-overlay';
       overlay.dataset.pdfPage=String(selection.pageIndex+1);
       overlay.dataset.blockIndex=String(selection.blockIndex);
-      // Host overlays at the SCROLL CONTENT level instead of inside a
-      // PDF.js page: PDFViewer may replace its page DOM on rerender/zoom.
-      // Coordinates are calculated from the rotated visual page rectangle.
       const paper=page.div.getBoundingClientRect();
       const scroll=this.scroller.getBoundingClientRect();
       overlay.style.left=(paper.left-scroll.left+this.scroller.scrollLeft+
@@ -332,14 +348,17 @@ export class PdfPreview {
       overlay.style.width=(paper.width*rect.width/100)+'px';
       overlay.style.height=(paper.height*rect.height/100)+'px';
       overlay.title='OCR 对应文本区域（待人工复核）';
-      this.scroller.append(overlay);
+      if(!overlay.isConnected)this.scroller.append(overlay);
+      this.overlay=overlay;
       if(this.revealPending && this.active){
         this.ensureVisible(overlay);
-        // Keep a short window for PDF.js late layout/scroll correction,
-        // then let the user scroll independently without snapping back.
+        // PDF.js can correct late page layout; retain a short reveal window,
+        // but any user-initiated PDF scrolling ends automatic reveal.
         if(performance.now()>this.revealUntil)this.revealPending=false;
       }
-    }catch(error){this.setStatus(error.message);}
+    }catch(error){
+      if(this.overlayDrawId===drawId){this.overlay?.remove();this.overlay=null;this.setStatus(error.message);}
+    }
   }
   dispose(){
     this.disposed=true;this.unsubscribe?.();this.resizeObserver.disconnect();
