@@ -7,7 +7,10 @@ import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './media-module.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-const imageRe=/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+|media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp))\)/g;
+// Include sized Markdown links and Obsidian wiki image links in adoption.
+// Capture only the image path; leave the |width suffix intact on edits.
+const imageRe=/!\[[^\]\n]*\]\((https?:\/\/[^\s)|]+|media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp))(?:\|[1-9]\d{0,3}(?:x[1-9]\d{0,3})?)?\)/g;
+const wikiImageRe=/!\[\[(media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp))(?:\|[1-9]\d{0,3}(?:x[1-9]\d{0,3})?)?\]\]/g;
 const theme=themeQuartz.withParams({
   accentColor:'#569d79',backgroundColor:'#2f383e',foregroundColor:'#d3c6aa',
   headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
@@ -23,8 +26,11 @@ export function findMedia(source){
   // Do not inspect data within the original immutable MinerU evidence blobs.
   const evidence=[...source.matchAll(/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g)]
     .map(m=>[m.index,m.index+m[0].length]);
-  for(const match of source.matchAll(imageRe)){
-    const url=match[1],from=match.index+match[0].lastIndexOf(url),to=from+url.length;
+  const found=[...source.matchAll(imageRe),...source.matchAll(wikiImageRe)]
+    .map(match=>({url:match[1],from:match.index+match[0].lastIndexOf(match[1])}))
+    .sort((a,b)=>a.from-b.from);
+  for(const {url,from} of found){
+    const to=from+url.length;
     if(evidence.some(([start,end])=>from<end&&to>start))continue;
     for(let i=last;i<from;i++)if(source.charCodeAt(i)===10)line++;
     last=from;

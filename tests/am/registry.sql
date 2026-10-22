@@ -76,7 +76,7 @@ INSERT INTO apis VALUES
  ('L18','L','returned.scanMedia','ui/workspace.js','returned','none','Promise<void>','requests Media scan through API',1),
  ('L19','L','returned.downloadMedia','ui/workspace.js','returned','none','Promise<void>','requests Media download through API',1),
  ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG with lazy thumbnail preview and download workflow',1),
- ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads image URL ranges outside evidence',1),
+ ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads normal/sized/wikilink image URL ranges outside evidence',1),
  ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media rows and server resume status',1),
  ('A04','A','returned.downloadAll','ui/media-module.js','returned','none','Promise<void>','downloads each remote media without modifying other modules',1),
  ('A05','A','returned.setActive','ui/media-module.js','returned','boolean','void','toggles Media projection lifecycle',1),
@@ -85,7 +85,8 @@ INSERT INTO apis VALUES
  ('A08','A','read_local','scripts/v6_media.py','export','document,filename','bytes,MIME','serves only validated local media names',1),
  ('A09','A','inventory','scripts/v6_media.py','export','document','completed local file list','read-only media inventory; no new directories',1),
  ('A10','A','store_pasted_image','scripts/v6_media.py','export','document,bytes,mime','local path+bytes','atomic deduplicated clipboard image; no document editing',1),
- ('A11','A','uploadPastedImage','ui/media-module.js','export','Blob image','Promise<local path>','authorized binary upload through Media endpoint',1);
+ ('A11','A','uploadPastedImage','ui/media-module.js','export','Blob image','Promise<local path>','authorized binary upload through Media endpoint',1),
+ ('A12','A','chapter_media_references','scripts/v6_media.py','export','chapter Markdown','canonical referenced media paths','sized Markdown and Obsidian wiki chapter references',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -294,7 +295,8 @@ INSERT INTO access_edges VALUES
  ('X21',NULL,'C','ui/main.js','cm.capturePasteTarget()','C15','registered','Shell asks CMD for opaque live paste position'),
  ('X22',NULL,'C','ui/main.js','cm.pasteAt(target','C16','registered','Shell asks CMD to insert local Markdown image atomically'),
  ('X23',NULL,'A','ui/main.js','uploadPastedImage(file)','A11','registered','Shell delegates clipboard binary upload to Media'),
- ('X24',NULL,'A','scripts/v6_serve.py','media_store_pasted_image(DOC, data, mime)','A10','registered','HTTP adapter invokes atomic Media storage');
+ ('X24',NULL,'A','scripts/v6_serve.py','media_store_pasted_image(DOC, data, mime)','A10','registered','HTTP adapter invokes atomic Media storage'),
+ ('X25',NULL,'A','scripts/v6_serve.py','chapter_media_references(markdown)','A12','registered','HTTP composition reads chapter references via Media public parser');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -360,3 +362,13 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-M08','M08','tests/obsidian-image-preview-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'Obsidian wiki/alt/link sizing renders real media; source and code unchanged','integration');
+
+
+-- Adopted references must match the Obsidian sizing forms in MD Preview.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-A02-SIZED','A02','tests/media-adoption-syntax.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Media references resolve exact real line 103 and resized Markdown/wiki links','integration'),
+ ('TC-A12','A12','tests/media-adoption-syntax.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Published chapter image dimensions count as adopted references','integration');

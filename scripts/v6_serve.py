@@ -5,7 +5,7 @@ import hashlib
 import subprocess
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
-from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE
+from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE, chapter_media_references
 import json
 import os
 import re
@@ -136,9 +136,7 @@ class Handler(BaseHTTPRequestHandler):
                 if manifest is not None:
                     for entry in manifest.get('files', []):
                         markdown = read_chapter(DOC, entry['name']).decode('utf-8')
-                        refs.update('media/' + name for name in re.findall(
-                            r'!\[[^\]\n]*\]\(\.\./media/([0-9a-f]{24}\.(?:jpg|jpeg|png|gif|webp))\)',
-                            markdown))
+                        refs.update(chapter_media_references(markdown))
                 self.response(200, json.dumps({'files':files,'chapterReferences':sorted(refs)}),
                               'application/json')
             except (ValueError, OSError, KeyError, TypeError, UnicodeDecodeError):

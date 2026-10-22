@@ -268,3 +268,18 @@ def store_pasted_image(doc, payload, mime):
     finally:
         staged.unlink(missing_ok=True)
     return {'path':'media/' + target.name, 'bytes':len(payload), 'unchanged':False}
+
+# Canonical local media references in chapter exports, including dimensions.
+_CHAPTER_MEDIA_KEY = r'[0-9a-f]{24}\.(?:jpg|jpeg|png|gif|webp)'
+_CHAPTER_MEDIA_SIZE = r'(?:\|[1-9]\d{0,3}(?:x[1-9]\d{0,3})?)?'
+_CHAPTER_MEDIA_SYNTAX = (
+    re.compile(r'!\[[^\]\n]*\]\(\.\./media/(' + _CHAPTER_MEDIA_KEY + r')' + _CHAPTER_MEDIA_SIZE + r'\)'),
+    re.compile(r'!\[\[\.\./media/(' + _CHAPTER_MEDIA_KEY + r')' + _CHAPTER_MEDIA_SIZE + r'\]\]'),
+)
+
+def chapter_media_references(markdown):
+    """Canonical media paths used by exported chapter image syntax."""
+    if not isinstance(markdown, str):
+        raise ValueError('Invalid chapter Markdown')
+    return {'media/' + found.group(1) for pattern in _CHAPTER_MEDIA_SYNTAX
+            for found in pattern.finditer(markdown)}
