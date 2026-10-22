@@ -74,9 +74,26 @@ for(let i=0;i<engines.length;i++){
   assert.equal(result.pdfPage,'6');assert.equal(result.pdfBlock,'5');
   assert(result.pdfVisible,'PDF OCR math block not visible: '+JSON.stringify(result));
   assert.equal(result.windows,4);
+  await page.locator('.ocr-latex-grid .ag-row[row-index="1"] [col-id="line"]').click();
+  await page.waitForFunction(()=>{
+    const focus=document.querySelector('.ocr-markdown .ocr-outline-focused-element');
+    const start=Number(focus?.dataset.sourceStart),end=Number(focus?.dataset.sourceEnd);
+    const overlay=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="6"][data-block-index="6"]');
+    return start<=763&&end>763&&overlay;
+  },null,{timeout:25000});
+  const inline=await page.evaluate(()=>{
+    const focus=document.querySelector('.ocr-markdown .ocr-outline-focused-element');
+    const overlay=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="6"][data-block-index="6"]');
+    const pane=document.querySelector('.ocr-pdf-scroller');
+    const a=overlay?.getBoundingClientRect(),b=pane?.getBoundingClientRect();
+    return {from:focus?.dataset.sourceStart,to:focus?.dataset.sourceEnd,
+      pdfPage:overlay?.dataset.pdfPage,pdfBlock:overlay?.dataset.blockIndex,
+      pdfVisible:a&&b?a.bottom>b.top&&a.top<b.bottom:false};
+  });
+  assert(inline.pdfVisible,'undelimited inline equation PDF region not visible: '+JSON.stringify(inline));
   await page.screenshot({path:`.v6/evidence/latex-four-view-${name.toLowerCase()}.png`,timeout:22000});
   assert.deepEqual(errors,[],name+' page exceptions');
   assert.equal(readFileSync(document,'utf8'),markdown,'review navigation cannot edit source');
-  console.log('LATEX_FOUR_VIEW_PASS',name,JSON.stringify(result));
+  console.log('LATEX_FOUR_VIEW_PASS',name,JSON.stringify({...result,inline}));
  }finally{await browser?.close();server.kill('SIGTERM');}
 }
