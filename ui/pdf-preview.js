@@ -133,8 +133,12 @@ export class PdfPreview {
     try{
       const [meta,loading]=await Promise.all([
         fetch('/api/pdf-map',{cache:'no-store'}),
-        Promise.resolve(getDocument({url:'/api/pdf',rangeChunkSize:65536,disableAutoFetch:true,
-          disableStream:true,stopAtErrors:true})),
+        // V6 evidence is a small (~1.4 MB) PDF. Fetch it once, streaming,
+        // rather than paying a remote round trip for every 64 KB PDF.js range.
+        // Large-document adaptive range loading can be added with file-size
+        // metadata once this fixed-document viewer supports large files.
+        Promise.resolve(getDocument({url:'/api/pdf',disableRange:true,
+          disableStream:false,stopAtErrors:true})),
       ]);
       if(!meta.ok)throw Error(`PDF 映射 HTTP ${meta.status}`);
       this.map=(await meta.json()).pages;

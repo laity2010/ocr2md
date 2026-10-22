@@ -29,6 +29,11 @@ for(let i=0;i<engines.length;i++){
   browser=await engine.launch({headless:true,...options});
   const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const pdfTransport=[];
+  page.on('response',response=>{
+    if(new URL(response.url()).pathname==='/api/pdf')
+      pdfTransport.push(response.status());
+  });
   await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
   // Hold the actual PDF metadata request so the UI can be checked during
   // background warm-up rather than relying on a timing-sensitive delay.
@@ -68,6 +73,8 @@ for(let i=0;i<engines.length;i++){
     document.querySelector('.ocr-pdf-status')?.textContent==='就绪'&&
     document.querySelector('.ocr-pdf-scroller .page canvas')?.width>0,
     null,{timeout:55000});
+  assert(pdfTransport.length<=2 && pdfTransport.every(code=>code===200),
+    `${name} PDF warm-up used redundant range requests: ${JSON.stringify(pdfTransport)}`);
   const initial=await page.evaluate(()=>({
     selectable:!document.querySelector('.ocr-preview-mode option[value="pdf"]').disabled,
     splitEnabled:!document.querySelector('.ocr-preview-split-toggle input').disabled,
@@ -184,7 +191,7 @@ for(let i=0;i<engines.length;i++){
   assert.equal(hash(readFileSync(document)),hash(fixture));
   console.log('SHARED_PREVIEW_PASS',name,JSON.stringify({panes:initial.panels,modeDefault:initial.mode,
     modes:'md↔pdf',warmupGuard:beforeWarm.disabled,toolsRetracted:hiddenToolbar.hidden,
-    page3,scale,page8Highlight:true,errors:errors.length}));
+    pdfTransport,page3,scale,page8Highlight:true,errors:errors.length}));
  }finally{if(browser)await browser.close();server.kill('SIGTERM');}
 }
 assert.equal(hash(readFileSync(pdf)),pdfHash);
