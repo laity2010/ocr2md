@@ -1,0 +1,38 @@
+{
+  "schema": "ocr2md-k-fixtures-v0.1",
+  "status": "fixture-precheck-only-not-k-certified",
+  "freeze": {
+    "gitCommit": "0733abb80f2ac068a628a289c94003f7b61b185f",
+    "gitTag": "v6-feature-freeze-20261022",
+    "release": "v6-20261022-075729",
+    "coreLines": 3501
+  },
+  "inputs": {
+    "mineruJson": {
+      "path": "packages/minerujson-md/fixtures/buffetts-alpha.mineru.json",
+      "sha256": "e7371434b168a68c77e8b26370327670abb150aed63f2989c9f5e7e4336ee4a5",
+      "pdfPages": 22
+    },
+    "sourceMarkdownFixture": {
+      "path": "packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md",
+      "sha256": "d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764",
+      "blocks": 224,
+      "endMarkers": 0,
+      "chapterAnnotations": 0,
+      "outlineHeadings": 21
+    },
+    "pdf": {
+      "path": ".v6/workspace/buffetts-alpha.original.pdf",
+      "sha256": "be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab",
+      "storage": "host-readonly-not-portable-fixture-yet"
+    }
+  },
+  "observationNotFixture": {
+    "savedMotherPath": ".v6/workspace/buffetts-alpha.minerujson.md",
+    "sha256AtFreeze": "cfd3e33644e640a845053f65c85c416ca49e8d90eeed7f96d66e2e1ae0446d80",
+    "blocks": 224,
+    "outlineHeadings": 19,
+    "chapterAnnotations": 14,
+    "note": "Real user work is mutable: never use it as K test input or write into it."
+  }
+}
