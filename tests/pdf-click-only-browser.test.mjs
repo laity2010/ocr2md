@@ -119,74 +119,69 @@ for(let i=0;i<engines.length;i++){
   assert.equal(afterReading.selected,beforeReading.selected,'PDF wheel reading selected another AG row');
   assert(Math.abs(afterReading.source-beforeReading.source)<5,'PDF scroll moved CM6 without click');
 
-  // Same-page OCR focus is a paint-only operation while both blocks are in
-  // view: no second PDF.js page navigation, no recenter, no overlay flicker.
-  const pair=await page.evaluate(()=>{
-    const pdf=window.__v6cm6.pdf, pageIndex=0, map=pdf.map[pageIndex];
-    const blocks=pdf.anchors.filter(a=>a.pageIndex===pageIndex)
-      .map(a=>({line:a.sourceLine+2,bbox:map.regions.find(r=>r.blockIndex===a.blockIndex)?.bbox,
-        blockIndex:a.blockIndex})).filter(a=>a.bbox);
-    const pairs=[];
-    for(let i=0;i<blocks.length;i++)for(let j=i+1;j<blocks.length;j++){
-      const a=blocks[i],b=blocks[j];
-      const spread=Math.max(a.bbox[3],b.bbox[3])-Math.min(a.bbox[1],b.bbox[1]);
-      pairs.push({a,b,spread});
-    }
-    pairs.sort((a,b)=>a.spread-b.spread);
-    if(!pairs.length)throw Error('no same-page OCR block pair');
-    return {pageIndex,pair:pairs[0],pageHeight:map.pageSize[1]};
-  });
-  await page.evaluate(line=>window.__v6cm6.pdf.focusLine(line,true),pair.pair.a.line);
-  await page.waitForFunction(block=>document.querySelector(
-    `.ocr-pdf-region-overlay[data-pdf-page="1"][data-block-index="${block}"]`),
-    pair.pair.a.blockIndex,{timeout:18000});
-  await delay(1950); // allow the previous explicit-navigation reveal to settle
-  const prepared=await page.evaluate(({pageIndex,pair,pageHeight})=>{
-    const pdf=window.__v6cm6.pdf,scroller=pdf.scroller;
+  // Browser-observable same-page focus regression, on production dist (which
+  // deliberately has no debug facade). Both OCR blocks are already in view.
+  await page.setViewportSize({width:1408,height:1056});
+  await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
+  await page.waitForFunction(()=>document.querySelector(
+    '.ocr-pdf-region-overlay[data-pdf-page="3"][data-block-index="4"]'),null,{timeout:18000});
+  await sleep(1950); // let previous PDF.js navigation/layout finish
+  await page.evaluate(async()=>{
+    const map=(await (await fetch('/api/pdf-map')).json()).pages[2];
+    const blocks=[4,6].map(i=>map.regions.find(r=>r.blockIndex===i));
+    const page=document.querySelector('.ocr-pdf-scroller .page[data-page-number="3"]');
+    const scroller=document.querySelector('.ocr-pdf-scroller'),paper=page.getBoundingClientRect();
+    const port=scroller.getBoundingClientRect(),vv=window.visualViewport;
+    const top=Math.max(0,port.top,vv?.offsetTop??0);
+    const bottom=Math.min(port.bottom,window.innerHeight,(vv?.offsetTop??0)+(vv?.height??window.innerHeight));
+    const center=(Math.min(...blocks.map(b=>b.bbox[1]))+
+      Math.max(...blocks.map(b=>b.bbox[3])))/2;
     scroller.style.scrollBehavior='auto';
-    const paper=pdf.viewer.getPageView(pageIndex).div.getBoundingClientRect();
-    const center=(Math.min(pair.a.bbox[1],pair.b.bbox[1])+
-      Math.max(pair.a.bbox[3],pair.b.bbox[3]))/2;
-    const clip=pdf.visibleClip();
-    scroller.scrollTop+=paper.top+paper.height*center/pageHeight-(clip.top+clip.bottom)/2;
-    pdf.revealPending=false;
-    return true;
-  },pair);
-  assert(prepared);
-  await delay(450);
-  const beforePair=await page.evaluate(({pageIndex,pair,pageHeight})=>{
-    const pdf=window.__v6cm6.pdf,scroller=pdf.scroller;
-    const clip=pdf.visibleClip(),paper=pdf.viewer.getPageView(pageIndex).div.getBoundingClientRect();
-    const inside=b=>paper.top+paper.height*b[1]/pageHeight>=clip.top+12&&
-      paper.top+paper.height*b[3]/pageHeight<=clip.bottom-12;
-    return {bothVisible:inside(pair.a.bbox)&&inside(pair.b.bbox),
-      top:scroller.scrollTop,left:scroller.scrollLeft};
-  },pair);
-  assert(beforePair.bothVisible,`${name}: test pair must both be visible ${JSON.stringify({pair,beforePair})}`);
-  const focusResult=await page.evaluate(async ({a,b})=>{
-    const pdf=window.__v6cm6.pdf,scroller=pdf.scroller;
-    const old=pdf.viewer.scrollPageIntoView, overlay=pdf.overlay;
-    let pageJumps=0;
-    pdf.viewer.scrollPageIntoView=function(...args){pageJumps++;return old.apply(this,args)};
-    try{
-      await pdf.focusLine(b.line,true);
-      await new Promise(resolve=>setTimeout(resolve,500));
-      const second={pageJumps,top:scroller.scrollTop,left:scroller.scrollLeft,
-        block:pdf.overlay?.dataset.blockIndex,reused:pdf.overlay===overlay};
-      await pdf.focusLine(a.line,true);
-      await new Promise(resolve=>setTimeout(resolve,450));
-      return {...second,jumpsBoth:pageJumps,returnedBlock:pdf.overlay?.dataset.blockIndex,
-        finalTop:scroller.scrollTop};
-    }finally{pdf.viewer.scrollPageIntoView=old;scroller.style.scrollBehavior='';}
-  },pair.pair);
-  assert.equal(focusResult.block,String(pair.pair.b.blockIndex),`${name}: second block not highlighted`);
-  assert.equal(focusResult.returnedBlock,String(pair.pair.a.blockIndex),`${name}: first block not restored`);
-  assert.equal(focusResult.jumpsBoth,0,`${name}: same-page click re-ran PDF.js page navigation`);
-  assert.equal(focusResult.reused,true,`${name}: PDF overlay DOM replaced between adjacent blocks`);
-  assert(Math.abs(focusResult.top-beforePair.top)<3&&Math.abs(focusResult.finalTop-beforePair.top)<3,
-    `${name}: same-page visible blocks triggered scroll ${JSON.stringify({beforePair,focusResult})}`);
-  console.log('PDF_SAME_PAGE_FOCUS_PASS',name,JSON.stringify({pageJumps:0,
-    deltaScroll:focusResult.finalTop-beforePair.top,reused:focusResult.reused}));
+    scroller.scrollTop+=paper.top+paper.height*center/map.pageSize[1]-(top+bottom)/2;
+  });
+  await sleep(450);
+  const beforePair=await page.evaluate(async()=>{
+    const map=(await (await fetch('/api/pdf-map')).json()).pages[2];
+    const page=document.querySelector('.ocr-pdf-scroller .page[data-page-number="3"]');
+    const scroller=document.querySelector('.ocr-pdf-scroller');
+    const paper=page.getBoundingClientRect(),port=scroller.getBoundingClientRect(),vv=window.visualViewport;
+    const top=Math.max(0,port.top,vv?.offsetTop??0);
+    const bottom=Math.min(port.bottom,window.innerHeight,(vv?.offsetTop??0)+(vv?.height??window.innerHeight));
+    const inside=i=>{
+      const b=map.regions.find(r=>r.blockIndex===i).bbox;
+      return paper.top+paper.height*b[1]/map.pageSize[1]>=top+12&&
+        paper.top+paper.height*b[3]/map.pageSize[1]<=bottom-12;
+    };
+    window.__pdfTestOverlay=document.querySelector('.ocr-pdf-region-overlay');
+    return {bothVisible:inside(4)&&inside(6),top:scroller.scrollTop,left:scroller.scrollLeft};
+  });
+  assert(beforePair.bothVisible,`${name}: test blocks 4 and 6 must both be visible ${JSON.stringify(beforePair)}`);
+  await page.locator('.ag-row[row-index="5"] [col-id="title"]').click();
+  await page.waitForFunction(()=>document.querySelector(
+    '.ocr-pdf-region-overlay[data-pdf-page="3"][data-block-index="6"]'),null,{timeout:18000});
+  await sleep(600);
+  const middlePair=await page.evaluate(()=>{
+    const scroller=document.querySelector('.ocr-pdf-scroller');
+    return {top:scroller.scrollTop,left:scroller.scrollLeft,
+      reused:window.__pdfTestOverlay===document.querySelector('.ocr-pdf-region-overlay')};
+  });
+  await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
+  await page.waitForFunction(()=>document.querySelector(
+    '.ocr-pdf-region-overlay[data-pdf-page="3"][data-block-index="4"]'),null,{timeout:18000});
+  await sleep(600);
+  const afterPair=await page.evaluate(()=>{
+    const scroller=document.querySelector('.ocr-pdf-scroller');
+    const reused=window.__pdfTestOverlay===document.querySelector('.ocr-pdf-region-overlay');
+    delete window.__pdfTestOverlay;
+    scroller.style.scrollBehavior='';
+    return {top:scroller.scrollTop,left:scroller.scrollLeft,reused};
+  });
+  assert(middlePair.reused&&afterPair.reused,`${name}: adjacent blocks replaced overlay DOM`);
+  assert(Math.abs(middlePair.top-beforePair.top)<3&&Math.abs(afterPair.top-beforePair.top)<3&&
+    Math.abs(middlePair.left-beforePair.left)<3,
+    `${name}: same-page visible blocks scrolled PDF ${JSON.stringify({beforePair,middlePair,afterPair})}`);
+  console.log('PDF_SAME_PAGE_FOCUS_PASS',name,JSON.stringify({deltaScroll:afterPair.top-beforePair.top,
+    reused:afterPair.reused}));
 
   await page.locator('.ocr-preview-mode').selectOption('md');
   await page.screenshot({path:`.v6/evidence/pdf-click-only-${name.toLowerCase()}.png`,timeout:15000});
