@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,existsSync,mkdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {chromium} from 'playwright';
+import {spawn} from 'node:child_process';
+import {resolve} from 'node:path';
 
 const base='http://127.0.0.1:5198';
 const evidence='.v6/evidence/wp1';
@@ -12,7 +14,17 @@ mkdirSync(evidence,{recursive:true});
 mkdirSync('.v6/tests',{recursive:true});
 // Reset only the isolated test document, never the immutable fixture or user work file.
 writeFileSync(testFile,readFileSync(fixture));
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-first-run']});
+const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
+  '--port','5198','--strictPort'],{cwd:process.cwd(),env:{...process.env,
+    V6_DOCUMENT_PATH:resolve(testFile)},stdio:'ignore'});
+let started=false;
+try {
+  for(let i=0;i<150;i++) {
+    try{if((await fetch(base)).ok){started=true;break}}catch{}
+    await new Promise(r=>setTimeout(r,150));
+  }
+  assert(started,'isolated CM6 browser test server unavailable');
+  const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-first-run']});
 const errors=[];
 try {
   const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
@@ -78,3 +90,4 @@ try {
   assert.equal(createHash('sha256').update(readFileSync(fixture)).digest('hex'),beforeHash,'source fixture was modified');
   console.log('BROWSER_TEST_PASS',JSON.stringify({size:initial.length,lines:initial.lines,extract:report,undoRedo:'pass',savedBytes:disk.length,selectionPreserved:true,scrollPreserved:true,refreshRoundTrip:true,sourceFixtureUnchanged:true,screenshots:[`${evidence}/desktop.png`,`${evidence}/ipad-viewport.png`]}));
 } finally {await browser.close();}
+} finally {server.kill('SIGTERM');}
