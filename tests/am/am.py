@@ -11,10 +11,50 @@ import sqlite3
 import sys
 import subprocess
 from datetime import datetime, timezone
+import json
+import hashlib
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 DB = ROOT / '.v6/tests/am.sqlite'
+
+
+# Only tested code, fixtures, runtime configuration and test scripts invalidate
+# a previous PASS. A documentation-only Git commit must not erase evidence.
+TEST_SURFACE = ('ui','packages','scripts','tests','vite.config.mjs',
+                'package.json','package-lock.json',
+                ':(exclude)tests/audits/**',
+                ':(exclude)tests/am/README.md',
+                ':(exclude)tests/k/K.md')
+
+
+def git(*args):
+    return subprocess.run(['git',*args],cwd=ROOT,text=True,
+                          stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+
+
+def current_commit():
+    r=git('rev-parse','HEAD')
+    if r.returncode: raise ValueError('cannot read Git HEAD: '+r.stderr)
+    return r.stdout.strip()
+
+
+def require_same_test_surface(old, head):
+    r=git('diff','--quiet',old,head,'--',*TEST_SURFACE)
+    return r.returncode==0
+
+
+def require_clean_fixtures_and_sources():
+    r=git('status','--porcelain','--untracked-files=all','--',*TEST_SURFACE)
+    if r.returncode or r.stdout.strip():
+        raise ValueError('AM cannot certify modified/untracked production or test files: '
+                         + (r.stdout or r.stderr).strip()[:500])
+    manifest=json.loads((ROOT/'tests/k/data.json').read_text())
+    for name in ('mineruJson','sourceMarkdownFixture','pdf'):
+        fixture=manifest['inputs'][name]
+        file=ROOT/fixture['path']
+        if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest()!=fixture['sha256']:
+            raise ValueError('AM evidence fixture absent or changed: '+fixture['path'])
 
 
 def connection(path):
@@ -56,6 +96,12 @@ def assert_references(con):
                 name = target.strip().split('(')[0].strip().split('.')[-1]
                 if name and name not in source:
                     missing.append(f'{table}.{row["id"]}.{field}: {name} missing in {row["source_file"]}')
+    for row in con.execute('SELECT id,source_file,source_needle,api_id,target_module FROM access_edges'):
+        path = ROOT / row['source_file']
+        if not path.is_file() or row['source_needle'] not in path.read_text():
+            missing.append(f'access_edges.{row["id"]}: source expression not found in {row["source_file"]}')
+        if row['api_id'] and con.execute('SELECT module_id FROM apis WHERE id=?',(row['api_id'],)).fetchone()[0] != row['target_module']:
+            missing.append(f'access_edges.{row["id"]}: API owner mismatch')
     for row in con.execute('SELECT id,script,fixture FROM test_cases'):
         if not (ROOT / row['script']).is_file():
             missing.append(f'test_cases.{row["id"]}.script: {row["script"]}')
@@ -64,6 +110,14 @@ def assert_references(con):
     if missing:
         raise ValueError('missing AM references:\n' + '\n'.join(missing))
     return con.execute('SELECT COUNT(*) FROM apis').fetchone()[0]
+
+
+def same_test_binding(con, case_id, original):
+    """Reject historical PASS when a case is rebound to a different target."""
+    current = con.execute('''SELECT api_id,message_id,subscription_id,publisher_id,
+        script,fixture,expected,evidence FROM test_cases WHERE id=?''',
+        (case_id,)).fetchone()
+    return current is not None and tuple(current) == tuple(original)
 
 
 def build():
@@ -78,6 +132,7 @@ def build():
         try:
             history = [tuple(row) for row in old.execute('''
                 SELECT r.case_id,r.git_commit,r.ran_at,r.status,r.output_file,r.detail,
+                       t.api_id,t.message_id,t.subscription_id,t.publisher_id,
                        t.script,t.fixture,t.expected,t.evidence
                 FROM test_runs r JOIN test_cases t ON t.id=r.case_id''')]
         finally:
@@ -89,9 +144,7 @@ def build():
             api_count = assert_references(con)
             restored = 0
             for row in history:
-                current = con.execute('SELECT script,fixture,expected,evidence FROM test_cases WHERE id=?',
-                                      (row[0],)).fetchone()
-                if current and tuple(current) == row[6:]:
+                if same_test_binding(con,row[0],row[6:]):
                     con.execute('INSERT INTO test_runs(case_id,git_commit,ran_at,status,output_file,detail) VALUES(?,?,?,?,?,?)',row[:6])
                     restored += 1
             summary = [con.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]
@@ -105,6 +158,7 @@ def build():
 
 
 def run_case(case_id):
+    require_clean_fixtures_and_sources()
     with connection(f'file:{DB}?mode=ro') as con:
         entry = con.execute('SELECT id,script FROM test_cases WHERE id=?',(case_id,)).fetchone()
         if not entry:
@@ -148,6 +202,7 @@ def full_coverage_check(con):
 
 
 def run_all():
+    require_clean_fixtures_and_sources()
     with connection(f'file:{DB}?mode=ro') as con:
         assert_references(con)
         case_count=full_coverage_check(con)
@@ -180,6 +235,9 @@ def run_all():
         if status!='PASS':
             failures.append((script,status))
             print('\n'.join(output.splitlines()[-10:]),flush=True)
+    require_clean_fixtures_and_sources()
+    if current_commit()!=git_commit:
+        raise ValueError('Git HEAD moved during AM suite; results not certifiable')
     with connection(f'file:{DB}?mode=ro') as con:
         passed=con.execute('SELECT COUNT(DISTINCT case_id) FROM test_runs WHERE git_commit=? AND status="PASS"',(git_commit,)).fetchone()[0]
     print(f'AM_FULL_RESULT passed_cases={passed}/{case_count} failed_suites={len(failures)} git={git_commit[:8]}',flush=True)
@@ -189,18 +247,32 @@ def run_all():
 
 
 def certify():
-    git_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    require_clean_fixtures_and_sources()
+    head=current_commit()
     with connection(f'file:{DB}?mode=ro') as con:
+        assert_references(con)
         count=full_coverage_check(con)
-        rows=con.execute('SELECT t.id,(SELECT r.status FROM test_runs r WHERE r.case_id=t.id AND r.git_commit=? ORDER BY r.id DESC LIMIT 1) as result FROM test_cases t',(git_commit,)).fetchall()
-        bad=[f'{r[0]}:{r[1] or "NOT_RUN"}' for r in rows if r[1]!='PASS']
-    if bad: raise ValueError(f'AM_CERTIFY_FAIL {len(bad)}/{count}: '+', '.join(bad[:22]))
-    print(f'AM_FULL_TABLE_CERTIFIED {count}/{count} linked contract cases git={git_commit} (including integration cases; not a substitute for isolated per-method oracle)')
+        candidates=[r['git_commit'] for r in con.execute(
+            'SELECT git_commit,MAX(id) as recent FROM test_runs GROUP BY git_commit ORDER BY recent DESC')]
+        good=None
+        for old in candidates:
+            if not require_same_test_surface(old,head): continue
+            rows=con.execute('SELECT t.id,(SELECT r.status FROM test_runs r WHERE '
+                'r.case_id=t.id AND r.git_commit=? ORDER BY r.id DESC LIMIT 1) result '
+                'FROM test_cases t',(old,)).fetchall()
+            if len(rows)==count and all(r['result']=='PASS' for r in rows):
+                good=old
+                break
+    if good is None:
+        raise ValueError('AM_CERTIFY_FAIL: no complete PASS with unchanged source/test Git tree; run-all required')
+    print(f'AM_FULL_TABLE_CERTIFIED {count}/{count} cases; tested_git={good[:8]} '
+          f'current_git={head[:8]} source_tests_unchanged=True '
+          '(integrated tests are not separate per-API oracles)')
 
 
 def main():
     p = argparse.ArgumentParser(description='OCR2MD V6 AM SQLite queries')
-    p.add_argument('action', choices=['build','check','modules','apis','route','untested','impact','coverage','cases','run','run-all','certify'])
+    p.add_argument('action', choices=['build','check','modules','apis','route','untested','impact','coverage','cases','run','run-all','certify','edges'])
     p.add_argument('key', nargs='?', help='API module ID, message topic, or impacted module ID')
     args = p.parse_args()
     if args.action == 'build':
@@ -225,6 +297,8 @@ def main():
         elif args.action == 'check':
             count = assert_references(con)
             print(f'AM_CHECK_PASS apis={count} FK=OK source-and-test-files=OK')
+        elif args.action == 'edges':
+            print_rows(con.execute('SELECT id,caller_module,target_module,source_file,source_needle,api_id,classification,rationale FROM access_edges WHERE (? IS NULL OR target_module=? OR caller_module=? OR classification=?) ORDER BY classification DESC,id', (args.key,args.key,args.key,args.key)))
         elif args.action == 'modules':
             print_rows(con.execute('SELECT * FROM modules ORDER BY id'))
         elif args.action == 'apis':

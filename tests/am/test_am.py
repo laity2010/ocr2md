@@ -32,6 +32,21 @@ class AMCatalogTests(unittest.TestCase):
             self.assertEqual(actual,total,tab)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM test_runs').fetchone()[0],0)
 
+    def test_observed_boundaries_are_not_silently_approved(self):
+        edges=self.db.execute('SELECT COUNT(*) FROM access_edges').fetchone()[0]
+        debt=self.db.execute("SELECT COUNT(*) FROM access_edges WHERE classification='debt'").fetchone()[0]
+        self.assertEqual(edges,9)
+        self.assertEqual(debt,5)
+
+    def test_registry_change_must_invalidate_bound_test_evidence(self):
+        row=self.db.execute("SELECT api_id,message_id,subscription_id,publisher_id,script,fixture,expected,evidence FROM test_cases WHERE id='TC-C05'").fetchone()
+        self.assertEqual(row['api_id'],'C05')
+        self.db.execute("UPDATE test_cases SET api_id='C03' WHERE id='TC-C05'")
+        changed=self.db.execute("SELECT api_id,message_id,subscription_id,publisher_id,script,fixture,expected,evidence FROM test_cases WHERE id='TC-C05'").fetchone()
+        self.assertNotEqual(tuple(row),tuple(changed))
+        self.assertFalse(am.same_test_binding(self.db,'TC-C05',tuple(row)))
+        self.assertTrue(am.same_test_binding(self.db,'TC-C05',tuple(changed)))
+
     def test_no_dangling_relations(self):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO subscriptions VALUES('bad','missing','C','ui/main.js','test','test','test')")

@@ -26,6 +26,18 @@ CREATE TABLE subscriptions(
   source_file TEXT NOT NULL, handler TEXT NOT NULL,
   condition TEXT NOT NULL, effects TEXT NOT NULL
 );
+-- Observed cross-component access. 'debt' is documented, never authorized.
+CREATE TABLE access_edges(
+  id TEXT PRIMARY KEY,
+  caller_module TEXT REFERENCES modules(id),
+  target_module TEXT NOT NULL REFERENCES modules(id),
+  source_file TEXT NOT NULL,
+  source_needle TEXT NOT NULL,
+  api_id TEXT REFERENCES apis(id),
+  classification TEXT NOT NULL CHECK(classification IN ('registered','debt')),
+  rationale TEXT NOT NULL
+);
+CREATE INDEX edges_by_target ON access_edges(target_module,classification);
 CREATE TABLE test_cases(
   id TEXT PRIMARY KEY, api_id TEXT REFERENCES apis(id),
   message_id TEXT REFERENCES messages(id),

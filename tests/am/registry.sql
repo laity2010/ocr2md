@@ -236,3 +236,17 @@ WITH pub(id,script,expected,evidence) AS (VALUES
 INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence)
 SELECT 'TC-'||id,id,script,
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,evidence FROM pub;
+
+-- Selected source-confirmed inter-module access edges. Registration is an
+-- inventory, NOT permission to depend on raw third-party objects. Audit the
+-- source diff for NEW edges separately; this is not a complete static analyzer.
+INSERT INTO access_edges VALUES
+ ('X01','G','C','ui/outline-grid.js','putMarker(getEditor(),current,checked)','C09','debt','AG directly edits CM6 via EditorView rather than a CMD facade call'),
+ ('X02','G','C','ui/outline-grid.js','editor.state.doc','C09','debt','AG reads CM6 internal document and marker metadata'),
+ ('X03','L','C','ui/workspace.js','getEditor()?.requestMeasure()','C09','debt','Layout reaches directly into CM6 instance'),
+ ('X04',NULL,'G','ui/main.js','workspace.outlineGrid.rows','G07','debt','App shell reaches AG projection via exposed OutlineGrid instance'),
+ ('X05',NULL,'L','ui/main.js','workspace?.dockview','L11','debt','DEV-only seam exposes raw Dockview; not production API authorization'),
+ ('X06','L','G','ui/workspace.js','createOutlineGrid(this.element','G01','registered','Layout invokes registered AG constructor to mount panel'),
+ ('X07','L','M','ui/workspace.js','renderMarkdown(source)','M01','registered','Layout renders a read-only MD projection using public renderer'),
+ ('X08','L','P','ui/workspace.js','this.pdf.moveToolbarTo(this.pdfTools)','P07','registered','Layout coordinates PDF toolbar through exposed method'),
+ ('X09','L','P','ui/workspace.js','currentPdf?.pdf?.refreshAnchors()','P03','registered','Layout requests PDF anchor refresh through published method');
