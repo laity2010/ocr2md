@@ -123,6 +123,7 @@ for(let i=0;i<engines.length;i++){
   assert(hiddenToolbar.hidden&&hiddenToolbar.display==='none'&&hiddenToolbar.width===0&&
     hiddenToolbar.buttons===3&&hiddenToolbar.parent,
     `${name} PDF buttons not retracted on Markdown: ${JSON.stringify(hiddenToolbar)}`);
+  await page.screenshot({path:`.v6/evidence/shared-preview-md-${name.toLowerCase()}.png`,timeout:16000});
   assert.equal(await page.locator('.ocr-preview-md-scroll').evaluate(el=>getComputedStyle(el).visibility),'visible');
   assert.equal(await page.locator('.ocr-preview-pdf-host').evaluate(el=>getComputedStyle(el).visibility),'hidden');
   await page.locator('.ag-row[row-index="5"] [col-id="title"]').click();
@@ -160,6 +161,25 @@ for(let i=0;i<engines.length;i++){
       :((r.left+r.right)/2>=c.left&&(r.left+r.right)/2<=c.right);
     return visibleY&&visibleX;
   },null,{timeout:16000});
+  // If warm-up fails, Markdown remains usable and neither PDF entry point
+  // can become selectable. Verify the asynchronous false readiness result.
+  const failed=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
+  try{
+    await failed.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
+    await failed.route('**/api/pdf-map',route=>route.fulfill({status:503,body:'unavailable'}));
+    await failed.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+    await failed.waitForFunction(()=>document.querySelector('.ocr-preview-mode option[value="pdf"]')?.textContent===
+      'PDF 原文（加载失败）',null,{timeout:35000});
+    const failureState=await failed.evaluate(()=>({
+      mode:document.querySelector('.ocr-preview-mode').value,
+      disabled:document.querySelector('.ocr-preview-mode option[value="pdf"]').disabled,
+      splitDisabled:document.querySelector('.ocr-preview-split-toggle input').disabled,
+      mdVisible:getComputedStyle(document.querySelector('.ocr-preview-md-scroll')).visibility,
+      toolsHidden:document.querySelector('.ocr-preview-mode-tools[data-mode="pdf"]').hidden
+    }));
+    assert.deepEqual(failureState,{mode:'md',disabled:true,splitDisabled:true,
+      mdVisible:'visible',toolsHidden:true},`${name} PDF failure should not unlock preview`);
+  }finally{await failed.close()}
   assert.deepEqual(errors,[],name+' browser errors');
   assert.equal(hash(readFileSync(document)),hash(fixture));
   console.log('SHARED_PREVIEW_PASS',name,JSON.stringify({panes:initial.panels,modeDefault:initial.mode,

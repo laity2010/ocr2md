@@ -108,6 +108,7 @@ class PreviewPanel {
     this.pdfPane.setAttribute('aria-label','PDF 原文阅读预览');
     this.element.append(this.toolbar,this.mdPane,this.pdfPane);
     this.pdf=null;
+    this.pdfUsable=false;
     this.timer=null;
     this.disposed=false;
     this.mode='md';
@@ -130,12 +131,12 @@ class PreviewPanel {
     this.setMode('md');
     // Keep Markdown interactive while PDF.js preloads in the hidden pane.
     // Enable PDF selection only after its first rendered page is ready.
-    void this.pdf.loading.then(()=>{
+    void this.pdf.whenReady().then(ready=>{
       if(this.disposed)return;
-      const ready=this.pdf.ready;
+      this.pdfUsable=ready;
       this.pdfOption.disabled=!ready;
       this.pdfOption.textContent=ready?'PDF 原文':'PDF 原文（加载失败）';
-      this.pdfOption.title=ready?'':this.pdf.statusNode.textContent;
+      this.pdfOption.title=ready?'':'PDF 预热失败';
       this.splitCheckbox.disabled=!ready;
     });
     this.unsubscribe=viewStore.subscribe((next,prior)=>{
@@ -148,7 +149,7 @@ class PreviewPanel {
   }
   setMode(mode){
     if(mode!=='md'&&mode!=='pdf')return false;
-    if(mode==='pdf' && (!this.pdf?.ready || this.splitCheckbox.checked)){
+    if(mode==='pdf' && (!this.pdfUsable || this.splitCheckbox.checked)){
       // Also reject scripted/early change events; the disabled option alone
       // is not a sufficient guard on every iPad select implementation.
       this.switcher.value=this.mode;
@@ -294,7 +295,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   toggleSplitPreview=(enabled)=>{
     if(!currentPreview || enabled===split)return;
     const preview=currentPreview;
-    if(enabled && !preview.pdf?.ready){
+    if(enabled && !preview.pdfUsable){
       preview.splitCheckbox.checked=false;
       return;
     }

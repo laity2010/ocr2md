@@ -112,6 +112,7 @@ export class PdfPreview {
   // The owning preview pane places the active viewer's toolbar immediately
   // to the right of the shared MD/PDF dropdown.
   moveToolbarTo(container){container.append(this.toolbar);}
+  whenReady(){return this.loading.then(()=>this.ready);}
   setActive(active){
     this.active=Boolean(active);
     // Merely opening the PDF preview never performs source-line navigation.
