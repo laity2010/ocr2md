@@ -8,6 +8,7 @@ import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
 import {CMDocument} from './cm-document.js';
+import {uploadPastedImage} from './media-module.js';
 import {mineruCommentFolding,foldInitialMineruComments} from './mineru-comment-folding.js';
 import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
 import {countMarkers} from './chapter-markers.js';
@@ -273,6 +274,32 @@ async function main() {
     extensions:[
       nativeIOSSelection ? nativeIOSBasicSetup : basicSetup,
       EditorView.lineWrapping,
+      // Only image clipboard items are handled here; native CM6 paste retains
+      // full control of text and all other clipboard formats.
+      EditorView.domEventHandlers.of({paste(event){
+        const item=[...(event.clipboardData?.items||[])].find(candidate=>
+          candidate.kind==='file' && candidate.type.startsWith('image/'));
+        if(!item)return false;
+        event.preventDefault();
+        const file=item.getAsFile();
+        if(!file){status('剪贴板图片不可读取','error');return true;}
+        if(canSave!==true){
+          status('🔒 粘贴图片需要编辑授权','warning');
+          showUnlock();
+          return true;
+        }
+        const target=cm.capturePasteTarget();
+        void (async()=>{
+          try{
+            status('正在将剪贴板图片写入 media/');
+            const path=await uploadPastedImage(file);
+            cm.pasteAt(target,`![](${path})`);
+            status('✓ 已插入图片引用 · 请保存 Markdown');
+            void workspace.scanMedia();
+          }catch(error){status('粘贴图片失败：'+error.message,'error');}
+        })();
+        return true;
+      }}),
       markdown({base:markdownLanguage}),
       mineruCommentFolding,
       obsidianMarkdown,

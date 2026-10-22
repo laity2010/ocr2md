@@ -232,3 +232,39 @@ def inventory(doc):
             continue
         results.append({'path': 'media/' + file.name, 'bytes': file.stat().st_size})
     return sorted(results, key=lambda x: x['path'])
+
+
+MAX_PASTE = 12 * 1024 * 1024
+PASTE_TYPES = {v: k for k, v in EXT.items() if k != '.jpeg'}
+
+def store_pasted_image(doc, payload, mime):
+    """Persist a clipboard image atomically; idempotent on identical bytes.
+
+    Remote download state is untouched. No Markdown files are ever edited.
+    """
+    if mime not in PASTE_TYPES or not isinstance(payload, bytes) or not 0 < len(payload) <= MAX_PASTE:
+        raise ValueError('Unsupported image type or size (maximum 12 MiB)')
+    extension = PASTE_TYPES[mime]
+    _check_magic(payload[:16], extension)
+    root = media_home(doc)
+    checksum = hashlib.sha256(payload).hexdigest()
+    target = root / (checksum[:24] + extension)
+    if _plain_file(target):
+        if hashlib.sha256(target.read_bytes()).hexdigest() != checksum:
+            raise ValueError('Local image name collision')
+        return {'path':'media/' + target.name, 'bytes':len(payload), 'unchanged':True}
+    staged = root / ('.pasted-' + secrets.token_hex(12) + '.tmp')
+    try:
+        with staged.open('xb') as out:
+            out.write(payload)
+            out.flush()
+            os.fsync(out.fileno())
+        # A concurrent upload of the same bytes must not replace any stored file.
+        try:
+            os.link(staged, target, follow_symlinks=False)
+        except FileExistsError:
+            if target.is_symlink() or hashlib.sha256(target.read_bytes()).hexdigest() != checksum:
+                raise ValueError('Local image collision')
+    finally:
+        staged.unlink(missing_ok=True)
+    return {'path':'media/' + target.name, 'bytes':len(payload), 'unchanged':False}

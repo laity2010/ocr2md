@@ -5,7 +5,7 @@ import hashlib
 import subprocess
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
-from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory
+from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE
 import json
 import os
 import re
@@ -253,6 +253,9 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get('Origin', '') in allowed
 
     def do_POST(self):
+        if urlsplit(self.path).path == '/api/media/paste':
+            self.post_media_paste()
+            return
         if urlsplit(self.path).path == '/api/media/chunk':
             self.post_media_chunk()
             return
@@ -293,6 +296,29 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '11')
         self.end_headers()
         self.wfile.write(b'{"ok":true}')
+
+    def post_media_paste(self):
+        if not self.authorized() or not self.same_origin():
+            self.response(403, 'Editor authorization required')
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '-1'))
+            if length < 1 or length > MAX_MEDIA_PASTE:
+                self.response(413, 'Image exceeds paste limit (12 MiB)')
+                return
+            mime = self.headers.get('Content-Type', '').split(';')[0].strip().lower()
+            data = self.rfile.read(length)
+            if len(data) != length:
+                self.response(400, 'Incomplete clipboard image')
+                return
+            result = media_store_pasted_image(DOC, data, mime)
+        except (ValueError, AttributeError, TypeError) as error:
+            self.response(422, str(error))
+            return
+        except OSError:
+            self.response(503, 'Media storage unavailable')
+            return
+        self.response(200, json.dumps(result), 'application/json')
 
     def post_media_chunk(self):
         if not self.authorized() or not self.same_origin():

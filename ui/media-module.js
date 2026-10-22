@@ -35,6 +35,23 @@ export function findMedia(source){
   return out;
 }
 
+/** The Media domain uploads browser clipboard image bytes and returns a local
+ * URL. It does not know the CMD source or paste position.
+ */
+export async function uploadPastedImage(file){
+  if(!file||!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type))
+    throw Error('仅支持 PNG、JPEG、GIF 或 WebP 剪贴板图片');
+  if(file.size<1||file.size>12*1024*1024)throw Error('粘贴图片必须小于 12 MB');
+  const response=await fetch('/api/media/paste',{method:'POST',
+    headers:{'Content-Type':file.type},body:file});
+  if(response.status===403)throw Error('需要编辑授权，完成授权后重新粘贴图片');
+  if(!response.ok)throw Error(`图片保存 HTTP ${response.status}: ${(await response.text()).slice(0,120)}`);
+  const result=await response.json();
+  if(!/^media\/[0-9a-f]{24}\.(?:jpg|jpeg|png|gif|webp)$/.test(result.path||''))
+    throw Error('媒体服务未返回有效的本地路径');
+  return result.path;
+}
+
 export function createMediaModule(host,getMarkdown,cmd,onStatus){
   host.classList.add('ocr-media-pane');
   const gridHost=document.createElement('div');

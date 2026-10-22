@@ -23,6 +23,8 @@ INSERT INTO apis VALUES
  ('C12','C','CMDocument.matchesSnapshot','ui/cm-document.js','export','opaque immutable text snapshot','boolean','compare document identity without exposing current EditorView',1),
  ('C13','C','CMDocument.requestMeasure','ui/cm-document.js','export','none','void','requests CM6 layout pass through CMD boundary',0),
  ('C14','C','CMDocument.replaceRanges','ui/cm-document.js','export','array of from/to/expected/insert','changed count','one validated CM6 transaction; forbids original evidence edits',1),
+ ('C15','C','CMDocument.capturePasteTarget','ui/cm-document.js','export','none','opaque snapshot + selected range','captures insertion position before async file upload',1),
+ ('C16','C','CMDocument.pasteAt','ui/cm-document.js','export','captured target, local Markdown image reference','void','one CM6 undo step; rejects changed source and evidence',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -80,7 +82,9 @@ INSERT INTO apis VALUES
  ('A06','A','download_chunk','scripts/v6_media.py','export','document,url','state/bytes/path','durable validated remote Range chunk, no Markdown edit',1),
  ('A07','A','status','scripts/v6_media.py','export','document,url','state/bytes/path','read persisted media status',1),
  ('A08','A','read_local','scripts/v6_media.py','export','document,filename','bytes,MIME','serves only validated local media names',1),
- ('A09','A','inventory','scripts/v6_media.py','export','document','completed local file list','read-only media inventory; no new directories',1);
+ ('A09','A','inventory','scripts/v6_media.py','export','document','completed local file list','read-only media inventory; no new directories',1),
+ ('A10','A','store_pasted_image','scripts/v6_media.py','export','document,bytes,mime','local path+bytes','atomic deduplicated clipboard image; no document editing',1),
+ ('A11','A','uploadPastedImage','ui/media-module.js','export','Blob image','Promise<local path>','authorized binary upload through Media endpoint',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -285,7 +289,11 @@ INSERT INTO access_edges VALUES
  ('X17','L','A','ui/workspace.js','this.media?.setActive(','A05','registered','Layout switches projection via Media API'),
  ('X18','L','A','ui/workspace.js','currentOutline?.media?.scan()','A03','registered','Shell scans Media through Layout API'),
  ('X19','L','A','ui/workspace.js','currentOutline?.media?.downloadAll()','A04','registered','Shell downloads Media through Layout API'),
- ('X20',NULL,'A','scripts/v6_serve.py','media_inventory(DOC)','A09','registered','HTTP transport combines Media inventory with chapter read API');
+ ('X20',NULL,'A','scripts/v6_serve.py','media_inventory(DOC)','A09','registered','HTTP transport combines Media inventory with chapter read API'),
+ ('X21',NULL,'C','ui/main.js','cm.capturePasteTarget()','C15','registered','Shell asks CMD for opaque live paste position'),
+ ('X22',NULL,'C','ui/main.js','cm.pasteAt(target','C16','registered','Shell asks CMD to insert local Markdown image atomically'),
+ ('X23',NULL,'A','ui/main.js','uploadPastedImage(file)','A11','registered','Shell delegates clipboard binary upload to Media'),
+ ('X24',NULL,'A','scripts/v6_serve.py','media_store_pasted_image(DOC, data, mime)','A10','registered','HTTP adapter invokes atomic Media storage');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -332,3 +340,15 @@ SELECT 'TC-'||id,
  CASE WHEN kind='subscription' THEN id ELSE NULL END,
  'tests/media-browser.test.mjs',
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'integration' FROM media_msgs;
+
+
+-- Clipboard paste: CMD position/edit APIs and isolated Media upload transport.
+WITH pasted(id,expected) AS (VALUES
+ ('C15','captures exact CM6 range before async upload'),
+ ('C16','inserts image link with one undo and preserved source'),
+ ('A10','validates bytes, MIME and hash before atomic media store'),
+ ('A11','clipboard image uploads via authorized Media transport')
+)
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,'tests/media-paste-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'integration' FROM pasted;

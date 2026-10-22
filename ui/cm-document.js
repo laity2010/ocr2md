@@ -103,18 +103,36 @@ export class CMDocument {
     return this.doc;
   }
 
+  /** Capture a source insertion location before asynchronous attachment I/O.
+   * An immutable CM6 Text snapshot guarantees no intervening edits; moving
+   * the caret alone must not redirect the original paste.
+   */
+  capturePasteTarget(){
+    const selection=this.view.state.selection.main;
+    return Object.freeze({snapshot:this.doc,from:selection.from,to:selection.to,
+      expected:this.doc.sliceString(selection.from,selection.to)});
+  }
+  pasteAt(target,text){
+    if(!target||!this.matchesSnapshot(target.snapshot))
+      throw Error('图片上传期间文档已改变，请重新选择位置粘贴');
+    if(typeof text!=='string'||!/^!\[[^\]\n]*\]\(media\/[a-f0-9]{24}\.(?:jpg|jpeg|png|gif|webp)\)$/.test(text))
+      throw Error('Invalid local image reference');
+    this.replaceRanges([{from:target.from,to:target.to,
+      expected:target.expected,insert:text}],target.from+text.length);
+  }
+
   /** Business-neutral optimistic text edits. All ranges must still contain the
    * expected source, so an asynchronous download cannot overwrite later edits.
    * One transaction / Undo step; no edits inside immutable MinerU evidence.
    */
-  replaceRanges(edits){
+  replaceRanges(edits,cursorAfter=null){
     if(!Array.isArray(edits)||!edits.length)throw Error('No source edits');
     const source=this.markdown;
     const sorted=[...edits].sort((a,b)=>a.from-b.from);
     let previousEnd=-1;
     for(const item of sorted){
       if(!Number.isInteger(item.from)||!Number.isInteger(item.to)||
-         item.from<0||item.to<=item.from||item.to>source.length||
+         item.from<0||item.to<item.from||item.to>source.length||
          item.from<previousEnd||typeof item.expected!=='string'||
          typeof item.insert!=='string'||item.insert.includes('\0')||
          source.slice(item.from,item.to)!==item.expected)
@@ -125,10 +143,13 @@ export class CMDocument {
     const evidence=/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g;
     for(const match of source.matchAll(evidence)){
       const from=match.index,to=from+match[0].length;
-      if(sorted.some(edit=>edit.from<to&&edit.to>from))
+      if(sorted.some(edit=>edit.from===edit.to
+        ?edit.from>=from&&edit.from<to
+        :edit.from<to&&edit.to>from))
         throw Error('Original MinerU evidence is read-only');
     }
     this.view.dispatch({changes:sorted.map(({from,to,insert})=>({from,to,insert})),
+      ...(cursorAfter===null?{}:{selection:{anchor:cursorAfter}}),
       userEvent:'input',annotations:isolateHistory.of('full')});
     return {changed:sorted.length};
   }
