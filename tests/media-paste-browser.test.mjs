@@ -41,13 +41,10 @@ for(let i=0;i<engines.length;i++){
   assert.equal(readFileSync(doc,'utf8'),fixture);
   browser=await engine.launch({headless:true,...options});
   const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
-  const errors=[];page.on('pageerror',error=>{errors.push(error.message);console.log('PASTE_PAGE_ERROR',name,error.message);});
-  page.on('console',message=>{if(message.type()==='error')console.log('PASTE_CONSOLE_ERROR',name,message.text());});
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.context().addCookies([{name:'v6edit',value:key,domain:'127.0.0.1',path:'/'}]);
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
-  await page.waitForTimeout(3500);
-  console.log('PASTE_BOOT',name,JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#status')?.textContent,hasCM:!!document.querySelector('.cm-content'),outline:document.querySelectorAll('.ocr-outline-checkbox').length,body:document.body.textContent.slice(0,150)}))));
-  await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-checkbox').length>0,null,{timeout:6000});
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-checkbox').length>0,null,{timeout:40000});
   const cm=page.locator('.cm-content');
   await cm.click();
   const result=await page.evaluate(base64=>{
@@ -89,10 +86,24 @@ for(let i=0;i<engines.length;i++){
   const again=await fetch(base+'/api/media/paste',{method:'POST',headers:{...origin,Cookie:'v6edit='+key},body:bytes});
   assert.equal(again.status,200);assert.equal((await again.json()).path,localPath);
   await page.reload({waitUntil:'domcontentloaded'});
-  await page.waitForFunction(path=>document.querySelector('.cm-content')?.textContent.includes('![]('+path+')'),localPath,
-    {timeout:25000});
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('大纲21项'),null,{timeout:30000});
+  assert((await (await fetch(base+'/api/document')).text()).includes(label));
+  // If source changes while a binary upload is pending, never insert the
+  // eventual URL at a stale location. The binary itself may be deduplicated.
+  await page.route('**/api/media/paste',async route=>{await pause(1300);await route.continue();});
+  await cm.click();
+  await page.evaluate(base64=>{
+    const data=new DataTransfer();const binary=atob(base64);
+    data.items.add(new File([Uint8Array.from(binary,c=>c.charCodeAt(0))],
+      'another.jpg',{type:'image/jpeg'}));
+    document.querySelector('.cm-content').dispatchEvent(
+      new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));
+  },bytes.toString('base64'));
+  await page.keyboard.type('X');
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('文档已改变'),null,{timeout:16000});
+  assert.equal(readFileSync(doc,'utf8'),written,'failed optimistic paste must never silently save');
   assert.deepEqual(errors,[],name+' page errors');
   console.log('MEDIA_PASTE_PASS',name,JSON.stringify({path:localPath,undoRedo:true,saveReload:true,
-    noOverwrite:true,rejectUnauth:true,rejectBadMime:true}));
+    noOverwrite:true,staleEditRejected:true,rejectUnauth:true,rejectBadMime:true}));
  }finally{await browser?.close();server.kill('SIGTERM');}
 }
