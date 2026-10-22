@@ -44,19 +44,17 @@ class OutlinePanel {
     this.element.setAttribute('aria-label','AG Grid 章节大纲');
     this.grid=null;
     this.media=null;
-    this.outlineHost=document.createElement('div');
-    this.outlineHost.className='ocr-outline-area';
     this.mediaHost=document.createElement('div');
     this.mediaHost.hidden=true;
-    this.element.append(this.outlineHost,this.mediaHost);
     currentOutline=this;
   }
   init(){
-    this.grid=createOutlineGrid(this.outlineHost,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
+    this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
+    this.element.append(this.mediaHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
   }
   setModule(module){
-    this.outlineHost.hidden=module!=='chapter-boundary';
+    this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
   }
   layout() {}

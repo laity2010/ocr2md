@@ -68,7 +68,8 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   }
   async function downloadOne(url){
     if(running.has(url))return;
-    if(!url.startsWith('https://'))throw Error('仅支持 HTTPS 远程媒体');
+    if(!url.startsWith('https://') && !(url.startsWith('http://127.0.0.1:') && location.hostname==='127.0.0.1'))
+      throw Error('仅支持 HTTPS 远程媒体');
     running.add(url);paused.delete(url);schedule();
     try{
       while(!paused.has(url)){
