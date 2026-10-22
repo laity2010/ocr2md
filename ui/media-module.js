@@ -81,6 +81,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
         const state=await response.json();
         states.set(url,state);schedule();
         if(state.state==='complete'){
+          if(active)grid?.refreshCells({force:true,columns:['preview']});
           // Re-scan the *current* CMD source after network I/O; stale offsets
           // or user edits cannot corrupt the document.
           const matches=findMedia(getMarkdown()).filter(row=>row.url===url);
@@ -142,7 +143,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     fallback.className='ocr-media-thumb-fallback';
     fallback.hidden=true;fallback.textContent='无预览';
     image.addEventListener('error',()=>{image.hidden=true;fallback.hidden=false;});
-    image.src=address;
+    // Native lazy-loading alone can fetch from a hidden AG pane in Chrome;
+    // keep src unset until the Media module is actually selected.
+    if(active)image.src=address;
     link.append(image,fallback);
     return link;
   }
@@ -178,7 +181,15 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   refresh();
   return {
     refresh,scan,downloadAll,
-    setActive(enabled){active=enabled;host.hidden=!enabled;if(enabled)void scan();},
+    setActive(enabled){
+      active=enabled;host.hidden=!enabled;
+      if(enabled){
+        // Recreate visible row renderers only when the pane becomes active:
+        // hidden thumbnails have no src and must be armed on activation.
+        grid?.redrawRows();
+        void scan();
+      }
+    },
     get count(){return rows.length;},
     dispose(){disposed=true;paused.clear();unsubscribe();grid.destroy();},
   };
