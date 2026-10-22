@@ -42,6 +42,7 @@ INSERT INTO apis VALUES
  ('M05','M','PreviewPanel.setMode','ui/workspace.js','internal','md|pdf','void','gates unready PDF; hides mode toolbar; retains PDF instance',1),
  ('M06','M','PreviewPanel.detachPdf','ui/workspace.js','internal','DetachedPdfPanel','void','reparents persistent viewer',0),
  ('M07','M','PreviewPanel.reattachPdf','ui/workspace.js','internal','none','void','reparents persistent viewer',0),
+ ('M08','M','installObsidianImages','ui/obsidian-images.js','export','markdown-it renderer instance','void','Obsidian wiki images and Markdown image dimensions; read-only rendering',1),
  ('P01','P','PdfPreview.open','ui/pdf-preview.js','export','none','Promise<void>','loads /api/pdf-map + /api/pdf; ready after first page paint',1),
  ('P02','P','PdfPreview.focusLine','ui/pdf-preview.js','export','1-based line,explicit:boolean','Promise<void>','locates OCR region; explicit reveal',1),
  ('P03','P','PdfPreview.refreshAnchors','ui/pdf-preview.js','export','none','void','rebuilds anchor source mapping',1),
@@ -352,3 +353,10 @@ WITH pasted(id,expected) AS (VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
 SELECT 'TC-'||id,id,'tests/media-paste-browser.test.mjs',
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'integration' FROM pasted;
+
+
+-- MD Preview feature adapter: only maps Obsidian-sized image syntax at render time.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-M08','M08','tests/obsidian-image-preview-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Obsidian wiki/alt/link sizing renders real media; source and code unchanged','integration');

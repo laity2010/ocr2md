@@ -7,6 +7,7 @@ import MarkdownIt from 'markdown-it';
 import footnote from 'markdown-it-footnote';
 import taskLists from 'markdown-it-task-lists';
 import DOMPurify from 'dompurify';
+import {installObsidianImages} from './obsidian-images.js';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './markdown-preview.css';
@@ -25,13 +26,8 @@ const sourceAttrs = token => token.map
   ? ` data-source-start="${token.map[0]+1}" data-source-end="${token.map[1]+1}"`
   : '';
 
+installObsidianImages(md);
 const oldFence = md.renderer.rules.fence;
-const oldImage = md.renderer.rules.image;
-md.renderer.rules.image = (tokens, idx, options, env, self) => {
-  tokens[idx].attrSet('loading','lazy');
-  tokens[idx].attrSet('decoding','async');
-  return oldImage(tokens,idx,options,env,self);
-};
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const language = token.info.trim().split(/\s+/)[0].toLowerCase();
