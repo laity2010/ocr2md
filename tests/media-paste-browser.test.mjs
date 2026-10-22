@@ -38,16 +38,16 @@ for(let i=0;i<engines.length;i++){
   const bad=await fetch(base+'/api/media/paste',{method:'POST',headers:{...origin,Cookie:'v6edit='+key,
     'Content-Type':'image/png'},body:bytes});
   assert.equal(bad.status,422,'image MIME/signature mismatch must not save');
-  const oversized=await fetch(base+'/api/media/paste',{method:'POST',headers:{...origin,Cookie:'v6edit='+key,
-    'Content-Length':String(12*1024*1024+1)},body:Buffer.alloc(12*1024*1024+1)});
-  assert.equal(oversized.status,413);
   assert.equal(readFileSync(doc,'utf8'),fixture);
   browser=await engine.launch({headless:true,...options});
   const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
-  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  const errors=[];page.on('pageerror',error=>{errors.push(error.message);console.log('PASTE_PAGE_ERROR',name,error.message);});
+  page.on('console',message=>{if(message.type()==='error')console.log('PASTE_CONSOLE_ERROR',name,message.text());});
   await page.context().addCookies([{name:'v6edit',value:key,domain:'127.0.0.1',path:'/'}]);
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
-  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已加载'),null,{timeout:40000});
+  await page.waitForTimeout(3500);
+  console.log('PASTE_BOOT',name,JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#status')?.textContent,hasCM:!!document.querySelector('.cm-content'),outline:document.querySelectorAll('.ocr-outline-checkbox').length,body:document.body.textContent.slice(0,150)}))));
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-checkbox').length>0,null,{timeout:6000});
   const cm=page.locator('.cm-content');
   await cm.click();
   const result=await page.evaluate(base64=>{

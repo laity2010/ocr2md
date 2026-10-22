@@ -276,7 +276,7 @@ async function main() {
       EditorView.lineWrapping,
       // Only image clipboard items are handled here; native CM6 paste retains
       // full control of text and all other clipboard formats.
-      EditorView.domEventHandlers.of({paste(event){
+      EditorView.domEventHandlers({paste(event){
         const item=[...(event.clipboardData?.items||[])].find(candidate=>
           candidate.kind==='file' && candidate.type.startsWith('image/'));
         if(!item)return false;
