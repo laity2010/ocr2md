@@ -408,6 +408,7 @@ async function main() {
     workspace.setWorkModule(selected);
   };
   $('media-refresh').addEventListener('click',()=>void workspace.scanMedia());
+  $('latex-refresh').addEventListener('click',()=>workspace.scanLatex());
   $('media-download-all').addEventListener('click',async()=>{
     const button=$('media-download-all');button.disabled=true;
     try{await workspace.downloadMedia();}

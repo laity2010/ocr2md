@@ -96,3 +96,6 @@
 /* Media is a sibling read-only projection, not an AG chapter grid mutation. */
 .ocr-outline-grid[hidden]{display:none!important}
 .ocr-outline-pane > .ocr-media-pane{flex:1;min-height:0}
+
+/* Latex has its own pane; chapter AG and Media remain separate. */
+.ocr-outline-pane > .ocr-latex-pane{flex:1;min-height:0}

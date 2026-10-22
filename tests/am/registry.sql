@@ -6,7 +6,8 @@ INSERT INTO modules VALUES
  ('M','MD Preview','markdown-it + DOMPurify','ui/markdown-preview.js'),
  ('P','PDF Preview','PDF.js','ui/pdf-preview.js'),
  ('L','Layout','Dockview','ui/workspace.js'),
- ('A','Media','AG Grid + resumable download','ui/media-module.js');
+ ('A','Media','AG Grid + resumable download','ui/media-module.js'),
+ ('T','LaTeX','AG Grid + KaTeX review plugin','ui/latex-module.js');
 
 INSERT INTO apis VALUES
  ('C01','C','CMDocument.getMarkdown','ui/cm-document.js','export','none','Markdown string','read only',1),
@@ -86,7 +87,12 @@ INSERT INTO apis VALUES
  ('A09','A','inventory','scripts/v6_media.py','export','document','completed local file list','read-only media inventory; no new directories',1),
  ('A10','A','store_pasted_image','scripts/v6_media.py','export','document,bytes,mime','local path+bytes','atomic deduplicated clipboard image; no document editing',1),
  ('A11','A','uploadPastedImage','ui/media-module.js','export','Blob image','Promise<local path>','authorized binary upload through Media endpoint',1),
- ('A12','A','chapter_media_references','scripts/v6_media.py','export','chapter Markdown','canonical referenced media paths','sized Markdown and Obsidian wiki chapter references',1);
+ ('A12','A','chapter_media_references','scripts/v6_media.py','export','chapter Markdown','canonical referenced media paths','sized Markdown and Obsidian wiki chapter references',1),
+ ('T01','T','findLatex','ui/latex-scan.js','export','Markdown source','source-positioned LaTeX spans','read-only scan with code and immutable comment exclusions',1),
+ ('T02','T','checkLatex','ui/latex-module.js','export','LaTeX span','KaTeX output and validation status','strict KaTeX render with errors as review results',1),
+ ('T03','T','createLatexModule','ui/latex-module.js','export','host,readDocument,onStatus','module facade','owns independent AG and subscribes document revisions',1),
+ ('T04','T','returned.refresh','ui/latex-module.js','returned','none','void','re-scans live CMD and updates AG',1),
+ ('T05','T','returned.setActive','ui/latex-module.js','returned','boolean','void','toggles separate LaTeX review projection',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -129,6 +135,7 @@ INSERT INTO subscriptions VALUES
  ('SUB12','E05',NULL,'ui/main.js','unsubscribeGlobalStatus -> renderGlobalStatus','outlineCount differs','render heading count'),
  ('SUB13','E06',NULL,'ui/main.js','unsubscribeGlobalStatus -> renderGlobalStatus','scrollSyncEnabled differs','render scrolling mode'),
  ('SUB16','E01','A','ui/media-module.js','viewStore.subscribe -> schedule','documentRevision changes','rebuild Media image list'),
+ ('SUB17','E01','T','ui/latex-module.js','viewStore.subscribe -> schedule','documentRevision changes','refresh active LaTeX review list'),
  ('SUB14','E06',NULL,'ui/scroll-sync.js','unsubscribe -> measureLater','enabled transition','measure and start continuous sync'),
  ('SUB15','E08',NULL,'ui/main.js','document.addEventListener -> status','chapter-error DOM event','show error in global status');
 
@@ -296,7 +303,10 @@ INSERT INTO access_edges VALUES
  ('X22',NULL,'C','ui/main.js','cm.pasteAt(target','C16','registered','Shell asks CMD to insert local Markdown image atomically'),
  ('X23',NULL,'A','ui/main.js','uploadPastedImage(file)','A11','registered','Shell delegates clipboard binary upload to Media'),
  ('X24',NULL,'A','scripts/v6_serve.py','media_store_pasted_image(DOC, data, mime)','A10','registered','HTTP adapter invokes atomic Media storage'),
- ('X25',NULL,'A','scripts/v6_serve.py','chapter_media_references(markdown)','A12','registered','HTTP composition reads chapter references via Media public parser');
+ ('X25',NULL,'A','scripts/v6_serve.py','chapter_media_references(markdown)','A12','registered','HTTP composition reads chapter references via Media public parser'),
+ ('X26','L','T','ui/workspace.js','createLatexModule(this.latexHost','T03','registered','Layout mounts independently owned LaTeX AG'),
+ ('X27','L','T','ui/workspace.js','this.latex?.setActive(','T05','registered','Layout switches LaTeX via registered module facade'),
+ ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -372,3 +382,20 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-A12','A12','tests/media-adoption-syntax.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'Published chapter image dimensions count as adopted references','integration');
+
+
+-- First read-only LaTeX audit plugin uses public review transport only.
+WITH latex_cases(id,description) AS (VALUES
+ ('T01','scans 20 real math fences plus inline and display delimiters; excludes evidence/code/currency'),
+ ('T02','KaTeX strict render records invalid syntax separately from valid formulas'),
+ ('T03','LaTeX mounts an independent AG panel without altering source or Media'),
+ ('T04','scan reflects CMD changes without a Markdown shadow copy'),
+ ('T05','module switch preserves chapter outline/Media and PDF viewer')
+)
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,'tests/latex-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',description,'integration' FROM latex_cases;
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence)
+VALUES ('TC-SUB17','SUB17','tests/latex-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+ 'source edit triggers automatic re-scan through documentRevision','integration');

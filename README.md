@@ -79,6 +79,7 @@ node tests/shared-preview-browser.test.mjs
 node tests/preview-split-browser.test.mjs
 node tests/media-browser.test.mjs           # Media 隔离下载、断点续传、CMD 撤销和路径验证
 node tests/media-paste-browser.test.mjs     # 剪贴板图片写入 media、CMD 指定光标粘贴及保存
+node tests/latex-browser.test.mjs           # LaTeX 行内、独立、围栏、KaTeX 语法审阅与定位
 node tests/obsidian-image-preview-browser.test.mjs # Obsidian 尺寸图片预览（只读）
 node tests/pdf-click-only-browser.test.mjs
 node tests/engineering-initialize-browser.test.mjs
@@ -103,6 +104,7 @@ python3 scripts/v6_git.py recover-source --build-id <构建ID>
 
 - **现行文档体系**：V6 不使用 MOPJO，也没有 MOPJO 模块或数据库作为编辑数据源。文档编辑由 CMD/CM6 承接，MinerU JSON ↔ Markdown 转换器仍是独立组件；AG、预览和 PDF 定位读取文档派生结果。历史文档中的 MOPJO 称谓不代表 V6 现行模块。
 - **文本块身份设计（已确定、尚未实施）**：原始 OCR 块以文档内的 `pageIndex:blockIndex`（`minerujson:block:v1`）作为稳定身份，无需逐块额外生成 UID；只有人工增补、复制为独立块或拆分出来的新块，才在创建时自动分配 UID（拟用 `ocr2md:block:v1:<UUID>`）。移动块时连同身份锚点一起移动，不重编原始 OCR 来源编号；PDF 来源另行关联，不伪造 MinerU 块。此规则是后续 CMD 文本块编辑功能的设计，不代表当前版本已支持增补或移动。
+- **LaTeX 审阅插件**：在模块下拉选择「LaTeX」，左 AG 表复用同一三窗定位总线，列出源码行、类型、原文、KaTeX 公式预览、校验和错误说明，支持按类型/结果筛选与「扫描公式」。扫描 `math`/`latex`/`tex` 围栏、`$$...$$`、`$...$`、`\\[...\\]`、`\\(...\\)`；跳过 MinerU 原始证据注释、非数学代码与金额。插件只读，改错在 CM6 源码窗进行，保存仍用全局保存；语法通过不代表与原 PDF 数学内容一致。
 - **Obsidian 图片尺寸预览**：MD 预览使用独立 `ui/obsidian-images.js` 只读适配器，支持 `![[media/图片.png|300]]`、`![[media/图片.png|300x200]]`、`![说明|300](media/图片.png)` 和现存兼容写法 `![](media/图片.png|300)`；只解析图片链接，保留内嵌代码和其他 wikilink 的原样文本，CMD、原始 Markdown 与保存行为不变。图片必须能经当前服务路径访问。
 - **粘贴图片**：源码 CM6 先选择插入位置，再通过系统粘贴图片；Media 校验 12 MiB 内的 JPEG/PNG/GIF/WebP 并在 `media/` 原子保存、内容哈希去重，CMD 仅在原文未变化时把 `![](media/<hash>.<ext>)` 插入原光标／替换原选区。粘贴文字仍由 CM6 原生处理，未授权或失败不修改文档；需要点击全局保存使 Markdown 落盘。
 - **媒体模块首版范围**：左侧模块下拉选择「媒体」，列表列出左侧固定的图片缩略预览、Markdown 图片 URL、源码行号、采用和状态；采用列区分绿色已采用与橙色未采用（按当前未保存的母文档、已发布章节中的图片链接判断），同时列出 `media/` 内未被引用的完整文件。采用和状态可复用 AG 勾选筛选器按值筛选；Media 的采用扫描同时识别标准图片、`|宽度[x高度]` 与 `![[media/图片.png|尺寸]]`，并保留远程下载后的尺寸标注；缩略图仅在打开 Media 时加载，点击打开原图，下载完成后优先显示本地图片。支持逐条下载、下载全部、暂停/续传。仅允许正式 MinerU CDN `cdn-mineru.openxlab.org.cn` 的 HTTPS JPG/PNG/GIF/WebP；每次最多取 512 KiB，未完成部分存入母文档旁的 `media/.<hash>.part`，重启后从断点继续。完整文件校验格式后才通过 CMD 原子替换 URL；需再点「保存」使 Markdown 改动落盘。母文档路径是 `media/<hash>.<ext>`，`chapters/` 导出自动调整为 `../media/<hash>.<ext>`。其他站点、HTML `<img>` 和大型媒体尚未支持。媒体下载及保存都需要现有编辑授权；测试使用独立临时文档与模拟远端，不访问用户工作媒体。

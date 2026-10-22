@@ -9,6 +9,7 @@ import {renderMarkdown} from './markdown-preview.js';
 import {createScrollSync} from './scroll-sync.js';
 import {createOutlineGrid} from './outline-grid.js';
 import {createMediaModule} from './media-module.js';
+import {createLatexModule} from './latex-module.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
 
@@ -44,23 +45,30 @@ class OutlinePanel {
     this.element.setAttribute('aria-label','AG Grid 章节大纲');
     this.grid=null;
     this.media=null;
+    this.latex=null;
     this.mediaHost=document.createElement('div');
     this.mediaHost.hidden=true;
+    this.latexHost=document.createElement('div');
+    this.latexHost.hidden=true;
     currentOutline=this;
   }
   init(){
     this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
-    this.element.append(this.mediaHost);
+    this.element.append(this.mediaHost,this.latexHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
+    this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),reportMediaStatus);
   }
   setModule(module){
-    this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':'AG Grid 章节大纲');
+    this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
+      module==='latex'?'AG Grid LaTeX 审阅':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
+    this.latex?.setActive(module==='latex');
   }
   layout() {}
   dispose(){
     this.media?.dispose();
+    this.latex?.dispose();
     this.grid?.dispose();
     if(currentOutline===this)currentOutline=null;
   }
@@ -358,6 +366,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setWorkModule:module=>currentOutline?.setModule(module),
     scanMedia:()=>currentOutline?.media?.scan(),
     downloadMedia:()=>currentOutline?.media?.downloadAll(),
+    scanLatex:()=>currentOutline?.latex?.refresh(),
     getChapterState(){
       const grid=currentOutline?.grid;
       return {rows:grid?.rows.map(row=>({...row}))||[], startText:grid?.startText||'000'};
