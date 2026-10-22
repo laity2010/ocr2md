@@ -77,7 +77,7 @@ npm run test:shell                   # 顶栏、布局、Undo/保存
 node tests/promoted-chapters-browser.test.mjs
 node tests/shared-preview-browser.test.mjs
 node tests/preview-split-browser.test.mjs
-node tests/preview-split-browser.test.mjs
+node tests/media-browser.test.mjs           # Media 隔离下载、断点续传、CMD 撤销和路径验证
 node tests/pdf-click-only-browser.test.mjs
 node tests/engineering-initialize-browser.test.mjs
 node --test tests/mineru-lossless-migration.test.mjs
@@ -101,9 +101,10 @@ python3 scripts/v6_git.py recover-source --build-id <构建ID>
 
 - **现行文档体系**：V6 不使用 MOPJO，也没有 MOPJO 模块或数据库作为编辑数据源。文档编辑由 CMD/CM6 承接，MinerU JSON ↔ Markdown 转换器仍是独立组件；AG、预览和 PDF 定位读取文档派生结果。历史文档中的 MOPJO 称谓不代表 V6 现行模块。
 - **文本块身份设计（已确定、尚未实施）**：原始 OCR 块以文档内的 `pageIndex:blockIndex`（`minerujson:block:v1`）作为稳定身份，无需逐块额外生成 UID；只有人工增补、复制为独立块或拆分出来的新块，才在创建时自动分配 UID（拟用 `ocr2md:block:v1:<UUID>`）。移动块时连同身份锚点一起移动，不重编原始 OCR 来源编号；PDF 来源另行关联，不伪造 MinerU 块。此规则是后续 CMD 文本块编辑功能的设计，不代表当前版本已支持增补或移动。
+- **媒体模块首版范围**：左侧模块下拉选择「媒体」，列表列出 Markdown 图片 URL、源码行号、状态，支持逐条下载、下载全部、暂停/续传。仅允许正式 MinerU CDN `cdn-mineru.openxlab.org.cn` 的 HTTPS JPG/PNG/GIF/WebP；每次最多取 512 KiB，未完成部分存入母文档旁的 `media/.<hash>.part`，重启后从断点继续。完整文件校验格式后才通过 CMD 原子替换 URL；需再点「保存」使 Markdown 改动落盘。母文档路径是 `media/<hash>.<ext>`，`chapters/` 导出自动调整为 `../media/<hash>.<ext>`。其他站点、HTML `<img>` 和大型媒体尚未支持。媒体下载及保存都需要现有编辑授权；测试使用独立临时文档与模拟远端，不访问用户工作媒体。
 - **单起始锚点格式**：MinerU 转换器默认生成不含 `minerujson:end` 的 `.minerujson.md`；正式母文档已经完成 SHA 校验、备份和一次性格式迁移，保存及重新打开均保持此格式。离线迁移脚本保留供旧文档使用，运行时 CMD 不再提供特殊兼容投影。块来源仍是原始 `pageIndex:blockIndex`。人工增补块 UID、可视化移动操作仍属后续功能；不把无 `end` 误称为已支持任意跨块合并。
 
-- 当前只实现章节定界业务；未声称已完成章节清洗、媒体本地化、通用多目录工作台或完整 Obsidian 功能。
+- 当前实现章节定界，以及首版 Media：识别 Markdown 图片、逐项／顺序下载、暂停与 HTTP Range 续传、源文档本地路径替换和章节导出相对路径修正。其他章节清洗插件、通用多目录工作台及完整 Obsidian 功能尚未完成。
 - V6 的 MinerU 映射与 PDF 只读证据使用 Buffett’s Alpha 样本；扩大到新文档或动态 PDF 绑定，需要另行实现与验证。MinerU JSON 严格逆转换的可编辑范围见组件 README。
 - `labs/cm-html/` 是已冻结的旁路实验（标签 `cm-html-lab-frozen-20261021`）；V6 主线不依赖其运行时文件。
 - [`PROJECT_INIT.md`](./PROJECT_INIT.md) 记录早期 V7/V8 初始化 Git 标签的使用方式，是历史起点，不覆盖当前的 `AGENTS.md`；实现变更查 Git 历史。

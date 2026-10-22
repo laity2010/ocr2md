@@ -54,6 +54,7 @@ class OutlinePanel {
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
   }
   setModule(module){
+    this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
   }

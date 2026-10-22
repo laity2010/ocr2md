@@ -104,7 +104,8 @@ INSERT INTO publishers VALUES
  ('PUB09','E05','G','ui/outline-grid.js','viewStore.setState(outlineCount)','AG refresh detects count change'),
  ('PUB10','E06',NULL,'ui/view-store.js','setScrollSyncEnabled','explicit setter; caller is primarily test seam'),
  ('PUB11','E07','L','ui/workspace.js','onDidActivePanelChange','Dockview active panel change'),
- ('PUB12','E08','G','ui/outline-grid.js','document.dispatchEvent','AG chapter checkbox edit throws');
+ ('PUB12','E08','G','ui/outline-grid.js','document.dispatchEvent','AG chapter checkbox edit throws'),
+ ('PUB13','E03','A','ui/media-module.js','publishFocus','Media AG image row click');
 
 INSERT INTO subscriptions VALUES
  ('SUB01','E01','G','ui/outline-grid.js','viewStore.subscribe -> schedule','revision differs','rebuild AG heading projection'),
@@ -120,6 +121,7 @@ INSERT INTO subscriptions VALUES
  ('SUB11','E04',NULL,'ui/scroll-sync.js','unsubscribe -> moveSource/movePreview','revision matches; scrollSyncEnabled=true','scroll follower without republishing'),
  ('SUB12','E05',NULL,'ui/main.js','unsubscribeGlobalStatus -> renderGlobalStatus','outlineCount differs','render heading count'),
  ('SUB13','E06',NULL,'ui/main.js','unsubscribeGlobalStatus -> renderGlobalStatus','scrollSyncEnabled differs','render scrolling mode'),
+ ('SUB16','E01','A','ui/media-module.js','viewStore.subscribe -> schedule','documentRevision changes','rebuild Media image list'),
  ('SUB14','E06',NULL,'ui/scroll-sync.js','unsubscribe -> measureLater','enabled transition','measure and start continuous sync'),
  ('SUB15','E08',NULL,'ui/main.js','document.addEventListener -> status','chapter-error DOM event','show error in global status');
 
@@ -274,7 +276,14 @@ INSERT INTO access_edges VALUES
  ('X09','L','P','ui/workspace.js','currentPdf?.pdf?.refreshAnchors()','P03','registered','Layout requests PDF anchor refresh through published method'),
  ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API'),
  ('X11','L','A','ui/workspace.js','createMediaModule(this.mediaHost','A01','registered','Layout hosts Media panel without accessing its AG internals'),
- ('X12','A','C','ui/media-module.js','cmd().replaceRanges(','C14','registered','Media requests optimistic batch edit through public CMD port');
+ ('X12','A','C','ui/media-module.js','cmd().replaceRanges(','C14','registered','Media requests optimistic batch edit through public CMD port'),
+ ('X13','L','C','ui/workspace.js','getCMD().replaceRanges(edits)','C14','registered','Layout implements Media write port with public CMD operation'),
+ ('X14',NULL,'A','scripts/v6_serve.py','media_download_chunk(DOC, url)','A06','registered','HTTP adapter invokes Media-only downloader'),
+ ('X15',NULL,'A','scripts/v6_serve.py','media_status(DOC, url)','A07','registered','HTTP adapter exposes Media status'),
+ ('X16',NULL,'A','scripts/v6_serve.py','media_read_local(DOC, path[','A08','registered','HTTP adapter reads only whitelisted media paths'),
+ ('X17','L','A','ui/workspace.js','this.media?.setActive(','A05','registered','Layout switches projection via Media API'),
+ ('X18','L','A','ui/workspace.js','currentOutline?.media?.scan()','A03','registered','Shell scans Media through Layout API'),
+ ('X19','L','A','ui/workspace.js','currentOutline?.media?.downloadAll()','A04','registered','Shell downloads Media through Layout API');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -308,3 +317,15 @@ WITH mapped(id,script,fixture,expected) AS (VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
 SELECT 'TC-'||id,id,'tests/'||script,
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'integration' FROM mapped;
+
+
+WITH media_msgs(id,kind,expected) AS (VALUES
+ ('PUB13','publisher','Media row focus uses existing focusTarget contract'),
+ ('SUB16','subscription','Media rows update when CMD changes without a shadow document')
+)
+INSERT INTO test_cases(id,publisher_id,subscription_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,
+ CASE WHEN kind='publisher' THEN id ELSE NULL END,
+ CASE WHEN kind='subscription' THEN id ELSE NULL END,
+ 'tests/media-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'integration' FROM media_msgs;

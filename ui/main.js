@@ -254,7 +254,10 @@ async function main() {
        next.scrollSyncEnabled!==previous.scrollSyncEnabled)
       renderGlobalStatus();
   });
-  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm, status);
+  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm, (message,kind)=>{
+    if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
+    else status(message,kind);
+  });
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   cm = new CMDocument({
@@ -378,7 +381,11 @@ async function main() {
     workspace.setWorkModule(selected);
   };
   $('media-refresh').addEventListener('click',()=>void workspace.scanMedia());
-  $('media-download-all').addEventListener('click',()=>void workspace.downloadMedia());
+  $('media-download-all').addEventListener('click',async()=>{
+    const button=$('media-download-all');button.disabled=true;
+    try{await workspace.downloadMedia();}
+    finally{button.disabled=false;}
+  });
   $('module-select').addEventListener('change',showModule);
   showModule();
   const numberInput=$('chapter-start-number');

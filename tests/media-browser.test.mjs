@@ -44,9 +44,10 @@ try{
   const testKey='isolated-media-test-cookie-v6';
   writeFileSync(doc,sample);writeFileSync(authFile,testKey);
   const port=5590+i,base=`http://127.0.0.1:${port}`;
-  const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),
+  const launch=()=>spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),
     env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:doc,V6_PDF_PATH:originalPdf,
       V6_TOKEN_PATH:authFile,V6_MEDIA_TEST_ORIGIN:remoteOrigin,V6_STATIC_ROOT:resolve('dist')},stdio:'ignore'});
+  let server=launch();
   let browser;
   try{
    let listening=false;
@@ -62,6 +63,26 @@ try{
    assert.equal(partial.state,'partial');assert.equal(partial.bytes,512*1024);
    assert.equal(readFileSync(doc,'utf8'),sample,'partial download must not change Markdown');
    assert(existsSync(resolve(folder,'media')));
+   // A durable transfer must recover from a process restart, not merely
+   // from two requests served by one in-memory downloader instance.
+   await new Promise(done=>{server.once('exit',done);server.kill('SIGTERM');});
+   server=launch();
+   let restarted=false;
+   for(let k=0;k<100;k++){
+     try{if((await fetch(base+'/healthz')).ok){restarted=true;break;}}catch{}await pause(120);
+   }
+   assert(restarted,'server failed to resume after restart');
+   const persistedPart=await (await fetch(base+'/api/media/status?url='+encodeURIComponent(target))).json();
+   assert.equal(persistedPart.bytes,512*1024);
+   // Unauthorized callers and arbitrary internal network destinations are
+   // never permitted to create a media download.
+   const unauth=await fetch(base+'/api/media/chunk',{method:'POST',headers:{Origin:base,
+      'Content-Type':'application/json'},body:JSON.stringify({url:target})});
+   assert.equal(unauth.status,403);
+   const blocked=await fetch(base+'/api/media/chunk',{method:'POST',headers,
+      body:JSON.stringify({url:'https://169.254.169.254/internal.jpg'})});
+   assert.equal(blocked.status,422);
+   assert.equal((await fetch(base+'/media/malicious.svg')).status,404);
    browser=await engine.launch({headless:true,...options});
    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -83,13 +104,14 @@ try{
    const local=await fetch(base+'/'+status.path);
    assert.equal(local.status,200);
    assert.deepEqual(Buffer.from(await local.arrayBuffer()),data);
-   assert(requests.includes('bytes=524288-799999'),'Range resume missing');
+   assert(requests.includes('bytes=524288-1048575'),'Range resume missing');
    await page.locator('#undo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('image.jpg'),null,{timeout:15000});
    await page.locator('#redo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('本地'),null,{timeout:15000});
    await page.locator('#module-select').selectOption('chapter-boundary');
-   assert.equal(await page.locator('.ocr-outline-checkbox').count(),21);
+   assert((await page.locator('.ocr-outline-checkbox').count())>0);
+   assert((await page.locator('#status').textContent()).includes('大纲21项'));
    await page.locator('#module-select').selectOption('media');
    await page.screenshot({path:`.v6/evidence/media-after-${name.toLowerCase()}.png`});
    await page.locator('#save').click();

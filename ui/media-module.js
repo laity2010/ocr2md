@@ -23,7 +23,7 @@ export function findMedia(source){
   const evidence=[...source.matchAll(/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g)]
     .map(m=>[m.index,m.index+m[0].length]);
   for(const match of source.matchAll(imageRe)){
-    const url=match[1],from=match.index+match[0].indexOf(url),to=from+url.length;
+    const url=match[1],from=match.index+match[0].lastIndexOf(url),to=from+url.length;
     if(evidence.some(([start,end])=>from<end&&to>start))continue;
     for(let i=last;i<from;i++)if(source.charCodeAt(i)===10)line++;
     last=from;
@@ -71,10 +71,12 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     if(!url.startsWith('https://') && !(url.startsWith('http://127.0.0.1:') && location.hostname==='127.0.0.1'))
       throw Error('仅支持 HTTPS 远程媒体');
     running.add(url);paused.delete(url);schedule();
+    let unauthorized=false;
     try{
       while(!paused.has(url)){
         const response=await fetch('/api/media/chunk',{method:'POST',
           headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+        if(response.status===403){unauthorized=true;throw Error('需要编辑授权，请先点保存完成授权');}
         if(!response.ok)throw Error(`HTTP ${response.status}: ${(await response.text()).slice(0,120)}`);
         const state=await response.json();
         states.set(url,state);schedule();
@@ -99,6 +101,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       states.set(url,{...stateFor(url),state:'error'});
       onStatus('媒体下载失败：'+error.message,'error');
     }finally{running.delete(url);schedule();}
+    return !unauthorized;
   }
   async function downloadAll(){
     if(allRunning)return;
@@ -106,7 +109,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     try{
       for(const url of [...new Set(findMedia(getMarkdown()).filter(r=>!r.local).map(r=>r.url))]){
         if(!allRunning)break;
-        await downloadOne(url);
+        if(!await downloadOne(url))break; // Stop only on authorization error.
       }
     }finally{allRunning=false;}
   }

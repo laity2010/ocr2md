@@ -174,6 +174,8 @@ def download_chunk(doc, url):
                 if not data or total == 0:
                     raise ValueError('Empty remote image')
                 validator = response.headers.get('ETag') or response.headers.get('Last-Modified')
+                if current and metadata and metadata.get('validator') and validator != metadata['validator']:
+                    raise ValueError('Remote image validator changed during resume')
         except HTTPError as error:
             raise ValueError('Remote media HTTP ' + str(error.code)) from error
         except (URLError, TimeoutError) as error:
@@ -190,8 +192,13 @@ def download_chunk(doc, url):
         _save_meta(info, {'urlHash': expected_hash, 'validator': validator,
                           'total': total})
         if complete:
-            with part.open('rb') as f:
-                _check_magic(f.read(16), ext)
+            try:
+                with part.open('rb') as f:
+                    _check_magic(f.read(16), ext)
+            except ValueError:
+                part.unlink(missing_ok=True)
+                info.unlink(missing_ok=True)
+                raise
             os.replace(part, final)
             info.unlink(missing_ok=True)
         return status(doc, url)
