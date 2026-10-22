@@ -92,7 +92,8 @@ INSERT INTO apis VALUES
  ('T02','T','checkLatex','ui/latex-module.js','export','LaTeX span','KaTeX output and validation status','strict KaTeX render with errors as review results',1),
  ('T03','T','createLatexModule','ui/latex-module.js','export','host,readDocument,onStatus','module facade','owns independent AG and subscribes document revisions',1),
  ('T04','T','returned.refresh','ui/latex-module.js','returned','none','void','re-scans live CMD and updates AG',1),
- ('T05','T','returned.setActive','ui/latex-module.js','returned','boolean','void','toggles separate LaTeX review projection',1);
+ ('T05','T','returned.setActive','ui/latex-module.js','returned','boolean','void','toggles separate LaTeX review projection',1),
+ ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -386,7 +387,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 
 -- First read-only LaTeX audit plugin uses public review transport only.
 WITH latex_cases(id,description) AS (VALUES
- ('T01','scans 20 real math fences plus inline and display delimiters; excludes evidence/code/currency'),
+ ('T01','scans 20 real math fences, 22 inferred inline candidates and explicit delimiters; excludes evidence/code/currency'),
  ('T02','KaTeX strict render records invalid syntax separately from valid formulas'),
  ('T03','LaTeX mounts an independent AG panel without altering source or Media'),
  ('T04','scan reflects CMD changes without a Markdown shadow copy'),
@@ -406,3 +407,10 @@ INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALU
  ('TC-SUB09-LATEX','SUB09','tests/latex-four-view-browser.test.mjs',
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
  'LaTeX AG click reaches selected source line, focused MD math and exact PDF OCR block in split four-window layout','integration');
+
+
+-- Candidate detection never certifies guessed TeX boundaries as correct.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-T06','T06','tests/latex-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'MinerU mixed prose LaTeX is recovered as pending-review candidates without touching Markdown or evidence','integration');

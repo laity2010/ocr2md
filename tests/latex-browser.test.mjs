@@ -18,9 +18,14 @@ const cases=[
   '```js', '$not_math$', '```',
   '```latex', 'x_1 + y_1', '```',
 ].join('\n');
-assert.equal(findLatex(fixture).length,20,'baseline has twenty math fences');
+const baseline=findLatex(fixture);
+assert.equal(baseline.filter(row=>row.kind==='独立').length,20,'baseline has twenty math fences');
+assert.equal(baseline.filter(row=>row.detection==='inferred').length,22,
+  'baseline has MinerU undelimited inline candidates');
+assert(baseline.some(row=>row.kind==='行内' && row.content.includes('\\mathsf')),
+  'MinerU inline math should not be missed');
 const marked=findLatex(cases);
-assert.equal(marked.length,6,'six valid/invalid LaTeX tokens should be scanned');
+assert.equal(marked.length,6,'six valid/invalid delimited tokens should be scanned');
 assert.deepEqual(marked.map(v=>v.kind),['行内','行内','行内','独立','独立','独立']);
 assert(!marked.some(v=>v.content.includes('ignored')||v.content.includes('not_math')));
 const badSyntax=findLatex('\\(a + b\n')[0];
@@ -63,8 +68,10 @@ for(let i=0;i<engines.length;i++){
     groups:document.querySelectorAll('.dv-groupview').length,
   }));
   assert(snapshot.count>=10,'AG Grid must render formulas in its virtual viewport');
-  assert((await page.locator('#status').textContent()).includes('LaTeX 26 项'),
-    'all 20 real and 6 synthetic formulas must be present in the AG model');
+  assert((await page.locator('#status').textContent()).includes('LaTeX 48 项'),
+    '20 display + 22 inferred inline + 6 synthetic formulas expected');
+  assert((await page.locator('#status').textContent()).includes('待复核 22'),
+    'undelimited candidates should be explicitly marked for review');
   assert.equal(snapshot.groups,3);
   assert.equal(snapshot.toolbar,false);
   assert(snapshot.data.filter(r=>r.katex>0).length>=10,'visible formulas should render with KaTeX');
@@ -72,6 +79,7 @@ for(let i=0;i<engines.length;i++){
   await statusHeader.locator('.ag-header-cell-filter-button').click();
   const filter=page.locator('.ocr-enum-filter');
   await filter.locator('[data-filter-value="通过"] input').uncheck();
+  await filter.locator('[data-filter-value="待复核"] input').uncheck();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length===1,
     null,{timeout:8000});
   assert((await page.locator('.ocr-latex-grid .ag-row').textContent()).includes('错误'));
@@ -79,6 +87,11 @@ for(let i=0;i<engines.length;i++){
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
     null,{timeout:8000});
   await statusHeader.locator('.ag-header-cell-filter-button').click();
+  const methodHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="syntax"]');
+  await methodHeader.locator('.ag-header-cell-filter-button').click();
+  assert.equal(await page.locator('.ocr-enum-filter [data-filter-value="未定界"]').count(),1,
+    'inferred inline candidates must have a dedicated categorical filter');
+  await methodHeader.locator('.ag-header-cell-filter-button').click();
   await page.locator('.ocr-latex-grid .ag-row[row-index="0"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-markdown .ocr-outline-focused-element')!==null,
     null,{timeout:12000});
@@ -90,7 +103,7 @@ for(let i=0;i<engines.length;i++){
   await page.screenshot({path:`.v6/evidence/latex-${name.toLowerCase()}.png`});
   assert.equal(readFileSync(path,'utf8'),content,'LaTeX review must never write CMD Markdown');
   assert.deepEqual(errors,[],name+' client errors');
-  console.log('LATEX_BROWSER_PASS',name,JSON.stringify({math:26,errors:1,
+  console.log('LATEX_BROWSER_PASS',name,JSON.stringify({math:48,display:20,inferred:22,errors:1,
     katex:true,statusFilter:true,focus:true,moduleIsolation:true}));
  }finally{await browser?.close();server.kill('SIGTERM');}
 }

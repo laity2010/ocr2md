@@ -1,3 +1,4 @@
+import {findUndelimitedInline} from './latex-inline-candidates.js';
 /** Pure, read-only LaTeX scan. Offsets refer to original CMD Markdown.
  * Recognizes $$...$$, $...$, \\( ... \\), \\[ ... \\] and math/latex/tex fences.
  * HTML evidence, non-math fences, and inline code are excluded.
@@ -103,5 +104,8 @@ export function findLatex(source){
     if(noSpace&&!isMoney)make(from,to,value,kind,open);
     i=to;
   }
-  return found.sort((a,b)=>a.from-b.from);
+  const candidates=findUndelimitedInline(source,masked,found);
+  return [...found,...candidates.map(row=>({...row,
+    line:source.slice(0,row.from).split('\n').length}))]
+    .sort((a,b)=>a.from-b.from);
 }

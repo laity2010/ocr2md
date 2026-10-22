@@ -14,14 +14,20 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
   oddRowBackgroundColor:'#2d363c',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
 export function checkLatex(item){
-  if(item.issue)return {...item,status:'错误',error:item.issue,html:''};
+  if(item.issue&&!item.detection)return {...item,status:'错误',error:item.issue,html:''};
   if(!item.content.trim())return {...item,status:'错误',error:'空公式',html:''};
   try{
     const html=katex.renderToString(item.content,{displayMode:item.kind==='独立',
       throwOnError:true,trust:false,maxExpand:1000,strict:'warn'});
+    if(item.detection)return {...item,status:'待复核',error:item.issue,html};
     return {...item,status:'通过',error:'',html};
   }catch(e){
-    return {...item,status:'错误',error:String(e.message||e).slice(0,300),html:''};
+    const message=String(e.message||e).slice(0,300);
+    // A guessed fragment may have incomplete boundaries. Report the parse
+    // failure but never assert that the original document has bad TeX.
+    if(item.detection)return {...item,status:'待复核',
+      error:`KaTeX：${message}；可能是公式边界不完整`,html:''};
+    return {...item,status:'错误',error:message,html:''};
   }
 }
 
@@ -43,6 +49,11 @@ export function createLatexModule(host,getMarkdown,onStatus){
     {field:'line',headerName:'源码行',width:87,minWidth:76,pinned:'left',lockPinned:true},
     {field:'kind',headerName:'类型',width:77,minWidth:72,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
+    {field:'syntax',headerName:'识别方式',width:91,minWidth:87,
+      valueFormatter:p=>p.data?.detection?'未定界':p.value||'明确',
+      filter:EnumCheckboxFilter,
+      filterValueGetter:p=>p.data?.detection?'未定界':'有定界',
+      suppressHeaderMenuButton:true},
     {field:'content',headerName:'LaTeX 源码',minWidth:155,flex:1,
       cellRenderer:p=>{
         const el=document.createElement('span');el.className='ocr-latex-source';
@@ -55,7 +66,8 @@ export function createLatexModule(host,getMarkdown,onStatus){
       cellRenderer:p=>{
         if(!p.data)return '';
         const el=document.createElement('span');el.className='ocr-latex-status';
-        el.dataset.status=p.value==='通过'?'ok':'error';el.textContent=p.value;return el;
+        el.dataset.status=p.value==='通过'?'ok':p.value==='待复核'?'review':'error';
+        el.textContent=p.value;return el;
       }},
     {field:'error',headerName:'错误信息',minWidth:130,flex:0.9,
       cellRenderer:p=>{
@@ -73,7 +85,7 @@ export function createLatexModule(host,getMarkdown,onStatus){
     if(disposed)return;
     rows=findLatex(getMarkdown()).map(checkLatex);
     grid.setGridOption('rowData',rows);
-    if(active)onStatus(`LaTeX ${rows.length} 项 · 通过 ${rows.filter(row=>row.status==='通过').length} · 错误 ${rows.filter(row=>row.status==='错误').length}`);
+    if(active)onStatus(`LaTeX ${rows.length} 项 · 通过 ${rows.filter(row=>row.status==='通过').length} · 待复核 ${rows.filter(row=>row.status==='待复核').length} · 错误 ${rows.filter(row=>row.status==='错误').length}`);
   }
   function schedule(){
     if(queued||disposed)return;queued=true;
