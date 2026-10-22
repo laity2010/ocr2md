@@ -8,6 +8,7 @@ import {viewStore,publishFocus} from './view-store.js';
 import {renderMarkdown} from './markdown-preview.js';
 import {createScrollSync} from './scroll-sync.js';
 import {createOutlineGrid} from './outline-grid.js';
+import {createMediaModule} from './media-module.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
 
@@ -20,6 +21,10 @@ let getEditor = () => null;
 let getCMD = () => null;
 // AG receives only the CMD capabilities needed for chapter projection/marking.
 // In particular, this port has no EditorView or other editor internals.
+const mediaCMD=Object.freeze({
+  replaceRanges:edits=>getCMD().replaceRanges(edits),
+});
+let reportMediaStatus=()=>{};
 const chapterCMD=Object.freeze({
   readLine:n=>getCMD().readLine(n),
   lineAtOffset:n=>getCMD().lineAtOffset(n),
@@ -38,13 +43,25 @@ class OutlinePanel {
     this.element=document.createElement('div');
     this.element.setAttribute('aria-label','AG Grid 章节大纲');
     this.grid=null;
+    this.media=null;
+    this.outlineHost=document.createElement('div');
+    this.outlineHost.className='ocr-outline-area';
+    this.mediaHost=document.createElement('div');
+    this.mediaHost.hidden=true;
+    this.element.append(this.outlineHost,this.mediaHost);
     currentOutline=this;
   }
   init(){
-    this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
+    this.grid=createOutlineGrid(this.outlineHost,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
+    this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
+  }
+  setModule(module){
+    this.outlineHost.hidden=module!=='chapter-boundary';
+    this.media?.setActive(module==='media');
   }
   layout() {}
   dispose(){
+    this.media?.dispose();
     this.grid?.dispose();
     if(currentOutline===this)currentOutline=null;
   }
@@ -264,10 +281,11 @@ class DetachedPdfPanel {
   }
 }
 
-export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument) {
+export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{}) {
   getMarkdown=getDocument;
   getEditor=getCurrentEditor;
   getCMD=getCommandDocument;
+  reportMediaStatus=mediaStatus;
   const dockview=createDockview(container, {
     theme:themeAbyss,
     createComponent: ({name}) => {
@@ -338,6 +356,9 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
+    setWorkModule:module=>currentOutline?.setModule(module),
+    scanMedia:()=>currentOutline?.media?.scan(),
+    downloadMedia:()=>currentOutline?.media?.downloadAll(),
     getChapterState(){
       const grid=currentOutline?.grid;
       return {rows:grid?.rows.map(row=>({...row}))||[], startText:grid?.startText||'000'};

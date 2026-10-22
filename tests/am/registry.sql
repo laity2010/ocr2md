@@ -5,7 +5,8 @@ INSERT INTO modules VALUES
  ('G','AG','AG Grid','ui/outline-grid.js'),
  ('M','MD Preview','markdown-it + DOMPurify','ui/markdown-preview.js'),
  ('P','PDF Preview','PDF.js','ui/pdf-preview.js'),
- ('L','Layout','Dockview','ui/workspace.js');
+ ('L','Layout','Dockview','ui/workspace.js'),
+ ('A','Media','AG Grid + resumable download','ui/media-module.js');
 
 INSERT INTO apis VALUES
  ('C01','C','CMDocument.getMarkdown','ui/cm-document.js','export','none','Markdown string','read only',1),
@@ -21,6 +22,7 @@ INSERT INTO apis VALUES
  ('C11','C','CMDocument.lineAtOffset','ui/cm-document.js','export','CM6 text offset','1-based line number','read only, no EditorView exposure',0),
  ('C12','C','CMDocument.matchesSnapshot','ui/cm-document.js','export','opaque immutable text snapshot','boolean','compare document identity without exposing current EditorView',1),
  ('C13','C','CMDocument.requestMeasure','ui/cm-document.js','export','none','void','requests CM6 layout pass through CMD boundary',0),
+ ('C14','C','CMDocument.replaceRanges','ui/cm-document.js','export','array of from/to/expected/insert','changed count','one validated CM6 transaction; forbids original evidence edits',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -66,7 +68,18 @@ INSERT INTO apis VALUES
  ('L13','L','returned.debug.scrollSync','ui/workspace.js','internal','DEV only','scrollSync object','test-only introspection; absent from production facade',0),
  ('L14','L','returned.getChapterState','ui/workspace.js','returned','none','detached {rows,startText} projection','source shell reads snapshot without AG wrapper',1),
  ('L15','L','returned.setChapterStartNumber','ui/workspace.js','returned','number|string','void','sets AG filename projection via Layout',1),
- ('L16','L','returned.setChaptersExported','ui/workspace.js','returned','opaque doc snapshot,names','void','sets AG published files via Layout',1);
+ ('L16','L','returned.setChaptersExported','ui/workspace.js','returned','opaque doc snapshot,names','void','sets AG published files via Layout',1),
+ ('L17','L','returned.setWorkModule','ui/workspace.js','returned','chapter-boundary|media','void','switches AG view projections',1),
+ ('L18','L','returned.scanMedia','ui/workspace.js','returned','none','Promise<void>','requests Media scan through API',1),
+ ('L19','L','returned.downloadMedia','ui/workspace.js','returned','none','Promise<void>','requests Media download through API',1),
+ ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG and download workflow',1),
+ ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads image URL ranges outside evidence',1),
+ ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media rows and server resume status',1),
+ ('A04','A','returned.downloadAll','ui/media-module.js','returned','none','Promise<void>','downloads each remote media without modifying other modules',1),
+ ('A05','A','returned.setActive','ui/media-module.js','returned','boolean','void','toggles Media projection lifecycle',1),
+ ('A06','A','download_chunk','scripts/v6_media.py','export','document,url','state/bytes/path','durable validated remote Range chunk, no Markdown edit',1),
+ ('A07','A','status','scripts/v6_media.py','export','document,url','state/bytes/path','read persisted media status',1),
+ ('A08','A','read_local','scripts/v6_media.py','export','document,filename','bytes,MIME','serves only validated local media names',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -255,11 +268,13 @@ INSERT INTO access_edges VALUES
  ('X03','L','C','ui/workspace.js','getCMD()?.requestMeasure()','C13','registered','Layout requests CM6 measurement through CMD API'),
  ('X04',NULL,'L','ui/main.js','workspace.getChapterState()','L14','registered','App shell reads detached chapter state via Workspace API'),
  ('X05',NULL,'L','ui/main.js','workspace?.debug?.dockview','L11','test_only','Only Vite DEV diagnostics see raw Dockview, never production facade'),
- ('X06','L','G','ui/workspace.js','createOutlineGrid(this.element','G01','registered','Layout invokes registered AG constructor to mount panel'),
+ ('X06','L','G','ui/workspace.js','createOutlineGrid(this.outlineHost','G01','registered','Layout invokes registered AG constructor to mount panel'),
  ('X07','L','M','ui/workspace.js','renderMarkdown(source)','M01','registered','Layout renders a read-only MD projection using public renderer'),
  ('X08','L','P','ui/workspace.js','this.pdf.moveToolbarTo(this.pdfTools)','P07','registered','Layout coordinates PDF toolbar through exposed method'),
  ('X09','L','P','ui/workspace.js','currentPdf?.pdf?.refreshAnchors()','P03','registered','Layout requests PDF anchor refresh through published method'),
- ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API');
+ ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API'),
+ ('X11','L','A','ui/workspace.js','createMediaModule(this.mediaHost','A01','registered','Layout hosts Media panel without accessing its AG internals'),
+ ('X12','A','C','ui/media-module.js','cmd().replaceRanges(','C14','registered','Media requests optimistic batch edit through public CMD port');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -273,3 +288,23 @@ WITH mapped(id,script,expected,evidence) AS (VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
 SELECT 'TC-'||id,id,script,
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,evidence FROM mapped;
+
+
+-- First Media module: independent API and CMD optimistic editing contract.
+WITH mapped(id,script,fixture,expected) AS (VALUES
+ ('A01','media-browser.test.mjs','md','media AG mounts separately from chapter outline'),
+ ('A02','media-browser.test.mjs','md','scan of 11 image links excludes immutable MinerU evidence'),
+ ('A03','media-browser.test.mjs','md','media scan shows pending/partial status'),
+ ('A04','media-browser.test.mjs','md','download resumes from durable Range part then localizes CMD source'),
+ ('A05','media-browser.test.mjs','md','module switching preserves outline and Media views'),
+ ('A06','media-browser.test.mjs','md','download chunk persists partial and completes with signature check'),
+ ('A07','media-browser.test.mjs','md','status reports partial and completed files'),
+ ('A08','media-browser.test.mjs','md','only hashed completed media may be read'),
+ ('C14','media-browser.test.mjs','md','CMD URL replacement is atomic undoable and excludes evidence'),
+ ('L17','media-browser.test.mjs','md','module dropdown selects Media or chapter boundaries'),
+ ('L18','media-browser.test.mjs','md','scan media through registered facade'),
+ ('L19','media-browser.test.mjs','md','download media through registered facade')
+)
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,'tests/'||script,
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'integration' FROM mapped;

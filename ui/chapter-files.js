@@ -80,7 +80,10 @@ export function buildChapterFiles(markdown,rows,startNumber=0){
     if(to<=from)throw Error('章节切分边界无效');
     // split/join of line arrays drops the separator immediately before the
     // next block (or raw JSON tail). Put back exactly that original newline.
-    const content=lines.slice(from,to).filter(line=>!decodeMarker(line.trim())).join('\n')+
+    // Chapter Markdown is one directory below its parent media/ folder.
+    // Only rewrite image URLs in this derived export, never the mother doc.
+    const content=lines.slice(from,to).filter(line=>!decodeMarker(line.trim()))
+      .map(line=>line.replace(/(!\[[^\]\n]*\]\()media\//g,'$1../media/')).join('\n')+
       (to<lines.length?'\n':'');
     if(!content.trim())throw Error(`章节「${chapters[i].title}」内容为空`);
     result.push({name:chapters[i].file,content,

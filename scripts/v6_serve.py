@@ -5,6 +5,7 @@ import hashlib
 import subprocess
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
+from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local
 import json
 import os
 import re
@@ -23,7 +24,7 @@ DOC = Path(os.environ.get('V6_DOCUMENT_PATH', RUNTIME / 'workspace' / 'buffetts-
 FIXTURE = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md'
 ORIGINAL_JSON = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'
 PDF_PATH = Path(os.environ.get('V6_PDF_PATH', RUNTIME / 'workspace' / 'buffetts-alpha.original.pdf')).resolve()
-TOKEN = RUNTIME / 'private' / 'editor-token'
+TOKEN = Path(os.environ.get('V6_TOKEN_PATH', RUNTIME / 'private' / 'editor-token')).resolve()
 HOST = os.environ.get('V6_BIND', '127.0.0.1')
 PORT = int(os.environ.get('V6_PORT', '4396'))
 LAN_TLS_HOST = os.environ.get('V6_LAN_TLS_HOST', '')
@@ -124,6 +125,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/document':
             self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
             return
+        if path == '/api/media/status':
+            from urllib.parse import parse_qs
+            url = parse_qs(urlsplit(self.path).query).get('url', [''])[0]
+            try:
+                result = media_status(DOC, url)
+            except (ValueError, OSError):
+                self.response(400, 'Invalid media status request')
+                return
+            self.response(200, json.dumps(result), 'application/json')
+            return
+        if path.startswith('/media/'):
+            try:
+                data, kind = media_read_local(DOC, path[len('/media/'):])
+            except (ValueError, FileNotFoundError, OSError):
+                self.response(404, 'Media not found')
+                return
+            self.response(200, data, kind, cache_control='public, max-age=86400')
+            return
         if path == '/api/chapters':
             try:
                 manifest = read_manifest(DOC)
@@ -215,6 +234,9 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get('Origin', '') in allowed
 
     def do_POST(self):
+        if urlsplit(self.path).path == '/api/media/chunk':
+            self.post_media_chunk()
+            return
         if urlsplit(self.path).path == '/api/initialize-document':
             self.post_initialize()
             return
@@ -252,6 +274,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '11')
         self.end_headers()
         self.wfile.write(b'{"ok":true}')
+
+    def post_media_chunk(self):
+        if not self.authorized() or not self.same_origin():
+            self.response(403, 'Editor authorization required')
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '-1'))
+            if length < 2 or length > 4096:
+                self.response(413, 'Invalid media request size')
+                return
+            body = json.loads(self.rfile.read(length).decode('utf-8'))
+            url = body.get('url')
+            result = media_download_chunk(DOC, url)
+        except (ValueError, AttributeError, TypeError, UnicodeDecodeError) as error:
+            self.response(422, str(error))
+            return
+        except OSError:
+            self.response(503, 'Media storage unavailable')
+            return
+        self.response(200, json.dumps(result), 'application/json')
 
     def post_initialize(self):
         if not self.authorized() or not self.same_origin():

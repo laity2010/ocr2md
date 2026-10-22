@@ -103,6 +103,36 @@ export class CMDocument {
     return this.doc;
   }
 
+  /** Business-neutral optimistic text edits. All ranges must still contain the
+   * expected source, so an asynchronous download cannot overwrite later edits.
+   * One transaction / Undo step; no edits inside immutable MinerU evidence.
+   */
+  replaceRanges(edits){
+    if(!Array.isArray(edits)||!edits.length)throw Error('No source edits');
+    const source=this.markdown;
+    const sorted=[...edits].sort((a,b)=>a.from-b.from);
+    let previousEnd=-1;
+    for(const item of sorted){
+      if(!Number.isInteger(item.from)||!Number.isInteger(item.to)||
+         item.from<0||item.to<=item.from||item.to>source.length||
+         item.from<previousEnd||typeof item.expected!=='string'||
+         typeof item.insert!=='string'||item.insert.includes('\0')||
+         source.slice(item.from,item.to)!==item.expected)
+        throw Error('Source changed; rescan before replacing');
+      previousEnd=item.to;
+    }
+    // Reserve original JSON + other MinerU provenance comments as evidence.
+    const evidence=/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g;
+    for(const match of source.matchAll(evidence)){
+      const from=match.index,to=from+match[0].length;
+      if(sorted.some(edit=>edit.from<to&&edit.to>from))
+        throw Error('Original MinerU evidence is read-only');
+    }
+    this.view.dispatch({changes:sorted.map(({from,to,insert})=>({from,to,insert})),
+      userEvent:'input',annotations:isolateHistory.of('full')});
+    return {changed:sorted.length};
+  }
+
   /** Insert HTML immediately before a 1-based document line, or replace the
    * content of an existing HTML line. No marker namespace is hard-coded.
    * Changes always go through CM6 transactions (undo/redo compatible).

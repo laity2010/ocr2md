@@ -254,7 +254,7 @@ async function main() {
        next.scrollSyncEnabled!==previous.scrollSyncEnabled)
       renderGlobalStatus();
   });
-  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm);
+  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm, status);
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   cm = new CMDocument({
@@ -375,7 +375,10 @@ async function main() {
     const selected=$('module-select').value;
     for(const panel of document.querySelectorAll('.module-actions[data-module]'))
       panel.hidden=panel.dataset.module!==selected;
+    workspace.setWorkModule(selected);
   };
+  $('media-refresh').addEventListener('click',()=>void workspace.scanMedia());
+  $('media-download-all').addEventListener('click',()=>void workspace.downloadMedia());
   $('module-select').addEventListener('change',showModule);
   showModule();
   const numberInput=$('chapter-start-number');

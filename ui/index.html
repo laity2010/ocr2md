@@ -11,12 +11,16 @@
       <div class="identity"><div class="brand">OCR2MD V6</div><button id="build-version" class="build-badge" type="button" aria-haspopup="dialog" aria-controls="engineering-dialog" title="打开工程菜单">v6-载入中</button><span id="status" class="status" role="status" aria-live="polite">正在加载</span></div>
     </header>
     <nav class="module-controls" aria-label="工作台模块工具条">
-      <select id="module-select" aria-label="选择模块"><option value="chapter-boundary">章节定界</option></select>
+      <select id="module-select" aria-label="选择模块"><option value="chapter-boundary">章节定界</option><option value="media">媒体</option></select>
       <div id="module-actions" class="module-actions" data-module="chapter-boundary">
         <button id="export-chapters" type="button">导出章节</button>
         <label for="chapter-start-number">起始编号</label>
         <input id="chapter-start-number" type="text" inputmode="numeric" pattern="[0-9]{1,5}"
           maxlength="5" value="000" autocomplete="off" spellcheck="false" aria-label="章节文件起始编号" />
+      </div>
+      <div class="module-actions" data-module="media" hidden>
+        <button id="media-refresh" type="button">扫描媒体</button>
+        <button id="media-download-all" type="button">下载全部</button>
       </div>
       <div class="source-actions" role="group" aria-label="源码编辑工具">
         <div class="quote-indent-tools" role="group" aria-label="源码引用缩进">

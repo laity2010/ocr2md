@@ -1,0 +1,7 @@
+.ocr-media-pane{width:100%;height:100%;min-height:0;min-width:0;display:flex;overflow:hidden;background:#2f383e}
+.ocr-media-pane[hidden]{display:none!important}
+.ocr-media-grid{flex:1;min-width:0;min-height:0}
+.ocr-media-url{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px "OCR2MD Sarasa",monospace}
+.ocr-media-pane .ag-root-wrapper{border:0;border-radius:0}
+.ocr-media-pane .ag-cell{padding:0 5px}
+.ocr-media-action{height:25px;min-width:54px;color:#d3c6aa;background:#344a40;border:1px solid #64736d;border-radius:4px;cursor:pointer;font:12px "OCR2MD Sarasa",monospace}
