@@ -56,6 +56,7 @@
   background:#344349;color:#d3c6aa;border:1px solid #64736d;
   border-radius:4px;font:12px "OCR2MD Sarasa",monospace;padding:2px 7px}
 .ocr-preview-mode-tools {display:flex;align-items:center;gap:5px;min-width:0}
+.ocr-preview-mode-tools[hidden] {display:none}
 .ocr-preview-mode-tools[data-mode="pdf"] .ocr-pdf-tools {position:static;
   height:28px;padding:0;border:0;background:transparent;z-index:auto}
 .ocr-preview-mode-tools[aria-hidden="true"] {visibility:hidden;pointer-events:none;

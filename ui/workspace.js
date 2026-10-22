@@ -77,12 +77,14 @@ class PreviewPanel {
     this.switcher=document.createElement('select');
     this.switcher.className='ocr-preview-mode';
     this.switcher.setAttribute('aria-label','预览类型');
-    this.switcher.innerHTML='<option value="md">Markdown 预览</option><option value="pdf">PDF 原文</option>';
+    this.switcher.innerHTML='<option value="md">Markdown 预览</option><option value="pdf" disabled>PDF 原文（预热中）</option>';
+    this.pdfOption=this.switcher.querySelector('option[value="pdf"]');
     this.toolbar.append(this.switcher);
     this.splitLabel=document.createElement('label');
     this.splitLabel.className='ocr-preview-split-toggle';
     this.splitCheckbox=document.createElement('input');
     this.splitCheckbox.type='checkbox';
+    this.splitCheckbox.disabled=true;
     this.splitCheckbox.setAttribute('aria-label','拆分 PDF 预览');
     this.splitLabel.append(this.splitCheckbox,document.createTextNode('拆分'));
     this.toolbar.append(this.splitLabel);
@@ -93,6 +95,7 @@ class PreviewPanel {
     this.pdfTools=document.createElement('div');
     this.pdfTools.className='ocr-preview-mode-tools';
     this.pdfTools.dataset.mode='pdf';
+    this.pdfTools.hidden=true;
     this.toolbar.append(this.pdfTools);
     this.mdPane=document.createElement('div');
     this.mdPane.className='ocr-preview-md-scroll';
@@ -125,6 +128,16 @@ class PreviewPanel {
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
+    // Keep Markdown interactive while PDF.js preloads in the hidden pane.
+    // Enable PDF selection only after its first rendered page is ready.
+    void this.pdf.loading.then(()=>{
+      if(this.disposed)return;
+      const ready=this.pdf.ready;
+      this.pdfOption.disabled=!ready;
+      this.pdfOption.textContent=ready?'PDF 原文':'PDF 原文（加载失败）';
+      this.pdfOption.title=ready?'':this.pdf.statusNode.textContent;
+      this.splitCheckbox.disabled=!ready;
+    });
     this.unsubscribe=viewStore.subscribe((next,prior)=>{
       if(next.documentRevision!==prior.documentRevision)this.schedule();
       if(next.focusTarget!==prior.focusTarget)this.highlight(next.focusTarget);
@@ -134,19 +147,26 @@ class PreviewPanel {
     this.schedule(true);
   }
   setMode(mode){
-    if(mode!=='md'&&mode!=='pdf')return;
-    if(this.splitCheckbox.checked && mode==='pdf')return;
+    if(mode!=='md'&&mode!=='pdf')return false;
+    if(mode==='pdf' && (!this.pdf?.ready || this.splitCheckbox.checked)){
+      // Also reject scripted/early change events; the disabled option alone
+      // is not a sufficient guard on every iPad select implementation.
+      this.switcher.value=this.mode;
+      return false;
+    }
     this.mode=mode;
     this.switcher.value=mode;
     this.element.dataset.previewMode=mode;
     this.mdPane.setAttribute('aria-hidden',String(mode!=='md'));
     this.pdfPane.setAttribute('aria-hidden',String(mode!=='pdf'));
+    this.pdfTools.hidden=mode!=='pdf';
     this.pdfTools.setAttribute('aria-hidden',String(mode!=='pdf'));
     if(this.pdf){
       this.pdf.setActive(mode==='pdf');
       if(mode==='pdf')this.pdf.revealCurrentLocation(); // only pending explicit click
       // Hidden MD viewport retains its geometry and synchronized scroll.
     }
+    return true;
   }
   detachPdf(panel){
     panel.pdfHost.append(this.pdfPane);
@@ -274,6 +294,10 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   toggleSplitPreview=(enabled)=>{
     if(!currentPreview || enabled===split)return;
     const preview=currentPreview;
+    if(enabled && !preview.pdf?.ready){
+      preview.splitCheckbox.checked=false;
+      return;
+    }
     if(enabled){
       preview.setMode('md');
       try{

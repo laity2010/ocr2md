@@ -30,13 +30,48 @@ for(let i=0;i<engines.length;i++){
   const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
+  // Hold the actual PDF metadata request so the UI can be checked during
+  // background warm-up rather than relying on a timing-sensitive delay.
+  let releasePdfMap;
+  const pdfMapGate=new Promise(resolve=>{releasePdfMap=resolve;});
+  await page.route('**/api/pdf-map',async route=>{
+    await pdfMapGate;
+    await route.continue();
+  });
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+  await page.waitForFunction(()=>document.querySelector('.ocr-preview-mode option[value="pdf"]')?.disabled&&
+    document.querySelector('.ocr-preview-split-toggle input')?.disabled,
+    null,{timeout:25000});
+  const beforeWarm=await page.evaluate(()=>{
+    const choice=document.querySelector('.ocr-preview-mode');
+    const pdf=choice.querySelector('option[value="pdf"]');
+    const split=document.querySelector('.ocr-preview-split-toggle input');
+    const controls=document.querySelector('.ocr-preview-mode-tools[data-mode="pdf"]');
+    const early={choice:choice.value,disabled:pdf.disabled,splitDisabled:split.disabled,
+      toolbarDisplay:getComputedStyle(controls).display,
+      label:pdf.textContent,groups:document.querySelectorAll('.dv-groupview').length};
+    // A scripted change event must not circumvent the disabled PDF option or
+    // the disabled split button (mobile select behavior can vary).
+    choice.value='pdf';choice.dispatchEvent(new Event('change',{bubbles:true}));
+    split.checked=true;split.dispatchEvent(new Event('change',{bubbles:true}));
+    return {...early,choiceAfter:choice.value,splitAfter:split.checked,
+      modeAfter:document.querySelector('.ocr-preview-pane').dataset.previewMode,
+      groupsAfter:document.querySelectorAll('.dv-groupview').length};
+  });
+  assert.deepEqual(beforeWarm,{choice:'md',disabled:true,splitDisabled:true,
+    toolbarDisplay:'none',label:'PDF 原文（预热中）',groups:3,
+    choiceAfter:'md',splitAfter:false,modeAfter:'md',groupsAfter:3},
+    `${name} PDF warm-up gate failed`);
+  releasePdfMap();
   await page.waitForFunction(()=>document.querySelectorAll('.dv-groupview').length===3&&
     document.querySelectorAll('.ocr-outline-checkbox').length===21&&
     document.querySelector('.ocr-pdf-status')?.textContent==='就绪'&&
     document.querySelector('.ocr-pdf-scroller .page canvas')?.width>0,
     null,{timeout:55000});
   const initial=await page.evaluate(()=>({
+    selectable:!document.querySelector('.ocr-preview-mode option[value="pdf"]').disabled,
+    splitEnabled:!document.querySelector('.ocr-preview-split-toggle input').disabled,
+    toolsDisplay:getComputedStyle(document.querySelector('.ocr-preview-mode-tools[data-mode="pdf"]')).display,
     groups:document.querySelectorAll('.dv-groupview').length,
     panels:['outline','source','preview'].filter(id=>document.querySelector(id==='outline'?'.ocr-outline-pane':id==='source'?'.ocr-source-pane':'.ocr-preview-pane')), 
     mode:document.querySelector('.ocr-preview-mode').value,
@@ -48,6 +83,8 @@ for(let i=0;i<engines.length;i++){
   }));
   assert.deepEqual(initial.panels.sort(),['outline','source','preview'].sort());
   assert.deepEqual(initial.tabs,[]);assert.equal(initial.mode,'md');
+  assert(initial.selectable&&initial.splitEnabled&&initial.toolsDisplay==='none',
+    `${name} PDF not unlocked after first-page render or toolbar visible on MD`);
   assert.equal(initial.mdVisibility,'visible');assert.equal(initial.pdfVisibility,'hidden');
   assert.equal(initial.pdfTools,'pdf');
   await page.evaluate(()=>window.__testPdfViewer=document.querySelector('.pdfViewer'));
@@ -75,6 +112,17 @@ for(let i=0;i<engines.length;i++){
   await page.locator('.ocr-pdf-plus').click();
   const scale=await page.locator('.ocr-pdf-zoom').textContent();
   await page.locator('.ocr-preview-mode').selectOption('md');
+  const hiddenToolbar=await page.evaluate(()=>{
+    const tools=document.querySelector('.ocr-preview-mode-tools[data-mode="pdf"]');
+    const controls=document.querySelector('.ocr-pdf-tools');
+    return {hidden:tools.hidden,display:getComputedStyle(tools).display,
+      width:tools.getBoundingClientRect().width,
+      buttons:controls.querySelectorAll('button').length,
+      parent:controls.parentElement===tools};
+  });
+  assert(hiddenToolbar.hidden&&hiddenToolbar.display==='none'&&hiddenToolbar.width===0&&
+    hiddenToolbar.buttons===3&&hiddenToolbar.parent,
+    `${name} PDF buttons not retracted on Markdown: ${JSON.stringify(hiddenToolbar)}`);
   assert.equal(await page.locator('.ocr-preview-md-scroll').evaluate(el=>getComputedStyle(el).visibility),'visible');
   assert.equal(await page.locator('.ocr-preview-pdf-host').evaluate(el=>getComputedStyle(el).visibility),'hidden');
   await page.locator('.ag-row[row-index="5"] [col-id="title"]').click();
@@ -115,7 +163,8 @@ for(let i=0;i<engines.length;i++){
   assert.deepEqual(errors,[],name+' browser errors');
   assert.equal(hash(readFileSync(document)),hash(fixture));
   console.log('SHARED_PREVIEW_PASS',name,JSON.stringify({panes:initial.panels,modeDefault:initial.mode,
-    modes:'md↔pdf',page3,scale,page8Highlight:true,errors:errors.length}));
+    modes:'md↔pdf',warmupGuard:beforeWarm.disabled,toolsRetracted:hiddenToolbar.hidden,
+    page3,scale,page8Highlight:true,errors:errors.length}));
  }finally{if(browser)await browser.close();server.kill('SIGTERM');}
 }
 assert.equal(hash(readFileSync(pdf)),pdfHash);

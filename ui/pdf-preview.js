@@ -156,11 +156,23 @@ export class PdfPreview {
         this.pageInput.value=String(e.pageNumber);
         this.toolbar.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
       });
+      // Loading the PDF metadata is not enough: the viewer is usable only
+      // after PDF.js has painted its first page in the hidden warm-up pane.
+      const firstPagePaint=new Promise(resolve=>{this.finishWarmup=resolve;});
       bus.on('pagerendered',e=>{
-        if(e.error){this.setStatus('PDF 页面渲染错误');return;}
+        if(e.error){
+          this.setStatus('PDF 页面渲染错误');
+          if(e.pageNumber===1)this.finishWarmup?.(false);
+          return;
+        }
+        if(e.pageNumber===1)this.finishWarmup?.(true);
         this.scheduleOverlay();
       });
       this.viewer.setDocument(pdf);
+      const painted=await firstPagePaint;
+      this.finishWarmup=null;
+      if(this.disposed)return;
+      if(!painted)throw Error('PDF 首页渲染失败');
       this.ready=true;
       this.setStatus('就绪');
       if(this.pendingFocus){
@@ -361,7 +373,8 @@ export class PdfPreview {
     }
   }
   dispose(){
-    this.disposed=true;this.unsubscribe?.();this.resizeObserver.disconnect();
+    this.disposed=true;this.finishWarmup?.(false);
+    this.unsubscribe?.();this.resizeObserver.disconnect();
     clearTimeout(this.overlayTimer);
     this.viewer?.setDocument(null);
     void this.task?.destroy();
