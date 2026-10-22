@@ -3,6 +3,7 @@
  */
 import {createGrid,AllCommunityModule,ModuleRegistry,themeQuartz} from 'ag-grid-community';
 import {viewStore,publishFocus} from './view-store.js';
+import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './media-module.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -40,10 +41,19 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   gridHost.className='ocr-media-grid';
   host.append(gridHost);
   let rows=[],grid,active=false,disposed=false,queued=false,allRunning=false;
+  let localFiles=[],chapterReferences=new Set();
   const paused=new Set(),running=new Set();
   const states=new Map();
   const stateFor=url=>states.get(url)||{state:'pending',bytes:0,total:null};
   const summarize=()=>rows.filter(r=>!r.local).length;
+  const statusKind=row=>{
+    if(row.local)return '本地';
+    const state=stateFor(row.url);
+    if(running.has(row.url))return '下载中';
+    if(state.state==='partial')return '部分下载';
+    return {complete:'已下载',error:'失败',paused:'已暂停'}[state.state]||'待下载';
+  };
+  const adoptionOf=row=>row.adopted?'已采用':'未采用';
   const valueOf=row=>{
     if(row.local)return '本地';
     const state=stateFor(row.url);
@@ -53,7 +63,20 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   };
   function refresh(){
     if(disposed)return;
-    rows=findMedia(getMarkdown());
+    const referenced=findMedia(getMarkdown());
+    // The live CMD document is the source of truth for unsaved edits; the
+    // read-only published chapters are a second legitimate reference source.
+    const adoptedPaths=new Set([
+      ...referenced.filter(row=>row.local).map(row=>row.url),
+      ...chapterReferences,
+    ]);
+    rows=referenced.map(row=>({...row,adopted:true}));
+    const linked=new Set(rows.filter(row=>row.local).map(row=>row.url));
+    for(const file of localFiles){
+      if(linked.has(file.path))continue;
+      rows.push({id:'file:'+file.path,line:null,url:file.path,local:true,
+        bytes:file.bytes,total:file.bytes,adopted:adoptedPaths.has(file.path)});
+    }
     grid?.setGridOption('rowData',rows);
   }
   function schedule(){if(queued||disposed)return;queued=true;queueMicrotask(()=>{queued=false;refresh();});}
@@ -63,8 +86,21 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   }
   async function scan(){
     refresh();
-    await Promise.allSettled([...new Set(rows.filter(r=>!r.local).map(r=>r.url))].map(getStatus));
-    onStatus(`媒体 ${rows.length} 项，远程 ${summarize()} 项`);
+    const inventory=fetch('/api/media/inventory',{cache:'no-store'})
+      .then(async response=>{
+        if(!response.ok)throw Error('媒体清单 HTTP '+response.status);
+        const data=await response.json();
+        localFiles=Array.isArray(data.files)?data.files:[];
+        chapterReferences=new Set(Array.isArray(data.chapterReferences)?data.chapterReferences:[]);
+        refresh();
+      });
+    const progress=Promise.allSettled([...new Set(rows.filter(r=>!r.local).map(r=>r.url))].map(getStatus));
+    const results=await Promise.allSettled([inventory,progress]);
+    if(results[0].status==='rejected'){
+      onStatus('媒体清单读取失败：'+results[0].reason.message,'error');
+      return;
+    }
+    onStatus(`媒体 ${rows.length} 项，已采用 ${rows.filter(r=>r.adopted).length} 项，未采用 ${rows.filter(r=>!r.adopted).length} 项`);
   }
   async function downloadOne(url){
     if(running.has(url))return;
@@ -81,6 +117,8 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
         const state=await response.json();
         states.set(url,state);schedule();
         if(state.state==='complete'){
+          if(!localFiles.some(file=>file.path===state.path))
+            localFiles.push({path:state.path,bytes:state.bytes});
           if(active)grid?.refreshCells({force:true,columns:['preview']});
           // Re-scan the *current* CMD source after network I/O; stale offsets
           // or user edits cannot corrupt the document.
@@ -130,7 +168,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     link.target='_blank';link.rel='noopener noreferrer';
     link.referrerPolicy='no-referrer';
     link.title='点击查看原图';
-    link.setAttribute('aria-label',`查看第 ${row.line} 行媒体原图`);
+    link.setAttribute('aria-label',row.line?`查看第 ${row.line} 行媒体原图`:'查看未引用媒体原图');
     // Clicking the thumbnail opens only the media; the row click continues
     // to navigate the source and PDF as before.
     link.addEventListener('click',event=>event.stopPropagation());
@@ -138,7 +176,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     image.className='ocr-media-thumb';
     image.loading='lazy';image.decoding='async';
     image.referrerPolicy='no-referrer';
-    image.alt=`第 ${row.line} 行媒体预览`;
+    image.alt=row.line?`第 ${row.line} 行媒体预览`:'未引用媒体预览';
     const fallback=document.createElement('span');
     fallback.className='ocr-media-thumb-fallback';
     fallback.hidden=true;fallback.textContent='无预览';
@@ -152,12 +190,30 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   const columns=[
     {colId:'preview',headerName:'预览',width:96,minWidth:88,pinned:'left',
       lockPinned:true,lockPosition:'left',cellRenderer:previewCell},
-    {field:'line',headerName:'源码行',width:76,minWidth:70},
+    {colId:'adopted',headerName:'采用',width:94,minWidth:85,
+      valueGetter:p=>p.data?adoptionOf(p.data):'',
+      filter:EnumCheckboxFilter,
+      filterValueGetter:p=>p.data?adoptionOf(p.data):'',
+      suppressHeaderMenuButton:true,
+      cellRenderer:p=>{
+        if(!p.data)return '';
+        const el=document.createElement('span');
+        el.className='ocr-media-adoption';
+        el.dataset.adopted=p.data.adopted?'yes':'no';
+        el.textContent=adoptionOf(p.data);
+        return el;
+      }},
+    {field:'line',headerName:'源码行',width:76,minWidth:70,
+      valueFormatter:p=>p.value??'—'},
     {field:'url',headerName:'媒体链接',minWidth:135,flex:1,cellRenderer:p=>{
       const el=document.createElement('span');el.className='ocr-media-url';
       el.textContent=p.value;el.title=p.value;return el;
     }},
-    {colId:'status',headerName:'状态',width:113,minWidth:104,valueGetter:p=>p.data?valueOf(p.data):''},
+    {colId:'status',headerName:'状态',width:113,minWidth:104,
+      valueGetter:p=>p.data?valueOf(p.data):'',
+      filter:EnumCheckboxFilter,
+      filterValueGetter:p=>p.data?statusKind(p.data):'',
+      suppressHeaderMenuButton:true},
     {colId:'action',headerName:'操作',width:85,minWidth:80,cellRenderer:p=>{
       if(!p.data||p.data.local)return '';
       const url=p.data.url,button=document.createElement('button');
@@ -174,7 +230,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   ].map(c=>({sortable:false,resizable:true,suppressMovable:true,...c}));
   grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:68,
     getRowId:p=>p.data.id,rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
-    onRowClicked:e=>publishFocus({sourceLine:e.data.line,origin:'media',intent:'click'})});
+    onRowClicked:e=>{
+      if(e.data.line)publishFocus({sourceLine:e.data.line,origin:'media',intent:'click'});
+    }});
   const unsubscribe=viewStore.subscribe((next,previous)=>{
     if(next.documentRevision!==previous.documentRevision)schedule();
   });

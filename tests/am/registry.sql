@@ -79,7 +79,8 @@ INSERT INTO apis VALUES
  ('A05','A','returned.setActive','ui/media-module.js','returned','boolean','void','toggles Media projection lifecycle',1),
  ('A06','A','download_chunk','scripts/v6_media.py','export','document,url','state/bytes/path','durable validated remote Range chunk, no Markdown edit',1),
  ('A07','A','status','scripts/v6_media.py','export','document,url','state/bytes/path','read persisted media status',1),
- ('A08','A','read_local','scripts/v6_media.py','export','document,filename','bytes,MIME','serves only validated local media names',1);
+ ('A08','A','read_local','scripts/v6_media.py','export','document,filename','bytes,MIME','serves only validated local media names',1),
+ ('A09','A','inventory','scripts/v6_media.py','export','document','completed local file list','read-only media inventory; no new directories',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -283,7 +284,8 @@ INSERT INTO access_edges VALUES
  ('X16',NULL,'A','scripts/v6_serve.py','media_read_local(DOC, path[','A08','registered','HTTP adapter reads only whitelisted media paths'),
  ('X17','L','A','ui/workspace.js','this.media?.setActive(','A05','registered','Layout switches projection via Media API'),
  ('X18','L','A','ui/workspace.js','currentOutline?.media?.scan()','A03','registered','Shell scans Media through Layout API'),
- ('X19','L','A','ui/workspace.js','currentOutline?.media?.downloadAll()','A04','registered','Shell downloads Media through Layout API');
+ ('X19','L','A','ui/workspace.js','currentOutline?.media?.downloadAll()','A04','registered','Shell downloads Media through Layout API'),
+ ('X20',NULL,'A','scripts/v6_serve.py','media_inventory(DOC)','A09','registered','HTTP transport combines Media inventory with chapter read API');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -301,14 +303,15 @@ SELECT 'TC-'||id,id,script,
 
 -- First Media module: independent API and CMD optimistic editing contract.
 WITH mapped(id,script,fixture,expected) AS (VALUES
- ('A01','media-browser.test.mjs','md','media AG mounts separately from chapter outline with lazy preview column'),
+ ('A01','media-browser.test.mjs','md','media AG with lazy preview, adoption coloring and categorical filters'),
  ('A02','media-browser.test.mjs','md','scan of 11 image links excludes immutable MinerU evidence'),
- ('A03','media-browser.test.mjs','md','media scan shows pending/partial status'),
+ ('A03','media-browser.test.mjs','md','media scan lists orphan files and stable adopted/status filters'),
  ('A04','media-browser.test.mjs','md','download resumes from durable Range part then localizes CMD source'),
  ('A05','media-browser.test.mjs','md','module switching preserves outline and Media views'),
  ('A06','media-browser.test.mjs','md','download chunk persists partial and completes with signature check'),
  ('A07','media-browser.test.mjs','md','status reports partial and completed files'),
  ('A08','media-browser.test.mjs','md','only hashed completed media may be read'),
+ ('A09','media-browser.test.mjs','md','inventory includes local unreferenced files and published chapter-only files'),
  ('C14','media-browser.test.mjs','md','CMD URL replacement is atomic undoable and excludes evidence'),
  ('L17','media-browser.test.mjs','md','module dropdown selects Media or chapter boundaries'),
  ('L18','media-browser.test.mjs','md','scan media through registered facade'),

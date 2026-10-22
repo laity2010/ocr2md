@@ -214,3 +214,21 @@ def read_local(doc, filename):
     if not file.is_file() or file.is_symlink():
         raise FileNotFoundError(filename)
     return file.read_bytes(), EXT[Path(filename).suffix]
+
+
+# A local media object may exist after Undo or an interrupted CMD save even
+# when no document references it. Inventory never modifies the media folder.
+MEDIA_NAME = re.compile(r'[0-9a-f]{24}\.(?:jpg|jpeg|png|gif|webp)')
+
+def inventory(doc):
+    root = Path(doc).parent / 'media'
+    if root.is_symlink():
+        raise ValueError('Media folder must not be a symlink')
+    if not root.is_dir():
+        return []
+    results = []
+    for file in root.iterdir():
+        if not MEDIA_NAME.fullmatch(file.name) or file.is_symlink() or not file.is_file():
+            continue
+        results.append({'path': 'media/' + file.name, 'bytes': file.stat().st_size})
+    return sorted(results, key=lambda x: x['path'])

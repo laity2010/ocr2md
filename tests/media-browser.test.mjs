@@ -75,6 +75,16 @@ try{
   const authFile=resolve(folder,'test-token');
   const testKey='isolated-media-test-cookie-v6';
   writeFileSync(doc,sample);writeFileSync(authFile,testKey);
+  // Two detached local files: one is used only by a published chapter,
+  // the other is not referenced by *any* managed Markdown document.
+  const mediaDir=resolve(folder,'media');mkdirSync(mediaDir,{recursive:true});
+  const chapterUsed='media/'+('1'.repeat(24))+'.jpg';
+  const orphan='media/'+('2'.repeat(24))+'.jpg';
+  for(const file of [chapterUsed,orphan])writeFileSync(resolve(folder,file),data);
+  const publishedDir=resolve(folder,'chapters');mkdirSync(publishedDir,{recursive:true});
+  const publishedName='000-media-fixture.md';
+  writeFileSync(resolve(publishedDir,publishedName),'![chapter-only](../'+chapterUsed+')\n');
+  writeFileSync(resolve(publishedDir,'manifest.json'),JSON.stringify({files:[{name:publishedName}]}));
   const port=5590+i,base=`http://127.0.0.1:${port}`;
   const launch=()=>spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),
     env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:doc,V6_PDF_PATH:originalPdf,
@@ -106,6 +116,9 @@ try{
    assert(restarted,'server failed to resume after restart');
    const persistedPart=await (await fetch(base+'/api/media/status?url='+encodeURIComponent(target))).json();
    assert.equal(persistedPart.bytes,512*1024);
+   const inventory=await (await fetch(base+'/api/media/inventory')).json();
+   assert.deepEqual(inventory.files.map(f=>f.path),[chapterUsed,orphan]);
+   assert.deepEqual(inventory.chapterReferences,[chapterUsed]);
    // Unauthorized callers and arbitrary internal network destinations are
    // never permitted to create a media download.
    const unauth=await fetch(base+'/api/media/chunk',{method:'POST',headers:{Origin:base,
@@ -131,9 +144,34 @@ try{
      images=>images.filter(image=>image.hasAttribute('src')).length);
    assert.equal(inactiveImages,0,'hidden Media thumbnails have src before activation');
    await page.locator('#module-select').selectOption('media');
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===11,null,{timeout:20000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:20000});
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('已下载'),null,{timeout:16000});
    assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').textContent(),'续传');
+   const adoption=page.locator('.ocr-media-grid .ocr-media-adoption');
+   assert.equal(await adoption.filter({hasText:'未采用'}).count(),1);
+   assert.equal(await adoption.filter({hasText:'已采用'}).count(),12);
+   assert.equal(await adoption.filter({hasText:'未采用'}).first().getAttribute('data-adopted'),'no');
+   assert.equal(await adoption.filter({hasText:'已采用'}).first().getAttribute('data-adopted'),'yes');
+   const adoptedHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="adopted"]');
+   const statusHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="status"]');
+   await adoptedHeader.locator('.ag-header-cell-filter-button').click();
+   const selectAdoption=page.locator('.ocr-enum-filter');
+   await selectAdoption.locator('[data-filter-value="已采用"] input').uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===1,null,{timeout:7000});
+   assert((await page.locator('.ocr-media-grid .ag-row').textContent()).includes(orphan));
+   assert.equal(await adoption.filter({hasText:'未采用'}).count(),1);
+   await selectAdoption.locator('[data-filter-value="all"] input').check();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:7000});
+   await adoptedHeader.locator('.ag-header-cell-filter-button').click();
+   await statusHeader.locator('.ag-header-cell-filter-button').click();
+   const statusValues=await page.locator('.ocr-enum-filter .ocr-enum-filter-option').allTextContents();
+   assert(statusValues.some(s=>s.includes('部分下载')),'missing stable partial-download filter value');
+   assert(statusValues.some(s=>s.includes('本地')),'missing local-file filter value');
+   await page.locator('.ocr-enum-filter [data-filter-value="部分下载"] input').uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===12,null,{timeout:7000});
+   await page.locator('.ocr-enum-filter [data-filter-value="all"] input').check();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:7000});
+   await statusHeader.locator('.ag-header-cell-filter-button').click();
    const header=page.locator('.ocr-media-grid .ag-header-cell[col-id="preview"]');
    assert.equal(await header.count(),1,'Media AG preview column is missing');
    assert.equal((await header.textContent()).trim(),'预览');
@@ -167,8 +205,11 @@ try{
    assert(requests.includes('bytes=524288-1048575'),'Range resume missing');
    await page.locator('#undo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('image.jpg'),null,{timeout:15000});
+   // Undo leaves the completed local file on disk but now unreferenced.
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ocr-media-adoption[data-adopted="no"]').length===2,null,{timeout:9000});
    await page.locator('#redo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('本地'),null,{timeout:15000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ocr-media-adoption[data-adopted="no"]').length===1,null,{timeout:9000});
    await page.locator('#module-select').selectOption('chapter-boundary');
    assert((await page.locator('.ocr-outline-checkbox').count())>0);
    assert((await page.locator('#status').textContent()).includes('大纲21项'));
@@ -184,14 +225,14 @@ try{
    assert(chapters.some(ch=>ch.content.includes('../'+status.path)));
    await page.reload({waitUntil:'domcontentloaded'});
    await page.locator('#module-select').selectOption('media');
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===11,null,{timeout:20000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:20000});
    assert((await page.locator('.ocr-media-grid .ag-row[row-index="0"]').textContent()).includes('本地'));
    await page.waitForFunction(path=>{
      const img=document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
      return img?.getAttribute('src')==='/'+path && img.naturalWidth>0;
    },status.path,{timeout:25000});
    assert.deepEqual(errors,[]);
-   console.log('MEDIA_END_TO_END_PASS',name,JSON.stringify({items:11,partial:partial.bytes,
+   console.log('MEDIA_END_TO_END_PASS',name,JSON.stringify({items:13,unused:1,chapterOnly:1,filters:'adopted+status',partial:partial.bytes,
      path:status.path,preview:'lazy remote → local',undoRedo:true,chapterPath:true,reopened:true}));
   }finally{await browser?.close();server.kill('SIGTERM');}
  }

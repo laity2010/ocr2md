@@ -5,7 +5,7 @@ import hashlib
 import subprocess
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
-from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local
+from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory
 import json
 import os
 import re
@@ -124,6 +124,25 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/document':
             self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
+            return
+        if path == '/api/media/inventory':
+            # This HTTP composition point uses only the public Media and
+            # chapter-read APIs. The two domains do not import one another.
+            # CMD contributes *unsaved* mother-document references in the UI.
+            try:
+                files = media_inventory(DOC)
+                refs = set()
+                manifest = read_manifest(DOC)
+                if manifest is not None:
+                    for entry in manifest.get('files', []):
+                        markdown = read_chapter(DOC, entry['name']).decode('utf-8')
+                        refs.update('media/' + name for name in re.findall(
+                            r'!\[[^\]\n]*\]\(\.\./media/([0-9a-f]{24}\.(?:jpg|jpeg|png|gif|webp))\)',
+                            markdown))
+                self.response(200, json.dumps({'files':files,'chapterReferences':sorted(refs)}),
+                              'application/json')
+            except (ValueError, OSError, KeyError, TypeError, UnicodeDecodeError):
+                self.response(503, 'Media inventory unavailable')
             return
         if path == '/api/media/status':
             from urllib.parse import parse_qs
