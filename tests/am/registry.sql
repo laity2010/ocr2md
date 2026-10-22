@@ -190,3 +190,49 @@ INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence)
 SELECT 'TC-'||id,id,'tests/'||script,
  CASE fixture WHEN 'pdf' THEN '.v6/workspace/buffetts-alpha.original.pdf' ELSE 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md' END,
  expected,'integration' FROM mapped;
+
+-- Closing the first full-table gaps with a real isolated browser contract test.
+WITH ids(id) AS (VALUES ('C03'),('C08'),('G06'),('P08'),('P12'))
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,'tests/am/contracts-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+ CASE id
+  WHEN 'C03' THEN 'Converter reject leaves document unchanged; valid source loads exactly'
+  WHEN 'C08' THEN 'CMDocument.destroy releases owned EditorView'
+  WHEN 'G06' THEN 'AG dispose unsubscribes, destroys grid and clears host'
+  WHEN 'P08' THEN 'PdfPreview.dispose tears down secondary viewer and observers'
+  ELSE 'PdfPreview.clearHighlight removes selected state and OCR overlay' END,
+ 'direct' FROM ids;
+
+WITH msg(id,expected) AS (VALUES
+ ('E07','Dockview activation changes Zustand activePanel to outline'),
+ ('E08','Real AG stale-checkbox failure publishes DOM CustomEvent and global error status'))
+INSERT INTO test_cases(id,message_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,'tests/am/contracts-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'direct' FROM msg;
+
+WITH subs(id,expected) AS (VALUES
+ ('SUB13','scrollSyncEnabled event updates global status line'),
+ ('SUB15','AG chapter-error DOM event is received and displayed in global status'))
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,'tests/am/contracts-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'direct' FROM subs;
+
+-- Publisher rows are tested separately from message topics: one topic may have
+-- multiple owners. No publisher may be approved merely because another works.
+WITH pub(id,script,expected,evidence) AS (VALUES
+ ('PUB01','tests/outline-browser.test.mjs','CMD edit increases documentRevision and AG updates','integration'),
+ ('PUB02','tests/cm6-browser.test.mjs','CM6 selectionSet changes sourceOffset','integration'),
+ ('PUB03','tests/outline-browser.test.mjs','CM6 deliberate navigation publishes focusTarget','integration'),
+ ('PUB04','tests/outline-browser.test.mjs','AG heading click publishes focusTarget(origin=outline)','integration'),
+ ('PUB05','tests/four-pane-pdf-browser.test.mjs','MD mapped-element click publishes focusTarget(origin=preview)','integration'),
+ ('PUB06','tests/four-pane-pdf-browser.test.mjs','PDF OCR click publishes focusTarget(origin=pdf)','integration'),
+ ('PUB07','tests/scroll-sync-leadership-browser.test.mjs','CM6 user scroll publishes scrollTarget(origin=cm6)','integration'),
+ ('PUB08','tests/scroll-sync-leadership-browser.test.mjs','MD scroll publishes scrollTarget(origin=preview)','integration'),
+ ('PUB09','tests/compact-shell-browser.test.mjs','AG recomputes outlineCount','integration'),
+ ('PUB10','tests/am/contracts-browser.test.mjs','setScrollSyncEnabled publishes false/true updates','direct'),
+ ('PUB11','tests/am/contracts-browser.test.mjs','Dockview active panel changed to outline','direct'),
+ ('PUB12','tests/am/contracts-browser.test.mjs','Stale AG checkbox emits chapter-error from AG catch handler','direct'))
+INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence)
+SELECT 'TC-'||id,id,script,
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,evidence FROM pub;

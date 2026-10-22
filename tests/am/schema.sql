@@ -30,9 +30,10 @@ CREATE TABLE test_cases(
   id TEXT PRIMARY KEY, api_id TEXT REFERENCES apis(id),
   message_id TEXT REFERENCES messages(id),
   subscription_id TEXT REFERENCES subscriptions(id),
+  publisher_id TEXT REFERENCES publishers(id),
   script TEXT NOT NULL, fixture TEXT NOT NULL, expected TEXT NOT NULL,
   evidence TEXT NOT NULL CHECK(evidence IN ('direct','integration')),
-  CHECK((api_id IS NOT NULL)+(message_id IS NOT NULL)+(subscription_id IS NOT NULL)=1)
+  CHECK((api_id IS NOT NULL)+(message_id IS NOT NULL)+(subscription_id IS NOT NULL)+(publisher_id IS NOT NULL)=1)
 );
 CREATE TABLE test_runs(
   id INTEGER PRIMARY KEY, case_id TEXT NOT NULL REFERENCES test_cases(id),

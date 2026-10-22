@@ -20,17 +20,17 @@ class AMCatalogTests(unittest.TestCase):
         self.assertEqual(am.assert_references(self.db), 51)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM modules').fetchone()[0], 5)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM messages').fetchone()[0], 8)
-        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM test_cases').fetchone()[0], 65)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM test_cases').fetchone()[0], 86)
 
     def test_focus_has_four_publishers_five_receivers(self):
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM publishers WHERE message_id='E03'").fetchone()[0], 4)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM subscriptions WHERE message_id='E03'").fetchone()[0], 5)
 
-    def test_unverified_but_exposed_interface_is_not_marked_tested(self):
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM test_cases WHERE api_id='C03'").fetchone()[0], 0)
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM subscriptions WHERE message_id='E07'").fetchone()[0], 0)
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM test_runs").fetchone()[0], 0)
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM test_cases WHERE subscription_id IN ('SUB13','SUB15')").fetchone()[0], 0)
+    def test_all_contracts_have_test_rows(self):
+        for tab,col,total in [('apis','api_id',51),('messages','message_id',8),('publishers','publisher_id',12),('subscriptions','subscription_id',15)]:
+            actual=self.db.execute(f'SELECT COUNT(DISTINCT {col}) FROM test_cases WHERE {col} IS NOT NULL').fetchone()[0]
+            self.assertEqual(actual,total,tab)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM test_runs').fetchone()[0],0)
 
     def test_no_dangling_relations(self):
         with self.assertRaises(sqlite3.IntegrityError):

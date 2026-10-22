@@ -137,9 +137,70 @@ def run_case(case_id):
     if status != 'PASS': raise ValueError(f'{case_id}: {status}')
 
 
+def full_coverage_check(con):
+    fields=[('apis','api_id'),('messages','message_id'),('publishers','publisher_id'),('subscriptions','subscription_id')]
+    issues=[]
+    for table,field in fields:
+        missing=con.execute(f'SELECT a.id FROM {table} a WHERE NOT EXISTS (SELECT 1 FROM test_cases t WHERE t.{field}=a.id)').fetchall()
+        if missing: issues.append(f'{table}: {",".join(row[0] for row in missing)}')
+    if issues: raise ValueError('AM coverage gaps: '+'; '.join(issues))
+    return con.execute('SELECT COUNT(*) FROM test_cases').fetchone()[0]
+
+
+def run_all():
+    with connection(f'file:{DB}?mode=ro') as con:
+        assert_references(con)
+        case_count=full_coverage_check(con)
+        suites={}
+        for row in con.execute('SELECT id,script FROM test_cases ORDER BY script,id'):
+            suites.setdefault(row['script'],[]).append(row['id'])
+    stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    git_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    print(f'AM_FULL_START git={git_commit[:8]} suites={len(suites)} contracts={case_count}',flush=True)
+    failures=[]
+    for i,(script,case_ids) in enumerate(suites.items(),start=1):
+        log=ROOT/f'.v6/tests/am-full-{stamp}-{git_commit[:8]}-{i:02d}-{Path(script).stem}.log'
+        log.parent.mkdir(parents=True,exist_ok=True)
+        print(f'AM_SUITE_START {i}/{len(suites)} {script} cases={len(case_ids)}',flush=True)
+        try:
+            completed=subprocess.run(['node',script],cwd=ROOT,stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,text=True,timeout=240)
+            status='PASS' if completed.returncode==0 else 'FAIL'
+            output=completed.stdout
+        except subprocess.TimeoutExpired as ex:
+            status='ERROR'
+            output=(ex.stdout or b'').decode(errors='replace') if isinstance(ex.stdout,bytes) else (ex.stdout or '')
+            output+='\nAM_TIMEOUT_240_SECONDS\n'
+        log.write_text(output)
+        with connection(DB) as con:
+            con.executemany('INSERT INTO test_runs(case_id,git_commit,ran_at,status,output_file,detail) VALUES(?,?,?,?,?,?)',
+                [(case_id,git_commit,datetime.now(timezone.utc).isoformat(),status,str(log.relative_to(ROOT)),output[-1800:]) for case_id in case_ids])
+            con.commit()
+        print(f'AM_SUITE_{status} {i}/{len(suites)} cases={len(case_ids)} log={log.relative_to(ROOT)}',flush=True)
+        if status!='PASS':
+            failures.append((script,status))
+            print('\n'.join(output.splitlines()[-10:]),flush=True)
+    with connection(f'file:{DB}?mode=ro') as con:
+        passed=con.execute('SELECT COUNT(DISTINCT case_id) FROM test_runs WHERE git_commit=? AND status="PASS"',(git_commit,)).fetchone()[0]
+    print(f'AM_FULL_RESULT passed_cases={passed}/{case_count} failed_suites={len(failures)} git={git_commit[:8]}',flush=True)
+    if failures: raise ValueError('AM full suite failed: '+str(failures))
+    if passed!=case_count: raise ValueError('AM full suite: some cases have no PASS results')
+    print('AM_FULL_TABLE_PASS',flush=True)
+
+
+def certify():
+    git_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    with connection(f'file:{DB}?mode=ro') as con:
+        count=full_coverage_check(con)
+        rows=con.execute('SELECT t.id,(SELECT r.status FROM test_runs r WHERE r.case_id=t.id AND r.git_commit=? ORDER BY r.id DESC LIMIT 1) as result FROM test_cases t',(git_commit,)).fetchall()
+        bad=[f'{r[0]}:{r[1] or "NOT_RUN"}' for r in rows if r[1]!='PASS']
+    if bad: raise ValueError(f'AM_CERTIFY_FAIL {len(bad)}/{count}: '+', '.join(bad[:22]))
+    print(f'AM_FULL_TABLE_CERTIFIED {count}/{count} linked contract cases git={git_commit} (including integration cases; not a substitute for isolated per-method oracle)')
+
+
 def main():
     p = argparse.ArgumentParser(description='OCR2MD V6 AM SQLite queries')
-    p.add_argument('action', choices=['build','check','modules','apis','route','untested','impact','coverage','cases','run'])
+    p.add_argument('action', choices=['build','check','modules','apis','route','untested','impact','coverage','cases','run','run-all','certify'])
     p.add_argument('key', nargs='?', help='API module ID, message topic, or impacted module ID')
     args = p.parse_args()
     if args.action == 'build':
@@ -147,6 +208,12 @@ def main():
         return
     if not DB.is_file():
         p.error('AM SQLite missing; first run: python3 tests/am/am.py build')
+    if args.action == 'run-all':
+        run_all()
+        return
+    if args.action == 'certify':
+        certify()
+        return
     if args.action == 'run':
         if not args.key: p.error('run requires a test-case ID such as TC-C05')
         run_case(args.key)
@@ -154,7 +221,7 @@ def main():
     with connection(f'file:{DB}?mode=ro') as con:
         if args.action == 'cases':
             if not args.key: p.error('cases requires API/message/subscription ID, e.g. C05 or E03')
-            print_rows(con.execute('SELECT id,script,fixture,expected,evidence FROM test_cases WHERE api_id=? OR message_id=? OR subscription_id=? ORDER BY id',(args.key,args.key,args.key)))
+            print_rows(con.execute('SELECT id,script,fixture,expected,evidence FROM test_cases WHERE api_id=? OR message_id=? OR subscription_id=? OR publisher_id=? ORDER BY id',(args.key,args.key,args.key,args.key)))
         elif args.action == 'check':
             count = assert_references(con)
             print(f'AM_CHECK_PASS apis={count} FK=OK source-and-test-files=OK')
@@ -170,12 +237,15 @@ def main():
             print_rows(con.execute('SELECT a.id,a.symbol,a.module_id FROM apis a WHERE NOT EXISTS(SELECT 1 FROM test_cases t WHERE t.api_id=a.id) ORDER BY a.module_id,a.id'))
             print('--- messages lacking test coverage ---')
             print_rows(con.execute('SELECT m.id,m.topic FROM messages m WHERE NOT EXISTS(SELECT 1 FROM test_cases t WHERE t.message_id=m.id) AND NOT EXISTS (SELECT 1 FROM subscriptions s JOIN test_cases t ON t.subscription_id=s.id WHERE s.message_id=m.id) ORDER BY m.id'))
+            print('--- publisher entries lacking test coverage ---')
+            print_rows(con.execute('SELECT p.id,m.topic,p.symbol FROM publishers p JOIN messages m ON m.id=p.message_id WHERE NOT EXISTS(SELECT 1 FROM test_cases t WHERE t.publisher_id=p.id) ORDER BY p.id'))
             print('--- subscriptions lacking test coverage ---')
             print_rows(con.execute('SELECT s.id,m.topic,s.handler FROM subscriptions s JOIN messages m ON m.id=s.message_id WHERE NOT EXISTS (SELECT 1 FROM test_cases t WHERE t.subscription_id=s.id) ORDER BY s.id'))
         elif args.action == 'coverage':
             for query in [
                 'SELECT (SELECT COUNT(*) FROM apis) total,(SELECT COUNT(DISTINCT api_id) FROM test_cases WHERE api_id IS NOT NULL) linked,(SELECT COUNT(*) FROM apis WHERE core=1) core_total,(SELECT COUNT(DISTINCT t.api_id) FROM test_cases t JOIN apis a ON a.id=t.api_id WHERE a.core=1) core_linked',
-                'SELECT (SELECT COUNT(*) FROM messages) total_messages,(SELECT COUNT(DISTINCT message_id) FROM publishers) with_publishers,(SELECT COUNT(DISTINCT message_id) FROM subscriptions) with_subscribers,(SELECT COUNT(*) FROM test_cases) test_links,(SELECT COUNT(*) FROM test_runs) actual_runs'
+                'SELECT (SELECT COUNT(*) FROM messages) total_messages,(SELECT COUNT(DISTINCT message_id) FROM publishers) with_publishers,(SELECT COUNT(DISTINCT message_id) FROM subscriptions) with_subscribers,(SELECT COUNT(*) FROM test_cases) test_links,(SELECT COUNT(*) FROM test_runs) actual_runs',
+                'SELECT (SELECT COUNT(*) FROM publishers) publishers,(SELECT COUNT(DISTINCT publisher_id) FROM test_cases WHERE publisher_id IS NOT NULL) publishers_linked,(SELECT COUNT(*) FROM subscriptions) subscriptions,(SELECT COUNT(DISTINCT subscription_id) FROM test_cases WHERE subscription_id IS NOT NULL) subscriptions_linked,(SELECT COUNT(DISTINCT message_id) FROM test_cases WHERE message_id IS NOT NULL) messages_linked'
             ]:
                 print_rows(con.execute(query))
             print('NOTE: script links are references, NOT certified PASS results or isolated API tests')

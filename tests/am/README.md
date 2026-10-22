@@ -18,14 +18,16 @@ python3 tests/am/am.py route focusTarget     # 谁发布？谁接收？内部 ha
 python3 tests/am/am.py impact P              # 改 PDF 模块会涉及哪些 API/消息？
 python3 tests/am/am.py cases C05             # 找到该 API 对应的脚本、输入、验收要求
 python3 tests/am/am.py run TC-C05            # 真实运行该隔离测试，结果写 test_runs + 本地日志
-python3 tests/am/am.py untested              # 尚无可定位测试的 API/消息
+python3 tests/am/am.py untested              # 查找未绑定 API、消息、发布及订阅测试
 python3 tests/am/am.py coverage              # 测试引用覆盖，而不是通过率
 python3 tests/am/am.py check                 # 数据库外键和源码/脚本路径校验
+python3 tests/am/am.py run-all               # 17 个不同脚本去重运行，对全部 86 条契约分别落测试结果
+python3 tests/am/am.py certify               # 当前 Git 上 86/86 最近一次运行 PASS 才通过
 python3 -m unittest discover -s tests/am -p 'test_*.py'
 ```
 
-**范围与诚实口径**：当前录入 51 个 API、8 类跨模块消息、12 个发布入口、15 个订阅处理者；5 个 API 未绑定已有测试，且 `activePanel` 与 `ocr2md:chapter-error` 缺消息测试。多数绑定的原有剧本是 `integration`：仅证明该用例触及功能，**不是直接调用每个 API 的孤立测试，也不等于 K 表标准答案已冻结**。`coverage` 只统计路径绑定；真实执行结果只统计 `test_runs`。每条测试的数据集字段指向其依赖的主要已有样本；正式验收仍需进一步冻结独立预期结果。
+**范围与诚实口径**：当前登记 51 个 API、8 类跨模块消息、12 个发布入口、15 个订阅处理者，所有记录都绑定了测试。新增真实隔离浏览器测试 `contracts-browser.test.mjs` 补足转换与销毁、PDF 清除高亮、AG 错误发布、Layout 激活状态、滚动状态等边界。多数既有剧本仍是 `integration`：仅证明该用例触及功能，**不是直接调用每个 API 的孤立测试，也不等于 K 表标准答案已冻结**。`coverage` 只统计路径绑定；真实执行结果只统计 `test_runs`。每条测试的数据集字段指向其依赖的主要已有样本；正式验收仍需进一步冻结独立预期结果。
 
-**安全边界**：AM 用 SQLite 做 AI 的检索索引，不改 V6 运行时；单项测试沿用原脚本自身的测试隔离实现，切勿将正式 `.v6/workspace/buffetts-alpha.minerujson.md` 作为写入测试输入。PDF 现阶段是本机 `.v6/workspace/` 的只读副本，尚不是便携测试夹具。没有全面运行已关联的 65 个测试条目之前，不得宣称整表通过或接口稳定已获认证。
+**安全边界**：AM 用 SQLite 做 AI 的检索索引，不改 V6 运行时；单项测试沿用原脚本自身的测试隔离实现，切勿将正式 `.v6/workspace/buffetts-alpha.minerujson.md` 作为写入测试输入。PDF 现阶段是本机 `.v6/workspace/` 的只读副本，尚不是便携测试夹具。已登记 **86 条测试契约**：51 API、8 消息、12 发布、15 订阅。全表验收按 **17 个不重复的现有/新增脚本**逐个实际运行；每条契约只对其引用脚本的真实运行结果登记 PASS/FAIL。一个脚本同时承担多个集成契约不等于每项都有独立单元测试。`certify` 验证当前 Git commit 全部 86 条结果，通过后仍不得夸大为“逐 API 独立单测/独立黄金文件均已认证”。
 
 Git 冻结标记 `v6-feature-freeze-20261022`，V6 正式构建仍为 `v6-20261022-075729`。主线生产代码和发布站点不依赖此 AM 索引。
