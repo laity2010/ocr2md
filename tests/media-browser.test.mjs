@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -12,12 +12,26 @@ const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.miner
 const originalPdf=resolve('.v6/workspace/buffetts-alpha.original.pdf');
 const first=fixture.match(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/);
 assert(first,'fixture image missing');
+// Valid decodable JPEG, padded beyond one downloader chunk. The browser can
+// test actual pixels while the backend separately tests interrupted transfers.
+mkdirSync('.v6/tests',{recursive:true});
+const tinyPng=resolve('.v6/tests/media-thumbnail-fixture.png');
+const tinyJpeg=resolve('.v6/tests/media-thumbnail-fixture.jpg');
+writeFileSync(tinyPng,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9hCeEEsAAAAASUVORK5CYII=','base64'));
+execFileSync('sips',['-s','format','jpeg',tinyPng,'--out',tinyJpeg],{stdio:'ignore'});
+const jpeg=readFileSync(tinyJpeg);
 const data=Buffer.alloc(800000,0x42);
-data.set([255,216,255,224],0);data.set([255,217],data.length-2);
+jpeg.copy(data);
+
 const requests=[];
 const upstream=createServer((req,res)=>{
  const range=/^bytes=(\d+)-(\d+)$/.exec(req.headers.range||'');
- if(req.url!=='/image.jpg'||!range){res.writeHead(416).end();return;}
+ if(req.url!=='/image.jpg'){res.writeHead(404).end();return;}
+ if(!range){ // Browser native <img> requests the preview, not a download chunk.
+   requests.push('thumbnail');
+   res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':data.length});
+   res.end(data);return;
+ }
  const start=Number(range[1]),end=Math.min(Number(range[2]),data.length-1);
  requests.push(req.headers.range);
  if(start>end){res.writeHead(416).end();return;}
@@ -87,13 +101,35 @@ try{
    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.context().addCookies([{name:'v6edit',value:testKey,domain:'127.0.0.1',path:'/'}]);
-   await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
+   const thumbnailRequests=[];
+   page.on('request',request=>{if(request.url()===target)thumbnailRequests.push(request.url());});
+   await page.route('**/*',route=>{
+     const link=route.request().url();
+     return link.startsWith(base)||link===target?route.continue():route.abort();
+   });
    await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-checkbox').length===21,null,{timeout:60000});
+   assert.equal(thumbnailRequests.length,0,'hidden Media AG fetched remote preview before selection');
    await page.locator('#module-select').selectOption('media');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===11,null,{timeout:20000});
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('已下载'),null,{timeout:16000});
    assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').textContent(),'续传');
+   const header=page.locator('.ocr-media-grid .ag-header-cell[col-id="preview"]');
+   assert.equal(await header.count(),1,'Media AG preview column is missing');
+   assert.equal(await header.textContent(),'预览');
+   assert(await header.evaluate(el=>Boolean(el.closest('.ag-pinned-left-header'))),
+     'Media preview column is not pinned to left');
+   const thumbnail=page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
+   await page.waitForFunction(()=>{
+     const img=document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
+     return img?.complete && img.naturalWidth>0;
+   },null,{timeout:25000});
+   assert.equal(await thumbnail.getAttribute('loading'),'lazy');
+   assert.equal(await thumbnail.getAttribute('decoding'),'async');
+   assert.equal(await thumbnail.getAttribute('referrerpolicy'),'no-referrer');
+   assert.equal(await thumbnail.getAttribute('src'),target);
+   assert(thumbnailRequests.length>0,'remote image preview did not load');
+   assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-preview-link').getAttribute('target'),'_blank');
    await page.screenshot({path:`.v6/evidence/media-before-${name.toLowerCase()}.png`});
    await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('本地'),null,{timeout:30000});
@@ -101,6 +137,10 @@ try{
    const status=await (await fetch(base+'/api/media/status?url='+encodeURIComponent(target))).json();
    assert.equal(status.state,'complete');
    assert.match(status.path,/^media\/[0-9a-f]{24}\.jpg$/);
+   await page.waitForFunction(path=>{
+     const img=document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
+     return img?.getAttribute('src')==='/'+path && img.complete && img.naturalWidth>0;
+   },status.path,{timeout:25000});
    const local=await fetch(base+'/'+status.path);
    assert.equal(local.status,200);
    assert.deepEqual(Buffer.from(await local.arrayBuffer()),data);
@@ -126,9 +166,13 @@ try{
    await page.locator('#module-select').selectOption('media');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===11,null,{timeout:20000});
    assert((await page.locator('.ocr-media-grid .ag-row[row-index="0"]').textContent()).includes('本地'));
+   await page.waitForFunction(path=>{
+     const img=document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
+     return img?.getAttribute('src')==='/'+path && img.naturalWidth>0;
+   },status.path,{timeout:25000});
    assert.deepEqual(errors,[]);
    console.log('MEDIA_END_TO_END_PASS',name,JSON.stringify({items:11,partial:partial.bytes,
-     path:status.path,undoRedo:true,chapterPath:true,reopened:true}));
+     path:status.path,preview:'lazy remote → local',undoRedo:true,chapterPath:true,reopened:true}));
   }finally{await browser?.close();server.kill('SIGTERM');}
  }
 }finally{upstream.close();}

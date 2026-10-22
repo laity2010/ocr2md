@@ -5,3 +5,12 @@
 .ocr-media-pane .ag-root-wrapper{border:0;border-radius:0}
 .ocr-media-pane .ag-cell{padding:0 5px}
 .ocr-media-action{height:25px;min-width:54px;color:#d3c6aa;background:#344a40;border:1px solid #64736d;border-radius:4px;cursor:pointer;font:12px "OCR2MD Sarasa",monospace}
+
+/* A compact, pinned image preview; native lazy loading follows AG virtualization. */
+.ocr-media-pane .ag-cell[col-id="preview"]{display:flex;align-items:center;justify-content:center;padding:2px}
+.ocr-media-preview-link{width:82px;height:58px;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  border:1px solid #52605a;border-radius:4px;background:#27352f;text-decoration:none}
+.ocr-media-preview-link:focus-visible{outline:2px solid #83c092;outline-offset:1px}
+.ocr-media-thumb{display:block;width:100%;height:100%;object-fit:contain}
+.ocr-media-thumb[hidden],.ocr-media-thumb-fallback[hidden]{display:none!important}
+.ocr-media-thumb-fallback{font:11px "OCR2MD Sarasa",monospace;color:#8b9693}

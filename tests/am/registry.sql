@@ -72,7 +72,7 @@ INSERT INTO apis VALUES
  ('L17','L','returned.setWorkModule','ui/workspace.js','returned','chapter-boundary|media','void','switches AG view projections',1),
  ('L18','L','returned.scanMedia','ui/workspace.js','returned','none','Promise<void>','requests Media scan through API',1),
  ('L19','L','returned.downloadMedia','ui/workspace.js','returned','none','Promise<void>','requests Media download through API',1),
- ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG and download workflow',1),
+ ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG with lazy thumbnail preview and download workflow',1),
  ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads image URL ranges outside evidence',1),
  ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media rows and server resume status',1),
  ('A04','A','returned.downloadAll','ui/media-module.js','returned','none','Promise<void>','downloads each remote media without modifying other modules',1),
@@ -301,7 +301,7 @@ SELECT 'TC-'||id,id,script,
 
 -- First Media module: independent API and CMD optimistic editing contract.
 WITH mapped(id,script,fixture,expected) AS (VALUES
- ('A01','media-browser.test.mjs','md','media AG mounts separately from chapter outline'),
+ ('A01','media-browser.test.mjs','md','media AG mounts separately from chapter outline with lazy preview column'),
  ('A02','media-browser.test.mjs','md','scan of 11 image links excludes immutable MinerU evidence'),
  ('A03','media-browser.test.mjs','md','media scan shows pending/partial status'),
  ('A04','media-browser.test.mjs','md','download resumes from durable Range part then localizes CMD source'),

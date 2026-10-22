@@ -113,14 +113,49 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       }
     }finally{allRunning=false;}
   }
+  // Native image elements use lazy decoding and the AG Grid viewport: no
+  // extra browser fetches while the chapter module is active. Prefer the
+  // completed local file, even if the CMD source still has a remote URL.
+  function previewCell(params){
+    if(!params.data)return '';
+    const row=params.data,state=stateFor(row.url);
+    const local=state.state==='complete' && /^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(state.path||'')
+      ?state.path:null;
+    const src='/'+(row.local?row.url:local||'');
+    const address=row.local||local?src:row.url;
+    const link=document.createElement('a');
+    link.className='ocr-media-preview-link';
+    link.href=address;
+    link.target='_blank';link.rel='noopener noreferrer';
+    link.referrerPolicy='no-referrer';
+    link.title='点击查看原图';
+    link.setAttribute('aria-label',`查看第 ${row.line} 行媒体原图`);
+    // Clicking the thumbnail opens only the media; the row click continues
+    // to navigate the source and PDF as before.
+    link.addEventListener('click',event=>event.stopPropagation());
+    const image=document.createElement('img');
+    image.className='ocr-media-thumb';
+    image.loading='lazy';image.decoding='async';
+    image.referrerPolicy='no-referrer';
+    image.alt=`第 ${row.line} 行媒体预览`;
+    const fallback=document.createElement('span');
+    fallback.className='ocr-media-thumb-fallback';
+    fallback.hidden=true;fallback.textContent='无预览';
+    image.addEventListener('error',()=>{image.hidden=true;fallback.hidden=false;});
+    image.src=address;
+    link.append(image,fallback);
+    return link;
+  }
   const columns=[
-    {field:'line',headerName:'源码行',width:104,minWidth:90},
-    {field:'url',headerName:'媒体链接',minWidth:195,flex:1,cellRenderer:p=>{
+    {colId:'preview',headerName:'预览',width:96,minWidth:88,pinned:'left',
+      lockPinned:true,lockPosition:'left',cellRenderer:previewCell},
+    {field:'line',headerName:'源码行',width:76,minWidth:70},
+    {field:'url',headerName:'媒体链接',minWidth:135,flex:1,cellRenderer:p=>{
       const el=document.createElement('span');el.className='ocr-media-url';
       el.textContent=p.value;el.title=p.value;return el;
     }},
-    {colId:'status',headerName:'状态',width:130,minWidth:110,valueGetter:p=>p.data?valueOf(p.data):''},
-    {colId:'action',headerName:'操作',width:92,minWidth:84,cellRenderer:p=>{
+    {colId:'status',headerName:'状态',width:113,minWidth:104,valueGetter:p=>p.data?valueOf(p.data):''},
+    {colId:'action',headerName:'操作',width:85,minWidth:80,cellRenderer:p=>{
       if(!p.data||p.data.local)return '';
       const url=p.data.url,button=document.createElement('button');
       button.className='ocr-media-action';
@@ -134,7 +169,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       return button;
     }}
   ].map(c=>({sortable:false,resizable:true,suppressMovable:true,...c}));
-  grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],
+  grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:68,
     getRowId:p=>p.data.id,rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
     onRowClicked:e=>publishFocus({sourceLine:e.data.line,origin:'media',intent:'click'})});
   const unsubscribe=viewStore.subscribe((next,previous)=>{
