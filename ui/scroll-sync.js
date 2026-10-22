@@ -277,8 +277,12 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     if(target===previous.focusTarget || !target ||
        target.revision!==state.documentRevision)return;
     const position={sourceLine:target.sourceLine,fraction:0};
-    if(target.origin==='outline'){
-      lastDriver='outline';
+    // A registered review module (LaTeX, Media, future audit plugins) sends
+    // the same explicit click-navigation contract as the chapter outline.
+    // Consumers use source lines, never import another module's AG or editor.
+    if(target.origin==='outline' ||
+       (target.intent==='click' && !['cm6','preview','pdf'].includes(target.origin))){
+      lastDriver=target.origin;
       moveSource(position,true);
       movePreview(position,true);
     } else if(target.origin==='cm6'){

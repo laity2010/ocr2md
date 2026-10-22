@@ -129,7 +129,7 @@ INSERT INTO subscriptions VALUES
  ('SUB06','E03','M','ui/workspace.js','PreviewPanel.unsubscribe -> highlight','focusTarget changed','highlight mapped MD element'),
  ('SUB07','E03','P','ui/pdf-preview.js','PdfPreview.unsubscribe -> focusLine','not from PDF AND deliberate click/outline/preview intent','reveal exact OCR bbox; not from scroll'),
  ('SUB08','E03','C','ui/main.js','viewStore.subscribe -> markOutlineLine','focusTarget changed','source-line visual decoration only'),
- ('SUB09','E03',NULL,'ui/scroll-sync.js','unsubscribeFocus -> moveSource/movePreview','revision matches; origin controls destination','navigate followers without feedback loop'),
+ ('SUB09','E03',NULL,'ui/scroll-sync.js','unsubscribeFocus -> moveSource/movePreview','revision matches; origin controls destination','review module clicks navigate CMD/MD without feedback loop'),
  ('SUB10','E04','G','ui/outline-grid.js','viewStore.subscribe -> chooseLine','scrollTarget changed AND no recent focus','select current heading'),
  ('SUB11','E04',NULL,'ui/scroll-sync.js','unsubscribe -> moveSource/movePreview','revision matches; scrollSyncEnabled=true','scroll follower without republishing'),
  ('SUB12','E05',NULL,'ui/main.js','unsubscribeGlobalStatus -> renderGlobalStatus','outlineCount differs','render heading count'),
@@ -399,3 +399,10 @@ INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence)
 VALUES ('TC-SUB17','SUB17','tests/latex-browser.test.mjs',
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
  'source edit triggers automatic re-scan through documentRevision','integration');
+
+
+-- AG review plugin source focus must navigate both MD and CMD with a visible PDF.
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
+ ('TC-SUB09-LATEX','SUB09','tests/latex-four-view-browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+ 'LaTeX AG click reaches selected source line, focused MD math and exact PDF OCR block in split four-window layout','integration');

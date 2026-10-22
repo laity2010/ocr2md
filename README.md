@@ -80,6 +80,7 @@ node tests/preview-split-browser.test.mjs
 node tests/media-browser.test.mjs           # Media 隔离下载、断点续传、CMD 撤销和路径验证
 node tests/media-paste-browser.test.mjs     # 剪贴板图片写入 media、CMD 指定光标粘贴及保存
 node tests/latex-browser.test.mjs           # LaTeX 行内、独立、围栏、KaTeX 语法审阅与定位
+node tests/latex-four-view-browser.test.mjs # LaTeX AG → CMD/MD/PDF 四窗精确点击定位
 node tests/obsidian-image-preview-browser.test.mjs # Obsidian 尺寸图片预览（只读）
 node tests/pdf-click-only-browser.test.mjs
 node tests/engineering-initialize-browser.test.mjs
