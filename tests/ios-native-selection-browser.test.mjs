@@ -56,12 +56,25 @@ try{
      bodySize:getComputedStyle(document.querySelector('#editor .cm-editor')).fontSize,
      fontFamily:getComputedStyle(document.querySelector('#editor .cm-scroller')).fontFamily,
      hardReturnDOM:document.querySelector('.cm-ob-hard-return')?.textContent,
-     hardReturnVisual:getComputedStyle(document.querySelector('.cm-ob-hard-return'),'::before').content,
+     hardReturnVisual:document.querySelector('.cm-ob-hard-return')
+       ?getComputedStyle(document.querySelector('.cm-ob-hard-return'),'::before').content
+       :getComputedStyle(document.querySelector('.cm-ob-hard-return-native'),'::after').content,
+     nativeHardReturnLines:document.querySelectorAll('.cm-ob-hard-return-native').length,
+     nonEditableEndMarkers:document.querySelectorAll('.cm-ob-hard-return[contenteditable="false"]').length,
+     nativeAfterPointerEvents:document.querySelector('.cm-ob-hard-return-native')
+       ?getComputedStyle(document.querySelector('.cm-ob-hard-return-native'),'::after').pointerEvents:null,
      headingSize:getComputedStyle(document.querySelector('.cm-ob-heading-line-2')).fontSize,
    }));
    assert.equal(styleCheck.bodySize,'16px');
    assert.match(styleCheck.fontFamily,/OCR2MD Sarasa/);
-   assert.equal(styleCheck.hardReturnDOM,'');
+   if(ios){
+     assert(styleCheck.nativeHardReturnLines>0,`${label} native newline decorations missing`);
+     assert.equal(styleCheck.nonEditableEndMarkers,0,`${label} noneditable end widgets block selection`);
+     assert.equal(styleCheck.nativeAfterPointerEvents,'none',`${label} newline marker intercepts taps`);
+   }else{
+     assert.equal(styleCheck.hardReturnDOM,'');
+     assert(styleCheck.nonEditableEndMarkers>0,`${label} Mac newline widgets removed`);
+   }
    assert.equal(styleCheck.hardReturnVisual,'"↵"');
    assert.equal(styleCheck.headingSize,'26px');
    if(ios){

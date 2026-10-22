@@ -1,6 +1,7 @@
 /** Display-only source-line decorations: Everforest headings and hard returns. */
 import {Decoration, ViewPlugin, WidgetType} from '@codemirror/view';
 import {syntaxTree} from '@codemirror/language';
+import {isIOSWebKit} from './ios-native-selection.js';
 
 const headingPattern = /^(#{1,6})(?=\s|$)/;
 class HardReturnMarker extends WidgetType {
@@ -30,6 +31,7 @@ export const obsidianHeadingMarkers = ViewPlugin.fromClass(class {
   scan(view) {
     const doc = view.state.doc;
     const markers = [];
+    const useNativeHardReturn = isIOSWebKit();
     const visited = new Set();
     const tree = syntaxTree(view.state);
     for (const {from, to} of view.visibleRanges) {
@@ -59,7 +61,11 @@ export const obsidianHeadingMarkers = ViewPlugin.fromClass(class {
         // Only a literal newline in the CM6 document gets a glyph; soft-wrap
         // continuations get none. Zero-width presentation never edits Markdown.
         if (line.to < doc.length) {
-          markers.push(Decoration.widget({widget:hardReturnMarker,side:1}).range(line.to));
+          // A non-editable widget directly after the last character can
+          // interrupt iOS's native double-tap word selection near line ends.
+          // Keep the same visual ↵ without inserting a DOM node at that edge.
+          if (useNativeHardReturn) markers.push(Decoration.line({attributes:{class:'cm-ob-hard-return-native'}}).range(line.from));
+          else markers.push(Decoration.widget({widget:hardReturnMarker,side:1}).range(line.to));
         }
       }
     }

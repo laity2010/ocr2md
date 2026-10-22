@@ -307,7 +307,10 @@ async function main() {
   workspace.startScrollSync();
   const unsubscribeOutlineFocus=viewStore.subscribe((next,previous)=>{
     if(next.focusTarget===previous.focusTarget || !next.focusTarget)return;
-    // Presentation effect only; never affects Markdown or undo history.
+    // CM6 already highlights its own active line. Repainting that same line
+    // after every tap can interfere with iOS double-tap word selection.
+    if(next.focusTarget.origin==='cm6')return;
+    // Cross-pane navigation still highlights its requested source line.
     view.dispatch({effects:markOutlineLine.of(next.focusTarget.sourceLine)});
   });
   function history(command){
