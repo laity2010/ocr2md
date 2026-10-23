@@ -7,6 +7,7 @@ const isEscaped=(s,i)=>{let n=0;while(i>0&&s[--i]==='\\')n++;return n%2===1;};
 const emptyMask=s=>s.replace(/[^\n]/g,' ');
 const LINE_FENCE=/^ {0,3}(`{3,}|~{3,})([^\n]*)$/;
 const CLOSE_FENCE=mark=>new RegExp(`^ {0,3}${mark[0]==='`'?'`':'~'}{${mark.length},} *$`);
+const DISPLAY_DOLLARS=/^ {0,3}\$\$[ \t]*$/;
 
 export function findLatex(source){
   if(typeof source!=='string')throw TypeError('Markdown must be a string');
@@ -21,15 +22,28 @@ export function findLatex(source){
   masked=masked.replace(/<!--[\s\S]*?(?:-->|$)/g,emptyMask);
   // Fenced math is an explicit display formula. Ordinary code is not math.
   const lines=source.split('\n'),prelines=masked.split('\n');
-  let offset=0,opened=null;
+  let offset=0,opened=null,display=null;
   for(let n=0;n<lines.length;n++){
     const raw=lines[n],present=prelines[n];
     const fence=LINE_FENCE.exec(present);
+    if(display){
+      prelines[n]=emptyMask(raw);
+      if(DISPLAY_DOLLARS.test(present)){
+        make(display.start,offset+raw.length,
+          source.slice(display.contentFrom,offset).replace(/\n$/,''),
+          '独立','$$');
+        display=null;
+      }
+      offset+=raw.length+1;continue;
+    }
     if(!opened){
       if(fence){
         const language=fence[2].trim().split(/\s+/)[0].toLowerCase();
         opened={mark:fence[1],start:offset,startLine:n,contentFrom:offset+raw.length+1,
           math:['math','latex','tex'].includes(language),syntax:'```'+language};
+        prelines[n]=emptyMask(raw);
+      }else if(DISPLAY_DOLLARS.test(present)){
+        display={start:offset,contentFrom:offset+raw.length+1};
         prelines[n]=emptyMask(raw);
       }
     }else{

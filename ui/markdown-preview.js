@@ -28,6 +28,27 @@ const sourceAttrs = token => token.map
   : '';
 
 installObsidianImages(md);
+// Obsidian-native display math uses its own $$ lines, not a code fence.
+// Keep source-line maps so AG/CM6/PDF navigation remains unchanged.
+md.block.ruler.before('fence','ocr_display_math',(state,startLine,endLine,silent)=>{
+  const line=n=>state.src.slice(state.bMarks[n]+state.tShift[n],state.eMarks[n]);
+  if(state.sCount[startLine]>3||!/^\$\$[ \t]*$/.test(line(startLine)))return false;
+  let end=startLine+1;
+  while(end<endLine&&!/^\$\$[ \t]*$/.test(line(end)))end++;
+  if(end===endLine)return false;
+  if(silent)return true;
+  const token=state.push('ocr_display_math','div',0);
+  token.block=true;token.map=[startLine,end+1];
+  token.content=state.getLines(startLine+1,end,0,false).replace(/\n$/,'');
+  state.line=end+1;
+  return true;
+});
+md.renderer.rules.ocr_display_math=(tokens,idx)=>{
+  const token=tokens[idx];
+  return '<div class="ocr-math ocr-source-block"'+sourceAttrs(token)+'>'+
+    katex.renderToString(token.content,{displayMode:true,throwOnError:false,
+      trust:false,maxExpand:1000})+'</div>\n';
+};
 const oldFence = md.renderer.rules.fence;
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];

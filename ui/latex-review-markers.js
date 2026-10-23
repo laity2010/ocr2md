@@ -6,6 +6,32 @@ export const REVIEW_CHOICES=Object.freeze(['待复核','latex','忽略']);
 const validId=id=>/^[a-f0-9]{16}$/.test(id||'');
 const textEdit=(from,to,expected,insert)=>({action:'text',from,to,expected,insert});
 const isUndelimitedInline=item=>item.kind==='行内'&&item.syntax==='未定界';
+function fencedDisplay(item){
+  if(item.kind!=='独立'||typeof item.raw!=='string')return null;
+  const first=item.raw.indexOf('\n'),last=item.raw.lastIndexOf('\n');
+  if(first<0||last===first)return null;
+  const opening=item.raw.slice(0,first),closing=item.raw.slice(last+1);
+  const match=/^ {0,3}(`{3,}|~{3,})(math|latex|tex)[ \t]*$/i.exec(opening);
+  if(!match||!new RegExp(`^ {0,3}${match[1][0]}{${match[1].length},}[ \\t]*$`).test(closing))return null;
+  return {
+    open:textEdit(item.from,item.from+first,opening,'$$'),
+    close:textEdit(item.from+last+1,item.to,closing,'$$'),
+    opening,closing,
+  };
+}
+function normalizeFencedDisplay(item,old=null,id=null){
+  const fence=fencedDisplay(item);
+  if(!fence)return [];
+  const attrs={...(old?.opening.attributes||{id,review:'latex'}),
+    review:'latex',delimited:'auto-display',fenceOpen:fence.opening,fenceClose:fence.closing};
+  return [
+    ...(old?[{action:'update',target:old.opening,tag:'ocr2md:latex',attributes:attrs}]:
+      [{action:'insert',at:item.from,tag:'ocr2md:latex',attributes:attrs,suffix:'\n'}]),
+    fence.open,fence.close,
+    ...(!old?[{action:'insert',at:item.to,tag:'/ocr2md:latex',
+      attributes:{id},prefix:'\n'}]:[]),
+  ];
+}
 
 /** Keep HTML comments OUTSIDE native Obsidian $...$ math, without changing
  * the OCR formula bytes. Surrounding prose gets spaces only when missing.
@@ -26,14 +52,19 @@ function wrapInline(source,item,opening=null,closing=null,id=null,review='latex'
   ],right};
 }
 
-/** Explicit one-shot upgrade for old confirmed inline comments. Never edits
+/** Explicit one-shot upgrade for old confirmed inline and standalone comments. Never edits
  * a file implicitly while loading; the owner must dispatch and Save via CMD.
  */
 export function planNormalizeReviewedInline(source,formulas){
   const operations=[];
   for(const item of formulas){
     const old=item.reviewMarker;
-    if(item.status!=='latex'||!old||!isUndelimitedInline(item))continue;
+    if(item.status!=='latex'||!old)continue;
+    if(fencedDisplay(item)){
+      operations.push(...normalizeFencedDisplay(item,old));
+      continue;
+    }
+    if(!isUndelimitedInline(item))continue;
     const wrap=wrapInline(source,item,old.opening,old.closing,null,'latex');
     operations.push(...wrap.lead,...wrap.tail,
       {action:'update',target:old.closing,tag:'/ocr2md:latex',attributes:{id:old.id}},
@@ -88,7 +119,11 @@ export function planReviewAnnotations(source,item,review,id){
   const old=item.reviewMarker;
   if(old){
     const auto=old.opening.attributes.delimited==='auto-inline';
-    const removeMath=auto&&review!=='latex' ? [
+    const display=old.opening.attributes.delimited==='auto-display'&&item.syntax==='$$';
+    const removeMath=display&&review!=='latex'?[
+      textEdit(item.from,item.from+2,'$$',old.opening.attributes.fenceOpen||'```math'),
+      textEdit(item.to-2,item.to,'$$',old.opening.attributes.fenceClose||'```'),
+    ]:auto&&review!=='latex' ? [
       textEdit(item.from,item.from+1,'$',''),
       textEdit(item.to-1,item.to,'$',''),
       ...(old.opening.attributes.padBefore==='1'?[textEdit(old.openFrom-1,old.openFrom,' ','')]:[]),
@@ -106,14 +141,18 @@ export function planReviewAnnotations(source,item,review,id){
       return [...wrap.lead,...wrap.tail,
         ...(wrap.right?[textEdit(old.closeTo,old.closeTo,'',' ')]:[])];
     }
+    if(review==='latex'&&fencedDisplay(item))
+      return normalizeFencedDisplay(item,old);
     return [{action:'update',target:old.opening,tag:'ocr2md:latex',
       attributes:{...old.opening.attributes,review,
-        ...(auto&&review!=='latex'?{delimited:'manual',padBefore:'0',padAfter:'0'}:{})}},
+        ...((auto||display)&&review!=='latex'?{delimited:'manual',padBefore:'0',padAfter:'0'}:{})}},
       ...removeMath];
   }
   if(review==='待复核')return [];
   if(!validId(id))throw Error('Invalid new annotation ID');
   const block=item.syntax.startsWith('```')||item.syntax.startsWith('~~~');
+  if(review==='latex'&&fencedDisplay(item))
+    return normalizeFencedDisplay(item,null,id);
   if(review==='latex'&&isUndelimitedInline(item)){
     const wrap=wrapInline(source,item,null,null,id,review);
     return [...wrap.lead,...wrap.tail,

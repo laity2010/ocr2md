@@ -28,9 +28,9 @@ assert.equal(candidates[0].status,'latex');
 changed=apply(changed,planReviewEdit(changed,candidates[0],'待复核'));
 assert.equal(changed,fixture,'pure comment insertion/removal must round-trip');
 const intended=planReviewAnnotations(fixture,original,'latex','0123456789abcdef');
-assert.deepEqual(intended.map(x=>x.action),['insert','insert']);
+assert.deepEqual(intended.map(x=>x.action),['insert','text','text','insert']);
 assert.equal(intended[0].tag,'ocr2md:latex');
-assert.equal(intended[1].tag,'/ocr2md:latex');
+assert.equal(intended[3].tag,'/ocr2md:latex');
 
 const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
