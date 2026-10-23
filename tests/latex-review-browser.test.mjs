@@ -98,6 +98,8 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   await inline.selectOption('忽略');
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('忽略 1'),
     null,{timeout:10000});
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-markdown .ocr-reviewed-inline-latex .katex').length===0,
+    null,{timeout:12000});
   assert.equal(await page.locator('.ocr-markdown .ocr-reviewed-inline-latex .katex').count(),0,
     'ignored formula must revert to ordinary prose');
   // The read-only preview must retain the whole inline formula paragraph after
