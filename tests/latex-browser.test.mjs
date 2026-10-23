@@ -87,7 +87,7 @@ for(let i=0;i<engines.length;i++){
   await filter.locator('[data-filter-value="待复核"] input').uncheck();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length===2,
     null,{timeout:8000});
-  assert((await page.locator('.ocr-latex-grid .ag-row').textContent()).includes('错误'));
+  assert((await page.locator('.ocr-latex-grid .ag-row').allTextContents()).every(row=>row.includes('错误')));
   await filter.locator('[data-filter-value="all"] input').check();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
     null,{timeout:8000});
@@ -110,10 +110,15 @@ for(let i=0;i<engines.length;i++){
   const row855=page.locator('.ocr-latex-grid .ag-row').filter({hasText:'\\kern - delimiterspace'}).first();
   assert.equal(await row855.locator('.ocr-latex-render-status').textContent(),'失败');
   assert.equal(await row855.locator('.ocr-latex-status').textContent(),'待复核');
+  await page.screenshot({path:`.v6/evidence/latex-render-fail-${name.toLowerCase()}.png`});
   await renders.locator('[data-filter-value="all"] input').check();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
     null,{timeout:8000});
   await renderHeader.locator('.ag-header-cell-filter-button').click();
+  // AG virtualizes headers as the horizontal viewport moves. After testing a
+  // right-side filter, scroll back before inspecting an earlier column.
+  await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
+    .evaluate(element=>{element.scrollLeft=0;});
   const methodHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="syntax"]');
   await methodHeader.locator('.ag-header-cell-filter-button').click();
   assert.equal(await page.locator('.ocr-enum-filter [data-filter-value="未定界"]').count(),1,
