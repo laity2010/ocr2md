@@ -139,10 +139,10 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     });
     findReviewMarkers(source,rows);
     grid.setGridOption('rowData',rows);
-    // Undo/Redo can re-use the same AG row ID with a changed review.
-    // AG pinned/center row clones require complete renderer recreation;
-    // WebKit otherwise leaves a stale select in one of the two row surfaces.
-    grid.redrawRows();
+    // Keep visible review controls synchronized after CM6 Undo/Redo.
+    // AG may retain opacity-zero old rows during transitions; do not
+    // redraw the entire grid on every source edit for those hidden clones.
+    grid.refreshCells({force:true,columns:['status']});
     report();
   }
   function schedule(){

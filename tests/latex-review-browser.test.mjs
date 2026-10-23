@@ -30,7 +30,7 @@ assert.equal(changed,fixture,'pure comment insertion/removal must round-trip');
 const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
 mkdirSync('.v6/evidence',{recursive:true});
-for(const [index,[name,engine,options]] of engines.entries()){
+for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WEBKIT_ONLY||x[0]==='WebKit').entries()){
  const root=resolve(`.v6/tests/latex-cm-review-${process.pid}-${index}`);
  mkdirSync(root,{recursive:true});
  const doc=resolve(root,'book.md'),token=resolve(root,'auth');
@@ -61,8 +61,8 @@ for(const [index,[name,engine,options]] of engines.entries()){
   await page.locator('#module-select').selectOption('latex');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-review-select').length>1,
     null,{timeout:23000});
-  const display=page.locator('.ocr-latex-grid .ag-row[row-index="0"] .ocr-latex-review-select').first();
-  const inline=page.locator('.ocr-latex-grid .ag-row[row-index="1"] .ocr-latex-review-select').first();
+  const display=page.locator('.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="0"] .ocr-latex-review-select').first();
+  const inline=page.locator('.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] .ocr-latex-review-select').first();
   assert.deepEqual(await display.locator('option').allTextContents(),['待复核','latex','忽略']);
   assert.equal(await display.inputValue(),'待复核');
   await display.selectOption('latex');

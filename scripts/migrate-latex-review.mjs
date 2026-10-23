@@ -67,7 +67,7 @@ try{
   null,{timeout:32000});
  let count=0;
  for(const target of plan){
-  const locator=page.locator(`.ocr-latex-grid .ag-row[row-index="${target.index}"] .ocr-latex-review-select`).first();
+  const locator=page.locator(`.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="${target.index}"] .ocr-latex-review-select`).first();
   if(!(await locator.count())){
    await page.locator('.ocr-latex-grid .ag-body-viewport')
     .evaluate((el,idx)=>{el.scrollTop=idx*103;},target.index);
