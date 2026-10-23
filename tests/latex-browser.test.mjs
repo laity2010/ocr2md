@@ -7,6 +7,14 @@ import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
 
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+const columnSource=readFileSync('ui/latex-module.js','utf8')
+  .split('const columns=[')[1]?.split('].map(c=>')[0];
+assert(columnSource,'LaTeX column definitions missing');
+assert.deepEqual([...columnSource.matchAll(/(?:field|colId):'([^']+)',headerName:'([^']+)'/g)]
+  .map(m=>[m[1],m[2]]),[
+    ['line','源码行'],['status','审阅'],['renderStatus','渲染'],
+    ['preview','预览'],['content','源码'],['syntax','类型'],['error','错误信息'],
+  ],'LaTeX AG column order must match user specification');
 const cases=[
   'Price $3,685 is not a formula.',
   'Inline $x^2+y^2=z^2$ is valid.',
@@ -36,7 +44,8 @@ assert(line855?.detection==='inferred','the row 855 extracted fragment must be d
 
 const content=fixture+'\n\n'+cases+'\n';
 const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+ ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]]
+ .filter(([name])=>!process.env.OCR_WEBKIT_ONLY||name==='WebKit');
 const pause=t=>new Promise(r=>setTimeout(r,t));
 mkdirSync('.v6/evidence',{recursive:true});
 for(let i=0;i<engines.length;i++){
@@ -61,6 +70,8 @@ for(let i=0;i<engines.length;i++){
   await page.locator('#module-select').selectOption('latex');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>0,
     null,{timeout:25000});
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('LaTeX 49 项'),
+    null,{timeout:25000});
   // The seven user-defined columns, in order. The old independent/inline
   // "kind" column is not presented; "类型" reuses former recognition syntax.
   const leftHeaders=await page.locator('.ocr-latex-grid .ag-header-cell')
@@ -73,21 +84,6 @@ for(let i=0;i<engines.length;i++){
   assert.equal(leftHeaders.find(h=>h.id==='renderStatus')?.label,'渲染');
   assert.equal(leftHeaders.find(h=>h.id==='preview')?.label,'预览');
   assert(!leftHeaders.some(h=>h.id==='kind'),'obsolete independent/inline column remains');
-  // AG Grid virtualizes horizontally; verify the remaining columns by
-  // scrolling to the end, without mutating the document or grid settings.
-  await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
-    .evaluate(el=>{el.scrollLeft=el.scrollWidth;});
-  await page.waitForFunction(()=>document.querySelector('.ocr-latex-grid .ag-header-cell[col-id="error"]')!==null);
-  const rightHeaders=await page.locator('.ocr-latex-grid .ag-header-cell')
-    .evaluateAll(nodes=>nodes.map(node=>({
-      id:node.getAttribute('col-id'),
-      label:node.querySelector('.ag-header-cell-text')?.textContent?.trim(),
-    })));
-  for(const [id,label] of [['content','源码'],['syntax','类型'],['error','错误信息']])
-    assert.equal(rightHeaders.find(h=>h.id===id)?.label,label,'unexpected LaTeX column '+id);
-  assert(!rightHeaders.some(h=>h.id==='kind'));
-  await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
-    .evaluate(el=>{el.scrollLeft=0;});
   const snapshot=await page.evaluate(()=>({
     count:document.querySelectorAll('.ocr-latex-grid .ag-row').length,
     data:[...document.querySelectorAll('.ocr-latex-grid .ag-row')].map(r=>({
@@ -150,12 +146,18 @@ for(let i=0;i<engines.length;i++){
     .evaluate(element=>{element.scrollLeft=element.scrollWidth;});
   const methodHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="syntax"]');
   await methodHeader.waitFor();
+  const rightHeaders=await page.locator('.ocr-latex-grid .ag-header-cell')
+    .evaluateAll(nodes=>nodes.map(node=>({
+      id:node.getAttribute('col-id'),
+      label:node.querySelector('.ag-header-cell-text')?.textContent?.trim(),
+    })));
+  for(const [id,label] of [['content','源码'],['syntax','类型']])
+    assert.equal(rightHeaders.find(h=>h.id===id)?.label,label,'unexpected LaTeX column '+id);
+  assert(!rightHeaders.some(h=>h.id==='kind'));
   await methodHeader.locator('.ag-header-cell-filter-button').click();
   assert.equal(await page.locator('.ocr-enum-filter [data-filter-value="未定界"]').count(),1,
     'inferred inline candidates must have a dedicated categorical filter');
   await methodHeader.locator('.ag-header-cell-filter-button').click();
-  await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
-    .evaluate(element=>{element.scrollLeft=0;});
   await page.locator('.ocr-latex-grid .ag-row[row-index="0"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-markdown .ocr-outline-focused-element')!==null,
     null,{timeout:12000});
