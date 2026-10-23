@@ -62,6 +62,12 @@ export function findLatex(source){
     make(opened.start,source.length,source.slice(opened.contentFrom).trimEnd(),
       '独立',opened.syntax,'缺少代码围栏结束标记');
   }
+  if(display){
+    // A missing closing $$ previously vanished from the AG review list
+    // because its remaining lines had already been masked.
+    make(display.start,source.length,source.slice(display.contentFrom).trimEnd(),
+      '独立','$$','缺少公式结束定界符');
+  }
   masked=prelines.join('\n');
   // Keep the plain original source for matched LaTeX while masking inline code.
   // Matched backtick lengths must agree, as in CommonMark.

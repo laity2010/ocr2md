@@ -39,6 +39,12 @@ assert.deepEqual(marked.map(v=>v.kind),['行内','行内','行内','独立','独
 assert(!marked.some(v=>v.content.includes('ignored')||v.content.includes('not_math')));
 const badSyntax=findLatex('\\(a + b\n')[0];
 assert(badSyntax.issue,'unterminated explicit LaTeX delimiter should be flagged');
+const badDisplay=findLatex('$$\nx+y\n\ntext continues\n');
+assert.equal(badDisplay.length,1,'unclosed standalone $$ must not vanish from review');
+assert.equal(badDisplay[0].syntax,'$$');
+assert.equal(badDisplay[0].issue,'缺少公式结束定界符');
+assert.equal(badDisplay[0].content,'x+y\n\ntext continues');
+assert.equal(findLatex('$$\nx+y\n$$')[0].issue,'','valid display math must not be flagged');
 const line855=baseline.find(item=>item.content.includes('\\kern - delimiterspace'));
 assert(line855?.detection==='inferred','the row 855 extracted fragment must be detected');
 

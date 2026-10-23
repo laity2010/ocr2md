@@ -29,7 +29,7 @@ INSERT INTO apis VALUES
  ('C17','C','CMDocument.readAnnotations','ui/cm-document.js','export','optional tag/attribute filters','source-positioned annotation records','generic HTML comment syntax in CM6 source; no nesting or business semantics',1),
  ('C18','C','CMDocument.writeAnnotation','ui/cm-document.js','export','tag,attributes,at or target','updated source annotation record','CM6 atomic insert/update with stale-target and immutable evidence safeguards',1),
  ('C19','C','CMDocument.removeAnnotation','ui/cm-document.js','export','annotation record from CMD','removed flag','CM6 atomic exact comment deletion; never deletes associated Markdown content',1),
- ('C20','C','CMDocument.editAnnotations','ui/cm-document.js','export','array of generic comment insert/update/remove, optional source guard','single undoable CM6 transaction','atomic paired inline/block tags, checked target and evidence protection',1),
+ ('C20','C','CMDocument.editAnnotations','ui/cm-document.js','export','array of generic comment insert/update/remove and guarded text operations; optional source guard','single undoable CM6 transaction','atomic HTML annotations plus Markdown delimiters; checked target and evidence protection',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -80,6 +80,7 @@ INSERT INTO apis VALUES
  ('L17','L','returned.setWorkModule','ui/workspace.js','returned','chapter-boundary|media','void','switches AG view projections',1),
  ('L18','L','returned.scanMedia','ui/workspace.js','returned','none','Promise<void>','requests Media scan through API',1),
  ('L19','L','returned.downloadMedia','ui/workspace.js','returned','none','Promise<void>','requests Media download through API',1),
+ ('L20','L','returned.normalizeLatex','ui/workspace.js','returned','none','void','routes explicit LaTeX normalization request to module facade; no direct source writes',1),
  ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG with lazy thumbnail preview and download workflow',1),
  ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads normal/sized/wikilink image URL ranges outside evidence',1),
  ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media rows and server resume status',1),
@@ -100,7 +101,8 @@ INSERT INTO apis VALUES
  ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0),
  ('T09','T','planReviewAnnotations','ui/latex-review-markers.js','export','Markdown source,formula span,choice','generic CMD annotation operations','maps review changes to CMD tag/attributes actions without serializing HTML',1),
  ('T10','T','findReviewMarkers','ui/latex-review-markers.js','export','Markdown source and scanned formulas','review projection','associates single HTML comment with adjacent Markdown math; reads legacy pairs for migration',1),
- ('T11','T','projectReviewedInlineLatex','ui/latex-inline-preview.js','export','Markdown source including CM6 review markers','Markdown projection and deferred KaTeX fragments','deferred sanitized inline rendering after markdown-it and DOMPurify; avoids paragraph truncation and CM6 changes',1);
+ ('T11','T','projectReviewedInlineLatex','ui/latex-inline-preview.js','export','Markdown source including CM6 review markers','Markdown projection and deferred KaTeX fragments','deferred sanitized inline rendering after markdown-it and DOMPurify; avoids paragraph truncation and CM6 changes',1),
+ ('T12','T','returned.normalizeReviewed','ui/latex-module.js','returned','none','void','explicitly normalize previously confirmed annotations via generic CMD editAnnotations; no implicit Save',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -315,9 +317,12 @@ INSERT INTO access_edges VALUES
  ('X26','L','T','ui/workspace.js','createLatexModule(this.latexHost','T03','registered','Layout mounts independently owned LaTeX AG'),
  ('X27','L','T','ui/workspace.js','this.latex?.setActive(','T05','registered','Layout switches LaTeX via registered module facade'),
  ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade'),
- ('X32','T','C','ui/latex-module.js','getCMD().editAnnotations(operations','C20','registered','LaTeX applies paired comment records through one CMD annotation transaction'),
+ ('X32','T','C','ui/latex-module.js','getCMD().editAnnotations(operations','C20','registered','LaTeX applies single comment markers and math delimiters through one CMD annotation transaction'),
  ('X33','L','C','ui/workspace.js','getCMD().editAnnotations(operations','C20','registered','Layout injects a narrow CMD annotation editing capability to LaTeX'),
- ('X34','M','T','ui/markdown-preview.js','projectReviewedInlineLatex(source)','T11','registered','MD preview projects LaTeX confirmed inline annotations using LaTeX public renderer; no CM6 writes');
+ ('X34','M','T','ui/markdown-preview.js','projectReviewedInlineLatex(source)','T11','registered','MD preview projects LaTeX confirmed inline annotations using LaTeX public renderer; no CM6 writes'),
+ ('X38',NULL,'L','ui/main.js','workspace.normalizeLatex()','L20','registered','Shell requests normalization only through Layout facade'),
+ ('X39','L','T','ui/workspace.js','currentOutline?.latex?.normalizeReviewed()','T12','registered','Layout routes normalization to LaTeX module public method'),
+ ('X40','T','C','ui/latex-module.js','getCMD().editAnnotations(operations','C20','registered','Explicit LaTeX normalization uses the same generic CMD transaction, not direct file writes');
 
 -- X31 remains in Git commit cb524eb and in this historical finding row.
 INSERT INTO architecture_findings VALUES
@@ -440,11 +445,12 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
   'KaTeX render results 成功/失败/未检测 independently filterable; line 855 rendering failure with 待复核 review','integration');
 
 
--- LaTeX human triage is distinct from parser validation and stored as a sidecar.
+-- LaTeX human triage is distinct from parser validation and uses only CMD
+-- inline comment annotations, not a second sidecar store.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-T09','T09','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
-  'LaTeX selection plans generic annotation operations; CMD atomically inserts/replaces/removes paired review markers','integration'),
+  'LaTeX selection plans generic CMD operations; confirmation writes one HTML review comment adjacent to native math delimiters','integration'),
  ('TC-T10','T10','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'CMD annotation scanner restores historical and canonical marker choices after save/reload; TeX unchanged','integration');
@@ -475,7 +481,14 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C20','C20','tests/cmd-annotations-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
-  'Atomic paired insert/remove with exact attributes, stale-source rejection and full original-text round-trip','direct');
+  'Atomic generic annotation/text edits with exact attributes, stale-source rejection and full original-text round-trip','direct');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-L20','L20','tests/latex-normalize-browser.test.mjs',
+  'tests/fixtures/latex-legacy-display.md',
+  'Shell normalization action routes via Workspace facade; no write until global Save','integration'),
+ ('TC-T12','T12','tests/latex-normalize-browser.test.mjs',
+  'tests/fixtures/latex-legacy-display.md',
+  'LaTeX module upgrades eight legacy reviews to single-comment native math, preserving IDs/contents and supporting global Save and reload','integration');
 INSERT INTO access_edges VALUES
  ('X35','G','C','ui/chapter-markers.js','cm.writeAnnotation(','C18','registered','Chapter annotates a heading via CMD generic tag/attribute writer'),
  ('X36','G','C','ui/chapter-markers.js','reader.readAnnotations(','C17','registered','Chapter reads CMD tags and binds immediately preceding marker to heading'),
