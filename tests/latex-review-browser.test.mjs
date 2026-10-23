@@ -54,12 +54,15 @@ for(const [index,[name,engine,options]] of engines.entries()){
   const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
+  // Establish edit authorization before the page's initial /api/session check;
+  // CMD caches that permission until the next unlock probe.
+  await page.context().addCookies([{name:'v6edit',value:key,domain:'127.0.0.1',path:'/'}]);
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
   await page.locator('#module-select').selectOption('latex');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-review-select').length>1,
     null,{timeout:23000});
-  const display=page.locator('.ocr-latex-grid .ag-row[row-index="0"] .ocr-latex-review-select');
-  const inline=page.locator('.ocr-latex-grid .ag-row[row-index="1"] .ocr-latex-review-select');
+  const display=page.locator('.ocr-latex-grid .ag-row[row-index="0"] .ocr-latex-review-select').first();
+  const inline=page.locator('.ocr-latex-grid .ag-row[row-index="1"] .ocr-latex-review-select').first();
   assert.deepEqual(await display.locator('option').allTextContents(),['待复核','latex','忽略']);
   assert.equal(await display.inputValue(),'待复核');
   await display.selectOption('latex');
@@ -85,7 +88,6 @@ for(const [index,[name,engine,options]] of engines.entries()){
   assert(chosen.includes('latex 1')&&chosen.includes('忽略 1'));
   await page.screenshot({path:`.v6/evidence/latex-cm-review-${name.toLowerCase()}.png`});
   // Only global CMD Save persists the inline/standalone audit markers.
-  await page.context().addCookies([{name:'v6edit',value:key,domain:'127.0.0.1',path:'/'}]);
   await page.locator('#save').click();
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
     null,{timeout:18000});
