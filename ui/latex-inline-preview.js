@@ -1,8 +1,8 @@
-/** Read-only presentation of reviewed inline LaTeX.
- * No mutation of CM6 Markdown and no persistence of rendered HTML.
+/** Read-only inline LaTeX projection owned by the LaTeX module.
+ * KaTeX HTML must NEVER be fed back into markdown-it's inline parser: mixing
+ * its MathML/HTML tags with surrounding source can truncate the paragraph.
  */
 import katex from 'katex';
-
 const INLINE=/<!--ocr2md:latex id=([a-f0-9]{16}) review=latex-->([^\n]*?)<!--\/ocr2md:latex id=\1-->/g;
 const COMMENT=/<!--(?:\/)?ocr2md:latex id=[a-f0-9]{16}(?: review=(?:latex|忽略))?-->/g;
 
@@ -10,20 +10,26 @@ function escapeHtml(text){
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/** Project confirmed inline formulas to KaTeX HTML before markdown-it parse.
- * The regex rejects multiline matches, so all source line anchors are stable.
- * Only matching ID pairs with review=latex render; ignored/unreviewed remain text.
+/** All placeholders are plain text with no newline and never collide with
+ * the original source. Only matching IDs with review=latex get replaced.
  */
 export function projectReviewedInlineLatex(source){
-  return source.replace(INLINE,(_full,_id,formula)=>{
+  let prefix='OCR2MDREVIEWEDINLINEKATEX';
+  while(source.includes(prefix))prefix+='Z';
+  const fragments=[];
+  const projected=source.replace(INLINE,(_full,_id,formula)=>{
+    const token=`${prefix}${fragments.length}END`;
+    let html;
     try{
       const rendered=katex.renderToString(formula,{
         displayMode:false,throwOnError:true,trust:false,maxExpand:1000,strict:'warn',
       });
-      return `<span class="ocr-reviewed-inline-latex">${rendered}</span>`;
+      html=`<span class="ocr-reviewed-inline-latex">${rendered}</span>`;
     }catch{
-      // Failed KaTeX remains legible and reviewable in AG; never drop text.
-      return `<span class="ocr-reviewed-inline-error">${escapeHtml(formula)}</span>`;
+      html=`<span class="ocr-reviewed-inline-error">${escapeHtml(formula)}</span>`;
     }
+    fragments.push({token,html});
+    return token;
   }).replace(COMMENT,'');
+  return {projected,fragments};
 }

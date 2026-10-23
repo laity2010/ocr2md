@@ -67,7 +67,7 @@ export function renderMarkdown(source) {
   // Review annotations are CMD-owned source metadata. Only confirmed inline
   // latex is rendered as math; ignored/unreviewed fragments stay plain text.
   // The projection never inserts or removes source line breaks.
-  const projected=projectReviewedInlineLatex(source);
+  const {projected,fragments}=projectReviewedInlineLatex(source);
   const env={};
   const tokens=md.parse(projected,env);
   for(const token of tokens) {
@@ -76,8 +76,17 @@ export function renderMarkdown(source) {
       token.attrSet('data-source-end',String(token.map[1]+1));
     }
   }
-  return DOMPurify.sanitize(md.renderer.render(tokens,md.options,env), {
+  let html=DOMPurify.sanitize(md.renderer.render(tokens,md.options,env), {
     USE_PROFILES:{html:true},
     ADD_ATTR:['class','colspan','rowspan','align'],
   });
+  // Restore only KaTeX-produced, separately sanitized HTML *after* Markdown
+  // parsing. Review tokens cannot swallow their surrounding paragraph.
+  for(const {token,html:fragment} of fragments){
+    const safe=DOMPurify.sanitize(fragment,{
+      USE_PROFILES:{html:true},ADD_ATTR:['class','aria-hidden'],
+    });
+    html=html.replace(token,safe);
+  }
+  return html;
 }

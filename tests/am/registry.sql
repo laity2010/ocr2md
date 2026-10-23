@@ -96,7 +96,7 @@ INSERT INTO apis VALUES
  ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0),
  ('T09','T','planReviewEdit','ui/latex-review-markers.js','export','Markdown source,formula span,choice','optimistic CMD edits','inserts/replaces/removes paired HTML comments without I/O',1),
  ('T10','T','findReviewMarkers','ui/latex-review-markers.js','export','Markdown source and scanned formulas','review projection','reads paired HTML comments in CM6 original Markdown',1),
- ('T11','T','projectReviewedInlineLatex','ui/latex-inline-preview.js','export','Markdown source including CM6 review markers','presentation-only Markdown source','renders confirmed inline LaTeX with KaTeX and removes review comments, without document edits',1);
+ ('T11','T','projectReviewedInlineLatex','ui/latex-inline-preview.js','export','Markdown source including CM6 review markers','Markdown projection and deferred KaTeX fragments','deferred sanitized inline rendering after markdown-it and DOMPurify; avoids paragraph truncation and CM6 changes',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
