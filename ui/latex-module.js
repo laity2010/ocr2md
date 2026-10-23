@@ -98,7 +98,12 @@ export function createLatexModule(host,getMarkdown,onStatus){
         throw Error('审阅记录格式不正确');
       reviewRecords=new Map(Object.entries(data.reviews));
       reviewsLoaded=true;
-      if(!disposed)refresh();
+      if(!disposed){
+        refresh();
+        // AG reuses identical row IDs during a refresh. Force the dropdown
+        // renderer to update its disabled state after async sidecar loading.
+        grid.refreshCells({force:true,columns:['status']});
+      }
     })().catch(error=>{
       if(!disposed&&active)onStatus(`LaTeX 审阅记录加载失败：${error.message}`);
     }).finally(()=>{reviewsLoading=null;});
