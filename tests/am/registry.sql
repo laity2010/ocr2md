@@ -311,7 +311,8 @@ INSERT INTO access_edges VALUES
  ('X27','L','T','ui/workspace.js','this.latex?.setActive(','T05','registered','Layout switches LaTeX via registered module facade'),
  ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade'),
  ('X29',NULL,'T','scripts/v6_serve.py','latex_read_reviews(DOC)','T07','registered','GET /api/latex/reviews loads human review sidecar via LaTeX API'),
- ('X30',NULL,'T','scripts/v6_serve.py','latex_write_review(DOC','T08','registered','authenticated POST persists one LaTeX review atomically');
+ ('X30',NULL,'T','scripts/v6_serve.py','latex_write_review(DOC','T08','registered','authenticated POST persists one LaTeX review atomically'),
+ ('X31','T','T','ui/latex-module.js','fetch(''/api/latex/review''','T08','debt','2026-10-23 audit: LaTeX owns parallel JSON review persistence instead of CMD source transactions; migrate existing human decisions before retirement');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
