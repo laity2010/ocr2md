@@ -7,6 +7,17 @@ import {viewStore,publishFocus} from './view-store.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './latex-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
+const reviewOptions=['待复核','latex','忽略'];
+// Content fingerprint + occurrence distinguishes repeated formulas and remains
+// stable if unrelated source lines are inserted above a reviewed formula.
+function formulaFingerprint(value){
+  let hash=0xcbf29ce484222325n;
+  for(const char of value){
+    hash^=BigInt(char.codePointAt(0));
+    hash=(hash*0x100000001b3n)&0xffffffffffffffffn;
+  }
+  return hash.toString(16).padStart(16,'0');
+}
 const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f383e',
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',rowHoverColor:'#37464b',
@@ -40,6 +51,59 @@ export function createLatexModule(host,getMarkdown,onStatus){
   const gridHost=document.createElement('div');gridHost.className='ocr-latex-grid';
   host.append(gridHost);
   let grid,disposed=false,active=false,queued=false,rows=[];
+  let reviewRecords=new Map(),reviewsLoaded=false,reviewsLoading=null;
+  const savingReviews=new Set();
+  function report(){
+    if(!active)return;
+    onStatus(`LaTeX ${rows.length} 项 · 渲染成功 ${rows.filter(row=>row.renderStatus==='成功').length} / 失败 ${rows.filter(row=>row.renderStatus==='失败').length} / 未检测 ${rows.filter(row=>row.renderStatus==='未检测').length} · 待复核 ${rows.filter(row=>row.status==='待复核').length} / latex ${rows.filter(row=>row.status==='latex').length} / 忽略 ${rows.filter(row=>row.status==='忽略').length}`);
+  }
+  function updateRowReview(item,review){
+    item.status=review;
+    grid.applyTransaction({update:[item]});
+    report();
+  }
+  async function saveReview(item,value){
+    if(disposed||!reviewsLoaded||!reviewOptions.includes(value)||
+       item.status===value||savingReviews.has(item.reviewKey))return;
+    const before=item.status;
+    savingReviews.add(item.reviewKey);
+    if(value==='待复核')reviewRecords.delete(item.reviewKey);
+    else reviewRecords.set(item.reviewKey,value);
+    updateRowReview(item,value);
+    try{
+      const response=await fetch('/api/latex/review',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key:item.reviewKey,review:value})});
+      if(!response.ok)throw Error(response.status===403?'需先取得编辑授权':`HTTP ${response.status}`);
+      const result=await response.json();
+      if(result.review!==value)throw Error('服务端审阅状态不一致');
+      report();
+    }catch(error){
+      if(before==='待复核')reviewRecords.delete(item.reviewKey);
+      else reviewRecords.set(item.reviewKey,before);
+      updateRowReview(item,before);
+      onStatus(`LaTeX 审阅未保存：${error.message}`);
+    }finally{
+      savingReviews.delete(item.reviewKey);
+      if(!disposed)grid.applyTransaction({update:[item]});
+    }
+  }
+  async function loadReviews(){
+    if(reviewsLoading)return reviewsLoading;
+    reviewsLoading=(async()=>{
+      const response=await fetch('/api/latex/reviews',{cache:'no-store'});
+      if(!response.ok)throw Error(`HTTP ${response.status}`);
+      const data=await response.json();
+      if(!data?.reviews || typeof data.reviews!=='object' || Array.isArray(data.reviews))
+        throw Error('审阅记录格式不正确');
+      reviewRecords=new Map(Object.entries(data.reviews));
+      reviewsLoaded=true;
+      if(!disposed)refresh();
+    })().catch(error=>{
+      if(!disposed&&active)onStatus(`LaTeX 审阅记录加载失败：${error.message}`);
+    }).finally(()=>{reviewsLoading=null;});
+    return reviewsLoading;
+  }
   const formulaPreview=params=>{
     const item=params.data;
     if(!item)return '';
@@ -76,13 +140,26 @@ export function createLatexModule(host,getMarkdown,onStatus){
           p.value==='成功'?'KaTeX 能解析渲染；不代表 OCR 内容已确认':'未执行渲染';
         return el;
       }},
-    {field:'status',headerName:'审阅',width:85,minWidth:79,
+    {field:'status',headerName:'审阅',width:106,minWidth:98,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
       cellRenderer:p=>{
         if(!p.data)return '';
-        const el=document.createElement('span');el.className='ocr-latex-status';
-        el.dataset.status=p.value==='通过'?'ok':p.value==='待复核'?'review':'error';
-        el.textContent=p.value;return el;
+        const dropdown=document.createElement('select');
+        dropdown.className='ocr-latex-review-select';
+        dropdown.setAttribute('aria-label',`第 ${p.data.line} 行公式审阅`);
+        for(const choice of reviewOptions){
+          const option=document.createElement('option');
+          option.value=choice;option.textContent=choice;
+          dropdown.append(option);
+        }
+        dropdown.value=p.data.status;
+        dropdown.disabled=!reviewsLoaded||savingReviews.has(p.data.reviewKey);
+        dropdown.dataset.review=p.data.status;
+        // A popup selection must not also trigger a four-pane AG row click.
+        for(const event of ['pointerdown','mousedown','click','touchstart'])
+          dropdown.addEventListener(event,evt=>evt.stopPropagation());
+        dropdown.addEventListener('change',()=>void saveReview(p.data,dropdown.value));
+        return dropdown;
       }},
     {field:'error',headerName:'错误信息',minWidth:130,flex:0.9,
       cellRenderer:p=>{
@@ -98,9 +175,18 @@ export function createLatexModule(host,getMarkdown,onStatus){
       origin:'latex',intent:'click'})});
   function refresh(){
     if(disposed)return;
-    rows=findLatex(getMarkdown()).map(checkLatex);
+    const seen=new Map();
+    rows=findLatex(getMarkdown()).map(item=>{
+      const row=checkLatex(item);
+      const fingerprint=formulaFingerprint(`${item.kind}\n${item.content}`);
+      const occurrence=(seen.get(fingerprint)||0)+1;
+      seen.set(fingerprint,occurrence);
+      row.reviewKey=`${fingerprint}:${occurrence}`;
+      row.status=reviewRecords.get(row.reviewKey)||'待复核';
+      return row;
+    });
     grid.setGridOption('rowData',rows);
-    if(active)onStatus(`LaTeX ${rows.length} 项 · 渲染成功 ${rows.filter(row=>row.renderStatus==='成功').length} / 失败 ${rows.filter(row=>row.renderStatus==='失败').length} / 未检测 ${rows.filter(row=>row.renderStatus==='未检测').length} · 审阅待复核 ${rows.filter(row=>row.status==='待复核').length} · 错误 ${rows.filter(row=>row.status==='错误').length}`);
+    report();
   }
   function schedule(){
     if(queued||disposed)return;queued=true;
@@ -111,7 +197,10 @@ export function createLatexModule(host,getMarkdown,onStatus){
   });
   return {
     refresh,
-    setActive(enabled){active=enabled;host.hidden=!enabled;if(enabled)refresh();},
+    setActive(enabled){
+      active=enabled;host.hidden=!enabled;
+      if(enabled){refresh();if(!reviewsLoaded)void loadReviews();}
+    },
     dispose(){disposed=true;unsubscribe();grid.destroy();},
   };
 }

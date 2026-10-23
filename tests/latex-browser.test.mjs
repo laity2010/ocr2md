@@ -73,8 +73,8 @@ for(let i=0;i<engines.length;i++){
   assert(snapshot.count>=10,'AG Grid must render formulas in its virtual viewport');
   assert((await page.locator('#status').textContent()).includes('LaTeX 49 项'),
     '20 display + 22 inferred inline + 7 synthetic formulas expected');
-  assert((await page.locator('#status').textContent()).includes('审阅待复核 22'),
-    'undelimited candidates should be explicitly marked for review');
+  assert((await page.locator('#status').textContent()).includes('待复核 49 / latex 0 / 忽略 0'),
+    'all formulas start pending human review until annotated');
   assert((await page.locator('#status').textContent()).includes('渲染成功'),
     'KaTeX render counts must be independent from human review counts');
   assert.equal(snapshot.groups,3);
@@ -83,11 +83,10 @@ for(let i=0;i<engines.length;i++){
   const statusHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="status"]');
   await statusHeader.locator('.ag-header-cell-filter-button').click();
   const filter=page.locator('.ocr-enum-filter');
-  await filter.locator('[data-filter-value="通过"] input').uncheck();
+  assert.equal(await filter.locator('[data-filter-value="待复核"]').count(),1);
   await filter.locator('[data-filter-value="待复核"] input').uncheck();
-  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length===2,
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length===0,
     null,{timeout:8000});
-  assert((await page.locator('.ocr-latex-grid .ag-row').allTextContents()).every(row=>row.includes('错误')));
   await filter.locator('[data-filter-value="all"] input').check();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
     null,{timeout:8000});
@@ -109,7 +108,11 @@ for(let i=0;i<engines.length;i++){
     'row 855 must have a distinct KaTeX failure even while awaiting manual review');
   const row855=page.locator('.ocr-latex-grid .ag-row').filter({hasText:'\\kern - delimiterspace'}).first();
   assert.equal(await row855.locator('.ocr-latex-render-status').textContent(),'失败');
-  assert.equal(await row855.locator('.ocr-latex-status').textContent(),'待复核');
+  await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-latex-review-select')].some(el=>!el.disabled),
+    null,{timeout:12000});
+  assert.equal(await row855.locator('.ocr-latex-review-select').inputValue(),'待复核');
+  assert.deepEqual(await row855.locator('.ocr-latex-review-select option').allTextContents(),
+    ['待复核','latex','忽略']);
   await page.screenshot({path:`.v6/evidence/latex-render-fail-${name.toLowerCase()}.png`});
   await renders.locator('[data-filter-value="all"] input').check();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,

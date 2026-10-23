@@ -22,3 +22,10 @@
 .ocr-latex-render-status[data-render="success"]{color:#a7d8b5;background:rgba(86,157,121,.18)}
 .ocr-latex-render-status[data-render="failure"]{color:#f0a49b;background:rgba(230,126,128,.2)}
 .ocr-latex-render-status[data-render="unavailable"]{color:#9ba6ad;background:rgba(145,151,156,.14)}
+
+/* Editable review-only metadata. No CM6 source mutation. */
+.ocr-latex-review-select{display:block;width:100%;height:29px;min-width:0;padding:2px 4px;border:1px solid #65736f;border-radius:4px;background:#263138;color:#d3c6aa;font:12px "OCR2MD Sarasa",monospace;cursor:pointer}
+.ocr-latex-review-select[data-review="待复核"]{color:#f0bd80}
+.ocr-latex-review-select[data-review="latex"]{color:#a7d8b5}
+.ocr-latex-review-select[data-review="忽略"]{color:#9ba6ad}
+.ocr-latex-review-select:disabled{opacity:.6;cursor:wait}

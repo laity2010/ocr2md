@@ -5,6 +5,7 @@ import hashlib
 import subprocess
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
+from v6_latex_review import read_reviews as latex_read_reviews, write_review as latex_write_review
 from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE, chapter_media_references
 import json
 import os
@@ -101,6 +102,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/session':
             self.response(200, json.dumps({'canSave': self.authorized()}), 'application/json; charset=utf-8')
+            return
+        if path == '/api/latex/reviews':
+            try:
+                reviews = latex_read_reviews(DOC)
+            except (OSError, ValueError, TypeError, UnicodeError):
+                self.response(503, 'LaTeX review records unavailable')
+                return
+            self.response(200, json.dumps({'reviews': reviews}, ensure_ascii=False), 'application/json')
             return
         if path == '/api/pdf':
             self.get_pdf()
@@ -251,6 +260,9 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get('Origin', '') in allowed
 
     def do_POST(self):
+        if urlsplit(self.path).path == '/api/latex/review':
+            self.post_latex_review()
+            return
         if urlsplit(self.path).path == '/api/media/paste':
             self.post_media_paste()
             return
@@ -294,6 +306,28 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '11')
         self.end_headers()
         self.wfile.write(b'{"ok":true}')
+
+    def post_latex_review(self):
+        if not self.authorized() or not self.same_origin():
+            self.response(403, 'Editor authorization required')
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '-1'))
+            if length < 2 or length > 512:
+                self.response(413, 'Invalid review request size')
+                return
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            if not isinstance(payload, dict) or set(payload) != {'key', 'review'}:
+                raise ValueError('Invalid review request')
+            with DOC_WRITE_LOCK:
+                result = latex_write_review(DOC, payload['key'], payload['review'])
+        except (ValueError, TypeError, KeyError, UnicodeError) as error:
+            self.response(422, str(error))
+            return
+        except OSError:
+            self.response(503, 'LaTeX review storage unavailable')
+            return
+        self.response(200, json.dumps({'review': result}, ensure_ascii=False), 'application/json')
 
     def post_media_paste(self):
         if not self.authorized() or not self.same_origin():

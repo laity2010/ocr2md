@@ -93,7 +93,9 @@ INSERT INTO apis VALUES
  ('T03','T','createLatexModule','ui/latex-module.js','export','host,readDocument,onStatus','module facade','owns independent AG and subscribes document revisions',1),
  ('T04','T','returned.refresh','ui/latex-module.js','returned','none','void','re-scans live CMD and updates AG',1),
  ('T05','T','returned.setActive','ui/latex-module.js','returned','boolean','void','toggles separate LaTeX review projection',1),
- ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0);
+ ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0),
+ ('T07','T','read_reviews','scripts/v6_latex_review.py','export','document path','human review record map','reads independent delta JSON; no Markdown mutation',1),
+ ('T08','T','write_review','scripts/v6_latex_review.py','export','document,formula key,review choice','saved choice','atomic bounded per-record delta update; caller holds server document lock',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -307,7 +309,9 @@ INSERT INTO access_edges VALUES
  ('X25',NULL,'A','scripts/v6_serve.py','chapter_media_references(markdown)','A12','registered','HTTP composition reads chapter references via Media public parser'),
  ('X26','L','T','ui/workspace.js','createLatexModule(this.latexHost','T03','registered','Layout mounts independently owned LaTeX AG'),
  ('X27','L','T','ui/workspace.js','this.latex?.setActive(','T05','registered','Layout switches LaTeX via registered module facade'),
- ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade');
+ ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade'),
+ ('X29',NULL,'T','scripts/v6_serve.py','latex_read_reviews(DOC)','T07','registered','GET /api/latex/reviews loads human review sidecar via LaTeX API'),
+ ('X30',NULL,'T','scripts/v6_serve.py','latex_write_review(DOC','T08','registered','authenticated POST persists one LaTeX review atomically');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -421,3 +425,13 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-T02-RENDER','T02','tests/latex-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'KaTeX render results 成功/失败/未检测 independently filterable; line 855 rendering failure with 待复核 review','integration');
+
+
+-- LaTeX human triage is distinct from parser validation and stored as a sidecar.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-T07','T07','tests/latex-review-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'LaTeX review values loaded from independent sidecar after reload without rewriting Markdown','integration'),
+ ('TC-T08','T08','tests/latex-review-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'three-value dropdown saves and resets one reviewed formula; authentication and invalid input enforced','integration');
