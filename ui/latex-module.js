@@ -139,9 +139,10 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     });
     findReviewMarkers(source,rows);
     grid.setGridOption('rowData',rows);
-    // CM6 Undo/Redo can restore the same AG row ID with a changed review.
-    // WebKit otherwise may keep the previous select renderer's DOM value.
-    grid.refreshCells({force:true,columns:['status']});
+    // Undo/Redo can re-use the same AG row ID with a changed review.
+    // AG pinned/center row clones require complete renderer recreation;
+    // WebKit otherwise leaves a stale select in one of the two row surfaces.
+    grid.redrawRows();
     report();
   }
   function schedule(){
