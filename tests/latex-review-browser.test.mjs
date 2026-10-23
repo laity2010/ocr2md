@@ -82,6 +82,16 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   await inline.selectOption('忽略');
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('忽略 1'),
     null,{timeout:10000});
+  // The read-only preview must retain the whole inline formula paragraph after
+  // CMD inserts paired HTML comments, and retain its source-line anchor.
+  const inlineLine=findLatex(fixture)[1].line;
+  await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
+    .some(el=>Number(el.dataset.sourceStart)<=line && line<Number(el.dataset.sourceEnd)
+      && el.textContent?.trim().length>25),inlineLine,{timeout:11000});
+  await page.locator('.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] [col-id="line"]').first().click();
+  await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown .ocr-outline-focused-element')]
+    .some(el=>Number(el.dataset.sourceStart)<=line&&line<Number(el.dataset.sourceEnd)),
+    inlineLine,{timeout:12000});
   // Inspect live source by selecting the CMS-visible source, not a parallel model.
   assert.equal(await inline.inputValue(),'忽略');
   const chosen=await page.locator('#status').textContent();

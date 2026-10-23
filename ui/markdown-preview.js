@@ -63,8 +63,13 @@ md.renderer.rules.html_block = (tokens,idx,options,env,self) => {
 // Obsidian-reading projection. MinerU preservation comments are deliberately
 // present in the source but invisible here; the sanitizer strips comments.
 export function renderMarkdown(source) {
+  // LaTeX review comments are CMD-owned metadata. Remove them ONLY from the
+  // read-only projection before Markdown parsing: an inline HTML comment may
+  // otherwise cause DOMPurify to drop the whole enclosing paragraph.
+  // Neither marker contains a newline; line-to-PDF anchors remain intact.
+  const projected=source.replace(/<!--(?:\/)?ocr2md:latex id=[a-f0-9]{16}(?: review=(?:latex|忽略))?-->/g,'');
   const env={};
-  const tokens=md.parse(source,env);
+  const tokens=md.parse(projected,env);
   for(const token of tokens) {
     if (token.map && mappedTags.has(token.type)) {
       token.attrSet('data-source-start',String(token.map[0]+1));
