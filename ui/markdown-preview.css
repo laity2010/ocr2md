@@ -76,3 +76,7 @@
 @media(max-width:800px) {
   .ocr-markdown {padding:9px 12px 40px;}
 }
+
+/* Confirmed inline formulas remain in normal prose flow. */
+.ocr-markdown .ocr-reviewed-inline-latex{display:inline}
+.ocr-markdown .ocr-reviewed-inline-error{color:#e67e80}

@@ -8,6 +8,7 @@ import footnote from 'markdown-it-footnote';
 import taskLists from 'markdown-it-task-lists';
 import DOMPurify from 'dompurify';
 import {installObsidianImages} from './obsidian-images.js';
+import {projectReviewedInlineLatex} from './latex-inline-preview.js';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './markdown-preview.css';
@@ -63,11 +64,10 @@ md.renderer.rules.html_block = (tokens,idx,options,env,self) => {
 // Obsidian-reading projection. MinerU preservation comments are deliberately
 // present in the source but invisible here; the sanitizer strips comments.
 export function renderMarkdown(source) {
-  // LaTeX review comments are CMD-owned metadata. Remove them ONLY from the
-  // read-only projection before Markdown parsing: an inline HTML comment may
-  // otherwise cause DOMPurify to drop the whole enclosing paragraph.
-  // Neither marker contains a newline; line-to-PDF anchors remain intact.
-  const projected=source.replace(/<!--(?:\/)?ocr2md:latex id=[a-f0-9]{16}(?: review=(?:latex|忽略))?-->/g,'');
+  // Review annotations are CMD-owned source metadata. Only confirmed inline
+  // latex is rendered as math; ignored/unreviewed fragments stay plain text.
+  // The projection never inserts or removes source line breaks.
+  const projected=projectReviewedInlineLatex(source);
   const env={};
   const tokens=md.parse(projected,env);
   for(const token of tokens) {

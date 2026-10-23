@@ -95,7 +95,8 @@ INSERT INTO apis VALUES
  ('T05','T','returned.setActive','ui/latex-module.js','returned','boolean','void','toggles separate LaTeX review projection',1),
  ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0),
  ('T09','T','planReviewEdit','ui/latex-review-markers.js','export','Markdown source,formula span,choice','optimistic CMD edits','inserts/replaces/removes paired HTML comments without I/O',1),
- ('T10','T','findReviewMarkers','ui/latex-review-markers.js','export','Markdown source and scanned formulas','review projection','reads paired HTML comments in CM6 original Markdown',1);
+ ('T10','T','findReviewMarkers','ui/latex-review-markers.js','export','Markdown source and scanned formulas','review projection','reads paired HTML comments in CM6 original Markdown',1),
+ ('T11','T','projectReviewedInlineLatex','ui/latex-inline-preview.js','export','Markdown source including CM6 review markers','presentation-only Markdown source','renders confirmed inline LaTeX with KaTeX and removes review comments, without document edits',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -311,7 +312,8 @@ INSERT INTO access_edges VALUES
  ('X27','L','T','ui/workspace.js','this.latex?.setActive(','T05','registered','Layout switches LaTeX via registered module facade'),
  ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade'),
  ('X32','T','C','ui/latex-module.js','getCMD().replaceRanges(edits)','C14','registered','LaTeX requests optimistic Markdown annotation transaction through CMD public API'),
- ('X33','L','C','ui/workspace.js','getCMD().replaceRanges(edits)','C14','registered','Layout injects a narrow CMD capability to the LaTeX plugin');
+ ('X33','L','C','ui/workspace.js','getCMD().replaceRanges(edits)','C14','registered','Layout injects a narrow CMD capability to the LaTeX plugin'),
+ ('X34','M','T','ui/markdown-preview.js','projectReviewedInlineLatex(source)','T11','registered','MD preview projects LaTeX confirmed inline annotations using LaTeX public renderer; no CM6 writes');
 
 -- X31 remains in Git commit cb524eb and in this historical finding row.
 INSERT INTO architecture_findings VALUES
@@ -442,3 +444,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-T10','T10','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'CM6 Markdown re-scan restores marked choices after save/reload; original TeX unchanged','integration');
+
+
+-- Confirmed formula is rendered in MD reading projection, not a metadata-only state.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-T11','T11','tests/latex-review-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Confirmed inline LaTeX renders KaTeX in surrounding MD paragraph; ignore remains plain text; source unchanged','integration');

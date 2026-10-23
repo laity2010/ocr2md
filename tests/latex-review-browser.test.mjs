@@ -79,12 +79,24 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   await page.locator('#redo').click();
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 1'),
     null,{timeout:10000});
+  // Confirming an undelimited inline formula must render actual KaTeX in
+  // the MD projection, without altering the TeX body or neighboring prose.
+  await inline.selectOption('latex');
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 2'),
+    null,{timeout:10000});
+  const inlineLine=findLatex(fixture)[1].line+2; // preceding fenced review added two source lines
+  await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
+    .some(el=>Number(el.dataset.sourceStart)<=line&&line<Number(el.dataset.sourceEnd)&&
+      el.querySelector('.ocr-reviewed-inline-latex .katex')&&el.textContent.includes('is total assets')),
+    inlineLine,{timeout:12000});
+  assert.equal(await page.locator('.ocr-markdown .ocr-reviewed-inline-latex .katex').count(),1);
   await inline.selectOption('忽略');
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('忽略 1'),
     null,{timeout:10000});
+  assert.equal(await page.locator('.ocr-markdown .ocr-reviewed-inline-latex .katex').count(),0,
+    'ignored formula must revert to ordinary prose');
   // The read-only preview must retain the whole inline formula paragraph after
   // CMD inserts paired HTML comments, and retain its source-line anchor.
-  const inlineLine=findLatex(fixture)[1].line+2; // fenced formula review added two comment lines before this paragraph
   await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
     .some(el=>Number(el.dataset.sourceStart)<=line && line<Number(el.dataset.sourceEnd)
       && el.textContent?.trim().length>25),inlineLine,{timeout:11000});
@@ -128,6 +140,6 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
     .filter(x=>x.status==='忽略').length,0);
   assert.deepEqual(errors,[],name+' page errors');
   console.log('LATEX_CM_REVIEW_PASS',name,JSON.stringify({inline:true,standalone:true,undoRedo:true,
-    saveReload:true,deltaApiRemoved:true,sourceSingle:true}));
+    saveReload:true,inlineKatex:true,ignoredPlain:true,deltaApiRemoved:true,sourceSingle:true}));
  }finally{await browser?.close();server.kill('SIGTERM');}
 }
