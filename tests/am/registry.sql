@@ -388,7 +388,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- First read-only LaTeX audit plugin uses public review transport only.
 WITH latex_cases(id,description) AS (VALUES
  ('T01','scans 20 real math fences, 22 inferred inline candidates and explicit delimiters; excludes evidence/code/currency'),
- ('T02','KaTeX strict render records invalid syntax separately from valid formulas'),
+ ('T02','KaTeX strict render success/failure/unavailable independent of OCR-boundary review; line 855 fails while marked pending review'),
  ('T03','LaTeX mounts an independent AG panel without altering source or Media'),
  ('T04','scan reflects CMD changes without a Markdown shadow copy'),
  ('T05','module switch preserves chapter outline/Media and PDF viewer')
@@ -414,3 +414,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-T06','T06','tests/latex-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'MinerU mixed prose LaTeX is recovered as pending-review candidates without touching Markdown or evidence','integration');
+
+
+-- Render success is a separate filter from review status, including line 855.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-T02-RENDER','T02','tests/latex-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'KaTeX render results 成功/失败/未检测 independently filterable; line 855 rendering failure with 待复核 review','integration');

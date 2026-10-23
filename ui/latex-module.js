@@ -14,20 +14,24 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
   oddRowBackgroundColor:'#2d363c',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
 export function checkLatex(item){
-  if(item.issue&&!item.detection)return {...item,status:'错误',error:item.issue,html:''};
-  if(!item.content.trim())return {...item,status:'错误',error:'空公式',html:''};
+  // Rendering and human review are orthogonal: incomplete MinerU fragments
+  // can parse successfully, while an unreviewed fragment may fail KaTeX.
+  if(item.issue&&!item.detection)
+    return {...item,status:'错误',renderStatus:'未检测',error:item.issue,html:''};
+  if(!item.content.trim())
+    return {...item,status:'错误',renderStatus:'未检测',error:'空公式',html:''};
   try{
     const html=katex.renderToString(item.content,{displayMode:item.kind==='独立',
       throwOnError:true,trust:false,maxExpand:1000,strict:'warn'});
-    if(item.detection)return {...item,status:'待复核',error:item.issue,html};
-    return {...item,status:'通过',error:'',html};
+    if(item.detection)return {...item,status:'待复核',renderStatus:'成功',error:item.issue,html};
+    return {...item,status:'通过',renderStatus:'成功',error:'',html};
   }catch(e){
     const message=String(e.message||e).slice(0,300);
     // A guessed fragment may have incomplete boundaries. Report the parse
     // failure but never assert that the original document has bad TeX.
-    if(item.detection)return {...item,status:'待复核',
+    if(item.detection)return {...item,status:'待复核',renderStatus:'失败',
       error:`KaTeX：${message}；可能是公式边界不完整`,html:''};
-    return {...item,status:'错误',error:message,html:''};
+    return {...item,status:'错误',renderStatus:'失败',error:message,html:''};
   }
 }
 
@@ -61,7 +65,18 @@ export function createLatexModule(host,getMarkdown,onStatus){
       }},
     {colId:'preview',headerName:'公式预览',minWidth:205,flex:1.15,
       cellRenderer:formulaPreview},
-    {field:'status',headerName:'校验',width:85,minWidth:79,
+    {field:'renderStatus',headerName:'渲染',width:89,minWidth:83,
+      filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
+      cellRenderer:p=>{
+        if(!p.data)return '';
+        const el=document.createElement('span');el.className='ocr-latex-render-status';
+        el.dataset.render=p.value==='成功'?'success':p.value==='失败'?'failure':'unavailable';
+        el.textContent=p.value;
+        el.title=p.value==='失败'?(p.data.error||'KaTeX 无法渲染'):
+          p.value==='成功'?'KaTeX 能解析渲染；不代表 OCR 内容已确认':'未执行渲染';
+        return el;
+      }},
+    {field:'status',headerName:'审阅',width:85,minWidth:79,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
       cellRenderer:p=>{
         if(!p.data)return '';
@@ -85,7 +100,7 @@ export function createLatexModule(host,getMarkdown,onStatus){
     if(disposed)return;
     rows=findLatex(getMarkdown()).map(checkLatex);
     grid.setGridOption('rowData',rows);
-    if(active)onStatus(`LaTeX ${rows.length} 项 · 通过 ${rows.filter(row=>row.status==='通过').length} · 待复核 ${rows.filter(row=>row.status==='待复核').length} · 错误 ${rows.filter(row=>row.status==='错误').length}`);
+    if(active)onStatus(`LaTeX ${rows.length} 项 · 渲染成功 ${rows.filter(row=>row.renderStatus==='成功').length} / 失败 ${rows.filter(row=>row.renderStatus==='失败').length} / 未检测 ${rows.filter(row=>row.renderStatus==='未检测').length} · 审阅待复核 ${rows.filter(row=>row.status==='待复核').length} · 错误 ${rows.filter(row=>row.status==='错误').length}`);
   }
   function schedule(){
     if(queued||disposed)return;queued=true;

@@ -16,3 +16,9 @@
 .ocr-latex-pane .ag-header-cell-filter-button{display:flex;align-items:center;width:22px;min-width:22px;margin-right:8px;cursor:pointer}
 
 .ocr-latex-status[data-status="review"]{color:#f0bd80;background:rgba(215,127,72,.18)}
+
+/* KaTeX renderability is independent from human OCR/boundary review. */
+.ocr-latex-render-status{display:inline-block;padding:3px 6px;border-radius:3px;font-weight:600;white-space:nowrap}
+.ocr-latex-render-status[data-render="success"]{color:#a7d8b5;background:rgba(86,157,121,.18)}
+.ocr-latex-render-status[data-render="failure"]{color:#f0a49b;background:rgba(230,126,128,.2)}
+.ocr-latex-render-status[data-render="unavailable"]{color:#9ba6ad;background:rgba(145,151,156,.14)}

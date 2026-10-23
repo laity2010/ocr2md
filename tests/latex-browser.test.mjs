@@ -17,6 +17,7 @@ const cases=[
   '<!-- $ignored$ \\(ignored\\) -->',
   '```js', '$not_math$', '```',
   '```latex', 'x_1 + y_1', '```',
+  '\\(unfinished',
 ].join('\n');
 const baseline=findLatex(fixture);
 assert.equal(baseline.filter(row=>row.kind==='独立').length,20,'baseline has twenty math fences');
@@ -25,11 +26,13 @@ assert.equal(baseline.filter(row=>row.detection==='inferred').length,22,
 assert(baseline.some(row=>row.kind==='行内' && row.content.includes('\\mathsf')),
   'MinerU inline math should not be missed');
 const marked=findLatex(cases);
-assert.equal(marked.length,6,'six valid/invalid delimited tokens should be scanned');
-assert.deepEqual(marked.map(v=>v.kind),['行内','行内','行内','独立','独立','独立']);
+assert.equal(marked.length,7,'seven valid/invalid delimited tokens should be scanned');
+assert.deepEqual(marked.map(v=>v.kind),['行内','行内','行内','独立','独立','独立','']);
 assert(!marked.some(v=>v.content.includes('ignored')||v.content.includes('not_math')));
 const badSyntax=findLatex('\\(a + b\n')[0];
 assert(badSyntax.issue,'unterminated explicit LaTeX delimiter should be flagged');
+const line855=baseline.find(item=>item.content.includes('\\kern - delimiterspace'));
+assert(line855?.detection==='inferred','the row 855 extracted fragment must be detected');
 
 const content=fixture+'\n\n'+cases+'\n';
 const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
@@ -68,10 +71,12 @@ for(let i=0;i<engines.length;i++){
     groups:document.querySelectorAll('.dv-groupview').length,
   }));
   assert(snapshot.count>=10,'AG Grid must render formulas in its virtual viewport');
-  assert((await page.locator('#status').textContent()).includes('LaTeX 48 项'),
-    '20 display + 22 inferred inline + 6 synthetic formulas expected');
-  assert((await page.locator('#status').textContent()).includes('待复核 22'),
+  assert((await page.locator('#status').textContent()).includes('LaTeX 49 项'),
+    '20 display + 22 inferred inline + 7 synthetic formulas expected');
+  assert((await page.locator('#status').textContent()).includes('审阅待复核 22'),
     'undelimited candidates should be explicitly marked for review');
+  assert((await page.locator('#status').textContent()).includes('渲染成功'),
+    'KaTeX render counts must be independent from human review counts');
   assert.equal(snapshot.groups,3);
   assert.equal(snapshot.toolbar,false);
   assert(snapshot.data.filter(r=>r.katex>0).length>=10,'visible formulas should render with KaTeX');
@@ -80,13 +85,35 @@ for(let i=0;i<engines.length;i++){
   const filter=page.locator('.ocr-enum-filter');
   await filter.locator('[data-filter-value="通过"] input').uncheck();
   await filter.locator('[data-filter-value="待复核"] input').uncheck();
-  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length===1,
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length===2,
     null,{timeout:8000});
   assert((await page.locator('.ocr-latex-grid .ag-row').textContent()).includes('错误'));
   await filter.locator('[data-filter-value="all"] input').check();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
     null,{timeout:8000});
   await statusHeader.locator('.ag-header-cell-filter-button').click();
+  // Filter actual KaTeX results independently of human audit. In particular,
+  // line 855 has an inferred boundary AND a failing \kern expression.
+  const renderHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="renderStatus"]');
+  await renderHeader.locator('.ag-header-cell-filter-button').click();
+  const renders=page.locator('.ocr-enum-filter');
+  for(const value of ['成功','未检测','失败'])
+    assert.equal(await renders.locator(`[data-filter-value="${value}"]`).count(),1,
+      'missing KaTeX render filter value '+value);
+  await renders.locator('[data-filter-value="成功"] input').uncheck();
+  await renders.locator('[data-filter-value="未检测"] input').uncheck();
+  await page.waitForFunction(()=>document.querySelector('.ocr-latex-grid .ag-row')?.textContent.includes('失败'),
+    null,{timeout:8000});
+  const failures=await page.locator('.ocr-latex-grid .ag-row').allTextContents();
+  assert(failures.some(text=>text.includes('\\kern - delimiterspace')),
+    'row 855 must have a distinct KaTeX failure even while awaiting manual review');
+  const row855=page.locator('.ocr-latex-grid .ag-row').filter({hasText:'\\kern - delimiterspace'}).first();
+  assert.equal(await row855.locator('.ocr-latex-render-status').textContent(),'失败');
+  assert.equal(await row855.locator('.ocr-latex-status').textContent(),'待复核');
+  await renders.locator('[data-filter-value="all"] input').check();
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
+    null,{timeout:8000});
+  await renderHeader.locator('.ag-header-cell-filter-button').click();
   const methodHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="syntax"]');
   await methodHeader.locator('.ag-header-cell-filter-button').click();
   assert.equal(await page.locator('.ocr-enum-filter [data-filter-value="未定界"]').count(),1,
@@ -103,7 +130,8 @@ for(let i=0;i<engines.length;i++){
   await page.screenshot({path:`.v6/evidence/latex-${name.toLowerCase()}.png`});
   assert.equal(readFileSync(path,'utf8'),content,'LaTeX review must never write CMD Markdown');
   assert.deepEqual(errors,[],name+' client errors');
-  console.log('LATEX_BROWSER_PASS',name,JSON.stringify({math:48,display:20,inferred:22,errors:1,
+  console.log('LATEX_BROWSER_PASS',name,JSON.stringify({math:49,display:20,inferred:22,
+    row855:{render:'失败',review:'待复核'},renderFilter:true,
     katex:true,statusFilter:true,focus:true,moduleIsolation:true}));
  }finally{await browser?.close();server.kill('SIGTERM');}
 }
