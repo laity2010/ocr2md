@@ -61,6 +61,33 @@ for(let i=0;i<engines.length;i++){
   await page.locator('#module-select').selectOption('latex');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>0,
     null,{timeout:25000});
+  // The seven user-defined columns, in order. The old independent/inline
+  // "kind" column is not presented; "类型" reuses former recognition syntax.
+  const leftHeaders=await page.locator('.ocr-latex-grid .ag-header-cell')
+    .evaluateAll(nodes=>nodes.map(node=>({
+      id:node.getAttribute('col-id'),
+      label:node.querySelector('.ag-header-cell-text')?.textContent?.trim(),
+    })));
+  assert.equal(leftHeaders.find(h=>h.id==='line')?.label,'源码行');
+  assert.equal(leftHeaders.find(h=>h.id==='status')?.label,'审阅');
+  assert.equal(leftHeaders.find(h=>h.id==='renderStatus')?.label,'渲染');
+  assert.equal(leftHeaders.find(h=>h.id==='preview')?.label,'预览');
+  assert(!leftHeaders.some(h=>h.id==='kind'),'obsolete independent/inline column remains');
+  // AG Grid virtualizes horizontally; verify the remaining columns by
+  // scrolling to the end, without mutating the document or grid settings.
+  await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
+    .evaluate(el=>{el.scrollLeft=el.scrollWidth;});
+  await page.waitForFunction(()=>document.querySelector('.ocr-latex-grid .ag-header-cell[col-id="error"]')!==null);
+  const rightHeaders=await page.locator('.ocr-latex-grid .ag-header-cell')
+    .evaluateAll(nodes=>nodes.map(node=>({
+      id:node.getAttribute('col-id'),
+      label:node.querySelector('.ag-header-cell-text')?.textContent?.trim(),
+    })));
+  for(const [id,label] of [['content','源码'],['syntax','类型'],['error','错误信息']])
+    assert.equal(rightHeaders.find(h=>h.id===id)?.label,label,'unexpected LaTeX column '+id);
+  assert(!rightHeaders.some(h=>h.id==='kind'));
+  await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
+    .evaluate(el=>{el.scrollLeft=0;});
   const snapshot=await page.evaluate(()=>({
     count:document.querySelectorAll('.ocr-latex-grid .ag-row').length,
     data:[...document.querySelectorAll('.ocr-latex-grid .ag-row')].map(r=>({
@@ -118,15 +145,17 @@ for(let i=0;i<engines.length;i++){
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>=10,
     null,{timeout:8000});
   await renderHeader.locator('.ag-header-cell-filter-button').click();
-  // AG virtualizes headers as the horizontal viewport moves. After testing a
-  // right-side filter, scroll back before inspecting an earlier column.
+  // "类型" (formerly "识别方式") is now near the far right.
   await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
-    .evaluate(element=>{element.scrollLeft=0;});
+    .evaluate(element=>{element.scrollLeft=element.scrollWidth;});
   const methodHeader=page.locator('.ocr-latex-grid .ag-header-cell[col-id="syntax"]');
+  await methodHeader.waitFor();
   await methodHeader.locator('.ag-header-cell-filter-button').click();
   assert.equal(await page.locator('.ocr-enum-filter [data-filter-value="未定界"]').count(),1,
     'inferred inline candidates must have a dedicated categorical filter');
   await methodHeader.locator('.ag-header-cell-filter-button').click();
+  await page.locator('.ocr-latex-grid .ag-body-horizontal-scroll-viewport')
+    .evaluate(element=>{element.scrollLeft=0;});
   await page.locator('.ocr-latex-grid .ag-row[row-index="0"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-markdown .ocr-outline-focused-element')!==null,
     null,{timeout:12000});

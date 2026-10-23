@@ -71,31 +71,6 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   };
   const columns=[
     {field:'line',headerName:'源码行',width:87,minWidth:76,pinned:'left',lockPinned:true},
-    {field:'kind',headerName:'类型',width:77,minWidth:72,
-      filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
-    {field:'syntax',headerName:'识别方式',width:91,minWidth:87,
-      valueFormatter:p=>p.data?.detection?'未定界':p.value||'明确',
-      filter:EnumCheckboxFilter,
-      filterValueGetter:p=>p.data?.detection?'未定界':'有定界',
-      suppressHeaderMenuButton:true},
-    {field:'content',headerName:'LaTeX 源码',minWidth:155,flex:1,
-      cellRenderer:p=>{
-        const el=document.createElement('span');el.className='ocr-latex-source';
-        el.textContent=p.value;el.title=p.value;return el;
-      }},
-    {colId:'preview',headerName:'公式预览',minWidth:205,flex:1.15,
-      cellRenderer:formulaPreview},
-    {field:'renderStatus',headerName:'渲染',width:89,minWidth:83,
-      filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
-      cellRenderer:p=>{
-        if(!p.data)return '';
-        const el=document.createElement('span');el.className='ocr-latex-render-status';
-        el.dataset.render=p.value==='成功'?'success':p.value==='失败'?'failure':'unavailable';
-        el.textContent=p.value;
-        el.title=p.value==='失败'?(p.data.error||'KaTeX 无法渲染'):
-          p.value==='成功'?'KaTeX 能解析渲染；不代表 OCR 内容已确认':'未执行渲染';
-        return el;
-      }},
     {field:'status',headerName:'审阅',width:106,minWidth:98,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
       cellRenderer:p=>{
@@ -117,6 +92,29 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
         dropdown.addEventListener('change',()=>markReview(p.data,dropdown.value));
         return dropdown;
       }},
+    {field:'renderStatus',headerName:'渲染',width:89,minWidth:83,
+      filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
+      cellRenderer:p=>{
+        if(!p.data)return '';
+        const el=document.createElement('span');el.className='ocr-latex-render-status';
+        el.dataset.render=p.value==='成功'?'success':p.value==='失败'?'failure':'unavailable';
+        el.textContent=p.value;
+        el.title=p.value==='失败'?(p.data.error||'KaTeX 无法渲染'):
+          p.value==='成功'?'KaTeX 能解析渲染；不代表 OCR 内容已确认':'未执行渲染';
+        return el;
+      }},
+    {colId:'preview',headerName:'预览',minWidth:205,flex:1.15,
+      cellRenderer:formulaPreview},
+    {field:'content',headerName:'源码',minWidth:155,flex:1,
+      cellRenderer:p=>{
+        const el=document.createElement('span');el.className='ocr-latex-source';
+        el.textContent=p.value;el.title=p.value;return el;
+      }},
+    {field:'syntax',headerName:'类型',width:91,minWidth:87,
+      valueFormatter:p=>p.data?.detection?'未定界':p.value||'明确',
+      filter:EnumCheckboxFilter,
+      filterValueGetter:p=>p.data?.detection?'未定界':'有定界',
+      suppressHeaderMenuButton:true},
     {field:'error',headerName:'错误信息',minWidth:130,flex:0.9,
       cellRenderer:p=>{
         const el=document.createElement('span');el.className='ocr-latex-error';
