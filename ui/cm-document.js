@@ -8,6 +8,7 @@ import {EditorView} from '@codemirror/view';
 import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
 import {unquotePrefix} from './mineru-anchors.js';
 import {isolateHistory} from '@codemirror/commands';
+import {scanAnnotations,formatAnnotation} from './cmd-annotations.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -152,6 +153,52 @@ export class CMDocument {
       ...(cursorAfter===null?{}:{selection:{anchor:cursorAfter}}),
       userEvent:'input',annotations:isolateHistory.of('full')});
     return {changed:sorted.length};
+  }
+
+  /** Read CMD-owned syntax records from the live CM6 source, with exact
+   * source ranges. No nesting, type schema, or Markdown preview semantics.
+   * Optional tag/attributes select records without interpreting their values.
+   */
+  readAnnotations({tag=null,attributes={}}={}){
+    if(tag!==null&&typeof tag!=='string')throw Error('Invalid annotation tag filter');
+    if(!attributes||typeof attributes!=='object'||Array.isArray(attributes))
+      throw Error('Invalid annotation attribute filter');
+    const snapshot=this.doc;
+    return scanAnnotations(this.markdown)
+      .filter(item=>(tag===null||item.tag===tag)&&Object.entries(attributes)
+        .every(([key,value])=>item.attributes[key]===String(value)))
+      .map(item=>Object.freeze({...item,attributes:Object.freeze(item.attributes),
+        line:snapshot.lineAt(item.from).number,snapshot}));
+  }
+  /** Insert or replace exactly one HTML-comment annotation. A read record
+   * is an optimistic edit target; stale data never edits another element.
+   * `at` is a CM6 source offset, never an inferred Markdown nesting level.
+   */
+  writeAnnotation({tag,attributes={},at=null,target=null,snapshot=null}={}){
+    const markup=formatAnnotation(tag,attributes);
+    if(target!==null){
+      this._requireAnnotationTarget(target);
+      this.replaceRanges([{from:target.from,to:target.to,expected:target.raw,insert:markup}]);
+      return this.readAnnotations().find(item=>item.from===target.from&&item.raw===markup);
+    }
+    if(!Number.isInteger(at)||at<0||at>this.doc.length)
+      throw Error('Invalid annotation insertion offset');
+    if(snapshot!==null&&!this.matchesSnapshot(snapshot))throw Error('Annotation source changed');
+    this.replaceRanges([{from:at,to:at,expected:'',insert:markup}]);
+    return this.readAnnotations().find(item=>item.from===at&&item.raw===markup);
+  }
+  /** Delete annotation syntax only; never remove its associated Markdown. */
+  removeAnnotation(target){
+    this._requireAnnotationTarget(target);
+    this.replaceRanges([{from:target.from,to:target.to,expected:target.raw,insert:''}]);
+    return {removed:true};
+  }
+  _requireAnnotationTarget(target){
+    if(!target||!this.matchesSnapshot(target.snapshot)||
+       !Number.isInteger(target.from)||!Number.isInteger(target.to)||
+       this.markdown.slice(target.from,target.to)!==target.raw||
+       !scanAnnotations(target.raw).some(item=>item.from===0&&item.to===target.raw.length))
+      throw Error('Annotation source changed; read current annotations again');
   }
 
   /** Insert HTML immediately before a 1-based document line, or replace the

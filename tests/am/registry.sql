@@ -26,6 +26,9 @@ INSERT INTO apis VALUES
  ('C14','C','CMDocument.replaceRanges','ui/cm-document.js','export','array of from/to/expected/insert','changed count','one validated CM6 transaction; forbids original evidence edits',1),
  ('C15','C','CMDocument.capturePasteTarget','ui/cm-document.js','export','none','opaque snapshot + selected range','captures insertion position before async file upload',1),
  ('C16','C','CMDocument.pasteAt','ui/cm-document.js','export','captured target, local Markdown image reference','void','one CM6 undo step; rejects changed source and evidence',1),
+ ('C17','C','CMDocument.readAnnotations','ui/cm-document.js','export','optional tag/attribute filters','source-positioned annotation records','generic HTML comment syntax in CM6 source; no nesting or business semantics',1),
+ ('C18','C','CMDocument.writeAnnotation','ui/cm-document.js','export','tag,attributes,at or target','updated source annotation record','CM6 atomic insert/update with stale-target and immutable evidence safeguards',1),
+ ('C19','C','CMDocument.removeAnnotation','ui/cm-document.js','export','annotation record from CMD','removed flag','CM6 atomic exact comment deletion; never deletes associated Markdown content',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -451,3 +454,16 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-T11','T11','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'Confirmed inline LaTeX renders KaTeX in surrounding MD paragraph; ignore remains plain text; source unchanged','integration');
+
+
+-- CMD syntax-only annotations; no business semantics, quote nesting, or MD renderer changes.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C17','C17','tests/cmd-annotations-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Read chapter and LaTeX annotations by tag/attribute with source offsets; skip provenance comment body','direct'),
+ ('TC-C18','C18','tests/cmd-annotations-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Insert inline comment at exact offset and replace attributes in CM6, keeping ordinary Markdown unchanged','direct'),
+ ('TC-C19','C19','tests/cmd-annotations-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Reject stale comment target and prohibited evidence modification; remove only annotation','direct');
