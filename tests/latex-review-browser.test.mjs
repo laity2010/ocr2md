@@ -84,7 +84,7 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
     null,{timeout:10000});
   // The read-only preview must retain the whole inline formula paragraph after
   // CMD inserts paired HTML comments, and retain its source-line anchor.
-  const inlineLine=findLatex(fixture)[1].line;
+  const inlineLine=findLatex(fixture)[1].line+2; // fenced formula review added two comment lines before this paragraph
   await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
     .some(el=>Number(el.dataset.sourceStart)<=line && line<Number(el.dataset.sourceEnd)
       && el.textContent?.trim().length>25),inlineLine,{timeout:11000});
