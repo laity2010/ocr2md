@@ -160,11 +160,11 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
       const current=findLatex(source).map(item=>({...item,raw:source.slice(item.from,item.to)}));
       findReviewMarkers(source,current,getCMD()?.readAnnotations()??[]);
       const operations=planNormalizeReviewedInline(source,current);
-      if(!operations.length){onStatus('已确认的行内公式无需规范化');return;}
+      if(!operations.length){onStatus('已确认的公式均符合单注释格式');return;}
       try{
         getCMD().editAnnotations(operations,{expectedSource:source});
         refresh();
-        onStatus(`已规范化 ${operations.filter(op=>op.tag==='ocr2md:latex').length} 条行内公式 · 请全局保存`);
+        onStatus(`已规范化 ${operations.filter(op=>op.tag==='ocr2md:latex').length} 条公式 · 请全局保存`);
       }catch(error){onStatus(`规范化失败：${error.message}`);}
     },
     setActive(enabled){active=enabled;host.hidden=!enabled;if(enabled)refresh();},

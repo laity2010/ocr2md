@@ -1,51 +1,37 @@
-/** Read-only inline LaTeX projection. HTML is introduced only AFTER
- * markdown-it has parsed the prose, otherwise it can truncate paragraphs.
- * Recognizes old unquoted and new canonical CMD-serialized annotation tags.
+/** Read-only markdown projection. One HTML comment preceding $...$ or
+ * $$...$$ carries the review status; old closing comments are hidden too.
  */
 import katex from 'katex';
 import {scanAnnotations} from './cmd-annotations.js';
-
+import {findLatex} from './latex-scan.js';
+import {findReviewMarkers} from './latex-review-markers.js';
 function escapeHtml(text){
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
 export function projectReviewedInlineLatex(source){
   let prefix='OCR2MDREVIEWEDINLINEKATEX';
   while(source.includes(prefix))prefix+='Z';
   const fragments=[],replacements=[];
   const annotations=scanAnnotations(source);
-  const starts=annotations.filter(x=>x.tag==='ocr2md:latex'&&
-    /^[a-f0-9]{16}$/.test(x.attributes.id||'')&&x.attributes.review==='latex');
-  const ends=annotations.filter(x=>x.tag==='/ocr2md:latex'&&
-    /^[a-f0-9]{16}$/.test(x.attributes.id||''));
-  const used=new Set();
-  for(const start of starts){
-    const end=ends.find(item=>item.attributes.id===start.attributes.id&&
-      item.from>=start.to&&!used.has(item.from)&&
-      !source.slice(start.to,item.from).includes('\n')&&
-      !annotations.some(other=>other.from>start.to&&other.from<item.from));
-    if(!end)continue;
-    const raw=source.slice(start.to,end.from);
-    // Native Obsidian delimiters are source syntax, not KaTeX formula text.
-    const formula=raw.startsWith('$')&&raw.endsWith('$')&&!raw.startsWith('$$')
-      ?raw.slice(1,-1):raw;
-    const token=`${prefix}${fragments.length}END`;
+  const formulas=findLatex(source);
+  findReviewMarkers(source,formulas,annotations);
+  for(const formula of formulas){
+    if(formula.kind!=='行内'||formula.status!=='latex')continue;
+    const token=prefix+fragments.length+'END';
+    const latex=formula.content;
     let html;
     try{
-      html=`<span class="ocr-reviewed-inline-latex">${katex.renderToString(formula,{
+      html='<span class="ocr-reviewed-inline-latex">'+katex.renderToString(latex,{
         displayMode:false,throwOnError:true,trust:false,maxExpand:1000,strict:'warn',
-      })}</span>`;
+      })+'</span>';
     }catch{
-      html=`<span class="ocr-reviewed-inline-error">${escapeHtml(formula)}</span>`;
+      html='<span class="ocr-reviewed-inline-error">'+escapeHtml(latex)+'</span>';
     }
     fragments.push({token,html});
-    replacements.push({from:start.to,to:end.from,insert:token});
-    used.add(end.from);
+    replacements.push({from:formula.from,to:formula.to,insert:token});
   }
-  // Remove all control annotations from the *projection*, including ignored
-  // annotations and both ends of old/new pairs. No line break is removed.
   for(const marker of annotations){
-    if(['/ocr2md:latex','ocr2md:latex'].includes(marker.tag)&&
+    if(['ocr2md:latex','/ocr2md:latex'].includes(marker.tag)&&
        /^[a-f0-9]{16}$/.test(marker.attributes.id||''))
       replacements.push({from:marker.from,to:marker.to,insert:''});
   }

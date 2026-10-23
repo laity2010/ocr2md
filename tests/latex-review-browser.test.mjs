@@ -14,23 +14,12 @@ const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.miner
 const pause=ms=>new Promise(done=>setTimeout(done,ms));
 const first=findLatex(fixture)[0];
 assert.equal(first.kind,'独立');
-// Unit proof that applying a pair of insertions and their removal are lossless.
+// One HTML annotation followed by native math delimiters; no closing comment.
 const original={...first,raw:fixture.slice(first.from,first.to)};
-const edits=planReviewEdit(fixture,original,'latex','0123456789abcdef');
-function apply(value,changes){for(const edit of [...changes].reverse()){
- assert.equal(value.slice(edit.from,edit.to),edit.expected);
- value=value.slice(0,edit.from)+edit.insert+value.slice(edit.to);
-}return value;}
-let changed=apply(fixture,edits);
-let candidates=findLatex(changed).map(r=>({...r,raw:changed.slice(r.from,r.to)}));
-findReviewMarkers(changed,candidates);
-assert.equal(candidates[0].status,'latex');
-changed=apply(changed,planReviewEdit(changed,candidates[0],'待复核'));
-assert.equal(changed,fixture,'pure comment insertion/removal must round-trip');
 const intended=planReviewAnnotations(fixture,original,'latex','0123456789abcdef');
-assert.deepEqual(intended.map(x=>x.action),['insert','text','text','insert']);
+assert.deepEqual(intended.map(x=>x.action),['insert','text']);
 assert.equal(intended[0].tag,'ocr2md:latex');
-assert.equal(intended[3].tag,'/ocr2md:latex');
+assert(!intended.some(op=>op.tag==='/ocr2md:latex'));
 
 const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
@@ -74,7 +63,7 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 1'),
     null,{timeout:10000});
   assert.equal(await inline.inputValue(),'待复核');
-  // Fenced formula: marker comments are placed on their own lines, outside the TeX fence.
+  // Confirmed standalone formula uses one comment and inline $...$ on one physical line.
   let current=await page.evaluate(async()=> (await fetch('/api/document')).text());
   assert.equal(current,fixture,'no implicit server write before global CMD Save');
   await page.locator('#undo').click();
@@ -89,7 +78,7 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   await inline.selectOption('latex');
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 2'),
     null,{timeout:10000});
-  const inlineLine=findLatex(fixture)[1].line+2; // preceding fenced review added two source lines
+  const inlineLine=findLatex(fixture)[1].line-2; // confirmed standalone collapsed to one source line
   await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
     .some(el=>Number(el.dataset.sourceStart)<=line&&line<Number(el.dataset.sourceEnd)&&
       el.querySelector('.ocr-reviewed-inline-latex .katex')&&el.textContent.includes('is total assets')),
@@ -103,7 +92,7 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   assert.equal(await page.locator('.ocr-markdown .ocr-reviewed-inline-latex .katex').count(),0,
     'ignored formula must revert to ordinary prose');
   // The read-only preview must retain the whole inline formula paragraph after
-  // CMD inserts paired HTML comments, and retain its source-line anchor.
+  // CMD inserts a single HTML comment, and retain its source-line anchor.
   await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
     .some(el=>Number(el.dataset.sourceStart)<=line && line<Number(el.dataset.sourceEnd)
       && el.textContent?.trim().length>25),inlineLine,{timeout:11000});

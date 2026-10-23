@@ -32,7 +32,16 @@ installObsidianImages(md);
 // Keep source-line maps so AG/CM6/PDF navigation remains unchanged.
 md.block.ruler.before('fence','ocr_display_math',(state,startLine,endLine,silent)=>{
   const line=n=>state.src.slice(state.bMarks[n]+state.tShift[n],state.eMarks[n]);
-  if(state.sCount[startLine]>3||!/^\$\$[ \t]*$/.test(line(startLine)))return false;
+  if(state.sCount[startLine]>3)return false;
+  const same=/^\$\$([^\n]+)\$\$[ \t]*$/.exec(line(startLine));
+  if(same){
+    if(silent)return true;
+    const token=state.push('ocr_display_math','div',0);
+    token.block=true;token.map=[startLine,startLine+1];
+    token.content=same[1];state.line=startLine+1;
+    return true;
+  }
+  if(!/^\$\$[ \t]*$/.test(line(startLine)))return false;
   let end=startLine+1;
   while(end<endLine&&!/^\$\$[ \t]*$/.test(line(end)))end++;
   if(end===endLine)return false;
