@@ -170,9 +170,10 @@ export class CMDocument {
       .map(item=>Object.freeze({...item,attributes:Object.freeze(item.attributes),
         line:snapshot.lineAt(item.from).number,snapshot}));
   }
-  /** Apply syntax-only annotation changes in ONE CMD/CM6 undoable transaction.
-   * An operation is insert/update/remove. The caller owns the element's
-   * Markdown range; CMD owns serialization, source guards and transactions.
+  /** Apply annotations and accompanying generic source edits in ONE undo step.
+   * Annotation actions insert/update/remove; 'text' accepts an optimistic
+   * from/to/expected/insert edit. CMD never interprets the inserted text.
+   * The caller owns Markdown semantics; CMD owns syntax and transactions.
    * Only optional single hard returns and Markdown quote prefixes are allowed
    * around standalone markers. All unrelated text is left byte-for-byte.
    */
@@ -183,9 +184,17 @@ export class CMDocument {
       throw Error('Annotation source changed; rescan before editing');
     const edits=[];
     for(const operation of operations){
-      if(!operation||!['insert','update','remove'].includes(operation.action))
+      if(!operation||!['insert','update','remove','text'].includes(operation.action))
         throw Error('Invalid annotation operation');
       const {action,target,at,tag,attributes={},prefix='',suffix='',spaced=false,removeBefore=false,removeAfter=false}=operation;
+      if(action==='text'){
+        const {from,to,expected,insert}=operation;
+        if(!Number.isInteger(from)||!Number.isInteger(to)||from<0||to<from||to>source.length||
+           typeof expected!=='string'||source.slice(from,to)!==expected||typeof insert!=='string')
+          throw Error('Invalid annotation companion text edit');
+        edits.push({from,to,expected,insert});
+        continue;
+      }
       if(!['','\n'].includes(suffix)||
         (prefix!==''&&prefix!=='\n'&&!/^(?: {0,3}>[ \t]?)+$/.test(prefix)))
         throw Error('Invalid annotation surrounding syntax');

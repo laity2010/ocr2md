@@ -25,7 +25,10 @@ export function projectReviewedInlineLatex(source){
       !source.slice(start.to,item.from).includes('\n')&&
       !annotations.some(other=>other.from>start.to&&other.from<item.from));
     if(!end)continue;
-    const formula=source.slice(start.to,end.from);
+    const raw=source.slice(start.to,end.from);
+    // Native Obsidian delimiters are source syntax, not KaTeX formula text.
+    const formula=raw.startsWith('$')&&raw.endsWith('$')&&!raw.startsWith('$$')
+      ?raw.slice(1,-1):raw;
     const token=`${prefix}${fragments.length}END`;
     let html;
     try{

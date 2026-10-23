@@ -409,6 +409,7 @@ async function main() {
   };
   $('media-refresh').addEventListener('click',()=>void workspace.scanMedia());
   $('latex-refresh').addEventListener('click',()=>workspace.scanLatex());
+  $('latex-normalize').addEventListener('click',()=>workspace.normalizeLatex());
   $('media-download-all').addEventListener('click',async()=>{
     const button=$('media-download-all');button.disabled=true;
     try{await workspace.downloadMedia();}

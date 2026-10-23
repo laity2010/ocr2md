@@ -4,6 +4,43 @@
 import {scanAnnotations} from './cmd-annotations.js';
 export const REVIEW_CHOICES=Object.freeze(['待复核','latex','忽略']);
 const validId=id=>/^[a-f0-9]{16}$/.test(id||'');
+const textEdit=(from,to,expected,insert)=>({action:'text',from,to,expected,insert});
+const isUndelimitedInline=item=>item.kind==='行内'&&item.syntax==='未定界';
+
+/** Keep HTML comments OUTSIDE native Obsidian $...$ math, without changing
+ * the OCR formula bytes. Surrounding prose gets spaces only when missing.
+ * The padding/delimited attributes make this change reversible on re-review.
+ */
+function wrapInline(source,item,opening=null,closing=null,id=null,review='latex'){
+  const left=/[\p{L}\p{N}]/u.test(source[(opening?.from??item.from)-1]||'');
+  const right=/[\p{L}\p{N}]/u.test(source[closing?.to??item.to]||'');
+  const attrs={...(opening?.attributes||{id,review}),review,delimited:'auto-inline',
+    ...(left?{padBefore:'1'}:{}),...(right?{padAfter:'1'}:{})};
+  return {attrs,lead:[
+    ...(left?[textEdit(opening?.from??item.from,opening?.from??item.from,'',' ')]:[]),
+    ...(opening?[{action:'update',target:opening,tag:'ocr2md:latex',attributes:attrs}]
+      :[{action:'insert',at:item.from,tag:'ocr2md:latex',attributes:attrs}]),
+    textEdit(item.from,item.from,'','$'),
+  ],tail:[
+    textEdit(item.to,item.to,'','$'),
+  ],right};
+}
+
+/** Explicit one-shot upgrade for old confirmed inline comments. Never edits
+ * a file implicitly while loading; the owner must dispatch and Save via CMD.
+ */
+export function planNormalizeReviewedInline(source,formulas){
+  const operations=[];
+  for(const item of formulas){
+    const old=item.reviewMarker;
+    if(item.status!=='latex'||!old||!isUndelimitedInline(item))continue;
+    const wrap=wrapInline(source,item,old.opening,old.closing,null,'latex');
+    operations.push(...wrap.lead,...wrap.tail,
+      {action:'update',target:old.closing,tag:'/ocr2md:latex',attributes:{id:old.id}},
+      ...(wrap.right?[textEdit(old.closeTo,old.closeTo,'',' ')]:[]));
+  }
+  return operations;
+}
 
 export function findReviewMarkers(source,formulas,annotations=scanAnnotations(source)){
   const starts=annotations.filter(item=>item.tag==='ocr2md:latex'&&
@@ -50,18 +87,39 @@ export function planReviewAnnotations(source,item,review,id){
     throw Error('Source changed; rescan LaTeX before review');
   const old=item.reviewMarker;
   if(old){
+    const auto=old.opening.attributes.delimited==='auto-inline';
+    const removeMath=auto&&review!=='latex' ? [
+      textEdit(item.from,item.from+1,'$',''),
+      textEdit(item.to-1,item.to,'$',''),
+      ...(old.opening.attributes.padBefore==='1'?[textEdit(old.openFrom-1,old.openFrom,' ','')]:[]),
+      ...(old.opening.attributes.padAfter==='1'?[textEdit(old.closeTo,old.closeTo+1,' ','')]:[]),
+    ]:[];
     if(review==='待复核')return [
       {action:'remove',target:old.opening,
         removeAfter:old.isBlock&&source[old.openTo]==='\n'},
       {action:'remove',target:old.closing,
         removeBefore:old.isBlock&&source[old.closeFrom-1]==='\n'},
+      ...removeMath,
     ];
+    if(review==='latex'&&isUndelimitedInline(item)){
+      const wrap=wrapInline(source,item,old.opening,old.closing,null,review);
+      return [...wrap.lead,...wrap.tail,
+        ...(wrap.right?[textEdit(old.closeTo,old.closeTo,'',' ')]:[])];
+    }
     return [{action:'update',target:old.opening,tag:'ocr2md:latex',
-      attributes:{...old.opening.attributes,review}}];
+      attributes:{...old.opening.attributes,review,
+        ...(auto&&review!=='latex'?{delimited:'manual',padBefore:'0',padAfter:'0'}:{})}},
+      ...removeMath];
   }
   if(review==='待复核')return [];
   if(!validId(id))throw Error('Invalid new annotation ID');
   const block=item.syntax.startsWith('```')||item.syntax.startsWith('~~~');
+  if(review==='latex'&&isUndelimitedInline(item)){
+    const wrap=wrapInline(source,item,null,null,id,review);
+    return [...wrap.lead,...wrap.tail,
+      {action:'insert',at:item.to,tag:'/ocr2md:latex',attributes:{id}},
+      ...(wrap.right?[textEdit(item.to,item.to,'',' ')]:[])];
+  }
   return [
     {action:'insert',at:item.from,tag:'ocr2md:latex',
       attributes:{id,review},suffix:block?'\n':''},

@@ -3,7 +3,7 @@
 import {createGrid,AllCommunityModule,ModuleRegistry,themeQuartz} from 'ag-grid-community';
 import katex from 'katex';
 import {findLatex} from './latex-scan.js';
-import {REVIEW_CHOICES,findReviewMarkers,planReviewAnnotations} from './latex-review-markers.js';
+import {REVIEW_CHOICES,findReviewMarkers,planReviewAnnotations,planNormalizeReviewedInline} from './latex-review-markers.js';
 import {viewStore,publishFocus} from './view-store.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './latex-module.css';
@@ -154,6 +154,19 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   });
   return {
     refresh,
+    normalizeReviewed(){
+      if(disposed)return;
+      const source=getMarkdown();
+      const current=findLatex(source).map(item=>({...item,raw:source.slice(item.from,item.to)}));
+      findReviewMarkers(source,current,getCMD()?.readAnnotations()??[]);
+      const operations=planNormalizeReviewedInline(source,current);
+      if(!operations.length){onStatus('已确认的行内公式无需规范化');return;}
+      try{
+        getCMD().editAnnotations(operations,{expectedSource:source});
+        refresh();
+        onStatus(`已规范化 ${operations.filter(op=>op.tag==='ocr2md:latex').length} 条行内公式 · 请全局保存`);
+      }catch(error){onStatus(`规范化失败：${error.message}`);}
+    },
     setActive(enabled){active=enabled;host.hidden=!enabled;if(enabled)refresh();},
     dispose(){disposed=true;unsubscribe();grid.destroy();},
   };

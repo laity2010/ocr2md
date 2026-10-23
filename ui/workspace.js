@@ -374,6 +374,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     scanMedia:()=>currentOutline?.media?.scan(),
     downloadMedia:()=>currentOutline?.media?.downloadAll(),
     scanLatex:()=>currentOutline?.latex?.refresh(),
+    normalizeLatex:()=>currentOutline?.latex?.normalizeReviewed(),
     getChapterState(){
       const grid=currentOutline?.grid;
       return {rows:grid?.rows.map(row=>({...row}))||[], startText:grid?.startText||'000'};
