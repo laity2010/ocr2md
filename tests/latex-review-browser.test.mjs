@@ -8,7 +8,8 @@ import {resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
-import {findReviewMarkers,planReviewEdit} from '../ui/latex-review-markers.js';
+import {findReviewMarkers,planReviewEdit,planReviewAnnotations} from '../ui/latex-review-markers.js';
+import {scanAnnotations} from '../ui/cmd-annotations.js';
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const pause=ms=>new Promise(done=>setTimeout(done,ms));
 const first=findLatex(fixture)[0];
@@ -26,6 +27,10 @@ findReviewMarkers(changed,candidates);
 assert.equal(candidates[0].status,'latex');
 changed=apply(changed,planReviewEdit(changed,candidates[0],'待复核'));
 assert.equal(changed,fixture,'pure comment insertion/removal must round-trip');
+const intended=planReviewAnnotations(fixture,original,'latex','0123456789abcdef');
+assert.deepEqual(intended.map(x=>x.action),['insert','insert']);
+assert.equal(intended[0].tag,'ocr2md:latex');
+assert.equal(intended[1].tag,'/ocr2md:latex');
 
 const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
@@ -114,8 +119,12 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
     null,{timeout:18000});
   const saved=readFileSync(doc,'utf8');
-  assert(saved.includes('<!--ocr2md:latex id='));
-  assert(saved.includes('review=latex-->')&&saved.includes('review=忽略-->'));
+  const savedAnnotations=scanAnnotations(saved).filter(x=>x.tag==='ocr2md:latex');
+  assert.equal(savedAnnotations.length,2);
+  assert(savedAnnotations.some(x=>x.attributes.review==='latex')&&
+    savedAnnotations.some(x=>x.attributes.review==='忽略'));
+  assert(savedAnnotations.every(x=>x.raw.includes('id="')),
+    'new LaTeX reviews must be serialized by CMD');
   assert.equal(findLatex(saved).length,42,'source scanner should still find all formulas');
   const marked=findLatex(saved).map(x=>({...x,raw:saved.slice(x.from,x.to)}));
   findReviewMarkers(saved,marked);
@@ -140,6 +149,6 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
     .filter(x=>x.status==='忽略').length,0);
   assert.deepEqual(errors,[],name+' page errors');
   console.log('LATEX_CM_REVIEW_PASS',name,JSON.stringify({inline:true,standalone:true,undoRedo:true,
-    saveReload:true,inlineKatex:true,ignoredPlain:true,deltaApiRemoved:true,sourceSingle:true}));
+    saveReload:true,inlineKatex:true,ignoredPlain:true,cmdAnnotations:true,deltaApiRemoved:true,sourceSingle:true}));
  }finally{await browser?.close();server.kill('SIGTERM');}
 }

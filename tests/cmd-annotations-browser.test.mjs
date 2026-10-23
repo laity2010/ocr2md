@@ -16,6 +16,7 @@ assert.throws(()=>formatAnnotation('cdm:v1',{key:'line\nbreak'}));
 assert.throws(()=>formatAnnotation('cdm:v1',{'bad key':'x'}));
 const encoded=formatAnnotation('cdm:v1',{id:10,review:'已核实',error:'a--b & "x" <y>'});
 assert.deepEqual(parseAnnotation(encoded)?.attributes,{id:'10',review:'已核实',error:'a--b & "x" <y>'});
+assert.equal(parseAnnotation(formatAnnotation('ocr2md:chapter:v1',{id:'h01',independent:'1'},{spaced:true}))?.attributes.id,'h01');
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port','5465','--strictPort'],{stdio:'ignore'});
 const url='http://127.0.0.1:5465/';
 try{
@@ -50,16 +51,32 @@ try{
          try{cm.removeAnnotation(annotation)}catch{staleBlocked=true}
          cm.removeAnnotation(updated);
          const sourceRestored=cm.markdown===untouched;
+         // CMD must handle multi-marker formula review as ONE optimistic edit,
+         // including its actual surrounding Markdown (no secondary storage).
+         const position=cm.markdown.indexOf('$x$');
+         cm.editAnnotations([
+           {action:'insert',at:position,tag:'ocr2md:latex',attributes:{id:'0123456789abcdef',review:'latex'}},
+           {action:'insert',at:position+3,tag:'/ocr2md:latex',attributes:{id:'0123456789abcdef'}},
+         ],{expectedSource:untouched});
+         const paired=cm.readAnnotations({tag:'ocr2md:latex'}).length===2&&
+           cm.readAnnotations({tag:'/ocr2md:latex'}).length===1;
+         let staleBatch=false;
+         try{cm.editAnnotations([{action:'insert',at:position,tag:'cdm:v1',attributes:{id:'x'}}],
+           {expectedSource:untouched})}catch{staleBatch=true}
+         const opening=cm.readAnnotations({tag:'ocr2md:latex',attributes:{id:'0123456789abcdef'}})[0];
+         const closing=cm.readAnnotations({tag:'/ocr2md:latex'})[0];
+         cm.editAnnotations([{action:'remove',target:opening},{action:'remove',target:closing}]);
+         const batchRestored=cm.markdown===untouched;
          // Ordinary paragraphs and quote prefixes are untouched by all writes.
          const neighbors=cm.markdown.includes('> # Chapter')&&cm.markdown.includes('Prose <!--ocr2md:latex');
          // No owned secondary document or attributes storage: source must have changed during insert.
          const revision=cm.doc.length;
-         return {readChapter:chapters.length===1,readLatex:Boolean(latex)&&latex.attributes.id==='abc',
+         return {paired,staleBatch,batchRestored,readChapter:chapters.length===1,readLatex:Boolean(latex)&&latex.attributes.id==='abc',
            blocked,inline,filtered:filtered.length===1,updated:updated.attributes.review==='通过',
            insideQuote,staleBlocked,sourceRestored,neighbors,revision};
        }finally{cm.destroy();host.remove()}
      },original);
-     assert(result.readChapter&&result.readLatex&&result.blocked&&result.inline&&result.filtered&&
+     assert(result.paired&&result.staleBatch&&result.batchRestored&&result.readChapter&&result.readLatex&&result.blocked&&result.inline&&result.filtered&&
        result.updated&&result.insideQuote&&result.staleBlocked&&result.sourceRestored&&result.neighbors,
        `${name} CMD contract failed: ${JSON.stringify(result)}`);
      assert.deepEqual(errors,[],name+' page exceptions');

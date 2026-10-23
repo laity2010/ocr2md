@@ -29,6 +29,7 @@ INSERT INTO apis VALUES
  ('C17','C','CMDocument.readAnnotations','ui/cm-document.js','export','optional tag/attribute filters','source-positioned annotation records','generic HTML comment syntax in CM6 source; no nesting or business semantics',1),
  ('C18','C','CMDocument.writeAnnotation','ui/cm-document.js','export','tag,attributes,at or target','updated source annotation record','CM6 atomic insert/update with stale-target and immutable evidence safeguards',1),
  ('C19','C','CMDocument.removeAnnotation','ui/cm-document.js','export','annotation record from CMD','removed flag','CM6 atomic exact comment deletion; never deletes associated Markdown content',1),
+ ('C20','C','CMDocument.editAnnotations','ui/cm-document.js','export','array of generic comment insert/update/remove, optional source guard','single undoable CM6 transaction','atomic paired inline/block tags, checked target and evidence protection',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -97,7 +98,7 @@ INSERT INTO apis VALUES
  ('T04','T','returned.refresh','ui/latex-module.js','returned','none','void','re-scans live CMD and updates AG',1),
  ('T05','T','returned.setActive','ui/latex-module.js','returned','boolean','void','toggles separate LaTeX review projection',1),
  ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0),
- ('T09','T','planReviewEdit','ui/latex-review-markers.js','export','Markdown source,formula span,choice','optimistic CMD edits','inserts/replaces/removes paired HTML comments without I/O',1),
+ ('T09','T','planReviewAnnotations','ui/latex-review-markers.js','export','Markdown source,formula span,choice','generic CMD annotation operations','maps review changes to CMD tag/attributes actions without serializing HTML',1),
  ('T10','T','findReviewMarkers','ui/latex-review-markers.js','export','Markdown source and scanned formulas','review projection','reads paired HTML comments in CM6 original Markdown',1),
  ('T11','T','projectReviewedInlineLatex','ui/latex-inline-preview.js','export','Markdown source including CM6 review markers','Markdown projection and deferred KaTeX fragments','deferred sanitized inline rendering after markdown-it and DOMPurify; avoids paragraph truncation and CM6 changes',1);
 
@@ -286,8 +287,8 @@ SELECT 'TC-'||id,id,script,
 -- inventory, NOT permission to depend on raw third-party objects. Audit the
 -- source diff for NEW edges separately; this is not a complete static analyzer.
 INSERT INTO access_edges VALUES
- ('X01','G','C','ui/outline-grid.js','putMarker(getCMD(),current,checked)','C05','registered','Chapter semantics uses CMD.writeHtml through CMDocument adapter'),
- ('X02','G','C','ui/outline-grid.js','markerForHeading(cmd,row)','C10','registered','Chapter marker read through CMD.readLine immutable line snapshot'),
+ ('X01','G','C','ui/outline-grid.js','putMarker(getCMD(),current,checked)','C05','registered','Chapter uses CMD.writeAnnotation for comments; writeHtml only for historical custom-tag conversion'),
+ ('X02','G','C','ui/outline-grid.js','markerForHeading(cmd,row,markers)','C10','registered','Chapter binds CMD.readAnnotations tag/attributes to the heading line and uses readLine for legacy tags'),
  ('X03','L','C','ui/workspace.js','getCMD()?.requestMeasure()','C13','registered','Layout requests CM6 measurement through CMD API'),
  ('X04',NULL,'L','ui/main.js','workspace.getChapterState()','L14','registered','App shell reads detached chapter state via Workspace API'),
  ('X05',NULL,'L','ui/main.js','workspace?.debug?.dockview','L11','test_only','Only Vite DEV diagnostics see raw Dockview, never production facade'),
@@ -314,8 +315,8 @@ INSERT INTO access_edges VALUES
  ('X26','L','T','ui/workspace.js','createLatexModule(this.latexHost','T03','registered','Layout mounts independently owned LaTeX AG'),
  ('X27','L','T','ui/workspace.js','this.latex?.setActive(','T05','registered','Layout switches LaTeX via registered module facade'),
  ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade'),
- ('X32','T','C','ui/latex-module.js','getCMD().replaceRanges(edits)','C14','registered','LaTeX requests optimistic Markdown annotation transaction through CMD public API'),
- ('X33','L','C','ui/workspace.js','getCMD().replaceRanges(edits)','C14','registered','Layout injects a narrow CMD capability to the LaTeX plugin'),
+ ('X32','T','C','ui/latex-module.js','getCMD().editAnnotations(operations','C20','registered','LaTeX applies paired comment records through one CMD annotation transaction'),
+ ('X33','L','C','ui/workspace.js','getCMD().editAnnotations(operations','C20','registered','Layout injects a narrow CMD annotation editing capability to LaTeX'),
  ('X34','M','T','ui/markdown-preview.js','projectReviewedInlineLatex(source)','T11','registered','MD preview projects LaTeX confirmed inline annotations using LaTeX public renderer; no CM6 writes');
 
 -- X31 remains in Git commit cb524eb and in this historical finding row.
@@ -443,10 +444,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-T09','T09','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
-  'LaTeX selection inserts/replaces/removes exact paired review marker in one CMD undoable transaction','integration'),
+  'LaTeX selection plans generic annotation operations; CMD atomically inserts/replaces/removes paired review markers','integration'),
  ('TC-T10','T10','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
-  'CM6 Markdown re-scan restores marked choices after save/reload; original TeX unchanged','integration');
+  'CMD annotation scanner restores historical and canonical marker choices after save/reload; TeX unchanged','integration');
 
 
 -- Confirmed formula is rendered in MD reading projection, not a metadata-only state.
@@ -467,3 +468,15 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C19','C19','tests/cmd-annotations-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   'Reject stale comment target and prohibited evidence modification; remove only annotation','direct');
+
+
+-- Headings and LaTeX now consume the CMD annotation API instead of owning
+-- parallel HTML parsing/serialization in business modules.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C20','C20','tests/cmd-annotations-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Atomic paired insert/remove with exact attributes, stale-source rejection and full original-text round-trip','direct');
+INSERT INTO access_edges VALUES
+ ('X35','G','C','ui/chapter-markers.js','cm.writeAnnotation(','C18','registered','Chapter annotates a heading via CMD generic tag/attribute writer'),
+ ('X36','G','C','ui/chapter-markers.js','reader.readAnnotations(','C17','registered','Chapter reads CMD tags and binds immediately preceding marker to heading'),
+ ('X37','T','C','ui/latex-module.js','getCMD()?.readAnnotations()','C17','registered','LaTeX matches formula spans to CMD parsed comment records');

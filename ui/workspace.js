@@ -26,13 +26,18 @@ const mediaCMD=Object.freeze({
   replaceRanges:edits=>getCMD().replaceRanges(edits),
 });
 // Review plugins only receive optimistic CMD changes, never EditorView or a filesystem port.
-const latexCMD=Object.freeze({replaceRanges:edits=>getCMD().replaceRanges(edits)});
+const latexCMD=Object.freeze({
+  readAnnotations:filter=>getCMD().readAnnotations(filter),
+  editAnnotations:(operations,options)=>getCMD().editAnnotations(operations,options),
+});
 let reportMediaStatus=()=>{};
 const chapterCMD=Object.freeze({
   readLine:n=>getCMD().readLine(n),
   lineAtOffset:n=>getCMD().lineAtOffset(n),
   matchesSnapshot:token=>getCMD().matchesSnapshot(token),
-  writeHtml:options=>getCMD().writeHtml(options),
+  writeHtml:options=>getCMD().writeHtml(options), // legacy custom chapter tags only
+  readAnnotations:filter=>getCMD().readAnnotations(filter),
+  writeAnnotation:options=>getCMD().writeAnnotation(options),
 });
 let refreshPreview = () => {};
 let currentPreview=null;

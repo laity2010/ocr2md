@@ -41,7 +41,7 @@ export function parseAnnotation(raw){
   if(!head[1].includes(':')&&Object.keys(attributes).length===0)return null;
   return {tag:head[1],attributes:{...attributes}};
 }
-export function formatAnnotation(tag,attributes={}){
+export function formatAnnotation(tag,attributes={}, {spaced=false}={}){
   if(typeof tag!=='string'||!TAG.test(tag))throw Error('Invalid annotation tag');
   if(!attributes||typeof attributes!=='object'||Array.isArray(attributes))
     throw Error('Annotation attributes must be an object');
@@ -51,7 +51,8 @@ export function formatAnnotation(tag,attributes={}){
     pairs.push(`${key}="${encode(value)}"`);
   }
   if(!tag.includes(':')&&pairs.length===0)throw Error('Annotation tag requires a namespace or attributes');
-  return `<!--${tag}${pairs.length?' '+pairs.join(' '):''}-->`;
+  return spaced?`<!-- ${tag}${pairs.length?' '+pairs.join(' '):''} -->`:
+    `<!--${tag}${pairs.length?' '+pairs.join(' '):''}-->`;
 }
 export function scanAnnotations(source){
   const items=[];

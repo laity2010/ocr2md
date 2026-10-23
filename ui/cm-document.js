@@ -170,27 +170,63 @@ export class CMDocument {
       .map(item=>Object.freeze({...item,attributes:Object.freeze(item.attributes),
         line:snapshot.lineAt(item.from).number,snapshot}));
   }
-  /** Insert or replace exactly one HTML-comment annotation. A read record
-   * is an optimistic edit target; stale data never edits another element.
-   * `at` is a CM6 source offset, never an inferred Markdown nesting level.
+  /** Apply syntax-only annotation changes in ONE CMD/CM6 undoable transaction.
+   * An operation is insert/update/remove. The caller owns the element's
+   * Markdown range; CMD owns serialization, source guards and transactions.
+   * Only optional single hard returns and Markdown quote prefixes are allowed
+   * around standalone markers. All unrelated text is left byte-for-byte.
    */
-  writeAnnotation({tag,attributes={},at=null,target=null,snapshot=null}={}){
-    const markup=formatAnnotation(tag,attributes);
-    if(target!==null){
-      this._requireAnnotationTarget(target);
-      this.replaceRanges([{from:target.from,to:target.to,expected:target.raw,insert:markup}]);
-      return this.readAnnotations().find(item=>item.from===target.from&&item.raw===markup);
+  editAnnotations(operations,{expectedSource=null}={}){
+    if(!Array.isArray(operations)||!operations.length)throw Error('No annotation changes');
+    const source=this.markdown;
+    if(expectedSource!==null&&source!==expectedSource)
+      throw Error('Annotation source changed; rescan before editing');
+    const edits=[];
+    for(const operation of operations){
+      if(!operation||!['insert','update','remove'].includes(operation.action))
+        throw Error('Invalid annotation operation');
+      const {action,target,at,tag,attributes={},prefix='',suffix='',spaced=false,removeBefore=false,removeAfter=false}=operation;
+      if(!['','\n'].includes(suffix)||
+        (prefix!==''&&prefix!=='\n'&&!/^(?: {0,3}>[ \t]?)+$/.test(prefix)))
+        throw Error('Invalid annotation surrounding syntax');
+      if(action==='insert'){
+        const markup=formatAnnotation(tag,attributes,{spaced});
+        if(!Number.isInteger(at)||at<0||at>source.length)throw Error('Invalid annotation insertion offset');
+        edits.push({from:at,to:at,expected:'',insert:prefix+markup+suffix});
+      }else{
+        if(prefix||suffix)throw Error('Surrounding syntax is only for inserted annotations');
+        this._requireAnnotationTarget(target);
+        let from=target.from,to=target.to,insert='';
+        if(action==='update'){
+          if(removeBefore||removeAfter)throw Error('Update cannot remove surrounding text');
+          insert=formatAnnotation(tag,attributes,{spaced});
+        }else{
+          if(removeBefore){
+            if(source[from-1]!=='\n')throw Error('Annotation has no preceding newline');
+            from--;
+          }
+          if(removeAfter){
+            if(source[to]!=='\n')throw Error('Annotation has no following newline');
+            to++;
+          }
+        }
+        edits.push({from,to,expected:source.slice(from,to),insert});
+      }
     }
-    if(!Number.isInteger(at)||at<0||at>this.doc.length)
-      throw Error('Invalid annotation insertion offset');
-    if(snapshot!==null&&!this.matchesSnapshot(snapshot))throw Error('Annotation source changed');
-    this.replaceRanges([{from:at,to:at,expected:'',insert:markup}]);
-    return this.readAnnotations().find(item=>item.from===at&&item.raw===markup);
+    return this.replaceRanges(edits);
   }
-  /** Delete annotation syntax only; never remove its associated Markdown. */
+  /** Backward-compatible single-comment interface backed by the batch API. */
+  writeAnnotation({tag,attributes={},at=null,target=null,snapshot=null,prefix='',suffix='',spaced=false}={}){
+    if(snapshot!==null&&!this.matchesSnapshot(snapshot))throw Error('Annotation source changed');
+    const markup=formatAnnotation(tag,attributes,{spaced});
+    const action=target===null?'insert':'update';
+    this.editAnnotations([{action,at,target,tag,attributes,prefix,suffix,spaced}]);
+    const from=target===null?at+prefix.length:target.from;
+    return this.readAnnotations().find(item=>item.from===from&&item.raw===markup);
+  }
+  /** Remove annotation syntax only; never delete its associated element. */
   removeAnnotation(target){
-    this._requireAnnotationTarget(target);
-    this.replaceRanges([{from:target.from,to:target.to,expected:target.raw,insert:''}]);
+    this.editAnnotations([{action:'remove',target}]);
     return {removed:true};
   }
   _requireAnnotationTarget(target){

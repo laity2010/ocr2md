@@ -88,8 +88,9 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
     const cmd=getCMD();
     rows=buildOutline(getMarkdown());
     indexedRevision=viewStore.getState().documentRevision;
+    const markers=cmd?cmd.readAnnotations({tag:'ocr2md:chapter:v1'}):[];
     for(const row of rows) {
-      const marker=cmd?markerForHeading(cmd,row):null;
+      const marker=cmd?markerForHeading(cmd,row,markers):null;
       row.independent=marker?.independent??true;
       row.markerHtmlKind=marker?.htmlKind||null;
     }

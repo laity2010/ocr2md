@@ -3,7 +3,7 @@
 import {createGrid,AllCommunityModule,ModuleRegistry,themeQuartz} from 'ag-grid-community';
 import katex from 'katex';
 import {findLatex} from './latex-scan.js';
-import {REVIEW_CHOICES,findReviewMarkers,planReviewEdit} from './latex-review-markers.js';
+import {REVIEW_CHOICES,findReviewMarkers,planReviewAnnotations} from './latex-review-markers.js';
 import {viewStore,publishFocus} from './view-store.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './latex-module.css';
@@ -49,10 +49,10 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     if(disposed||!REVIEW_CHOICES.includes(review)||review===item.status)return;
     try{
       const original=getMarkdown();
-      const edits=planReviewEdit(original,item,review,
+      const operations=planReviewAnnotations(original,item,review,
         crypto.randomUUID().replaceAll('-','').slice(0,16));
-      if(!edits.length)return;
-      getCMD().replaceRanges(edits);
+      if(!operations.length)return;
+      getCMD().editAnnotations(operations,{expectedSource:original});
       // CM6 publishes documentRevision and owns all undo/save semantics.
       refresh();
     }catch(error){
@@ -109,7 +109,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
           dropdown.append(option);
         }
         dropdown.value=p.data.status;
-        dropdown.disabled=!getCMD()?.replaceRanges;
+        dropdown.disabled=!getCMD()?.editAnnotations;
         dropdown.dataset.review=p.data.status;
         // A popup selection must not also trigger a four-pane AG row click.
         for(const event of ['pointerdown','mousedown','click','touchstart'])
@@ -137,7 +137,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
       row.raw=source.slice(row.from,row.to);
       return row;
     });
-    findReviewMarkers(source,rows);
+    findReviewMarkers(source,rows,getCMD()?.readAnnotations()??[]);
     grid.setGridOption('rowData',rows);
     // Keep visible review controls synchronized after CM6 Undo/Redo.
     // AG may retain opacity-zero old rows during transitions; do not
