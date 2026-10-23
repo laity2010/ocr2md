@@ -38,6 +38,14 @@ CREATE TABLE access_edges(
   rationale TEXT NOT NULL
 );
 CREATE INDEX edges_by_target ON access_edges(target_module,classification);
+-- Unlike active edges, history records survive removal of offending code.
+CREATE TABLE architecture_findings(
+  id TEXT PRIMARY KEY, first_recorded_commit TEXT NOT NULL,
+  original_classification TEXT NOT NULL CHECK(original_classification='debt'),
+  original_source TEXT NOT NULL, finding TEXT NOT NULL,
+  resolution TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('open','resolved'))
+);
+
 CREATE TABLE test_cases(
   id TEXT PRIMARY KEY, api_id TEXT REFERENCES apis(id),
   message_id TEXT REFERENCES messages(id),

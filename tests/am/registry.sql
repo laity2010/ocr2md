@@ -94,8 +94,8 @@ INSERT INTO apis VALUES
  ('T04','T','returned.refresh','ui/latex-module.js','returned','none','void','re-scans live CMD and updates AG',1),
  ('T05','T','returned.setActive','ui/latex-module.js','returned','boolean','void','toggles separate LaTeX review projection',1),
  ('T06','T','findUndelimitedInline','ui/latex-inline-candidates.js','export','Markdown source and masked protected regions','read-only candidate source ranges','intra-plugin heuristic for MinerU undelimited inline equations; requires review',0),
- ('T07','T','read_reviews','scripts/v6_latex_review.py','export','document path','human review record map','reads independent delta JSON; no Markdown mutation',1),
- ('T08','T','write_review','scripts/v6_latex_review.py','export','document,formula key,review choice','saved choice','atomic bounded per-record delta update; caller holds server document lock',1);
+ ('T09','T','planReviewEdit','ui/latex-review-markers.js','export','Markdown source,formula span,choice','optimistic CMD edits','inserts/replaces/removes paired HTML comments without I/O',1),
+ ('T10','T','findReviewMarkers','ui/latex-review-markers.js','export','Markdown source and scanned formulas','review projection','reads paired HTML comments in CM6 original Markdown',1);
 
 -- Store fields / DOM CustomEvent are the existing transport. Not a new event bus.
 INSERT INTO messages VALUES
@@ -310,9 +310,15 @@ INSERT INTO access_edges VALUES
  ('X26','L','T','ui/workspace.js','createLatexModule(this.latexHost','T03','registered','Layout mounts independently owned LaTeX AG'),
  ('X27','L','T','ui/workspace.js','this.latex?.setActive(','T05','registered','Layout switches LaTeX via registered module facade'),
  ('X28','L','T','ui/workspace.js','currentOutline?.latex?.refresh()','T04','registered','Shell scans LaTeX through Layout facade'),
- ('X29',NULL,'T','scripts/v6_serve.py','latex_read_reviews(DOC)','T07','registered','GET /api/latex/reviews loads human review sidecar via LaTeX API'),
- ('X30',NULL,'T','scripts/v6_serve.py','latex_write_review(DOC','T08','registered','authenticated POST persists one LaTeX review atomically'),
- ('X31','T','T','ui/latex-module.js','fetch(''/api/latex/review''','T08','debt','2026-10-23 audit: LaTeX owns parallel JSON review persistence instead of CMD source transactions; migrate existing human decisions before retirement');
+ ('X32','T','C','ui/latex-module.js','getCMD().replaceRanges(edits)','C14','registered','LaTeX requests optimistic Markdown annotation transaction through CMD public API'),
+ ('X33','L','C','ui/workspace.js','getCMD().replaceRanges(edits)','C14','registered','Layout injects a narrow CMD capability to the LaTeX plugin');
+
+-- X31 remains in Git commit cb524eb and in this historical finding row.
+INSERT INTO architecture_findings VALUES
+ ('X31','cb524eb','debt','ui/latex-module.js -> scripts/v6_serve.py -> scripts/v6_latex_review.py',
+  'LaTeX independently persisted review JSON through its own HTTP read/write API, bypassing unified CMD document edits',
+  'Replace with paired inline/block Markdown HTML comments via CMD.replaceRanges; migrate 8 actual user review decisions; delete active sidecar HTTP code',
+  'resolved');
 
 -- Added interface acceptance references for completed boundary isolation.
 WITH mapped(id,script,expected,evidence) AS (VALUES
@@ -430,9 +436,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 
 -- LaTeX human triage is distinct from parser validation and stored as a sidecar.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-T07','T07','tests/latex-review-browser.test.mjs',
+ ('TC-T09','T09','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
-  'LaTeX review values loaded from independent sidecar after reload without rewriting Markdown','integration'),
- ('TC-T08','T08','tests/latex-review-browser.test.mjs',
+  'LaTeX selection inserts/replaces/removes exact paired review marker in one CMD undoable transaction','integration'),
+ ('TC-T10','T10','tests/latex-review-browser.test.mjs',
   'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
-  'three-value dropdown saves and resets one reviewed formula; authentication and invalid input enforced','integration');
+  'CM6 Markdown re-scan restores marked choices after save/reload; original TeX unchanged','integration');

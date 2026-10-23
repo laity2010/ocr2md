@@ -25,6 +25,8 @@ let getCMD = () => null;
 const mediaCMD=Object.freeze({
   replaceRanges:edits=>getCMD().replaceRanges(edits),
 });
+// Review plugins only receive optimistic CMD changes, never EditorView or a filesystem port.
+const latexCMD=Object.freeze({replaceRanges:edits=>getCMD().replaceRanges(edits)});
 let reportMediaStatus=()=>{};
 const chapterCMD=Object.freeze({
   readLine:n=>getCMD().readLine(n),
@@ -56,7 +58,7 @@ class OutlinePanel {
     this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
     this.element.append(this.mediaHost,this.latexHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
-    this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),reportMediaStatus);
+    this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
   }
   setModule(module){
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
