@@ -30,6 +30,9 @@ INSERT INTO apis VALUES
  ('C18','C','CMDocument.writeAnnotation','ui/cm-document.js','export','tag,attributes,at or target','updated source annotation record','CM6 atomic insert/update with stale-target and immutable evidence safeguards',1),
  ('C19','C','CMDocument.removeAnnotation','ui/cm-document.js','export','annotation record from CMD','removed flag','CM6 atomic exact comment deletion; never deletes associated Markdown content',1),
  ('C20','C','CMDocument.editAnnotations','ui/cm-document.js','export','array of generic comment insert/update/remove and guarded text operations; optional source guard','single undoable CM6 transaction','atomic HTML annotations plus Markdown delimiters; checked target and evidence protection',1),
+ ('C21','C','parseAnnotation','ui/cmd-annotations.js','export','single HTML comment text','tag and attributes or null','public read-only CMD annotation syntax parser, without business semantics',1),
+ ('C22','C','formatAnnotation','ui/cmd-annotations.js','export','tag, attributes, spacing options','single-line HTML comment text','public CMD annotation syntax formatter, rejects invalid attribute names and multiline values',1),
+ ('C23','C','scanAnnotations','ui/cmd-annotations.js','export','Markdown source','offset-positioned syntax records','public read-only CMD annotation scanner; no state or writes',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -40,6 +43,8 @@ INSERT INTO apis VALUES
  ('G08','G','returned.api','ui/outline-grid.js','raw','none','AG Grid native API','third-party object exposed',0),
  ('G09','G','returned.filters','ui/outline-grid.js','returned','none','filter model','read only',0),
  ('G10','G','returned.startText','ui/outline-grid.js','returned','none','chapter sequence text','read only',0),
+ ('G11','G','countMarkers','ui/chapter-markers.js','export','CM6 document or Markdown','chapter comment/tag counts','public detached chapter-marker summary for shell global status',1),
+ ('G12','G','buildChapterFiles','ui/chapter-files.js','export','Markdown, heading rows, start number','detached chapter files','public chapter export projection; no source edit or disk write',1),
  ('M01','M','renderMarkdown','ui/markdown-preview.js','export','Markdown:string','sanitized HTML:string','maps source line attributes',1),
  ('M02','M','PreviewPanel.render','ui/workspace.js','internal','none','void','renders CM6 projection; preserves scroll',1),
  ('M03','M','PreviewPanel.schedule','ui/workspace.js','internal','immediate?:boolean','void','debounced preview render',0),
@@ -427,7 +432,7 @@ VALUES ('TC-SUB17','SUB17','tests/latex-browser.test.mjs',
 -- AG review plugin source focus must navigate both MD and CMD with a visible PDF.
 INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
  ('TC-SUB09-LATEX','SUB09','tests/latex-four-view-browser.test.mjs',
- 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+ 'tests/fixtures/buffetts-alpha-four-view-reviewed.md.gz',
  'LaTeX AG click reaches selected source line, focused MD math and exact PDF OCR block in split four-window layout','integration');
 
 
@@ -493,3 +498,29 @@ INSERT INTO access_edges VALUES
  ('X35','G','C','ui/chapter-markers.js','cm.writeAnnotation(','C18','registered','Chapter annotates a heading via CMD generic tag/attribute writer'),
  ('X36','G','C','ui/chapter-markers.js','reader.readAnnotations(','C17','registered','Chapter reads CMD tags and binds immediately preceding marker to heading'),
  ('X37','T','C','ui/latex-module.js','getCMD()?.readAnnotations()','C17','registered','LaTeX matches formula spans to CMD parsed comment records');
+
+-- Public pure syntax ports and chapter business projections referenced across
+-- modules. These are existing exports, not new services or editable stores.
+INSERT INTO access_edges VALUES
+ ('X41','G','C','ui/chapter-markers.js','import {parseAnnotation}','C21','registered','Chapter consumes CMD public syntax parser for historical marker decode'),
+ ('X42','T','C','ui/latex-review-markers.js','import {scanAnnotations}','C23','registered','LaTeX review uses public read-only CMD scan fallback'),
+ ('X43','T','C','ui/latex-inline-preview.js','import {scanAnnotations}','C23','registered','LaTeX preview projects public CMD syntax only; no editor access'),
+ ('X44',NULL,'G','ui/main.js','countMarkers(view.state.doc)','G11','registered','Global status reads detached chapter marker count'),
+ ('X45',NULL,'G','ui/main.js','buildChapterFiles(doc.toString()','G12','registered','Shell asks Chapter public projection for files before authorized export');
+
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C21','C21','tests/cmd-annotations-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Parse exact HTML comment attributes; reject prose, duplicates and invalid syntax','direct'),
+ ('TC-C22','C22','tests/cmd-annotations-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Format safe single-line comments, encode entities, reject invalid attributes','direct'),
+ ('TC-C23','C23','tests/cmd-annotations-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Scan source-offset annotation records without mistaking nested MinerU evidence for tags','direct'),
+ ('TC-G11','G11','tests/compact-shell-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Global shell status includes detached Chapter marker counts from one CMD document','integration'),
+ ('TC-G12','G12','tests/chapter-numbering.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Pure Chapter export creates correctly numbered and merged MD files without mutating source','direct');

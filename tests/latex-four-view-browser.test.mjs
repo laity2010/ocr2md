@@ -4,15 +4,22 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {gunzipSync} from 'node:zlib';
 import {resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
-const markdown=readFileSync('.v6/workspace/buffetts-alpha.minerujson.md','utf8');
-const pdf=resolve('/Users/daisor/Library/Mobile Documents/iCloud~md~obsidian/Documents/ocr2md/ocr2md/Bufett’s Alpha/Buffett s Alpha.pdf');
+// Freeze source anchors and human review markers; never bind regression to the
+// user's live Markdown or an iCloud-only PDF path.
+// Deterministic gzip retains original OCR whitespace byte-for-byte, including
+// significant trailing spaces that a source checkout must never normalize.
+const markdown=gunzipSync(readFileSync(
+  'tests/fixtures/buffetts-alpha-four-view-reviewed.md.gz')).toString('utf8');
+const pdf=resolve('.v6/workspace/buffetts-alpha.original.pdf');
 const math=findLatex(markdown);
+assert.equal(math.length,42);
 assert.equal(math.filter(row=>row.kind==='独立').length,20);
-assert.equal(math.filter(row=>row.detection==='inferred').length,22);
+assert.equal(math.filter(row=>row.detection==='inferred').length,0);
 assert.equal(math[0].line,757);
 const wait=ms=>new Promise(done=>setTimeout(done,ms));
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
@@ -47,12 +54,12 @@ for(let i=0;i<engines.length;i++){
     document.querySelector('.ocr-detached-pdf-pane .pdfViewer'),null,{timeout:20000});
   const initial=await page.locator('.cm-scroller').evaluate(el=>el.scrollTop);
   await page.locator('.ocr-latex-grid .ag-row[row-index="0"] [col-id="line"]').click();
-  await page.waitForFunction(()=>{
+  await page.waitForFunction(firstLine=>{
     const source=document.querySelector('.cm-scroller');
     const matching=document.querySelector('.ocr-markdown .ocr-math.ocr-outline-focused-element');
     const overlay=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="6"][data-block-index="5"]');
-    return source?.scrollTop>400 && matching?.dataset.sourceStart==='757' && overlay;
-  },null,{timeout:25000});
+    return source?.scrollTop>400 && matching?.dataset.sourceStart===String(firstLine) && overlay;
+  },math[0].line,{timeout:25000});
   await page.waitForTimeout(450);
   const result=await page.evaluate(()=>{
     const s=document.querySelector('.cm-scroller'),m=document.querySelector('.ocr-preview-md-scroll');
@@ -69,18 +76,18 @@ for(let i=0;i<engines.length;i++){
       windows:document.querySelectorAll('.dv-groupview').length};
   });
   assert(result.sourceScroll>initial+200,'LaTeX AG click did not scroll CM6: '+JSON.stringify(result));
-  assert.equal(result.focusedLine,'757','MD formula block not highlighted');
+  assert.equal(result.focusedLine,String(math[0].line),'MD formula block not highlighted');
   assert(result.previewVisible,'MD formula not brought into visible preview: '+JSON.stringify(result));
   assert.equal(result.pdfPage,'6');assert.equal(result.pdfBlock,'5');
   assert(result.pdfVisible,'PDF OCR math block not visible: '+JSON.stringify(result));
   assert.equal(result.windows,4);
   await page.locator('.ocr-latex-grid .ag-row[row-index="1"] [col-id="line"]').click();
-  await page.waitForFunction(()=>{
+  await page.waitForFunction(secondLine=>{
     const focus=document.querySelector('.ocr-markdown .ocr-outline-focused-element');
     const start=Number(focus?.dataset.sourceStart),end=Number(focus?.dataset.sourceEnd);
     const overlay=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="6"][data-block-index="6"]');
-    return start<=763&&end>763&&overlay;
-  },null,{timeout:25000});
+    return start<=secondLine&&end>secondLine&&overlay;
+  },math[1].line,{timeout:25000});
   const inline=await page.evaluate(()=>{
     const focus=document.querySelector('.ocr-markdown .ocr-outline-focused-element');
     const overlay=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="6"][data-block-index="6"]');

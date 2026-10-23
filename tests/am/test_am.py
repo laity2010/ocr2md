@@ -45,6 +45,15 @@ class AMCatalogTests(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM access_edges WHERE classification='test_only'").fetchone()[0],1)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM access_edges WHERE classification='registered'").fetchone()[0],edges-1)
 
+    def test_registered_access_edges_still_match_source(self):
+        # Full-audit drift check: an old API record is not proof that a live
+        # cross-module call still uses it. This inspects the *registered*
+        # needles only, not every possible coupling in the project.
+        for edge in self.db.execute('SELECT id,source_file,source_needle FROM access_edges'):
+            body = (am.ROOT / edge['source_file']).read_text()
+            self.assertIn(edge['source_needle'],body,
+                          f"AM edge {edge['id']} no longer matches {edge['source_file']}")
+
     def test_registry_change_must_invalidate_bound_test_evidence(self):
         row=self.db.execute("SELECT api_id,message_id,subscription_id,publisher_id,script,fixture,expected,evidence FROM test_cases WHERE id='TC-C05'").fetchone()
         self.assertEqual(row['api_id'],'C05')

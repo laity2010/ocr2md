@@ -28,8 +28,10 @@ for(const [i,[name,engine,launch]] of engines.entries()){
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
+  // Layout mounts independent Media/LaTeX AG instances even while hidden.
+  // Only the Chapter AG header count is part of this contract.
   await page.waitForFunction(()=>window.__v6cm6?.outline?.rows.length===21&&
-   document.querySelectorAll('.ag-header-cell').length===5,null,{timeout:65000});
+   window.__v6cm6?.outline?.api?.getAllDisplayedColumns().length===5,null,{timeout:65000});
   const state=await page.evaluate(()=>{
     const api=window.__v6cm6.outline.api;
     return {fields:api.getAllDisplayedColumns().map(c=>c.getColId()),
@@ -41,7 +43,7 @@ for(const [i,[name,engine,launch]] of engines.entries()){
   assert.equal(state.titlePinned,'left');assert.equal(state.pdfPinned,null);
   assert.equal(state.otherPinned,null);
   const title=page.locator('.ag-header-cell[col-id="title"]');
-  const geom=await page.evaluate(()=>[...document.querySelectorAll('.ag-header-cell')].map(cell=>{
+  const geom=await page.evaluate(()=>[...document.querySelectorAll('.ocr-outline-grid .ag-header-cell')].map(cell=>{
     const rect=x=>x?.getBoundingClientRect();
     const f=rect(cell.querySelector('.ag-header-cell-filter-button'));
     const r=rect(cell.querySelector('.ag-header-cell-resize'));
@@ -51,6 +53,7 @@ for(const [i,[name,engine,launch]] of engines.entries()){
       filterCenter:[f.left+f.width/2,f.top+f.height/2],
       resizeCenter:[r.left+r.width/2,r.top+r.height/2]};
   }));
+  assert.equal(geom.length,5,'chapter AG must expose all five column hit areas');
   for(const g of geom){
     assert(g.resizeWidth>=14,`${name}/${g.col} resize hit area too small ${g.resizeWidth}`);
     assert(g.gap>=9,`${name}/${g.col} filter and resize overlap ${g.gap}`);

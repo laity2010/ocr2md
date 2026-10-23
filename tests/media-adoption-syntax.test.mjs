@@ -1,12 +1,12 @@
 /** Media image references must agree with the supported MD preview forms. */
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
 import {chromium,webkit} from 'playwright';
 
 const target='media/0ce612d66ff4d75e285466e3.png';
-const original=readFileSync('.v6/workspace/buffetts-alpha.minerujson.md','utf8');
-assert(original.includes(`![](${target})`),'source line 103 is missing');
+// A stable saved-adoption syntax sample, not the user's editable mother MD.
+// Original OCR uses a quote prefix and Obsidian width; either may change later.
+const adopted=`>![](${target}|32)`;
 const source=[
   `![](${target})`,
   `![](${target}|300)`,
@@ -34,15 +34,15 @@ try{
       await page.goto('http://127.0.0.1:5610/',{waitUntil:'domcontentloaded'});
       const result=await page.evaluate(async inputs=>{
         const {findMedia}=await import('/media-module.js');
-        return {examples:findMedia(inputs.source),real:findMedia(inputs.original)
+        return {examples:findMedia(inputs.source),adopted:findMedia(inputs.adopted)
           .filter(row=>row.url===inputs.target).map(row=>({url:row.url,line:row.line}))};
-      },{source,original,target});
+      },{source,adopted,target});
       assert.equal(result.examples.length,6,label+' should find five local image references and one remote');
       assert.deepEqual(result.examples.slice(0,5).map(row=>row.url),Array(5).fill(target));
       assert.deepEqual(result.examples.slice(0,5).map(row=>row.line),[1,2,3,4,5]);
       assert.equal(result.examples[5].url,'https://cdn-mineru.openxlab.org.cn/a.png');
-      assert.deepEqual(result.real,[{url:target,line:103}],label+' misclassified saved real image');
-      console.log('MEDIA_ADOPTION_SYNTAX_PASS',label,JSON.stringify({cases:6,realSourceLine:103}));
+      assert.deepEqual(result.adopted,[{url:target,line:1}],label+' misclassified quote-prefixed sized image');
+      console.log('MEDIA_ADOPTION_SYNTAX_PASS',label,JSON.stringify({cases:6,adoptedQuoteAndWidth:true}));
     }finally{await browser.close();}
   }
   const check=spawnSync('python3',['-c',`import sys
