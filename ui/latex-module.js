@@ -85,7 +85,7 @@ export function createLatexModule(host,getMarkdown,onStatus){
       onStatus(`LaTeX 审阅未保存：${error.message}`);
     }finally{
       savingReviews.delete(item.reviewKey);
-      if(!disposed)grid.applyTransaction({update:[item]});
+      if(!disposed)grid.refreshCells({force:true,columns:['status']});
     }
   }
   async function loadReviews(){
