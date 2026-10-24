@@ -3,7 +3,7 @@
  */
 import {createDockview,themeAbyss} from 'dockview';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
-import {openCMDJsonSource} from './cmd-json-source.js';
+import {openCMDJsonSource,readCMDJsonSnapshot} from './cmd-json-source.js';
 import './settings-module.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -14,7 +14,7 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
 
 export function createSettingsModule(container,onStatus=()=>{}){
   const definitions=new Map(),applied=new Map();
-  let source=null,grid=null,dockview=null,loadPromise=null,slider=null,valueLabel=null,details=null;
+  let source=null,grid=null,dockview=null,loadPromise=null,initialPromise=null,slider=null,valueLabel=null,details=null;
   let agHost=null,sourceHost=null,previewHost=null;
   let activeKey=null,invalid=false;
   function entry(key){const item=definitions.get(key);if(!item)throw Error('Unregistered setting: '+key);return item;}
@@ -44,9 +44,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
   }
   function isValid(item,value){return typeof value==='number'&&Number.isInteger(value)&&
     value>=item.min&&value<=item.max&&((value-item.min)%item.step===0);}
-  function parseValues(){
-    if(!source)return null;
-    const data=source.readJSON();
+  function valuesFromDocument(data){
     if(!data||typeof data!=='object'||Array.isArray(data))return null;
     const values=new Map();
     for(const [key,item]of definitions){
@@ -56,6 +54,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
     }
     return values;
   }
+  function parseValues(){return source?valuesFromDocument(source.readJSON()):null;}
   function refreshGrid(){
     if(!grid||!activeKey)return;
     const item=entry(activeKey),value=applied.get(activeKey);
@@ -103,6 +102,18 @@ export function createSettingsModule(container,onStatus=()=>{}){
     container.dispatchEvent(new CustomEvent('settings.changed',{detail:Object.freeze({
       topic:'settings.changed',key,value,origin
     })}));
+  }
+  function initialize(){
+    if(!initialPromise)initialPromise=readCMDJsonSnapshot().then(({text})=>{
+      const values=valuesFromDocument(JSON.parse(text));
+      if(!values)throw Error('设置文件键值超出注册范围');
+      for(const [key,value] of values)publish(key,value,'startup');
+    }).catch(error=>{
+      onStatus('无法应用已保存设置：'+error.message,'warning');
+      // A transient read error must not poison a retry when settings opens.
+      initialPromise=null;
+    });
+    return initialPromise;
   }
   function onSourceChange({docChanged}){
     if(!source)return;
@@ -167,7 +178,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
     if(invalid)throw Error('无效 JSON 不允许保存');
     return source.save();
   }
-  return Object.freeze({register,subscribe,get,set,load,activate,hasUnsaved,save,
+  return Object.freeze({register,subscribe,get,set,initialize,load,activate,hasUnsaved,save,
     undo:()=>source?.undo(),redo:()=>source?.redo(),
     get history(){return source?.history||{undo:0,redo:0};},
     get invalid(){return invalid;},

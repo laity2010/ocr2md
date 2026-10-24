@@ -5,12 +5,19 @@ import {EditorView,basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
 import {CMDocument} from './cm-document.js';
 
-export async function openCMDJsonSource(host,onUpdate=()=>{}){
+export async function readCMDJsonSnapshot(){
   const response=await fetch('/api/settings',{cache:'no-store'});
   if(!response.ok)throw Error('设置 JSON 读取失败 '+response.status);
   const text=await response.text();
-  let etag=response.headers.get('ETag');
+  const etag=response.headers.get('ETag');
   if(!etag)throw Error('设置 JSON 缺少版本指纹');
+  return {text,etag};
+}
+
+export async function openCMDJsonSource(host,onUpdate=()=>{}){
+  const snapshot=await readCMDJsonSnapshot();
+  const text=snapshot.text;
+  let etag=snapshot.etag;
   let savedDoc=null;
   const cm=new CMDocument({parent:host,markdown:text,extensions:[
     basicSetup,EditorView.lineWrapping,

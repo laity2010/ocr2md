@@ -45,7 +45,7 @@ for(const [n,[name,engine,options]] of engines.entries()){
   assert.notEqual(first,second);
   assert(first.startsWith('000-'),name+' default chapter start must be 000');
   assert(second.startsWith('001-'),name+' second chapter must be 001');
-  assert.deepEqual(await page.locator('#module-select option').allTextContents(),['章节定界','媒体','LaTeX']);
+  assert.deepEqual(await page.locator('#module-select option').allTextContents(),['章节定界','媒体','LaTeX','全局设置']);
   assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
   assert.deepEqual(await page.locator('#module-actions button').allTextContents(),['导出章节']);
   assert.equal(await page.locator('#chapter-start-number').inputValue(),'000');

@@ -541,7 +541,7 @@ async function main() {
   await restoreExport();
   // Load the compact global JSON in parallel with the PDF/document UI.
   // Settings can stay hidden; it will still apply registered CM font defaults.
-  void settings.load().catch(error=>status('设置加载失败：'+error.message,'warning'));
+  void settings.initialize();
   // Git publication changes /healthz immediately; no extra store or WebSocket.
   setInterval(checkForNewBuild, 5000);
   document.addEventListener('visibilitychange',() => {

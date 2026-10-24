@@ -25,6 +25,9 @@ try{
       const page=await browser.newPage({viewport:{width:1365,height:840}});
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.goto(base,{waitUntil:'domcontentloaded'});
+      await page.locator('#editor .cm-editor').waitFor({state:'visible'});
+      assert.equal(await page.locator('.dv-groupview').count(),3,'Unopened settings must not create a second Dockview');
+      assert.equal(await page.locator('.cm-content').count(),1,'Unopened settings must not create a second CM6');
       await page.locator('#module-select').selectOption('settings');
       const slider=page.locator('#settings-font-slider');
       await slider.waitFor({state:'visible',timeout:25000});

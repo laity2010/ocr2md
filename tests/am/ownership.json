@@ -121,7 +121,8 @@
       "registerCMSourceFontSetting"
     ],
     "settings-module.js->cmd-json-source.js": [
-      "openCMDJsonSource"
+      "openCMDJsonSource",
+      "readCMDJsonSnapshot"
     ]
   }
 }

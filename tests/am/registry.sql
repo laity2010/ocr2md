@@ -544,7 +544,7 @@ INSERT INTO publishers VALUES
 INSERT INTO subscriptions VALUES
  ('SUB-C01','E09','C','ui/cm-font-setting.js','settings.subscribe','Registered CM source key change','Set public CSS variable for source editor font size');
 INSERT INTO access_edges VALUES
- ('X70','S','C','ui/settings-module.js','import {openCMDJsonSource}','C24','registered','Settings requests JSON text transactions only via CMD port'),
+ ('X70','S','C','ui/settings-module.js','import {openCMDJsonSource,readCMDJsonSnapshot}','C24','registered','Settings requests JSON text transactions only via CMD port'),
  ('X71',NULL,'S','ui/main.js','createSettingsModule(','S01','registered','Shell mounts Settings facade into the WCP module selector'),
  ('X72',NULL,'C','ui/main.js','registerCMSourceFontSetting(settings)','C25','registered','CM module registers the first settings key at composition root');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
@@ -570,3 +570,11 @@ INSERT INTO access_edges VALUES
  ('X73',NULL,'C','scripts/v6_serve.py','cmd_settings_save(','C27','registered','Authorized HTTP endpoint delegates JSON storage to CMD transport');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C27','C27','tests/settings-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Authenticated CMD JSON settings I/O preserves bytes, rejects stale, invalid and unauthorized writes','direct');
+
+-- Lazy Settings preflight reads JSON through CMD without mounting CM6.
+INSERT INTO apis VALUES
+ ('C28','C','readCMDJsonSnapshot','ui/cmd-json-source.js','export','none','Promise<{text,etag}>','read-only authorized public JSON snapshot; no EditorView or Dockview created',1);
+INSERT INTO access_edges VALUES
+ ('X74','S','C','ui/settings-module.js','readCMDJsonSnapshot()','C28','registered','Settings startup loads effective values via CMD read-only JSON port');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C28','C28','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Startup applies saved font without creating hidden secondary Dockview or CM6','integration');

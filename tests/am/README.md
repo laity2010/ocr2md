@@ -61,3 +61,5 @@ WP1/WP2 采用并公开记录了三项测试契约修订：`tests/scroll-sync-br
 `Settings`（AM 模块 S）提供 `register/get/set/subscribe` 公共 API，其他模块只登记设置定义和 `settings.changed` 订阅，不访问 Settings 内部 AG/CM6。第一个消费者是 CMD 模块 C，暴露 `globalUi.cmSource.defaultFontSize`：分类 `全局 UI → CM 源码窗 → 默认字号`，范围 8–32pt，默认 12pt。AG 显示三级索引，JSON CM6 实例独立于 Markdown，Dockview 预览提供滑条与分类说明；滑条、JSON、字号 CSS 变量和 Undo/Redo 保持双向同步。只有合法设置才发送消息；暂时无效的 JSON 保留源码、不覆盖当前值。保存仅通过 CMD 的 `openCMDJsonSource` / `scripts/v6_cmd_settings.py`，服务器使用同源与编辑 Cookie 认证、原子写与内容指纹防并发覆盖。
 
 新增 `tests/settings-browser.test.mjs` 的 Chromium/WebKit 真实交互回归、`tests/settings-server.test.mjs` 的 HTTP 授权/原子写回归，以及 `tests/am/test_settings_io.py` 的 CMD I/O 负向测试。所有新增边界已登记在 `registry.sql`，文件所有者更新到 `ownership.json`；早期 WP3 的 7 模块/98 API/139 用例仅是历史基线，新的实际数量以 `am.py build` 为准。
+
+**设置模块懒加载修订**：未打开设置时，仅通过 CMD `readCMDJsonSnapshot` 读取有效配置并发出设置变更；不创建第二份 Dockview/CM6，维持原工作台的 3 个面板与单份 `.cm-content`。首次切换到全局设置再装配设置三窗，之后保留该独立编辑状态。旧 29 套件第一次仅 84/151，因隐藏工作台被提前初始化产生重复面板与编辑器节点，以及模块菜单旧三项断言；这些故障均保留为回归证据。
