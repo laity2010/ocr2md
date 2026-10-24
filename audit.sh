@@ -5,7 +5,16 @@ set -euo pipefail
 BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SHA='5c7497cdf94ea35217e83effd9496a045625fef0'
 EXPECTED_PDF='be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab'
-TARGET="${OCR2MD_AUDIT_TARGET_DIR:-$(dirname "$BUNDLE_DIR")/ocr2md-v6-audit-target}"
+# Bash preserves // at filesystem root, which Node interprets as a file://host
+# URL on Linux. Normalize the default before any worktree or --import path.
+PARENT="$(dirname "$BUNDLE_DIR")"
+if [[ "$PARENT" == / ]]; then
+  TARGET_DEFAULT='/ocr2md-v6-audit-target'
+else
+  TARGET_DEFAULT="$PARENT/ocr2md-v6-audit-target"
+fi
+TARGET="${OCR2MD_AUDIT_TARGET_DIR:-$TARGET_DEFAULT}"
+[[ "$TARGET" == /* && "$TARGET" != //* ]] || { echo "AUDIT_TARGET_PATH_INVALID: $TARGET" >&2; exit 2; }
 
 fail(){ printf 'AUDIT_BLOCKED: %s\n' "$*" >&2; exit 2; }
 for command in git node npm python3; do
@@ -47,6 +56,9 @@ PY
 [[ -z "$(git -C "$TARGET" status --porcelain)" ]] || fail 'target must remain clean'
 
 cd "$TARGET"
+# Frozen vite.config.mjs otherwise points at a developer-specific macOS
+# iCloud PDF; without this Linux /api/pdf always returns HTTP 404.
+export V6_PDF_PATH="$(pwd -P)/.v6/workspace/buffetts-alpha.original.pdf"
 REPORT_DIR='.v6/audit-reports'
 # Prevent overlapping npm installs, browser sessions and writes to the same AM SQLite.
 LOCK="$REPORT_DIR/.active-run"
@@ -61,8 +73,19 @@ npm ci --no-audit --no-fund
 # This package is not a root dependency and its dist/ is intentionally ignored.
 npm --prefix packages/minerujson-md ci --no-audit --no-fund
 npm --prefix packages/minerujson-md run build
+if [[ "$(uname -s)" == "Linux" && "${OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS:-0}" == '1' ]]; then
+  npx playwright install-deps chromium webkit
+fi
 if [[ "${OCR2MD_AUDIT_SKIP_BROWSER_INSTALL:-0}" != '1' ]]; then
-  npx playwright install chromium webkit
+  # Playwright may only WARN (exit 0) when Linux system libs are missing.
+  # Treat that as an actionable BLOCKED environment, never test FAIL.
+  INSTALL_LOG="$REPORT_DIR/playwright-install.log"
+  if ! npx playwright install chromium webkit 2>&1 | tee "$INSTALL_LOG"; then
+    fail 'Playwright browser install failed; see playwright-install.log'
+  fi
+  if [[ "$(uname -s)" == "Linux" ]] && grep -q 'Host system is missing dependencies' "$INSTALL_LOG"; then
+    fail 'Linux browser libraries missing: run npx playwright install-deps chromium webkit with sudo, or set OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS=1 as root'
+  fi
 fi
 export OCR2MD_AUDIT_CHROME_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
 export OCR2MD_AUDIT_WEBKIT_PATH="$(node -p 'require("playwright").webkit.executablePath()')"

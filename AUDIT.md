@@ -22,13 +22,15 @@ cd ocr2md-audit-bundle
 bash audit.sh
 ```
 
+Linux 首次准备系统库时执行一次 `npx playwright install-deps chromium webkit`（按系统权限可能需要 sudo），或者在拥有 root 权限的隔离容器中用 `OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS=1 bash audit.sh` 自动安装。默认不擅自更改第三方机器的系统库；若缺失，脚本给出明确 `AUDIT_BLOCKED`。
+
 不需要 GitHub 写权限、Grok 凭据、AgentDock、用户 Mac 原始工作目录或其他私有文件。审计包的 PDF 在 `.v6/workspace/buffetts-alpha.original.pdf`，哈希参见 `.v6/grok-handoff/fixtures.SHA256SUMS`。**当前 GitHub 仓库和 PDF 均为 Public；不可视作私有数据通道。**
 
 脚本执行：
 
 1. 检查 Git 当前是审计包分支、工作区干净、冻结业务源码确实是该分支的祖先；
 2. 创建/复用兄弟目录 `../ocr2md-v6-audit-target`，checkout 到上表**固定的源码 SHA**；
-3. 校验 JSON/Markdown、PDF 哈希，拒绝改写 PDF，确认只有被允许的忽略路径可以写；
+3. 校验 JSON/Markdown、PDF 哈希，拒绝改写 PDF，并统一设置 `V6_PDF_PATH` 为隔离夹具的绝对路径，避免冻结的 Vite 默认为开发者的 iCloud 路径而在 Linux 返回 `/api/pdf` 404；
 4. 对 Web 工作台和独立 `packages/minerujson-md` 转换器分别执行锁文件安装与构建，并安装匹配 lockfile 的 Playwright Chromium/WebKit，在 Mac/Linux 使用真实可执行文件（不依赖用户机器的绝对浏览器路径）；
 5. 对历史 start-only UI 测试单独使用 Git 跟踪的压缩审阅夹具（14 条章节标定），结束立即恢复原始零标定样本；对历史章节发布测试单独在忽略目录放置由本次 dist 构建生成的完整 release 快照；冻结测试断言和受审源码均不改变，两项前置夹具在 JSON 证据中显式登记；
 6. 在冻结源码执行 `tests/am/run-grok-audit.sh`：AM build/check/coverage/edges、全部已登记测试、certify 和 Git fsck；
