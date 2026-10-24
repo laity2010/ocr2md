@@ -19,6 +19,19 @@ HERE = Path(__file__).resolve().parent
 DB = ROOT / '.v6/tests/am.sqlite'
 
 
+def check_ui_ownership():
+    """WP2 git-owned UI file inventory and cross-module edge review."""
+    import audit_boundaries
+    cfg=json.loads(audit_boundaries.CATALOG.read_text(encoding='utf-8'))
+    metrics, findings=audit_boundaries.scan_files(ROOT,cfg)
+    if findings:
+        raise ValueError('AM_UI_BOUNDARY_FAIL: '+'; '.join(findings))
+    print(f'AM_UI_BOUNDARY_PASS files={metrics["ui_js"]} shared={metrics["shared_libraries"]} '
+          f'cross_imports={metrics["cross_module_imports"]} '
+          '(runtime message/callsite auditing is separate)',flush=True)
+    return metrics
+
+
 # Only tested code, fixtures, runtime configuration and test scripts invalidate
 # a previous PASS. A documentation-only Git commit must not erase evidence.
 TEST_SURFACE = ('ui','packages','scripts','tests','vite.config.mjs',
@@ -203,6 +216,7 @@ def full_coverage_check(con):
 
 def run_all():
     require_clean_fixtures_and_sources()
+    check_ui_ownership()
     with connection(f'file:{DB}?mode=ro') as con:
         assert_references(con)
         case_count=full_coverage_check(con)
@@ -248,6 +262,7 @@ def run_all():
 
 def certify():
     require_clean_fixtures_and_sources()
+    check_ui_ownership()
     head=current_commit()
     with connection(f'file:{DB}?mode=ro') as con:
         assert_references(con)
@@ -296,7 +311,8 @@ def main():
             print_rows(con.execute('SELECT id,script,fixture,expected,evidence FROM test_cases WHERE api_id=? OR message_id=? OR subscription_id=? OR publisher_id=? ORDER BY id',(args.key,args.key,args.key,args.key)))
         elif args.action == 'check':
             count = assert_references(con)
-            print(f'AM_CHECK_PASS apis={count} FK=OK source-and-test-files=OK')
+            check_ui_ownership()
+            print(f'AM_CHECK_PASS apis={count} FK=OK source-and-test-files=OK ui-ownership=OK')
         elif args.action == 'edges':
             print_rows(con.execute('SELECT id,caller_module,target_module,source_file,source_needle,api_id,classification,rationale FROM access_edges WHERE (? IS NULL OR target_module=? OR caller_module=? OR classification=?) ORDER BY classification DESC,id', (args.key,args.key,args.key,args.key)))
         elif args.action == 'modules':

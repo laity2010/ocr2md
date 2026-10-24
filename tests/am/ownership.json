@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "scope": "ui/*.js",
+  "sourceOfModuleIdentity": "tests/am/registry.sql:modules",
+  "scopeNotes": "Audit-only ownership classification; not a second API registry or production state store. Shared files are infrastructure, not new business modules. shell is the application composition root.",
+  "files": {
+    "chapter-files.js": "G",
+    "chapter-markers.js": "G",
+    "cm-document.js": "C",
+    "cmd-annotations.js": "C",
+    "enum-checkbox-filter.js": "shared",
+    "fontcheck.js": "shell",
+    "ios-native-selection.js": "shared",
+    "latex-inline-candidates.js": "T",
+    "latex-inline-preview.js": "T",
+    "latex-module.js": "T",
+    "latex-review-markers.js": "T",
+    "latex-scan.js": "T",
+    "main.js": "shell",
+    "markdown-preview.js": "M",
+    "media-module.js": "A",
+    "mineru-anchors.js": "shared",
+    "mineru-comment-folding.js": "shell",
+    "obsidian-heading-markers.js": "shell",
+    "obsidian-images.js": "M",
+    "obsidian-markdown.js": "shell",
+    "outline-focus.js": "shell",
+    "outline-grid.js": "G",
+    "outline-index.js": "G",
+    "pdf-preview.js": "P",
+    "scroll-sync.js": "L",
+    "view-store.js": "shared",
+    "workspace.js": "L"
+  },
+  "sharedConsumers": {
+    "enum-checkbox-filter.js": [
+      "G",
+      "A",
+      "T"
+    ],
+    "ios-native-selection.js": [
+      "shell"
+    ],
+    "mineru-anchors.js": [
+      "C",
+      "G",
+      "P"
+    ],
+    "view-store.js": [
+      "shell",
+      "G",
+      "P",
+      "L",
+      "A",
+      "T"
+    ]
+  },
+  "observedDirectStoreWrites": {
+    "outline-grid.js": [
+      "outlineCount"
+    ],
+    "workspace.js": [
+      "activePanel"
+    ]
+  },
+  "residualScope": [
+    "Static relative JS imports and constant-string dynamic imports are checked. Computed imports are BLOCKED rather than silently ignored.",
+    "Zustand/DOM runtime subscriptions and callsite semantics require separate AM message and API review; passing does not certify all hidden runtime coupling.",
+    "Existing direct viewStore.setState writes are reported as review findings, not silently classified as zero debt."
+  ],
+  "crossModuleBindings": {
+    "chapter-markers.js->cmd-annotations.js": [
+      "parseAnnotation"
+    ],
+    "latex-inline-preview.js->cmd-annotations.js": [
+      "scanAnnotations"
+    ],
+    "latex-review-markers.js->cmd-annotations.js": [
+      "scanAnnotations"
+    ],
+    "main.js->workspace.js": [
+      "createWorkspace"
+    ],
+    "main.js->cm-document.js": [
+      "CMDocument"
+    ],
+    "main.js->media-module.js": [
+      "uploadPastedImage"
+    ],
+    "main.js->chapter-markers.js": [
+      "countMarkers"
+    ],
+    "main.js->chapter-files.js": [
+      "buildChapterFiles"
+    ],
+    "markdown-preview.js->latex-inline-preview.js": [
+      "projectReviewedInlineLatex"
+    ],
+    "workspace.js->markdown-preview.js": [
+      "renderMarkdown"
+    ],
+    "workspace.js->outline-grid.js": [
+      "createOutlineGrid"
+    ],
+    "workspace.js->media-module.js": [
+      "createMediaModule"
+    ],
+    "workspace.js->latex-module.js": [
+      "createLatexModule"
+    ],
+    "workspace.js->pdf-preview.js": [
+      "PdfPreview"
+    ]
+  }
+}

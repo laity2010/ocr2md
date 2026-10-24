@@ -37,3 +37,20 @@ python3 -m unittest discover -s tests/am -p 'test_*.py'
 **安全边界**：AM 用 SQLite 做 AI 的检索索引，不改 V6 运行时；单项测试沿用原脚本自身的测试隔离实现，切勿将正式 `.v6/workspace/buffetts-alpha.minerujson.md` 作为写入测试输入。PDF 现阶段是本机 `.v6/workspace/` 的只读副本，尚不是便携测试夹具。全表验收按脚本去重实际运行，每条契约只对其引用脚本的真实运行结果登记 PASS/FAIL。一个脚本同时承担多个集成契约不等于每项都有独立单元测试。`certify` 验证当前 Git commit 全部已登记结果，通过后仍不得夸大为“逐 API 独立单测/独立黄金文件均已认证”。
 
 历史 Git 冻结标记 `v6-feature-freeze-20261022`；当前 V6 构建号以正式服务 `/healthz` 为准。主线生产代码和发布站点不依赖此 AM 索引。
+
+## WP3 · 主线跨平台 AM/Git 审计入口（Mac 与 Linux）
+
+保持现有 AM 七个模块、98 个 API、139 条业务契约及单份 `registry.sql` 不变。
+`audit_boundaries.py` 从 `ownership.json` 补充读取 **27 个 `ui/*.js` 实现文件归属**（不是新增 20 个业务模块），检查静态相对导入、具名符号、共享库允许消费者与已知的直接状态写入。`am.py check`、`run-all` 和 `certify` 会执行这个只读检查；`test_boundaries.py` 提供九项故意越界负向测试。此类静态检查不宣称能证明运行时所有调用、动态事件总线和 DOM 耦合完全解耦。`outlineCount` / `activePanel` 两处既存直写仍列为后续审阅项。
+
+**唯一全量审计入口**（旧命令名保留，便于 Grok/Muse 独立调用）：
+
+```sh
+bash tests/am/run-grok-audit.sh "$(git rev-parse HEAD)"
+```
+
+该命令拒绝脏的主线工作区与 Git SHA 不匹配，不在真实工作目录运行测试。它创建一个同 SHA 的**隔离 detached worktree**，只复制只读 PDF 样本进隔离环境，将母本 Markdown 初始化为测试专用副本，再在其中执行 27 套件/139 AM 契约，运行后查验 Git 完整性。可设置 `OCR2MD_AUDIT_TARGET_DIR=/absolute/new/path` 为本轮指定新的隔离工作区；遇到旧 SHA 或文件改动直接 BLOCKED，而不是自动覆盖或 `reset --hard`。
+
+跨平台差异仅存在 `tests/am/portability/`，包括 Python 端口预检、真实 Chromium/WebKit 动态库检查、Node 测试适配器、Linux `sips` → 真实 Chromium JPEG 转换、WebKit 本地 HTTP 授权 Cookie 适配与 reload 取证。授权适配**不进入生产**；本地 HTTP 验收不代表正式 HTTPS 授权验收。测试所需 PDF 路径及 SHA 由既有 `tests/k/data.json` 标定，审计前须将同份 PDF 放在工作区的 `.v6/workspace/buffetts-alpha.original.pdf`，Linux 也一样；不把实际用户工作文档当测试输入。浏览器缺库时报告环境 BLOCKED 而不假造业务测试 FAIL。Linux 可在具有适当权限的隔离容器中设置 `OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS=1` 安装系统依赖；可设置 `OCR2MD_AUDIT_SKIP_BROWSER_INSTALL=1` 跳过安装命令，但仍须通过真实启动预检。
+
+WP1/WP2 采用并公开记录了三项测试契约修订：`tests/scroll-sync-browser.test.mjs` 基于用户请求的行 600 检查滚动前进；`tests/latex-browser.test.mjs` 等待实际 KaTeX 渲染就绪再执行原断言；`tests/media-paste-browser.test.mjs` 对本地只读媒体 GET 的短连接错误至多重试两次，**绝不重试媒体写入 POST**。原有功能结果要求均保留。审计报告必须保留业务提交 SHA、测试提交 SHA、环境、失败日志与独立审阅结论；单次 PASS 不代表所有平台和生产 HTTPS 行为已被证明。
