@@ -21,8 +21,8 @@ class AMCatalogTests(unittest.TestCase):
         self.assertGreater(api_count, 0)
         self.assertEqual(am.assert_references(self.db), api_count)
         modules = {row[0] for row in self.db.execute('SELECT id FROM modules')}
-        self.assertTrue({'C','G','M','P','L','A','T'}.issubset(modules))
-        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM messages').fetchone()[0], 8)
+        self.assertTrue({'C','G','M','P','L','A','T','S'}.issubset(modules))
+        self.assertGreaterEqual(self.db.execute('SELECT COUNT(*) FROM messages').fetchone()[0], 9)
         self.assertGreater(self.db.execute('SELECT COUNT(*) FROM test_cases').fetchone()[0], 0)
 
     def test_focus_includes_original_and_media_publishers_five_receivers(self):

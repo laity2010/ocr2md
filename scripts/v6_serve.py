@@ -5,6 +5,7 @@ import hashlib
 import subprocess
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
+from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
 from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE, chapter_media_references
 import json
 import os
@@ -25,6 +26,7 @@ FIXTURE = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md'
 ORIGINAL_JSON = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'
 PDF_PATH = Path(os.environ.get('V6_PDF_PATH', RUNTIME / 'workspace' / 'buffetts-alpha.original.pdf')).resolve()
 TOKEN = Path(os.environ.get('V6_TOKEN_PATH', RUNTIME / 'private' / 'editor-token')).resolve()
+SETTINGS = Path(os.environ.get('V6_SETTINGS_PATH', RUNTIME / 'settings.json')).resolve()
 HOST = os.environ.get('V6_BIND', '127.0.0.1')
 PORT = int(os.environ.get('V6_PORT', '4396'))
 LAN_TLS_HOST = os.environ.get('V6_LAN_TLS_HOST', '')
@@ -121,6 +123,20 @@ class Handler(BaseHTTPRequestHandler):
                     'application/json; charset=utf-8')
             except (OSError,ValueError,KeyError,TypeError):
                 self.response(503,'Original OCR geometry unavailable')
+            return
+        if path == '/api/settings':
+            try:
+                content = cmd_settings_read(SETTINGS)
+            except OSError:
+                self.response(503, 'Settings unavailable')
+                return
+            self.send_response(200)
+            self.send_header('Content-Type','application/json; charset=utf-8')
+            self.send_header('Cache-Control','no-store')
+            self.send_header('ETag',cmd_settings_fingerprint(content))
+            self.send_header('Content-Length',str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
             return
         if path == '/api/document':
             self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
@@ -426,6 +442,31 @@ class Handler(BaseHTTPRequestHandler):
         self.response(200, result.stdout, 'text/markdown; charset=utf-8')
 
     def do_PUT(self):
+        if urlsplit(self.path).path == '/api/settings':
+            if not self.authorized() or not self.same_origin():
+                self.response(403, 'Editor authorization required')
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '-1'))
+            except ValueError:
+                length = -1
+            if length < 2 or length > SETTINGS_LIMIT:
+                self.response(413, 'Invalid settings document size')
+                return
+            content = self.rfile.read(length)
+            if len(content) != length:
+                self.response(400, 'Incomplete settings document')
+                return
+            try:
+                saved, _ = cmd_settings_save(SETTINGS, content, self.headers.get('If-Match'))
+            except ValueError as error:
+                self.response(400, str(error))
+                return
+            except OSError:
+                self.response(503, 'Settings storage unavailable')
+                return
+            self.response(200 if saved else 409, 'saved' if saved else 'Settings changed elsewhere; reload')
+            return
         if urlsplit(self.path).path != '/api/document':
             self.response(404, 'Not found')
             return

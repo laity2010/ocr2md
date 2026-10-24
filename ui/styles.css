@@ -45,7 +45,7 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error {
   font-size: 12pt;
   font-family: "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
 }
-#editor .cm-editor { font-size:12pt; line-height:1.5; }
+#editor .cm-editor { font-size:var(--ocr-cm-source-font-size, 12pt); line-height:1.5; }
 #editor .cm-scroller { font-family:"Sarasa Fixed SC", "Sarasa Mono SC", monospace; }
 
 /* Complete Sarasa Fixed SC Web fonts, identical on Mac and iPad.
@@ -123,3 +123,5 @@ button.danger {background:#923532;border-color:#c45351;color:#fff}
 button.danger:hover:not(:disabled) {background:#b3423e}
 .engineering-error {min-height:20px;margin:8px 0;color:#fca5a5;font-size:12px}
 #initialize-dialog strong {color:#fdd18e}
+
+.quote-indent-tools[hidden]{display:none!important}

@@ -3,6 +3,7 @@ import {readFile, mkdir, rename, writeFile} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
 import {existsSync,statSync,createReadStream} from 'node:fs';
 import {homedir} from 'node:os';
+import {createHash} from 'node:crypto';
 // A build version is fixed at bundle creation, never generated from page-load time.
 const stamp = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
@@ -10,6 +11,9 @@ const stamp = new Intl.DateTimeFormat('en-CA', {
 }).formatToParts(new Date());
 const part = key => stamp.find(x => x.type===key).value;
 const buildVersion = `v6-${part('year')}${part('month')}${part('day')}-${part('hour')}${part('minute')}${part('second')}`;
+const settingsFile = resolve(process.env.V6_SETTINGS_PATH || '.v6/settings.json');
+const defaultSettings = '{\n  "globalUi": {\n    "cmSource": {\n      "defaultFontSize": 12\n    }\n  }\n}\n';
+const hashSettings = text => createHash('sha256').update(text).digest('hex');
 const fixture = resolve('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const file = resolve(process.env.V6_DOCUMENT_PATH || '.v6/workspace/buffetts-alpha.minerujson.md');
 const originalJson = resolve('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json');
@@ -63,6 +67,37 @@ export default defineConfig({
         if(match)res.setHeader('Content-Range',`bytes ${start}-${end}/${length}`);
         if(req.method==='HEAD'){res.end();return;}
         createReadStream(originalPdf,{start,end}).pipe(res);
+      });
+    }},
+    {name:'cmd-settings-json-io',configureServer(server){
+      server.middlewares.use('/api/settings',async(req,res)=>{
+        res.setHeader('Cache-Control','no-store');
+        res.setHeader('Content-Type','application/json; charset=utf-8');
+        try{
+          const readSettings=()=>existsSync(settingsFile)?readFile(settingsFile,'utf8'):Promise.resolve(defaultSettings);
+          if(req.method==='GET'){
+            const source=await readSettings();res.setHeader('ETag',hashSettings(source));res.end(source);return;
+          }
+          if(req.method==='PUT'){
+            const chunks=[];let count=0;
+            for await(const chunk of req){count+=chunk.length;
+              if(count>65536){res.statusCode=413;res.end('Settings too large');return;}
+              chunks.push(chunk);
+            }
+            const body=Buffer.concat(chunks).toString('utf8');
+            const decoded=JSON.parse(body);
+            if(!decoded||typeof decoded!=='object'||Array.isArray(decoded))
+              throw Error('Invalid settings root');
+            if(hashSettings(await readSettings())!==req.headers['if-match']){
+              res.statusCode=409;res.end('Settings changed elsewhere');return;
+            }
+            await mkdir(dirname(settingsFile),{recursive:true});
+            const temp=join(dirname(settingsFile),'.settings-'+process.pid+'-save.tmp');
+            await writeFile(temp,body);await rename(temp,settingsFile);
+            res.end('saved');return;
+          }
+          res.statusCode=405;res.end('Method not allowed');
+        }catch(error){res.statusCode=400;res.end(String(error.message||error));}
       });
     }},
     {name: 'single-file-io', configureServer(server) {

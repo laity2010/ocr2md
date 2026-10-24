@@ -30,7 +30,10 @@
     "pdf-preview.js": "P",
     "scroll-sync.js": "L",
     "view-store.js": "shared",
-    "workspace.js": "L"
+    "workspace.js": "L",
+    "settings-module.js": "S",
+    "cm-font-setting.js": "C",
+    "cmd-json-source.js": "C"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -110,6 +113,15 @@
     ],
     "workspace.js->pdf-preview.js": [
       "PdfPreview"
+    ],
+    "main.js->settings-module.js": [
+      "createSettingsModule"
+    ],
+    "main.js->cm-font-setting.js": [
+      "registerCMSourceFontSetting"
+    ],
+    "settings-module.js->cmd-json-source.js": [
+      "openCMDJsonSource"
     ]
   }
 }

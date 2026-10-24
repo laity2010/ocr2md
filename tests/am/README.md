@@ -54,3 +54,10 @@ bash tests/am/run-grok-audit.sh "$(git rev-parse HEAD)"
 跨平台差异仅存在 `tests/am/portability/`，包括 Python 端口预检、真实 Chromium/WebKit 动态库检查、Node 测试适配器、Linux `sips` → 真实 Chromium JPEG 转换、WebKit 本地 HTTP 授权 Cookie 适配与 reload 取证。授权适配**不进入生产**；本地 HTTP 验收不代表正式 HTTPS 授权验收。测试所需 PDF 路径及 SHA 由既有 `tests/k/data.json` 标定，审计前须将同份 PDF 放在工作区的 `.v6/workspace/buffetts-alpha.original.pdf`，Linux 也一样；不把实际用户工作文档当测试输入。浏览器缺库时报告环境 BLOCKED 而不假造业务测试 FAIL。Linux 可在具有适当权限的隔离容器中设置 `OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS=1` 安装系统依赖；可设置 `OCR2MD_AUDIT_SKIP_BROWSER_INSTALL=1` 跳过安装命令，但仍须通过真实启动预检。
 
 WP1/WP2 采用并公开记录了三项测试契约修订：`tests/scroll-sync-browser.test.mjs` 基于用户请求的行 600 检查滚动前进；`tests/latex-browser.test.mjs` 等待实际 KaTeX 渲染就绪再执行原断言；`tests/media-paste-browser.test.mjs` 对本地只读媒体 GET 的短连接错误至多重试两次，**绝不重试媒体写入 POST**。原有功能结果要求均保留。审计报告必须保留业务提交 SHA、测试提交 SHA、环境、失败日志与独立审阅结论；单次 PASS 不代表所有平台和生产 HTTPS 行为已被证明。
+
+
+## WP4 · 全局设置首个接口（2026-10-24）
+
+`Settings`（AM 模块 S）提供 `register/get/set/subscribe` 公共 API，其他模块只登记设置定义和 `settings.changed` 订阅，不访问 Settings 内部 AG/CM6。第一个消费者是 CMD 模块 C，暴露 `globalUi.cmSource.defaultFontSize`：分类 `全局 UI → CM 源码窗 → 默认字号`，范围 8–32pt，默认 12pt。AG 显示三级索引，JSON CM6 实例独立于 Markdown，Dockview 预览提供滑条与分类说明；滑条、JSON、字号 CSS 变量和 Undo/Redo 保持双向同步。只有合法设置才发送消息；暂时无效的 JSON 保留源码、不覆盖当前值。保存仅通过 CMD 的 `openCMDJsonSource` / `scripts/v6_cmd_settings.py`，服务器使用同源与编辑 Cookie 认证、原子写与内容指纹防并发覆盖。
+
+新增 `tests/settings-browser.test.mjs` 的 Chromium/WebKit 真实交互回归、`tests/settings-server.test.mjs` 的 HTTP 授权/原子写回归，以及 `tests/am/test_settings_io.py` 的 CMD I/O 负向测试。所有新增边界已登记在 `registry.sql`，文件所有者更新到 `ownership.json`；早期 WP3 的 7 模块/98 API/139 用例仅是历史基线，新的实际数量以 `am.py build` 为准。

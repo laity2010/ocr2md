@@ -8,6 +8,8 @@ import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
 import {CMDocument} from './cm-document.js';
+import {createSettingsModule} from './settings-module.js';
+import {registerCMSourceFontSetting} from './cm-font-setting.js';
 import {uploadPastedImage} from './media-module.js';
 import {mineruCommentFolding,foldInitialMineruComments} from './mineru-comment-folding.js';
 import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
@@ -20,6 +22,7 @@ const buttons = {undo: $('undo'),redo:$('redo'),save:$('save')};
 let view;
 let cm;
 let workspace;
+let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
 let savedDoc = null;
 let revision = 0;
@@ -58,7 +61,7 @@ function renderGlobalStatus() {
 const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));
 function applyPendingUpdate() {
   if (!pendingUpdate) return;
-  if (hasUnsavedEdits() || buttons.save.disabled || exporting || initializing ||
+  if (hasUnsavedEdits() || settings?.hasUnsaved() || buttons.save.disabled || exporting || initializing ||
       $('unlock-dialog').open || $('engineering-dialog').open || $('initialize-dialog').open) {
     status('● 新版本待更新，请先保存','warning');
     return;
@@ -102,6 +105,12 @@ async function checkPermission() {
   return canSave;
 }
 function refreshToolbar() {
+  if ($('module-select').value==='settings' && settings) {
+    buttons.undo.disabled=!settings.history.undo;
+    buttons.redo.disabled=!settings.history.redo;
+    if (pendingUpdate) applyPendingUpdate();
+    return;
+  }
   buttons.undo.disabled = !undoDepth(view.state);
   buttons.redo.disabled = !redoDepth(view.state);
   if(documentLines!==view.state.doc.lines || documentChars!==view.state.doc.length){
@@ -114,6 +123,17 @@ function refreshToolbar() {
   else renderGlobalStatus();
 }
 async function save() {
+  if ($('module-select').value==='settings'){
+    if(!settings)return false;
+    if(canSave!==true){afterUnlock='settings';status('🔒 保存需授权','warning');showUnlock();return false;}
+    buttons.save.disabled=true;
+    try{
+      const ok=await settings.save();
+      status(ok?'✓ 全局设置已保存':'● 保存期间设置被继续修改',ok?'ok':'warning');
+      return ok;
+    }catch(error){status('设置保存失败：'+error.message,'error');return false;}
+    finally{buttons.save.disabled=false;refreshToolbar();}
+  }
   if (!view) return false;
   if (canSave !== true) {
     status('🔒 保存需授权','warning');
@@ -255,6 +275,11 @@ async function main() {
        next.scrollSyncEnabled!==previous.scrollSyncEnabled)
       renderGlobalStatus();
   });
+  settings=createSettingsModule($('settings-workspace'),(message,kind)=>{
+    if($('module-select').value==='settings')status(message,kind);
+    refreshToolbar();
+  });
+  registerCMSourceFontSetting(settings);
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm, (message,kind)=>{
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
@@ -371,8 +396,8 @@ async function main() {
     $(id).addEventListener('mousedown',event=>event.preventDefault());
   $('quote-indent').addEventListener('click',()=>quoteIndent(1));
   $('quote-outdent').addEventListener('click',()=>quoteIndent(-1));
-  buttons.undo.addEventListener('click',()=>history(undo));
-  buttons.redo.addEventListener('click',()=>history(redo));
+  buttons.undo.addEventListener('click',()=> $('module-select').value==='settings'?settings?.undo():history(undo));
+  buttons.redo.addEventListener('click',()=> $('module-select').value==='settings'?settings?.redo():history(redo));
   buttons.save.addEventListener('click',save);
   $('build-version').addEventListener('click',()=>{
     $('engineering-dialog').showModal();
@@ -405,7 +430,15 @@ async function main() {
     const selected=$('module-select').value;
     for(const panel of document.querySelectorAll('.module-actions[data-module]'))
       panel.hidden=panel.dataset.module!==selected;
-    workspace.setWorkModule(selected);
+    const isSettings=selected==='settings';
+    $('workspace').hidden=isSettings;
+    $('settings-workspace').hidden=!isSettings;
+    document.querySelector('.quote-indent-tools').hidden=isSettings;
+    if(isSettings){
+      void settings.load().then(()=>{settings.activate();refreshToolbar();})
+        .catch(error=>status('设置载入失败：'+error.message,'error'));
+    }else workspace.setWorkModule(selected);
+    refreshToolbar();
   };
   $('media-refresh').addEventListener('click',()=>void workspace.scanMedia());
   $('latex-refresh').addEventListener('click',()=>workspace.scanLatex());
@@ -457,7 +490,8 @@ async function main() {
       $('unlock-code').value='';
       $('unlock-dialog').close();
       const action=afterUnlock;afterUnlock=null;
-      if(action==='export')await exportChapters();
+      if(action==='settings')await save();
+      else if(action==='export')await exportChapters();
       else if(action==='initialize')openInitializeDialog();
       else await save();
     } catch(error) {
@@ -465,7 +499,7 @@ async function main() {
     }
   });
   window.addEventListener('beforeunload',event=>{
-    if (hasUnsavedEdits()&&!allowInitializeReload) {event.preventDefault(); event.returnValue='';}
+    if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload) {event.preventDefault(); event.returnValue='';}
   });
   window.addEventListener('pagehide',()=>{
     unsubscribeOutlineFocus();
@@ -505,6 +539,9 @@ async function main() {
     void import('./fontcheck.js').then(({showFontCheck}) => showFontCheck());
   }
   await restoreExport();
+  // Load the compact global JSON in parallel with the PDF/document UI.
+  // Settings can stay hidden; it will still apply registered CM font defaults.
+  void settings.load().catch(error=>status('设置加载失败：'+error.message,'warning'));
   // Git publication changes /healthz immediately; no extra store or WebSocket.
   setInterval(checkForNewBuild, 5000);
   document.addEventListener('visibilitychange',() => {
