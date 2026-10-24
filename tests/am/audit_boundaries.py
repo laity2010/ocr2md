@@ -16,6 +16,11 @@ CATALOG = Path(__file__).resolve().parent / 'ownership.json'
 STATIC = re.compile(r'''(?m)^\s*(?:import|export)\s+(?:(?P<bindings>[^;'"`]*?)\s+from\s+)?['"](?P<target>\.[^'"]+)['"]''')
 DYNAMIC = re.compile(r'\bimport\s*\(\s*([^)]*)\)', re.S)
 RAW_STORE_WRITE = re.compile(r'\bviewStore\s*\.\s*setState\s*\(\s*\{\s*([A-Za-z_$][\w$]*)\s*:')
+# Grok fix: absolute / URL module specifiers bypassed the relative-only STATIC
+# pattern, and functional updaters viewStore.setState(s=>({...})) bypassed
+# RAW_STORE_WRITE. Both are now fail-closed findings.
+NON_RELATIVE_IMPORT = re.compile(r'''(?m)^\s*(?:import|export)\s+(?:[^;'"`]*?\s+from\s+)?['"](?P<target>(?:/|[A-Za-z][\w+.-]*:)[^'"]*)['"]''')
+FUNCTIONAL_STORE_WRITE = re.compile(r'\bviewStore\s*\.\s*setState\s*\(\s*(?!\{)')
 
 
 def load_registry(root):
@@ -61,6 +66,8 @@ def scan_files(root, cfg, override=None):
         caller = assignments.get(name)
         body = override.get(name, (ui/name).read_text(encoding='utf-8'))
         candidates = [(m.group('target'),'static',m.group('bindings')) for m in STATIC.finditer(body)]
+        for m in NON_RELATIVE_IMPORT.finditer(body):
+            issues.append(f'ABSOLUTE_OR_URL_IMPORT {name} -> {m.group("target")[:100]}')
         for m in DYNAMIC.finditer(body):
             arg = m.group(1).strip()
             if re.fullmatch(r'''['"]\.[^'"]+['"]''',arg):
@@ -117,6 +124,9 @@ def scan_files(root, cfg, override=None):
                 field = m.group(1)
                 if field not in cfg['observedDirectStoreWrites'].get(name,[]):
                     issues.append(f'UNTRACKED_DIRECT_STORE_WRITE {name} field={field}')
+            for m in FUNCTIONAL_STORE_WRITE.finditer(body):
+                line = body.count('\n',0,m.start())+1
+                issues.append(f'UNTRACKED_FUNCTIONAL_STORE_WRITE {name}:{line}')
     for writer in cfg['observedDirectStoreWrites']:
         if writer not in found or assignments.get(writer) in ('shared','shell',None):
             issues.append(f'INVALID_DIRECT_STORE_WRITER {writer}')

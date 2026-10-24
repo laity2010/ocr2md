@@ -65,4 +65,20 @@ class GateTests(unittest.TestCase):
         issues=self.modified('main.js',"void import('./unlisted-file.js');")
         self.assertTrue(any('MISSING_IMPORT_TARGET' in issue for issue in issues))
 
+    def test_absolute_path_import(self):
+        issues=self.modified('outline-grid.js','import {createLatexModule} from "/ui/latex-module.js";')
+        self.assertTrue(any('ABSOLUTE_OR_URL_IMPORT' in issue for issue in issues))
+
+    def test_url_import(self):
+        issues=self.modified('outline-grid.js','import "http://127.0.0.1:4710/ui/latex-module.js";')
+        self.assertTrue(any('ABSOLUTE_OR_URL_IMPORT' in issue for issue in issues))
+
+    def test_functional_store_write(self):
+        issues=self.modified('media-module.js','viewStore.setState(s=>({activePanel: "new"}));')
+        self.assertTrue(any('UNTRACKED_FUNCTIONAL_STORE_WRITE' in issue for issue in issues))
+
+    def test_functional_store_write_variable(self):
+        issues=self.modified('media-module.js','viewStore.setState(updater);')
+        self.assertTrue(any('UNTRACKED_FUNCTIONAL_STORE_WRITE' in issue for issue in issues))
+
 if __name__=='__main__':unittest.main(verbosity=2)
