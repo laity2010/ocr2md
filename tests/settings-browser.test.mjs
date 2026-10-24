@@ -109,6 +109,8 @@ try{
         await page.locator('#module-select').selectOption('settings');
         assert.equal(await slider.inputValue(),'14');
         await page.locator('#save').click();
+        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('全局设置已保存'),
+          null,{timeout:16000});
         assert.equal(JSON.parse(readFileSync(jsonPath,'utf8')).globalUi.cmSource.defaultFontSize,14);
         // Verify round-trip persistence, not merely an unsaved in-memory value.
         await page.reload({waitUntil:'domcontentloaded'});
@@ -123,7 +125,13 @@ try{
         assert.equal(await slider.isDisabled(),true);
         assert.equal(await page.evaluate(()=>document.documentElement.style
           .getPropertyValue('--ocr-cm-source-font-size')),'14pt');
+        // The save action performs a real asynchronous CMD JSON PUT. Wait for
+        // its successful server response before checking atomic disk bytes;
+        // Playwright click resolves before the async click handler completes.
+        const saveResponse=page.waitForResponse(response=>response.url().endsWith('/api/settings')&&
+          response.request().method()==='PUT',{timeout:20000});
         await page.locator('#save').click();
+        assert.equal((await saveResponse).status(),200,'CMD must finish JSON persistence');
         assert.equal(JSON.parse(readFileSync(jsonPath,'utf8')).globalUi.cmSource.defaultFontSize,14);
         await page.locator('#undo').click();
         assert.equal(await slider.isEnabled(),true);
