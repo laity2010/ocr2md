@@ -26,6 +26,17 @@ try{
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.goto(base,{waitUntil:'domcontentloaded'});
       await page.locator('#editor .cm-editor').waitFor({state:'visible'});
+      assert.equal(await page.locator('.dv-groupview').count(),3,'Unopened settings must not create a second Dockview');
+      assert.equal(await page.locator('.cm-content').count(),1,'Unopened settings must not create a second CM6');
+      await page.locator('#module-select').selectOption('settings');
+      const slider=page.locator('#settings-font-slider');
+      await slider.waitFor({state:'visible',timeout:25000});
+      assert.equal(await slider.inputValue(),name==='Chromium'?'12':'14');
+      // The startup settings snapshot is asynchronous. Compare both sources
+      // only after its saved font size has actually been published to CSS.
+      await page.waitForFunction(()=>document.documentElement.style.getPropertyValue(
+        '--ocr-cm-source-font-size')===document.querySelector('#settings-font-slider')?.value+'pt',
+        null,{timeout:16000});
       const sourceStyle=await page.locator('#editor .cm-editor').evaluate(el=>({
         background:getComputedStyle(el).backgroundColor,
         color:getComputedStyle(el).color,
@@ -34,12 +45,6 @@ try{
         gutters:getComputedStyle(el.querySelector('.cm-gutters')).backgroundColor,
         caret:getComputedStyle(el.querySelector('.cm-content')).caretColor,
       }));
-      assert.equal(await page.locator('.dv-groupview').count(),3,'Unopened settings must not create a second Dockview');
-      assert.equal(await page.locator('.cm-content').count(),1,'Unopened settings must not create a second CM6');
-      await page.locator('#module-select').selectOption('settings');
-      const slider=page.locator('#settings-font-slider');
-      await slider.waitFor({state:'visible',timeout:25000});
-      assert.equal(await slider.inputValue(),name==='Chromium'?'12':'14');
       assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
       assert.equal(await page.locator('#editor .cm-editor').count(),1);
       assert.equal(await page.locator('#settings-workspace .ag-row').count(),1);
@@ -108,9 +113,13 @@ try{
         assert.equal(await page.locator('#editor .cm-editor').count(),1);
         await page.locator('#module-select').selectOption('settings');
         assert.equal(await slider.inputValue(),'14');
+        // Playwright click returns before the asynchronous CMD save completes.
+        // A successful PUT response establishes that the server has committed
+        // the JSON file atomically before disk bytes are asserted below.
+        const saveResponse=page.waitForResponse(response=>response.url().endsWith('/api/settings')&&
+          response.request().method()==='PUT',{timeout:20000});
         await page.locator('#save').click();
-        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('全局设置已保存'),
-          null,{timeout:16000});
+        assert.equal((await saveResponse).status(),200,'CMD must confirm JSON persistence');
         assert.equal(JSON.parse(readFileSync(jsonPath,'utf8')).globalUi.cmSource.defaultFontSize,14);
         // Verify round-trip persistence, not merely an unsaved in-memory value.
         await page.reload({waitUntil:'domcontentloaded'});
@@ -125,13 +134,11 @@ try{
         assert.equal(await slider.isDisabled(),true);
         assert.equal(await page.evaluate(()=>document.documentElement.style
           .getPropertyValue('--ocr-cm-source-font-size')),'14pt');
-        // The save action performs a real asynchronous CMD JSON PUT. Wait for
-        // its successful server response before checking atomic disk bytes;
-        // Playwright click resolves before the async click handler completes.
-        const saveResponse=page.waitForResponse(response=>response.url().endsWith('/api/settings')&&
-          response.request().method()==='PUT',{timeout:20000});
+        // Invalid JSON must NOT cause a PUT. The previous persisted value
+        // remains unchanged even when Save is clicked.
         await page.locator('#save').click();
-        assert.equal((await saveResponse).status(),200,'CMD must finish JSON persistence');
+        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('设置保存失败'),
+          null,{timeout:16000});
         assert.equal(JSON.parse(readFileSync(jsonPath,'utf8')).globalUi.cmSource.defaultFontSize,14);
         await page.locator('#undo').click();
         assert.equal(await slider.isEnabled(),true);
