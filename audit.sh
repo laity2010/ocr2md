@@ -24,7 +24,9 @@ done
 # warn during install and fail much later in unrelated UI assertions.
 node -e 'const [major,minor]=process.versions.node.split(".").map(Number);if(major<22||(major===22&&minor<13)){console.error("AUDIT_NODE_UNSUPPORTED: need >=22.13 (pdfjs-dist); found "+process.versions.node);process.exit(22)}'
 cd "$BUNDLE_DIR"
-[[ "$(git branch --show-current)" == 'audit-fixture-5c7497c' ]] || fail 'checkout audit-fixture-5c7497c first'
+# WP2 uses a dedicated audit-only branch; default remains the reviewed fixture branch.
+EXPECTED_AUDIT_BRANCH="${OCR2MD_AUDIT_EXPECTED_BRANCH:-audit-fixture-5c7497c}"
+[[ "$(git branch --show-current)" == "$EXPECTED_AUDIT_BRANCH" ]] || fail "checkout expected audit branch $EXPECTED_AUDIT_BRANCH first"
 [[ -z "$(git status --porcelain)" ]] || fail 'audit bundle must have a clean Git worktree'
 git merge-base --is-ancestor "$SOURCE_SHA" HEAD || fail 'fixed source SHA is not an ancestor of the audit bundle'
 # The audit branch may add evidence and amend *two reviewed test contracts*.
@@ -74,6 +76,10 @@ PY
 [[ -z "$(git -C "$TARGET" status --porcelain)" ]] || fail 'target must remain clean'
 
 cd "$TARGET"
+# WP2 boundary inventory and negative controls. This is an additional audit
+# gate, not a replacement for the existing 139 AM behavioral contracts.
+python3 audit-am-boundaries-test.py
+python3 audit-am-boundaries.py
 # Some Linux browser subprocesses dump multi-gigabyte ELF cores even after
 # their controlling browser test reports PASS. Capture test errors/logs normally
 # but disable unbounded core dumps so Git-clean audit worktrees stay reproducible.

@@ -41,6 +41,14 @@ Linux 首次准备系统库时执行一次 `npx playwright install-deps chromium
 8. 仅 Linux WebKit 的本地 `http://127.0.0.1` 测试解锁响应，保留服务端验证码和权限校验，在验证解锁成功后让 WebKit 的本地 Cookie Jar 接收非 Secure 的同一有效 Cookie；对两项 Python 服务测试等待真实的初始化/授权探测结束；此适配**不能替代 HTTPS 生产授权的验收**，日志标记 `AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER`；
 9. 生成 `.v6/audit-reports/RUN_EVIDENCE.json` 和 `run.log`，失败也保留证据。
 
+## WP2 · AM 全仓文件归属及共享库审计（独立分支）
+
+在 `audit/wp2-boundary-20261024` 独立工作区内，设置
+`OCR2MD_AUDIT_EXPECTED_BRANCH=audit/wp2-boundary-20261024` 后执行同一 `bash audit.sh`。
+新检查器 `audit-am-boundaries.py` 会核对全部 `ui/*.js` 文件归属、所有静态/字面量动态 JS 导入、跨模块 AM 访问边与具名导出符号，以及共享库消费和直接 Zustand 写入的登记。`audit-am-boundaries-test.py` 提供故意触发边界违规的负向用例；均通过后继续原有 27 脚本/139 契约。完整分类、遗留审阅项和静态覆盖限制记录在 `audit-reports/WP2_AM_BOUNDARY_BASELINE.md`。
+
+WP2 扫描检查的只是可静态识别的调用入口，并不替代人工审查 DOM 消息、对象属性 API 和运行时耦合；不得因新增检查器 PASS 就宣称已取得全仓动态边界证明。此分支不修改冻结业务源码与正式 AM 表。
+
 ## WP1 跨平台环境收口（审计包独立修订）
 
 本项不改变冻结业务源码 `5c7497c`、AM 登记表、生产 Cookie、原章节保存/发布断言。
