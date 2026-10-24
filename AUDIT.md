@@ -29,9 +29,10 @@ bash audit.sh
 1. 检查 Git 当前是审计包分支、工作区干净、冻结业务源码确实是该分支的祖先；
 2. 创建/复用兄弟目录 `../ocr2md-v6-audit-target`，checkout 到上表**固定的源码 SHA**；
 3. 校验 JSON/Markdown、PDF 哈希，拒绝改写 PDF，确认只有被允许的忽略路径可以写；
-4. `npm ci` 并安装匹配 lockfile 的 Playwright Chromium/WebKit，在 Mac/Linux 使用它们的真实可执行文件（不依赖用户机器的绝对浏览器路径）；
-5. 在冻结源码执行 `tests/am/run-grok-audit.sh`：AM build/check/coverage/edges、全部已登记测试、certify 和 Git fsck；
-6. 生成 `.v6/audit-reports/RUN_EVIDENCE.json` 和 `run.log`，失败也保留证据。
+4. 对 Web 工作台和独立 `packages/minerujson-md` 转换器分别执行锁文件安装与构建，并安装匹配 lockfile 的 Playwright Chromium/WebKit，在 Mac/Linux 使用真实可执行文件（不依赖用户机器的绝对浏览器路径）；
+5. 对历史 start-only UI 测试单独使用 Git 跟踪的压缩审阅夹具（14 条章节标定），结束立即恢复原始零标定样本；对历史章节发布测试单独在忽略目录放置由本次 dist 构建生成的完整 release 快照；冻结测试断言和受审源码均不改变，两项前置夹具在 JSON 证据中显式登记；
+6. 在冻结源码执行 `tests/am/run-grok-audit.sh`：AM build/check/coverage/edges、全部已登记测试、certify 和 Git fsck；
+7. 生成 `.v6/audit-reports/RUN_EVIDENCE.json` 和 `run.log`，失败也保留证据。
 
 仅 `AM_FULL_TABLE_PASS` 加 `AM_FULL_TABLE_CERTIFIED` 才能称已登记契约全表通过。139 是**契约关联数**，不是 139 个互不相关的黄金单测；脚本通过也**不等于**模块边界已独立审完。
 

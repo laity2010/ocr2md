@@ -54,11 +54,19 @@ printf 'AUDIT_BUNDLE_SHA=%s\nAUDIT_SOURCE_SHA=%s\nAUDIT_PDF_SHA=%s\nAUDIT_TARGET
 
 # Install versions from package-lock before determining browser executable paths.
 npm ci --no-audit --no-fund
+# Some registered AM tests import the separately built MinerU JSON converter.
+# This package is not a root dependency and its dist/ is intentionally ignored.
+npm --prefix packages/minerujson-md ci --no-audit --no-fund
+npm --prefix packages/minerujson-md run build
 if [[ "${OCR2MD_AUDIT_SKIP_BROWSER_INSTALL:-0}" != '1' ]]; then
   npx playwright install chromium webkit
 fi
 export OCR2MD_AUDIT_CHROME_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
 export OCR2MD_AUDIT_WEBKIT_PATH="$(node -p 'require("playwright").webkit.executablePath()')"
+# Historical start-only UI test requires the tracked reviewed fixture; stage
+# it solely while that test runs, without changing frozen source or assertions.
+cp "$BUNDLE_DIR/audit-fixture-preload.mjs" "$REPORT_DIR/audit-fixture-preload.mjs"
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import=$(pwd)/$REPORT_DIR/audit-fixture-preload.mjs"
 [[ -x "$OCR2MD_AUDIT_CHROME_PATH" ]] || fail 'Chromium browser binary not installed'
 [[ -x "$OCR2MD_AUDIT_WEBKIT_PATH" ]] || fail 'WebKit browser binary not installed'
 
@@ -99,6 +107,7 @@ result={
          'playwright':subprocess.run(['node','-p','require("playwright/package.json").version'],capture_output=True,text=True).stdout.strip()},
  'runner_exit_code':int(rc),
  'am_cases':[{**r,'status':r['status'] or 'NOT VERIFIED'} for r in rows],
+ 'fixture_overrides':{'tests/mineru-start-only-ui-browser.test.mjs':{'source':'tests/fixtures/buffetts-alpha-four-view-reviewed.md.gz','sha256_uncompressed':'c998da7aeea5410f1d7be10975c05e59efb5cdf6bfcf750595b27a048c5e3e19','scope':'one test only; restored after test'}, 'tests/promoted-chapters-browser.test.mjs':{'source':'dist/','target':'.v6/release/','scope':'isolated release snapshot; unchanged test assertions'}},
  'runner_log':'run.log',
  'note':'These are AM test associations, not an independent source-code architecture review.'
 }
