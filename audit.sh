@@ -11,6 +11,9 @@ fail(){ printf 'AUDIT_BLOCKED: %s\n' "$*" >&2; exit 2; }
 for command in git node npm python3; do
   command -v "$command" >/dev/null 2>&1 || fail "missing dependency: $command"
 done
+# Chromium/WebKit/PDF.js stack requires Node >=22.13; npm may otherwise only
+# warn during install and fail much later in unrelated UI assertions.
+node -e 'const [major,minor]=process.versions.node.split(".").map(Number);if(major<22||(major===22&&minor<13)){console.error("AUDIT_NODE_UNSUPPORTED: need >=22.13 (pdfjs-dist); found "+process.versions.node);process.exit(22)}'
 cd "$BUNDLE_DIR"
 [[ "$(git branch --show-current)" == 'audit-fixture-5c7497c' ]] || fail 'checkout audit-fixture-5c7497c first'
 [[ -z "$(git status --porcelain)" ]] || fail 'audit bundle must have a clean Git worktree'
@@ -72,7 +75,8 @@ export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import=$(pwd)/$REPORT_DIR/
 if [[ "$(uname -s)" == "Linux" ]]; then
   cp "$BUNDLE_DIR/audit-sips-compat.mjs" "$REPORT_DIR/audit-sips-compat.mjs"
   cp "$BUNDLE_DIR/audit-png-to-jpeg.mjs" "$REPORT_DIR/audit-png-to-jpeg.mjs"
-  export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-sips-compat.mjs"
+  cp "$BUNDLE_DIR/audit-linux-diagnostics.mjs" "$REPORT_DIR/audit-linux-diagnostics.mjs"
+  export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-sips-compat.mjs --import=$(pwd)/$REPORT_DIR/audit-linux-diagnostics.mjs"
 fi
 [[ -x "$OCR2MD_AUDIT_CHROME_PATH" ]] || fail 'Chromium browser binary not installed'
 [[ -x "$OCR2MD_AUDIT_WEBKIT_PATH" ]] || fail 'WebKit browser binary not installed'
@@ -80,6 +84,10 @@ fi
 printf 'AUDIT_OS=%s\nAUDIT_NODE=%s\nAUDIT_PYTHON=%s\nAUDIT_PLAYWRIGHT=%s\n' \
   "$(uname -s)" "$(node -v)" "$(python3 -V 2>&1)" "$(node -p 'require("playwright/package.json").version')"
 printf 'AUDIT_BROWSER_BINARIES=installed_and_executable\n'
+if [[ "$(uname -s)" == "Linux" ]]; then
+  cp "$BUNDLE_DIR/audit-sips-smoke.test.mjs" "$REPORT_DIR/audit-sips-smoke.test.mjs"
+  node "$REPORT_DIR/audit-sips-smoke.test.mjs"
+fi
 
 set +e
 bash tests/am/run-grok-audit.sh "$SOURCE_SHA" 2>&1 | tee "$REPORT_DIR/run.log"
