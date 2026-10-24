@@ -1,3 +1,5 @@
+> **审计分支专用提示**：你正在阅读 `audit-fixture-5c7497c` 的资料快照。这不是 GPT 主线。第三方独立审计请先打开 [AUDIT.md](./AUDIT.md)，执行 `bash audit.sh`；审计对象固定为 `5c7497c`。本 README 其余部分是被审计 V6 的技术手册。
+
 # OCR2MD V6 · 技术手册
 
 OCR2MD V6 是运行于 Mac 的 Markdown 校阅工作台，当前业务模块为**章节定界**。使用 MinerU JSON 转换出的 `.minerujson.md` 作为可编辑母文档，结合原始 PDF 进行定位核对。公网入口：[https://ocr2md.laity.bid/](https://ocr2md.laity.bid/)。
