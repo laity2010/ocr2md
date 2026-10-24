@@ -8,6 +8,7 @@ import {buildOutline,headingAtLine} from './outline-index.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {markerForHeading,putMarker} from './chapter-markers.js';
 import {chapterAssignments} from './chapter-files.js';
+import './ag-enum-filter-shared.css';
 import './outline-grid.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);

@@ -2,12 +2,20 @@
 import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
 import {spawn} from 'node:child_process';
-import {mkdtempSync,existsSync,readFileSync} from 'node:fs';
+import {mkdtempSync,existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {tmpdir,homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 const root=process.cwd();
 const folder=mkdtempSync(join(tmpdir(),'ocr2md-v6-settings-test-'));
 const jsonPath=join(folder,'settings.json');
+const KEY='globalUi.cmSource.defaultFontSize';
+// Start from the previously published V6 scalar+$comments schema; opening
+// settings must migrate it once without writing until Save.
+writeFileSync(jsonPath,JSON.stringify({
+  $comments:{[KEY]:'旧格式中保留的字号说明'},
+  globalUi:{cmSource:{defaultFontSize:12}},
+  otherSystem:{untouched:true},
+},null,2)+'\n');
 const port=5763,base=`http://127.0.0.1:${port}`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
   '--port',String(port),'--strictPort'],{cwd:root,env:{...process.env,V6_SETTINGS_PATH:jsonPath,
@@ -48,26 +56,32 @@ try{
       assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
       assert.equal(await page.locator('#editor .cm-editor').count(),1);
       assert.equal(await page.locator('#settings-workspace .ag-row').count(),1);
-      assert.deepEqual(await page.locator('#settings-workspace .ocr-settings-filter-header span').allTextContents(),
-        ['一级分类','二级分类','键名']);
-      assert.equal((await page.locator('#settings-workspace .ag-header-cell-text').allTextContents()).at(-1),
-        '键注释');
-      assert.equal(await page.locator('#settings-workspace .ocr-settings-filter').count(),3);
+      assert.deepEqual(await page.locator('#settings-workspace .ag-header-cell-text').allTextContents(),
+        ['一级分类','二级分类','键名','键注释']);
+      assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3,
+        'Reuse native AG Grid filter buttons for the first 3 columns');
+      assert.equal(await page.locator('#settings-workspace .ocr-settings-filter-header').count(),0,
+        'No parallel custom header filters');
       assert.deepEqual(await page.locator('#settings-workspace .ag-header-cell[col-id]').evaluateAll(nodes=>
         nodes.map(node=>node.getAttribute('col-id'))),
         ['primaryCategory','secondaryCategory','keyName','keyComment']);
       assert((await page.locator('#settings-workspace .ag-header-cell[col-id]').evaluateAll(nodes=>
         nodes.every(node=>node.classList.contains('ag-header-cell')&&!node.querySelector('.ag-header-cell-moving')))));
       const initialJSON=JSON.parse(await page.locator('#settings-workspace .cm-content').innerText());
-      assert.equal(initialJSON.$comments['globalUi.cmSource.defaultFontSize'],
-        '所有 CM6 源码窗的默认字号（8–32 pt）');
-      assert.equal(initialJSON.$comments.globalUi,'全局 UI');
-      assert.equal(initialJSON.$comments['globalUi.cmSource'],'CM 源码窗');
+      const record=initialJSON.settings[KEY];
+      assert.equal(record.key,'defaultFontSize');
+      assert.equal(record.category1,'全局 UI');
+      assert.equal(record.category2,'CM 源码窗');
+      assert.equal(record.comment,'旧格式中保留的字号说明');
+      assert.deepEqual(record.range,{min:8,max:32,step:1});
+      assert.equal(record.value,name==='Chromium'?12:14);
+      assert.equal(initialJSON.$legacy.otherSystem.untouched,true,
+        'Migrating schema must preserve unrelated legacy settings');
       const agCells=await page.locator('#settings-workspace .ag-row [col-id]').allTextContents();
       assert(agCells.includes('全局 UI'));
       assert(agCells.includes('CM 源码窗'));
       assert(agCells.includes('defaultFontSize'));
-      assert(agCells.some(v=>v.includes('所有 CM6 源码窗')));
+      assert(agCells.some(v=>v.includes('旧格式中保留的字号说明')));
       const settingsStyle=await page.locator('#settings-workspace .cm-editor').evaluate(el=>({
         background:getComputedStyle(el).backgroundColor,
         color:getComputedStyle(el).color,
@@ -93,25 +107,20 @@ try{
       assert((await page.locator('.ocr-settings-breadcrumb').textContent()).includes('全局 UI / CM 源码窗 / defaultFontSize'));
       assert.equal(await page.locator('.ocr-settings-control label').textContent(),'defaultFontSize');
       assert.equal(await page.locator('.ocr-settings-key-comment').textContent(),
-        initialJSON.$comments['globalUi.cmSource.defaultFontSize']);
-      // Exact-value filters exist only on the first three fixed-order columns.
-      const firstFilter=page.getByRole('combobox',{name:'筛选一级分类'});
-      await firstFilter.selectOption('全局 UI');
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),1);
-      await firstFilter.selectOption('');
-      // Hide the row deliberately, then click its JSON source key. Source -> AG
-      // must clear the now-incompatible filter and locate the matching row.
-      await firstFilter.evaluate(element=>{
-        const missing=document.createElement('option');missing.value='NO_SUCH_CATEGORY';
-        missing.textContent='NO_SUCH_CATEGORY';element.append(missing);
-        element.value=missing.value;element.dispatchEvent(new Event('change',{bubbles:true}));
-      });
+        record.comment);
+      // The Chapter Outline's native checkbox filter is reused verbatim.
+      const filterButton=page.locator('#settings-workspace .ag-header-cell[col-id="primaryCategory"] .ag-header-cell-filter-button');
+      await filterButton.click();
+      const nativeFilter=page.locator('.ocr-enum-filter:visible');
+      await nativeFilter.waitFor();
+      assert.equal(await nativeFilter.locator('[data-filter-value="全局 UI"]').count(),1);
+      await nativeFilter.locator('[data-filter-value="全局 UI"] input').uncheck();
       await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===0);
-      const sourceKey=page.locator('#settings-workspace .cm-line span')
-        .filter({hasText:'defaultFontSize'}).last();
-      await sourceKey.click();
+      // Click the source record: it must clear a filter that hides that row.
+      await page.locator('#settings-workspace .cm-line').filter({hasText:'"key": "defaultFontSize"'}).first().click();
       await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===1);
-      assert.equal(await firstFilter.inputValue(),'');
+      assert.equal(await page.locator('#settings-workspace .ag-row-selected').count(),1);
+      assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3);
       await page.locator('#settings-workspace .ag-row').click();
       // AG -> CMD selects the *real JSON key*, never the localized label.
       assert((await page.locator('#settings-workspace .cm-content').innerText()).includes('defaultFontSize'));
@@ -134,7 +143,7 @@ try{
       await page.locator('#module-select').selectOption('settings');
       await slider.waitFor({state:'visible'});
       const raw=await page.locator('#settings-workspace .cm-content').innerText();
-      assert.equal(JSON.parse(raw).globalUi.cmSource.defaultFontSize,name==='Chromium'?18:16);
+      assert.equal(JSON.parse(raw).settings[KEY].value,name==='Chromium'?18:16);
       await page.locator('#undo').click();
       assert.equal(await slider.inputValue(),name==='Chromium'?'12':'14');
       await page.locator('#redo').click();
@@ -143,7 +152,9 @@ try{
         // User changes JSON directly in CM6; registration publishes the same value.
         const editor=page.locator('#settings-workspace .cm-content');
         await editor.click();await editor.press('ControlOrMeta+A');
-        await page.keyboard.insertText('{"globalUi":{"cmSource":{"defaultFontSize":14}}}\n');
+        const current=JSON.parse(await editor.innerText());
+        current.settings[KEY].value=14;
+        await page.keyboard.insertText(JSON.stringify(current,null,2)+'\n');
         await page.waitForTimeout(150);
         assert.equal(await slider.inputValue(),'14');
         assert.equal(await page.evaluate(()=>document.documentElement.style
@@ -160,10 +171,10 @@ try{
         await page.locator('#save').click();
         assert.equal((await saveResponse).status(),200,'CMD must confirm JSON persistence');
         const persisted=JSON.parse(readFileSync(jsonPath,'utf8'));
-        assert.equal(persisted.globalUi.cmSource.defaultFontSize,14);
-        assert.equal(persisted.$comments['globalUi.cmSource.defaultFontSize'],
-          '所有 CM6 源码窗的默认字号（8–32 pt）',
-          'CMD should restore missing key comments before saving legacy JSON');
+        assert.equal(persisted.settings[KEY].value,14);
+        assert.equal(persisted.settings[KEY].comment,'旧格式中保留的字号说明',
+          'Migrate old comment into the parameter record');
+        assert.equal(persisted.$legacy.otherSystem.untouched,true);
         // Verify round-trip persistence, not merely an unsaved in-memory value.
         await page.reload({waitUntil:'domcontentloaded'});
         await page.locator('#module-select').selectOption('settings');
@@ -172,7 +183,10 @@ try{
         // The metadata really comes from JSON. Editing its text instantly
         // updates the AG comment and preview without changing the font value.
         const annotated=JSON.parse(await page.locator('#settings-workspace .cm-content').innerText());
-        annotated.$comments['globalUi.cmSource.defaultFontSize']='手动修改的字号注释';
+        annotated.settings[KEY].comment='手动修改的字号注释';
+        annotated.settings[KEY].category1='个性化 UI';
+        annotated.settings[KEY].category2='源码编辑器';
+        annotated.settings[KEY].range={min:10,max:24,step:1};
         const metadataEditor=page.locator('#settings-workspace .cm-content');
         await metadataEditor.click();await metadataEditor.press('ControlOrMeta+A');
         await page.keyboard.insertText(JSON.stringify(annotated,null,2));
@@ -180,13 +194,19 @@ try{
           '手动修改的字号注释',{timeout:10000});
         assert((await page.locator('#settings-workspace .ag-row').innerText()).includes('手动修改的字号注释'));
         assert.equal(await slider.inputValue(),'14');
+        assert.equal(await slider.getAttribute('min'),'10');
+        assert.equal(await slider.getAttribute('max'),'24');
+        assert((await page.locator('#settings-workspace .ag-row').innerText()).includes('个性化 UI'));
+        assert((await page.locator('.ocr-settings-breadcrumb').innerText()).includes('源码编辑器'));
         // The cursor on the JSON leaf or its comment must locate the AG row.
-        await page.locator('#settings-workspace .cm-line').filter({hasText:'"defaultFontSize": 14'}).first().click();
+        await page.locator('#settings-workspace .cm-line').filter({hasText:'"value": 14'}).first().click();
         assert.equal(await page.locator('#settings-workspace .ag-row-selected').count(),1);
         // Invalid yet parseable JSON must not emit a changed message or save.
         const direct=page.locator('#settings-workspace .cm-content');
         await direct.click();await direct.press('ControlOrMeta+A');
-        await page.keyboard.insertText('{"globalUi":{"cmSource":{"defaultFontSize":33}}}');
+        const invalidRecord=JSON.parse(await direct.innerText());
+        invalidRecord.settings[KEY].value=33;
+        await page.keyboard.insertText(JSON.stringify(invalidRecord));
         await page.waitForTimeout(150);
         assert.equal(await slider.isDisabled(),true);
         assert.equal(await page.evaluate(()=>document.documentElement.style
@@ -196,24 +216,25 @@ try{
         await page.locator('#save').click();
         await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('设置保存失败'),
           null,{timeout:16000});
-        assert.equal(JSON.parse(readFileSync(jsonPath,'utf8')).globalUi.cmSource.defaultFontSize,14);
+        assert.equal(JSON.parse(readFileSync(jsonPath,'utf8')).settings[KEY].value,14);
         await page.locator('#undo').click();
         assert.equal(await slider.isEnabled(),true);
         assert.equal(await slider.inputValue(),'14');
         // Two modules may legitimately have the same leaf name. CMD must
         // update the full registered path and leave the other value untouched.
         const duplicate=JSON.parse(await direct.innerText());
-        duplicate.otherGroup={defaultFontSize:7};
-        duplicate.$comments.otherGroup='Unregistered test group';
-        duplicate.$comments['otherGroup.defaultFontSize']='Unregistered duplicate key';
+        duplicate.settings['otherGroup.defaultFontSize']={
+          key:'defaultFontSize',category1:'Other',category2:'Test',comment:'Unregistered record',
+          value:7,range:{min:1,max:10,step:1}
+        };
         await direct.click();await direct.press('ControlOrMeta+A');
         await page.keyboard.insertText(JSON.stringify(duplicate,null,2));
         await slider.evaluate(node=>{node.value='19';node.dispatchEvent(new Event('input',{bubbles:true}));});
         await page.waitForFunction(()=>document.documentElement.style.getPropertyValue(
           '--ocr-cm-source-font-size')==='19pt',{timeout:15000});
         const afterDuplicate=JSON.parse(await direct.innerText());
-        assert.equal(afterDuplicate.globalUi.cmSource.defaultFontSize,19);
-        assert.equal(afterDuplicate.otherGroup.defaultFontSize,7);
+        assert.equal(afterDuplicate.settings[KEY].value,19);
+        assert.equal(afterDuplicate.settings['otherGroup.defaultFontSize'].value,7);
       }
       assert.equal(errors.length,0,`uncaught page errors: ${errors.join(';')}`);
       if(name==='Chromium'){

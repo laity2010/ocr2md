@@ -4,6 +4,8 @@
 import {createDockview,themeAbyss} from 'dockview';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import {openCMDJsonSource,readCMDJsonSnapshot} from './cmd-json-source.js';
+import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
+import './ag-enum-filter-shared.css';
 import './settings-module.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -14,8 +16,7 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
 
 export function createSettingsModule(container,onStatus=()=>{}){
   const definitions=new Map(),applied=new Map();
-  const selectedFilters=new Map();
-  let keyComments=Object.create(null);
+  let records=new Map();
   let source=null,grid=null,dockview=null,loadPromise=null,initialPromise=null,slider=null,valueLabel=null,details=null;
   let agHost=null,sourceHost=null,previewHost=null;
   let activeKey=null,invalid=false;
@@ -30,6 +31,9 @@ export function createSettingsModule(container,onStatus=()=>{}){
       throw Error('Invalid settings registration');
     if(definitions.has(key))throw Error('Duplicate settings key: '+key);
     definitions.set(key,Object.freeze({...definition,category:Object.freeze([...category])}));
+    // A new module may register after the settings editor is already open.
+    // Add its initial record through CMD's undoable text transaction.
+    if(source)ensureRegisteredRecords();
     if(!activeKey)activeKey=key;
     refreshGrid();grid?.refreshHeader();renderPreview();
   }
@@ -41,64 +45,64 @@ export function createSettingsModule(container,onStatus=()=>{}){
     if(applied.has(key))handler({topic:'settings.changed',key,value:applied.get(key),origin:'initial'});
     return ()=>container.removeEventListener('settings.changed',listener);
   }
-  function defaultComments(){
-    const defaults={};
-    for(const item of definitions.values()){
-      const path=item.key.split('.');
-      if(path.length>=2){
-        defaults[path[0]]??=item.category[0];
-        defaults[path.slice(0,2).join('.')]??=item.category[1];
-      }
-      defaults[item.key]??=item.comment||item.label;
+  // Module declarations supply defaults and hard safety bounds. The editable
+  // JSON record is authoritative for category/comment/value/control range.
+  function defaultRecord(item,value=item.defaultValue,comment=item.comment||item.label){
+    return {key:item.key.split('.').at(-1),category1:item.category[0],
+      category2:item.category[1],comment,value,
+      range:{min:item.min,max:item.max,step:item.step}};
+  }
+  function recordFor(key){return records.get(key)||defaultRecord(entry(key));}
+  function normaliseDocument(data){
+    if(!data||typeof data!=='object'||Array.isArray(data))return null;
+    if(data.settings && typeof data.settings==='object'&&!Array.isArray(data.settings)){
+      const missing=[...definitions.values()].filter(item=>!Object.hasOwn(data.settings,item.key));
+      if(!missing.length)return data;
+      const copy=structuredClone(data);
+      for(const item of missing)copy.settings[item.key]=defaultRecord(item);
+      return copy;
     }
-    return defaults;
-  }
-  function displayedComment(key){
-    return typeof keyComments[key]==='string'?keyComments[key]:defaultComments()[key]||'';
-  }
-  function createFilterHeader(field,title){
-    return class {
-      init(params){
-        const el=document.createElement('div');el.className='ocr-settings-filter-header';
-        const label=document.createElement('span');label.textContent=title;
-        const select=document.createElement('select');select.className='ocr-settings-filter';
-        select.setAttribute('aria-label','筛选'+title);select.title='按值筛选'+title;
-        const addOption=(value,text)=>{const option=document.createElement('option');
-          option.value=value;option.textContent=text;select.append(option);};
-        addOption('','全部');
-        const keys=new Set([...definitions.values()].map(item=>({
-          primaryCategory:item.category[0],secondaryCategory:item.category[1],
-          keyName:item.key.split('.').at(-1),
-        })[field]));
-        for(const value of [...keys].sort((a,b)=>a.localeCompare(b,'zh-CN')))
-          addOption(value,value);
-        select.value=selectedFilters.get(field)||'';
-        select.addEventListener('pointerdown',event=>event.stopPropagation());
-        select.addEventListener('click',event=>event.stopPropagation());
-        select.addEventListener('change',()=>{
-          if(select.value)selectedFilters.set(field,select.value);
-          else selectedFilters.delete(field);
-          params.api.onFilterChanged();
-        });
-        el.append(label,select);this.gui=el;
+    // Pre-existing V6 settings used nested scalar keys and a separate
+    // $comments map. Migrate on opening the CM6 document as one undoable
+    // edit, without an implicit write. Keep unrelated source data archived.
+    const archived=structuredClone(data),converted={settings:{}};
+    for(const item of definitions.values()){
+      const prior=valueAt(data,item.key);
+      const comment=data.$comments?.[item.key];
+      converted.settings[item.key]=defaultRecord(item,
+        prior===undefined?item.defaultValue:prior,
+        typeof comment==='string'?comment:item.comment||item.label);
+      let branch=archived;
+      const parts=item.key.split('.');
+      for(const name of parts.slice(0,-1))branch=branch?.[name];
+      if(branch && typeof branch==='object')delete branch[parts.at(-1)];
+    }
+    function dropEmpty(obj){
+      if(!obj||typeof obj!=='object'||Array.isArray(obj))return;
+      for(const [key,value]of Object.entries(obj)){
+        dropEmpty(value);
+        if(value && typeof value==='object'&&!Array.isArray(value)&&!Object.keys(value).length)
+          delete obj[key];
       }
-      getGui(){return this.gui;}
-      refresh(){return false;}
-    };
+    }
+    delete archived.$comments;
+    dropEmpty(archived);
+    if(Object.keys(archived).length)converted.$legacy=archived;
+    return converted;
+  }
+  function ensureRegisteredRecords(){
+    if(!source)return false;
+    const data=source.readJSON(),updated=normaliseDocument(data);
+    if(updated===data)return false;
+    source.replaceDocument(JSON.stringify(updated,null,2)+'\n');
+    return true;
   }
   function showSelectedRow({reveal=false}={}){
     if(!grid||!activeKey)return;
-    // Clicks in source must reveal the matching AG record even if a user
-    // previously applied a filter that hides it.
     const node=grid.getRowNode(activeKey);
     if(!node)return;
-    if(reveal && selectedFilters.size){
-      const item=entry(activeKey);
-      const data={primaryCategory:item.category[0],secondaryCategory:item.category[1],
-        keyName:item.key.split('.').at(-1)};
-      if([...selectedFilters].some(([field,value])=>data[field]!==value)){
-        selectedFilters.clear();grid.refreshHeader();grid.onFilterChanged();
-      }
+    if(reveal && node.rowIndex==null){
+      grid.setFilterModel(null);grid.onFilterChanged();
     }
     node.setSelected(true);
     if(reveal)grid.ensureNodeVisible(node,'middle');
@@ -106,53 +110,65 @@ export function createSettingsModule(container,onStatus=()=>{}){
   function valueAt(object,key){
     return key.split('.').reduce((value,part)=>value&&typeof value==='object'?value[part]:undefined,object);
   }
-  function isValid(item,value){return typeof value==='number'&&Number.isInteger(value)&&
-    value>=item.min&&value<=item.max&&((value-item.min)%item.step===0);}
+  function isValid(item,record){
+    if(!record||typeof record!=='object'||Array.isArray(record))return false;
+    const range=record.range;
+    return record.key===item.key.split('.').at(-1)&&
+      typeof record.category1==='string'&&record.category1.length>0&&
+      typeof record.category2==='string'&&record.category2.length>0&&
+      typeof record.comment==='string'&&
+      range&&typeof range==='object'&&!Array.isArray(range)&&
+      Number.isInteger(range.min)&&Number.isInteger(range.max)&&
+      Number.isInteger(range.step)&&range.step>0&&
+      range.min>=item.min&&range.max<=item.max&&range.min<=range.max&&
+      typeof record.value==='number'&&Number.isInteger(record.value)&&
+      record.value>=range.min&&record.value<=range.max&&
+      (record.value-range.min)%range.step===0;
+  }
   function valuesFromDocument(data){
-    if(!data||typeof data!=='object'||Array.isArray(data))return null;
-    const values=new Map();
-    for(const [key,item]of definitions){
-      const value=valueAt(data,key);
-      if(!isValid(item,value))return null;
-      values.set(key,value);
+    const normalized=normaliseDocument(data);
+    if(!normalized||!normalized.settings||typeof normalized.settings!=='object')return null;
+    const values=new Map(),nextRecords=new Map();
+    for(const [key,item] of definitions){
+      const record=normalized.settings[key];
+      if(!isValid(item,record))return null;
+      nextRecords.set(key,record);
+      values.set(key,record.value);
     }
-    keyComments=data.$comments && typeof data.$comments==='object' && !Array.isArray(data.$comments)
-      ?data.$comments:Object.create(null);
+    records=nextRecords;
     return values;
   }
   function parseValues(){return source?valuesFromDocument(source.readJSON()):null;}
   function refreshGrid(){
     if(!grid||!activeKey)return;
-    const rows=[...definitions.values()].map(item=>({
-      key:item.key,
-      primaryCategory:item.category[0],
-      secondaryCategory:item.category[1],
-      keyName:item.key.split('.').at(-1),
-      keyComment:displayedComment(item.key),
+    grid.setGridOption('rowData',[...definitions.values()].map(item=>{
+      const record=recordFor(item.key);
+      return {key:item.key,primaryCategory:record.category1,
+        secondaryCategory:record.category2,keyName:record.key,
+        keyComment:record.comment};
     }));
-    grid.setGridOption('rowData',rows);
     showSelectedRow();
   }
   function renderPreview(){
     if(!previewHost||!activeKey)return;
-    const item=entry(activeKey);
+    const item=entry(activeKey),record=recordFor(activeKey);
     previewHost.replaceChildren();
     const pane=document.createElement('section');pane.className='ocr-settings-control';
     const breadcrumb=document.createElement('div');breadcrumb.className='ocr-settings-breadcrumb';
-    const rawName=item.key.split('.').at(-1);
-    breadcrumb.textContent=[...item.category,rawName].join(' / ');
+    const rawName=record.key;
+    breadcrumb.textContent=[record.category1,record.category2,rawName].join(' / ');
     const label=document.createElement('label');label.textContent=rawName;
     label.htmlFor='settings-font-slider';
     const row=document.createElement('div');row.className='ocr-settings-slider-row';
     slider=document.createElement('input');slider.id='settings-font-slider';slider.type='range';
-    slider.min=String(item.min);slider.max=String(item.max);slider.step=String(item.step);
+    slider.min=String(record.range.min);slider.max=String(record.range.max);slider.step=String(record.range.step);
     slider.setAttribute('aria-label',item.label);
     valueLabel=document.createElement('output');valueLabel.htmlFor=slider.id;
     row.append(slider,valueLabel);
     const comment=document.createElement('p');comment.className='ocr-settings-key-comment';
-    comment.textContent=displayedComment(item.key);
+    comment.textContent=record.comment;
     const footer=document.createElement('div');footer.className='ocr-settings-description';
-    footer.textContent=`字号 ${item.min}–${item.max} pt · ${item.key}`;
+    footer.textContent=`字号 ${record.range.min}–${record.range.max} pt · ${item.key}`;
     details=document.createElement('div');details.className='ocr-settings-validation';
     slider.addEventListener('input',()=>{
       try{set(item.key,Number(slider.value));}catch(error){onStatus(error.message,'warning');syncPreview();}
@@ -193,7 +209,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
     try{values=parseValues();}catch{} // Partial JSON is allowed while typing.
     invalid=!values;
     if(values)for(const [key,value]of values)publish(key,value,docChanged?'cm6':'load');
-    if(docChanged){refreshGrid();renderPreview();}
+    if(docChanged&&values){refreshGrid();renderPreview();}
     else syncPreview();
     if(Number.isInteger(sourceOffset)){
       const candidate=source.keyAtOffset(sourceOffset);
@@ -212,15 +228,15 @@ export function createSettingsModule(container,onStatus=()=>{}){
   function get(key){entry(key);return applied.has(key)?applied.get(key):entry(key).defaultValue;}
   function set(key,value){
     const item=entry(key);
-    if(!isValid(item,value))throw Error('Setting value outside allowed range');
+    if(!isValid(item,{...recordFor(key),value}))throw Error('Setting value outside allowed range');
     if(!source||invalid)throw Error('JSON 源码尚未就绪或存在错误');
     // Settings cannot read/write disk or operate CM6 internals. CMD alone
     // performs the precise JSON scalar transaction and owns undo history.
-    source.changeScalar(key,value);
+    source.changeScalar(['settings',key,'value'],value);
   }
   function createPanel(name){
     const host=document.createElement('div');host.className='ocr-settings-pane';
-    if(name==='outline')agHost=host;
+    if(name==='outline'){agHost=host;host.classList.add('ocr-settings-ag-pane');}
     if(name==='source'){sourceHost=host;host.classList.add('ocr-settings-source','ocr-cm-source');}
     if(name==='preview')previewHost=host;
     return {element:host,init(){},layout(){if(name==='source')source?.requestMeasure();},dispose(){}};
@@ -233,17 +249,19 @@ export function createSettingsModule(container,onStatus=()=>{}){
     const right=dockview.addPanel({id:'settings-preview',component:'preview',title:'设置控件',
       position:{referencePanel:center,direction:'below'}});
     for(const panel of [left,center,right]){panel.group.header.hidden=true;panel.group.relayout();}
-    grid=createGrid(agHost,{theme,headerHeight:42,rowHeight:35,getRowId:p=>p.data.key,
+    grid=createGrid(agHost,{theme,headerHeight:33,rowHeight:35,getRowId:p=>p.data.key,
       rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
-      isExternalFilterPresent:()=>selectedFilters.size>0,
-      doesExternalFilterPass:node=>[...selectedFilters].every(([field,value])=>node.data[field]===value),
-      defaultColDef:{sortable:false,resizable:true,suppressMovable:true,lockPosition:true},
+      defaultColDef:{sortable:false,resizable:true,suppressMovable:true,
+        suppressHeaderMenuButton:true,suppressHeaderFilterButton:false},
       columnDefs:[
-        {field:'primaryCategory',headerName:'一级分类',width:145,minWidth:110,pinned:'left',lockPinned:true,headerComponent:createFilterHeader('primaryCategory','一级分类')},
-        {field:'secondaryCategory',headerName:'二级分类',width:150,minWidth:120,headerComponent:createFilterHeader('secondaryCategory','二级分类')},
-        {field:'keyName',headerName:'键名',width:160,minWidth:130,headerComponent:createFilterHeader('keyName','键名')},
+        {field:'primaryCategory',headerName:'一级分类',width:145,minWidth:110,
+          pinned:'left',lockPinned:true,lockPosition:'left',filter:EnumCheckboxFilter},
+        {field:'secondaryCategory',headerName:'二级分类',width:150,minWidth:120,
+          filter:EnumCheckboxFilter},
+        {field:'keyName',headerName:'键名',width:160,minWidth:130,
+          filter:EnumCheckboxFilter},
         {field:'keyComment',headerName:'键注释',flex:1,minWidth:180,
-          tooltipField:'keyComment'},
+          filter:false,tooltipField:'keyComment'},
       ],
       onRowClicked:event=>{
         if(!event.data?.key)return;
@@ -253,7 +271,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
       },
     });
     source=await openCMDJsonSource(sourceHost,onSourceChange);
-    source.ensureKeyComments(defaultComments());
+    ensureRegisteredRecords();
     // Registered module values are applied after the first actual JSON read.
     onSourceChange({docChanged:false});
     refreshGrid();renderPreview();
@@ -271,7 +289,6 @@ export function createSettingsModule(container,onStatus=()=>{}){
   async function save(){
     if(!source)throw Error('设置未加载');
     if(invalid)throw Error('无效 JSON 不允许保存');
-    source.ensureKeyComments(defaultComments());
     return source.save();
   }
   return Object.freeze({register,subscribe,get,set,initialize,load,activate,hasUnsaved,save,

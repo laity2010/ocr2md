@@ -21,63 +21,6 @@
   border:none;
   border-radius:0;
 }
-.ocr-outline-pane .ag-header-cell {
-  padding-left:3px;
-  padding-right:3px;
-}
-.ocr-outline-pane .ag-header-cell-label {width:100%;min-width:0;}
-
-/* Reserve independent touch targets for the native AG filter button and
-   resize handle. The default 8px resize strip overlapped the 16px filter
-   icon by 2px. Keep the original AG handlers, only improve geometry. */
-.ocr-outline-pane .ag-header-cell-filter-button {
-  display:flex;align-items:center;justify-content:center;
-  width:22px;min-width:22px;height:26px;
-  margin-right:19px;
-  cursor:pointer;
-}
-.ocr-outline-pane .ag-header-cell-resize {
-  width:16px;right:-5px;z-index:2;
-  cursor:col-resize;touch-action:none;
-}
-.ocr-outline-pane .ag-header-cell-resize::after {
-  width:3px;height:20px;border-radius:2px;
-  background:#859c94;opacity:.9;
-}
-.ocr-outline-pane .ag-header-cell-resize:hover::after {
-  background:#b5e3c5;
-}
-
-/* AG Grid owns the filter icon/popup and its model; the component styles only
-   its V4-like checkbox options. Popups are mounted outside the grid pane. */
-.ocr-enum-filter {
-  min-width:190px;
-  max-width:min(320px,90vw);
-  max-height:min(310px,70vh);
-  overflow-y:auto;
-  padding:5px 8px;
-  background:#2f383e;
-  color:#d3c6aa;
-  font:14px/1.35 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
-}
-.ocr-enum-filter-option {
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-height:30px;
-  cursor:pointer;
-}
-.ocr-enum-filter-option:hover {background:#37464b;}
-.ocr-enum-filter-option input {accent-color:#83c092;flex:none;}
-.ocr-enum-filter-option span {
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.ocr-enum-filter-separator {
-  margin:4px 0;
-  border-top:1px solid #525c62;
-}
 .ocr-outline-pane .ag-cell {
   padding-left:5px;
   padding-right:5px;

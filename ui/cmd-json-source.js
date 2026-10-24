@@ -45,7 +45,7 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
   const getText=()=>cm.getMarkdown();
   function readJSON(){return JSON.parse(getText());}
   function changeScalar(path,value){
-    if(typeof path!=='string'||!path||!['number','boolean','string'].includes(typeof value))
+    if(!Array.isArray(path)||path.length<1||path.some(part=>typeof part!=='string'||!part)||!['number','boolean','string'].includes(typeof value))
       throw Error('Invalid JSON scalar edit');
     // Full paths avoid ambiguity when independent modules expose the same
     // leaf key. Parsing/patching belongs to CMD, never to AG or Settings.
@@ -53,7 +53,7 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
     let selected=null;
     function scan(node){
       if(selected)return;
-      if(node.name==='Property' && pathOfProperty(node,source)?.join('.')===path){
+      if(node.name==='Property' && JSON.stringify(pathOfProperty(node,source))===JSON.stringify(path)){
         selected=node;return;
       }
       for(let child=node.firstChild;child;child=child.nextSibling)scan(child);
@@ -90,15 +90,16 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
   }
   function keyAtOffset(offset){
     const path=propertyAt(offset);
-    return path?.length ? (path[0]==='$comments'?path[1]||null:path.join('.')) : null;
+    return path?.[0]==='settings' && typeof path[1]==='string' ?path[1]:null;
   }
   function revealKeyPath(key){
     const text=getText(),tree=jsonLanguage.parser.parse(text);
     let target=null;
-    // Walk the JSON grammar, not a regex that may find a comment or a value.
+    // Target a settings record in the JSON grammar, not other same-name keys.
+    const expected=['settings',key];
     function scan(node){
       if(target)return;
-      if(node.name==='Property'&&pathOfProperty(node,text)?.join('.')===key){
+      if(node.name==='Property'&&JSON.stringify(pathOfProperty(node,text))===JSON.stringify(expected)){
         target=node.getChild('PropertyName');return;
       }
       for(let child=node.firstChild;child;child=child.nextSibling)scan(child);
@@ -109,52 +110,14 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
     cm.view.focus();
     return true;
   }
-  /** Inject missing per-key comments as a standard-JSON metadata map; CMD
-   * handles document edits only, callers own comment semantics. Existing
-   * user-authored comments are never overridden. */
-  function ensureKeyComments(defaults){
-    if(!defaults||typeof defaults!=='object'||Array.isArray(defaults))throw Error('Invalid key comments');
-    const source=getText(),data=JSON.parse(source);
-    if(!data||typeof data!=='object'||Array.isArray(data))throw Error('JSON root must be an object');
-    const prior=data.$comments;
-    if(prior!==undefined&&(!prior||typeof prior!=='object'||Array.isArray(prior)))
-      throw Error('$comments must be a JSON object');
-    const merged={...(prior||{})};let changed=false;
-    for(const [key,comment]of Object.entries(defaults)){
-      if(typeof key!=='string'||typeof comment!=='string')throw Error('Invalid comment entry');
-      if(!Object.hasOwn(merged,key)){merged[key]=comment;changed=true;}
-    }
-    if(!changed)return false;
-    if(prior===undefined){
-      const opening=source.indexOf('{');
-      const hasKeys=Object.keys(data).length>0;
-      cm.replaceRanges([{from:opening+1,to:opening+1,expected:'',
-        insert:'\n  "$comments": '+JSON.stringify(merged,null,2).replace(/\n/g,'\n  ')+
-          (hasKeys?',':'')+'\n'}]);
-    }else{
-      let prop=null;
-      const tree=jsonLanguage.parser.parse(source);
-      for(let node=tree.topNode.firstChild;node;node=node.nextSibling){
-        if(node.name!=='Object')continue;
-        for(let child=node.firstChild;child;child=child.nextSibling){
-          if(child.name==='Property'&&pathOfProperty(child,source)?.join('.')==='$comments'){
-            prop=child;break;
-          }
-        }
-      }
-      if(!prop)throw Error('Cannot locate $comments in JSON source');
-      const value=prop.getChild('Object');
-      if(!value)throw Error('$comments must be an object');
-      cm.replaceRanges([{from:value.from,to:value.to,expected:source.slice(value.from,value.to),insert:JSON.stringify(merged,null,2)}]);
-    }
-    JSON.parse(getText());
-    return true;
-  }
-  function revealKey(key){
-    const source=getText();
-    const at=source.indexOf('"'+key+'"');
-    if(at<0)return false;
-    cm.view.dispatch({selection:{anchor:at},scrollIntoView:true});
+  /** CMD owns the text transaction, the Settings module supplies a validated
+   * migrated document. This never persists to disk until explicit Save. */
+  function replaceDocument(nextText){
+    if(typeof nextText!=='string')throw Error('CMD requires JSON text');
+    JSON.parse(nextText);
+    const old=getText();
+    if(old===nextText)return false;
+    cm.replaceRanges([{from:0,to:old.length,expected:old,insert:nextText}]);
     return true;
   }
   async function save(){
@@ -180,7 +143,7 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
       selection:tr.selection,effects:tr.effects,annotations:tr.annotations,filter:false})});
   }
   const isDirty=()=>!cm.doc.eq(savedDoc);
-  return Object.freeze({getText,readJSON,changeScalar,revealKeyPath,keyAtOffset,ensureKeyComments,save,isDirty,
+  return Object.freeze({getText,readJSON,changeScalar,revealKeyPath,keyAtOffset,replaceDocument,save,isDirty,
     get history(){return {undo:undoDepth(cm.view.state),redo:redoDepth(cm.view.state)};},
     undo:()=>history(undo),redo:()=>history(redo),
     requestMeasure:()=>cm.requestMeasure(),destroy:()=>cm.destroy(),

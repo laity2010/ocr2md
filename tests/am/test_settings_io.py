@@ -22,9 +22,9 @@ class CMDSettingsTransportTest(unittest.TestCase):
     def test_default_read_does_not_create_file(self):
         raw = backend.read(self.path)
         self.assertFalse(self.path.exists())
-        self.assertEqual(json.loads(raw)['globalUi']['cmSource']['defaultFontSize'],12)
-        self.assertEqual(json.loads(raw)['$comments']['globalUi.cmSource.defaultFontSize'],
-                         '所有 CM6 源码窗的默认字号（8–32 pt）')
+        self.assertEqual(json.loads(raw)['settings']['globalUi.cmSource.defaultFontSize']['value'],12)
+        self.assertEqual(json.loads(raw)['settings']['globalUi.cmSource.defaultFontSize']['range'],
+                         {'min':8,'max':32,'step':1})
 
     def test_save_exact_bytes_and_cas(self):
         old = backend.read(self.path)

@@ -37,8 +37,9 @@
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
-      "G",
       "A",
+      "G",
+      "S",
       "T"
     ],
     "ios-native-selection.js": [

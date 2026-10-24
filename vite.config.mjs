@@ -12,7 +12,11 @@ const stamp = new Intl.DateTimeFormat('en-CA', {
 const part = key => stamp.find(x => x.type===key).value;
 const buildVersion = `v6-${part('year')}${part('month')}${part('day')}-${part('hour')}${part('minute')}${part('second')}`;
 const settingsFile = resolve(process.env.V6_SETTINGS_PATH || '.v6/settings.json');
-const defaultSettings = JSON.stringify({$comments:{globalUi:'全局 UI', 'globalUi.cmSource':'CM 源码窗','globalUi.cmSource.defaultFontSize':'所有 CM6 源码窗的默认字号（8–32 pt）'},globalUi:{cmSource:{defaultFontSize:12}}},null,2)+'\n';
+const defaultSettings = JSON.stringify({settings:{'globalUi.cmSource.defaultFontSize':{
+  key:'defaultFontSize',category1:'全局 UI',category2:'CM 源码窗',
+  comment:'所有 CM6 源码窗的默认字号（8–32 pt）',value:12,
+  range:{min:8,max:32,step:1}
+}}},null,2)+'\n' ;
 const hashSettings = text => createHash('sha256').update(text).digest('hex');
 const fixture = resolve('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const file = resolve(process.env.V6_DOCUMENT_PATH || '.v6/workspace/buffetts-alpha.minerujson.md');

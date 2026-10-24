@@ -10,12 +10,15 @@ import secrets
 import threading
 
 DEFAULT = (
-    '{\n  "$comments": {\n'
-    '    "globalUi": "全局 UI",\n'
-    '    "globalUi.cmSource": "CM 源码窗",\n'
-    '    "globalUi.cmSource.defaultFontSize": "所有 CM6 源码窗的默认字号（8–32 pt）"\n'
-    '  },\n  "globalUi": {\n    "cmSource": {\n'
-    '      "defaultFontSize": 12\n    }\n  }\n}\n'
+    '{\n  "settings": {\n'
+    '    "globalUi.cmSource.defaultFontSize": {\n'
+    '      "key": "defaultFontSize",\n'
+    '      "category1": "全局 UI",\n'
+    '      "category2": "CM 源码窗",\n'
+    '      "comment": "所有 CM6 源码窗的默认字号（8–32 pt）",\n'
+    '      "value": 12,\n'
+    '      "range": {"min": 8, "max": 32, "step": 1}\n'
+    '    }\n  }\n}\n'
 )
 LIMIT = 64 * 1024
 LOCK = threading.Lock()

@@ -18,9 +18,12 @@ assert(up,'Settings test server never became ready');
 try{
  const current=await fetch(base+'/api/settings');assert.equal(current.status,200);
  const oldEtag=current.headers.get('etag');assert.equal(oldEtag?.length,64);
- assert.equal((await current.json()).globalUi.cmSource.defaultFontSize,12);
+ assert.equal((await current.json()).settings['globalUi.cmSource.defaultFontSize'].value,12);
  assert.equal(existsSync(storage),false,'GET must not create user config');
- const content='{\n "globalUi":{"cmSource":{"defaultFontSize":23}},"keep":"untouched"\n}\n';
+ const content=JSON.stringify({settings:{'globalUi.cmSource.defaultFontSize':{
+  key:'defaultFontSize',category1:'全局 UI',category2:'CM 源码窗',
+  comment:'测试持久化',value:23,range:{min:8,max:32,step:1}
+ }},keep:'untouched'},null,2)+'\n';
  const send=(cookie,origin,etag,body=content)=>fetch(base+'/api/settings',{method:'PUT',
    headers:{'Content-Type':'application/json','Cookie':cookie,'Origin':origin,'If-Match':etag},body});
  assert.equal((await send('',base,oldEtag)).status,403);
