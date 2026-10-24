@@ -67,6 +67,13 @@ export OCR2MD_AUDIT_WEBKIT_PATH="$(node -p 'require("playwright").webkit.executa
 # it solely while that test runs, without changing frozen source or assertions.
 cp "$BUNDLE_DIR/audit-fixture-preload.mjs" "$REPORT_DIR/audit-fixture-preload.mjs"
 export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import=$(pwd)/$REPORT_DIR/audit-fixture-preload.mjs"
+# Only Linux needs a replacement for frozen test-only macOS sips calls.
+# Uses genuine PNG→JPEG conversion via Playwright Chromium; no test is skipped.
+if [[ "$(uname -s)" == "Linux" ]]; then
+  cp "$BUNDLE_DIR/audit-sips-compat.mjs" "$REPORT_DIR/audit-sips-compat.mjs"
+  cp "$BUNDLE_DIR/audit-png-to-jpeg.mjs" "$REPORT_DIR/audit-png-to-jpeg.mjs"
+  export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-sips-compat.mjs"
+fi
 [[ -x "$OCR2MD_AUDIT_CHROME_PATH" ]] || fail 'Chromium browser binary not installed'
 [[ -x "$OCR2MD_AUDIT_WEBKIT_PATH" ]] || fail 'WebKit browser binary not installed'
 
@@ -108,6 +115,7 @@ result={
  'runner_exit_code':int(rc),
  'am_cases':[{**r,'status':r['status'] or 'NOT VERIFIED'} for r in rows],
  'fixture_overrides':{'tests/mineru-start-only-ui-browser.test.mjs':{'source':'tests/fixtures/buffetts-alpha-four-view-reviewed.md.gz','sha256_uncompressed':'c998da7aeea5410f1d7be10975c05e59efb5cdf6bfcf750595b27a048c5e3e19','scope':'one test only; restored after test'}, 'tests/promoted-chapters-browser.test.mjs':{'source':'dist/','target':'.v6/release/','scope':'isolated release snapshot; unchanged test assertions'}},
+ 'linux_compat':{'sips':'Playwright Chromium PNG to actual JPEG only for frozen browser tests; log marker AUDIT_LINUX_SIPS_SHIM'},
  'runner_log':'run.log',
  'note':'These are AM test associations, not an independent source-code architecture review.'
 }
