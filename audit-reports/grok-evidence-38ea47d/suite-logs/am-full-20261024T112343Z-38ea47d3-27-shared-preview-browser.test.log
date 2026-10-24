@@ -1,0 +1,3 @@
+SHARED_PREVIEW_PASS Chrome {"panes":["outline","preview","source"],"modeDefault":"md","modes":"md↔pdf","warmupGuard":true,"toolsRetracted":true,"pdfTransport":[200],"page3":{"mode":"pdf","view":true,"selected":"4","toolbar":"visible"},"scale":"67%","page8Highlight":true,"errors":0}
+SHARED_PREVIEW_PASS WebKit {"panes":["outline","preview","source"],"modeDefault":"md","modes":"md↔pdf","warmupGuard":true,"toolsRetracted":true,"pdfTransport":[200],"page3":{"mode":"pdf","view":true,"selected":"4","toolbar":"visible"},"scale":"67%","page8Highlight":true,"errors":0}
+SHARED_PREVIEW_READONLY_PASS

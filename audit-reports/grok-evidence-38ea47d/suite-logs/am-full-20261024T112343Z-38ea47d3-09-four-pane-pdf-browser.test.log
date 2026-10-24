@@ -1,0 +1,9 @@
+FOUR_PANE_PDF_OPEN_ZOOM Chrome {"groups":3,"pdfReady":"就绪","pages":"/ 22","dark":"dark","tabs":[],"canvas":{"x":537,"y":393,"width":474,"height":623,"top":393,"right":1011,"bottom":1016,"left":537},"scale":"56%","fitScale":"56%"}
+FOUR_PANE_ROTATED_PAGE_PASS Chrome 8+11
+FOUR_PANE_PDF_REVERSE_PASS Chrome {"agFrom":"4","agTo":"8","page":8}
+FOUR_PANE_PDF_PASS Chrome {"groups":3,"logicalViews":4,"highlighter":true,"page8Selected":true,"zoom":"56%"}
+FOUR_PANE_PDF_OPEN_ZOOM WebKit {"groups":3,"pdfReady":"就绪","pages":"/ 22","dark":"dark","tabs":[],"canvas":{"x":537,"y":393,"width":474,"height":623,"top":393,"right":1011,"bottom":1016,"left":537},"scale":"56%","fitScale":"56%"}
+FOUR_PANE_ROTATED_PAGE_PASS WebKit 8+11
+FOUR_PANE_PDF_REVERSE_PASS WebKit {"agFrom":"4","agTo":"8","page":8}
+FOUR_PANE_PDF_PASS WebKit {"groups":3,"logicalViews":4,"highlighter":true,"page8Selected":true,"zoom":"56%"}
+FOUR_PANE_PDF_ISOLATION_PASS

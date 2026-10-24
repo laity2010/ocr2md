@@ -1,0 +1,3 @@
+AUDIT_LINUX_SIPS_SHIM media-thumbnail-fixture.png -> media-thumbnail-fixture.jpg
+MEDIA_END_TO_END_PASS Chrome {"items":13,"unused":1,"chapterOnly":1,"filters":"adopted+status","partial":524288,"path":"media/a68e6d33e4e7b7d72de4203b.jpg","preview":"lazy remote → local","undoRedo":true,"chapterPath":true,"reopened":true}
+MEDIA_END_TO_END_PASS WebKit {"items":13,"unused":1,"chapterOnly":1,"filters":"adopted+status","partial":524288,"path":"media/a68e6d33e4e7b7d72de4203b.jpg","preview":"lazy remote → local","undoRedo":true,"chapterPath":true,"reopened":true}

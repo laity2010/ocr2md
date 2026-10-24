@@ -1,0 +1,5 @@
+PDF_SAME_PAGE_FOCUS_PASS Chrome {"deltaScroll":0,"reused":true}
+PDF_CLICK_ONLY_PASS Chrome {"before":{"top":1325,"page":"3","overlays":[["3","4"]]},"afterScroll":{"top":1325,"page":"3","overlays":[["3","4"]]},"afterToggle":{"top":1325,"page":"3","overlays":[["3","4"]]},"clickedPage":"15","manualReadingNoReverseSync":true}
+PDF_SAME_PAGE_FOCUS_PASS WebKit {"deltaScroll":0,"reused":true}
+PDF_CLICK_ONLY_PASS WebKit {"before":{"top":1324,"page":"3","overlays":[["3","4"]]},"afterScroll":{"top":1324,"page":"3","overlays":[["3","4"]]},"afterToggle":{"top":1324,"page":"3","overlays":[["3","4"]]},"clickedPage":"15","manualReadingNoReverseSync":true}
+PDF_CLICK_ONLY_ISOLATION_PASS
