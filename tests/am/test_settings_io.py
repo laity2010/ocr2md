@@ -23,6 +23,8 @@ class CMDSettingsTransportTest(unittest.TestCase):
         raw = backend.read(self.path)
         self.assertFalse(self.path.exists())
         self.assertEqual(json.loads(raw)['globalUi']['cmSource']['defaultFontSize'],12)
+        self.assertEqual(json.loads(raw)['$comments']['globalUi.cmSource.defaultFontSize'],
+                         '所有 CM6 源码窗的默认字号（8–32 pt）')
 
     def test_save_exact_bytes_and_cas(self):
         old = backend.read(self.path)

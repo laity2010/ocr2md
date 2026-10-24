@@ -529,13 +529,13 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- CMD owns JSON source + compare-and-save; Settings owns only schema/projections.
 INSERT INTO modules VALUES ('S','Global Settings','Dockview + AG + CodeMirror projections','ui/settings-module.js');
 INSERT INTO apis VALUES
- ('C24','C','openCMDJsonSource','ui/cmd-json-source.js','export','host,onUpdate','CMD JSON text document port','source edit/history/save + optimistic document fingerprint',1),
+ ('C24','C','openCMDJsonSource','ui/cmd-json-source.js','export','host,onUpdate','CMD JSON text, source key-path navigation and key-comment metadata port','source edit/history/save + AST key-path lookup + JSON $comments metadata + optimistic fingerprint',1),
  ('C25','C','registerCMSourceFontSetting','ui/cm-font-setting.js','export','settings port','unsubscribe','CM source registers its font value and receives changed message',1),
  ('S01','S','createSettingsModule','ui/settings-module.js','export','container,status','settings API facade','creates an independent three-pane Settings instance',1),
- ('S02','S','register','ui/settings-module.js','internal','module/key/schema','void','registers setting without knowing owning module code',1),
+ ('S02','S','register','ui/settings-module.js','internal','module/key/schema','void','registers setting defaults and comment templates without owning modules',1),
  ('S03','S','subscribe','ui/settings-module.js','internal','module,key,handler','unsubscribe','routes settings.changed only to registered owner',1),
  ('S04','S','get','ui/settings-module.js','internal','key','current effective value','read-only projection of CMD JSON',1),
- ('S05','S','set','ui/settings-module.js','internal','key,number','void','validates and delegates one JSON scalar edit to CMD',1),
+ ('S05','S','set','ui/settings-module.js','internal','key,number','void','validates and delegates exact key-path scalar edit to CMD',1),
  ('S06','S','save','ui/settings-module.js','internal','none','Promise<boolean>','delegates durable write and stale-write defense to CMD',1);
 INSERT INTO messages VALUES
  ('E09','dom','settings.changed','{"key":"string","value":"number","origin":"string"}',1);
@@ -551,11 +551,11 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C24','C24','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','JSON CM6 source read-write and compare-and-save', 'integration'),
  ('TC-C25','C25','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM source module explicitly registers defaultFontSize and receives changes','integration'),
  ('TC-S01','S01','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Independent AG/CM/Preview panes mount and switch without destroying markdown','integration'),
- ('TC-S02','S02','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Schema is registered and AG renders classification','integration'),
+ ('TC-S02','S02','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG fixed columns, real JSON keys, source-backed comments and exact value filters','integration'),
  ('TC-S03','S03','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Registered subscriber receives effective settings.changed','integration'),
  ('TC-S04','S04','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG slider and CM6 report one effective setting value','integration'),
- ('TC-S05','S05','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Slider updates JSON, source CSS and undo reverts','integration'),
- ('TC-S06','S06','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Settings save/reload persists without writing markdown','integration');
+ ('TC-S05','S05','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG/source bidirectional AST location, slider updates exact JSON path and undo reverts','integration'),
+ ('TC-S06','S06','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Settings save/reload persists JSON key comments and values without writing markdown','integration');
 INSERT INTO test_cases(id,message_id,script,fixture,expected,evidence) VALUES
  ('TC-E09','E09','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','DOM settings.changed is emitted on accepted CM source changes','integration');
 INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence) VALUES

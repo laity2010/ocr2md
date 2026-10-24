@@ -20,3 +20,10 @@
 .ocr-settings-validation{font-size:12px;color:#fca5a5}
 /* Settings is initialized on first selection, not while hidden. */
 #settings-workspace[hidden]{display:none!important}
+/* AG column order is fixed, but column widths stay resizable. Only the first
+   three category/key columns expose exact-value filters. */
+.ocr-settings-filter-header{width:100%;min-width:0;display:flex;align-items:center;gap:5px}
+.ocr-settings-filter-header span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.ocr-settings-filter{min-width:27px;max-width:55%;font:11px 'OCR2MD Sarasa',monospace;
+ background:#283238;color:#d3c6aa;border:1px solid #596663;border-radius:3px;cursor:pointer}
+.ocr-settings-key-comment{margin:0;color:#a7c080;font-size:13px;line-height:1.45;overflow-wrap:anywhere}

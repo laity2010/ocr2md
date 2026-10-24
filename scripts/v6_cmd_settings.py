@@ -9,7 +9,14 @@ from pathlib import Path
 import secrets
 import threading
 
-DEFAULT = '{\n  "globalUi": {\n    "cmSource": {\n      "defaultFontSize": 12\n    }\n  }\n}\n'
+DEFAULT = (
+    '{\n  "$comments": {\n'
+    '    "globalUi": "全局 UI",\n'
+    '    "globalUi.cmSource": "CM 源码窗",\n'
+    '    "globalUi.cmSource.defaultFontSize": "所有 CM6 源码窗的默认字号（8–32 pt）"\n'
+    '  },\n  "globalUi": {\n    "cmSource": {\n'
+    '      "defaultFontSize": 12\n    }\n  }\n}\n'
+)
 LIMIT = 64 * 1024
 LOCK = threading.Lock()
 

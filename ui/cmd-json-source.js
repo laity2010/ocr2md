@@ -5,7 +5,7 @@ import {EditorView,basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
 import {CMDocument} from './cm-document.js';
 import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
-import {json} from '@codemirror/lang-json';
+import {json,jsonLanguage} from '@codemirror/lang-json';
 import {HighlightStyle,syntaxHighlighting} from '@codemirror/language';
 import {tags as t} from '@lezer/highlight';
 
@@ -44,20 +44,111 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
   savedDoc=cm.doc;
   const getText=()=>cm.getMarkdown();
   function readJSON(){return JSON.parse(getText());}
-  function changeScalar(key,value){
-    // This port changes exactly one literal scalar and leaves unrelated JSON
-    // bytes untouched; registered settings own key semantics and ranges.
-    if(!/^[A-Za-z_$][\w$]*$/.test(key) || !['number','boolean','string'].includes(typeof value))
+  function changeScalar(path,value){
+    if(typeof path!=='string'||!path||!['number','boolean','string'].includes(typeof value))
       throw Error('Invalid JSON scalar edit');
-    const source=getText();
-    const pattern=new RegExp('"'+key+'"\\s*:\\s*(-?(?:\\d+(?:\\.\\d+)?)|true|false|"(?:[^"\\\\]|\\\\.)*")','g');
-    const matches=[...source.matchAll(pattern)];
-    if(matches.length!==1)throw Error('Expected exactly one JSON key: '+key);
-    const matched=matches[0],start=matched.index+matched[0].lastIndexOf(matched[1]);
-    const serialized=JSON.stringify(value);
-    const projected=source.slice(0,start)+serialized+source.slice(start+matched[1].length);
-    JSON.parse(projected); // fail without changing the text
-    cm.replaceRanges([{from:start,to:start+matched[1].length,expected:matched[1],insert:serialized}]);
+    // Full paths avoid ambiguity when independent modules expose the same
+    // leaf key. Parsing/patching belongs to CMD, never to AG or Settings.
+    const source=getText(),tree=jsonLanguage.parser.parse(source);
+    let selected=null;
+    function scan(node){
+      if(selected)return;
+      if(node.name==='Property' && pathOfProperty(node,source)?.join('.')===path){
+        selected=node;return;
+      }
+      for(let child=node.firstChild;child;child=child.nextSibling)scan(child);
+    }
+    scan(tree.topNode);
+    const scalar=selected?.lastChild;
+    if(!scalar||!['Number','String','True','False','Null'].includes(scalar.name))
+      throw Error('JSON setting is not a scalar: '+path);
+    const from=scalar.from,to=scalar.to,serialized=JSON.stringify(value);
+    JSON.parse(source.slice(0,from)+serialized+source.slice(to));
+    cm.replaceRanges([{from,to,expected:source.slice(from,to),insert:serialized}]);
+  }
+  /** CMD JSON syntax-aware key navigation. Never match a duplicated key via
+   * string search: nested path identity comes from official Lezer JSON AST.
+   */
+  function pathOfProperty(node,source){
+    const segments=[];
+    for(let current=node;current;current=current.parent){
+      if(current.name!=='Property')continue;
+      const name=current.getChild('PropertyName');
+      if(!name)return null;
+      try{segments.unshift(JSON.parse(source.slice(name.from,name.to)));}
+      catch{return null;}
+    }
+    return segments;
+  }
+  function propertyAt(offset){
+    const text=getText(),tree=jsonLanguage.parser.parse(text);
+    const position=Math.max(0,Math.min(offset,text.length));
+    let node=tree.resolveInner(position,-1);
+    for(;node;node=node.parent)if(node.name==='Property')
+      return pathOfProperty(node,text);
+    return null;
+  }
+  function keyAtOffset(offset){
+    const path=propertyAt(offset);
+    return path?.length ? (path[0]==='$comments'?path[1]||null:path.join('.')) : null;
+  }
+  function revealKeyPath(key){
+    const text=getText(),tree=jsonLanguage.parser.parse(text);
+    let target=null;
+    // Walk the JSON grammar, not a regex that may find a comment or a value.
+    function scan(node){
+      if(target)return;
+      if(node.name==='Property'&&pathOfProperty(node,text)?.join('.')===key){
+        target=node.getChild('PropertyName');return;
+      }
+      for(let child=node.firstChild;child;child=child.nextSibling)scan(child);
+    }
+    scan(tree.topNode);
+    if(!target)return false;
+    cm.view.dispatch({selection:{anchor:target.from,head:target.to},scrollIntoView:true});
+    cm.view.focus();
+    return true;
+  }
+  /** Inject missing per-key comments as a standard-JSON metadata map; CMD
+   * handles document edits only, callers own comment semantics. Existing
+   * user-authored comments are never overridden. */
+  function ensureKeyComments(defaults){
+    if(!defaults||typeof defaults!=='object'||Array.isArray(defaults))throw Error('Invalid key comments');
+    const source=getText(),data=JSON.parse(source);
+    if(!data||typeof data!=='object'||Array.isArray(data))throw Error('JSON root must be an object');
+    const prior=data.$comments;
+    if(prior!==undefined&&(!prior||typeof prior!=='object'||Array.isArray(prior)))
+      throw Error('$comments must be a JSON object');
+    const merged={...(prior||{})};let changed=false;
+    for(const [key,comment]of Object.entries(defaults)){
+      if(typeof key!=='string'||typeof comment!=='string')throw Error('Invalid comment entry');
+      if(!Object.hasOwn(merged,key)){merged[key]=comment;changed=true;}
+    }
+    if(!changed)return false;
+    if(prior===undefined){
+      const opening=source.indexOf('{');
+      const hasKeys=Object.keys(data).length>0;
+      cm.replaceRanges([{from:opening+1,to:opening+1,expected:'',
+        insert:'\n  "$comments": '+JSON.stringify(merged,null,2).replace(/\n/g,'\n  ')+
+          (hasKeys?',':'')+'\n'}]);
+    }else{
+      let prop=null;
+      const tree=jsonLanguage.parser.parse(source);
+      for(let node=tree.topNode.firstChild;node;node=node.nextSibling){
+        if(node.name!=='Object')continue;
+        for(let child=node.firstChild;child;child=child.nextSibling){
+          if(child.name==='Property'&&pathOfProperty(child,source)?.join('.')==='$comments'){
+            prop=child;break;
+          }
+        }
+      }
+      if(!prop)throw Error('Cannot locate $comments in JSON source');
+      const value=prop.getChild('Object');
+      if(!value)throw Error('$comments must be an object');
+      cm.replaceRanges([{from:value.from,to:value.to,expected:source.slice(value.from,value.to),insert:JSON.stringify(merged,null,2)}]);
+    }
+    JSON.parse(getText());
+    return true;
   }
   function revealKey(key){
     const source=getText();
@@ -89,7 +180,7 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
       selection:tr.selection,effects:tr.effects,annotations:tr.annotations,filter:false})});
   }
   const isDirty=()=>!cm.doc.eq(savedDoc);
-  return Object.freeze({getText,readJSON,changeScalar,revealKey,save,isDirty,
+  return Object.freeze({getText,readJSON,changeScalar,revealKeyPath,keyAtOffset,ensureKeyComments,save,isDirty,
     get history(){return {undo:undoDepth(cm.view.state),redo:redoDepth(cm.view.state)};},
     undo:()=>history(undo),redo:()=>history(redo),
     requestMeasure:()=>cm.requestMeasure(),destroy:()=>cm.destroy(),

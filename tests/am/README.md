@@ -63,3 +63,10 @@ WP1/WP2 采用并公开记录了三项测试契约修订：`tests/scroll-sync-br
 新增 `tests/settings-browser.test.mjs` 的 Chromium/WebKit 真实交互回归、`tests/settings-server.test.mjs` 的 HTTP 授权/原子写回归，以及 `tests/am/test_settings_io.py` 的 CMD I/O 负向测试。所有新增边界已登记在 `registry.sql`，文件所有者更新到 `ownership.json`；早期 WP3 的 7 模块/98 API/139 用例仅是历史基线，新的实际数量以 `am.py build` 为准。
 
 **设置模块懒加载修订**：未打开设置时，仅通过 CMD `readCMDJsonSnapshot` 读取有效配置并发出设置变更；不创建第二份 Dockview/CM6，维持原工作台的 3 个面板与单份 `.cm-content`。首次切换到全局设置再装配设置三窗，之后保留该独立编辑状态。旧 29 套件第一次仅 84/151，因隐藏工作台被提前初始化产生重复面板与编辑器节点，以及模块菜单旧三项断言；这些故障均保留为回归证据。
+
+
+## 全局设置 JSON 的键注释与三窗定位（2026-10-24）
+
+全局设置仍然是标准 JSON，不引入 JSONC 或第二个设置文件。`$comments` 是 JSON 内置的**保留元数据对象**，以完整点分隔键路径为键，保存每个配置键（包括一级/二级父键）的说明文字，例如 `"globalUi.cmSource.defaultFontSize": "所有 CM6 源码窗的默认字号（8–32 pt）"`。模块注册表提供初始注释模板，但 AG 的「键注释」和预览窗实际显示值以当前 CMD JSON 源码的 `$comments` 为准，源码修改会实时反映。旧的合法 JSON 若缺注释，CMD 在打开时通过可撤销的文本事务补齐，**不自动写盘**；保存前也确保注册键注释齐备，保留用户自行修改过的已有注释。
+
+AG 固定列序 `一级分类 → 二级分类 → 键名 → 键注释`，键名是 JSON 的真实末级键，不是中文显示标签；前三列通过列头下拉执行精确值筛选，注释列不提供筛选；宽度可调整，不能拖换列序。AG 行点击经 CMD `revealKeyPath` 定位精确 JSON 键，CM6 光标/点击经 CMD Lezer JSON 语法树 `keyAtOffset` 反定位 AG（含 `$comments` 的路径映射），必要时清空阻碍定位的筛选。CMD 的 `changeScalar` 亦按完整路径修改，不会误改其他模块同名末级键。设置模块没有直接访问另一模块的 DOM 或文件系统。
