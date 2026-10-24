@@ -1,0 +1,25 @@
+stopping renderers: 164217
+164228
+164230 at 12s
+rc=1 t=53s
+---
+PDF_CLICK_ONLY_STEP Chrome spawn-server t=2ms
+PDF_CLICK_ONLY_STEP Chrome healthz t=6ms
+PDF_CLICK_ONLY_STEP Chrome launch t=146ms
+PDF_CLICK_ONLY_STEP Chrome new-page t=336ms
+PDF_CLICK_ONLY_STEP Chrome goto+ready t=436ms
+PDF_CLICK_ONLY_STEP Chrome click-row-4 t=1644ms
+PDF_CLICK_ONLY_STEP Chrome md-scroll-while-hidden t=4897ms
+PDF_CLICK_ONLY_STEP Chrome click-row-10 t=7480ms
+PDF_CLICK_ONLY_STEP Chrome cm6-click t=8243ms
+PDF_CLICK_ONLY_STEP Chrome pdf-reading-scroll t=10947ms
+PDF_CLICK_ONLY_FAIL Chrome step="pdf-reading-scroll" t=32264ms: Chrome: step "pdf-reading-scroll" / afterReading exceeded 20000ms
+PDF_CLICK_ONLY_STEP Chrome cleanup t=32264ms
+PDF_CLICK_ONLY_CLOSE_TIMEOUT Chrome Chrome: step "cleanup" / browser.close exceeded 20000ms
+file:///workspace/ocr2md-audit/fix-38ea47d/tests/pdf-click-only-browser.test.mjs:27
+  timer=setTimeout(()=>reject(new Error(`${currentEngine}: step "${currentStep}" / ${label} exceeded ${ms}ms`)),ms);})])
+                              ^
+
+Error: Chrome: step "pdf-reading-scroll" / afterReading exceeded 20000ms
+
+Node.js v22.23.4

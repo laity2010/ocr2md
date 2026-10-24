@@ -1,0 +1,38 @@
+AM_AUDIT_SOURCE=f919378cceb9d973e4ba37f3134ed5450739781a
+AM_AUDIT_OS=Linux
+AM_AUDIT_ENV node=v22.23.4 python=Python 3.13.5 playwright=1.64.1
+Ran 21 tests in 4.339s
+AM_UI_BOUNDARY_PASS files=27 shared=4 cross_imports=14 (runtime message/callsite auditing is separate)
+AM_CHECK_PASS apis=98 FK=OK source-and-test-files=OK ui-ownership=OK
+AM_UI_BOUNDARY_PASS files=27 shared=4 cross_imports=14 (runtime message/callsite auditing is separate)
+AM_FULL_START git=f919378c suites=27 contracts=139
+AM_SUITE_PASS 1/27 cases=2 log=.v6/tests/am-full-20261024T130701Z-f919378c-01-ag-header-browser.test.log
+AM_SUITE_PASS 2/27 cases=16 log=.v6/tests/am-full-20261024T130701Z-f919378c-02-contracts-browser.test.log
+AM_SUITE_PASS 3/27 cases=1 log=.v6/tests/am-full-20261024T130701Z-f919378c-03-chapter-numbering.test.log
+AM_SUITE_PASS 4/27 cases=3 log=.v6/tests/am-full-20261024T130701Z-f919378c-04-cm6-browser.test.log
+AM_SUITE_PASS 5/27 cases=7 log=.v6/tests/am-full-20261024T130701Z-f919378c-05-cmd-annotations-browser.test.log
+AM_SUITE_PASS 6/27 cases=5 log=.v6/tests/am-full-20261024T130701Z-f919378c-06-cmd-html-unified-browser.test.log
+AM_SUITE_PASS 7/27 cases=5 log=.v6/tests/am-full-20261024T130701Z-f919378c-07-compact-shell-browser.test.log
+AM_SUITE_PASS 8/27 cases=5 log=.v6/tests/am-full-20261024T130701Z-f919378c-08-dockview-preview-browser.test.log
+AM_SUITE_PASS 9/27 cases=5 log=.v6/tests/am-full-20261024T130701Z-f919378c-09-four-pane-pdf-browser.test.log
+AM_SUITE_PASS 10/27 cases=8 log=.v6/tests/am-full-20261024T130701Z-f919378c-10-latex-browser.test.log
+AM_SUITE_PASS 11/27 cases=1 log=.v6/tests/am-full-20261024T130701Z-f919378c-11-latex-four-view-browser.test.log
+AM_SUITE_PASS 12/27 cases=2 log=.v6/tests/am-full-20261024T130701Z-f919378c-12-latex-normalize-browser.test.log
+AM_SUITE_PASS 13/27 cases=3 log=.v6/tests/am-full-20261024T130701Z-f919378c-13-latex-review-browser.test.log
+AM_SUITE_PASS 14/27 cases=2 log=.v6/tests/am-full-20261024T130701Z-f919378c-14-media-adoption-syntax.test.log
+AM_SUITE_PASS 15/27 cases=15 log=.v6/tests/am-full-20261024T130701Z-f919378c-15-media-browser.test.log
+AM_SUITE_PASS 16/27 cases=4 log=.v6/tests/am-full-20261024T130701Z-f919378c-16-media-paste-browser.test.log
+AM_SUITE_PASS 17/27 cases=4 log=.v6/tests/am-full-20261024T130701Z-f919378c-17-mineru-start-only-ui-browser.test.log
+AM_SUITE_PASS 18/27 cases=1 log=.v6/tests/am-full-20261024T130701Z-f919378c-18-obsidian-image-preview-browser.test.log
+AM_SUITE_PASS 19/27 cases=15 log=.v6/tests/am-full-20261024T130701Z-f919378c-19-outline-browser.test.log
+AM_SUITE_ERROR 20/27 cases=1 log=.v6/tests/am-full-20261024T130701Z-f919378c-20-pdf-anchor-viewport-browser.test.log
+AM_SUITE_PASS 21/27 cases=4 log=.v6/tests/am-full-20261024T130701Z-f919378c-21-pdf-click-only-browser.test.log
+AM_SUITE_PASS 22/27 cases=6 log=.v6/tests/am-full-20261024T130701Z-f919378c-22-preview-split-browser.test.log
+AM_SUITE_PASS 23/27 cases=7 log=.v6/tests/am-full-20261024T130701Z-f919378c-23-promoted-chapters-browser.test.log
+AM_SUITE_PASS 24/27 cases=1 log=.v6/tests/am-full-20261024T130701Z-f919378c-24-quote-indent-browser.test.log
+AM_SUITE_PASS 25/27 cases=4 log=.v6/tests/am-full-20261024T130701Z-f919378c-25-scroll-sync-browser.test.log
+AM_SUITE_PASS 26/27 cases=6 log=.v6/tests/am-full-20261024T130701Z-f919378c-26-scroll-sync-leadership-browser.test.log
+AM_SUITE_PASS 27/27 cases=6 log=.v6/tests/am-full-20261024T130701Z-f919378c-27-shared-preview-browser.test.log
+AM_FULL_RESULT passed_cases=138/139 failed_suites=1 git=f919378c
+AM_ERROR: AM full suite failed: [('tests/pdf-anchor-viewport-browser.test.mjs', 'ERROR')]
+EXIT=1

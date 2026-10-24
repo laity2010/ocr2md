@@ -1,0 +1,4 @@
+AM_FULL_RESULT passed_cases=139/139 failed_suites=0 git=f919378c
+AM_FULL_TABLE_CERTIFIED 139/139 cases; tested_git=f919378c current_git=f919378c source_tests_unchanged=True (integrated tests are not separate per-API oracles)
+AM_AUDIT_CERTIFIED sha=f919378cceb9d973e4ba37f3134ed5450739781a runtime=Linux
+EXIT=0
