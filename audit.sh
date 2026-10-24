@@ -27,7 +27,7 @@ cd "$BUNDLE_DIR"
 [[ "$(git branch --show-current)" == 'audit-fixture-5c7497c' ]] || fail 'checkout audit-fixture-5c7497c first'
 [[ -z "$(git status --porcelain)" ]] || fail 'audit bundle must have a clean Git worktree'
 git merge-base --is-ancestor "$SOURCE_SHA" HEAD || fail 'fixed source SHA is not an ancestor of the audit bundle'
-# The audit branch may add evidence and amend *one reviewed test contract*.
+# The audit branch may add evidence and amend *two reviewed test contracts*.
 # All business implementation, API registries, and other tests remain byte-
 # identical to the frozen source; fail closed if future commits violate this.
 python3 - "$SOURCE_SHA" <<'PYVERIFY'
@@ -35,7 +35,7 @@ import subprocess,sys
 base=sys.argv[1]
 paths=subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines()
 allowed_exact={'README.md','AUDIT.md','tests/am/GROK_AUDIT.md',
-               'tests/scroll-sync-browser.test.mjs'}
+               'tests/scroll-sync-browser.test.mjs','tests/latex-browser.test.mjs'}
 allowed_prefix=('audit-', 'audit.', 'audit-reports/', '.v6/grok-handoff/',
                 '.v6/workspace/buffetts-alpha.original.pdf')
 violations=[p for p in paths if p not in allowed_exact and
@@ -129,9 +129,12 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   cp "$BUNDLE_DIR/audit-sips-compat.mjs" "$REPORT_DIR/audit-sips-compat.mjs"
   cp "$BUNDLE_DIR/audit-png-to-jpeg.mjs" "$REPORT_DIR/audit-png-to-jpeg.mjs"
   cp "$BUNDLE_DIR/audit-linux-diagnostics.mjs" "$REPORT_DIR/audit-linux-diagnostics.mjs"
-  cp "$BUNDLE_DIR/audit-loopback-cookie.mjs" "$REPORT_DIR/audit-loopback-cookie.mjs"
-  export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-sips-compat.mjs --import=$(pwd)/$REPORT_DIR/audit-linux-diagnostics.mjs --import=$(pwd)/$REPORT_DIR/audit-loopback-cookie.mjs"
+  export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-sips-compat.mjs --import=$(pwd)/$REPORT_DIR/audit-linux-diagnostics.mjs"
 fi
+# The authorization-probe initialization barrier applies to WebKit on Mac
+# and Linux; only the insecure HTTP loopback cookie adaptation is Linux-only.
+cp "$BUNDLE_DIR/audit-loopback-cookie.mjs" "$REPORT_DIR/audit-loopback-cookie.mjs"
+export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-loopback-cookie.mjs"
 [[ -x "$OCR2MD_AUDIT_CHROME_PATH" ]] || fail 'Chromium browser binary not installed'
 [[ -x "$OCR2MD_AUDIT_WEBKIT_PATH" ]] || fail 'WebKit browser binary not installed'
 # Playwright binaries can be cached while Linux shared libraries are missing.
@@ -190,6 +193,8 @@ result={
  'audited_test_revision':{'file':'tests/scroll-sync-browser.test.mjs',
  'reason':'replace renderer-dependent previous anchor +30 with requested source line 600 +30',
  'review_file':'audit-reports/scroll-sync-semantic-assertion-proposal.diff'},
+ 'audited_test_revision_latex':{'file':'tests/latex-browser.test.mjs',
+ 'reason':'wait for >=10 genuinely KaTeX-rendered visible AG cells before original count assertion; same 25s timeout and required count'},
  'runner_log':'run.log',
  'note':'These are AM test associations, not an independent source-code architecture review.'
 }

@@ -7,10 +7,10 @@
 | GitHub | `https://github.com/laity2010/ocr2md.git` |
 | 审计包分支 | `audit-fixture-5c7497c` |
 | **冻结业务源码提交** | `5c7497cdf94ea35217e83effd9496a045625fef0` |
-| **AM 使用的测试契约** | 审计分支 HEAD（仅 `tests/scroll-sync-browser.test.mjs` 有已公开的跨平台语义修订） |
+| **AM 使用的测试契约** | 审计分支 HEAD（仅 `tests/scroll-sync-browser.test.mjs` 与 `tests/latex-browser.test.mjs` 有公开记录的测试契约修订） |
 | PDF SHA-256 | `be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab` |
 
-审计包后续可以修订测试契约，**不允许把审计包 HEAD 当成被冻结的 V6 业务源码 HEAD**。脚本首先验证相对冻结 SHA 的差异仅限审计资料与一条显式记录的测试契约，然后在兄弟目录建立**审计分支 HEAD 的干净 detached worktree**，令 AM 运行/认证绑定这份可核验的测试契约版本；报告分别记录业务源码 SHA 与测试 SHA。主线不改、不合并。
+审计包后续可以修订测试契约，**不允许把审计包 HEAD 当成被冻结的 V6 业务源码 HEAD**。脚本首先验证相对冻结 SHA 的差异仅限审计资料与两条显式记录的测试契约，然后在兄弟目录建立**审计分支 HEAD 的干净 detached worktree**，令 AM 运行/认证绑定这份可核验的测试契约版本；报告分别记录业务源码 SHA 与测试 SHA。主线不改、不合并。
 
 ## 从零开始
 
@@ -47,7 +47,9 @@ Linux 首次准备系统库时执行一次 `npx playwright install-deps chromium
 
 - **端口**：`audit-port-preflight.py` 在扫描 127.0.0.1 固定测试端口前执行真实监听自测；用 `SO_REUSEADDR` 后的 `bind`+`listen` 拒绝仍在监听的服务，允许可安全复用的 TIME_WAIT，**不设置 SO_REUSEPORT**、不关闭其他进程。实测 `AUDIT_TEST_PORT_PREFLIGHT_PASS` 才继续；仍被占用的端口保持 `AUDIT_TEST_PORT_BUSY`、退出 2。
 - **浏览器依赖**：浏览器安装后、139 条测试运行前，用 `audit-browser-preflight.mjs` 真正启动 Chromium/WebKit 并打开 `about:blank`。即使浏览器文件已缓存，缺少 Linux 动态库或无法启动仍会打印 `AUDIT_BROWSER_RUNTIME_BLOCKED` 并退出；`audit.sh` 归类为环境 `AUDIT_BLOCKED`，而不是制造大面积业务 FAIL。该检查不通过测试垫片启动，避免被注入层伪造成功。
+- **WebKit 初始化屏障**：Mac/Linux 的 LaTeX 与章节测试，在初次导航后等待真实 CM6 编辑器和授权探测完成，避免异步权限响应覆盖模块状态；该屏障只等真实应用状态，绝不修改授权或业务断言。Linux 的 loopback Cookie 适配仍严格限于本地 HTTP Linux 环境。
 - **重开超时取证**：仅 Linux 的 `promoted-chapters-browser.test.mjs` 由 `audit-linux-diagnostics.mjs` 在原生 `page.reload` 前后记录导航、DOMContentLoaded、HTTP 错误、失败请求、有限的页面状态（无凭据）；失败原样抛出。**不重试、不增加超时、不跳过原断言**。对照 Grok 的 `page.reload` 等待失败与 Muse 完整通过的证据，直到可以确认根因。
+- **LaTeX 异步渲染测试修订**：新增一次有限时 `waitForFunction`，在读取 AG 可见单元格快照前等待至少十个真的 KaTeX DOM 元素渲染完成。原断言仍然要求 `>=10`、49 项统计与全部筛选结果；原 25 秒等待预算不放宽。此修改由 WP1 Mac 全量（原状态栏等待偶发超时）及独立 WebKit（状态成功但可见 KaTeX 尚未就绪）复现推动；不得声称冻结原测试未修改。
 - **兼容既有测试**：`V6_PDF_PATH` 隔离、macOS `sips`→Linux Chromium JPEG、Linux loopback WebKit cookie 适配沿用原先已审核做法；Linux 本地 HTTP 的 Cookie 适配不证明生产 HTTPS 验收。
 
 复跑时执行同一 `bash audit.sh`。审计员应分别报告环境 BLOCKED、测试 FAIL、以及 `AM_FULL_TABLE_CERTIFIED`；要比较 reload 失败，提供 `AUDIT_RELOAD_OK`/`AUDIT_RELOAD_FAIL` 与原始日志，不应仅凭单次 Linux 全绿声称故障已根治。 Mac 目标环境仍单独执行真实 Chrome/WebKit 验收，Linux 视觉表现不能替代 iPad 实机截图验收。

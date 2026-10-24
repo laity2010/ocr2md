@@ -1,10 +1,10 @@
-/** Linux WebKit compatibility for HTTPS-only auth cookies in HTTP loopback tests.
- * Production secure-cookie semantics remain untouched. Does NOT authorize any
- * request: the server still verifies the unlock code, cookie and same-origin.
+/** Audit-only WebKit initialization barrier on Mac/Linux, plus Linux-only
+ * HTTP loopback cookie compatibility. Production auth is untouched: the
+ * server still checks unlock codes, cookie tokens and same-origin requests.
  */
 import {webkit} from 'playwright';
 import {basename} from 'node:path';
-if(process.platform==='linux' && basename(process.argv[1]||'').endsWith('.test.mjs')){
+if(basename(process.argv[1]||'').endsWith('.test.mjs')){
   const suite=basename(process.argv[1]);
   const originalLaunch=webkit.launch.bind(webkit);
   webkit.launch=async function(options={}){
@@ -13,7 +13,7 @@ if(process.platform==='linux' && basename(process.argv[1]||'').endsWith('.test.m
     browser.newPage=async function(...args){
       const page=await originalNewPage(...args);
       // Frozen HTTP browser tests navigate on DOMContentLoaded and immediately
-      // operate a module. Linux WebKit can complete the later async permission
+      // operate a module. WebKit can complete the later async permission
       // probe *after* module selection, overwriting its status. Wait for the
       // true app/auth initialization barrier, not a guessed sleep or a relaxed
       // assertion. Only affects the two observed Python-server test suites.
@@ -25,11 +25,12 @@ if(process.platform==='linux' && basename(process.argv[1]||'').endsWith('.test.m
           if(url.hostname==='127.0.0.1'&&url.protocol==='http:'){
             await page.waitForFunction(()=>Boolean(document.querySelector('.cm-editor .cm-content'))&&
               document.querySelector('#status')?.textContent?.includes('保存需授权'),null,{timeout:30000});
-            console.log('AUDIT_LINUX_WEBKIT_INITIALIZATION_BARRIER',suite);
+            console.log('AUDIT_WEBKIT_INITIALIZATION_BARRIER',process.platform,suite);
           }
           return response;
         };
       }
+      if(process.platform==='linux'){
       const originalRoute=page.route.bind(page);
       let added=false;
       page.route=async function(...routeArgs){
@@ -65,6 +66,7 @@ if(process.platform==='linux' && basename(process.argv[1]||'').endsWith('.test.m
         }
         return result;
       };
+      } // Linux-only HTTP loopback Cookie jar adapter.
       return page;
     };
     return browser;

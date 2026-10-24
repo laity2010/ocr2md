@@ -78,6 +78,12 @@ for(let i=0;i<engines.length;i++){
     null,{timeout:25000});
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('LaTeX 49 项'),
     null,{timeout:25000});
+  // The status counts identified formulas before KaTeX's visible AG cells
+  // finish rendering. Await the real success condition before the existing
+  // >=10 rendered-formulas assertion, without changing the expected count.
+  await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-latex-grid .ag-row')]
+    .filter(row=>row.querySelectorAll('.katex').length>0).length>=10,
+    null,{timeout:25000});
   // The seven user-defined columns, in order. The old independent/inline
   // "kind" column is not presented; "类型" reuses former recognition syntax.
   const leftHeaders=await page.locator('.ocr-latex-grid .ag-header-cell')
