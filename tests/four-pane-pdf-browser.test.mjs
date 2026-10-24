@@ -5,7 +5,9 @@ import {resolve,join} from 'node:path';
 import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {createHash} from 'node:crypto';
-const pdf=resolve('/Users/daisor/Library/Mobile Documents/iCloud~md~obsidian/Documents/ocr2md/ocr2md/Bufett’s Alpha/Buffett s Alpha.pdf');
+// Full AM runs use a checksum-pinned PDF copy in the isolated audit workspace,
+// never a developer's private iCloud path.
+const pdf=resolve(process.env.OCR2MD_AUDIT_PDF || '.v6/workspace/buffetts-alpha.original.pdf');
 const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const sourceHash=hash(original),pdfHash=hash(readFileSync(pdf));
