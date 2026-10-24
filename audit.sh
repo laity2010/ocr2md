@@ -84,28 +84,8 @@ fi
 # Isolated browser suites use fixed HTTP ports. A stale previous Python/Vite
 # test server can silently serve an old document and fabricate a PASS or FAIL.
 # Refuse rather than kill someone else's process or trust a stale /healthz.
-python3 - <<'PYPORT'
-import re,socket,sys
-from pathlib import Path
-ports=set()
-for script in Path('tests').rglob('*.test.mjs'):
-    source=script.read_text(encoding='utf-8')
-    for match in re.finditer(r'\bport\s*=\s*(\d{4})(\s*\+\s*[in])?',source):
-        base=int(match.group(1))
-        ports.add(base)
-        if match.group(2):ports.add(base+1)
-busy=[]
-for port in sorted(ports):
-    sock=socket.socket()
-    try:sock.bind(('127.0.0.1',port))
-    except OSError:busy.append(port)
-    finally:sock.close()
-if busy:
-    print('AUDIT_TEST_PORT_BUSY: '+','.join(map(str,busy)),file=sys.stderr)
-    print('Use a fresh isolated environment; never trust a previous /healthz.',file=sys.stderr)
-    sys.exit(2)
-print('AUDIT_TEST_PORT_PREFLIGHT_PASS ports='+str(len(ports)))
-PYPORT
+python3 "$BUNDLE_DIR/audit-port-preflight.py" --self-test
+python3 "$BUNDLE_DIR/audit-port-preflight.py"
 # Frozen vite.config.mjs otherwise points at a developer-specific macOS
 # iCloud PDF; without this Linux /api/pdf always returns HTTP 404.
 export V6_PDF_PATH="$(pwd -P)/.v6/workspace/buffetts-alpha.original.pdf"
@@ -154,6 +134,14 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 fi
 [[ -x "$OCR2MD_AUDIT_CHROME_PATH" ]] || fail 'Chromium browser binary not installed'
 [[ -x "$OCR2MD_AUDIT_WEBKIT_PATH" ]] || fail 'WebKit browser binary not installed'
+# Playwright binaries can be cached while Linux shared libraries are missing.
+# Check actual browser launches before claiming application test failures.
+cp "$BUNDLE_DIR/audit-browser-preflight.mjs" "$REPORT_DIR/audit-browser-preflight.mjs"
+# Clear NODE_OPTIONS only for this host-runtime check: the audited tests keep
+# all their adapters and original assertions, but this probe must not use them.
+if ! env -u NODE_OPTIONS node "$REPORT_DIR/audit-browser-preflight.mjs" 2>&1 | tee "$REPORT_DIR/browser-preflight.log"; then
+  fail 'browser runtime unavailable; see browser-preflight.log (environment BLOCKED, not application FAIL)'
+fi
 
 printf 'AUDIT_OS=%s\nAUDIT_NODE=%s\nAUDIT_PYTHON=%s\nAUDIT_PLAYWRIGHT=%s\n' \
   "$(uname -s)" "$(node -v)" "$(python3 -V 2>&1)" "$(node -p 'require("playwright/package.json").version')"

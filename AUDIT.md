@@ -41,6 +41,17 @@ Linux 首次准备系统库时执行一次 `npx playwright install-deps chromium
 8. 仅 Linux WebKit 的本地 `http://127.0.0.1` 测试解锁响应，保留服务端验证码和权限校验，在验证解锁成功后让 WebKit 的本地 Cookie Jar 接收非 Secure 的同一有效 Cookie；对两项 Python 服务测试等待真实的初始化/授权探测结束；此适配**不能替代 HTTPS 生产授权的验收**，日志标记 `AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER`；
 9. 生成 `.v6/audit-reports/RUN_EVIDENCE.json` 和 `run.log`，失败也保留证据。
 
+## WP1 跨平台环境收口（审计包独立修订）
+
+本项不改变冻结业务源码 `5c7497c`、AM 登记表、生产 Cookie、原章节保存/发布断言。
+
+- **端口**：`audit-port-preflight.py` 在扫描 127.0.0.1 固定测试端口前执行真实监听自测；用 `SO_REUSEADDR` 后的 `bind`+`listen` 拒绝仍在监听的服务，允许可安全复用的 TIME_WAIT，**不设置 SO_REUSEPORT**、不关闭其他进程。实测 `AUDIT_TEST_PORT_PREFLIGHT_PASS` 才继续；仍被占用的端口保持 `AUDIT_TEST_PORT_BUSY`、退出 2。
+- **浏览器依赖**：浏览器安装后、139 条测试运行前，用 `audit-browser-preflight.mjs` 真正启动 Chromium/WebKit 并打开 `about:blank`。即使浏览器文件已缓存，缺少 Linux 动态库或无法启动仍会打印 `AUDIT_BROWSER_RUNTIME_BLOCKED` 并退出；`audit.sh` 归类为环境 `AUDIT_BLOCKED`，而不是制造大面积业务 FAIL。该检查不通过测试垫片启动，避免被注入层伪造成功。
+- **重开超时取证**：仅 Linux 的 `promoted-chapters-browser.test.mjs` 由 `audit-linux-diagnostics.mjs` 在原生 `page.reload` 前后记录导航、DOMContentLoaded、HTTP 错误、失败请求、有限的页面状态（无凭据）；失败原样抛出。**不重试、不增加超时、不跳过原断言**。对照 Grok 的 `page.reload` 等待失败与 Muse 完整通过的证据，直到可以确认根因。
+- **兼容既有测试**：`V6_PDF_PATH` 隔离、macOS `sips`→Linux Chromium JPEG、Linux loopback WebKit cookie 适配沿用原先已审核做法；Linux 本地 HTTP 的 Cookie 适配不证明生产 HTTPS 验收。
+
+复跑时执行同一 `bash audit.sh`。审计员应分别报告环境 BLOCKED、测试 FAIL、以及 `AM_FULL_TABLE_CERTIFIED`；要比较 reload 失败，提供 `AUDIT_RELOAD_OK`/`AUDIT_RELOAD_FAIL` 与原始日志，不应仅凭单次 Linux 全绿声称故障已根治。 Mac 目标环境仍单独执行真实 Chrome/WebKit 验收，Linux 视觉表现不能替代 iPad 实机截图验收。
+
 **测试契约修订说明（2026-10-24）**：`tests/scroll-sync-browser.test.mjs` 原本使用 `reverse.source.sourceLine > sourceResult.source.sourceLine + 30`，这比较两个不同浏览器生成的像素滚动位置。审计版保留预览驱动、双窗行号对齐、反馈循环、同步开关、编辑与 resize 等全部检查，只把该项改为 `reverse.source.sourceLine > 600 + 30`（相对于该测试明确请求的源码行 600，确认进入后续段落）。修改在审计分支 Git diff 中可见，绝不声称它是原始 `5c7497c` 测试全文未变。后续若解冻主线接纳该断言，必须由正常代码验收与 Git 流程实施。
 
 仅 `AM_FULL_TABLE_PASS` 加 `AM_FULL_TABLE_CERTIFIED` 才能称**审计分支该 SHA 下的**已登记契约全表通过。139 是**契约关联数**，不是 139 个互不相关的黄金单测；脚本通过也**不等于**模块边界已独立审完。
