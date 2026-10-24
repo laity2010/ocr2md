@@ -7,7 +7,7 @@
 .ocr-settings-pane{width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;background:#2f383e}
 .ocr-settings-pane .ag-root-wrapper{border:none;border-radius:0}
 .ocr-settings-pane .ag-cell{display:flex;align-items:center}
-.ocr-settings-source .cm-editor{height:100%;background:#111827;font-size:12pt;line-height:1.5}
+.ocr-settings-source .cm-editor{height:100%;background:#111827;font-size:var(--ocr-cm-source-font-size,12pt);line-height:1.5}
 .ocr-settings-source .cm-scroller{font-family:'OCR2MD Sarasa',monospace;overflow:auto}
 .ocr-settings-control{padding:20px 22px;display:flex;flex-direction:column;gap:13px;color:#d3c6aa;
  font:14px/1.5 'OCR2MD Sarasa',monospace;min-width:0}

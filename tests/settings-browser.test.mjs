@@ -46,6 +46,8 @@ try{
       // Check the published token, then verify visible CM editor geometry.
       assert.equal(await page.evaluate(()=>document.documentElement.style
         .getPropertyValue('--ocr-cm-source-font-size')), (name==='Chromium'?18:16)+'pt');
+      assert(Math.abs(parseFloat(await page.locator('#settings-workspace .cm-editor')
+        .evaluate(node=>getComputedStyle(node).fontSize))-(name==='Chromium'?24:21.33333))<0.1);
       await page.locator('#module-select').selectOption('chapter-boundary');
       assert(Math.abs(parseFloat(await computed())-(name==='Chromium'?24:21.33333))<0.1);
       await page.locator('#module-select').selectOption('settings');
