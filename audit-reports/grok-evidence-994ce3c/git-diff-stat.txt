@@ -1,0 +1,54 @@
+ AUDIT.md                                           |  17 +-
+ audit-browser-preflight.mjs                        |  27 +
+ audit-linux-diagnostics.mjs                        |  51 +-
+ audit-loopback-cookie.mjs                          |  14 +-
+ audit-port-preflight.py                            |  68 ++
+ .../GROK_BOT_INDEPENDENT_AUDIT_1dab592.md          |  83 ++
+ .../META_MUSE_INDEPENDENT_AUDIT_1dab592.md         | 188 +++++
+ .../grok-evidence-1dab592/RUN_EVIDENCE.json        | 875 +++++++++++++++++++++
+ ...T063411Z-1dab5924-01-ag-header-browser.test.log |   3 +
+ ...T063411Z-1dab5924-02-contracts-browser.test.log |   2 +
+ ...T063411Z-1dab5924-03-chapter-numbering.test.log |   1 +
+ ...261024T063411Z-1dab5924-04-cm6-browser.test.log |   2 +
+ ...1Z-1dab5924-05-cmd-annotations-browser.test.log |   2 +
+ ...Z-1dab5924-06-cmd-html-unified-browser.test.log |   2 +
+ ...411Z-1dab5924-07-compact-shell-browser.test.log |   4 +
+ ...Z-1dab5924-08-dockview-preview-browser.test.log |   2 +
+ ...411Z-1dab5924-09-four-pane-pdf-browser.test.log |   9 +
+ ...1024T063411Z-1dab5924-10-latex-browser.test.log |   3 +
+ ...1Z-1dab5924-11-latex-four-view-browser.test.log |   2 +
+ ...1Z-1dab5924-12-latex-normalize-browser.test.log |   2 +
+ ...3411Z-1dab5924-13-latex-review-browser.test.log |   2 +
+ ...411Z-1dab5924-14-media-adoption-syntax.test.log |   3 +
+ ...1024T063411Z-1dab5924-15-media-browser.test.log |   3 +
+ ...63411Z-1dab5924-16-media-paste-browser.test.log |   3 +
+ ...ab5924-17-mineru-start-only-ui-browser.test.log |   3 +
+ ...5924-18-obsidian-image-preview-browser.test.log |   2 +
+ ...24T063411Z-1dab5924-19-outline-browser.test.log |  22 +
+ ...dab5924-20-pdf-anchor-viewport-browser.test.log |   3 +
+ ...11Z-1dab5924-21-pdf-click-only-browser.test.log |   5 +
+ ...411Z-1dab5924-22-preview-split-browser.test.log |   4 +
+ ...-1dab5924-23-promoted-chapters-browser.test.log |  26 +
+ ...3411Z-1dab5924-24-quote-indent-browser.test.log |   2 +
+ ...63411Z-1dab5924-25-scroll-sync-browser.test.log |  16 +
+ ...5924-26-scroll-sync-leadership-browser.test.log |   4 +
+ ...11Z-1dab5924-27-shared-preview-browser.test.log |   3 +
+ .../grok-evidence-1dab592/audit-sh-console.log     | 190 +++++
+ .../audit-sh-node20-blocked.log                    |   1 +
+ .../grok-evidence-1dab592/git-fsck-full.txt        |   1 +
+ .../grok-evidence-1dab592/git-status-after.txt     |   0
+ .../grok-evidence-1dab592/playwright-install.log   |   0
+ audit-reports/grok-evidence-1dab592/run.log        | 164 ++++
+ .../grok-evidence-1dab592/sha256-after.txt         |   2 +
+ audit.sh                                           |  45 +-
+ tests/latex-browser.test.mjs                       |   6 +
+ 44 files changed, 1832 insertions(+), 35 deletions(-)
+
+ .v6/grok-handoff/MUSE_AUDIT_START_HERE.md |     9 +
+ .v6/grok-handoff/fixtures.SHA256SUMS      |     1 +
+ .v6/workspace/buffetts-alpha.original.pdf | 47241 ++++++++++++++++++++++++++++
+ README.md                                 |     2 +
+ tests/am/GROK_AUDIT.md                    |    29 +-
+ tests/latex-browser.test.mjs              |     6 +
+ tests/scroll-sync-browser.test.mjs        |     7 +-
+ 7 files changed, 47276 insertions(+), 19 deletions(-)

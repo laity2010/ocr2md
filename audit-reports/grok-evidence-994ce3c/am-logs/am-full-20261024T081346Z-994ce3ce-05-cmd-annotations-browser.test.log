@@ -1,0 +1,2 @@
+CMD_ANNOTATIONS_PASS Chrome {"paired":true,"staleBatch":true,"batchRestored":true,"readChapter":true,"readLatex":true,"blocked":true,"inline":true,"filtered":true,"updated":true,"insideQuote":true,"staleBlocked":true,"sourceRestored":true,"neighbors":true,"revision":189}
+CMD_ANNOTATIONS_PASS WebKit {"paired":true,"staleBatch":true,"batchRestored":true,"readChapter":true,"readLatex":true,"blocked":true,"inline":true,"filtered":true,"updated":true,"insideQuote":true,"staleBlocked":true,"sourceRestored":true,"neighbors":true,"revision":189}

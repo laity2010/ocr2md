@@ -1,0 +1,2 @@
+be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab  .v6/workspace/buffetts-alpha.original.pdf
+d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764  .v6/workspace/buffetts-alpha.minerujson.md

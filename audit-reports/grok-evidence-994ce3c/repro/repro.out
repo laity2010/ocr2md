@@ -1,0 +1,20 @@
+live listener -> can_listen = False
+State     Recv-Q Send-Q Local Address:Port  Peer Address:Port 
+TIME-WAIT 0      0          127.0.0.1:45725    127.0.0.1:58710
+
+TIME_WAIT -> can_listen (preflight) = False
+naive bind w/o SO_REUSEADDR = [Errno 98] Address already in use
+AUDIT_PORT_PREFLIGHT_SELFTEST_PASS live_listener=blocked closed_server=reusable
+== listener WITH SO_REUSEADDR
+live listener -> can_listen = False
+State     Recv-Q Send-Q Local Address:Port  Peer Address:Port 
+TIME-WAIT 0      0          127.0.0.1:42743    127.0.0.1:34320
+
+TIME_WAIT -> can_listen (preflight) = True
+naive bind w/o SO_REUSEADDR = [Errno 98] Address already in use
+== Node http server (libuv) closing first
+State     Recv-Q Send-Q Local Address:Port  Peer Address:Port 
+TIME-WAIT 0      0          127.0.0.1:35409    127.0.0.1:57346
+
+node-server TIME_WAIT -> can_listen = True
+

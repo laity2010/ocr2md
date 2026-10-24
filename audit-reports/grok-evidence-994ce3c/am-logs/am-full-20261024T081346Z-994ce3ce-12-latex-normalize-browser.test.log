@@ -1,0 +1,2 @@
+LATEX_NORMALIZE_API_PASS Chrome {"marked":8,"display":6,"inline":2,"closing":0,"saveReload":true,"idempotent":true,"source":"isolated","errors":0}
+LATEX_NORMALIZE_API_PASS WebKit {"marked":8,"display":6,"inline":2,"closing":0,"saveReload":true,"idempotent":true,"source":"isolated","errors":0}

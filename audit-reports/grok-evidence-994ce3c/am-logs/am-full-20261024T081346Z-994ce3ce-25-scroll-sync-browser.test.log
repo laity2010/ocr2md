@@ -1,0 +1,16 @@
+SCROLL_INIT Chrome {"anchors":237,"lastEnd":978,"lines":3112,"tableAnchors":28,"previewHTML":67501,"docLength":306869}
+SOURCE_TO_PREVIEW_OK Chrome {"source":{"sourceLine":573,"fraction":0.793440334961619},"preview":{"sourceLine":573,"fraction":0.7993068683049387},"origin":"cm6","driver":"cm6","seq":2,"sourceY":30464,"previewY":30047}
+BLOCK_SCROLL_OK Chrome table {"source":{"sourceLine":185,"fraction":0.3563287143189446},"preview":{"sourceLine":185,"fraction":0.35601327133585414}}
+BLOCK_SCROLL_OK Chrome formula {"source":{"sourceLine":240,"fraction":0.12526168876482904},"preview":{"sourceLine":240,"fraction":0.03285968028419006}}
+PREVIEW_TO_SOURCE_RAW Chrome {"source":{"sourceLine":657,"fraction":0.45908932309839495},"preview":{"sourceLine":657,"fraction":0.8797258979205935},"origin":"preview","driver":"preview","seq":7,"sourceY":36489,"previewY":34650}
+PREVIEW_TO_SOURCE_OK Chrome {"source":{"sourceLine":657,"fraction":0.45908932309839495},"preview":{"sourceLine":657,"fraction":0.8797258979205935},"origin":"preview","driver":"preview","seq":7,"sourceY":36489,"previewY":34650}
+SYNC_OFF_EDIT_POSITION Chrome {"pixelBefore":34650,"pixelAfter":34276,"anchorBefore":{"sourceLine":657,"fraction":0.8797258979205935},"anchorAfter":{"sourceLine":657,"fraction":0.8108348134991274}}
+SCROLL_SYNC_PASS Chrome {"anchors":237,"bodyToPreview":573,"previewToSource":657,"feedbackLoops":false,"toggle":true,"edit":true,"resize":true,"errors":0}
+SCROLL_INIT WebKit {"anchors":237,"lastEnd":978,"lines":3112,"tableAnchors":28,"previewHTML":67501,"docLength":306869}
+SOURCE_TO_PREVIEW_OK WebKit {"source":{"sourceLine":573,"fraction":0.8244940683879972},"preview":{"sourceLine":573,"fraction":0.8182104599874265},"origin":"cm6","driver":"cm6","seq":1,"sourceY":30443,"previewY":31608}
+BLOCK_SCROLL_OK WebKit table {"source":{"sourceLine":185,"fraction":0.5530522048316885},"preview":{"sourceLine":185,"fraction":0.5527259684361638}}
+BLOCK_SCROLL_OK WebKit formula {"source":{"sourceLine":233,"fraction":0.2944870900209351},"preview":{"sourceLine":233,"fraction":0.269532864820178}}
+PREVIEW_TO_SOURCE_RAW WebKit {"source":{"sourceLine":652,"fraction":0.46615491974877876},"preview":{"sourceLine":652,"fraction":0.4884547069272003},"origin":"preview","driver":"preview","seq":4,"sourceY":36047,"previewY":35872}
+PREVIEW_TO_SOURCE_OK WebKit {"source":{"sourceLine":652,"fraction":0.46615491974877876},"preview":{"sourceLine":652,"fraction":0.4884547069272003},"origin":"preview","driver":"preview","seq":4,"sourceY":36047,"previewY":35872}
+SYNC_OFF_EDIT_POSITION WebKit {"pixelBefore":35872,"pixelAfter":35818,"anchorBefore":{"sourceLine":652,"fraction":0.4884547069272003},"anchorAfter":{"sourceLine":652,"fraction":0.46536412078148714}}
+SCROLL_SYNC_PASS WebKit {"anchors":237,"bodyToPreview":573,"previewToSource":652,"feedbackLoops":false,"toggle":true,"edit":true,"resize":true,"errors":0}

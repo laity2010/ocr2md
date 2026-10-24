@@ -1,0 +1,3 @@
+AUDIT_TEST_FIXTURE_STAGE reviewed-mother 14 chapters sha256=c998da7aeea5410f1d7be10975c05e59efb5cdf6bfcf750595b27a048c5e3e19
+START_ONLY_UI_PASS Chrome {"blocks":224,"ends":0,"headings":19,"chapters":14,"pdf":true,"errors":0}
+START_ONLY_UI_PASS iPad WebKit {"blocks":224,"ends":0,"headings":19,"chapters":14,"pdf":true,"errors":0}
