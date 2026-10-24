@@ -1,0 +1,164 @@
+GROK_AUDIT_ENV os=Linux node=v22.23.4 python=Python 3.13.5
+
+added 64 packages in 2s
+
+> ocr2md-v6-editor-lab@0.1.0 build
+> vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 98 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/release-version.json                                 0.03 kB │ gzip:   0.05 kB
+../dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff             4.42 kB
+../dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2            4.93 kB
+../dist/index.html                                           4.99 kB │ gzip:   1.98 kB
+../dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2            5.21 kB
+../dist/assets/cursor-editorTextHighlight-kG3uUOwL.svg       5.40 kB │ gzip:   2.15 kB
+../dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2            5.47 kB
+../dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff             5.98 kB
+../dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff             6.19 kB
+../dist/assets/KaTeX_Size1-Regular-C195tn64.woff             6.50 kB
+../dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2      6.91 kB
+../dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2         6.91 kB
+../dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf              7.59 kB
+../dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff       7.66 kB
+../dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff          7.72 kB
+../dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2           9.64 kB
+../dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2       10.34 kB
+../dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf             10.36 kB
+../dist/assets/KaTeX_Script-Regular-D5yQViql.woff           10.59 kB
+../dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2         11.32 kB
+../dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2            11.35 kB
+../dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf             11.51 kB
+../dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2        12.03 kB
+../dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2          12.22 kB
+../dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf             12.23 kB
+../dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff        12.32 kB
+../dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf       12.34 kB
+../dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf          12.37 kB
+../dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff          13.21 kB
+../dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff             13.30 kB
+../dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2      13.57 kB
+../dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff         14.11 kB
+../dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff           14.41 kB
+../dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff       16.03 kB
+../dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2         16.40 kB
+../dist/assets/KaTeX_Math-Italic-t53AETM-.woff2             16.44 kB
+../dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf            16.65 kB
+../dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2         16.78 kB
+../dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2             16.99 kB
+../dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff          18.67 kB
+../dist/assets/KaTeX_Math-Italic-DA0__PXp.woff              18.75 kB
+../dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff          19.41 kB
+../dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf         19.44 kB
+../dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB
+../dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB
+../dist/assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB
+../dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB
+../dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB
+../dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB
+../dist/assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB
+../dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB
+../dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB
+../dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB
+../dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB
+../dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB
+../dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB
+../dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB
+../dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB
+../dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB
+../dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB
+../dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB
+../dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB
+../dist/assets/pdf.worker.min-CjEcRF4W.mjs               1,264.34 kB
+../dist/assets/index-BJu9uC-2.css                          418.04 kB │ gzip:  65.61 kB
+../dist/assets/fontcheck-CDzPn_qu.js                         1.41 kB │ gzip:   0.97 kB
+../dist/assets/index-DccoRPO0.js                         3,222.47 kB │ gzip: 964.90 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 4.78s
+AM_BUILD_PASS modules/apis/messages/publishers/subscriptions/tests=[7, 98, 8, 13, 17, 139] database=.v6/tests/am.sqlite
+AM_REFERENCES_PASS checked 98 API registry rows and all source/test paths; previous-run records kept=0/0
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.022s
+
+OK
+AM_CHECK_PASS apis=98 FK=OK source-and-test-files=OK
+total=98 | linked=98 | core_total=70 | core_linked=70
+total_messages=8 | with_publishers=8 | with_subscribers=7 | test_links=139 | actual_runs=0
+publishers=13 | publishers_linked=13 | subscriptions=17 | subscriptions_linked=17 | messages_linked=8
+NOTE: script links are references, NOT certified PASS results or isolated API tests
+(no results)
+AM_FULL_START git=1dab5924 suites=27 contracts=139
+AM_SUITE_START 1/27 tests/ag-header-browser.test.mjs cases=2
+AM_SUITE_PASS 1/27 cases=2 log=.v6/tests/am-full-20261024T063411Z-1dab5924-01-ag-header-browser.test.log
+AM_SUITE_START 2/27 tests/am/contracts-browser.test.mjs cases=16
+AM_SUITE_PASS 2/27 cases=16 log=.v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log
+AM_SUITE_START 3/27 tests/chapter-numbering.test.mjs cases=1
+AM_SUITE_PASS 3/27 cases=1 log=.v6/tests/am-full-20261024T063411Z-1dab5924-03-chapter-numbering.test.log
+AM_SUITE_START 4/27 tests/cm6-browser.test.mjs cases=3
+AM_SUITE_PASS 4/27 cases=3 log=.v6/tests/am-full-20261024T063411Z-1dab5924-04-cm6-browser.test.log
+AM_SUITE_START 5/27 tests/cmd-annotations-browser.test.mjs cases=7
+AM_SUITE_PASS 5/27 cases=7 log=.v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log
+AM_SUITE_START 6/27 tests/cmd-html-unified-browser.test.mjs cases=5
+AM_SUITE_PASS 6/27 cases=5 log=.v6/tests/am-full-20261024T063411Z-1dab5924-06-cmd-html-unified-browser.test.log
+AM_SUITE_START 7/27 tests/compact-shell-browser.test.mjs cases=5
+AM_SUITE_PASS 7/27 cases=5 log=.v6/tests/am-full-20261024T063411Z-1dab5924-07-compact-shell-browser.test.log
+AM_SUITE_START 8/27 tests/dockview-preview-browser.test.mjs cases=5
+AM_SUITE_PASS 8/27 cases=5 log=.v6/tests/am-full-20261024T063411Z-1dab5924-08-dockview-preview-browser.test.log
+AM_SUITE_START 9/27 tests/four-pane-pdf-browser.test.mjs cases=5
+AM_SUITE_PASS 9/27 cases=5 log=.v6/tests/am-full-20261024T063411Z-1dab5924-09-four-pane-pdf-browser.test.log
+AM_SUITE_START 10/27 tests/latex-browser.test.mjs cases=8
+AM_SUITE_PASS 10/27 cases=8 log=.v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log
+AM_SUITE_START 11/27 tests/latex-four-view-browser.test.mjs cases=1
+AM_SUITE_PASS 11/27 cases=1 log=.v6/tests/am-full-20261024T063411Z-1dab5924-11-latex-four-view-browser.test.log
+AM_SUITE_START 12/27 tests/latex-normalize-browser.test.mjs cases=2
+AM_SUITE_PASS 12/27 cases=2 log=.v6/tests/am-full-20261024T063411Z-1dab5924-12-latex-normalize-browser.test.log
+AM_SUITE_START 13/27 tests/latex-review-browser.test.mjs cases=3
+AM_SUITE_PASS 13/27 cases=3 log=.v6/tests/am-full-20261024T063411Z-1dab5924-13-latex-review-browser.test.log
+AM_SUITE_START 14/27 tests/media-adoption-syntax.test.mjs cases=2
+AM_SUITE_PASS 14/27 cases=2 log=.v6/tests/am-full-20261024T063411Z-1dab5924-14-media-adoption-syntax.test.log
+AM_SUITE_START 15/27 tests/media-browser.test.mjs cases=15
+AM_SUITE_PASS 15/27 cases=15 log=.v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log
+AM_SUITE_START 16/27 tests/media-paste-browser.test.mjs cases=4
+AM_SUITE_PASS 16/27 cases=4 log=.v6/tests/am-full-20261024T063411Z-1dab5924-16-media-paste-browser.test.log
+AM_SUITE_START 17/27 tests/mineru-start-only-ui-browser.test.mjs cases=4
+AM_SUITE_PASS 17/27 cases=4 log=.v6/tests/am-full-20261024T063411Z-1dab5924-17-mineru-start-only-ui-browser.test.log
+AM_SUITE_START 18/27 tests/obsidian-image-preview-browser.test.mjs cases=1
+AM_SUITE_PASS 18/27 cases=1 log=.v6/tests/am-full-20261024T063411Z-1dab5924-18-obsidian-image-preview-browser.test.log
+AM_SUITE_START 19/27 tests/outline-browser.test.mjs cases=15
+AM_SUITE_PASS 19/27 cases=15 log=.v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log
+AM_SUITE_START 20/27 tests/pdf-anchor-viewport-browser.test.mjs cases=1
+AM_SUITE_PASS 20/27 cases=1 log=.v6/tests/am-full-20261024T063411Z-1dab5924-20-pdf-anchor-viewport-browser.test.log
+AM_SUITE_START 21/27 tests/pdf-click-only-browser.test.mjs cases=4
+AM_SUITE_PASS 21/27 cases=4 log=.v6/tests/am-full-20261024T063411Z-1dab5924-21-pdf-click-only-browser.test.log
+AM_SUITE_START 22/27 tests/preview-split-browser.test.mjs cases=6
+AM_SUITE_PASS 22/27 cases=6 log=.v6/tests/am-full-20261024T063411Z-1dab5924-22-preview-split-browser.test.log
+AM_SUITE_START 23/27 tests/promoted-chapters-browser.test.mjs cases=7
+AM_SUITE_FAIL 23/27 cases=7 log=.v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log
+
+    at /workspace/ocr2md-audit/target-1dab592/tests/promoted-chapters-browser.test.mjs:119:14 {
+  log: [
+    '  - waiting for navigation until "domcontentloaded"',
+    '    - navigated to "http://127.0.0.1:4512/"'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4
+AM_SUITE_START 24/27 tests/quote-indent-browser.test.mjs cases=1
+AM_SUITE_PASS 24/27 cases=1 log=.v6/tests/am-full-20261024T063411Z-1dab5924-24-quote-indent-browser.test.log
+AM_SUITE_START 25/27 tests/scroll-sync-browser.test.mjs cases=4
+AM_SUITE_PASS 25/27 cases=4 log=.v6/tests/am-full-20261024T063411Z-1dab5924-25-scroll-sync-browser.test.log
+AM_SUITE_START 26/27 tests/scroll-sync-leadership-browser.test.mjs cases=6
+AM_SUITE_PASS 26/27 cases=6 log=.v6/tests/am-full-20261024T063411Z-1dab5924-26-scroll-sync-leadership-browser.test.log
+AM_SUITE_START 27/27 tests/shared-preview-browser.test.mjs cases=6
+AM_SUITE_PASS 27/27 cases=6 log=.v6/tests/am-full-20261024T063411Z-1dab5924-27-shared-preview-browser.test.log
+AM_FULL_RESULT passed_cases=132/139 failed_suites=1 git=1dab5924
+AM_ERROR: AM full suite failed: [('tests/promoted-chapters-browser.test.mjs', 'FAIL')]

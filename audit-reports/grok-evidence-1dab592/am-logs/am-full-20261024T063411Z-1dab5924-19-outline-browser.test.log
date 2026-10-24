@@ -1,0 +1,22 @@
+OUTLINE_LAYOUT_OK Chrome {"groups":3,"ag":{"x":0,"y":77,"width":516,"height":565,"bottom":642},"source":{"x":516,"y":77,"width":516,"height":282,"bottom":359},"preview":{"x":516,"y":359,"width":516,"height":283,"bottom":642},"filters":{},"filterColumns":[{"field":"title","enabled":true},{"field":"level","enabled":true},{"field":"pdfPage","enabled":true},{"field":"independent","enabled":true},{"field":"chapterFile","enabled":true}],"customHeaderCount":0,"pdfPages":[1,1,2,2],"levels":[2,2,1,1],"exported":true,"status":"✓ 已加载 · 3,112行 / 306,869字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","font":"\"OCR2MD Sarasa\", \"Sarasa Fixed SC\", monospace","pdfPinned":null,"titlePinned":"left","visualColumns":["title","level","pdfPage","independent","chapterFile"],"titleLayout":{"whiteSpace":"nowrap","textOverflow":"ellipsis","overflow":"hidden","scrollHeight":39,"clientHeight":39}}
+HEADING_LEVEL_LIVE_OK Chrome 2 26px
+HEADING_LEVEL_LIVE_OK Chrome 3 22px
+HEADING_LEVEL_LIVE_OK Chrome 4 20px
+HEADING_LEVEL_LIVE_OK Chrome 5 18px
+HEADING_LEVEL_LIVE_OK Chrome 6 18px
+HEADING_LEVEL_LIVE_OK Chrome 1 34px
+AG_NAV_OK Chrome {"origin":"outline","title":"Data Sources","source":{"sourceLine":143,"fraction":0.064405324173465},"preview":{"sourceLine":142,"fraction":0.9759519038076121}}
+PREVIEW_AG_DIAGNOSTIC Chrome {"focus":{"sourceLine":151,"sourceEnd":152,"origin":"preview","elementId":null,"intent":null,"revision":8,"sequence":3},"scroll":{"sourceLine":147,"fraction":0.8389317047162024,"origin":"preview","revision":8,"sequence":1},"selected":[{"line":151,"id":"mineru:2:6:0"}],"source":{"sourceLine":147,"fraction":0.8389991027813777},"preview":{"sourceLine":147,"fraction":0.8389317047162024}}
+PREVIEW_NAV_OK Chrome {"selected":151,"source":{"sourceLine":147,"fraction":0.8389991027813777},"preview":{"sourceLine":147,"fraction":0.8389317047162024}}
+FOUR_PANE_AG_PASS Chrome {"headings":21,"columns":5,"filters":"all+values","layout":"left-full/right-top-bottom","agToViews":true,"previewToAg":true,"cm6ToAg":true,"editorPreserved":true,"documentUnmodified":true,"chapterMarkerCM6Undoable":true,"errors":0}
+OUTLINE_LAYOUT_OK WebKit {"groups":3,"ag":{"x":0,"y":77,"width":516,"height":565,"bottom":642},"source":{"x":516,"y":77,"width":516,"height":282,"bottom":359},"preview":{"x":516,"y":359,"width":516,"height":283,"bottom":642},"filters":{},"filterColumns":[{"field":"title","enabled":true},{"field":"level","enabled":true},{"field":"pdfPage","enabled":true},{"field":"independent","enabled":true},{"field":"chapterFile","enabled":true}],"customHeaderCount":0,"pdfPages":[1,1,2,2],"levels":[2,2,1,1],"exported":true,"status":"✓ 已加载 · 3,112行 / 306,869字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","font":"OCR2MD Sarasa, Sarasa Fixed SC, monospace","pdfPinned":null,"titlePinned":"left","visualColumns":["title","level","pdfPage","independent","chapterFile"],"titleLayout":{"whiteSpace":"nowrap","textOverflow":"ellipsis","overflow":"hidden","scrollHeight":39,"clientHeight":39}}
+HEADING_LEVEL_LIVE_OK WebKit 2 26px
+HEADING_LEVEL_LIVE_OK WebKit 3 22px
+HEADING_LEVEL_LIVE_OK WebKit 4 20px
+HEADING_LEVEL_LIVE_OK WebKit 5 18px
+HEADING_LEVEL_LIVE_OK WebKit 6 18px
+HEADING_LEVEL_LIVE_OK WebKit 1 34px
+AG_NAV_OK WebKit {"origin":"outline","title":"Data Sources","source":{"sourceLine":143,"fraction":0.0369257191927866},"preview":{"sourceLine":142,"fraction":0.9353707414829557}}
+PREVIEW_AG_DIAGNOSTIC WebKit {"focus":{"sourceLine":151,"sourceEnd":152,"origin":"preview","elementId":null,"intent":null,"revision":8,"sequence":3},"scroll":null,"selected":[{"line":151,"id":"mineru:2:6:0"}],"source":{"sourceLine":151,"fraction":0.043366251610133105},"preview":{"sourceLine":147,"fraction":0.8376229945228033}}
+PREVIEW_NAV_OK WebKit {"selected":151,"source":{"sourceLine":151,"fraction":0.043366251610133105},"preview":{"sourceLine":147,"fraction":0.8376229945228033}}
+FOUR_PANE_AG_PASS WebKit {"headings":21,"columns":5,"filters":"all+values","layout":"left-full/right-top-bottom","agToViews":true,"previewToAg":true,"cm6ToAg":true,"editorPreserved":true,"documentUnmodified":true,"chapterMarkerCM6Undoable":true,"errors":0}

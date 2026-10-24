@@ -1,0 +1,2 @@
+CMD_UNIFIED_HTML_PASS Chrome {"forms":"standard/custom/comment","syntax":[["Document","HTMLBlock"],["Document","Paragraph","HTMLTag"],["Document","CommentBlock"]],"blockquote":true,"chapterSemantics":true,"conversionPipeline":false,"documentRestored":true,"jsErrors":0}
+CMD_UNIFIED_HTML_PASS iPad WebKit {"forms":"standard/custom/comment","syntax":[["Document","HTMLBlock"],["Document","Paragraph","HTMLTag"],["Document","CommentBlock"]],"blockquote":true,"chapterSemantics":true,"conversionPipeline":false,"documentRestored":true,"jsErrors":0}

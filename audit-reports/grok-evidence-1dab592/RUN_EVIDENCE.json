@@ -1,0 +1,875 @@
+{
+  "audit_bundle_git_sha": "1dab5924abaed31c5711f1580710bae26936885d",
+  "frozen_business_source_git_sha": "5c7497cdf94ea35217e83effd9496a045625fef0",
+  "audited_test_contract_git_sha": "1dab5924abaed31c5711f1580710bae26936885d",
+  "runner_git_sha": "1dab5924abaed31c5711f1580710bae26936885d",
+  "pdf_sha256": "be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab",
+  "date_utc": "2026-10-24T06:49:20.594037+00:00",
+  "host": {
+    "os": "Linux",
+    "architecture": "x86_64",
+    "python": "3.13.5",
+    "node": "v22.23.4",
+    "playwright": "1.64.1"
+  },
+  "runner_exit_code": 1,
+  "am_cases": [
+    {
+      "id": "TC-G08",
+      "script": "tests/ag-header-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-01-ag-header-browser.test.log"
+    },
+    {
+      "id": "TC-G09",
+      "script": "tests/ag-header-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-01-ag-header-browser.test.log"
+    },
+    {
+      "id": "TC-C03",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-C08",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-C10",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-C11",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-C12",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-C13",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-E07",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-E08",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-G06",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-P08",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-P12",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-PUB10",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-PUB11",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-PUB12",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-SUB13",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-SUB15",
+      "script": "tests/am/contracts-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-02-contracts-browser.test.log"
+    },
+    {
+      "id": "TC-G12",
+      "script": "tests/chapter-numbering.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-03-chapter-numbering.test.log"
+    },
+    {
+      "id": "TC-C09",
+      "script": "tests/cm6-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-04-cm6-browser.test.log"
+    },
+    {
+      "id": "TC-L08",
+      "script": "tests/cm6-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-04-cm6-browser.test.log"
+    },
+    {
+      "id": "TC-PUB02",
+      "script": "tests/cm6-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-04-cm6-browser.test.log"
+    },
+    {
+      "id": "TC-C17",
+      "script": "tests/cmd-annotations-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log"
+    },
+    {
+      "id": "TC-C18",
+      "script": "tests/cmd-annotations-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log"
+    },
+    {
+      "id": "TC-C19",
+      "script": "tests/cmd-annotations-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log"
+    },
+    {
+      "id": "TC-C20",
+      "script": "tests/cmd-annotations-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log"
+    },
+    {
+      "id": "TC-C21",
+      "script": "tests/cmd-annotations-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log"
+    },
+    {
+      "id": "TC-C22",
+      "script": "tests/cmd-annotations-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log"
+    },
+    {
+      "id": "TC-C23",
+      "script": "tests/cmd-annotations-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-05-cmd-annotations-browser.test.log"
+    },
+    {
+      "id": "TC-C01",
+      "script": "tests/cmd-html-unified-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-06-cmd-html-unified-browser.test.log"
+    },
+    {
+      "id": "TC-C02",
+      "script": "tests/cmd-html-unified-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-06-cmd-html-unified-browser.test.log"
+    },
+    {
+      "id": "TC-C04",
+      "script": "tests/cmd-html-unified-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-06-cmd-html-unified-browser.test.log"
+    },
+    {
+      "id": "TC-C05",
+      "script": "tests/cmd-html-unified-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-06-cmd-html-unified-browser.test.log"
+    },
+    {
+      "id": "TC-C06",
+      "script": "tests/cmd-html-unified-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-06-cmd-html-unified-browser.test.log"
+    },
+    {
+      "id": "TC-E05",
+      "script": "tests/compact-shell-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-07-compact-shell-browser.test.log"
+    },
+    {
+      "id": "TC-G11",
+      "script": "tests/compact-shell-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-07-compact-shell-browser.test.log"
+    },
+    {
+      "id": "TC-L01",
+      "script": "tests/compact-shell-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-07-compact-shell-browser.test.log"
+    },
+    {
+      "id": "TC-PUB09",
+      "script": "tests/compact-shell-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-07-compact-shell-browser.test.log"
+    },
+    {
+      "id": "TC-SUB12",
+      "script": "tests/compact-shell-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-07-compact-shell-browser.test.log"
+    },
+    {
+      "id": "TC-L02",
+      "script": "tests/dockview-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-08-dockview-preview-browser.test.log"
+    },
+    {
+      "id": "TC-L11",
+      "script": "tests/dockview-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-08-dockview-preview-browser.test.log"
+    },
+    {
+      "id": "TC-M01",
+      "script": "tests/dockview-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-08-dockview-preview-browser.test.log"
+    },
+    {
+      "id": "TC-M03",
+      "script": "tests/dockview-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-08-dockview-preview-browser.test.log"
+    },
+    {
+      "id": "TC-SUB02",
+      "script": "tests/dockview-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-08-dockview-preview-browser.test.log"
+    },
+    {
+      "id": "TC-E03",
+      "script": "tests/four-pane-pdf-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-09-four-pane-pdf-browser.test.log"
+    },
+    {
+      "id": "TC-P09",
+      "script": "tests/four-pane-pdf-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-09-four-pane-pdf-browser.test.log"
+    },
+    {
+      "id": "TC-PUB05",
+      "script": "tests/four-pane-pdf-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-09-four-pane-pdf-browser.test.log"
+    },
+    {
+      "id": "TC-PUB06",
+      "script": "tests/four-pane-pdf-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-09-four-pane-pdf-browser.test.log"
+    },
+    {
+      "id": "TC-SUB06",
+      "script": "tests/four-pane-pdf-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-09-four-pane-pdf-browser.test.log"
+    },
+    {
+      "id": "TC-SUB17",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-T01",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-T02",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-T02-RENDER",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-T03",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-T04",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-T05",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-T06",
+      "script": "tests/latex-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-10-latex-browser.test.log"
+    },
+    {
+      "id": "TC-SUB09-LATEX",
+      "script": "tests/latex-four-view-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-11-latex-four-view-browser.test.log"
+    },
+    {
+      "id": "TC-L20",
+      "script": "tests/latex-normalize-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-12-latex-normalize-browser.test.log"
+    },
+    {
+      "id": "TC-T12",
+      "script": "tests/latex-normalize-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-12-latex-normalize-browser.test.log"
+    },
+    {
+      "id": "TC-T09",
+      "script": "tests/latex-review-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-13-latex-review-browser.test.log"
+    },
+    {
+      "id": "TC-T10",
+      "script": "tests/latex-review-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-13-latex-review-browser.test.log"
+    },
+    {
+      "id": "TC-T11",
+      "script": "tests/latex-review-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-13-latex-review-browser.test.log"
+    },
+    {
+      "id": "TC-A02-SIZED",
+      "script": "tests/media-adoption-syntax.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-14-media-adoption-syntax.test.log"
+    },
+    {
+      "id": "TC-A12",
+      "script": "tests/media-adoption-syntax.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-14-media-adoption-syntax.test.log"
+    },
+    {
+      "id": "TC-A01",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A02",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A03",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A04",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A05",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A06",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A07",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A08",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A09",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-C14",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-L17",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-L18",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-L19",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-PUB13",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-SUB16",
+      "script": "tests/media-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-15-media-browser.test.log"
+    },
+    {
+      "id": "TC-A10",
+      "script": "tests/media-paste-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-16-media-paste-browser.test.log"
+    },
+    {
+      "id": "TC-A11",
+      "script": "tests/media-paste-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-16-media-paste-browser.test.log"
+    },
+    {
+      "id": "TC-C15",
+      "script": "tests/media-paste-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-16-media-paste-browser.test.log"
+    },
+    {
+      "id": "TC-C16",
+      "script": "tests/media-paste-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-16-media-paste-browser.test.log"
+    },
+    {
+      "id": "TC-L04",
+      "script": "tests/mineru-start-only-ui-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-17-mineru-start-only-ui-browser.test.log"
+    },
+    {
+      "id": "TC-P03",
+      "script": "tests/mineru-start-only-ui-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-17-mineru-start-only-ui-browser.test.log"
+    },
+    {
+      "id": "TC-P10",
+      "script": "tests/mineru-start-only-ui-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-17-mineru-start-only-ui-browser.test.log"
+    },
+    {
+      "id": "TC-SUB03",
+      "script": "tests/mineru-start-only-ui-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-17-mineru-start-only-ui-browser.test.log"
+    },
+    {
+      "id": "TC-M08",
+      "script": "tests/obsidian-image-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-18-obsidian-image-preview-browser.test.log"
+    },
+    {
+      "id": "TC-E01",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-E02",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-G01",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-G02",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-G03",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-G07",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-L03",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-M04",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-PUB01",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-PUB03",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-PUB04",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-SUB01",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-SUB04",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-SUB05",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-SUB08",
+      "script": "tests/outline-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-19-outline-browser.test.log"
+    },
+    {
+      "id": "TC-P06",
+      "script": "tests/pdf-anchor-viewport-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-20-pdf-anchor-viewport-browser.test.log"
+    },
+    {
+      "id": "TC-L10",
+      "script": "tests/pdf-click-only-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-21-pdf-click-only-browser.test.log"
+    },
+    {
+      "id": "TC-P02",
+      "script": "tests/pdf-click-only-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-21-pdf-click-only-browser.test.log"
+    },
+    {
+      "id": "TC-P11",
+      "script": "tests/pdf-click-only-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-21-pdf-click-only-browser.test.log"
+    },
+    {
+      "id": "TC-SUB07",
+      "script": "tests/pdf-click-only-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-21-pdf-click-only-browser.test.log"
+    },
+    {
+      "id": "TC-L05",
+      "script": "tests/preview-split-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-22-preview-split-browser.test.log"
+    },
+    {
+      "id": "TC-L12",
+      "script": "tests/preview-split-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-22-preview-split-browser.test.log"
+    },
+    {
+      "id": "TC-M06",
+      "script": "tests/preview-split-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-22-preview-split-browser.test.log"
+    },
+    {
+      "id": "TC-M07",
+      "script": "tests/preview-split-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-22-preview-split-browser.test.log"
+    },
+    {
+      "id": "TC-P05",
+      "script": "tests/preview-split-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-22-preview-split-browser.test.log"
+    },
+    {
+      "id": "TC-P07",
+      "script": "tests/preview-split-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-22-preview-split-browser.test.log"
+    },
+    {
+      "id": "TC-G04",
+      "script": "tests/promoted-chapters-browser.test.mjs",
+      "status": "FAIL",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log"
+    },
+    {
+      "id": "TC-G05",
+      "script": "tests/promoted-chapters-browser.test.mjs",
+      "status": "FAIL",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log"
+    },
+    {
+      "id": "TC-G10",
+      "script": "tests/promoted-chapters-browser.test.mjs",
+      "status": "FAIL",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log"
+    },
+    {
+      "id": "TC-L09",
+      "script": "tests/promoted-chapters-browser.test.mjs",
+      "status": "FAIL",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log"
+    },
+    {
+      "id": "TC-L14",
+      "script": "tests/promoted-chapters-browser.test.mjs",
+      "status": "FAIL",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log"
+    },
+    {
+      "id": "TC-L15",
+      "script": "tests/promoted-chapters-browser.test.mjs",
+      "status": "FAIL",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log"
+    },
+    {
+      "id": "TC-L16",
+      "script": "tests/promoted-chapters-browser.test.mjs",
+      "status": "FAIL",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-23-promoted-chapters-browser.test.log"
+    },
+    {
+      "id": "TC-C07",
+      "script": "tests/quote-indent-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-24-quote-indent-browser.test.log"
+    },
+    {
+      "id": "TC-E06",
+      "script": "tests/scroll-sync-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-25-scroll-sync-browser.test.log"
+    },
+    {
+      "id": "TC-L07",
+      "script": "tests/scroll-sync-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-25-scroll-sync-browser.test.log"
+    },
+    {
+      "id": "TC-SUB10",
+      "script": "tests/scroll-sync-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-25-scroll-sync-browser.test.log"
+    },
+    {
+      "id": "TC-SUB14",
+      "script": "tests/scroll-sync-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-25-scroll-sync-browser.test.log"
+    },
+    {
+      "id": "TC-E04",
+      "script": "tests/scroll-sync-leadership-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-26-scroll-sync-leadership-browser.test.log"
+    },
+    {
+      "id": "TC-L13",
+      "script": "tests/scroll-sync-leadership-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-26-scroll-sync-leadership-browser.test.log"
+    },
+    {
+      "id": "TC-PUB07",
+      "script": "tests/scroll-sync-leadership-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-26-scroll-sync-leadership-browser.test.log"
+    },
+    {
+      "id": "TC-PUB08",
+      "script": "tests/scroll-sync-leadership-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-26-scroll-sync-leadership-browser.test.log"
+    },
+    {
+      "id": "TC-SUB09",
+      "script": "tests/scroll-sync-leadership-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-26-scroll-sync-leadership-browser.test.log"
+    },
+    {
+      "id": "TC-SUB11",
+      "script": "tests/scroll-sync-leadership-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-26-scroll-sync-leadership-browser.test.log"
+    },
+    {
+      "id": "TC-L06",
+      "script": "tests/shared-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-27-shared-preview-browser.test.log"
+    },
+    {
+      "id": "TC-M02",
+      "script": "tests/shared-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-27-shared-preview-browser.test.log"
+    },
+    {
+      "id": "TC-M05",
+      "script": "tests/shared-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-27-shared-preview-browser.test.log"
+    },
+    {
+      "id": "TC-P01",
+      "script": "tests/shared-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-27-shared-preview-browser.test.log"
+    },
+    {
+      "id": "TC-P04",
+      "script": "tests/shared-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-27-shared-preview-browser.test.log"
+    },
+    {
+      "id": "TC-P13",
+      "script": "tests/shared-preview-browser.test.mjs",
+      "status": "PASS",
+      "log": ".v6/tests/am-full-20261024T063411Z-1dab5924-27-shared-preview-browser.test.log"
+    }
+  ],
+  "fixture_overrides": {
+    "tests/mineru-start-only-ui-browser.test.mjs": {
+      "source": "tests/fixtures/buffetts-alpha-four-view-reviewed.md.gz",
+      "sha256_uncompressed": "c998da7aeea5410f1d7be10975c05e59efb5cdf6bfcf750595b27a048c5e3e19",
+      "scope": "one test only; restored after test"
+    },
+    "tests/promoted-chapters-browser.test.mjs": {
+      "source": "dist/",
+      "target": ".v6/release/",
+      "scope": "isolated release snapshot; unchanged test assertions"
+    }
+  },
+  "linux_compat": {
+    "sips": "Playwright Chromium PNG to actual JPEG only for frozen browser tests; log marker AUDIT_LINUX_SIPS_SHIM",
+    "webkit_cookie": "HTTP 127.0.0.1 test only: strip Secure on successful unlock response; original credentials and same-origin checks unchanged; log AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER"
+  },
+  "audited_test_revision": {
+    "file": "tests/scroll-sync-browser.test.mjs",
+    "reason": "replace renderer-dependent previous anchor +30 with requested source line 600 +30",
+    "review_file": "audit-reports/scroll-sync-semantic-assertion-proposal.diff"
+  },
+  "runner_log": "run.log",
+  "note": "These are AM test associations, not an independent source-code architecture review."
+}

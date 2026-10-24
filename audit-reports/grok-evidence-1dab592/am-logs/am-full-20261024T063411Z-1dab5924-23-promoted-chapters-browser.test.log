@@ -1,0 +1,26 @@
+AUDIT_TEST_FIXTURE_STAGE isolated release snapshot from built dist
+AUDIT_LINUX_SAVE_STATE {"status":"✓ 已保存 · 3,113行 / 306,930字 · 大纲21项 · 章节标定 注释1/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md"}
+V6_PROMOTED_CHAPTER_EXPORT_PASS Chrome {"count":20,"filename":"0025-Bufett-s-Alpha.md","firstChars":2218}
+V6_PROMOTED_CHAPTER_REOPEN_REEXPORT_PASS Chrome
+AUDIT_LINUX_WEBKIT_INITIALIZATION_BARRIER promoted-chapters-browser.test.mjs
+AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER verified-server-token-stored
+AUDIT_LINUX_SAVE_STATE {"status":"✓ 已保存 · 3,113行 / 306,930字 · 大纲21项 · 章节标定 注释1/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md"}
+V6_PROMOTED_CHAPTER_EXPORT_PASS WebKit {"count":20,"filename":"0025-Bufett-s-Alpha.md","firstChars":2218}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.reload: Timeout 30000ms exceeded.
+Call log:
+  - waiting for navigation until "domcontentloaded"
+    - navigated to "http://127.0.0.1:4512/"
+
+    at /workspace/ocr2md-audit/target-1dab592/tests/promoted-chapters-browser.test.mjs:119:14 {
+  log: [
+    '  - waiting for navigation until "domcontentloaded"',
+    '    - navigated to "http://127.0.0.1:4512/"'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4
