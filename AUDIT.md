@@ -28,14 +28,15 @@ Linux 首次准备系统库时执行一次 `npx playwright install-deps chromium
 
 脚本执行：
 
-1. 检查 Git 当前是审计包分支、工作区干净、冻结业务源码确实是该分支的祖先；
+1. 检查 Git 当前是审计包分支、工作区干净、冻结业务源码确实是该分支的祖先；启动前检查全部已登记测试的固定端口未被旧服务占用（忙则 `AUDIT_TEST_PORT_BUSY`，不自动杀进程）；
 2. 创建/复用兄弟目录 `../ocr2md-v6-audit-target`，checkout 到上表**固定的源码 SHA**；
 3. 校验 JSON/Markdown、PDF 哈希，拒绝改写 PDF，并统一设置 `V6_PDF_PATH` 为隔离夹具的绝对路径，避免冻结的 Vite 默认为开发者的 iCloud 路径而在 Linux 返回 `/api/pdf` 404；
 4. 对 Web 工作台和独立 `packages/minerujson-md` 转换器分别执行锁文件安装与构建，并安装匹配 lockfile 的 Playwright Chromium/WebKit，在 Mac/Linux 使用真实可执行文件（不依赖用户机器的绝对浏览器路径）；
 5. 对历史 start-only UI 测试单独使用 Git 跟踪的压缩审阅夹具（14 条章节标定），结束立即恢复原始零标定样本；对历史章节发布测试单独在忽略目录放置由本次 dist 构建生成的完整 release 快照；冻结测试断言和受审源码均不改变，两项前置夹具在 JSON 证据中显式登记；
 6. 在冻结源码执行 `tests/am/run-grok-audit.sh`：AM build/check/coverage/edges、全部已登记测试、certify 和 Git fsck；
 7. Linux 环境为仍使用 macOS `sips` 的两项冻结媒体测试提供基于 Chromium 的真实 PNG→JPEG 转换，按 `AUDIT_LINUX_SIPS_SHIM` 日志登记；不修改原测试或跳过断言；遇到 Linux 80s 等页面等待失败时，自动将页面状态/脚本名/JS 错误写入 `AUDIT_LINUX_WAIT_DIAG`，不改变超时阈值；
-8. 生成 `.v6/audit-reports/RUN_EVIDENCE.json` 和 `run.log`，失败也保留证据。
+8. 仅 Linux WebKit 的本地 `http://127.0.0.1` 测试解锁响应，保留服务端验证码和权限校验，在验证解锁成功后让 WebKit 的本地 Cookie Jar 接收非 Secure 的同一有效 Cookie；对两项 Python 服务测试等待真实的初始化/授权探测结束；此适配**不能替代 HTTPS 生产授权的验收**，日志标记 `AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER`；
+9. 生成 `.v6/audit-reports/RUN_EVIDENCE.json` 和 `run.log`，失败也保留证据。
 
 仅 `AM_FULL_TABLE_PASS` 加 `AM_FULL_TABLE_CERTIFIED` 才能称已登记契约全表通过。139 是**契约关联数**，不是 139 个互不相关的黄金单测；脚本通过也**不等于**模块边界已独立审完。
 

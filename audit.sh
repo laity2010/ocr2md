@@ -56,6 +56,31 @@ PY
 [[ -z "$(git -C "$TARGET" status --porcelain)" ]] || fail 'target must remain clean'
 
 cd "$TARGET"
+# Isolated browser suites use fixed HTTP ports. A stale previous Python/Vite
+# test server can silently serve an old document and fabricate a PASS or FAIL.
+# Refuse rather than kill someone else's process or trust a stale /healthz.
+python3 - <<'PYPORT'
+import re,socket,sys
+from pathlib import Path
+ports=set()
+for script in Path('tests').rglob('*.test.mjs'):
+    source=script.read_text(encoding='utf-8')
+    for match in re.finditer(r'\bport\s*=\s*(\d{4})(\s*\+\s*[in])?',source):
+        base=int(match.group(1))
+        ports.add(base)
+        if match.group(2):ports.add(base+1)
+busy=[]
+for port in sorted(ports):
+    sock=socket.socket()
+    try:sock.bind(('127.0.0.1',port))
+    except OSError:busy.append(port)
+    finally:sock.close()
+if busy:
+    print('AUDIT_TEST_PORT_BUSY: '+','.join(map(str,busy)),file=sys.stderr)
+    print('Use a fresh isolated environment; never trust a previous /healthz.',file=sys.stderr)
+    sys.exit(2)
+print('AUDIT_TEST_PORT_PREFLIGHT_PASS ports='+str(len(ports)))
+PYPORT
 # Frozen vite.config.mjs otherwise points at a developer-specific macOS
 # iCloud PDF; without this Linux /api/pdf always returns HTTP 404.
 export V6_PDF_PATH="$(pwd -P)/.v6/workspace/buffetts-alpha.original.pdf"
@@ -99,7 +124,8 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   cp "$BUNDLE_DIR/audit-sips-compat.mjs" "$REPORT_DIR/audit-sips-compat.mjs"
   cp "$BUNDLE_DIR/audit-png-to-jpeg.mjs" "$REPORT_DIR/audit-png-to-jpeg.mjs"
   cp "$BUNDLE_DIR/audit-linux-diagnostics.mjs" "$REPORT_DIR/audit-linux-diagnostics.mjs"
-  export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-sips-compat.mjs --import=$(pwd)/$REPORT_DIR/audit-linux-diagnostics.mjs"
+  cp "$BUNDLE_DIR/audit-loopback-cookie.mjs" "$REPORT_DIR/audit-loopback-cookie.mjs"
+  export NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT_DIR/audit-sips-compat.mjs --import=$(pwd)/$REPORT_DIR/audit-linux-diagnostics.mjs --import=$(pwd)/$REPORT_DIR/audit-loopback-cookie.mjs"
 fi
 [[ -x "$OCR2MD_AUDIT_CHROME_PATH" ]] || fail 'Chromium browser binary not installed'
 [[ -x "$OCR2MD_AUDIT_WEBKIT_PATH" ]] || fail 'WebKit browser binary not installed'
@@ -107,6 +133,23 @@ fi
 printf 'AUDIT_OS=%s\nAUDIT_NODE=%s\nAUDIT_PYTHON=%s\nAUDIT_PLAYWRIGHT=%s\n' \
   "$(uname -s)" "$(node -v)" "$(python3 -V 2>&1)" "$(node -p 'require("playwright/package.json").version')"
 printf 'AUDIT_BROWSER_BINARIES=installed_and_executable\n'
+# Test suites use fixed loopback ports. A crashed prior suite can leave its
+# Python server alive and trick a new run into reading the *previous* fixture.
+# Reject occupied ports before starting the audit, never kill third-party jobs.
+python3 - <<'PYPORTS'
+import socket,sys
+ports=(4511,4512,4590,4591,4710,4711,4800,4801,5202,5204,5216,
+       5265,5296,5590,5591,5593,5594,5601,5602,5620,5621,5640,5641)
+occupied=[]
+for port in ports:
+    with socket.socket() as s:
+        try: s.bind(('127.0.0.1',port))
+        except OSError: occupied.append(port)
+if occupied:
+    print('AUDIT_BLOCKED: pre-existing localhost test server(s) on ports '+str(occupied),file=sys.stderr)
+    sys.exit(2)
+print('AUDIT_LOOPBACK_PORT_PREFLIGHT_PASS',len(ports))
+PYPORTS
 if [[ "$(uname -s)" == "Linux" ]]; then
   cp "$BUNDLE_DIR/audit-sips-smoke.test.mjs" "$REPORT_DIR/audit-sips-smoke.test.mjs"
   node "$REPORT_DIR/audit-sips-smoke.test.mjs"
@@ -146,7 +189,7 @@ result={
  'runner_exit_code':int(rc),
  'am_cases':[{**r,'status':r['status'] or 'NOT VERIFIED'} for r in rows],
  'fixture_overrides':{'tests/mineru-start-only-ui-browser.test.mjs':{'source':'tests/fixtures/buffetts-alpha-four-view-reviewed.md.gz','sha256_uncompressed':'c998da7aeea5410f1d7be10975c05e59efb5cdf6bfcf750595b27a048c5e3e19','scope':'one test only; restored after test'}, 'tests/promoted-chapters-browser.test.mjs':{'source':'dist/','target':'.v6/release/','scope':'isolated release snapshot; unchanged test assertions'}},
- 'linux_compat':{'sips':'Playwright Chromium PNG to actual JPEG only for frozen browser tests; log marker AUDIT_LINUX_SIPS_SHIM'},
+ 'linux_compat':{'sips':'Playwright Chromium PNG to actual JPEG only for frozen browser tests; log marker AUDIT_LINUX_SIPS_SHIM','webkit_cookie':'HTTP 127.0.0.1 test only: strip Secure on successful unlock response; original credentials and same-origin checks unchanged; log AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER'},
  'runner_log':'run.log',
  'note':'These are AM test associations, not an independent source-code architecture review.'
 }
