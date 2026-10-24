@@ -19,6 +19,125 @@ HERE = Path(__file__).resolve().parent
 DB = ROOT / '.v6/tests/am.sqlite'
 
 
+SUITE_TIMEOUT_SECONDS = 240
+
+
+def _proc_tree(root_pid, pgid):
+    """Linux /proc snapshot of the suite's process group plus descendants
+    (Playwright may start browsers in their own group)."""
+    procs = {}
+    proc = Path('/proc')
+    if not proc.is_dir():
+        return set()
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / 'stat').read_text()
+            fields = stat[stat.rindex(')') + 2:].split()
+            procs[int(entry.name)] = (int(fields[1]), int(fields[2]))  # ppid, pgrp
+        except (OSError, ValueError, IndexError):
+            continue
+    found = {pid for pid, (_, grp) in procs.items() if grp == pgid}
+    found.add(root_pid)
+    changed = True
+    while changed:
+        changed = False
+        for pid, (ppid, _) in procs.items():
+            if ppid in found and pid not in found:
+                found.add(pid); changed = True
+    return found
+
+
+def _listening_ports(pids):
+    """TCP LISTEN ports owned by the given pids (Linux only, best effort)."""
+    inodes = {}
+    for pid in pids:
+        fd_dir = Path(f'/proc/{pid}/fd')
+        try:
+            for fd in fd_dir.iterdir():
+                try:
+                    target = os.readlink(fd)
+                except OSError:
+                    continue
+                if target.startswith('socket:['):
+                    inodes[target[8:-1]] = pid
+        except OSError:
+            continue
+    ports = set()
+    for table in ('/proc/net/tcp', '/proc/net/tcp6'):
+        try:
+            lines = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            cols = line.split()
+            if len(cols) > 9 and cols[3] == '0A' and cols[9] in inodes:
+                ports.add(int(cols[1].rsplit(':', 1)[1], 16))
+    return ports
+
+
+def _port_listening(port):
+    for table in ('/proc/net/tcp', '/proc/net/tcp6'):
+        try:
+            for line in Path(table).read_text().splitlines()[1:]:
+                cols = line.split()
+                if len(cols) > 3 and cols[3] == '0A' and int(cols[1].rsplit(':', 1)[1], 16) == port:
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def run_test_script(script):
+    """Run one node test in its own session. On timeout terminate the WHOLE
+    process tree (node, spawned v6_serve.py/vite servers, browsers) and verify
+    that every port they listened on is released. Grok fix for the 38ea47d
+    orphan v6_serve.py that kept 127.0.0.1:4710 after AM_TIMEOUT_240_SECONDS."""
+    import signal, time
+    child = subprocess.Popen(['node', script], cwd=ROOT, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    try:
+        output, _ = child.communicate(timeout=SUITE_TIMEOUT_SECONDS)
+        return ('PASS' if child.returncode == 0 else 'FAIL'), output
+    except subprocess.TimeoutExpired:
+        pass
+    pids = _proc_tree(child.pid, child.pid)
+    ports = _listening_ports(pids)
+    lines = [f'AM_TIMEOUT_PROCESS_TREE pids={sorted(pids)} listening_ports={sorted(ports)}']
+    for sig, grace in ((signal.SIGTERM, 5), (signal.SIGKILL, 5)):
+        try:
+            os.killpg(child.pid, sig)
+        except ProcessLookupError:
+            pass
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except (ProcessLookupError, PermissionError):
+                pass
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline and any(Path(f'/proc/{p}').exists() and p != child.pid for p in pids):
+            time.sleep(0.1)
+        if child.poll() is None:
+            try:
+                child.wait(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                pass
+    try:
+        output, _ = child.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        output = ''
+    survivors = sorted(p for p in pids if Path(f'/proc/{p}').exists() and p != child.pid)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and any(_port_listening(p) for p in ports):
+        time.sleep(0.2)
+    still = sorted(p for p in ports if _port_listening(p))
+    lines.append(f'AM_TIMEOUT_CLEANUP survivors={survivors} ports_still_listening={still}')
+    if survivors or still:
+        lines.append('AM_TIMEOUT_CLEANUP_INCOMPLETE')
+    return 'ERROR', (output or '') + f'\nAM_TIMEOUT_{SUITE_TIMEOUT_SECONDS}_SECONDS\n' + '\n'.join(lines) + '\n'
+
+
 def check_ui_ownership():
     """WP2 git-owned UI file inventory and cross-module edge review."""
     import audit_boundaries
@@ -185,15 +304,7 @@ def run_case(case_id):
     log = ROOT / f'.v6/tests/am-{case_id}-{stamp}-{git_commit[:8]}-{os.getpid()}.log'
     log.parent.mkdir(parents=True, exist_ok=True)
     print(f'AM_RUN_START case={case_id} git={git_commit[:8]} script={script_rel}',flush=True)
-    try:
-        result = subprocess.run(['node',script_rel],cwd=ROOT,text=True,
-                                stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
-        status = 'PASS' if result.returncode == 0 else 'FAIL'
-        output = result.stdout
-    except subprocess.TimeoutExpired as exc:
-        status = 'ERROR'
-        output = (exc.stdout or b'').decode(errors='replace') if isinstance(exc.stdout,bytes) else (exc.stdout or '')
-        output += '\nAM_TIMEOUT_AFTER_240_SECONDS\n'
+    status, output = run_test_script(script_rel)
     log.write_text(output)
     with connection(DB) as con:
         con.execute('INSERT INTO test_runs(case_id,git_commit,ran_at,status,output_file,detail) VALUES(?,?,?,?,?,?)',
@@ -231,15 +342,7 @@ def run_all():
         log=ROOT/f'.v6/tests/am-full-{stamp}-{git_commit[:8]}-{i:02d}-{Path(script).stem}.log'
         log.parent.mkdir(parents=True,exist_ok=True)
         print(f'AM_SUITE_START {i}/{len(suites)} {script} cases={len(case_ids)}',flush=True)
-        try:
-            completed=subprocess.run(['node',script],cwd=ROOT,stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,text=True,timeout=240)
-            status='PASS' if completed.returncode==0 else 'FAIL'
-            output=completed.stdout
-        except subprocess.TimeoutExpired as ex:
-            status='ERROR'
-            output=(ex.stdout or b'').decode(errors='replace') if isinstance(ex.stdout,bytes) else (ex.stdout or '')
-            output+='\nAM_TIMEOUT_240_SECONDS\n'
+        status,output=run_test_script(script)
         log.write_text(output)
         with connection(DB) as con:
             con.executemany('INSERT INTO test_runs(case_id,git_commit,ran_at,status,output_file,detail) VALUES(?,?,?,?,?,?)',
