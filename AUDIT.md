@@ -23,6 +23,8 @@ cd ocr2md-audit-bundle
 bash audit.sh
 ```
 
+Linux 测试进程会禁用超大 ELF core dump 文件，避免浏览器子进程退出产生数 GB 未跟踪数据；异常退出码、测试错误与截图仍照常收集。
+
 Linux 首次准备系统库时执行一次 `npx playwright install-deps chromium webkit`（按系统权限可能需要 sudo），或者在拥有 root 权限的隔离容器中用 `OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS=1 bash audit.sh` 自动安装。默认不擅自更改第三方机器的系统库；若缺失，脚本给出明确 `AUDIT_BLOCKED`。
 
 不需要 GitHub 写权限、Grok 凭据、AgentDock、用户 Mac 原始工作目录或其他私有文件。审计包的 PDF 在 `.v6/workspace/buffetts-alpha.original.pdf`，哈希参见 `.v6/grok-handoff/fixtures.SHA256SUMS`。**当前 GitHub 仓库和 PDF 均为 Public；不可视作私有数据通道。**

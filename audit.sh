@@ -74,6 +74,13 @@ PY
 [[ -z "$(git -C "$TARGET" status --porcelain)" ]] || fail 'target must remain clean'
 
 cd "$TARGET"
+# Some Linux browser subprocesses dump multi-gigabyte ELF cores even after
+# their controlling browser test reports PASS. Capture test errors/logs normally
+# but disable unbounded core dumps so Git-clean audit worktrees stay reproducible.
+if [[ "$(uname -s)" == Linux ]]; then
+  ulimit -c 0 || fail 'unable to disable unbounded browser core dumps'
+  printf 'AUDIT_LINUX_CORE_DUMPS_DISABLED=1\n'
+fi
 # Isolated browser suites use fixed HTTP ports. A stale previous Python/Vite
 # test server can silently serve an old document and fabricate a PASS or FAIL.
 # Refuse rather than kill someone else's process or trust a stale /healthz.
