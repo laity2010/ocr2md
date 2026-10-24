@@ -19,10 +19,10 @@ export function createSettingsModule(container,onStatus=()=>{}){
   let activeKey=null,invalid=false;
   function entry(key){const item=definitions.get(key);if(!item)throw Error('Unregistered setting: '+key);return item;}
   function register(definition){
-    const {module,key,category,label,type,control,defaultValue,min,max,step,message}=definition;
+    const {module,key,category,label,comment,type,control,defaultValue,min,max,step,message}=definition;
     if(!module||typeof key!=='string'||!/^\w+(?:\.\w+)+$/.test(key)||
        !Array.isArray(category)||category.length!==2||!category.every(v=>typeof v==='string'&&v)||
-       !label||type!=='number'||control!=='slider'||message!=='settings.changed'||
+       !label||(comment!==undefined&&typeof comment!=='string')||type!=='number'||control!=='slider'||message!=='settings.changed'||
        !Number.isInteger(min)||!Number.isInteger(max)||max<=min||
        !Number.isInteger(defaultValue)||defaultValue<min||defaultValue>max||step!==1)
       throw Error('Invalid settings registration');
@@ -57,10 +57,13 @@ export function createSettingsModule(container,onStatus=()=>{}){
   function parseValues(){return source?valuesFromDocument(source.readJSON()):null;}
   function refreshGrid(){
     if(!grid||!activeKey)return;
-    const item=entry(activeKey),value=applied.get(activeKey);
-    const rows=[{id:'category',label:item.category[0],value:'',depth:0},
-      {id:'section',label:item.category[1],value:'',depth:1},
-      {id:activeKey,label:item.label,value:value===undefined?'—':value+' pt',depth:2}];
+    const rows=[...definitions.values()].map(item=>({
+      key:item.key,
+      primaryCategory:item.category[0],
+      secondaryCategory:item.category[1],
+      keyName:item.label,
+      keyComment:item.comment||'',
+    }));
     grid.setGridOption('rowData',rows);
     grid.getRowNode(activeKey)?.setSelected(true);
   }
@@ -137,7 +140,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
   function createPanel(name){
     const host=document.createElement('div');host.className='ocr-settings-pane';
     if(name==='outline')agHost=host;
-    if(name==='source'){sourceHost=host;host.classList.add('ocr-settings-source');}
+    if(name==='source'){sourceHost=host;host.classList.add('ocr-settings-source','ocr-cm-source');}
     if(name==='preview')previewHost=host;
     return {element:host,init(){},layout(){if(name==='source')source?.requestMeasure();},dispose(){}};
   }
@@ -151,12 +154,19 @@ export function createSettingsModule(container,onStatus=()=>{}){
     for(const panel of [left,center,right]){panel.group.header.hidden=true;panel.group.relayout();}
     grid=createGrid(agHost,{theme,headerHeight:33,rowHeight:35,getRowId:p=>p.data.id,
       rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
-      columnDefs:[{field:'label',headerName:'设置分类 / 键值',flex:1,minWidth:130,
-        cellRenderer:params=>{
-          const span=document.createElement('span');span.textContent=params.value;
-          span.style.paddingLeft=(params.data.depth*14)+'px';return span;
-        }},{field:'value',headerName:'当前值',width:90}],
-      onRowClicked:()=>{if(activeKey)source?.revealKey(activeKey);},
+      columnDefs:[
+        {field:'primaryCategory',headerName:'一级分类',width:108,minWidth:95,pinned:'left',lockPinned:true},
+        {field:'secondaryCategory',headerName:'二级分类',width:116,minWidth:105},
+        {field:'keyName',headerName:'键名',width:115,minWidth:85},
+        {field:'keyComment',headerName:'键注释',flex:1,minWidth:180,
+          tooltipField:'keyComment'},
+      ],
+      onRowClicked:event=>{
+        if(!event.data?.key)return;
+        activeKey=event.data.key;
+        source?.revealKey(activeKey);
+        renderPreview();
+      },
     });
     source=await openCMDJsonSource(sourceHost,onSourceChange);
     // Registered module values are applied after the first actual JSON read.

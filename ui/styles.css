@@ -24,12 +24,12 @@ dialog input {width:100%;padding:10px;border:1px solid #64748b;border-radius:5px
 #unlock-error {min-height:20px;color:#fca5a5;font-size:12px;margin:8px 0;}
 .dialog-actions {display:flex;justify-content:flex-end;gap:8px;}
 #editor { height:100%; width:100%; min-width:0; }
-#editor .cm-editor { height:100%; font-size:14px; background:#111827; }
-#editor .cm-scroller { overflow:auto; font-family: "SFMono-Regular", Menlo, Consolas, monospace; }
-#editor .cm-gutters { background:#182132; border-right:1px solid #2f3a4b; color:#64748b; }
-#editor .cm-activeLine { background:#24314280; }
-#editor .cm-cursor { border-left-color:#a7cdfd; }
-#editor .cm-selectionBackground { background:#324f72 !important; }
+.ocr-cm-source .cm-editor { height:100%; font-size:14px; background:#111827; }
+.ocr-cm-source .cm-scroller { overflow:auto; font-family: "SFMono-Regular", Menlo, Consolas, monospace; }
+.ocr-cm-source .cm-gutters { background:#182132; border-right:1px solid #2f3a4b; color:#64748b; }
+.ocr-cm-source .cm-activeLine { background:#24314280; }
+.ocr-cm-source .cm-cursor { border-left-color:#a7cdfd; }
+.ocr-cm-source .cm-selectionBackground { background:#324f72 !important; }
 @media (max-width:800px) { .identity {gap:5px;} .build-badge {padding:2px 4px;} }
 
 /* Uniform typography on Mac and iPad: 12pt Sarasa fixed-width Simplified Chinese.
@@ -45,8 +45,8 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error {
   font-size: 12pt;
   font-family: "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
 }
-#editor .cm-editor { font-size:var(--ocr-cm-source-font-size, 12pt); line-height:1.5; }
-#editor .cm-scroller { font-family:"Sarasa Fixed SC", "Sarasa Mono SC", monospace; }
+.ocr-cm-source .cm-editor { font-size:var(--ocr-cm-source-font-size, 12pt); line-height:1.5; }
+.ocr-cm-source .cm-scroller { font-family:"Sarasa Fixed SC", "Sarasa Mono SC", monospace; }
 
 /* Complete Sarasa Fixed SC Web fonts, identical on Mac and iPad.
    Immutable content-hashed WOFF2 under SIL OFL 1.1 (see public/fonts/). */
@@ -66,7 +66,7 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error {
 }
 :root, .brand, .build-badge, .status,
 button, dialog h2, dialog p, dialog label, dialog input, #unlock-error,
-#editor .cm-scroller {
+.ocr-cm-source .cm-scroller {
   font-family: "OCR2MD Sarasa", "Sarasa Fixed SC", "Sarasa Mono SC", monospace;
 }
 

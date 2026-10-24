@@ -4,6 +4,19 @@
 import {EditorView,basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
 import {CMDocument} from './cm-document.js';
+import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
+import {json} from '@codemirror/lang-json';
+import {HighlightStyle,syntaxHighlighting} from '@codemirror/language';
+import {tags as t} from '@lezer/highlight';
+
+const jsonEverforest=syntaxHighlighting(HighlightStyle.define([
+  {tag:t.propertyName,color:'#83c092'},
+  {tag:t.string,color:'#a7c080'},
+  {tag:t.number,color:'#d699b6'},
+  {tag:t.bool,color:'#d699b6'},
+  {tag:t.null,color:'#e69875'},
+  {tag:t.punctuation,color:'#9aa79d'},
+]));
 
 export async function readCMDJsonSnapshot(){
   const response=await fetch('/api/settings',{cache:'no-store'});
@@ -19,8 +32,10 @@ export async function openCMDJsonSource(host,onUpdate=()=>{}){
   const text=snapshot.text;
   let etag=snapshot.etag;
   let savedDoc=null;
+  const nativeSelection=isIOSWebKit();
+  host.classList.toggle('ocr-ios-native-selection',nativeSelection);
   const cm=new CMDocument({parent:host,markdown:text,extensions:[
-    basicSetup,EditorView.lineWrapping,
+    nativeSelection?nativeIOSBasicSetup:basicSetup,EditorView.lineWrapping,json(),jsonEverforest,
     EditorView.updateListener.of(update=>{
       if(update.docChanged||update.selectionSet)onUpdate({text:update.state.doc.toString(),
         sourceOffset:update.state.selection.main.head,docChanged:update.docChanged});

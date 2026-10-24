@@ -1,13 +1,13 @@
 /*
  * OCR2MD V6: Obsidian source-editor appearance, drawn from the *installed*
  * Everforest dark theme 0.0.0 in the Mac ocr2md Obsidian vault.
- * Scope to CM6 only: do not import Obsidian's workspace/sidebar CSS.
+ * Shared by every CM6 source window by default. Do not import Obsidian's workspace/sidebar CSS.
  * Sarasa Fixed SC 12pt WOFF2 and the existing CM6 line geometry stay fixed.
  *
  * Palette source: .obsidian/themes/Everforest/theme.css
  * Highlight convention: .obsidian/snippets/daisor.css
  */
-#editor {
+.ocr-cm-source {
   --ob-bg: #2f383e;
   --ob-bg-alt: #272f34;
   --ob-fg: #d3c6aa;
@@ -19,63 +19,63 @@
   --ob-highlight: rgba(255, 170, 0, .3);
 }
 
-#editor .cm-editor {
+.ocr-cm-source .cm-editor {
   background: var(--ob-bg);
   color: var(--ob-fg);
 }
-#editor .cm-content {
+.ocr-cm-source .cm-content {
   caret-color: var(--ob-caret);
 }
-#editor .cm-scroller {
+.ocr-cm-source .cm-scroller {
   /* The web-hosted Sarasa declaration in styles.css remains authoritative. */
   color: var(--ob-fg);
 }
-#editor .cm-gutters {
+.ocr-cm-source .cm-gutters {
   background: var(--ob-bg-alt);
   border-right: 1px solid var(--ob-border);
   color: var(--ob-faint);
 }
-#editor .cm-activeLine,
-#editor .cm-activeLineGutter {
+.ocr-cm-source .cm-activeLine,
+.ocr-cm-source .cm-activeLineGutter {
   background: rgba(131, 192, 146, .08);
 }
-#editor .cm-cursor {
+.ocr-cm-source .cm-cursor {
   border-left-color: var(--ob-caret);
 }
-#editor .cm-selectionBackground {
+.ocr-cm-source .cm-selectionBackground {
   background: #525c62 !important;
 }
 /* iOS uses the OS caret, native selection paint, draggable handles and
    selection menu: do not impose the Everforest caret or custom ::selection.
    CM6's drawSelection extension is omitted only for this editor variant. */
-#editor.ocr-ios-native-selection .cm-content {
+.ocr-cm-source.ocr-ios-native-selection .cm-content {
   caret-color: auto;
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
 }
-#editor .cm-panels,
-#editor .cm-tooltip {
+.ocr-cm-source .cm-panels,
+.ocr-cm-source .cm-tooltip {
   background: var(--ob-bg-alt);
   color: var(--ob-fg);
 }
-#editor .cm-foldGutter .cm-gutterElement {
+.ocr-cm-source .cm-foldGutter .cm-gutterElement {
   color: var(--ob-faint);
 }
-#editor .cm-scroller::-webkit-scrollbar-thumb {
+.ocr-cm-source .cm-scroller::-webkit-scrollbar-thumb {
   background: #4a555b;
 }
 /* Exact Everforest --hN-size ratios relative to the 16px Sarasa body. */
-#editor .cm-ob-heading-line-1 { font-size: 2.125em; }
-#editor .cm-ob-heading-line-2 { font-size: 1.625em; }
-#editor .cm-ob-heading-line-3 { font-size: 1.375em; }
-#editor .cm-ob-heading-line-4 { font-size: 1.25em; }
-#editor .cm-ob-heading-line-5 { font-size: 1.125em; }
-#editor .cm-ob-heading-line-6 { font-size: 1.125em; }
+.ocr-cm-source .cm-ob-heading-line-1 { font-size: 2.125em; }
+.ocr-cm-source .cm-ob-heading-line-2 { font-size: 1.625em; }
+.ocr-cm-source .cm-ob-heading-line-3 { font-size: 1.375em; }
+.ocr-cm-source .cm-ob-heading-line-4 { font-size: 1.25em; }
+.ocr-cm-source .cm-ob-heading-line-5 { font-size: 1.125em; }
+.ocr-cm-source .cm-ob-heading-line-6 { font-size: 1.125em; }
 /* LineWrapping from CM6: soft wraps adapt to the pane, without editing text. */
-#editor .cm-content.cm-lineWrapping { overflow-wrap: anywhere; }
+.ocr-cm-source .cm-content.cm-lineWrapping { overflow-wrap: anywhere; }
 /* A zero-width indicator for actual newlines only: no character is saved. */
-#editor .cm-ob-hard-return {
+.ocr-cm-source .cm-ob-hard-return {
   display: inline-block;
   position: relative;
   width: 0;
@@ -87,11 +87,11 @@
   pointer-events: none;
   user-select: none;
 }
-#editor .cm-ob-hard-return::before { content: "↵"; }
+.ocr-cm-source .cm-ob-hard-return::before { content: "↵"; }
 /* On iOS, draw the newline indicator as CSS-generated content on the
    editable line itself. Unlike a CM6 widget, it cannot add a non-editable
    sibling right against the last glyph or intercept native word selection. */
-#editor.ocr-ios-native-selection .cm-ob-hard-return-native::after {
+.ocr-cm-source.ocr-ios-native-selection .cm-ob-hard-return-native::after {
   content: "↵";
   display: inline-block;
   width: 0;
@@ -104,9 +104,9 @@
   -webkit-user-select: none;
 }
 /* Obsidian's enabled daisor snippet makes heading # markers match the text. */
-#editor .cm-ob-heading-marker-1, #editor .cm-ob-heading-marker-1 span { color: #da6362 !important; }
-#editor .cm-ob-heading-marker-2, #editor .cm-ob-heading-marker-2 span { color: #d77f48 !important; }
-#editor .cm-ob-heading-marker-3, #editor .cm-ob-heading-marker-3 span { color: #bf983d !important; }
-#editor .cm-ob-heading-marker-4, #editor .cm-ob-heading-marker-4 span { color: #899c40 !important; }
-#editor .cm-ob-heading-marker-5, #editor .cm-ob-heading-marker-5 span { color: #569d79 !important; }
-#editor .cm-ob-heading-marker-6, #editor .cm-ob-heading-marker-6 span { color: #b87b9d !important; }
+.ocr-cm-source .cm-ob-heading-marker-1, .ocr-cm-source .cm-ob-heading-marker-1 span { color: #da6362 !important; }
+.ocr-cm-source .cm-ob-heading-marker-2, .ocr-cm-source .cm-ob-heading-marker-2 span { color: #d77f48 !important; }
+.ocr-cm-source .cm-ob-heading-marker-3, .ocr-cm-source .cm-ob-heading-marker-3 span { color: #bf983d !important; }
+.ocr-cm-source .cm-ob-heading-marker-4, .ocr-cm-source .cm-ob-heading-marker-4 span { color: #899c40 !important; }
+.ocr-cm-source .cm-ob-heading-marker-5, .ocr-cm-source .cm-ob-heading-marker-5 span { color: #569d79 !important; }
+.ocr-cm-source .cm-ob-heading-marker-6, .ocr-cm-source .cm-ob-heading-marker-6 span { color: #b87b9d !important; }

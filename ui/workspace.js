@@ -15,6 +15,7 @@ import './workspace.css';
 
 const sourceHost = document.createElement('div');
 sourceHost.id = 'editor';
+sourceHost.classList.add('ocr-cm-source');
 sourceHost.setAttribute('aria-label','CodeMirror 6 Markdown 编辑器');
 
 let getMarkdown = () => '';

@@ -42,7 +42,8 @@
       "T"
     ],
     "ios-native-selection.js": [
-      "shell"
+      "shell",
+      "C"
     ],
     "mineru-anchors.js": [
       "C",

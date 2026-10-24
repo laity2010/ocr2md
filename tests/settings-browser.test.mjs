@@ -26,6 +26,14 @@ try{
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.goto(base,{waitUntil:'domcontentloaded'});
       await page.locator('#editor .cm-editor').waitFor({state:'visible'});
+      const sourceStyle=await page.locator('#editor .cm-editor').evaluate(el=>({
+        background:getComputedStyle(el).backgroundColor,
+        color:getComputedStyle(el).color,
+        font:getComputedStyle(el).fontSize,
+        family:getComputedStyle(el.querySelector('.cm-scroller')).fontFamily,
+        gutters:getComputedStyle(el.querySelector('.cm-gutters')).backgroundColor,
+        caret:getComputedStyle(el.querySelector('.cm-content')).caretColor,
+      }));
       assert.equal(await page.locator('.dv-groupview').count(),3,'Unopened settings must not create a second Dockview');
       assert.equal(await page.locator('.cm-content').count(),1,'Unopened settings must not create a second CM6');
       await page.locator('#module-select').selectOption('settings');
@@ -34,10 +42,36 @@ try{
       assert.equal(await slider.inputValue(),name==='Chromium'?'12':'14');
       assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
       assert.equal(await page.locator('#editor .cm-editor').count(),1);
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),3);
+      assert.equal(await page.locator('#settings-workspace .ag-row').count(),1);
+      assert.deepEqual(await page.locator('#settings-workspace .ag-header-cell-text').allTextContents(),
+        ['一级分类','二级分类','键名','键注释']);
+      const agCells=await page.locator('#settings-workspace .ag-row [col-id]').allTextContents();
+      assert(agCells.includes('全局 UI'));
+      assert(agCells.includes('CM 源码窗'));
+      assert(agCells.includes('默认字号'));
+      assert(agCells.some(v=>v.includes('所有 CM6 源码窗')));
+      const settingsStyle=await page.locator('#settings-workspace .cm-editor').evaluate(el=>({
+        background:getComputedStyle(el).backgroundColor,
+        color:getComputedStyle(el).color,
+        font:getComputedStyle(el).fontSize,
+        family:getComputedStyle(el.querySelector('.cm-scroller')).fontFamily,
+        gutters:getComputedStyle(el.querySelector('.cm-gutters')).backgroundColor,
+        caret:getComputedStyle(el.querySelector('.cm-content')).caretColor,
+      }));
+      assert.deepEqual(settingsStyle,sourceStyle,'Every CM6 source must share its appearance');
+      const coloredJSON=await page.locator('#settings-workspace .cm-content').evaluate(el=>{
+        const ordinary=getComputedStyle(el).color;
+        return [...el.querySelectorAll('.cm-line span')].map(span=>({
+          text:span.textContent,color:getComputedStyle(span).color,
+        })).filter(item=>item.color!==ordinary);
+      });
+      assert(coloredJSON.some(span=>span.text.includes('defaultFontSize')),
+        'JSON property names must have syntax highlighting');
+      assert(coloredJSON.some(span=>/^(?:12|14)$/.test(span.text)),
+        'JSON number values must have syntax highlighting');
       await page.waitForFunction(()=>[...document.querySelectorAll('#settings-workspace .ag-row')].some(e=>e.textContent.includes('全局 UI')),{timeout:10000});
       const labels=await page.locator('#settings-workspace .ag-row').allTextContents();
-      assert(labels.some(v=>v.includes('全局 UI'))&&labels.some(v=>v.includes('CM 源码窗'))&&labels.some(v=>v.includes('默认字号')));
+      assert(labels[0]?.includes('默认字号'));
       assert((await page.locator('.ocr-settings-breadcrumb').textContent()).includes('全局 UI / CM 源码窗 / 默认字号'));
       const setSlider=async value=>{await slider.evaluate((element,v)=>{
         element.value=String(v);element.dispatchEvent(new Event('input',{bubbles:true}));
