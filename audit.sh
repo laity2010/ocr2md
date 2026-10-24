@@ -29,7 +29,7 @@ EXPECTED_AUDIT_BRANCH="${OCR2MD_AUDIT_EXPECTED_BRANCH:-audit-fixture-5c7497c}"
 [[ "$(git branch --show-current)" == "$EXPECTED_AUDIT_BRANCH" ]] || fail "checkout expected audit branch $EXPECTED_AUDIT_BRANCH first"
 [[ -z "$(git status --porcelain)" ]] || fail 'audit bundle must have a clean Git worktree'
 git merge-base --is-ancestor "$SOURCE_SHA" HEAD || fail 'fixed source SHA is not an ancestor of the audit bundle'
-# The audit branch may add evidence and amend *two reviewed test contracts*.
+# The audit branch may add evidence and amend *three reviewed test contracts*.
 # All business implementation, API registries, and other tests remain byte-
 # identical to the frozen source; fail closed if future commits violate this.
 python3 - "$SOURCE_SHA" <<'PYVERIFY'
@@ -37,7 +37,8 @@ import subprocess,sys
 base=sys.argv[1]
 paths=subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines()
 allowed_exact={'README.md','AUDIT.md','tests/am/GROK_AUDIT.md',
-               'tests/scroll-sync-browser.test.mjs','tests/latex-browser.test.mjs'}
+               'tests/scroll-sync-browser.test.mjs','tests/latex-browser.test.mjs',
+               'tests/media-paste-browser.test.mjs'}
 allowed_prefix=('audit-', 'audit.', 'audit-reports/', '.v6/grok-handoff/',
                 '.v6/workspace/buffetts-alpha.original.pdf')
 violations=[p for p in paths if p not in allowed_exact and
@@ -199,6 +200,8 @@ result={
  'audited_test_revision':{'file':'tests/scroll-sync-browser.test.mjs',
  'reason':'replace renderer-dependent previous anchor +30 with requested source line 600 +30',
  'review_file':'audit-reports/scroll-sync-semantic-assertion-proposal.diff'},
+ 'audited_test_revision_media_paste':{'file':'tests/media-paste-browser.test.mjs',
+ 'reason':'bounded retry for idempotent local media GET only on ECONNRESET/ECONNREFUSED; no retry of POST or save; original content/hash assertions preserved'},
  'audited_test_revision_latex':{'file':'tests/latex-browser.test.mjs',
  'reason':'wait for >=10 genuinely KaTeX-rendered visible AG cells before original count assertion; same 25s timeout and required count'},
  'runner_log':'run.log',

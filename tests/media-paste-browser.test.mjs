@@ -60,7 +60,22 @@ for(let i=0;i<engines.length;i++){
   await page.waitForFunction(path=>document.querySelector('.cm-content')?.textContent.includes('![]('+path+')'),localPath,
     {timeout:20000});
   assert.equal(readFileSync(doc,'utf8'),fixture,'CMD edits remain unsaved until global Save');
-  const media=await fetch(base+'/'+localPath);
+  // A local media GET is idempotent. Older Node/undici on macOS may reuse a
+  // just-closed HTTP/1.0 test-server socket, producing ECONNRESET even after
+  // the in-page paste is complete. Preserve the same status/byte assertions;
+  // bound transport recovery to two retries and NEVER retry POST/write APIs.
+  let media;
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      media=await fetch(base+'/'+localPath,{headers:{Connection:'close'}});
+      break;
+    }catch(error){
+      const cause=error?.cause?.code;
+      if(attempt===2 || !['ECONNRESET','ECONNREFUSED'].includes(cause))throw error;
+      console.log('AUDIT_LOCAL_MEDIA_GET_RETRY',name,'attempt',attempt+1,'reason',cause);
+      await pause(200*(attempt+1));
+    }
+  }
   assert.equal(media.status,200);assert.deepEqual(Buffer.from(await media.arrayBuffer()),bytes);
   const inventory=await (await fetch(base+'/api/media/inventory')).json();
   assert.equal(inventory.files.filter(f=>f.path===localPath).length,1);

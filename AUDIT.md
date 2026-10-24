@@ -7,10 +7,10 @@
 | GitHub | `https://github.com/laity2010/ocr2md.git` |
 | 审计包分支 | `audit-fixture-5c7497c` |
 | **冻结业务源码提交** | `5c7497cdf94ea35217e83effd9496a045625fef0` |
-| **AM 使用的测试契约** | 审计分支 HEAD（仅 `tests/scroll-sync-browser.test.mjs` 与 `tests/latex-browser.test.mjs` 有公开记录的测试契约修订） |
+| **AM 使用的测试契约** | 审计分支 HEAD（仅 `tests/scroll-sync-browser.test.mjs`、`tests/latex-browser.test.mjs` 和 `tests/media-paste-browser.test.mjs` 有公开记录的测试契约修订） |
 | PDF SHA-256 | `be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab` |
 
-审计包后续可以修订测试契约，**不允许把审计包 HEAD 当成被冻结的 V6 业务源码 HEAD**。脚本首先验证相对冻结 SHA 的差异仅限审计资料与两条显式记录的测试契约，然后在兄弟目录建立**审计分支 HEAD 的干净 detached worktree**，令 AM 运行/认证绑定这份可核验的测试契约版本；报告分别记录业务源码 SHA 与测试 SHA。主线不改、不合并。
+审计包后续可以修订测试契约，**不允许把审计包 HEAD 当成被冻结的 V6 业务源码 HEAD**。脚本首先验证相对冻结 SHA 的差异仅限审计资料与三条显式记录的测试契约，然后在兄弟目录建立**审计分支 HEAD 的干净 detached worktree**，令 AM 运行/认证绑定这份可核验的测试契约版本；报告分别记录业务源码 SHA 与测试 SHA。主线不改、不合并。
 
 ## 从零开始
 
@@ -40,6 +40,8 @@ Linux 首次准备系统库时执行一次 `npx playwright install-deps chromium
 7. Linux 环境为仍使用 macOS `sips` 的两项冻结媒体测试提供基于 Chromium 的真实 PNG→JPEG 转换，按 `AUDIT_LINUX_SIPS_SHIM` 日志登记；不修改原测试或跳过断言；遇到 Linux 80s 等页面等待失败时，自动将页面状态/脚本名/JS 错误写入 `AUDIT_LINUX_WAIT_DIAG`，不改变超时阈值；
 8. 仅 Linux WebKit 的本地 `http://127.0.0.1` 测试解锁响应，保留服务端验证码和权限校验，在验证解锁成功后让 WebKit 的本地 Cookie Jar 接收非 Secure 的同一有效 Cookie；对两项 Python 服务测试等待真实的初始化/授权探测结束；此适配**不能替代 HTTPS 生产授权的验收**，日志标记 `AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER`；
 9. 生成 `.v6/audit-reports/RUN_EVIDENCE.json` 和 `run.log`，失败也保留证据。
+
+**WP2 测试契约补充修订（媒体 GET，2026-10-24）**：`tests/media-paste-browser.test.mjs` 在 iPad 页面确认图片插入后读取本地媒体文件时，Mac Node v23 的 Undici 出现多次短连接 `ECONNRESET`（5593/5594），导致两轮 26/27；在不同隔离端口的 Chrome/WebKit 全业务验证均通过。仅对这一处只读 GET 显式 `Connection: close`，并在 `ECONNRESET` / `ECONNREFUSED` 时最多重试 2 次，保留状态码 200、文件字节相等、未授权拒绝、保存、撤销/重做和其他全部断言；**绝不重试具有写入副作用的 POST**。若服务持续不可达，仍然 FAIL。记录该测试源码修订，不能宣称冻结原始脚本逐字不变。
 
 ## WP2 · AM 全仓文件归属及共享库审计（独立分支）
 
