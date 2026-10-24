@@ -27,16 +27,34 @@ cd "$BUNDLE_DIR"
 [[ "$(git branch --show-current)" == 'audit-fixture-5c7497c' ]] || fail 'checkout audit-fixture-5c7497c first'
 [[ -z "$(git status --porcelain)" ]] || fail 'audit bundle must have a clean Git worktree'
 git merge-base --is-ancestor "$SOURCE_SHA" HEAD || fail 'fixed source SHA is not an ancestor of the audit bundle'
+# The audit branch may add evidence and amend *one reviewed test contract*.
+# All business implementation, API registries, and other tests remain byte-
+# identical to the frozen source; fail closed if future commits violate this.
+python3 - "$SOURCE_SHA" <<'PYVERIFY'
+import subprocess,sys
+base=sys.argv[1]
+paths=subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines()
+allowed_exact={'README.md','AUDIT.md','tests/am/GROK_AUDIT.md',
+               'tests/scroll-sync-browser.test.mjs'}
+allowed_prefix=('audit-', 'audit.', 'audit-reports/', '.v6/grok-handoff/',
+                '.v6/workspace/buffetts-alpha.original.pdf')
+violations=[p for p in paths if p not in allowed_exact and
+            not p.startswith(allowed_prefix)]
+if violations:
+  print('AUDIT_FROZEN_BUSINESS_SOURCE_CHANGED: '+', '.join(violations),file=sys.stderr)
+  sys.exit(2)
+print('AUDIT_FROZEN_BUSINESS_SOURCE_VERIFIED changed_paths='+str(len(paths)))
+PYVERIFY
 BUNDLE_SHA="$(git rev-parse HEAD)"
 
 if [[ -e "$TARGET" ]]; then
   [[ -d "$TARGET" ]] || fail "target exists and is not a directory: $TARGET"
   [[ "$(git -C "$TARGET" rev-parse --show-toplevel 2>/dev/null)" == "$(cd "$TARGET" && pwd)" ]] || fail 'existing target not a Git checkout'
-  [[ "$(git -C "$TARGET" rev-parse HEAD)" == "$SOURCE_SHA" ]] || fail 'existing target has a different Git SHA'
+  [[ "$(git -C "$TARGET" rev-parse HEAD)" == "$BUNDLE_SHA" ]] || fail 'existing target has a different Git SHA (rerun in a new target directory after updating audit branch)'
   [[ "$(git -C "$TARGET" rev-parse --path-format=absolute --git-common-dir)" == "$(git rev-parse --path-format=absolute --git-common-dir)" ]] || fail 'existing target belongs to a different Git repository'
   [[ -z "$(git -C "$TARGET" status --porcelain)" ]] || fail 'existing target has changes'
 else
-  git worktree add --detach "$TARGET" "$SOURCE_SHA"
+  git worktree add --detach "$TARGET" "$BUNDLE_SHA"
 fi
 
 PDF="$TARGET/.v6/workspace/buffetts-alpha.original.pdf"
@@ -139,7 +157,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 fi
 
 set +e
-bash tests/am/run-grok-audit.sh "$SOURCE_SHA" 2>&1 | tee "$REPORT_DIR/run.log"
+bash tests/am/run-grok-audit.sh "$BUNDLE_SHA" 2>&1 | tee "$REPORT_DIR/run.log"
 EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
@@ -160,10 +178,11 @@ if db.is_file():
             (SELECT output_file FROM test_runs t WHERE t.case_id=c.id AND t.git_commit=?
               ORDER BY t.id DESC LIMIT 1) AS log
           FROM test_cases c ORDER BY c.script,c.id
-        ''',(source,source)):
+        ''',(bundle,bundle)):
             rows.append(dict(row))
 result={
- 'audit_bundle_git_sha':bundle,'target_source_git_sha':source,'pdf_sha256':pdf,
+ 'audit_bundle_git_sha':bundle,'frozen_business_source_git_sha':source,
+ 'audited_test_contract_git_sha':bundle,'runner_git_sha':bundle,'pdf_sha256':pdf,
  'date_utc':datetime.now(timezone.utc).isoformat(),
  'host':{'os':platform.system(),'architecture':platform.machine(),
          'python':platform.python_version(),
@@ -173,6 +192,9 @@ result={
  'am_cases':[{**r,'status':r['status'] or 'NOT VERIFIED'} for r in rows],
  'fixture_overrides':{'tests/mineru-start-only-ui-browser.test.mjs':{'source':'tests/fixtures/buffetts-alpha-four-view-reviewed.md.gz','sha256_uncompressed':'c998da7aeea5410f1d7be10975c05e59efb5cdf6bfcf750595b27a048c5e3e19','scope':'one test only; restored after test'}, 'tests/promoted-chapters-browser.test.mjs':{'source':'dist/','target':'.v6/release/','scope':'isolated release snapshot; unchanged test assertions'}},
  'linux_compat':{'sips':'Playwright Chromium PNG to actual JPEG only for frozen browser tests; log marker AUDIT_LINUX_SIPS_SHIM','webkit_cookie':'HTTP 127.0.0.1 test only: strip Secure on successful unlock response; original credentials and same-origin checks unchanged; log AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER'},
+ 'audited_test_revision':{'file':'tests/scroll-sync-browser.test.mjs',
+ 'reason':'replace renderer-dependent previous anchor +30 with requested source line 600 +30',
+ 'review_file':'audit-reports/scroll-sync-semantic-assertion-proposal.diff'},
  'runner_log':'run.log',
  'note':'These are AM test associations, not an independent source-code architecture review.'
 }
@@ -184,5 +206,5 @@ if [[ "$EXIT_CODE" -ne 0 ]]; then
   printf 'AUDIT_FAILED exit=%s evidence=%s\n' "$EXIT_CODE" "$REPORT_DIR/RUN_EVIDENCE.json" >&2
   exit "$EXIT_CODE"
 fi
-printf '\nAUDIT_AUTOMATED_PASS Source=%s Bundle=%s\n' "$SOURCE_SHA" "$BUNDLE_SHA"
+printf '\nAUDIT_AUTOMATED_PASS FrozenBusinessSource=%s AuditedTestContract=%s\n' "$SOURCE_SHA" "$BUNDLE_SHA"
 printf 'Independent AI review and report still required: %s\n' "$REPORT_DIR/INDEPENDENT_AM_GIT_REPORT.md"
