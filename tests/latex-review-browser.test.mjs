@@ -123,8 +123,22 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   assert.equal(marked.filter(x=>x.status==='忽略').length,1);
   assert.equal(marked[0].content,findLatex(fixture)[0].content,'standalone formula unchanged');
   assert.equal(marked[1].content,findLatex(fixture)[1].content,'inline formula unchanged');
+  // Muse Ubuntu audit (38ea47d) exposed a startup race: if the module is
+  // selected while the reloaded document is still fetching, generic 'loaded'
+  // status overwrites the plugin's restored review counts. Delay ONLY the
+  // reload's /api/document response to deterministically exercise that race.
+  await page.route('**/api/document',async route=>{
+    await pause(2400);
+    await route.continue();
+  });
   await page.reload({waitUntil:'domcontentloaded'});
   await page.locator('#module-select').selectOption('latex');
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-review-select').length>=2,
+    null,{timeout:28000});
+  // Stored values and the status channel must both be restored. A Mac run of
+  // the unfixed 38ea47d restored values while displaying only '✓ 已加载'.
+  assert.equal(await display.inputValue(),'latex','reloaded formula review was lost');
+  assert.equal(await inline.inputValue(),'忽略','reloaded inline review was lost');
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 1 / 忽略 1'),
     null,{timeout:25000});
   assert.equal(await display.inputValue(),'latex');

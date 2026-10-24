@@ -519,6 +519,11 @@ async function main() {
   if ((await checkPermission()) === false && !hasUnsavedEdits()) {
     status('🔒 保存需授权','warning');
   }
+  // A module may have become active while the async document fetch and
+  // authorization check were still running. The generic 'loaded' status above
+  // can otherwise overwrite its initial report (Muse Linux 38ea47d). Refresh
+  // through Workspace's public semantic API, never via LaTeX internals.
+  if ($('module-select').value === 'latex') workspace.scanLatex();
   // Read-only test seam for verifying *CM6 public APIs*, not an app document cache.
   if (import.meta.env.DEV) window.__v6cm6 = {
     get view(){return view;},
