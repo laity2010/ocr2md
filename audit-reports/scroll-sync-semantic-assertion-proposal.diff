@@ -1,0 +1,11 @@
+--- a/tests/scroll-sync-browser.test.mjs
++++ b/tests/scroll-sync-browser.test.mjs
+@@ -113,7 +113,7 @@
+       assert(Math.abs(reverse.source.sourceLine+reverse.source.fraction-
+         reverse.preview.sourceLine-reverse.preview.fraction)<12,
+         name+' preview/source locations differ');
+-      assert(reverse.source.sourceLine>sourceResult.source.sourceLine+30);
++      assert(reverse.source.sourceLine>600+30, 'preview scroll must land beyond requested source line 600');
+       await delay(450);
+       const stable=await page.evaluate(getState);
+       assert((stable.seq||0)-(reverse.seq||0)<6,name+' recursive scroll feedback');

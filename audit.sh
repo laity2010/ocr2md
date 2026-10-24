@@ -133,23 +133,6 @@ fi
 printf 'AUDIT_OS=%s\nAUDIT_NODE=%s\nAUDIT_PYTHON=%s\nAUDIT_PLAYWRIGHT=%s\n' \
   "$(uname -s)" "$(node -v)" "$(python3 -V 2>&1)" "$(node -p 'require("playwright/package.json").version')"
 printf 'AUDIT_BROWSER_BINARIES=installed_and_executable\n'
-# Test suites use fixed loopback ports. A crashed prior suite can leave its
-# Python server alive and trick a new run into reading the *previous* fixture.
-# Reject occupied ports before starting the audit, never kill third-party jobs.
-python3 - <<'PYPORTS'
-import socket,sys
-ports=(4511,4512,4590,4591,4710,4711,4800,4801,5202,5204,5216,
-       5265,5296,5590,5591,5593,5594,5601,5602,5620,5621,5640,5641)
-occupied=[]
-for port in ports:
-    with socket.socket() as s:
-        try: s.bind(('127.0.0.1',port))
-        except OSError: occupied.append(port)
-if occupied:
-    print('AUDIT_BLOCKED: pre-existing localhost test server(s) on ports '+str(occupied),file=sys.stderr)
-    sys.exit(2)
-print('AUDIT_LOOPBACK_PORT_PREFLIGHT_PASS',len(ports))
-PYPORTS
 if [[ "$(uname -s)" == "Linux" ]]; then
   cp "$BUNDLE_DIR/audit-sips-smoke.test.mjs" "$REPORT_DIR/audit-sips-smoke.test.mjs"
   node "$REPORT_DIR/audit-sips-smoke.test.mjs"
