@@ -2,6 +2,14 @@
 import {chromium,webkit} from 'playwright';
 import {basename} from 'node:path';
 
+// Grok fix: diagnostics must never become the hang. A wedged renderer made the
+// unbounded page.evaluate below wait forever after a waitForFunction timeout,
+// swallowing the original error (no output, orphan server).
+const DIAG_EVAL_MS=5000;
+const boundedEval=(page,fn)=>{let timer;return Promise.race([page.evaluate(fn),
+  new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`diagnostic page.evaluate exceeded ${DIAG_EVAL_MS}ms`)),DIAG_EVAL_MS);})])
+  .finally(()=>clearTimeout(timer));};
+
 if(process.platform==='linux' && basename(process.argv[1]||'').endsWith('.test.mjs')){
   const suite=basename(process.argv[1]);
   for(const [engineName,engine] of [['Chrome',chromium],['WebKit',webkit]]){
@@ -68,11 +76,11 @@ if(process.platform==='linux' && basename(process.argv[1]||'').endsWith('.test.m
             const result=await originalWait(...waitArgs);
             if(suite==='promoted-chapters-browser.test.mjs' &&
                /已保存/.test(String(waitArgs[0]))){
-              const state=await page.evaluate(()=>({
+              const state=await boundedEval(page,()=>({
                 editorHasChapterMarker:window.__v6cm6?.view?.state?.doc?.toString().includes('<!-- ocr2md:chapter:v1'),
                 dirty:window.__v6cm6?.dirty,
                 status:document.querySelector('#status')?.textContent,
-              }));
+              })).catch(e=>({diagnosticUnavailable:String(e.message)}));
               console.log('AUDIT_LINUX_SAVE_STATE',JSON.stringify(state));
             }
             return result;
@@ -80,7 +88,7 @@ if(process.platform==='linux' && basename(process.argv[1]||'').endsWith('.test.m
           catch(error){
             if(/timeout|timed out/i.test(String(error.message))){
               try{
-                const state=await page.evaluate(()=>({
+                const state=await boundedEval(page,()=>({
                   documentState:document.readyState,
                   title:document.title,
                   agRows:window.__v6cm6?.outline?.rows?.length,
