@@ -12,25 +12,17 @@ export function createSourceFileNavigation(){
   const moduleSelector=document.getElementById('module-select');
   const workbench=document.getElementById('workspace');
   const settingsWorkbench=document.getElementById('settings-workspace');
-  let lastMarkdownModule='chapter-boundary';
-  const selectors=new Set();
-  function updateLabels(){
-    const active=moduleSelector?.querySelector(`option[value="${lastMarkdownModule}"]`);
-    const markdownModule=active?.textContent?.trim()||'章节定界';
-    for(const select of selectors){
-      for(const file of OPEN_FILES){
-        const option=select.querySelector(`option[value="${file.id}"]`);
-        if(option)option.textContent=(file.id==='document'?markdownModule:'全局设置')+'/'+file.path;
-      }
-    }
-  }
-  const updateLastModule=()=>{
-    if(moduleSelector?.value&&moduleSelector.value!=='settings')
-      lastMarkdownModule=moduleSelector.value;
-    updateLabels();
+  // This is only the Chapter Boundary / Global Settings navigator.
+  // Media and LaTeX have separate future navigation designs.
+  const filenames=Object.freeze({
+    document:'章节定界/Buffett’s Alpha.minerujson.md',
+    settings:'全局设置/settings.json',
+  });
+  const updateVisibility=()=>{
+    const toolbar=workbench?.querySelector('.ocr-source-pane > .ocr-lab-file-toolbar');
+    if(toolbar)toolbar.hidden=moduleSelector?.value!=='chapter-boundary';
   };
-  moduleSelector?.addEventListener('change',updateLastModule);
-  updateLastModule();
+  moduleSelector?.addEventListener('change',updateVisibility);
 
   function addBar(host,source){
     if(!host||host.querySelector(':scope > .ocr-lab-file-toolbar'))return;
@@ -43,18 +35,17 @@ export function createSourceFileNavigation(){
     for(const file of OPEN_FILES){
       const option=document.createElement('option');
       option.value=file.id;
-      option.textContent=file.path;
+      option.textContent=filenames[file.id];
       select.append(option);
     }
     select.value=source;
-    selectors.add(select);
-    updateLabels();
+    updateVisibility();
     select.addEventListener('change',()=>{
       const next=select.value;
       // Neither source is recreated: each CM6 keeps its own edits and undo.
       // Module selection has the existing save/dirty handling.
       if(next==='settings')moduleSelector.value='settings';
-      else moduleSelector.value=lastMarkdownModule;
+      else moduleSelector.value='chapter-boundary';
       moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
       select.value=source; // this pane always displays its own file
     });
@@ -65,7 +56,7 @@ export function createSourceFileNavigation(){
   function mountMarkdown(){
     const editor=workbench?.querySelector('#editor');
     const pane=editor?.closest('.ocr-source-pane');
-    if(pane)addBar(pane,'document');
+    if(pane){addBar(pane,'document');updateVisibility();}
     return Boolean(pane);
   }
   function mountSettings(){

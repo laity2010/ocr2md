@@ -14,26 +14,29 @@ for(const [name,browserType,options] of [['Chrome',chromium,{viewport:{width:130
   await markdown.waitFor({timeout:22000});
   assert.equal(await markdown.inputValue(),'document');
   assert.deepEqual(await markdown.locator('option').allTextContents(),['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
-  await page.locator('#module-select').selectOption('media');
-  assert.equal(await markdown.locator('option[value="document"]').textContent(),'媒体/Buffett’s Alpha.minerujson.md');
+  for(const other of ['media','latex']){
+    await page.locator('#module-select').selectOption(other);
+    assert.equal(await markdown.locator('option[value="document"]').textContent(),
+      '章节定界/Buffett’s Alpha.minerujson.md');
+    assert.equal(await page.locator('.ocr-source-pane .ocr-lab-file-toolbar').isVisible(),false,
+      'Other modules have their own navigation scheme');
+  }
+  await page.locator('#module-select').selectOption('chapter-boundary');
+  assert.equal(await markdown.isVisible(),true);
   await markdown.selectOption('settings');
   assert.equal(await page.locator('#module-select').inputValue(),'settings');
   const settings=page.locator('#settings-workspace .ocr-lab-file-select');
   await settings.waitFor({timeout:18000});
   assert.equal(await settings.inputValue(),'settings');
   assert.deepEqual(await settings.locator('option').allTextContents(),
-    ['媒体/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
+    ['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
   assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
   assert.equal(await page.locator('#editor .cm-editor').count(),1);
   await settings.selectOption('document');
-  assert.equal(await page.locator('#module-select').inputValue(),'media', 'Must restore previous Markdown module');
+  assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
   assert.equal(await markdown.inputValue(),'document');
   // Editing the mother file and then navigating must preserve the actual CM
   // value and undo history. Only do a transient change, never hit Save.
-  await page.locator('#module-select').selectOption('latex');
-  assert.equal(await markdown.locator('option[value="document"]').textContent(),'LaTeX/Buffett’s Alpha.minerujson.md');
-  await page.locator('#module-select').selectOption('chapter-boundary');
-  assert.equal(await markdown.locator('option[value="document"]').textContent(),'章节定界/Buffett’s Alpha.minerujson.md');
   const edit=page.locator('#editor .cm-content');
   await edit.click();await page.keyboard.insertText('CM_NAV_DRAFT_ONLY');
   const valueBefore=await edit.innerText();
