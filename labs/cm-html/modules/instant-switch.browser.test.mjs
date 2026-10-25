@@ -99,7 +99,8 @@ for(const [i,[name,engine,context]] of engines.entries()){
     await page.waitForURL(u=>u.searchParams.get('chapter')===a,{timeout:18000});
     await assertIdentity();
     assert((await page.locator('#editor .cm-content').innerText()).includes(chapterMarker),'Saved chapter text missing');
-    assert((await page.locator('#module-select').inputValue())==='chapter-boundary');
+    assert((await page.locator('#module-select').inputValue())==='media');
+    assert.equal(await page.locator('.ocr-outline-pane .ocr-lab-ag-toolbar #module-select').isVisible(),true);
     assert.equal(mainDocumentRequests,1,'HTML page was reloaded on file switch');
     assert.deepEqual(errors,[]);
     console.log('SPA_INSTANT_SWITCH_PASS',name,JSON.stringify({noPageReload:true,reusedEditorAGPdf:true,

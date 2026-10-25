@@ -14,15 +14,9 @@ for(const [name,browserType,options] of [['Chrome',chromium,{viewport:{width:130
   await markdown.waitFor({timeout:22000});
   assert.equal(await markdown.inputValue(),'document');
   assert.deepEqual((await markdown.locator('option').allTextContents()).slice(0,2),['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
-  for(const other of ['media','latex']){
-    await page.locator('#module-select').selectOption(other);
-    assert.equal(await markdown.locator('option[value="document"]').textContent(),
-      '章节定界/Buffett’s Alpha.minerujson.md');
-    assert.equal(await page.locator('.ocr-source-pane .ocr-lab-file-toolbar').isVisible(),false,
-      'Other modules have their own navigation scheme');
-  }
-  await page.locator('#module-select').selectOption('chapter-boundary');
-  assert.equal(await markdown.isVisible(),true);
+  assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
+  assert.equal(await page.locator('.ocr-source-pane .ocr-lab-file-toolbar').isVisible(),true);
+  assert.equal(await page.locator('.ocr-outline-pane .ocr-lab-ag-toolbar #module-select').isVisible(),false);
   await markdown.selectOption('settings');
   assert.equal(await page.locator('#module-select').inputValue(),'settings');
   const settings=page.locator('#settings-workspace .ocr-lab-file-select');

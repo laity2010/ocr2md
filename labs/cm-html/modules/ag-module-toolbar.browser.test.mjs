@@ -36,17 +36,59 @@ for(const [name,engine,options] of [
     assert.equal(await input.getAttribute('aria-invalid'),'true');
     await input.blur();
     assert.equal(await input.inputValue(),'012','Existing input blur rollback missing');
-    for(const mod of ['media','latex','settings']){
-      await page.locator('#module-select').selectOption(mod);
-      assert.equal(await bar.isVisible(),false,`AG toolbar should be hidden in ${mod}`);
-    }
-    await page.locator('#settings-workspace .ocr-lab-file-select').waitFor({state:'visible',timeout:20000});
-    await page.locator('#settings-workspace .ocr-lab-file-select').selectOption('document');
+    // The original module select remains available to the app, but the
+    // mother-file AG toolbar exposes only its chapter-boundary action group.
+    assert.equal(await bar.locator('#module-select').isVisible(),false);
+    assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
+    assert.equal(await bar.locator('#media-refresh').isVisible(),false);
+    assert.equal(await bar.locator('#latex-refresh').isVisible(),false);
+    await page.locator('.ocr-source-pane .ocr-lab-file-select').selectOption('settings');
+    assert.equal(await page.locator('#module-select').inputValue(),'settings');
+    assert.equal(await bar.isVisible(),false,'Settings should not show a chapter toolbar');
+    const settings=page.locator('#settings-workspace .ocr-lab-file-select');
+    await settings.waitFor({state:'visible',timeout:20000});
+    await settings.selectOption('document');
     assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
     assert.equal(await bar.isVisible(),true);
     assert.equal(await input.inputValue(),'012','Module navigation reset start number');
+    await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select option[value^="chapter:"]').length>=2,null,{timeout:14000});
+    const chapterIds=await page.locator('.ocr-source-pane .ocr-lab-file-select option[value^="chapter:"]').evaluateAll(items=>items.map(i=>i.value));
+    const sourceMenu=page.locator('.ocr-source-pane .ocr-lab-file-select');
+    await sourceMenu.selectOption(chapterIds[0]);
+    await page.waitForURL(u=>u.searchParams.has('chapter'),{timeout:15000});
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:12000});
+    assert.equal(await bar.isVisible(),true);
+    assert.equal(await bar.locator('#export-chapters').isVisible(),false,'Chapter must not offer re-export');
+    assert.equal(await bar.locator('#chapter-start-number').isVisible(),false);
+    assert.equal(await bar.locator('#module-select').isVisible(),true,'Chapter module dropdown missing');
+    assert.equal(await bar.locator('#media-refresh').isVisible(),true);
+    assert.equal(await bar.locator('#media-download-all').isVisible(),true);
+    assert.equal(await page.locator('.ocr-outline-pane .ocr-media-pane').isVisible(),true);
+    assert.equal(await sourceMenu.isVisible(),true,'File menu must remain accessible within Media');
+    const choices=await bar.locator('#module-select option:not([hidden])').allTextContents();
+    assert.deepEqual(choices,['媒体','LaTeX'],'Only element-processing modules belong to a chapter');
+    await bar.locator('#module-select').selectOption('latex');
+    assert.equal(await bar.locator('#latex-refresh').isVisible(),true);
+    assert.equal(await bar.locator('#latex-normalize').isVisible(),true);
+    assert.equal(await bar.locator('#media-refresh').isVisible(),false);
+    assert.equal(await page.locator('.ocr-outline-pane .ocr-latex-pane').isVisible(),true);
+    assert.equal(await sourceMenu.isVisible(),true,'File menu must remain accessible within LaTeX');
+    await sourceMenu.selectOption(chapterIds[1]);
+    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[1].slice(8),{timeout:15000});
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:12000});
+    assert.equal(await bar.locator('#media-refresh').isVisible(),true);
+    await sourceMenu.selectOption(chapterIds[0]);
+    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[0].slice(8),{timeout:15000});
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='latex',null,{timeout:12000});
+    assert.equal(await bar.locator('#latex-refresh').isVisible(),true,'File-specific module choice lost');
+    await sourceMenu.selectOption('document');
+    await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:15000});
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
+    assert.equal(await bar.locator('#module-select').isVisible(),false);
+    assert.equal(await bar.locator('#export-chapters').isVisible(),true);
+    assert.equal(await input.inputValue(),'012');
     assert.deepEqual(errors,[]);
     assert.deepEqual(unscoped,[]);
-    console.log('LAB_AG_TOOLBAR_PASS',name,JSON.stringify({tools:['导出章节','起始编号','012'],modesHidden:3,unscopedRequests:0}));
+    console.log('LAB_AG_FILE_MODE_TOOLBAR_PASS',name,JSON.stringify({mother:'chapter-boundary',chapter:['media','latex'],perFileModule:true,unscopedRequests:0}));
   }finally{await browser.close();}
 }

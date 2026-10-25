@@ -18,7 +18,7 @@ export function createSourceFileNavigation(){
   const selectBoxes=new Set();
   let names=[];
   const activeId=()=>currentChapter?chapterId(currentChapter):'document';
-  const isChapterMode=()=>moduleSelector?.value==='chapter-boundary';
+  const isChapterMode=()=>moduleSelector?.value!=='settings';
   const updateVisibility=()=>{
     const toolbar=workbench?.querySelector('.ocr-source-pane > .ocr-lab-file-toolbar');
     if(toolbar)toolbar.hidden=!isChapterMode();
