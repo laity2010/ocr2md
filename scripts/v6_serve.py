@@ -3,6 +3,7 @@
 import hmac
 import hashlib
 import subprocess
+from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
@@ -45,6 +46,13 @@ LAN_TLS_HOST = os.environ.get('V6_LAN_TLS_HOST', '')
 LAN_TLS_PORT = int(os.environ.get('V6_LAN_TLS_PORT', '4443'))
 LAN_TLS_CERT = os.environ.get('V6_LAN_TLS_CERT', '')
 LAN_TLS_KEY = os.environ.get('V6_LAN_TLS_KEY', '')
+LAN_LAB_ROUTES = parse_lan_labs(os.environ.get('V6_LAN_LAB_ROUTES', 'cm-html=4408')) if not LAB_ID else {}
+LAB_LAN_ORIGIN = os.environ.get('V6_LAB_LAN_ORIGIN', '') if LAB_ID else ''
+if LAB_LAN_ORIGIN:
+    lab_origin = urlsplit(LAB_LAN_ORIGIN)
+    if (lab_origin.scheme != 'https' or not lab_origin.hostname or lab_origin.path
+            or lab_origin.query or lab_origin.fragment or lab_origin.username):
+        raise RuntimeError('Invalid V6_LAB_LAN_ORIGIN')
 STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT', str(LAB_DIR / 'dist') if LAB_ID else '')
 if LAB_ID:
     if HOST not in ('127.0.0.1','localhost') or LAN_TLS_HOST:
@@ -285,6 +293,8 @@ class Handler(BaseHTTPRequestHandler):
         allowed = {'https://ocr2md.laity.bid', f'http://127.0.0.1:{PORT}'}
         if LAN_TLS_HOST:
             allowed.add(f'https://{LAN_TLS_HOST}:{LAN_TLS_PORT}')
+        if LAB_LAN_ORIGIN:
+            allowed.add(LAB_LAN_ORIGIN)
         return self.headers.get('Origin', '') in allowed
 
     def do_POST(self):
@@ -534,7 +544,21 @@ def start_lan_tls():
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(LAN_TLS_CERT, LAN_TLS_KEY)
-    https = ThreadingHTTPServer((LAN_TLS_HOST, LAN_TLS_PORT), Handler)
+    class LANHandler(Handler):
+        # Only this HTTPS listener routes labs, never the public/tunnel port.
+        def do_GET(self):
+            if not dispatch_lan_lab(self, LAN_LAB_ROUTES):
+                super().do_GET()
+        def do_HEAD(self):
+            if not dispatch_lan_lab(self, LAN_LAB_ROUTES):
+                super().do_HEAD()
+        def do_POST(self):
+            if not dispatch_lan_lab(self, LAN_LAB_ROUTES):
+                super().do_POST()
+        def do_PUT(self):
+            if not dispatch_lan_lab(self, LAN_LAB_ROUTES):
+                super().do_PUT()
+    https = ThreadingHTTPServer((LAN_TLS_HOST, LAN_TLS_PORT), LANHandler)
     https.socket = context.wrap_socket(https.socket, server_side=True)
     thread = threading.Thread(target=https.serve_forever, name='v6-lan-https', daemon=True)
     thread.start()

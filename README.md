@@ -134,6 +134,9 @@ python3 scripts/v6_lab_worktree.py merge-check latex-v2 --trunk build/2026-10-20
 ```
 
 `sync` 使用普通 Git merge，不 rebase；`merge-check` 只计算能否合并，**不会**合入主线。
+
+LAN HTTPS 使用**现有正式 V6 的 TLS 4443 监听和证书**，仅此监听按 `V6_LAN_LAB_ROUTES` 的静态白名单将 `/labs/<实验名>/` 转发到回环地址的实验端口（默认 `cm-html=4408`）；正式 `/`、`/api/` 不转发，公网 4396 的入口也不会开放此路径。实验服务仍仅监听 `127.0.0.1`，并应设置 `V6_LAB_LAN_ORIGIN=https://<LAN-IP>:4443`，允许这一个 HTTPS 来源完成实验的授权保存。实验 Cookie 以实验路径隔离。增加新实验需要明确配置对应端口与 Origin，不通过客户端自由指定上游服务。
+
 实验定型后的正式合并需先验收并获得用户明确批准，再通过正常 Git merge 在集成主线上执行。
 合并完成后可以移除实验覆盖配置，保留 Git 提交作为演进历史。
 
