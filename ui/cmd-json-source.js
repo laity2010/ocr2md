@@ -19,16 +19,27 @@ const jsonEverforest=syntaxHighlighting(HighlightStyle.define([
 ]));
 
 export async function readCMDJsonSnapshot(){
-  const response=await fetch('/api/settings',{cache:'no-store'});
-  if(!response.ok)throw Error('设置 JSON 读取失败 '+response.status);
-  const text=await response.text();
-  const etag=response.headers.get('ETag');
-  if(!etag)throw Error('设置 JSON 缺少版本指纹');
-  return {text,etag};
+  // iPad Safari occasionally interrupts an in-flight GET ("Load failed").
+  // Only retry read-only transport failures; never retry PUT or HTTP errors.
+  // Fetch body is consumed inside the try: an interrupted response body also
+  // needs a new GET rather than leaving the settings editor half initialized.
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const response=await fetch('/api/settings',{cache:'no-store'});
+      if(!response.ok)throw Error('设置 JSON 读取失败 '+response.status);
+      const text=await response.text();
+      const etag=response.headers.get('ETag');
+      if(!etag)throw Error('设置 JSON 缺少版本指纹');
+      return {text,etag};
+    }catch(error){
+      if(!(error instanceof TypeError)||attempt===2)throw error;
+      await new Promise(resolve=>setTimeout(resolve,150*(attempt+1)));
+    }
+  }
 }
 
-export async function openCMDJsonSource(host,onUpdate=()=>{}){
-  const snapshot=await readCMDJsonSnapshot();
+export async function openCMDJsonSource(host,onUpdate=()=>{},initialSnapshot=null){
+  const snapshot=initialSnapshot??await readCMDJsonSnapshot();
   const text=snapshot.text;
   let etag=snapshot.etag;
   let savedDoc=null;

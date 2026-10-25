@@ -244,6 +244,10 @@ export function createSettingsModule(container,onStatus=()=>{}){
     return {element:host,init(){},layout(){if(name==='source')source?.requestMeasure();},dispose(){}};
   }
   async function doLoad(){
+    // Fetch and verify the server snapshot before creating Dockview/AG/CM.
+    // On a sustained network failure, no partial widget remains behind and
+    // loadPromise can safely retry when the module is selected again.
+    const initialSnapshot=await readCMDJsonSnapshot();
     dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>createPanel(name)});
     const left=dockview.addPanel({id:'settings-outline',component:'outline',title:'设置 · AG'});
     const center=dockview.addPanel({id:'settings-source',component:'source',title:'settings.json',
@@ -273,7 +277,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
         renderPreview();
       },
     });
-    source=await openCMDJsonSource(sourceHost,onSourceChange);
+    source=await openCMDJsonSource(sourceHost,onSourceChange,initialSnapshot);
     ensureRegisteredRecords();
     // Registered module values are applied after the first actual JSON read.
     onSourceChange({docChanged:false});
