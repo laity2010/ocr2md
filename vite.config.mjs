@@ -4,13 +4,17 @@ import {join, resolve, dirname} from 'node:path';
 import {existsSync,statSync,createReadStream} from 'node:fs';
 import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
+import {labProfile,labVitePlugin} from './scripts/v6_lab_profile.mjs';
+import {execFileSync} from 'node:child_process';
+const root=process.cwd();
+const lab=labProfile(root);
 // A build version is fixed at bundle creation, never generated from page-load time.
 const stamp = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
   hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
 }).formatToParts(new Date());
 const part = key => stamp.find(x => x.type===key).value;
-const buildVersion = `v6-${part('year')}${part('month')}${part('day')}-${part('hour')}${part('minute')}${part('second')}`;
+const buildVersion = `${lab?`v6-lab-${lab.name}`:'v6'}-${part('year')}${part('month')}${part('day')}-${part('hour')}${part('minute')}${part('second')}`;
 const settingsFile = resolve(process.env.V6_SETTINGS_PATH || '.v6/settings.json');
 const defaultSettings = JSON.stringify({settings:{'globalUi.cmSource.defaultFontSize':{
   key:'defaultFontSize',category1:'全局 UI',category2:'CM 源码窗',
@@ -31,10 +35,13 @@ async function readDocument() {
 export default defineConfig({
   define: {'__V6_BUILD_VERSION__': JSON.stringify(buildVersion)},
   root: 'ui',
-  build: {outDir: '../dist', emptyOutDir: true},
+  base:lab?.base||'/',
+  build: {outDir: lab?`../labs/${lab.name}/dist`:'../dist', emptyOutDir: true},
   plugins: [
+    labVitePlugin(root,lab),
     {name:'release-identity',generateBundle() {
-      this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({version:buildVersion})+'\n'});
+      const baseCommit=lab?execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim():undefined;
+      this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({version:buildVersion,...(lab?{mode:'lab',name:lab.name,baseCommit}:{})})+'\n'});
     }},
     {name:'readonly-pdf-evidence-dev', configureServer(server){
       // Dev parity with production PDF read-only endpoints. Never writes PDF,

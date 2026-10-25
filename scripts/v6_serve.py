@@ -20,22 +20,43 @@ from pathlib import Path
 from urllib.parse import urlsplit, unquote
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / '.v6'
-DOC = Path(os.environ.get('V6_DOCUMENT_PATH', RUNTIME / 'workspace' / 'buffetts-alpha.minerujson.md')).resolve()
+LAB_ID = os.environ.get('V6_LAB_ID', '')
+if LAB_ID and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', LAB_ID) is None:
+    raise RuntimeError('Invalid V6_LAB_ID')
+LAB_DIR = ROOT / 'labs' / LAB_ID if LAB_ID else None
+PREFIX = f'/labs/{LAB_ID}/' if LAB_ID else '/'
+RUNTIME = LAB_DIR / '.runtime' if LAB_ID else ROOT / '.v6'
+
+def lab_path(env, default):
+    path = Path(os.environ.get(env, str(default))).resolve()
+    if LAB_ID and not path.is_relative_to(RUNTIME.resolve()):
+        raise RuntimeError(f'{env} escapes the experiment runtime')
+    return path
+
+DOC = lab_path('V6_DOCUMENT_PATH', RUNTIME / ('document.md' if LAB_ID else 'workspace/buffetts-alpha.minerujson.md'))
 FIXTURE = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md'
 ORIGINAL_JSON = ROOT / 'packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'
-PDF_PATH = Path(os.environ.get('V6_PDF_PATH', RUNTIME / 'workspace' / 'buffetts-alpha.original.pdf')).resolve()
-TOKEN = Path(os.environ.get('V6_TOKEN_PATH', RUNTIME / 'private' / 'editor-token')).resolve()
-SETTINGS = Path(os.environ.get('V6_SETTINGS_PATH', RUNTIME / 'settings.json')).resolve()
+PDF_PATH = lab_path('V6_PDF_PATH', RUNTIME / ('reference.pdf' if LAB_ID else 'workspace/buffetts-alpha.original.pdf'))
+TOKEN = lab_path('V6_TOKEN_PATH', RUNTIME / ('private/save-token' if LAB_ID else 'private/editor-token'))
+SETTINGS = lab_path('V6_SETTINGS_PATH', RUNTIME / 'settings.json')
 HOST = os.environ.get('V6_BIND', '127.0.0.1')
-PORT = int(os.environ.get('V6_PORT', '4396'))
+PORT = int(os.environ.get('V6_PORT', os.environ.get('CMHTML_PORT', '4408') if LAB_ID else '4396'))
 LAN_TLS_HOST = os.environ.get('V6_LAN_TLS_HOST', '')
 LAN_TLS_PORT = int(os.environ.get('V6_LAN_TLS_PORT', '4443'))
 LAN_TLS_CERT = os.environ.get('V6_LAN_TLS_CERT', '')
 LAN_TLS_KEY = os.environ.get('V6_LAN_TLS_KEY', '')
-STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT')
-LIMIT = 8 * 1024 * 1024
+STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT', str(LAB_DIR / 'dist') if LAB_ID else '')
+if LAB_ID:
+    if HOST not in ('127.0.0.1','localhost') or LAN_TLS_HOST:
+        raise RuntimeError('Lab server may bind loopback only')
+    if (not LAB_DIR.is_dir() or LAB_DIR.is_symlink() or RUNTIME.is_symlink()
+            or not RUNTIME.resolve().is_relative_to(LAB_DIR.resolve())):
+        raise RuntimeError('Lab directory/runtime missing or escaped')
+    if STATIC_OVERRIDE and not Path(STATIC_OVERRIDE).resolve().is_relative_to(LAB_DIR.resolve()):
+        raise RuntimeError('Lab static release must remain under the lab directory')
+COOKIE = f'v6lab_{LAB_ID.replace("-", "_")}' if LAB_ID else 'v6edit'
 DOC_WRITE_LOCK = threading.RLock()
+LIMIT = 8 * 1024 * 1024
 
 TOKEN.parent.mkdir(parents=True, exist_ok=True)
 if not TOKEN.is_file():
@@ -70,7 +91,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             cookie = SimpleCookie()
             cookie.load(self.headers.get('Cookie', ''))
-            item = cookie.get('v6edit')
+            item = cookie.get(COOKIE)
             return bool(item and hmac.compare_digest(item.value, KEY))
         except Exception:
             return False
@@ -95,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/access/' + KEY:
             self.send_response(302)
-            self.send_header('Set-Cookie', f'v6edit={KEY}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=86400')
+            self.send_header('Set-Cookie', f'{COOKIE}={KEY}; Path={PREFIX}' + ('; Secure' if not LAB_ID or self.headers.get('Origin','').startswith('https:') else '') + '; HttpOnly; SameSite=Strict; Max-Age=86400')
             self.send_header('Cache-Control', 'no-store')
             self.send_header('Location', '/')
             self.send_header('Content-Length', '0')
@@ -304,7 +325,7 @@ class Handler(BaseHTTPRequestHandler):
             self.response(403, 'Invalid code')
             return
         self.send_response(200)
-        self.send_header('Set-Cookie', f'v6edit={KEY}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000')
+        self.send_header('Set-Cookie', f'{COOKIE}={KEY}; Path={PREFIX}' + ('; Secure' if not LAB_ID or self.headers.get('Origin','').startswith('https:') else '') + '; HttpOnly; SameSite=Lax; Max-Age=2592000')
         self.send_header('Cache-Control','no-store')
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', '11')
@@ -519,6 +540,33 @@ def start_lan_tls():
     thread.start()
     print(f'V6 LAN HTTPS READY: https://{LAN_TLS_HOST}:{LAN_TLS_PORT}/', flush=True)
 
+class LabHandler(Handler):
+    # Use exactly the production endpoints, but within a lab-only namespace.
+    # Any request lacking the lab prefix fails before reaching a handler.
+    def dispatch_scoped(self, method):
+        parsed = urlsplit(self.path)
+        if parsed.path == PREFIX[:-1]:
+            self.send_response(302)
+            self.send_header('Location', PREFIX)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return
+        if not parsed.path.startswith(PREFIX):
+            self.response(404, 'Outside lab scope')
+            return
+        self.path = '/' + parsed.path[len(PREFIX):] + ('?' + parsed.query if parsed.query else '')
+        getattr(Handler, method)(self)
+
+    def do_GET(self): self.dispatch_scoped('do_GET')
+    def do_HEAD(self): self.dispatch_scoped('do_HEAD')
+    def do_POST(self): self.dispatch_scoped('do_POST')
+    def do_PUT(self): self.dispatch_scoped('do_PUT')
+
+    def send_header(self, name, value):
+        if LAB_ID and name.lower() == 'location' and value.startswith('/') and not value.startswith(PREFIX):
+            value = PREFIX + value.lstrip('/')
+        super().send_header(name,value)
+
 start_lan_tls()
-print(f'V6 PUBLIC ORIGIN READY: http://{HOST}:{PORT}/', flush=True)
-ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+print(f'V6 {"LAB "+LAB_ID if LAB_ID else "PUBLIC"} READY: http://{HOST}:{PORT}{PREFIX}', flush=True)
+ThreadingHTTPServer((HOST, PORT), LabHandler if LAB_ID else Handler).serve_forever()

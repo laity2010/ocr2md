@@ -4,7 +4,7 @@ import {spawn} from 'node:child_process';
 import {existsSync,readFileSync,mkdtempSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join,resolve} from 'node:path';
-import {tmpdir,homedir} from 'node:os';
+import {homedir} from 'node:os';
 import {chromium,webkit} from 'playwright';
 const root=process.cwd(),lab=resolve('labs/cm-html');
 const buildDir=process.env.CMHTML_STATIC_DIR||join(lab,'dist');
@@ -17,10 +17,10 @@ const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.a
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 for(const [i,[name,engine,launch]] of engines.entries()){
  const port=4540+i,base=`http://127.0.0.1:${port}/labs/cm-html/`;
- const temp=mkdtempSync(join(tmpdir(),'lab-v6-fork-'));
+ const temp=mkdtempSync(join(lab,'.runtime','acceptance-'));
  const doc=join(temp,'document.md'),settings=join(temp,'settings.json'),token=join(temp,'token');
- const server=spawn('python3',['labs/cm-html/server.py'],{cwd:root,stdio:'ignore',env:{...process.env,
-   V6_PORT:String(port),V6_STATIC_ROOT:buildDir,V6_DOCUMENT_PATH:doc,V6_SETTINGS_PATH:settings,V6_TOKEN_PATH:token,
+ const server=spawn('python3',['scripts/v6_serve.py'],{cwd:root,stdio:'ignore',env:{...process.env,
+   V6_LAB_ID:'cm-html',V6_PORT:String(port),V6_STATIC_ROOT:buildDir,V6_DOCUMENT_PATH:doc,V6_SETTINGS_PATH:settings,V6_TOKEN_PATH:token,
    V6_PDF_PATH:join(lab,'.runtime/reference.pdf')}});
  let browser;
  try{
@@ -40,6 +40,7 @@ for(const [i,[name,engine,launch]] of engines.entries()){
         (url.hostname==='127.0.0.1' &&url.port!==String(port)))outside.push(url.pathname);
    });
    await page.goto(base,{waitUntil:'domcontentloaded'});
+   assert.equal((await page.context().cookies()).filter(c=>c.name==='v6edit').length,0);
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-pane .ag-row').length>0&&
      document.querySelector('#status')?.textContent.includes('大纲21项'),null,{timeout:45000});
    const outline=await page.evaluate(()=>({rows:document.querySelectorAll('.ocr-outline-pane .ag-row').length,
@@ -63,6 +64,9 @@ for(const [i,[name,engine,launch]] of engines.entries()){
    await page.locator('#unlock-form button[type=submit]').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),null,{timeout:12000});
    assert(existsSync(doc),'Lab authorized save did not persist locally');
+   const cookies=await page.context().cookies();
+   assert(cookies.some(c=>c.name==='v6lab_cm_html'&&c.path==='/labs/cm-html/'));
+   assert(!cookies.some(c=>c.name==='v6edit'));
    assert.equal(readFileSync(doc,'utf8').startsWith('<!-- minerujson:'),true);
    await page.reload({waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('大纲21项'),null,{timeout:30000});

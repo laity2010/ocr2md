@@ -102,6 +102,41 @@ python3 scripts/v6_git.py recover-source --build-id <构建ID>
 
 上述回退使用独立 Git worktree 重建发布，不改当前开发分支。**日终 squash 与 GitHub 推送均需用户另行明确批准**；具体工程原则见 `AGENTS.md`。
 
+## 主线与实验：一个核心，独立 Git Worktree
+
+目前集成主线为 `build/2026-10-20`（历史 `v6` 分支不是当前开发主线）。
+正式版无 `V6_LAB_ID`，沿用已有 `vite.config.mjs`、`ui/index.html` 和 `scripts/v6_serve.py`。
+实验版使用**同一套文件**：设置 `V6_LAB_ID=<实验名>` 即选择 `/labs/<实验名>/`、
+`labs/<实验名>/dist/` 和 `labs/<实验名>/.runtime/`，且在服务端独立校验文档、PDF、授权、设置及发布目录。
+主线生产端口与工作数据不随实验构建改变。
+
+实验 `labs/<实验名>/lab.json` 仅登记需要替换的模块。可用槽位：`chapterBoundary`、`media`、`latex`、`settings`；
+每个值必须指向本实验的 `./modules/*.js`，并满足对应模块接口。没有覆盖的模块直接使用主线文件；
+若需修改通用接口，应先通过 AM 契约审计，不应让实验越过消息/API 边界。旧 `cm-html` 标定实验已吸收到主线，
+只保留同名公网实验入口的空模块配置。
+
+```sh
+# 1. 创建实验分支及独立 Worktree（不会改动主线内容）
+python3 scripts/v6_lab_worktree.py create latex-v2 --trunk build/2026-10-20
+# 实验工作区: ../ocr2md-v6-experiments/latex-v2
+
+# 2. 在实验 Worktree 内构建、运行；实验机需自己的 node_modules
+cd ../ocr2md-v6-experiments/latex-v2
+npm ci
+V6_LAB_ID=latex-v2 npm run build
+V6_LAB_ID=latex-v2 V6_PORT=4410 python3 scripts/v6_serve.py
+# 实验 URL 由独立路由映射至 /labs/latex-v2/
+
+# 3. 日后在集成主线工作区进行同步、查看差异及合并可行性检查
+python3 scripts/v6_lab_worktree.py sync latex-v2 --trunk build/2026-10-20
+python3 scripts/v6_lab_worktree.py status latex-v2 --trunk build/2026-10-20
+python3 scripts/v6_lab_worktree.py merge-check latex-v2 --trunk build/2026-10-20
+```
+
+`sync` 使用普通 Git merge，不 rebase；`merge-check` 只计算能否合并，**不会**合入主线。
+实验定型后的正式合并需先验收并获得用户明确批准，再通过正常 Git merge 在集成主线上执行。
+合并完成后可以移除实验覆盖配置，保留 Git 提交作为演进历史。
+
 ## 边界与参考
 
 - **现行文档体系**：V6 不使用 MOPJO，也没有 MOPJO 模块或数据库作为编辑数据源。文档编辑由 CMD/CM6 承接，MinerU JSON ↔ Markdown 转换器仍是独立组件；AG、预览和 PDF 定位读取文档派生结果。历史文档中的 MOPJO 称谓不代表 V6 现行模块。
