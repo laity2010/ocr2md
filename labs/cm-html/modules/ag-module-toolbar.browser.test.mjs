@@ -24,6 +24,11 @@ for(const [name,engine,options] of [
     assert.equal(await page.locator('.ocr-outline-pane > .ocr-outline-grid').count(),1);
     const box=await bar.boundingBox(),grid=await page.locator('.ocr-outline-pane > .ocr-outline-grid').boundingBox();
     assert(box&&grid&&box.y+box.height<=grid.y+1.5,'Toolbar is not above the AG grid');
+    // The moved original button must still invoke the mainline export handler.
+    // On a fresh unauthenticated lab session it must open the save-unlock dialog.
+    await bar.locator('#export-chapters').click();
+    await page.locator('#unlock-dialog').waitFor({state:'visible',timeout:5000});
+    await page.locator('#unlock-cancel').click();
     const input=bar.locator('#chapter-start-number');
     await input.fill('012');await input.dispatchEvent('input');
     assert.equal(await input.getAttribute('aria-invalid'),'false');
