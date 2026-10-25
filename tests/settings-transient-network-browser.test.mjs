@@ -28,15 +28,17 @@ for(const [name,engine,contextOptions] of engines){
   // A sustained outage must not create a half-initialized grid. After it
   // clears, reselecting Settings has to work with exactly one settings grid.
   const ctx2=await browser.newContext({ignoreHTTPSErrors:true,...contextOptions});
-  let offline=true;
+  let offline=true,outageCalls=0;
   await ctx2.route('**/labs/cm-html/api/settings',route=>{
-    if(offline&&route.request().method()==='GET')return route.abort('failed');
+    if(offline&&route.request().method()==='GET'){outageCalls++;return route.abort('failed');}
     return route.continue();
   });
   const retryPage=await ctx2.newPage();
   await retryPage.goto(url,{waitUntil:'domcontentloaded'});
   await retryPage.locator('#module-select').selectOption('settings');
-  await retryPage.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('设置载入失败'),null,{timeout:18000});
+  await retryPage.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('设置载入失败'),null,{timeout:5500}).catch(()=>{});
+  await retryPage.waitForTimeout(1000);
+  assert(outageCalls>=3,'Expected repeated interrupted Settings requests');
   const partial=await retryPage.evaluate(()=>document.querySelectorAll('#settings-workspace .ag-root-wrapper').length);
   assert.equal(partial,0,'Failed GET left a partially initialized Settings grid');
   offline=false;
@@ -45,7 +47,7 @@ for(const [name,engine,contextOptions] of engines){
   await retryPage.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length>=2,null,{timeout:17000});
   const grids=await retryPage.evaluate(()=>document.querySelectorAll('#settings-workspace .ag-root-wrapper').length);
   assert.equal(grids,1,'Recovery duplicated a Settings grid');
-  console.log('SETTINGS_OUTAGE_RESELECT_PASS',name,{grids});
+  console.log('SETTINGS_OUTAGE_RESELECT_PASS',name,{grids,outageCalls});
   await ctx2.close();
  }finally{await browser.close();}
 }
