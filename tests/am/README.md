@@ -79,6 +79,6 @@ WP1/WP2 采用并公开记录了三项测试契约修订：`tests/scroll-sync-br
 
 - 配置和浏览器测试不得绑定开发者 Mac 的绝对路径：浏览器从当前锁定的 `playwright` 包解析可执行文件，原始 PDF 由 `V6_PDF_PATH` 或隔离工作目录 `.v6/workspace/buffetts-alpha.original.pdf` 指定；缺失时明确提示不可用，不读取个人 iCloud 路径。
 - `tests/helpers/png-to-jpeg.mjs` 用 Playwright Chromium 生成跨平台 JPEG 夹具，`tests/media-*.test.mjs` 不再直接调用 macOS `sips`。既有 `tests/am/portability/` 继续提供 Linux 回环 HTTP Cookie 适配、双浏览器动态库/真实启动预检、TIME_WAIT 端口预检和失败诊断；兼容适配不得进入正式 HTTPS 授权代码。
-- `.github/workflows/linux-am.yml` 对 `build/**`、`experiment/**` 和 PR 运行 Linux 双引擎真实启动、媒体夹具转换、AM 静态登记/边界负向测试。全量作业还运行唯一审计入口 `tests/am/run-grok-audit.sh`，对固定 SHA 的隔离 worktree 执行所有 AM 套件。
+- `.github/workflows/linux-am.yml` 对 `build/**`、`experiment/**` 和 PR 运行 Linux 双引擎真实启动、AG Grid 浏览器回归、媒体夹具转换、AM 静态登记/边界负向测试。**为了保护受控 PDF 夹具，只有受信任的集成主线 `build/2026-10-20` 的 push/手动运行才会启动使用私有 Secret 的全量作业**；实验分支和 PR 只执行无 Secret 的兼容门禁。全量作业还运行唯一审计入口 `tests/am/run-grok-audit.sh`，对固定 SHA 的隔离 worktree 执行所有 AM 套件。
 - 完整 PDF 夹具因来源/版权/数据边界 **不得提交到 GitHub 或 CI 日志、artifact**。管理员需要在 GitHub 仓库 Actions Secret 设置 `OCR2MD_AUDIT_PDF_URL` 为可由 Actions Ubuntu runner 访问的**受控 HTTPS** 下载地址（建议有效期可管理的只读对象访问 URL）；CI 下载后校验固定 SHA-256 `be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab`。未配置、下载失败或哈希不符都视为 `AM_AUDIT_BLOCKED`，绝不伪报全量 PASS。Secret 请通过 GitHub 安全设置而非提交配置文件提供。
 - Linux CI 是开发期门禁，Grok/Muse 依旧在**各自独立环境**审计指定 Git SHA 并提交不可变报告。测试变更不得悄悄删除、弱化原始业务断言；生产 HTTPS Cookie、Mac 原生 Safari/iPad 行为需分别真实验收。

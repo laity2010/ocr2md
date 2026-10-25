@@ -35,6 +35,8 @@ jobs:
         run: node tests/am/portability/audit-browser-preflight.mjs
       - name: Verify cross-platform media fixtures
         run: node --test tests/portability-fixture.test.mjs
+      - name: Real AG Grid browser regression (Chromium and WebKit)
+        run: node tests/ag-header-browser.test.mjs
       - name: Compile and validate AM contracts (static-only PDF path placeholder)
         run: |
           # Only the AM catalog reference check runs here, not any PDF browser test.
@@ -51,11 +53,12 @@ jobs:
 
   linux-full-am:
     name: Linux full AM (requires frozen private PDF)
+    # The private fixture is available only to the trusted integration branch,
+    # never to feature/experiment pushes or pull-request code.
+    if: github.ref == 'refs/heads/build/2026-10-20' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: linux-portability
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    env:
-      PDF_URL: ${{ secrets.OCR2MD_AUDIT_PDF_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,6 +69,8 @@ jobs:
         with:
           python-version: '3.12'
       - name: Stage the immutable licensed fixture (fail closed)
+        env:
+          PDF_URL: ${{ secrets.OCR2MD_AUDIT_PDF_URL }}
         shell: bash
         run: |
           set -euo pipefail
