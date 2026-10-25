@@ -8,13 +8,18 @@ import {createSourceFileNavigation} from './source-file-navigation.js';
 export function createSettingsModule(...args){
   const original=createMainlineSettingsModule(...args);
   const navigation=createSourceFileNavigation();
-  return new Proxy(original,{
-    get(target,property,receiver){
-      if(property==='load')return async()=>{
-        await target.load();
-        navigation.mountSettings();
-      };
-      return Reflect.get(target,property,receiver);
+  // Mainline Settings returns a frozen object. Proxying a frozen `load`
+  // violates JS invariants; copy the public descriptors into a new adapter
+  // instead, retaining live getters such as history/invalid.
+  const descriptors=Object.getOwnPropertyDescriptors(original);
+  descriptors.load={
+    enumerable:true,
+    configurable:false,
+    writable:false,
+    value:async()=>{
+      await original.load();
+      navigation.mountSettings();
     },
-  });
+  };
+  return Object.freeze(Object.defineProperties({},descriptors));
 }
