@@ -103,7 +103,7 @@ KEY = TOKEN.read_text().strip()
 if LAB_ID:
     unlock_fixture = os.environ.get('V6_LAB_UNLOCK_TOKEN_PATH')
     unlock_source = (lab_path('V6_LAB_UNLOCK_TOKEN_PATH', TOKEN)
-                     if unlock_fixture else ROOT / '.v6/private/editor-token')
+                     if unlock_fixture else (RUNTIME.parents[2] if os.environ.get('V6_LAB_RUNTIME') else ROOT) / '.v6/private/editor-token')
     if not unlock_source.is_file():
         raise RuntimeError('Mainline save authorization is unavailable for lab')
     UNLOCK_CODE = unlock_source.read_text().strip()[:12]
