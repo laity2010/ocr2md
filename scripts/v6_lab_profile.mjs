@@ -47,6 +47,15 @@ export function labVitePlugin(root,profile){
     transform(code,id){
       const path=id.split('?')[0].replaceAll('\\','/');
       if(!path.startsWith(sourceRoot+'/'))return;
+      if(path===join(sourceRoot,'workspace.js')){
+        const layoutModule=join(profile.dir,'modules','layout-persistence.js');
+        if(existsSync(layoutModule)){
+          const marker='  dockview.onDidActivePanelChange(event => {';
+          if(!code.includes(marker))throw Error('V6 core Workspace layout hook changed');
+          code=`import {persistLabWorkspaceLayout} from ${JSON.stringify(layoutModule)};\n`+
+            code.replace(marker,'  persistLabWorkspaceLayout(dockview,container);\n'+marker);
+        }
+      }
       if(path===join(sourceRoot,'main.js')){
         // Select the document as an explicit URL context, never a shared
         // mutable global server DOC. Every CM/AG/preview business path in
