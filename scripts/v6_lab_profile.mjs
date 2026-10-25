@@ -6,6 +6,7 @@ const NAME=/^[a-z][a-z0-9-]{0,31}$/;
 const slots=Object.freeze({
   chapterBoundary:{request:'./outline-grid.js',importers:['workspace.js','main.js']},
   chapterFiles:{request:'./chapter-files.js',importers:['outline-grid.js','main.js']},
+  cmDocument:{request:'./cm-document.js',importers:['main.js']},
   media:{request:'./media-module.js',importers:['workspace.js','main.js']},
   latex:{request:'./latex-module.js',importers:['workspace.js','main.js']},
   settings:{request:'./settings-module.js',importers:['main.js']},
@@ -60,14 +61,83 @@ export function labVitePlugin(root,profile){
         // Select the document as an explicit URL context, never a shared
         // mutable global server DOC. Every CM/AG/preview business path in
         // this page then uses exactly the same mainline workbench core.
-        const helper = `const __labActiveChapter = new URLSearchParams(location.search).get('chapter');
+        const sessionsModule=join(profile.dir,'modules','document-sessions.js');
+        if(!existsSync(sessionsModule))throw Error('Missing lab file-session adapter');
+        const helper = `let __labActiveChapter = new URLSearchParams(location.search).get('chapter');
 const __labDocumentUrl = path => __labActiveChapter ? path + '?chapter=' + encodeURIComponent(__labActiveChapter) : path;
+let __labSessions = null;
 `;
-        code=code.replace('const $ = (id) => document.getElementById(id);',helper+'const $ = (id) => document.getElementById(id);');
+        code=`import {createDocumentSessions} from ${JSON.stringify(sessionsModule)};\n`+code;
+        const replaceOnce=(before,after)=>{
+          if(!code.includes(before))throw Error('V6 core file session integration changed: '+before.slice(0,55));
+          code=code.replace(before,after);
+        };
+        replaceOnce('const $ = (id) => document.getElementById(id);',helper+'const $ = (id) => document.getElementById(id);');
+        replaceOnce("const documentLabel='Buffett’s Alpha.minerujson.md';",
+          "let documentLabel=__labActiveChapter||'Buffett’s Alpha.minerujson.md';");
+        replaceOnce("const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));",
+          "const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));");
+        replaceOnce("const snapshotDoc = view.state.doc;\n  const snapshot = snapshotDoc.toString();",
+          "const snapshotDoc = view.state.doc;\n  const __labSavingFilename=__labActiveChapter;\n  const snapshot = snapshotDoc.toString();");
+        replaceOnce('    savedDoc = snapshotDoc;\n    status(!hasUnsavedEdits()',
+          '    savedDoc = snapshotDoc;\n    __labSessions?.markSaved(snapshotDoc,__labSavingFilename);\n    status(!hasUnsavedEdits()');
+        replaceOnce('  savedDoc=view.state.doc;\n  workspace.refreshPreview();',`  savedDoc=view.state.doc;
+  __labSessions=createDocumentSessions({
+    cm,initialName:__labActiveChapter,initialSaved:savedDoc,
+    fetchDocument:async name=>{
+      const path=name?'${scoped}api/document?chapter='+encodeURIComponent(name):'${scoped}api/document';
+      const res=await fetch(path,{cache:'no-store'});
+      if(!res.ok)throw Error('文件读取失败 HTTP '+res.status);
+      return res.text();
+    },
+    onActivated:({name,saved})=>{
+      __labActiveChapter=name;
+      savedDoc=saved;
+      documentLabel=name||'Buffett’s Alpha.minerujson.md';
+      // Clear cross-file selection/focus while retaining global module layout.
+      viewStore.setState({focusTarget:null,scrollTarget:null,sourceOffset:0,outlineCount:null});
+      documentChanged();
+      workspace.refreshPreview();workspace.refreshOutline();workspace.refreshPdf();
+      documentLines=null;documentChars=null;
+      refreshToolbar();renderGlobalStatus();
+    },
+  });
+  document.addEventListener('ocr2md:lab-switch-file',event=>{
+    const detail=event.detail;
+    detail.promise=(async()=>{
+      if(saving||exporting||initializing||pendingUpdate||$('unlock-dialog').open || $('initialize-dialog').open)
+        throw Error('正在保存或操作中，无法切换文件');
+      const changed=await __labSessions.switchTo(detail.chapter);
+      if(!changed)throw Error('文件切换正在进行，请重试');
+      if($('module-select').value==='settings'){
+        $('module-select').value='chapter-boundary';
+        $('module-select').dispatchEvent(new Event('change',{bubbles:true}));
+      }
+      const url=new URL(location.href);
+      if(detail.chapter)url.searchParams.set('chapter',detail.chapter);
+      else url.searchParams.delete('chapter');
+      if(detail.updateHistory!==false)window.history.pushState(null,'',url.pathname+url.search+url.hash);
+      document.dispatchEvent(new CustomEvent('ocr2md:lab-file-activated',{detail:{chapter:detail.chapter}}));
+      status('✓ 已切换文件');
+      return true;
+    })();
+  });
+  window.addEventListener('popstate',()=>{
+    // History navigation follows the same in-place document switching path.
+    const chapter=new URLSearchParams(location.search).get('chapter');
+    if(chapter===__labActiveChapter)return;
+    const detail={chapter,promise:null,updateHistory:false};
+    document.dispatchEvent(new CustomEvent('ocr2md:lab-switch-file',{detail}));
+    detail.promise?.catch(error=>status('导航失败：'+error.message,'error'));
+  });
+  workspace.refreshPreview();`);
+        replaceOnce("if (hasUnsavedEdits() || settings?.hasUnsaved() || buttons.save.disabled || exporting || initializing ||",
+          "if (hasUnsavedEdits() || __labSessions?.hasOtherUnsaved() || settings?.hasUnsaved() || buttons.save.disabled || exporting || initializing ||");
+        replaceOnce("if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload)",
+          "if ((hasUnsavedEdits()||__labSessions?.hasOtherUnsaved()||settings?.hasUnsaved())&&!allowInitializeReload)");
         for(const endpoint of ['document','export-chapters','initialize-document'])
           code=code.replaceAll(`fetch('/api/${endpoint}'`,`fetch(__labDocumentUrl('/api/${endpoint}')`);
-        code=code.replace("const documentLabel='Buffett’s Alpha.minerujson.md';",
-          "const documentLabel=__labActiveChapter||'Buffett’s Alpha.minerujson.md';");
+
       }
 
       // Scope only the reused mainline's network requests; fail-closed browser

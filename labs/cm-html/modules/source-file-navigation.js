@@ -9,7 +9,7 @@ const DEFAULTS=Object.freeze([
 ]);
 const FILE_PATTERN=/^[0-9]{1,6}-[\p{L}\p{N}_-]{1,110}\.cmd\.chapter\.md$/u;
 const chapterId=name=>'chapter:'+name;
-const currentChapter=new URLSearchParams(location.search).get('chapter');
+let currentChapter=new URLSearchParams(location.search).get('chapter');
 
 export function createSourceFileNavigation(){
   const moduleSelector=document.getElementById('module-select');
@@ -45,7 +45,7 @@ export function createSourceFileNavigation(){
       syncOptions();
     }catch(error){console.warn('章节清单暂不可读',error.message);}
   }
-  function navigate(target,selector){
+  async function navigate(target,selector){
     if(target==='settings'){
       moduleSelector.value='settings';
       moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
@@ -53,32 +53,43 @@ export function createSourceFileNavigation(){
       return;
     }
     if(target.startsWith('chapter:')&&!names.includes(target.slice(8))){
-      selector.value=selector.closest('#settings-workspace')?'settings':activeId();
+      syncOptions();
       return;
     }
     const next=target==='document'?null:target.slice(8);
     if(next!==currentChapter){
-      const url=new URL(location.href);
-      if(next)url.searchParams.set('chapter',next);
-      else url.searchParams.delete('chapter');
-      // Native beforeunload protects unsaved CM/Settings changes. A new page
-      // creates a fresh CM history for the new file, not mixed transactions.
-      location.assign(url.toString());
+      const detail={chapter:next,promise:null};
+      document.dispatchEvent(new CustomEvent('ocr2md:lab-switch-file',{detail}));
+      try{
+        if(!detail.promise)throw Error('文件切换服务尚未就绪');
+        await detail.promise;
+        currentChapter=next;
+        syncOptions();
+      }catch(error){
+        console.warn('文件切换失败',error.message);
+        syncOptions();
+        document.getElementById('status')?.setAttribute('data-file-switch-error',error.message);
+      }
       return;
     }
     if(!isChapterMode()){
       moduleSelector.value='chapter-boundary';
       moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
     }
-    selector.value=selector.closest('#settings-workspace')?'settings':activeId();
+    syncOptions();
   }
+  document.addEventListener('ocr2md:lab-file-activated',event=>{
+    currentChapter=event.detail.chapter;
+    syncOptions();
+  });
+
   function addBar(host){
     if(!host||host.querySelector(':scope > .ocr-lab-file-toolbar'))return;
     const bar=document.createElement('div');bar.className='ocr-lab-file-toolbar';
     const select=document.createElement('select');select.className='ocr-lab-file-select';
     select.setAttribute('aria-label','源码文件导航');
     select.title='切换同一 CM6 工作台加载的 Markdown 文件';
-    select.addEventListener('change',()=>navigate(select.value,select));
+    select.addEventListener('change',()=>{void navigate(select.value,select);});
     selectBoxes.add(select);bar.append(select);host.prepend(bar);
     host.classList.add('ocr-lab-file-source');syncOptions();updateVisibility();
   }
