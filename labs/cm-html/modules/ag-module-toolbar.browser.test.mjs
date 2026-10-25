@@ -38,7 +38,7 @@ for(const [name,engine,options] of [
     assert.equal(await input.inputValue(),'012','Existing input blur rollback missing');
     // The original module select remains available to the app, but the
     // mother-file AG toolbar exposes only its chapter-boundary action group.
-    assert.equal(await bar.locator('#module-select').isVisible(),false);
+    assert.equal(await bar.locator('.ocr-lab-element-select').isVisible(),false);
     assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
     assert.equal(await bar.locator('#media-refresh').isVisible(),false);
     assert.equal(await bar.locator('#latex-refresh').isVisible(),false);
@@ -60,27 +60,29 @@ for(const [name,engine,options] of [
     assert.equal(await bar.isVisible(),true);
     assert.equal(await bar.locator('#export-chapters').isVisible(),false,'Chapter must not offer re-export');
     assert.equal(await bar.locator('#chapter-start-number').isVisible(),false);
-    assert.equal(await bar.locator('#module-select').isVisible(),true,'Chapter module dropdown missing');
+    assert.equal(await bar.locator('.ocr-lab-element-select').isVisible(),true,'Chapter element dropdown missing');
+    assert.equal(await bar.locator('#module-select').isVisible(),false,'Original module router must remain internal');
     assert.equal(await bar.locator('#media-refresh').isVisible(),false);
     assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
-    await bar.locator('#module-select').selectOption('media');
+    await bar.locator('.ocr-lab-element-select').selectOption('media');
     assert.equal(await bar.locator('#media-refresh').isVisible(),true);
     assert.equal(await bar.locator('#media-download-all').isVisible(),true);
     assert.equal(await page.locator('.ocr-outline-pane .ocr-media-pane').isVisible(),true);
     assert.equal(await sourceMenu.isVisible(),true,'File menu must remain accessible within Media');
-    const choices=await bar.locator('#module-select option:not([hidden])').allTextContents();
-    assert.deepEqual(choices,['标题','媒体','LaTeX'],'Title/Media/LaTeX are chapter element categories');
-    await bar.locator('#module-select').selectOption('latex');
+    const choices=await bar.locator('.ocr-lab-element-select option').allTextContents();
+    assert.deepEqual(choices,['标题','媒体','LaTeX'],'Chapter picker must physically contain only 3 options');
+    assert.equal(await bar.locator('.ocr-lab-element-select option[value=settings]').count(),0,'Global Settings leaked into iPad-native picker');
+    await bar.locator('.ocr-lab-element-select').selectOption('latex');
     assert.equal(await bar.locator('#latex-refresh').isVisible(),true);
     assert.equal(await bar.locator('#latex-normalize').isVisible(),true);
     assert.equal(await bar.locator('#media-refresh').isVisible(),false);
     assert.equal(await page.locator('.ocr-outline-pane .ocr-latex-pane').isVisible(),true);
     assert.equal(await sourceMenu.isVisible(),true,'File menu must remain accessible within LaTeX');
-    await bar.locator('#module-select').selectOption('chapter-boundary');
-    assert.equal(await bar.locator('#module-select option[value="chapter-boundary"]').textContent(),'标题');
+    await bar.locator('.ocr-lab-element-select').selectOption('chapter-boundary');
+    assert.equal(await bar.locator('.ocr-lab-element-select option[value="chapter-boundary"]').textContent(),'标题');
     assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
     assert.equal(await bar.locator('#export-chapters').isVisible(),false);
-    await bar.locator('#module-select').selectOption('latex');
+    await bar.locator('.ocr-lab-element-select').selectOption('latex');
     await sourceMenu.selectOption(chapterIds[1]);
     await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[1].slice(8),{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
@@ -92,7 +94,7 @@ for(const [name,engine,options] of [
     await sourceMenu.selectOption('document');
     await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
-    assert.equal(await bar.locator('#module-select').isVisible(),false);
+    assert.equal(await bar.locator('.ocr-lab-element-select').isVisible(),false);
     assert.equal(await bar.locator('#export-chapters').isVisible(),true);
     assert.equal(await bar.locator('#module-select option[value="chapter-boundary"]').textContent(),'章节定界');
     assert.equal(await input.inputValue(),'012');

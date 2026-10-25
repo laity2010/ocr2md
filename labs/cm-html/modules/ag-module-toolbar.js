@@ -17,6 +17,21 @@ export function mountAgModuleToolbar(){
   const chapterModules=new Map();
   let bar=null;
   let transitioning=false;
+  // File navigation and the mainline module handler keep the original select.
+  // The chapter's *visible* element picker has only three real options: iPad
+  // Safari's native picker can expose <option hidden>, so don't rely on it.
+  const elementSelect=document.createElement('select');
+  elementSelect.className='ocr-lab-element-select';
+  elementSelect.setAttribute('aria-label','文档元素');
+  for(const [value,label] of [['chapter-boundary','标题'],['media','媒体'],['latex','LaTeX']]){
+    const option=document.createElement('option');
+    option.value=value;option.textContent=label;elementSelect.append(option);
+  }
+  elementSelect.addEventListener('change',()=>{
+    if(!isChapter())return;
+    moduleSelect.value=elementSelect.value;
+    moduleSelect.dispatchEvent(new Event('change',{bubbles:true}));
+  });
   const isChapter=()=>Boolean(chapter);
   const activeModule=()=>{
     const value=chapterModules.get(chapter);
@@ -41,16 +56,12 @@ export function mountAgModuleToolbar(){
     const settings=selected==='settings';
     bar.hidden=settings;
     bar.setAttribute('aria-label',isChapter()?'章节元素处理工具栏':'章节定界工具栏');
-    moduleSelect.hidden=!isChapter();
+    moduleSelect.hidden=true;
+    elementSelect.hidden=!isChapter()||settings;
+    if(!settings)elementSelect.value=selected;
     moduleSelect.setAttribute('aria-label','章节处理模块');
-    for(const option of moduleSelect.options){
-      // Under a chapter the original outline AG is the Title element view.
-      // The mother document retains its normal Chapter Boundary identity.
-      if(option.value==='chapter-boundary')option.textContent=isChapter()?'标题':'章节定界';
-      // Global Settings is a file navigation destination, never a chapter
-      // element category. Do not remove the underlying original option.
-      option.hidden=isChapter()&&option.value==='settings';
-    }
+    // Original settings option stays intact for source-file navigation,
+    // but cannot appear in the separate 3-item native chapter picker.
     for(const actions of actionGroups){
       // Title view on bounded chapters has no Export/Start Number actions:
       // those belong exclusively to the mother document.
@@ -90,7 +101,7 @@ export function mountAgModuleToolbar(){
     bar.className='ocr-lab-ag-toolbar';
     bar.setAttribute('role','toolbar');
     // No cloned controls. Events and input state stay owned by mainline.
-    bar.append(moduleSelect,...actionGroups);
+    bar.append(moduleSelect,elementSelect,...actionGroups);
     outline.insertBefore(bar,grid);
     refresh();
     // Startup may have deep-linked directly into a chapter. The mainline's

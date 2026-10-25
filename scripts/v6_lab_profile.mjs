@@ -48,6 +48,33 @@ export function labVitePlugin(root,profile){
     transform(code,id){
       const path=id.split('?')[0].replaceAll('\\','/');
       if(!path.startsWith(sourceRoot+'/'))return;
+      if(path===join(sourceRoot,'media-module.js')){
+        // Media thumbnails used to flash on every visit because activating
+        // the pane destroyed visible row DOM (redrawRows), then repeated
+        // inventory/status scans reassigned the same AG rowData. Inject this
+        // small experiment-only adapter without forking the media module.
+        const exact=(before,after)=>{
+          if(!code.includes(before))throw Error('V6 Media preview adapter contract changed: '+before.slice(0,60));
+          code=code.replace(before,after);
+        };
+        exact('  let localFiles=[],chapterReferences=new Set();',
+          '  let localFiles=[],chapterReferences=new Set();\n  let lastRowSignature=null,lastPreviewSignature=null;');
+        exact("    grid?.setGridOption('rowData',rows);",`    const rowSignature=JSON.stringify(rows.map(row=>[row.id,row.url,row.local,row.adopted,row.bytes,row.total]));
+    const previewSignature=JSON.stringify(rows.map(row=>[row.id,stateFor(row.url).state==='complete'?stateFor(row.url).path||'':row.url]));
+    if(rowSignature!==lastRowSignature){
+      lastRowSignature=rowSignature;lastPreviewSignature=previewSignature;
+      grid?.setGridOption('rowData',rows);
+    }else if(previewSignature!==lastPreviewSignature){
+      lastPreviewSignature=previewSignature;
+      grid?.refreshCells({force:true,columns:['preview','status','action']});
+    }else grid?.refreshCells({columns:['status','action']});`);
+        exact('        grid?.redrawRows();',`        // Images rendered while the pane was hidden have no src. Arm only
+        // those existing thumbnails, preserving loaded DOM/image state.
+        for(const image of gridHost.querySelectorAll('.ocr-media-preview-link img.ocr-media-thumb:not([src])')){
+          const address=image.closest('a')?.getAttribute('href');
+          if(address)image.src=address;
+        }`);
+      }
       if(path===join(sourceRoot,'workspace.js')){
         const layoutModule=join(profile.dir,'modules','layout-persistence.js');
         if(existsSync(layoutModule)){

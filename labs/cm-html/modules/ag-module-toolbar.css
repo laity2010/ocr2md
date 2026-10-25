@@ -17,14 +17,15 @@
 .ocr-lab-ag-toolbar input[aria-invalid='true']{border-color:#fca5a5}
 @media(max-width:560px){.ocr-lab-ag-toolbar > .module-actions{gap:5px}}
 /* The original module picker lives here only for .cmd.chapter.md files. */
-.ocr-lab-ag-toolbar > #module-select {
+.ocr-lab-ag-toolbar > .ocr-lab-element-select {
   display:block;width:118px;min-width:94px;max-width:36%;height:27px;
   flex:none;box-sizing:border-box;padding:2px 5px;
   border:1px solid #60766b;border-radius:4px;
   background:#293b3c;color:#d3c6aa;
   font:12px 'OCR2MD Sarasa',monospace;
 }
-.ocr-lab-ag-toolbar > #module-select[hidden]{display:none!important}
+.ocr-lab-ag-toolbar > #module-select{display:none!important}
+.ocr-lab-ag-toolbar > .ocr-lab-element-select[hidden]{display:none!important}
 .ocr-lab-ag-toolbar > .module-actions[data-module]{gap:6px}
 .ocr-lab-ag-toolbar > .module-actions[data-module] label{display:inline}
 .ocr-lab-ag-toolbar > .module-actions[data-module][hidden]{display:none!important}

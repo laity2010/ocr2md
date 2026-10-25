@@ -60,7 +60,7 @@ print('VALID_FIXTURE',manifest['files'][0]['name'],manifest['files'][1]['name'])
    await page.goto(base,{waitUntil:'domcontentloaded'});
    const fileMenu=page.locator('.ocr-source-pane .ocr-lab-file-select');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select option[value^="chapter:"]').length>=2,null,{timeout:27000});
-   const moduleMenu=page.locator('.ocr-lab-ag-toolbar #module-select');
+   const moduleMenu=page.locator('.ocr-lab-ag-toolbar .ocr-lab-element-select');
    for(let ix=0;ix<2;ix++){
      const tag=names[ix],chapter=chapters[ix];
      await fileMenu.selectOption('chapter:'+chapter);
@@ -79,6 +79,22 @@ print('VALID_FIXTURE',manifest['files'][0]['name'],manifest['files'][1]['name'])
        assert(text.includes(marker+tag),`Wrong ${mode} rows in ${tag} chapter`);
        assert(!text.includes(marker+names[1-ix]),`Stale ${mode} rows from previous chapter`);
      }
+     // Once the media pane is painted, visiting another element category
+     // must not tear down and recreate its thumbnails. This specifically
+     // catches the iPad flash caused by unconditional AG redrawRows().
+     await moduleMenu.selectOption('media');
+     await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ocr-media-thumb')!==null,null,{timeout:12000});
+     await page.waitForTimeout(650); // allow pending media status/inventory fetches
+     const before=await page.evaluate(()=>{
+       window.__mediaPreviewElement=document.querySelector('.ocr-media-grid .ocr-media-thumb');
+       return window.__mediaPreviewElement?.getAttribute('src');
+     });
+     await moduleMenu.selectOption('chapter-boundary');
+     await moduleMenu.selectOption('media');
+     await page.waitForTimeout(350);
+     assert(await page.evaluate(()=>window.__mediaPreviewElement===document.querySelector('.ocr-media-grid .ocr-media-thumb')),
+       'Media preview image DOM was recreated on module switch (visible flash)');
+     assert.equal(await page.locator('.ocr-media-grid .ocr-media-thumb').first().getAttribute('src'),before);
    }
    await fileMenu.selectOption('document');
    await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:16000});
