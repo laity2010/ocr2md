@@ -21,6 +21,17 @@ const theme=themeQuartz.withParams({
   oddRowBackgroundColor:'#2d363c',fontFamily:'"OCR2MD Sarasa",monospace',
   fontSize:16,spacing:3,
 });
+export const OUTLINE_TITLE_SCALE_KEY='chapterBoundary.ag.titleFontScale';
+const TITLE_FONT_PX=Object.freeze([0,34,26,22,20,18,18]);
+// Chapter AG alone owns this key. Settings only publishes an effective value.
+export function registerOutlineTitleScaleSetting(settings,onChange){
+  settings.register({module:'G',key:OUTLINE_TITLE_SCALE_KEY,
+    category:['章节定界','AG 表'],label:'标题列字号倍率',
+    comment:'章节定界 AG 表标题列 H1–H6 字号倍率（0.2–2.0，步长 0.1）',
+    type:'number',control:'slider',defaultValue:1,min:0.2,max:2,step:0.1,
+    unit:'×',message:'settings.changed'});
+  return settings.subscribe({module:'G',key:OUTLINE_TITLE_SCALE_KEY},({value})=>onChange(value));
+}
 const fields=['title','level','pdfPage','independent','chapterFile'];
 const labels=['标题','层级','PDF页码','独立成章','章节文件'];
 const valueOf=(row,field)=>{
@@ -41,12 +52,13 @@ function titleCell(params){
 export function createOutlineGrid(element,getMarkdown,getCMD) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
   let indexedRevision=-1,pendingFocusFrame=0;
-  let startText='000';
+  let startText='000',titleFontScale=1;
   let exportedDoc=null,exportedNames=new Set(),exportedMapping=null;
   const isExportCurrent=()=>Boolean(exportedDoc)&&Boolean(getCMD())&&
     getCMD().matchesSnapshot(exportedDoc)&&Boolean(exportedMapping)&&
     rows.every(row=>exportedMapping.get(row.id)===row.chapterFile);
   element.classList.add('ocr-outline-pane');
+  element.style.setProperty('--ocr-outline-title-scale',String(titleFontScale));
   const host=document.createElement('div');
   host.className='ocr-outline-grid';
   element.append(host);
@@ -228,7 +240,8 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
   });
   api=createGrid(host,{
     theme,columnDefs:columns,rowData:rows,headerHeight:40,rowHeight:34,
-    getRowHeight:p=>p.data?.level===1?48:40,
+    getRowHeight:p=>Math.max(p.data?.level===1?48:40,
+      Math.ceil((TITLE_FONT_PX[p.data?.level]||18)*titleFontScale*1.18+7)),
     getRowId:p=>p.data.id,
     rowSelection:{mode:'singleRow',checkboxes:false,headerCheckbox:false,
       enableClickSelection:false},
@@ -275,6 +288,13 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
       api.refreshCells({columns:['chapterFile'],force:true});
     },
     refresh,schedule,
+    setTitleFontScale(value){
+      if(!Number.isFinite(value)||value<0.2||value>2)throw Error('Invalid title font scale');
+      if(titleFontScale===value)return;
+      titleFontScale=value;
+      element.style.setProperty('--ocr-outline-title-scale',String(value));
+      api.resetRowHeights();
+    },
     dispose(){
       disposed=true;clearTimeout(timer);stopPendingFocus();unsub();api?.destroy();
       element.replaceChildren();

@@ -45,12 +45,12 @@
   line-height:1.18;
   padding:4px 0;
 }
-.ocr-outline-h1 { font-size:34px; color:#da6362; }
-.ocr-outline-h2 { font-size:26px; color:#d77f48; }
-.ocr-outline-h3 { font-size:22px; color:#bf983d; }
-.ocr-outline-h4 { font-size:20px; color:#899c40; }
-.ocr-outline-h5 { font-size:18px; color:#569d79; }
-.ocr-outline-h6 { font-size:18px; color:#b87b9d; }
+.ocr-outline-h1 { font-size:calc(34px * var(--ocr-outline-title-scale, 1)); color:#da6362; }
+.ocr-outline-h2 { font-size:calc(26px * var(--ocr-outline-title-scale, 1)); color:#d77f48; }
+.ocr-outline-h3 { font-size:calc(22px * var(--ocr-outline-title-scale, 1)); color:#bf983d; }
+.ocr-outline-h4 { font-size:calc(20px * var(--ocr-outline-title-scale, 1)); color:#899c40; }
+.ocr-outline-h5 { font-size:calc(18px * var(--ocr-outline-title-scale, 1)); color:#569d79; }
+.ocr-outline-h6 { font-size:calc(18px * var(--ocr-outline-title-scale, 1)); color:#b87b9d; }
 .ocr-outline-checkbox {
   display:block;
   width:17px;

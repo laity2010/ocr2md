@@ -370,6 +370,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     editorHost:sourceHost,
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
+    setOutlineTitleFontScale:value=>currentOutline?.grid?.setTitleFontScale(value),
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:module=>currentOutline?.setModule(module),
     scanMedia:()=>currentOutline?.media?.scan(),

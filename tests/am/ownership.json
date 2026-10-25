@@ -122,6 +122,9 @@
     "main.js->cm-font-setting.js": [
       "registerCMSourceFontSetting"
     ],
+    "main.js->outline-grid.js": [
+      "registerOutlineTitleScaleSetting"
+    ],
     "settings-module.js->cmd-json-source.js": [
       "openCMDJsonSource",
       "readCMDJsonSnapshot"

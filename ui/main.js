@@ -10,6 +10,7 @@ import {createWorkspace} from './workspace.js';
 import {CMDocument} from './cm-document.js';
 import {createSettingsModule} from './settings-module.js';
 import {registerCMSourceFontSetting} from './cm-font-setting.js';
+import {registerOutlineTitleScaleSetting} from './outline-grid.js';
 import {uploadPastedImage} from './media-module.js';
 import {mineruCommentFolding,foldInitialMineruComments} from './mineru-comment-folding.js';
 import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
@@ -284,6 +285,7 @@ async function main() {
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
   });
+  registerOutlineTitleScaleSetting(settings,value=>workspace.setOutlineTitleFontScale(value));
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   cm = new CMDocument({
@@ -534,6 +536,7 @@ async function main() {
     get scrollSync(){return workspace?.debug?.scrollSync;},
     get scrollState(){return viewStore.getState();},
     get outline(){return workspace?.debug?.outline;},
+    get settings(){return settings?.debug;},
     get pdf(){return workspace?.debug?.pdf;},
     // Regression seam for the existing scroll coordinator; no fourth button.
     setScrollSyncEnabled,

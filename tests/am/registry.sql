@@ -45,6 +45,8 @@ INSERT INTO apis VALUES
  ('G10','G','returned.startText','ui/outline-grid.js','returned','none','chapter sequence text','read only',0),
  ('G11','G','countMarkers','ui/chapter-markers.js','export','CM6 document or Markdown','chapter comment/tag counts','public detached chapter-marker summary for shell global status',1),
  ('G12','G','buildChapterFiles','ui/chapter-files.js','export','Markdown, heading rows, start number','detached chapter files','public chapter export projection; no source edit or disk write',1),
+ ('G13','G','registerOutlineTitleScaleSetting','ui/outline-grid.js','export','settings port,onChange','unsubscribe','Chapter AG registers its own global title font multiplier',1),
+ ('G14','G','returned.setTitleFontScale','ui/outline-grid.js','returned','number','void','updates only AG title font scale and recalculates row heights',1),
  ('M01','M','renderMarkdown','ui/markdown-preview.js','export','Markdown:string','sanitized HTML:string','maps source line attributes',1),
  ('M02','M','PreviewPanel.render','ui/workspace.js','internal','none','void','renders CM6 projection; preserves scroll',1),
  ('M03','M','PreviewPanel.schedule','ui/workspace.js','internal','immediate?:boolean','void','debounced preview render',0),
@@ -542,14 +544,19 @@ INSERT INTO messages VALUES
 INSERT INTO publishers VALUES
  ('PUB-S01','E09','S','ui/settings-module.js','container.dispatchEvent','Effective registered JSON value changes');
 INSERT INTO subscriptions VALUES
- ('SUB-C01','E09','C','ui/cm-font-setting.js','settings.subscribe','Registered CM source key change','Set public CSS variable for source editor font size');
+ ('SUB-C01','E09','C','ui/cm-font-setting.js','settings.subscribe','Registered CM source key change','Set public CSS variable for source editor font size'),
+ ('SUB-G01','E09','G','ui/outline-grid.js','settings.subscribe','Registered chapter title scale key change','Send title scale through Workspace semantic port into AG');
 INSERT INTO access_edges VALUES
  ('X70','S','C','ui/settings-module.js','import {openCMDJsonSource,readCMDJsonSnapshot}','C24','registered','Settings requests JSON text transactions only via CMD port'),
  ('X71',NULL,'S','ui/main.js','createSettingsModule(','S01','registered','Shell mounts Settings facade into the WCP module selector'),
- ('X72',NULL,'C','ui/main.js','registerCMSourceFontSetting(settings)','C25','registered','CM module registers the first settings key at composition root');
+ ('X72',NULL,'C','ui/main.js','registerCMSourceFontSetting(settings)','C25','registered','CM module registers the first settings key at composition root'),
+ ('X90',NULL,'G','ui/main.js','registerOutlineTitleScaleSetting(settings','G13','registered','Shell subscribes chapter title multiplier through G registration API'),
+ ('X91','L','G','ui/workspace.js','grid?.setTitleFontScale(','G14','registered','Layout forwards settings multiplier to Chapter AG semantic method');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C24','C24','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','JSON CM6 source read-write and compare-and-save', 'integration'),
  ('TC-C25','C25','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM source module explicitly registers defaultFontSize and receives changes','integration'),
+ ('TC-G13','G13','tests/outline-title-scale-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter title multiplier range, decimal step and saved restore','integration'),
+ ('TC-G14','G14','tests/outline-title-scale-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG title scales without clipping or changing other columns','integration'),
  ('TC-S01','S01','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Independent AG/CM/Preview panes mount and switch without destroying markdown','integration'),
  ('TC-S02','S02','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG fixed columns, actual record fields and reused chapter EnumCheckboxFilter','integration'),
  ('TC-S03','S03','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Registered subscriber receives effective settings.changed','integration'),

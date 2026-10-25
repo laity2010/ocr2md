@@ -19,15 +19,16 @@ export function createSettingsModule(container,onStatus=()=>{}){
   let records=new Map();
   let source=null,grid=null,dockview=null,loadPromise=null,initialPromise=null,slider=null,valueLabel=null,details=null;
   let agHost=null,sourceHost=null,previewHost=null;
-  let activeKey=null,invalid=false;
+  let activeKey=null,invalid=false,locatingFromGrid=false;
   function entry(key){const item=definitions.get(key);if(!item)throw Error('Unregistered setting: '+key);return item;}
   function register(definition){
-    const {module,key,category,label,comment,type,control,defaultValue,min,max,step,message}=definition;
+    const {module,key,category,label,comment,type,control,defaultValue,min,max,step,message,unit}=definition;
     if(!module||typeof key!=='string'||!/^\w+(?:\.\w+)+$/.test(key)||
        !Array.isArray(category)||category.length!==2||!category.every(v=>typeof v==='string'&&v)||
        !label||(comment!==undefined&&typeof comment!=='string')||type!=='number'||control!=='slider'||message!=='settings.changed'||
-       !Number.isInteger(min)||!Number.isInteger(max)||max<=min||
-       !Number.isInteger(defaultValue)||defaultValue<min||defaultValue>max||step!==1)
+       !Number.isFinite(min)||!Number.isFinite(max)||max<=min||
+       !Number.isFinite(defaultValue)||defaultValue<min||defaultValue>max||
+       !Number.isFinite(step)||step<=0||(unit!==undefined&&typeof unit!=='string'))
       throw Error('Invalid settings registration');
     if(definitions.has(key))throw Error('Duplicate settings key: '+key);
     definitions.set(key,Object.freeze({...definition,category:Object.freeze([...category])}));
@@ -118,12 +119,13 @@ export function createSettingsModule(container,onStatus=()=>{}){
       typeof record.category2==='string'&&record.category2.length>0&&
       typeof record.comment==='string'&&
       range&&typeof range==='object'&&!Array.isArray(range)&&
-      Number.isInteger(range.min)&&Number.isInteger(range.max)&&
-      Number.isInteger(range.step)&&range.step>0&&
+      Number.isFinite(range.min)&&Number.isFinite(range.max)&&
+      Number.isFinite(range.step)&&range.step>0&&
       range.min>=item.min&&range.max<=item.max&&range.min<=range.max&&
-      typeof record.value==='number'&&Number.isInteger(record.value)&&
+      typeof record.value==='number'&&Number.isFinite(record.value)&&
       record.value>=range.min&&record.value<=range.max&&
-      (record.value-range.min)%range.step===0;
+      Math.abs((record.value-range.min)/range.step-
+        Math.round((record.value-range.min)/range.step))<1e-8;
   }
   function valuesFromDocument(data){
     const normalized=normaliseDocument(data);
@@ -168,7 +170,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
     const comment=document.createElement('p');comment.className='ocr-settings-key-comment';
     comment.textContent=record.comment;
     const footer=document.createElement('div');footer.className='ocr-settings-description';
-    footer.textContent=`字号 ${record.range.min}–${record.range.max} pt · ${item.key}`;
+    footer.textContent=`${item.unit?'倍率':'字号'} ${record.range.min}–${record.range.max} ${item.unit||'pt'} · ${item.key}`;
     details=document.createElement('div');details.className='ocr-settings-validation';
     slider.addEventListener('input',()=>{
       try{set(item.key,Number(slider.value));}catch(error){onStatus(error.message,'warning');syncPreview();}
@@ -181,7 +183,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
     const current=applied.get(activeKey);
     slider.value=String(current??entry(activeKey).defaultValue);
     slider.disabled=invalid||!source;
-    valueLabel.textContent=slider.value+' pt';
+    valueLabel.textContent=slider.value+(entry(activeKey).unit||' pt');
     details.textContent=invalid?'JSON 语法或设置值无效，继续保留上次有效值':'';
   }
   function publish(key,value,origin){
@@ -211,7 +213,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
     if(values)for(const [key,value]of values)publish(key,value,docChanged?'cm6':'load');
     if(docChanged&&values){refreshGrid();renderPreview();}
     else syncPreview();
-    if(Number.isInteger(sourceOffset)){
+    if(!locatingFromGrid&&Number.isInteger(sourceOffset)){
       const candidate=source.keyAtOffset(sourceOffset);
       const exact=definitions.has(candidate)?candidate:
         [...definitions.keys()].find(key=>candidate && key.startsWith(candidate+'.'));
@@ -266,7 +268,8 @@ export function createSettingsModule(container,onStatus=()=>{}){
       onRowClicked:event=>{
         if(!event.data?.key)return;
         activeKey=event.data.key;
-        source?.revealKeyPath(activeKey);
+        locatingFromGrid=true;
+        try{source?.revealKeyPath(activeKey);}finally{locatingFromGrid=false;}
         renderPreview();
       },
     });
