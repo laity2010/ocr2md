@@ -5,6 +5,7 @@ import {join,resolve,relative,isAbsolute} from 'node:path';
 const NAME=/^[a-z][a-z0-9-]{0,31}$/;
 const slots=Object.freeze({
   chapterBoundary:{request:'./outline-grid.js',importers:['workspace.js','main.js']},
+  chapterFiles:{request:'./chapter-files.js',importers:['outline-grid.js','main.js']},
   media:{request:'./media-module.js',importers:['workspace.js','main.js']},
   latex:{request:'./latex-module.js',importers:['workspace.js','main.js']},
   settings:{request:'./settings-module.js',importers:['main.js']},

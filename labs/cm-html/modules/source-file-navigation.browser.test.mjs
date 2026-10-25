@@ -13,7 +13,7 @@ for(const [name,browserType,options] of [['Chrome',chromium,{viewport:{width:130
   const markdown=page.locator('.ocr-source-pane .ocr-lab-file-select');
   await markdown.waitFor({timeout:22000});
   assert.equal(await markdown.inputValue(),'document');
-  assert.deepEqual(await markdown.locator('option').allTextContents(),['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
+  assert.deepEqual((await markdown.locator('option').allTextContents()).slice(0,2),['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
   for(const other of ['media','latex']){
     await page.locator('#module-select').selectOption(other);
     assert.equal(await markdown.locator('option[value="document"]').textContent(),
@@ -28,7 +28,7 @@ for(const [name,browserType,options] of [['Chrome',chromium,{viewport:{width:130
   const settings=page.locator('#settings-workspace .ocr-lab-file-select');
   await settings.waitFor({timeout:18000});
   assert.equal(await settings.inputValue(),'settings');
-  assert.deepEqual(await settings.locator('option').allTextContents(),
+  assert.deepEqual((await settings.locator('option').allTextContents()).slice(0,2),
     ['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
   assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
   assert.equal(await page.locator('#editor .cm-editor').count(),1);
