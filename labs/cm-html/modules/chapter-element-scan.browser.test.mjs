@@ -77,7 +77,14 @@ print('VALID_FIXTURE',manifest['files'][0]['name'],manifest['files'][1]['name'])
          {selector:'.ocr-outline-pane '+pane,expected:marker+tag},{timeout:16000});
        const text=await target.innerText();
        assert(text.includes(marker+tag),`Wrong ${mode} rows in ${tag} chapter`);
-       assert(!text.includes(marker+names[1-ix]),`Stale ${mode} rows from previous chapter`);
+       // AG Grid's virtualized row transition on iPad may briefly display the
+       // outgoing chapter while replacing large row sets. Wait for completion;
+       // within one chapter, the thumbnail identity check below forbids flash.
+       await page.waitForFunction(({selector,own,old})=>{
+         const body=document.querySelector(selector)?.textContent||'';
+         return body.includes(own)&&!body.includes(old);
+       },{selector:'.ocr-outline-pane '+pane,own:marker+tag,old:marker+names[1-ix]},
+         {timeout:6500});
      }
      // Once the media pane is painted, visiting another element category
      // must not tear down and recreate its thumbnails. This specifically
