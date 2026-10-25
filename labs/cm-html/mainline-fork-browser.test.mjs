@@ -20,7 +20,7 @@ for(const [i,[name,engine,launch]] of engines.entries()){
  const temp=mkdtempSync(join(lab,'.runtime','acceptance-'));
  const doc=join(temp,'document.md'),settings=join(temp,'settings.json'),token=join(temp,'token');
  const server=spawn('python3',['scripts/v6_serve.py'],{cwd:root,stdio:'ignore',env:{...process.env,
-   V6_LAB_ID:'cm-html',V6_PORT:String(port),V6_STATIC_ROOT:buildDir,V6_DOCUMENT_PATH:doc,V6_SETTINGS_PATH:settings,V6_TOKEN_PATH:token,
+   V6_LAB_ID:'cm-html',V6_PORT:String(port),V6_STATIC_ROOT:buildDir,V6_DOCUMENT_PATH:doc,V6_SETTINGS_PATH:settings,V6_TOKEN_PATH:token,V6_LAB_UNLOCK_TOKEN_PATH:token,
    V6_PDF_PATH:join(lab,'.runtime/reference.pdf')}});
  let browser;
  try{

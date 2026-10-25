@@ -32,7 +32,7 @@ for(const [idx,[name,engine,config]] of engines.entries()){
  const data=mkdtempSync(join(lab,'.runtime','lan-acceptance-'));
  const doc=join(data,'document.md'),token=join(data,'token');
  const serverEnv={...process.env,V6_LAB_ID:'cm-html',V6_PORT:String(labPort),V6_BIND:'127.0.0.1',
-  V6_DOCUMENT_PATH:doc,V6_SETTINGS_PATH:join(data,'settings.json'),V6_TOKEN_PATH:token,
+  V6_DOCUMENT_PATH:doc,V6_SETTINGS_PATH:join(data,'settings.json'),V6_TOKEN_PATH:token,V6_LAB_UNLOCK_TOKEN_PATH:token,
   V6_PDF_PATH:testPDF,V6_LAB_LAN_ORIGIN:base.slice(0,-1)};
  const labServer=spawn('python3',['scripts/v6_serve.py'],{cwd:root,env:serverEnv,stdio:'ignore'});
  const formalServer=spawn('python3',['scripts/v6_serve.py'],{cwd:root,env:{...process.env,

@@ -72,6 +72,21 @@ if not TOKEN.is_file():
     with os.fdopen(fd, 'w') as writer:
         writer.write(secrets.token_urlsafe(36))
 KEY = TOKEN.read_text().strip()
+# The lab unlocks with the formal V6 edit code, but issues its OWN cookie,
+# signed with its isolated KEY above. Merely sharing the short unlock code
+# must never grant the formal session cookie or access to the formal DOC.
+# Only isolated lab tests may override the code source within lab runtime.
+if LAB_ID:
+    unlock_fixture = os.environ.get('V6_LAB_UNLOCK_TOKEN_PATH')
+    unlock_source = (lab_path('V6_LAB_UNLOCK_TOKEN_PATH', TOKEN)
+                     if unlock_fixture else ROOT / '.v6/private/editor-token')
+    if not unlock_source.is_file():
+        raise RuntimeError('Mainline save authorization is unavailable for lab')
+    UNLOCK_CODE = unlock_source.read_text().strip()[:12]
+else:
+    UNLOCK_CODE = KEY[:12]
+if len(UNLOCK_CODE) != 12:
+    raise RuntimeError('Invalid save authorization credential')
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -331,7 +346,7 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, AttributeError):
             self.response(400, 'Invalid request')
             return
-        if not isinstance(code, str) or not hmac.compare_digest(code, KEY[:12]):
+        if not isinstance(code, str) or not hmac.compare_digest(code, UNLOCK_CODE):
             self.response(403, 'Invalid code')
             return
         self.send_response(200)
