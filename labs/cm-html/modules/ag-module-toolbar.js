@@ -1,7 +1,7 @@
 /** Lab AG toolbar: file identity selects the allowed module controls.
  * Move existing DOM nodes; the mainline handlers continue to own all actions.
  * Mother .minerujson.md -> chapter boundary. Derived .cmd.chapter.md ->
- * module switcher plus the owning Media/LaTeX action group.
+ * element picker Title/Media/LaTeX and owning module actions.
  */
 import './ag-module-toolbar.css';
 
@@ -20,7 +20,7 @@ export function mountAgModuleToolbar(){
   const isChapter=()=>Boolean(chapter);
   const activeModule=()=>{
     const value=chapterModules.get(chapter);
-    return value==='media'||value==='latex'?value:'media';
+    return value==='chapter-boundary'||value==='media'||value==='latex'?value:'chapter-boundary';
   };
 
   function syncModule(){
@@ -43,13 +43,18 @@ export function mountAgModuleToolbar(){
     moduleSelect.hidden=!isChapter();
     moduleSelect.setAttribute('aria-label','章节处理模块');
     for(const option of moduleSelect.options){
-      // Global settings is addressed via the file navigator, not a chapter
-      // element-processing module. This does not delete/disable its API option.
-      option.hidden=isChapter()&&(option.value==='chapter-boundary'||option.value==='settings');
+      // Under a chapter the original outline AG is the Title element view.
+      // The mother document retains its normal Chapter Boundary identity.
+      if(option.value==='chapter-boundary')option.textContent=isChapter()?'标题':'章节定界';
+      // Global Settings is a file navigation destination, never a chapter
+      // element category. Do not remove the underlying original option.
+      option.hidden=isChapter()&&option.value==='settings';
     }
     for(const actions of actionGroups){
+      // Title view on bounded chapters has no Export/Start Number actions:
+      // those belong exclusively to the mother document.
       actions.hidden=settings || actions.dataset.module!==selected ||
-        (isChapter()?actions.dataset.module==='chapter-boundary':actions.dataset.module!=='chapter-boundary');
+        (isChapter()&&actions.dataset.module==='chapter-boundary');
     }
     if(!isChapter()&&selected!=='settings')bar.hidden=false;
   }
@@ -58,7 +63,7 @@ export function mountAgModuleToolbar(){
     const selected=moduleSelect.value;
     if(selected==='settings'){refresh();return;}
     if(isChapter()){
-      if(selected==='media'||selected==='latex')chapterModules.set(chapter,selected);
+      if(selected==='chapter-boundary'||selected==='media'||selected==='latex')chapterModules.set(chapter,selected);
       else{syncModule();return;}
     }else if(selected!=='chapter-boundary'){
       syncModule();return;

@@ -118,6 +118,13 @@ let __labSessions = null;
       else url.searchParams.delete('chapter');
       if(detail.updateHistory!==false)window.history.pushState(null,'',url.pathname+url.search+url.hash);
       document.dispatchEvent(new CustomEvent('ocr2md:lab-file-activated',{detail:{chapter:detail.chapter}}));
+      // Refresh all three existing element projections from the new CM6 file
+      // even if the user currently displays only one AG category.
+      if(detail.chapter){
+        workspace.refreshOutline();
+        void workspace.scanMedia();
+        workspace.scanLatex();
+      }
       status('✓ 已切换文件');
       return true;
     })();
