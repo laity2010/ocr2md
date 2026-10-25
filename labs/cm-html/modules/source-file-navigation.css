@@ -1,0 +1,11 @@
+/* Experimental CM file chrome only. Dockview stays in full control. */
+.ocr-lab-file-source {display:flex!important;flex-direction:column;min-height:0;}
+.ocr-lab-file-toolbar {height:34px;min-height:34px;box-sizing:border-box;
+  display:flex;align-items:center;gap:6px;padding:3px 7px;
+  background:#283238;border-bottom:1px solid #4d585d;flex:none;}
+.ocr-lab-file-select {height:27px;max-width:100%;min-width:100px;width:min(100%,410px);
+  background:#344349;color:#d3c6aa;border:1px solid #64736d;
+  border-radius:4px;font:12px 'OCR2MD Sarasa',monospace;
+  padding:2px 7px;white-space:nowrap;text-overflow:ellipsis;}
+.ocr-source-pane.ocr-lab-file-source #editor {height:auto;flex:1 1 0;min-height:0;}
+.ocr-settings-pane.ocr-lab-file-source > .cm-editor {height:auto;flex:1 1 0;min-height:0;}

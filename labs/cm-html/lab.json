@@ -1,3 +1,5 @@
 {
-  "modules": {}
+  "modules": {
+    "settings": "./modules/settings-module.js"
+  }
 }
