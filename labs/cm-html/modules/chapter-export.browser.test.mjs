@@ -67,7 +67,11 @@ for(const [name,engine,options] of [
     if(sibling)assert.equal(readFileSync(join(folder,sibling),'utf8'),savedSibling,'Sibling chapter changed');
     await page.reload({waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('大纲'),null,{timeout:25000});
-    assert((await page.locator('#editor .cm-content').innerText()).includes('CMD_CHAPTER_NATIVE_SAVE_TEST'));
+    // CM6 virtualizes offscreen source lines; verify full reloaded document via
+    // the same explicitly selected document endpoint, not visible DOM text.
+    const persisted=await page.request.get(base+'api/document?chapter='+encodeURIComponent(chapter));
+    assert.equal(persisted.status(),200);
+    assert((await persisted.text()).includes('CMD_CHAPTER_NATIVE_SAVE_TEST'));
     await page.locator('.ocr-source-pane .ocr-lab-file-select').selectOption('document');
     await page.waitForURL(url=>!url.searchParams.has('chapter'),{timeout:20000});
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('大纲'),null,{timeout:25000});
