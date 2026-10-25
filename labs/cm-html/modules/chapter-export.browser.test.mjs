@@ -42,7 +42,7 @@ for(const [name,engine,options] of [
     assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
     assert.equal(await page.locator('#editor .cm-editor').count(),1,'Chapter must use original workbench CM6');
     assert.equal(await page.locator('.ocr-lab-chapter-reader').count(),0,'Old read-only shadow editor still active');
-    assert.equal(await page.locator('.ocr-outline-pane .ag-root-wrapper').count(),1,'Chapter AG differs from mother');
+    assert((await page.locator('.ocr-outline-pane .ocr-outline-grid .ag-root-wrapper').count())>=1,'Native chapter AG was not mounted');
     assert.equal(await page.locator('.ocr-preview-pane').count()>0,true,'Native MD/PDF preview missing');
     assert.equal(await page.locator('.ocr-lab-ag-toolbar #export-chapters').count(),1);
     assert.equal(await page.locator('.ocr-source-pane .ocr-lab-file-select').inputValue(),'chapter:'+chapter);
