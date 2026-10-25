@@ -4,10 +4,12 @@
  */
 import {createSettingsModule as createMainlineSettingsModule} from '../../../ui/settings-module.js';
 import {createSourceFileNavigation} from './source-file-navigation.js';
+import {mountAgModuleToolbar} from './ag-module-toolbar.js';
 
 export function createSettingsModule(...args){
   const original=createMainlineSettingsModule(...args);
   const navigation=createSourceFileNavigation();
+  mountAgModuleToolbar();
   // Mainline Settings returns a frozen object. Proxying a frozen `load`
   // violates JS invariants; copy the public descriptors into a new adapter
   // instead, retaining live getters such as history/invalid.

@@ -1,0 +1,18 @@
+/* Module-owned actions in the AG pane, independent of the global control bar. */
+.ocr-outline-pane > .ocr-lab-ag-toolbar{
+  flex:none;display:flex;align-items:center;gap:6px;min-width:0;
+  box-sizing:border-box;height:34px;padding:3px 7px;
+  background:#283238;border-bottom:1px solid #4d585d;
+  font:12px/1.3 'OCR2MD Sarasa',monospace;
+}
+.ocr-outline-pane > .ocr-lab-ag-toolbar[hidden]{display:none!important}
+.ocr-lab-ag-toolbar > .module-actions{display:flex;align-items:center;gap:8px;min-width:0}
+.ocr-lab-ag-toolbar > .module-actions[hidden]{display:none!important}
+.ocr-lab-ag-toolbar label{color:#d3c6aa;white-space:nowrap}
+.ocr-lab-ag-toolbar button{height:27px;padding:2px 8px;flex:none;
+  font:12px 'OCR2MD Sarasa',monospace;background:#344a40;border-color:#60766b}
+.ocr-lab-ag-toolbar input{height:27px;width:65px;min-width:0;padding:2px 5px;
+  text-align:center;border:1px solid #60766b;border-radius:4px;
+  background:#293b3c;color:#d3c6aa;font:12px 'OCR2MD Sarasa',monospace}
+.ocr-lab-ag-toolbar input[aria-invalid='true']{border-color:#fca5a5}
+@media(max-width:560px){.ocr-lab-ag-toolbar > .module-actions{gap:5px}}
