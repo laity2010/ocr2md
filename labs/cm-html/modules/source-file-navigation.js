@@ -4,8 +4,8 @@
  */
 import './source-file-navigation.css';
 const OPEN_FILES=Object.freeze([
-  {id:'document',label:'Buffett’s Alpha.minerujson.md'},
-  {id:'settings',label:'settings.json'},
+  {id:'document',path:'Buffett’s Alpha.minerujson.md'},
+  {id:'settings',path:'settings.json'},
 ]);
 
 export function createSourceFileNavigation(){
@@ -13,9 +13,21 @@ export function createSourceFileNavigation(){
   const workbench=document.getElementById('workspace');
   const settingsWorkbench=document.getElementById('settings-workspace');
   let lastMarkdownModule='chapter-boundary';
+  const selectors=new Set();
+  function updateLabels(){
+    const active=moduleSelector?.querySelector(`option[value="${lastMarkdownModule}"]`);
+    const markdownModule=active?.textContent?.trim()||'章节定界';
+    for(const select of selectors){
+      for(const file of OPEN_FILES){
+        const option=select.querySelector(`option[value="${file.id}"]`);
+        if(option)option.textContent=(file.id==='document'?markdownModule:'全局设置')+'/'+file.path;
+      }
+    }
+  }
   const updateLastModule=()=>{
     if(moduleSelector?.value&&moduleSelector.value!=='settings')
       lastMarkdownModule=moduleSelector.value;
+    updateLabels();
   };
   moduleSelector?.addEventListener('change',updateLastModule);
   updateLastModule();
@@ -31,10 +43,12 @@ export function createSourceFileNavigation(){
     for(const file of OPEN_FILES){
       const option=document.createElement('option');
       option.value=file.id;
-      option.textContent=file.label;
+      option.textContent=file.path;
       select.append(option);
     }
     select.value=source;
+    selectors.add(select);
+    updateLabels();
     select.addEventListener('change',()=>{
       const next=select.value;
       // Neither source is recreated: each CM6 keeps its own edits and undo.
