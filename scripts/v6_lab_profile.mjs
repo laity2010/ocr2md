@@ -68,7 +68,7 @@ export function labVitePlugin(root,profile){
         // Local thumbnail links must stay under the isolated lab base. In
         // particular, do not request /media/* from the formal root service.
         exact("    const src='/'+(row.local?row.url:local||'');",
-          "    const src='${scoped}'+(row.local?row.url:local||'');");
+          `    const src='${scoped}'+(row.local?row.url:local||'');`);
         exact("    grid?.setGridOption('rowData',rows);",`    const rowSignature=JSON.stringify(rows.map(row=>[row.id,row.url,row.local,row.adopted,row.bytes,row.total]));
     const previewSignature=JSON.stringify(rows.map(row=>[row.id,stateFor(row.url).state==='complete'?stateFor(row.url).path||'':row.url]));
     if(rowSignature!==lastRowSignature){

@@ -40,6 +40,19 @@ for(const [browserName,engine,options] of [
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-pane .ocr-media-url').length>=1,null,{timeout:10000});
    const before=await rows.allTextContents();
    assert(before.length>0,'001 must show its referenced images');
+   // Thumbnail markup alone is not proof of preview: image requests once
+   // contained a literal ${scoped} and silently fell back to 無预览.
+   await page.waitForFunction(prefix=>{
+     const images=[...document.querySelectorAll('.ocr-media-pane .ocr-media-thumb')];
+     return images.length===5 && images.every(img=>img.complete && img.naturalWidth>0 &&
+       !img.hidden && img.src.startsWith(prefix+'media/') &&
+       !img.src.includes('%7Bscoped%7D') && !img.src.includes('${scoped}'));
+   },base,{timeout:18000});
+   const previews=await page.locator('.ocr-media-pane .ocr-media-preview-link').evaluateAll(items=>
+     items.map(link=>({href:link.href,src:link.querySelector('img')?.src,
+       width:link.querySelector('img')?.naturalWidth,
+       noPreview:!link.querySelector('.ocr-media-thumb-fallback')?.hidden})));
+   assert(previews.every(p=>p.width>0&&!p.noPreview),'Local media thumbnails must actually load');
    await openMedia(chapter002);
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-pane .ocr-media-url').length===0,null,{timeout:9000});
    await page.waitForTimeout(1100); // late inventory and status network responses
@@ -52,6 +65,6 @@ for(const [browserName,engine,options] of [
    assert(after.some(url=>before.includes(url)),'001 images did not return');
    assert.equal(documentRequests,1,'File switching unexpectedly reloaded the page');
    assert.deepEqual(errors,[]);
-   console.log('CHAPTER_EMPTY_MEDIA_PASS',browserName,JSON.stringify({chapter001Images:before.length,chapter002Images:0,afterReturn:after.length,documentRequests}));
+   console.log('CHAPTER_EMPTY_MEDIA_PASS',browserName,JSON.stringify({chapter001Images:before.length,loadedPreviewImages:previews.length,chapter002Images:0,afterReturn:after.length,documentRequests}));
  }finally{await browser.close();}
 }
