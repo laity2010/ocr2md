@@ -1,15 +1,16 @@
-# OCR2MD V6 · cm-html 实验版
+# OCR2MD V6 · cm-html 实验：同一工作台、多文件上下文
 
-使用同一份 V6 主线核心，实验差异只登记在本分支 `labs/cm-html/lab.json`：
+本实验只在 `experiment/wcp-lab` 分支修改实验模块与可选 HTTP 适配接口，主线 `ui/`、工作数据和正式发布不变。沿用主线 WCP、CMD、AG、CM6、PDF.js、MD Preview、所有模块控件；**绝不建立章节只读影子编辑器**。
 
-- `settings`：CM 文件导航（章节定界母文档、全局设置以及导出后的章节只读打开）。
-- `chapterFiles`：复用 V6 章节切分，将文件名统一成 `000-xxx.cmd.chapter.md`。
-- `modules/chapter-server-launch.py`：由实验部署器复制到运行目录 `.runtime/chapter-server.py` 作为启动入口；只修改运行时 `v6_chapters.chapter_dir` 与文件名校验，复用既有导出和原子写入接口，不复制 V6 后端。
+- 文件导航：`章节定界/母文档`、`全局设置/settings.json`、`章节chapter/<编号>-<标题>.cmd.chapter.md`。
+- 选择章文件：以 URL 查询参数 `?chapter=<文件名>` 建立独立的当前文档上下文，重新运行原生 V6 组件初始化；AG/源码/预览/PDF/撤销重做/保存全都来自同一 CM6 章节文档。
+- 章节保存：`/api/document?chapter=<文件名>` 通过实验路由限定在清单登记的章节，复用 `v6_chapters.export` 原子更新全部章节及 SHA 清单；母文档及其他章节不能被覆盖。切换不同文件时遵循原生浏览器未保存提醒，不能将两个文件的撤销历史混到一个 EditorState。
+- 章节导出：母文档仍用原 `export-chapters`，输出实验数据目录的 `chapter/*.cmd.chapter.md`；章节内再次导出/初始化被拒绝，以防误覆盖母文档章节目录。
+- `*.cmd.chapter.md` 只是已定界、允许后续元素模块处理的文件格式，不会改变 CM6 内容的其他解析规则。
+- `settings`、`chapterFiles` 仍是单独模块覆盖。实验分支的通用 `scripts/v6_serve.py` 仅增加可选实验 `document-router.py` 钩子，生产没有开启；通过 `V6_LAB_RUNTIME` 明确复用已经部署的实验 `.runtime/`，无需复制用户数据。
 
-实验版章节输出在**实验工作文档同级目录的 `chapter/`**（例如 `labs/cm-html/.runtime/chapter/`）。
-读取 `/api/chapters` 清单并显示 `章节chapter/文件名`；点击章节文件会在源码窗以**只读 CM6** 查看。母文档、设置和章节各自分离；不能将章节内容通过原母文档保存按钮误写。
-标签 `.cmd.chapter.md` 表明该章节已完成定界，可以被后续元素清洗模块识别；**不表示本轮已启用章节内编辑/保存或元素处理**。
+## 验收
 
-实验服务沿用现有 4443 HTTPS `/labs/cm-html/` 反代到 4408，保存授权和数据仍与正式 V6 隔离。部署的实验服务启动器位于实验 `.runtime/` 内，正式 `scripts/v6_serve.py` 及 `scripts/v6_chapters.py` 不改。
-
-验收：`modules/chapter-export.browser.test.mjs` 在隔离测试数据目录中做授权导出、落盘、读取及源码只读打开；另运行 `modules/source-file-navigation.browser.test.mjs`、`modules/ag-module-toolbar.browser.test.mjs` 和主线实验完整回归。
+- `modules/chapter-export.browser.test.mjs`：真实 Chrome/WebKit 授权导出 → 选择章节 → 原生 AG/CM6/预览 → 编辑、Undo/Redo、保存、重开、回母文档，核对父文档及旁章字节不变。
+- `modules/source-file-navigation.browser.test.mjs`、`modules/ag-module-toolbar.browser.test.mjs`：原工作台交互回归。
+- 现有实验公网/内网入口仍为 `/labs/cm-html/`（内网 HTTPS 4443 反代 4408）。
