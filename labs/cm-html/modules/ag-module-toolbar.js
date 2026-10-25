@@ -33,6 +33,7 @@ export function mountAgModuleToolbar(){
       transitioning=false;
     }
     refresh();
+    queueMicrotask(refresh);
   }
   function refresh(){
     if(!bar)return;
@@ -69,6 +70,10 @@ export function mountAgModuleToolbar(){
       syncModule();return;
     }
     refresh();
+    // The original module listener was registered after the lab toolbar and
+    // may restore visibility of its own action group on the same event.
+    // Apply file-type visibility after all synchronous owners have run.
+    queueMicrotask(refresh);
   });
   document.addEventListener('ocr2md:lab-file-activated',event=>{
     // A native in-place file switch has already changed the CM6 state; the AG
