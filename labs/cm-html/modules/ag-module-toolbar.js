@@ -14,7 +14,9 @@ export function mountAgModuleToolbar(){
     throw Error('Missing module action/selection contract');
 
   let chapter=new URLSearchParams(location.search).get('chapter');
-  const chapterModules=new Map();
+  // The element category is a workspace-wide view preference, not a
+  // document-specific state. Chapters share it across in-place navigation.
+  let selectedElementModule='chapter-boundary';
   let bar=null;
   let transitioning=false;
   // File navigation and the mainline module handler keep the original select.
@@ -33,10 +35,7 @@ export function mountAgModuleToolbar(){
     moduleSelect.dispatchEvent(new Event('change',{bubbles:true}));
   });
   const isChapter=()=>Boolean(chapter);
-  const activeModule=()=>{
-    const value=chapterModules.get(chapter);
-    return value==='chapter-boundary'||value==='media'||value==='latex'?value:'chapter-boundary';
-  };
+  const activeModule=()=>selectedElementModule;
 
   function syncModule(){
     if(transitioning)return;
@@ -75,7 +74,7 @@ export function mountAgModuleToolbar(){
     const selected=moduleSelect.value;
     if(selected==='settings'){refresh();return;}
     if(isChapter()){
-      if(selected==='chapter-boundary'||selected==='media'||selected==='latex')chapterModules.set(chapter,selected);
+      if(selected==='chapter-boundary'||selected==='media'||selected==='latex')selectedElementModule=selected;
       else{syncModule();return;}
     }else if(selected!=='chapter-boundary'){
       syncModule();return;

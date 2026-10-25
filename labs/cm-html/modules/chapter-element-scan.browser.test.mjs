@@ -65,7 +65,9 @@ print('VALID_FIXTURE',manifest['files'][0]['name'],manifest['files'][1]['name'])
      const tag=names[ix],chapter=chapters[ix];
      await fileMenu.selectOption('chapter:'+chapter);
      await page.waitForURL(u=>u.searchParams.get('chapter')===chapter,{timeout:16000});
-     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
+     const remembered=ix===0?'chapter-boundary':'media';
+     await page.waitForFunction(expected=>document.querySelector('#module-select')?.value===expected,remembered,{timeout:12000});
+     assert.equal(await moduleMenu.inputValue(),remembered,'AG element dropdown reset on chapter switch');
      assert.deepEqual(await moduleMenu.locator('option:not([hidden])').allTextContents(),['标题','媒体','LaTeX']);
      const grids=[['chapter-boundary','.ocr-outline-grid','QA_TRIPLE_TITLE_'],
        ['media','.ocr-media-pane','QA_MEDIA_'],['latex','.ocr-latex-pane','QA_']];

@@ -83,14 +83,37 @@ for(const [name,engine,options] of [
     assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
     assert.equal(await bar.locator('#export-chapters').isVisible(),false);
     await bar.locator('.ocr-lab-element-select').selectOption('latex');
+    // Element category is one workspace-level view, not per-file default.
+    // Enter a NEW chapter while LaTeX is active: remain on LaTeX.
     await sourceMenu.selectOption(chapterIds[1]);
     await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[1].slice(8),{timeout:15000});
-    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
-    assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='latex',null,{timeout:12000});
+    assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'latex');
+    assert.equal(await page.locator('.ocr-outline-pane .ocr-latex-pane').isVisible(),true);
+    // Change category in chapter 001 and retain it going back to 000.
+    await bar.locator('.ocr-lab-element-select').selectOption('media');
     await sourceMenu.selectOption(chapterIds[0]);
     await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[0].slice(8),{timeout:15000});
-    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='latex',null,{timeout:12000});
-    assert.equal(await bar.locator('#latex-refresh').isVisible(),true,'File-specific module choice lost');
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:12000});
+    assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'media');
+    assert.equal(await page.locator('.ocr-outline-pane .ocr-media-pane').isVisible(),true);
+    // Opening the mother document displays Chapter Boundary without
+    // overwriting the selected element category for subsequent chapter work.
+    await sourceMenu.selectOption('document');
+    await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:15000});
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
+    assert.equal(await bar.locator('.ocr-lab-element-select').isVisible(),false);
+    assert.equal(await bar.locator('#export-chapters').isVisible(),true);
+    await sourceMenu.selectOption(chapterIds[1]);
+    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[1].slice(8),{timeout:15000});
+    await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:12000});
+    assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'media');
+    // The Title selection likewise remains active across a chapter switch.
+    await bar.locator('.ocr-lab-element-select').selectOption('chapter-boundary');
+    await sourceMenu.selectOption(chapterIds[0]);
+    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[0].slice(8),{timeout:15000});
+    assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'chapter-boundary');
+    assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
     await sourceMenu.selectOption('document');
     await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
@@ -100,6 +123,6 @@ for(const [name,engine,options] of [
     assert.equal(await input.inputValue(),'012');
     assert.deepEqual(errors,[]);
     assert.deepEqual(unscoped,[]);
-    console.log('LAB_AG_FILE_MODE_TOOLBAR_PASS',name,JSON.stringify({mother:'chapter-boundary',chapter:['title','media','latex'],perFileModule:true,unscopedRequests:0}));
+    console.log('LAB_AG_FILE_MODE_TOOLBAR_PASS',name,JSON.stringify({mother:'chapter-boundary',chapter:['title','media','latex'],sharedElementMode:true,unscopedRequests:0}));
   }finally{await browser.close();}
 }
