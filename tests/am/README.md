@@ -51,7 +51,7 @@ bash tests/am/run-grok-audit.sh "$(git rev-parse HEAD)"
 
 该命令拒绝脏的主线工作区与 Git SHA 不匹配，不在真实工作目录运行测试。它创建一个同 SHA 的**隔离 detached worktree**，只复制只读 PDF 样本进隔离环境，将母本 Markdown 初始化为测试专用副本，再在其中执行 27 套件/139 AM 契约，运行后查验 Git 完整性。可设置 `OCR2MD_AUDIT_TARGET_DIR=/absolute/new/path` 为本轮指定新的隔离工作区；遇到旧 SHA 或文件改动直接 BLOCKED，而不是自动覆盖或 `reset --hard`。
 
-跨平台差异仅存在 `tests/am/portability/`，包括 Python 端口预检、真实 Chromium/WebKit 动态库检查、Node 测试适配器、Linux `sips` → 真实 Chromium JPEG 转换、WebKit 本地 HTTP 授权 Cookie 适配与 reload 取证。授权适配**不进入生产**；本地 HTTP 验收不代表正式 HTTPS 授权验收。测试所需 PDF 路径及 SHA 由既有 `tests/k/data.json` 标定，审计前须将同份 PDF 放在工作区的 `.v6/workspace/buffetts-alpha.original.pdf`，Linux 也一样；不把实际用户工作文档当测试输入。浏览器缺库时报告环境 BLOCKED 而不假造业务测试 FAIL。Linux 可在具有适当权限的隔离容器中设置 `OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS=1` 安装系统依赖；可设置 `OCR2MD_AUDIT_SKIP_BROWSER_INSTALL=1` 跳过安装命令，但仍须通过真实启动预检。
+跨平台审计专用适配位于 `tests/am/portability/`，包括 Python 端口预检、真实 Chromium/WebKit 动态库检查、Node 测试适配器、WebKit 本地 HTTP 授权 Cookie 适配与 reload 取证；媒体夹具由 `tests/helpers/png-to-jpeg.mjs` 直接跨平台生成。授权适配**不进入生产**；本地 HTTP 验收不代表正式 HTTPS 授权验收。测试所需 PDF 路径及 SHA 由既有 `tests/k/data.json` 标定，审计前须将同份 PDF 放在工作区的 `.v6/workspace/buffetts-alpha.original.pdf`，Linux 也一样；不把实际用户工作文档当测试输入。浏览器缺库时报告环境 BLOCKED 而不假造业务测试 FAIL。Linux 可在具有适当权限的隔离容器中设置 `OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS=1` 安装系统依赖；可设置 `OCR2MD_AUDIT_SKIP_BROWSER_INSTALL=1` 跳过安装命令，但仍须通过真实启动预检。
 
 WP1/WP2 采用并公开记录了三项测试契约修订：`tests/scroll-sync-browser.test.mjs` 基于用户请求的行 600 检查滚动前进；`tests/latex-browser.test.mjs` 等待实际 KaTeX 渲染就绪再执行原断言；`tests/media-paste-browser.test.mjs` 对本地只读媒体 GET 的短连接错误至多重试两次，**绝不重试媒体写入 POST**。原有功能结果要求均保留。审计报告必须保留业务提交 SHA、测试提交 SHA、环境、失败日志与独立审阅结论；单次 PASS 不代表所有平台和生产 HTTPS 行为已被证明。
 
@@ -72,3 +72,13 @@ WP1/WP2 采用并公开记录了三项测试契约修订：`tests/scroll-sync-br
 列序固定 `一级分类 → 二级分类 → 键名 → 键注释`，前三列**直接复用章节定界的 `EnumCheckboxFilter` 和 AG 原生过滤按钮、复用 `ag-enum-filter-shared.css` 列头触摸/拖拽几何与弹窗样式**，键注释不设过滤；列宽可调整。AG 行点击调用 CMD 语法树按完整路径定位 `settings[fullKey]`；CM6 中点击任一记录字段/注释/范围都会选择对应 AG 行，必要时重置隐藏该行的过滤。
 
 此前发布的嵌套数值 + `$comments` 旧格式在 Settings 首次打开时经 CMD **一个可撤销的完整文档事务**转换为参数记录；不会自动写入磁盘。已注册键的旧值和注释保留；未登记的其他数据放到 `$legacy` 归档以免丢失。模块随后新登记键时，自动补充一条默认记录（依旧需要用户保存）。CMD 只负责源码的语法树定位、路径精确编辑、撤销及持久化，不解释设置业务含义。
+
+## Linux 持续兼容与独立审计（2026-10-25）
+
+此节是 **V6 的实现/验收说明**，不是新的 `AGENTS.md` 正式原则。跨版本正式约束以 `AGENTS.md` 为准；实验开发遵守第 5 条，AM/Git 审计遵守第 6 条。
+
+- 配置和浏览器测试不得绑定开发者 Mac 的绝对路径：浏览器从当前锁定的 `playwright` 包解析可执行文件，原始 PDF 由 `V6_PDF_PATH` 或隔离工作目录 `.v6/workspace/buffetts-alpha.original.pdf` 指定；缺失时明确提示不可用，不读取个人 iCloud 路径。
+- `tests/helpers/png-to-jpeg.mjs` 用 Playwright Chromium 生成跨平台 JPEG 夹具，`tests/media-*.test.mjs` 不再直接调用 macOS `sips`。既有 `tests/am/portability/` 继续提供 Linux 回环 HTTP Cookie 适配、双浏览器动态库/真实启动预检、TIME_WAIT 端口预检和失败诊断；兼容适配不得进入正式 HTTPS 授权代码。
+- `.github/workflows/linux-am.yml` 对 `build/**`、`experiment/**` 和 PR 运行 Linux 双引擎真实启动、媒体夹具转换、AM 静态登记/边界负向测试。全量作业还运行唯一审计入口 `tests/am/run-grok-audit.sh`，对固定 SHA 的隔离 worktree 执行所有 AM 套件。
+- 完整 PDF 夹具因来源/版权/数据边界 **不得提交到 GitHub 或 CI 日志、artifact**。管理员需要在 GitHub 仓库 Actions Secret 设置 `OCR2MD_AUDIT_PDF_URL` 为可由 Actions Ubuntu runner 访问的**受控 HTTPS** 下载地址（建议有效期可管理的只读对象访问 URL）；CI 下载后校验固定 SHA-256 `be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab`。未配置、下载失败或哈希不符都视为 `AM_AUDIT_BLOCKED`，绝不伪报全量 PASS。Secret 请通过 GitHub 安全设置而非提交配置文件提供。
+- Linux CI 是开发期门禁，Grok/Muse 依旧在**各自独立环境**审计指定 Git SHA 并提交不可变报告。测试变更不得悄悄删除、弱化原始业务断言；生产 HTTPS Cookie、Mac 原生 Safari/iPad 行为需分别真实验收。

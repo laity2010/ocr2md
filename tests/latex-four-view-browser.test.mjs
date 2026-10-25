@@ -6,7 +6,6 @@ import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
 // Freeze source anchors and human review markers; never bind regression to the
@@ -23,8 +22,8 @@ assert.equal(math.filter(row=>row.detection==='inferred').length,0);
 assert.equal(math[0].line,757);
 const wait=ms=>new Promise(done=>setTimeout(done,ms));
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 for(let i=0;i<engines.length;i++){
  const [name,engine,options]=engines[i];
  const document=resolve(`.v6/tests/latex-four-view-${process.pid}-${i}.md`);

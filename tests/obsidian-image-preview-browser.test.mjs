@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
@@ -22,8 +21,8 @@ const suffix=[
  `![[notes.md|150]]`,
 ].join('\n\n');
 const source=fixture+'\n\n'+suffix+'\n';
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 mkdirSync('.v6/evidence',{recursive:true});
 for(let i=0;i<engines.length;i++){

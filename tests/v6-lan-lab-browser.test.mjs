@@ -16,8 +16,8 @@ const prodDoc=join(root,'.v6/workspace/buffetts-alpha.minerujson.md');
 const prodRelease=join(root,'.v6/release/index.html');
 const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
 const before=[hash(prodDoc),hash(prodRelease)];
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function request(url,opts={}){
  return new Promise((resolve,reject)=>{

@@ -6,7 +6,6 @@ import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const sha=x=>createHash('sha256').update(x).digest('hex');
@@ -18,11 +17,11 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
  cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:testFile},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const cases=[
- ['Mac Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'},
+ ['Mac Chrome',chromium,{executablePath:chromium.executablePath()},
   {viewport:{width:1440,height:900}},false],
- ['iPad Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'},
+ ['iPad Chrome',chromium,{executablePath:chromium.executablePath()},
   {...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}},true],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'},
+ ['iPad WebKit',webkit,{executablePath:webkit.executablePath()},
   {...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}},true],
 ];
 try{

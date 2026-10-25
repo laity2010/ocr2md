@@ -2,13 +2,13 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdtempSync,readFileSync} from 'node:fs';
-import {tmpdir,homedir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {chromium,webkit} from 'playwright';
 const key='chapterBoundary.ag.titleFontScale';
 const pause=n=>new Promise(r=>setTimeout(r,n));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 for(const [i,[name,engine,options]]of engines.entries()){
   const temp=mkdtempSync(join(tmpdir(),'ocr-title-scale-'));
   const path=join(temp,'settings.json');

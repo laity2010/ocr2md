@@ -24,7 +24,7 @@ try {
     await new Promise(r=>setTimeout(r,150));
   }
   assert(started,'isolated CM6 browser test server unavailable');
-  const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-first-run']});
+  const browser=await chromium.launch({executablePath:chromium.executablePath(),headless:true,args:['--no-first-run']});
 const errors=[];
 try {
   const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});

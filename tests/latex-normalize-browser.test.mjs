@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {spawn} from 'node:child_process';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
 import {findReviewMarkers} from '../ui/latex-review-markers.js';
@@ -19,8 +18,8 @@ function parse(text){
 }
 const before=parse(source);
 assert.equal(before.filter(x=>x.status==='latex').length,8);
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 const sleep=t=>new Promise(done=>setTimeout(done,t));
 mkdirSync('.v6/tests',{recursive:true});
 mkdirSync('.v6/evidence',{recursive:true});

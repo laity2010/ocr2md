@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
@@ -16,8 +15,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
  cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:file},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const cases=[
- ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'},{viewport:{width:1440,height:900}}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'},
+ ['Chrome',chromium,{executablePath:chromium.executablePath()},{viewport:{width:1440,height:900}}],
+ ['iPad WebKit',webkit,{executablePath:webkit.executablePath()},
   {...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}}],
 ];
 try{

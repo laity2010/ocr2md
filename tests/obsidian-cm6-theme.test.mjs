@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {chromium, webkit, devices} from 'playwright';
-import {homedir} from 'node:os';
 
 // Isolated Vite service and document: never open or save the real V6 workspace.
 const doc = '.v6/tests/obsidian-theme-probe.md';
@@ -31,8 +30,8 @@ try {
   assert(ready,'V6 style test server did not start');
 
   const variants = [
-    ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-    ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
+    ['Chrome',chromium,{executablePath:chromium.executablePath()}],
+    ['WebKit',webkit,{executablePath:webkit.executablePath()}],
   ];
   for(const [name,engine,launchOptions] of variants) {
     if(process.env.V6_ONLY_WEBKIT&&name!=='WebKit')continue;

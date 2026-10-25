@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {readFileSync,unlinkSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {buildOutline} from '../ui/outline-index.js';
 import {createHash} from 'node:crypto';
@@ -25,8 +24,8 @@ const port=5276,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{
  env:{...process.env,V6_DOCUMENT_PATH:file,V6_PDF_PATH:resolve('.v6/workspace/buffetts-alpha.original.pdf')},stdio:'ignore'});
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['iPad WebKit',webkit,{executablePath:webkit.executablePath()}]];
 try{
  let started=false;for(let i=0;i<160;i++){try{if((await fetch(url)).ok){started=true;break}}catch{}await delay(150)}
  assert(started,'isolated preview server not ready');

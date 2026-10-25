@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
@@ -17,8 +16,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
   '--port',String(port),'--strictPort'],{cwd:process.cwd(),
     env:{...process.env,V6_DOCUMENT_PATH:documentPath},stdio:'ignore'});
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-const browsers=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const browsers=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['iPad WebKit',webkit,{executablePath:webkit.executablePath()}]];
 try {
  let ready=false;
  for(let i=0;i<140;i++){

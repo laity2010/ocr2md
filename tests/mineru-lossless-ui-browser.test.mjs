@@ -3,7 +3,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync} from 'node:fs';
-import {homedir} from 'node:os';
 import {resolve} from 'node:path';
 import {chromium,webkit,devices} from 'playwright';
 import {buildOutline} from '../ui/outline-index.js';
@@ -12,8 +11,8 @@ const staged=readFileSync(file,'utf8');
 const old=readFileSync('.v6/workspace/buffetts-alpha.minerujson.md','utf8');
 const expectedHeadings=buildOutline(old).length;
 assert.equal(buildOutline(staged).length,expectedHeadings,'staging altered heading index');
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 for(let i=0;i<engines.length;i++){
  const [name,engine,launch]=engines[i],port=5280+i;

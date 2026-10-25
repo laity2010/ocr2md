@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {chromium,webkit,devices} from 'playwright';
 const sha=b=>createHash('sha256').update(b).digest('hex');
@@ -27,8 +26,8 @@ const bounded=(label,promise,ms)=>{let timer;return Promise.race([promise,new Pr
   timer=setTimeout(()=>reject(new Error(`${currentEngine}: step "${currentStep}" / ${label} exceeded ${ms}ms`)),ms);})])
   .finally(()=>clearTimeout(timer));};
 const ENGINE_WATCHDOG_MS=150000;
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 for(let i=0;i<engines.length;i++){
  const [name,engine,options]=engines[i],port=4710+i;
  const url=`http://127.0.0.1:${port}/`;

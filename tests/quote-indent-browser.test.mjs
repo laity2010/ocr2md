@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {buildOutline} from '../ui/outline-index.js';
 import {buildChapterFiles} from '../ui/chapter-files.js';
@@ -17,8 +16,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js',
   '--host','127.0.0.1','--port',String(port),'--strictPort'],{
   env:{...process.env,V6_DOCUMENT_PATH:path},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['iPad WebKit',webkit,{executablePath:webkit.executablePath()}]];
 try{
  let up=false;
  for(let i=0;i<140;i++){try{if((await fetch(url)).ok){up=true;break}}catch{}await sleep(150)}

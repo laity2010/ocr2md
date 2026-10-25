@@ -3,15 +3,14 @@ import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,existsSync,readdirSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 const root=process.cwd(),fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const files=['packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   '.v6/workspace/buffetts-alpha.minerujson.md','.v6/release/index.html'];
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const hashes=files.map(f=>hash(readFileSync(f)));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
 for(const [n,[name,engine,options]] of engines.entries()){

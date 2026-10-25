@@ -3,15 +3,14 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {chromium,webkit,devices} from 'playwright';
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 for(const [i,[name,engine,launch]] of engines.entries()){
  const port=5227+i, url=`http://127.0.0.1:${port}/`;
  const doc=resolve(`.v6/tests/ag-header-${name.toLowerCase()}-${process.pid}.md`);

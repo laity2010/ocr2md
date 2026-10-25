@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {chromium, webkit, devices} from 'playwright';
-import {homedir} from 'node:os';
 
 const original='packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md';
 const testFile='.v6/tests/dockview-preview-test.md';
@@ -23,8 +22,8 @@ async function waitServer() {
   throw Error('Isolated Vite test server unavailable');
 }
 const engines=[
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
+  ['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}],
 ];
 try {
   await waitServer();

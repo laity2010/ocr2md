@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {buildOutline} from '../ui/outline-index.js';
 
@@ -30,8 +29,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
 });
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const engines=[
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
+  ['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}],
 ];
 
 try{

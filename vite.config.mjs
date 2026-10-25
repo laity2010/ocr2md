@@ -2,7 +2,6 @@ import {defineConfig} from 'vite';
 import {readFile, mkdir, rename, writeFile} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
 import {existsSync,statSync,createReadStream} from 'node:fs';
-import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {labProfile,labVitePlugin} from './scripts/v6_lab_profile.mjs';
 import {execFileSync} from 'node:child_process';
@@ -25,8 +24,7 @@ const hashSettings = text => createHash('sha256').update(text).digest('hex');
 const fixture = resolve('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const file = resolve(process.env.V6_DOCUMENT_PATH || '.v6/workspace/buffetts-alpha.minerujson.md');
 const originalJson = resolve('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json');
-const originalPdf = resolve(process.env.V6_PDF_PATH || join(homedir(),
-  'Library/Mobile Documents/iCloud~md~obsidian/Documents/ocr2md/ocr2md/Bufett’s Alpha/Buffett s Alpha.pdf'));
+const originalPdf = resolve(process.env.V6_PDF_PATH || '.v6/workspace/buffetts-alpha.original.pdf');
 
 // Thin I/O, no duplicate document state and no Markdown parsing.
 async function readDocument() {

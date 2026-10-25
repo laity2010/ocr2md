@@ -5,7 +5,7 @@ const base='http://127.0.0.1:4397/';
 const file='.v6/tests/auto-refresh.md';
 const version=JSON.parse(readFileSync('dist/release-version.json')).version;
 const code=readFileSync('.v6/private/editor-token','utf8').slice(0,12);
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const browser=await chromium.launch({executablePath:chromium.executablePath(),headless:true});
 async function prepare(){
  const p=await browser.newPage({viewport:{width:1032,height:730}});let redirects=0;let reported=version;
  await p.route('**/healthz',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({version:reported})}));

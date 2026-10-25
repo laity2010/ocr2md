@@ -2,7 +2,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {chromium,webkit} from 'playwright';
-import {homedir} from 'node:os';
 import {scanAnnotations,parseAnnotation,formatAnnotation} from '../ui/cmd-annotations.js';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const original='Intro\n> <!-- ocr2md:chapter:v1 id="h01" independent="1" -->\n> # Chapter\nProse <!--ocr2md:latex id=abc review=latex-->$x$ after.\n<!-- minerujson:test:v1\n<!--cdm:fake id="hidden"-->\n-->\nFinal';
@@ -24,8 +23,8 @@ try{
  for(let i=0;i<150;i++){try{if((await fetch(url)).ok){ready=true;break}}catch{}await sleep(130)}
  assert(ready,'isolated Vite unavailable');
  for(const [name,engine,launch] of [
-   ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-   ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]]){
+   ['Chrome',chromium,{executablePath:chromium.executablePath()}],
+   ['WebKit',webkit,{executablePath:webkit.executablePath()}]]){
    const browser=await engine.launch({headless:true,...launch});
    try{
      const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));

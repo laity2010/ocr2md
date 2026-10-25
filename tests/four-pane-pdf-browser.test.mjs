@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {resolve,join} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {createHash} from 'node:crypto';
 // Full AM runs use a checksum-pinned PDF copy in the isolated audit workspace,
@@ -12,8 +11,8 @@ const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mine
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const sourceHash=hash(original),pdfHash=hash(readFileSync(pdf));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
 for(const [i,[name,engine,options]] of engines.entries()){
  const port=4590+i,url=`http://127.0.0.1:${port}/`;

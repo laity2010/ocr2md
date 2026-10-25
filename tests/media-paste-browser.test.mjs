@@ -1,24 +1,24 @@
 /** Clipboard image -> authorized Media file -> CMD paste transaction. No live data. */
 import assert from 'node:assert/strict';
-import {spawn,execFileSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
-import {homedir} from 'node:os';
 import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {chromium,webkit,devices} from 'playwright';
+import {pngToJpeg} from './helpers/png-to-jpeg.mjs';
 
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const imageSource=resolve('.v6/tests/paste-image-source.png');
 const imageJpeg=resolve('.v6/tests/paste-image-valid.jpg');
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
 writeFileSync(imageSource,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9hCeEEsAAAAASUVORK5CYII=','base64'));
-execFileSync('sips',['-s','format','jpeg',imageSource,'--out',imageJpeg],{stdio:'ignore'});
+await pngToJpeg(imageSource,imageJpeg);
 const bytes=readFileSync(imageJpeg);
 const localPath='media/'+createHash('sha256').update(bytes).digest('hex').slice(0,24)+'.jpg';
 const pause=ms=>new Promise(done=>setTimeout(done,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 for(let i=0;i<engines.length;i++){
  const [name,engine,options]=engines[i];
  const root=resolve('.v6/tests/paste-'+process.pid+'-'+i);mkdirSync(root,{recursive:true});

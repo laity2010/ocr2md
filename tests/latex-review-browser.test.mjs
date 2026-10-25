@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
 import {findReviewMarkers,planReviewEdit,planReviewAnnotations} from '../ui/latex-review-markers.js';
@@ -21,8 +20,8 @@ assert.deepEqual(intended.map(x=>x.action),['insert','text']);
 assert.equal(intended[0].tag,'ocr2md:latex');
 assert(!intended.some(op=>op.tag==='/ocr2md:latex'));
 
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 mkdirSync('.v6/evidence',{recursive:true});
 for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WEBKIT_ONLY||x[0]==='WebKit').entries()){
  const root=resolve(`.v6/tests/latex-cm-review-${process.pid}-${index}`);

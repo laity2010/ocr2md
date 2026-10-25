@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import {spawn,execFileSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {randomBytes} from 'node:crypto';
 import {deflateSync} from 'node:zlib';
 import {chromium,webkit,devices} from 'playwright';
+import {pngToJpeg} from './helpers/png-to-jpeg.mjs';
 import {buildChapterFiles} from '../ui/chapter-files.js';
 import {buildOutline} from '../ui/outline-index.js';
 
@@ -37,7 +37,7 @@ dimensions[8]=8;dimensions[9]=2;
 writeFileSync(tinyPng,Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),
  pngChunk('IHDR',dimensions),pngChunk('IDAT',deflateSync(raw)),
  pngChunk('IEND',Buffer.alloc(0))]));
-execFileSync('sips',['-s','format','jpeg','-s','formatOptions','best',tinyPng,'--out',tinyJpeg],{stdio:'ignore'});
+await pngToJpeg(tinyPng,tinyJpeg);
 const data=readFileSync(tinyJpeg);
 assert(data.length>512*1024,'test JPEG must span multiple resumable chunks');
 
@@ -62,8 +62,8 @@ await new Promise(done=>upstream.listen(0,'127.0.0.1',done));
 const remoteOrigin=`http://127.0.0.1:${upstream.address().port}`;
 const target=remoteOrigin+'/image.jpg';
 const sample=fixture.replace(first[1],target);
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]];
 const pause=ms=>new Promise(done=>setTimeout(done,ms));
 mkdirSync('.v6/evidence',{recursive:true});
 try{

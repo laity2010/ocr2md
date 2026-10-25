@@ -46,6 +46,8 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 ## 开发、测试、发布
 
+跨平台兼容与 Linux CI 的实施说明见 [`tests/am/README.md`](./tests/am/README.md#linux-持续兼容与独立审计2026-10-25)；GitHub Actions 的全量 Linux 审计需先安全配置固定 PDF 夹具来源，否则会明确 BLOCKED，不会当作验收通过。实验分支的正式原则见 [`AGENTS.md` 第 5 条](./AGENTS.md)。
+
 本机需 Node.js/npm、Python 3；浏览器测试需 Mac 上的 Chrome 与已安装的 Playwright WebKit。
 
 ```bash

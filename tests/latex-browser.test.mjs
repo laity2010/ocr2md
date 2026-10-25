@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {findLatex} from '../ui/latex-scan.js';
 
@@ -49,8 +48,8 @@ const line855=baseline.find(item=>item.content.includes('\\kern - delimiterspace
 assert(line855?.detection==='inferred','the row 855 extracted fragment must be detected');
 
 const content=fixture+'\n\n'+cases+'\n';
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]]
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['WebKit',webkit,{executablePath:webkit.executablePath()}]]
  .filter(([name])=>!process.env.OCR_WEBKIT_ONLY||name==='WebKit');
 const pause=t=>new Promise(r=>setTimeout(r,t));
 mkdirSync('.v6/evidence',{recursive:true});

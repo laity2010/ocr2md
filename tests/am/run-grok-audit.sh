@@ -80,14 +80,11 @@ cp tests/am/portability/audit-loopback-cookie.mjs "$REPORT/audit-loopback-cookie
 NODE_OPTIONS="--import=$(pwd)/tests/am/audit-browser-preload.mjs --import=$(pwd)/$REPORT/audit-fixture-preload.mjs"
 if [[ "$(uname -s)" == Linux ]]; then
   ulimit -c 0 || blocked 'cannot disable Linux browser core dumps'
-  for helper in audit-sips-compat.mjs audit-png-to-jpeg.mjs audit-linux-diagnostics.mjs audit-sips-smoke.test.mjs; do
-    cp "tests/am/portability/$helper" "$REPORT/$helper"
-  done
-  NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT/audit-sips-compat.mjs --import=$(pwd)/$REPORT/audit-linux-diagnostics.mjs"
+  cp tests/am/portability/audit-linux-diagnostics.mjs "$REPORT/audit-linux-diagnostics.mjs"
+  NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT/audit-linux-diagnostics.mjs"
 fi
 NODE_OPTIONS="$NODE_OPTIONS --import=$(pwd)/$REPORT/audit-loopback-cookie.mjs"
 export NODE_OPTIONS
-if [[ "$(uname -s)" == Linux ]]; then node "$REPORT/audit-sips-smoke.test.mjs"; fi
 
 printf 'AM_AUDIT_ENV node=%s python=%s playwright=%s\n' "$(node -v)" "$(python3 -V 2>&1)" "$(node -p 'require("playwright/package.json").version')"
 mkdir -p .v6/workspace .v6/tests .v6/evidence

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {copyFileSync,mkdirSync,readFileSync} from 'node:fs';
 import {chromium,webkit,devices} from 'playwright';
-import {homedir} from 'node:os';
 
 const fixture='packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md';
 const testFile='.v6/tests/scroll-sync-browser-test.md';
@@ -31,8 +30,8 @@ const getState=()=>({source:window.__v6cm6.scrollSync.currentSource,
   previewY:document.querySelector('.ocr-preview-md-scroll').scrollTop,
 });
 const engines=[
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
+  ['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}],
 ];
 try{
   let ready=false;

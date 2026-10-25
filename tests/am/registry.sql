@@ -585,3 +585,9 @@ INSERT INTO access_edges VALUES
  ('X74','S','C','ui/settings-module.js','readCMDJsonSnapshot()','C28','registered','Settings startup loads effective values via CMD read-only JSON port');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C28','C28','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Startup applies saved font without creating hidden secondary Dockview or CM6','integration');
+
+-- Bind the existing settings-to-chapter AG subscription to its actual browser regression.
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
+ ('TC-SUB-G01','SUB-G01','tests/outline-title-scale-browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Setting titleFontScale updates chapter AG row font without affecting other columns and survives reload','integration');

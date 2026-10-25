@@ -1,0 +1,97 @@
+name: OCR2MD Linux portability and AM
+
+on:
+  push:
+    branches: ['build/**', 'experiment/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-am-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-portability:
+    name: Linux Chromium/WebKit preflight and AM static contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: npm --prefix packages/minerujson-md ci --no-audit --no-fund
+      - run: npm --prefix packages/minerujson-md run build
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Verify both real engines start
+        run: node tests/am/portability/audit-browser-preflight.mjs
+      - name: Verify cross-platform media fixtures
+        run: node --test tests/portability-fixture.test.mjs
+      - name: Compile and validate AM contracts (static-only PDF path placeholder)
+        run: |
+          # Only the AM catalog reference check runs here, not any PDF browser test.
+          # The full audit job separately requires the exact hashed private PDF.
+          mkdir -p .v6/workspace
+          : > .v6/workspace/buffetts-alpha.original.pdf
+          npm run build
+          python3 tests/am/am.py build
+          python3 -m unittest discover -s tests/am -p 'test_*.py'
+          python3 tests/am/am.py check
+          python3 tests/am/am.py edges debt
+      - name: Verify known port reuse
+        run: python3 tests/am/portability/audit-port-preflight.py --self-test
+
+  linux-full-am:
+    name: Linux full AM (requires frozen private PDF)
+    needs: linux-portability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PDF_URL: ${{ secrets.OCR2MD_AUDIT_PDF_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage the immutable licensed fixture (fail closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$PDF_URL" ]]; then
+            echo 'AM_AUDIT_BLOCKED: configure the private OCR2MD_AUDIT_PDF_URL repository secret; never upload the licensed PDF to Git' >&2
+            exit 2
+          fi
+          if [[ "$PDF_URL" != https://* ]]; then
+            echo 'AM_AUDIT_BLOCKED: PDF fixture URL must use HTTPS' >&2
+            exit 2
+          fi
+          mkdir -p .v6/workspace
+          curl --fail --silent --show-error --location --retry 2 --proto '=https' --proto-redir '=https' \
+            --max-time 90 --output .v6/workspace/buffetts-alpha.original.pdf "$PDF_URL"
+          echo 'be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab  .v6/workspace/buffetts-alpha.original.pdf' | sha256sum --check --status || {
+            echo 'AM_AUDIT_BLOCKED: frozen fixture SHA-256 mismatch' >&2
+            exit 2
+          }
+          chmod 400 .v6/workspace/buffetts-alpha.original.pdf
+      - name: Full isolated Linux Chromium/WebKit audit
+        env:
+          OCR2MD_AUDIT_INSTALL_SYSTEM_DEPS: '1'
+        run: bash tests/am/run-grok-audit.sh "$(git rev-parse HEAD)"
+      - name: Collect non-sensitive test logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          printf 'Current commit: '; git rev-parse HEAD
+          echo 'Full AM failure: consult runner logs; PDF and secrets are never uploaded as artifacts.'

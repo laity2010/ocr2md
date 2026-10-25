@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
 import {spawn} from 'node:child_process';
 import {mkdtempSync,existsSync,readFileSync,writeFileSync} from 'node:fs';
-import {tmpdir,homedir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 const root=process.cwd();
 const folder=mkdtempSync(join(tmpdir(),'ocr2md-v6-settings-test-'));
@@ -25,8 +25,8 @@ const pause=t=>new Promise(r=>setTimeout(r,t));
 let ready=false;
 for(let i=0;i<180;i++){try{if((await fetch(base)).ok){ready=true;break;}}catch{}await pause(120);}
 assert(ready,'Vite settings test server failed to start');
-const engines=[['Chromium',chromium,{headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{headless:true,executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chromium',chromium,{headless:true,executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{headless:true,executablePath:webkit.executablePath()}]];
 try{
   for(const [name,engine,options]of engines){
     const browser=await engine.launch(options);

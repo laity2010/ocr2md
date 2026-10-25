@@ -4,7 +4,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawn} from 'node:child_process';
-import {homedir} from 'node:os';
 import {chromium,webkit} from 'playwright';
 const original=readFileSync('tests/fixtures/latex-legacy-display.md','utf8');
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port','5471','--strictPort'],{stdio:'ignore'});
@@ -16,8 +15,8 @@ try{
  }
  assert(ready,'test Vite not ready');
  for(const [name,engine,options] of [
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]]){
+  ['Chrome',chromium,{executablePath:chromium.executablePath()}],
+  ['WebKit',webkit,{executablePath:webkit.executablePath()}]]){
   const browser=await engine.launch({headless:true,...options});
   try{
     const page=await browser.newPage({viewport:{width:1140,height:740}});

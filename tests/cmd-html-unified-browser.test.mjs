@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 const bytes=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 mkdirSync('.v6/tests',{recursive:true});
@@ -13,8 +12,8 @@ const port=5291,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
  '--port',String(port),'--strictPort'],{env:{...process.env,V6_DOCUMENT_PATH:docFile},stdio:'ignore'});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromium.executablePath()}],
+ ['iPad WebKit',webkit,{executablePath:webkit.executablePath()}]];
 try{
  let available=false;
  for(let i=0;i<150;i++){try{if((await fetch(url)).ok){available=true;break}}catch{}await sleep(130)}
