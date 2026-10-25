@@ -11,11 +11,3 @@
 .ocr-settings-pane.ocr-lab-file-source > .cm-editor {height:auto;flex:1 1 0;min-height:0;}
 
 .ocr-lab-file-toolbar[hidden] {display:none!important;}
-/* Independent chapter read-only CM6; the mother editor is never overwritten. */
-.ocr-source-pane.ocr-lab-chapter-active #editor{display:none!important}
-.ocr-lab-chapter-reader{flex:1 1 0;min-height:0;min-width:0;overflow:hidden;background:#111827}
-.ocr-lab-chapter-reader[hidden]{display:none!important}
-.ocr-lab-chapter-reader .cm-editor{height:100%;font-size:var(--ocr-cm-source-font-size,12pt)}
-.ocr-lab-chapter-reader .cm-scroller{font-family:'OCR2MD Sarasa',monospace}
-.ocr-lab-chapter-readonly{font:11px 'OCR2MD Sarasa',monospace;color:#d3c6aa;white-space:nowrap}
-.ocr-lab-chapter-readonly[hidden]{display:none!important}

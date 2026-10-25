@@ -47,6 +47,20 @@ export function labVitePlugin(root,profile){
     transform(code,id){
       const path=id.split('?')[0].replaceAll('\\','/');
       if(!path.startsWith(sourceRoot+'/'))return;
+      if(path===join(sourceRoot,'main.js')){
+        // Select the document as an explicit URL context, never a shared
+        // mutable global server DOC. Every CM/AG/preview business path in
+        // this page then uses exactly the same mainline workbench core.
+        const helper = `const __labActiveChapter = new URLSearchParams(location.search).get('chapter');
+const __labDocumentUrl = path => __labActiveChapter ? path + '?chapter=' + encodeURIComponent(__labActiveChapter) : path;
+`;
+        code=code.replace('const $ = (id) => document.getElementById(id);',helper+'const $ = (id) => document.getElementById(id);');
+        for(const endpoint of ['document','export-chapters','initialize-document'])
+          code=code.replaceAll(`fetch('/api/${endpoint}'`,`fetch(__labDocumentUrl('/api/${endpoint}')`);
+        code=code.replace("const documentLabel='Buffett’s Alpha.minerujson.md';",
+          "const documentLabel=__labActiveChapter||'Buffett’s Alpha.minerujson.md';");
+      }
+
       // Scope only the reused mainline's network requests; fail-closed browser
       // acceptance checks reject any unprefixed /api or /media request.
       return code.replaceAll("'/api/",`'${scoped}api/`)

@@ -1,141 +1,86 @@
-/** Lab-only navigation for master, JSON settings, and exported bounded chapters.
- * The master CM6/editor API is untouched. Chapters open read-only in their
- * own CM6 view until a dedicated element module owns chapter write actions.
+/** Experimental file selection uses the SAME original CM6 / CMD / AG / PDF
+ * workbench; navigating a file reloads it as the currently active document.
+ * Per-file save is explicitly routed on the server and cannot touch mother.
  */
-import {EditorState} from '@codemirror/state';
-import {EditorView,basicSetup} from 'codemirror';
-import {markdown} from '@codemirror/lang-markdown';
 import './source-file-navigation.css';
-
 const DEFAULTS=Object.freeze([
   {id:'document',label:'章节定界/Buffett’s Alpha.minerujson.md'},
   {id:'settings',label:'全局设置/settings.json'},
 ]);
 const FILE_PATTERN=/^[0-9]{1,6}-[\p{L}\p{N}_-]{1,110}\.cmd\.chapter\.md$/u;
 const chapterId=name=>'chapter:'+name;
+const currentChapter=new URLSearchParams(location.search).get('chapter');
 
 export function createSourceFileNavigation(){
   const moduleSelector=document.getElementById('module-select');
   const workbench=document.getElementById('workspace');
   const settingsWorkbench=document.getElementById('settings-workspace');
   const selectBoxes=new Set();
-  let names=[],activeChapter=null,chapterView=null,chapterPane=null,requestId=0;
+  let names=[];
+  const activeId=()=>currentChapter?chapterId(currentChapter):'document';
   const isChapterMode=()=>moduleSelector?.value==='chapter-boundary';
-  function setSelections(){
-    for(const select of selectBoxes){
-      const isSettings=Boolean(select.closest('#settings-workspace'));
-      select.value=isSettings?'settings':activeChapter?chapterId(activeChapter):'document';
-    }
-  }
-  function updateVisibility(){
+  const updateVisibility=()=>{
     const toolbar=workbench?.querySelector('.ocr-source-pane > .ocr-lab-file-toolbar');
     if(toolbar)toolbar.hidden=!isChapterMode();
-    if(!isChapterMode())closeChapter();
-  }
-  function closeChapter(){
-    requestId++;
-    activeChapter=null;
-    chapterView?.destroy();chapterView=null;
-    if(chapterPane)chapterPane.hidden=true;
-    const pane=workbench?.querySelector('.ocr-source-pane');
-    pane?.classList.remove('ocr-lab-chapter-active');
-    setSelections();
-  }
+  };
   moduleSelector?.addEventListener('change',updateVisibility);
-
-  function rebuildOptions(){
+  function syncOptions(){
     for(const select of selectBoxes){
+      const isSettings=Boolean(select.closest('#settings-workspace'));
       select.replaceChildren();
       for(const item of [...DEFAULTS,...names.map(name=>({id:chapterId(name),label:'章节chapter/'+name}))]){
         const option=document.createElement('option');
-        option.value=item.id;option.textContent=item.label;
-        select.append(option);
+        option.value=item.id;option.textContent=item.label;select.append(option);
       }
+      select.value=isSettings?'settings':activeId();
     }
-    if(activeChapter&&!names.includes(activeChapter))closeChapter();
-    setSelections();
   }
-
   async function refreshChapters(){
     try{
       const response=await fetch('api/chapters',{cache:'no-store'});
-      if(response.status===404){names=[];rebuildOptions();return;}
+      if(response.status===404){names=[];syncOptions();return;}
       if(!response.ok)throw Error('章节清单 HTTP '+response.status);
       const manifest=await response.json();
-      names=(manifest.files||[]).map(f=>f.name).filter(name=>FILE_PATTERN.test(name));
-      rebuildOptions();
-    }catch(error){
-      // Keep previously listed files if a transient connection is lost.
-      console.warn('章节清单暂不可读',error.message);
-    }
+      names=(manifest.files||[]).map(f=>f.name).filter(n=>FILE_PATTERN.test(n));
+      syncOptions();
+    }catch(error){console.warn('章节清单暂不可读',error.message);}
   }
-
-  async function showChapter(name){
-    if(!names.includes(name))throw Error('章节清单不存在该文件');
-    const seq=++requestId;
-    const response=await fetch('api/chapters/'+encodeURIComponent(name),{cache:'no-store'});
-    if(!response.ok)throw Error('章节文件读取失败 HTTP '+response.status);
-    const content=await response.text();
-    if(seq!==requestId||!isChapterMode())return;
-    const pane=workbench?.querySelector('.ocr-source-pane');
-    if(!pane)throw Error('CM 源码窗尚未就绪');
-    if(!chapterPane){
-      chapterPane=document.createElement('div');
-      chapterPane.className='ocr-lab-chapter-reader ocr-cm-source';
-      chapterPane.setAttribute('aria-label','已定界章节 CM 源码（只读）');
-      chapterPane.hidden=true;
-      pane.append(chapterPane);
+  function navigate(target,selector){
+    if(target==='settings'){
+      moduleSelector.value='settings';
+      moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
+      selector.value=selector.closest('#settings-workspace')?'settings':activeId();
+      return;
     }
-    chapterView?.destroy();
-    chapterPane.replaceChildren();
-    chapterView=new EditorView({parent:chapterPane,state:EditorState.create({doc:content,
-      extensions:[basicSetup,markdown(),EditorState.readOnly.of(true),EditorView.editable.of(false),EditorView.lineWrapping]})});
-    activeChapter=name;
-    chapterPane.hidden=false;
-    pane.classList.add('ocr-lab-chapter-active');
-    setSelections();
-  }
-
-  async function navigate(target,fromSelect){
-    try{
-      if(target==='settings'){
-        closeChapter();
-        moduleSelector.value='settings';
-        moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
-      }else{
-        if(!isChapterMode()){
-          moduleSelector.value='chapter-boundary';
-          moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
-        }
-        if(target==='document')closeChapter();
-        else if(target.startsWith('chapter:'))await showChapter(target.slice(8));
-      }
-    }catch(error){
-      closeChapter();
-      console.warn('章节导航未完成',error.message);
-      const pane=workbench?.querySelector('.ocr-source-pane');
-      pane?.setAttribute('data-chapter-error',error.message);
-    }finally{
-      fromSelect.value=fromSelect.closest('#settings-workspace')?'settings':activeChapter?chapterId(activeChapter):'document';
+    if(target.startsWith('chapter:')&&!names.includes(target.slice(8))){
+      selector.value=selector.closest('#settings-workspace')?'settings':activeId();
+      return;
     }
+    const next=target==='document'?null:target.slice(8);
+    if(next!==currentChapter){
+      const url=new URL(location.href);
+      if(next)url.searchParams.set('chapter',next);
+      else url.searchParams.delete('chapter');
+      // Native beforeunload protects unsaved CM/Settings changes. A new page
+      // creates a fresh CM history for the new file, not mixed transactions.
+      location.assign(url.toString());
+      return;
+    }
+    if(!isChapterMode()){
+      moduleSelector.value='chapter-boundary';
+      moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    selector.value=selector.closest('#settings-workspace')?'settings':activeId();
   }
-
   function addBar(host){
     if(!host||host.querySelector(':scope > .ocr-lab-file-toolbar'))return;
-    const toolbar=document.createElement('div');toolbar.className='ocr-lab-file-toolbar';
+    const bar=document.createElement('div');bar.className='ocr-lab-file-toolbar';
     const select=document.createElement('select');select.className='ocr-lab-file-select';
     select.setAttribute('aria-label','源码文件导航');
-    select.title='章节文件只读预览；章节元素编辑将在对应模块启用';
-    const note=document.createElement('span');
-    note.className='ocr-lab-chapter-readonly';note.textContent='章节只读';note.hidden=true;
-    select.addEventListener('change',()=>{
-      void navigate(select.value,select).then(()=>{note.hidden=!activeChapter;});
-    });
-    selectBoxes.add(select);
-    toolbar.append(select,note);host.prepend(toolbar);
-    host.classList.add('ocr-lab-file-source');
-    rebuildOptions();
-    updateVisibility();
+    select.title='切换同一 CM6 工作台加载的 Markdown 文件';
+    select.addEventListener('change',()=>navigate(select.value,select));
+    selectBoxes.add(select);bar.append(select);host.prepend(bar);
+    host.classList.add('ocr-lab-file-source');syncOptions();updateVisibility();
   }
   function mountMarkdown(){
     const host=workbench?.querySelector('#editor')?.closest('.ocr-source-pane');
@@ -154,11 +99,11 @@ export function createSourceFileNavigation(){
   }
   const status=document.getElementById('status');
   if(status){
-    let noticed=false;
+    let notified=false;
     new MutationObserver(()=>{
       const exported=status.textContent?.includes('已导出');
-      if(exported&&!noticed)void refreshChapters();
-      noticed=exported;
+      if(exported&&!notified)void refreshChapters();
+      notified=exported;
     }).observe(status,{childList:true,characterData:true,subtree:true});
   }
   void refreshChapters();

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """V6 static release + single-document I/O. No Vite runtime, no MD cache."""
 import hmac
+import importlib.util
 import hashlib
 import subprocess
 from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
@@ -26,7 +27,18 @@ if LAB_ID and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', LAB_ID) is None:
     raise RuntimeError('Invalid V6_LAB_ID')
 LAB_DIR = ROOT / 'labs' / LAB_ID if LAB_ID else None
 PREFIX = f'/labs/{LAB_ID}/' if LAB_ID else '/'
+# Explicit experiment runtime sharing between the independent Git worktree
+# and its existing deployed lab data. No production .v6 path is accepted.
 RUNTIME = LAB_DIR / '.runtime' if LAB_ID else ROOT / '.v6'
+if LAB_ID and os.environ.get('V6_LAB_RUNTIME'):
+    runtime_override = Path(os.environ['V6_LAB_RUNTIME']).resolve()
+    if (runtime_override.name != '.runtime' or
+        runtime_override.parent.name != LAB_ID or
+        runtime_override.parent.parent.name != 'labs' or
+        runtime_override.parent.is_symlink() or not runtime_override.is_dir()):
+        raise RuntimeError('Invalid isolated experiment runtime location')
+    RUNTIME = runtime_override
+
 
 def lab_path(env, default):
     path = Path(os.environ.get(env, str(default))).resolve()
@@ -57,13 +69,25 @@ STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT', str(LAB_DIR / 'dist') if LAB_
 if LAB_ID:
     if HOST not in ('127.0.0.1','localhost') or LAN_TLS_HOST:
         raise RuntimeError('Lab server may bind loopback only')
+    runtime_owner = RUNTIME.parent.resolve()
     if (not LAB_DIR.is_dir() or LAB_DIR.is_symlink() or RUNTIME.is_symlink()
-            or not RUNTIME.resolve().is_relative_to(LAB_DIR.resolve())):
+            or not RUNTIME.resolve().is_relative_to(runtime_owner)
+            or runtime_owner.name != LAB_ID):
         raise RuntimeError('Lab directory/runtime missing or escaped')
-    if STATIC_OVERRIDE and not Path(STATIC_OVERRIDE).resolve().is_relative_to(LAB_DIR.resolve()):
+    if STATIC_OVERRIDE and not (Path(STATIC_OVERRIDE).resolve().is_relative_to(LAB_DIR.resolve())
+        or Path(STATIC_OVERRIDE).resolve().is_relative_to(runtime_owner)):
         raise RuntimeError('Lab static release must remain under the lab directory')
 COOKIE = f'v6lab_{LAB_ID.replace("-", "_")}' if LAB_ID else 'v6edit'
 DOC_WRITE_LOCK = threading.RLock()
+LAB_HTTP_EXTENSION = None
+if LAB_ID:
+    # Optional lab-local document router. Production has no such module.
+    extension_file = LAB_DIR / 'modules' / 'document-router.py'
+    if extension_file.is_file() and not extension_file.is_symlink():
+        spec = importlib.util.spec_from_file_location('ocr2md_lab_document_router', extension_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        LAB_HTTP_EXTENSION = module.route
 LIMIT = 8 * 1024 * 1024
 
 TOKEN.parent.mkdir(parents=True, exist_ok=True)
@@ -594,6 +618,8 @@ class LabHandler(Handler):
             self.response(404, 'Outside lab scope')
             return
         self.path = '/' + parsed.path[len(PREFIX):] + ('?' + parsed.query if parsed.query else '')
+        if LAB_HTTP_EXTENSION and LAB_HTTP_EXTENSION(self, method, DOC, DOC_WRITE_LOCK):
+            return
         getattr(Handler, method)(self)
 
     def do_GET(self): self.dispatch_scoped('do_GET')
