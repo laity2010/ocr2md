@@ -59,6 +59,12 @@ export function labVitePlugin(root,profile){
         };
         exact('  let localFiles=[],chapterReferences=new Set();',
           '  let localFiles=[],chapterReferences=new Set();\n  let lastRowSignature=null,lastPreviewSignature=null;');
+        // The general Media inventory includes unused local files from other
+        // chapters. In bounded chapter mode, AG must list ONLY items that
+        // actually appear in the active chapter's Markdown (possibly zero).
+        // Keep the old inventory UX for the mother/global view unchanged.
+        exact('    for(const file of localFiles){',
+          '    if(!new URLSearchParams(location.search).has(\'chapter\'))for(const file of localFiles){');
         exact("    grid?.setGridOption('rowData',rows);",`    const rowSignature=JSON.stringify(rows.map(row=>[row.id,row.url,row.local,row.adopted,row.bytes,row.total]));
     const previewSignature=JSON.stringify(rows.map(row=>[row.id,stateFor(row.url).state==='complete'?stateFor(row.url).path||'':row.url]));
     if(rowSignature!==lastRowSignature){

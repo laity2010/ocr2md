@@ -17,3 +17,5 @@
 - `modules/chapter-export.browser.test.mjs`：真实 Chrome/WebKit 授权导出 → 选择章节 → 原生 AG/CM6/预览 → 编辑、Undo/Redo、保存、重开、回母文档，核对父文档及旁章字节不变。
 - `modules/source-file-navigation.browser.test.mjs`、`modules/ag-module-toolbar.browser.test.mjs`：原工作台交互回归。
 - 现有实验公网/内网入口仍为 `/labs/cm-html/`（内网 HTTPS 4443 反代 4408）。
+
+- 章节「媒体」AG **只显示当前 `.cmd.chapter.md` 正文引用的媒体**；工作区已下载但未出现在该章的本地文件不混入本章元素表。空章节必须显示空媒体表。该规则由 `chapter-empty-media.browser.test.mjs` 用真实 001→002→001 验证。
