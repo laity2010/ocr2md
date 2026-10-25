@@ -7,6 +7,7 @@
 - 章节保存：`/api/document?chapter=<文件名>` 通过实验路由限定在清单登记的章节，复用 `v6_chapters.export` 原子更新全部章节及 SHA 清单；母文档及其他章节不能被覆盖。切换不同文件时遵循原生浏览器未保存提醒，不能将两个文件的撤销历史混到一个 EditorState。
 - 章节导出：母文档仍用原 `export-chapters`，输出实验数据目录的 `chapter/*.cmd.chapter.md`；章节内再次导出/初始化被拒绝，以防误覆盖母文档章节目录。
 - `*.cmd.chapter.md` 只是已定界、允许后续元素模块处理的文件格式，不会改变 CM6 内容的其他解析规则。
+- 文件切换（母文档 ↔ 章节）会重新初始化同一 V6 工作台，但 Dockview 的 AG 左右宽度和源码／预览上下高度比例通过实验布局适配器保存在当前浏览器标签的 sessionStorage；同标签切换保留分隔条位置，互不混入文件正文或设置 JSON。
 - `settings`、`chapterFiles` 仍是单独模块覆盖。实验分支的通用 `scripts/v6_serve.py` 仅增加可选实验 `document-router.py` 钩子，生产没有开启；通过 `V6_LAB_RUNTIME` 明确复用已经部署的实验 `.runtime/`，无需复制用户数据。
 
 ## 验收
