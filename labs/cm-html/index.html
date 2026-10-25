@@ -3,49 +3,73 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>OCR2MD V6 · CM-HTML 旁路实验</title>
+  <title>OCR2MD V6 · 章节定界</title>
 </head>
 <body>
   <div class="app">
     <header class="toolbar">
-      <div class="identity">
-        <div class="brand">OCR2MD V6 · 实验</div>
-        <span id="build-version" class="build-badge">cm-html</span>
-        <span id="status" class="status" role="status" aria-live="polite">正在加载隔离文档</span>
-      </div>
-      <div class="actions">
-        <button id="update-release" type="button" hidden title="有新版时可手动更新；未保存修改不会被自动丢弃">新版可用</button>
-        <button id="undo" type="button" title="撤销 ⌘Z">↶ 撤销</button>
-        <button id="redo" type="button" title="重做 ⇧⌘Z">↷ 重做</button>
-        <button id="save" type="button" class="primary">保存</button>
-      </div>
+      <div class="identity"><div class="brand">OCR2MD V6 · 实验</div><button id="build-version" class="build-badge" type="button" aria-haspopup="dialog" aria-controls="engineering-dialog" title="打开工程菜单">v6-载入中</button><span id="status" class="status" role="status" aria-live="polite">正在加载</span></div>
     </header>
-    <nav class="lab-controls" aria-label="独立实验控制">
-      <strong>章节标定实验</strong>
-      <label for="marker-format">写入格式</label>
-      <select id="marker-format">
-        <option value="comment">HTML 注释</option>
-        <option value="tag">HTML 标签</option>
-      </select>
-      <button id="inspect" type="button">检查 CM6 语法节点</button>
-      <button id="export-chapters" type="button">导出章节</button>
-      <span id="parse-report" title="检查被选中的章节标定">请选择章节或取消“独立章节”勾选</span>
+    <nav class="module-controls" aria-label="工作台模块工具条">
+      <select id="module-select" aria-label="选择模块"><option value="chapter-boundary">章节定界</option><option value="media">媒体</option><option value="latex">LaTeX</option><option value="settings">全局设置</option></select>
+      <div id="module-actions" class="module-actions" data-module="chapter-boundary">
+        <button id="export-chapters" type="button">导出章节</button>
+        <label for="chapter-start-number">起始编号</label>
+        <input id="chapter-start-number" type="text" inputmode="numeric" pattern="[0-9]{1,5}"
+          maxlength="5" value="000" autocomplete="off" spellcheck="false" aria-label="章节文件起始编号" />
+      </div>
+      <div class="module-actions" data-module="media" hidden>
+        <button id="media-refresh" type="button">扫描媒体</button>
+        <button id="media-download-all" type="button">下载全部</button>
+      </div>
+      <div class="module-actions" data-module="latex" hidden>
+        <button id="latex-refresh" type="button">扫描公式</button>
+        <button id="latex-normalize" type="button" title="统一为单个 HTML 注释加 $公式$ 或 $$公式$$；不写闭注释、不自动保存">规范标定</button>
+      </div>
+      <div class="source-actions" role="group" aria-label="源码编辑工具">
+        <div class="quote-indent-tools" role="group" aria-label="源码引用缩进">
+          <button id="quote-outdent" type="button" title="选中行减少一层 Markdown 引用缩进">&gt;−</button>
+          <button id="quote-indent" type="button" title="选中行增加一层 Markdown 引用缩进">&gt;+</button>
+        </div>
+        <button id="undo" title="撤销 ⌘Z" aria-label="撤销" type="button">↶ <span class="button-caption">撤销</span></button>
+        <button id="redo" title="重做 ⇧⌘Z" aria-label="重做" type="button">↷ <span class="button-caption">重做</span></button>
+        <button id="save" class="primary" type="button">保存</button>
+      </div>
     </nav>
-    <main><div id="workspace" aria-label="只读复用 V6 Dockview 的独立技术实验"></div></main>
+    <main><div id="workspace" aria-label="OCR2MD 源码与 Markdown 预览工作区"></div><div id="settings-workspace" hidden aria-label="全局设置 AG JSON 源码与预览工作区"></div></main>
   </div>
-  <dialog id="unlock-dialog" aria-labelledby="unlock-heading">
-    <form id="unlock-form" method="dialog">
-      <h2 id="unlock-heading">实验独立保存授权</h2>
-      <p>此授权只用于 cm-html 实验文档，不会访问或覆盖 V6 主线文件。</p>
-      <label for="unlock-code">实验专用授权码</label>
-      <input id="unlock-code" type="password" autocomplete="off" spellcheck="false" required/>
-      <div id="unlock-error" role="alert"></div>
+  <dialog id="engineering-dialog" aria-labelledby="engineering-heading">
+    <h2 id="engineering-heading">工程菜单</h2>
+    <p>当前 V6 数据文档的工程操作。</p>
+    <div class="engineering-menu-actions">
+      <button id="initialize-document" type="button">初始化数据文档</button>
+      <button id="engineering-close" type="button">关闭</button>
+    </div>
+  </dialog>
+  <dialog id="initialize-dialog" aria-labelledby="initialize-heading">
+    <h2 id="initialize-heading">初始化数据文档</h2>
+    <p>将当前 Markdown 母文档恢复到最初的 MinerU 转换状态。当前已保存文档会先备份；未保存的修改无法备份。此前导出的章节文件不会删除，但可能不再对应恢复后的正文。</p>
+    <p>初始化完成后重新加载编辑器，并重新开始撤销历史。请输入 <strong>初始化</strong> 以确认。</p>
+    <form id="initialize-form" method="dialog">
+      <label for="initialize-phrase">确认操作</label>
+      <input id="initialize-phrase" type="text" autocomplete="off" spellcheck="false" placeholder="输入 初始化" required />
+      <div id="initialize-error" class="engineering-error" role="alert"></div>
       <div class="dialog-actions">
-        <button id="unlock-cancel" type="button">取消</button>
-        <button type="submit" class="primary">授权并保存</button>
+        <button id="initialize-cancel" type="button">取消</button>
+        <button id="initialize-confirm" class="danger" type="submit" disabled>确认初始化</button>
       </div>
     </form>
   </dialog>
-  <script type="module" src="./app.js"></script>
+  <dialog id="unlock-dialog" aria-labelledby="unlock-heading">
+    <form id="unlock-form" method="dialog">
+      <h2 id="unlock-heading">授权保存</h2>
+      <p>首次保存需要编辑授权码。授权后可直接使用首页保存。</p>
+      <label for="unlock-code">编辑授权码</label>
+      <input id="unlock-code" name="code" type="password" autocomplete="off" spellcheck="false" required />
+      <div id="unlock-error" role="alert"></div>
+      <div class="dialog-actions"><button id="unlock-cancel" type="button">取消</button><button class="primary" type="submit">授权并保存</button></div>
+    </form>
+  </dialog>
+  <script type="module" src="./mainline-entry.js"></script>
 </body>
 </html>
