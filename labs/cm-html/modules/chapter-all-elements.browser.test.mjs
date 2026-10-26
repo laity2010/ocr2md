@@ -59,6 +59,20 @@ for(const [name,engine,context] of [
     const latexCount=Number((await page.locator('.ocr-all-chapters-status').textContent()).match(/· (\d+)项/)?.[1]);
     assert(latexCount>1,'All chapters missing LaTeX rows');
     assert.equal(await checkbox.isChecked(),true);
+    // Return to the mother document: aggregate must auto-disable even though
+    // its checkbox is no longer visible in the chapter-boundary toolbar.
+    await chooseNative(sourceNav,'document');
+    await page.waitForFunction(()=>!new URLSearchParams(location.search).has('chapter')&&
+      !document.querySelector('.ocr-outline-pane')?.classList.contains('ocr-all-chapters-mode'),
+      null,{timeout:16000});
+    assert.equal(await checkbox.isVisible(),false);
+    assert.equal(await grid.isVisible(),false);
+    await chooseNative(sourceNav,'chapter:'+chapters[0]);
+    await checkbox.waitFor({state:'visible',timeout:16000});
+    assert.equal(await checkbox.isChecked(),false);
+    await checkbox.check();
+    await page.waitForFunction(()=>document.querySelector('.ocr-all-chapters-status')?.textContent.includes('项 · 已保存'),
+      null,{timeout:20000});
     // Clicking a record opens the owning chapter for normal CMD-safe editing,
     // clears the aggregate toggle and locates the saved source line.
     const record=page.locator('.ocr-all-chapters-grid .ag-row[row-index="0"]');

@@ -64,6 +64,10 @@ export function mountAgModuleToolbar(){
     if(!bar)return;
     const selected=moduleSelect.value;
     const settings=selected==='settings';
+    // Whole-chapter aggregation belongs only to derived chapter workspaces.
+    // Mother-file navigation must never strand a hidden checked toggle with
+    // its overlay still visible (Settings temporarily hides the whole pane).
+    if(!isChapter()&&allToggle.checked)allChapters?.enable(false);
     bar.hidden=settings;
     bar.setAttribute('aria-label',isChapter()?'章节元素处理工具栏':'章节定界工具栏');
     moduleSelect.hidden=true;
