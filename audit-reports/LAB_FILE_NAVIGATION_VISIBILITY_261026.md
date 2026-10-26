@@ -17,6 +17,6 @@
 - `labs/cm-html/modules/file-navigation-visibility.browser.test.mjs`：3 组本地全部通过；真实点击章文件选项，原生导航同步更新，按钮仍全部可见，菜单左右、上下均位于视口以内。公网 iPad WebKit 1024 也通过真实点击和几何校验（屏幕截图已在本地完成；公网截图因 Cloudflare 字体等待超时，公网测量使用不截图模式）。
 - `labs/cm-html/wp0-2/virtual-chapter-navigation.browser.test.mjs`：Chrome/iPad WebKit 本地通过，章节合并、文件名更新、设置切换、元素模块保持状态，无文件写入。
 - 截图证据：`audit-reports/screenshots/file-nav-Chrome-1440-compare.png`、`file-nav-iPad-1024-compare.png`、`file-nav-iPad-820-compare.png`，以真实前后浏览器截图拼成，另保存 iPad1024 的完整菜单原图。
-- 已部署 Lab `v6-lab-cm-html-20261026-223935`。实验母 Markdown SHA-256 为 `33a61ac0428f8102d195f47f541a84ee7698c77fa24d79d5b06c584fbad601dc`，未变化；正式根仍 `v6-20261026-102651`，未合并。
+- 已部署 Lab `v6-lab-cm-html-20261026-223935`。实验母 Markdown **现有** SHA-256 为 `a25b17c13909b388c619e61826fe041c2b67c7e575215cea39b77a1ed2124087`，文件修改时间为 2026-10-26 22:28:25 +0800，早于本次导航任务（约 22:30）开始；这是此前已有的保存版本，不能误称为原先的 `33a61ac...`。本次导航截图与浏览器测试没有提交保存/业务写入，也未回退或覆盖用户数据。正式根仍 `v6-20261026-102651`，未合并。
 
 界限：选中控件宽度始终受源码窗物理宽度及缩进按钮约束；极窄窗下文件名可以在控件内省略，但打开的文件菜单会完整显示、文字可换行。WebKit 自动化模拟 iPad 浏览器，不宣称实体 Safari 人工验收。
