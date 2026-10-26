@@ -169,19 +169,21 @@ let __labSessions = null;
         replaceOnce("const snapshotDoc = view.state.doc;\n  const snapshot = snapshotDoc.toString();",
           "const snapshotDoc = view.state.doc;\n  const __labSavingFilename=__labActiveChapter;\n  const snapshot = snapshotDoc.toString();");
         replaceOnce('    savedDoc = snapshotDoc;\n    status(!hasUnsavedEdits()',
-          '    savedDoc = snapshotDoc;\n    __labSessions?.markSaved(snapshotDoc,__labSavingFilename);\n    status(!hasUnsavedEdits()');
+          '    savedDoc = snapshotDoc;\n    __labSessions?.markSaved(snapshotDoc,__labSavingFilename,documentETag);\n    status(!hasUnsavedEdits()');
         replaceOnce('  savedDoc=view.state.doc;\n  workspace.refreshPreview();',`  savedDoc=view.state.doc;
   __labSessions=createDocumentSessions({
-    cm,initialName:__labActiveChapter,initialSaved:savedDoc,
+    cm,initialName:__labActiveChapter,initialSaved:savedDoc,initialETag:documentETag,
     fetchDocument:async name=>{
       const path=name?'${scoped}api/document?chapter='+encodeURIComponent(name):'${scoped}api/document';
       const res=await fetch(path,{cache:'no-store'});
       if(!res.ok)throw Error('文件读取失败 HTTP '+res.status);
-      return res.text();
+      const etag=res.headers.get('ETag');
+      if(!etag)throw Error('章节读取缺少 ETag');
+      return {source:await res.text(),etag};
     },
-    onActivated:({name,saved})=>{
+    onActivated:({name,saved,etag})=>{
       __labActiveChapter=name;
-      savedDoc=saved;
+      savedDoc=saved;documentETag=etag;saveConflict=false;
       documentLabel=name||'Buffett’s Alpha.minerujson.md';
       // Clear cross-file selection/focus while retaining global module layout.
       viewStore.setState({focusTarget:null,scrollTarget:null,sourceOffset:0,outlineCount:null});

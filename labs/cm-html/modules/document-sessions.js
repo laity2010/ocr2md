@@ -2,11 +2,11 @@
  * EditorView and PDF.js viewer. Per-file immutable CM6 EditorState carries
  * history/selection; independent saved Text snapshot drives save/dirty status.
  */
-export function createDocumentSessions({cm,initialName=null,initialSaved,fetchDocument,onActivated}){
+export function createDocumentSessions({cm,initialName=null,initialSaved,initialETag,fetchDocument,onActivated}){
   const states=new Map();
   const keyOf=name=>name||'';
   let current=keyOf(initialName);
-  states.set(current,{state:cm.view.state,saved:initialSaved,scrollTop:cm.view.scrollDOM.scrollTop});
+  states.set(current,{state:cm.view.state,saved:initialSaved,etag:initialETag,scrollTop:cm.view.scrollDOM.scrollTop});
   let switching=false;
   function updateActive(){
     const item=states.get(current);
@@ -17,10 +17,11 @@ export function createDocumentSessions({cm,initialName=null,initialSaved,fetchDo
   const api={
     get currentName(){return current||null;},
     get savedDoc(){return states.get(current).saved;},
-    markSaved(snapshot,filename){
+    get revision(){return states.get(current).etag;},
+    markSaved(snapshot,filename,etag){
       const key=keyOf(filename);
       const item=states.get(key);
-      if(item){item.saved=snapshot; if(key===current)item.state=cm.view.state;}
+      if(item){item.etag=etag;item.saved=snapshot; if(key===current)item.state=cm.view.state;}
     },
     hasOtherUnsaved(){
       updateActive();
@@ -40,16 +41,17 @@ export function createDocumentSessions({cm,initialName=null,initialSaved,fetchDo
         // document, history, cursor, and unsaved changes completely intact.
         let next=states.get(target);
         if(!next){
-          const source=await fetchDocument(name);
+          const {source,etag}=await fetchDocument(name);
+          if(!etag)throw Error('Chapter response missing ETag');
           const state=cm.createFileState(source);
-          next={state,saved:state.doc,scrollTop:0};
+          next={state,saved:state.doc,etag,scrollTop:0};
         }
         updateActive();
         states.set(target,next);
         cm.activateFileState(next.state);
         current=target;
         cm.view.scrollDOM.scrollTop=next.scrollTop;
-        onActivated({name:target||null,saved:next.saved});
+        onActivated({name:target||null,saved:next.saved,etag:next.etag});
         return true;
       }finally{switching=false;}
     },

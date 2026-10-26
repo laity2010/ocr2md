@@ -44,11 +44,20 @@ def route(handler, method, document, write_lock):
         return True
     if method in ('do_GET', 'do_HEAD'):
         try:
-            content = read_chapter(document, name)
+            with write_lock:
+                content = read_chapter(document, name)
         except (OSError, KeyError, ValueError, TypeError):
             handler.response(404, 'Chapter not found in manifest')
             return True
-        handler.response(200, content, 'text/plain; charset=utf-8')
+        etag = '"' + hashlib.sha256(content).hexdigest() + '"'
+        handler.send_response(200)
+        handler.send_header('Content-Type','text/plain; charset=utf-8')
+        handler.send_header('Cache-Control','no-store')
+        handler.send_header('ETag',etag)
+        handler.send_header('Content-Length',str(len(content)))
+        handler.end_headers()
+        if method != 'do_HEAD':
+            handler.wfile.write(content)
         return True
     if not handler.authorized() or not handler.same_origin():
         handler.response(403, 'Editor authorization required')
@@ -74,6 +83,14 @@ def route(handler, method, document, write_lock):
             manifest = read_manifest(document)
             if not manifest or name not in {f['name'] for f in manifest['files']}:
                 raise FileNotFoundError(name)
+            previous = handler.headers.get('If-Match')
+            if not previous:
+                handler.response(428, 'Chapter revision required')
+                return True
+            current = read_chapter(document, name)
+            if previous != '"' + hashlib.sha256(current).hexdigest() + '"':
+                handler.response(412, 'Chapter changed elsewhere; local edits preserved')
+                return True
             # Preserve all sibling chapters when atomically updating just one.
             files = []
             for entry in manifest['files']:
@@ -90,5 +107,9 @@ def route(handler, method, document, write_lock):
         except OSError:
             handler.response(503, 'Chapter storage unavailable')
             return True
-    handler.response(200, 'saved')
+    handler.send_response(200)
+    handler.send_header('ETag','"' + hashlib.sha256(body).hexdigest() + '"')
+    handler.send_header('Content-Length','5')
+    handler.end_headers()
+    handler.wfile.write(b'saved')
     return True

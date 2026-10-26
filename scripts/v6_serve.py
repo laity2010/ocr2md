@@ -79,6 +79,11 @@ if LAB_ID:
         raise RuntimeError('Lab static release must remain under the lab directory')
 COOKIE = f'v6lab_{LAB_ID.replace("-", "_")}' if LAB_ID else 'v6edit'
 DOC_WRITE_LOCK = threading.RLock()
+
+def document_etag(content):
+    # Strong checksum over the exact UTF-8 representation sent to the client.
+    return '"' + hashlib.sha256(content).hexdigest() + '"'
+
 LAB_HTTP_EXTENSION = None
 if LAB_ID:
     # Optional lab-local document router. Production has no such module.
@@ -207,7 +212,22 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(content)
             return
         if path == '/api/document':
-            self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
+            try:
+                with DOC_WRITE_LOCK:
+                    content = (DOC if DOC.is_file() else FIXTURE).read_bytes()
+                    revision = document_etag(content)
+            except OSError:
+                self.response(503, 'Document storage unavailable')
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store, max-age=0')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('ETag', revision)
+            self.send_header('Content-Length', str(len(content)))
+            self.end_headers()
+            if self.command != 'HEAD':
+                self.wfile.write(content)
             return
         if path == '/api/media/inventory':
             # This HTTP composition point uses only the public Media and
@@ -561,7 +581,21 @@ class Handler(BaseHTTPRequestHandler):
         except UnicodeDecodeError:
             self.response(400, 'Invalid UTF-8')
             return
+        # Compare-and-swap and atomic replacement share this SAME lock.
+        # A stale writer can never replace bytes saved by another editor.
         with DOC_WRITE_LOCK:
+            try:
+                current = (DOC if DOC.is_file() else FIXTURE).read_bytes()
+            except OSError:
+                self.response(503, 'Document storage unavailable')
+                return
+            previous = self.headers.get('If-Match')
+            if not previous:
+                self.response(428, 'Document revision required; reopen before saving')
+                return
+            if previous != document_etag(current):
+                self.response(412, 'Document modified by another editor; local edits preserved')
+                return
             DOC.parent.mkdir(parents=True, exist_ok=True)
             tmp = DOC.with_name('.' + str(os.getpid()) + '-' + secrets.token_hex(4) + '.tmp')
             try:
@@ -573,7 +607,14 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 if tmp.exists():
                     tmp.unlink()
-        self.response(200, 'saved')
+            new_revision = document_etag(value)
+        self.send_response(200)
+        self.send_header('Content-Type','text/plain; charset=utf-8')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('ETag',new_revision)
+        self.send_header('Content-Length','5')
+        self.end_headers()
+        self.wfile.write(b'saved')
 
 def start_lan_tls():
     if not LAN_TLS_HOST:
