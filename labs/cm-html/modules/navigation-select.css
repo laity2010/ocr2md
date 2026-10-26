@@ -1,7 +1,7 @@
 /* Experiment-only common Tom Select theme: Dockview-safe portal popups. */
 .ts-wrapper.ocr-navigation-select{
   flex:1 1 auto;min-width:0;width:100%;max-width:100%;height:27px;
-  color:#d3c6aa;font:12px 'OCR2MD Sarasa',monospace;
+  color:#d3c6aa;font:var(--ocr-navigation-font-size,10pt) 'OCR2MD Sarasa',monospace;
 }
 .ts-wrapper.ocr-navigation-select[hidden]{display:none!important}
 .ts-wrapper.ocr-navigation-select .ts-control{
@@ -20,20 +20,20 @@
 .ts-wrapper.ocr-navigation-select.dropdown-active .ts-control{border-color:#a7c080;
   background:#30433e;box-shadow:0 0 0 1px #a7c08066;}
 .ts-wrapper.ocr-navigation-select .ts-control>input{
-  color:#d3c6aa;font:12px 'OCR2MD Sarasa',monospace;min-width:50px;
+  color:#d3c6aa;font:var(--ocr-navigation-font-size,10pt) 'OCR2MD Sarasa',monospace;min-width:50px;
 }
 .ocr-navigation-popup.ts-dropdown{
   z-index:120000!important;max-height:min(64vh,440px);overflow:auto;
   color:#d3c6aa;background:#28383a;border:1px solid #72816e;
   border-radius:7px;box-shadow:0 8px 28px #000a;
-  font:13px/1.45 'OCR2MD Sarasa',monospace;
+  font:var(--ocr-navigation-font-size,10pt)/1.35 'OCR2MD Sarasa',monospace;
 }
 .ocr-navigation-popup .ts-dropdown-content{max-height:min(60vh,410px);overflow:auto}
 .ocr-navigation-popup .option{padding:8px 10px;white-space:normal;overflow-wrap:anywhere}
 .ocr-navigation-popup .option.active{background:#3b564b;color:#e8e7d9}
 .ocr-navigation-popup .option.selected{background:#365046;color:#d3e2ca}
 .ocr-navigation-popup .optgroup-header{
-  color:#a7c080;background:#233337;font-size:12px;padding:6px 9px;
+  color:#a7c080;background:#233337;font-size:var(--ocr-navigation-font-size,10pt);padding:6px 9px;
   position:sticky;top:0;z-index:1;
 }
 .ocr-navigation-popup .no-results{padding:9px;color:#b7b9ac}
@@ -43,23 +43,30 @@
  * Keep the wrapper entirely inside the 34px source toolbar. */
 .ocr-source-file-toolbar>.ts-wrapper.ocr-navigation-files{
   flex:1 1 0;width:auto;max-width:none;min-width:0;
-  height:30px;align-self:center;box-sizing:border-box;
+  height:30px;min-height:0;max-height:30px;align-self:center;box-sizing:border-box;
 }
 .ocr-source-file-toolbar>.ts-wrapper.ocr-navigation-files .ts-control{
-  height:30px;min-height:30px;padding-left:10px;font-size:13px;
+  height:30px;min-height:30px;max-height:30px;box-sizing:border-box;
+  padding:1px 26px 1px 10px;font-size:var(--ocr-navigation-font-size,10pt);
+  line-height:1.15;
 }
+/* All source, AG-element and preview navigators share this one setting. */
+.ts-wrapper.ocr-navigation-select .ts-control,
+.ts-wrapper.ocr-navigation-select .ts-control>.item,
+.ts-wrapper.ocr-navigation-select .ts-control>input,
+.ocr-navigation-popup .option{font-size:var(--ocr-navigation-font-size,10pt)}
 .ocr-navigation-popup-files.ts-dropdown{
   max-width:calc(100vw - 16px)!important;
-  font-size:13px;
+  font-size:var(--ocr-navigation-font-size,10pt);
 }
 /* Filenames wrap inside the popup instead of overflowing right of the iPad. */
 .ocr-navigation-popup-files .option{
   white-space:normal;overflow-wrap:anywhere;
 }
 .ocr-lab-ag-toolbar>.ts-wrapper.ocr-navigation-elements{width:112px;flex:0 0 112px}
-.ocr-lab-ag-toolbar>.ts-wrapper.ocr-navigation-elements .ts-control{font-size:12px}
+.ocr-lab-ag-toolbar>.ts-wrapper.ocr-navigation-elements .ts-control{font-size:var(--ocr-navigation-font-size,10pt)}
 .ocr-preview-switchbar>.ts-wrapper.ocr-navigation-preview{width:155px;max-width:46%;flex:0 1 155px}
-.ocr-preview-switchbar>.ts-wrapper.ocr-navigation-preview .ts-control{font-size:12px}
+.ocr-preview-switchbar>.ts-wrapper.ocr-navigation-preview .ts-control{font-size:var(--ocr-navigation-font-size,10pt)}
 .ts-wrapper.ocr-navigation-select.disabled{opacity:.65}
 @media(pointer:coarse){
  .ocr-navigation-popup .option{padding:12px 11px;min-height:42px}

@@ -5,9 +5,11 @@
 import {createSettingsModule as createMainlineSettingsModule} from '../../../ui/settings-module.js';
 import {createSourceFileNavigation} from './source-file-navigation.js';
 import {mountAgModuleToolbar} from './ag-module-toolbar.js';
+import {registerNavigationFontSetting} from './navigation-select.js';
 
 export function createSettingsModule(...args){
   const original=createMainlineSettingsModule(...args);
+  registerNavigationFontSetting(original);
   const navigation=createSourceFileNavigation();
   mountAgModuleToolbar();
   // Mainline Settings returns a frozen object. Proxying a frozen `load`
