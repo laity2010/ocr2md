@@ -29,3 +29,6 @@
 .ocr-lab-ag-toolbar > .module-actions[data-module]{gap:6px}
 .ocr-lab-ag-toolbar > .module-actions[data-module] label{display:inline}
 .ocr-lab-ag-toolbar > .module-actions[data-module][hidden]{display:none!important}
+
+/* Virtual chapters are views, not exported editable files. */
+.ocr-lab-ag-toolbar #export-chapters{display:none!important}

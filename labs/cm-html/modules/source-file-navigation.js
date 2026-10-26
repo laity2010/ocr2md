@@ -1,113 +1,158 @@
-/** Experimental file selection uses the SAME original CM6 / CMD / AG / PDF
- * workbench; navigating a file reloads it as the currently active document.
- * Per-file save is explicitly routed on the server and cannot touch mother.
+/** Virtual chapter names from the current CMD index, not exported files.
+ * All views share ONE mother CM6 document and its Undo/Redo/Save history.
+ * The source select is the sole chapter-view navigator; Settings remains
+ * its existing independent document/editor.
  */
 import './source-file-navigation.css';
 import {enhanceNavigationSelect} from './navigation-select.js';
+import {viewStore} from '../../../ui/view-store.js';
+
 const DEFAULTS=Object.freeze([
   {id:'document',label:'章节定界/Buffett’s Alpha.minerujson.md'},
   {id:'settings',label:'全局设置/settings.json'},
 ]);
-const FILE_PATTERN=/^[0-9]{1,6}-[\p{L}\p{N}_-]{1,110}\.cmd\.chapter\.md$/u;
-const chapterId=name=>'chapter:'+name;
-let currentChapter=new URLSearchParams(location.search).get('chapter');
+const chapterId=id=>'virtual:'+id;
+let activeChapter=null;
 
 export function createSourceFileNavigation(){
   const moduleSelector=document.getElementById('module-select');
   const workbench=document.getElementById('workspace');
   const settingsWorkbench=document.getElementById('settings-workspace');
   const selectBoxes=new Set();
-  let names=[];
-  const activeId=()=>currentChapter?chapterId(currentChapter):'document';
-  const isChapterMode=()=>moduleSelector?.value!=='settings';
-  const updateVisibility=()=>{
-    const toolbar=workbench?.querySelector('.ocr-source-pane > .ocr-lab-file-toolbar');
-    if(toolbar){
-      toolbar.hidden=!isChapterMode();
-      toolbar.querySelector('.ocr-source-file-select')?.ocrNavigationSelect?.show();
-    }
-  };
-  moduleSelector?.addEventListener('change',updateVisibility);
+  let views=[],bridge=null,refreshTimer=null;
+  const selected=()=>activeChapter?chapterId(activeChapter):'document';
+  const isSettings=()=>moduleSelector?.value==='settings';
   function syncOptions(){
     for(const select of selectBoxes){
-      const isSettings=Boolean(select.closest('#settings-workspace'));
+      const withinSettings=Boolean(select.closest('#settings-workspace'));
       select.replaceChildren();
-      for(const [groupLabel,items] of [
+      for(const [heading,items] of [
         ['工作区',DEFAULTS],
-        ['章节文件',names.map(name=>({id:chapterId(name),label:'章节chapter/'+name}))],
+        ['章节文件',views.map(item=>({id:chapterId(item.id),
+          label:'章节chapter/'+item.name}))],
       ]){
-        const group=document.createElement('optgroup');group.label=groupLabel;
+        const group=document.createElement('optgroup');group.label=heading;
         for(const item of items){
           const option=document.createElement('option');
           option.value=item.id;option.textContent=item.label;group.append(option);
         }
         select.append(group);
       }
-      select.value=isSettings?'settings':activeId();
+      select.value=withinSettings?'settings':selected();
       select.ocrNavigationSelect?.refresh();
     }
   }
-  async function refreshChapters(){
-    try{
-      const response=await fetch('api/chapters',{cache:'no-store'});
-      if(response.status===404){names=[];syncOptions();return;}
-      if(!response.ok)throw Error('章节清单 HTTP '+response.status);
-      const manifest=await response.json();
-      names=(manifest.files||[]).map(f=>f.name).filter(n=>FILE_PATTERN.test(n));
-      syncOptions();
-    }catch(error){console.warn('章节清单暂不可读',error.message);}
+  function selectChapter(id){
+    const detail={id,accepted:false,error:null};
+    document.dispatchEvent(new CustomEvent('ocr2md:lab-virtual-select',{detail}));
+    if(!detail.accepted)throw Error(detail.error||'虚拟章节视图尚未就绪');
+    activeChapter=id;
+    syncOptions();
   }
-  async function navigate(target,selector){
+  function refreshChapters(){
+    if(!bridge?.getCMD?.()?.getIndex)return;
+    try{
+      const index=bridge.getCMD().getIndex();
+      const outline=bridge.views?.outline;
+      // Column '章节文件' already uses this exact name projection including
+      // the start-number width and all live '独立成章' decisions.
+      const rows=new Map((outline?.rows||[]).map(row=>[row.id,row.chapterFile]));
+      const next=index.chapters.map(chapter=>({
+        id:chapter.id,name:rows.get(chapter.firstHeadingId)||chapter.legacyExportName,
+        from:chapter.from,
+      }));
+      if(activeChapter&&!next.some(row=>row.id===activeChapter)){
+        const old=views.find(row=>row.id===activeChapter);
+        const owner=old&&index.chapterAt(Math.min(old.from,index.bodyEnd-1));
+        const substitute=owner?.id??null;
+        // This chapter was merged with the preceding independent chapter.
+        // Follow the resulting owner rather than navigating to a stale file.
+        selectChapter(substitute);
+      }
+      views=next;
+      syncOptions();
+    }catch(error){
+      console.warn('CMD 虚拟章节导航更新失败',error.message);
+    }
+  }
+  function scheduleRefresh(immediate=false){
+    clearTimeout(refreshTimer);
+    refreshTimer=setTimeout(refreshChapters,immediate?0:220);
+  }
+  function navigate(target){
     if(target==='settings'){
       moduleSelector.value='settings';
       moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
-      selector.value=selector.closest('#settings-workspace')?'settings':activeId();
-      selector.ocrNavigationSelect?.refresh();
-      return;
-    }
-    if(target.startsWith('chapter:')&&!names.includes(target.slice(8))){
       syncOptions();
       return;
     }
-    const next=target==='document'?null:target.slice(8);
-    if(next!==currentChapter){
-      const detail={chapter:next,promise:null};
-      document.dispatchEvent(new CustomEvent('ocr2md:lab-switch-file',{detail}));
-      try{
-        if(!detail.promise)throw Error('文件切换服务尚未就绪');
-        await detail.promise;
-        currentChapter=next;
-        syncOptions();
-      }catch(error){
-        console.warn('文件切换失败',error.message);
-        syncOptions();
-        document.getElementById('status')?.setAttribute('data-file-switch-error',error.message);
-      }
-      return;
+    if(target!=='document'&&!target.startsWith('virtual:')){
+      syncOptions();return;
     }
-    if(!isChapterMode()){
-      moduleSelector.value='chapter-boundary';
-      moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
+    const next=target==='document'?null:target.slice('virtual:'.length);
+    if(next&&!views.some(item=>item.id===next)){
+      syncOptions();return;
+    }
+    try{
+      if(activeChapter!==next||isSettings())selectChapter(next);
+      if(isSettings()||moduleSelector.value==='settings'){
+        moduleSelector.value=next?'chapter-boundary':'chapter-boundary';
+        moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+      // Browser history keeps views addressable without ?chapter=<file>;
+      // reload will still load only mother CM6 (never a derived file).
+      const url=new URL(location.href);
+      if(next)url.searchParams.set('view',next);
+      else url.searchParams.delete('view');
+      history.pushState(null,'',url.pathname+url.search+url.hash);
+    }catch(error){
+      console.warn('虚拟章节视图切换失败',error.message);
+      document.getElementById('status')?.setAttribute('data-file-switch-error',error.message);
     }
     syncOptions();
   }
-  document.addEventListener('ocr2md:lab-file-activated',event=>{
-    currentChapter=event.detail.chapter;
-    syncOptions();
+  function updateVisibility(){
+    const toolbar=workbench?.querySelector('.ocr-source-pane > .ocr-lab-file-toolbar');
+    if(toolbar){
+      toolbar.hidden=isSettings();
+      toolbar.querySelector('.ocr-source-file-select')?.ocrNavigationSelect?.show();
+    }
+  }
+  moduleSelector?.addEventListener('change',updateVisibility);
+  document.addEventListener('ocr2md:wp3-ag-ready',event=>{
+    bridge=event.detail;
+    // CMDocument can finish initializing in the same event loop.
+    queueMicrotask(()=>{
+      refreshChapters();
+      const desired=new URLSearchParams(location.search).get('view');
+      if(desired&&views.some(item=>item.id===desired)){
+        try{selectChapter(desired);}catch(error){console.warn(error.message);}
+      }
+    });
+  });
+  // Source mutation notifies all readers; list rebuilding is deferred while
+  // typing but explicit independent-chapter changes refresh next task.
+  viewStore.subscribe((now,before)=>{
+    if(now.documentRevision!==before.documentRevision)scheduleRefresh();
+  });
+  document.addEventListener('change',event=>{
+    if(event.target?.matches?.('.ocr-outline-checkbox, #chapter-start-number'))
+      queueMicrotask(()=>scheduleRefresh(true));
+  },true);
+  document.addEventListener('input',event=>{
+    if(event.target?.matches?.('#chapter-start-number'))scheduleRefresh(true);
+  },true);
+  window.addEventListener('popstate',()=>{
+    const next=new URLSearchParams(location.search).get('view');
+    if(next===activeChapter)return;
+    if(next&&!views.some(row=>row.id===next))return;
+    try{selectChapter(next);}catch(error){console.warn(error.message);}
   });
 
   function addBar(host){
-    if(!host)return;
-    // V6 supplies the one permanent source bar and its real quote buttons.
-    // The lab supplies only dynamic file options and the change handler.
-    if(host.querySelector(':scope > .ocr-lab-file-toolbar'))return;
+    if(!host||host.querySelector(':scope > .ocr-lab-file-toolbar'))return;
     let bar=host.querySelector(':scope > .ocr-source-file-toolbar');
-    if(!bar){
-      // The settings JSON editor is independent of the Markdown SourcePanel.
-      // It needs the same navigation dropdown, but never its quote buttons.
-      bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
-      host.prepend(bar);
-    }
+    if(!bar){bar=document.createElement('div');bar.className='ocr-source-file-toolbar';host.prepend(bar);}
     let select=bar.querySelector('.ocr-source-file-select');
     if(!select){
       select=document.createElement('select');select.className='ocr-source-file-select';
@@ -115,25 +160,22 @@ export function createSourceFileNavigation(){
     }
     bar.classList.add('ocr-lab-file-toolbar');
     select.classList.add('ocr-lab-file-select');
-    select.title='切换同一 CM6 工作台加载的 Markdown 文件';
-    select.addEventListener('change',()=>{void navigate(select.value,select);});
+    select.title='在同一母 Markdown 中切换虚拟章节视图';
+    select.addEventListener('change',()=>navigate(select.value));
     selectBoxes.add(select);host.classList.add('ocr-lab-file-source');
     syncOptions();
     enhanceNavigationSelect(select,{search:true,kind:'files'});
     updateVisibility();
   }
-
   function mountPreview(){
     const picker=workbench?.querySelector('.ocr-preview-pane select.ocr-preview-mode');
     if(!picker)return false;
-    enhanceNavigationSelect(picker,{kind:'preview'});
-    return true;
+    enhanceNavigationSelect(picker,{kind:'preview'});return true;
   }
   if(!mountPreview()&&workbench){
     const observer=new MutationObserver(()=>{
       if(mountPreview())observer.disconnect();
-    });
-    observer.observe(workbench,{childList:true,subtree:true});
+    });observer.observe(workbench,{childList:true,subtree:true});
   }
   function mountMarkdown(){
     const host=workbench?.querySelector('#editor')?.closest('.ocr-source-pane');
@@ -147,18 +189,7 @@ export function createSourceFileNavigation(){
   if(!mountMarkdown()&&workbench){
     const observer=new MutationObserver(()=>{
       if(mountMarkdown())observer.disconnect();
-    });
-    observer.observe(workbench,{childList:true,subtree:true});
+    });observer.observe(workbench,{childList:true,subtree:true});
   }
-  const status=document.getElementById('status');
-  if(status){
-    let notified=false;
-    new MutationObserver(()=>{
-      const exported=status.textContent?.includes('已导出');
-      if(exported&&!notified)void refreshChapters();
-      notified=exported;
-    }).observe(status,{childList:true,characterData:true,subtree:true});
-  }
-  void refreshChapters();
   return Object.freeze({mountSettings,refreshChapters});
 }

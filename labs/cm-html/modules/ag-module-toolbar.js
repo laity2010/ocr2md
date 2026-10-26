@@ -17,7 +17,7 @@ export function mountAgModuleToolbar(){
     throw Error('Missing module action/selection contract');
 
   let chapter=new URLSearchParams(location.search).get('chapter');
-  let virtualMode=false; // WP3 opt-in; retain the mother chapter-boundary contract
+  let virtualMode=false; // Chapter navigation selects CMD-scoped views of the mother
   // The element category is a workspace-wide view preference, not a
   // document-specific state. Chapters share it across in-place navigation.
   let selectedElementModule='chapter-boundary';
@@ -83,13 +83,17 @@ export function mountAgModuleToolbar(){
     elementSelect.hidden=settings||!isChapter();
     if(!settings){elementSelect.value=selected;elementSelect.ocrNavigationSelect?.tom.setValue(selected,true);}
     elementSelect.ocrNavigationSelect?.show();
-    indexLabel.hidden=Boolean(chapter)||settings;
-    allLabel.hidden=Boolean(chapter)||settings||!virtualMode;
-    chapterSelect.hidden=Boolean(chapter)||settings||!virtualMode||allToggle.checked;
+    // The source navigation owns virtual-chapter selection; no second chapter
+    // dropdown/toggle in AG. The element selector remains module-owned.
+    indexLabel.hidden=true;
+    allLabel.hidden=true;
+    chapterSelect.hidden=true;
     chapterSelect.ocrNavigationSelect?.show();
     allStatus.hidden=Boolean(chapter)||settings||!virtualMode;
     virtualQuery?.setModule();
     moduleSelect.setAttribute('aria-label','章节处理模块');
+    // A virtual chapter is never exported to a second editable file.
+    document.getElementById('export-chapters')?.setAttribute('hidden','');
     // Original settings option stays intact for source-file navigation,
     // but cannot appear in the separate 3-item native chapter picker.
     for(const actions of actionGroups){
@@ -118,10 +122,23 @@ export function mountAgModuleToolbar(){
     // Apply file-type visibility after all synchronous owners have run.
     queueMicrotask(refresh);
   });
-  indexToggle.addEventListener('change',()=>{
-    if(chapter){indexToggle.checked=false;return;}
-    virtualMode=indexToggle.checked;
+  // Navigation owns chapter scope and uses only the existing mother CM6.
+  // No file switch, new EditorState, or legacy physical chapter endpoint.
+  document.addEventListener('ocr2md:lab-virtual-select',event=>{
+    const id=event.detail?.id??null;
+    if(chapter){event.detail.error='实体章节模式不可切换虚拟章节';return;}
+    if(id){
+      const option=[...chapterSelect.options].find(item=>item.value===id);
+      if(!option){event.detail.error='章节标定已经变化';return;}
+      virtualMode=true;indexToggle.checked=true;allToggle.checked=false;
+      chapterSelect.value=id;chapterSelect.ocrNavigationSelect?.refresh();
+      if(selectedElementModule==='chapter-boundary')selectedElementModule='chapter-boundary';
+    }else{
+      virtualMode=false;indexToggle.checked=false;allToggle.checked=true;
+      selectedElementModule='chapter-boundary';
+    }
     syncModule();virtualQuery?.sync();
+    event.detail.accepted=true;
   });
   document.addEventListener('ocr2md:lab-file-activated',event=>{
     chapter=event.detail.chapter||null;
