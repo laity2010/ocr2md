@@ -190,11 +190,19 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     link.href=address;
     link.target='_blank';link.rel='noopener noreferrer';
     link.referrerPolicy='no-referrer';
-    link.title='点击查看原图';
-    link.setAttribute('aria-label',row.line?`查看第 ${row.line} 行媒体原图`:'查看未引用媒体原图');
-    // Clicking the thumbnail opens only the media; the row click continues
-    // to navigate the source and PDF as before.
-    link.addEventListener('click',event=>event.stopPropagation());
+    link.title=row.line?'点击同步定位；Cmd/Ctrl+点击查看原图':'点击查看未引用媒体原图';
+    link.setAttribute('aria-label',row.line?`定位第 ${row.line} 行媒体`:'查看未引用媒体原图');
+    // The preview column is part of the Media AG: a normal tap must take
+    // exactly the same four-pane focus path as tapping its source-line cell.
+    // Cmd/Ctrl-click keeps the existing native open-original affordance;
+    // unreferenced inventory files have no source coordinate to focus.
+    link.addEventListener('click',event=>{
+      event.stopPropagation();
+      if(!row.line||event.metaKey||event.ctrlKey||event.shiftKey)return;
+      event.preventDefault();
+      params.node?.setSelected(true);
+      publishFocus({sourceLine:row.line,origin:'media',intent:'click'});
+    });
     const image=document.createElement('img');
     image.className='ocr-media-thumb';
     image.loading='lazy';image.decoding='async';
