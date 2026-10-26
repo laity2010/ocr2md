@@ -5,6 +5,7 @@
  */
 import './ag-module-toolbar.css';
 import {enhanceNavigationSelect} from './navigation-select.js';
+import {mountAllChaptersGrid} from './chapter-all-elements.js';
 
 export function mountAgModuleToolbar(){
   const moduleSelect=document.getElementById('module-select');
@@ -19,7 +20,16 @@ export function mountAgModuleToolbar(){
   // document-specific state. Chapters share it across in-place navigation.
   let selectedElementModule='chapter-boundary';
   let bar=null;
+  let allChapters=null;
   let transitioning=false;
+  const allLabel=document.createElement('label');
+  allLabel.className='ocr-all-chapters-control';
+  const allToggle=document.createElement('input');
+  allToggle.type='checkbox';allToggle.setAttribute('aria-label','章节所有');
+  allLabel.append(allToggle,document.createTextNode('章节所有'));
+  const allStatus=document.createElement('span');
+  allStatus.className='ocr-all-chapters-status';
+  allStatus.setAttribute('role','status');
   // File navigation and the mainline module handler keep the original select.
   // The chapter's *visible* element picker has only three real options: iPad
   // Safari's native picker can expose <option hidden>, so don't rely on it.
@@ -60,6 +70,9 @@ export function mountAgModuleToolbar(){
     elementSelect.hidden=!isChapter()||settings;
     if(!settings){elementSelect.value=selected;elementSelect.ocrNavigationSelect?.tom.setValue(selected,true);}
     elementSelect.ocrNavigationSelect?.show();
+    allLabel.hidden=!isChapter()||settings;
+    allStatus.hidden=!isChapter()||settings||!allToggle.checked;
+    allChapters?.setModule();
     moduleSelect.setAttribute('aria-label','章节处理模块');
     // Original settings option stays intact for source-file navigation,
     // but cannot appear in the separate 3-item native chapter picker.
@@ -67,7 +80,7 @@ export function mountAgModuleToolbar(){
       // Title view on bounded chapters has no Export/Start Number actions:
       // those belong exclusively to the mother document.
       actions.hidden=settings || actions.dataset.module!==selected ||
-        (isChapter()&&actions.dataset.module==='chapter-boundary');
+        (isChapter()&&actions.dataset.module==='chapter-boundary') || allToggle.checked;
     }
     if(!isChapter()&&selected!=='settings')bar.hidden=false;
   }
@@ -102,9 +115,10 @@ export function mountAgModuleToolbar(){
     bar.className='ocr-lab-ag-toolbar';
     bar.setAttribute('role','toolbar');
     // No cloned controls. Events and input state stay owned by mainline.
-    bar.append(moduleSelect,elementSelect,...actionGroups);
+    bar.append(moduleSelect,elementSelect,allLabel,allStatus,...actionGroups);
     enhanceNavigationSelect(elementSelect,{kind:'elements'});
     outline.insertBefore(bar,grid);
+    allChapters=mountAllChaptersGrid(outline,allToggle,allStatus,()=>moduleSelect.value,()=>queueMicrotask(refresh));
     refresh();
     // Startup may have deep-linked directly into a chapter. The mainline's
     // module-select listener is registered later during async initialization.
