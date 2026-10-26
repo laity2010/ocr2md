@@ -12,7 +12,7 @@ const choose=async(locator,value)=>locator.evaluate((el,v)=>{
 for(const [name,engine,opts] of [
   ['Chrome',chromium,{viewport:{width:1330,height:865}}],
   ['iPad WebKit',webkit,{viewport:{width:1040,height:780},isMobile:true,hasTouch:true,deviceScaleFactor:2}],
-]){
+].filter(([name])=>!process.env.OCR_TEST_BROWSER||name===process.env.OCR_TEST_BROWSER)){
   const browser=await engine.launch({headless:true});
   try{
     const page=await browser.newPage(opts),errors=[],writes=[],physical=[];
@@ -95,7 +95,14 @@ for(const [name,engine,opts] of [
     assert.equal(await page.locator('.ocr-pdf-region-overlay').getAttribute('data-pdf-page'),String(pick.expectedPage));
     // Reverse direction: a real PDF block click must reselect the media item.
     await page.evaluate(()=>window.__mediaFocus.views.media.api.deselectAll());
-    await page.locator('.ocr-pdf-region-overlay').click({force:true,timeout:15000});
+    // The gold PDF overlay is noninteractive (pointer-events:none) and lives
+    // outside the viewer's .pdfViewer event delegation. Click its real
+    // on-screen coordinates to hit the underlying PDF canvas, never force
+    // a synthetic click on the noninteractive overlay node.
+    await page.locator('.ocr-pdf-region-overlay').scrollIntoViewIfNeeded();
+    const pdfHit=await page.locator('.ocr-pdf-region-overlay').boundingBox();
+    assert(pdfHit?.width>10&&pdfHit.height>10);
+    await page.mouse.click(pdfHit.x+pdfHit.width/2,pdfHit.y+pdfHit.height/2);
     await page.waitForFunction(line=>window.__mediaFocus.views.media.api.getSelectedRows()[0]?.line===line,
       pick.line,{timeout:12000});
     // Reverse direction: a real Markdown block click follows the same AG row,
@@ -103,6 +110,14 @@ for(const [name,engine,opts] of [
     await choose(page.locator('.ocr-preview-mode'),'md');
     await page.evaluate(()=>window.__mediaFocus.views.media.api.deselectAll());
     await page.locator('.ocr-markdown .ocr-outline-focused-element').first().click({timeout:16000});
+    await page.waitForFunction(line=>window.__mediaFocus.views.media.api.getSelectedRows()[0]?.line===line,
+      pick.line,{timeout:12000});
+    // And the native CM6 caret: clicking inside the current media URL should
+    // select the corresponding Media AG row without a new document or save.
+    await page.evaluate(()=>window.__mediaFocus.views.media.api.deselectAll());
+    const cmMediaLine=page.locator('#editor .cm-line').filter({hasText:pick.url}).first();
+    await cmMediaLine.waitFor({state:'visible',timeout:14000});
+    await cmMediaLine.click({position:{x:110,y:10},timeout:15000});
     await page.waitForFunction(line=>window.__mediaFocus.views.media.api.getSelectedRows()[0]?.line===line,
       pick.line,{timeout:12000});
     assert.equal(await page.evaluate(()=>window.__mediaFocus.getMarkdown()),original);
