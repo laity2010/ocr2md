@@ -16,7 +16,7 @@
 - Local Chrome and iPad WebKit: `media-four-pane-focus.browser.test.mjs` PASS after each full end-to-end click round trip, source line 555 / actual PDF page 14, AG 全部 persists, parent chapter navigation transitions to `mineru:1:1:0`.
 - Local Chrome and iPad WebKit: `ag-all-cross-chapter-focus.browser.test.mjs` PASS after product changes; media source line 63, LaTeX line 898, title line 910, 3 distinct AG grids; absolute Markdown highlight, PDF 22nd-page heading overlay, no business writes.
 - Public Chrome: `media-four-pane-focus.browser.test.mjs` PASS against `https://ocr2md.laity.bid/labs/cm-html/`.
-- Public iPad WebKit: pending final browser execution report; do not interpret as passed until observed.
+- Public iPad WebKit: `media-four-pane-focus.browser.test.mjs` PASS against `https://ocr2md.laity.bid/labs/cm-html/` (source line 555, PDF page 14, true bidirectional selection, no writes).
 - Formal public release version: `v6-20261026-102651` unchanged (HTTP 200). Public Lab version `v6-lab-cm-html-20261026-202912` (HTTP 200).
 
 ## Gate
