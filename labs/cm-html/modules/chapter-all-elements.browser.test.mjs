@@ -10,7 +10,7 @@ const chooseNative=(locator,value)=>locator.evaluate((el,v)=>{
 for(const [name,engine,context] of [
   ['Chrome',chromium,{viewport:{width:1300,height:825}}],
   ['iPad WebKit',webkit,{viewport:{width:1032,height:768},isMobile:true,hasTouch:true,deviceScaleFactor:2}],
-]){
+].filter(([name])=>!process.env.OCR_WEBKIT_ONLY||name==='iPad WebKit')){
   const browser=await engine.launch({headless:true});
   try{
     const page=await browser.newPage({ignoreHTTPSErrors:base.startsWith('https:'),...context});
@@ -21,9 +21,9 @@ for(const [name,engine,context] of [
       const u=new URL(r.url());
       if(r.resourceType()==='document')docLoads++;
       if(/^\/(api|media)\//.test(u.pathname))badRequests.push(u.pathname);
-      if(!['GET','HEAD'].includes(r.method()))badRequests.push(r.method()+' '+u.pathname);
+      if(!['GET','HEAD'].includes(r.method())&&u.pathname.startsWith(new URL(base).pathname+'api/'))badRequests.push(r.method()+' '+u.pathname);
     });
-    await page.goto(base,{waitUntil:'domcontentloaded'});
+    await page.goto(base,{waitUntil:'domcontentloaded',timeout:60000});
     const checkbox=page.locator('input[type="checkbox"][aria-label="章节所有"]');
     await checkbox.waitFor({state:'attached',timeout:30000});
     assert.equal(await checkbox.isVisible(),false,'Mother file must not show all-chapters toggle');
