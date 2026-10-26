@@ -69,8 +69,8 @@ for(const [name,engine,context] of [
   await page.waitForFunction(()=>!document.querySelector('#workspace').hidden,null,{timeout:12000});
   await page.waitForTimeout(170);
   const restored=await ratios();
-  assert(Math.abs(restored.ag-changedInSettings.ag)<0.06);
-  assert(Math.abs(restored.source-changedInSettings.source)<0.06);
+  assert(Math.abs(restored.ag-changedInSettings.ag)<0.06,`AG ratio mismatch ${JSON.stringify({initial,adjusted,settings1,changedInSettings,restored})}`);
+  assert(Math.abs(restored.source-changedInSettings.source)<0.06,`source ratio mismatch ${JSON.stringify({initial,adjusted,settings1,changedInSettings,restored})}`);
   // A second Settings entrance must retain the previously selected sash ratios.
   await nav.selectOption('settings');
   await page.waitForFunction(()=>!document.querySelector('#settings-workspace').hidden,null,{timeout:12000});
