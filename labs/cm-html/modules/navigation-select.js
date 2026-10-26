@@ -26,6 +26,10 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
     render:{no_results:(data,escape)=>`<div class="no-results">未找到：${escape(data.input)}</div>`},
   });
   tom.wrapper.classList.add('ocr-navigation-select',`ocr-navigation-${kind}`);
+  // Tom Select copies native classes onto its wrapper. Strip selector-contract
+  // names so existing code/tests targeting the real <select> stay unambiguous.
+  tom.wrapper.classList.remove('ocr-source-file-select','ocr-lab-file-select',
+    'ocr-lab-element-select','ocr-preview-mode');
   tom.dropdown.classList.add('ocr-navigation-popup',`ocr-navigation-popup-${kind}`);
   const updateVisibility=()=>{
     tom.wrapper.hidden=element.hidden||element.closest('[hidden]')!==null;
