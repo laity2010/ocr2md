@@ -37,9 +37,17 @@ export function createWCPRuntime(){
       }));
     },
     onPreviewInit(previewPort){
+      // A review annotation changes source offsets even when the SAME chapter
+      // remains selected. It must not be treated as a navigation: repaint()
+      // intentionally scrolls to chapter start and caused the reported jump.
+      let previousChapterId=null;
       const onScope=event=>{
-        previewPort.setScope(event.detail?.scope??null);
-        if(event.detail?.reason==='edit')return; // already scheduled by CM revision
+        const nextScope=event.detail?.scope??null;
+        const nextChapterId=nextScope?.id??null;
+        const chapterChanged=previousChapterId!==nextChapterId;
+        previousChapterId=nextChapterId;
+        previewPort.setScope(nextScope);
+        if(event.detail?.reason==='edit'||!chapterChanged)return;
         requestAnimationFrame(()=>{
           if(!previewPort.isDisposed())previewPort.repaint();
         });
