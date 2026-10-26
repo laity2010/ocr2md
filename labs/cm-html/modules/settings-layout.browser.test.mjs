@@ -73,7 +73,18 @@ for(const [name,engine,context] of [
   assert(Math.abs(restored.source-changedInSettings.source)<0.06,`source ratio mismatch ${JSON.stringify({initial,adjusted,settings1,changedInSettings,restored})}`);
   // A second Settings entrance must retain the previously selected sash ratios.
   await nav.selectOption('settings');
-  await page.waitForFunction(()=>!document.querySelector('#settings-workspace').hidden,null,{timeout:12000});
+  await page.waitForFunction(()=>!document.querySelector('#settings-workspace').hidden&&
+    document.querySelector('#settings-workspace .ocr-settings-source')?.getBoundingClientRect().width>300,
+    null,{timeout:12000});
+  // Observe the settled layout, not Dockview's transient 200×200 bootstrap.
+  await page.waitForFunction(target=>{
+    const left=document.querySelector('#settings-workspace .ocr-settings-ag-pane')?.getBoundingClientRect();
+    const source=document.querySelector('#settings-workspace .ocr-settings-source')?.getBoundingClientRect();
+    const preview=document.querySelector('#settings-workspace .ocr-settings-pane:not(.ocr-settings-source):not(.ocr-settings-ag-pane)')?.getBoundingClientRect();
+    if(!left||!source||!preview||left.width+source.width<900)return false;
+    return Math.abs(left.width/(left.width+source.width)-target.ag)<0.06&&
+      Math.abs(source.height/(source.height+preview.height)-target.source)<0.06;
+  },restored,{timeout:6000});
   const settings2=await ratios();
   assert(Math.abs(settings2.ag-restored.ag)<0.06);
   assert(Math.abs(settings2.source-restored.source)<0.06);
