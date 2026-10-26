@@ -32,9 +32,13 @@
 }
 .ocr-navigation-popup .ts-dropdown-content{max-height:min(60vh,410px);overflow:auto}
 .ocr-navigation-popup .option{padding:8px 10px;white-space:normal;overflow-wrap:anywhere}
-/* Keyboard focus is not a second selection: distinct subdued indication. */
+/* The selected option is green. Tom Select's `active` means keyboard
+ * focus, which iPad Safari can leave on the previous chapter even after
+ * Settings becomes selected. Never color a non-selected row like a second
+ * selection; show accessible focus as a subtle dotted text underline. */
 .ocr-navigation-popup .option.active:not(.selected){
-  background:#2c3e40;color:#d3c6aa;box-shadow:inset 3px 0 #718c79;
+  background:transparent;color:#d3c6aa;box-shadow:none;
+  text-decoration:underline dotted #81958a;text-underline-offset:3px;
 }
 .ocr-navigation-popup .option.selected{background:#365046;color:#d3e2ca}
 .ocr-navigation-popup .optgroup-header{

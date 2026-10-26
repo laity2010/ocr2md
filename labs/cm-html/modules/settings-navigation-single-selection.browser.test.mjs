@@ -26,10 +26,12 @@ for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1408,heig
     const popup=target.dropdown;
     return {module:document.querySelector('#module-select').value,native:native.value,
       proxy:target.getValue(),activeOption:target.activeOption?.dataset.value||null,
+      inputValue:target.inputValue,isOpen:target.isOpen,selectedOptionExists:!!target.getOption('settings'),
       workbenchHidden:document.querySelector('#workspace').hidden,
       visiblePopup:popup.getBoundingClientRect().height>0,
       options:[...popup.querySelectorAll('[data-selectable][data-value]')].filter(o=>['document','settings'].includes(o.dataset.value)).map(el=>({text:el.textContent.trim(),value:el.dataset.value,cls:el.className,
-      selected:el.classList.contains('selected'),active:el.classList.contains('active'),aria:el.getAttribute('aria-selected')}))};
+      selected:el.classList.contains('selected'),active:el.classList.contains('active'),aria:el.getAttribute('aria-selected'),
+      background:getComputedStyle(el).backgroundColor,decoration:getComputedStyle(el).textDecorationLine}))};
   });
   // Simulate TomSelect reindex giving the old chapter row stale focus, then
   // exercise the production navigation refresh contract (reused in WP3).
@@ -40,7 +42,14 @@ for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1408,heig
     e.ocrNavigationSelect.refresh();
   });
   await page.waitForTimeout(80);
+  // Tom.sync can dismiss its portal during option mirroring; the next user
+  // open must rebuild the SINGLE real selection without stale active focus.
+  if(!(await page.locator('body>.ocr-navigation-popup-files:visible').count()))
+    await nav.click();
+  await page.locator('body>.ocr-navigation-popup-files:visible').waitFor({state:'visible',timeout:9000});
+  await page.waitForTimeout(70);
   const before=await state();
+
   console.log('SETTINGS_NAV_SELECTION',name,JSON.stringify(before));
   await page.screenshot({path:`audit-reports/screenshots/settings-navigation-${name}-before.png`,animations:'disabled'});
   if(process.env.OCR_BASELINE!=='1'){
@@ -49,7 +58,14 @@ for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1408,heig
     assert.equal(await page.locator('.ocr-source-pane .ocr-lab-file-select').inputValue(),
       'settings','hidden source navigator retains a competing selection');
     assert.deepEqual(before.options.filter(o=>o.selected).map(o=>o.value),['settings']);
-    assert.deepEqual(before.options.filter(o=>o.active).map(o=>o.value),['settings'],'Active row is not current selection');
+    // Active is keyboard focus, not selection; WebKit can leave it on the
+    // previous file. It must NOT paint a second green selected-looking row.
+    const doc=before.options.find(o=>o.value==='document');
+    const setting=before.options.find(o=>o.value==='settings');
+    assert(doc&&!doc.selected,'chapter boundary still truly selected');
+    assert(setting?.selected,'settings missing selected highlight');
+    assert.notEqual(doc.background,setting.background,'stale active row painted as selected');
+    assert.equal(doc.background,'rgba(0, 0, 0, 0)','non-selected active row has a misleading background');
     assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
     console.log('SETTINGS_NAV_SINGLE_SELECTION_PASS',name);
   }

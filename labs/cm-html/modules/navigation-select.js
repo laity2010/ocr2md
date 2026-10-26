@@ -32,21 +32,6 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   tom.wrapper.classList.add('ocr-navigation-select',`ocr-navigation-${kind}`);
   tom.dropdown.classList.add('ocr-navigation-popup',`ocr-navigation-popup-${kind}`);
   let destroyed=false,scheduled=false;
-  // Searchable file navigation can retain its previously *active* keyboard
-  // option after the selected file changes, making two rows look selected
-  // (one `.active`, one `.selected`). Align the active highlight to the real
-  // selection on popup open or option refresh, not during user search/arrowing.
-  const syncActiveFile=()=>{
-    if(destroyed||kind!=='files'||!tom.isOpen||tom.inputValue)return;
-    const current=tom.getOption(tom.getValue());
-    if(current&&tom.activeOption!==current)tom.setActiveOption(current);
-  };
-  if(kind==='files')tom.on('dropdown_open',()=>{
-    // iPad WebKit may activate the *old* first option AFTER dropdown_open's
-    // synchronous listeners run. Align on the next painted frame, after the
-    // native touch/mouse focus transition (not during keyboard navigation).
-    requestAnimationFrame(()=>requestAnimationFrame(syncActiveFile));
-  });
   // Tom Select repositions its portal on open, scroll, resize and search.
   // Apply our viewport clamp AFTER each built-in positionDropdown() call;
   // a one-time dropdown_open handler is overwritten by a later reposition.
@@ -75,7 +60,6 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
     if(destroyed)return;
     reflectOptions();
     tom.sync(true); // safe: mutates only proxy, never the original select
-    queueMicrotask(syncActiveFile);
     tom.wrapper.title=element.selectedOptions[0]?.textContent||'';
     updateVisibility();
   };
@@ -88,7 +72,6 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   // change updates Tom silently; Tom user changes dispatch one native event.
   const onNativeChange=()=>{
     if(tom.getValue()!==element.value)tom.setValue(element.value,true);
-    queueMicrotask(syncActiveFile);
     tom.wrapper.title=element.selectedOptions[0]?.textContent||'';
     updateVisibility();
   };
