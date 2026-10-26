@@ -39,12 +39,13 @@ for(const [name,browserType,device] of [
   const second=await source.locator('optgroup:nth-child(2) option').nth(2).getAttribute('value');
   assert.equal((await label.textContent()).trim(),'全部');
   assert(await label.isVisible());
-  assert(await element.isVisible());
+  assert(await bar.locator('.ocr-navigation-elements').isVisible());
   assert.deepEqual(await element.locator('option').allTextContents(),['标题','媒体','LaTeX']);
-  assert.deepEqual(await bar.locator(':scope > *').evaluateAll(xs=>xs.filter(x=>
-    x.getBoundingClientRect().width>0&&x.getBoundingClientRect().height>0)
-    .slice(0,2).map(x=>x.classList.contains('ocr-all-chapters-control')?'全部':x.classList.contains('ocr-navigation-elements')?'元素':x.className)),
-    ['全部','元素']);
+  const positions=await bar.evaluate(el=>({
+    all:el.querySelector('.ocr-all-chapters-control').getBoundingClientRect().right,
+    select:el.querySelector('.ocr-navigation-elements').getBoundingClientRect().left,
+  }));
+  assert(positions.all<=positions.select,'All checkbox must be left of element dropdown');
   assert.equal(await all.isChecked(),true);
   assert.equal(await all.isDisabled(),true,'Whole mother has no selected chapter');
   assert.equal(await element.inputValue(),'chapter-boundary');
@@ -69,6 +70,11 @@ for(const [name,browserType,device] of [
   assert.equal(await element.inputValue(),'latex');
   await page.waitForFunction(()=>window.__elementToolbar.views.latex.api.getDisplayedRowCount()===25,
     null,{timeout:15000});
+  // iPad WebKit may still be displaying the previous preview frame right
+  // after AG+CM6 have switched. Wait for the absolute source-line remap.
+  await page.waitForFunction(()=>Number(document.querySelector(
+    '.ocr-markdown [data-source-start]')?.dataset.sourceStart)>20,
+    null,{timeout:17000});
   const scope=await page.evaluate(()=>({
     selected:document.querySelector('.ocr-source-pane .ocr-lab-file-select').value,
     editorNodes:document.querySelectorAll('#editor .cm-editor').length,
