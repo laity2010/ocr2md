@@ -83,7 +83,15 @@ async function checkForNewBuild() {
   } catch { /* Transient tunnel/network failures must not disturb the editor. */ }
   finally {checkingVersion = false;}
 }
-$('build-version').textContent = __V6_BUILD_VERSION__;
+// UI badge is intentionally short; release/healthz keeps its full immutable ID.
+const compactBuildLabel=full=>{
+  const match=/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(?:\d{2})?$/.exec(full);
+  if(!match)return full;
+  const channel=full.startsWith('v6-lab-')?'lab':'main';
+  return `v6 ${channel}-${match[1].slice(-2)}${match[2]}${match[3]}-${match[4]}${match[5]}`;
+};
+$('build-version').textContent=compactBuildLabel(currentBuild);
+$('build-version').title=`${currentBuild} · 打开工程菜单`;
 
 function status(text, kind='ok') {
   statusMessage=text;
