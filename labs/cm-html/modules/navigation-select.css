@@ -38,7 +38,24 @@
 }
 .ocr-navigation-popup .no-results{padding:9px;color:#b7b9ac}
 /* File navigation shares the source bar with > +/-; never grows vertically. */
-.ocr-source-file-toolbar>.ts-wrapper{min-width:80px;max-width:min(100%,410px)}
+/* Lab source-file navigator: take ALL remaining toolbar width, after the
+ * fixed indent buttons. The old 410px cap wasted 200px on wider panes.
+ * Keep the wrapper entirely inside the 34px source toolbar. */
+.ocr-source-file-toolbar>.ts-wrapper.ocr-navigation-files{
+  flex:1 1 0;width:auto;max-width:none;min-width:0;
+  height:30px;align-self:center;box-sizing:border-box;
+}
+.ocr-source-file-toolbar>.ts-wrapper.ocr-navigation-files .ts-control{
+  height:30px;min-height:30px;padding-left:10px;font-size:13px;
+}
+.ocr-navigation-popup-files.ts-dropdown{
+  max-width:calc(100vw - 16px)!important;
+  font-size:13px;
+}
+/* Filenames wrap inside the popup instead of overflowing right of the iPad. */
+.ocr-navigation-popup-files .option{
+  white-space:normal;overflow-wrap:anywhere;
+}
 .ocr-lab-ag-toolbar>.ts-wrapper.ocr-navigation-elements{width:112px;flex:0 0 112px}
 .ocr-lab-ag-toolbar>.ts-wrapper.ocr-navigation-elements .ts-control{font-size:12px}
 .ocr-preview-switchbar>.ts-wrapper.ocr-navigation-preview{width:155px;max-width:46%;flex:0 1 155px}

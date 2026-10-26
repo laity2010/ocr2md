@@ -32,6 +32,26 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   tom.wrapper.classList.add('ocr-navigation-select',`ocr-navigation-${kind}`);
   tom.dropdown.classList.add('ocr-navigation-popup',`ocr-navigation-popup-${kind}`);
   let destroyed=false,scheduled=false;
+  // File names can be much wider than their compact toolbar. The popup may
+  // grow for readability, but its portal must NEVER extend past the viewport
+  // (particularly when the source pane occupies the right half of an iPad).
+  const fitFilePopup=()=>{
+    if(destroyed||kind!=='files'||!tom.isOpen)return;
+    requestAnimationFrame(()=>{
+      if(destroyed||!tom.isOpen)return;
+      const trigger=tom.wrapper.getBoundingClientRect();
+      const vw=Math.max(0,document.documentElement.clientWidth||window.innerWidth);
+      const width=Math.min(Math.max(540,Math.ceil(trigger.width)),Math.max(0,vw-16));
+      if(width<80)return;
+      const left=Math.max(8,Math.min(trigger.left,vw-width-8));
+      tom.dropdown.style.width=`${width}px`;
+      tom.dropdown.style.left=`${left}px`;
+    });
+  };
+  if(kind==='files'){
+    tom.on('dropdown_open',fitFilePopup);
+    window.addEventListener('resize',fitFilePopup);
+  }
   const updateVisibility=()=>{
     // The original select's own hidden flag controls only its proxy. A hidden
     // Dockview/settings ancestor already hides the proxy via CSS; copying that
@@ -43,6 +63,7 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
     if(destroyed)return;
     reflectOptions();
     tom.sync(true); // safe: mutates only proxy, never the original select
+    tom.wrapper.title=element.selectedOptions[0]?.textContent||'';
     updateVisibility();
   };
   const scheduleRefresh=()=>{
@@ -54,6 +75,7 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   // change updates Tom silently; Tom user changes dispatch one native event.
   const onNativeChange=()=>{
     if(tom.getValue()!==element.value)tom.setValue(element.value,true);
+    tom.wrapper.title=element.selectedOptions[0]?.textContent||'';
     updateVisibility();
   };
   const onProxyChange=()=>{
@@ -74,6 +96,7 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   updateVisibility();
   const adapter=Object.freeze({tom,refresh,show:updateVisibility,dispose:()=>{
     destroyed=true;observer.disconnect();
+    if(kind==='files')window.removeEventListener('resize',fitFilePopup);
     element.removeEventListener('change',onNativeChange);
     proxy.removeEventListener('change',onProxyChange);
     tom.destroy();proxy.remove();element.classList.remove('ocr-navigation-native');
