@@ -261,6 +261,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   });
   refresh();
   return {
+    api:grid,
     refresh,scan,downloadAll,
     setActive(enabled){
       active=enabled;host.hidden=!enabled;

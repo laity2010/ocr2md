@@ -1,4 +1,5 @@
 import './styles.css';
+import {createWCPRuntime} from './wcp-runtime.js';
 import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
@@ -22,6 +23,8 @@ const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save')};
 let view;
 let cm;
+let cmdPort=null;
+const wcpRuntime=createWCPRuntime();
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
@@ -312,10 +315,10 @@ async function main() {
     refreshToolbar();
   });
   registerCMSourceFontSetting(settings);
-  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm, (message,kind)=>{
+  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
-  });
+  },wcpRuntime);
   registerOutlineTitleScaleSetting(settings,value=>workspace.setOutlineTitleFontScale(value));
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
@@ -330,6 +333,7 @@ async function main() {
       return res.text();
     },
     extensions:[
+      ...wcpRuntime.editorExtensions,
       nativeIOSSelection ? nativeIOSBasicSetup : basicSetup,
       EditorView.lineWrapping,
       // Only image clipboard items are handled here; native CM6 paste retains
@@ -383,6 +387,8 @@ async function main() {
     ]
   });
   view=cm.view;
+  cmdPort=wcpRuntime.wrapCMD(cm);
+  wcpRuntime.onCMReady({view,status});
   foldInitialMineruComments(view);
   view.contentDOM.addEventListener('click',()=>{
     const sourceLine=view.state.doc.lineAt(view.state.selection.main.head).number;

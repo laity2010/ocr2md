@@ -196,6 +196,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
       followFocus(current.focusTarget,current);
   });
   return {
+    api:grid,
     refresh,
     normalizeReviewed(){
       if(disposed)return;

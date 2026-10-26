@@ -10,6 +10,7 @@ const slots=Object.freeze({
   media:{request:'./media-module.js',importers:['workspace.js','main.js']},
   latex:{request:'./latex-module.js',importers:['workspace.js','main.js']},
   settings:{request:'./settings-module.js',importers:['main.js']},
+  wcpRuntime:{request:'./wcp-runtime.js',importers:['main.js']},
 });
 export function labProfile(root,name=process.env.V6_LAB_ID||''){
   if(!name)return null;
@@ -84,58 +85,6 @@ export function labVitePlugin(root,profile){
           const address=image.closest('a')?.getAttribute('href');
           if(address)image.src=address;
         }`);
-      }
-      if(existsSync(join(profile.dir,'wp0-2','ag-query.js'))){
-        if(path===join(sourceRoot,'media-module.js')){
-          const needle='  return {\n    refresh,scan,downloadAll,';
-          if(!code.includes(needle))throw Error('WP3 Media AG public adapter changed');
-          code=code.replace(needle,'  return {\n    api:grid,\n    refresh,scan,downloadAll,');
-        }
-        if(path===join(sourceRoot,'latex-module.js')){
-          const needle='  return {\n    refresh,\n    normalizeReviewed(){';
-          if(!code.includes(needle))throw Error('WP3 LaTeX AG public adapter changed');
-          code=code.replace(needle,'  return {\n    api:grid,\n    refresh,\n    normalizeReviewed(){');
-        }
-        if(path===join(sourceRoot,'workspace.js')){
-          const needle='    this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);';
-          if(!code.includes(needle))throw Error('WP3 Workspace AG readiness contract changed');
-          code=code.replace(needle,needle+`\n    setTimeout(()=>document.dispatchEvent(new CustomEvent('ocr2md:wp3-ag-ready',{detail:{\n      views:{outline:this.grid,media:this.media,latex:this.latex},getMarkdown:()=>getMarkdown(),getCMD:()=>getCMD(),\n    }})),0);`);
-        }
-      }
-      if(path===join(sourceRoot,'workspace.js')&&
-         existsSync(join(profile.dir,'wp0-2','cmd-element-transactions.js'))){
-        const old='  replaceRanges:edits=>getCMD().replaceRanges(edits),';
-        if(!code.includes(old))throw Error('WP6 Media CMD write-port contract changed');
-        code=code.replace(old,'  replaceRanges:edits=>getCMD().replaceMediaReferences(edits),');
-      }
-      if(path===join(sourceRoot,'workspace.js')&&
-         existsSync(join(profile.dir,'wp0-2','md-virtual-preview.js'))){
-        const wp5=join(profile.dir,'wp0-2','md-virtual-preview.js');
-        if(!code.includes('this.body.innerHTML=renderMarkdown(source);') ||
-           !code.includes("this.body.addEventListener('click',this.onClick);"))
-          throw Error('WP5 MD preview integration contract changed');
-        code=`import {renderVirtualMarkdown} from ${JSON.stringify(wp5)};\n`+code;
-        code=code.replace('this.body.innerHTML=renderMarkdown(source);',
-          'this.body.innerHTML=renderVirtualMarkdown(source,this.virtualScope??null);');
-        code=code.replace("    this.body.addEventListener('click',this.onClick);",
-          `    this.onVirtualScope=event=>{
-      this.virtualScope=event.detail?.scope??null;
-      // The source text changed and the original PreviewPanel already
-      // scheduled its normal 180 ms rerender on documentRevision. Retaining
-      // the mapped range avoids re-parsing the entire chapter per keystroke.
-      if(event.detail?.reason==='edit')return;
-      // The CM6 subscriber may be registered later. Re-render after all
-      // same-turn receivers have applied the new scope to their own state.
-      requestAnimationFrame(()=>{if(this.disposed)return;
-        this.render();this.mdPane.scrollTop=0;
-      });
-    };
-    document.addEventListener('ocr2md:wp4-virtual-scope',this.onVirtualScope);
-    this.body.addEventListener('click',this.onClick);`);
-        if(!code.includes("    this.body.removeEventListener('click',this.onClick);"))
-          throw Error('WP5 preview cleanup contract changed');
-        code=code.replace("    this.body.removeEventListener('click',this.onClick);",
-          "    document.removeEventListener('ocr2md:wp4-virtual-scope',this.onVirtualScope);\n    this.body.removeEventListener('click',this.onClick);");
       }
       if(path===join(sourceRoot,'workspace.js')){
         const layoutModule=join(profile.dir,'modules','layout-persistence.js');
@@ -235,22 +184,7 @@ let __labSessions = null;
           "if ((hasUnsavedEdits()||__labSessions?.hasOtherUnsaved()||settings?.hasUnsaved())&&!allowInitializeReload)");
         for(const endpoint of ['document','export-chapters','initialize-document'])
           code=code.replaceAll(`fetch('/api/${endpoint}'`,`fetch(__labDocumentUrl('/api/${endpoint}')`);
-        const wp6=join(profile.dir,'wp0-2','cmd-element-transactions.js');
-        if(existsSync(wp6)){
-          code=`import {createCMDTransactionPort} from ${JSON.stringify(wp6)};\n`+code;
-          replaceOnce('let cm;','let cm;\nlet cmdTx=null;');
-          replaceOnce('() => cm, (message,kind)=>','() => cmdTx??cm, (message,kind)=>');
-          replaceOnce('  view=cm.view;','  view=cm.view;\n  cmdTx=createCMDTransactionPort(cm);');
-        }
-        const wp4=join(profile.dir,'wp0-2','cm-virtual-view.js');
-        if(existsSync(wp4)){
-          code=`import {virtualChapterExtensions,setVirtualChapter,currentVirtualChapter} from ${JSON.stringify(wp4)};\n`+code;
-          replaceOnce('    extensions:[','    extensions:[\n      ...virtualChapterExtensions,');
-          replaceOnce('          documentChanged();',`          documentChanged();
-          document.dispatchEvent(new CustomEvent('ocr2md:wp4-virtual-scope',
-            {detail:{scope:currentVirtualChapter(update.state),reason:'edit'}}));`);
-          replaceOnce('  view=cm.view;','  view=cm.view;\n  document.addEventListener(\'ocr2md:wp4-virtual-scope\',event=>{\n    const scope=event.detail?.scope??null;\n    try{setVirtualChapter(view,scope);}catch(error){\n      status(\'章节视图失败：\'+error.message,\'error\');\n    }\n  });');
-        }
+
       }
 
       // Scope only the reused mainline's network requests; fail-closed browser
