@@ -16,7 +16,9 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
     maxOptions:1000,
     hideSelected:false,
     searchField:search?['text']:[],
-    controlInput:search?undefined:null,
+    // Do not pass controlInput:undefined: Tom Select interprets the presence
+    // of the key as an explicit custom control, suppressing its search input.
+    ...(search?{}:{controlInput:null}),
     dropdownParent:'body',
     placeholder:search?'搜索文件名或路径…':undefined,
     sortField:[{field:'$order',direction:'asc'}],

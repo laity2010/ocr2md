@@ -22,6 +22,8 @@ for(const [name,engine,ctx] of [
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-source-file-select option[value^="chapter:"]').length>=3,null,{timeout:18000});
   const filePopup=page.locator('body>.ocr-navigation-popup-files');
   await nav.click();
+  await filePopup.waitFor({state:'visible',timeout:9000});
+  await page.waitForFunction(()=>document.querySelectorAll('body>.ocr-navigation-popup-files .optgroup-header').length===2,null,{timeout:9000});
   assert.equal(await filePopup.locator('.optgroup-header').allTextContents().then(xs=>xs.join('|')),'工作区|章节文件');
   assert.equal(await filePopup.locator('[data-value^="chapter:"]').count()>=3,true);
   await nav.locator('input').fill('002');
