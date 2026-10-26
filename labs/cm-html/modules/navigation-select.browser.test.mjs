@@ -39,6 +39,8 @@ for(const [name,engine,ctx] of [
   const elementControl=page.locator('.ocr-navigation-elements .ts-control');
   await elementControl.click();
   const agPopup=page.locator('body>.ocr-navigation-popup-elements');
+  await agPopup.waitFor({state:'visible',timeout:8000});
+  await page.waitForFunction(()=>document.querySelectorAll('body>.ocr-navigation-popup-elements [data-selectable]').length===3,null,{timeout:8000});
   assert.deepEqual(await agPopup.locator('[data-selectable]').allTextContents(),['标题','媒体','LaTeX']);
   assert(!((await agPopup.textContent())||'').includes('全局设置'));
   await agPopup.locator('[data-selectable][data-value="media"]').click();
@@ -51,6 +53,7 @@ for(const [name,engine,ctx] of [
   const preview=page.locator('.ocr-navigation-preview .ts-control');
   await preview.click();
   const pvPopup=page.locator('body>.ocr-navigation-popup-preview');
+  await pvPopup.waitFor({state:'visible',timeout:8000});
   assert((await pvPopup.locator('[data-selectable]').count())>=1);
   assert((await pvPopup.textContent()).includes('Markdown'));
   // Check source navigation is still clickable while PDF toolbar shares space.

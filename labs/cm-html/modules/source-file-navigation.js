@@ -41,7 +41,7 @@ export function createSourceFileNavigation(){
         select.append(group);
       }
       select.value=isSettings?'settings':activeId();
-      select.tomselect?.sync(true);
+      select.ocrNavigationSelect?.refresh();
     }
   }
   async function refreshChapters(){
@@ -59,6 +59,7 @@ export function createSourceFileNavigation(){
       moduleSelector.value='settings';
       moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
       selector.value=selector.closest('#settings-workspace')?'settings':activeId();
+      selector.ocrNavigationSelect?.refresh();
       return;
     }
     if(target.startsWith('chapter:')&&!names.includes(target.slice(8))){

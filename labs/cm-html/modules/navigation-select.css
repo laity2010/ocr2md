@@ -47,3 +47,6 @@
 @media(pointer:coarse){
  .ocr-navigation-popup .option{padding:12px 11px;min-height:42px}
 }
+
+/* The original select is a pure business interface, not the painted control. */
+select.ocr-navigation-native{display:none!important}
