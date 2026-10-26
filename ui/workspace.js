@@ -3,6 +3,7 @@
  * Zustand vanilla transports revision/selection signals, not content.
  */
 import {createDockview, themeAbyss} from 'dockview';
+import {readPaneRatios,applyPaneRatios} from './pane-layout-ratios.js';
 import 'dockview/dist/styles/dockview.css';
 import {viewStore,publishFocus} from './view-store.js';
 import {renderMarkdown} from './markdown-preview.js';
@@ -377,6 +378,8 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   });
   return {
     editorHost:sourceHost,
+    getPaneRatios:()=>readPaneRatios(dockview,'outline','source','preview'),
+    applyPaneRatios:ratios=>applyPaneRatios(dockview,'outline','source','preview',ratios),
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
     setOutlineTitleFontScale:value=>currentOutline?.grid?.setTitleFontScale(value),
