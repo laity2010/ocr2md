@@ -1,12 +1,14 @@
 /* Experiment-only common Tom Select theme: Dockview-safe portal popups. */
 .ts-wrapper.ocr-navigation-select{
-  flex:1 1 auto;min-width:0;width:100%;max-width:100%;height:27px;
+  flex:1 1 auto;min-width:0;width:100%;max-width:100%;
+  height:27px;min-height:0;max-height:27px;box-sizing:border-box;align-self:center;
   color:#d3c6aa;font:var(--ocr-navigation-font-size,10pt) 'OCR2MD Sarasa',monospace;
 }
 .ts-wrapper.ocr-navigation-select[hidden]{display:none!important}
 .ts-wrapper.ocr-navigation-select .ts-control{
-  min-height:27px;height:27px;display:flex;align-items:center;flex-wrap:nowrap;
-  padding:3px 26px 3px 8px;border:1px solid #60766b;border-radius:4px;
+  min-height:27px;max-height:27px;height:27px;box-sizing:border-box;
+  display:flex;align-items:center;flex-wrap:nowrap;line-height:1.15;
+  padding:1px 26px 1px 8px;border:1px solid #60766b;border-radius:4px;
   background:#344349;color:#d3c6aa;box-shadow:none;cursor:pointer;
 }
 .ts-wrapper.ocr-navigation-select .ts-control>.item{
