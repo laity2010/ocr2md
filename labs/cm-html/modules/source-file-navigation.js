@@ -22,7 +22,10 @@ export function createSourceFileNavigation(){
   const isChapterMode=()=>moduleSelector?.value!=='settings';
   const updateVisibility=()=>{
     const toolbar=workbench?.querySelector('.ocr-source-pane > .ocr-lab-file-toolbar');
-    if(toolbar)toolbar.hidden=!isChapterMode();
+    if(toolbar){
+      toolbar.hidden=!isChapterMode();
+      toolbar.querySelector('.ocr-source-file-select')?.ocrNavigationSelect?.show();
+    }
   };
   moduleSelector?.addEventListener('change',updateVisibility);
   function syncOptions(){

@@ -33,9 +33,11 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   tom.dropdown.classList.add('ocr-navigation-popup',`ocr-navigation-popup-${kind}`);
   let destroyed=false,scheduled=false;
   const updateVisibility=()=>{
-    const hidden=element.hidden||element.closest('[hidden]')!==null;
-    tom.wrapper.hidden=hidden;
-    if(hidden)tom.close();
+    // The original select's own hidden flag controls only its proxy. A hidden
+    // Dockview/settings ancestor already hides the proxy via CSS; copying that
+    // temporary ancestor state onto the proxy sticks after the pane returns.
+    tom.wrapper.hidden=element.hidden;
+    if(element.hidden||element.closest('[hidden]'))tom.close();
   };
   const refresh=()=>{
     if(destroyed)return;
@@ -57,6 +59,9 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   const onProxyChange=()=>{
     const next=tom.getValue();
     if(next===element.value)return;
+    // File switching can hide/reparent the source pane synchronously. Close
+    // the portal before dispatch so it cannot block neighboring controls.
+    tom.close();
     element.value=next;
     element.dispatchEvent(new Event('change',{bubbles:true}));
   };

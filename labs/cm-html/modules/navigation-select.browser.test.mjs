@@ -77,6 +77,18 @@ for(const [name,engine,ctx] of [
   await settingsNav.click();
   await page.locator('body>.ocr-navigation-popup-files:visible [data-selectable][data-value="document"]').click();
   await page.waitForFunction(()=>!document.querySelector('#workspace').hidden,null,{timeout:18000});
+  // Regression: the file control must reappear after Settings -> chapter,
+  // even when the source toolbar's parent was temporarily hidden.
+  await nav.waitFor({state:'visible',timeout:9000});
+  await nav.click();
+  await filePopup.waitFor({state:'visible',timeout:5000});
+  assert((await filePopup.locator('[data-value="settings"]').count())===1);
+  await filePopup.locator('[data-selectable][data-value="settings"]').click();
+  await page.waitForFunction(()=>!document.querySelector('#settings-workspace').hidden,null,{timeout:12000});
+  await settingsNav.waitFor({state:'visible',timeout:9000});
+  await settingsNav.click();
+  await page.locator('body>.ocr-navigation-popup-files:visible [data-selectable][data-value="document"]').click();
+  await nav.waitFor({state:'visible',timeout:9000});
   assert.equal(documentLoads,1,'In-place file navigation triggered full reload');
   assert.equal(escapedApi,0,'Unscoped API/media request');
   assert.deepEqual(errors,[]);
