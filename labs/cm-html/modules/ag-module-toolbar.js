@@ -129,7 +129,10 @@ export function mountAgModuleToolbar(){
     if(id){
       const option=[...chapterSelect.options].find(item=>item.value===id);
       if(!option){event.detail.error='章节标定已经变化';return;}
-      virtualMode=true;indexToggle.checked=true;allToggle.checked=false;
+      virtualMode=true;indexToggle.checked=true;
+      // AG-initiated cross-chapter focus preserves "全部". Explicit source
+      // navigator selections keep the existing default of chapter-only AG.
+      if(!event.detail.preserveAll)allToggle.checked=false;
       chapterSelect.value=id;chapterSelect.ocrNavigationSelect?.refresh();
     }else{
       virtualMode=false;indexToggle.checked=false;allToggle.checked=true;

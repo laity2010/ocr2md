@@ -136,22 +136,31 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     populate();
     unsubscribe=viewStore.subscribe((current,prior)=>{
       if(current.focusTarget!==prior.focusTarget &&
-         current.focusTarget?.origin==='pdf' &&
-         current.focusTarget.revision===current.documentRevision &&
-         enabled()){
+         current.focusTarget?.revision===current.documentRevision&&enabled()){
         const target=current.focusTarget;
-        const owner=owningChapter(target.sourceLine);
-        if(owner&&owner.id!==chapterSelect.value){
-          chapterSelect.value=owner.id;
-          chapterSelect.ocrNavigationSelect?.tom.setValue(owner.id,true);
-          apply();
-          // The original PDF focus may have reached scroll followers before
-          // the scoped CM6 decorations updated. Replay the SAME full-doc line
-          // once after scope switch; subsequent replay sees matching owner.
-          queueMicrotask(()=>{if(!disposed&&enabled())
-            publishFocus({sourceLine:target.sourceLine,sourceEnd:target.sourceEnd,
-              origin:'pdf',elementId:target.elementId,intent:'click'});
-          });
+        const clickedAG=['outline','media','latex'].includes(target.origin);
+        // A click in an all-chapters AG or original PDF may refer to a line
+        // hidden by the current CM6/Markdown virtual scope. Resolve the
+        // owning chapter from the *one current CMD index*, not AG row order.
+        if(target.origin==='pdf'||clickedAG&&checkbox.checked){
+          const owner=owningChapter(target.sourceLine);
+          if(owner&&owner.id!==chapterSelect.value){
+            const detail={id:owner.id,preserveAll:checkbox.checked,
+              accepted:false};
+            document.dispatchEvent(new CustomEvent('ocr2md:lab-virtual-open',
+              {detail}));
+            if(detail.accepted&&chapterSelect.value===owner.id){
+              // The initial focus may be consumed before the MD projection
+              // repaints. Replay its absolute line after the scope's own
+              // render frame, preserving origin, element ID, and "全部".
+              requestAnimationFrame(()=>{
+                if(disposed||!enabled()||chapterSelect.value!==owner.id)return;
+                publishFocus({sourceLine:target.sourceLine,
+                  sourceEnd:target.sourceEnd,origin:target.origin,
+                  elementId:target.elementId,intent:target.intent||'click'});
+              });
+            }
+          }
         }
       }
       if(current.documentRevision!==prior.documentRevision){

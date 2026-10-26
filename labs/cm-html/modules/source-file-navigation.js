@@ -43,8 +43,8 @@ export function createSourceFileNavigation(){
       select.ocrNavigationSelect?.refresh();
     }
   }
-  function selectChapter(id){
-    const detail={id,accepted:false,error:null};
+  function selectChapter(id,{preserveAll=false}={}){
+    const detail={id,preserveAll,accepted:false,error:null};
     document.dispatchEvent(new CustomEvent('ocr2md:lab-virtual-select',{detail}));
     if(!detail.accepted)throw Error(detail.error||'虚拟章节视图尚未就绪');
     activeChapter=id;
@@ -83,7 +83,7 @@ export function createSourceFileNavigation(){
     clearTimeout(refreshTimer);
     refreshTimer=setTimeout(refreshChapters,immediate?0:220);
   }
-  function navigate(target){
+  function navigate(target,{preserveAll=false}={}){
     if(target==='settings'){
       moduleSelector.value='settings';
       moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
@@ -98,7 +98,7 @@ export function createSourceFileNavigation(){
       syncOptions();return;
     }
     try{
-      if(activeChapter!==next||isSettings())selectChapter(next);
+      if(activeChapter!==next||isSettings())selectChapter(next,{preserveAll});
       if(isSettings()||moduleSelector.value==='settings'){
         moduleSelector.value=next?'chapter-boundary':'chapter-boundary';
         moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
@@ -122,6 +122,14 @@ export function createSourceFileNavigation(){
       toolbar.querySelector('.ocr-source-file-select')?.ocrNavigationSelect?.show();
     }
   }
+  // Cross-chapter AG/PDF focus requests the owning *virtual* chapter by ID.
+  // Keep the source navigation, browser URL and WCP scope in agreement.
+  document.addEventListener('ocr2md:lab-virtual-open',event=>{
+    const {id,preserveAll=false}=event.detail??{};
+    if(!id||!views.some(row=>row.id===id))return;
+    navigate(chapterId(id),{preserveAll});
+    event.detail.accepted=activeChapter===id;
+  });
   moduleSelector?.addEventListener('change',updateVisibility);
   document.addEventListener('ocr2md:wp3-ag-ready',event=>{
     bridge=event.detail;
