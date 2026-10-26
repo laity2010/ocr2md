@@ -30,26 +30,26 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
     if(tom.wrapper.hidden)tom.close();
   };
   let destroyed=false;
-  let scheduled=false;
-  function synchronize(){
-    if(destroyed||scheduled)return;
-    scheduled=true;
-    queueMicrotask(()=>{
-      scheduled=false;
-      if(destroyed)return;
-      tom.sync(true); // includes optgroup, disabled state and native selected value
-      updateVisibility();
-    });
-  }
-  // The original application programmatically uses select.value and options.
-  // The DOM remains authoritative, and changing its value does NOT refire a
-  // second change event (Tom Select's own user selections do that already).
+  // Native change events come from existing module/navigation controllers,
+  // including Tom Select's own user-driven selections. React only if a
+  // controller changed the underlying value, never write it back recursively.
+  const synchronize=()=>{
+    if(destroyed)return;
+    if(tom.getValue()!==element.value)tom.setValue(element.value,true);
+    updateVisibility();
+  };
   element.addEventListener('change',synchronize);
-  const observer=new MutationObserver(synchronize);
-  observer.observe(element,{subtree:true,childList:true,attributes:true,characterData:true});
+  // File option replacement calls the adapter explicitly from syncOptions().
+  // Observing ALL native mutations caused an infinite Tom Select <-> select
+  // update loop (sync() itself rebuilds native options). Avoid that entirely.
+  const refresh=()=>{
+    if(destroyed)return;
+    tom.sync(true);
+    updateVisibility();
+  };
   updateVisibility();
-  const adapter=Object.freeze({tom,refresh:synchronize,show:updateVisibility,
-    dispose:()=>{destroyed=true;observer.disconnect();tom.destroy();adapters.delete(element);}});
+  const adapter=Object.freeze({tom,refresh,show:updateVisibility,
+    dispose:()=>{destroyed=true;element.removeEventListener('change',synchronize);tom.destroy();adapters.delete(element);}});
   adapters.set(element,adapter);
   return adapter;
 }
