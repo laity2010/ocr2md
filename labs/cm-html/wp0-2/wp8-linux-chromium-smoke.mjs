@@ -13,8 +13,9 @@ try{
  const page=await browser.newPage({viewport:{width:1280,height:840}});
  const errors=[],calls=[],apiWrites=[];
  page.on('pageerror',e=>{errors.push(e.message);console.log('BROWSER_PAGEERROR',e.message)});
- page.on('console',msg=>{if(msg.type()==='error')console.log('BROWSER_CONSOLE_ERROR',msg.text().slice(0,350))});
- page.on('requestfailed',req=>console.log('FAILED_REQUEST',req.method(),req.url().slice(0,180),req.failure()?.errorText));
+ // Offline mode intentionally denies remote MinerU thumbnail downloads.
+ page.on('requestfailed',req=>{if(new URL(req.url()).hostname==='127.0.0.1')
+   console.log('FAILED_LOCAL_REQUEST',req.method(),req.url(),req.failure()?.errorText);});
  page.on('request',r=>{
    const target=new URL(r.url());
    if(target.pathname.endsWith('/api/document')&&target.searchParams.has('chapter'))
@@ -65,6 +66,11 @@ try{
  await page.waitForFunction(()=>document.querySelectorAll('.ocr-wp4-hidden-section').length>0&&
    [...document.querySelectorAll('.ocr-markdown [data-source-start]')]
    .some(x=>Number(x.dataset.sourceStart)>30),null,{timeout:23000});
+ await page.locator('.ocr-lab-element-select').evaluate(el=>{
+   el.value='latex';el.dispatchEvent(new Event('change',{bubbles:true}));
+ });
+ await page.waitForFunction(()=>window.__wp8.views.latex.api.getDisplayedRowCount()===25,
+   null,{timeout:14000});
  const scoped=await page.evaluate(()=>{
    const el=document.querySelector('.ocr-markdown');
    const lines=[...el.querySelectorAll('[data-source-start]')].map(x=>Number(x.dataset.sourceStart));
