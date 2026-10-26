@@ -88,7 +88,7 @@ const compactBuildLabel=full=>{
   const match=/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(?:\d{2})?$/.exec(full);
   if(!match)return full;
   const channel=full.startsWith('v6-lab-')?'lab':'main';
-  return `v6 ${channel}-${match[1].slice(-2)}${match[2]}${match[3]}-${match[4]}${match[5]}`;
+  return `${channel}-${match[1].slice(-2)}${match[2]}${match[3]}-${match[4]}${match[5]}`;
 };
 $('build-version').textContent=compactBuildLabel(currentBuild);
 $('build-version').title=`${currentBuild} · 打开工程菜单`;
@@ -436,18 +436,44 @@ async function main() {
   $('export-chapters').addEventListener('click',exportChapters);
   // The selected module owns the command area. More modules can register
   // their own data-module container without changing the global toolbar.
+  // Switching between two independent Dockview hosts must NOT reset their
+  // shared AG/source/preview sashes. Transfer only ratios, never editor data.
+  let lastVisibleModule='chapter-boundary';
+  let sharedPaneRatios=null;
   const showModule=()=>{
     const selected=$('module-select').value;
+    if(selected==='settings'&&lastVisibleModule!=='settings')
+      sharedPaneRatios=workspace.getPaneRatios()||sharedPaneRatios;
+    if(selected!=='settings'&&lastVisibleModule==='settings')
+      sharedPaneRatios=settings.getPaneRatios()||sharedPaneRatios;
     for(const panel of document.querySelectorAll('.module-actions[data-module]'))
       panel.hidden=panel.dataset.module!==selected;
     const isSettings=selected==='settings';
     $('workspace').hidden=isSettings;
     $('settings-workspace').hidden=!isSettings;
     document.querySelector('.quote-indent-tools').hidden=isSettings;
+    const previous=lastVisibleModule;
+    lastVisibleModule=selected;
     if(isSettings){
-      void settings.load().then(()=>{settings.activate();refreshToolbar();})
-        .catch(error=>status('设置载入失败：'+error.message,'error'));
-    }else workspace.setWorkModule(selected);
+      void settings.load().then(()=>{
+        if($('module-select').value!=='settings')return;
+        settings.activate();
+        settings.applyPaneRatios(sharedPaneRatios);
+        refreshToolbar();
+      }).catch(error=>{
+        // A transient settings transport error must never leave a blank app.
+        if($('module-select').value==='settings'){
+          $('module-select').value=previous==='settings'?'chapter-boundary':previous;
+          showModule();
+        }
+        status('设置载入失败：'+error.message,'error');
+      });
+    }else{
+      workspace.setWorkModule(selected);
+      if(previous==='settings')requestAnimationFrame(()=>{
+        if($('module-select').value===selected)workspace.applyPaneRatios(sharedPaneRatios);
+      });
+    }
     refreshToolbar();
   };
   $('media-refresh').addEventListener('click',()=>void workspace.scanMedia());

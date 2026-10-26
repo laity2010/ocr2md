@@ -2,6 +2,7 @@
  * No file access, no cross-module DOM mutation. CMD owns JSON and persistence.
  */
 import {createDockview,themeAbyss} from 'dockview';
+import {readPaneRatios,applyPaneRatios} from './pane-layout-ratios.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import {openCMDJsonSource,readCMDJsonSnapshot} from './cmd-json-source.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
@@ -299,6 +300,8 @@ export function createSettingsModule(container,onStatus=()=>{}){
     return source.save();
   }
   return Object.freeze({register,subscribe,get,set,initialize,load,activate,hasUnsaved,save,
+    getPaneRatios:()=>readPaneRatios(dockview,'settings-outline','settings-source','settings-preview'),
+    applyPaneRatios:ratios=>applyPaneRatios(dockview,'settings-outline','settings-source','settings-preview',ratios),
     undo:()=>source?.undo(),redo:()=>source?.redo(),
     get history(){return source?.history||{undo:0,redo:0};},
     get invalid(){return invalid;},

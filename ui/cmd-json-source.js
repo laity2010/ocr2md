@@ -29,8 +29,13 @@ export async function readCMDJsonSnapshot(){
       if(!response.ok)throw Error('设置 JSON 读取失败 '+response.status);
       const text=await response.text();
       const etag=response.headers.get('ETag');
-      if(!etag)throw Error('设置 JSON 缺少版本指纹');
-      return {text,etag};
+      // An intermediate HTTP cache/proxy may hide the response ETag. The
+      // server's canonical fingerprint is SHA-256 of the UTF-8 response body.
+      // Reconstruct it instead of rendering an empty settings workspace;
+      // server-side If-Match remains authoritative on every subsequent PUT.
+      const fingerprint=etag||Array.from(new Uint8Array(await crypto.subtle.digest(
+        'SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+      return {text,etag:fingerprint};
     }catch(error){
       if(!(error instanceof TypeError)||attempt===2)throw error;
       await new Promise(resolve=>setTimeout(resolve,150*(attempt+1)));
