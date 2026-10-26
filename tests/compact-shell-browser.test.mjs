@@ -95,7 +95,7 @@ try {
       assert.deepEqual(initial.quoteIds,['quote-outdent','quote-indent']);
       assert.equal(initial.undoLabel,'↶');assert.equal(initial.redoLabel,'↷');
       assert(initial.undoWidth<=36&&initial.redoWidth<=36,'Undo/Redo must be compact');
-      assert.match(initial.build,/^v6 main-\d{6}-\d{4}$/);
+      assert.match(initial.build,/^main-\d{6}-\d{4}$/);
       assert(initial.toolbar.height<=42,name+' status bar must be compact');
       assert.equal(initial.globalButtons,3,'global actions must be unique');
       assert(Math.abs(initial.sourceActions.top-initial.toolbar.top)<=6,
