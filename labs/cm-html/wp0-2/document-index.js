@@ -106,7 +106,7 @@ export function buildDocumentIndex(source,{startNumber='000'}={}){
     if(to>chapter.to)warnings.push({kind:'cross-boundary-element',type,from,to,chapterId:chapter.id});
     const key=`${type}:${sourceId}`;
     const count=occurrences.get(key)||0;occurrences.set(key,count+1);
-    const id=persistedId?`${type}:${persistedId}`:`${key}:${count}`;
+    const id=type==='heading'?`heading:${sourceId}`:(persistedId?`${type}:${persistedId}`:`${key}:${count}`);
     if(seenIds.has(id))throw Error('Duplicate element identity: '+id);
     seenIds.add(id);
     elements.push({id,type,chapterId:chapter.id,from,to,

@@ -85,6 +85,23 @@ export function labVitePlugin(root,profile){
           if(address)image.src=address;
         }`);
       }
+      if(existsSync(join(profile.dir,'wp0-2','ag-query.js'))){
+        if(path===join(sourceRoot,'media-module.js')){
+          const needle='  return {\n    refresh,scan,downloadAll,';
+          if(!code.includes(needle))throw Error('WP3 Media AG public adapter changed');
+          code=code.replace(needle,'  return {\n    api:grid,\n    refresh,scan,downloadAll,');
+        }
+        if(path===join(sourceRoot,'latex-module.js')){
+          const needle='  return {\n    refresh,\n    normalizeReviewed(){';
+          if(!code.includes(needle))throw Error('WP3 LaTeX AG public adapter changed');
+          code=code.replace(needle,'  return {\n    api:grid,\n    refresh,\n    normalizeReviewed(){');
+        }
+        if(path===join(sourceRoot,'workspace.js')){
+          const needle='    this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);';
+          if(!code.includes(needle))throw Error('WP3 Workspace AG readiness contract changed');
+          code=code.replace(needle,needle+`\n    setTimeout(()=>document.dispatchEvent(new CustomEvent('ocr2md:wp3-ag-ready',{detail:{\n      views:{outline:this.grid,media:this.media,latex:this.latex},getMarkdown:()=>getMarkdown(),\n    }})),0);`);
+        }
+      }
       if(path===join(sourceRoot,'workspace.js')){
         const layoutModule=join(profile.dir,'modules','layout-persistence.js');
         if(existsSync(layoutModule)){
