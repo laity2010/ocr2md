@@ -163,30 +163,30 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     // visible cascade of refreshes. Only update changed formula cells.
     if(lastScannedSource!==null&&next.length===previous.length){
       let statusChanged=false;
-      const shiftedLineNodes=[];
+      const cellChanges=[];
       for(let i=0;i<next.length;i++){
         const fresh=next[i],old=previous[i];
         fresh.id=old.id;
         if(fresh.status!==old.status)statusChanged=true;
-        const semanticChange=['status','raw','content','html','renderStatus',
-          'kind','syntax','error','detection'].some(key=>fresh[key]!==old[key]);
-        const lineChanged=fresh.line!==old.line;
-        if(semanticChange){
-          grid.getRowNode(old.id)?.updateData(fresh);
-          continue;
-        }
-        // Preserve the existing AG RowNode.data object and rendered cells;
-        // mutate only the scanner's new source coordinate/metadata values.
-        // AG row clicks and review controls still see live row data.
+        const columns=[];
+        if(fresh.line!==old.line)columns.push('line');
+        if(fresh.status!==old.status)columns.push('status');
+        if(fresh.renderStatus!==old.renderStatus)columns.push('renderStatus');
+        if(fresh.html!==old.html || (!fresh.html&&fresh.content!==old.content))
+          columns.push('preview');
+        if(fresh.content!==old.content)columns.push('content');
+        if(fresh.syntax!==old.syntax||fresh.detection!==old.detection)columns.push('syntax');
+        if(fresh.error!==old.error)columns.push('error');
+        // Only scanner offsets and review metadata changed on other rows.
+        // Even the reviewed row can have identical KaTeX HTML; updateData()
+        // would remount its costly preview cell for no visual change.
         Object.assign(old,fresh);
         next[i]=old;
-        if(lineChanged){
-          const node=grid.getRowNode(old.id);
-          if(node)shiftedLineNodes.push(node);
-        }
+        const node=grid.getRowNode(old.id);
+        if(node&&columns.length)cellChanges.push({node,columns});
       }
-      if(shiftedLineNodes.length)
-        grid.refreshCells({rowNodes:shiftedLineNodes,columns:['line'],force:true});
+      for(const {node,columns} of cellChanges)
+        grid.refreshCells({rowNodes:[node],columns,force:true});
       // A review-value checkbox filter may need its membership recomputed;
       // unchanged rows themselves must remain mounted.
       // isAnyFilterPresent() includes the WCP *external chapter* filter.

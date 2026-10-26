@@ -94,6 +94,16 @@ export function labVitePlugin(root,profile){
           code=`import {persistLabWorkspaceLayout} from ${JSON.stringify(layoutModule)};\n`+
             code.replace(marker,'  persistLabWorkspaceLayout(dockview,container);\n'+marker);
         }
+        const patcher=join(profile.dir,'modules','preview-dom-patch.js');
+        if(!existsSync(patcher))throw Error('Missing Lab Markdown DOM reconciliation module');
+        const fullRender=`    this.body.innerHTML=wcpRuntime
+      ?wcpRuntime.renderPreview(source,{scope:this.virtualScope??null},renderMarkdown)
+      :renderMarkdown(source);`;
+        if(!code.includes(fullRender))throw Error('V6 Markdown render hook changed');
+        code=`import {patchLabMarkdown} from ${JSON.stringify(patcher)};\n`+code;
+        code=code.replace(fullRender,`    patchLabMarkdown(this.body,wcpRuntime
+      ?wcpRuntime.renderPreview(source,{scope:this.virtualScope??null},renderMarkdown)
+      :renderMarkdown(source));`);
       }
       if(path===join(sourceRoot,'main.js')){
         // Select the document as an explicit URL context, never a shared
