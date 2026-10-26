@@ -33,7 +33,7 @@ for(const [name,engine,ctx] of [
   const popRect=await filePopup.boundingBox();
   assert(popRect&&popRect.x>=0&&popRect.x+popRect.width<=ctx.viewport.width+3,'Popover clipped by Dockview/viewport');
   await chapter002.click();
-  await page.waitForURL(u=>u.searchParams.get('chapter')===target.slice(8),{timeout:14000});
+  await page.waitForFunction(expected=>new URLSearchParams(location.search).get('chapter')===expected,target.slice(8),{timeout:14000});
   assert.equal(await page.locator('.ocr-source-pane .ocr-source-file-select').inputValue(),target);
   await page.waitForFunction(()=>document.querySelector('.ocr-navigation-elements')?.getBoundingClientRect().width>90,null,{timeout:12000});
   const elementControl=page.locator('.ocr-navigation-elements .ts-control');
@@ -48,7 +48,7 @@ for(const [name,engine,ctx] of [
   await nav.click();
   await nav.locator('input').fill('001');
   await filePopup.locator('[data-selectable][data-value^="chapter:001-"]').first().click();
-  await page.waitForURL(u=>u.searchParams.get('chapter')?.startsWith('001-'),{timeout:14000});
+  await page.waitForFunction(()=>new URLSearchParams(location.search).get('chapter')?.startsWith('001-'),null,{timeout:14000});
   assert.equal(await page.locator('.ocr-lab-element-select').inputValue(),'media','AG module should persist across chapter switches');
   const preview=page.locator('.ocr-navigation-preview .ts-control');
   await preview.click();
