@@ -32,7 +32,14 @@ for(const [name,engine,options] of [
     const host=document.querySelector('.ocr-latex-grid');
     const dropdown=host.querySelector('.ag-row[row-index="1"] .ocr-latex-review-select');
     const sibling=host.querySelector('.ag-row[row-index="2"] .ocr-latex-review-select');
-    window.__reviewBefore={dropdown,sibling,root:host.querySelector('.ag-center-cols-container'),
+    // Capture every rendered cell below the changed row, not just its review
+    // selector. AG may preserve <select> yet rebuild every KaTeX preview.
+    const afterRows=[...host.querySelectorAll('.ag-row[row-index]')]
+      .filter(node=>Number(node.getAttribute('row-index'))>1);
+    const lowerCells=afterRows.flatMap(row=>[...row.querySelectorAll('.ag-cell')]
+      .map(cell=>({index:row.getAttribute('row-index'),column:cell.getAttribute('col-id'),
+        cell,child:cell.firstElementChild}))).filter(x=>x.child);
+    window.__reviewBefore={lowerCells,dropdown,sibling,root:host.querySelector('.ag-center-cols-container'),
       scroller:host.querySelector('.ag-body-viewport'), scroll:host.querySelector('.ag-body-viewport')?.scrollTop};
     const api=window.__latexTest.views.latex.api;
     return {current:dropdown.value,other:sibling?.value,count:api.getDisplayedRowCount(),
@@ -48,7 +55,11 @@ for(const [name,engine,options] of [
   const after=await page.evaluate(()=>{
     const host=document.querySelector('.ocr-latex-grid'),before=window.__reviewBefore;
     const current=host.querySelector('.ag-row[row-index="1"] .ocr-latex-review-select');
-    return {sameDropdown:before.dropdown===current,
+    const lower=before.lowerCells.map(x=>({index:x.index,column:x.column,
+      sameCell:x.cell.isConnected,
+      sameChild:x.child===host.querySelector(`.ag-row[row-index="${x.index}"] .ag-cell[col-id="${x.column}"]`)?.firstElementChild}));
+    return {lowerCellsInspected:lower.length,lowerReplaced:lower.filter(x=>!x.sameChild).length,
+      sameDropdown:before.dropdown===current,
       oldConnected:before.dropdown.isConnected,
       sameSibling:before.sibling===host.querySelector('.ag-row[row-index="2"] .ocr-latex-review-select'),
       sameContainer:before.root===host.querySelector('.ag-center-cols-container'),
@@ -65,6 +76,8 @@ for(const [name,engine,options] of [
   // User-visible acceptance: no redraw of the active control or its sibling.
   assert(after.sameDropdown,'Review select remounted during value change');
   assert(after.sameSibling,'Other row review select remounted');
+  assert(after.lowerCellsInspected>2,'Need visible lower-row cells to check churn');
+  assert.equal(after.lowerReplaced,0,'Lower rows were unnecessarily re-rendered');
   assert(after.sameContainer,'AG whole grid was recreated');
   assert.equal(after.value,changedTo);
   console.log('LATEX_REVIEW_REFRESH_PASS',name);

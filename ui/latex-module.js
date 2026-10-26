@@ -150,31 +150,51 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     const source=getMarkdown();
     if(source===lastScannedSource){report();return;}
     const previous=rows;
-    rows=findLatex(source).map(item=>{
+    const next=findLatex(source).map(item=>{
       const row=checkLatex(item);
       row.raw=source.slice(row.from,row.to);
       return row;
     });
-    findReviewMarkers(source,rows,getCMD()?.readAnnotations()??[]);
-    // The scanner's from:to IDs shift whenever CMD inserts a review comment.
-    // For unchanged formula membership, retain grid row identity by source
-    // order and update values in place. AG refreshes only changed cells;
-    // existing controls, the scroll viewport and unrelated renderers survive.
-    const next=rows;
+    findReviewMarkers(source,next,getCMD()?.readAnnotations()??[]);
+    // Review markers insert/change characters in the ONE CM6 Markdown source.
+    // This shifts all later LaTeX positions, but their formula content and
+    // KaTeX rendering are UNCHANGED. Never updateData() every downstream row:
+    // that destroys all its function-rendered KaTeX previews and causes the
+    // visible cascade of refreshes. Only update changed formula cells.
     if(lastScannedSource!==null&&next.length===previous.length){
       let statusChanged=false;
+      const shiftedLineNodes=[];
       for(let i=0;i<next.length;i++){
-        const row=next[i],old=previous[i];
-        row.id=old.id;
-        if(row.status!==old.status)statusChanged=true;
-        grid.getRowNode(row.id)?.updateData(row);
+        const fresh=next[i],old=previous[i];
+        fresh.id=old.id;
+        if(fresh.status!==old.status)statusChanged=true;
+        const semanticChange=['status','raw','content','html','renderStatus',
+          'kind','syntax','error','detection'].some(key=>fresh[key]!==old[key]);
+        const lineChanged=fresh.line!==old.line;
+        if(semanticChange){
+          grid.getRowNode(old.id)?.updateData(fresh);
+          continue;
+        }
+        // Preserve the existing AG RowNode.data object and rendered cells;
+        // mutate only the scanner's new source coordinate/metadata values.
+        // AG row clicks and review controls still see live row data.
+        Object.assign(old,fresh);
+        next[i]=old;
+        if(lineChanged){
+          const node=grid.getRowNode(old.id);
+          if(node)shiftedLineNodes.push(node);
+        }
       }
-      // An active review-value filter must be reapplied when review changes.
+      if(shiftedLineNodes.length)
+        grid.refreshCells({rowNodes:shiftedLineNodes,columns:['line'],force:true});
+      // A review-value checkbox filter may need its membership recomputed;
+      // unchanged rows themselves must remain mounted.
       if(statusChanged&&grid.isAnyFilterPresent())grid.onFilterChanged();
     }else{
       for(const row of next)row.id=`latex-row-${++nextRowKey}`;
       grid.setGridOption('rowData',next);
     }
+    rows=next;
     lastScannedSource=source;
     report();
   }
