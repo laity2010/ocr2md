@@ -93,6 +93,18 @@ for(const [name,engine,opts] of [
     await page.waitForFunction(pageNum=>Number(document.querySelector('.ocr-pdf-region-overlay')?.dataset.pdfPage)===pageNum,
       pick.expectedPage,{timeout:25000});
     assert.equal(await page.locator('.ocr-pdf-region-overlay').getAttribute('data-pdf-page'),String(pick.expectedPage));
+    // Reverse direction: a real PDF block click must reselect the media item.
+    await page.evaluate(()=>window.__mediaFocus.views.media.api.deselectAll());
+    await page.locator('.ocr-pdf-region-overlay').click({force:true,timeout:15000});
+    await page.waitForFunction(line=>window.__mediaFocus.views.media.api.getSelectedRows()[0]?.line===line,
+      pick.line,{timeout:12000});
+    // Reverse direction: a real Markdown block click follows the same AG row,
+    // rather than publishing focus outward with no Media follower.
+    await choose(page.locator('.ocr-preview-mode'),'md');
+    await page.evaluate(()=>window.__mediaFocus.views.media.api.deselectAll());
+    await page.locator('.ocr-markdown .ocr-outline-focused-element').first().click({timeout:16000});
+    await page.waitForFunction(line=>window.__mediaFocus.views.media.api.getSelectedRows()[0]?.line===line,
+      pick.line,{timeout:12000});
     assert.equal(await page.evaluate(()=>window.__mediaFocus.getMarkdown()),original);
     assert.deepEqual(physical,[]);
     assert.deepEqual(writes,[]);
