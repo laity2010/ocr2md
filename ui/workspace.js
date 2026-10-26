@@ -194,7 +194,13 @@ class PreviewPanel {
       if(next.documentRevision!==prior.documentRevision)this.schedule();
       if(next.focusTarget!==prior.focusTarget)this.highlight(next.focusTarget);
     });
-    this.releaseWPCRenderer=wcpRuntime?.onPreviewInit(this);
+    // WCP receives only a bounded semantic preview port, never the raw
+    // Dockview panel or Markdown DOM. The panel remains the renderer owner.
+    this.releaseWPCRenderer=wcpRuntime?.onPreviewInit(Object.freeze({
+      setScope:scope=>{this.virtualScope=scope;},
+      repaint:()=>{if(this.disposed)return;this.render();this.mdPane.scrollTop=0;},
+      isDisposed:()=>this.disposed,
+    }));
     this.body.addEventListener('click',this.onClick);
     refreshPreview=()=>this.schedule();
     this.schedule(true);
@@ -247,7 +253,7 @@ class PreviewPanel {
     const ratio=pane.scrollHeight>pane.clientHeight
       ?pane.scrollTop/(pane.scrollHeight-pane.clientHeight):0;
     this.body.innerHTML=wcpRuntime
-      ?wcpRuntime.renderPreview(source,this,renderMarkdown)
+      ?wcpRuntime.renderPreview(source,{scope:this.virtualScope??null},renderMarkdown)
       :renderMarkdown(source);
     this.lastFocusElement=null;
     this.highlight(viewStore.getState().focusTarget);

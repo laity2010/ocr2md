@@ -36,20 +36,18 @@ export function createWCPRuntime(){
         detail:{views,getMarkdown,getCMD},
       }));
     },
-    onPreviewInit(panel){
+    onPreviewInit(previewPort){
       const onScope=event=>{
-        panel.virtualScope=event.detail?.scope??null;
+        previewPort.setScope(event.detail?.scope??null);
         if(event.detail?.reason==='edit')return; // already scheduled by CM revision
         requestAnimationFrame(()=>{
-          if(panel.disposed)return;
-          panel.render();
-          panel.mdPane.scrollTop=0;
+          if(!previewPort.isDisposed())previewPort.repaint();
         });
       };
       document.addEventListener('ocr2md:wp4-virtual-scope',onScope);
       return ()=>document.removeEventListener('ocr2md:wp4-virtual-scope',onScope);
     },
-    renderPreview:(source,panel)=>renderVirtualMarkdown(source,panel.virtualScope??null),
+    renderPreview:(source,{scope})=>renderVirtualMarkdown(source,scope),
     dispose(){detachCM();activeView=null;},
   });
 }
