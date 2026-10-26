@@ -13,6 +13,14 @@ for(const [name,browserType,context] of [
   page.on('pageerror',e=>errors.push(e.message));
   page.on('request',r=>{if(!['GET','HEAD'].includes(r.method())&&new URL(r.url()).pathname.includes('/api/'))writes.push(r.method()+' '+r.url());});
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:50000});
+  await page.waitForTimeout(1800);
+  console.log('NAV_CURRENT_VISIBILITY',name,JSON.stringify(await page.evaluate(()=>{
+    const el=document.querySelector('.ocr-source-pane .ocr-navigation-files .ts-control');
+    const wrap=el?.closest('.ocr-navigation-files');
+    const panel=document.querySelector('.ocr-source-pane');
+    const b=e=>e?{hidden:e.hidden,display:getComputedStyle(e).display,visibility:getComputedStyle(e).visibility,rect:e.getBoundingClientRect().toJSON()}:null;
+    return {control:b(el),wrapper:b(wrap),pane:b(panel),module:document.querySelector('#module-select')?.value,status:document.querySelector('#status')?.textContent};
+  })));
   const ctrl=page.locator('.ocr-source-pane .ocr-navigation-files .ts-control');
   await ctrl.waitFor({state:'visible',timeout:30000});
   const geometry=()=>page.evaluate(()=>{
