@@ -45,7 +45,7 @@ for(const [name,engine,options] of [
     return {current:dropdown.value,other:sibling?.value,count:api.getDisplayedRowCount(),
       sourceLen:window.__latexTest.read().length};
   });
-  const changedTo=data.current==='latex'?'忽略':'latex';
+  const changedTo=process.env.OCR_LATEX_REVIEW_CHOICE||(data.current==='latex'?'忽略':'latex');
   await s.selectOption(changedTo);
   await page.waitForFunction(({before,choice})=>
     window.__latexTest.read().length!==before&&
