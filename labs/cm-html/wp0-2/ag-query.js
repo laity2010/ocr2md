@@ -29,6 +29,11 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     const state=index;
     if(!enabled()||!state)return null;
     const chapter=currentChapter();
+    // 全部 means NO chapter filtering. A Set of all CMD 'from' offsets
+    // is not equivalent: review annotations shift later offsets immediately,
+    // while the WP3 CMD index updates on a delayed revision tick. Reapplying
+    // that stale Set briefly hides all but the first LaTeX row on iPad.
+    if(chapter==='all')return null;
     const allowed=state.queryElements({chapter,type});
     return new Set(allowed.map(x=>type==='heading'?x.id.slice('heading:'.length):x.from));
   }

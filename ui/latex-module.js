@@ -189,7 +189,13 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
         grid.refreshCells({rowNodes:shiftedLineNodes,columns:['line'],force:true});
       // A review-value checkbox filter may need its membership recomputed;
       // unchanged rows themselves must remain mounted.
-      if(statusChanged&&grid.isAnyFilterPresent())grid.onFilterChanged();
+      // isAnyFilterPresent() includes the WCP *external chapter* filter.
+      // Refiring it during CMD annotation insertion evaluates stale source
+      // offsets and transiently removes all later formulas (42 -> 1 -> 42).
+      // Only an explicitly selected AG column-value filter should be applied
+      // here; the WCP chapter projector owns its own deferred re-index.
+      if(statusChanged&&Object.keys(grid.getFilterModel()||{}).length>0)
+        grid.onFilterChanged();
     }else{
       for(const row of next)row.id=`latex-row-${++nextRowKey}`;
       grid.setGridOption('rowData',next);
