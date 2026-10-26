@@ -3,6 +3,7 @@
  * Per-file save is explicitly routed on the server and cannot touch mother.
  */
 import './source-file-navigation.css';
+import {enhanceNavigationSelect} from './navigation-select.js';
 const DEFAULTS=Object.freeze([
   {id:'document',label:'章节定界/Buffett’s Alpha.minerujson.md'},
   {id:'settings',label:'全局设置/settings.json'},
@@ -28,11 +29,19 @@ export function createSourceFileNavigation(){
     for(const select of selectBoxes){
       const isSettings=Boolean(select.closest('#settings-workspace'));
       select.replaceChildren();
-      for(const item of [...DEFAULTS,...names.map(name=>({id:chapterId(name),label:'章节chapter/'+name}))]){
-        const option=document.createElement('option');
-        option.value=item.id;option.textContent=item.label;select.append(option);
+      for(const [groupLabel,items] of [
+        ['工作区',DEFAULTS],
+        ['章节文件',names.map(name=>({id:chapterId(name),label:'章节chapter/'+name}))],
+      ]){
+        const group=document.createElement('optgroup');group.label=groupLabel;
+        for(const item of items){
+          const option=document.createElement('option');
+          option.value=item.id;option.textContent=item.label;group.append(option);
+        }
+        select.append(group);
       }
       select.value=isSettings?'settings':activeId();
+      select.tomselect?.sync(true);
     }
   }
   async function refreshChapters(){
@@ -105,9 +114,23 @@ export function createSourceFileNavigation(){
     select.title='切换同一 CM6 工作台加载的 Markdown 文件';
     select.addEventListener('change',()=>{void navigate(select.value,select);});
     selectBoxes.add(select);host.classList.add('ocr-lab-file-source');
-    syncOptions();updateVisibility();
+    syncOptions();
+    enhanceNavigationSelect(select,{search:true,kind:'files'});
+    updateVisibility();
   }
 
+  function mountPreview(){
+    const picker=workbench?.querySelector('.ocr-preview-pane select.ocr-preview-mode');
+    if(!picker)return false;
+    enhanceNavigationSelect(picker,{kind:'preview'});
+    return true;
+  }
+  if(!mountPreview()&&workbench){
+    const observer=new MutationObserver(()=>{
+      if(mountPreview())observer.disconnect();
+    });
+    observer.observe(workbench,{childList:true,subtree:true});
+  }
   function mountMarkdown(){
     const host=workbench?.querySelector('#editor')?.closest('.ocr-source-pane');
     if(host)addBar(host);

@@ -4,6 +4,7 @@
  * element picker Title/Media/LaTeX and owning module actions.
  */
 import './ag-module-toolbar.css';
+import {enhanceNavigationSelect} from './navigation-select.js';
 
 export function mountAgModuleToolbar(){
   const moduleSelect=document.getElementById('module-select');
@@ -57,7 +58,8 @@ export function mountAgModuleToolbar(){
     bar.setAttribute('aria-label',isChapter()?'章节元素处理工具栏':'章节定界工具栏');
     moduleSelect.hidden=true;
     elementSelect.hidden=!isChapter()||settings;
-    if(!settings)elementSelect.value=selected;
+    if(!settings){elementSelect.value=selected;elementSelect.tomselect?.setValue(selected,true);}
+    elementSelect.tomselect&&(elementSelect.tomselect.wrapper.hidden=elementSelect.hidden);
     moduleSelect.setAttribute('aria-label','章节处理模块');
     // Original settings option stays intact for source-file navigation,
     // but cannot appear in the separate 3-item native chapter picker.
@@ -101,6 +103,7 @@ export function mountAgModuleToolbar(){
     bar.setAttribute('role','toolbar');
     // No cloned controls. Events and input state stay owned by mainline.
     bar.append(moduleSelect,elementSelect,...actionGroups);
+    enhanceNavigationSelect(elementSelect,{kind:'elements'});
     outline.insertBefore(bar,grid);
     refresh();
     // Startup may have deep-linked directly into a chapter. The mainline's
