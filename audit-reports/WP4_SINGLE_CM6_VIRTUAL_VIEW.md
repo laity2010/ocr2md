@@ -18,3 +18,12 @@ Branch: experiment/virtual-chapters-wp0-2. Isolated lab only, no public/mainline
 - Real isolated mother text: 6 logical chapters, 19 titles, 11 media, 42 formulae. Chrome and iPad WebKit browser PASS for chapter viewport reduction, in-chapter user typing, global undo/redo, switching to All, one HTML load and zero physical chapter reads/writes.
 - WP3 AG and legacy chapter mode regression must also pass on the final build.
 - WP5 Markdown/PDF preview range, WP6 transactional unified scanner, WP7 38 chapter-only LaTeX review markers and single save, and WP8 Linux/AM audits remain pending. No deployment or merge authorized by this report.
+
+## Final isolated-build verification (2026-10-26)
+- Build badge: v6-lab-cm-html-20261026-163617, based on Git 689c4a3. Vite build PASS.
+- Synthetic original mother index: WP1_WP2_SYNTHETIC_PASS, WP1_WP2_REAL_MOTHER_PASS, six virtual chapters, 72 elements; original mother checksum 33a61ac0428f8102d195f47f541a84ee7698c77fa24d79d5b06c584fbad601dc.
+- CM6 transaction guards: WP4_VIRTUAL_STATE_PASS; hidden edit denied; select-all scoped; normal edit mapped; boundary mutation and unfiltered external changes fail open.
+- Browser viewport + editing + native Undo/Redo: WP4_VIRTUAL_CM6_PASS Chrome and iPad WebKit. Original mother length 307,662; Chrome source scroll height 39,553 -> 29,953 scoped; iPad WebKit 47,277 -> 35,920 scoped. Source restored exactly after undo; one document load, zero chapter-file API calls and zero API writes.
+- CMD/AG query regression: WP3_SHARED_AG_QUERY_PASS Chrome and iPad WebKit. 19/11/42 whole book, 10/5/25 for chapter 001, no fourth AG.
+- Old toolbar compatibility: LAB_AG_FILE_MODE_TOOLBAR_PASS Chrome and iPad WebKit. Mother chapter export controls and bounded chapter column ownership unchanged.
+- All tests run against local-isolated lab copied fixture on Mac. No Linux execution, public deployment, GitHub push, or mainline merge.
