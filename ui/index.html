@@ -9,6 +9,11 @@
   <div class="app">
     <header class="toolbar">
       <div class="identity"><div class="brand">OCR2MD V6</div><button id="build-version" class="build-badge" type="button" aria-haspopup="dialog" aria-controls="engineering-dialog" title="打开工程菜单">v6-载入中</button><span id="status" class="status" role="status" aria-live="polite">正在加载</span></div>
+      <div class="source-actions" role="group" aria-label="源码编辑工具">
+        <button id="undo" title="撤销 ⌘Z" aria-label="撤销" type="button">↶</button>
+        <button id="redo" title="重做 ⇧⌘Z" aria-label="重做" type="button">↷</button>
+        <button id="save" class="primary" type="button">保存</button>
+      </div>
     </header>
     <nav class="module-controls" aria-label="工作台模块工具条">
       <select id="module-select" aria-label="选择模块"><option value="chapter-boundary">章节定界</option><option value="media">媒体</option><option value="latex">LaTeX</option><option value="settings">全局设置</option></select>
@@ -26,15 +31,10 @@
         <button id="latex-refresh" type="button">扫描公式</button>
         <button id="latex-normalize" type="button" title="统一为单个 HTML 注释加 $公式$ 或 $$公式$$；不写闭注释、不自动保存">规范标定</button>
       </div>
-      <div class="source-actions" role="group" aria-label="源码编辑工具">
         <div class="quote-indent-tools" role="group" aria-label="源码引用缩进">
           <button id="quote-outdent" type="button" title="选中行减少一层 Markdown 引用缩进">&gt;−</button>
           <button id="quote-indent" type="button" title="选中行增加一层 Markdown 引用缩进">&gt;+</button>
         </div>
-        <button id="undo" title="撤销 ⌘Z" aria-label="撤销" type="button">↶ <span class="button-caption">撤销</span></button>
-        <button id="redo" title="重做 ⇧⌘Z" aria-label="重做" type="button">↷ <span class="button-caption">重做</span></button>
-        <button id="save" class="primary" type="button">保存</button>
-      </div>
     </nav>
     <main><div id="workspace" aria-label="OCR2MD 源码与 Markdown 预览工作区"></div><div id="settings-workspace" hidden aria-label="全局设置 AG JSON 源码与预览工作区"></div></main>
   </div>

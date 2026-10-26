@@ -54,7 +54,7 @@ try {
           const r=el.getBoundingClientRect();
           return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height,width:r.width};
         };
-        const buttons=[...document.querySelectorAll('.module-controls .source-actions button')].map(b=>b.id);
+        const buttons=[...document.querySelectorAll('header.toolbar > .source-actions button')].map(b=>b.id);
         const status=document.querySelector('#status');
         const toolbar=document.querySelector('.toolbar');
         const main=document.querySelector('main');
@@ -68,6 +68,11 @@ try {
           buttons,toolbar:rect(toolbar),main:rect(main),ag:rect(ag),
           moduleToolbar:rect(moduleToolbar),sourceActions:rect(sourceActions),
           sourcePane:rect(sourcePane),moduleActions:rect(moduleActions),
+          sourceFileBar:rect(sourcePane.querySelector('.ocr-source-file-toolbar')),
+          quoteIds:[...sourcePane.querySelectorAll('.ocr-source-file-toolbar .quote-indent-tools button')].map(b=>b.id),
+          undoLabel:document.querySelector('#undo').textContent.trim(),
+          redoLabel:document.querySelector('#redo').textContent.trim(),
+          undoWidth:rect(document.querySelector('#undo')).width,redoWidth:rect(document.querySelector('#redo')).width,
           globalButtons:document.querySelectorAll('header.toolbar button:not(#build-version)').length,
           status:status.textContent,statusTitle:status.title,
           adjacent:status.previousElementSibling?.id,
@@ -85,19 +90,21 @@ try {
           },
         };
       });
-      assert.deepEqual(initial.buttons,['quote-outdent','quote-indent','undo','redo','save'],
-        name+' source actions must remain in module toolbar');
+      assert.deepEqual(initial.buttons,['undo','redo','save'],
+        name+' global actions must be in the top status toolbar');
+      assert.deepEqual(initial.quoteIds,['quote-outdent','quote-indent']);
+      assert.equal(initial.undoLabel,'↶');assert.equal(initial.redoLabel,'↷');
+      assert(initial.undoWidth<=36&&initial.redoWidth<=36,'Undo/Redo must be compact');
+      assert.match(initial.build,/^v6 main-\d{6}-\d{4}$/);
       assert(initial.toolbar.height<=42,name+' status bar must be compact');
-      assert.equal(initial.globalButtons,0,'status row must not contain CMD action buttons');
-      assert.equal(initial.sourceActions.top,initial.moduleToolbar.top+4,'CMD controls should share module strip');
-      assert(Math.abs(initial.sourceActions.bottom-initial.moduleToolbar.bottom)<=6,
-        'CMD controls must fit entirely inside module strip');
+      assert.equal(initial.globalButtons,3,'global actions must be unique');
+      assert(Math.abs(initial.sourceActions.top-initial.toolbar.top)<=6,
+        'CMD actions must share the global status row');
       assert(Math.abs(initial.sourceActions.right-initial.viewport.width)<=12,
-        'CMD controls must be flush right alongside the source pane');
-      assert(initial.sourceActions.left>=initial.moduleActions.right,
-        'CMD controls must be to the right of module-specific actions');
-      assert(initial.sourceActions.left>initial.sourcePane.width/2,
-        'CMD controls must be placed near right-side source pane');
+        'Save must be at top-right window edge');
+      assert(initial.sourceFileBar.height>=27,'source file toolbar missing');
+      assert(initial.sourceFileBar.top>=initial.sourcePane.top,
+        'source navigation must live inside the source pane');
       assert.equal(initial.main.top,initial.toolbar.bottom+37,'module toolbar must sit between top bar and workspace');
       assert(Math.abs(initial.main.bottom-initial.viewport.height)<1.5,'workspace fills to bottom edge');
       assert(initial.ag.height>520,'AG must remain full-height below chapter controls');
@@ -117,16 +124,20 @@ try {
         await page.setViewportSize({width,height:642});
         const g=await page.evaluate(()=>{
           const nav=document.querySelector('.module-controls');
-          const left=document.querySelector('#module-actions').getBoundingClientRect();
-          const source=document.querySelector('.source-actions').getBoundingClientRect();
+          const source=document.querySelector('header.toolbar > .source-actions').getBoundingClientRect();
           const last=document.querySelector('#save').getBoundingClientRect();
-          const b=document.querySelector('.module-controls').getBoundingClientRect();
-          return {leftEnd:left.right,sourceLeft:source.left,sourceRight:source.right,
-            buttonRight:last.right,navWidth:b.width,overflow:nav.scrollWidth>nav.clientWidth};
+          const bar=document.querySelector('.ocr-source-file-toolbar');
+          const quote=document.querySelector('.ocr-source-file-toolbar > .quote-indent-tools').getBoundingClientRect();
+          const selected=bar.querySelector('select').getBoundingClientRect();
+          return {sourceRight:source.right,buttonRight:last.right,
+            navOverflow:nav.scrollWidth>nav.clientWidth,
+            quoteAfterSelect:quote.left>=selected.right-1,
+            sourceOnScreen:source.left>=0};
         });
-        assert(!g.overflow,`${name} module strip overflow at ${width}px`);
-        assert(g.sourceLeft>=g.leftEnd,`${name} source and module actions overlap at ${width}px`);
-        assert(Math.abs(g.buttonRight-width)<=12,`${name} save no longer right aligned at ${width}px`);
+        assert(!g.navOverflow,`${name} module strip overflow at ${width}px`);
+        assert(g.sourceOnScreen,`${name} header actions clipped at ${width}px`);
+        assert(g.quoteAfterSelect,`${name} quote buttons must follow file navigator at ${width}px`);
+        assert(Math.abs(g.buttonRight-width)<=12,`${name} save no longer top-right at ${width}px`);
         if(width===834)await page.screenshot({path:`.v6/evidence/compact-shell-portrait-${name.toLowerCase()}.png`});
       }
       await page.setViewportSize({width:1032,height:642});

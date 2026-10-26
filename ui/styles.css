@@ -88,8 +88,7 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error,
   #module-select{width:102px}.module-actions{gap:5px}
   .module-controls button{padding:2px 5px}}
 
-/* CMD commands belong at the far right of the module strip, aligned with
-   the right-side source editor. The global status line remains status-only. */
+/* Shared CMD action host: moved to the far right of the global status row. */
 .source-actions {display:flex;align-items:center;gap:5px;flex:none;
   margin-left:auto;padding-left:12px;border-left:1px solid #52605a}
 .quote-indent-tools {display:flex;gap:4px;margin-right:4px;
@@ -125,3 +124,30 @@ button.danger:hover:not(:disabled) {background:#b3423e}
 #initialize-dialog strong {color:#fdd18e}
 
 .quote-indent-tools[hidden]{display:none!important}
+
+/* V6 compact global actions on the status row, after all status text. */
+.toolbar > .source-actions{display:flex;align-items:center;gap:4px;flex:none;
+  margin-left:auto;padding-left:7px;border-left:1px solid #52605a}
+.toolbar > .source-actions button{height:30px;min-width:0;padding:3px 9px;font-size:12pt}
+.toolbar > .source-actions #undo,.toolbar > .source-actions #redo{
+  width:34px;height:30px;padding:0;font-size:23px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center}
+.toolbar > .source-actions #save{padding:3px 10px}
+/* Source navigation and Markdown quote nesting are one pane-local toolbar. */
+.ocr-source-pane.ocr-source-file-source{display:flex;flex-direction:column;min-height:0}
+.ocr-source-file-toolbar{height:34px;min-height:34px;box-sizing:border-box;
+  display:flex;align-items:center;gap:6px;padding:3px 7px;flex:none;
+  background:#283238;border-bottom:1px solid #4d585d}
+.ocr-source-file-select{height:27px;width:min(100%,410px);min-width:90px;flex:1 1 auto;
+  background:#344349;color:#d3c6aa;border:1px solid #64736d;border-radius:4px;
+  font:12px 'OCR2MD Sarasa',monospace;padding:2px 7px;white-space:nowrap;text-overflow:ellipsis}
+.ocr-source-file-toolbar > .quote-indent-tools{display:flex;flex:none;align-items:center;
+  gap:4px;margin:0;padding:0;border:0}
+.ocr-source-file-toolbar > .quote-indent-tools button{height:27px;padding:2px 8px;
+  font:12pt 'OCR2MD Sarasa',monospace;background:#344a40;border-color:#60766b}
+.ocr-source-pane.ocr-source-file-source #editor{height:auto;flex:1 1 0;min-height:0}
+@media(max-width:720px){.toolbar > .source-actions{padding-left:4px;gap:3px}
+  .toolbar > .source-actions #undo,.toolbar > .source-actions #redo{width:31px}
+  .toolbar > .source-actions #save{padding:3px 6px}
+  .ocr-source-file-toolbar{padding:3px 5px;gap:4px}
+  .ocr-source-file-toolbar > .quote-indent-tools{gap:3px}}

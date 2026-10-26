@@ -86,7 +86,16 @@ class SourcePanel {
   constructor() {
     this.element=document.createElement('div');
     this.element.className='ocr-source-pane';
-    this.element.append(sourceHost);
+    this.element.classList.add('ocr-source-file-source');
+    const bar=document.createElement('div');
+    bar.className='ocr-source-file-toolbar';
+    const files=document.createElement('select');
+    files.className='ocr-source-file-select';
+    files.setAttribute('aria-label','源码文件导航');
+    files.add(new Option('章节定界/Buffett’s Alpha.minerujson.md','document'));
+    // Real shared CodeMirror action buttons; no clones or new handlers.
+    bar.append(files,document.querySelector('.quote-indent-tools'));
+    this.element.append(bar,sourceHost);
   }
   init() {}
   layout() { getCMD()?.requestMeasure(); }
