@@ -35,7 +35,25 @@ for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1408,heig
     assert.equal(g.clipTop,false,`${g.kind} top border clipped`);
     assert.equal(g.clipBottom,false,`${g.kind} bottom border clipped`);
   }
+  // Global Settings controls all three navigators, including 16pt maximum.
+  await page.evaluate(()=>document.documentElement.style.setProperty('--ocr-navigation-font-size','16pt'));
+  const large=await measure();
+  for(const g of large){
+    assert(g.wrap.top>=g.bar.top-0.2&&g.wrap.bottom<=g.bar.bottom+0.2,
+      `${g.kind} 16pt wrapper outside toolbar`);
+    assert(g.ctrl.top>=g.bar.top-0.2&&g.ctrl.bottom<=g.bar.bottom+0.2,
+      `${g.kind} 16pt control outside toolbar`);
+    assert(parseFloat(g.font)>20,`${g.kind} fails to use global 16pt font`);
+  }
+  await page.evaluate(()=>document.documentElement.style.setProperty('--ocr-navigation-font-size','10pt'));
+  // Business navigation and both menus still work after the geometry change.
+  await page.locator('.ocr-navigation-elements .ts-control').click();
+  await page.locator('body>.ocr-navigation-popup-elements:visible').waitFor({state:'visible',timeout:7000});
+  await page.keyboard.press('Escape');
+  await page.locator('.ocr-navigation-preview .ts-control').click();
+  await page.locator('body>.ocr-navigation-popup-preview:visible').waitFor({state:'visible',timeout:7000});
+  await page.keyboard.press('Escape');
   assert.deepEqual(errors,[]);
-  console.log('THREE_NAV_BORDERS_PASS',name);
+  console.log('THREE_NAV_BORDERS_PASS',name,JSON.stringify({normal:before.map(x=>[x.kind,x.wrap.height,x.ctrl.height]),large:large.map(x=>[x.kind,x.font])}));
  }finally{await browser.close();}
 }
