@@ -32,3 +32,17 @@
 
 /* Virtual chapters are views, not exported editable files. */
 .ocr-lab-ag-toolbar #export-chapters{display:none!important}
+
+/* AG toolbar: [全部] [元素模块] (never a mixed-element column). */
+.ocr-lab-ag-toolbar > .ocr-all-chapters-control{
+  display:inline-flex;align-items:center;gap:5px;flex:none;
+  white-space:nowrap;order:0;
+}
+.ocr-lab-ag-toolbar > .ocr-all-chapters-control[hidden]{display:none!important}
+.ocr-lab-ag-toolbar > .ocr-all-chapters-control input[type="checkbox"]{
+  width:16px;height:16px;min-width:16px;padding:0;margin:0;
+  accent-color:#569d79;flex:none;
+}
+.ocr-lab-ag-toolbar > .ocr-navigation-elements{order:1;flex:none;}
+.ocr-lab-ag-toolbar > .module-actions,
+.ocr-lab-ag-toolbar > .ocr-all-chapters-status{order:2;}

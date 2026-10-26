@@ -33,7 +33,8 @@ export function mountAgModuleToolbar(){
   allLabel.className='ocr-all-chapters-control';
   const allToggle=document.createElement('input');
   allToggle.type='checkbox';allToggle.setAttribute('aria-label','章节所有');
-  allLabel.append(allToggle,document.createTextNode('章节所有'));
+  allLabel.append(allToggle,document.createTextNode('全部'));
+  allLabel.title='勾选后 AG 显示所有章节的当前元素；不改变源码或预览的章节范围';
   const chapterSelect=document.createElement('select');
   chapterSelect.className='ocr-wp3-chapter-select';
   chapterSelect.setAttribute('aria-label','虚拟章节');
@@ -51,18 +52,17 @@ export function mountAgModuleToolbar(){
     option.value=value;option.textContent=label;elementSelect.append(option);
   }
   elementSelect.addEventListener('change',()=>{
-    if(!isChapter())return;
+    if(moduleSelect.value==='settings')return;
     moduleSelect.value=elementSelect.value;
     moduleSelect.dispatchEvent(new Event('change',{bubbles:true}));
   });
-  // WP3 is an opt-in view of the mother CM6 text; file sessions and
-  // chapter-boundary editing remain intact until WP4 and WP7 migrations.
-  const isChapter=()=>Boolean(chapter)||virtualMode;
+  // Each element owns its distinct AG schema. The mother document may show
+  // Title/Media/LaTeX without creating any combined or fourth grid.
   const activeModule=()=>selectedElementModule;
 
   function syncModule(){
     if(transitioning)return;
-    const should=isChapter()?activeModule():'chapter-boundary';
+    const should=activeModule();
     if(moduleSelect.value!==should){
       transitioning=true;
       moduleSelect.value=should;
@@ -80,13 +80,15 @@ export function mountAgModuleToolbar(){
     bar.setAttribute('aria-label',chapter?'实体章节兼容工具栏':
       virtualMode?'CMD 虚拟章节元素工具栏':'章节定界工具栏');
     moduleSelect.hidden=true;
-    elementSelect.hidden=settings||!isChapter();
+    elementSelect.hidden=settings;
     if(!settings){elementSelect.value=selected;elementSelect.ocrNavigationSelect?.tom.setValue(selected,true);}
     elementSelect.ocrNavigationSelect?.show();
     // The source navigation owns virtual-chapter selection; no second chapter
     // dropdown/toggle in AG. The element selector remains module-owned.
     indexLabel.hidden=true;
-    allLabel.hidden=true;
+    allLabel.hidden=settings||Boolean(chapter);
+    allToggle.disabled=!virtualMode;
+    allToggle.title=virtualMode?'勾选显示所有章节的当前元素':'章节定界为全文视图';
     chapterSelect.hidden=true;
     chapterSelect.ocrNavigationSelect?.show();
     allStatus.hidden=Boolean(chapter)||settings||!virtualMode;
@@ -104,18 +106,15 @@ export function mountAgModuleToolbar(){
       actions.hidden=settings || actions.dataset.module!==selected ||
         (chapter ? actions.dataset.module==='chapter-boundary' : virtualMode);
     }
-    if(!isChapter()&&selected!=='settings')bar.hidden=false;
+    if(!settings)bar.hidden=false;
   }
   moduleSelect.addEventListener('change',()=>{
     if(transitioning)return;
     const selected=moduleSelect.value;
     if(selected==='settings'){refresh();return;}
-    if(isChapter()){
-      if(selected==='chapter-boundary'||selected==='media'||selected==='latex')selectedElementModule=selected;
-      else{syncModule();return;}
-    }else if(selected!=='chapter-boundary'){
-      syncModule();return;
-    }
+    if(selected==='chapter-boundary'||selected==='media'||selected==='latex')
+      selectedElementModule=selected;
+    else{syncModule();return;}
     refresh();
     // The original module listener was registered after the lab toolbar and
     // may restore visibility of its own action group on the same event.
@@ -132,7 +131,6 @@ export function mountAgModuleToolbar(){
       if(!option){event.detail.error='章节标定已经变化';return;}
       virtualMode=true;indexToggle.checked=true;allToggle.checked=false;
       chapterSelect.value=id;chapterSelect.ocrNavigationSelect?.refresh();
-      if(selectedElementModule==='chapter-boundary')selectedElementModule='chapter-boundary';
     }else{
       virtualMode=false;indexToggle.checked=false;allToggle.checked=true;
       selectedElementModule='chapter-boundary';
@@ -155,7 +153,8 @@ export function mountAgModuleToolbar(){
     bar.className='ocr-lab-ag-toolbar';
     bar.setAttribute('role','toolbar');
     // No cloned controls. Events and input state stay owned by mainline.
-    bar.append(moduleSelect,elementSelect,indexLabel,allLabel,chapterSelect,allStatus,...actionGroups);
+    // The first two visible controls are exactly: 全部 ☐ | [标题/媒体/LaTeX].
+    bar.append(allLabel,elementSelect,moduleSelect,indexLabel,chapterSelect,allStatus,...actionGroups);
     enhanceNavigationSelect(elementSelect,{kind:'elements'});
     enhanceNavigationSelect(chapterSelect,{kind:'virtual-chapters',search:true});
     outline.insertBefore(bar,grid);
