@@ -194,8 +194,8 @@ let __labSessions = null;
         .replaceAll('"/healthz"',`"${scoped}healthz"`);
     },
     transformIndexHtml(html){
-      return html.replace('<div class="brand">OCR2MD V6</div>',
-        `<div class="brand">OCR2MD V6 · 实验 ${profile.name}</div>`);
+      // The compact build badge already distinguishes lab from main.
+      return html;
     },
   };
 }

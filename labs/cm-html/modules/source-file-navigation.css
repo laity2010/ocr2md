@@ -11,3 +11,6 @@
 .ocr-settings-pane.ocr-lab-file-source > .cm-editor {height:auto;flex:1 1 0;min-height:0;}
 
 .ocr-lab-file-toolbar[hidden] {display:none!important;}
+
+/* Mainline source toolbar is shared; lab augments its file selector only. */
+.module-controls{display:none!important}

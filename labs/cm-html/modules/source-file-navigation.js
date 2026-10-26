@@ -84,15 +84,30 @@ export function createSourceFileNavigation(){
   });
 
   function addBar(host){
-    if(!host||host.querySelector(':scope > .ocr-lab-file-toolbar'))return;
-    const bar=document.createElement('div');bar.className='ocr-lab-file-toolbar';
-    const select=document.createElement('select');select.className='ocr-lab-file-select';
-    select.setAttribute('aria-label','源码文件导航');
+    if(!host)return;
+    // V6 supplies the one permanent source bar and its real quote buttons.
+    // The lab supplies only dynamic file options and the change handler.
+    if(host.querySelector(':scope > .ocr-lab-file-toolbar'))return;
+    let bar=host.querySelector(':scope > .ocr-source-file-toolbar');
+    if(!bar){
+      // The settings JSON editor is independent of the Markdown SourcePanel.
+      // It needs the same navigation dropdown, but never its quote buttons.
+      bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
+      host.prepend(bar);
+    }
+    let select=bar.querySelector('.ocr-source-file-select');
+    if(!select){
+      select=document.createElement('select');select.className='ocr-source-file-select';
+      select.setAttribute('aria-label','源码文件导航');bar.append(select);
+    }
+    bar.classList.add('ocr-lab-file-toolbar');
+    select.classList.add('ocr-lab-file-select');
     select.title='切换同一 CM6 工作台加载的 Markdown 文件';
     select.addEventListener('change',()=>{void navigate(select.value,select);});
-    selectBoxes.add(select);bar.append(select);host.prepend(bar);
-    host.classList.add('ocr-lab-file-source');syncOptions();updateVisibility();
+    selectBoxes.add(select);host.classList.add('ocr-lab-file-source');
+    syncOptions();updateVisibility();
   }
+
   function mountMarkdown(){
     const host=workbench?.querySelector('#editor')?.closest('.ocr-source-pane');
     if(host)addBar(host);
