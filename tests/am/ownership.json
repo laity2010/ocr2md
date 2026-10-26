@@ -33,7 +33,9 @@
     "workspace.js": "L",
     "settings-module.js": "S",
     "cm-font-setting.js": "C",
-    "cmd-json-source.js": "C"
+    "cmd-json-source.js": "C",
+    "wcp-runtime.js": "shell",
+    "pane-layout-ratios.js": "shared"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -49,7 +51,8 @@
     "mineru-anchors.js": [
       "C",
       "G",
-      "P"
+      "P",
+      "A"
     ],
     "view-store.js": [
       "shell",
@@ -58,6 +61,10 @@
       "L",
       "A",
       "T"
+    ],
+    "pane-layout-ratios.js": [
+      "S",
+      "L"
     ]
   },
   "observedDirectStoreWrites": {

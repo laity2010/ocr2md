@@ -125,4 +125,3 @@ export function setVirtualChapter(view,scope){
     userEvent:'select.virtualChapter'});
   return true;
 }
-
