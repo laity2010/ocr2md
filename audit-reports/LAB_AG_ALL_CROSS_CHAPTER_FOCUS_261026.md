@@ -23,3 +23,10 @@ Branch: experiment/virtual-chapters-wp0-2. 功能源码 Git 2cc45dc；隔离构�
 - 仲裁：WP3 CMD 查询适配模块仅根据 current getIndex() 判定 owner。
 - 导航责任：source-file-navigation.js 统一处理导航下拉、URL 历史与 scope 选择。
 - 保持 UI 状态：ag-module-toolbar.js 对 AG 发起导航传入 preserveAll；无任何 AG 直写 CM6/PDF 源或 URL 文件。
+
+## Public Lab deployment / browser confirmation
+- Publish only isolated Lab static assets to /labs/cm-html/, preserving older content-hashed JS/CSS for already-open browser tabs. Public build v6-lab-cm-html-20261026-195658 from 2cc45dc. Public HTML references index-BVsGRRY7.js (HTTP 200); Lab server and ETag save protocol unchanged.
+- Chrome and iPad WebKit HTTPS AG_ALL_CROSS_CHAPTER_FOCUS_PASS, including all three original AG row-click origins and real original PDF page 22 block overlay; AG all-chapter checkbox remains checked, navigator switches to correct chapter and MD highlights the absolute line. No physical chapter loads or business writes.
+- Initial public iPad WebKit pass timed out at the 40-second PDF.js preheat gate during a slow Cloudflare round trip, not at any focus assertion. A separate real WebKit diagnostic verified PDF worker, API pdf-map and /api/pdf all returned HTTP 200 and showed 22-page PDF Ready. Test retry retained every focus, chapter and overlay assertion and changed **only** remote preheat timeout to 100 seconds. Full public Chromium and iPad WebKit PASS afterward.
+- Public formal main version remains v6-20261026-102651. Isolated Lab mother SHA 33a61ac0428f8102d195f47f541a84ee7698c77fa24d79d5b06c584fbad601dc unchanged.
+- No mainline merge or old physical chapter retirement is approved by this experiment; independent Grok/Muse WP8 gate remains separate.

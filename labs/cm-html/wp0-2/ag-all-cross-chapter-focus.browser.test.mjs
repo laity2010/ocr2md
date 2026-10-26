@@ -59,8 +59,11 @@ for(const [name,engine,device] of [
       // The actual PDF.js viewer remains on the original continuous PDF.
       // Switch it on before the distant outline click so the active overlay
       // (not just MD focus) proves that the PDF follows the same source line.
+      // Cloudflare round trips can delay PDF.js preheat on iPad WebKit.
+      // Do not relax focus/page assertions; only bound the remote warmup.
+      const pdfWarmupTimeout=base.startsWith('https://')?100000:40000;
       await page.waitForFunction(()=>!document.querySelector(
-        '.ocr-preview-mode option[value="pdf"]')?.disabled,null,{timeout:40000});
+        '.ocr-preview-mode option[value="pdf"]')?.disabled,null,{timeout:pdfWarmupTimeout});
       await choose(page.locator('.ocr-preview-mode'),'pdf');
     }
     const gridName=kind==='chapter-boundary'?'outline':kind;
