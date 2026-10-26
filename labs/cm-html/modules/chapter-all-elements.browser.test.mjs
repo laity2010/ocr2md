@@ -80,7 +80,7 @@ for(const [name,engine,context] of [
     const firstLine=Number((await record.locator('[col-id="line"]').textContent()).trim());
     await record.locator('[col-id="line"]').click();
     await page.waitForFunction(expected=>new URLSearchParams(location.search).get('chapter')===expected,
-      firstName,{timeout:18000});
+      firstName.slice('chapter/'.length),{timeout:18000});
     await page.waitForFunction(()=>!document.querySelector('.ocr-all-chapters-mode')&&
       document.querySelector('.ocr-latex-grid .ag-row-selected'),null,{timeout:19000});
     assert.equal(await checkbox.isChecked(),false);

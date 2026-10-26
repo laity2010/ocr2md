@@ -28,7 +28,7 @@ if(!base)throw Error('Cross-chapter AG requires isolated lab URL');
 const filter=field=>({field,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true});
 const cell=(field,headerName,extra={})=>({field,headerName,resizable:true,sortable:false,suppressMovable:true,...extra});
 const baseColumns=()=>[
-  cell('chapter','章节',{width:215,minWidth:175,pinned:'left',lockPinned:true,
+  cell('chapter','章节文件',{width:215,minWidth:175,pinned:'left',lockPinned:true,
     ...filter('chapter')}),
   cell('line','源码行',{width:82,minWidth:72}),
 ];
@@ -71,7 +71,7 @@ function columnsFor(type){
     cell('error','错误信息',{minWidth:140,flex:0.8})];
 }
 export function scanChapterElements(name,source,type){
-  const shared={chapter:name,sourceName:name};
+  const shared={chapter:'chapter/'+name,sourceName:name};
   const items=type==='chapter-boundary' ? buildOutline(source).map(row=>({
     ...row,line:row.sourceLine,level:'H'+row.level,
   })) : type==='media' ? findMedia(source) : findLatex(source).map(item=>{

@@ -30,6 +30,8 @@ for(const [name,engine,options] of [
     assert.equal(await bar.locator('label[for="chapter-start-number"]').textContent(),'起始编号');
     assert.equal(await bar.locator('#chapter-start-number').inputValue(),'000');
     assert.equal(await page.locator('.ocr-outline-pane > .ocr-outline-grid').count(),1);
+    assert.equal(await page.locator('.ocr-outline-grid .ocr-outline-checkbox').count()>0,true,
+      'Mother chapter boundary must retain the independent chapter column');
     const box=await bar.boundingBox(),grid=await page.locator('.ocr-outline-pane > .ocr-outline-grid').boundingBox();
     assert(box&&grid&&box.y+box.height<=grid.y+1.5,'Toolbar is not above the AG grid');
     // The moved original button must still invoke the mainline export handler.
@@ -72,6 +74,16 @@ for(const [name,engine,options] of [
     assert.equal(await bar.locator('#module-select').isVisible(),false,'Original module router must remain internal');
     assert.equal(await bar.locator('#media-refresh').isVisible(),false);
     assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
+    assert.equal(await page.locator('.ocr-outline-grid .ocr-outline-checkbox').count(),0,
+      'Already bounded chapter must not show independent chapter checkboxes');
+    assert.equal(await page.locator('.ocr-outline-grid [col-id="independent"]').count(),0);
+    // Horizontal AG Grid columns are virtualized. Read the real file column by
+    // moving its native horizontal scrollbar into view, never a guessed title.
+    await page.locator('.ocr-outline-grid .ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=el.scrollWidth);
+    await page.waitForFunction(expected=>[...document.querySelectorAll('.ocr-outline-grid .ag-cell[col-id="chapterFile"]')]
+      .some(el=>el.textContent.trim()==='chapter/'+expected),chapterIds[0].slice(8),{timeout:9000});
+    assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="chapterFile"] .ag-header-cell-text').first().textContent(),
+      '章节文件');
     await chooseNative(bar.locator('.ocr-lab-element-select'),'media');
     assert.equal(await bar.locator('#media-refresh').isVisible(),true);
     assert.equal(await bar.locator('#media-download-all').isVisible(),true);
@@ -122,11 +134,18 @@ for(const [name,engine,options] of [
     await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[0].slice(8),{timeout:15000});
     assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'chapter-boundary');
     assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
+    await page.waitForFunction(expected=>[...document.querySelectorAll('.ocr-outline-grid .ag-cell[col-id="chapterFile"]')]
+      .some(el=>el.textContent.trim()==='chapter/'+expected),chapterIds[0].slice(8),{timeout:9000});
     await chooseNative(sourceMenu,'document');
     await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
     assert.equal(await bar.locator('.ocr-navigation-elements').isVisible(),false);
     assert.equal(await bar.locator('#export-chapters').isVisible(),true);
+    await page.locator('.ocr-outline-grid .ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=120);
+    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="independent"]')&&
+      document.querySelector('.ocr-outline-grid .ocr-outline-checkbox'),null,{timeout:12000});
+    assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="independent"] .ag-header-cell-text').first().textContent(),
+      '独立成章','Mother file must restore the editable independent chapter column');
     assert.equal(await bar.locator('#module-select option[value="chapter-boundary"]').textContent(),'章节定界');
     assert.equal(await input.inputValue(),'012');
     assert.deepEqual(errors,[]);
