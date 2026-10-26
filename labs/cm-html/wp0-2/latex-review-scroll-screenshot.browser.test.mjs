@@ -44,7 +44,8 @@ for(const [name,engine,options] of engines.filter(([n])=>!process.env.OCR_TEST_B
   });
   // User-like scrolling of the real preview viewport, independent of source.
   await pane.hover();
-  await page.mouse.wheel(0,840);
+  if(name==='iPad-WebKit')await pane.evaluate(el=>{el.scrollTop=840;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
+  else await page.mouse.wheel(0,840);
   await page.waitForTimeout(550);
   const before=await page.evaluate(()=>{
     const md=document.querySelector('.ocr-preview-md-scroll');
@@ -74,5 +75,12 @@ for(const [name,engine,options] of engines.filter(([n])=>!process.env.OCR_TEST_B
   assert(minimum>before.scrollTop-40,`Review jumped Markdown backwards ${before.scrollTop} -> ${minimum}`);
   assert(Math.max(...timeline.map(x=>x.scrollTop))<before.scrollTop+160,'Review moved Markdown far forward');
   await page.locator('#undo').click();
+  // A REAL source navigator change must still reset to the NEW chapter start.
+  const other=await file.locator('optgroup:nth-child(2) option').nth(2).getAttribute('value');
+  await file.evaluate((el,val)=>{el.value=val;el.dispatchEvent(new Event('change',{bubbles:true}));},other);
+  await page.waitForTimeout(600);
+  const afterNav=await pane.evaluate(el=>el.scrollTop);
+  assert(afterNav<80,'Explicit navigation should begin at chapter head: '+afterNav);
+  console.log('LATEX_SCROLL_EXPLICIT_NAV_PASS',name,JSON.stringify({before:before.scrollTop,afterNav,chapter:other}));
  }finally{await browser.close();}
 }
