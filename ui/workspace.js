@@ -25,7 +25,11 @@ let getCMD = () => null;
 // AG receives only the CMD capabilities needed for chapter projection/marking.
 // In particular, this port has no EditorView or other editor internals.
 const mediaCMD=Object.freeze({
-  replaceRanges:edits=>getCMD().replaceRanges(edits),
+  replaceRanges:edits=>{
+    const cmd=getCMD();
+    return typeof cmd.replaceMediaReferences==='function'
+      ?cmd.replaceMediaReferences(edits):cmd.replaceRanges(edits);
+  },
 });
 // Review plugins only receive optimistic CMD changes, never EditorView or a filesystem port.
 const latexCMD=Object.freeze({
@@ -47,6 +51,7 @@ let scrollSync=null;
 let currentOutline=null;
 let currentPdf=null;
 let toggleSplitPreview=()=>{};
+let wcpRuntime=null;
 
 class OutlinePanel {
   constructor(){
@@ -66,6 +71,10 @@ class OutlinePanel {
     this.element.append(this.mediaHost,this.latexHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
+    queueMicrotask(()=>wcpRuntime?.onAGReady({
+      views:{outline:this.grid,media:this.media,latex:this.latex},
+      getMarkdown:()=>getMarkdown(),getCMD:()=>getCMD(),
+    }));
   }
   setModule(module){
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
@@ -185,6 +194,13 @@ class PreviewPanel {
       if(next.documentRevision!==prior.documentRevision)this.schedule();
       if(next.focusTarget!==prior.focusTarget)this.highlight(next.focusTarget);
     });
+    // WCP receives only a bounded semantic preview port, never the raw
+    // Dockview panel or Markdown DOM. The panel remains the renderer owner.
+    this.releaseWPCRenderer=wcpRuntime?.onPreviewInit(Object.freeze({
+      setScope:scope=>{this.virtualScope=scope;},
+      repaint:()=>{if(this.disposed)return;this.render();this.mdPane.scrollTop=0;},
+      isDisposed:()=>this.disposed,
+    }));
     this.body.addEventListener('click',this.onClick);
     refreshPreview=()=>this.schedule();
     this.schedule(true);
@@ -236,7 +252,9 @@ class PreviewPanel {
     const preserved=scrollSync?.beforeRender();
     const ratio=pane.scrollHeight>pane.clientHeight
       ?pane.scrollTop/(pane.scrollHeight-pane.clientHeight):0;
-    this.body.innerHTML=renderMarkdown(source);
+    this.body.innerHTML=wcpRuntime
+      ?wcpRuntime.renderPreview(source,{scope:this.virtualScope??null},renderMarkdown)
+      :renderMarkdown(source);
     this.lastFocusElement=null;
     this.highlight(viewStore.getState().focusTarget);
     if(scrollSync)scrollSync.afterRender(preserved);
@@ -265,6 +283,7 @@ class PreviewPanel {
     clearTimeout(this.timer);
     this.unsubscribe?.();
     this.body.removeEventListener('click',this.onClick);
+    this.releaseWPCRenderer?.();
     this.pdf?.dispose();
     scrollSync?.dispose();scrollSync=null;
     if(currentPdf===this)currentPdf=null;
@@ -306,7 +325,8 @@ class DetachedPdfPanel {
   }
 }
 
-export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{}) {
+export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null) {
+  wcpRuntime=runtime;
   getMarkdown=getDocument;
   getEditor=getCurrentEditor;
   getCMD=getCommandDocument;

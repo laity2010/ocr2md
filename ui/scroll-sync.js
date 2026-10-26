@@ -301,6 +301,14 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   // Preserve the logical preview location across HTML re-renders. It matters
   // especially when inserting lines near the start of a 3,560-line document.
   function beforeRender() {
+    // A CMD/AG review edit changes the document without a user gesture in
+    // CM6. Keep the reader's own Markdown location instead of pulling it to
+    // a stale CM6 source position (often the virtual chapter's first line).
+    // Typing in focused CM6 still uses the original source-led synchronization.
+    if(measuredRevision!==viewStore.getState().documentRevision &&
+       !getEditor()?.hasFocus && previewPane.clientHeight>=4){
+      lastDriver='preview';
+    }
     if(!viewStore.getState().scrollSyncEnabled) return readPreview();
     return lastDriver==='preview' ? readPreview() : readSource();
   }

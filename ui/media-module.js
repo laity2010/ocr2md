@@ -4,6 +4,7 @@
 import {createGrid,AllCommunityModule,ModuleRegistry,themeQuartz} from 'ag-grid-community';
 import {viewStore,publishFocus} from './view-store.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
+import {blockAnchor} from './mineru-anchors.js';
 import './media-module.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -190,11 +191,19 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     link.href=address;
     link.target='_blank';link.rel='noopener noreferrer';
     link.referrerPolicy='no-referrer';
-    link.title='点击查看原图';
-    link.setAttribute('aria-label',row.line?`查看第 ${row.line} 行媒体原图`:'查看未引用媒体原图');
-    // Clicking the thumbnail opens only the media; the row click continues
-    // to navigate the source and PDF as before.
-    link.addEventListener('click',event=>event.stopPropagation());
+    link.title=row.line?'点击同步定位；Cmd/Ctrl+点击查看原图':'点击查看未引用媒体原图';
+    link.setAttribute('aria-label',row.line?`定位第 ${row.line} 行媒体`:'查看未引用媒体原图');
+    // The preview column is part of the Media AG: a normal tap must take
+    // exactly the same four-pane focus path as tapping its source-line cell.
+    // Cmd/Ctrl-click keeps the existing native open-original affordance;
+    // unreferenced inventory files have no source coordinate to focus.
+    link.addEventListener('click',event=>{
+      event.stopPropagation();
+      if(!row.line||event.metaKey||event.ctrlKey||event.shiftKey)return;
+      event.preventDefault();
+      params.node?.setSelected(true);
+      publishFocus({sourceLine:row.line,origin:'media',intent:'click'});
+    });
     const image=document.createElement('img');
     image.className='ocr-media-thumb';
     image.loading='lazy';image.decoding='async';
@@ -256,11 +265,57 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     onRowClicked:e=>{
       if(e.data.line)publishFocus({sourceLine:e.data.line,origin:'media',intent:'click'});
     }});
+  // Media must also FOLLOW navigation from other panes, just as the
+  // Heading/LaTeX AGs do. Grid selection is a read-only follower: it never
+  // publishes another focus event or moves the CM6 cursor.
+  function selectRow(row){
+    if(!active||!row?.line)return;
+    const node=grid.getRowNode(row.id);
+    // External CMD chapter filters may hide the row. Never select a row that
+    // is out of the current visible AG scope.
+    if(node?.rowIndex==null)return;
+    node.setSelected(true,true);
+    grid.ensureIndexVisible(node.rowIndex,'auto');
+  }
+  function focusFromOtherPane(target,state){
+    if(!active||!target||target.origin==='media'||
+       target.revision!==state.documentRevision)return;
+    let row=rows.find(r=>r.line===target.sourceLine);
+    if(!row&&target.sourceEnd>target.sourceLine+1)
+      row=rows.find(r=>r.line>=target.sourceLine&&r.line<target.sourceEnd);
+    if(!row&&target.origin==='pdf'){
+      // A PDF region identifies an OCR block, not the image URL's specific
+      // Markdown line. Match only an image within that exact source block.
+      const lines=getMarkdown().split('\n');
+      const blockAt=line=>{
+        for(let i=Math.min(line,lines.length)-1;i>=0;i--){
+          const anchor=blockAnchor(lines[i]);
+          if(anchor)return `${anchor.pageIndex}:${anchor.blockIndex}`;
+        }
+        return null;
+      };
+      const clickedBlock=blockAt(target.sourceLine);
+      if(clickedBlock)row=rows.find(r=>r.line&&blockAt(r.line)===clickedBlock);
+    }
+    selectRow(row);
+  }
+  function followCursor(offset){
+    if(!active||!Number.isInteger(offset)||offset<0)return;
+    const source=getMarkdown();
+    if(offset>source.length)return;
+    const row=rows.find(r=>r.line&&r.from<=offset&&offset<r.to);
+    if(row)selectRow(row);
+  }
   const unsubscribe=viewStore.subscribe((next,previous)=>{
     if(next.documentRevision!==previous.documentRevision)schedule();
+    if(next.focusTarget!==previous.focusTarget)
+      focusFromOtherPane(next.focusTarget,next);
+    else if(next.sourceOffset!==previous.sourceOffset)
+      followCursor(next.sourceOffset);
   });
   refresh();
   return {
+    api:grid,
     refresh,scan,downloadAll,
     setActive(enabled){
       active=enabled;host.hidden=!enabled;
@@ -269,6 +324,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
         // hidden thumbnails have no src and must be armed on activation.
         grid?.redrawRows();
         void scan();
+        const state=viewStore.getState();
+        focusFromOtherPane(state.focusTarget,state);
+        followCursor(state.sourceOffset);
       }
     },
     get count(){return rows.length;},

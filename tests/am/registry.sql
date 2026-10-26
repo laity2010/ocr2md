@@ -308,7 +308,7 @@ INSERT INTO access_edges VALUES
  ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API'),
  ('X11','L','A','ui/workspace.js','createMediaModule(this.mediaHost','A01','registered','Layout hosts Media panel without accessing its AG internals'),
  ('X12','A','C','ui/media-module.js','cmd().replaceRanges(','C14','registered','Media requests optimistic batch edit through public CMD port'),
- ('X13','L','C','ui/workspace.js','getCMD().replaceRanges(edits)','C14','registered','Layout implements Media write port with public CMD operation'),
+ ('X13','L','C','ui/workspace.js','cmd.replaceRanges(edits)','C14','registered','Layout Media write adapter delegates to CMD replaceMediaReferences where available or replaceRanges compatibility port'),
  ('X14',NULL,'A','scripts/v6_serve.py','media_download_chunk(DOC, url)','A06','registered','HTTP adapter invokes Media-only downloader'),
  ('X15',NULL,'A','scripts/v6_serve.py','media_status(DOC, url)','A07','registered','HTTP adapter exposes Media status'),
  ('X16',NULL,'A','scripts/v6_serve.py','media_read_local(DOC, path[','A08','registered','HTTP adapter reads only whitelisted media paths'),
@@ -557,6 +557,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C25','C25','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM source module explicitly registers defaultFontSize and receives changes','integration'),
  ('TC-G13','G13','tests/outline-title-scale-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter title multiplier range, decimal step and saved restore','integration'),
  ('TC-G14','G14','tests/outline-title-scale-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG title scales without clipping or changing other columns','integration'),
+
  ('TC-S01','S01','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Independent AG/CM/Preview panes mount and switch without destroying markdown','integration'),
  ('TC-S02','S02','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG fixed columns, actual record fields and reused chapter EnumCheckboxFilter','integration'),
  ('TC-S03','S03','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Registered subscriber receives effective settings.changed','integration'),
@@ -569,6 +570,9 @@ INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence) VALUES
  ('TC-PUB-S01','PUB-S01','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Publisher notifies CM owner only on effective value delta','integration');
 INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
  ('TC-SUB-C01','SUB-C01','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM source receives valid update and applies CSS immediately','integration');
+
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
+ ('TC-SUB-G01','SUB-G01','tests/outline-title-scale-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Registered settings.changed title-scale subscriber updates AG title through public Layout and preserves rows/column heights','integration');
 
 -- CMD JSON I/O server is not owned by Settings; enforce authorization and CAS.
 INSERT INTO apis VALUES

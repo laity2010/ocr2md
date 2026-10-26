@@ -1,0 +1,15 @@
+.ocr-outline-pane.ocr-all-chapters-mode>.ocr-outline-grid,
+.ocr-outline-pane.ocr-all-chapters-mode>.ocr-media-pane,
+.ocr-outline-pane.ocr-all-chapters-mode>.ocr-latex-pane{display:none!important}
+.ocr-outline-pane>.ocr-all-chapters-grid{min-width:0;min-height:0;flex:1;overflow:hidden}
+.ocr-outline-pane>.ocr-all-chapters-grid[hidden]{display:none!important}
+.ocr-outline-pane>.ocr-all-chapters-grid .ag-root-wrapper{border:0;border-radius:0}
+.ocr-all-chapters-control{display:flex;align-items:center;gap:3px;flex:none;white-space:nowrap;cursor:pointer}
+.ocr-lab-ag-toolbar .ocr-all-chapters-control>input{width:15px;height:15px;min-width:15px;accent-color:#a7c080;cursor:pointer}
+.ocr-all-chapters-status{font:11px 'OCR2MD Sarasa',monospace;color:#a7c080;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ocr-all-chapters-latex-preview{max-height:87px;overflow:auto;line-height:1.2;font-size:13px}
+.ocr-all-chapters-source{display:block;max-height:88px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+.ocr-all-chapters-image{display:flex;align-items:center;height:59px;overflow:hidden}
+.ocr-all-chapters-image img{max-width:95px;max-height:56px;object-fit:contain}
+.ocr-lab-ag-toolbar .ocr-all-chapters-control[hidden],
+.ocr-lab-ag-toolbar .ocr-all-chapters-status[hidden]{display:none!important}

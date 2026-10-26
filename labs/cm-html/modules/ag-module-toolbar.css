@@ -1,0 +1,48 @@
+/* Module-owned actions in the AG pane, independent of the global control bar. */
+.ocr-outline-pane > .ocr-lab-ag-toolbar{
+  flex:none;display:flex;align-items:center;gap:6px;min-width:0;
+  box-sizing:border-box;height:34px;padding:3px 7px;
+  background:#283238;border-bottom:1px solid #4d585d;
+  font:12px/1.3 'OCR2MD Sarasa',monospace;
+}
+.ocr-outline-pane > .ocr-lab-ag-toolbar[hidden]{display:none!important}
+.ocr-lab-ag-toolbar > .module-actions{display:flex;align-items:center;gap:8px;min-width:0}
+.ocr-lab-ag-toolbar > .module-actions[hidden]{display:none!important}
+.ocr-lab-ag-toolbar label{color:#d3c6aa;white-space:nowrap}
+.ocr-lab-ag-toolbar button{height:27px;padding:2px 8px;flex:none;
+  font:12px 'OCR2MD Sarasa',monospace;background:#344a40;border-color:#60766b}
+.ocr-lab-ag-toolbar input{height:27px;width:65px;min-width:0;padding:2px 5px;
+  text-align:center;border:1px solid #60766b;border-radius:4px;
+  background:#293b3c;color:#d3c6aa;font:12px 'OCR2MD Sarasa',monospace}
+.ocr-lab-ag-toolbar input[aria-invalid='true']{border-color:#fca5a5}
+@media(max-width:560px){.ocr-lab-ag-toolbar > .module-actions{gap:5px}}
+/* The original module picker lives here only for .cmd.chapter.md files. */
+.ocr-lab-ag-toolbar > .ocr-lab-element-select {
+  display:block;width:118px;min-width:94px;max-width:36%;height:27px;
+  flex:none;box-sizing:border-box;padding:2px 5px;
+  border:1px solid #60766b;border-radius:4px;
+  background:#293b3c;color:#d3c6aa;
+  font:12px 'OCR2MD Sarasa',monospace;
+}
+.ocr-lab-ag-toolbar > #module-select{display:none!important}
+.ocr-lab-ag-toolbar > .ocr-lab-element-select[hidden]{display:none!important}
+.ocr-lab-ag-toolbar > .module-actions[data-module]{gap:6px}
+.ocr-lab-ag-toolbar > .module-actions[data-module] label{display:inline}
+.ocr-lab-ag-toolbar > .module-actions[data-module][hidden]{display:none!important}
+
+/* Virtual chapters are views, not exported editable files. */
+.ocr-lab-ag-toolbar #export-chapters{display:none!important}
+
+/* AG toolbar: [全部] [元素模块] (never a mixed-element column). */
+.ocr-lab-ag-toolbar > .ocr-all-chapters-control{
+  display:inline-flex;align-items:center;gap:5px;flex:none;
+  white-space:nowrap;order:0;
+}
+.ocr-lab-ag-toolbar > .ocr-all-chapters-control[hidden]{display:none!important}
+.ocr-lab-ag-toolbar > .ocr-all-chapters-control input[type="checkbox"]{
+  width:16px;height:16px;min-width:16px;padding:0;margin:0;
+  accent-color:#569d79;flex:none;
+}
+.ocr-lab-ag-toolbar > .ocr-navigation-elements{order:1;flex:none;}
+.ocr-lab-ag-toolbar > .module-actions,
+.ocr-lab-ag-toolbar > .ocr-all-chapters-status{order:2;}

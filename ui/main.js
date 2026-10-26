@@ -1,4 +1,5 @@
 import './styles.css';
+import {createWCPRuntime} from './wcp-runtime.js';
 import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
@@ -22,10 +23,15 @@ const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save')};
 let view;
 let cm;
+let cmdPort=null;
+const wcpRuntime=createWCPRuntime();
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
 let savedDoc = null;
+// Strong server revision from the exact document GET; not the edited CM6 text.
+let documentETag = null;
+let saveConflict = false;
 let revision = 0;
 let saving = false, exporting = false, initializing = false, afterUnlock = null;
 let allowInitializeReload = false;
@@ -128,6 +134,8 @@ function refreshToolbar() {
     renderGlobalStatus();
   }
   if (pendingUpdate) applyPendingUpdate();
+  else if (saveConflict && hasUnsavedEdits())
+    status('⚠ 保存冲突：磁盘已有其他编辑，请保留本地修改并核对', 'error');
   else if (hasUnsavedEdits()) status('● 未保存','warning');
   else renderGlobalStatus();
 }
@@ -151,18 +159,33 @@ async function save() {
   }
   const snapshotDoc = view.state.doc;
   const snapshot = snapshotDoc.toString();
+  const savingETag = documentETag;
+  if (!savingETag) {
+    status('⚠ 缺少磁盘版本标识，保留本地修改；请核对当前文档', 'error');
+    return false;
+  }
   saving = true;
   buttons.save.disabled = true;
   status('正在保存');
   try {
-    const res = await fetch('/api/document',{method:'PUT',headers:{'Content-Type':'text/plain; charset=utf-8'},body:snapshot});
+    const res = await fetch('/api/document',{method:'PUT',headers:{
+      'Content-Type':'text/plain; charset=utf-8','If-Match':savingETag},body:snapshot});
     if (res.status === 403) {
       canSave = false;
       status('🔒 保存需授权', 'warning');
       showUnlock();
       return false;
     }
+    if (res.status===412 || res.status===428) {
+      saveConflict = true;
+      status('⚠ 保存冲突：服务器内容已变化；本地修改保留，不能直接覆盖', 'error');
+      return false;
+    }
     if (!res.ok) throw Error(`HTTP ${res.status}: ${(await res.text()).slice(0,120)}`);
+    const nextETag=res.headers.get('ETag');
+    if (!nextETag) throw Error('保存响应缺少 ETag；需人工核对服务器版本');
+    documentETag = nextETag;
+    saveConflict = false;
     savedDoc = snapshotDoc;
     status(!hasUnsavedEdits() ? '✓ 已保存' : '● 保存期间有新修改');
     if (pendingUpdate) applyPendingUpdate();
@@ -278,7 +301,10 @@ async function initializeDataDocument(){
 async function main() {
   const response = await fetch('/api/document',{cache:'no-store'});
   if (!response.ok) throw Error('文档读取失败 '+response.status);
+  const firstETag=response.headers.get('ETag');
+  if(!firstETag)throw Error('文档响应缺少版本 ETag，拒绝开启无保护保存');
   const markdownText = await response.text();
+  documentETag=firstETag;
   const unsubscribeGlobalStatus=viewStore.subscribe((next,previous)=>{
     if(next.outlineCount!==previous.outlineCount ||
        next.scrollSyncEnabled!==previous.scrollSyncEnabled)
@@ -289,10 +315,10 @@ async function main() {
     refreshToolbar();
   });
   registerCMSourceFontSetting(settings);
-  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cm, (message,kind)=>{
+  workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
-  });
+  },wcpRuntime);
   registerOutlineTitleScaleSetting(settings,value=>workspace.setOutlineTitleFontScale(value));
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
@@ -307,6 +333,7 @@ async function main() {
       return res.text();
     },
     extensions:[
+      ...wcpRuntime.editorExtensions,
       nativeIOSSelection ? nativeIOSBasicSetup : basicSetup,
       EditorView.lineWrapping,
       // Only image clipboard items are handled here; native CM6 paste retains
@@ -360,6 +387,8 @@ async function main() {
     ]
   });
   view=cm.view;
+  cmdPort=wcpRuntime.wrapCMD(cm);
+  wcpRuntime.onCMReady({view,status});
   foldInitialMineruComments(view);
   view.contentDOM.addEventListener('click',()=>{
     const sourceLine=view.state.doc.lineAt(view.state.selection.main.head).number;

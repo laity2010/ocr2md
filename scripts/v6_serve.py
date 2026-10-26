@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """V6 static release + single-document I/O. No Vite runtime, no MD cache."""
 import hmac
+import importlib.util
 import hashlib
 import subprocess
 from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
@@ -26,7 +27,18 @@ if LAB_ID and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', LAB_ID) is None:
     raise RuntimeError('Invalid V6_LAB_ID')
 LAB_DIR = ROOT / 'labs' / LAB_ID if LAB_ID else None
 PREFIX = f'/labs/{LAB_ID}/' if LAB_ID else '/'
+# Explicit experiment runtime sharing between the independent Git worktree
+# and its existing deployed lab data. No production .v6 path is accepted.
 RUNTIME = LAB_DIR / '.runtime' if LAB_ID else ROOT / '.v6'
+if LAB_ID and os.environ.get('V6_LAB_RUNTIME'):
+    runtime_override = Path(os.environ['V6_LAB_RUNTIME']).resolve()
+    if (runtime_override.name != '.runtime' or
+        runtime_override.parent.name != LAB_ID or
+        runtime_override.parent.parent.name != 'labs' or
+        runtime_override.parent.is_symlink() or not runtime_override.is_dir()):
+        raise RuntimeError('Invalid isolated experiment runtime location')
+    RUNTIME = runtime_override
+
 
 def lab_path(env, default):
     path = Path(os.environ.get(env, str(default))).resolve()
@@ -57,13 +69,30 @@ STATIC_OVERRIDE = os.environ.get('V6_STATIC_ROOT', str(LAB_DIR / 'dist') if LAB_
 if LAB_ID:
     if HOST not in ('127.0.0.1','localhost') or LAN_TLS_HOST:
         raise RuntimeError('Lab server may bind loopback only')
+    runtime_owner = RUNTIME.parent.resolve()
     if (not LAB_DIR.is_dir() or LAB_DIR.is_symlink() or RUNTIME.is_symlink()
-            or not RUNTIME.resolve().is_relative_to(LAB_DIR.resolve())):
+            or not RUNTIME.resolve().is_relative_to(runtime_owner)
+            or runtime_owner.name != LAB_ID):
         raise RuntimeError('Lab directory/runtime missing or escaped')
-    if STATIC_OVERRIDE and not Path(STATIC_OVERRIDE).resolve().is_relative_to(LAB_DIR.resolve()):
+    if STATIC_OVERRIDE and not (Path(STATIC_OVERRIDE).resolve().is_relative_to(LAB_DIR.resolve())
+        or Path(STATIC_OVERRIDE).resolve().is_relative_to(runtime_owner)):
         raise RuntimeError('Lab static release must remain under the lab directory')
 COOKIE = f'v6lab_{LAB_ID.replace("-", "_")}' if LAB_ID else 'v6edit'
 DOC_WRITE_LOCK = threading.RLock()
+
+def document_etag(content):
+    # Strong checksum over the exact UTF-8 representation sent to the client.
+    return '"' + hashlib.sha256(content).hexdigest() + '"'
+
+LAB_HTTP_EXTENSION = None
+if LAB_ID:
+    # Optional lab-local document router. Production has no such module.
+    extension_file = LAB_DIR / 'modules' / 'document-router.py'
+    if extension_file.is_file() and not extension_file.is_symlink():
+        spec = importlib.util.spec_from_file_location('ocr2md_lab_document_router', extension_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        LAB_HTTP_EXTENSION = module.route
 LIMIT = 8 * 1024 * 1024
 
 TOKEN.parent.mkdir(parents=True, exist_ok=True)
@@ -79,7 +108,7 @@ KEY = TOKEN.read_text().strip()
 if LAB_ID:
     unlock_fixture = os.environ.get('V6_LAB_UNLOCK_TOKEN_PATH')
     unlock_source = (lab_path('V6_LAB_UNLOCK_TOKEN_PATH', TOKEN)
-                     if unlock_fixture else ROOT / '.v6/private/editor-token')
+                     if unlock_fixture else (RUNTIME.parents[2] if os.environ.get('V6_LAB_RUNTIME') else ROOT) / '.v6/private/editor-token')
     if not unlock_source.is_file():
         raise RuntimeError('Mainline save authorization is unavailable for lab')
     UNLOCK_CODE = unlock_source.read_text().strip()[:12]
@@ -183,7 +212,22 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(content)
             return
         if path == '/api/document':
-            self.response(200, (DOC if DOC.is_file() else FIXTURE).read_bytes(), 'text/plain; charset=utf-8')
+            try:
+                with DOC_WRITE_LOCK:
+                    content = (DOC if DOC.is_file() else FIXTURE).read_bytes()
+                    revision = document_etag(content)
+            except OSError:
+                self.response(503, 'Document storage unavailable')
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store, max-age=0')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('ETag', revision)
+            self.send_header('Content-Length', str(len(content)))
+            self.end_headers()
+            if self.command != 'HEAD':
+                self.wfile.write(content)
             return
         if path == '/api/media/inventory':
             # This HTTP composition point uses only the public Media and
@@ -537,7 +581,21 @@ class Handler(BaseHTTPRequestHandler):
         except UnicodeDecodeError:
             self.response(400, 'Invalid UTF-8')
             return
+        # Compare-and-swap and atomic replacement share this SAME lock.
+        # A stale writer can never replace bytes saved by another editor.
         with DOC_WRITE_LOCK:
+            try:
+                current = (DOC if DOC.is_file() else FIXTURE).read_bytes()
+            except OSError:
+                self.response(503, 'Document storage unavailable')
+                return
+            previous = self.headers.get('If-Match')
+            if not previous:
+                self.response(428, 'Document revision required; reopen before saving')
+                return
+            if previous != document_etag(current):
+                self.response(412, 'Document modified by another editor; local edits preserved')
+                return
             DOC.parent.mkdir(parents=True, exist_ok=True)
             tmp = DOC.with_name('.' + str(os.getpid()) + '-' + secrets.token_hex(4) + '.tmp')
             try:
@@ -549,7 +607,14 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 if tmp.exists():
                     tmp.unlink()
-        self.response(200, 'saved')
+            new_revision = document_etag(value)
+        self.send_response(200)
+        self.send_header('Content-Type','text/plain; charset=utf-8')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('ETag',new_revision)
+        self.send_header('Content-Length','5')
+        self.end_headers()
+        self.wfile.write(b'saved')
 
 def start_lan_tls():
     if not LAN_TLS_HOST:
@@ -594,6 +659,8 @@ class LabHandler(Handler):
             self.response(404, 'Outside lab scope')
             return
         self.path = '/' + parsed.path[len(PREFIX):] + ('?' + parsed.query if parsed.query else '')
+        if LAB_HTTP_EXTENSION and LAB_HTTP_EXTENSION(self, method, DOC, DOC_WRITE_LOCK):
+            return
         getattr(Handler, method)(self)
 
     def do_GET(self): self.dispatch_scoped('do_GET')

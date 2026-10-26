@@ -32,6 +32,15 @@ const originalPdf = resolve(process.env.V6_PDF_PATH || join(homedir(),
 async function readDocument() {
   return readFile(existsSync(file) ? file : fixture, 'utf8');
 }
+const etagDocument=text=>'"'+createHash('sha256').update(text).digest('hex')+'"';
+// Vite dev parity with production's one-process document write lock.
+// Concurrent browser saves MUST serialize source-revision checks.
+let docSaveTail=Promise.resolve();
+function exclusiveDocWrite(fn){
+  const running=docSaveTail.then(fn);
+  docSaveTail=running.catch(()=>{});
+  return running;
+}
 export default defineConfig({
   define: {'__V6_BUILD_VERSION__': JSON.stringify(buildVersion)},
   root: 'ui',
@@ -116,28 +125,38 @@ export default defineConfig({
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       try {
-        if (req.method === 'GET') {
-          res.end(await readDocument());
+        if (req.method === 'GET' || req.method === 'HEAD') {
+          const source=await readDocument();
+          res.setHeader('ETag',etagDocument(source));
+          res.end(req.method==='HEAD'?'':source);
         } else if (req.method === 'PUT') {
-          const chunks = [];
-          let size = 0;
+          if(!req.headers['if-match']){
+            res.statusCode=428;res.end('If-Match required');return;
+          }
+          const chunks=[];let size=0;
           for await (const chunk of req) {
-            size += chunk.length;
-            if (size > 10 * 1024 * 1024) throw new Error('Document exceeds 10 MB');
+            size+=chunk.length;
+            if(size>10*1024*1024){res.statusCode=413;res.end('Document exceeds 10 MB');return;}
             chunks.push(chunk);
           }
-          await mkdir(dirname(file), {recursive:true});
-          const temp = join(dirname(file), '.' + process.pid + '-save.tmp');
-          await writeFile(temp, Buffer.concat(chunks));
-          await rename(temp, file);
-          res.end('saved');
+          const body=Buffer.concat(chunks);
+          await exclusiveDocWrite(async()=>{
+            const current=await readDocument();
+            if(req.headers['if-match']!==etagDocument(current)){
+              res.statusCode=412;res.end('Stale document version');return;
+            }
+            await mkdir(dirname(file),{recursive:true});
+            const temp=join(dirname(file),'.'+process.pid+'-'+Date.now()+'-save.tmp');
+            await writeFile(temp,body);
+            await rename(temp,file);
+            res.setHeader('ETag',etagDocument(body));
+            res.end('saved');
+          });
         } else {
-          res.statusCode = 405;
-          res.end('Method not allowed');
+          res.statusCode=405;res.end('Method not allowed');
         }
       } catch (error) {
-        res.statusCode = 500;
-        res.end(String(error));
+        res.statusCode=500;res.end(String(error));
       }
     });
   }}]
