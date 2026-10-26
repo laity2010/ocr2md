@@ -119,7 +119,12 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     view=event.detail?.views;
     if(!view?.outline?.api||!view?.media?.api||!view?.latex?.api)
       throw Error('WP3 requires three original AG module APIs');
-    sourcePort=createIndexProjector(event.detail.getMarkdown);
+    const cmd=event.detail.getCMD?.();
+    // WP6 CMD owns the ONE derived source index; AG only queries it. The
+    // compatibility fallback is retained for earlier standalone WP3 tests.
+    sourcePort=cmd?.getIndex?
+      {get:()=>event.detail.getCMD().getIndex(),clear(){}}
+      :createIndexProjector(event.detail.getMarkdown);
     for(const {name,api} of grids())original.set(name,api.getGridOption('columnDefs'));
     populate();
     unsubscribe=viewStore.subscribe((current,prior)=>{

@@ -99,8 +99,14 @@ export function labVitePlugin(root,profile){
         if(path===join(sourceRoot,'workspace.js')){
           const needle='    this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);';
           if(!code.includes(needle))throw Error('WP3 Workspace AG readiness contract changed');
-          code=code.replace(needle,needle+`\n    setTimeout(()=>document.dispatchEvent(new CustomEvent('ocr2md:wp3-ag-ready',{detail:{\n      views:{outline:this.grid,media:this.media,latex:this.latex},getMarkdown:()=>getMarkdown(),\n    }})),0);`);
+          code=code.replace(needle,needle+`\n    setTimeout(()=>document.dispatchEvent(new CustomEvent('ocr2md:wp3-ag-ready',{detail:{\n      views:{outline:this.grid,media:this.media,latex:this.latex},getMarkdown:()=>getMarkdown(),getCMD:()=>getCMD(),\n    }})),0);`);
         }
+      }
+      if(path===join(sourceRoot,'workspace.js')&&
+         existsSync(join(profile.dir,'wp0-2','cmd-element-transactions.js'))){
+        const old='  replaceRanges:edits=>getCMD().replaceRanges(edits),';
+        if(!code.includes(old))throw Error('WP6 Media CMD write-port contract changed');
+        code=code.replace(old,'  replaceRanges:edits=>getCMD().replaceMediaReferences(edits),');
       }
       if(path===join(sourceRoot,'workspace.js')&&
          existsSync(join(profile.dir,'wp0-2','md-virtual-preview.js'))){
@@ -227,6 +233,13 @@ let __labSessions = null;
           "if ((hasUnsavedEdits()||__labSessions?.hasOtherUnsaved()||settings?.hasUnsaved())&&!allowInitializeReload)");
         for(const endpoint of ['document','export-chapters','initialize-document'])
           code=code.replaceAll(`fetch('/api/${endpoint}'`,`fetch(__labDocumentUrl('/api/${endpoint}')`);
+        const wp6=join(profile.dir,'wp0-2','cmd-element-transactions.js');
+        if(existsSync(wp6)){
+          code=`import {createCMDTransactionPort} from ${JSON.stringify(wp6)};\n`+code;
+          replaceOnce('let cm;','let cm;\nlet cmdTx=null;');
+          replaceOnce('() => cm, (message,kind)=>','() => cmdTx??cm, (message,kind)=>');
+          replaceOnce('  view=cm.view;','  view=cm.view;\n  cmdTx=createCMDTransactionPort(cm);');
+        }
         const wp4=join(profile.dir,'wp0-2','cm-virtual-view.js');
         if(existsSync(wp4)){
           code=`import {virtualChapterExtensions,setVirtualChapter,currentVirtualChapter} from ${JSON.stringify(wp4)};\n`+code;
