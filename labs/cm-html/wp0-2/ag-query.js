@@ -119,12 +119,16 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     view=event.detail?.views;
     if(!view?.outline?.api||!view?.media?.api||!view?.latex?.api)
       throw Error('WP3 requires three original AG module APIs');
-    const cmd=event.detail.getCMD?.();
-    // WP6 CMD owns the ONE derived source index; AG only queries it. The
-    // compatibility fallback is retained for earlier standalone WP3 tests.
-    sourcePort=cmd?.getIndex?
-      {get:()=>event.detail.getCMD().getIndex(),clear(){}}
-      :createIndexProjector(event.detail.getMarkdown);
+    // The Workspace is instantiated before its CM6/CMD transaction port.
+    // Its one-shot AG-ready callback can run before that port is initialized,
+    // especially in fast Linux Chromium. Resolve the CURRENT CMD port on
+    // each read rather than capturing the initial, possibly unready object.
+    // The fallback is only for an experiment without WP6 wired at all.
+    const legacyProjection=createIndexProjector(event.detail.getMarkdown);
+    sourcePort={
+      get:()=>event.detail.getCMD?.()?.getIndex?.() ?? legacyProjection.get(),
+      clear:()=>legacyProjection.clear(),
+    };
     for(const {name,api} of grids())original.set(name,api.getGridOption('columnDefs'));
     populate();
     unsubscribe=viewStore.subscribe((current,prior)=>{
