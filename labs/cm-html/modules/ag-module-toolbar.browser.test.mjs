@@ -13,7 +13,7 @@ const base=process.env.OCR_LAB_TEST_URL||'https://192.168.1.10:4443/labs/cm-html
 for(const [name,engine,options] of [
   ['Chrome',chromium,{viewport:{width:1320,height:830}}],
   ['iPad WebKit',webkit,{viewport:{width:1024,height:768},hasTouch:true,isMobile:true,deviceScaleFactor:2}],
-]){
+].filter(([name])=>!process.env.OCR_WEBKIT_ONLY||name==='iPad WebKit')){
   const browser=await engine.launch({headless:true});
   try{
     const page=await browser.newPage({ignoreHTTPSErrors:base.startsWith('https:'),...options});
@@ -30,6 +30,9 @@ for(const [name,engine,options] of [
     assert.equal(await bar.locator('label[for="chapter-start-number"]').textContent(),'起始编号');
     assert.equal(await bar.locator('#chapter-start-number').inputValue(),'000');
     assert.equal(await page.locator('.ocr-outline-pane > .ocr-outline-grid').count(),1);
+    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row'),null,{timeout:22000});
+    await page.locator('.ocr-outline-grid .ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=120);
+    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ocr-outline-checkbox'),null,{timeout:12000});
     assert.equal(await page.locator('.ocr-outline-grid .ocr-outline-checkbox').count()>0,true,
       'Mother chapter boundary must retain the independent chapter column');
     const box=await bar.boundingBox(),grid=await page.locator('.ocr-outline-pane > .ocr-outline-grid').boundingBox();
@@ -65,7 +68,7 @@ for(const [name,engine,options] of [
     const chapterIds=await page.locator('.ocr-source-pane .ocr-lab-file-select option[value^="chapter:"]').evaluateAll(items=>items.map(i=>i.value));
     const sourceMenu=page.locator('.ocr-source-pane .ocr-lab-file-select');
     await chooseNative(sourceMenu,chapterIds[0]);
-    await page.waitForURL(u=>u.searchParams.has('chapter'),{timeout:15000});
+    await page.waitForFunction(()=>new URLSearchParams(location.search).has('chapter'),null,{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
     assert.equal(await bar.isVisible(),true);
     assert.equal(await bar.locator('#export-chapters').isVisible(),false,'Chapter must not offer re-export');
@@ -106,38 +109,38 @@ for(const [name,engine,options] of [
     // Element category is one workspace-level view, not per-file default.
     // Enter a NEW chapter while LaTeX is active: remain on LaTeX.
     await chooseNative(sourceMenu,chapterIds[1]);
-    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[1].slice(8),{timeout:15000});
+    await page.waitForFunction(name=>new URLSearchParams(location.search).get('chapter')===name,chapterIds[1].slice(8),{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='latex',null,{timeout:12000});
     assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'latex');
     assert.equal(await page.locator('.ocr-outline-pane .ocr-latex-pane').isVisible(),true);
     // Change category in chapter 001 and retain it going back to 000.
     await chooseNative(bar.locator('.ocr-lab-element-select'),'media');
     await chooseNative(sourceMenu,chapterIds[0]);
-    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[0].slice(8),{timeout:15000});
+    await page.waitForFunction(name=>new URLSearchParams(location.search).get('chapter')===name,chapterIds[0].slice(8),{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:12000});
     assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'media');
     assert.equal(await page.locator('.ocr-outline-pane .ocr-media-pane').isVisible(),true);
     // Opening the mother document displays Chapter Boundary without
     // overwriting the selected element category for subsequent chapter work.
     await chooseNative(sourceMenu,'document');
-    await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:15000});
+    await page.waitForFunction(()=>!new URLSearchParams(location.search).has('chapter'),null,{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
     assert.equal(await bar.locator('.ocr-navigation-elements').isVisible(),false);
     assert.equal(await bar.locator('#export-chapters').isVisible(),true);
     await chooseNative(sourceMenu,chapterIds[1]);
-    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[1].slice(8),{timeout:15000});
+    await page.waitForFunction(name=>new URLSearchParams(location.search).get('chapter')===name,chapterIds[1].slice(8),{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:12000});
     assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'media');
     // The Title selection likewise remains active across a chapter switch.
     await chooseNative(bar.locator('.ocr-lab-element-select'),'chapter-boundary');
     await chooseNative(sourceMenu,chapterIds[0]);
-    await page.waitForURL(u=>u.searchParams.get('chapter')===chapterIds[0].slice(8),{timeout:15000});
+    await page.waitForFunction(name=>new URLSearchParams(location.search).get('chapter')===name,chapterIds[0].slice(8),{timeout:15000});
     assert.equal(await bar.locator('.ocr-lab-element-select').inputValue(),'chapter-boundary');
     assert.equal(await page.locator('.ocr-outline-pane .ocr-outline-grid').isVisible(),true);
     await page.waitForFunction(expected=>[...document.querySelectorAll('.ocr-outline-grid .ag-cell[col-id="chapterFile"]')]
       .some(el=>el.textContent.trim()==='chapter/'+expected),chapterIds[0].slice(8),{timeout:9000});
     await chooseNative(sourceMenu,'document');
-    await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:15000});
+    await page.waitForFunction(()=>!new URLSearchParams(location.search).has('chapter'),null,{timeout:15000});
     await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary',null,{timeout:12000});
     assert.equal(await bar.locator('.ocr-navigation-elements').isVisible(),false);
     assert.equal(await bar.locator('#export-chapters').isVisible(),true);
