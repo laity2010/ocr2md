@@ -470,9 +470,14 @@ async function main() {
       });
     }else{
       workspace.setWorkModule(selected);
-      if(previous==='settings')requestAnimationFrame(()=>{
-        if($('module-select').value===selected)workspace.applyPaneRatios(sharedPaneRatios);
-      });
+      if(previous==='settings'){
+        // Re-showing a hidden Dockview can enqueue an additional ResizeObserver
+        // layout in the following frame. Restore after both layout passes.
+        const restore=()=>{
+          if($('module-select').value===selected)workspace.applyPaneRatios(sharedPaneRatios);
+        };
+        requestAnimationFrame(()=>{restore();requestAnimationFrame(restore);});
+      }
     }
     refreshToolbar();
   };

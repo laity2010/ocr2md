@@ -379,7 +379,13 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   return {
     editorHost:sourceHost,
     getPaneRatios:()=>readPaneRatios(dockview,'outline','source','preview'),
-    applyPaneRatios:ratios=>applyPaneRatios(dockview,'outline','source','preview',ratios),
+    applyPaneRatios:ratios=>{
+      // The workbench may just have returned from display:none; resynchronize
+      // Dockview's measured size before restoring the user-selected sashes.
+      if(!ratios||container.clientWidth<=0||container.clientHeight<=0)return false;
+      dockview.layout(container.clientWidth,container.clientHeight);
+      return applyPaneRatios(dockview,'outline','source','preview',ratios);
+    },
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
     setOutlineTitleFontScale:value=>currentOutline?.grid?.setTitleFontScale(value),
