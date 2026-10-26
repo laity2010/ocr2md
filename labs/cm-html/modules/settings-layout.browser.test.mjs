@@ -32,20 +32,45 @@ for(const [name,engine,context] of [
       height:b.height+c.height,settings:source!=='#workspace'};
   });
   const initial=await ratios();
+  // Physically move BOTH sashes off their default positions before opening
+  // settings. Default 50:50 matching default 50:50 is not meaningful proof.
+  const dragSash=async(scope,kind,distance)=>{
+    const sashes=await page.evaluate(root=>[...document.querySelectorAll(root+' .dv-sash.dv-enabled')]
+      .map(e=>{const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height}}),scope);
+    const candidates=sashes.filter(r=>kind==='vertical'?r.w<r.h:r.h<r.w);
+    assert(candidates.length,`No ${kind} sash under ${scope}`);
+    const sash=candidates.sort((a,b)=>kind==='vertical'?b.h-a.h:b.w-a.w)[0];
+    // Grab off-center to avoid tab/gizmo hit areas in WebKit.
+    const x=sash.x,y=kind==='vertical'?sash.y-sash.h*0.22:sash.y;
+    await page.mouse.move(x,y);await page.mouse.down();
+    await page.mouse.move(x+(kind==='vertical'?distance:0),y+(kind==='vertical'?0:distance),{steps:12});
+    await page.mouse.up();await page.waitForTimeout(180);
+  };
+  await dragSash('#workspace','vertical',-125);
+  await dragSash('#workspace','horizontal',85);
+  const adjusted=await ratios();
+  assert(Math.abs(adjusted.ag-initial.ag)>0.055,`AG resize did not take: ${JSON.stringify({initial,adjusted})}`);
+  assert(Math.abs(adjusted.source-initial.source)>0.055,`Preview resize did not take: ${JSON.stringify({initial,adjusted})}`);
   const nav=page.locator('.ocr-source-pane .ocr-source-file-select');
   await nav.selectOption('settings');
   await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-settings-source .cm-editor')&&
     document.querySelector('#status')?.textContent?.includes('全局设置已加载'),null,{timeout:25000});
   const settings1=await ratios();
-  assert(Math.abs(settings1.ag-initial.ag)<0.06,`Settings AG sash reset: ${JSON.stringify({initial,settings1})}`);
-  assert(Math.abs(settings1.source-initial.source)<0.06,`Settings source sash reset: ${JSON.stringify({initial,settings1})}`);
+  assert(Math.abs(settings1.ag-adjusted.ag)<0.06,`Settings AG sash reset: ${JSON.stringify({initial,settings1})}`);
+  assert(Math.abs(settings1.source-adjusted.source)<0.06,`Settings source sash reset: ${JSON.stringify({initial,settings1})}`);
+  // Resizing SETTINGS also updates the chapter workbench on return.
+  await dragSash('#settings-workspace','vertical',85);
+  await dragSash('#settings-workspace','horizontal',-65);
+  const changedInSettings=await ratios();
+  assert(Math.abs(changedInSettings.ag-settings1.ag)>0.045,'Settings AG sash failed to move');
+  assert(Math.abs(changedInSettings.source-settings1.source)>0.045,'Settings preview sash failed to move');
   const settingsPicker=page.locator('#settings-workspace .ocr-lab-file-select');
   await settingsPicker.selectOption('document');
   await page.waitForFunction(()=>!document.querySelector('#workspace').hidden,null,{timeout:12000});
   await page.waitForTimeout(170);
   const restored=await ratios();
-  assert(Math.abs(restored.ag-settings1.ag)<0.06);
-  assert(Math.abs(restored.source-settings1.source)<0.06);
+  assert(Math.abs(restored.ag-changedInSettings.ag)<0.06);
+  assert(Math.abs(restored.source-changedInSettings.source)<0.06);
   // A second Settings entrance must retain the previously selected sash ratios.
   await nav.selectOption('settings');
   await page.waitForFunction(()=>!document.querySelector('#settings-workspace').hidden,null,{timeout:12000});
@@ -57,6 +82,6 @@ for(const [name,engine,context] of [
   assert.equal(await page.locator('.ocr-settings-control input[type=range]').count(),1);
   assert.deepEqual(errors,[]);
   assert.match(await page.locator('#build-version').textContent(),/^lab-\d{6}-\d{4}$/);
-  console.log('SETTINGS_SPLIT_CONTINUITY_PASS',name,JSON.stringify({initial,settings1,restored,settings2,etagOmitted:true}));
+  console.log('SETTINGS_SPLIT_CONTINUITY_PASS',name,JSON.stringify({initial,adjusted,settings1,changedInSettings,restored,settings2,etagOmitted:true}));
  }finally{await browser.close();}
 }
