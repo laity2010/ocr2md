@@ -1,3 +1,11 @@
+// Legacy business contract test: dispatch a native selection on the hidden
+// source select. Real Tom Select touch/menu interaction has its own E2E test.
+const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
+  el.value=v;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+},value);
+
 /** The same Dockview dividers follow the user between chapter files. */
 import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
@@ -13,7 +21,7 @@ for(const [name,engine,context] of [
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base,{waitUntil:'domcontentloaded'});
   const selector=page.locator('.ocr-source-pane .ocr-lab-file-select');
-  await selector.waitFor({timeout:30000});
+  await selector.waitFor({state:'attached',timeout:30000});
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select option[value^="chapter:"]').length>0,null,{timeout:17000});
   const chapter=await selector.locator('option[value^="chapter:"]').first().getAttribute('value');
   const sizes=()=>page.evaluate(()=>{
@@ -44,16 +52,16 @@ for(const [name,engine,context] of [
   const stored=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)||'null'),storageKey);
   assert(stored&&Math.abs(stored.agRatio-changed.ag)<0.035,'Saved AG proportion is stale');
   assert(Math.abs(stored.sourceRatio-changed.source)<0.035,'Saved source proportion is stale');
-  await selector.selectOption(chapter);
+  await chooseNative(selector,chapter);
   await page.waitForURL(u=>u.searchParams.has('chapter'),{timeout:16000});
-  await page.locator('.ocr-source-pane .ocr-lab-file-select').waitFor({timeout:24000});
+  await page.locator('.ocr-source-pane .ocr-lab-file-select').waitFor({state:'attached',timeout:24000});
   await page.waitForTimeout(800);
   const inChapter=await sizes();
   assert(Math.abs(inChapter.ag-changed.ag)<0.035,`AG divider reset in chapter: ${JSON.stringify({changed,inChapter})}`);
   assert(Math.abs(inChapter.source-changed.source)<0.035,`Source divider reset in chapter: ${JSON.stringify({changed,inChapter})}`);
-  await page.locator('.ocr-source-pane .ocr-lab-file-select').selectOption('document');
+  await chooseNative(page.locator('.ocr-source-pane .ocr-lab-file-select'),'document');
   await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:16000});
-  await page.locator('.ocr-source-pane .ocr-lab-file-select').waitFor({timeout:24000});
+  await page.locator('.ocr-source-pane .ocr-lab-file-select').waitFor({state:'attached',timeout:24000});
   await page.waitForTimeout(800);
   const back=await sizes();
   assert(Math.abs(back.ag-changed.ag)<0.035&&Math.abs(back.source-changed.source)<0.035,`Divider reset returning to mother: ${JSON.stringify({changed,back})}`);

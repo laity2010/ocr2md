@@ -11,7 +11,7 @@ for(const [name,engine,options] of [
     const page=await browser.newPage({ignoreHTTPSErrors:base.startsWith('https:'),...options});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(base,{waitUntil:'domcontentloaded'});
-    await page.locator('.ocr-source-pane .ocr-lab-file-select').waitFor({timeout:26000});
+    await page.locator('.ocr-source-pane .ocr-navigation-files').waitFor({timeout:26000});
     const ui=await page.evaluate(()=>{
       const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
       const status=document.querySelector('#status');
@@ -28,7 +28,7 @@ for(const [name,engine,options] of [
         redundantStrip:rect(document.querySelector('.module-controls')).height,
         pane:rect(source)};
     });
-    assert.match(ui.badge,/^v6 lab-\d{6}-\d{4}$/);
+    assert.match(ui.badge,/^lab-\d{6}-\d{4}$/);
     assert(ui.title.includes('v6-lab-cm-html-'),'Full build ID must be preserved in title');
     assert.equal(ui.buttons.map(b=>b.id).join(','),'undo,redo,save');
     assert.deepEqual(ui.buttons.slice(0,2).map(b=>b.label),['↶','↷']);

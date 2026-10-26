@@ -1,3 +1,11 @@
+// Legacy business contract test: dispatch a native selection on the hidden
+// source select. Real Tom Select touch/menu interaction has its own E2E test.
+const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
+  el.value=v;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+},value);
+
 /** In-place V6 chapter switching. Reuse one CM6/Dockview/AG/PDF instance.
  * Real on-disk chapter save must not overwrite the mother or sibling.
  */
@@ -64,7 +72,7 @@ for(const [i,[name,engine,context]] of engines.entries()){
     const motherMarker='SPA_MOTHER_DRAFT_'+name.replace(/\W/g,'_');
     const chapterMarker='SPA_CHAPTER_SAVE_'+name.replace(/\W/g,'_');
     await typeMarker(motherMarker);
-    await menu.selectOption('chapter:'+a);
+    await chooseNative(menu,'chapter:'+a);
     await page.waitForURL(u=>u.searchParams.get('chapter')===a,{timeout:18000});
     await assertIdentity();
     assert(!(await page.locator('#editor .cm-content').innerText()).includes(motherMarker),'Draft leaked into chapter');
@@ -77,7 +85,7 @@ for(const [i,[name,engine,context]] of engines.entries()){
     assert(readFileSync(join(data,'chapter',a),'utf8').includes(chapterMarker),'Current chapter did not persist');
     assert.equal(readFileSync(join(data,'document.md'),'utf8'),original,'Mother overwritten by chapter');
     assert.equal(readFileSync(join(data,'chapter',b),'utf8'),siblingOriginal,'Sibling overwritten');
-    await menu.selectOption('document');
+    await chooseNative(menu,'document');
     await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:18000});
     await assertIdentity();
     assert((await page.locator('#editor .cm-content').innerText()).includes(motherMarker),'Mother unsaved draft disappeared');
@@ -95,12 +103,12 @@ for(const [i,[name,engine,context]] of engines.entries()){
       'Mother redo history did not restore original insertion');
     assert(readFileSync(join(data,'chapter',a),'utf8').includes(chapterMarker));
     assert.equal(readFileSync(join(data,'chapter',b),'utf8'),siblingOriginal);
-    await menu.selectOption('chapter:'+a);
+    await chooseNative(menu,'chapter:'+a);
     await page.waitForURL(u=>u.searchParams.get('chapter')===a,{timeout:18000});
     await assertIdentity();
     assert((await page.locator('#editor .cm-content').innerText()).includes(chapterMarker),'Saved chapter text missing');
     assert((await page.locator('#module-select').inputValue())==='chapter-boundary');
-    assert.equal(await page.locator('.ocr-outline-pane .ocr-lab-ag-toolbar .ocr-lab-element-select').isVisible(),true);
+    assert.equal(await page.locator('.ocr-outline-pane .ocr-lab-ag-toolbar .ocr-navigation-elements').isVisible(),true);
     assert.equal(await page.locator('.ocr-outline-pane .ocr-lab-ag-toolbar .ocr-lab-element-select option').count(),3);
     assert.equal(mainDocumentRequests,1,'HTML page was reloaded on file switch');
     assert.deepEqual(errors,[]);

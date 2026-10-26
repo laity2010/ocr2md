@@ -1,3 +1,11 @@
+// Legacy business contract test: dispatch a native selection on the hidden
+// source select. Real Tom Select touch/menu interaction has its own E2E test.
+const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
+  el.value=v;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+},value);
+
 /** Experimental source selectors must navigate only real open CM files. */
 import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
@@ -11,22 +19,22 @@ for(const [name,browserType,options] of [['Chrome',chromium,{viewport:{width:130
   page.on('request',request=>{const path=new URL(request.url()).pathname;if(path.startsWith('/api/')||path.startsWith('/media/'))unscoped.push(path);});
   await page.goto(base,{waitUntil:'domcontentloaded'});
   const markdown=page.locator('.ocr-source-pane .ocr-lab-file-select');
-  await markdown.waitFor({timeout:22000});
+  await markdown.waitFor({state:'attached',timeout:22000});
   assert.equal(await markdown.inputValue(),'document');
   assert.deepEqual((await markdown.locator('option').allTextContents()).slice(0,2),['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
   assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
   assert.equal(await page.locator('.ocr-source-pane .ocr-lab-file-toolbar').isVisible(),true);
   assert.equal(await page.locator('.ocr-outline-pane .ocr-lab-ag-toolbar #module-select').isVisible(),false);
-  await markdown.selectOption('settings');
+  await chooseNative(markdown,'settings');
   assert.equal(await page.locator('#module-select').inputValue(),'settings');
   const settings=page.locator('#settings-workspace .ocr-lab-file-select');
-  await settings.waitFor({timeout:18000});
+  await settings.waitFor({state:'attached',timeout:18000});
   assert.equal(await settings.inputValue(),'settings');
   assert.deepEqual((await settings.locator('option').allTextContents()).slice(0,2),
     ['章节定界/Buffett’s Alpha.minerujson.md','全局设置/settings.json']);
   assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
   assert.equal(await page.locator('#editor .cm-editor').count(),1);
-  await settings.selectOption('document');
+  await chooseNative(settings,'document');
   assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
   assert.equal(await markdown.inputValue(),'document');
   // Editing the mother file and then navigating must preserve the actual CM
@@ -35,8 +43,8 @@ for(const [name,browserType,options] of [['Chrome',chromium,{viewport:{width:130
   await edit.click();await page.keyboard.insertText('CM_NAV_DRAFT_ONLY');
   const valueBefore=await edit.innerText();
   assert(valueBefore.includes('CM_NAV_DRAFT_ONLY'));
-  await markdown.selectOption('settings');
-  await settings.selectOption('document');
+  await chooseNative(markdown,'settings');
+  await chooseNative(settings,'document');
   assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
   assert((await edit.innerText()).includes('CM_NAV_DRAFT_ONLY'),'Navigating lost unsaved editor data');
   assert.equal(await page.locator('#editor .cm-editor').count(),1);

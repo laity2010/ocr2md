@@ -1,3 +1,11 @@
+// Legacy business contract test: dispatch a native selection on the hidden
+// source select. Real Tom Select touch/menu interaction has its own E2E test.
+const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
+  el.value=v;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+},value);
+
 /** End to end: export CMD chapters, list, read-only browse, preserve mother CM. */
 import assert from 'node:assert/strict';
 import {existsSync,readFileSync,readdirSync} from 'node:fs';
@@ -15,7 +23,7 @@ for(const [name,engine,options] of [
     const page=await browser.newPage({...options});
     const jsErrors=[];page.on('pageerror',e=>jsErrors.push(e.message));
     await page.goto(base,{waitUntil:'domcontentloaded'});
-    await page.locator('#module-select').selectOption('chapter-boundary');
+    await chooseNative(page.locator('#module-select'),'chapter-boundary');
     await page.locator('.ocr-lab-ag-toolbar #export-chapters').waitFor({timeout:20000});
     const initial=await page.locator('#editor .cm-content').innerText();
     await page.locator('#export-chapters').click();
@@ -36,7 +44,7 @@ for(const [name,engine,options] of [
     const savedMother=readFileSync(join(directory,'document.md'),'utf8');
     const sibling=manifest.files[1]?.name;
     const savedSibling=sibling?readFileSync(join(folder,sibling),'utf8'):null;
-    await menu.selectOption('chapter:'+chapter);
+    await chooseNative(menu,'chapter:'+chapter);
     await page.waitForURL(url=>url.searchParams.get('chapter')===chapter,{timeout:20000});
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('大纲'),null,{timeout:25000});
     assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
@@ -72,7 +80,7 @@ for(const [name,engine,options] of [
     const persisted=await page.request.get(base+'api/document?chapter='+encodeURIComponent(chapter));
     assert.equal(persisted.status(),200);
     assert((await persisted.text()).includes('CMD_CHAPTER_NATIVE_SAVE_TEST'));
-    await page.locator('.ocr-source-pane .ocr-lab-file-select').selectOption('document');
+    await chooseNative(page.locator('.ocr-source-pane .ocr-lab-file-select'),'document');
     await page.waitForURL(url=>!url.searchParams.has('chapter'),{timeout:20000});
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('大纲'),null,{timeout:25000});
     assert.equal(await page.locator('.ocr-source-pane .ocr-lab-file-select').inputValue(),'document');

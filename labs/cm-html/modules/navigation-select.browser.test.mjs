@@ -56,6 +56,17 @@ for(const [name,engine,ctx] of [
   await pvPopup.waitFor({state:'visible',timeout:8000});
   assert((await pvPopup.locator('[data-selectable]').count())>=1);
   assert((await pvPopup.textContent()).includes('Markdown'));
+  await page.waitForFunction(()=>!document.querySelector('select.ocr-preview-mode option[value="pdf"]')?.disabled,
+    null,{timeout:20000});
+  // Dynamic PDF preheat updates the mirrored options; selecting through Tom
+  // still dispatches the native PreviewPanel change event.
+  await pvPopup.locator('[data-selectable][data-value="pdf"]').click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-preview-pane')?.dataset.previewMode==='pdf',
+    null,{timeout:12000});
+  await preview.click();
+  await pvPopup.locator('[data-selectable][data-value="md"]').click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-preview-pane')?.dataset.previewMode==='md',
+    null,{timeout:12000});
   // Check source navigation is still clickable while PDF toolbar shares space.
   await nav.click();
   await nav.locator('input').fill('全局设置');
@@ -70,6 +81,6 @@ for(const [name,engine,ctx] of [
   assert.equal(escapedApi,0,'Unscoped API/media request');
   assert.deepEqual(errors,[]);
   console.log('NAVIGATION_SELECT_PASS',name,JSON.stringify({searchable:true,grouped:true,agThreeOptions:true,
-    agSelectionRetained:true,settingsNavigator:true,popupBody:true,documentLoads,escapedApi}));
+    agSelectionRetained:true,settingsNavigator:true,popupBody:true,previewModesVerified:true,documentLoads,escapedApi}));
  }finally{await browser.close();}
 }

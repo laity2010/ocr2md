@@ -1,3 +1,11 @@
+// Legacy business contract test: dispatch a native selection on the hidden
+// source select. Real Tom Select touch/menu interaction has its own E2E test.
+const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
+  el.value=v;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+},value);
+
 /** The Settings Dockview shares sash geometry with the chapter workbench.
  * Includes a no-ETag read regression. No SAVE/PUT, no user data mutation.
  */
@@ -20,7 +28,7 @@ for(const [name,engine,context] of [
   });
   await page.goto(base,{waitUntil:'domcontentloaded'});
   const file=page.locator('.ocr-source-pane .ocr-source-file-select');
-  await file.waitFor({state:'visible',timeout:30000});
+  await file.waitFor({state:'attached',timeout:30000});
   const ratios=()=>page.evaluate(()=>{
     const source=document.querySelector('#settings-workspace:not([hidden])')?'#settings-workspace':'#workspace';
     const r=q=>document.querySelector(source+' '+q)?.getBoundingClientRect();
@@ -52,7 +60,7 @@ for(const [name,engine,context] of [
   assert(Math.abs(adjusted.ag-initial.ag)>0.055,`AG resize did not take: ${JSON.stringify({initial,adjusted})}`);
   assert(Math.abs(adjusted.source-initial.source)>0.055,`Preview resize did not take: ${JSON.stringify({initial,adjusted})}`);
   const nav=page.locator('.ocr-source-pane .ocr-source-file-select');
-  await nav.selectOption('settings');
+  await chooseNative(nav,'settings');
   await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-settings-source .cm-editor')&&
     document.querySelector('#status')?.textContent?.includes('全局设置已加载'),null,{timeout:25000});
   const settings1=await ratios();
@@ -65,14 +73,14 @@ for(const [name,engine,context] of [
   assert(Math.abs(changedInSettings.ag-settings1.ag)>0.045,'Settings AG sash failed to move');
   assert(Math.abs(changedInSettings.source-settings1.source)>0.045,'Settings preview sash failed to move');
   const settingsPicker=page.locator('#settings-workspace .ocr-lab-file-select');
-  await settingsPicker.selectOption('document');
+  await chooseNative(settingsPicker,'document');
   await page.waitForFunction(()=>!document.querySelector('#workspace').hidden,null,{timeout:12000});
   await page.waitForTimeout(170);
   const restored=await ratios();
   assert(Math.abs(restored.ag-changedInSettings.ag)<0.06,`AG ratio mismatch ${JSON.stringify({initial,adjusted,settings1,changedInSettings,restored})}`);
   assert(Math.abs(restored.source-changedInSettings.source)<0.06,`source ratio mismatch ${JSON.stringify({initial,adjusted,settings1,changedInSettings,restored})}`);
   // A second Settings entrance must retain the previously selected sash ratios.
-  await nav.selectOption('settings');
+  await chooseNative(nav,'settings');
   await page.waitForFunction(()=>!document.querySelector('#settings-workspace').hidden&&
     document.querySelector('#settings-workspace .ocr-settings-source')?.getBoundingClientRect().width>300,
     null,{timeout:12000});

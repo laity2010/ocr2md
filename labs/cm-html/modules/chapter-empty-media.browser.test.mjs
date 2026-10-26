@@ -1,3 +1,11 @@
+// Legacy business contract test: dispatch a native selection on the hidden
+// source select. Real Tom Select touch/menu interaction has its own E2E test.
+const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
+  el.value=v;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+},value);
+
 /** Real data regression: chapter/001 has images, chapter/002 has none.
  * Media AG must display only current chapter references, never local inventory.
  * Browser tests are read-only and don't change the user's chapter files.
@@ -31,9 +39,9 @@ for(const [browserName,engine,options] of [
    const picker=page.locator('.ocr-lab-ag-toolbar .ocr-lab-element-select');
    const rows=page.locator('.ocr-media-pane .ocr-media-grid .ocr-media-url');
    async function openMedia(entry){
-     await nav.selectOption(entry.value);
+     await chooseNative(nav,entry.value);
      await page.waitForURL(u=>u.searchParams.get('chapter')===entry.value.slice(8),{timeout:15000});
-     await picker.selectOption('media');
+     await chooseNative(picker,'media');
      await page.locator('.ocr-media-pane').waitFor({state:'visible',timeout:12000});
    }
    await openMedia(chapter001);

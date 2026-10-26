@@ -1,3 +1,11 @@
+// Legacy business contract test: dispatch a native selection on the hidden
+// source select. Real Tom Select touch/menu interaction has its own E2E test.
+const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
+  el.value=v;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+},value);
+
 /** Exercise all 3 existing element AGs against two distinct bounded chapters.
  * The test uses an isolated copy and the original atomic chapter exporter.
  */
@@ -63,7 +71,7 @@ print('VALID_FIXTURE',manifest['files'][0]['name'],manifest['files'][1]['name'])
    const moduleMenu=page.locator('.ocr-lab-ag-toolbar .ocr-lab-element-select');
    for(let ix=0;ix<2;ix++){
      const tag=names[ix],chapter=chapters[ix];
-     await fileMenu.selectOption('chapter:'+chapter);
+     await chooseNative(fileMenu,'chapter:'+chapter);
      await page.waitForURL(u=>u.searchParams.get('chapter')===chapter,{timeout:16000});
      const remembered=ix===0?'chapter-boundary':'media';
      await page.waitForFunction(expected=>document.querySelector('#module-select')?.value===expected,remembered,{timeout:12000});
@@ -72,7 +80,7 @@ print('VALID_FIXTURE',manifest['files'][0]['name'],manifest['files'][1]['name'])
      const grids=[['chapter-boundary','.ocr-outline-grid','QA_TRIPLE_TITLE_'],
        ['media','.ocr-media-pane','QA_MEDIA_'],['latex','.ocr-latex-pane','QA_']];
      for(const [mode,pane,marker] of grids){
-       await moduleMenu.selectOption(mode);
+       await chooseNative(moduleMenu,mode);
        const target=page.locator('.ocr-outline-pane '+pane);
        await target.waitFor({state:'visible',timeout:16000});
        await page.waitForFunction(({selector,expected})=>document.querySelector(selector)?.textContent.includes(expected),
@@ -91,21 +99,21 @@ print('VALID_FIXTURE',manifest['files'][0]['name'],manifest['files'][1]['name'])
      // Once the media pane is painted, visiting another element category
      // must not tear down and recreate its thumbnails. This specifically
      // catches the iPad flash caused by unconditional AG redrawRows().
-     await moduleMenu.selectOption('media');
+     await chooseNative(moduleMenu,'media');
      await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ocr-media-thumb')!==null,null,{timeout:12000});
      await page.waitForTimeout(650); // allow pending media status/inventory fetches
      const before=await page.evaluate(()=>{
        window.__mediaPreviewElement=document.querySelector('.ocr-media-grid .ocr-media-thumb');
        return window.__mediaPreviewElement?.getAttribute('src');
      });
-     await moduleMenu.selectOption('chapter-boundary');
-     await moduleMenu.selectOption('media');
+     await chooseNative(moduleMenu,'chapter-boundary');
+     await chooseNative(moduleMenu,'media');
      await page.waitForTimeout(350);
      assert(await page.evaluate(()=>window.__mediaPreviewElement===document.querySelector('.ocr-media-grid .ocr-media-thumb')),
        'Media preview image DOM was recreated on module switch (visible flash)');
      assert.equal(await page.locator('.ocr-media-grid .ocr-media-thumb').first().getAttribute('src'),before);
    }
-   await fileMenu.selectOption('document');
+   await chooseNative(fileMenu,'document');
    await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:16000});
    assert.equal(await moduleMenu.isVisible(),false);
    assert.equal(await page.locator('.ocr-lab-ag-toolbar #export-chapters').isVisible(),true);
