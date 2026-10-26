@@ -182,6 +182,22 @@ let __labSessions = null;
           "if (hasUnsavedEdits() || __labSessions?.hasOtherUnsaved() || settings?.hasUnsaved() || buttons.save.disabled || exporting || initializing ||");
         replaceOnce("if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload)",
           "if ((hasUnsavedEdits()||__labSessions?.hasOtherUnsaved()||settings?.hasUnsaved())&&!allowInitializeReload)");
+        // Lab is a disposable review workbench: a published build should
+        // replace a dirty in-browser draft on the next /healthz tick. The
+        // mainline's dirty/save guard and beforeunload prompt are deliberately
+        // left intact in non-lab builds; this substitution is Lab-only.
+        replaceOnce(`  if (hasUnsavedEdits() || __labSessions?.hasOtherUnsaved() || settings?.hasUnsaved() || buttons.save.disabled || exporting || initializing ||
+      $('unlock-dialog').open || $('engineering-dialog').open || $('initialize-dialog').open) {
+    status('● 新版本待更新，请先保存','warning');
+    return;
+  }
+  window.location.reload();`, `  // Keep in-flight writes/exports coherent, but discard unsaved Lab drafts.
+  if (saving || exporting || initializing) return;
+  pendingUpdate = false;
+  window.location.reload();`);
+        replaceOnce(`  window.addEventListener('beforeunload',event=>{
+    if ((hasUnsavedEdits()||__labSessions?.hasOtherUnsaved()||settings?.hasUnsaved())&&!allowInitializeReload) {event.preventDefault(); event.returnValue='';}
+  });`, `  // No beforeunload warning in disposable Lab; Save remains explicit.`);
         for(const endpoint of ['document','export-chapters','initialize-document'])
           code=code.replaceAll(`fetch('/api/${endpoint}'`,`fetch(__labDocumentUrl('/api/${endpoint}')`);
 
