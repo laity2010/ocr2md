@@ -40,7 +40,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   host.classList.add('ocr-latex-pane');
   const gridHost=document.createElement('div');gridHost.className='ocr-latex-grid';
   host.append(gridHost);
-  let grid,disposed=false,active=false,queued=false,rows=[];
+  let grid,disposed=false,active=false,queued=false,rows=[],lastScannedSource=null,nextRowKey=0;
   function report(){
     if(!active)return;
     onStatus(`LaTeX ${rows.length} 项 · 渲染成功 ${rows.filter(row=>row.renderStatus==='成功').length} / 失败 ${rows.filter(row=>row.renderStatus==='失败').length} / 未检测 ${rows.filter(row=>row.renderStatus==='未检测').length} · 待复核 ${rows.filter(row=>row.status==='待复核').length} / latex ${rows.filter(row=>row.status==='latex').length} / 忽略 ${rows.filter(row=>row.status==='忽略').length}`);
@@ -89,7 +89,10 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
         // A popup selection must not also trigger a four-pane AG row click.
         for(const event of ['pointerdown','mousedown','click','touchstart'])
           dropdown.addEventListener(event,evt=>evt.stopPropagation());
-        dropdown.addEventListener('change',()=>markReview(p.data,dropdown.value));
+        // This select can survive an earlier CMD annotation that shifts
+        // source offsets. Resolve its latest row data, not the old renderer
+        // params captured when the control was first mounted.
+        dropdown.addEventListener('change',()=>markReview(p.node.data,dropdown.value));
         return dropdown;
       }},
     {field:'renderStatus',headerName:'渲染',width:89,minWidth:83,
@@ -130,17 +133,34 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   function refresh(){
     if(disposed)return;
     const source=getMarkdown();
+    if(source===lastScannedSource){report();return;}
+    const previous=rows;
     rows=findLatex(source).map(item=>{
       const row=checkLatex(item);
       row.raw=source.slice(row.from,row.to);
       return row;
     });
     findReviewMarkers(source,rows,getCMD()?.readAnnotations()??[]);
-    grid.setGridOption('rowData',rows);
-    // Keep visible review controls synchronized after CM6 Undo/Redo.
-    // AG may retain opacity-zero old rows during transitions; do not
-    // redraw the entire grid on every source edit for those hidden clones.
-    grid.refreshCells({force:true,columns:['status']});
+    // The scanner's from:to IDs shift whenever CMD inserts a review comment.
+    // For unchanged formula membership, retain grid row identity by source
+    // order and update values in place. AG refreshes only changed cells;
+    // existing controls, the scroll viewport and unrelated renderers survive.
+    const next=rows;
+    if(lastScannedSource!==null&&next.length===previous.length){
+      let statusChanged=false;
+      for(let i=0;i<next.length;i++){
+        const row=next[i],old=previous[i];
+        row.id=old.id;
+        if(row.status!==old.status)statusChanged=true;
+        grid.getRowNode(row.id)?.updateData(row);
+      }
+      // An active review-value filter must be reapplied when review changes.
+      if(statusChanged&&grid.isAnyFilterPresent())grid.onFilterChanged();
+    }else{
+      for(const row of next)row.id=`latex-row-${++nextRowKey}`;
+      grid.setGridOption('rowData',next);
+    }
+    lastScannedSource=source;
     report();
   }
   function schedule(){

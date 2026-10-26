@@ -59,9 +59,19 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   const inline=page.locator('.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] .ocr-latex-review-select').first();
   assert.deepEqual(await display.locator('option').allTextContents(),['待复核','latex','忽略']);
   assert.equal(await display.inputValue(),'待复核');
+  // CMD prepends metadata and shifts every following scanner offset. The AG
+  // projection must keep unrelated review controls mounted, not replace the
+  // entire rowData on each review/Undo/Redo.
+  await page.evaluate(()=>{
+    window.__latexUnchangedReview=document.querySelector(
+      '.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] .ocr-latex-review-select');
+  });
   await display.selectOption('latex');
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 1'),
     null,{timeout:10000});
+  assert.equal(await page.evaluate(()=>window.__latexUnchangedReview===document.querySelector(
+    '.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] .ocr-latex-review-select')),
+    true,'Unrelated LaTeX review control was remounted after marking another formula');
   assert.equal(await inline.inputValue(),'待复核');
   // Confirmed standalone formula uses one comment and inline $...$ on one physical line.
   let current=await page.evaluate(async()=> (await fetch('/api/document')).text());
