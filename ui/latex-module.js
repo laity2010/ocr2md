@@ -163,12 +163,37 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     lastScannedSource=source;
     report();
   }
+  function chooseSourceLine(line,end=line+1){
+    if(!active||disposed||!Number.isInteger(line)||line<1)return;
+    // Preview clicks can identify an enclosing paragraph rather than the
+    // formula itself. Prefer a formula containing the clicked source line;
+    // otherwise accept a formula within the preview's explicit source range.
+    const inside=rows.find(row=>row.line<=line&&
+      line<=row.line+row.raw.split('\n').length-1);
+    const match=inside||(end>line+1?rows.find(row=>row.line>=line&&row.line<end):null);
+    if(!match)return;
+    const node=grid.getRowNode(match.id);
+    if(!node)return;
+    node.setSelected(true,true);
+    if(node.rowIndex!==null&&node.rowIndex!==undefined)
+      grid.ensureIndexVisible(node.rowIndex,'auto');
+  }
+  function followFocus(target,state){
+    if(!active||!target||target.origin==='latex'||
+       target.revision!==state.documentRevision)return;
+    // A source edit can shift every formula's line number. Always route a
+    // focus event against the current CMD-backed scan, not an old AG row.
+    if(lastScannedSource!==getMarkdown())refresh();
+    chooseSourceLine(target.sourceLine,target.sourceEnd);
+  }
   function schedule(){
     if(queued||disposed)return;queued=true;
     queueMicrotask(()=>{queued=false;if(active)refresh();});
   }
   const unsubscribe=viewStore.subscribe((current,prior)=>{
     if(current.documentRevision!==prior.documentRevision)schedule();
+    if(current.focusTarget!==prior.focusTarget)
+      followFocus(current.focusTarget,current);
   });
   return {
     refresh,
@@ -185,7 +210,14 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
         onStatus(`已规范化 ${operations.filter(op=>op.tag==='ocr2md:latex').length} 条公式 · 请全局保存`);
       }catch(error){onStatus(`规范化失败：${error.message}`);}
     },
-    setActive(enabled){active=enabled;host.hidden=!enabled;if(enabled)refresh();},
+    setActive(enabled){
+      active=enabled;host.hidden=!enabled;
+      if(enabled){
+        refresh();
+        const state=viewStore.getState();
+        followFocus(state.focusTarget,state);
+      }
+    },
     dispose(){disposed=true;unsubscribe();grid.destroy();},
   };
 }

@@ -59,6 +59,23 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   const inline=page.locator('.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] .ocr-latex-review-select').first();
   assert.deepEqual(await display.locator('option').allTextContents(),['待复核','latex','忽略']);
   assert.equal(await display.inputValue(),'待复核');
+  // Reverse focus contract: real clicks in the CM6 source and Markdown
+  // preview must select and reveal the corresponding existing LaTeX AG row.
+  const rowSelected=idx=>page.locator(`.ocr-latex-grid .ag-row[row-index="${idx}"].ag-row-selected`).count();
+  await page.locator('.ocr-latex-grid .ag-row[row-index="1"] [col-id="line"]').click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-latex-grid .ag-row[row-index="1"].ag-row-selected'),
+    null,{timeout:11000});
+  await page.locator('.cm-line').filter({hasText:'L _ {t} ='}).first().click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-latex-grid .ag-row[row-index="0"].ag-row-selected'),
+    null,{timeout:12000});
+  assert.equal(await rowSelected(0),1,'Source click did not focus LaTeX AG first formula');
+  await page.locator('.ocr-latex-grid .ag-row[row-index="3"] [col-id="line"]').click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-latex-grid .ag-row[row-index="3"].ag-row-selected'),
+    null,{timeout:10000});
+  await page.locator('.ocr-markdown .ocr-math[data-source-start="231"]').first().click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-latex-grid .ag-row[row-index="0"].ag-row-selected'),
+    null,{timeout:12000});
+  assert.equal(await rowSelected(0),1,'Preview formula click did not focus LaTeX AG');
   // CMD prepends metadata and shifts every following scanner offset. The AG
   // projection must keep unrelated review controls mounted, not replace the
   // entire rowData on each review/Undo/Redo.
