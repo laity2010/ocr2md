@@ -3,7 +3,6 @@ import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {copyFileSync,mkdirSync,readFileSync} from 'node:fs';
 import {chromium,webkit,devices} from 'playwright';
-import {homedir} from 'node:os';
 
 const fixture='packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md';
 const testFile='.v6/tests/compact-shell-browser-test.md';
@@ -21,10 +20,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
   stdio:'ignore',
 });
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const engines=[
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
-];
+// Portable browser launch: use Playwright-managed Chromium/WebKit binaries.
+const engines=[['Chrome',chromium,{}],['WebKit',webkit,{}]];
 try {
   let ready=false;
   for(let i=0;i<180;i++){
