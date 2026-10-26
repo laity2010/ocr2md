@@ -41,7 +41,12 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
     const current=tom.getOption(tom.getValue());
     if(current&&tom.activeOption!==current)tom.setActiveOption(current);
   };
-  if(kind==='files')tom.on('dropdown_open',()=>queueMicrotask(syncActiveFile));
+  if(kind==='files')tom.on('dropdown_open',()=>{
+    // iPad WebKit may activate the *old* first option AFTER dropdown_open's
+    // synchronous listeners run. Align on the next painted frame, after the
+    // native touch/mouse focus transition (not during keyboard navigation).
+    requestAnimationFrame(()=>requestAnimationFrame(syncActiveFile));
+  });
   // Tom Select repositions its portal on open, scroll, resize and search.
   // Apply our viewport clamp AFTER each built-in positionDropdown() call;
   // a one-time dropdown_open handler is overwritten by a later reposition.
