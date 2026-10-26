@@ -41,11 +41,12 @@ for(const [name,engine,device] of cases){
   const reloaded=page.waitForEvent('framenavigated',{predicate:frame=>frame===page.mainFrame(),timeout:13500});
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
   await reloaded;
-  await page.locator('.cm-content').first().waitFor({state:'visible',timeout:23000});
+  await page.locator('.cm-content').first().waitFor({state:'visible',timeout:base.startsWith('https://')?85000:23000});
   await page.waitForFunction(t=>!document.querySelector('.cm-content')?.textContent.includes(t),token,{timeout:10000});
   assert(served,'Synthetic new build was never seen');
   assert.equal(dialogs.length,0,'Lab blocked auto refresh with an unsaved warning');
   assert.equal(writes.length,0,'Lab refresh must not save dirty CM6 via any API');
+  if(errors.length)console.log('LAB_REFRESH_PAGE_ERRORS',name,JSON.stringify(errors));
   assert.equal(errors.length,0,'Lab refresh script raised page errors');
   console.log('LAB_FAST_REFRESH_PASS',name,JSON.stringify({dirtyDiscarded:true,promptCount:dialogs.length,
     apiWrites:writes.length,buildBefore:build,htmlReloaded:true,readRequests:requests.length}));
