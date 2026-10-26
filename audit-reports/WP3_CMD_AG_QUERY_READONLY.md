@@ -28,3 +28,7 @@
 ## AM route check
 
 Producer: Workspace OutlinePanel in lab Vite adaptor. Event: `ocr2md:wp3-ag-ready` (one-shot after mount; publishes existing AG API references and a read-only `getMarkdown` getter). Consumer: WP3 query adapter; publication to browser only, no Node/global backend escape. State notification: `viewStore.documentRevision` triggers a CMD snapshot reindex and native AG `onFilterChanged`. Read data: existing CM6 Markdown getter; derived CMD source offsets. Write data: **none by this adapter**. Business cell actions still belong to their original modules and require existing CMD authorization; mass chapter actions are hidden in virtual query mode. This experimental AM route must be reviewed in WP8 before mainline merge.
+
+## WP3 boundary-conflict correction
+
+The complete original `ag-module-toolbar.browser.test.mjs` initially found that the WP3 adapter restored the mother's `independent` column over the bounded-chapter adapter's own column schema. Corrected `ag-query.js`: when leaving virtual mode it restores columns **only when a WP3-owned `virtualChapter` column is still mounted**; if the chapter-outline module already installed its bounded schema WP3 leaves that owner's columnDefs untouched. After this correction **both** Chrome/iPad WebKit original AG toolbar tests and both WP3 scoped-query tests PASS. This is the scoped ownership gate for the new experiment; no formal AG Grid internals were changed.

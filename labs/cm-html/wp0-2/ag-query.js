@@ -53,9 +53,17 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
         ...originalColumns.filter(c=>type==='heading'?c.field!=='independent'&&c.field!=='chapterFile':true),
         chapterColumn,
       ]);
-      const target=enabled()?adapted.get(name):originalColumns;
       const actual=api.getGridOption('columnDefs')||[];
-      if(actual.length!==target.length || actual.some((c,i)=>c!==target[i]))api.setGridOption('columnDefs',target);
+      const usesWP3Column=actual.some(c=>c.colId==='virtualChapter');
+      if(enabled()){
+        const target=adapted.get(name);
+        if(actual.length!==target.length||actual.some((c,i)=>c!==target[i]))
+          api.setGridOption('columnDefs',target);
+      }else if(usesWP3Column){
+        // Only remove WP3-owned columns. Physical chapter schema is owned by
+        // chapter-outline.js, which may already have reacted to file switch.
+        api.setGridOption('columnDefs',originalColumns);
+      }
       // The CMD query result, not a second parse of chapter files, provides
       // row membership. AG's native filter preserves row state and renderer DOM.
       api.setGridOption('isExternalFilterPresent',()=>Boolean(keySet));
