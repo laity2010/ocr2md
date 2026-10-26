@@ -198,7 +198,12 @@ let __labSessions = null;
           "if ((hasUnsavedEdits()||__labSessions?.hasOtherUnsaved()||settings?.hasUnsaved())&&!allowInitializeReload)");
         for(const endpoint of ['document','export-chapters','initialize-document'])
           code=code.replaceAll(`fetch('/api/${endpoint}'`,`fetch(__labDocumentUrl('/api/${endpoint}')`);
-
+        const wp4=join(profile.dir,'wp0-2','cm-virtual-view.js');
+        if(existsSync(wp4)){
+          code=`import {virtualChapterExtensions,setVirtualChapter} from ${JSON.stringify(wp4)};\n`+code;
+          replaceOnce('    extensions:[','    extensions:[\n      ...virtualChapterExtensions,');
+          replaceOnce('  view=cm.view;','  view=cm.view;\n  document.addEventListener(\'ocr2md:wp4-virtual-scope\',event=>{\n    const scope=event.detail?.scope??null;\n    try{setVirtualChapter(view,scope);}catch(error){\n      status(\'章节视图失败：\'+error.message,\'error\');\n    }\n  });');
+        }
       }
 
       // Scope only the reused mainline's network requests; fail-closed browser

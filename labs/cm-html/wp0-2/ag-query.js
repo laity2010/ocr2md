@@ -9,6 +9,7 @@ const TYPE=Object.freeze({'chapter-boundary':'heading',media:'media',latex:'late
 const gridType=Object.freeze({outline:'heading',media:'media',latex:'latex'});
 export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isPhysicalChapter,isIndexMode}){
   let view=null,sourcePort=null,unsubscribe=null,disposed=false,index=null;
+  let priorScope=null,updateTimer=null;
   const original=new Map(),adapted=new Map(),enabled=()=>!isPhysicalChapter()&&isIndexMode();
   const currentChapter=()=>!enabled()||checkbox.checked?'all':chapterSelect.value;
   const locate=(data,type)=>{
@@ -70,6 +71,15 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       api.setGridOption('doesExternalFilterPass',node=>!keySet||keySet.has(locate(node.data,type)));
       api.onFilterChanged();
     }
+    const nextScope=enabled()&&state&&currentChapter()!=='all'
+      ?state.getChapter(currentChapter()):null;
+    const signature=nextScope?nextScope.id+'|'+nextScope.from+'|'+nextScope.to:'all';
+    if(signature!==priorScope){
+      priorScope=signature;
+      document.dispatchEvent(new CustomEvent('ocr2md:wp4-virtual-scope',{
+        detail:{scope:nextScope?{id:nextScope.id,from:nextScope.from,to:nextScope.to}:null},
+      }));
+    }
     const type=TYPE[getModule()];
     if(!enabled()){
       status.textContent='实体章节兼容模式（WP4 尚未接管编辑）';
@@ -99,7 +109,10 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     populate();
     unsubscribe=viewStore.subscribe((current,prior)=>{
       if(current.documentRevision!==prior.documentRevision){
-        sourcePort.clear();populate();queueMicrotask(apply);
+        // Coalesce expensive full-document CMD indexing while typing. CM6
+        // maps current chapter bounds through ChangeDesc synchronously.
+        clearTimeout(updateTimer);
+        updateTimer=setTimeout(()=>{sourcePort.clear();populate();apply();},700);
       }
     });
     apply();
@@ -113,7 +126,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   return Object.freeze({
     sync(){if(enabled()&&sourcePort)populate();apply();},
     setModule(){apply();},
-    dispose(){disposed=true;document.removeEventListener('ocr2md:wp3-ag-ready',onGridReady);
+    dispose(){disposed=true;clearTimeout(updateTimer);
+      document.removeEventListener('ocr2md:wp3-ag-ready',onGridReady);
       unsubscribe?.();for(const {name,api} of grids()){
         const originalColumns=original.get(name);
         if(originalColumns)api.setGridOption('columnDefs',originalColumns);
