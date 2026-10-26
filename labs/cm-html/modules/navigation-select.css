@@ -32,7 +32,10 @@
 }
 .ocr-navigation-popup .ts-dropdown-content{max-height:min(60vh,410px);overflow:auto}
 .ocr-navigation-popup .option{padding:8px 10px;white-space:normal;overflow-wrap:anywhere}
-.ocr-navigation-popup .option.active{background:#3b564b;color:#e8e7d9}
+/* Keyboard focus is not a second selection: distinct subdued indication. */
+.ocr-navigation-popup .option.active:not(.selected){
+  background:#2c3e40;color:#d3c6aa;box-shadow:inset 3px 0 #718c79;
+}
 .ocr-navigation-popup .option.selected{background:#365046;color:#d3e2ca}
 .ocr-navigation-popup .optgroup-header{
   color:#a7c080;background:#233337;font-size:var(--ocr-navigation-font-size,10pt);padding:6px 9px;

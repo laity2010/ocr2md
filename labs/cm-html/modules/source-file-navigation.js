@@ -25,7 +25,6 @@ export function createSourceFileNavigation(){
   const isSettings=()=>moduleSelector?.value==='settings';
   function syncOptions(){
     for(const select of selectBoxes){
-      const withinSettings=Boolean(select.closest('#settings-workspace'));
       select.replaceChildren();
       for(const [heading,items] of [
         ['工作区',DEFAULTS],
@@ -39,7 +38,9 @@ export function createSourceFileNavigation(){
         }
         select.append(group);
       }
-      select.value=withinSettings?'settings':selected();
+      // Both file navigator mirrors represent ONE active document. Hidden
+      // source navigation must not keep '章节定界' selected in Settings.
+      select.value=isSettings()?'settings':selected();
       select.ocrNavigationSelect?.refresh();
     }
   }
@@ -130,7 +131,7 @@ export function createSourceFileNavigation(){
     navigate(chapterId(id),{preserveAll});
     event.detail.accepted=activeChapter===id;
   });
-  moduleSelector?.addEventListener('change',updateVisibility);
+  moduleSelector?.addEventListener('change',()=>{updateVisibility();syncOptions();});
   document.addEventListener('ocr2md:wp3-ag-ready',event=>{
     bridge=event.detail;
     // CMDocument can finish initializing in the same event loop.
