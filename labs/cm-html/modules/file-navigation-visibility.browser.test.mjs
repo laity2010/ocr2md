@@ -32,7 +32,7 @@ for(const [name,engine,config] of cases){
     const r=e=>{const b=e.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height,right:b.right,bottom:b.bottom};};
     return {pane:r(src),bar:r(bar),control:r(ctrl),controlContent:r(ctrl.querySelector('.ts-control')),item:r(item),itemText:item.textContent,itemTextClipped:item.scrollWidth>item.clientWidth+1,buttons:r(q),viewport:[innerWidth,innerHeight]};
   });
-  await page.screenshot({path:`${screenshotDir}/file-nav-${name}-before.png`,animations:'disabled'});
+  if(!process.env.OCR_SKIP_SCREENSHOTS)await page.screenshot({path:`${screenshotDir}/file-nav-${name}-before.png`,animations:'disabled'});
   await nav.click();
   const popup=page.locator('body>.ocr-navigation-popup-files:visible');
   await popup.waitFor({state:'visible',timeout:9000});
@@ -43,7 +43,7 @@ for(const [name,engine,config] of cases){
       labels:[...pop.querySelectorAll('.optgroup-header')].map(x=>x.textContent),
       values:[...pop.querySelectorAll('[data-selectable]')].slice(0,8).map(x=>x.textContent.trim())};
   });
-  await page.screenshot({path:`${screenshotDir}/file-nav-${name}-opened.png`,animations:'disabled'});
+  if(!process.env.OCR_SKIP_SCREENSHOTS)await page.screenshot({path:`${screenshotDir}/file-nav-${name}-opened.png`,animations:'disabled'});
   console.log('FILE_NAV_VISIBILITY',name,JSON.stringify({before,open}));
   assert(before.control.x>=0&&before.control.right<=before.viewport[0]+1,'file control clipped by viewport');
   assert(before.control.x>=before.bar.x-1&&before.control.right<=before.bar.right+1,'file control outside toolbar');
@@ -56,7 +56,17 @@ for(const [name,engine,config] of cases){
     assert(before.control.h<=before.bar.h+2&&before.control.y>=before.bar.y-2&&before.control.bottom<=before.bar.bottom+2,
       'file control not inside toolbar');
   }
+  // Select a REAL chapter from the enlarged menu and verify native business
+  // navigation still updates without hiding/repainting the dropdown control.
+  const item=popup.locator('[data-selectable][data-value^="virtual:"]').nth(4);
+  const chosen=await item.getAttribute('data-value');
+  await item.click({timeout:14000});
+  await page.waitForFunction(v=>document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.value===v,
+    chosen,{timeout:20000});
+  const navigated=await nav.boundingBox();
+  assert(navigated&&navigated.x>=0&&navigated.x+navigated.width<=before.viewport[0]+1,
+    'file navigator escaped viewport after chapter selection');
   assert.deepEqual(errors,[]);
-  console.log('FILE_NAV_VISIBILITY_PASS',name);
+  console.log('FILE_NAV_VISIBILITY_PASS',name,JSON.stringify({selected:chosen,popupWidth:open.popup.w,navWidth:before.control.w}));
  }finally{await browser.close();}
 }
