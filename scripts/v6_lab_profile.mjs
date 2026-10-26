@@ -102,6 +102,35 @@ export function labVitePlugin(root,profile){
           code=code.replace(needle,needle+`\n    setTimeout(()=>document.dispatchEvent(new CustomEvent('ocr2md:wp3-ag-ready',{detail:{\n      views:{outline:this.grid,media:this.media,latex:this.latex},getMarkdown:()=>getMarkdown(),\n    }})),0);`);
         }
       }
+      if(path===join(sourceRoot,'workspace.js')&&
+         existsSync(join(profile.dir,'wp0-2','md-virtual-preview.js'))){
+        const wp5=join(profile.dir,'wp0-2','md-virtual-preview.js');
+        if(!code.includes('this.body.innerHTML=renderMarkdown(source);') ||
+           !code.includes("this.body.addEventListener('click',this.onClick);"))
+          throw Error('WP5 MD preview integration contract changed');
+        code=`import {renderVirtualMarkdown} from ${JSON.stringify(wp5)};\n`+code;
+        code=code.replace('this.body.innerHTML=renderMarkdown(source);',
+          'this.body.innerHTML=renderVirtualMarkdown(source,this.virtualScope??null);');
+        code=code.replace("    this.body.addEventListener('click',this.onClick);",
+          `    this.onVirtualScope=event=>{
+      this.virtualScope=event.detail?.scope??null;
+      // The source text changed and the original PreviewPanel already
+      // scheduled its normal 180 ms rerender on documentRevision. Retaining
+      // the mapped range avoids re-parsing the entire chapter per keystroke.
+      if(event.detail?.reason==='edit')return;
+      // The CM6 subscriber may be registered later. Re-render after all
+      // same-turn receivers have applied the new scope to their own state.
+      requestAnimationFrame(()=>{if(this.disposed)return;
+        this.render();this.mdPane.scrollTop=0;
+      });
+    };
+    document.addEventListener('ocr2md:wp4-virtual-scope',this.onVirtualScope);
+    this.body.addEventListener('click',this.onClick);`);
+        if(!code.includes("    this.body.removeEventListener('click',this.onClick);"))
+          throw Error('WP5 preview cleanup contract changed');
+        code=code.replace("    this.body.removeEventListener('click',this.onClick);",
+          "    document.removeEventListener('ocr2md:wp4-virtual-scope',this.onVirtualScope);\n    this.body.removeEventListener('click',this.onClick);");
+      }
       if(path===join(sourceRoot,'workspace.js')){
         const layoutModule=join(profile.dir,'modules','layout-persistence.js');
         if(existsSync(layoutModule)){
@@ -200,8 +229,11 @@ let __labSessions = null;
           code=code.replaceAll(`fetch('/api/${endpoint}'`,`fetch(__labDocumentUrl('/api/${endpoint}')`);
         const wp4=join(profile.dir,'wp0-2','cm-virtual-view.js');
         if(existsSync(wp4)){
-          code=`import {virtualChapterExtensions,setVirtualChapter} from ${JSON.stringify(wp4)};\n`+code;
+          code=`import {virtualChapterExtensions,setVirtualChapter,currentVirtualChapter} from ${JSON.stringify(wp4)};\n`+code;
           replaceOnce('    extensions:[','    extensions:[\n      ...virtualChapterExtensions,');
+          replaceOnce('          documentChanged();',`          documentChanged();
+          document.dispatchEvent(new CustomEvent('ocr2md:wp4-virtual-scope',
+            {detail:{scope:currentVirtualChapter(update.state),reason:'edit'}}));`);
           replaceOnce('  view=cm.view;','  view=cm.view;\n  document.addEventListener(\'ocr2md:wp4-virtual-scope\',event=>{\n    const scope=event.detail?.scope??null;\n    try{setVirtualChapter(view,scope);}catch(error){\n      status(\'章节视图失败：\'+error.message,\'error\');\n    }\n  });');
         }
       }

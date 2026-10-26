@@ -3,7 +3,7 @@
  * Legacy physical chapter mode is deliberately excluded until WP4.
  */
 import {createIndexProjector} from './document-index.js';
-import {viewStore} from '../../../ui/view-store.js';
+import {viewStore,publishFocus} from '../../../ui/view-store.js';
 
 const TYPE=Object.freeze({'chapter-boundary':'heading',media:'media',latex:'latex'});
 const gridType=Object.freeze({outline:'heading',media:'media',latex:'latex'});
@@ -28,6 +28,21 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     const chapter=currentChapter();
     const allowed=state.queryElements({chapter,type});
     return new Set(allowed.map(x=>type==='heading'?x.id.slice('heading:'.length):x.from));
+  }
+  const owningChapter=(sourceLine)=>{
+    if(!index||!Number.isInteger(sourceLine))return null;
+    return index.chapters.find(c=>c.startLine<=sourceLine&&sourceLine<c.endLine)||null;
+  };
+  function focusChapterStart(){
+    if(!enabled()||checkbox.checked)return;
+    const chapter=index?.getChapter(chapterSelect.value);
+    if(!chapter)return;
+    requestAnimationFrame(()=>{
+      if(disposed||!enabled()||checkbox.checked||chapterSelect.value!==chapter.id)return;
+      // Intentional chapter navigation is an explicit user location, not a
+      // passive CM6 scroll; the shared PDF and preview focus contracts apply.
+      publishFocus({sourceLine:chapter.startLine,origin:'wp5-chapter',intent:'click'});
+    });
   }
   const grids=()=>view?Object.entries(gridType).map(([name,type])=>({name,type,api:view[name]?.api})).filter(x=>x.api):[];
   function apply(){
@@ -108,6 +123,25 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     for(const {name,api} of grids())original.set(name,api.getGridOption('columnDefs'));
     populate();
     unsubscribe=viewStore.subscribe((current,prior)=>{
+      if(current.focusTarget!==prior.focusTarget &&
+         current.focusTarget?.origin==='pdf' &&
+         current.focusTarget.revision===current.documentRevision &&
+         enabled()&&!checkbox.checked){
+        const target=current.focusTarget;
+        const owner=owningChapter(target.sourceLine);
+        if(owner&&owner.id!==chapterSelect.value){
+          chapterSelect.value=owner.id;
+          chapterSelect.ocrNavigationSelect?.tom.setValue(owner.id,true);
+          apply();
+          // The original PDF focus may have reached scroll followers before
+          // the scoped CM6 decorations updated. Replay the SAME full-doc line
+          // once after scope switch; subsequent replay sees matching owner.
+          queueMicrotask(()=>{if(!disposed&&enabled()&&!checkbox.checked)
+            publishFocus({sourceLine:target.sourceLine,sourceEnd:target.sourceEnd,
+              origin:'pdf',elementId:target.elementId,intent:'click'});
+          });
+        }
+      }
       if(current.documentRevision!==prior.documentRevision){
         // Coalesce expensive full-document CMD indexing while typing. CM6
         // maps current chapter bounds through ChangeDesc synchronously.
@@ -120,8 +154,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   document.addEventListener('ocr2md:wp3-ag-ready',onGridReady);
   checkbox.checked=true;
   checkbox.addEventListener('change',()=>{chapterSelect.hidden=checkbox.checked;
-    chapterSelect.ocrNavigationSelect?.show();apply();});
-  chapterSelect.addEventListener('change',apply);
+    chapterSelect.ocrNavigationSelect?.show();apply();focusChapterStart();});
+  chapterSelect.addEventListener('change',()=>{apply();focusChapterStart();});
   status.title='WP3 仅按母 Markdown 已有 CMD 标定查询；旧实体章节的独立审阅记录须先无损迁移。';
   return Object.freeze({
     sync(){if(enabled()&&sourcePort)populate();apply();},
