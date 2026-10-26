@@ -17,6 +17,8 @@ const chapterCell=params=>{
 export function createOutlineGrid(element,getMarkdown,getCMD){
   const core=createMainlineOutlineGrid(element,getMarkdown,getCMD);
   const originalColumns=core.api.getGridOption('columnDefs');
+  const virtualColumns=originalColumns.map(column=>column.field==='chapterFile'
+    ? {...column,cellRenderer:chapterCell}:column);
   if(!Array.isArray(originalColumns)||!originalColumns.some(c=>c.field==='independent')||
      !originalColumns.some(c=>c.field==='chapterFile')){
     core.dispose();
@@ -25,10 +27,12 @@ export function createOutlineGrid(element,getMarkdown,getCMD){
   let currentName=null;
   function updateColumns(next){
     const name=next||null;
-    if(name===currentName)return;
+    if(name===currentName&&currentName!==null)return;
     currentName=name;
     if(!name){
-      core.api.setGridOption('columnDefs',originalColumns);
+      // These are CMD virtual views. Nothing is pending export, clickable
+      // as a physical chapter, or downloadable from the boundary grid.
+      core.api.setGridOption('columnDefs',virtualColumns);
       return;
     }
     // A bounded element resides in the actual opened file, not in a new

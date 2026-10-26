@@ -6,6 +6,7 @@
 import './source-file-navigation.css';
 import {enhanceNavigationSelect} from './navigation-select.js';
 import {viewStore} from '../../../ui/view-store.js';
+import {chapterAssignments} from './chapter-files.js';
 
 const DEFAULTS=Object.freeze([
   {id:'document',label:'章节定界/Buffett’s Alpha.minerujson.md'},
@@ -54,12 +55,15 @@ export function createSourceFileNavigation(){
     try{
       const index=bridge.getCMD().getIndex();
       const outline=bridge.views?.outline;
-      // Column '章节文件' already uses this exact name projection including
-      // the start-number width and all live '独立成章' decisions.
-      const rows=new Map((outline?.rows||[]).map(row=>[row.id,row.chapterFile]));
-      const next=index.chapters.map(chapter=>({
-        id:chapter.id,name:rows.get(chapter.firstHeadingId)||chapter.legacyExportName,
-        from:chapter.from,
+      // Use the original lab chapter filename formatter, but on the current
+      // CMD boundaries, never on AG's asynchronously refreshed rowData. An
+      // independent marker must immediately rename/renumber subsequent views.
+      const pseudoRows=index.chapters.map(chapter=>({
+        id:chapter.id,title:chapter.title,independent:true,
+      }));
+      const names=chapterAssignments(pseudoRows,outline?.startText||'000');
+      const next=index.chapters.map((chapter,i)=>({
+        id:chapter.id,name:names[i].file,from:chapter.from,
       }));
       if(activeChapter&&!next.some(row=>row.id===activeChapter)){
         const old=views.find(row=>row.id===activeChapter);
