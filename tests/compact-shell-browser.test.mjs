@@ -158,6 +158,20 @@ try {
       await page.waitForFunction(expected=>document.querySelector('#status')?.textContent.includes(expected),
         `${formatCount(expectedLines)}行`,{timeout:12000});
 
+      // The existing quote actions must still edit live CM6 with the same
+      // selection and support reverse action in the source navigation bar.
+      const quoteSnapshot=await page.evaluate(()=>{
+        const view=window.__v6cm6.view;
+        const line=view.state.doc.line(25);
+        view.dispatch({selection:{anchor:line.from}});
+        return line.text;
+      });
+      await page.locator('.ocr-source-file-toolbar #quote-indent').click();
+      assert.match(await page.evaluate(()=>window.__v6cm6.view.state.doc.line(25).text),
+        /^> ?/,'quote-indent must prefix a Markdown quote marker');
+      await page.locator('.ocr-source-file-toolbar #quote-outdent').click();
+      assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.line(25).text),quoteSnapshot);
+
       // Sync stays implemented even though there is no fourth toolbar button.
       await page.evaluate(()=>window.__v6cm6.setScrollSyncEnabled(false));
       assert.match(await page.locator('#status').textContent(),/⇅独立滚动/);
