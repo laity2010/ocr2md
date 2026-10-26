@@ -32,25 +32,22 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   tom.wrapper.classList.add('ocr-navigation-select',`ocr-navigation-${kind}`);
   tom.dropdown.classList.add('ocr-navigation-popup',`ocr-navigation-popup-${kind}`);
   let destroyed=false,scheduled=false;
-  // File names can be much wider than their compact toolbar. The popup may
-  // grow for readability, but its portal must NEVER extend past the viewport
-  // (particularly when the source pane occupies the right half of an iPad).
-  const fitFilePopup=()=>{
-    if(destroyed||kind!=='files'||!tom.isOpen)return;
-    requestAnimationFrame(()=>{
+  // Tom Select repositions its portal on open, scroll, resize and search.
+  // Apply our viewport clamp AFTER each built-in positionDropdown() call;
+  // a one-time dropdown_open handler is overwritten by a later reposition.
+  if(kind==='files'){
+    const originalPosition=tom.positionDropdown.bind(tom);
+    tom.positionDropdown=()=>{
+      originalPosition();
       if(destroyed||!tom.isOpen)return;
-      const trigger=tom.wrapper.getBoundingClientRect();
+      const trigger=tom.control.getBoundingClientRect();
       const vw=Math.max(0,document.documentElement.clientWidth||window.innerWidth);
       const width=Math.min(Math.max(540,Math.ceil(trigger.width)),Math.max(0,vw-16));
       if(width<80)return;
       const left=Math.max(8,Math.min(trigger.left,vw-width-8));
       tom.dropdown.style.width=`${width}px`;
-      tom.dropdown.style.left=`${left}px`;
-    });
-  };
-  if(kind==='files'){
-    tom.on('dropdown_open',fitFilePopup);
-    window.addEventListener('resize',fitFilePopup);
+      tom.dropdown.style.left=`${left+window.scrollX}px`;
+    };
   }
   const updateVisibility=()=>{
     // The original select's own hidden flag controls only its proxy. A hidden
@@ -96,7 +93,6 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   updateVisibility();
   const adapter=Object.freeze({tom,refresh,show:updateVisibility,dispose:()=>{
     destroyed=true;observer.disconnect();
-    if(kind==='files')window.removeEventListener('resize',fitFilePopup);
     element.removeEventListener('change',onNativeChange);
     proxy.removeEventListener('change',onProxyChange);
     tom.destroy();proxy.remove();element.classList.remove('ocr-navigation-native');

@@ -39,7 +39,7 @@ for(const [name,engine,config] of cases){
   const open=await page.evaluate(()=>{
     const pop=document.querySelector('body>.ocr-navigation-popup-files:not([style*="display: none"])');
     const b=pop.getBoundingClientRect();
-    return {popup:{x:b.x,y:b.y,w:b.width,h:b.height,right:b.right,bottom:b.bottom},
+    return {popup:{x:b.x,y:b.y,w:b.width,h:b.height,right:b.right,bottom:b.bottom,inlineWidth:pop.style.width,inlineLeft:pop.style.left},tomOpen:document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.ocrNavigationSelect?.tom?.isOpen,
       labels:[...pop.querySelectorAll('.optgroup-header')].map(x=>x.textContent),
       values:[...pop.querySelectorAll('[data-selectable]')].slice(0,8).map(x=>x.textContent.trim())};
   });
@@ -50,7 +50,12 @@ for(const [name,engine,config] of cases){
   assert(before.buttons.x>=before.control.right-1,'quote buttons overlap nav');
   assert(open.popup.x>=7&&open.popup.right<=before.viewport[0]-7,'file dropdown clipped horizontally');
   assert(open.popup.y>=0&&open.popup.bottom<=before.viewport[1]+1,'file dropdown clipped vertically');
-  if(!process.env.OCR_CAPTURE_ONLY)assert(before.control.w>=Math.min(500,before.bar.w-100)-10,'file control unnecessarily narrow');
+  if(!process.env.OCR_CAPTURE_ONLY){
+    assert(before.control.w>=Math.min(500,before.bar.w-100)-10,'file control unnecessarily narrow');
+    assert(open.popup.w>=Math.min(540,before.viewport[0]-16)-3,'file dropdown popup too narrow for chapter names');
+    assert(before.control.h<=before.bar.h+2&&before.control.y>=before.bar.y-2&&before.control.bottom<=before.bar.bottom+2,
+      'file control not inside toolbar');
+  }
   assert.deepEqual(errors,[]);
   console.log('FILE_NAV_VISIBILITY_PASS',name);
  }finally{await browser.close();}
