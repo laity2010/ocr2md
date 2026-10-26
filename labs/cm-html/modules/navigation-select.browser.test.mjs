@@ -20,7 +20,7 @@ for(const [name,engine,ctx] of [
   const nav=page.locator('.ocr-source-pane .ocr-navigation-files .ts-control');
   await nav.waitFor({state:'visible',timeout:30000});
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-source-file-select option[value^="chapter:"]').length>=3,null,{timeout:18000});
-  const filePopup=page.locator('body>.ocr-navigation-popup-files');
+  const filePopup=page.locator('body>.ocr-navigation-popup-files:visible');
   await nav.click();
   await filePopup.waitFor({state:'visible',timeout:9000});
   await page.waitForFunction(()=>document.querySelectorAll('body>.ocr-navigation-popup-files .optgroup-header').length===2,null,{timeout:9000});
