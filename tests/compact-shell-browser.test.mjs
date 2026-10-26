@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {copyFileSync,mkdirSync,readFileSync} from 'node:fs';
 import {chromium,webkit,devices} from 'playwright';
@@ -182,8 +183,14 @@ try {
       // Save status is shown beside the build number; mock the isolated
       // document PUT and verify the same CM6 instance and contents persist.
       await page.route('**/api/document',route=>{
-        if(route.request().method()==='PUT')
-          return route.fulfill({status:200,body:'saved'});
+        if(route.request().method()==='PUT'){
+          // Match production's strict CAS contract rather than weakening the
+          // client: every simulated write carries If-Match and returns ETag.
+          assert(route.request().headers()['if-match'],'Save omitted If-Match');
+          const body=route.request().postData()||'';
+          const etag='"'+createHash('sha256').update(body).digest('hex')+'"';
+          return route.fulfill({status:200,headers:{ETag:etag},body:'saved'});
+        }
         return route.continue();
       });
       await page.locator('#save').click();
