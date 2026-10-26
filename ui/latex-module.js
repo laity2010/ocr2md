@@ -60,6 +60,42 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
       grid.refreshCells({force:true,columns:['status']});
     }
   }
+  // AG Grid's function cellRenderer returns a DOM node but has no refresh()
+  // contract. On every review status change AG destroys the native <select>
+  // (even during a WebKit picker change), losing focus and flickering. Keep
+  // the same control mounted and update only its value/metadata.
+  class ReviewSelectRenderer {
+    init(params){
+      this.params=params;
+      const dropdown=document.createElement('select');
+      dropdown.className='ocr-latex-review-select';
+      for(const choice of REVIEW_CHOICES){
+        const option=document.createElement('option');
+        option.value=choice;option.textContent=choice;
+        dropdown.append(option);
+      }
+      for(const event of ['pointerdown','mousedown','click','touchstart'])
+        dropdown.addEventListener(event,evt=>evt.stopPropagation());
+      dropdown.addEventListener('change',()=>{
+        // Review may shift CMD offsets. Resolve live row through AG each time.
+        const row=this.params.node?.data;
+        if(row)markReview(row,dropdown.value);
+      });
+      this.dropdown=dropdown;
+      this.refresh(params);
+    }
+    getGui(){return this.dropdown;}
+    refresh(params){
+      this.params=params;
+      if(!params.data)return false;
+      const dropdown=this.dropdown;
+      dropdown.setAttribute('aria-label',`第 ${params.data.line} 行公式审阅`);
+      dropdown.value=params.data.status;
+      dropdown.dataset.review=params.data.status;
+      dropdown.disabled=!getCMD()?.editAnnotations;
+      return true; // preserve the real DOM select, even when review changes
+    }
+  }
   const formulaPreview=params=>{
     const item=params.data;
     if(!item)return '';
@@ -73,28 +109,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     {field:'line',headerName:'源码行',width:87,minWidth:76,pinned:'left',lockPinned:true},
     {field:'status',headerName:'审阅',width:106,minWidth:98,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
-      cellRenderer:p=>{
-        if(!p.data)return '';
-        const dropdown=document.createElement('select');
-        dropdown.className='ocr-latex-review-select';
-        dropdown.setAttribute('aria-label',`第 ${p.data.line} 行公式审阅`);
-        for(const choice of REVIEW_CHOICES){
-          const option=document.createElement('option');
-          option.value=choice;option.textContent=choice;
-          dropdown.append(option);
-        }
-        dropdown.value=p.data.status;
-        dropdown.disabled=!getCMD()?.editAnnotations;
-        dropdown.dataset.review=p.data.status;
-        // A popup selection must not also trigger a four-pane AG row click.
-        for(const event of ['pointerdown','mousedown','click','touchstart'])
-          dropdown.addEventListener(event,evt=>evt.stopPropagation());
-        // This select can survive an earlier CMD annotation that shifts
-        // source offsets. Resolve its latest row data, not the old renderer
-        // params captured when the control was first mounted.
-        dropdown.addEventListener('change',()=>markReview(p.node.data,dropdown.value));
-        return dropdown;
-      }},
+      cellRenderer:ReviewSelectRenderer},
     {field:'renderStatus',headerName:'渲染',width:89,minWidth:83,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
       cellRenderer:p=>{
