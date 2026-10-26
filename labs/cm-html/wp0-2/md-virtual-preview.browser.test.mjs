@@ -32,17 +32,17 @@ for(const [name,engine,options] of [
       });
     });
     await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
-    const index=page.locator('input[aria-label="CMD 虚拟索引"]');
-    await index.waitFor({state:'visible',timeout:27000});
+    const sourceNavigation=page.locator('.ocr-source-pane .ocr-lab-file-select');
+    await page.waitForFunction(()=>document.querySelectorAll(
+      '.ocr-source-pane .ocr-lab-file-select optgroup:nth-child(2) option').length===6,
+      null,{timeout:27000});
     const original=await page.evaluate(()=>window.__wp5Read());
     const md=page.locator('.ocr-markdown');
     assert((await md.textContent()).includes('Bufett’s Alpha'));
-    const chapter=page.locator('.ocr-wp3-chapter-select');
-    await index.check();
-    await page.locator('input[aria-label="章节所有"]').uncheck();
-    const ids=await chapter.locator('option').evaluateAll(xs=>xs.map(x=>x.value));
+    const ids=await sourceNavigation.locator('optgroup:nth-child(2) option')
+      .evaluateAll(xs=>xs.map(x=>x.value.slice('virtual:'.length)));
     assert.equal(ids.length,6);
-    await choose(chapter,ids[1]);
+    await choose(sourceNavigation,'virtual:'+ids[1]);
     await page.waitForFunction(id=>window.__wp5Scope?.id===id&&
       document.querySelector('.ocr-markdown')?.textContent.includes('Buffett’s Alpha'),ids[1],{timeout:16000});
     await page.waitForTimeout(400);
@@ -98,7 +98,7 @@ for(const [name,engine,options] of [
     assert(pdfScope.previewStart>=pdfScope.firstLine,'PDF jumped to chapter but MD preview did not remap');
     assert.equal(await page.evaluate(()=>window.__wp5Read()),original);
     // Undo/Redo and file sessions remain outside this read-only task.
-    await page.locator('input[aria-label="章节所有"]').check();
+    await choose(sourceNavigation,'document');
     await page.waitForFunction(()=>window.__wp5Scope===null &&
       document.querySelector('.ocr-markdown')?.textContent.includes('Bufett’s Alpha'),null,{timeout:18000});
     assert.deepEqual(errors,[]);

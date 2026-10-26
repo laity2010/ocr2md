@@ -55,6 +55,14 @@ for(const [name,engine,device] of [
     ['chapter-boundary','.ocr-outline-grid'],
   ]){
     await choose(element,kind);
+    if(kind==='chapter-boundary'){
+      // The actual PDF.js viewer remains on the original continuous PDF.
+      // Switch it on before the distant outline click so the active overlay
+      // (not just MD focus) proves that the PDF follows the same source line.
+      await page.waitForFunction(()=>!document.querySelector(
+        '.ocr-preview-mode option[value="pdf"]')?.disabled,null,{timeout:40000});
+      await choose(page.locator('.ocr-preview-mode'),'pdf');
+    }
     const gridName=kind==='chapter-boundary'?'outline':kind;
     const pick=await page.evaluate(gridName=>{
       const {views,getCMD}=window.__cross;
@@ -102,6 +110,13 @@ for(const [name,engine,device] of [
     assert.equal(await page.evaluate(()=>window.__cross.getMarkdown()),original);
     const clicked=await page.evaluate(()=>window.__crossOpen.at(-1));
     assert.deepEqual(clicked,{id:pick.id,preserveAll:true});
+    if(kind==='chapter-boundary'){
+      await page.waitForFunction(()=>Number(document.querySelector(
+        '.ocr-pdf-region-overlay')?.dataset.pdfPage)>=18,
+        null,{timeout:23000});
+      const pdfRegion=await page.locator('.ocr-pdf-region-overlay').getAttribute('data-pdf-page');
+      assert.equal(pdfRegion,'22','AG focus did not target the last original PDF page');
+    }
     cases.push({module:kind,from:id001,to:pick.id,line:pick.line});
   }
   assert.deepEqual(errors,[]);

@@ -29,14 +29,17 @@ for(const [name,engine,options] of [
     await page.goto(base,{waitUntil:'domcontentloaded',timeout:40000});
     const element=page.locator('.ocr-lab-element-select');
     const checkbox=page.locator('input[aria-label="章节所有"]');
-    const chapter=page.locator('.ocr-wp3-chapter-select');
+    const navigation=page.locator('.ocr-source-pane .ocr-lab-file-select');
     const status=page.locator('.ocr-all-chapters-status');
-    const indexToggle=page.locator('input[aria-label="CMD 虚拟索引"]');
-    await indexToggle.waitFor({state:'visible',timeout:29000});
-    assert.equal(await indexToggle.isChecked(),false,'Legacy mother must remain default');
-    assert.equal(await page.locator('.ocr-lab-ag-toolbar #export-chapters').isVisible(),true,
-      'Mother chapter-boundary actions must remain available');
-    await indexToggle.check();
+    await page.waitForFunction(()=>document.querySelectorAll(
+      '.ocr-source-pane .ocr-lab-file-select optgroup:nth-child(2) option').length===6,
+      null,{timeout:29000});
+    assert.equal(await page.locator('.ocr-lab-ag-toolbar #export-chapters').isVisible(),false,
+      'Virtual chapter mode must not export separate editable files');
+    const ids=await navigation.locator('optgroup:nth-child(2) option')
+      .evaluateAll(nodes=>nodes.map(x=>x.value));
+    await choose(navigation,ids[1]);
+    await checkbox.check();
     await status.waitFor({state:'visible',timeout:29000});
     await page.waitForFunction(()=>document.querySelector('.ocr-all-chapters-status')?.textContent.includes('CMD ·')&&
       Boolean(window.__wp3AGViews?.latex?.api),null,{timeout:28000});
@@ -65,14 +68,13 @@ for(const [name,engine,options] of [
     await check('media','media',11,'All media');
     await check('latex','latex',42,'All LaTeX');
     await checkbox.uncheck();
-    await chapter.waitFor({state:'attached'});
-    await page.locator('.ocr-navigation-virtual-chapters').waitFor({state:'visible'});
-    const first=await chapter.locator('option').first().getAttribute('value');
-    const second=await chapter.locator('option').nth(1).getAttribute('value');
+    const first=ids[0].slice('virtual:'.length);
+    const second=ids[1].slice('virtual:'.length);
+    await choose(navigation,ids[0]);
     await check('latex','latex',0,'First chapter contains no LaTeX');
     await check('media','media',6,'First chapter media');
     await check('chapter-boundary','outline',1,'First chapter heading');
-    await choose(chapter,second);
+    await choose(navigation,ids[1]);
     await check('chapter-boundary','outline',10,'Second chapter headings');
     await check('media','media',5,'Second chapter media');
     await check('latex','latex',25,'Second chapter LaTeX');
