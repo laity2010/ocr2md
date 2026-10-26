@@ -40,7 +40,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   host.classList.add('ocr-latex-pane');
   const gridHost=document.createElement('div');gridHost.className='ocr-latex-grid';
   host.append(gridHost);
-  let grid,disposed=false,active=false,queued=false,rows=[];
+  let grid,disposed=false,active=false,queued=false,rows=[],lastScannedSource=null,nextRowKey=0;
   function report(){
     if(!active)return;
     onStatus(`LaTeX ${rows.length} 项 · 渲染成功 ${rows.filter(row=>row.renderStatus==='成功').length} / 失败 ${rows.filter(row=>row.renderStatus==='失败').length} / 未检测 ${rows.filter(row=>row.renderStatus==='未检测').length} · 待复核 ${rows.filter(row=>row.status==='待复核').length} / latex ${rows.filter(row=>row.status==='latex').length} / 忽略 ${rows.filter(row=>row.status==='忽略').length}`);
@@ -60,6 +60,42 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
       grid.refreshCells({force:true,columns:['status']});
     }
   }
+  // AG Grid's function cellRenderer returns a DOM node but has no refresh()
+  // contract. On every review status change AG destroys the native <select>
+  // (even during a WebKit picker change), losing focus and flickering. Keep
+  // the same control mounted and update only its value/metadata.
+  class ReviewSelectRenderer {
+    init(params){
+      this.params=params;
+      const dropdown=document.createElement('select');
+      dropdown.className='ocr-latex-review-select';
+      for(const choice of REVIEW_CHOICES){
+        const option=document.createElement('option');
+        option.value=choice;option.textContent=choice;
+        dropdown.append(option);
+      }
+      for(const event of ['pointerdown','mousedown','click','touchstart'])
+        dropdown.addEventListener(event,evt=>evt.stopPropagation());
+      dropdown.addEventListener('change',()=>{
+        // Review may shift CMD offsets. Resolve live row through AG each time.
+        const row=this.params.node?.data;
+        if(row)markReview(row,dropdown.value);
+      });
+      this.dropdown=dropdown;
+      this.refresh(params);
+    }
+    getGui(){return this.dropdown;}
+    refresh(params){
+      this.params=params;
+      if(!params.data)return false;
+      const dropdown=this.dropdown;
+      dropdown.setAttribute('aria-label',`第 ${params.data.line} 行公式审阅`);
+      dropdown.value=params.data.status;
+      dropdown.dataset.review=params.data.status;
+      dropdown.disabled=!getCMD()?.editAnnotations;
+      return true; // preserve the real DOM select, even when review changes
+    }
+  }
   const formulaPreview=params=>{
     const item=params.data;
     if(!item)return '';
@@ -73,25 +109,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     {field:'line',headerName:'源码行',width:87,minWidth:76,pinned:'left',lockPinned:true},
     {field:'status',headerName:'审阅',width:106,minWidth:98,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
-      cellRenderer:p=>{
-        if(!p.data)return '';
-        const dropdown=document.createElement('select');
-        dropdown.className='ocr-latex-review-select';
-        dropdown.setAttribute('aria-label',`第 ${p.data.line} 行公式审阅`);
-        for(const choice of REVIEW_CHOICES){
-          const option=document.createElement('option');
-          option.value=choice;option.textContent=choice;
-          dropdown.append(option);
-        }
-        dropdown.value=p.data.status;
-        dropdown.disabled=!getCMD()?.editAnnotations;
-        dropdown.dataset.review=p.data.status;
-        // A popup selection must not also trigger a four-pane AG row click.
-        for(const event of ['pointerdown','mousedown','click','touchstart'])
-          dropdown.addEventListener(event,evt=>evt.stopPropagation());
-        dropdown.addEventListener('change',()=>markReview(p.data,dropdown.value));
-        return dropdown;
-      }},
+      cellRenderer:ReviewSelectRenderer},
     {field:'renderStatus',headerName:'渲染',width:89,minWidth:83,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
       cellRenderer:p=>{
@@ -130,18 +148,84 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   function refresh(){
     if(disposed)return;
     const source=getMarkdown();
-    rows=findLatex(source).map(item=>{
+    if(source===lastScannedSource){report();return;}
+    const previous=rows;
+    const next=findLatex(source).map(item=>{
       const row=checkLatex(item);
       row.raw=source.slice(row.from,row.to);
       return row;
     });
-    findReviewMarkers(source,rows,getCMD()?.readAnnotations()??[]);
-    grid.setGridOption('rowData',rows);
-    // Keep visible review controls synchronized after CM6 Undo/Redo.
-    // AG may retain opacity-zero old rows during transitions; do not
-    // redraw the entire grid on every source edit for those hidden clones.
-    grid.refreshCells({force:true,columns:['status']});
+    findReviewMarkers(source,next,getCMD()?.readAnnotations()??[]);
+    // Review markers insert/change characters in the ONE CM6 Markdown source.
+    // This shifts all later LaTeX positions, but their formula content and
+    // KaTeX rendering are UNCHANGED. Never updateData() every downstream row:
+    // that destroys all its function-rendered KaTeX previews and causes the
+    // visible cascade of refreshes. Only update changed formula cells.
+    if(lastScannedSource!==null&&next.length===previous.length){
+      let statusChanged=false;
+      const cellChanges=[];
+      for(let i=0;i<next.length;i++){
+        const fresh=next[i],old=previous[i];
+        fresh.id=old.id;
+        if(fresh.status!==old.status)statusChanged=true;
+        const columns=[];
+        if(fresh.line!==old.line)columns.push('line');
+        if(fresh.status!==old.status)columns.push('status');
+        if(fresh.renderStatus!==old.renderStatus)columns.push('renderStatus');
+        if(fresh.html!==old.html || (!fresh.html&&fresh.content!==old.content))
+          columns.push('preview');
+        if(fresh.content!==old.content)columns.push('content');
+        if(fresh.syntax!==old.syntax||fresh.detection!==old.detection)columns.push('syntax');
+        if(fresh.error!==old.error)columns.push('error');
+        // Only scanner offsets and review metadata changed on other rows.
+        // Even the reviewed row can have identical KaTeX HTML; updateData()
+        // would remount its costly preview cell for no visual change.
+        Object.assign(old,fresh);
+        next[i]=old;
+        const node=grid.getRowNode(old.id);
+        if(node&&columns.length)cellChanges.push({node,columns});
+      }
+      for(const {node,columns} of cellChanges)
+        grid.refreshCells({rowNodes:[node],columns,force:true});
+      // A review-value checkbox filter may need its membership recomputed;
+      // unchanged rows themselves must remain mounted.
+      // isAnyFilterPresent() includes the WCP *external chapter* filter.
+      // Refiring it during CMD annotation insertion evaluates stale source
+      // offsets and transiently removes all later formulas (42 -> 1 -> 42).
+      // Only an explicitly selected AG column-value filter should be applied
+      // here; the WCP chapter projector owns its own deferred re-index.
+      if(statusChanged&&Object.keys(grid.getFilterModel()||{}).length>0)
+        grid.onFilterChanged();
+    }else{
+      for(const row of next)row.id=`latex-row-${++nextRowKey}`;
+      grid.setGridOption('rowData',next);
+    }
+    rows=next;
+    lastScannedSource=source;
     report();
+  }
+  function chooseSourceLine(line,end=line+1){
+    if(!active||disposed||!Number.isInteger(line)||line<1)return;
+    // Preview clicks can identify an enclosing paragraph rather than the
+    // formula itself. Prefer a formula containing the clicked source line;
+    // otherwise accept a formula within the preview's explicit source range.
+    const inside=rows.find(row=>row.line<=line&&
+      line<=row.line+row.raw.split('\n').length-1);
+    const match=inside||(end>line+1?rows.find(row=>row.line>=line&&row.line<end):null);
+    if(!match)return;
+    const node=grid.getRowNode(match.id);
+    if(!node)return;
+    node.setSelected(true,true);
+    if(node.rowIndex!==null&&node.rowIndex!==undefined)
+      grid.ensureIndexVisible(node.rowIndex,'auto');
+  }
+  function followFocus(target,state){
+    if(!active||!target||target.origin==='latex'||
+       target.revision!==state.documentRevision)return;
+    // A source edit can shift every formula's line number. Always route a
+    // focus event against the current CMD-backed scan, not an old AG row.
+    if(lastScannedSource!==getMarkdown())refresh();
+    chooseSourceLine(target.sourceLine,target.sourceEnd);
   }
   function schedule(){
     if(queued||disposed)return;queued=true;
@@ -149,8 +233,11 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   }
   const unsubscribe=viewStore.subscribe((current,prior)=>{
     if(current.documentRevision!==prior.documentRevision)schedule();
+    if(current.focusTarget!==prior.focusTarget)
+      followFocus(current.focusTarget,current);
   });
   return {
+    api:grid,
     refresh,
     normalizeReviewed(){
       if(disposed)return;
@@ -165,7 +252,14 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
         onStatus(`已规范化 ${operations.filter(op=>op.tag==='ocr2md:latex').length} 条公式 · 请全局保存`);
       }catch(error){onStatus(`规范化失败：${error.message}`);}
     },
-    setActive(enabled){active=enabled;host.hidden=!enabled;if(enabled)refresh();},
+    setActive(enabled){
+      active=enabled;host.hidden=!enabled;
+      if(enabled){
+        refresh();
+        const state=viewStore.getState();
+        followFocus(state.focusTarget,state);
+      }
+    },
     dispose(){disposed=true;unsubscribe();grid.destroy();},
   };
 }

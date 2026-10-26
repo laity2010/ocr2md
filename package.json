@@ -30,7 +30,9 @@
     "markdown-it": "15.0.3",
     "markdown-it-footnote": "4.0.0",
     "markdown-it-task-lists": "2.1.1",
+    "morphdom": "2.7.8",
     "pdfjs-dist": "6.4.299",
+    "tom-select": "2.6.2",
     "zustand": "5.0.15"
   },
   "devDependencies": {
