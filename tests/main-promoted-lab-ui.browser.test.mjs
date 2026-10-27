@@ -45,6 +45,38 @@ try{
    const sourceSelect=p.locator('.ocr-source-pane .ocr-lab-file-select');
    await p.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane option[value^="virtual:"]').length>=3,null,{timeout:30000});
    const chapters=await sourceSelect.locator('option[value^="virtual:"]').count();
+   // Regression: Main's unbounded mother view previously disabled a checked
+   // "全部" checkbox. The checkbox must be usable and AG-only even here.
+   const all=p.locator('input[aria-label="章节所有"]');
+   const agRows=async()=>Number(await p.locator('.ocr-outline-grid [role="grid"]').getAttribute('aria-rowcount'))-1;
+   assert.equal(await all.isDisabled(),false,'AG 全部 must not be disabled on mother');
+   assert.equal(await all.isChecked(),true);
+   const totalRows=await agRows();
+   await all.uncheck();
+   await p.waitForFunction(full=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))<full+1,totalRows,{timeout:11000});
+   const motherFiltered=await agRows();
+   assert(motherFiltered>=0&&motherFiltered<totalRows,'Unchecking 全部 did not filter AG');
+   assert.equal(await sourceSelect.inputValue(),'document','AG filter changed mother source view');
+   assert.equal(new URL(p.url()).searchParams.has('view'),false,'AG filter navigated source');
+   assert.equal(await all.isChecked(),false);
+   await p.screenshot({path:`.v6/evidence/main-all-unchecked-${name}.png`,animations:'disabled',timeout:45000});
+   await all.check();
+   await p.waitForFunction(full=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))===full+1,totalRows,{timeout:11000});
+   assert.equal(await agRows(),totalRows);
+   // A second element owner must obey the same control without changing CMD
+   // source/Markdown and without writing any business API.
+   await choose(p.locator('.ocr-lab-element-select'),'media');
+   const mediaRows=async()=>Number(await p.locator('.ocr-media-grid [role="grid"]').getAttribute('aria-rowcount'))-1;
+   await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:10000});
+   const mediaFull=await mediaRows();
+   await all.uncheck();
+   await p.waitForFunction(full=>Number(document.querySelector('.ocr-media-grid [role="grid"]')?.getAttribute('aria-rowcount'))<full+1,mediaFull,{timeout:11000});
+   const mediaFiltered=await mediaRows();
+   assert.equal(await sourceSelect.inputValue(),'document');
+   await all.check();
+   await p.waitForFunction(full=>Number(document.querySelector('.ocr-media-grid [role="grid"]')?.getAttribute('aria-rowcount'))===full+1,mediaFull,{timeout:11000});
+   await choose(p.locator('.ocr-lab-element-select'),'chapter-boundary');
+   console.log('MAIN_AG_ALL_MOTHER_PASS',name,JSON.stringify({totalRows,motherFiltered,mediaFull,mediaFiltered}));
    await p.screenshot({path:`.v6/evidence/main-promoted-${name}-initial.png`,animations:'disabled',timeout:45000});
    const target=await sourceSelect.locator('option[value^="virtual:"]').nth(1).getAttribute('value');
    await choose(sourceSelect,target);
