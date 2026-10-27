@@ -21,6 +21,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
   let source=null,grid=null,dockview=null,loadPromise=null,initialPromise=null,slider=null,valueLabel=null,details=null;
   let agHost=null,sourceHost=null,previewHost=null;
   let activeKey=null,invalid=false,locatingFromGrid=false;
+  let renderedSignature=null;
   function entry(key){const item=definitions.get(key);if(!item)throw Error('Unregistered setting: '+key);return item;}
   function register(definition){
     const {module,key,category,label,comment,type,control,defaultValue,min,max,step,message,unit}=definition;
@@ -152,9 +153,21 @@ export function createSettingsModule(container,onStatus=()=>{}){
     }));
     showSelectedRow();
   }
+  function presentationSignature(key){
+    const record=recordFor(key);
+    return JSON.stringify([key,record.key,record.category1,record.category2,
+      record.comment,record.range]);
+  }
   function renderPreview(){
     if(!previewHost||!activeKey)return;
+    const nextSignature=presentationSignature(activeKey);
+    // AG selection callbacks and CM6 selection updates may arrive after a
+    // slider input. Never replace an unchanged control underneath its pointer.
+    if(renderedSignature===nextSignature && previewHost.firstChild){
+      syncPreview();return;
+    }
     const item=entry(activeKey),record=recordFor(activeKey);
+    renderedSignature=nextSignature;
     previewHost.replaceChildren();
     const pane=document.createElement('section');pane.className='ocr-settings-control';
     const breadcrumb=document.createElement('div');breadcrumb.className='ocr-settings-breadcrumb';
@@ -212,8 +225,14 @@ export function createSettingsModule(container,onStatus=()=>{}){
     try{values=parseValues();}catch{} // Partial JSON is allowed while typing.
     invalid=!values;
     if(values)for(const [key,value]of values)publish(key,value,docChanged?'cm6':'load');
-    if(docChanged&&values){refreshGrid();renderPreview();}
-    else syncPreview();
+    if(docChanged&&values){
+      refreshGrid();
+      // A scalar edit must not destroy its own active slider while an
+      // input event, pointer drag or AG/CM6 selection transaction is pending.
+      // Rebuild only for actual metadata/selection changes.
+      if(renderedSignature===presentationSignature(activeKey))syncPreview();
+      else renderPreview();
+    }else syncPreview();
     if(!locatingFromGrid&&Number.isInteger(sourceOffset)){
       const candidate=source.keyAtOffset(sourceOffset);
       const exact=definitions.has(candidate)?candidate:

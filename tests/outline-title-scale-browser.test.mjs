@@ -54,7 +54,13 @@ for(const [i,[name,engine,options]]of engines.entries()){
     const tiny=await layout();
     assert.equal(tiny.other,big.other,'Other AG columns stay unchanged');
     await page.locator('#module-select').selectOption('settings');
-    await row.click();await set(1.7);
+    await row.click();
+    const activeSlider=await slider.evaluate(e=>{window.__settingSliderIdentity=e;return e.value;});
+    assert.equal(activeSlider,'0.2');
+    await set(1.7);
+    await page.waitForFunction(k=>JSON.parse(window.__v6cm6.settings.source.getText()).settings[k].value===1.7,key);
+    assert.equal(await slider.evaluate(e=>e===window.__settingSliderIdentity),true,
+      'Scalar change must not remount the active setting control');
     assert.equal(await page.evaluate(k=>JSON.parse(window.__v6cm6.settings.source.getText()).settings[k].value,key),1.7);
     const saved=page.waitForResponse(r=>r.url().endsWith('/api/settings')&&r.request().method()==='PUT');
     await page.locator('#save').click();
