@@ -1,0 +1,31 @@
+PDF_CLICK_ONLY_STEP Chrome spawn-server t=0ms
+PDF_CLICK_ONLY_STEP Chrome healthz t=5ms
+PDF_CLICK_ONLY_STEP Chrome launch t=143ms
+PDF_CLICK_ONLY_STEP Chrome new-page t=321ms
+PDF_CLICK_ONLY_STEP Chrome goto+ready t=430ms
+PDF_CLICK_ONLY_STEP Chrome click-row-4 t=1770ms
+PDF_CLICK_ONLY_STEP Chrome md-scroll-while-hidden t=5100ms
+PDF_CLICK_ONLY_STEP Chrome click-row-10 t=7714ms
+PDF_CLICK_ONLY_STEP Chrome cm6-click t=8486ms
+PDF_CLICK_ONLY_STEP Chrome pdf-reading-scroll t=11203ms
+PDF_CLICK_ONLY_STEP Chrome same-page-focus t=12506ms
+PDF_SAME_PAGE_FOCUS_PASS Chrome {"deltaScroll":0,"reused":true}
+PDF_CLICK_ONLY_STEP Chrome screenshot t=16786ms
+PDF_CLICK_ONLY_PASS Chrome {"before":{"top":1325,"page":"3","overlays":[["3","4"]]},"afterScroll":{"top":1325,"page":"3","overlays":[["3","4"]]},"afterToggle":{"top":1325,"page":"3","overlays":[["3","4"]]},"clickedPage":"15","manualReadingNoReverseSync":true}
+PDF_CLICK_ONLY_STEP Chrome cleanup t=17046ms
+PDF_CLICK_ONLY_STEP WebKit spawn-server t=17141ms
+PDF_CLICK_ONLY_STEP WebKit healthz t=17145ms
+PDF_CLICK_ONLY_STEP WebKit launch t=17271ms
+PDF_CLICK_ONLY_STEP WebKit new-page t=17362ms
+PDF_CLICK_ONLY_STEP WebKit goto+ready t=17579ms
+PDF_CLICK_ONLY_STEP WebKit click-row-4 t=20230ms
+PDF_CLICK_ONLY_STEP WebKit md-scroll-while-hidden t=23692ms
+PDF_CLICK_ONLY_STEP WebKit click-row-10 t=26321ms
+PDF_CLICK_ONLY_STEP WebKit cm6-click t=27269ms
+PDF_CLICK_ONLY_STEP WebKit pdf-reading-scroll t=29996ms
+PDF_CLICK_ONLY_STEP WebKit same-page-focus t=31284ms
+PDF_SAME_PAGE_FOCUS_PASS WebKit {"deltaScroll":0,"reused":true}
+PDF_CLICK_ONLY_STEP WebKit screenshot t=35916ms
+PDF_CLICK_ONLY_PASS WebKit {"before":{"top":1324,"page":"3","overlays":[["3","4"]]},"afterScroll":{"top":1324,"page":"3","overlays":[["3","4"]]},"afterToggle":{"top":1324,"page":"3","overlays":[["3","4"]]},"clickedPage":"15","manualReadingNoReverseSync":true}
+PDF_CLICK_ONLY_STEP WebKit cleanup t=36486ms
+PDF_CLICK_ONLY_ISOLATION_PASS

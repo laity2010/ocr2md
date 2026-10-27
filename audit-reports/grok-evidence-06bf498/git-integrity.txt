@@ -1,0 +1,16 @@
+isolated HEAD 06bf498daab22ad175f5ae4727a2c1e66b38402c
+status: []
+be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab  .v6/workspace/buffetts-alpha.original.pdf
+d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764  packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md
+package HEAD 75567488c52dcd92afa9ff8baf179c0b379f26c3 status:[]
+fsck_rc=0
+source wt HEAD 06bf498daab22ad175f5ae4727a2c1e66b38402c status:[]
+Linux grok-bot-vm-405115729 6.12.94+ #1 SMP PREEMPT_DYNAMIC Mon Oct 19 19:23:48 UTC 2026 x86_64 GNU/Linux
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+NAME="Debian GNU/Linux"
+VERSION_ID="13"
+sqlite 3.46.1
+fsck_isolated_rc=0
+fsck_package_rc=0
+chromium 156.0.8078.4
+webkit 27.2

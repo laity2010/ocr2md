@@ -1,0 +1,2 @@
+SETTINGS_BROWSER_PASS Chromium {"agCategories":true,"jsonCM":true,"slider":true,"messageApplied":true,"undoRedo":true,"saveReload":true}
+SETTINGS_BROWSER_PASS WebKit {"agCategories":true,"jsonCM":true,"slider":true,"messageApplied":true,"undoRedo":true,"saveReload":false}

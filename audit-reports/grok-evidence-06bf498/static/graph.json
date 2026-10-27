@@ -1,0 +1,792 @@
+{
+ "unowned": [],
+ "n_edges": 70,
+ "cross": [
+  {
+   "src": "chapter-files.js",
+   "dst": "mineru-anchors.js",
+   "sm": "G",
+   "dm": "shared",
+   "names": "{blockAnchor,pageHeader,sourceHeader}"
+  },
+  {
+   "src": "chapter-markers.js",
+   "dst": "mineru-anchors.js",
+   "sm": "G",
+   "dm": "shared",
+   "names": "{quotePrefix,unquotePrefix}"
+  },
+  {
+   "src": "chapter-markers.js",
+   "dst": "cmd-annotations.js",
+   "sm": "G",
+   "dm": "C",
+   "names": "{parseAnnotation}"
+  },
+  {
+   "src": "cm-document.js",
+   "dst": "mineru-anchors.js",
+   "sm": "C",
+   "dm": "shared",
+   "names": "{unquotePrefix}"
+  },
+  {
+   "src": "cmd-json-source.js",
+   "dst": "ios-native-selection.js",
+   "sm": "C",
+   "dm": "shared",
+   "names": "{isIOSWebKit,nativeIOSBasicSetup}"
+  },
+  {
+   "src": "latex-inline-preview.js",
+   "dst": "cmd-annotations.js",
+   "sm": "T",
+   "dm": "C",
+   "names": "{scanAnnotations}"
+  },
+  {
+   "src": "latex-module.js",
+   "dst": "view-store.js",
+   "sm": "T",
+   "dm": "shared",
+   "names": "{viewStore,publishFocus}"
+  },
+  {
+   "src": "latex-module.js",
+   "dst": "enum-checkbox-filter.js",
+   "sm": "T",
+   "dm": "shared",
+   "names": "{EnumCheckboxFilter}"
+  },
+  {
+   "src": "latex-module.js",
+   "dst": "latex-module.css",
+   "sm": "T",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "latex-review-markers.js",
+   "dst": "cmd-annotations.js",
+   "sm": "T",
+   "dm": "C",
+   "names": "{scanAnnotations}"
+  },
+  {
+   "src": "main.js",
+   "dst": "styles.css",
+   "sm": "shell",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "main.js",
+   "dst": "obsidian-everforest.css",
+   "sm": "shell",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "main.js",
+   "dst": "workspace.js",
+   "sm": "shell",
+   "dm": "L",
+   "names": "{createWorkspace}"
+  },
+  {
+   "src": "main.js",
+   "dst": "cm-document.js",
+   "sm": "shell",
+   "dm": "C",
+   "names": "{CMDocument}"
+  },
+  {
+   "src": "main.js",
+   "dst": "settings-module.js",
+   "sm": "shell",
+   "dm": "S",
+   "names": "{createSettingsModule}"
+  },
+  {
+   "src": "main.js",
+   "dst": "cm-font-setting.js",
+   "sm": "shell",
+   "dm": "C",
+   "names": "{registerCMSourceFontSetting}"
+  },
+  {
+   "src": "main.js",
+   "dst": "outline-grid.js",
+   "sm": "shell",
+   "dm": "G",
+   "names": "{registerOutlineTitleScaleSetting}"
+  },
+  {
+   "src": "main.js",
+   "dst": "media-module.js",
+   "sm": "shell",
+   "dm": "A",
+   "names": "{uploadPastedImage}"
+  },
+  {
+   "src": "main.js",
+   "dst": "ios-native-selection.js",
+   "sm": "shell",
+   "dm": "shared",
+   "names": "{isIOSWebKit,nativeIOSBasicSetup}"
+  },
+  {
+   "src": "main.js",
+   "dst": "chapter-markers.js",
+   "sm": "shell",
+   "dm": "G",
+   "names": "{countMarkers}"
+  },
+  {
+   "src": "main.js",
+   "dst": "chapter-files.js",
+   "sm": "shell",
+   "dm": "G",
+   "names": "{buildChapterFiles}"
+  },
+  {
+   "src": "main.js",
+   "dst": "view-store.js",
+   "sm": "shell",
+   "dm": "shared",
+   "names": "{documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled}"
+  },
+  {
+   "src": "markdown-preview.js",
+   "dst": "latex-inline-preview.js",
+   "sm": "M",
+   "dm": "T",
+   "names": "{projectReviewedInlineLatex}"
+  },
+  {
+   "src": "markdown-preview.js",
+   "dst": "markdown-preview.css",
+   "sm": "M",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "media-module.js",
+   "dst": "view-store.js",
+   "sm": "A",
+   "dm": "shared",
+   "names": "{viewStore,publishFocus}"
+  },
+  {
+   "src": "media-module.js",
+   "dst": "enum-checkbox-filter.js",
+   "sm": "A",
+   "dm": "shared",
+   "names": "{EnumCheckboxFilter}"
+  },
+  {
+   "src": "media-module.js",
+   "dst": "mineru-anchors.js",
+   "sm": "A",
+   "dm": "shared",
+   "names": "{blockAnchor}"
+  },
+  {
+   "src": "media-module.js",
+   "dst": "media-module.css",
+   "sm": "A",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "obsidian-heading-markers.js",
+   "dst": "ios-native-selection.js",
+   "sm": "shell",
+   "dm": "shared",
+   "names": "{isIOSWebKit}"
+  },
+  {
+   "src": "outline-grid.js",
+   "dst": "view-store.js",
+   "sm": "G",
+   "dm": "shared",
+   "names": "{viewStore,publishFocus}"
+  },
+  {
+   "src": "outline-grid.js",
+   "dst": "enum-checkbox-filter.js",
+   "sm": "G",
+   "dm": "shared",
+   "names": "{EnumCheckboxFilter}"
+  },
+  {
+   "src": "outline-grid.js",
+   "dst": "ag-enum-filter-shared.css",
+   "sm": "G",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "outline-grid.js",
+   "dst": "outline-grid.css",
+   "sm": "G",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "outline-index.js",
+   "dst": "mineru-anchors.js",
+   "sm": "G",
+   "dm": "shared",
+   "names": "{blockAnchor,pageHeader,sourceHeader}"
+  },
+  {
+   "src": "pdf-preview.js",
+   "dst": "view-store.js",
+   "sm": "P",
+   "dm": "shared",
+   "names": "{viewStore,publishFocus}"
+  },
+  {
+   "src": "pdf-preview.js",
+   "dst": "pdf-preview.css",
+   "sm": "P",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "pdf-preview.js",
+   "dst": "mineru-anchors.js",
+   "sm": "P",
+   "dm": "shared",
+   "names": "{blockAnchor}"
+  },
+  {
+   "src": "scroll-sync.js",
+   "dst": "view-store.js",
+   "sm": "L",
+   "dm": "shared",
+   "names": "{viewStore, publishScroll}"
+  },
+  {
+   "src": "settings-module.js",
+   "dst": "pane-layout-ratios.js",
+   "sm": "S",
+   "dm": "shared",
+   "names": "{readPaneRatios,applyPaneRatios}"
+  },
+  {
+   "src": "settings-module.js",
+   "dst": "cmd-json-source.js",
+   "sm": "S",
+   "dm": "C",
+   "names": "{openCMDJsonSource,readCMDJsonSnapshot}"
+  },
+  {
+   "src": "settings-module.js",
+   "dst": "enum-checkbox-filter.js",
+   "sm": "S",
+   "dm": "shared",
+   "names": "{EnumCheckboxFilter}"
+  },
+  {
+   "src": "settings-module.js",
+   "dst": "ag-enum-filter-shared.css",
+   "sm": "S",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "settings-module.js",
+   "dst": "settings-module.css",
+   "sm": "S",
+   "dm": null,
+   "names": ""
+  },
+  {
+   "src": "workspace.js",
+   "dst": "pane-layout-ratios.js",
+   "sm": "L",
+   "dm": "shared",
+   "names": "{readPaneRatios,applyPaneRatios}"
+  },
+  {
+   "src": "workspace.js",
+   "dst": "view-store.js",
+   "sm": "L",
+   "dm": "shared",
+   "names": "{viewStore,publishFocus}"
+  },
+  {
+   "src": "workspace.js",
+   "dst": "markdown-preview.js",
+   "sm": "L",
+   "dm": "M",
+   "names": "{renderMarkdown}"
+  },
+  {
+   "src": "workspace.js",
+   "dst": "outline-grid.js",
+   "sm": "L",
+   "dm": "G",
+   "names": "{createOutlineGrid}"
+  },
+  {
+   "src": "workspace.js",
+   "dst": "media-module.js",
+   "sm": "L",
+   "dm": "A",
+   "names": "{createMediaModule}"
+  },
+  {
+   "src": "workspace.js",
+   "dst": "latex-module.js",
+   "sm": "L",
+   "dm": "T",
+   "names": "{createLatexModule}"
+  },
+  {
+   "src": "workspace.js",
+   "dst": "pdf-preview.js",
+   "sm": "L",
+   "dm": "P",
+   "names": "{PdfPreview}"
+  },
+  {
+   "src": "workspace.js",
+   "dst": "workspace.css",
+   "sm": "L",
+   "dm": null,
+   "names": ""
+  }
+ ],
+ "setState": [
+  "outline-grid.js:138: if(state.outlineCount!==rows.length)viewStore.setState({outlineCount:rows.length});",
+  "view-store.js:19: viewStore.setState(s => ({documentRevision:s.documentRevision + 1}));",
+  "view-store.js:24: viewStore.setState({sourceOffset:offset});",
+  "view-store.js:31: viewStore.setState(state => ({",
+  "view-store.js:40: viewStore.setState({scrollSyncEnabled:Boolean(enabled)});",
+  "view-store.js:45: viewStore.setState(state=>({",
+  "workspace.js:397: viewStore.setState({activePanel:event.panel?.id||null});"
+ ],
+ "dom_events": {
+  "ocr2md:chapter-error": {
+   "pub": [
+    "outline-grid.js"
+   ],
+   "sub": [
+    "main.js"
+   ],
+   "registered": true
+  },
+  "settings": {
+   "pub": [
+    "settings-module.js"
+   ],
+   "sub": [],
+   "registered": false
+  }
+ },
+ "registered_msgs": [
+  "ocr2md:chapter-error",
+  "settings.changed",
+  "activePanel",
+  "documentRevision",
+  "focusTarget",
+  "outlineCount",
+  "scrollSyncEnabled",
+  "scrollTarget",
+  "sourceOffset"
+ ],
+ "window_globals": [
+  "main.js:598: if (import.meta.env.DEV) window.__v6cm6 = {"
+ ],
+ "modules": [
+  [
+   "C",
+   "CMD",
+   "ui/cm-document.js"
+  ],
+  [
+   "G",
+   "AG",
+   "ui/outline-grid.js"
+  ],
+  [
+   "M",
+   "MD Preview",
+   "ui/markdown-preview.js"
+  ],
+  [
+   "P",
+   "PDF Preview",
+   "ui/pdf-preview.js"
+  ],
+  [
+   "L",
+   "Layout",
+   "ui/workspace.js"
+  ],
+  [
+   "A",
+   "Media",
+   "ui/media-module.js"
+  ],
+  [
+   "T",
+   "LaTeX",
+   "ui/latex-module.js"
+  ],
+  [
+   "S",
+   "Global Settings",
+   "ui/settings-module.js"
+  ]
+ ],
+ "n_access_edges": 49,
+ "access_edges": [
+  [
+   "G",
+   "C",
+   "ui/outline-grid.js",
+   "putMarker(getCMD(),current,checked)",
+   "C05"
+  ],
+  [
+   "G",
+   "C",
+   "ui/outline-grid.js",
+   "markerForHeading(cmd,row,markers)",
+   "C10"
+  ],
+  [
+   "L",
+   "C",
+   "ui/workspace.js",
+   "getCMD()?.requestMeasure()",
+   "C13"
+  ],
+  [
+   null,
+   "L",
+   "ui/main.js",
+   "workspace.getChapterState()",
+   "L14"
+  ],
+  [
+   null,
+   "L",
+   "ui/main.js",
+   "workspace?.debug?.dockview",
+   "L11"
+  ],
+  [
+   "L",
+   "G",
+   "ui/workspace.js",
+   "createOutlineGrid(this.element",
+   "G01"
+  ],
+  [
+   "L",
+   "M",
+   "ui/workspace.js",
+   "renderMarkdown(source)",
+   "M01"
+  ],
+  [
+   "L",
+   "P",
+   "ui/workspace.js",
+   "this.pdf.moveToolbarTo(this.pdfTools)",
+   "P07"
+  ],
+  [
+   "L",
+   "P",
+   "ui/workspace.js",
+   "currentPdf?.pdf?.refreshAnchors()",
+   "P03"
+  ],
+  [
+   "L",
+   "P",
+   "ui/workspace.js",
+   "this.pdf.whenReady()",
+   "P13"
+  ],
+  [
+   "L",
+   "A",
+   "ui/workspace.js",
+   "createMediaModule(this.mediaHost",
+   "A01"
+  ],
+  [
+   "A",
+   "C",
+   "ui/media-module.js",
+   "cmd().replaceRanges(",
+   "C14"
+  ],
+  [
+   "L",
+   "C",
+   "ui/workspace.js",
+   "cmd.replaceRanges(edits)",
+   "C14"
+  ],
+  [
+   null,
+   "A",
+   "scripts/v6_serve.py",
+   "media_download_chunk(DOC, url)",
+   "A06"
+  ],
+  [
+   null,
+   "A",
+   "scripts/v6_serve.py",
+   "media_status(DOC, url)",
+   "A07"
+  ],
+  [
+   null,
+   "A",
+   "scripts/v6_serve.py",
+   "media_read_local(DOC, path[",
+   "A08"
+  ],
+  [
+   "L",
+   "A",
+   "ui/workspace.js",
+   "this.media?.setActive(",
+   "A05"
+  ],
+  [
+   "L",
+   "A",
+   "ui/workspace.js",
+   "currentOutline?.media?.scan()",
+   "A03"
+  ],
+  [
+   "L",
+   "A",
+   "ui/workspace.js",
+   "currentOutline?.media?.downloadAll()",
+   "A04"
+  ],
+  [
+   null,
+   "A",
+   "scripts/v6_serve.py",
+   "media_inventory(DOC)",
+   "A09"
+  ],
+  [
+   null,
+   "C",
+   "ui/main.js",
+   "cm.capturePasteTarget()",
+   "C15"
+  ],
+  [
+   null,
+   "C",
+   "ui/main.js",
+   "cm.pasteAt(target",
+   "C16"
+  ],
+  [
+   null,
+   "A",
+   "ui/main.js",
+   "uploadPastedImage(file)",
+   "A11"
+  ],
+  [
+   null,
+   "A",
+   "scripts/v6_serve.py",
+   "media_store_pasted_image(DOC, data, mime)",
+   "A10"
+  ],
+  [
+   null,
+   "A",
+   "scripts/v6_serve.py",
+   "chapter_media_references(markdown)",
+   "A12"
+  ],
+  [
+   "L",
+   "T",
+   "ui/workspace.js",
+   "createLatexModule(this.latexHost",
+   "T03"
+  ],
+  [
+   "L",
+   "T",
+   "ui/workspace.js",
+   "this.latex?.setActive(",
+   "T05"
+  ],
+  [
+   "L",
+   "T",
+   "ui/workspace.js",
+   "currentOutline?.latex?.refresh()",
+   "T04"
+  ],
+  [
+   "T",
+   "C",
+   "ui/latex-module.js",
+   "getCMD().editAnnotations(operations",
+   "C20"
+  ],
+  [
+   "L",
+   "C",
+   "ui/workspace.js",
+   "getCMD().editAnnotations(operations",
+   "C20"
+  ],
+  [
+   "M",
+   "T",
+   "ui/markdown-preview.js",
+   "projectReviewedInlineLatex(source)",
+   "T11"
+  ],
+  [
+   null,
+   "L",
+   "ui/main.js",
+   "workspace.normalizeLatex()",
+   "L20"
+  ],
+  [
+   "L",
+   "T",
+   "ui/workspace.js",
+   "currentOutline?.latex?.normalizeReviewed()",
+   "T12"
+  ],
+  [
+   "T",
+   "C",
+   "ui/latex-module.js",
+   "getCMD().editAnnotations(operations",
+   "C20"
+  ],
+  [
+   "G",
+   "C",
+   "ui/chapter-markers.js",
+   "cm.writeAnnotation(",
+   "C18"
+  ],
+  [
+   "G",
+   "C",
+   "ui/chapter-markers.js",
+   "reader.readAnnotations(",
+   "C17"
+  ],
+  [
+   "T",
+   "C",
+   "ui/latex-module.js",
+   "getCMD()?.readAnnotations()",
+   "C17"
+  ],
+  [
+   "G",
+   "C",
+   "ui/chapter-markers.js",
+   "import {parseAnnotation}",
+   "C21"
+  ],
+  [
+   "T",
+   "C",
+   "ui/latex-review-markers.js",
+   "import {scanAnnotations}",
+   "C23"
+  ],
+  [
+   "T",
+   "C",
+   "ui/latex-inline-preview.js",
+   "import {scanAnnotations}",
+   "C23"
+  ],
+  [
+   null,
+   "G",
+   "ui/main.js",
+   "countMarkers(view.state.doc)",
+   "G11"
+  ],
+  [
+   null,
+   "G",
+   "ui/main.js",
+   "buildChapterFiles(doc.toString()",
+   "G12"
+  ],
+  [
+   "S",
+   "C",
+   "ui/settings-module.js",
+   "import {openCMDJsonSource,readCMDJsonSnapshot}",
+   "C24"
+  ],
+  [
+   null,
+   "S",
+   "ui/main.js",
+   "createSettingsModule(",
+   "S01"
+  ],
+  [
+   null,
+   "C",
+   "ui/main.js",
+   "registerCMSourceFontSetting(settings)",
+   "C25"
+  ],
+  [
+   null,
+   "G",
+   "ui/main.js",
+   "registerOutlineTitleScaleSetting(settings",
+   "G13"
+  ],
+  [
+   "L",
+   "G",
+   "ui/workspace.js",
+   "grid?.setTitleFontScale(",
+   "G14"
+  ],
+  [
+   null,
+   "C",
+   "scripts/v6_serve.py",
+   "cmd_settings_save(",
+   "C27"
+  ],
+  [
+   "S",
+   "C",
+   "ui/settings-module.js",
+   "readCMDJsonSnapshot()",
+   "C28"
+  ]
+ ]
+}

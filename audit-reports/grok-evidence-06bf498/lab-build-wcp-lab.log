@@ -1,0 +1,9 @@
+✗ Build failed in 30ms
+error during build:
+[vite:build-html] Missing lab file-session adapter
+file: /tmp/grok-labbuild-06bf498/ui/index.html
+    at Object.transform (file:///workspace/ocr2md-audit/ocr2md-am-06bf498d-isolated/node_modules/.vite-temp/vite.config.mjs.timestamp-1793083943689-92f3892e642fc.mjs:114:48)
+    at Object.handler (file:///workspace/ocr2md-audit/ocr2md-am-06bf498d-isolated/node_modules/vite/dist/node/chunks/config.js:33981:13)
+    at file:///workspace/ocr2md-audit/ocr2md-am-06bf498d-isolated/node_modules/rollup/dist/es/shared/node-entry.js:23692:40
+LAB_BUILD_RC=1
+PROD_BUILD_RC=0
