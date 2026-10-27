@@ -9,9 +9,15 @@ import subprocess
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
+# The worktree tool is callable from Main OR a Lab mirror. Git's common-dir
+# resolves to the owning Main repository; do not concatenate '-experiments'
+# onto a Lab path (which would create nested or invisible worktrees).
+_git_common=subprocess.run(['git','rev-parse','--path-format=absolute','--git-common-dir'],
+                           cwd=ROOT,check=True,text=True,capture_output=True).stdout.strip()
+MAIN_ROOT=Path(_git_common).resolve().parent
 NAME=re.compile(r'[a-z][a-z0-9-]{0,31}\Z')
 
-def git(*args, cwd=ROOT, check=True):
+def git(*args, cwd=MAIN_ROOT, check=True):
     return subprocess.run(['git',*args],cwd=cwd,text=True,capture_output=True,check=check)
 
 def assert_clean(path):
@@ -19,7 +25,7 @@ def assert_clean(path):
     if result: raise RuntimeError(f'Worktree contains uncommitted changes: {path}\n{result}')
 
 def worktree_path(name):
-    return ROOT.parent / (ROOT.name+'-experiments') / name
+    return MAIN_ROOT.parent / (MAIN_ROOT.name+'-experiments') / name
 
 def branch(name):
     if not NAME.fullmatch(name): raise ValueError('Lab name must match [a-z][a-z0-9-]{0,31}')
@@ -37,7 +43,7 @@ def main():
         if path.exists():raise RuntimeError('Experiment directory already exists: '+str(path))
         if git('show-ref','--verify','--quiet','refs/heads/'+target,check=False).returncode==0:
             raise RuntimeError('Experiment branch exists; attach it manually: '+target)
-        assert_clean(ROOT)
+        assert_clean(MAIN_ROOT)
         path.parent.mkdir(exist_ok=True)
         git('worktree','add','-b',target,str(path),args.trunk)
         # Mirror must begin at the EXACT Main SHA; do not introduce an
@@ -48,7 +54,12 @@ def main():
         raise RuntimeError('Missing worktree: '+str(path))
     if args.action=='sync':
         assert_clean(path)
-        git('merge','--no-edit','--no-ff',args.trunk,cwd=path)
+        # Preserve exactly matching Main SHA when Lab has not diverged;
+        # otherwise keep normal merge history and enforce conflict review.
+        if git('merge-base','--is-ancestor','HEAD',args.trunk,cwd=path,check=False).returncode==0:
+            git('merge','--ff-only',args.trunk,cwd=path)
+        else:
+            git('merge','--no-edit','--no-ff',args.trunk,cwd=path)
     if args.action=='parity-check':
         assert_clean(path)
         subprocess.run(['node','scripts/v6_lab_parity_check.mjs',args.name],cwd=path,check=True)
@@ -57,7 +68,7 @@ def main():
         # Merge-tree resolves integration in-memory and reports conflicts,
         # but NEVER modifies the trunk or the laboratory checkout.
         subprocess.run(['node','scripts/v6_lab_parity_check.mjs',args.name],cwd=path,check=True)
-        result=git('merge-tree','--write-tree',args.trunk,target,cwd=ROOT,check=False)
+        result=git('merge-tree','--write-tree',args.trunk,target,cwd=MAIN_ROOT,check=False)
         if result.returncode:
             print(result.stdout)
             raise RuntimeError('Promotion conflict detected; no branch was changed')
