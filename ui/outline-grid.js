@@ -9,7 +9,7 @@ import {viewStore,publishFocus,publishOutlineCount} from './view-store.js';
 import {buildOutline,headingAtLine} from './outline-index.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {markerForHeading,putMarker} from './chapter-markers.js';
-import {chapterAssignments} from './chapter-files.js';
+import {chapterAssignments} from '../labs/cm-html/modules/chapter-files.js';
 import './ag-enum-filter-shared.css';
 import './outline-grid.css';
 

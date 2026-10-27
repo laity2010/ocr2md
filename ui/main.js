@@ -1,6 +1,6 @@
 import {appPath} from './http-path.js';
 import './styles.css';
-import {createWCPRuntime} from './wcp-runtime.js';
+import {createWCPRuntime} from '../labs/cm-html/modules/wcp-virtual-chapters.js';
 import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
@@ -9,15 +9,15 @@ import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
-import {CMDocument} from './cm-document.js';
-import {createSettingsModule} from './settings-module.js';
+import {CMDocument} from '../labs/cm-html/modules/cm-document.js';
+import {createSettingsModule} from '../labs/cm-html/modules/settings-module.js';
 import {registerCMSourceFontSetting} from './cm-font-setting.js';
-import {registerOutlineTitleScaleSetting} from './outline-grid.js';
+import {registerOutlineTitleScaleSetting} from '../labs/cm-html/modules/chapter-outline.js';
 import {uploadPastedImage} from './media-module.js';
 import {mineruCommentFolding,foldInitialMineruComments} from './mineru-comment-folding.js';
 import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
 import {countMarkers} from './chapter-markers.js';
-import {buildChapterFiles} from './chapter-files.js';
+import {buildChapterFiles} from '../labs/cm-html/modules/chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
 
 const $ = (id) => document.getElementById(id);
