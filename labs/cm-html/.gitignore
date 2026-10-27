@@ -2,3 +2,6 @@ dist/
 .runtime/
 __pycache__/
 *.log
+.publish.lock
+.publish-staging/
+.publish-replacing/
