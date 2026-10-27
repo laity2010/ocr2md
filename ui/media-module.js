@@ -68,6 +68,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   host.append(gridHost);
   let rows=[],grid,active=false,disposed=false,queued=false,allRunning=false;
   let localFiles=[],chapterReferences=new Set();
+  let renderedStatuses=new Map(),renderedPreviews=new Map();
   const paused=new Set(),running=new Set();
   const states=new Map();
   const stateFor=url=>states.get(url)||{state:'pending',bytes:0,total:null};
@@ -87,6 +88,17 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     if(running.has(row.url))return '下载中 '+(state.total?`${Math.round(state.bytes/state.total*100)}%`:`${state.bytes} B`);
     return state.state==='complete'?'已下载':state.state==='error'?'失败':state.state==='paused'?'已暂停':'待下载';
   };
+  // AG Grid re-creates image renderers when rowData is replaced, even if every
+  // image URL is identical. A module switch must not invalidate image DOM.
+  const sameRow=(a,b)=>a.id===b.id&&a.from===b.from&&a.to===b.to&&
+    a.line===b.line&&a.url===b.url&&a.local===b.local&&
+    a.adopted===b.adopted&&a.bytes===b.bytes&&a.total===b.total;
+  const mediaPreviewSource=row=>{
+    const state=stateFor(row.url);
+    const local=state.state==='complete' && /^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(state.path||'')
+      ?state.path:null;
+    return row.local||local?appPath('/'+(row.local?row.url:local)):row.url;
+  };
   function refresh(){
     if(disposed)return;
     const referenced=findMedia(getMarkdown());
@@ -96,14 +108,29 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       ...referenced.filter(row=>row.local).map(row=>row.url),
       ...chapterReferences,
     ]);
-    rows=referenced.map(row=>({...row,adopted:true}));
-    const linked=new Set(rows.filter(row=>row.local).map(row=>row.url));
+    const nextRows=referenced.map(row=>({...row,adopted:true}));
+    const linked=new Set(nextRows.filter(row=>row.local).map(row=>row.url));
     for(const file of localFiles){
       if(linked.has(file.path))continue;
-      rows.push({id:'file:'+file.path,line:null,url:file.path,local:true,
+      nextRows.push({id:'file:'+file.path,line:null,url:file.path,local:true,
         bytes:file.bytes,total:file.bytes,adopted:adoptedPaths.has(file.path)});
     }
-    grid?.setGridOption('rowData',rows);
+    const same=rows.length===nextRows.length&&rows.every((row,i)=>sameRow(row,nextRows[i]));
+    const statuses=new Map(nextRows.map(row=>[row.id,
+      `${valueOf(row)}|${statusKind(row)}|${running.has(row.url)}|${paused.has(row.url)}`]));
+    const previews=new Map(nextRows.map(row=>[row.id,mediaPreviewSource(row)]));
+    const statusChanged=[...statuses].some(([id,value])=>renderedStatuses.get(id)!==value);
+    const previewChanged=[...previews].some(([id,value])=>renderedPreviews.get(id)!==value);
+    renderedStatuses=statuses;renderedPreviews=previews;
+    if(!same){
+      rows=nextRows;
+      grid?.setGridOption('rowData',rows);
+    }else{
+      // Status is a network-derived value, not a Markdown row change. Refresh
+      // only those scalar cells; don't unmount an unchanged <img> renderer.
+      if(statusChanged)grid?.refreshCells({columns:['status','action'],force:true});
+      if(previewChanged)grid?.refreshCells({columns:['preview'],force:true});
+    }
   }
   function schedule(){if(queued||disposed)return;queued=true;queueMicrotask(()=>{queued=false;refresh();});}
   async function getStatus(url){
@@ -183,11 +210,8 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   // completed local file, even if the CMD source still has a remote URL.
   function previewCell(params){
     if(!params.data)return '';
-    const row=params.data,state=stateFor(row.url);
-    const local=state.state==='complete' && /^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(state.path||'')
-      ?state.path:null;
-    const src=appPath('/'+(row.local?row.url:local||''));
-    const address=row.local||local?src:row.url;
+    const row=params.data;
+    const address=mediaPreviewSource(row);
     const link=document.createElement('a');
     link.className='ocr-media-preview-link';
     link.href=address;
@@ -322,11 +346,16 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     api:grid,
     refresh,scan,downloadAll,
     setActive(enabled){
+      if(active===enabled)return;
       active=enabled;host.hidden=!enabled;
       if(enabled){
-        // Recreate visible row renderers only when the pane becomes active:
-        // hidden thumbnails have no src and must be armed on activation.
-        grid?.redrawRows();
+        // Existing hidden thumbnails intentionally have no src. Arm those
+        // exact DOM nodes on first reveal, rather than redrawRows() (which
+        // destroys every preview cell on EACH module switch).
+        for(const link of gridHost.querySelectorAll('.ocr-media-preview-link')){
+          const image=link.querySelector('.ocr-media-thumb');
+          if(image&&!image.hasAttribute('src'))image.src=link.href;
+        }
         void scan();
         const state=viewStore.getState();
         focusFromOtherPane(state.focusTarget,state);
