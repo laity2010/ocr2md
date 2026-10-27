@@ -50,6 +50,7 @@ let refreshPreview = () => {};
 let currentPreview=null;
 let scrollSync=null;
 let currentOutline=null;
+let outlineTitleFontScale=1;
 let currentPdf=null;
 let toggleSplitPreview=()=>{};
 let wcpRuntime=null;
@@ -69,6 +70,7 @@ class OutlinePanel {
   }
   init(){
     this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
+    this.grid.setTitleFontScale(outlineTitleFontScale);
     this.element.append(this.mediaHost,this.latexHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
@@ -434,7 +436,11 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     refreshPreview:()=>refreshPreview(),
     refreshOutline:()=>currentOutline?.grid?.refresh(),
-    setOutlineTitleFontScale:value=>currentOutline?.grid?.setTitleFontScale(value),
+    setOutlineTitleFontScale(value){
+      if(!Number.isFinite(value)||value<0.2||value>2)throw Error('Invalid title font scale');
+      outlineTitleFontScale=value;
+      currentOutline?.grid?.setTitleFontScale(value);
+    },
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:module=>currentOutline?.setModule(module),
     scanMedia:()=>currentOutline?.media?.scan(),
