@@ -1,57 +1,81 @@
-# OCR2MD · 独立审计统一入口
+# OCR2MD · 外部 AM/Git 审计工作流
 
-本文件是工程**操作流程**，不是 AGENTS.md 新增的正式原则。Grok/Muse 使用同一 Git SHA、同一 AM 全量测试入口 tests/am/run-grok-audit.sh；审计结论来自独立真实执行，不得互相转抄。旧公开审计包曾用本文件作为单一冷启动入口，本轮恢复此方式。
+本文件是 OCR2MD 审计的**唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。人工转发 Prompt 是默认交付方式；不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
 
-## 固定的六个状态
+## 1. 工作流与责任
 
-1. PREPARED：本地基线预检，固定 40 位完整源 SHA；冻结 audit/* 分支及标签，普通 push 到核实为私有的审计镜像，不改变公开/生产引用，不上传 .v6、PDF、个人工作数据或密钥。
-2. DELIVERED：向 Grok/Muse **实际执行会话**发送仓库、固定 ref、完整 SHA、夹具领取方式、任务书与报告路径；创建 GitHub Issue 不等于真正投递。
-3. ACKNOWLEDGED：每个 AI 使用**自己的**访问权限实际读取冻结 ref，检出并确认目标 SHA、干净工作树、可用运行环境，交回下面的 AUDIT_ACK 或有证据的 BLOCKED。发起方本机有权限不能替代对方的 ACK。
-4. EXECUTED：在独立工作区使用真实夹具运行 AM/Git、专项测试与 Chromium/WebKit，记录每项 PASS/FAIL/BLOCKED、命令、原日志、平台信息。
-5. REPORTED：审计者把独立报告及证据提交到自己的 audit/<ai>-<sha>-report 分支，或清楚申明 REPORT_PUSH BLOCKED；原被审 Git SHA 不得改变。
-6. REVIEWED：集成 AI 独立审阅和复验修复；修复分支合格后才可正常合并到持续开发 Main，生产发布另行审批。
+| 阶段 | 执行者 | 可验收的交付 |
+| --- | --- | --- |
+| 1. 整合 | 主线 AI | 用户已批准的 Lab 通过正常 merge 进入**持续开发 Main**；原 Lab 分支、快照及数据冻结。若没有待合并 Lab，直接进行下一阶段 |
+| 2. 冻结 | 主线 AI | 核查 Main 状态与本地 AM/Git 基线，冻结完整 40 位 Git SHA，创建只读 `audit/*` 引用；使用普通 push 交付到经核验的私有仓库，不动公开/生产分支 |
+| 3. 准备 | 主线 AI | 从下方**单一模板**生成一份审计 Prompt；注明仓库、SHA、只读夹具及预期报告/修复分支；由用户直接转发给 Grok、Muse |
+| 4. 接单 | Grok / Muse | 在**自己的**执行环境核实仓库访问、准确 SHA、Git 状态与运行能力；给出 ACK 或真实的 BLOCKED 原因。人工转发不等于接单成功 |
+| 5. 审计与修复 | Grok / Muse | 各自独立运行 AM/Git、浏览器及专项检查；保留初始失败证据，**在自己的修复分支**自主修复、复测；不互相等待、不修改冻结快照 |
+| 6. 报告 | Grok / Muse | 各自独立审计报告、修复报告、日志与 Git 提交/分支。未修复问题及 BLOCKED 原样记录 |
+| 7. 集成 | 主线 AI | 复核真实 Git diff、AM/WCP 边界、原始与修复后证据，必要时交叉复验；决定是否把部分或全部修复正常 merge 到最新开发 Main，并补做受影响测试 |
 
-每个状态都必须有证据；不能因“已建立 Issue”、测试脚本命名或 Git 作者名称就声称某 AI 已经开始/完成。
+审计 Main 时，**当前 Main 可继续开发**；冻结 SHA 不随其移动。修复合入开发 Main **不等于正式生产发布**，正式上线仍按 `AGENTS.md` 由用户批准及适用跨平台验收。执行期间禁止 rebase、reset --hard、git clean、force push；不修改生产数据、冻结 Lab、原始 PDF 或他人的实验环境。
 
-## 统一交接卡（对 Grok/Muse 各自发送一次）
+## 2. 统一审计 Prompt（人工转发用）
 
-- 来源仓库（含权限）：git@github.com:laity2010/ocr2md-independent-audit.git
-- 冻结引用：refs/heads/audit/<name>；完整 Git SHA：<40 hex>
-- 报告分支：refs/heads/audit/<grok|muse>-<shortsha>-report
-- 目标环境：实际 OS/CPU、Node/Python、Chromium/WebKit；不能在模拟 iPad 上声称真机 PASS
-- PDF/MD：仅走有权限的私有夹具渠道，先验证 SHA；不得把用户母文件用于写入测试
-- 交接入口：被审提交中的 AUDIT.md；统一测试命令：bash tests/am/run-grok-audit.sh <40 hex>
-- 独立任务：记录 AM API/事件/订阅/跨模块调用、WCP/Lab 覆盖差异、Git、CAS/412 草稿、生产/实验接线，并分别判断 SOURCE_MERGE 与 PRODUCTION_CUTOVER
+主线 AI 每次只生成**一份** Prompt（以下模板），把占位符填成真实值，原文分别转发给 Grok 与 Muse；两边可依据自身平台特点选择额外的测试，但不能删减共用验收范围。先确认私有仓库可由接收 AI 自身访问；若不行，在交付中注明实际授权渠道，不能把主线的 GitHub 权限当作对方权限。
 
-先在该 AI 自己的会话询问：“请只完成仓库权限、冻结 SHA、环境三项读取验证，返回 ACK 或 BLOCKED；收到 ACK 后再执行全量审计。”**不要一次发送后就认定已经开工。**
+```text
+你是 OCR2MD 独立审计与修复 AI（Grok 或 Muse）。请独立执行以下任务，不引用另一位 AI 的审计结论作为自己的 PASS。
 
-## 审计者权限与环境验收
+审计仓库：<PRIVATE_REPOSITORY_URL>
+冻结分支：<AUDIT_SOURCE_BRANCH>
+待审 Main 完整 SHA：<40_CHAR_SHA>
+只读 PDF/MD 测试夹具：<AUTHORIZED_FIXTURE_SOURCE_AND_SHA256>
+原始报告分支：audit/<AI>-<SHORT_SHA>-report
+独立修复分支：fix/<AI>-<SHORT_SHA>
+唯一工作流入口：该冻结提交根目录 AUDIT.md
+统一 AM 执行入口：bash tests/am/run-grok-audit.sh <40_CHAR_SHA>
 
-在隔离目录克隆或 checkout 冻结审计分支（不能跟踪浮动 main）。新 SHA 会包含只读验收脚本：
+第一步：在你自己的环境读取仓库，核对完整 SHA、Git 状态、系统/运行时/浏览器与夹具哈希；使用 bash scripts/audit-ack.sh <40_CHAR_SHA> <REPOSITORY_URL> refs/heads/<AUDIT_SOURCE_BRANCH> 返回真实 AUDIT_ACK READY；无法访问或运行时，请附证据说明 BLOCKED，不得臆造 PASS。
 
-~~~sh
-# 三个值必须从本轮交接卡逐字填入。
-REVIEWED_SHA='<40位 SHA>'
-SOURCE_REMOTE='git@github.com:laity2010/ocr2md-independent-audit.git'
-FROZEN_REF='refs/heads/audit/<完整分支名>'
+第二步：在独立 worktree 运行全部适用 AM/Git、Chromium/WebKit 和业务专项检查，人工独立审阅 AM/API/消息订阅、WCP/Lab 边界、跨模块 import/DOM/store 调用、构建期改写、版本/跨平台差异、HTTP 428/412/CAS 与草稿保护、生产与 Lab 功能激活；如有未覆盖范围，如实报告。真实 iPad 与模拟 WebKit 不可混称。
 
-git clone --branch '<完整分支名>' "$SOURCE_REMOTE" ocr2md-audit
-cd ocr2md-audit
-bash scripts/audit-ack.sh "$REVIEWED_SHA" "$SOURCE_REMOTE" "$FROZEN_REF"
-~~~
+第三步：把原始发现和 FAIL/BLOCKED/日志先固化在审计报告中（不能在修复后抹去）。在自己的 fix/* 分支从指定 SHA 出发逐项自主修复，运行相关回归，不降低断言、不删除失败测试、不放宽授权或数据隔离；遇到无法安全修复的事项，保持未解决而非强行修复。
 
-仅出现 AUDIT_ACK READY 且回执 sha/ref 与任务一致，才可进入 EXECUTED。连接器型 AI 可以采用其真实 GitHub 读取工具检查相同 SHA/文件，但必须附实证；无法运行命令标 BLOCKED: ENV，缺权限标 BLOCKED: REPO_ACCESS。
+第四步：提交原始审计报告、逐项修复报告及证据到独立 audit/*-report 分支；修复代码普通 push 到自己的 fix/* 分支。报告列出原始 SHA、两条提交/分支引用、环境、复现命令、初始问题 P0/P1/P2、实际修改文件、修复后 PASS/FAIL/BLOCKED、遗留问题，并分别给出 SOURCE_MERGE 和 PRODUCTION_CUTOVER 的建议（最终裁决不由你作出）。
 
-**旧冻结 SHA 的兼容**：2026-10-27 冻结的 99531372736085eb5a8c89ea6bbf315c4378c504 尚无此脚本。不得改写旧快照。对旧任务，真实执行 git ls-remote --exit-code 检查远端 ref、git rev-parse HEAD 核对完整 SHA、git status --porcelain 核对干净工作区，返回相同字段即可。
+不得修改源 audit 快照、开发 Main、冻结 Lab、正式用户文档或生产发布目录。禁止 force push/rebase/reset-hard/git clean。检查 Git 凭证与日志是否包含隐私信息，不上传令牌、原始用户数据或未授权 PDF。修复者不能给自己的修复出具独立审计签字。
+```
 
-## 审计执行、签字与修复
+注：模板中的 `<AI>` 填为 `grok` 或 `muse`，但任务主体和验收标准完全相同。主线 AI 应当把填好的**同一 Prompt**交给用户转发，不额外维护两套分叉的 Prompt 文件。GitHub Issue 可作记录，但**不作为任务送达、接单或执行的证据**。
 
-- 验证 Git 树与夹具哈希、OS/CPU、Node/Python/SQLite、Playwright 和**真实启动的** Chromium/WebKit；可运行的项目全部实际执行，不能把 BLOCKED 填 PASS。
-- 标准 AM 全量命令：bash tests/am/run-grok-audit.sh "$REVIEWED_SHA"。该命令会在隔离 detached worktree 内执行；报告保留测试计数、失败套件、退出码、AM certify、Git fsck。AM 全表通过不等于 WCP/Lab 源码架构自动合格。
-- 源码审阅另核对 WCP 消息和 AM 注册表、跨模块直接 import/DOM/store、构建期替换、生产与实验差异、HTTP 428/412 和双编辑器保留草稿。标明风险 P0/P1/P2 与实际证据路径；区分 SOURCE_MERGE / PRODUCTION_CUTOVER。
-- Grok 可在另一个 fix/grok-<sha>-* 分支修复自己的 FAIL，**原报告必须保留**；修复后提交代码/测试 diff 与回归证据，不能自行充当独立复核者。Muse 作交叉审计，集成 AI 决定能否进入持续开发 Main。任何合并采用正常 Git merge，不 rebase、reset-hard、force-push，不擅自生产发布。
-- Main 可以同时继续开发。合入修复时以当前 Main 再检查影响差异与补审范围；旧报告只证明旧 SHA，不代表新 Main 已全面认证。
+## 3. 冻结快照与接单门禁
 
-## 2026-10-27 的既有历史状态
+- 主线 AI 在 `git status --porcelain` 为空、`git rev-parse HEAD` 与目标完整 SHA 对齐、`git diff --check` 及基线 AM/Git 预检完成后，建立不可随 Main 漂移的 `audit/<名称>` 分支与对应标签。未通过项记录清楚，不得把本地预检叫作外部全量认证。
+- 交付使用已核实为私有的仓库，冻结源分支只作**读取**。跨平台测试所需只读 PDF/MD 必须来自获授权且可核验 SHA256 的隔离夹具；源码仓库不存在的 `.v6/` 或真实用户文件不能视为自动交付。严禁把原工作目录当测试目标。
+- Grok/Muse 收到人工转发后，各自先运行 `bash scripts/audit-ack.sh <SHA> <REMOTE> <refs/heads/audit/...>`（或使用其 GitHub 连接器真实验证同等事实），记录仓库、ref、SHA、OS/架构、环境和错误。脚本/连接器验证不能由主线 AI 代跑后称为外部 AI 的 ACK。
+- 若某个接收 AI 未能访问私有仓库或环境缺依赖，记录 `BLOCKED: REPO_ACCESS` / `BLOCKED: ENV`，由其说明原因并解决后重试；另一位的结果与权限不能代替该 AI 的独立验收。
+- 对早于 `scripts/audit-ack.sh` 存在的冻结提交，不得为增加脚本而改写快照；可由接收 AI 实际运行 `git ls-remote`、`git rev-parse HEAD`、`git status --porcelain` 获得同等回执。
 
-冻结 SHA 9953137：Grok 已提交独立 FAIL 报告 c8b9536；Muse Issue #2 仍未收到实际 ACK/审计报告。本文件的新增不构成对 Muse 旧任务的实际派送。当前私有镜像是否能被 Muse 访问，必须由 Muse 在自身会话独立验证。
+## 4. 共用 AM/Git 验收与自主修复
+
+**全量 AM 主入口沿用既有脚本名称**，Grok/Muse 使用完全相同的命令：
+
+```sh
+bash tests/am/run-grok-audit.sh "<40_CHAR_SHA>"
+```
+
+该脚本在隔离 detached worktree 中执行，依赖固定的测试 PDF 哈希、环境与浏览器真实启动。审计 AI 要保存执行命令/退出码、构建和 AM check/coverage/edges/run-all/certify、Git fsck、Chromium/WebKit 的实际结果；运行失败保留原日志，不得改测试掩盖问题。AM 静态覆盖不足以证明所有 Lab/WCP 功能合格，需另列源码和专项业务审阅。
+
+**分支各司其职**：`audit/main-<sha>` 为只读源；`audit/grok-<sha>-report`、`audit/muse-<sha>-report` 留存各自原始发现和后续修复证据；`fix/grok-<sha>`、`fix/muse-<sha>` 只装各自修复代码与必要的新增/纠偏测试，保留完整提交历史。报告必须指出起始 SHA、修复 HEAD 和实际差异；修复后不能覆盖原始 FAIL 事实。修复用例仍失败或不能复现则保持未解决状态。
+
+## 5. 主线 AI 集成验收
+
+主线 AI 只复核候选 `fix/*` 分支，**不得盲合**：核验它从冻结 SHA 出发，检查 Git diff/AM 契约/接口边界/测试证据/安全隔离。Grok 与 Muse 修复同一问题时，比较两种方案并择优，避免机械叠加和冲突；可接受部分修复、拒绝问题修复，或要求交叉审计。合格的代码使用普通 Git merge 吸收到最新开发 Main，再对因 Main 前进产生的差异补审。原始审计报告及修复报告独立保留。
+
+最终必须分别记录两个结论：`SOURCE_MERGE`（是否能并入**开发** Main）与 `PRODUCTION_CUTOVER`（是否具备正式发布资格）。外部 AI 的自测 PASS 不自动成为独立复核 PASS；旧 SHA 的结论不能冒认为新 Main 的全面认证；正式生产发布需另行取得用户批准。
+
+## 6. 记录位置与复用
+
+- **正式原则**：`AGENTS.md`，第 6 条明确本文件为细节入口；新原则必须由用户批准。
+- **操作流程与唯一 Prompt**：本文件 `AUDIT.md`，随流程实践维护，避免重复的交接手册。
+- **AM 业务契约与脚本**：`tests/am/README.md`、`tests/am/run-grok-audit.sh`、`scripts/audit-ack.sh`；只记录真实执行所支持的事实。
+- **每轮证据**：`audit-reports/`、审计分支、修复分支、Git Commit、隔离测试日志；历史报告不可改写以迎合新的结果。
+
+未来只需向主线 AI 下达“发起标准 AM/Git 全量审计”：它就按照本文检查/冻结快照、生成统一 Prompt 交由用户转发，并在 Grok/Muse 提交修复后独立决定是否并入 Main。
