@@ -1,6 +1,6 @@
 # OCR2MD · 外部 AM/Git 审计工作流
 
-本文件是 OCR2MD 审计的**唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。人工转发 Prompt 是默认交付方式；不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
+本文件是 OCR2MD 审计的**唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。**人工唯一交付动作是转发一份标准审计 Prompt**；主线 AI 必须在此前将源码快照、版本化审计说明、PDF/MD 测试夹具及哈希证据全部放到 GitHub 的实际可下载位置。外部 AI 从 GitHub 自行取得和验证全部资料，绝不要求用户另行传送 bundle、PDF 或其他文件。GitHub 上传成功不等于外部 AI 可取件：私有仓库必须确认接收 AI 自身具有可用的连接器或 Git 传输权限，未验证应标为 `BLOCKED: DELIVERY_ACCESS`。不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
 
 ## 1. 工作流与责任
 
@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 1. 整合 | 主线 AI | 用户已批准的 Lab 通过正常 merge 进入**持续开发 Main**；原 Lab 分支、快照及数据冻结。若没有待合并 Lab，直接进行下一阶段 |
 | 2. 冻结 | 主线 AI | 核查 Main 状态与本地 AM/Git 基线，冻结完整 40 位 Git SHA，创建只读 `audit/*` 引用；使用普通 push 交付到经核验的私有仓库，不动公开/生产分支 |
-| 3. 准备 | 主线 AI | 从下方**单一模板**生成一份审计 Prompt；注明仓库、SHA、只读夹具及预期报告/修复分支；由用户直接转发给 Grok、Muse |
+| 3. 准备 | 主线 AI | 从下方**单一模板**生成一份审计 Prompt；注明仓库、SHA、GitHub 取件方式及预期报告/修复分支；由用户仅转发这份 Prompt 给 Grok、Muse |
 | 4. 接单 | Grok / Muse | 在**自己的**执行环境核实仓库访问、准确 SHA、Git 状态与运行能力；给出 ACK 或真实的 BLOCKED 原因。人工转发不等于接单成功 |
 | 5. 审计与修复 | Grok / Muse | 各自独立运行 AM/Git、浏览器及专项检查；保留初始失败证据，**在自己的修复分支**自主修复、复测；不互相等待、不修改冻结快照 |
 | 6. 报告 | Grok / Muse | 各自独立审计报告、修复报告、日志与 Git 提交/分支。未修复问题及 BLOCKED 原样记录 |
@@ -26,13 +26,14 @@
 审计仓库：<PRIVATE_REPOSITORY_URL>
 冻结分支：<AUDIT_SOURCE_BRANCH>
 待审 Main 完整 SHA：<40_CHAR_SHA>
-只读 PDF/MD 测试夹具：<AUTHORIZED_FIXTURE_SOURCE_AND_SHA256>
+GitHub 审计材料下载入口（包括可用的 Git bundle、PDF/MD、哈希）：<GITHUB_ARTIFACT_URL_OR_REPO_PATH>
+GitHub 审计材料的权限要求与获取说明：<ACCESS_VERIFICATION_INSTRUCTIONS>
 原始报告分支：audit/<AI>-<SHORT_SHA>-report
 独立修复分支：fix/<AI>-<SHORT_SHA>
 唯一工作流入口：该冻结提交根目录 AUDIT.md
 统一 AM 执行入口：bash tests/am/run-grok-audit.sh <40_CHAR_SHA>
 
-第一步：在你自己的环境读取仓库，核对完整 SHA、Git 状态、系统/运行时/浏览器与夹具哈希；使用 bash scripts/audit-ack.sh <40_CHAR_SHA> <REPOSITORY_URL> refs/heads/<AUDIT_SOURCE_BRANCH> 返回真实 AUDIT_ACK READY；无法访问或运行时，请附证据说明 BLOCKED，不得臆造 PASS。
+第一步：在你自己的环境读取仓库，从 GitHub 自行获取全部材料，核对完整 SHA、Git 状态、系统/运行时/浏览器与夹具哈希；如克隆通道不可用，可从 GitHub 下载完整 Git bundle 并自行克隆为独立 worktree；使用 bash scripts/audit-ack.sh <40_CHAR_SHA> <REPOSITORY_URL> refs/heads/<AUDIT_SOURCE_BRANCH> 返回真实 AUDIT_ACK READY；无法访问或运行时，请附证据说明 BLOCKED，不得臆造 PASS。
 
 第二步：在独立 worktree 运行全部适用 AM/Git、Chromium/WebKit 和业务专项检查，人工独立审阅 AM/API/消息订阅、WCP/Lab 边界、跨模块 import/DOM/store 调用、构建期改写、版本/跨平台差异、HTTP 428/412/CAS 与草稿保护、生产与 Lab 功能激活；如有未覆盖范围，如实报告。真实 iPad 与模拟 WebKit 不可混称。
 
@@ -48,7 +49,7 @@
 ## 3. 冻结快照与接单门禁
 
 - 主线 AI 在 `git status --porcelain` 为空、`git rev-parse HEAD` 与目标完整 SHA 对齐、`git diff --check` 及基线 AM/Git 预检完成后，建立不可随 Main 漂移的 `audit/<名称>` 分支与对应标签。未通过项记录清楚，不得把本地预检叫作外部全量认证。
-- 交付使用已核实为私有的仓库，冻结源分支只作**读取**。跨平台测试所需只读 PDF/MD 必须来自获授权且可核验 SHA256 的隔离夹具；源码仓库不存在的 `.v6/` 或真实用户文件不能视为自动交付。严禁把原工作目录当测试目标。
+- 交付使用已核实为私有的仓库，冻结源分支只作**读取**。如 Git clone 在接收端不可用，应把经过独立 clone 验证的 Git bundle 作为 GitHub 托管的审计资产，并先核验接收 AI 能否用其 GitHub 连接器实际下载；绝不改为用户手工传文件，也不得未经授权公开私有代码。跨平台测试所需只读 PDF/MD 必须由审计 AI 自行从 GitHub 下载获授权且可核验 SHA256 的隔离夹具；源码仓库不存在的 `.v6/` 或真实用户文件不能视为自动交付。严禁把原工作目录当测试目标。
 - Grok/Muse 收到人工转发后，各自先运行 `bash scripts/audit-ack.sh <SHA> <REMOTE> <refs/heads/audit/...>`（或使用其 GitHub 连接器真实验证同等事实），记录仓库、ref、SHA、OS/架构、环境和错误。脚本/连接器验证不能由主线 AI 代跑后称为外部 AI 的 ACK。
 - 若某个接收 AI 未能访问私有仓库或环境缺依赖，记录 `BLOCKED: REPO_ACCESS` / `BLOCKED: ENV`，由其说明原因并解决后重试；另一位的结果与权限不能代替该 AI 的独立验收。
 - 对早于 `scripts/audit-ack.sh` 存在的冻结提交，不得为增加脚本而改写快照；可由接收 AI 实际运行 `git ls-remote`、`git rev-parse HEAD`、`git status --porcelain` 获得同等回执。
