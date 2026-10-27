@@ -1,3 +1,5 @@
+> 独立审计与 Grok/Muse 交接的唯一入口：[AUDIT.md](AUDIT.md)。先确认审计者自身 ACK，不以 GitHub Issue 代替实际派单。
+
 # OCR2MD V6 · 技术手册
 
 OCR2MD V6 是运行于 Mac 的 Markdown 校阅工作台，当前业务模块为**章节定界**。使用 MinerU JSON 转换出的 `.minerujson.md` 作为可编辑母文档，结合原始 PDF 进行定位核对。公网入口：[https://ocr2md.laity.bid/](https://ocr2md.laity.bid/)。
