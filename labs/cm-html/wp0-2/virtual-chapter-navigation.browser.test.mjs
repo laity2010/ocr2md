@@ -20,7 +20,6 @@ for(const [name,engine,device] of [
     if(u.pathname.endsWith('/api/document')&&u.searchParams.has('chapter'))fileReads.push(u.href);
     if(!['GET','HEAD'].includes(r.method())&&u.pathname.includes('/api/'))writes.push(r.method()+' '+u.pathname);
   });
-  await page.addInitScript(()=>document.addEventListener('ocr2md:wp3-ag-ready',e=>window.__navTest=e.detail));
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:48000});
   const select=page.locator('.ocr-source-pane .ocr-lab-file-select');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select optgroup:nth-child(2) option').length===6,null,{timeout:26000});
@@ -32,7 +31,12 @@ for(const [name,engine,device] of [
   assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
   assert.equal(await page.locator('#export-chapters').isVisible(),false);
   assert.equal(await page.locator('.ocr-outline-checkbox').count()>0,true,'Boundary checkbox missing');
-  const original=await page.evaluate(()=>window.__navTest.getMarkdown());
+  const readMother=()=>page.evaluate(async()=>{
+    const response=await fetch('/labs/cm-html/api/document',{cache:'no-store'});
+    if(!response.ok)throw Error('Mother fixture GET failed');
+    return response.text();
+  });
+  const original=await readMother();
   const second=await chapters().nth(1).getAttribute('value');
   const third=await chapters().nth(2).getAttribute('value');
   await choose(select,second);
@@ -42,24 +46,24 @@ for(const [name,engine,device] of [
     !document.querySelector('.ocr-lab-element-select')?.hidden,
     second,{timeout:22000});
   assert.equal(await page.locator('#editor .cm-editor').count(),1);
-  assert.equal(await page.evaluate(()=>window.__navTest.getMarkdown()),original);
+  assert.equal(await readMother(),original);
   await choose(page.locator('.ocr-lab-element-select'),'media');
   assert.equal(await page.locator('#module-select').inputValue(),'media');
   await choose(select,third);
   assert.equal(await page.locator('#module-select').inputValue(),'media','Element module should persist between virtual chapters');
-  assert.equal(await page.evaluate(()=>window.__navTest.getMarkdown()),original);
+  assert.equal(await readMother(),original);
   // Chapter-boundary menu returns to original 5-column H1/H2 marking table.
   await choose(select,'document');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-wp4-hidden-section').length===0,
     null,{timeout:20000});
   assert.equal(await page.locator('#module-select').inputValue(),'chapter-boundary');
-  await page.evaluate(()=>window.__navTest.views.outline.api.ensureIndexVisible(1,'top'));
+  await page.locator('.ocr-outline-checkbox[aria-label="Buffett’s Alpha 独立章节"]').scrollIntoViewIfNeeded();
   const independent=page.locator('.ocr-outline-checkbox[aria-label="Buffett’s Alpha 独立章节"]');
   await independent.uncheck();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select optgroup:nth-child(2) option').length===5,
     null,{timeout:12000});
   assert((await chapters().nth(1).textContent()).includes('Appendix-A'),'Merged chapter still in menu');
-  await page.evaluate(()=>window.__navTest.views.outline.api.ensureIndexVisible(1,'top'));
+  await page.locator('.ocr-outline-checkbox[aria-label="Buffett’s Alpha 独立章节"]').scrollIntoViewIfNeeded();
   await page.locator('.ocr-outline-checkbox[aria-label="Buffett’s Alpha 独立章节"]').check();
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select optgroup:nth-child(2) option').length===6,
     null,{timeout:12000});

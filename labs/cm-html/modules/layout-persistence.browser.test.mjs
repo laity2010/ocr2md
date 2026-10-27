@@ -6,7 +6,7 @@ const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
   el.dispatchEvent(new Event('change',{bubbles:true}));
 },value);
 
-/** The same Dockview dividers follow the user between chapter files. */
+/** Dockview dividers stay fixed when switching virtual chapter views. */
 import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
 const base=process.env.OCR_LAB_TEST_URL||'https://192.168.1.10:4443/labs/cm-html/';
@@ -22,8 +22,8 @@ for(const [name,engine,context] of [
   await page.goto(base,{waitUntil:'domcontentloaded'});
   const selector=page.locator('.ocr-source-pane .ocr-lab-file-select');
   await selector.waitFor({state:'attached',timeout:30000});
-  await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select option[value^="chapter:"]').length>0,null,{timeout:17000});
-  const chapter=await selector.locator('option[value^="chapter:"]').first().getAttribute('value');
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select option[value^="virtual:"]').length>0,null,{timeout:17000});
+  const chapter=await selector.locator('option[value^="virtual:"]').first().getAttribute('value');
   const sizes=()=>page.evaluate(()=>{
     const outline=document.querySelector('.ocr-outline-pane').getBoundingClientRect();
     const source=document.querySelector('.ocr-source-pane').getBoundingClientRect();
@@ -53,14 +53,14 @@ for(const [name,engine,context] of [
   assert(stored&&Math.abs(stored.agRatio-changed.ag)<0.035,'Saved AG proportion is stale');
   assert(Math.abs(stored.sourceRatio-changed.source)<0.035,'Saved source proportion is stale');
   await chooseNative(selector,chapter);
-  await page.waitForURL(u=>u.searchParams.has('chapter'),{timeout:16000});
+  await page.waitForURL(u=>u.searchParams.has('view'),{timeout:16000});
   await page.locator('.ocr-source-pane .ocr-lab-file-select').waitFor({state:'attached',timeout:24000});
   await page.waitForTimeout(800);
   const inChapter=await sizes();
   assert(Math.abs(inChapter.ag-changed.ag)<0.035,`AG divider reset in chapter: ${JSON.stringify({changed,inChapter})}`);
   assert(Math.abs(inChapter.source-changed.source)<0.035,`Source divider reset in chapter: ${JSON.stringify({changed,inChapter})}`);
   await chooseNative(page.locator('.ocr-source-pane .ocr-lab-file-select'),'document');
-  await page.waitForURL(u=>!u.searchParams.has('chapter'),{timeout:16000});
+  await page.waitForURL(u=>!u.searchParams.has('view'),{timeout:16000});
   await page.locator('.ocr-source-pane .ocr-lab-file-select').waitFor({state:'attached',timeout:24000});
   await page.waitForTimeout(800);
   const back=await sizes();

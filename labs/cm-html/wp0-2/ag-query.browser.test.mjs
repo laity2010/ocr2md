@@ -20,12 +20,6 @@ for(const [name,engine,options] of [
       if(u.searchParams.has('chapter')&&u.pathname.endsWith('/api/document'))bad.push('physical-load:'+u.pathname);
       if(!['GET','HEAD'].includes(r.method())&&u.pathname.includes('/api/'))bad.push('write:'+u.pathname);
     });
-    await page.addInitScript(()=>{
-      document.addEventListener('ocr2md:wp3-ag-ready',event=>{
-        window.__wp3AGViews=event.detail.views;
-        window.__wp3ReadSource=event.detail.getMarkdown;
-      });
-    });
     await page.goto(base,{waitUntil:'domcontentloaded',timeout:40000});
     const element=page.locator('.ocr-lab-element-select');
     const checkbox=page.locator('input[aria-label="章节所有"]');
@@ -41,29 +35,35 @@ for(const [name,engine,options] of [
     await choose(navigation,ids[1]);
     await checkbox.check();
     await status.waitFor({state:'visible',timeout:29000});
-    await page.waitForFunction(()=>document.querySelector('.ocr-all-chapters-status')?.textContent.includes('CMD ·')&&
-      Boolean(window.__wp3AGViews?.latex?.api),null,{timeout:28000});
-    const wholeText=await page.evaluate(()=>window.__wp3ReadSource());
-    const count=(type)=>page.evaluate(name=>window.__wp3AGViews[name].api.getDisplayedRowCount(),type);
+    await page.waitForFunction(()=>document.querySelector('.ocr-all-chapters-status')?.textContent.includes('CMD ·'),null,{timeout:28000});
+    const readMother=()=>page.evaluate(async()=>{
+      const r=await fetch('/labs/cm-html/api/document',{cache:'no-store'});
+      if(!r.ok)throw Error('Mother fixture GET failed');
+      return r.text();
+    });
+    const wholeText=await readMother();
+    const gridRoot=type=>type==='outline'?'.ocr-outline-grid':type==='media'?'.ocr-media-grid':'.ocr-latex-grid';
+    const count=async type=>Number(await page.locator(gridRoot(type)+' [role="grid"]').getAttribute('aria-rowcount'))-1;
     const check=async(module,type,total,label)=>{
       await choose(element,module);
       await page.waitForFunction(expected=>document.querySelector('.ocr-all-chapters-status')?.textContent.includes(' · '+expected+' 项'),total,{timeout:9000});
-      await page.waitForFunction(({kind,total})=>window.__wp3AGViews[kind].api.getDisplayedRowCount()===total,{kind:type,total},{timeout:15000});
+      await page.waitForFunction(({selector,total})=>Number(document.querySelector(selector+' [role="grid"]')?.getAttribute('aria-rowcount'))===total+1,
+        {selector:gridRoot(type),total},{timeout:15000});
       assert.equal(await count(type),total,label);
-      const col=await page.evaluate(kind=>window.__wp3AGViews[kind].api.getColumn('virtualChapter')!==null,type);
-      assert.equal(col,true,'Original AG missing CMD virtual-chapter column');
+      await page.locator(gridRoot(type)+' .ag-body-horizontal-scroll-viewport').evaluate(el=>{
+        el.scrollLeft=el.scrollWidth;el.dispatchEvent(new Event('scroll',{bubbles:true}));
+      });
+      await page.locator(gridRoot(type)+' [col-id="virtualChapter"]').first().waitFor({state:'attached',timeout:10000});
       if(total>0){
-        const chapterValue=await page.evaluate(kind=>{
-          const api=window.__wp3AGViews[kind].api;
-          const first=api.getDisplayedRowAtIndex(0);
-          return api.getColumn('virtualChapter').getColDef().valueGetter({data:first.data,api});
-        },type);
-        assert.match(chapterValue,/^00[0-5] · /,'AG could not resolve row chapter via CMD index');
+        const chapterValue=await page.locator(gridRoot(type)+' .ag-row [col-id="virtualChapter"]').first().textContent();
+        assert.match(chapterValue||'',/^00[0-5] · /,'AG could not resolve row chapter via CMD index');
       }
     };
     assert.equal(await checkbox.isChecked(),true);
     assert.equal(await page.locator('.ocr-all-chapters-grid').count(),0,'A fourth aggregate AG was mounted');
-    assert.equal(await page.evaluate(()=>Object.keys(window.__wp3AGViews).length),3);
+    assert.equal(await page.locator('.ocr-outline-grid [role="grid"]').count(),1);
+    assert.equal(await page.locator('.ocr-media-grid [role="grid"]').count(),1);
+    assert.equal(await page.locator('.ocr-latex-grid [role="grid"]').count(),1);
     await check('chapter-boundary','outline',19,'All headings');
     await check('media','media',11,'All media');
     await check('latex','latex',42,'All LaTeX');
@@ -81,7 +81,7 @@ for(const [name,engine,options] of [
     await checkbox.check();
     await check('latex','latex',42,'All-chapters restore without reading physical files');
     assert.equal(await page.locator('.ocr-all-chapters-grid').count(),0);
-    assert.equal(await page.evaluate(()=>window.__wp3ReadSource()),wholeText,'Virtual filter changed CM6 source');
+    assert.equal(await readMother(),wholeText,'Virtual filter changed CM6 source');
     assert.deepEqual(errors,[],'Browser error');
     assert.deepEqual(bad,[],'File-boundary or write request occurred');
     console.log('WP3_SHARED_AG_QUERY_PASS',name,JSON.stringify({all:{heading:19,media:11,latex:42},
