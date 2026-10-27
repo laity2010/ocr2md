@@ -87,8 +87,11 @@ export function mountAgModuleToolbar(){
     // dropdown/toggle in AG. The element selector remains module-owned.
     indexLabel.hidden=true;
     allLabel.hidden=settings||Boolean(chapter);
-    allToggle.disabled=!virtualMode;
-    allToggle.title=virtualMode?'勾选显示所有章节的当前元素':'章节定界为全文视图';
+    // '全部' controls AG membership even in the unbounded mother view.
+    // The current chapter in the CMD index is the scoped AG fallback;
+    // toggling never changes the CM6/Markdown source file or preview scope.
+    allToggle.disabled=Boolean(chapter);
+    allToggle.title='勾选显示所有章节；取消则只筛选 AG 当前章节，不改变源码和预览视图';
     chapterSelect.hidden=true;
     chapterSelect.ocrNavigationSelect?.show();
     allStatus.hidden=Boolean(chapter)||settings||!virtualMode;

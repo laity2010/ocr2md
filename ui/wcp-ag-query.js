@@ -10,7 +10,11 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   let bridge=null,sourcePort=null,unsubscribe=null,disposed=false,index=null;
   let priorScope=null,updateTimer=null;
   const enabled=()=>!isPhysicalChapter()&&isIndexMode();
-  const currentChapter=()=>!enabled()||checkbox.checked?'all':chapterSelect.value;
+  // AG row filtering and source projection are independent. In the mother
+  // document there is no bounded CM6 scope, but '全部' must still be editable:
+  // unchecked means the currently indexed chapter's AG rows only.
+  const queryEnabled=()=>!isPhysicalChapter();
+  const currentChapter=()=>!queryEnabled()||checkbox.checked?'all':chapterSelect.value;
   // AG's "全部" controls row membership only. The editor/Markdown/PDF
   // always project the chapter picked in the source navigation.
   const sourceChapter=()=>enabled()?chapterSelect.value:null;
@@ -26,7 +30,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   };
   function scopedKeys(type){
     const state=index;
-    if(!enabled()||!state)return null;
+    if(!queryEnabled()||!state)return null;
     const chapter=currentChapter();
     // 全部 means NO chapter filtering. A Set of all CMD 'from' offsets
     // is not equivalent: review annotations shift later offsets immediately,
@@ -59,7 +63,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       const keys=scopedKeys(type);
       // Cross-module intention only. Each AG owner creates its own column and
       // external filter; WCP never reads/writes raw AG Grid APIs.
-      bridge.applyChapterQuery(name,{enabled:enabled(),keys,chapterLabel:data=>{
+      bridge.applyChapterQuery(name,{enabled:queryEnabled(),keys,chapterLabel:data=>{
         const current=index;
         if(!current||!data)return '';
         const found=type==='heading'?
@@ -78,7 +82,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       }));
     }
     const type=TYPE[getModule()];
-    if(!enabled())status.textContent='实体章节兼容模式（WP4 尚未接管编辑）';
+    status.hidden=isPhysicalChapter()||(!isIndexMode()&&checkbox.checked);
+    if(isPhysicalChapter())status.textContent='实体章节兼容模式（WP4 尚未接管编辑）';
     else if(state&&type){
       const chapter=currentChapter();
       const count=state.queryElements({chapter,type}).length;
