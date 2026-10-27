@@ -1,3 +1,4 @@
+import {appPath} from './http-path.js';
 import './styles.css';
 import {createWCPRuntime} from './wcp-runtime.js';
 import './obsidian-everforest.css';
@@ -79,7 +80,7 @@ async function checkForNewBuild() {
   if (checkingVersion || !view || document.hidden) return;
   checkingVersion = true;
   try {
-    const res = await fetch('/healthz', {cache:'no-store'});
+    const res = await fetch(appPath('/healthz'), {cache:'no-store'});
     if (!res.ok) return;
     const {version} = await res.json();
     if (version && version !== currentBuild) {
@@ -113,7 +114,7 @@ function showUnlock() {
 async function checkPermission() {
   if (import.meta.env.DEV) return true;
   try {
-    const res = await fetch('/api/session', {cache:'no-store'});
+    const res = await fetch(appPath('/api/session'), {cache:'no-store'});
     if (!res.ok) throw Error(`HTTP ${res.status}`);
     canSave = Boolean((await res.json()).canSave);
   } catch { canSave = null; } // A failed probe must not discard any local edits.
@@ -168,7 +169,7 @@ async function save() {
   buttons.save.disabled = true;
   status('正在保存');
   try {
-    const res = await fetch('/api/document',{method:'PUT',headers:{
+    const res = await fetch(appPath('/api/document'),{method:'PUT',headers:{
       'Content-Type':'text/plain; charset=utf-8','If-Match':savingETag},body:snapshot});
     if (res.status === 403) {
       canSave = false;
@@ -201,7 +202,7 @@ async function sourceHash(source){
 }
 async function restoreExport(){
   try {
-    const res=await fetch('/api/chapters',{cache:'no-store'});
+    const res=await fetch(appPath('/api/chapters'),{cache:'no-store'});
     if(!res.ok)return;
     const manifest=await res.json();
     if(manifest.sourceSha256!==await sourceHash(view.state.doc.toString()))return;
@@ -229,7 +230,7 @@ async function exportChapters(){
     const files=buildChapterFiles(doc.toString(),rows,startText);
     const hash=await sourceHash(doc.toString());
     status(`正在导出${files.length}个章节`);
-    const res=await fetch('/api/export-chapters',{
+    const res=await fetch(appPath('/api/export-chapters'),{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sourceSha256:hash,
         files:files.map(file=>({name:file.name,content:file.content}))}),
@@ -271,7 +272,7 @@ async function initializeDataDocument(){
   $('initialize-error').textContent='正在备份并初始化，请勿关闭页面…';
   try{
     const expectedSha256=await sourceHash(savedDoc.toString());
-    const res=await fetch('/api/initialize-document',{
+    const res=await fetch(appPath('/api/initialize-document'),{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({confirmation:'初始化',expectedSha256}),
     });
@@ -299,7 +300,7 @@ async function initializeDataDocument(){
   }
 }
 async function main() {
-  const response = await fetch('/api/document',{cache:'no-store'});
+  const response = await fetch(appPath('/api/document'),{cache:'no-store'});
   if (!response.ok) throw Error('文档读取失败 '+response.status);
   const firstETag=response.headers.get('ETag');
   if(!firstETag)throw Error('文档响应缺少版本 ETag，拒绝开启无保护保存');
@@ -326,7 +327,7 @@ async function main() {
     parent:workspace.editorHost, markdown:markdownText,
     convertMineruJson: async input=>{
       const raw=typeof input==='string'?input:JSON.stringify(input);
-      const res=await fetch('/api/convert-mineru',{
+      const res=await fetch(appPath('/api/convert-mineru'),{
         method:'POST',headers:{'Content-Type':'application/json'},body:raw,
       });
       if(!res.ok)throw Error(`MinerU conversion HTTP ${res.status}`);
@@ -538,7 +539,7 @@ async function main() {
     $('unlock-error').textContent='';
     const code=$('unlock-code').value.trim().replace(/[\u200b-\u200d\ufeff]/gi,'');
     try {
-      const res=await fetch('/api/unlock',{
+      const res=await fetch(appPath('/api/unlock'),{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({code})
       });

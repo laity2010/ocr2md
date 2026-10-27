@@ -7,6 +7,8 @@
 export function createWCPRuntime(){
   return Object.freeze({
     editorExtensions:[],
+    preservePreviewNodes:false,
+    onLayoutReady(){return ()=>{};},
     wrapCMD:cm=>cm,
     onCMReady(){},
     onAGReady(){},

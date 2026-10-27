@@ -1,9 +1,11 @@
+import {createVirtualAGQuery} from './virtual-ag-query.js';
+import {appPath} from './http-path.js';
 /** V6 mainline chapter outline: a pure AG projection of CM6 marker metadata.
  * Stable MinerU IDs route clicks through the shared Zustand focus contract.
  * Chapter file names are derived projections, not an editable AG data copy.
  */
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
-import {viewStore,publishFocus} from './view-store.js';
+import {viewStore,publishFocus,publishOutlineCount} from './view-store.js';
 import {buildOutline,headingAtLine} from './outline-index.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {markerForHeading,putMarker} from './chapter-markers.js';
@@ -135,7 +137,7 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
     else if(activeId && api.getRowNode(activeId))
       choose(rows.find(row=>row.id===activeId),false);
     else if(cmd)chooseLine(cmd.lineAtOffset(state.sourceOffset),false);
-    if(state.outlineCount!==rows.length)viewStore.setState({outlineCount:rows.length});
+    publishOutlineCount(rows.length);
     
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(refresh,160);}
@@ -229,7 +231,7 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
         }
         const link=document.createElement('a');
         link.className='ocr-chapter-link';
-        link.href='/api/chapters/'+encodeURIComponent(name);
+        link.href=appPath('/api/chapters/')+encodeURIComponent(name);
         link.target='_blank';link.rel='noopener noreferrer';
         link.download=name;link.textContent=name;
         link.title='已导出，点击查看当前章节 Markdown';
@@ -266,7 +268,9 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
     else if(next.sourceOffset!==prev.sourceOffset&&getCMD()&&!next.focusTarget)
       chooseLine(getCMD().lineAtOffset(next.sourceOffset));
   });
+  const virtualQuery=createVirtualAGQuery(api,'heading');
   return {
+    setVirtualQuery:virtualQuery.setVirtualQuery,
     api,get rows(){return rows;},get filters(){return api?.getFilterModel()||{};},
     get startNumber(){return Number(startText);},
     get startText(){return startText;},

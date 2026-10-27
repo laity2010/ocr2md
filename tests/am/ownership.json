@@ -34,8 +34,10 @@
     "settings-module.js": "S",
     "cm-font-setting.js": "C",
     "cmd-json-source.js": "C",
-    "wcp-runtime.js": "shell",
-    "pane-layout-ratios.js": "shared"
+    "wcp-runtime.js": "W",
+    "pane-layout-ratios.js": "shared",
+    "http-path.js": "shared",
+    "virtual-ag-query.js": "shared"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -65,16 +67,21 @@
     "pane-layout-ratios.js": [
       "S",
       "L"
-    ]
-  },
-  "observedDirectStoreWrites": {
-    "outline-grid.js": [
-      "outlineCount"
     ],
-    "workspace.js": [
-      "activePanel"
+    "http-path.js": [
+      "shell",
+      "C",
+      "A",
+      "G",
+      "P"
+    ],
+    "virtual-ag-query.js": [
+      "G",
+      "A",
+      "T"
     ]
   },
+  "observedDirectStoreWrites": {},
   "residualScope": [
     "Static relative JS imports and constant-string dynamic imports are checked. Computed imports are BLOCKED rather than silently ignored.",
     "Zustand/DOM runtime subscriptions and callsite semantics require separate AM message and API review; passing does not certify all hidden runtime coupling.",
@@ -135,6 +142,9 @@
     "settings-module.js->cmd-json-source.js": [
       "openCMDJsonSource",
       "readCMDJsonSnapshot"
+    ],
+    "main.js->wcp-runtime.js": [
+      "createWCPRuntime"
     ]
   }
 }

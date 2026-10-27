@@ -7,7 +7,8 @@ INSERT INTO modules VALUES
  ('P','PDF Preview','PDF.js','ui/pdf-preview.js'),
  ('L','Layout','Dockview','ui/workspace.js'),
  ('A','Media','AG Grid + resumable download','ui/media-module.js'),
- ('T','LaTeX','AG Grid + KaTeX review plugin','ui/latex-module.js');
+ ('T','LaTeX','AG Grid + KaTeX review plugin','ui/latex-module.js'),
+ ('W','WCP Runtime','bounded extension contract','ui/wcp-runtime.js');
 
 INSERT INTO apis VALUES
  ('C01','C','CMDocument.getMarkdown','ui/cm-document.js','export','none','Markdown string','read only',1),
@@ -131,9 +132,9 @@ INSERT INTO publishers VALUES
  ('PUB06','E03','P','ui/pdf-preview.js','PdfPreview.onClick/sendPdfNavigation','PDF OCR click / page input'),
  ('PUB07','E04',NULL,'ui/scroll-sync.js','publishScroll','CM6 user scroll'),
  ('PUB08','E04',NULL,'ui/scroll-sync.js','publishScroll','MD preview user scroll'),
- ('PUB09','E05','G','ui/outline-grid.js','viewStore.setState(outlineCount)','AG refresh detects count change'),
+ ('PUB09','E05','G','ui/outline-grid.js','publishOutlineCount','AG refresh detects count change'),
  ('PUB10','E06',NULL,'ui/view-store.js','setScrollSyncEnabled','explicit setter; caller is primarily test seam'),
- ('PUB11','E07','L','ui/workspace.js','onDidActivePanelChange','Dockview active panel change'),
+ ('PUB11','E07','L','ui/workspace.js','publishActivePanel','Dockview active panel change'),
  ('PUB12','E08','G','ui/outline-grid.js','document.dispatchEvent','AG chapter checkbox edit throws'),
  ('PUB13','E03','A','ui/media-module.js','publishFocus','Media AG image row click');
 
@@ -589,3 +590,42 @@ INSERT INTO access_edges VALUES
  ('X74','S','C','ui/settings-module.js','readCMDJsonSnapshot()','C28','registered','Settings startup loads effective values via CMD read-only JSON port');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C28','C28','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Startup applies saved font without creating hidden secondary Dockview or CM6','integration');
+
+
+-- WCP extension capabilities are versioned AM ports, not invisible hooks.
+INSERT INTO apis VALUES
+ ('W01','W','createWCPRuntime','ui/wcp-runtime.js','export','none','WCP facade','composition root creates explicit WCP adapter',1),
+ ('W02','W','returned.editorExtensions','ui/wcp-runtime.js','returned','none','CM6 extension array','runtime may provide CM6 extensions only through composition root',1),
+ ('W03','W','returned.wrapCMD','ui/wcp-runtime.js','returned','CMD composition object','CMD facade','WCP may extend CMD port; must not give raw CMD to AG consumers',1),
+ ('W04','W','returned.onCMReady','ui/wcp-runtime.js','returned','CM6 mount/status port','void','WCP editor extension lifecycle; raw CM6 only at composition root (review pending)',1),
+ ('W05','W','returned.onAGReady','ui/wcp-runtime.js','returned','getChapterIndex/getStartNumber/applyChapterQuery','void','read-only bounded chapter port; never AG/Grid/CMD raw objects',1),
+ ('W06','W','returned.onPreviewInit','ui/wcp-runtime.js','returned','setScope/repaint/isDisposed','unsubscribe','semantic preview port without raw DOM',1),
+ ('W07','W','returned.renderPreview','ui/wcp-runtime.js','returned','source,scope,render','sanitized HTML','WCP may project chapter scope via registered render delegate',1),
+ ('W08','W','returned.onLayoutReady','ui/wcp-runtime.js','returned','getRatios/setRatios/onChange','unsubscribe','semantic layout ratio port; no Dockview raw object',1),
+ ('W09','W','returned.preservePreviewNodes','ui/wcp-runtime.js','returned','none','boolean','PreviewPanel owns optional DOM reconciliation; WCP cannot mutate DOM directly',1);
+
+INSERT INTO access_edges VALUES
+ ('X-W01',NULL,'W','ui/main.js','createWCPRuntime()','W01','registered','Composition root obtains registered WCP runtime factory'),
+ ('X-W02','L','W','ui/workspace.js','onAGReady(bridge)','W05','registered','Layout exposes only readonly chapter projections to WCP lifecycle');
+
+INSERT INTO test_cases VALUES
+ ('TC-W01','W01',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','default WCP adapter and exported public contract are present','direct'),
+ ('TC-W02','W05',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP AG bridge provides no AG Grid or CMD internals','direct'),
+ ('TC-W03','W08',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Layout hook consumes only semantic ratio port','direct'),
+ ('TC-W04','W09',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Preview DOM reconciliation remains Layout-owned','direct');
+
+-- Virtual chapter filters stay inside their three AG owners.
+INSERT INTO apis VALUES
+ ('G15','G','returned.setVirtualQuery','ui/outline-grid.js','returned','chapter key-set + label','void','Heading AG owns its own virtual chapter column and filter',1),
+ ('A13','A','returned.setVirtualQuery','ui/media-module.js','returned','chapter key-set + label','void','Media AG owns virtual chapter filter, WCP cannot mutate native Grid',1),
+ ('T13','T','returned.setVirtualQuery','ui/latex-module.js','returned','chapter key-set + label','void','LaTeX AG owns virtual chapter filter, WCP cannot mutate native Grid',1);
+INSERT INTO test_cases VALUES
+ ('TC-G15','G15',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Heading AG offers semantic chapter query port without raw Grid exposure','direct'),
+ ('TC-A13','A13',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Media AG offers semantic chapter query port without raw Grid exposure','direct'),
+ ('TC-T13','T13',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','LaTeX AG offers semantic chapter query port without raw Grid exposure','direct');
+INSERT INTO test_cases VALUES
+ ('TC-W05','W02',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM6 extensions are exposed only via composition-root WCP facade','integration'),
+ ('TC-W06','W03',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP default CMD wrapper preserves CMD facade','integration'),
+ ('TC-W07','W04',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP CM6 lifecycle hook is explicitly declared and callable','integration'),
+ ('TC-W08','W06',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP preview hook exposes a semantic port and unsubscribe','integration'),
+ ('TC-W09','W07',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP render hook delegates text projection without raw preview DOM','integration');

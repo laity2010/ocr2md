@@ -2,15 +2,14 @@
  * Scope is an AG external filter; no file is loaded to switch chapter views.
  * Legacy physical chapter mode is deliberately excluded until WP4.
  */
-import {createIndexProjector} from './document-index.js';
 import {viewStore,publishFocus} from '../../../ui/view-store.js';
 
 const TYPE=Object.freeze({'chapter-boundary':'heading',media:'media',latex:'latex'});
 const gridType=Object.freeze({outline:'heading',media:'media',latex:'latex'});
 export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isPhysicalChapter,isIndexMode}){
-  let view=null,sourcePort=null,unsubscribe=null,disposed=false,index=null;
+  let bridge=null,sourcePort=null,unsubscribe=null,disposed=false,index=null;
   let priorScope=null,updateTimer=null;
-  const original=new Map(),adapted=new Map(),enabled=()=>!isPhysicalChapter()&&isIndexMode();
+  const enabled=()=>!isPhysicalChapter()&&isIndexMode();
   const currentChapter=()=>!enabled()||checkbox.checked?'all':chapterSelect.value;
   // AG's "全部" controls row membership only. The editor/Markdown/PDF
   // always project the chapter picked in the source navigation.
@@ -52,50 +51,25 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       publishFocus({sourceLine:chapter.startLine,origin:'wp5-chapter',intent:'click'});
     });
   }
-  const grids=()=>view?Object.entries(gridType).map(([name,type])=>({name,type,api:view[name]?.api})).filter(x=>x.api):[];
+  const grids=()=>Object.entries(gridType).map(([name,type])=>({name,type}));
   function apply(){
-    if(disposed||!view)return;
+    if(disposed||!bridge)return;
     const state=refreshIndex();
-    // Actual source is always the same CM6 mother doc in virtual mode.
-    // A physical chapter restores native row filtering; it is NOT a virtual view.
-    for(const {name,type,api} of grids()){
-      const keySet=scopedKeys(type);
-      const originalColumns=original.get(name);
-      if(!originalColumns)continue;
-      const chapterColumn={colId:'virtualChapter',headerName:'所属章节',width:147,minWidth:117,
-        sortable:false,resizable:true,suppressMovable:true,
-        valueGetter:p=>{
-          const current=index;
-          if(!current||!p.data)return '';
-          const found=type==='heading'?current.elements.find(x=>x.type==='heading'&&x.id==='heading:'+p.data.id):
-            current.elements.find(x=>x.type===type&&x.from===p.data.from);
-          const chapter=found&&current.getChapter(found.chapterId);
-          return chapter?`${chapter.number} · ${chapter.title}`:'';
-        },
-      };
-      if(!adapted.has(name))adapted.set(name,[
-        ...originalColumns.filter(c=>type==='heading'?c.field!=='independent'&&c.field!=='chapterFile':true),
-        chapterColumn,
-      ]);
-      const actual=api.getGridOption('columnDefs')||[];
-      const usesWP3Column=actual.some(c=>c.colId==='virtualChapter');
-      if(enabled()){
-        const target=adapted.get(name);
-        if(actual.length!==target.length||actual.some((c,i)=>c!==target[i]))
-          api.setGridOption('columnDefs',target);
-      }else if(usesWP3Column){
-        // Only remove WP3-owned columns. Physical chapter schema is owned by
-        // chapter-outline.js, which may already have reacted to file switch.
-        api.setGridOption('columnDefs',originalColumns);
-      }
-      // The CMD query result, not a second parse of chapter files, provides
-      // row membership. AG's native filter preserves row state and renderer DOM.
-      api.setGridOption('isExternalFilterPresent',()=>Boolean(keySet));
-      api.setGridOption('doesExternalFilterPass',node=>!keySet||keySet.has(locate(node.data,type)));
-      api.onFilterChanged();
+    for(const {name,type} of grids()){
+      const keys=scopedKeys(type);
+      // Cross-module intention only. Each AG owner creates its own column and
+      // external filter; WCP never reads/writes raw AG Grid APIs.
+      bridge.applyChapterQuery(name,{enabled:enabled(),keys,chapterLabel:data=>{
+        const current=index;
+        if(!current||!data)return '';
+        const found=type==='heading'?
+          current.elements.find(x=>x.type==='heading'&&x.id==='heading:'+data.id):
+          current.elements.find(x=>x.type===type&&x.from===data.from);
+        const chapter=found&&current.getChapter(found.chapterId);
+        return chapter?chapter.number+' · '+chapter.title:'';
+      }});
     }
-    const nextScope=state&&sourceChapter()
-      ?state.getChapter(sourceChapter()):null;
+    const nextScope=state&&sourceChapter()?state.getChapter(sourceChapter()):null;
     const signature=nextScope?nextScope.id+'|'+nextScope.from+'|'+nextScope.to:'all';
     if(signature!==priorScope){
       priorScope=signature;
@@ -104,12 +78,11 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       }));
     }
     const type=TYPE[getModule()];
-    if(!enabled()){
-      status.textContent='实体章节兼容模式（WP4 尚未接管编辑）';
-    }else if(state&&type){
+    if(!enabled())status.textContent='实体章节兼容模式（WP4 尚未接管编辑）';
+    else if(state&&type){
       const chapter=currentChapter();
       const count=state.queryElements({chapter,type}).length;
-      status.textContent=`CMD · ${chapter==='all'?'全部章节':state.getChapter(chapter)?.number||'—'} · ${count} 项`;
+      status.textContent='CMD · '+(chapter==='all'?'全部章节':state.getChapter(chapter)?.number||'—')+' · '+count+' 项';
     }
   }
   const populate=()=>{
@@ -123,21 +96,12 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     if(state.getChapter(saved))chapterSelect.value=saved;
   };
   function onGridReady(event){
-    if(disposed||view)return;
-    view=event.detail?.views;
-    if(!view?.outline?.api||!view?.media?.api||!view?.latex?.api)
-      throw Error('WP3 requires three original AG module APIs');
-    // The Workspace is instantiated before its CM6/CMD transaction port.
-    // Its one-shot AG-ready callback can run before that port is initialized,
-    // especially in fast Linux Chromium. Resolve the CURRENT CMD port on
-    // each read rather than capturing the initial, possibly unready object.
-    // The fallback is only for an experiment without WP6 wired at all.
-    const legacyProjection=createIndexProjector(event.detail.getMarkdown);
-    sourcePort={
-      get:()=>event.detail.getCMD?.()?.getIndex?.() ?? legacyProjection.get(),
-      clear:()=>legacyProjection.clear(),
-    };
-    for(const {name,api} of grids())original.set(name,api.getGridOption('columnDefs'));
+    if(disposed||bridge)return;
+    bridge=event.detail;
+    if(typeof bridge?.applyChapterQuery!=='function'||
+       typeof bridge?.getChapterIndex!=='function')
+      throw Error('WP3 needs semantic AG query and CMD index ports');
+    sourcePort={get:()=>bridge.getChapterIndex(),clear:()=>{}};
     populate();
     unsubscribe=viewStore.subscribe((current,prior)=>{
       if(current.focusTarget!==prior.focusTarget &&
@@ -189,13 +153,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     setModule(){apply();},
     dispose(){disposed=true;clearTimeout(updateTimer);
       document.removeEventListener('ocr2md:wp3-ag-ready',onGridReady);
-      unsubscribe?.();for(const {name,api} of grids()){
-        const originalColumns=original.get(name);
-        if(originalColumns)api.setGridOption('columnDefs',originalColumns);
-        api.setGridOption('isExternalFilterPresent',()=>false);
-        api.setGridOption('doesExternalFilterPass',()=>true);
-        api.onFilterChanged();
-      }
+      unsubscribe?.();
+      for(const {name} of grids())bridge?.applyChapterQuery(name,{enabled:false});
     },
   });
 }

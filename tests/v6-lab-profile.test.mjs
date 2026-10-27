@@ -17,11 +17,9 @@ test('production profile is unchanged and lab routes core assets only to scoped 
   assert.equal(plugin.resolveId('./latex-module.js',join(fake,'ui','workspace.js')),override);
   assert.equal(plugin.resolveId('./latex-module.js',join(fake,'labs','check','modules','whatever.js')),undefined);
   assert.equal(plugin.resolveId('./media-module.js',join(fake,'ui','workspace.js')),undefined);
-  const source="fetch('/api/document');fetch('/healthz');url:'/api/pdf';src='/media/image.png'";
-  const transformed=plugin.transform(source,join(fake,'ui','main.js'));
-  assert(!transformed.includes("'/api/"));assert.match(transformed,/labs\/check\/api\/document/);
-  assert.match(transformed,/labs\/check\/api\/pdf/);assert.match(transformed,/labs\/check\/healthz/);
-  assert.equal(plugin.transform(source,join(dir,'modules','latex-module.js')),undefined);
+  // Source rewriting is forbidden; Lab differences only route named imports.
+  assert.equal(plugin.transform,undefined);
+  assert.equal(plugin.resolveId('./latex-module.js',join(fake,'ui','main.js')),override);
   writeFileSync(join(dir,'lab.json'),JSON.stringify({modules:{latex:'../ui/latex-module.js'}}));
   assert.throws(()=>labProfile(fake,'check'),/Lab modules must be local/);
  }finally{rmSync(fake,{recursive:true});}

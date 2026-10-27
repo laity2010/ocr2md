@@ -48,3 +48,12 @@ export function publishFocus({sourceLine,sourceEnd=sourceLine+1,origin,elementId
       sequence:(state.focusTarget?.sequence||0)+1},
   }));
 }
+
+export function publishOutlineCount(count){
+  if(!Number.isInteger(count)||count<0)throw Error('Invalid outline count');
+  if(viewStore.getState().outlineCount!==count)viewStore.setState({outlineCount:count});
+}
+export function publishActivePanel(panelId){
+  if(panelId!==null&&typeof panelId!=='string')throw Error('Invalid active panel');
+  if(viewStore.getState().activePanel!==panelId)viewStore.setState({activePanel:panelId});
+}

@@ -52,17 +52,18 @@ export function createSourceFileNavigation(){
     syncOptions();
   }
   function refreshChapters(){
-    if(!bridge?.getCMD?.()?.getIndex)return;
+    if(!bridge?.getChapterIndex)return;
     try{
-      const index=bridge.getCMD().getIndex();
-      const outline=bridge.views?.outline;
+      const index=bridge.getChapterIndex();
+      if(!index)return;
+      const startText=bridge.getStartNumber?.()||'000';
       // Use the original lab chapter filename formatter, but on the current
       // CMD boundaries, never on AG's asynchronously refreshed rowData. An
       // independent marker must immediately rename/renumber subsequent views.
       const pseudoRows=index.chapters.map(chapter=>({
         id:chapter.id,title:chapter.title,independent:true,
       }));
-      const names=chapterAssignments(pseudoRows,outline?.startText||'000');
+      const names=chapterAssignments(pseudoRows,startText);
       const next=index.chapters.map((chapter,i)=>({
         id:chapter.id,name:names[i].file,from:chapter.from,
       }));

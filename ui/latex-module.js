@@ -1,3 +1,4 @@
+import {createVirtualAGQuery} from './virtual-ag-query.js';
 /** LaTeX review plugin. Reads live CMD text, owns its AG view and uses the
  * existing focusTarget bus for navigation. Never writes document text. */
 import {createGrid,AllCommunityModule,ModuleRegistry,themeQuartz} from 'ag-grid-community';
@@ -236,7 +237,9 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
     if(current.focusTarget!==prior.focusTarget)
       followFocus(current.focusTarget,current);
   });
+  const virtualQuery=createVirtualAGQuery(grid,'latex');
   return {
+    setVirtualQuery:virtualQuery.setVirtualQuery,
     api:grid,
     refresh,
     normalizeReviewed(){

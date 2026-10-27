@@ -1,3 +1,4 @@
+import {appPath} from './http-path.js';
 /** Read-only V6 PDF.js Viewer. PDF is evidence; CM6 owns all editable text.
  * Inspired by V4's official Viewer + normalized MinerU bbox overlay, with
  * transport/position events adapted to the V6 single-document architecture.
@@ -132,12 +133,12 @@ export class PdfPreview {
   async open(){
     try{
       const [meta,loading]=await Promise.all([
-        fetch('/api/pdf-map',{cache:'no-store'}),
+        fetch(appPath('/api/pdf-map'),{cache:'no-store'}),
         // V6 evidence is a small (~1.4 MB) PDF. Fetch it once, streaming,
         // rather than paying a remote round trip for every 64 KB PDF.js range.
         // Large-document adaptive range loading can be added with file-size
         // metadata once this fixed-document viewer supports large files.
-        Promise.resolve(getDocument({url:'/api/pdf',disableRange:true,
+        Promise.resolve(getDocument({url:appPath('/api/pdf'),disableRange:true,
           disableStream:false,stopAtErrors:true})),
       ]);
       if(!meta.ok)throw Error(`PDF 映射 HTTP ${meta.status}`);

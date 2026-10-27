@@ -1,3 +1,4 @@
+import {appPath} from './http-path.js';
 /** CMD generic JSON text source: one CodeMirror 6 document and atomic I/O.
  * It knows syntax and transactions, never the meaning of a setting key.
  */
@@ -25,7 +26,7 @@ export async function readCMDJsonSnapshot(){
   // needs a new GET rather than leaving the settings editor half initialized.
   for(let attempt=0;attempt<3;attempt++){
     try{
-      const response=await fetch('/api/settings',{cache:'no-store'});
+      const response=await fetch(appPath('/api/settings'),{cache:'no-store'});
       if(!response.ok)throw Error('设置 JSON 读取失败 '+response.status);
       const text=await response.text();
       const etag=response.headers.get('ETag');
@@ -142,7 +143,7 @@ export async function openCMDJsonSource(host,onUpdate=()=>{},initialSnapshot=nul
     const body=getText();
     const parsed=JSON.parse(body);
     if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw Error('JSON 根节点必须是对象');
-    const result=await fetch('/api/settings',{method:'PUT',headers:{
+    const result=await fetch(appPath('/api/settings'),{method:'PUT',headers:{
       'Content-Type':'application/json; charset=utf-8','If-Match':etag,
     },body});
     if(!result.ok)throw Error('设置保存失败 HTTP '+result.status+': '+(await result.text()).slice(0,100));

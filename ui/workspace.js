@@ -4,8 +4,9 @@
  */
 import {createDockview, themeAbyss} from 'dockview';
 import {readPaneRatios,applyPaneRatios} from './pane-layout-ratios.js';
+import morphdom from 'morphdom';
 import 'dockview/dist/styles/dockview.css';
-import {viewStore,publishFocus} from './view-store.js';
+import {viewStore,publishFocus,publishActivePanel} from './view-store.js';
 import {renderMarkdown} from './markdown-preview.js';
 import {createScrollSync} from './scroll-sync.js';
 import {createOutlineGrid} from './outline-grid.js';
@@ -71,10 +72,19 @@ class OutlinePanel {
     this.element.append(this.mediaHost,this.latexHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
-    queueMicrotask(()=>wcpRuntime?.onAGReady({
-      views:{outline:this.grid,media:this.media,latex:this.latex},
-      getMarkdown:()=>getMarkdown(),getCMD:()=>getCMD(),
-    }));
+    // Only scalar/immutable chapter projections cross WCP: no raw AG API or
+    // CMD editor objects leave Layout's ownership boundary.
+    const bridge=Object.freeze({
+      getChapterIndex:()=>getCMD()?.getIndex?.()??null,
+      getStartNumber:()=>this.grid?.startText||'000',
+      // Only semantic query intents enter business-owned AGs.
+      applyChapterQuery:(module,intent)=>{
+        const owner={outline:this.grid,media:this.media,latex:this.latex}[module];
+        if(!owner?.setVirtualQuery)throw Error('Unknown AG chapter query owner');
+        owner.setVirtualQuery(intent);
+      },
+    });
+    queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
   }
   setModule(module){
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
@@ -252,9 +262,19 @@ class PreviewPanel {
     const preserved=scrollSync?.beforeRender();
     const ratio=pane.scrollHeight>pane.clientHeight
       ?pane.scrollTop/(pane.scrollHeight-pane.clientHeight):0;
-    this.body.innerHTML=wcpRuntime
+    const html=wcpRuntime
       ?wcpRuntime.renderPreview(source,{scope:this.virtualScope??null},renderMarkdown)
       :renderMarkdown(source);
+    // PreviewPanel alone owns Markdown DOM. The Lab requests stable-node
+    // reconciliation through a boolean capability; it never receives body DOM.
+    if(wcpRuntime?.preservePreviewNodes){
+      if(this.body.innerHTML!==html){
+        const next=this.body.cloneNode(false);
+        next.innerHTML=html;
+        morphdom(this.body,next,{childrenOnly:true,
+          onBeforeElUpdated:(from,to)=>!from.isEqualNode(to)});
+      }
+    }else this.body.innerHTML=html;
     this.lastFocusElement=null;
     this.highlight(viewStore.getState().focusTarget);
     if(scrollSync)scrollSync.afterRender(preserved);
@@ -393,8 +413,14 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       scrollSync?.measureLater();
     });
   };
+  const layoutPort=Object.freeze({
+    getRatios:()=>readPaneRatios(dockview,'outline','source','preview'),
+    setRatios:ratios=>applyPaneRatios(dockview,'outline','source','preview',ratios),
+    onChange:listener=>dockview.onDidLayoutChange(listener),
+  });
+  const releaseWCPLayout=wcpRuntime?.onLayoutReady?.(layoutPort);
   dockview.onDidActivePanelChange(event => {
-    viewStore.setState({activePanel:event.panel?.id||null});
+    publishActivePanel(event.panel?.id||null);
   });
   return {
     editorHost:sourceHost,

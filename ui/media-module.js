@@ -1,3 +1,5 @@
+import {createVirtualAGQuery} from './virtual-ag-query.js';
+import {appPath} from './http-path.js';
 /** Media business module: discover Markdown images, resumable backend chunks,
  * and optimistic CMD replacement. Owns its AG grid; never owns an EditorView.
  */
@@ -49,7 +51,7 @@ export async function uploadPastedImage(file){
   if(!file||!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type))
     throw Error('仅支持 PNG、JPEG、GIF 或 WebP 剪贴板图片');
   if(file.size<1||file.size>12*1024*1024)throw Error('粘贴图片必须小于 12 MB');
-  const response=await fetch('/api/media/paste',{method:'POST',
+  const response=await fetch(appPath('/api/media/paste'),{method:'POST',
     headers:{'Content-Type':file.type},body:file});
   if(response.status===403)throw Error('需要编辑授权，完成授权后重新粘贴图片');
   if(!response.ok)throw Error(`图片保存 HTTP ${response.status}: ${(await response.text()).slice(0,120)}`);
@@ -105,12 +107,12 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   }
   function schedule(){if(queued||disposed)return;queued=true;queueMicrotask(()=>{queued=false;refresh();});}
   async function getStatus(url){
-    const r=await fetch('/api/media/status?url='+encodeURIComponent(url),{cache:'no-store'});
+    const r=await fetch(appPath('/api/media/status?url=')+encodeURIComponent(url),{cache:'no-store'});
     if(r.ok){states.set(url,await r.json());schedule();}
   }
   async function scan(){
     refresh();
-    const inventory=fetch('/api/media/inventory',{cache:'no-store'})
+    const inventory=fetch(appPath('/api/media/inventory'),{cache:'no-store'})
       .then(async response=>{
         if(!response.ok)throw Error('媒体清单 HTTP '+response.status);
         const data=await response.json();
@@ -134,7 +136,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     let unauthorized=false;
     try{
       while(!paused.has(url)){
-        const response=await fetch('/api/media/chunk',{method:'POST',
+        const response=await fetch(appPath('/api/media/chunk'),{method:'POST',
           headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
         if(response.status===403){unauthorized=true;throw Error('需要编辑授权，请先点保存完成授权');}
         if(!response.ok)throw Error(`HTTP ${response.status}: ${(await response.text()).slice(0,120)}`);
@@ -184,7 +186,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     const row=params.data,state=stateFor(row.url);
     const local=state.state==='complete' && /^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(state.path||'')
       ?state.path:null;
-    const src='/'+(row.local?row.url:local||'');
+    const src=appPath('/'+(row.local?row.url:local||''));
     const address=row.local||local?src:row.url;
     const link=document.createElement('a');
     link.className='ocr-media-preview-link';
@@ -314,7 +316,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       followCursor(next.sourceOffset);
   });
   refresh();
+  const virtualQuery=createVirtualAGQuery(grid,'media');
   return {
+    setVirtualQuery:virtualQuery.setVirtualQuery,
     api:grid,
     refresh,scan,downloadAll,
     setActive(enabled){

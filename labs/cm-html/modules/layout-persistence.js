@@ -6,54 +6,41 @@
 const STORAGE_KEY='ocr2md:lab:cm-html:workspace-divider:v1';
 const validRatio=value=>typeof value==='number'&&Number.isFinite(value)&&value>0.08&&value<0.92;
 
-export function persistLabWorkspaceLayout(dockview,container){
-  let restoring=true,disposed=false;
-  const group=id=>dockview.getPanel(id)?.group?.api;
-  const measure=()=>{
-    const ag=group('outline'),source=group('source'),preview=group('preview');
-    const width=dockview.width||container.clientWidth;
-    const sourceHeight=(source?.height||0),previewHeight=(preview?.height||0);
-    if(!ag||!source||!preview||width<=0||sourceHeight<=0||previewHeight<=0)return null;
-    const agRatio=ag.width/width;
-    const sourceRatio=sourceHeight/(sourceHeight+previewHeight);
-    return validRatio(agRatio)&&validRatio(sourceRatio)
-      ?{agRatio,sourceRatio}:null;
-  };
-  const capture=()=>{
-    if(restoring||disposed)return;
-    const state=measure();
-    if(state)try{sessionStorage.setItem(STORAGE_KEY,JSON.stringify(state));}catch{}
-  };
+export function persistLabWorkspaceLayout(port){
+  let disposed=false,restoring=true;
   let stored=null;
   try{
     const parsed=JSON.parse(sessionStorage.getItem(STORAGE_KEY)||'null');
     if(parsed&&validRatio(parsed.agRatio)&&validRatio(parsed.sourceRatio))stored=parsed;
   }catch{}
-  let attempts=0;
-  function complete(){
-    restoring=false;
-    dockview.onDidLayoutChange(capture);
-    window.addEventListener('pagehide',capture,{once:true});
-    capture();
-  }
-  function restoreWhenReady(){
+  const capture=()=>{
+    if(disposed||restoring)return;
+    const ratios=port.getRatios();
+    if(ratios)try{sessionStorage.setItem(STORAGE_KEY,JSON.stringify(ratios));}catch{}
+  };
+  let unsubscribe=null,attempts=0;
+  const complete=()=>{
     if(disposed)return;
-    const sizes=measure();
-    if(!sizes){
-      if(++attempts<90)requestAnimationFrame(restoreWhenReady);
+    restoring=false;
+    unsubscribe=port.onChange(capture);
+    window.addEventListener('pagehide',capture);
+    capture();
+  };
+  const restore=()=>{
+    if(disposed)return;
+    const current=port.getRatios();
+    if(!current){
+      if(++attempts<90)requestAnimationFrame(restore);
       else complete();
       return;
     }
-    if(stored){
-      const ag=group('outline'),source=group('source'),preview=group('preview');
-      const width=dockview.width||container.clientWidth;
-      ag.setSize({width:Math.round(stored.agRatio*width)});
-      const height=(source.height+preview.height);
-      source.setSize({height:Math.round(stored.sourceRatio*height)});
-    }
-    // Allow Dockview to finish laying out and to resolve size constraints.
+    if(stored)port.setRatios(stored);
     requestAnimationFrame(complete);
-  }
-  requestAnimationFrame(restoreWhenReady);
-  return {dispose(){disposed=true;}};
+  };
+  requestAnimationFrame(restore);
+  return ()=>{
+    disposed=true;
+    unsubscribe?.dispose?.();
+    window.removeEventListener('pagehide',capture);
+  };
 }

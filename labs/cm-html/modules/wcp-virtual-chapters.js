@@ -1,3 +1,4 @@
+import {persistLabWorkspaceLayout} from './layout-persistence.js';
 /** Only the explicit WCP contract wires WP3–WP6 into reusable V6 components.
  * No duplicate EditorState, source scanner, Markdown renderer or Grid owner.
  */
@@ -19,6 +20,8 @@ export function createWCPRuntime(){
   ];
   return Object.freeze({
     editorExtensions,
+    preservePreviewNodes:true,
+    onLayoutReady:port=>persistLabWorkspaceLayout(port),
     wrapCMD:cm=>createCMDTransactionPort(cm),
     onCMReady({view,status}){
       activeView=view;reportStatus=status;
@@ -29,11 +32,11 @@ export function createWCPRuntime(){
       document.addEventListener('ocr2md:wp4-virtual-scope',onScope);
       detachCM=()=>document.removeEventListener('ocr2md:wp4-virtual-scope',onScope);
     },
-    onAGReady({views,getMarkdown,getCMD}){
-      // Event published by the stable Workspace module contract, not injected
-      // into source through Vite. Consumers look up the live CMD on demand.
+    onAGReady(bridge){
+      // The message contains only bounded chapter read operations, not AG,
+      // Media, LaTeX or CMD instances.
       document.dispatchEvent(new CustomEvent('ocr2md:wp3-ag-ready',{
-        detail:{views,getMarkdown,getCMD},
+        detail:bridge,
       }));
     },
     onPreviewInit(previewPort){
