@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs';
 /** Media image references must agree with the supported MD preview forms. */
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
@@ -25,8 +26,12 @@ try{
     await new Promise(resolve=>setTimeout(resolve,110));
   }
   assert(started,'isolated Vite server failed');
-  const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-    ['WebKit',webkit,{executablePath:'/Users/daisor/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+  // Explicit env override, else the legacy macOS path when present, else Playwright's bundled browser.
+  const pick=(env,legacy)=>process.env[env]||(existsSync(legacy)?legacy:undefined);
+  const chromePath=pick('V6_CHROME_PATH','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+  const webkitPath=pick('V6_WEBKIT_PATH','/Users/daisor/Library/Caches/ms-playwright/webkit-2359/pw_run.sh');
+  const engines=[['Chrome',chromium,chromePath?{executablePath:chromePath}:{}],
+    ['WebKit',webkit,webkitPath?{executablePath:webkitPath}:{}]];
   for(const [label,engine,options] of engines){
     const browser=await engine.launch({headless:true,...options});
     try{
