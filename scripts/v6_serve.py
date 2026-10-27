@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """V6 static release + single-document I/O. No Vite runtime, no MD cache."""
 import hmac
-import importlib.util
 import hashlib
 import subprocess
 from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
@@ -84,15 +83,9 @@ def document_etag(content):
     # Strong checksum over the exact UTF-8 representation sent to the client.
     return '"' + hashlib.sha256(content).hexdigest() + '"'
 
-LAB_HTTP_EXTENSION = None
-if LAB_ID:
-    # Optional lab-local document router. Production has no such module.
-    extension_file = LAB_DIR / 'modules' / 'document-router.py'
-    if extension_file.is_file() and not extension_file.is_symlink():
-        spec = importlib.util.spec_from_file_location('ocr2md_lab_document_router', extension_file)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        LAB_HTTP_EXTENSION = module.route
+# Lab and Main serve the SAME business routes. Legacy lab/module HTTP
+# extensions may remain in archival source but are never loaded/executed.
+# Only URL/cookie/runtime/data paths are environment-specific.
 LIMIT = 8 * 1024 * 1024
 
 TOKEN.parent.mkdir(parents=True, exist_ok=True)
@@ -659,8 +652,6 @@ class LabHandler(Handler):
             self.response(404, 'Outside lab scope')
             return
         self.path = '/' + parsed.path[len(PREFIX):] + ('?' + parsed.query if parsed.query else '')
-        if LAB_HTTP_EXTENSION and LAB_HTTP_EXTENSION(self, method, DOC, DOC_WRITE_LOCK):
-            return
         getattr(Handler, method)(self)
 
     def do_GET(self): self.dispatch_scoped('do_GET')

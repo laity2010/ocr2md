@@ -3,7 +3,8 @@ import {readFile, mkdir, rename, writeFile} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
 import {existsSync,statSync,createReadStream} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {labProfile,labVitePlugin} from './scripts/v6_lab_profile.mjs';
+import {labProfile} from './scripts/v6_lab_profile.mjs';
+import {moduleParityPlugin} from './scripts/v6_module_parity.mjs';
 import {execFileSync} from 'node:child_process';
 const root=process.cwd();
 const lab=labProfile(root);
@@ -47,7 +48,7 @@ export default defineConfig({
   base:lab?.base||'/',
   build: {outDir: lab?`../labs/${lab.name}/dist`:'../dist', emptyOutDir: true},
   plugins: [
-    labVitePlugin(root,lab),
+    moduleParityPlugin(root,lab),
     {name:'release-identity',generateBundle() {
       const baseCommit=lab?execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim():undefined;
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({version:buildVersion,...(lab?{mode:'lab',name:lab.name,baseCommit}:{})})+'\n'});

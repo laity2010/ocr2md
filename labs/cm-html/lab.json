@@ -1,9 +1,1 @@
-{
-  "modules": {
-    "chapterBoundary": "./modules/chapter-outline.js",
-    "settings": "./modules/settings-module.js",
-    "chapterFiles": "./modules/chapter-files.js",
-    "cmDocument": "./modules/cm-document.js",
-    "wcpRuntime": "./modules/wcp-virtual-chapters.js"
-  }
-}
+{}

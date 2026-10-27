@@ -27,7 +27,7 @@ def branch(name):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=['create','sync','status','merge-check'])
+    parser.add_argument('action',choices=['create','sync','status','merge-check','parity-check'])
     parser.add_argument('name',help='Lab slug, e.g. latex-v2')
     parser.add_argument('--trunk',default='build/2026-10-20',help='The current integration branch')
     args=parser.parse_args()
@@ -40,20 +40,23 @@ def main():
         assert_clean(ROOT)
         path.parent.mkdir(exist_ok=True)
         git('worktree','add','-b',target,str(path),args.trunk)
-        directory=path/'labs'/args.name
-        directory.mkdir(parents=True,exist_ok=True)
-        (directory/'lab.json').write_text(json.dumps({'modules':{}},indent=2)+'\n')
-        git('add',str(Path('labs')/args.name/'lab.json'),cwd=path)
-        git('commit','-m',f'lab({args.name}): initialize isolated module overrides',cwd=path)
+        # Mirror must begin at the EXACT Main SHA; do not introduce an
+        # experiment-only initialization commit or business override config.
+        # Build creates labs/<name>/dist; server has its own runtime directory.
+        assert git('rev-parse','HEAD',cwd=path).stdout.strip()==git('rev-parse',args.trunk).stdout.strip()
     elif not path.is_dir():
         raise RuntimeError('Missing worktree: '+str(path))
     if args.action=='sync':
         assert_clean(path)
         git('merge','--no-edit','--no-ff',args.trunk,cwd=path)
+    if args.action=='parity-check':
+        assert_clean(path)
+        subprocess.run(['node','scripts/v6_lab_parity_check.mjs',args.name],cwd=path,check=True)
     if args.action=='merge-check':
         assert_clean(path)
         # Merge-tree resolves integration in-memory and reports conflicts,
         # but NEVER modifies the trunk or the laboratory checkout.
+        subprocess.run(['node','scripts/v6_lab_parity_check.mjs',args.name],cwd=path,check=True)
         result=git('merge-tree','--write-tree',args.trunk,target,cwd=ROOT,check=False)
         if result.returncode:
             print(result.stdout)
