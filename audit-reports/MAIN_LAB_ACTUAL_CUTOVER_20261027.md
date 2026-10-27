@@ -23,3 +23,10 @@
 ## 交付边界
 
 这次修复针对 **Main 默认功能入口真实启用**，不是把 `V6_LAB_ID=cm-html` 实验构建伪装成正式主线。要求发布后的内外网加载截图/AG 操作再次通过，记录实际 release SHA。外部审计快照 `9953137` 仍冻结；本轮新 Main 代码须归入后续增量审计，不能冒称已获 Grok/Muse 签字。
+
+## 实际 Main 内外网已发布（最终结果）
+
+- **正式 Main 产物 `v6-20261027-202307`，页面标牌 `main-261027-2023`，源提交 `3321bd99a094103d8bbab5d198fa504e9a858f5c`。** 标准 `npm run build`、标准单正式目录锁定发布 `python3 scripts/v6_publish.py` 均完成；内网 `https://192.168.1.10:4443/release-version.json` 与公网 `https://ocr2md.laity.bid/release-version.json` 返回完全相同版本。
+- **真实正式入口验收**（不是隔离测试、也不是 Lab URL）：Playwright LAN Chrome、LAN iPad WebKit、PUBLIC Chrome 三次实测均 `MAIN_LIVE_PROMOTED_UI_PASS`。三个环境都加载当前用户母文档，看到六个真实 CMD 虚拟章节 `000–005`；`#module-select` 旧原生控件不可见、Tom Select 文件导航+元素导航+预览导航出现、「全部」可见；实际切换 `001` 更新 URL `?view=mineru...` 和源下拉选择值。三次 `pageerror=[]`，`apiWrites=[]`。原始截图位于 `.v6/evidence/main-live-...`，可比对的导航裁图已提交 `audit-reports/screenshots/main-live-...-new-nav.png`。
+- **实际内容未覆盖**：Main Markdown `.v6/workspace/buffetts-alpha.minerujson.md` SHA256 `c998da7aeea5410f1d7be10975c05e59efb5cdf6bfcf750595b27a048c5e3e19`、全局设置 `.v6/settings.json` SHA256 `18fdc687751150f8f0c994c9889b36caf326c8e1482ddacededc6362e5c07c23`、Lab 母 Markdown `649c0de9ce82896ef2c7a04f4fea0cc79ade32d0657cc3ebc47cc9d9864ebe6f` 均在修复/发布前后不变；实验分支冻结不动。正式 GitHub origin 没有推送未经完整审计的改动。
+- **审计边界**：以上证明 Main 功能已真实接线并部署、核心导航对照可用，**不等于 Grok/Muse 已对这轮迁移完成独立 AM/Git 签字**。外部冻结快照 A `9953137` 未变；迁移与媒体闪烁修复属于后续 Main 差异，须作为审计补充。
