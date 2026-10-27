@@ -1,13 +1,25 @@
 # OCR2MD · 外部 AM/Git 审计工作流
 
-本文件是 OCR2MD 审计的**唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。**人工唯一交付动作是转发一份标准审计 Prompt**；主线 AI 必须在此前将源码快照、版本化审计说明、PDF/MD 测试夹具及哈希证据全部放到 GitHub 的实际可下载位置。外部 AI 从 GitHub 自行取得和验证全部资料，绝不要求用户另行传送 bundle、PDF 或其他文件。GitHub 上传成功不等于外部 AI 可取件：私有仓库必须确认接收 AI 自身具有可用的连接器或 Git 传输权限，未验证应标为 `BLOCKED: DELIVERY_ACCESS`。不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
+本文件是 OCR2MD 审计的**唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。**人工唯一交付动作是转发一份标准审计 Prompt**；主线 AI 必须在此前将源码快照、版本化审计说明、PDF/MD 测试夹具及哈希证据全部放到 GitHub 的实际可下载位置。外部 AI 从 GitHub 自行取得和验证全部资料，绝不要求用户另行传送 bundle、PDF 或其他文件。GitHub 上传成功不等于外部 AI 可取件：经用户授权公开的审计包必须实际通过匿名 HTTPS 冷克隆验证；私有仓库必须确认接收 AI 自身具有可用的连接器或 Git 传输权限，未验证应标为 `BLOCKED: DELIVERY_ACCESS`。不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
+
+### 经用户授权的公开审计包（已验证案例）
+
+2026-10-27 用户明确授权 OCR2MD 项目公开，已使用原公开仓库 laity2010/ocr2md 的独立 audit-public-06bf498 分支发布本轮审计包：固定受审源码完整 SHA 为 06bf498daab22ad175f5ae4727a2c1e66b38402c；审计包 HEAD 为 75567488c52dcd92afa9ff8baf179c0b379f26c3；完整 PDF 及 MD 夹具已校验哈希。已由无凭据的匿名 HTTPS 单分支冷克隆实际验证，包内根目录 audit.sh 为一键入口。发布仅限审计包分支，没有推送未验收的开发 Main，也没有部署生产。
+
+每次新审计优先复用已成功的模式：检查冻结 SHA、全部可达 Git 历史及测试数据是否存在不应公开内容；若已获得相应公开授权，则从冻结 SHA 创建**独立交付包提交**，内置受许可的 PDF/MD 测试夹具、根目录 AUDIT.md 和 audit.sh；普通 push 到原公开 GitHub 仓库的独立审计分支，再实际使用无凭据的 HTTPS 完整克隆验收。该交付包 HEAD 可以晚于被审源码 SHA，但必须准确披露两者关系，所有运行与结论绑定**被审源码 SHA**。若未获公开许可，不得借审计便利泄露私有内容；私有渠道需真实验证接收 AI 有权读取，未通过则停止交付并报告 BLOCKED。
+
+~~~
+git clone --single-branch --branch audit-public-06bf498 https://github.com/laity2010/ocr2md.git ocr2md-audit-06bf498
+cd ocr2md-audit-06bf498
+bash audit.sh
+~~~
 
 ## 1. 工作流与责任
 
 | 阶段 | 执行者 | 可验收的交付 |
 | --- | --- | --- |
 | 1. 整合 | 主线 AI | 用户已批准的 Lab 通过正常 merge 进入**持续开发 Main**；原 Lab 分支、快照及数据冻结。若没有待合并 Lab，直接进行下一阶段 |
-| 2. 冻结 | 主线 AI | 核查 Main 状态与本地 AM/Git 基线，冻结完整 40 位 Git SHA，创建只读 `audit/*` 引用；使用普通 push 交付到经核验的私有仓库，不动公开/生产分支 |
+| 2. 冻结 | 主线 AI | 核查 Main 状态与本地 AM/Git 基线，冻结完整 40 位 Git SHA，创建只读 `audit/*` 引用；经用户明确授权公开并通过敏感内容预检时，普通 push 到公开仓库的独立审计交付分支；否则须使用已验证接收端权限的私有仓库，不动开发/生产分支 |
 | 3. 准备 | 主线 AI | 从下方**单一模板**生成一份审计 Prompt；注明仓库、SHA、GitHub 取件方式及预期报告/修复分支；由用户仅转发这份 Prompt 给 Grok、Muse |
 | 4. 接单 | Grok / Muse | 在**自己的**执行环境核实仓库访问、准确 SHA、Git 状态与运行能力；给出 ACK 或真实的 BLOCKED 原因。人工转发不等于接单成功 |
 | 5. 审计与修复 | Grok / Muse | 各自独立运行 AM/Git、浏览器及专项检查；保留初始失败证据，**在自己的修复分支**自主修复、复测；不互相等待、不修改冻结快照 |
@@ -18,22 +30,23 @@
 
 ## 2. 统一审计 Prompt（人工转发用）
 
-主线 AI 每次只生成**一份** Prompt（以下模板），把占位符填成真实值，原文分别转发给 Grok 与 Muse；两边可依据自身平台特点选择额外的测试，但不能删减共用验收范围。先确认私有仓库可由接收 AI 自身访问；若不行，在交付中注明实际授权渠道，不能把主线的 GitHub 权限当作对方权限。
+主线 AI 每次只生成**一份** Prompt（以下模板），把占位符填成真实值，原文分别转发给 Grok 与 Muse；两边可依据自身平台特点选择额外的测试，但不能删减共用验收范围。优先采用已获得授权且通过安全检查的公开审计包，实测匿名 HTTPS clone；私有交付必须额外验证接收 AI 自身权限，不能把主线的 GitHub 权限当作对方权限。
 
 ```text
 你是 OCR2MD 独立审计与修复 AI（Grok 或 Muse）。请独立执行以下任务，不引用另一位 AI 的审计结论作为自己的 PASS。
 
-审计仓库：<PRIVATE_REPOSITORY_URL>
-冻结分支：<AUDIT_SOURCE_BRANCH>
+审计仓库：<GITHUB_REPOSITORY_URL>
+冻结源码分支：<AUDIT_SOURCE_BRANCH>
+审计交付包分支（公开方式）：<PUBLIC_AUDIT_PACKAGE_BRANCH>
 待审 Main 完整 SHA：<40_CHAR_SHA>
-GitHub 审计材料下载入口（包括可用的 Git bundle、PDF/MD、哈希）：<GITHUB_ARTIFACT_URL_OR_REPO_PATH>
+GitHub 审计材料入口：<PUBLIC_AUDIT_PACKAGE_BRANCH_OR_PRIVATE_ARTIFACT_PATH>（含源码、PDF/MD、哈希与审计脚本）
 GitHub 审计材料的权限要求与获取说明：<ACCESS_VERIFICATION_INSTRUCTIONS>
 原始报告分支：audit/<AI>-<SHORT_SHA>-report
 独立修复分支：fix/<AI>-<SHORT_SHA>
 唯一工作流入口：该冻结提交根目录 AUDIT.md
 统一 AM 执行入口：bash tests/am/run-grok-audit.sh <40_CHAR_SHA>
 
-第一步：在你自己的环境读取仓库，从 GitHub 自行获取全部材料，核对完整 SHA、Git 状态、系统/运行时/浏览器与夹具哈希；如克隆通道不可用，可从 GitHub 下载完整 Git bundle 并自行克隆为独立 worktree；使用 bash scripts/audit-ack.sh <40_CHAR_SHA> <REPOSITORY_URL> refs/heads/<AUDIT_SOURCE_BRANCH> 返回真实 AUDIT_ACK READY；无法访问或运行时，请附证据说明 BLOCKED，不得臆造 PASS。
+第一步：如果交付为公开审计包，从 GitHub 匿名 HTTPS clone 指定审计交付包分支，核实该分支包含指定完整源码 SHA 与 PDF/MD 夹具，运行 bash audit.sh（它在隔离 worktree 审计固定源码 SHA，不把交付包 HEAD 误认成被审源码）。私有交付则由本人授权 GitHub/Git 实际验证仓库访问和 SHA，可使用 scripts/audit-ack.sh。无论哪种交付，都记录真实平台、Git 状态、哈希与运行结果；失败必须报 BLOCKED，不得臆造 PASS。
 
 第二步：在独立 worktree 运行全部适用 AM/Git、Chromium/WebKit 和业务专项检查，人工独立审阅 AM/API/消息订阅、WCP/Lab 边界、跨模块 import/DOM/store 调用、构建期改写、版本/跨平台差异、HTTP 428/412/CAS 与草稿保护、生产与 Lab 功能激活；如有未覆盖范围，如实报告。真实 iPad 与模拟 WebKit 不可混称。
 
