@@ -43,6 +43,8 @@ python3 -m unittest discover -s tests/am -p 'test_*.py'
 保持现有 AM 七个模块、98 个 API、139 条业务契约及单份 `registry.sql` 不变。
 `audit_boundaries.py` 从 `ownership.json` 补充读取 **27 个 `ui/*.js` 实现文件归属**（不是新增 20 个业务模块），检查静态相对导入、具名符号、共享库允许消费者与已知的直接状态写入。`am.py check`、`run-all` 和 `certify` 会执行这个只读检查；`test_boundaries.py` 提供九项故意越界负向测试。此类静态检查不宣称能证明运行时所有调用、动态事件总线和 DOM 耦合完全解耦。`outlineCount` / `activePanel` 两处既存直写仍列为后续审阅项。
 
+派单、审计者读取回执和报告规范参阅仓库根目录 [AUDIT.md](../../AUDIT.md)；两个 AI 使用相同测试入口，Issue 不是执行回执。
+
 **唯一全量审计入口**（旧命令名保留，便于 Grok/Muse 独立调用）：
 
 ```sh
