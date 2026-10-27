@@ -1,0 +1,13 @@
+AUDIT_LINUX_WAIT_DIAG {"suite":"outline-title-scale-browser.test.mjs","state":{"documentState":"complete","title":"OCR2MD V6 · 章节定界","agRows":21,"pdfReady":false,"pdfLoading":true,"status":"● 全局设置未保存 · 3,112行 / 306,869字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","docLength":306869,"selectedModule":"chapter-boundary","latexRows":0,"latexGridPresent":true,"unlockOpen":false,"unlockError":"","url":"http://127.0.0.1:5894/"},"errors":[]}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 30000ms exceeded.
+    at page.waitForFunction (/home/hatch/workspace/ocr2md-am-06bf498d-run4/.v6/audit-reports/audit-linux-diagnostics.mjs:76:32)
+    at /home/hatch/workspace/ocr2md-am-06bf498d-run4/tests/outline-title-scale-browser.test.mjs:53:16 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v24.22.1

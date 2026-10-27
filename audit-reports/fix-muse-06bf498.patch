@@ -1,0 +1,101 @@
+From 287441921b7548532dbf0bd59d3cea9392eded9e Mon Sep 17 00:00:00 2001
+From: "Meta Muse (independent audit)" <muse@independent-audit.local>
+Date: Tue, 27 Oct 2026 15:30:03 +0800
+Subject: [PATCH 1/2] fix(ui): retain outline title font scale across outline
+ panel lifecycle
+
+Independent audit of frozen 06bf498 (Meta Muse, Linux): suite
+tests/outline-title-scale-browser.test.mjs failed deterministically
+(3/3 samples: two full AM runs + one standalone rerun). After saving
+titleFontScale=1.7 and reloading, the outline H1 font never reached
+the persisted 57.8px; the wait at test line 53 timed out with the
+document fully loaded and the outline grid present at scale 1.
+
+Root cause: the settings value reaches the outline only through
+workspace.setOutlineTitleFontScale -> currentOutline?.grid?.setTitleFontScale.
+If the settings module publishes the loaded value before the outline
+panel's grid exists (or across a dispose/recreate gap), the optional
+chain silently drops it, and createOutlineGrid always starts at 1
+with no replay of the last published value.
+
+Fix: workspace remembers the last validated scale value, forwards it
+to the live grid as before, and OutlinePanel.init() applies the
+remembered value to every newly created grid. Validation mirrors the
+grid setter (finite, 0.2..2, same error). No test changes.
+---
+ ui/workspace.js | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/ui/workspace.js b/ui/workspace.js
+index 4969216..5d87ffa 100644
+--- a/ui/workspace.js
++++ b/ui/workspace.js
+@@ -49,6 +49,7 @@ let refreshPreview = () => {};
+ let currentPreview=null;
+ let scrollSync=null;
+ let currentOutline=null;
++let outlineTitleFontScale=1;
+ let currentPdf=null;
+ let toggleSplitPreview=()=>{};
+ let wcpRuntime=null;
+@@ -68,6 +69,7 @@ class OutlinePanel {
+   }
+   init(){
+     this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
++    this.grid.setTitleFontScale(outlineTitleFontScale);
+     this.element.append(this.mediaHost,this.latexHost);
+     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
+     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
+@@ -408,7 +410,11 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
+     },
+     refreshPreview:()=>refreshPreview(),
+     refreshOutline:()=>currentOutline?.grid?.refresh(),
+-    setOutlineTitleFontScale:value=>currentOutline?.grid?.setTitleFontScale(value),
++    setOutlineTitleFontScale(value){
++      if(!Number.isFinite(value)||value<0.2||value>2)throw Error('Invalid title font scale');
++      outlineTitleFontScale=value;
++      currentOutline?.grid?.setTitleFontScale(value);
++    },
+     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
+     setWorkModule:module=>currentOutline?.setModule(module),
+     scanMedia:()=>currentOutline?.media?.scan(),
+-- 
+2.43.0
+
+
+From 76b8f829b36363b0275b0e8f496f587bf21d5e73 Mon Sep 17 00:00:00 2001
+From: "Meta Muse (independent audit)" <muse@independent-audit.local>
+Date: Tue, 27 Oct 2026 15:30:03 +0800
+Subject: [PATCH 2/2] test(media): use portable Playwright-managed launchers in
+ media-adoption-syntax
+
+Independent audit of frozen 06bf498 (Meta Muse, Linux): this suite
+still pinned one machine's browsers - a macOS system Chrome path and
+a personal /Users/daisor/.../webkit-2359/pw_run.sh - unlike sibling
+suites already converted by cc14a72 to Playwright-managed launchers.
+On any other macOS machine the suite cannot start its browsers;
+AGENTS.md section 7 forbids personal absolute paths in shared tests.
+Mirror cc14a72 exactly: default Playwright-managed Chromium/WebKit.
+No assertion, fixture or behavioral change.
+---
+ tests/media-adoption-syntax.test.mjs | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/media-adoption-syntax.test.mjs b/tests/media-adoption-syntax.test.mjs
+index a6f7812..346239b 100644
+--- a/tests/media-adoption-syntax.test.mjs
++++ b/tests/media-adoption-syntax.test.mjs
+@@ -25,8 +25,8 @@ try{
+     await new Promise(resolve=>setTimeout(resolve,110));
+   }
+   assert(started,'isolated Vite server failed');
+-  const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
+-    ['WebKit',webkit,{executablePath:'/Users/daisor/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
++  // Portable browser launch: use Playwright-managed Chromium/WebKit binaries.
++  const engines=[['Chrome',chromium,{}],['WebKit',webkit,{}]];
+   for(const [label,engine,options] of engines){
+     const browser=await engine.launch({headless:true,...options});
+     try{
+-- 
+2.43.0
+
