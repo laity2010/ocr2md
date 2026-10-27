@@ -13,7 +13,7 @@ const root=process.cwd(),name=process.env.OCR_LAB_NAME||'cm-html';
 assert(/^[a-z][a-z0-9-]{0,31}$/.test(name));
 execFileSync('node',['scripts/v6_lab_parity_check.mjs',name],{cwd:root,stdio:'inherit'});
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
-const settings=readFileSync('.v6/settings.json','utf8');
+const settings=JSON.stringify({settings:{}},null,2)+'\n';
 // Never remove an existing runtime. The mirror should be a fresh test worktree,
 // distinct from the hosted deployment's persistent user data.
 const rt=resolve(`labs/${name}/.runtime`);
