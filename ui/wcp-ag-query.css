@@ -1,0 +1,10 @@
+.ocr-lab-ag-toolbar .ocr-wp3-index-toggle[hidden],
+.ocr-lab-ag-toolbar .ocr-all-chapters-control[hidden],
+.ocr-lab-ag-toolbar .ocr-all-chapters-status[hidden],
+.ocr-lab-ag-toolbar .ocr-wp3-chapter-select[hidden]{display:none!important}
+.ocr-lab-ag-toolbar .ocr-wp3-index-toggle,
+.ocr-lab-ag-toolbar .ocr-all-chapters-control{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-size:12px}
+.ocr-lab-ag-toolbar .ocr-wp3-index-toggle input,
+.ocr-lab-ag-toolbar .ocr-all-chapters-control input{width:15px;height:15px;accent-color:#a7c080}
+.ocr-lab-ag-toolbar .ocr-wp3-chapter-select{max-width:205px;width:205px;flex:0 1 auto;background:#272f34;color:#d3c6aa;border:1px solid #525c62;border-radius:4px;font-size:12px}
+.ocr-lab-ag-toolbar .ocr-all-chapters-status{font-size:11px;color:#a7c080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

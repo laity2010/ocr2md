@@ -7,9 +7,12 @@
     "chapter-files.js": "G",
     "chapter-markers.js": "G",
     "cm-document.js": "C",
+    "cm-font-setting.js": "C",
     "cmd-annotations.js": "C",
+    "cmd-json-source.js": "C",
     "enum-checkbox-filter.js": "shared",
     "fontcheck.js": "shell",
+    "http-path.js": "shared",
     "ios-native-selection.js": "shared",
     "latex-inline-candidates.js": "T",
     "latex-inline-preview.js": "T",
@@ -27,17 +30,28 @@
     "outline-focus.js": "shell",
     "outline-grid.js": "G",
     "outline-index.js": "G",
+    "pane-layout-ratios.js": "shared",
     "pdf-preview.js": "P",
     "scroll-sync.js": "L",
-    "view-store.js": "shared",
-    "workspace.js": "L",
     "settings-module.js": "S",
-    "cm-font-setting.js": "C",
-    "cmd-json-source.js": "C",
+    "view-store.js": "shared",
+    "virtual-ag-query.js": "shared",
+    "wcp-ag-module-toolbar.js": "G",
+    "wcp-ag-query.js": "G",
+    "wcp-chapter-files.js": "G",
+    "wcp-chapter-outline.js": "G",
+    "wcp-cm-document.js": "C",
+    "wcp-cm-virtual-view.js": "C",
+    "wcp-cmd-element-transactions.js": "C",
+    "wcp-document-index.js": "G",
+    "wcp-layout-persistence.js": "L",
+    "wcp-md-virtual-preview.js": "M",
+    "wcp-navigation-select.js": "shared",
     "wcp-runtime.js": "W",
-    "pane-layout-ratios.js": "shared",
-    "http-path.js": "shared",
-    "virtual-ag-query.js": "shared"
+    "wcp-settings-module.js": "S",
+    "wcp-source-file-navigation.js": "S",
+    "wcp-wcp-virtual-chapters.js": "shell",
+    "workspace.js": "L"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -47,38 +61,43 @@
       "T"
     ],
     "ios-native-selection.js": [
-      "shell",
-      "C"
+      "C",
+      "shell"
     ],
     "mineru-anchors.js": [
-      "C",
-      "G",
-      "P",
-      "A"
-    ],
-    "view-store.js": [
-      "shell",
-      "G",
-      "P",
-      "L",
       "A",
-      "T"
-    ],
-    "pane-layout-ratios.js": [
-      "S",
-      "L"
-    ],
-    "http-path.js": [
-      "shell",
       "C",
-      "A",
       "G",
       "P"
     ],
-    "virtual-ag-query.js": [
-      "G",
+    "view-store.js": [
       "A",
+      "G",
+      "L",
+      "P",
+      "S",
+      "T",
+      "shell"
+    ],
+    "pane-layout-ratios.js": [
+      "L",
+      "S"
+    ],
+    "http-path.js": [
+      "A",
+      "C",
+      "G",
+      "P",
+      "shell"
+    ],
+    "virtual-ag-query.js": [
+      "A",
+      "G",
       "T"
+    ],
+    "wcp-navigation-select.js": [
+      "G",
+      "S"
     ]
   },
   "observedDirectStoreWrites": {},
@@ -97,54 +116,86 @@
     "latex-review-markers.js->cmd-annotations.js": [
       "scanAnnotations"
     ],
-    "main.js->workspace.js": [
-      "createWorkspace"
-    ],
-    "main.js->cm-document.js": [
-      "CMDocument"
-    ],
-    "main.js->media-module.js": [
-      "uploadPastedImage"
-    ],
     "main.js->chapter-markers.js": [
       "countMarkers"
-    ],
-    "main.js->chapter-files.js": [
-      "buildChapterFiles"
-    ],
-    "markdown-preview.js->latex-inline-preview.js": [
-      "projectReviewedInlineLatex"
-    ],
-    "workspace.js->markdown-preview.js": [
-      "renderMarkdown"
-    ],
-    "workspace.js->outline-grid.js": [
-      "createOutlineGrid"
-    ],
-    "workspace.js->media-module.js": [
-      "createMediaModule"
-    ],
-    "workspace.js->latex-module.js": [
-      "createLatexModule"
-    ],
-    "workspace.js->pdf-preview.js": [
-      "PdfPreview"
-    ],
-    "main.js->settings-module.js": [
-      "createSettingsModule"
     ],
     "main.js->cm-font-setting.js": [
       "registerCMSourceFontSetting"
     ],
-    "main.js->outline-grid.js": [
+    "main.js->media-module.js": [
+      "uploadPastedImage"
+    ],
+    "main.js->wcp-chapter-files.js": [
+      "buildChapterFiles"
+    ],
+    "main.js->wcp-chapter-outline.js": [
       "registerOutlineTitleScaleSetting"
+    ],
+    "main.js->wcp-cm-document.js": [
+      "CMDocument"
+    ],
+    "main.js->wcp-settings-module.js": [
+      "createSettingsModule"
+    ],
+    "main.js->workspace.js": [
+      "createWorkspace"
+    ],
+    "markdown-preview.js->latex-inline-preview.js": [
+      "projectReviewedInlineLatex"
     ],
     "settings-module.js->cmd-json-source.js": [
       "openCMDJsonSource",
       "readCMDJsonSnapshot"
     ],
-    "main.js->wcp-runtime.js": [
-      "createWCPRuntime"
+    "wcp-cmd-element-transactions.js->wcp-document-index.js": [
+      "createIndexProjector"
+    ],
+    "wcp-document-index.js->cmd-annotations.js": [
+      "scanAnnotations"
+    ],
+    "wcp-document-index.js->latex-review-markers.js": [
+      "findReviewMarkers"
+    ],
+    "wcp-document-index.js->latex-scan.js": [
+      "findLatex"
+    ],
+    "wcp-document-index.js->media-module.js": [
+      "findMedia"
+    ],
+    "wcp-settings-module.js->wcp-ag-module-toolbar.js": [
+      "mountAgModuleToolbar"
+    ],
+    "wcp-source-file-navigation.js->wcp-chapter-files.js": [
+      "chapterAssignments"
+    ],
+    "wcp-wcp-virtual-chapters.js->wcp-cm-virtual-view.js": [
+      "virtualChapterExtensions",
+      "setVirtualChapter",
+      "currentVirtualChapter"
+    ],
+    "wcp-wcp-virtual-chapters.js->wcp-cmd-element-transactions.js": [
+      "createCMDTransactionPort"
+    ],
+    "wcp-wcp-virtual-chapters.js->wcp-layout-persistence.js": [
+      "persistLabWorkspaceLayout"
+    ],
+    "wcp-wcp-virtual-chapters.js->wcp-md-virtual-preview.js": [
+      "renderVirtualMarkdown"
+    ],
+    "workspace.js->latex-module.js": [
+      "createLatexModule"
+    ],
+    "workspace.js->markdown-preview.js": [
+      "renderMarkdown"
+    ],
+    "workspace.js->media-module.js": [
+      "createMediaModule"
+    ],
+    "workspace.js->pdf-preview.js": [
+      "PdfPreview"
+    ],
+    "workspace.js->wcp-chapter-outline.js": [
+      "createOutlineGrid"
     ]
   }
 }

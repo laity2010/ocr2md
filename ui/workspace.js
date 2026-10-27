@@ -9,7 +9,7 @@ import 'dockview/dist/styles/dockview.css';
 import {viewStore,publishFocus,publishActivePanel} from './view-store.js';
 import {renderMarkdown} from './markdown-preview.js';
 import {createScrollSync} from './scroll-sync.js';
-import {createOutlineGrid} from '../labs/cm-html/modules/chapter-outline.js';
+import {createOutlineGrid} from './wcp-chapter-outline.js';
 import {createMediaModule} from './media-module.js';
 import {createLatexModule} from './latex-module.js';
 import {PdfPreview} from './pdf-preview.js';
