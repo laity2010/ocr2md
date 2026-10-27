@@ -25,8 +25,8 @@ try{
     await new Promise(resolve=>setTimeout(resolve,110));
   }
   assert(started,'isolated Vite server failed');
-  const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-    ['WebKit',webkit,{executablePath:'/Users/daisor/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+  // Portable browser launch: use Playwright-managed Chromium/WebKit binaries.
+  const engines=[['Chrome',chromium,{}],['WebKit',webkit,{}]];
   for(const [label,engine,options] of engines){
     const browser=await engine.launch({headless:true,...options});
     try{
