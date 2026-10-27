@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {chromium,webkit} from 'playwright';
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-main-promoted-'));
-const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+const fixture=readFileSync(process.env.OCR_MAIN_USE_CURRENT_COPY==='1'?'.v6/workspace/buffetts-alpha.minerujson.md':'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const settings=readFileSync('.v6/settings.json','utf8');
 writeFileSync(join(dir,'document.md'),fixture);
 writeFileSync(join(dir,'settings.json'),settings);
