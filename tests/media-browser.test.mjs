@@ -70,6 +70,8 @@ mkdirSync('.v6/evidence',{recursive:true});
 try{
  for(let i=0;i<engines.length;i++){
   const [name,engine,options]=engines[i];
+  if(process.env.V6_ONLY_WEBKIT&&name!=='WebKit')continue;
+  if(process.env.V6_ONLY_CHROME&&name!=='Chrome')continue;
   const folder=resolve(`.v6/tests/media-${process.pid}-${i}`);
   mkdirSync(folder,{recursive:true});
   const doc=resolve(folder,'book.minerujson.md');
@@ -148,7 +150,15 @@ try{
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:20000});
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('已下载'),null,{timeout:16000});
    assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').textContent(),'续传');
+   // The iPad AG virtualizes unpinned columns as the horizontal scroller
+   // moves. Return the real user viewport to the left so the adoption column
+   // is actually mounted before counting its 13 status markers.
+   await page.locator('.ocr-media-grid .ag-body-horizontal-scroll-viewport').evaluate(el=>{
+     el.scrollLeft=0;
+     el.dispatchEvent(new Event('scroll',{bubbles:true}));
+   });
    const adoption=page.locator('.ocr-media-grid .ocr-media-adoption');
+   await adoption.first().waitFor({state:'attached',timeout:14000});
    assert.equal(await adoption.filter({hasText:'未采用'}).count(),1);
    assert.equal(await adoption.filter({hasText:'已采用'}).count(),12);
    assert.equal(await adoption.filter({hasText:'未采用'}).first().getAttribute('data-adopted'),'no');
