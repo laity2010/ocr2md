@@ -63,8 +63,14 @@ export function createWorkspaceDirectoryModule(directoryPort){
       pathInput.setAttribute('aria-invalid',String(kind==='error'));
     };
     const normalizedPath=raw=>raw.trim().replace(/\\([ ~()&])/g,'$1');
+    // Book identity is relative to its catalogue; changing roots clears old selection.
+    const setRoot=path=>{
+      if(get(item.key)===path)return;
+      set('workspace.files.bookName','');
+      set(item.key,path);
+    };
     pathInput.addEventListener('change',()=>{
-      try{set(item.key,normalizedPath(pathInput.value));pathInput.value=normalizedPath(pathInput.value);}
+      try{const path=normalizedPath(pathInput.value);setRoot(path);pathInput.value=path;}
       catch(error){showFeedback('error','✕ '+error.message);}
     });
     const directoryList=document.createElement('div');directoryList.className='ocr-settings-directory-list';
@@ -81,9 +87,7 @@ export function createWorkspaceDirectoryModule(directoryPort){
         current.textContent='设为工作根目录';
         current.addEventListener('click',()=>{
           try{
-            const previous=get(item.key);
-            set(item.key,data.path);pathInput.value=data.path;
-            if(previous!==data.path)set('workspace.files.bookName','');
+            setRoot(data.path);pathInput.value=data.path;
             showFeedback('success','✓ 根目录已填写；请在「当前书籍工作目录」选书籍，然后顶栏保存');
           }catch(error){showFeedback('error','✕ 无法选用：'+error.message);}
         });
@@ -111,7 +115,7 @@ export function createWorkspaceDirectoryModule(directoryPort){
     verifyButton.addEventListener('click',async()=>{
       const path=normalizedPath(pathInput.value);
       try{
-        if(path!==pathInput.value){set(item.key,path);pathInput.value=path;}
+        setRoot(path);pathInput.value=path;
         showFeedback('info','正在验证书库根目录…');
         const data=await directoryPort.books(path);
         const available=data.books.filter(book=>book.selectable);

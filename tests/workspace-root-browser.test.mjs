@@ -100,6 +100,17 @@ for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1320,heig
   assert.equal(readFileSync(join(from,originalName),'utf8'),source);
   assert.equal(readFileSync(join(work,targetName),'utf8'),destinationDoc);
   assert.equal(JSON.parse(readFileSync(settings,'utf8')).settings['workspace.files.bookName'].value,'Book B');
+  // A newly typed catalogue invalidates the prior book choice before save.
+  await page.locator('#module-select').evaluate(el=>{
+   el.value='settings';el.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await row('rootPath').click();
+  await page.locator('#settings-workspace-root').fill(scratch);
+  await page.getByRole('button',{name:'验证路径'}).click();
+  await row('bookName').click();
+  await page.getByText('尚未选中书籍，继续使用原工作文档').waitFor({state:'visible',timeout:20000});
+  assert.equal(JSON.parse(readFileSync(settings,'utf8')).settings['workspace.files.bookName'].value,'Book B',
+   'Unsaved root change must not mutate saved book');
   assert.equal(await page.locator('#build-version').count(),1);
   assert.deepEqual(errors,[]);
   console.log('WORKROOT_BROWSER_PASS',name,JSON.stringify({bookCatalog:true,
