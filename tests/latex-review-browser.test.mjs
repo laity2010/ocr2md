@@ -1,6 +1,7 @@
 /** LaTeX review = CM6 Markdown comments, no separate document persistence.
  * Tests fenced and undelimited inline formulas, Undo/Redo, save/reload.
  */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -52,7 +53,7 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   // CMD caches that permission until the next unlock probe.
   await page.context().addCookies([{name:'v6edit',value:key,domain:'127.0.0.1',path:'/'}]);
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
-  await page.locator('#module-select').selectOption('latex');
+  await selectModule(page,'latex');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-review-select').length>1,
     null,{timeout:23000});
   const display=page.locator('.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="0"] .ocr-latex-review-select').first();
@@ -159,7 +160,7 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
     await route.continue();
   });
   await page.reload({waitUntil:'domcontentloaded'});
-  await page.locator('#module-select').selectOption('latex');
+  await selectModule(page,'latex');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-review-select').length>=2,
     null,{timeout:28000});
   // Stored values and the status channel must both be restored. A Mac run of

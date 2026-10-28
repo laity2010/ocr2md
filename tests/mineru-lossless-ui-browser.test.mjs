@@ -1,5 +1,6 @@
 /** New lossless comments must stay invisible in MD preview and leave AG
  * headings, original PDF and CM6 editing/scrolling behaviors intact. */
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync} from 'node:fs';
@@ -45,7 +46,7 @@ for(let i=0;i<engines.length;i++){
   assert.equal(state.agRowCount,expectedHeadings);
   assert.equal(state.visibleComments,false,'PDF discarded raw text exposed in rendered MD preview');
   assert(state.title?.includes('Bufett'),`unexpected AG title ${state.title}`);
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await page.locator('.ag-row[row-index="3"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]'),
     null,{timeout:34000});

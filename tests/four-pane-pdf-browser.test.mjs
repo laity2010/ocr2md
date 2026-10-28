@@ -1,3 +1,4 @@
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
@@ -63,7 +64,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
   assert.equal(initial.groups,3);assert.equal(initial.dark,'dark');
   assert.match(initial.pages,/22/);
   assert.deepEqual(initial.tabs,[],'all pane tabs hidden; shared preview uses own dropdown');
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await page.locator('.ocr-pdf-plus').click();
   await page.waitForFunction(old=>document.querySelector('.ocr-pdf-zoom')?.textContent!==old,
     initial.scale,{timeout:10000});

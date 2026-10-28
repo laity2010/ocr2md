@@ -1,6 +1,7 @@
 /** Regression: LaTeX AG click navigates all four visible peers (AG/CM6/MD/PDF).
  * Test copies source into isolation, never modifies a user's working document.
  */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -46,7 +47,7 @@ for(let i=0;i<engines.length;i++){
   const errors=[];page.on('pageerror',err=>errors.push(err.message));
   await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
-  await page.locator('#module-select').selectOption('latex');
+  await selectModule(page,'latex');
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪' &&
     !document.querySelector('.ocr-preview-split-toggle input')?.disabled,null,{timeout:65000});
   await page.locator('.ocr-preview-split-toggle input').check();

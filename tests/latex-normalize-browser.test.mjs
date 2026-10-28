@@ -2,6 +2,7 @@
  * Uses an isolated writable file seeded by immutable frozen legacy source.
  * Never touches the user's actual Buffett's Alpha workspace document.
  */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -50,7 +51,7 @@ for(let i=0;i<engines.length;i++){
     const page=await context.newPage();
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(base+'/',{waitUntil:'domcontentloaded',timeout:45000});
-    await page.locator('#module-select').selectOption('latex');
+    await selectModule(page,'latex');
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 8'),
       null,{timeout:30000});
     assert.equal(readFileSync(documentPath,'utf8'),source);
@@ -73,7 +74,7 @@ for(let i=0;i<engines.length;i++){
     assert.deepEqual(after.map(row=>row.reviewMarker?.id),before.map(row=>row.reviewMarker?.id));
     assert(after.filter(r=>r.status==='latex').every(r=>saved.slice(r.reviewMarker.openTo,r.from)===''));
     await page.reload({waitUntil:'domcontentloaded'});
-    await page.locator('#module-select').selectOption('latex');
+    await selectModule(page,'latex');
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 8'),
       null,{timeout:30000});
     await page.locator('#latex-normalize').click();

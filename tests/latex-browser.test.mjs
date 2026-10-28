@@ -1,3 +1,4 @@
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -73,7 +74,7 @@ for(let i=0;i<engines.length;i++){
   const errors=[];page.on('pageerror',err=>errors.push(err.message));
   await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-  await page.locator('#module-select').selectOption('latex');
+  await selectModule(page,'latex');
   await page.waitForFunction(()=>document.querySelectorAll('.ocr-latex-grid .ag-row').length>0,
     null,{timeout:25000});
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('LaTeX 49 项'),
@@ -173,11 +174,23 @@ for(let i=0;i<engines.length;i++){
   await page.locator('.ocr-latex-grid .ag-row[row-index="0"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-markdown .ocr-outline-focused-element')!==null,
     null,{timeout:12000});
-  await page.locator('#module-select').selectOption('media');
+  await selectModule(page,'media');
   assert((await page.locator('.ocr-media-grid .ag-row').count())>0);
-  await page.locator('#module-select').selectOption('chapter-boundary');
-  assert((await page.locator('.ocr-outline-checkbox').count())>0);
-  await page.locator('#module-select').selectOption('latex');
+  await selectModule(page,'chapter-boundary');
+  // The new source pane / AG toolbar can narrow the iPad grid. AG Grid
+  // virtualizes off-screen independent-column checkboxes; scroll the real
+  // horizontal user viewport to prove the chapter-boundary control exists.
+  await page.locator('.ocr-outline-grid .ag-body-horizontal-scroll-viewport').evaluate(el=>{
+    el.scrollLeft=el.scrollWidth;
+    el.dispatchEvent(new Event('scroll',{bubbles:true}));
+  });
+  await page.locator('.ocr-outline-grid .ag-header-cell[col-id="independent"]')
+    .waitFor({state:'attached',timeout:18000});
+  await page.locator('.ocr-outline-grid .ocr-outline-checkbox').first()
+    .waitFor({state:'attached',timeout:18000});
+  assert((await page.locator('.ocr-outline-grid .ag-row').count())>0,
+    'Chapter boundary AG lost the independently marked heading rows');
+  await selectModule(page,'latex');
   await page.screenshot({path:`.v6/evidence/latex-${name.toLowerCase()}.png`});
   assert.equal(readFileSync(path,'utf8'),content,'LaTeX review must never write CMD Markdown');
   assert.deepEqual(errors,[],name+' client errors');

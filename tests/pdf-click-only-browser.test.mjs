@@ -1,4 +1,5 @@
 /** PDF navigation is click-only, never driven by Markdown scroll/caret/preview switch. */
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -66,7 +67,7 @@ for(let i=0;i<engines.length;i++){
   const stable=async()=>{await page.waitForTimeout(700);return pdfSnapshot()};
   mark('click-row-4');
   // Select a chapter by explicit AG click and reveal it in PDF preview.
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
   await page.waitForFunction(()=>{
     const e=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]');
@@ -83,7 +84,7 @@ for(let i=0;i<engines.length;i++){
 
   mark('md-scroll-while-hidden');
   // Merely switching preview modes must not use the last MD scroll anchor.
-  await page.locator('.ocr-preview-mode').selectOption('md');
+  await selectPreview(page,'md');
   await page.locator('.cm-scroller').evaluate(el=>{el.scrollTop+=12500;},null,{timeout:20000});
   await page.locator('.ocr-preview-md-scroll').evaluate(el=>{el.scrollTop+=9500;},null,{timeout:20000});
   await page.waitForTimeout(1100);
@@ -92,7 +93,7 @@ for(let i=0;i<engines.length;i++){
   assert.deepEqual(afterScroll.overlays,chosen.overlays,'PDF highlighted block followed MD scroll');
   assert(Math.abs(afterScroll.top-chosen.top)<5,
     `PDF scrolled due to Markdown continuous scroll ${JSON.stringify({chosen,afterScroll})}`);
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   const afterToggle=await stable();
   assert.equal(afterToggle.page,chosen.page,'Mode switch navigated PDF by MD position');
   assert.deepEqual(afterToggle.overlays,chosen.overlays);
@@ -215,7 +216,7 @@ for(let i=0;i<engines.length;i++){
     reused:afterPair.reused}));
 
   mark('screenshot');
-  await page.locator('.ocr-preview-mode').selectOption('md');
+  await selectPreview(page,'md');
   await page.screenshot({path:`.v6/evidence/pdf-click-only-${name.toLowerCase()}.png`,timeout:15000});
   assert.deepEqual(errors,[],name+' browser errors');
   assert.equal(sha(readFileSync(document)),sha(fixture));

@@ -1,6 +1,7 @@
 /** Media AG preview must retain image DOM between element-module switches.
  * Independent temporary Markdown/settings and read-only fixtures; no prod writes.
  */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
@@ -64,16 +65,16 @@ try{
    });
    const samples=[];
    for(let i=0;i<3;i++){
-    await page.locator('#module-select').selectOption('media');
+    await selectModule(page,'media');
     await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ocr-media-thumb[src]').length>0,null,{timeout:25000});
     await page.waitForTimeout(800);
     samples.push({stage:'media-'+i,...await probe()});
     if(i===0)await page.screenshot({path:`.v6/evidence/media-switch-${name}-first.png`,timeout:35000});
-    await page.locator('#module-select').selectOption('chapter-boundary');
+    await selectModule(page,'chapter-boundary');
     await page.waitForTimeout(180);
     samples.push({stage:'hidden-'+i,...await probe()});
    }
-   await page.locator('#module-select').selectOption('media');await page.waitForTimeout(250);
+   await selectModule(page,'media');await page.waitForTimeout(250);
    samples.push({stage:'final',...await probe()});
    await page.screenshot({path:`.v6/evidence/media-switch-${name}-final.png`,timeout:35000});
    console.log('MEDIA_SWITCH_PROBE',name,JSON.stringify(samples.map(({events,firstSrc,...sample})=>sample)));

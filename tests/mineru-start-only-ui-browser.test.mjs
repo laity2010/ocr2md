@@ -1,4 +1,5 @@
 /** Read-only, live-shape V6 stage: start-only mother in Chrome and iPad WebKit. */
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {readFileSync,unlinkSync,mkdirSync} from 'node:fs';
@@ -53,7 +54,7 @@ try{
    assert.equal(initial.blocks,224);assert.equal(initial.ends,0);assert.equal(initial.headings,19);
    assert.equal(initial.chapters,14);assert.equal(initial.previewLeaksEvidence,false);
    assert.equal(initial.dirty,false);
-   await page.locator('.ocr-preview-mode').selectOption('pdf');
+   await selectPreview(page,'pdf');
    await page.locator('.ag-row[row-index="3"] [col-id="title"]').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]'),null,{timeout:40000});
    assert.deepEqual(errors,[]);

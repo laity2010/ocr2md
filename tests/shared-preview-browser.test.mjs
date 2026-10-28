@@ -1,3 +1,4 @@
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -99,7 +100,7 @@ for(let i=0;i<engines.length;i++){
   // the new block, not the old visible Markdown state.
   await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]'),null,{timeout:16000});
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await page.waitForFunction(()=>{
     const el=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]');
     const scroller=document.querySelector('.ocr-pdf-scroller');
@@ -118,7 +119,7 @@ for(let i=0;i<engines.length;i++){
   assert.equal(page3.toolbar,'visible');
   await page.locator('.ocr-pdf-plus').click();
   const scale=await page.locator('.ocr-pdf-zoom').textContent();
-  await page.locator('.ocr-preview-mode').selectOption('md');
+  await selectPreview(page,'md');
   const hiddenToolbar=await page.evaluate(()=>{
     const tools=document.querySelector('.ocr-preview-mode-tools[data-mode="pdf"]');
     const controls=document.querySelector('.ocr-pdf-tools');
@@ -135,7 +136,7 @@ for(let i=0;i<engines.length;i++){
   assert.equal(await page.locator('.ocr-preview-pdf-host').evaluate(el=>getComputedStyle(el).visibility),'hidden');
   await page.locator('.ag-row[row-index="5"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]')?.dataset.blockIndex==='6',null,{timeout:16000});
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await page.waitForFunction(()=>{
     const el=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"]');
     const scroller=document.querySelector('.ocr-pdf-scroller');
@@ -146,14 +147,14 @@ for(let i=0;i<engines.length;i++){
   assert.equal(await page.locator('.ocr-pdf-zoom').textContent(),scale,
     'PDF zoom should persist when switching preview modes');
   // Change the active source to a distant page while the PDF is hidden.
-  await page.locator('.ocr-preview-mode').selectOption('md');
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'md');
+  await selectPreview(page,'pdf');
   await page.locator('.ocr-pdf-page').fill('8');
   await page.locator('.ocr-pdf-page').press('Enter');
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="8"]'),null,{timeout:20000});
-  await page.locator('.ocr-preview-mode').selectOption('md');
+  await selectPreview(page,'md');
   await page.waitForFunction(()=>document.querySelectorAll('.ag-row[aria-selected="true"]').length===1,null,{timeout:16000});
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await page.waitForFunction(()=>{
     const el=document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="8"]');
     const scroller=document.querySelector('.ocr-pdf-scroller');

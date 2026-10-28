@@ -1,3 +1,4 @@
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
@@ -143,7 +144,7 @@ try{
    const inactiveImages=await page.locator('.ocr-media-grid .ocr-media-thumb').evaluateAll(
      images=>images.filter(image=>image.hasAttribute('src')).length);
    assert.equal(inactiveImages,0,'hidden Media thumbnails have src before activation');
-   await page.locator('#module-select').selectOption('media');
+   await selectModule(page,'media');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:20000});
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('已下载'),null,{timeout:16000});
    assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').textContent(),'续传');
@@ -210,10 +211,10 @@ try{
    await page.locator('#redo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('本地'),null,{timeout:15000});
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ocr-media-adoption[data-adopted="no"]').length===1,null,{timeout:9000});
-   await page.locator('#module-select').selectOption('chapter-boundary');
+   await selectModule(page,'chapter-boundary');
    assert((await page.locator('.ocr-outline-checkbox').count())>0);
    assert((await page.locator('#status').textContent()).includes('大纲21项'));
-   await page.locator('#module-select').selectOption('media');
+   await selectModule(page,'media');
    await page.screenshot({path:`.v6/evidence/media-after-${name.toLowerCase()}.png`});
    await page.locator('#save').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),null,{timeout:22000});
@@ -224,7 +225,7 @@ try{
    const chapters=buildChapterFiles(updated,buildOutline(updated),'000');
    assert(chapters.some(ch=>ch.content.includes('../'+status.path)));
    await page.reload({waitUntil:'domcontentloaded'});
-   await page.locator('#module-select').selectOption('media');
+   await selectModule(page,'media');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:20000});
    assert((await page.locator('.ocr-media-grid .ag-row[row-index="0"]').textContent()).includes('本地'));
    await page.waitForFunction(path=>{

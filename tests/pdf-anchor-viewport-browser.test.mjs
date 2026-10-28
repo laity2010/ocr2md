@@ -1,4 +1,5 @@
 /** Regression: iPad Safari screen crop, click PDF highlight must be genuinely visible. */
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -34,7 +35,7 @@ for(const [i,[name,engine,launch]] of engines.entries()){
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪'&&
    document.querySelectorAll('.ag-row').length>10&&document.querySelector('.ocr-pdf-scroller .page'),
    null,{timeout:65000});
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"][data-block-index="4"]'),null,{timeout:19000});
   await delay(1400);
@@ -72,10 +73,10 @@ for(const [i,[name,engine,launch]] of engines.entries()){
     'test must exercise the original PDF scrollport cropped by screen');
   await page.screenshot({path:`.v6/evidence/pdf-anchor-visible-${name.toLowerCase()}.png`,timeout:18000});
   // Continuous Markdown scroll should never change PDF position.
-  await page.locator('.ocr-preview-mode').selectOption('md');
+  await selectPreview(page,'md');
   await page.locator('.cm-scroller').evaluate(e=>{e.scrollTop+=10000;});
   await delay(850);
-  await page.locator('.ocr-preview-mode').selectOption('pdf');
+  await selectPreview(page,'pdf');
   await delay(650);
   const unchanged=await visible();
   assert.equal(unchanged.page,'3');assert.equal(unchanged.block,'6');

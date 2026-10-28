@@ -1,4 +1,5 @@
 /** Clipboard image -> authorized Media file -> CMD paste transaction. No live data. */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -85,7 +86,7 @@ for(let i=0;i<engines.length;i++){
   await page.locator('#redo').click();
   await page.waitForFunction(path=>document.querySelector('.cm-content')?.textContent.includes('![]('+path+')'),localPath,
     {timeout:12000});
-  await page.locator('#module-select').selectOption('media');
+  await selectModule(page,'media');
   await page.waitForFunction(path=>{
     const nodes=[...document.querySelectorAll('.ocr-media-grid .ag-row')];
     return nodes.some(el=>el.textContent.includes(path)&&el.textContent.includes('已采用'));

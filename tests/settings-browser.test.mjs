@@ -1,4 +1,5 @@
 /** Real WP Settings triple-pane regression: Chrome + WebKit, isolated Vite I/O. */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
 import {spawn} from 'node:child_process';
@@ -37,9 +38,16 @@ try{
       await page.locator('#editor .cm-editor').waitFor({state:'visible'});
       assert.equal(await page.locator('.dv-groupview').count(),3,'Unopened settings must not create a second Dockview');
       assert.equal(await page.locator('.cm-content').count(),1,'Unopened settings must not create a second CM6');
-      await page.locator('#module-select').selectOption('settings');
+      await selectModule(page,'settings');
       const slider=page.locator('#settings-font-slider');
       const sourceJSON=()=>page.evaluate(()=>JSON.parse(window.__v6cm6.settings.source.getText()));
+      // The new navigation-font setting can be the last selected Settings
+      // record. Select the CM font row through the real AG UI before asserting
+      // the expected saved 12pt/14pt fixture, never assume the default row.
+      await page.locator('#settings-workspace .ag-row').filter({hasText:'defaultFontSize'})
+        .first().click();
+      await page.waitForFunction(()=>document.querySelector('.ocr-settings-control label')?.textContent==='defaultFontSize',
+        null,{timeout:20000});
       await slider.waitFor({state:'visible',timeout:25000});
       assert.equal(await slider.inputValue(),name==='Chromium'?'12':'14');
       // The startup settings snapshot is asynchronous. Compare both sources
@@ -57,7 +65,8 @@ try{
       }));
       assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
       assert.equal(await page.locator('#editor .cm-editor').count(),1);
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),2);
+      assert.equal(await page.locator('#settings-workspace .ag-row').count(),3,
+        'CM font, title scale and navigation dropdown are registered');
       assert.deepEqual(await page.locator('#settings-workspace .ag-header-cell-text').allTextContents(),
         ['一级分类','二级分类','键名','键注释']);
       assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3,
@@ -109,7 +118,8 @@ try{
         'JSON number values must have syntax highlighting');
       await page.waitForFunction(()=>[...document.querySelectorAll('#settings-workspace .ag-row')].some(e=>e.textContent.includes('全局 UI')),{timeout:10000});
       const labels=await page.locator('#settings-workspace .ag-row').allTextContents();
-      assert(labels[0]?.includes('defaultFontSize'));
+      assert(labels.some(row=>row.includes('defaultFontSize')),
+        'CM saved font setting must be present regardless of AG row sorting');
       assert((await page.locator('.ocr-settings-breadcrumb').textContent()).includes('全局 UI / CM 源码窗 / defaultFontSize'));
       assert.equal(await page.locator('.ocr-settings-control label').textContent(),'defaultFontSize');
       assert.equal(await page.locator('.ocr-settings-key-comment').textContent(),
@@ -124,7 +134,7 @@ try{
       await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===1);
       // Click the source record: it must clear a filter that hides that row.
       await page.locator('#settings-workspace .cm-line').filter({hasText:'"key": "defaultFontSize"'}).first().click();
-      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===2);
+      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===3);
       assert.equal(await page.locator('#settings-workspace .ag-row-selected').count(),1);
       assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3);
       await page.locator('#settings-workspace .ag-row').filter({hasText:'defaultFontSize'}).click();
@@ -144,9 +154,9 @@ try{
         .getPropertyValue('--ocr-cm-source-font-size')), (name==='Chromium'?18:16)+'pt');
       assert(Math.abs(parseFloat(await page.locator('#settings-workspace .cm-editor')
         .evaluate(node=>getComputedStyle(node).fontSize))-(name==='Chromium'?24:21.33333))<0.1);
-      await page.locator('#module-select').selectOption('chapter-boundary');
+      await selectModule(page,'chapter-boundary');
       assert(Math.abs(parseFloat(await computed())-(name==='Chromium'?24:21.33333))<0.1);
-      await page.locator('#module-select').selectOption('settings');
+      await selectModule(page,'settings');
       await slider.waitFor({state:'visible'});
       const raw=await page.evaluate(()=>window.__v6cm6.settings.source.getText());
       assert.equal(JSON.parse(raw).settings[KEY].value,name==='Chromium'?18:16);
@@ -168,9 +178,9 @@ try{
         assert.equal(await slider.inputValue(),'14');
         assert.equal(await page.evaluate(()=>document.documentElement.style
           .getPropertyValue('--ocr-cm-source-font-size')),'14pt');
-        await page.locator('#module-select').selectOption('chapter-boundary');
+        await selectModule(page,'chapter-boundary');
         assert.equal(await page.locator('#editor .cm-editor').count(),1);
-        await page.locator('#module-select').selectOption('settings');
+        await selectModule(page,'settings');
         assert.equal(await slider.inputValue(),'14');
         // Playwright click returns before the asynchronous CMD save completes.
         // A successful PUT response establishes that the server has committed
@@ -186,7 +196,11 @@ try{
         assert.equal(persisted.$legacy.otherSystem.untouched,true);
         // Verify round-trip persistence, not merely an unsaved in-memory value.
         await page.reload({waitUntil:'domcontentloaded'});
-        await page.locator('#module-select').selectOption('settings');
+        await selectModule(page,'settings');
+        await page.locator('#settings-workspace .ag-row').filter({hasText:'defaultFontSize'})
+          .first().click();
+        await page.waitForFunction(()=>document.querySelector('.ocr-settings-control label')?.textContent==='defaultFontSize',
+          null,{timeout:16000});
         await slider.waitFor();
         assert.equal(await slider.inputValue(),'14');
         // The metadata really comes from JSON. Editing its text instantly

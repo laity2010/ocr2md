@@ -1,4 +1,5 @@
 /** Settings needs to survive a temporary loss of GET /api/settings on iPad Safari. */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
 const url=process.env.V6_SETTINGS_TEST_URL||'https://192.168.1.10:4443/labs/cm-html/';
@@ -18,7 +19,7 @@ for(const [name,engine,contextOptions] of engines){
   const page=await ctx.newPage();
   const jsErrors=[];page.on('pageerror',e=>jsErrors.push(e.message));
   await page.goto(url,{waitUntil:'domcontentloaded'});
-  await page.locator('#module-select').selectOption('settings');
+  await selectModule(page,'settings');
   await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length>=2,null,{timeout:17000});
   assert(!page.url().includes('/api/'));
   assert.deepEqual(jsErrors,[]);
@@ -35,15 +36,15 @@ for(const [name,engine,contextOptions] of engines){
   });
   const retryPage=await ctx2.newPage();
   await retryPage.goto(url,{waitUntil:'domcontentloaded'});
-  await retryPage.locator('#module-select').selectOption('settings');
+  await selectModule(retryPage,'settings');
   await retryPage.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('设置载入失败'),null,{timeout:5500}).catch(()=>{});
   await retryPage.waitForTimeout(1000);
   assert(outageCalls>=3,'Expected repeated interrupted Settings requests');
   const partial=await retryPage.evaluate(()=>document.querySelectorAll('#settings-workspace .ag-root-wrapper').length);
   assert.equal(partial,0,'Failed GET left a partially initialized Settings grid');
   offline=false;
-  await retryPage.locator('#module-select').selectOption('chapter-boundary');
-  await retryPage.locator('#module-select').selectOption('settings');
+  await selectModule(retryPage,'chapter-boundary');
+  await selectModule(retryPage,'settings');
   await retryPage.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length>=2,null,{timeout:17000});
   const grids=await retryPage.evaluate(()=>document.querySelectorAll('#settings-workspace .ag-root-wrapper').length);
   assert.equal(grids,1,'Recovery duplicated a Settings grid');

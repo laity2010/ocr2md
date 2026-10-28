@@ -1,4 +1,5 @@
 /** Chapter title font multiplier: registered global setting and isolated Chrome/WebKit rendering. */
+import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdtempSync,readFileSync} from 'node:fs';
@@ -26,9 +27,11 @@ for(const [i,[name,engine,options]]of engines.entries()){
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(base,{waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>document.querySelector('.ocr-outline-h1')!==null);
-    await page.locator('#module-select').selectOption('settings');
-    await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===2);
+    await selectModule(page,'settings');
+    // AG virtualizes rows; count of rendered DOM rows is not the Settings
+    // registry size. Assert the specific registered key remains reachable.
     const row=page.locator('#settings-workspace .ag-row').filter({hasText:'titleFontScale'});
+    await row.waitFor({state:'visible',timeout:30000});
     await row.click();
     const slider=page.locator('#settings-font-slider');
     await page.waitForFunction(()=>document.querySelector('.ocr-settings-breadcrumb')?.textContent.includes('titleFontScale'));
@@ -43,17 +46,17 @@ for(const [i,[name,engine,options]]of engines.entries()){
         other:parseFloat(getComputedStyle(level).fontSize),height:title.closest('.ag-row').getBoundingClientRect().height};
     });
     await set(2);
-    await page.locator('#module-select').selectOption('chapter-boundary');
+    await selectModule(page,'chapter-boundary');
     await page.waitForFunction(()=>Math.abs(parseFloat(getComputedStyle(document.querySelector('.ocr-outline-h1')).fontSize)-68)<.1);
     const big=await layout();
     assert(big.height>=80,'H1 row must grow for large font');
-    await page.locator('#module-select').selectOption('settings');
+    await selectModule(page,'settings');
     await row.click();await set(.2);
-    await page.locator('#module-select').selectOption('chapter-boundary');
+    await selectModule(page,'chapter-boundary');
     await page.waitForFunction(()=>Math.abs(parseFloat(getComputedStyle(document.querySelector('.ocr-outline-h1')).fontSize)-6.8)<.1);
     const tiny=await layout();
     assert.equal(tiny.other,big.other,'Other AG columns stay unchanged');
-    await page.locator('#module-select').selectOption('settings');
+    await selectModule(page,'settings');
     await row.click();
     const activeSlider=await slider.evaluate(e=>{window.__settingSliderIdentity=e;return e.value;});
     assert.equal(activeSlider,'0.2');

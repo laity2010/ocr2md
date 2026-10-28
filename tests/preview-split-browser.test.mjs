@@ -1,4 +1,5 @@
 /** Shared MD/PDF viewer splits into two Dockview peers without reinitializing PDF.js. */
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,unlinkSync} from 'node:fs';
@@ -114,7 +115,7 @@ try{
      groups:document.querySelectorAll('.dv-groupview').length}));
    assert.deepEqual(merged,{samePdf:true,sameCanvas:true,pdfHost:true,toolbar:'pdf',
      checked:false,selectEnabled:true,mdVisible:'visible',groups:3});
-   await page.locator('.ocr-preview-mode').selectOption('pdf');
+   await selectPreview(page,'pdf');
    await page.waitForFunction(()=>getComputedStyle(document.querySelector('.ocr-preview-pdf-host')).visibility==='visible');
    assert.equal(await page.locator('.ocr-pdf-zoom').textContent(),zoom,'PDF zoom should survive merge');
    // Toggle while the combined preview currently shows PDF, not just MD.
