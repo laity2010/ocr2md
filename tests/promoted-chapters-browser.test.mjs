@@ -59,8 +59,10 @@ for(const [number,[name,engine]] of engines.entries()){
   assert(originalOptions.every(item=>item.text.startsWith('章节chapter/')));
   assert.equal(await page.locator('#chapter-start-number').inputValue(),'000');
   assert.equal(await source.inputValue(),'document');
-  assert(await all.isEnabled());
+  assert(await all.isDisabled(),'章节定界中的 全部 必须勾选置灰');
   assert(await all.isChecked());
+  assert(await page.locator('.ocr-outline-grid .ag-row[row-index="1"] .ocr-outline-checkbox').isEnabled(),
+    '章节定界必须允许修改后续行的 独立成章');
   assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="independent"]').count(),1);
   assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="chapterFile"]').count(),0);
   assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="virtualChapter"]').count(),1);
