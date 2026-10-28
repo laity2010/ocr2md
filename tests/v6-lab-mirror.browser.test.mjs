@@ -59,6 +59,7 @@ try{
     // Capture real WCP cross-module event traffic before any app code runs.
     await p.addInitScript(()=>{
       window.__wcpEvents={};
+      document.addEventListener('ocr2md:wp3-ag-ready',e=>{window.__wcpBridge=e.detail;});
       for(const kind of ['lab-virtual-select','lab-virtual-open','wp3-ag-ready','wp4-virtual-scope']){
         const topic='ocr2md:'+kind;
         window.__wcpEvents[kind]=0;
@@ -84,12 +85,34 @@ try{
     // From ALL, a REAL click on a different chapter's AG heading must emit
     // lab-virtual-open and return navigation to that row's owning chapter.
     await all.check();
-    const targetFirst=await select.locator('option[value^="virtual:"]').first().getAttribute('value');
-    const heading=p.locator('.ocr-outline-grid .ag-row [col-id="title"]').first();
-    await heading.waitFor({state:'visible',timeout:19000});
-    await heading.click();
-    await p.waitForFunction(target=>document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.value===target,
-      targetFirst,{timeout:19000});
+    await p.waitForFunction(()=>{
+      const idx=window.__wcpBridge?.getChapterIndex?.();
+      const selected=document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.value;
+      if(!idx||!selected)return false;
+      return [...document.querySelectorAll('.ocr-outline-grid .ag-row [data-heading-source-line]')].some(el=>{
+        const line=Number(el.dataset.headingSourceLine);
+        const owner=idx.chapters.find(c=>c.startLine<=line&&line<c.endLine);
+        return owner&&'virtual:'+owner.id!==selected;
+      });
+    },null,{timeout:20000});
+    const target=await p.evaluate(()=>{
+      const idx=window.__wcpBridge.getChapterIndex();
+      const selected=document.querySelector('.ocr-source-pane .ocr-lab-file-select').value;
+      for(const el of document.querySelectorAll('.ocr-outline-grid .ag-row [data-heading-source-line]')){
+        const line=Number(el.dataset.headingSourceLine);
+        const owner=idx.chapters.find(c=>c.startLine<=line&&line<c.endLine);
+        if(owner&&'virtual:'+owner.id!==selected)return {line,chapter:owner.id,row:el.closest('.ag-row').getAttribute('row-index')};
+      }
+      return null;
+    });
+    assert(target,'Must find an AG row belonging to another actual chapter');
+    await p.locator(`.ocr-outline-grid .ag-row[row-index="${target.row}"] [col-id="title"]`).click();
+    await p.waitForFunction(target=>document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.value==='virtual:'+target.chapter,
+      target,{timeout:19000}).catch(async error=>{
+      const diagnostics=await p.evaluate(()=>({events:window.__wcpEvents,source:document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.value,
+        all:document.querySelector('input[aria-label="章节所有"]')?.checked,scope:location.search,rows:[...document.querySelectorAll('.ocr-outline-grid .ag-row [data-heading-source-line]')].slice(0,10).map(x=>x.dataset.headingSourceLine)}));
+      throw new Error('Cross-chapter AG real click failed '+JSON.stringify({target,diagnostics}),{cause:error});
+    });
     const wcpEvents=await p.evaluate(()=>window.__wcpEvents);
     for(const kind of ['lab-virtual-select','lab-virtual-open','wp3-ag-ready','wp4-virtual-scope'])
       assert(wcpEvents[kind]>0,`Missing real WCP event ${kind}: ${JSON.stringify(wcpEvents)}`);
