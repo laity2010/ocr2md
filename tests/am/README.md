@@ -7,6 +7,8 @@
 - `am.py`：生成并读取 SQLite，核对外键、源码路径、API 符号名及测试脚本；用真实已有脚本执行单个注册测试，并记录结果。
 - `.v6/tests/am.sqlite`：由 SQL 确定性生成、Git 忽略的查询索引；禁止直接手改作为正式契约。测试结果 `test_runs` 属本地执行证据，不进入生产发布。
 
+**内外统一标准审计**：`AUDIT.md` 是唯一流程入口；Main 内部 AI、Grok、Muse 在同一完整源码 SHA、同一 `registry.sql`/`ownership.json`、同一 PDF/MD 哈希证据上执行 `bash tests/am/run-standard-audit.sh <40_CHAR_SHA>`，生成 `run.log`、`report.json`、`report.md`。旧 `run-grok-audit.sh` 仍为隔离执行内核。报告严格区分直接接口测试与集成测试引用、静态越界与动态待核实。总体状态 `REVIEW_REQUIRED` 不可写成全面 PASS；发现越界以 Git 追溯并撤销违规提交再复审。
+
 从项目根目录执行：
 
 ```sh

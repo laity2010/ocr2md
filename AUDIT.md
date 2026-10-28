@@ -1,6 +1,6 @@
-# OCR2MD · 外部 AM/Git 审计工作流
+# OCR2MD · 内部与外部统一 AM/Git 审计工作流
 
-本文件是 OCR2MD 审计的**唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。**人工唯一交付动作是转发一份标准审计 Prompt**；主线 AI 必须在此前将源码快照、版本化审计说明、PDF/MD 测试夹具及哈希证据全部放到 GitHub 的实际可下载位置。外部 AI 从 GitHub 自行取得和验证全部资料，绝不要求用户另行传送 bundle、PDF 或其他文件。GitHub 上传成功不等于外部 AI 可取件：经用户授权公开的审计包必须实际通过匿名 HTTPS 冷克隆验证；私有仓库必须确认接收 AI 自身具有可用的连接器或 Git 传输权限，未验证应标为 `BLOCKED: DELIVERY_ACCESS`。不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
+本文件是 OCR2MD **内部与外部审计共用的唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。**人工唯一交付动作是转发一份标准审计 Prompt**；主线 AI 必须在此前将源码快照、版本化审计说明、PDF/MD 测试夹具及哈希证据全部放到 GitHub 的实际可下载位置。外部 AI 从 GitHub 自行取得和验证全部资料，绝不要求用户另行传送 bundle、PDF 或其他文件。GitHub 上传成功不等于外部 AI 可取件：经用户授权公开的审计包必须实际通过匿名 HTTPS 冷克隆验证；私有仓库必须确认接收 AI 自身具有可用的连接器或 Git 传输权限，未验证应标为 `BLOCKED: DELIVERY_ACCESS`。不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
 
 ### 经用户授权的公开审计包（已验证案例）
 
@@ -13,6 +13,18 @@ git clone --single-branch --branch audit-public-06bf498 https://github.com/laity
 cd ocr2md-audit-06bf498
 bash audit.sh
 ~~~
+
+## 标准审计：同一快照、同一执行入口、同一报告
+
+不管审计者是 Main 内部 AI、Grok 还是 Muse，**审计的对象都是同一个完整 40 位 Git SHA**，而不是各自最新的 Main。唯一可信的契约来自该 SHA 的 `tests/am/registry.sql`（API、消息、发布者、订阅者、调用登记）和 `tests/am/ownership.json`（模块及静态导入归属）；`AGENTS.md` 第 6 条确定审计目标，`AUDIT.md` 定义执行流程。不得在本地为外部 AI 另做一套不同清单或降低断言。
+
+1. **冻结与取件**：从干净的 Main 固定 `<SHA>`，只读 `audit/*` 引用及经许可的交付包。交付包必须包含该源码 SHA 的可检出 Git 对象、版本化 AM 清单、同一 PDF/MD 夹具与 SHA256；来源通过 `git rev-parse`、`git ls-remote`、匿名克隆或接收人自身权限进行实证核对。打包提交的 HEAD 若不同于源码 SHA，必须记录两者；测试以源码 SHA 为准。
+2. **统一执行**：在已检出源码 SHA 且夹具哈希正确的独立环境中执行 `bash tests/am/run-standard-audit.sh <40_CHAR_SHA>`。脚本复用既有 `run-grok-audit.sh`，于 detached worktree 安装依赖、构建、运行 AM `check/coverage/edges/run-all/certify`、Chrome/WebKit 和 Python 负向边界测试；不动用户文档、冻结 Lab 与生产发布。内部、Grok、Muse 运行的是**同一脚本**。
+3. **统一证据**：每位审计者各自保留 `run.log`、`report.json` 与 `report.md`（脚本输出在本地忽略目录 `.v6/audit-reports/standard-.../`）。报告包含被审 SHA、契约文件指纹、测试实际通过数与直接/集成测试区分、静态跨模块导入、DOM 事件/共享状态调用点、未登记或未证实的交互、环境、失败及阻断。审计者还需独立审阅动态调用点，不把脚本无法穷举的运行时行为冒认为已验证。
+4. **判定与处置**：功能回归 PASS 不能代替边界 PASS。审计存在未核实的调用点则结论为 `REVIEW_REQUIRED`；未登记的实际跨模块调用、契约失败则为 `FAIL`；环境/材料缺失则为 `BLOCKED`。已确认越界须保留证据、用 `git log`/`git blame` 定位并优先 `git revert` 撤销引入它的变更，复测后才能接受新基线；不得为通过审计而把违规调用简单加入白名单。独立审计者必须在报告中逐项给出证据、确认/排除未核实项，并说明 SOURCE_MERGE 与 PRODUCTION_CUTOVER 两种不同结论。
+5. **外部报告独立**：同一审计快照不等于同一个报告。Grok/Muse 分别记录自己执行的 OS、浏览器、SHA、证据及问题；主线 AI 不冒用外部 AI 的 ACK 或签字。任何源码/测试/AM 登记更改后，须针对新的最终 SHA 重新核对并按变更范围复验。
+
+本脚本只自动覆盖**可检测的静态边界和已运行的测试**；对于难以静态识别的运行时直接 DOM、共享对象和隐式模块引用，生成可定位的待审调用清单。自动工具本身**不能证明动态越界绝对不存在**，因此未完成独立源码/运行时审阅前，不得将总体结论提升为无条件 PASS。
 
 ## 1. 工作流与责任
 
@@ -44,7 +56,7 @@ GitHub 审计材料的权限要求与获取说明：<ACCESS_VERIFICATION_INSTRUC
 原始报告分支：audit/<AI>-<SHORT_SHA>-report
 独立修复分支：fix/<AI>-<SHORT_SHA>
 唯一工作流入口：该冻结提交根目录 AUDIT.md
-统一 AM 执行入口：bash tests/am/run-grok-audit.sh <40_CHAR_SHA>
+统一 AM 执行入口：bash tests/am/run-standard-audit.sh <40_CHAR_SHA>
 
 第一步：如果交付为公开审计包，从 GitHub 匿名 HTTPS clone 指定审计交付包分支，核实该分支包含指定完整源码 SHA 与 PDF/MD 夹具，运行 bash audit.sh（它在隔离 worktree 审计固定源码 SHA，不把交付包 HEAD 误认成被审源码）。私有交付则由本人授权 GitHub/Git 实际验证仓库访问和 SHA，可使用 scripts/audit-ack.sh。无论哪种交付，都记录真实平台、Git 状态、哈希与运行结果；失败必须报 BLOCKED，不得臆造 PASS。
 
@@ -69,10 +81,10 @@ GitHub 审计材料的权限要求与获取说明：<ACCESS_VERIFICATION_INSTRUC
 
 ## 4. 共用 AM/Git 验收与自主修复
 
-**全量 AM 主入口沿用既有脚本名称**，Grok/Muse 使用完全相同的命令：
+**全量 AM 主入口由内外审计共用**；原 `run-grok-audit.sh` 保留为隔离执行内核，Grok/Muse/Main 使用完全相同的标准命令：
 
 ```sh
-bash tests/am/run-grok-audit.sh "<40_CHAR_SHA>"
+bash tests/am/run-standard-audit.sh "<40_CHAR_SHA>"
 ```
 
 该脚本在隔离 detached worktree 中执行，依赖固定的测试 PDF 哈希、环境与浏览器真实启动。审计 AI 要保存执行命令/退出码、构建和 AM check/coverage/edges/run-all/certify、Git fsck、Chromium/WebKit 的实际结果；运行失败保留原日志，不得改测试掩盖问题。AM 静态覆盖不足以证明所有 Lab/WCP 功能合格，需另列源码和专项业务审阅。
@@ -89,7 +101,7 @@ bash tests/am/run-grok-audit.sh "<40_CHAR_SHA>"
 
 - **正式原则**：`AGENTS.md`，第 6 条明确本文件为细节入口；新原则必须由用户批准。
 - **操作流程与唯一 Prompt**：本文件 `AUDIT.md`，随流程实践维护，避免重复的交接手册。
-- **AM 业务契约与脚本**：`tests/am/README.md`、`tests/am/run-grok-audit.sh`、`scripts/audit-ack.sh`；只记录真实执行所支持的事实。
+- **AM 业务契约与脚本**：`tests/am/README.md`、`tests/am/run-standard-audit.sh`、`tests/am/run-grok-audit.sh`、`tests/am/standard_audit.py`、`scripts/audit-ack.sh`；只记录真实执行所支持的事实。
 - **每轮证据**：`audit-reports/`、审计分支、修复分支、Git Commit、隔离测试日志；历史报告不可改写以迎合新的结果。
 
 未来只需向主线 AI 下达“发起标准 AM/Git 全量审计”：它就按照本文检查/冻结快照、生成统一 Prompt 交由用户转发，并在 Grok/Muse 提交修复后独立决定是否并入 Main。
