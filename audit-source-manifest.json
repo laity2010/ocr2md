@@ -1,0 +1,15 @@
+{
+  "schema": "ocr2md.audit-delivery.v1",
+  "source_sha": "9c816050a73b5e2b851f56d36fbf58f73bdac35c",
+  "delivery_branch": "audit-public-9c81605",
+  "expected_parent": "9c816050a73b5e2b851f56d36fbf58f73bdac35c",
+  "fixture_sha256": {
+    "pdf": "be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab",
+    "markdown": "d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764"
+  },
+  "contract_sha256": {
+    "registry": "22ffcc728e9550f6221992c2cbd648440d061f3698807115cb90478af1ad3560",
+    "ownership": "d9690a6a07fbe9d21e332d588fe588ef3036cab6da27bb1a04b98dbe5c2f04df"
+  },
+  "standard_command": "bash tests/am/run-standard-audit.sh 9c816050a73b5e2b851f56d36fbf58f73bdac35c"
+}
