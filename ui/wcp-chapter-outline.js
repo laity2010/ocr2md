@@ -1,4 +1,4 @@
-/** Lab-only column schema for a chapter that has already been bounded.
+/** Legacy-compatible chapter column schema, sharing Main AG ownership.
  * Delegate scanning, CMD edits, AG creation and focus routing unchanged to
  * the mainline outline component. Only adapt AG's owned column definitions.
  */
@@ -48,12 +48,9 @@ export function createOutlineGrid(element,getMarkdown,getCMD){
     });
     core.api.setGridOption('columnDefs',columns);
   }
-  function activated(event){updateColumns(event.detail?.chapter);}
-  document.addEventListener('ocr2md:lab-file-activated',activated);
   updateColumns(nameFromURL());
   const originalDispose=core.dispose;
   core.dispose=()=>{
-    document.removeEventListener('ocr2md:lab-file-activated',activated);
     originalDispose();
   };
   return core;

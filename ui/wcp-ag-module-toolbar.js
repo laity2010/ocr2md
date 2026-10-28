@@ -8,14 +8,13 @@ import {enhanceNavigationSelect} from './wcp-navigation-select.js';
 import {mountVirtualAgQuery} from './wcp-ag-query.js';
 import './wcp-ag-query.css';
 
-export function mountAgModuleToolbar(){
-  const moduleSelect=document.getElementById('module-select');
-  const workspace=document.getElementById('workspace');
-  const chapterActions=document.getElementById('module-actions');
-  const actionGroups=[...document.querySelectorAll('.module-actions[data-module]')];
-  if(!moduleSelect||!workspace||!chapterActions||actionGroups.length<3)
-    throw Error('Missing module action/selection contract');
+let toolbarInitialized=false;
+export function mountAgModuleToolbar({modulePort,workspace}={}){
+  if(toolbarInitialized)return false;
+  if(!modulePort||!workspace||!modulePort.hasModuleActions())
+    throw Error('AG toolbar requires an explicit Shell module-control port');
 
+  toolbarInitialized=true;
   let chapter=new URLSearchParams(location.search).get('chapter');
   let virtualMode=false; // Chapter navigation selects CMD-scoped views of the mother
   // The element category is a workspace-wide view preference, not a
@@ -52,9 +51,8 @@ export function mountAgModuleToolbar(){
     option.value=value;option.textContent=label;elementSelect.append(option);
   }
   elementSelect.addEventListener('change',()=>{
-    if(moduleSelect.value==='settings')return;
-    moduleSelect.value=elementSelect.value;
-    moduleSelect.dispatchEvent(new Event('change',{bubbles:true}));
+    if(modulePort.getModule()==='settings')return;
+    modulePort.selectModule(elementSelect.value);
   });
   // Each element owns its distinct AG schema. The mother document may show
   // Title/Media/LaTeX without creating any combined or fourth grid.
@@ -63,23 +61,21 @@ export function mountAgModuleToolbar(){
   function syncModule(){
     if(transitioning)return;
     const should=activeModule();
-    if(moduleSelect.value!==should){
+    if(modulePort.getModule()!==should){
       transitioning=true;
-      moduleSelect.value=should;
-      moduleSelect.dispatchEvent(new Event('change',{bubbles:true}));
-      transitioning=false;
+      try{modulePort.selectModule(should);}finally{transitioning=false;}
     }
     refresh();
     queueMicrotask(refresh);
   }
   function refresh(){
     if(!bar)return;
-    const selected=moduleSelect.value;
+    const selected=modulePort.getModule();
     const settings=selected==='settings';
       bar.hidden=settings;
     bar.setAttribute('aria-label',chapter?'实体章节兼容工具栏':
       virtualMode?'CMD 虚拟章节元素工具栏':'章节定界工具栏');
-    moduleSelect.hidden=true;
+    modulePort.hideSelector();
     elementSelect.hidden=settings;
     if(!settings){elementSelect.value=selected;elementSelect.ocrNavigationSelect?.tom.setValue(selected,true);}
     elementSelect.ocrNavigationSelect?.show();
@@ -96,24 +92,17 @@ export function mountAgModuleToolbar(){
     chapterSelect.ocrNavigationSelect?.show();
     allStatus.hidden=Boolean(chapter)||settings||!virtualMode;
     virtualQuery?.setModule();
-    moduleSelect.setAttribute('aria-label','章节处理模块');
+    modulePort.labelSelector('章节处理模块');
     // A virtual chapter is never exported to a second editable file.
-    document.getElementById('export-chapters')?.setAttribute('hidden','');
+    modulePort.hideLegacyExport();
     // Original settings option stays intact for source-file navigation,
     // but cannot appear in the separate 3-item native chapter picker.
-    for(const actions of actionGroups){
-      // Title view on bounded chapters has no Export/Start Number actions:
-      // those belong exclusively to the mother document.
-      // Until WP4/WP6, the virtual scope is an AG query experiment, not
-      // a bulk action target. Legacy chapters retain their own handlers.
-      actions.hidden=settings || actions.dataset.module!==selected ||
-        (chapter ? actions.dataset.module==='chapter-boundary' : virtualMode);
-    }
+    modulePort.showActions({selected,settings,chapter:Boolean(chapter),virtualMode});
     if(!settings)bar.hidden=false;
   }
-  moduleSelect.addEventListener('change',()=>{
+  modulePort.onModuleChange(()=>{
     if(transitioning)return;
-    const selected=moduleSelect.value;
+    const selected=modulePort.getModule();
     if(selected==='settings'){refresh();return;}
     if(selected==='chapter-boundary'||selected==='media'||selected==='latex')
       selectedElementModule=selected;
@@ -144,12 +133,8 @@ export function mountAgModuleToolbar(){
     syncModule();virtualQuery?.sync();
     event.detail.accepted=true;
   });
-  document.addEventListener('ocr2md:lab-file-activated',event=>{
-    chapter=event.detail.chapter||null;
-    virtualMode=false;indexToggle.checked=false;
-    syncModule();
-    virtualQuery?.sync();
-  });
+  // The retired physical-file switch had no producer after CMD virtual
+  // chapters replaced chapter exports. Do not subscribe to a ghost bus topic.
   function attach(){
     const outline=workspace.querySelector('.ocr-outline-pane');
     const grid=outline?.querySelector(':scope > .ocr-outline-grid');
@@ -160,12 +145,15 @@ export function mountAgModuleToolbar(){
     bar.setAttribute('role','toolbar');
     // No cloned controls. Events and input state stay owned by mainline.
     // The first two visible controls are exactly: 全部 ☐ | [标题/媒体/LaTeX].
-    bar.append(allLabel,elementSelect,moduleSelect,indexLabel,chapterSelect,allStatus,...actionGroups);
+    bar.append(allLabel,elementSelect);
+    modulePort.mountSelector(bar);
+    bar.append(indexLabel,chapterSelect,allStatus);
+    modulePort.mountActionGroups(bar);
     enhanceNavigationSelect(elementSelect,{kind:'elements'});
     enhanceNavigationSelect(chapterSelect,{kind:'virtual-chapters',search:true});
     outline.insertBefore(bar,grid);
     virtualQuery=mountVirtualAgQuery({checkbox:allToggle,chapterSelect,
-      status:allStatus,getModule:()=>moduleSelect.value,
+      status:allStatus,getModule:()=>modulePort.getModule(),
       isPhysicalChapter:()=>Boolean(chapter),isIndexMode:()=>virtualMode});
     refresh();
     // Startup may have deep-linked directly into a chapter. The mainline's

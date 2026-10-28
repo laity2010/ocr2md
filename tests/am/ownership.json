@@ -165,9 +165,6 @@
     "wcp-document-index.js->media-module.js": [
       "findMedia"
     ],
-    "wcp-settings-module.js->wcp-ag-module-toolbar.js": [
-      "mountAgModuleToolbar"
-    ],
     "wcp-source-file-navigation.js->wcp-chapter-files.js": [
       "chapterAssignments"
     ],
@@ -199,6 +196,12 @@
     ],
     "workspace.js->wcp-chapter-outline.js": [
       "createOutlineGrid"
+    ],
+    "main.js->wcp-ag-module-toolbar.js": [
+      "mountAgModuleToolbar"
+    ],
+    "main.js->wcp-source-file-navigation.js": [
+      "createSourceFileNavigation"
     ]
   }
 }

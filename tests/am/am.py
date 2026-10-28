@@ -228,6 +228,17 @@ def assert_references(con):
                 name = target.strip().split('(')[0].strip().split('.')[-1]
                 if name and name not in source:
                     missing.append(f'{table}.{row["id"]}.{field}: {name} missing in {row["source_file"]}')
+    # Fail closed: a cross-module call cannot become "registered" by writing
+    # an edge without a real public API in the sole contract registry.
+    for row in con.execute('''SELECT e.id,e.caller_module,e.target_module,e.api_id,
+            a.visibility AS visibility FROM access_edges e
+        LEFT JOIN apis a ON e.api_id=a.id
+        WHERE e.classification='registered' AND e.caller_module IS NOT NULL
+          AND e.caller_module<>e.target_module'''):
+        if not row['api_id']:
+            missing.append(f'access_edges.{row["id"]}: registered cross-module call has no API')
+        elif row['visibility'] not in ('export','returned'):
+            missing.append(f'access_edges.{row["id"]}: non-public cross-module API {row["api_id"]}')
     for row in con.execute('SELECT id,source_file,source_needle,api_id,target_module FROM access_edges'):
         path = ROOT / row['source_file']
         if not path.is_file() or row['source_needle'] not in path.read_text():

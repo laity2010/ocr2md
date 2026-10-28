@@ -21,7 +21,17 @@ class GateTests(unittest.TestCase):
     def test_baseline(self):
         stats,issues=mod.scan_files(ROOT,CAT)
         self.assertEqual(issues,[])
-        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(48,9,30))
+        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(48,9,31))
+
+    def test_undeclared_semantic_event_publisher(self):
+        issues=self.modified('outline-grid.js',
+            "document.dispatchEvent(new CustomEvent('ocr2md:undeclared-topic',{detail:{}}));")
+        self.assertTrue(any('UNREGISTERED_DOM_PUBLISH' in issue for issue in issues))
+
+    def test_retired_semantic_event_subscription(self):
+        issues=self.modified('wcp-ag-module-toolbar.js',
+            "document.addEventListener('ocr2md:lab-file-activated',()=>{});")
+        self.assertTrue(any('UNREGISTERED_DOM_SUBSCRIBE' in issue for issue in issues))
 
     def test_new_cross_module_import(self):
         issues=self.modified('outline-grid.js','import {createLatexModule} from "./latex-module.js";')

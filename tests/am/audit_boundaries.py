@@ -21,6 +21,8 @@ RAW_STORE_WRITE = re.compile(r'\bviewStore\s*\.\s*setState\s*\(\s*\{\s*([A-Za-z_
 # RAW_STORE_WRITE. Both are now fail-closed findings.
 NON_RELATIVE_IMPORT = re.compile(r'''(?m)^\s*(?:import|export)\s+(?:[^;'"`]*?\s+from\s+)?['"](?P<target>(?:/|[A-Za-z][\w+.-]*:)[^'"]*)['"]''')
 FUNCTIONAL_STORE_WRITE = re.compile(r'\bviewStore\s*\.\s*setState\s*\(\s*(?!\{)')
+DOM_PUBLISH = re.compile(r'''\bnew\s+CustomEvent\s*\(\s*['"]([^'"]+)['"]''')
+DOM_SUBSCRIBE = re.compile(r'''\baddEventListener\s*\(\s*['"]([^'"]+)['"]''')
 
 
 def load_registry(root):
@@ -62,9 +64,20 @@ def scan_files(root, cfg, override=None):
     if any(assignments.get(name) != owner for owner,name in modules.items()):
         issues.append('MISSING_ENTRY_OWNERSHIP')
     imports=[]
+    # DOM semantic topics are also public cross-module contracts. Native
+    # input/change/click remain local DOM UI events and are not AM topics.
+    with sqlite3.connect(':memory:') as contracts:
+        contracts.executescript((root/'tests/am/schema.sql').read_text())
+        contracts.executescript((root/'tests/am/registry.sql').read_text())
+        declared_topics={r[0] for r in contracts.execute("SELECT topic FROM messages WHERE transport='dom'")}
     for name in sorted(found):
         caller = assignments.get(name)
         body = override.get(name, (ui/name).read_text(encoding='utf-8'))
+        for kind,regexp in (('publish',DOM_PUBLISH),('subscribe',DOM_SUBSCRIBE)):
+            for match in regexp.finditer(body):
+                topic=match.group(1)
+                if (topic.startswith('ocr2md:') or topic=='settings.changed') and topic not in declared_topics:
+                    issues.append(f'UNREGISTERED_DOM_{kind.upper()} {name} {topic}')
         candidates = [(m.group('target'),'static',m.group('bindings')) for m in STATIC.finditer(body)]
         for m in NON_RELATIVE_IMPORT.finditer(body):
             issues.append(f'ABSOLUTE_OR_URL_IMPORT {name} -> {m.group("target")[:100]}')

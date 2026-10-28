@@ -631,23 +631,41 @@ INSERT INTO test_cases VALUES
  ('TC-W09','W07',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP render hook delegates text projection without raw preview DOM','integration');
 
 -- Main production WCP source promotion: explicit immutable import evidence.
-INSERT INTO access_edges VALUES ('PROMO01','W','L','ui/wcp-wcp-virtual-chapters.js','import {persistLabWorkspaceLayout} from ''./wcp-layout-persistence.js''',NULL,'registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public L module entry (wcp-layout-persistence.js); runtime behavior covered by main-promoted browser test and independent AM review');
-INSERT INTO access_edges VALUES ('PROMO02','W','C','ui/wcp-wcp-virtual-chapters.js','import {createCMDTransactionPort} from ''./wcp-cmd-element-transactions.js''',NULL,'registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public C module entry (wcp-cmd-element-transactions.js); runtime behavior covered by main-promoted browser test and independent AM review');
-INSERT INTO access_edges VALUES ('PROMO03','W','M','ui/wcp-wcp-virtual-chapters.js','import {renderVirtualMarkdown} from ''./wcp-md-virtual-preview.js''',NULL,'registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public M module entry (wcp-md-virtual-preview.js); runtime behavior covered by main-promoted browser test and independent AM review');
-INSERT INTO access_edges VALUES ('PROMO04','S','G','ui/wcp-settings-module.js','import {mountAgModuleToolbar} from ''./wcp-ag-module-toolbar.js''',NULL,'registered','WCP Main promoted ui/wcp-settings-module.js imports public G module entry (wcp-ag-module-toolbar.js); runtime behavior covered by main-promoted browser test and independent AM review');
-INSERT INTO access_edges VALUES ('PROMO05','S','G','ui/wcp-source-file-navigation.js','import {chapterAssignments} from ''./wcp-chapter-files.js''',NULL,'registered','WCP Main promoted ui/wcp-source-file-navigation.js imports public G module entry (wcp-chapter-files.js); runtime behavior covered by main-promoted browser test and independent AM review');
+-- Main architecture remediation: the public contract is the source of truth,
+-- not a cross-module import whitelist. These entrypoints were live exported
+-- functions introduced during Lab promotion; direct Chrome/WebKit contract
+-- tests now call them explicitly, including negative/error paths.
+INSERT INTO apis VALUES
+ ('L21','L','persistLabWorkspaceLayout','ui/wcp-layout-persistence.js','export','layout port: getRatios,setRatios,onChange','dispose function','owns same-session divider continuity without document mutation',1),
+ ('C29','C','createCMDTransactionPort','ui/wcp-cmd-element-transactions.js','export','live CMDocument','immutable CMD transaction/index facade','preflights chapter/evidence source ranges and rejects invalid edits',1),
+ ('C30','C','virtualChapterExtensions','ui/wcp-cm-virtual-view.js','export','none','CM6 extension array','defines bounded view without source duplication',1),
+ ('C31','C','setVirtualChapter','ui/wcp-cm-virtual-view.js','export','EditorView,scope|null','boolean','applies one CMD-backed virtual chapter view; no document write',1),
+ ('C32','C','currentVirtualChapter','ui/wcp-cm-virtual-view.js','export','EditorState','immutable scope|null','read-only view selection projection',1),
+ ('M09','M','renderVirtualMarkdown','ui/wcp-md-virtual-preview.js','export','source,scope|null','rendered safe HTML','render CMD-bounded Markdown while retaining global source-line identifiers',1),
+ ('G16','G','mountAgModuleToolbar','ui/wcp-ag-module-toolbar.js','export','Shell module port + workspace','boolean','AG-owned toolbar mounted only by Shell composition; idempotent',1),
+ ('G17','G','chapterAssignments','ui/wcp-chapter-files.js','export','heading rows,start number','chapter projections','read-only chapter naming projection for source navigation',1),
+ ('G18','G','createIndexProjector','ui/wcp-document-index.js','export','CMD source reader','read-only cached semantic index','public AG-owned projection of one mother source; no CM editor access',1),
+ ('S07','S','createSourceFileNavigation','ui/wcp-source-file-navigation.js','export','Shell module/workspace ports + reportError','navigation facade','Shell-mounted virtual chapter and Settings source navigator',1),
+ ('W10','W','createWCPRuntime','ui/wcp-wcp-virtual-chapters.js','export','none','bounded WCP composition hooks','creates immutable virtual chapter runtime for Main application shell',1);
+
+INSERT INTO access_edges VALUES ('PROMO01','W','L','ui/wcp-wcp-virtual-chapters.js','import {persistLabWorkspaceLayout} from ''./wcp-layout-persistence.js''','L21','registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public L module entry (wcp-layout-persistence.js); runtime behavior covered by main-promoted browser test and independent AM review');
+INSERT INTO access_edges VALUES ('PROMO02','W','C','ui/wcp-wcp-virtual-chapters.js','import {createCMDTransactionPort} from ''./wcp-cmd-element-transactions.js''','C29','registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public C module entry (wcp-cmd-element-transactions.js); runtime behavior covered by main-promoted browser test and independent AM review');
+INSERT INTO access_edges VALUES ('PROMO03','W','M','ui/wcp-wcp-virtual-chapters.js','import {renderVirtualMarkdown} from ''./wcp-md-virtual-preview.js''','M09','registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public M module entry (wcp-md-virtual-preview.js); runtime behavior covered by main-promoted browser test and independent AM review');
+INSERT INTO access_edges VALUES ('PROMO05','S','G','ui/wcp-source-file-navigation.js','import {chapterAssignments} from ''./wcp-chapter-files.js''','G17','registered','WCP Main promoted ui/wcp-source-file-navigation.js imports public G module entry (wcp-chapter-files.js); runtime behavior covered by main-promoted browser test and independent AM review');
 INSERT INTO access_edges VALUES ('PROMO06','G','G','ui/wcp-document-index.js','import {buildOutline} from ''./outline-index.js''',NULL,'registered','WCP Main promoted ui/wcp-document-index.js imports public G module entry (outline-index.js); runtime behavior covered by main-promoted browser test and independent AM review');
 INSERT INTO access_edges VALUES ('PROMO07','G','C','ui/wcp-document-index.js','import {scanAnnotations} from ''./cmd-annotations.js''','C23','registered','WCP Main promoted ui/wcp-document-index.js imports public C module entry (cmd-annotations.js); runtime behavior covered by main-promoted browser test and independent AM review');
 INSERT INTO access_edges VALUES ('PROMO08','G','T','ui/wcp-document-index.js','import {findLatex} from ''./latex-scan.js''','T01','registered','WCP Main promoted ui/wcp-document-index.js imports public T module entry (latex-scan.js); runtime behavior covered by main-promoted browser test and independent AM review');
 INSERT INTO access_edges VALUES ('PROMO09','G','A','ui/wcp-document-index.js','import {findMedia} from ''./media-module.js''','A02','registered','WCP Main promoted ui/wcp-document-index.js imports public A module entry (media-module.js); runtime behavior covered by main-promoted browser test and independent AM review');
 
-INSERT INTO access_edges VALUES ('PROMO10','C','G','ui/wcp-cmd-element-transactions.js','import {createIndexProjector} from ''./wcp-document-index.js''',NULL,'registered','CMD wrapper reads chapter index via imported pure source projector; tracked public projection contract, no editor or AG instance imported');
+INSERT INTO access_edges VALUES ('PROMO10','C','G','ui/wcp-cmd-element-transactions.js','import {createIndexProjector} from ''./wcp-document-index.js''','G18','registered','CMD wrapper reads chapter index via imported pure source projector; tracked public projection contract, no editor or AG instance imported');
 
 -- Live, cross-component WCP virtual chapter DOM message contract (Main source).
--- Two removed/dormant legacy names `lab-switch-file` and `lab-file-activated`
--- are NOT invented as active publisher contracts. They remain audit debt.
+-- Retired physical file switch listeners and publishers are absent; only
+-- the active virtual chapter message contracts are registered.
 INSERT INTO access_edges VALUES
- ('X-W-VIRTUAL','W','C','ui/wcp-wcp-virtual-chapters.js','import {virtualChapterExtensions,setVirtualChapter,currentVirtualChapter} from ''./wcp-cm-virtual-view.js''',NULL,'registered','WCP editor lifecycle consumes bounded chapter CM6 projection through its declared interface');
+ ('X-W-VIRTUAL-EXT','W','C','ui/wcp-wcp-virtual-chapters.js','...virtualChapterExtensions','C30','registered','WCP injects the public CMD virtual chapter extensions into EditorState'),
+ ('X-W-VIRTUAL-SET','W','C','ui/wcp-wcp-virtual-chapters.js','setVirtualChapter(activeView','C31','registered','WCP sends bounded chapter selection to the CMD port'),
+ ('X-W-VIRTUAL-GET','W','C','ui/wcp-wcp-virtual-chapters.js','currentVirtualChapter(update.state)','C32','registered','WCP reads the active CMD chapter scope for edit message');
 INSERT INTO messages VALUES
  ('E10','dom','ocr2md:lab-virtual-select','{"type":"object","fields":["id","preserveAll","accepted","error"],"meaning":"source chapter navigation request and accepted status"}',1),
  ('E11','dom','ocr2md:lab-virtual-open','{"type":"object","fields":["id","preserveAll","accepted"],"meaning":"focus-driven navigation across virtual chapters"}',1),
@@ -682,3 +700,27 @@ INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALU
  ('TC-SUB-W12','SUB-W12','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG scoped rows via WCP bridge','integration'),
  ('TC-SUB-W13','SUB-W13','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','File navigation populated from WCP index','integration'),
  ('TC-SUB-W14','SUB-W14','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM6 scope follows semantic message','integration');
+
+INSERT INTO access_edges VALUES
+ ('X-SHELL-AG',NULL,'G','ui/main.js','mountAgModuleToolbar({modulePort','G16','registered','Shell composes the AG toolbar; Settings cannot mount AG internals'),
+ ('X-SHELL-NAV',NULL,'S','ui/main.js','createSourceFileNavigation({modulePort','S07','registered','Shell composes virtual source navigator instead of hiding it in Settings'),
+ ('X-SHELL-WCP',NULL,'W','ui/main.js','createWCPRuntime()','W10','registered','Shell initializes promoted WCP main runtime through its public API');
+
+-- Direct public API invocation and independent observed semantics, not an
+-- association to a generic integrated browser session.
+WITH direct(id,expected) AS (VALUES
+ ('L21','layout port saves ratios and returns a working dispose function'),
+ ('C29','CMD index reads correctly and rejects unsafe source mutation'),
+ ('C30','CM6 extension array mounts single native document'),
+ ('C31','explicit chapter selection activates and is idempotent'),
+ ('C32','current chapter scope returns immutable selection or null'),
+ ('M09','chapter HTML projection preserves semantic global source locations'),
+ ('G16','AG toolbar entrypoint is idempotent and keeps one DOM toolbar'),
+ ('G17','chapter file projections deterministically name 21 virtual chapters'),
+ ('G18','semantic CMD projection builds and caches 21 chapter index'),
+ ('S07','source navigation facade is idempotent and exposes Settings mount'),
+ ('W10','promoted WCP facade has complete bounded lifecycle hooks'))
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
+SELECT 'TC-DIRECT-'||id,id,'tests/wcp-promoted-api-direct.browser.test.mjs',
+ 'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'direct'
+FROM direct;

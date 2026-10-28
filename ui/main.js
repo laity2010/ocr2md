@@ -11,6 +11,8 @@ import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
 import {CMDocument} from './wcp-cm-document.js';
 import {createSettingsModule} from './wcp-settings-module.js';
+import {createSourceFileNavigation} from './wcp-source-file-navigation.js';
+import {mountAgModuleToolbar} from './wcp-ag-module-toolbar.js';
 import {registerCMSourceFontSetting} from './cm-font-setting.js';
 import {registerOutlineTitleScaleSetting} from './wcp-chapter-outline.js';
 import {uploadPastedImage} from './media-module.js';
@@ -315,6 +317,37 @@ async function main() {
     if($('module-select').value==='settings')status(message,kind);
     refreshToolbar();
   });
+  // Application composition root owns cross-module mounting; Settings may
+  // not instantiate AG or the source-file navigator as hidden dependencies.
+  // A narrow Shell-owned UI port: AG and navigation cannot locate or mutate
+  // Shell module selectors, action groups or errors through global DOM IDs.
+  const moduleSelector=$('module-select');
+  const modulePort=Object.freeze({
+    getModule:()=>moduleSelector.value,
+    selectModule:next=>{
+      if(moduleSelector.value===next)return;
+      moduleSelector.value=next;
+      moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
+    },
+    onModuleChange:handler=>moduleSelector.addEventListener('change',handler),
+    hasModuleActions:()=>Boolean($('module-actions'))&&
+      document.querySelectorAll('.module-actions[data-module]').length>=3,
+    mountSelector:parent=>parent.append(moduleSelector),
+    mountActionGroups:parent=>parent.append(...document.querySelectorAll('.module-actions[data-module]')),
+    hideSelector:()=>{moduleSelector.hidden=true;},
+    labelSelector:label=>moduleSelector.setAttribute('aria-label',label),
+    hideLegacyExport:()=>$('export-chapters')?.setAttribute('hidden',''),
+    showActions:({selected,settings,chapter,virtualMode})=>{
+      for(const actions of document.querySelectorAll('.module-actions[data-module]')){
+        actions.hidden=settings||actions.dataset.module!==selected||
+          (chapter?actions.dataset.module==='chapter-boundary':virtualMode);
+      }
+    },
+  });
+  const sourceNavigation=createSourceFileNavigation({modulePort,
+    workbench:$('workspace'),settingsWorkbench:$('settings-workspace'),
+    reportError:message=>$('status')?.setAttribute('data-file-switch-error',message)});
+  mountAgModuleToolbar({modulePort,workspace:$('workspace')});
   registerCMSourceFontSetting(settings);
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
@@ -486,6 +519,7 @@ async function main() {
     lastVisibleModule=selected;
     if(isSettings){
       void settings.load().then(()=>{
+        sourceNavigation.mountSettings();
         if($('module-select').value!=='settings')return;
         settings.activate();
         settings.applyPaneRatios(sharedPaneRatios);

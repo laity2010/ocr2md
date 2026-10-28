@@ -25,6 +25,16 @@ class AMCatalogTests(unittest.TestCase):
         self.assertGreaterEqual(self.db.execute('SELECT COUNT(*) FROM messages').fetchone()[0], 9)
         self.assertGreater(self.db.execute('SELECT COUNT(*) FROM test_cases').fetchone()[0], 0)
 
+    def test_unregistered_cross_module_call_cannot_be_whitelisted(self):
+        self.db.execute("UPDATE access_edges SET api_id=NULL WHERE id='PROMO01'")
+        with self.assertRaisesRegex(ValueError,'registered cross-module call has no API'):
+            am.assert_references(self.db)
+
+    def test_cross_module_cannot_reference_internal_api(self):
+        self.db.execute("UPDATE apis SET visibility='internal' WHERE id='L21'")
+        with self.assertRaisesRegex(ValueError,'non-public cross-module API'):
+            am.assert_references(self.db)
+
     def test_focus_includes_original_and_media_publishers_five_receivers(self):
         owners = {row[0] for row in self.db.execute("SELECT module_id FROM publishers WHERE message_id='E03'")}
         self.assertEqual(owners, {'C','G','M','P','A'})

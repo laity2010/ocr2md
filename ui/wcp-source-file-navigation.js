@@ -15,14 +15,15 @@ const DEFAULTS=Object.freeze([
 const chapterId=id=>'virtual:'+id;
 let activeChapter=null;
 
-export function createSourceFileNavigation(){
-  const moduleSelector=document.getElementById('module-select');
-  const workbench=document.getElementById('workspace');
-  const settingsWorkbench=document.getElementById('settings-workspace');
+let liveNavigation=null;
+export function createSourceFileNavigation({modulePort,workbench,settingsWorkbench,reportError}={}){
+  if(liveNavigation)return liveNavigation;
+  if(!modulePort||!workbench||!settingsWorkbench||typeof reportError!=='function')
+    throw Error('Source navigation requires Shell module and workspace ports');
   const selectBoxes=new Set();
   let views=[],bridge=null,refreshTimer=null;
   const selected=()=>activeChapter?chapterId(activeChapter):'document';
-  const isSettings=()=>moduleSelector?.value==='settings';
+  const isSettings=()=>modulePort.getModule()==='settings';
   function syncOptions(){
     for(const select of selectBoxes){
       select.replaceChildren();
@@ -87,8 +88,7 @@ export function createSourceFileNavigation(){
   }
   function navigate(target,{preserveAll=false}={}){
     if(target==='settings'){
-      moduleSelector.value='settings';
-      moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
+      modulePort.selectModule('settings');
       syncOptions();
       return;
     }
@@ -101,10 +101,7 @@ export function createSourceFileNavigation(){
     }
     try{
       if(activeChapter!==next||isSettings())selectChapter(next,{preserveAll});
-      if(isSettings()||moduleSelector.value==='settings'){
-        moduleSelector.value=next?'chapter-boundary':'chapter-boundary';
-        moduleSelector.dispatchEvent(new Event('change',{bubbles:true}));
-      }
+      if(isSettings())modulePort.selectModule('chapter-boundary');
       // Browser history keeps views addressable without ?chapter=<file>;
       // reload will still load only mother CM6 (never a derived file).
       const url=new URL(location.href);
@@ -113,7 +110,7 @@ export function createSourceFileNavigation(){
       history.pushState(null,'',url.pathname+url.search+url.hash);
     }catch(error){
       console.warn('虚拟章节视图切换失败',error.message);
-      document.getElementById('status')?.setAttribute('data-file-switch-error',error.message);
+      reportError(error.message);
     }
     syncOptions();
   }
@@ -132,7 +129,7 @@ export function createSourceFileNavigation(){
     navigate(chapterId(id),{preserveAll});
     event.detail.accepted=activeChapter===id;
   });
-  moduleSelector?.addEventListener('change',()=>{updateVisibility();syncOptions();});
+  modulePort.onModuleChange(()=>{updateVisibility();syncOptions();});
   document.addEventListener('ocr2md:wp3-ag-ready',event=>{
     bridge=event.detail;
     // CMDocument can finish initializing in the same event loop.
@@ -205,5 +202,6 @@ export function createSourceFileNavigation(){
       if(mountMarkdown())observer.disconnect();
     });observer.observe(workbench,{childList:true,subtree:true});
   }
-  return Object.freeze({mountSettings,refreshChapters});
+  liveNavigation=Object.freeze({mountSettings,refreshChapters});
+  return liveNavigation;
 }
