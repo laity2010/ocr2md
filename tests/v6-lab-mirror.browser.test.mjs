@@ -56,6 +56,15 @@ try{
     const errors=[],writes=[];
     p.on('pageerror',e=>errors.push(e.message));
     p.on('request',r=>{if(r.url().includes('/api/')&&!['GET','HEAD'].includes(r.method()))writes.push(r.url())});
+    // Capture real WCP cross-module event traffic before any app code runs.
+    await p.addInitScript(()=>{
+      window.__wcpEvents={};
+      for(const kind of ['lab-virtual-select','lab-virtual-open','wp3-ag-ready','wp4-virtual-scope']){
+        const topic='ocr2md:'+kind;
+        window.__wcpEvents[kind]=0;
+        document.addEventListener(topic,()=>{window.__wcpEvents[kind]++;});
+      }
+    });
     await p.goto(`http://127.0.0.1:${h.port}${h.path}`,{waitUntil:'domcontentloaded',timeout:55000});
     await p.locator('.ocr-source-pane .ocr-navigation-files .ts-control').waitFor({state:'visible',timeout:48000});
     await p.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').waitFor({state:'visible',timeout:15000});
@@ -71,13 +80,26 @@ try{
     const choice=await select.locator('option[value^="virtual:"]').nth(1).getAttribute('value');
     await select.evaluate((e,v)=>{e.value=v;e.dispatchEvent(new Event('change',{bubbles:true}))},choice);
     await p.waitForFunction(v=>location.search.includes(encodeURIComponent(v.slice(8)))||new URLSearchParams(location.search).has('view'),choice,{timeout:19000});
+    // User-initiated source navigation intentionally scopes AG to one chapter.
+    // From ALL, a REAL click on a different chapter's AG heading must emit
+    // lab-virtual-open and return navigation to that row's owning chapter.
+    await all.check();
+    const targetFirst=await select.locator('option[value^="virtual:"]').first().getAttribute('value');
+    const heading=p.locator('.ocr-outline-grid .ag-row [col-id="title"]').first();
+    await heading.waitFor({state:'visible',timeout:19000});
+    await heading.click();
+    await p.waitForFunction(target=>document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.value===target,
+      targetFirst,{timeout:19000});
+    const wcpEvents=await p.evaluate(()=>window.__wcpEvents);
+    for(const kind of ['lab-virtual-select','lab-virtual-open','wp3-ag-ready','wp4-virtual-scope'])
+      assert(wcpEvents[kind]>0,`Missing real WCP event ${kind}: ${JSON.stringify(wcpEvents)}`);
     await p.locator('.ocr-navigation-files .ts-control').first().click();
     await p.locator('body>.ocr-navigation-popup-files:visible [data-value="settings"]').click();
     await p.locator('#settings-workspace .ocr-navigation-files .ts-control').waitFor({state:'visible',timeout:19000});
     assert.equal(await p.locator('#settings-workspace .ocr-lab-file-select').inputValue(),'settings');
     assert.equal(await select.inputValue(),'settings');
     assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);
-    console.log('LAB_MIRROR_BUSINESS_PASS',h.kind,nameBrowser,JSON.stringify({chapterCount,checkbox:true,settings:'settings',writes:0,errors:0}));
+    console.log('LAB_MIRROR_BUSINESS_PASS',h.kind,nameBrowser,JSON.stringify({chapterCount,checkbox:true,settings:'settings',wcpEvents,writes:0,errors:0}));
    }finally{await browser.close()}
   }
  }

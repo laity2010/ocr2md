@@ -50,7 +50,7 @@
     "wcp-runtime.js": "W",
     "wcp-settings-module.js": "S",
     "wcp-source-file-navigation.js": "S",
-    "wcp-wcp-virtual-chapters.js": "shell",
+    "wcp-wcp-virtual-chapters.js": "W",
     "workspace.js": "L"
   },
   "sharedConsumers": {
@@ -136,6 +136,9 @@
     ],
     "main.js->wcp-settings-module.js": [
       "createSettingsModule"
+    ],
+    "main.js->wcp-wcp-virtual-chapters.js": [
+      "createWCPRuntime"
     ],
     "main.js->workspace.js": [
       "createWorkspace"

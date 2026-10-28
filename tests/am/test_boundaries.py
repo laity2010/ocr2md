@@ -21,7 +21,7 @@ class GateTests(unittest.TestCase):
     def test_baseline(self):
         stats,issues=mod.scan_files(ROOT,CAT)
         self.assertEqual(issues,[])
-        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(48,9,29))
+        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(48,9,30))
 
     def test_new_cross_module_import(self):
         issues=self.modified('outline-grid.js','import {createLatexModule} from "./latex-module.js";')
