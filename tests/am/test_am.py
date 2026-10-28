@@ -35,10 +35,18 @@ class AMCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'non-public cross-module API'):
             am.assert_references(self.db)
 
-    def test_focus_includes_original_and_media_publishers_five_receivers(self):
+    def test_focus_includes_original_and_media_publishers_six_receivers(self):
         owners = {row[0] for row in self.db.execute("SELECT module_id FROM publishers WHERE message_id='E03'")}
         self.assertEqual(owners, {'C','G','M','P','A'})
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM subscriptions WHERE message_id='E03'").fetchone()[0], 5)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM subscriptions WHERE message_id='E03'").fetchone()[0], 6)
+
+    def test_wcp_shared_store_subscribers_are_explicit(self):
+        expected={'SUB-W15':('E13','W'),'SUB-W16':('E03','G'),'SUB-W17':('E01','S')}
+        for key,(message,owner) in expected.items():
+            self.assertEqual(self.db.execute(
+                'SELECT message_id,module_id FROM subscriptions WHERE id=?',(key,)).fetchone()[:],
+                (message,owner))
+            self.assertEqual(self.db.execute('SELECT COUNT(*) FROM test_cases WHERE subscription_id=?',(key,)).fetchone()[0],1)
 
     def test_all_contracts_have_test_rows(self):
         for tab,col in [('apis','api_id'),('messages','message_id'),('publishers','publisher_id'),('subscriptions','subscription_id')]:
