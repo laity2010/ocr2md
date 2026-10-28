@@ -45,46 +45,58 @@ try{
    const sourceSelect=p.locator('.ocr-source-pane .ocr-lab-file-select');
    await p.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane option[value^="virtual:"]').length>=3,null,{timeout:30000});
    const chapters=await sourceSelect.locator('option[value^="virtual:"]').count();
-   // Regression: Main's unbounded mother view previously disabled a checked
-   // "全部" checkbox. The checkbox must be usable and AG-only even here.
+   // Chapter boundary is the mother document. Its AG "全部" must be
+   // checked, visibly disabled and impossible to change in any element type.
    const all=p.locator('input[aria-label="章节所有"]');
    const agRows=async()=>Number(await p.locator('.ocr-outline-grid [role="grid"]').getAttribute('aria-rowcount'))-1;
-   assert.equal(await all.isDisabled(),false,'AG 全部 must not be disabled on mother');
-   assert.equal(await all.isChecked(),true);
    const totalRows=await agRows();
-   await all.uncheck();
-   await p.waitForFunction(full=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))<full+1,totalRows,{timeout:11000});
-   const motherFiltered=await agRows();
-   assert(motherFiltered>=0&&motherFiltered<totalRows,'Unchecking 全部 did not filter AG');
-   assert.equal(await sourceSelect.inputValue(),'document','AG filter changed mother source view');
-   assert.equal(new URL(p.url()).searchParams.has('view'),false,'AG filter navigated source');
-   assert.equal(await all.isChecked(),false);
-   await p.screenshot({path:`.v6/evidence/main-all-unchecked-${name}.png`,animations:'disabled',timeout:45000});
-   await all.check();
-   await p.waitForFunction(full=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))===full+1,totalRows,{timeout:11000});
-   assert.equal(await agRows(),totalRows);
-   // A second element owner must obey the same control without changing CMD
-   // source/Markdown and without writing any business API.
+   assert.equal(await sourceSelect.inputValue(),'document');
+   assert.equal(await all.isChecked(),true,'Mother AG 全部 must start checked');
+   assert.equal(await all.isDisabled(),true,'Mother AG 全部 must be disabled');
+   await all.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}));});
+   assert.equal(await all.isChecked(),true,'Mother AG 全部 cannot be unchecked even by synthetic change');
+   assert.equal(await agRows(),totalRows,'Mother AG must keep all heading rows');
+   // The element category can change on the mother; chapter scope cannot.
    await choose(p.locator('.ocr-lab-element-select'),'media');
    const mediaRows=async()=>Number(await p.locator('.ocr-media-grid [role="grid"]').getAttribute('aria-rowcount'))-1;
    await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:10000});
    const mediaFull=await mediaRows();
-   await all.uncheck();
-   await p.waitForFunction(full=>Number(document.querySelector('.ocr-media-grid [role="grid"]')?.getAttribute('aria-rowcount'))<full+1,mediaFull,{timeout:11000});
-   const mediaFiltered=await mediaRows();
-   assert.equal(await sourceSelect.inputValue(),'document');
-   await all.check();
-   await p.waitForFunction(full=>Number(document.querySelector('.ocr-media-grid [role="grid"]')?.getAttribute('aria-rowcount'))===full+1,mediaFull,{timeout:11000});
+   assert.equal(await all.isChecked(),true);
+   assert.equal(await all.isDisabled(),true,'Mother media AG 全部 must remain disabled');
    await choose(p.locator('.ocr-lab-element-select'),'chapter-boundary');
-   console.log('MAIN_AG_ALL_MOTHER_PASS',name,JSON.stringify({totalRows,motherFiltered,mediaFull,mediaFiltered}));
+   console.log('MAIN_AG_MOTHER_LOCKED_PASS',name,JSON.stringify({totalRows,mediaFull}));
    await p.screenshot({path:`.v6/evidence/main-promoted-${name}-initial.png`,animations:'disabled',timeout:45000});
    const target=await sourceSelect.locator('option[value^="virtual:"]').nth(1).getAttribute('value');
    await choose(sourceSelect,target);
    await p.waitForFunction(expected=>new URLSearchParams(location.search).get('view')===expected,
     target.slice('virtual:'.length),{timeout:16000});
+   // Chapter files alone allow AG "全部" toggling. Default is scoped, and
+   // checking shows all chapter rows without changing the selected file.
+   assert.equal(await all.isDisabled(),false,'Chapter file must allow AG 全部 changes');
+   assert.equal(await all.isChecked(),false,'Chapter file defaults to current-chapter AG');
+   const chapterRows=await agRows();
+   assert(chapterRows>=0&&chapterRows<totalRows,'Chapter file must initially filter heading rows');
+   await all.check();
+   await p.waitForFunction(total=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))===total+1,totalRows,{timeout:12000});
+   assert.equal(await sourceSelect.inputValue(),target,'AG 全部 changed selected chapter file');
+   await all.uncheck();
+   await p.waitForFunction(total=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))<total+1,totalRows,{timeout:12000});
+   assert.equal(await sourceSelect.inputValue(),target);
    await p.locator('.ocr-lab-element-select').waitFor({state:'attached'});
    await choose(p.locator('.ocr-lab-element-select'),'media');
    await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:10000});
+   assert.equal(await all.isDisabled(),false,'Chapter-file media AG 全部 must be enabled');
+   await all.check();
+   await all.uncheck();
+   // Returning to the chapter-boundary mother must restore checked + gray.
+   await choose(sourceSelect,'document');
+   await p.waitForFunction(()=>!new URLSearchParams(location.search).has('view'),null,{timeout:16000});
+   assert.equal(await all.isChecked(),true,'Returning to mother must restore checked 全部');
+   assert.equal(await all.isDisabled(),true,'Returning to mother must lock 全部');
+   await choose(sourceSelect,target);
+   await p.waitForFunction(expected=>new URLSearchParams(location.search).get('view')===expected,
+    target.slice('virtual:'.length),{timeout:16000});
+   assert.equal(await all.isDisabled(),false,'Returning to chapter file must unlock 全部');
    const mode=await p.locator('#module-select').inputValue();
    await nav.click();
    await p.locator('body>.ocr-navigation-popup-files:visible [data-selectable][data-value="settings"]').click();

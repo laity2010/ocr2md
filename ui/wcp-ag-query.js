@@ -11,10 +11,10 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   let priorScope=null,updateTimer=null;
   const enabled=()=>!isPhysicalChapter()&&isIndexMode();
   // AG row filtering and source projection are independent. In the mother
-  // document there is no bounded CM6 scope, but '全部' must still be editable:
-  // unchecked means the currently indexed chapter's AG rows only.
+  // document '全部' is locked on. Only a selected chapter file can
+  // uncheck it to filter AG to its current indexed chapter.
   const queryEnabled=()=>!isPhysicalChapter();
-  const currentChapter=()=>!queryEnabled()||checkbox.checked?'all':chapterSelect.value;
+  const currentChapter=()=>!queryEnabled()||!isIndexMode()||checkbox.checked?'all':chapterSelect.value;
   // AG's "全部" controls row membership only. The editor/Markdown/PDF
   // always project the chapter picked in the source navigation.
   const sourceChapter=()=>enabled()?chapterSelect.value:null;
@@ -149,6 +149,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   document.addEventListener('ocr2md:wp3-ag-ready',onGridReady);
   checkbox.checked=true;
   checkbox.addEventListener('change',()=>{
+    // Even synthetic changes cannot leave the mother view in a filtered state.
+    if(!isIndexMode())checkbox.checked=true;
     chapterSelect.hidden=true;apply();
   });
   chapterSelect.addEventListener('change',()=>{apply();focusChapterStart();});
