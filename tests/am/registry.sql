@@ -778,4 +778,5 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-B09','B09','tests/workspace-portability.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Node path configuration works under environment without Homebrew','direct');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C33-MEDIA-SCOPE','C33','tests/media-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG 全部 authorizes validated whole-CMB Media adoption while preserving the selected CM6 chapter projection','integration'),
+ ('TC-A04-PREEXISTING','A04','tests/media-preexisting-adoption.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','11 predownloaded files + 11 remote CMD links render 11 pending-adoption AG rows, then adopt all through CMD Save and reload in Chrome/WebKit','integration'),
  ('TC-C20-AG-SCOPE','C20','tests/wcp-promoted-api-direct.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG chapter scope rejects outside LaTeX edit; all-CMB scope permits controlled edit without changing the selected CM6 chapter','direct');

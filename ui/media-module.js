@@ -74,6 +74,12 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   const states=new Map();
   const stateFor=url=>states.get(url)||{state:'pending',bytes:0,total:null};
   const summarize=()=>rows.filter(r=>!r.local).length;
+  const completedPath=url=>{
+    const state=stateFor(url);
+    return state.state==='complete' &&
+      /^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(state.path||'')
+      ?state.path:null;
+  };
   const statusKind=row=>{
     if(row.local)return '本地';
     const state=stateFor(row.url);
@@ -81,7 +87,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     if(state.state==='partial')return '部分下载';
     return {complete:'已下载',error:'失败',paused:'已暂停'}[state.state]||'待下载';
   };
-  const adoptionOf=row=>row.adopted?'已采用':'未采用';
+  // A remote source reference is not a local adoption, even if its file exists.
+  const adoptionOf=row=>row.adopted?'已采用':
+    !row.local&&completedPath(row.url)?'待采用':row.local?'未引用':'未采用';
   const valueOf=row=>{
     if(row.local)return '本地';
     const state=stateFor(row.url);
@@ -95,9 +103,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     a.line===b.line&&a.url===b.url&&a.local===b.local&&
     a.adopted===b.adopted&&a.bytes===b.bytes&&a.total===b.total;
   const mediaPreviewSource=row=>{
-    const state=stateFor(row.url);
-    const local=state.state==='complete' && /^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(state.path||'')
-      ?state.path:null;
+    const local=completedPath(row.url);
     return row.local||local?appPath('/'+(row.local?row.url:local)):row.url;
   };
   function refresh(){
@@ -109,8 +115,16 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       ...referenced.filter(row=>row.local).map(row=>row.url),
       ...chapterReferences,
     ]);
-    const nextRows=referenced.map(row=>({...row,adopted:true}));
+    const nextRows=referenced.map(row=>({...row,adopted:row.local}));
     const linked=new Set(nextRows.filter(row=>row.local).map(row=>row.url));
+    // A downloaded file backing a remote CMD image is the same media item,
+    // not another 'unadopted' inventory row.
+    for(const row of referenced){
+      if(!row.local){
+        const path=completedPath(row.url);
+        if(path)linked.add(path);
+      }
+    }
     for(const file of localFiles){
       if(linked.has(file.path))continue;
       nextRows.push({id:'file:'+file.path,line:null,url:file.path,local:true,
@@ -118,7 +132,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     }
     const same=rows.length===nextRows.length&&rows.every((row,i)=>sameRow(row,nextRows[i]));
     const statuses=new Map(nextRows.map(row=>[row.id,
-      `${valueOf(row)}|${statusKind(row)}|${running.has(row.url)}|${paused.has(row.url)}`]));
+      `${valueOf(row)}|${statusKind(row)}|${adoptionOf(row)}|${running.has(row.url)}|${paused.has(row.url)}`]));
     const previews=new Map(nextRows.map(row=>[row.id,mediaPreviewSource(row)]));
     const statusChanged=[...statuses].some(([id,value])=>renderedStatuses.get(id)!==value);
     const previewChanged=[...previews].some(([id,value])=>renderedPreviews.get(id)!==value);
@@ -129,7 +143,10 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     }else{
       // Status is a network-derived value, not a Markdown row change. Refresh
       // only those scalar cells; don't unmount an unchanged <img> renderer.
-      if(statusChanged)grid?.refreshCells({columns:['status','action'],force:true});
+      if(statusChanged){
+        grid?.refreshCells({columns:['status','action','adopted'],force:true});
+        if(grid?.getFilterModel()?.adopted)grid.onFilterChanged();
+      }
       if(previewChanged)grid?.refreshCells({columns:['preview'],force:true});
     }
   }
@@ -154,7 +171,8 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       onStatus('媒体清单读取失败：'+results[0].reason.message,'error');
       return;
     }
-    onStatus(`媒体 ${rows.length} 项，已采用 ${rows.filter(r=>r.adopted).length} 项，未采用 ${rows.filter(r=>!r.adopted).length} 项`);
+    const tally=label=>rows.filter(row=>adoptionOf(row)===label).length;
+    onStatus(`媒体 ${rows.length} 项 · 已采用 ${tally('已采用')} · 待采用 ${tally('待采用')} · 未下载 ${tally('未采用')} · 未引用 ${tally('未引用')}`);
   }
   async function downloadOne(url,scope=operationScope){
     if(running.has(url))return;

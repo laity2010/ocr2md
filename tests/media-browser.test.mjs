@@ -5,7 +5,7 @@ import {createServer} from 'node:http';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {homedir} from 'node:os';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {deflateSync} from 'node:zlib';
 import {chromium,webkit,devices} from 'playwright';
 import {buildChapterFiles} from '../ui/chapter-files.js';
@@ -83,7 +83,13 @@ try{
   const mediaDir=resolve(folder,'media');mkdirSync(mediaDir,{recursive:true});
   const chapterUsed='media/'+('1'.repeat(24))+'.jpg';
   const orphan='media/'+('2'.repeat(24))+'.jpg';
-  for(const file of [chapterUsed,orphan])writeFileSync(resolve(folder,file),data);
+  // Same as the real book: completed file exists while CMD still holds a
+  // remote URL. It must be ONE '待采用' row, never another inventory row.
+  const otherRemote=[...sample.matchAll(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/g)]
+    .map(match=>match[1]).find(url=>url!==target);
+  assert(otherRemote?.endsWith('.jpg'));
+  const pairedLocal='media/'+createHash('sha256').update(otherRemote).digest('hex').slice(0,24)+'.jpg';
+  for(const file of [chapterUsed,orphan,pairedLocal])writeFileSync(resolve(folder,file),data);
   const publishedDir=resolve(folder,'chapters');mkdirSync(publishedDir,{recursive:true});
   const publishedName='000-media-fixture.md';
   writeFileSync(resolve(publishedDir,publishedName),'![chapter-only](../'+chapterUsed+')\n');
@@ -122,7 +128,7 @@ try{
    const persistedPart=await (await fetch(base+'/api/media/status?url='+encodeURIComponent(target))).json();
    assert.equal(persistedPart.bytes,512*1024);
    const inventory=await (await fetch(base+'/api/media/inventory')).json();
-   assert.deepEqual(inventory.files.map(f=>f.path),[chapterUsed,orphan]);
+   assert.deepEqual(inventory.files.map(f=>f.path),[chapterUsed,orphan,pairedLocal].sort());
    assert.deepEqual(inventory.chapterReferences,[chapterUsed]);
    // Unauthorized callers and arbitrary internal network destinations are
    // never permitted to create a media download.
@@ -163,16 +169,22 @@ try{
    await adoption.first().waitFor({state:'attached',timeout:14000});
    // AG virtualizes rows on WebKit. Verify the visible adopted cells here;
    // the category filter below validates the unadopted orphan independent of scroll.
-   assert((await adoption.filter({hasText:'已采用'}).count())>0);
-   assert.equal(await adoption.filter({hasText:'已采用'}).first().getAttribute('data-adopted'),'yes');
+   // At least one remote file is complete but not yet referenced locally.
+   await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row') &&
+     [...document.querySelectorAll('.ocr-media-adoption')].some(el=>el.textContent==='待采用'),
+     null,{timeout:15000});
+   assert.equal(await page.locator('.ocr-media-grid [role="grid"]').getAttribute('aria-rowcount'),'14',
+     '13 semantic rows plus one grid header: completed remote must not duplicate inventory');
    const adoptedHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="adopted"]');
    const statusHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="status"]');
    await adoptedHeader.locator('.ag-header-cell-filter-button').click();
    const selectAdoption=page.locator('.ocr-enum-filter');
    await selectAdoption.locator('[data-filter-value="已采用"] input').uncheck();
+   await selectAdoption.locator('[data-filter-value="未采用"] input').uncheck();
+   await selectAdoption.locator('[data-filter-value="待采用"] input').uncheck();
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===1,null,{timeout:7000});
    assert((await page.locator('.ocr-media-grid .ag-row').textContent()).includes(orphan));
-   assert.equal(await adoption.filter({hasText:'未采用'}).count(),1);
+   assert.equal(await adoption.filter({hasText:'未引用'}).count(),1);
    await selectAdoption.locator('[data-filter-value="all"] input').check();
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===13,null,{timeout:7000});
    await adoptedHeader.locator('.ag-header-cell-filter-button').click();
@@ -227,10 +239,15 @@ try{
    await page.locator('#undo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('image.jpg'),null,{timeout:15000});
    // Undo leaves the completed local file on disk but now unreferenced.
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ocr-media-adoption[data-adopted="no"]').length===2,null,{timeout:9000});
+   await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-media-grid .ag-row')].some(row=>
+      row.textContent.includes('image.jpg')&&row.textContent.includes('待采用')),
+      null,{timeout:9000});
+   assert.equal(await page.locator('.ocr-media-grid [role="grid"]').getAttribute('aria-rowcount'),'14',
+     'Undo must retain 13 semantic rows, irrespective of pinned-cell DOM duplication');
    await page.locator('#redo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('本地'),null,{timeout:15000});
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ocr-media-adoption[data-adopted="no"]').length===1,null,{timeout:9000});
+   await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('已采用'),
+     null,{timeout:9000});
    await selectModule(page,'chapter-boundary');
    assert((await page.locator('.ocr-outline-checkbox').count())>0);
    assert((await page.locator('#status').textContent()).includes('大纲21项'));
