@@ -685,7 +685,8 @@ INSERT INTO subscriptions VALUES
  ('SUB-W14','E13','W','ui/wcp-wcp-virtual-chapters.js','onScope','virtual chapter changes','Set CM6 scope using CMD public port'),
  ('SUB-W15','E13','W','ui/wcp-wcp-virtual-chapters.js','onScope','virtual chapter changes','Re-render Markdown virtual chapter preview using MD public port'),
  ('SUB-W16','E03','G','ui/wcp-ag-query.js','viewStore.subscribe','AG/PDF focus changes within current document revision','Follow focused element into its owning virtual chapter via semantic focus event'),
- ('SUB-W17','E01','S','ui/wcp-source-file-navigation.js','viewStore.subscribe','CM6 document revision changes','Refresh chapter filename projections from CMD index');
+ ('SUB-W17','E01','S','ui/wcp-source-file-navigation.js','viewStore.subscribe','CM6 document revision changes','Refresh chapter filename projections from CMD index'),
+ ('SUB-W18','E10','G','ui/outline-grid.js','document.addEventListener','accepted WCP chapter file changes','Disable independent-chapter CMD marker edits in virtual chapter files; restore in mother chapter-boundary view');
 INSERT INTO test_cases(id,message_id,script,fixture,expected,evidence) VALUES
  ('TC-E10','E10','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab Chrome/WebKit source navigator dispatches chapter selection','integration'),
  ('TC-E11','E11','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab AG heading click in All moves to another chapter via WCP','integration'),
@@ -705,7 +706,8 @@ INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALU
  ('TC-SUB-W14','SUB-W14','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM6 scope follows semantic message','integration'),
  ('TC-SUB-W15','SUB-W15','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Markdown preview follows same WCP virtual chapter scope','integration'),
  ('TC-SUB-W16','SUB-W16','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG/PDF focus to another chapter changes source view by semantic focusTarget','integration'),
- ('TC-SUB-W17','SUB-W17','tests/promoted-chapters-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM6 chapter marker edits immediately refresh virtual chapter file navigation','integration');
+ ('TC-SUB-W17','SUB-W17','tests/promoted-chapters-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM6 chapter marker edits immediately refresh virtual chapter file navigation','integration'),
+ ('TC-SUB-W18','SUB-W18','tests/main-promoted-lab-ui.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter-boundary mother checkbox editable; chapter-file checkbox read-only; no direct CMD mutation allowed in chapter file','integration');
 
 INSERT INTO access_edges VALUES
  ('X-SHELL-AG',NULL,'G','ui/main.js','mountAgModuleToolbar({modulePort','G16','registered','Shell composes the AG toolbar; Settings cannot mount AG internals'),

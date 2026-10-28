@@ -6,6 +6,7 @@ import {spawn} from 'node:child_process';
 import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createServer} from 'node:net';
 import {chromium,webkit} from 'playwright';
 
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
@@ -15,7 +16,16 @@ const settingsPath=join(scratch,'settings.json');
 const settings='{"settings":{}}\n';
 writeFileSync(documentPath,fixture);
 writeFileSync(settingsPath,settings);
-const port=5968,origin=`http://127.0.0.1:${port}`;
+// Never mistake a previous audit's orphaned Vite on a fixed port for this
+// test's own fixture/server. Each invocation picks an unused local port.
+const port=await new Promise((resolve,reject)=>{
+ const probe=createServer();probe.once('error',reject);
+ probe.listen(0,'127.0.0.1',()=>{
+  const found=probe.address().port;
+  probe.close(error=>error?reject(error):resolve(found));
+ });
+});
+const origin=`http://127.0.0.1:${port}`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{
  cwd:process.cwd(),env:{...process.env,V6_LAB_ID:'',V6_DOCUMENT_PATH:documentPath,V6_SETTINGS_PATH:settingsPath},stdio:'ignore'});
 try{
@@ -47,8 +57,8 @@ try{
    await page.locator('.ocr-source-pane .ocr-navigation-files .ts-control').waitFor({state:'visible',timeout:50000});
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select option[value^="virtual:"]').length>=3,null,{timeout:25000});
    const chapterCount=await source.locator('option[value^="virtual:"]').count();
-   // New virtual chapter navigation must not suppress the business-critical
-   // '独立成章' checkbox. Its CMD markers are what define these chapters.
+   // Chapter markers belong only to the mother chapter-boundary editor;
+   // chapter files must show them read-only without writing CMD source.
    await page.locator('.ocr-outline-grid .ag-body-horizontal-scroll-viewport').evaluate(el=>{
      el.scrollLeft=el.scrollWidth;
      el.dispatchEvent(new Event('scroll',{bubbles:true}));
@@ -56,7 +66,7 @@ try{
    const boundary=page.locator('.ocr-outline-grid .ocr-outline-checkbox').first();
    await boundary.waitFor({state:'attached',timeout:20000});
    assert((await page.locator('.ocr-outline-grid .ag-header-cell[col-id="independent"]').count())>0,
-     'Virtual heading AG must preserve the editable independent marker column');
+     'Heading AG must preserve the independent marker column');
    assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="chapterFile"]').count(),0,
      'No legacy physical chapter-export column in virtual chapter view');
    const second=await source.locator('option[value^="virtual:"]').nth(1).getAttribute('value');
@@ -64,6 +74,17 @@ try{
    await page.waitForFunction(v=>new URLSearchParams(location.search).get('view')===v.slice(8),second,{timeout:16000});
    const all=page.locator('input[aria-label="章节所有"]');
    await all.check();
+   const marker=page.locator('.ocr-outline-grid .ag-row[row-index="1"] .ocr-outline-checkbox');
+   await marker.waitFor({state:'attached',timeout:15000});
+   await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-outline-grid .ocr-outline-checkbox')].length>2&&
+     [...document.querySelectorAll('.ocr-outline-grid .ocr-outline-checkbox')].every(el=>el.disabled),
+     null,{timeout:10000});
+   assert(await marker.isDisabled(),'Chapter-file independent marker must not be editable');
+   const beforeMutation=await page.evaluate(()=>window.__v6cm6.cm.markdown);
+   await marker.evaluate(el=>{el.checked=!el.checked;el.dispatchEvent(new Event('change',{bubbles:true}));});
+   assert.equal(await page.evaluate(()=>window.__v6cm6.cm.markdown),beforeMutation,
+     'Synthetic checkbox event in chapter file must not mutate mother CM6');
+   assert(await marker.isChecked(),'Read-only checkbox must restore CMD marker state');
    await page.waitForFunction(()=>{
     const index=window.__wcpAuditBridge?.getChapterIndex?.();
     const selected=document.querySelector('.ocr-source-pane .ocr-lab-file-select')?.value;

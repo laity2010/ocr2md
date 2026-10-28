@@ -51,6 +51,9 @@ try{
    const agRows=async()=>Number(await p.locator('.ocr-outline-grid [role="grid"]').getAttribute('aria-rowcount'))-1;
    const totalRows=await agRows();
    assert.equal(await sourceSelect.inputValue(),'document');
+   const chapterMarkers=p.locator('.ocr-outline-grid .ocr-outline-checkbox');
+   assert(await chapterMarkers.nth(0).isDisabled(),'First mother chapter is always independent');
+   assert(await chapterMarkers.nth(1).isEnabled(),'Only mother chapter-boundary permits changing 独立成章');
    assert.equal(await all.isChecked(),true,'Mother AG 全部 must start checked');
    assert.equal(await all.isDisabled(),true,'Mother AG 全部 must be disabled');
    await all.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}));});
@@ -74,10 +77,15 @@ try{
    // checking shows all chapter rows without changing the selected file.
    assert.equal(await all.isDisabled(),false,'Chapter file must allow AG 全部 changes');
    assert.equal(await all.isChecked(),false,'Chapter file defaults to current-chapter AG');
+   const chapterFileMarker=p.locator('.ocr-outline-grid .ocr-outline-checkbox').first();
+   await chapterFileMarker.waitFor({state:'attached',timeout:12000});
+   assert(await chapterFileMarker.isDisabled(),'独立成章 must be read-only in chapter files');
    const chapterRows=await agRows();
    assert(chapterRows>=0&&chapterRows<totalRows,'Chapter file must initially filter heading rows');
    await all.check();
    await p.waitForFunction(total=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))===total+1,totalRows,{timeout:12000});
+   assert(await chapterMarkers.nth(1).isDisabled(),
+    '独立成章 must remain disabled when chapter-file 全部 shows all rows');
    assert.equal(await sourceSelect.inputValue(),target,'AG 全部 changed selected chapter file');
    await all.uncheck();
    await p.waitForFunction(total=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))<total+1,totalRows,{timeout:12000});
@@ -93,6 +101,11 @@ try{
    await p.waitForFunction(()=>!new URLSearchParams(location.search).has('view'),null,{timeout:16000});
    assert.equal(await all.isChecked(),true,'Returning to mother must restore checked 全部');
    assert.equal(await all.isDisabled(),true,'Returning to mother must lock 全部');
+   await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary'&&
+     !document.querySelector('.ocr-outline-grid .ag-row[row-index="1"] .ocr-outline-checkbox')?.disabled,
+     null,{timeout:10000});
+   assert(await chapterMarkers.nth(1).isEnabled(),
+    'Returning to chapter-boundary mother must re-enable 独立成章');
    await choose(sourceSelect,target);
    await p.waitForFunction(expected=>new URLSearchParams(location.search).get('view')===expected,
     target.slice('virtual:'.length),{timeout:16000});

@@ -89,6 +89,7 @@ class OutlinePanel {
     queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
   }
   setModule(module){
+    this.grid?.setChapterBoundaryModuleActive(module==='chapter-boundary');
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
       module==='latex'?'AG Grid LaTeX 审阅':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';

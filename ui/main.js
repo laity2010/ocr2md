@@ -518,6 +518,9 @@ async function main() {
     const previous=lastVisibleModule;
     lastVisibleModule=selected;
     if(isSettings){
+      // Settings removes chapter-boundary marker editing permission even
+      // though the existing AG pane is retained beneath the settings view.
+      workspace.setWorkModule('settings');
       void settings.load().then(()=>{
         sourceNavigation.mountSettings();
         if($('module-select').value!=='settings')return;

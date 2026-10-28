@@ -55,6 +55,10 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
   let rows=[],api,activeId=null,timer=null,disposed=false,focusUntil=0;
   let indexedRevision=-1,pendingFocusFrame=0;
   let startText='000',titleFontScale=1;
+  // AG owns chapter-marker writes. The WCP scope message gives the public
+  // source context; Layout provides the active module via its existing port.
+  let motherScope=true,chapterBoundaryModule=true;
+  const canEditMarker=()=>motherScope&&chapterBoundaryModule;
   let exportedDoc=null,exportedNames=new Set(),exportedMapping=null;
   const isExportCurrent=()=>Boolean(exportedDoc)&&Boolean(getCMD())&&
     getCMD().matchesSnapshot(exportedDoc)&&Boolean(exportedMapping)&&
@@ -184,8 +188,9 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
         input.type='checkbox';input.className='ocr-outline-checkbox';
         input.checked=p.data.independent;
         const first=rows[0]?.id===p.data.id;
-        input.disabled=first;
-        input.title=first?'首项必须独立成章':'写入当前 V6 Markdown 的 CM6 HTML 标定';
+        input.disabled=first||!canEditMarker();
+        input.title=first?'首项必须独立成章':!canEditMarker()
+          ?'只能在章节定界模块修改独立成章':'写入当前 V6 Markdown 的 CM6 HTML 标定';
         input.setAttribute('aria-label',p.data.title+' 独立章节');
         const hit=document.createElement('label');
         hit.className='ocr-chapter-checkbox-hit';
@@ -198,6 +203,12 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
           e.stopPropagation();
           const id=p.data.id;
           const checked=input.checked;
+          // A disabled input can still receive synthetic change events. Check
+          // the permission again at the actual CMD mutation boundary.
+          if(!canEditMarker()){
+            input.checked=liveRow(id)?.independent??!checked;
+            return;
+          }
           try{
             const current=liveRow(id);
             if(!current)throw Error('章节已变化，请重新选择标题');
@@ -258,6 +269,20 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
         origin:'outline',elementId:row.id});
     },
   });
+  // Consume the authoritative, registered source-file selection message.
+  // It is synchronous but its accepted flag is filled by the navigation
+  // recipient later in that dispatch; inspect the result in a microtask.
+  const onChapterViewSelected=event=>{
+    const detail=event.detail;
+    queueMicrotask(()=>{
+      if(disposed||!detail?.accepted)return;
+      const nextMother=!detail.id;
+      if(motherScope===nextMother)return;
+      motherScope=nextMother;
+      api.refreshCells({columns:['independent'],force:true});
+    });
+  };
+  document.addEventListener('ocr2md:lab-virtual-select',onChapterViewSelected);
   const unsub=viewStore.subscribe((next,prev)=>{
     if(next.documentRevision!==prev.documentRevision)schedule();
     if(next.focusTarget!==prev.focusTarget && next.focusTarget){
@@ -270,6 +295,12 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
   });
   const virtualQuery=createVirtualAGQuery(api,'heading');
   return {
+    setChapterBoundaryModuleActive(active){
+      const next=Boolean(active);
+      if(chapterBoundaryModule===next)return;
+      chapterBoundaryModule=next;
+      api.refreshCells({columns:['independent'],force:true});
+    },
     setVirtualQuery:virtualQuery.setVirtualQuery,
     api,get rows(){return rows;},get filters(){return api?.getFilterModel()||{};},
     get startNumber(){return Number(startText);},
@@ -300,7 +331,9 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
       api.resetRowHeights();
     },
     dispose(){
-      disposed=true;clearTimeout(timer);stopPendingFocus();unsub();api?.destroy();
+      disposed=true;clearTimeout(timer);stopPendingFocus();unsub();
+      document.removeEventListener('ocr2md:lab-virtual-select',onChapterViewSelected);
+      api?.destroy();
       element.replaceChildren();
     },
   };
