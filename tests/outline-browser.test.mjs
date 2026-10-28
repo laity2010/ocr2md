@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {buildOutline} from '../ui/outline-index.js';
 
@@ -29,10 +28,7 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
     stdio:'ignore',
 });
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const engines=[
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
-];
+const engines=[['Chrome',chromium,{}],['WebKit',webkit,{}]];
 
 try{
   let ready=false;
@@ -64,7 +60,7 @@ try{
           ag:rect('.ocr-outline-pane'),source:rect('.ocr-source-pane'),
           preview:rect('.ocr-preview-pane'),
           filters:window.__v6cm6.outline.api.getFilterModel(),
-          filterColumns:['title','level','pdfPage','independent','chapterFile']
+          filterColumns:['title','level','pdfPage','independent','virtualChapter']
             .map(field=>({field,enabled:window.__v6cm6.outline.api.getColumn(field).isFilterAllowed()})),
           customHeaderCount:document.querySelectorAll('select[data-outline-filter]').length,
           pdfPages:window.__v6cm6.outline.rows.slice(0,4).map(x=>x.pdfPage),
@@ -95,11 +91,11 @@ try{
       assert.equal(initial.customHeaderCount,0,'old custom header selects must be removed');
       assert.deepEqual(initial.pdfPages,[1,1,2,2]);
       assert.deepEqual(initial.levels,[2,2,1,1]);
-      assert.equal(initial.exported,true,'chapter filenames are planned before export');
+      assert.equal(initial.exported,true,'CMD still supplies stable chapter source metadata');
       assert.match(initial.font,/OCR2MD Sarasa/);
       assert.equal(initial.pdfPinned,null);
       assert.equal(initial.titlePinned,'left');
-      assert.deepEqual(initial.visualColumns,['title','level','pdfPage','independent','chapterFile']);
+      assert.deepEqual(initial.visualColumns,['title','level','pdfPage','independent','virtualChapter']);
       assert.equal(initial.titleLayout.whiteSpace,'nowrap');
       assert.equal(initial.titleLayout.textOverflow,'ellipsis');
       assert.equal(initial.titleLayout.overflow,'hidden');
@@ -147,10 +143,10 @@ try{
 
       // The AG Grid filter button owns the popup. Verify the actual
       // IFilterComp GUI, its all checkbox, and multiple-choice behavior.
-      for(const field of ['pdfPage','level','title','independent','chapterFile']){
+      for(const field of ['pdfPage','level','title','independent','virtualChapter']){
         await page.evaluate(field=>window.__v6cm6.outline.api.showColumnFilter(field),field);
         const label={pdfPage:'PDF页码',level:'层级',title:'标题',
-          independent:'独立成章',chapterFile:'章节文件'}[field];
+          independent:'独立成章',virtualChapter:'所属章节'}[field];
         const popup=page.locator(`.ocr-enum-filter[aria-label="${label} 筛选"]:visible`);
         await popup.waitFor({timeout:10000});
         assert(await popup.locator('[data-filter-value="all"] input').isChecked(),field+' default all');
@@ -186,8 +182,15 @@ try{
       assert.equal(await selectFilter('title','all'),21);
       assert.equal(await selectFilter('independent','是'),21);
       assert.equal(await selectFilter('independent','all'),21);
-      assert.equal(await selectFilter('chapterFile','000-Bufett-s-Alpha.md'),1);
-      assert.equal(await selectFilter('chapterFile','all'),21);
+      const chapterValue=await page.evaluate(()=>{
+        const api=window.__v6cm6.outline.api;
+        return api.getGridOption('columnDefs').find(c=>c.colId==='virtualChapter')
+          ?.valueGetter({data:api.getDisplayedRowAtIndex(0).data});
+      });
+      assert(chapterValue && chapterValue.includes(' · '),'virtual chapter label must be mapped from CMD');
+      const chapterHits=await selectFilter('virtualChapter',chapterValue);
+      assert(chapterHits>0&&chapterHits<=21,'virtual chapter value filter must select real owners');
+      assert.equal(await selectFilter('virtualChapter','all'),21);
 
       // First heading cannot be unchecked. Others write into CM6 as HTML.
       const checkBefore=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
