@@ -131,7 +131,7 @@ try{
       await nativeFilter.waitFor();
       assert.equal(await nativeFilter.locator('[data-filter-value="全局 UI"]').count(),1);
       await nativeFilter.locator('[data-filter-value="全局 UI"] input').uncheck();
-      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===1);
+      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===3);
       // Click the source record: it must clear a filter that hides that row.
       await page.locator('#settings-workspace .cm-line').filter({hasText:'"key": "defaultFontSize"'}).first().click();
       await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===5);
