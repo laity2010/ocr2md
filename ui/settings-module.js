@@ -21,7 +21,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
   let source=null,grid=null,dockview=null,loadPromise=null,initialPromise=null,slider=null,valueLabel=null,details=null;
   let agHost=null,sourceHost=null,previewHost=null;
   let activeKey=null,invalid=false,locatingFromGrid=false;
-  let renderedSignature=null,savedRootValue='',pathInput=null;
+  let renderedSignature=null,savedRootValue='',savedBookValue='',pathInput=null;
   function entry(key){const item=definitions.get(key);if(!item)throw Error('Unregistered setting: '+key);return item;}
   function register(definition){
     const {module,key,category,label,comment,type,control,defaultValue,min,max,step,message,unit}=definition;
@@ -185,7 +185,8 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     const rawName=record.key;
     breadcrumb.textContent=[record.category1,record.category2,rawName].join(' / ');
     if(item.type==='path'){
-      renderDirectoryControl(pane,item,record);
+      if(item.key==='workspace.files.bookName')renderBookControl(pane,item,record);
+      else renderDirectoryControl(pane,item,record);
       previewHost.append(pane);return;
     }
     const label=document.createElement('label');label.textContent=rawName;
@@ -207,51 +208,85 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     pane.append(breadcrumb,label,comment,row,footer,details);previewHost.append(pane);
     syncPreview();
   }
+  function renderBookControl(pane,item,record){
+    const label=document.createElement('label');label.textContent='当前书籍工作目录';
+    const selected=document.createElement('p');selected.className='ocr-settings-description';
+    selected.textContent=record.value?`当前选择：${record.value}`:'尚未选中书籍，继续使用原工作文档';
+    const note=document.createElement('p');note.className='ocr-settings-description';
+    note.textContent='书籍必须是根目录的首层文件夹，含 mineru json/ 和 pdf/。转换后的 .minerujson.md 若不存在，会在全局保存时自动生成；已有文件绝不覆盖。';
+    const feedback=document.createElement('div');feedback.className='ocr-settings-directory-feedback';
+    feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
+    const items=document.createElement('div');items.className='ocr-settings-directory-list';
+    const show=(kind,msg)=>{feedback.dataset.state=kind;feedback.textContent=msg;};
+    const root=get('workspace.files.rootPath');
+    if(!root){show('warning','⚠ 请先在工作根目录设置中选好书库根路径');pane.append(label,selected,note,feedback,items);return;}
+    show('info','正在扫描书籍工作目录…');
+    void directoryPort.books(root).then(data=>{
+      if(!pane.isConnected)return;
+      items.replaceChildren();
+      for(const book of data.books){
+        const choice=document.createElement('button');choice.type='button';
+        const ready=book.state==='ready';
+        choice.textContent=(ready?'✓ ':book.selectable?'◷ ':'⚠ ')+book.name+
+          (ready?' · 已有转换文档':book.state==='needs-conversion'?' · 保存时转换':' · '+(book.reason||'母文档格式不合格'));
+        choice.disabled=!book.selectable;
+        choice.addEventListener('click',()=>{
+          try{set(item.key,book.name);selected.textContent=`当前选择：${book.name}`;
+            show(ready?'success':'warning',ready
+              ?'✓ 已选中现有 MinerU 母 Markdown；全局保存后切换'
+              :'◷ 已选中；全局保存时先无覆盖生成 MinerU 母 Markdown 再切换');}
+          catch(error){show('error','✕ '+error.message);}
+        });
+        items.append(choice);
+      }
+      if(!data.books.length)show('warning','⚠ 工作根目录没有首层书籍文件夹');
+      else if(data.books.every(book=>!book.selectable))show('warning','⚠ 这些文件夹尚无合格的 MinerU JSON/PDF 配套资料');
+      else show('info',`发现 ${data.books.length} 个首层文件夹；请选择可用书籍`);
+    }).catch(error=>{if(pane.isConnected)show('error','✕ 无法读取书籍目录：'+error.message);});
+    pane.append(label,selected,note,feedback,items);
+  }
   function renderDirectoryControl(pane,item,record){
     const label=document.createElement('label');label.textContent='工作根目录';
     label.htmlFor='settings-workspace-root';
     pathInput=document.createElement('input');pathInput.id='settings-workspace-root';
     pathInput.type='text';pathInput.value=String(record.value);
-    pathInput.placeholder='留空表示服务器默认工作目录';
+    pathInput.placeholder='Mac 上的书库根目录（首层为每本书）';
     pathInput.setAttribute('aria-label','服务器工作根目录');
-    pathInput.addEventListener('change',()=>{
-      try{set(item.key,pathInput.value.trim());}
-      catch(error){onStatus(error.message,'warning');syncPreview();}
-    });
     const actions=document.createElement('div');actions.className='ocr-settings-directory-actions';
     const browseButton=document.createElement('button');browseButton.type='button';
     browseButton.textContent='浏览目录';
     const verifyButton=document.createElement('button');verifyButton.type='button';
     verifyButton.textContent='验证路径';
     const feedback=document.createElement('div');feedback.className='ocr-settings-directory-feedback';
-    feedback.setAttribute('role','status');
-    feedback.setAttribute('aria-live','polite');
+    feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
     const showFeedback=(kind,message)=>{
-      feedback.dataset.state=kind;
-      feedback.textContent=message;
+      feedback.dataset.state=kind;feedback.textContent=message;
       pathInput.setAttribute('aria-invalid',String(kind==='error'));
     };
-    // macOS Finder/Terminal "Copy as Pathname" escapes spaces and tildes.
-    // Convert only known shell escapes; never evaluate or run the pasted text.
     const normalizedPath=raw=>raw.trim().replace(/\\([ ~()&])/g,'$1');
-    const directoryList=document.createElement('div');
-    directoryList.className='ocr-settings-directory-list';
+    pathInput.addEventListener('change',()=>{
+      try{set(item.key,normalizedPath(pathInput.value));pathInput.value=normalizedPath(pathInput.value);}
+      catch(error){showFeedback('error','✕ '+error.message);}
+    });
+    const directoryList=document.createElement('div');directoryList.className='ocr-settings-directory-list';
     const display=async value=>{
-      directoryList.replaceChildren();
-      showFeedback('info','正在检查服务器目录…');
+      directoryList.replaceChildren();showFeedback('info','正在检查服务器目录…');
       try{
         const data=await directoryPort.browse(value);
-        showFeedback(data.hasDocument?'success':'warning',
-          (data.hasDocument?'✓ 找到母 Markdown：':'⚠ 目录存在，但缺少母 Markdown：')+
-          data.documentName+' · '+data.path);
-        const choices=[...(data.parent?[{name:'.. 上一级',path:data.parent}]:[]),
-          ...data.children];
+        const selectable=data.books.filter(book=>book.selectable);
+        showFeedback(selectable.length?'success':'warning',selectable.length
+          ?`✓ 发现 ${data.books.length} 个首层文件夹，其中 ${selectable.length} 个可选；请再选择当前书籍`
+          :'⚠ 目录存在，但没有完整的首层书籍（mineru json/、pdf/）');
+        const choices=[...(data.parent?[{name:'.. 上一级',path:data.parent}]:[]),...data.children];
         const current=document.createElement('button');current.type='button';
-        current.textContent='选用当前目录';current.disabled=!data.hasDocument;
+        current.textContent='设为工作根目录';
         current.addEventListener('click',()=>{
-          try{set(item.key,data.path);pathInput.value=data.path;
-            showFeedback('success','✓ 已填写目录，请点击顶栏「保存」才会生效');}
-          catch(error){showFeedback('error','✕ 无法选用：'+error.message);}
+          try{
+            const previous=get(item.key);
+            set(item.key,data.path);pathInput.value=data.path;
+            if(previous!==data.path)set('workspace.files.bookName','');
+            showFeedback('success','✓ 根目录已填写；请在「当前书籍工作目录」选书籍，然后顶栏保存');
+          }catch(error){showFeedback('error','✕ 无法选用：'+error.message);}
         });
         directoryList.append(current);
         for(const choice of choices){
@@ -265,8 +300,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     browseButton.addEventListener('click',async()=>{
       try{
         const data=await directoryPort.roots();
-        directoryList.replaceChildren();
-        showFeedback('info','授权目录（选择后可逐级浏览）');
+        directoryList.replaceChildren();showFeedback('info','授权目录（选择后逐级浏览到书库根目录）');
         for(const path of data.allowedRoots){
           const button=document.createElement('button');button.type='button';
           button.textContent='📁 '+path;
@@ -278,16 +312,13 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     verifyButton.addEventListener('click',async()=>{
       const path=normalizedPath(pathInput.value);
       try{
-        if(path!==pathInput.value){
-          // Correct the source JSON through CMD as well as the text field.
-          set(item.key,path);
-          pathInput.value=path;
-        }
-        showFeedback('info','正在验证服务器目录…');
-        const data=await directoryPort.browse(path);
-        showFeedback(data.hasDocument?'success':'warning',data.hasDocument
-          ?'✓ 验证通过：已有母文档；点击顶栏「保存」生效'
-          :'⚠ 目录存在，但缺少 '+data.documentName+'；目前不能切换');
+        if(path!==pathInput.value){set(item.key,path);pathInput.value=path;}
+        showFeedback('info','正在验证书库根目录…');
+        const data=await directoryPort.books(path);
+        const available=data.books.filter(book=>book.selectable);
+        showFeedback(available.length?'success':'warning',available.length
+          ?`✓ 目录可用：${available.length} 本书已具备转换前提；请选中当前书籍后保存`
+          :'⚠ 目录存在，但没有同时具备 mineru json/、pdf/ 的可用书籍');
       }catch(error){showFeedback('error','✕ 验证失败：'+error.message);}
     });
     actions.append(browseButton,verifyButton);
@@ -296,7 +327,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     pane.append(label,pathInput,actions,feedback,directoryList,help);
     void directoryPort.roots().then(data=>{
       if(pane.isConnected&&record.value==='')
-        showFeedback('info','当前目录：'+data.activeRoot+' · 未选择新目录');
+        showFeedback('info','默认工作文档仍保持不变；可选择其他书库根目录');
     }).catch(()=>{});
   }
   function syncPreview(){
@@ -413,6 +444,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     });
     const initialData=JSON.parse(initialSnapshot.text);
     savedRootValue=initialData.settings?.['workspace.files.rootPath']?.value??'';
+    savedBookValue=initialData.settings?.['workspace.files.bookName']?.value??'';
     source=await openCMDJsonSource(sourceHost,onSourceChange,initialSnapshot);
     ensureRegisteredRecords();
     // Registered module values are applied after the first actual JSON read.
@@ -433,13 +465,17 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     if(!source)throw Error('设置未加载');
     if(invalid)throw Error('无效 JSON 不允许保存');
     const completed=await source.save();
-    if(completed)savedRootValue=source.readJSON().settings?.['workspace.files.rootPath']?.value??'';
+    if(completed){
+      savedRootValue=source.readJSON().settings?.['workspace.files.rootPath']?.value??'';
+      savedBookValue=source.readJSON().settings?.['workspace.files.bookName']?.value??'';
+    }
     return completed;
   }
   return Object.freeze({register,subscribe,get,set,initialize,load,activate,hasUnsaved,save,
     get workspaceRootChanged(){
       if(!source||invalid)return false;
-      try{return (source.readJSON().settings?.['workspace.files.rootPath']?.value??'')!==savedRootValue;}
+      try{const settings=source.readJSON().settings;return (settings?.['workspace.files.rootPath']?.value??'')!==savedRootValue||
+        (settings?.['workspace.files.bookName']?.value??'')!==savedBookValue;}
       catch{return false;}
     },
     getPaneRatios:()=>readPaneRatios(dockview,'settings-outline','settings-source','settings-preview'),

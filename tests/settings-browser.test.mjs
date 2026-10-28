@@ -134,7 +134,7 @@ try{
       await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===1);
       // Click the source record: it must clear a filter that hides that row.
       await page.locator('#settings-workspace .cm-line').filter({hasText:'"key": "defaultFontSize"'}).first().click();
-      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===4);
+      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===5);
       assert.equal(await page.locator('#settings-workspace .ag-row-selected').count(),1);
       assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3);
       await page.locator('#settings-workspace .ag-row').filter({hasText:'defaultFontSize'}).click();

@@ -23,6 +23,7 @@ sourceHost.setAttribute('aria-label','CodeMirror 6 Markdown 编辑器');
 let getMarkdown = () => '';
 let getEditor = () => null;
 let getCMD = () => null;
+let documentFileLabel='Buffett’s Alpha.minerujson.md';
 // AG receives only the CMD capabilities needed for chapter projection/marking.
 // In particular, this port has no EditorView or other editor internals.
 const mediaCMD=Object.freeze({
@@ -115,7 +116,7 @@ class SourcePanel {
     const files=document.createElement('select');
     files.className='ocr-source-file-select';
     files.setAttribute('aria-label','源码文件导航');
-    files.add(new Option('章节定界/Buffett’s Alpha.minerujson.md','document'));
+    files.add(new Option('章节定界/'+documentFileLabel,'document'));
     // Real shared CodeMirror action buttons; no clones or new handlers.
     bar.append(files,document.querySelector('.quote-indent-tools'));
     this.element.append(bar,sourceHost);
@@ -348,7 +349,8 @@ class DetachedPdfPanel {
   }
 }
 
-export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null) {
+export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null,documentName=null) {
+  if(documentName)documentFileLabel=documentName;
   wcpRuntime=runtime;
   getMarkdown=getDocument;
   getEditor=getCurrentEditor;

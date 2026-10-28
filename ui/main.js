@@ -50,7 +50,7 @@ let checkingVersion = false;
 const currentBuild = __V6_BUILD_VERSION__;
 // One visible status channel beside the release badge. Former subbar, AG
 // footer and page footer metadata all converge here without extra UI rows.
-const documentLabel='Buffett’s Alpha.minerujson.md';
+let documentLabel='Buffett’s Alpha.minerujson.md';
 let statusMessage='正在加载';
 let statusKind='ok';
 let documentLines=null,documentChars=null;
@@ -322,6 +322,14 @@ async function main() {
   if (!response.ok) throw Error('文档读取失败 '+response.status);
   const firstETag=response.headers.get('ETag');
   if(!firstETag)throw Error('文档响应缺少版本 ETag，拒绝开启无保护保存');
+  // Server is authoritative for the selected book's document identity.
+  const rawLabel=response.headers.get('X-OCR2MD-Document-Name');
+  if(rawLabel && /^[0-9a-f]+$/i.test(rawLabel)){
+    try{
+      const bytes=new Uint8Array(rawLabel.match(/.{2}/g).map(pair=>parseInt(pair,16)));
+      documentLabel=new TextDecoder().decode(bytes);
+    }catch{/* Default is only a label, never a file selector. */}
+  }
   const markdownText = await response.text();
   documentETag=firstETag;
   const unsubscribeGlobalStatus=viewStore.subscribe((next,previous)=>{
@@ -362,13 +370,14 @@ async function main() {
   });
   const sourceNavigation=createSourceFileNavigation({modulePort,
     workbench:$('workspace'),settingsWorkbench:$('settings-workspace'),
+    documentName:documentLabel,
     reportError:message=>$('status')?.setAttribute('data-file-switch-error',message)});
   mountAgModuleToolbar({modulePort,workspace:$('workspace')});
   registerCMSourceFontSetting(settings);
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
-  },wcpRuntime);
+  },wcpRuntime,documentLabel);
   registerOutlineTitleScaleSetting(settings,value=>workspace.setOutlineTitleFontScale(value));
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);

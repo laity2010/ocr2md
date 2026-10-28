@@ -7,7 +7,7 @@ from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
-from v6_workspace_roots import saved_root, proposed_root, check_root, allowed_roots, list_directories
+from v6_workspace_roots import saved_root, saved_selection, selected_book, proposed_root, prepare_selected, check_root, allowed_roots, list_directories, list_books
 from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE, chapter_media_references
 import json
 import os
@@ -87,11 +87,18 @@ def active_root():
 
 
 def active_doc():
-    return active_root() / DOC.name
+    book=selected_book(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
+    return book[3] if book else DOC
 
 
 def active_pdf():
-    return active_root() / PDF_PATH.name
+    book=selected_book(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
+    return book[2] if book else PDF_PATH
+
+
+def active_json():
+    book=selected_book(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
+    return book[1] if book else ORIGINAL_JSON
 
 
 def document_etag(content, path=None):
@@ -193,10 +200,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 # Geometry must belong to the selected PDF, not the previous
                 # workspace's OCR data. Never reuse fixture boxes in another root.
-                if active_root() == DOC.parent.resolve():
-                    geometry = ORIGINAL_JSON
-                else:
-                    geometry = active_root() / DOC.name.replace('.minerujson.md', '.mineru.json')
+                geometry = active_json()
                 data = json.loads(geometry.read_text(encoding='utf-8'))
                 pages=[]
                 for page in data['pdf_info']:
@@ -212,18 +216,21 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError,ValueError,KeyError,TypeError):
                 self.response(503,'Original OCR geometry unavailable')
             return
-        if path in ('/api/workspace/roots', '/api/workspace/browse'):
+        if path in ('/api/workspace/roots', '/api/workspace/browse', '/api/workspace/books'):
             if not self.authorized():
                 self.response(403, 'Editor authorization required')
                 return
             try:
                 if path.endswith('/roots'):
-                    data = {'activeRoot': str(active_root()),
+                    configured,book,_ = saved_selection(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
+                    data = {'activeRoot': str(active_root()),'configuredRoot':configured,
+                            'activeBook':book,
                             'allowedRoots': [str(root) for root in allowed_roots(DOC, RUNTIME, bool(LAB_ID))],
-                            'documentName': DOC.name}
+                            'documentName':active_doc().name}
                 else:
                     value = parse_qs(urlsplit(self.path).query).get('path', [''])[0]
-                    data = list_directories(value, DOC, RUNTIME, bool(LAB_ID))
+                    data = (list_books(value,DOC,RUNTIME,bool(LAB_ID)) if path.endswith('/books')
+                            else list_directories(value,DOC,RUNTIME,bool(LAB_ID)))
                 self.response(200, json.dumps(data, ensure_ascii=False), 'application/json; charset=utf-8')
             except (OSError, ValueError, TypeError) as error:
                 self.response(422, str(error))
@@ -246,7 +253,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with DOC_WRITE_LOCK:
                     doc = active_doc()
-                    content = (doc if doc.is_file() else FIXTURE).read_bytes()
+                    content = doc.read_bytes() if doc.is_file() else FIXTURE.read_bytes()
                     revision = document_etag(content, doc)
             except OSError:
                 self.response(503, 'Document storage unavailable')
@@ -256,6 +263,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-store, max-age=0')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('ETag', revision)
+            self.send_header('X-OCR2MD-Document-Name', doc.name.encode('utf-8').hex())
             self.send_header('Content-Length', str(len(content)))
             self.end_headers()
             if self.command != 'HEAD':
@@ -587,7 +595,15 @@ class Handler(BaseHTTPRequestHandler):
                 # same lock. An invalid/disallowed root never reaches disk.
                 with DOC_WRITE_LOCK:
                     proposed_root(content, DOC, RUNTIME, bool(LAB_ID))
-                    saved, _ = cmd_settings_save(SETTINGS, content, self.headers.get('If-Match'))
+                    # Prevent any conversion side effects for stale Settings.
+                    previous = self.headers.get('If-Match')
+                    if cmd_settings_fingerprint(cmd_settings_read(SETTINGS)) != previous:
+                        self.response(409, 'Settings changed elsewhere; reload')
+                        return
+                    # Prepare only the explicitly selected first-level book.
+                    # Never overwrite a pre-existing Markdown or source PDF/JSON.
+                    prepare_selected(content, DOC, RUNTIME, ROOT, bool(LAB_ID))
+                    saved, _ = cmd_settings_save(SETTINGS, content, previous)
             except ValueError as error:
                 self.response(400, str(error))
                 return

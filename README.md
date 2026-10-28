@@ -46,9 +46,13 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 `V6_DOCUMENT_PATH`、`V6_PDF_PATH` 可将服务指向**独立测试母文档/PDF**。正式服务默认读取上述工作区文件；浏览器通过 `/api/document`、`/api/pdf`（支持 HTTP Range）、`/api/pdf-map` 和 `/api/chapters` 获取当前数据，保存、导出、初始化需通过编辑授权及同源校验。
 
-### 工作根目录（Main）
+### 工作根目录与首层书籍目录（Main）
 
-在「全局设置 → 工作区 → 文件与目录 → rootPath」选择 Mac 服务器目录；右下控件可浏览已授权目录、校验，点击顶栏统一「保存」才生效并重载页面。服务器仅允许默认工作区、当前 Mac 用户的 `~/Documents` 及管理员显式配置 `V6_WORKSPACE_ALLOWED_ROOTS` 的目录及其子目录。目标目录必须预先存在同名母 Markdown（正式版 `buffetts-alpha.minerujson.md`），以避免误初始化、移动或覆盖其他文件。PDF 证据需预先放在该目录中的 `buffetts-alpha.original.pdf`，否则 PDF 预览会显示缺失。不会复制、删除或重命名旧目录。工作目录路径写入现有 `settings.json`；设为空可返回默认目录。独立 Lab 仅能选择其隔离运行目录内的路径。此功能不是多文档文件浏览器，也不会更改程序源码/发布目录。
+「全局设置 → 工作区 → 文件与目录」包含 `rootPath`（书库根目录）与 `bookName`（当前书籍工作目录）。`rootPath` 本身**不是**母 Markdown 文件夹；每个首层子目录是一部书，内含 `mineru json/` 和 `pdf/`，各提供一个 `.json` 和一个 `.pdf` 原始文件。先在根目录控件浏览/选定书库，再在书籍控件选书，最后使用顶栏「保存」统一提交、准备并加载。未选择书籍时，旧母文档保持工作状态。
+
+如果书籍目录没有 `${书名}.minerujson.md`，服务器调用已有 `@ocr2md/minerujson-md` 转换器，从只读 MinerU JSON 生成带原始块锚点与 Markdown 标题的母文档；验证通过才切换。已有母文档仅验证而**绝不覆盖**；转换失败、多个同类原始来源、权限不足均拒绝切换。`pdf/` 原件和 `mineru json/` 原件均不移动、不修改。CMD 的章节独立成章标定仍需人工校阅，初始转换不冒充已完成章节定界。前端保持 AG/CMD/CM6 模块和统一保存，不引入第二编辑器。
+
+Mac 服务器只允许原工作区、`~/Documents`、以及 `V6_WORKSPACE_ALLOWED_ROOTS` 指定的目录。Lab 仍只允许自己的隔离运行目录。首次 iCloud 书库访问可能还需 macOS 给运行服务器的 Python 应用授权；网页白名单不等于系统隐私授权。
 
 
 ## 开发、测试、发布

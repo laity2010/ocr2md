@@ -16,10 +16,11 @@ const chapterId=id=>'virtual:'+id;
 let activeChapter=null;
 
 let liveNavigation=null;
-export function createSourceFileNavigation({modulePort,workbench,settingsWorkbench,reportError}={}){
+export function createSourceFileNavigation({modulePort,workbench,settingsWorkbench,reportError,documentName}={}){
   if(liveNavigation)return liveNavigation;
   if(!modulePort||!workbench||!settingsWorkbench||typeof reportError!=='function')
     throw Error('Source navigation requires Shell module and workspace ports');
+  const defaults=[{id:'document',label:'章节定界/'+(documentName||'Buffett’s Alpha.minerujson.md')},DEFAULTS[1]];
   const selectBoxes=new Set();
   let views=[],bridge=null,refreshTimer=null;
   const selected=()=>activeChapter?chapterId(activeChapter):'document';
@@ -28,7 +29,7 @@ export function createSourceFileNavigation({modulePort,workbench,settingsWorkben
     for(const select of selectBoxes){
       select.replaceChildren();
       for(const [heading,items] of [
-        ['工作区',DEFAULTS],
+        ['工作区',defaults],
         ['章节文件',views.map(item=>({id:chapterId(item.id),
           label:'章节chapter/'+item.name}))],
       ]){

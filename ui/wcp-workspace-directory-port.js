@@ -8,4 +8,5 @@ async function json(url){
 export const workspaceDirectoryPort=Object.freeze({
   roots:()=>json('/api/workspace/roots'),
   browse:path=>json('/api/workspace/browse?path='+encodeURIComponent(path)),
+  books:root=>json('/api/workspace/books?path='+encodeURIComponent(root)),
 });
