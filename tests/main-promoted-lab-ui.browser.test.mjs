@@ -52,8 +52,9 @@ try{
    const totalRows=await agRows();
    assert.equal(await sourceSelect.inputValue(),'document');
    const chapterMarkers=p.locator('.ocr-outline-grid .ocr-outline-checkbox');
-   assert(await chapterMarkers.nth(0).isDisabled(),'First mother chapter is always independent');
-   assert(await chapterMarkers.nth(1).isEnabled(),'Only mother chapter-boundary permits changing 独立成章');
+   const editableMarker=p.locator('.ocr-outline-grid .ag-row[row-index="1"] .ocr-outline-checkbox');
+   assert(await p.locator('.ocr-outline-grid .ag-row[row-index="0"] .ocr-outline-checkbox').isDisabled(),'First mother chapter is always independent');
+   assert(await editableMarker.isEnabled(),'Only mother chapter-boundary permits changing 独立成章');
    assert.equal(await all.isChecked(),true,'Mother AG 全部 must start checked');
    assert.equal(await all.isDisabled(),true,'Mother AG 全部 must be disabled');
    await all.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}));});
@@ -84,7 +85,7 @@ try{
    assert(chapterRows>=0&&chapterRows<totalRows,'Chapter file must initially filter heading rows');
    await all.check();
    await p.waitForFunction(total=>Number(document.querySelector('.ocr-outline-grid [role="grid"]')?.getAttribute('aria-rowcount'))===total+1,totalRows,{timeout:12000});
-   assert(await chapterMarkers.nth(1).isDisabled(),
+   assert(await editableMarker.isDisabled(),
     '独立成章 must remain disabled when chapter-file 全部 shows all rows');
    assert.equal(await sourceSelect.inputValue(),target,'AG 全部 changed selected chapter file');
    await all.uncheck();
@@ -104,7 +105,7 @@ try{
    await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary'&&
      !document.querySelector('.ocr-outline-grid .ag-row[row-index="1"] .ocr-outline-checkbox')?.disabled,
      null,{timeout:10000});
-   assert(await chapterMarkers.nth(1).isEnabled(),
+   assert(await editableMarker.isEnabled(),
     'Returning to chapter-boundary mother must re-enable 独立成章');
    await choose(sourceSelect,target);
    await p.waitForFunction(expected=>new URLSearchParams(location.search).get('view')===expected,
