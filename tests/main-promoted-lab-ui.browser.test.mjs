@@ -97,6 +97,10 @@ try{
    await p.waitForFunction(expected=>new URLSearchParams(location.search).get('view')===expected,
     target.slice('virtual:'.length),{timeout:16000});
    assert.equal(await all.isDisabled(),false,'Returning to chapter file must unlock 全部');
+   // Returning through 章节定界 intentionally reset the element picker to 标题;
+   // the chapter-file editor must still allow selecting 媒体 independently.
+   await choose(p.locator('.ocr-lab-element-select'),'media');
+   await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:10000});
    const mode=await p.locator('#module-select').inputValue();
    await nav.click();
    await p.locator('body>.ocr-navigation-popup-files:visible [data-selectable][data-value="settings"]').click();
