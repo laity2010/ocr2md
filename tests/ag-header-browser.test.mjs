@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {chromium,webkit,devices} from 'playwright';
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{}],['WebKit',webkit,{}]];
 for(const [i,[name,engine,launch]] of engines.entries()){
+ if(process.env.V6_ONLY_CHROME && name!=='Chrome')continue;
+ if(process.env.V6_ONLY_WEBKIT && name!=='WebKit')continue;
  const port=5227+i, url=`http://127.0.0.1:${port}/`;
  const doc=resolve(`.v6/tests/ag-header-${name.toLowerCase()}-${process.pid}.md`);
  writeFileSync(doc,original);
@@ -39,7 +39,8 @@ for(const [i,[name,engine,launch]] of engines.entries()){
       titleWidth:api.getColumn('title').getActualWidth(),
       otherPinned:api.getColumn('level').getPinned()};
   });
-  assert.deepEqual(state.fields,['title','level','pdfPage','independent','chapterFile']);
+  // The promoted virtual chapter view replaces physical chapter-export fields.
+  assert.deepEqual(state.fields,['title','level','pdfPage','independent','virtualChapter']);
   assert.equal(state.titlePinned,'left');assert.equal(state.pdfPinned,null);
   assert.equal(state.otherPinned,null);
   const title=page.locator('.ag-header-cell[col-id="title"]');
@@ -74,7 +75,15 @@ for(const [i,[name,engine,launch]] of engines.entries()){
   const resizedWidth=await page.evaluate(()=>window.__v6cm6.outline.api.getColumn('title').getActualWidth());
   // Pinning survives sideways scroll of the unpinned columns.
   const before=await title.boundingBox();
-  await page.evaluate(()=>window.__v6cm6.outline.api.ensureColumnVisible('chapterFile'));
+  await page.evaluate(()=>window.__v6cm6.outline.api.ensureColumnVisible('virtualChapter'));
+  // The new virtual chapter column must retain a REAL AG touch filter, not
+  // merely a visible label that cannot be used to narrow rows.
+  await page.locator('.ocr-outline-grid .ag-header-cell[col-id="virtualChapter"] .ag-header-cell-filter-button').tap();
+  const chapterPopup=page.locator('.ocr-enum-filter[aria-label="所属章节 筛选"]:visible');
+  await chapterPopup.waitFor({timeout:12000});
+  assert(await chapterPopup.locator('[data-filter-value="all"] input').isChecked());
+  assert((await chapterPopup.locator('.ocr-enum-filter-option').count())>=2);
+  await page.evaluate(()=>window.__v6cm6.outline.api.hideColumnFilter());
   const after=await title.boundingBox();
   assert(Math.abs(before.x-after.x)<2,`${name} pinned title moved in horizontal scroll`);
   assert.equal(await page.evaluate(()=>window.__v6cm6.outline.api.getColumn('title').getPinned()),'left');
