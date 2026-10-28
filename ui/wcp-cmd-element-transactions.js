@@ -103,6 +103,8 @@ export function createCMDTransactionPort(cmd){
     // an asynchronous fetch while ensuring the result is still an indexed
     // media reference (not an arbitrary matching string in another chapter).
     replaceMediaReferences(edits){
+      if(!Array.isArray(edits)||!edits.length)
+        throw Error('Media replacement requires source ranges');
       const index=projector.get();
       const available=new Set(index.queryElements({type:'media'})
         .map(item=>String(item.from)+':'+String(item.to)));
@@ -110,7 +112,14 @@ export function createCMDTransactionPort(cmd){
         if(!available.has(edit.from+':'+edit.to))
           throw Error('Media element moved or changed; rescan before writing');
       }
-      return port.replaceRanges(edits);
+      // The active virtual chapter is a CMD write boundary, not a Media
+      // download boundary. Accept only authorized in-chapter references;
+      // outside links remain unchanged and the fetched image stays on disk.
+      const scope=currentVirtualChapter(cmd.view.state);
+      const writable=scope?edits.filter(edit=>edit.from>=scope.from&&edit.to<=scope.to):edits;
+      if(!writable.length)return {changed:0,skipped:edits.length};
+      const result=port.replaceRanges(writable);
+      return {changed:result.changed,skipped:edits.length-writable.length};
     },
   };
   return Object.freeze(port);

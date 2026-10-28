@@ -27,11 +27,8 @@ let documentFileLabel='Buffett’s Alpha.minerujson.md';
 // AG receives only the CMD capabilities needed for chapter projection/marking.
 // In particular, this port has no EditorView or other editor internals.
 const mediaCMD=Object.freeze({
-  replaceRanges:edits=>{
-    const cmd=getCMD();
-    return typeof cmd.replaceMediaReferences==='function'
-      ?cmd.replaceMediaReferences(edits):cmd.replaceRanges(edits);
-  },
+  // Semantic CMD capability only; no fallback that bypasses virtual chapter guards.
+  replaceMediaReferences:edits=>getCMD().replaceMediaReferences(edits),
 });
 // Review plugins only receive optimistic CMD changes, never EditorView or a filesystem port.
 const latexCMD=Object.freeze({

@@ -177,10 +177,17 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
           // or user edits cannot corrupt the document.
           const matches=findMedia(getMarkdown()).filter(row=>row.url===url);
           if(matches.length){
-            cmd().replaceRanges(matches.map(row=>({from:row.from,to:row.to,
-              expected:url,insert:state.path})));
-            onStatus(`✓ 已本地化 ${matches.length} 处引用，记得保存 Markdown`);
-          }else onStatus('✓ 媒体已下载；正文已改变，未替换其他链接');
+            try{
+              const result=cmd().replaceMediaReferences(matches.map(row=>({
+                from:row.from,to:row.to,expected:url,insert:state.path})));
+              if(result.changed)onStatus(`✓ 图片已下载，本地化 ${result.changed} 处引用${result.skipped?`；其他 ${result.skipped} 处不在当前章节`:''} · 请保存 Markdown`);
+              else onStatus('✓ 图片下载成功；引用不在当前章节，切换到对应章节或全文后点击「采用」','warning');
+            }catch(error){
+              // Download and CMD adoption are separate transactions: never
+              // report a successfully stored image as a failed download.
+              onStatus('✓ 图片已下载到 media/；正文引用尚未替换：'+error.message,'warning');
+            }
+          }else onStatus('✓ 图片已下载；正文已改变，未替换其他链接');
           break;
         }
         if(state.state!=='partial'||!Number.isFinite(state.bytes))throw Error('Invalid media progress');
@@ -277,7 +284,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       const url=p.data.url,button=document.createElement('button');
       button.className='ocr-media-action';
       button.type='button';button.textContent=running.has(url)?'暂停':
+        stateFor(url).state==='complete'?'采用':
         stateFor(url).state==='partial'||stateFor(url).state==='paused'?'续传':'下载';
+      if(stateFor(url).state==='complete')button.title='图片已下载；将当前章节内的远程链接替换为本地引用';
       button.addEventListener('click',event=>{
         event.stopPropagation();
         if(running.has(url)){paused.add(url);return;}

@@ -364,7 +364,7 @@ async function main() {
     showActions:({selected,settings,chapter,virtualMode})=>{
       for(const actions of document.querySelectorAll('.module-actions[data-module]')){
         actions.hidden=settings||actions.dataset.module!==selected||
-          (chapter?actions.dataset.module==='chapter-boundary':virtualMode);
+          (actions.dataset.module==='chapter-boundary' && (chapter||virtualMode));
       }
     },
   });

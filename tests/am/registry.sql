@@ -34,6 +34,7 @@ INSERT INTO apis VALUES
  ('C21','C','parseAnnotation','ui/cmd-annotations.js','export','single HTML comment text','tag and attributes or null','public read-only CMD annotation syntax parser, without business semantics',1),
  ('C22','C','formatAnnotation','ui/cmd-annotations.js','export','tag, attributes, spacing options','single-line HTML comment text','public CMD annotation syntax formatter, rejects invalid attribute names and multiline values',1),
  ('C23','C','scanAnnotations','ui/cmd-annotations.js','export','Markdown source','offset-positioned syntax records','public read-only CMD annotation scanner; no state or writes',1),
+ ('C33','C','returned.replaceMediaReferences','ui/wcp-cmd-element-transactions.js','returned','validated media URL edits','changed/skipped counts','CMD validates indexed media references and applies only the active virtual chapter writes; downloaded files remain Media-owned',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -308,8 +309,8 @@ INSERT INTO access_edges VALUES
  ('X09','L','P','ui/workspace.js','currentPdf?.pdf?.refreshAnchors()','P03','registered','Layout requests PDF anchor refresh through published method'),
  ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API'),
  ('X11','L','A','ui/workspace.js','createMediaModule(this.mediaHost','A01','registered','Layout hosts Media panel without accessing its AG internals'),
- ('X12','A','C','ui/media-module.js','cmd().replaceRanges(','C14','registered','Media requests optimistic batch edit through public CMD port'),
- ('X13','L','C','ui/workspace.js','cmd.replaceRanges(edits)','C14','registered','Layout Media write adapter delegates to CMD replaceMediaReferences where available or replaceRanges compatibility port'),
+ ('X12','A','C','ui/media-module.js','cmd().replaceMediaReferences(','C33','registered','Media requests indexed, scope-aware URL replacement through CMD public transaction port'),
+ ('X13','L','C','ui/workspace.js','getCMD().replaceMediaReferences(edits)','C33','registered','Layout exposes the narrow indexed CMD media replacement capability without fallback'),
  ('X14',NULL,'A','scripts/v6_serve.py','media_download_chunk(active_doc(), url)','A06','registered','HTTP adapter invokes Media-only downloader'),
  ('X15',NULL,'A','scripts/v6_serve.py','media_status(active_doc(), url)','A07','registered','HTTP adapter exposes Media status'),
  ('X16',NULL,'A','scripts/v6_serve.py','media_read_local(active_doc(), path[','A08','registered','HTTP adapter reads only whitelisted media paths'),
@@ -772,3 +773,5 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-B07','B07','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CAS checks before conversion and rejects invalid selection','integration'),
  ('TC-B08','B08','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Never overwrite old or preexisting mother Markdown','integration'),
  ('TC-B09','B09','tests/workspace-portability.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Node path configuration works under environment without Homebrew','direct');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C33-MEDIA-SCOPE','C33','tests/media-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Download in a virtual chapter keeps out-of-scope CMD links unchanged and permits later adoption in full document','integration');

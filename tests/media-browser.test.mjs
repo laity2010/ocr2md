@@ -91,6 +91,8 @@ try{
   const port=5590+i,base=`http://127.0.0.1:${port}`;
   const launch=()=>spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),
     env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:doc,V6_PDF_PATH:originalPdf,
+      // Never read the Main book selection when running disposable media tests.
+      V6_SETTINGS_PATH:resolve(folder,'isolated-settings.json'),
       V6_TOKEN_PATH:authFile,V6_MEDIA_TEST_ORIGIN:remoteOrigin,V6_STATIC_ROOT:resolve('dist')},stdio:'ignore'});
   let server=launch();
   let browser;
@@ -200,6 +202,23 @@ try{
    assert(thumbnailRequests.length>0,'remote image preview did not load');
    assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-preview-link').getAttribute('target'),'_blank');
    await page.screenshot({path:`.v6/evidence/media-before-${name.toLowerCase()}.png`});
+   // Active virtual chapters are CMD write boundaries, not download errors.
+   // The first image is outside this short chapter; save the file without
+   // changing an out-of-scope Markdown link, then adopt it in full view.
+   const firstImageLine=sample.lastIndexOf('\n',sample.indexOf(target))+1;
+   assert(firstImageLine>0,'test fixture needs a pre-image chapter boundary');
+   await page.evaluate(to=>document.dispatchEvent(new CustomEvent('ocr2md:wp4-virtual-scope',{
+     detail:{scope:{id:'fixture:before-image',from:0,to}}
+   })),firstImageLine);
+   await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action')?.textContent==='采用',null,{timeout:30000});
+   assert.equal(readFileSync(doc,'utf8'),sample,'out-of-scope download must not change Markdown');
+   const scopeStatus=await page.locator('#status').textContent();
+   assert(scopeStatus.includes('图片下载成功'),
+     'completed image must not be reported as failed when its link is outside chapter: '+scopeStatus);
+   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('ocr2md:wp4-virtual-scope',{
+     detail:{scope:null}
+   })));
    await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('本地'),null,{timeout:30000});
    assert.equal(readFileSync(doc,'utf8'),sample,'download must not autosave Markdown');

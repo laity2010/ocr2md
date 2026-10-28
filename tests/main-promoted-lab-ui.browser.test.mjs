@@ -9,7 +9,12 @@ import {resolve,join} from 'node:path';
 import {chromium,webkit} from 'playwright';
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-main-promoted-'));
 const fixture=readFileSync(process.env.OCR_MAIN_USE_CURRENT_COPY==='1'?'.v6/workspace/buffetts-alpha.minerujson.md':'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
-const settings=readFileSync('.v6/settings.json','utf8');
+// Isolate navigation from any real Main workspace/book selection.
+const settingsData=JSON.parse(readFileSync('.v6/settings.json','utf8'));
+for(const key of ['workspace.files.rootPath','workspace.files.bookName']){
+ if(settingsData.settings?.[key])settingsData.settings[key].value='';
+}
+const settings=JSON.stringify(settingsData,null,2)+'\n';
 writeFileSync(join(dir,'document.md'),fixture);
 writeFileSync(join(dir,'settings.json'),settings);
 const port=5996,origin=`http://127.0.0.1:${port}`;
@@ -94,6 +99,8 @@ try{
    await p.locator('.ocr-lab-element-select').waitFor({state:'attached'});
    await choose(p.locator('.ocr-lab-element-select'),'media');
    await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:10000});
+   await p.locator('#media-refresh').waitFor({state:'visible',timeout:10000});
+   await p.locator('#media-download-all').waitFor({state:'visible',timeout:10000});
    assert.equal(await all.isDisabled(),false,'Chapter-file media AG 全部 must be enabled');
    await all.check();
    await all.uncheck();
