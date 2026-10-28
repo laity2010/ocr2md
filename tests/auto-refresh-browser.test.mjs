@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {chromium,webkit} from 'playwright';
@@ -85,7 +85,7 @@ async function runScenario(name,engine,device,scenario){
   assert.deepEqual(dialogs,[],`${name} ${scenario}: automatic reload should not ask to save`);
   assert.deepEqual(writes,[],`${name} ${scenario}: automatic reload must not save drafts`);
   assert.equal(readFileSync(doc,'utf8'),original,'User data changed on release reload');
-  assert.equal(readFileSync(settingsFile,'utf8').includes('UNSAVED_MAIN_RELEASE_BUFFER'),false);
+  assert.equal(existsSync(settingsFile),false,'Unsaved Settings must not be written by auto-reload');
   assert.deepEqual(errors,[],`${name} ${scenario}: unexpected browser errors`);
   console.log('MAIN_AUTO_RELEASE_PASS',name,scenario,JSON.stringify({navigations,autoReload:true,
     browserDraftDiscarded:true,serverDataUnmodified:true,dialogs,writes,errors}));
