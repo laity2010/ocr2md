@@ -46,6 +46,11 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 `V6_DOCUMENT_PATH`、`V6_PDF_PATH` 可将服务指向**独立测试母文档/PDF**。正式服务默认读取上述工作区文件；浏览器通过 `/api/document`、`/api/pdf`（支持 HTTP Range）、`/api/pdf-map` 和 `/api/chapters` 获取当前数据，保存、导出、初始化需通过编辑授权及同源校验。
 
+### 工作根目录（Main）
+
+在「全局设置 → 工作区 → 文件与目录 → rootPath」选择 Mac 服务器目录；右下控件可浏览已授权目录、校验，点击顶栏统一「保存」才生效并重载页面。服务器仅允许默认工作区、当前 Mac 用户的 `~/Documents` 及管理员显式配置 `V6_WORKSPACE_ALLOWED_ROOTS` 的目录及其子目录。目标目录必须预先存在同名母 Markdown（正式版 `buffetts-alpha.minerujson.md`），以避免误初始化、移动或覆盖其他文件。PDF 证据需预先放在该目录中的 `buffetts-alpha.original.pdf`，否则 PDF 预览会显示缺失。不会复制、删除或重命名旧目录。工作目录路径写入现有 `settings.json`；设为空可返回默认目录。独立 Lab 仅能选择其隔离运行目录内的路径。此功能不是多文档文件浏览器，也不会更改程序源码/发布目录。
+
+
 ## 开发、测试、发布
 
 本机需 Node.js/npm、Python 3；浏览器测试需 Mac 上的 Chrome 与已安装的 Playwright WebKit。
