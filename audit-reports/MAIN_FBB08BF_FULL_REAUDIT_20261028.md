@@ -81,3 +81,7 @@
 `AM_GIT_AUDIT_RESULT = FAIL`；`MAINLINE_ARCHITECTURE_COMPLIANT = BLOCKED`（动态全量未证）；`READY_FOR_PRODUCTION_CUTOVER = NO`。
 
 接下来按“旧测试迁移 → 真正功能回归修复 → 完整 run-all+certify → 同一 SHA 双外部复审”闭环，不得删测、弱化断言或凭局部 PASS 宣布全量合格。
+
+### 后续增量：可在 Main 直接安全执行的 WCP 事件测试
+
+原镜像测试会在 Main 工作树中发现现有正式 `labs/cm-html/.runtime` 并主动拒绝触碰它，不能直接作为 AM `run-all` 的测试脚本。新增 `tests/wcp-virtual-event-contract.browser.test.mjs`：自建临时 Markdown/Settings 与独立 localhost Vite，以 Chrome、iPad WebKit 真点 AG 跨章节标题行，核对 `lab-virtual-select/open`、`wp3-ag-ready`、`wp4-virtual-scope` 四类消息以及导航和「全部」保持。**Chrome + iPad WebKit PASS**，零 JS 错误、零业务写入，临时数据恢复后删除。AM 14 条新增消息/发布/订阅测试登记均指向此可在 Main 执行的隔离脚本。镜像测试 `tests/v6-lab-mirror.browser.test.mjs` 仍单独执行 Main/Lab 4 组实际业务回归。历史 `fbb08bf` 31 套 **10 PASS/21 FAIL** 的认证结果完全不变。
