@@ -13,8 +13,11 @@ export function createVirtualAGQuery(api,type){
         const column={colId:'virtualChapter',headerName:'所属章节',width:147,minWidth:117,
           sortable:false,resizable:true,suppressMovable:true,
           valueGetter:p=>p.data?chapterLabel(p.data):''};
+        // Virtual chapters replace physical chapter export, NOT chapter
+        // boundary editing. The '独立成章' checkbox must remain available in
+        // the heading AG: its CMD marker drives the virtual chapter list.
         projected=[...original.filter(c=>type!=='heading'||
-          c.field!=='independent'&&c.field!=='chapterFile'),column];
+          c.field!=='chapterFile'),column];
       }
       if(actual.length!==projected.length||actual.some((c,i)=>c!==projected[i]))
         api.setGridOption('columnDefs',projected);

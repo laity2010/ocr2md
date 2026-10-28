@@ -47,6 +47,18 @@ try{
    await page.locator('.ocr-source-pane .ocr-navigation-files .ts-control').waitFor({state:'visible',timeout:50000});
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-source-pane .ocr-lab-file-select option[value^="virtual:"]').length>=3,null,{timeout:25000});
    const chapterCount=await source.locator('option[value^="virtual:"]').count();
+   // New virtual chapter navigation must not suppress the business-critical
+   // '独立成章' checkbox. Its CMD markers are what define these chapters.
+   await page.locator('.ocr-outline-grid .ag-body-horizontal-scroll-viewport').evaluate(el=>{
+     el.scrollLeft=el.scrollWidth;
+     el.dispatchEvent(new Event('scroll',{bubbles:true}));
+   });
+   const boundary=page.locator('.ocr-outline-grid .ocr-outline-checkbox').first();
+   await boundary.waitFor({state:'attached',timeout:20000});
+   assert((await page.locator('.ocr-outline-grid .ag-header-cell[col-id="independent"]').count())>0,
+     'Virtual heading AG must preserve the editable independent marker column');
+   assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="chapterFile"]').count(),0,
+     'No legacy physical chapter-export column in virtual chapter view');
    const second=await source.locator('option[value^="virtual:"]').nth(1).getAttribute('value');
    await source.evaluate((el,v)=>{el.value=v;el.dispatchEvent(new Event('change',{bubbles:true}))},second);
    await page.waitForFunction(v=>new URLSearchParams(location.search).get('view')===v.slice(8),second,{timeout:16000});
