@@ -234,6 +234,8 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     // macOS Finder/Terminal "Copy as Pathname" escapes spaces and tildes.
     // Convert only known shell escapes; never evaluate or run the pasted text.
     const normalizedPath=raw=>raw.trim().replace(/\\([ ~()&])/g,'$1');
+    const directoryList=document.createElement('div');
+    directoryList.className='ocr-settings-directory-list';
     const display=async value=>{
       directoryList.replaceChildren();
       showFeedback('info','正在检查服务器目录…');
