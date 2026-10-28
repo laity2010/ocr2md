@@ -65,8 +65,8 @@ try{
       }));
       assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
       assert.equal(await page.locator('#editor .cm-editor').count(),1);
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),4,
-        'CM font, title scale, navigation dropdown and workspace root are registered');
+      assert.equal(await page.locator('#settings-workspace .ag-row').count(),5,
+        'CM font, title scale, navigation dropdown, workspace root and selected book are registered');
       assert.deepEqual(await page.locator('#settings-workspace .ag-header-cell-text').allTextContents(),
         ['一级分类','二级分类','键名','键注释']);
       assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3,
