@@ -64,6 +64,29 @@ for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1340,heig
   const input=page.locator('#settings-workspace #settings-workspace-root');
   await input.waitFor({state:'visible',timeout:20000});
   assert.equal(await input.inputValue(),'');
+  const feedback=page.locator('.ocr-settings-directory-feedback');
+  // A rejected directory must be red and explicitly marked invalid.
+  await input.fill('/etc');
+  await page.getByRole('button',{name:'验证路径'}).click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-settings-directory-feedback')?.dataset.state==='error');
+  assert.match(await feedback.textContent(),/未授权/);
+  assert.equal(await feedback.evaluate(el=>getComputedStyle(el).color),'rgb(255, 153, 153)');
+  assert.equal(await input.getAttribute('aria-invalid'),'true');
+  // Existing, authorized, document-free root is amber rather than red or green.
+  await input.fill(scratch);
+  await page.getByRole('button',{name:'验证路径'}).click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-settings-directory-feedback')?.dataset.state==='warning');
+  assert.match(await feedback.textContent(),/缺少/);
+  assert.equal(await feedback.evaluate(el=>getComputedStyle(el).color),'rgb(233, 196, 106)');
+  assert.equal(await input.getAttribute('aria-invalid'),'false');
+  // Mac Terminal "Copy as Pathname" escapes spaces and ~. Normalize both
+  // the text input and underlying CMD JSON before reporting validation.
+  const escaped=join(scratch,'shell escaped~directory');
+  mkdirSync(escaped);
+  await input.fill(join(scratch,'shell\\ escaped\\~directory'));
+  await page.getByRole('button',{name:'验证路径'}).click();
+  await page.waitForFunction(()=>document.querySelector('.ocr-settings-directory-feedback')?.dataset.state==='warning');
+  assert.equal(await input.inputValue(),escaped);
   console.log('WORKROOT_UI_STEP',name,'await page.getByRole');
   await page.getByRole('button',{name:'浏览目录'}).click();
   const choice=page.getByRole('button',{name:'📁 '+scratch,exact:true});

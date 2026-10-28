@@ -32,14 +32,21 @@ def check_root(value, default_doc, runtime, is_lab=False, require_document=True)
     path = Path(value).expanduser()
     if not path.is_absolute() or '..' in path.parts:
         raise ValueError('Workspace path must be an absolute directory without ..')
-    root = path.resolve(strict=True)
-    if not root.is_dir() or not any(root.is_relative_to(allowed) for allowed in allowed_roots(default_doc, runtime, is_lab)):
-        raise ValueError('Workspace directory is outside authorized roots')
+    try:
+        root = path.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise ValueError('目录不存在；请核对完整路径') from error
+    except PermissionError as error:
+        raise ValueError('服务器无权访问此目录') from error
+    if not root.is_dir():
+        raise ValueError('所填路径不是目录')
+    if not any(root.is_relative_to(allowed) for allowed in allowed_roots(default_doc, runtime, is_lab)):
+        raise ValueError('目录未授权；请从「浏览目录」中选择允许访问的目录')
     if not os.access(root, os.R_OK | os.X_OK | os.W_OK):
-        raise ValueError('Workspace directory is not readable and writable')
+        raise ValueError('服务器无权读写此目录')
     target = root / Path(default_doc).name
     if require_document and (not target.is_file() or target.is_symlink()):
-        raise ValueError('Directory must contain an existing mother Markdown named ' + target.name)
+        raise ValueError('目录缺少母 Markdown：' + target.name)
     # Nothing in a newly selected root is created, copied or overwritten.
     for name in ('chapters', '.initialize-backups'):
         if (root / name).is_symlink():

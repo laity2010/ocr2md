@@ -225,22 +225,31 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     verifyButton.textContent='验证路径';
     const feedback=document.createElement('div');feedback.className='ocr-settings-directory-feedback';
     feedback.setAttribute('role','status');
-    const directoryList=document.createElement('div');directoryList.className='ocr-settings-directory-list';
+    feedback.setAttribute('aria-live','polite');
+    const showFeedback=(kind,message)=>{
+      feedback.dataset.state=kind;
+      feedback.textContent=message;
+      pathInput.setAttribute('aria-invalid',String(kind==='error'));
+    };
+    // macOS Finder/Terminal "Copy as Pathname" escapes spaces and tildes.
+    // Convert only known shell escapes; never evaluate or run the pasted text.
+    const normalizedPath=raw=>raw.trim().replace(/\\([ ~()&])/g,'$1');
     const display=async value=>{
       directoryList.replaceChildren();
-      feedback.textContent='正在检查服务器目录…';
+      showFeedback('info','正在检查服务器目录…');
       try{
         const data=await directoryPort.browse(value);
-        feedback.textContent=(data.hasDocument?'✓ 找到母 Markdown：':'尚无母 Markdown：')+
-          data.documentName+' · '+data.path;
+        showFeedback(data.hasDocument?'success':'warning',
+          (data.hasDocument?'✓ 找到母 Markdown：':'⚠ 目录存在，但缺少母 Markdown：')+
+          data.documentName+' · '+data.path);
         const choices=[...(data.parent?[{name:'.. 上一级',path:data.parent}]:[]),
           ...data.children];
         const current=document.createElement('button');current.type='button';
         current.textContent='选用当前目录';current.disabled=!data.hasDocument;
         current.addEventListener('click',()=>{
           try{set(item.key,data.path);pathInput.value=data.path;
-            feedback.textContent='已填写目录，请点击顶栏「保存」才会生效';}
-          catch(error){feedback.textContent=error.message;}
+            showFeedback('success','✓ 已填写目录，请点击顶栏「保存」才会生效');}
+          catch(error){showFeedback('error','✕ 无法选用：'+error.message);}
         });
         directoryList.append(current);
         for(const choice of choices){
@@ -249,28 +258,35 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
           row.addEventListener('click',()=>void display(choice.path));
           directoryList.append(row);
         }
-      }catch(error){feedback.textContent='无法浏览：'+error.message;}
+      }catch(error){showFeedback('error','✕ 无法浏览：'+error.message);}
     };
     browseButton.addEventListener('click',async()=>{
       try{
         const data=await directoryPort.roots();
         directoryList.replaceChildren();
-        feedback.textContent='授权目录（选择后可逐级浏览）';
+        showFeedback('info','授权目录（选择后可逐级浏览）');
         for(const path of data.allowedRoots){
           const button=document.createElement('button');button.type='button';
           button.textContent='📁 '+path;
           button.addEventListener('click',()=>void display(path));
           directoryList.append(button);
         }
-      }catch(error){feedback.textContent='浏览需要编辑授权：'+error.message;}
+      }catch(error){showFeedback('error','✕ 浏览失败：'+error.message);}
     });
     verifyButton.addEventListener('click',async()=>{
+      const path=normalizedPath(pathInput.value);
       try{
-        const data=await directoryPort.browse(pathInput.value.trim());
-        feedback.textContent=data.hasDocument
-          ?'✓ 路径可选，已有母文档；点击顶栏「保存」生效'
-          :'目录存在但没有母 Markdown（不能切换，避免误初始化）';
-      }catch(error){feedback.textContent='验证失败：'+error.message;}
+        if(path!==pathInput.value){
+          // Correct the source JSON through CMD as well as the text field.
+          set(item.key,path);
+          pathInput.value=path;
+        }
+        showFeedback('info','正在验证服务器目录…');
+        const data=await directoryPort.browse(path);
+        showFeedback(data.hasDocument?'success':'warning',data.hasDocument
+          ?'✓ 验证通过：已有母文档；点击顶栏「保存」生效'
+          :'⚠ 目录存在，但缺少 '+data.documentName+'；目前不能切换');
+      }catch(error){showFeedback('error','✕ 验证失败：'+error.message);}
     });
     actions.append(browseButton,verifyButton);
     const help=document.createElement('p');help.className='ocr-settings-key-comment';
@@ -278,7 +294,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     pane.append(label,pathInput,actions,feedback,directoryList,help);
     void directoryPort.roots().then(data=>{
       if(pane.isConnected&&record.value==='')
-        feedback.textContent='当前目录：'+data.activeRoot+' · 未选择新目录';
+        showFeedback('info','当前目录：'+data.activeRoot+' · 未选择新目录');
     }).catch(()=>{});
   }
   function syncPreview(){

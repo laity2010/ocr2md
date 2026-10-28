@@ -34,4 +34,12 @@
  max-height:190px;overflow-y:auto}
 .ocr-settings-directory-list button{text-align:left;overflow-wrap:anywhere}
 .ocr-settings-directory-list button:disabled{opacity:.45;cursor:default}
-.ocr-settings-directory-feedback{color:#a7c080;font-size:12px;overflow-wrap:anywhere}
+/* No validation state is silently rendered as success. Contrast + icon
+   must communicate error, caution, success even on narrow iPad layouts. */
+.ocr-settings-directory-feedback{color:#aebbb8;font-size:12px;overflow-wrap:anywhere;
+ line-height:1.55;min-height:1.55em}
+.ocr-settings-directory-feedback[data-state="success"]{color:#a7c080}
+.ocr-settings-directory-feedback[data-state="warning"]{color:#e9c46a}
+.ocr-settings-directory-feedback[data-state="error"]{color:#ff9999;font-weight:600}
+.ocr-settings-control #settings-workspace-root[aria-invalid="true"]{border-color:#ff9999;
+ outline:1px solid #ff999988}
