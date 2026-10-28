@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
 import {buildOutline} from '../ui/outline-index.js';
 import {buildChapterFiles} from '../ui/chapter-files.js';
@@ -17,18 +16,23 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js',
   '--host','127.0.0.1','--port',String(port),'--strictPort'],{
   env:{...process.env,V6_DOCUMENT_PATH:path},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{}],['iPad WebKit',webkit,{}]];
 try{
  let up=false;
  for(let i=0;i<140;i++){try{if((await fetch(url)).ok){up=true;break}}catch{}await sleep(150)}
  assert(up,'isolated Vite server not ready');
  for(const [name,engine,launch] of engines){
+  if(process.env.V6_ONLY_CHROME && name!=='Chrome')continue;
+  if(process.env.V6_ONLY_WEBKIT && name!=='iPad WebKit')continue;
   const browser=await engine.launch({headless:true,...launch});
   try{
    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
+   // Vite does not implement the production /healthz endpoint. Keep the
+   // automatic-update probe on-origin and deterministic in both browsers.
+   await page.route('**/healthz',route=>route.fulfill({status:200,
+     contentType:'application/json',body:'{}'}));
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:52000});
    await page.waitForFunction(()=>window.__v6cm6?.outline?.rows.length===21 &&
      window.__v6cm6?.pdf?.anchors?.length===224,null,{timeout:75000});
@@ -132,7 +136,7 @@ try{
      'AG must insert quoted chapter marker beside quoted heading');
    assert.deepEqual(errors,[],`${name} browser errors`);
    console.log('QUOTE_INDENT_PASS',name,JSON.stringify({titleLine:old.line,
-     quotedBlock:true,outline:quotedRows.length,PDF:true,chapterExport:true,
+     quotedBlock:true,outline:quotedRows.length,PDF:true,chapterIndex:true,
      undoOneStep:true,metadataProtected:true,errors:errors.length}));
   }finally{await browser.close()}
  }
