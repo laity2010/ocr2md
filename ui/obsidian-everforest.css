@@ -65,6 +65,16 @@
 .ocr-cm-source .cm-scroller::-webkit-scrollbar-thumb {
   background: #4a555b;
 }
+/* Enabled daisor.css source-mode fenced code background, with the active
+   Everforest --code-background / --everforest-bg1-dark value. */
+.ocr-cm-source .cm-ob-code-block-line { background: #272f34; }
+/* The Obsidian display-math delimiter stays visibly distinct from TeX while
+   the literal $$ remains column zero in the CM6 source. */
+.ocr-cm-source .cm-ob-display-math-boundary {
+  color: #83c092;
+  background: #272f34;
+  font-weight: 600;
+}
 /* Exact Everforest --hN-size ratios relative to the 16px Sarasa body. */
 .ocr-cm-source .cm-ob-heading-line-1 { font-size: 2.125em; }
 .ocr-cm-source .cm-ob-heading-line-2 { font-size: 1.625em; }

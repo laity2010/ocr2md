@@ -39,6 +39,18 @@ export const obsidianHeadingMarkers = ViewPlugin.fromClass(class {
         if (visited.has(n)) continue;
         visited.add(n);
         const line = doc.line(n);
+        // Installed Obsidian Everforest + daisor.css darkens the *whole*
+        // fenced code block in Source mode, not just individual code tokens.
+        // Render this as a CM6 line decoration: it changes no Markdown bytes.
+        let currentNode=tree.resolveInner(Math.min(line.to,line.from+1),1);
+        let inFence=false;
+        for(;currentNode;currentNode=currentNode.parent){
+          if(currentNode.name==='FencedCode'){inFence=true;break;}
+        }
+        if(inFence)markers.push(Decoration.line({
+          attributes:{class:'cm-ob-code-block-line'}}).range(line.from));
+        if(line.text==='$$')markers.push(Decoration.line({
+          attributes:{class:'cm-ob-display-math-boundary'}}).range(line.from));
         const match = headingPattern.exec(line.text);
         if (match) {
           // Don't style '# ' in fenced code as a Markdown heading.
@@ -46,12 +58,7 @@ export const obsidianHeadingMarkers = ViewPlugin.fromClass(class {
           // The Lezer tree may not yet cover every visible line on first
           // paint. Accept ordinary ATX lines immediately; exclude fenced
           // code only when its node is actually available.
-          let node=tree.resolveInner(at,1);
-          let codeFence=false;
-          for (;node;node=node.parent) {
-            if (node.name==='FencedCode') {codeFence=true;break;}
-          }
-          if (!codeFence) {
+          if (!inFence) {
             const level=match[1].length;
             markers.push(Decoration.line({attributes:{class:`cm-ob-heading-line-${level}`}}).range(at));
             markers.push(Decoration.mark({class:`cm-ob-heading-marker-${level}`})

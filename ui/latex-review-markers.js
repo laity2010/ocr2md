@@ -6,8 +6,10 @@ export const REVIEW_CHOICES=Object.freeze(['待复核','latex','忽略']);
 const validId=id=>/^[a-f0-9]{16}$/.test(id||'');
 const textEdit=(from,to,expected,insert)=>({action:'text',from,to,expected,insert});
 function canonical(item){
-  if(item.kind==='独立'&&['$$','```math','```latex','```tex'].includes(item.syntax))
-    return '$$'+item.content.replace(/\r?\n/g,' ')+'$$';
+  // Obsidian display math uses standalone, column-zero $$ fences.
+  // Preserve the inner TeX line structure (notably aligned/array bodies).
+  if(item.kind==='独立'&&['$$','```math','```latex','```tex','\\['].includes(item.syntax))
+    return '$$\n'+item.content.replace(/\r\n?/g,'\n').replace(/^\n+|\n+$/g,'')+'\n$$';
   if(item.kind==='行内'&&item.syntax==='未定界')return '$'+item.raw+'$';
   return item.raw;
 }
@@ -82,23 +84,28 @@ export function planReviewAnnotations(source,item,review,id){
       attributes:cleanedAttributes({...attrs,
         delimited:review==='latex'?attrs.delimited:'manual'},review)});
     const gap=source.slice(old.openTo,item.from);
-    const wanted=review==='latex'?'':item.kind==='独立'?'\n':gap;
+    const wanted=item.kind==='独立'?'\n':review==='latex'?'':gap;
     if(gap!==wanted)result.push(textEdit(old.openTo,item.from,gap,wanted));
     result.push(...oldClose(source,old));
   }else{
     result.push({action:'insert',at:item.from,tag:'ocr2md:latex',
       attributes:cleanedAttributes({...attrs,id,
         delimited:review==='latex'?attrs.delimited:'manual'},review),
-      suffix:review==='latex'?'':item.kind==='独立'?'\n':''});
+      suffix:item.kind==='独立'?'\n':''});
   }
-  if(output!==item.raw)result.push(textEdit(item.from,item.to,item.raw,output));
+  if(output!==item.raw){
+    const trailing=review==='latex'&&item.kind==='独立'&&item.to<source.length&&
+      source[item.to]!=='\n'?'\n':'';
+    result.push(textEdit(item.from,item.to,item.raw,output+trailing));
+  }
   return result;
 }
 export function planNormalizeReviewedInline(source,formulas){
   return formulas.flatMap(item=>{
     if(item.status!=='latex'||!item.reviewMarker)return [];
     const old=item.reviewMarker;
-    const isSingle=!old.closing&&source.slice(old.openTo,item.from)===''&&
+    const wantedGap=item.kind==='独立'?'\n':'';
+    const isSingle=!old.closing&&source.slice(old.openTo,item.from)===wantedGap&&
       canonical(item)===item.raw;
     return isSingle?[]:planReviewAnnotations(source,item,'latex');
   });

@@ -73,7 +73,13 @@ for(let i=0;i<engines.length;i++){
     assert.equal(after.filter(row=>row.syntax==='$$').length,6);
     assert.deepEqual(after.map(row=>row.content),before.map(row=>row.content));
     assert.deepEqual(after.map(row=>row.reviewMarker?.id),before.map(row=>row.reviewMarker?.id));
-    assert(after.filter(r=>r.status==='latex').every(r=>saved.slice(r.reviewMarker.openTo,r.from)===''));
+    assert(after.filter(r=>r.status==='latex').every(r=>
+      saved.slice(r.reviewMarker.openTo,r.from)===(r.kind==='独立'?'\n':'')));
+    assert(after.filter(r=>r.kind==='独立'&&r.status==='latex').every(r=>
+      /^\$\$\n[^]*\n\$\$$/.test(saved.slice(r.from,r.to)) &&
+      saved[r.from-1]==='\n' &&
+      (r.to===saved.length||saved[r.to]==='\n')),
+      'Obsidian display math delimiters must start their own source lines');
     await page.reload({waitUntil:'domcontentloaded'});
     await selectModule(page,'latex');
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 8'),

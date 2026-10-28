@@ -91,7 +91,8 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
     '.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] .ocr-latex-review-select')),
     true,'Unrelated LaTeX review control was remounted after marking another formula');
   assert.equal(await inline.inputValue(),'待复核');
-  // Confirmed standalone formula uses one comment and inline $...$ on one physical line.
+  // Confirmed standalone formula uses Obsidian's own-line $$ delimiters;
+  // inline math keeps its original $...$ convention.
   let current=await page.evaluate(async()=> (await fetch('/api/document')).text());
   assert.equal(current,fixture,'no implicit server write before global CMD Save');
   await page.locator('#undo').click();
@@ -106,7 +107,10 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
   await inline.selectOption('latex');
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 2'),
     null,{timeout:10000});
-  const inlineLine=findLatex(fixture)[1].line-2; // confirmed standalone collapsed to one source line
+  // Source line shifts when the display formula is formatted into multiple
+  // physical lines. Read the real AG source coordinate, never hardcode -2.
+  const inlineLine=Number(await page.locator('.ocr-latex-grid .ag-row[row-index="1"] [col-id="line"]').first().textContent());
+  assert(Number.isFinite(inlineLine)&&inlineLine>=0);
   await page.waitForFunction(line=>[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
     .some(el=>Number(el.dataset.sourceStart)<=line&&line<Number(el.dataset.sourceEnd)&&
       el.querySelector('.ocr-reviewed-inline-latex .katex')&&el.textContent.includes('is total assets')),

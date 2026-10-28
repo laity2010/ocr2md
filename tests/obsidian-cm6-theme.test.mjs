@@ -14,7 +14,7 @@ writeFileSync(doc, [
   'Ordinary text **strong** *emphasis* [link](https://example.com).',
   'A deliberately long paragraph to test automatic soft wrapping: '+ 'Sarasa Fixed SC with English words and 中文等宽文字。 '.repeat(35),
   '> A quotation', '- A list item', '<!-- minerujson:block:v1:1:2 -->',
-  '`inline code`', '',
+  '`inline code`', '```math', 'a=b', '```', '$$', 'a+b', '$$', '',
 ].join('\n'));
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js',
   '--host','127.0.0.1','--port','5198','--strictPort'], {
@@ -68,7 +68,12 @@ try {
           fullText:content.textContent,
           docSource:window.__v6cm6.view.state.doc.toString(),
           softWrap:css(content).whiteSpace,
-          hardReturnMarkers:document.querySelectorAll('.cm-ob-hard-return').length,
+          hardReturnMarkers:document.querySelectorAll('.cm-ob-hard-return').length+
+            document.querySelectorAll('.cm-ob-hard-return-native').length,
+          sourceCodeLines:lines.filter(line=>line.classList.contains('cm-ob-code-block-line'))
+            .map(line=>({text:line.textContent,background:css(line).backgroundColor})),
+          mathDelimiters:lines.filter(line=>line.classList.contains('cm-ob-display-math-boundary'))
+            .map(line=>({text:line.textContent,background:css(line).backgroundColor})),
           docRows:document.querySelector('#status').textContent,
         };
       });
@@ -89,6 +94,21 @@ try {
       assert(result.docSource.includes('minerujson:block:v1:1:2'));
       assert.match(result.softWrap,/pre-wrap|break-spaces/);
       assert(result.hardReturnMarkers>=6,'physical line breaks must show markers');
+      // These lines are below the long wrapped paragraph. CM6 virtualizes
+      // them until scrolled into view, so don't count their off-screen DOM.
+      await page.evaluate(()=>{
+        const view=window.__v6cm6.view,offset=view.state.doc.toString().indexOf('a=b');
+        view.dispatch({selection:{anchor:offset},scrollIntoView:true});
+        view.requestMeasure();
+      });
+      await page.waitForFunction(()=>{
+        const code=[...document.querySelectorAll('#editor .cm-line')]
+          .find(line=>line.textContent.includes('a=b'));
+        return code?.classList.contains('cm-ob-code-block-line') &&
+          getComputedStyle(code).backgroundColor==='rgb(39, 47, 52)';
+      },null,{timeout:14000});
+      const mathLines=await page.locator('#editor .cm-ob-display-math-boundary').allTextContents();
+      assert.equal(mathLines.length,2,name+' standalone Obsidian $$ delimiters');
       assert(result.docSource.includes('A deliberately long paragraph'));
       assert(!result.docSource.includes('↵'),'hard-return glyph must never enter Markdown source');
       const wrapTest=await page.evaluate(()=>{
@@ -96,7 +116,8 @@ try {
         const offset=view.state.doc.toString().indexOf('A deliberately long paragraph');
         view.dispatch({selection:{anchor:offset},scrollIntoView:true});
         const line=[...document.querySelectorAll('.cm-line')].find(el=>el.textContent.includes('A deliberately long paragraph'));
-        return {height:line?.getBoundingClientRect().height,hardMarkers:line?.querySelectorAll('.cm-ob-hard-return').length,docLength:view.state.doc.length};
+        return {height:line?.getBoundingClientRect().height,hardMarkers:(line?.querySelectorAll('.cm-ob-hard-return').length||0)+
+          Number(line?.classList.contains('cm-ob-hard-return-native')),docLength:view.state.doc.length};
       });
       assert(wrapTest.height>45,name+' long line should wrap in wide viewport');
       assert.equal(wrapTest.hardMarkers,1,'a wrapped logical line needs one real EOL marker');
@@ -111,7 +132,8 @@ try {
       },wrapTest.height,{timeout:16000});
       const narrow=await page.evaluate(()=>{
         const el=[...document.querySelectorAll('.cm-line')].find(el=>el.textContent.includes('A deliberately long paragraph'));
-        return {height:el?.getBoundingClientRect().height,hardMarkers:el?.querySelectorAll('.cm-ob-hard-return').length,source:window.__v6cm6.view.state.doc.toString(),width:document.querySelector('#editor .cm-scroller').getBoundingClientRect().width,viewport:innerWidth};
+        return {height:el?.getBoundingClientRect().height,hardMarkers:(el?.querySelectorAll('.cm-ob-hard-return').length||0)+
+          Number(el?.classList.contains('cm-ob-hard-return-native')),source:window.__v6cm6.view.state.doc.toString(),width:document.querySelector('#editor .cm-scroller').getBoundingClientRect().width,viewport:innerWidth};
       });
       console.log('THEME_WRAP_MEASURE',name,JSON.stringify({wide:wrapTest.height,narrow:narrow.height,width:narrow.width,viewport:narrow.viewport}));
       assert(narrow.height>wrapTest.height,name+' narrow window should cause more soft wrapping');
