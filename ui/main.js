@@ -39,8 +39,12 @@ let saveConflict = false;
 let revision = 0;
 let saving = false, exporting = false, initializing = false, afterUnlock = null;
 let allowInitializeReload = false;
+// Main is a continuously deployed development workbench: release reloads may
+// discard unsaved browser buffers. Ordinary user navigation still warns.
+let allowReleaseReload = false;
 let canSave = import.meta.env.DEV ? true : null;
 let pendingUpdate = false;
+let releaseReloadRequested = false;
 let checkingVersion = false;
 // This is only a release identifier; CM6 remains the sole editor state.
 const currentBuild = __V6_BUILD_VERSION__;
@@ -71,12 +75,13 @@ function renderGlobalStatus() {
 
 const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));
 function applyPendingUpdate() {
-  if (!pendingUpdate) return;
-  if (hasUnsavedEdits() || settings?.hasUnsaved() || buttons.save.disabled || exporting || initializing ||
-      $('unlock-dialog').open || $('engineering-dialog').open || $('initialize-dialog').open) {
-    status('● 新版本待更新，请先保存','warning');
-    return;
-  }
+  if (!pendingUpdate || releaseReloadRequested) return;
+  // Do not interrupt an in-flight write; it must complete or fail before
+  // the release takes over. Unsaved local CM6/Settings edits and open dialogs
+  // are NOT a release gate in the constantly updated Main workbench.
+  if (saving || exporting || initializing || buttons.save.disabled) return;
+  releaseReloadRequested = true;
+  allowReleaseReload = true;
   window.location.reload();
 }
 async function checkForNewBuild() {
@@ -618,7 +623,7 @@ async function main() {
     }
   });
   window.addEventListener('beforeunload',event=>{
-    if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload) {event.preventDefault(); event.returnValue='';}
+    if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload&&!allowReleaseReload) {event.preventDefault(); event.returnValue='';}
   });
   window.addEventListener('pagehide',()=>{
     unsubscribeOutlineFocus();
