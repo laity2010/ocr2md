@@ -7,6 +7,7 @@ from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
+from v6_workspace_roots import saved_root, proposed_root, check_root, allowed_roots, list_directories
 from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE, chapter_media_references
 import json
 import os
@@ -18,7 +19,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from mimetypes import guess_type
 from pathlib import Path
-from urllib.parse import urlsplit, unquote
+from urllib.parse import urlsplit, unquote, parse_qs
 
 ROOT = Path(__file__).resolve().parents[1]
 LAB_ID = os.environ.get('V6_LAB_ID', '')
@@ -79,9 +80,24 @@ if LAB_ID:
 COOKIE = f'v6lab_{LAB_ID.replace("-", "_")}' if LAB_ID else 'v6edit'
 DOC_WRITE_LOCK = threading.RLock()
 
-def document_etag(content):
+# The setting is resolved on each request, not copied into a global mutable
+# DOC variable: concurrent requests must not borrow another workspace path.
+def active_root():
+    return saved_root(SETTINGS, DOC, RUNTIME, bool(LAB_ID))
+
+
+def active_doc():
+    return active_root() / DOC.name
+
+
+def active_pdf():
+    return active_root() / PDF_PATH.name
+
+
+def document_etag(content, path=None):
     # Strong checksum over the exact UTF-8 representation sent to the client.
-    return '"' + hashlib.sha256(content).hexdigest() + '"'
+    identity = b'' if path is None or Path(path).resolve() == DOC.resolve() else (str(Path(path).resolve()) + '\0').encode('utf-8')
+    return '"' + hashlib.sha256(identity + content).hexdigest() + '"'
 
 # Lab and Main serve the SAME business routes. Legacy lab/module HTTP
 # extensions may remain in archival source but are never loaded/executed.
@@ -175,7 +191,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/pdf-map':
             try:
-                data = json.loads(ORIGINAL_JSON.read_text(encoding='utf-8'))
+                # Geometry must belong to the selected PDF, not the previous
+                # workspace's OCR data. Never reuse fixture boxes in another root.
+                if active_root() == DOC.parent.resolve():
+                    geometry = ORIGINAL_JSON
+                else:
+                    geometry = active_root() / DOC.name.replace('.minerujson.md', '.mineru.json')
+                data = json.loads(geometry.read_text(encoding='utf-8'))
                 pages=[]
                 for page in data['pdf_info']:
                     regions=[]
@@ -189,6 +211,22 @@ class Handler(BaseHTTPRequestHandler):
                     'application/json; charset=utf-8')
             except (OSError,ValueError,KeyError,TypeError):
                 self.response(503,'Original OCR geometry unavailable')
+            return
+        if path in ('/api/workspace/roots', '/api/workspace/browse'):
+            if not self.authorized():
+                self.response(403, 'Editor authorization required')
+                return
+            try:
+                if path.endswith('/roots'):
+                    data = {'activeRoot': str(active_root()),
+                            'allowedRoots': [str(root) for root in allowed_roots(DOC, RUNTIME, bool(LAB_ID))],
+                            'documentName': DOC.name}
+                else:
+                    value = parse_qs(urlsplit(self.path).query).get('path', [''])[0]
+                    data = list_directories(value, DOC, RUNTIME, bool(LAB_ID))
+                self.response(200, json.dumps(data, ensure_ascii=False), 'application/json; charset=utf-8')
+            except (OSError, ValueError, TypeError) as error:
+                self.response(422, str(error))
             return
         if path == '/api/settings':
             try:
@@ -207,8 +245,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/document':
             try:
                 with DOC_WRITE_LOCK:
-                    content = (DOC if DOC.is_file() else FIXTURE).read_bytes()
-                    revision = document_etag(content)
+                    doc = active_doc()
+                    content = (doc if doc.is_file() else FIXTURE).read_bytes()
+                    revision = document_etag(content, doc)
             except OSError:
                 self.response(503, 'Document storage unavailable')
                 return
@@ -227,12 +266,13 @@ class Handler(BaseHTTPRequestHandler):
             # chapter-read APIs. The two domains do not import one another.
             # CMD contributes *unsaved* mother-document references in the UI.
             try:
-                files = media_inventory(DOC)
+                doc = active_doc()
+                files = media_inventory(doc)
                 refs = set()
-                manifest = read_manifest(DOC)
+                manifest = read_manifest(doc)
                 if manifest is not None:
                     for entry in manifest.get('files', []):
-                        markdown = read_chapter(DOC, entry['name']).decode('utf-8')
+                        markdown = read_chapter(doc, entry['name']).decode('utf-8')
                         refs.update(chapter_media_references(markdown))
                 self.response(200, json.dumps({'files':files,'chapterReferences':sorted(refs)}),
                               'application/json')
@@ -240,10 +280,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.response(503, 'Media inventory unavailable')
             return
         if path == '/api/media/status':
-            from urllib.parse import parse_qs
             url = parse_qs(urlsplit(self.path).query).get('url', [''])[0]
             try:
-                result = media_status(DOC, url)
+                result = media_status(active_doc(), url)
             except (ValueError, OSError):
                 self.response(400, 'Invalid media status request')
                 return
@@ -251,7 +290,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith('/media/'):
             try:
-                data, kind = media_read_local(DOC, path[len('/media/'):])
+                data, kind = media_read_local(active_doc(), path[len('/media/'):])
             except (ValueError, FileNotFoundError, OSError):
                 self.response(404, 'Media not found')
                 return
@@ -259,7 +298,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/chapters':
             try:
-                manifest = read_manifest(DOC)
+                manifest = read_manifest(active_doc())
             except (ValueError, OSError, KeyError, json.JSONDecodeError):
                 manifest = None
             if manifest is None:
@@ -269,7 +308,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith('/api/chapters/'):
             try:
-                content=read_chapter(DOC,path[len('/api/chapters/'):])
+                content=read_chapter(active_doc(),path[len('/api/chapters/'):])
             except (OSError, ValueError, KeyError):
                 self.response(404, 'Unknown chapter file')
             else:
@@ -300,7 +339,7 @@ class Handler(BaseHTTPRequestHandler):
         # permission to read the user's iCloud vault directly. Open BEFORE
         # headers so a failure is a proper 503, never a broken 200/206 or 520.
         try:
-            file = PDF_PATH.open('rb')
+            file = active_pdf().open('rb')
         except OSError:
             self.response(503, 'Original PDF evidence is not readable by V6 service')
             return
@@ -408,7 +447,8 @@ class Handler(BaseHTTPRequestHandler):
             if len(data) != length:
                 self.response(400, 'Incomplete clipboard image')
                 return
-            result = media_store_pasted_image(DOC, data, mime)
+            with DOC_WRITE_LOCK:
+                result = media_store_pasted_image(active_doc(), data, mime)
         except (ValueError, AttributeError, TypeError) as error:
             self.response(422, str(error))
             return
@@ -428,7 +468,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             body = json.loads(self.rfile.read(length).decode('utf-8'))
             url = body.get('url')
-            result = media_download_chunk(DOC, url)
+            with DOC_WRITE_LOCK:
+                result = media_download_chunk(active_doc(), url)
         except (ValueError, AttributeError, TypeError, UnicodeDecodeError) as error:
             self.response(422, str(error))
             return
@@ -457,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.response(400, 'Initialization confirmation and source checksum required')
                 return
             with DOC_WRITE_LOCK:
-                result = initialize_document(DOC, FIXTURE, expected)
+                result = initialize_document(active_doc(), FIXTURE, expected)
         except (ValueError, AttributeError, TypeError, UnicodeDecodeError) as error:
             if 'Document changed' in str(error):
                 self.response(409, 'Document changed; reload before initialization')
@@ -482,7 +523,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             body = json.loads(self.rfile.read(length).decode('utf-8'))
-            manifest = export_chapters(DOC, body)
+            with DOC_WRITE_LOCK:
+                manifest = export_chapters(active_doc(), body)
         except (ValueError, TypeError, AttributeError, UnicodeDecodeError, KeyError) as error:
             self.response(400, 'Invalid chapter export: '+str(error))
             return
@@ -541,7 +583,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.response(400, 'Incomplete settings document')
                 return
             try:
-                saved, _ = cmd_settings_save(SETTINGS, content, self.headers.get('If-Match'))
+                # Settings commit and document PUT are serialized by the
+                # same lock. An invalid/disallowed root never reaches disk.
+                with DOC_WRITE_LOCK:
+                    proposed_root(content, DOC, RUNTIME, bool(LAB_ID))
+                    saved, _ = cmd_settings_save(SETTINGS, content, self.headers.get('If-Match'))
             except ValueError as error:
                 self.response(400, str(error))
                 return
@@ -578,7 +624,8 @@ class Handler(BaseHTTPRequestHandler):
         # A stale writer can never replace bytes saved by another editor.
         with DOC_WRITE_LOCK:
             try:
-                current = (DOC if DOC.is_file() else FIXTURE).read_bytes()
+                doc = active_doc()
+                current = (doc if doc.is_file() else FIXTURE).read_bytes()
             except OSError:
                 self.response(503, 'Document storage unavailable')
                 return
@@ -586,21 +633,21 @@ class Handler(BaseHTTPRequestHandler):
             if not previous:
                 self.response(428, 'Document revision required; reopen before saving')
                 return
-            if previous != document_etag(current):
+            if previous != document_etag(current, doc):
                 self.response(412, 'Document modified by another editor; local edits preserved')
                 return
-            DOC.parent.mkdir(parents=True, exist_ok=True)
-            tmp = DOC.with_name('.' + str(os.getpid()) + '-' + secrets.token_hex(4) + '.tmp')
+            doc.parent.mkdir(parents=True, exist_ok=True)
+            tmp = doc.with_name('.' + str(os.getpid()) + '-' + secrets.token_hex(4) + '.tmp')
             try:
                 with tmp.open('xb') as out:
                     out.write(value)
                     out.flush()
                     os.fsync(out.fileno())
-                os.replace(tmp, DOC)
+                os.replace(tmp, doc)
             finally:
                 if tmp.exists():
                     tmp.unlink()
-            new_revision = document_etag(value)
+            new_revision = document_etag(value, doc)
         self.send_response(200)
         self.send_header('Content-Type','text/plain; charset=utf-8')
         self.send_header('Cache-Control','no-store')

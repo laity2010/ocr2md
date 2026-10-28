@@ -51,7 +51,8 @@
     "wcp-settings-module.js": "S",
     "wcp-source-file-navigation.js": "S",
     "wcp-wcp-virtual-chapters.js": "W",
-    "workspace.js": "L"
+    "workspace.js": "L",
+    "wcp-workspace-directory-port.js": "shell"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [

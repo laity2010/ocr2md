@@ -15,22 +15,27 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
   borderColor:'#525c62',selectedRowBackgroundColor:'rgba(86,157,121,.2)',
   fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
-export function createSettingsModule(container,onStatus=()=>{}){
+export function createSettingsModule(container,onStatus=()=>{},directoryPort=null){
   const definitions=new Map(),applied=new Map();
   let records=new Map();
   let source=null,grid=null,dockview=null,loadPromise=null,initialPromise=null,slider=null,valueLabel=null,details=null;
   let agHost=null,sourceHost=null,previewHost=null;
   let activeKey=null,invalid=false,locatingFromGrid=false;
-  let renderedSignature=null;
+  let renderedSignature=null,savedRootValue='',pathInput=null;
   function entry(key){const item=definitions.get(key);if(!item)throw Error('Unregistered setting: '+key);return item;}
   function register(definition){
     const {module,key,category,label,comment,type,control,defaultValue,min,max,step,message,unit}=definition;
-    if(!module||typeof key!=='string'||!/^\w+(?:\.\w+)+$/.test(key)||
+    const numberSetting=type==='number'&&control==='slider'&&
+      Number.isFinite(min)&&Number.isFinite(max)&&max>min&&
+      Number.isFinite(defaultValue)&&defaultValue>=min&&defaultValue<=max&&
+      Number.isFinite(step)&&step>0;
+    const directorySetting=type==='path'&&control==='directory'&&
+      typeof defaultValue==='string'&&directoryPort&&
+      typeof directoryPort.roots==='function'&&typeof directoryPort.browse==='function';
+    if(!module||typeof key!=='string'||!/\w+(?:\.\w+)+$/.test(key)||
        !Array.isArray(category)||category.length!==2||!category.every(v=>typeof v==='string'&&v)||
-       !label||(comment!==undefined&&typeof comment!=='string')||type!=='number'||control!=='slider'||message!=='settings.changed'||
-       !Number.isFinite(min)||!Number.isFinite(max)||max<=min||
-       !Number.isFinite(defaultValue)||defaultValue<min||defaultValue>max||
-       !Number.isFinite(step)||step<=0||(unit!==undefined&&typeof unit!=='string'))
+       !label||(comment!==undefined&&typeof comment!=='string')||message!=='settings.changed'||
+       !(numberSetting||directorySetting)||(unit!==undefined&&typeof unit!=='string'))
       throw Error('Invalid settings registration');
     if(definitions.has(key))throw Error('Duplicate settings key: '+key);
     definitions.set(key,Object.freeze({...definition,category:Object.freeze([...category])}));
@@ -53,7 +58,7 @@ export function createSettingsModule(container,onStatus=()=>{}){
   function defaultRecord(item,value=item.defaultValue,comment=item.comment||item.label){
     return {key:item.key.split('.').at(-1),category1:item.category[0],
       category2:item.category[1],comment,value,
-      range:{min:item.min,max:item.max,step:item.step}};
+      range:item.type==='path'?{kind:'server-directory'}:{min:item.min,max:item.max,step:item.step}};
   }
   function recordFor(key){return records.get(key)||defaultRecord(entry(key));}
   function normaliseDocument(data){
@@ -116,6 +121,11 @@ export function createSettingsModule(container,onStatus=()=>{}){
   function isValid(item,record){
     if(!record||typeof record!=='object'||Array.isArray(record))return false;
     const range=record.range;
+    if(item.type==='path')return record.key===item.key.split('.').at(-1)&&
+      typeof record.category1==='string'&&typeof record.category2==='string'&&
+      typeof record.comment==='string'&&range?.kind==='server-directory'&&
+      typeof record.value==='string'&&record.value.length<=1024&&
+      !/[\x00\r\n]/.test(record.value);
     return record.key===item.key.split('.').at(-1)&&
       typeof record.category1==='string'&&record.category1.length>0&&
       typeof record.category2==='string'&&record.category2.length>0&&
@@ -168,11 +178,16 @@ export function createSettingsModule(container,onStatus=()=>{}){
     }
     const item=entry(activeKey),record=recordFor(activeKey);
     renderedSignature=nextSignature;
+    slider=null;pathInput=null;
     previewHost.replaceChildren();
     const pane=document.createElement('section');pane.className='ocr-settings-control';
     const breadcrumb=document.createElement('div');breadcrumb.className='ocr-settings-breadcrumb';
     const rawName=record.key;
     breadcrumb.textContent=[record.category1,record.category2,rawName].join(' / ');
+    if(item.type==='path'){
+      renderDirectoryControl(pane,item,record);
+      previewHost.append(pane);return;
+    }
     const label=document.createElement('label');label.textContent=rawName;
     label.htmlFor='settings-font-slider';
     const row=document.createElement('div');row.className='ocr-settings-slider-row';
@@ -192,8 +207,89 @@ export function createSettingsModule(container,onStatus=()=>{}){
     pane.append(breadcrumb,label,comment,row,footer,details);previewHost.append(pane);
     syncPreview();
   }
+  function renderDirectoryControl(pane,item,record){
+    const label=document.createElement('label');label.textContent='工作根目录';
+    label.htmlFor='settings-workspace-root';
+    pathInput=document.createElement('input');pathInput.id='settings-workspace-root';
+    pathInput.type='text';pathInput.value=String(record.value);
+    pathInput.placeholder='留空表示服务器默认工作目录';
+    pathInput.setAttribute('aria-label','服务器工作根目录');
+    pathInput.addEventListener('change',()=>{
+      try{set(item.key,pathInput.value.trim());}
+      catch(error){onStatus(error.message,'warning');syncPreview();}
+    });
+    const actions=document.createElement('div');actions.className='ocr-settings-directory-actions';
+    const browseButton=document.createElement('button');browseButton.type='button';
+    browseButton.textContent='浏览目录';
+    const verifyButton=document.createElement('button');verifyButton.type='button';
+    verifyButton.textContent='验证路径';
+    const feedback=document.createElement('div');feedback.className='ocr-settings-directory-feedback';
+    feedback.setAttribute('role','status');
+    const directoryList=document.createElement('div');directoryList.className='ocr-settings-directory-list';
+    const display=async value=>{
+      directoryList.replaceChildren();
+      feedback.textContent='正在检查服务器目录…';
+      try{
+        const data=await directoryPort.browse(value);
+        feedback.textContent=(data.hasDocument?'✓ 找到母 Markdown：':'尚无母 Markdown：')+
+          data.documentName+' · '+data.path;
+        const choices=[...(data.parent?[{name:'.. 上一级',path:data.parent}]:[]),
+          ...data.children];
+        const current=document.createElement('button');current.type='button';
+        current.textContent='选用当前目录';current.disabled=!data.hasDocument;
+        current.addEventListener('click',()=>{
+          try{set(item.key,data.path);pathInput.value=data.path;
+            feedback.textContent='已填写目录，请点击顶栏「保存」才会生效';}
+          catch(error){feedback.textContent=error.message;}
+        });
+        directoryList.append(current);
+        for(const choice of choices){
+          const row=document.createElement('button');row.type='button';
+          row.textContent='📁 '+choice.name;
+          row.addEventListener('click',()=>void display(choice.path));
+          directoryList.append(row);
+        }
+      }catch(error){feedback.textContent='无法浏览：'+error.message;}
+    };
+    browseButton.addEventListener('click',async()=>{
+      try{
+        const data=await directoryPort.roots();
+        directoryList.replaceChildren();
+        feedback.textContent='授权目录（选择后可逐级浏览）';
+        for(const path of data.allowedRoots){
+          const button=document.createElement('button');button.type='button';
+          button.textContent='📁 '+path;
+          button.addEventListener('click',()=>void display(path));
+          directoryList.append(button);
+        }
+      }catch(error){feedback.textContent='浏览需要编辑授权：'+error.message;}
+    });
+    verifyButton.addEventListener('click',async()=>{
+      try{
+        const data=await directoryPort.browse(pathInput.value.trim());
+        feedback.textContent=data.hasDocument
+          ?'✓ 路径可选，已有母文档；点击顶栏「保存」生效'
+          :'目录存在但没有母 Markdown（不能切换，避免误初始化）';
+      }catch(error){feedback.textContent='验证失败：'+error.message;}
+    });
+    actions.append(browseButton,verifyButton);
+    const help=document.createElement('p');help.className='ocr-settings-key-comment';
+    help.textContent=record.comment;
+    pane.append(label,pathInput,actions,feedback,directoryList,help);
+    void directoryPort.roots().then(data=>{
+      if(pane.isConnected&&record.value==='')
+        feedback.textContent='当前目录：'+data.activeRoot+' · 未选择新目录';
+    }).catch(()=>{});
+  }
   function syncPreview(){
-    if(!slider||!activeKey)return;
+    if(!activeKey)return;
+    if(entry(activeKey).type==='path'){
+      if(pathInput&&document.activeElement!==pathInput)
+        pathInput.value=String(applied.get(activeKey)??'');
+      if(pathInput)pathInput.disabled=invalid||!source;
+      return;
+    }
+    if(!slider)return;
     const current=applied.get(activeKey);
     slider.value=String(current??entry(activeKey).defaultValue);
     slider.disabled=invalid||!source;
@@ -297,6 +393,8 @@ export function createSettingsModule(container,onStatus=()=>{}){
         renderPreview();
       },
     });
+    const initialData=JSON.parse(initialSnapshot.text);
+    savedRootValue=initialData.settings?.['workspace.files.rootPath']?.value??'';
     source=await openCMDJsonSource(sourceHost,onSourceChange,initialSnapshot);
     ensureRegisteredRecords();
     // Registered module values are applied after the first actual JSON read.
@@ -316,9 +414,16 @@ export function createSettingsModule(container,onStatus=()=>{}){
   async function save(){
     if(!source)throw Error('设置未加载');
     if(invalid)throw Error('无效 JSON 不允许保存');
-    return source.save();
+    const completed=await source.save();
+    if(completed)savedRootValue=source.readJSON().settings?.['workspace.files.rootPath']?.value??'';
+    return completed;
   }
   return Object.freeze({register,subscribe,get,set,initialize,load,activate,hasUnsaved,save,
+    get workspaceRootChanged(){
+      if(!source||invalid)return false;
+      try{return (source.readJSON().settings?.['workspace.files.rootPath']?.value??'')!==savedRootValue;}
+      catch{return false;}
+    },
     getPaneRatios:()=>readPaneRatios(dockview,'settings-outline','settings-source','settings-preview'),
     applyPaneRatios:ratios=>applyPaneRatios(dockview,'settings-outline','settings-source','settings-preview',ratios),
     undo:()=>source?.undo(),redo:()=>source?.redo(),

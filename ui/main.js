@@ -11,6 +11,7 @@ import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
 import {CMDocument} from './wcp-cm-document.js';
 import {createSettingsModule} from './wcp-settings-module.js';
+import {workspaceDirectoryPort} from './wcp-workspace-directory-port.js';
 import {createSourceFileNavigation} from './wcp-source-file-navigation.js';
 import {mountAgModuleToolbar} from './wcp-ag-module-toolbar.js';
 import {registerCMSourceFontSetting} from './cm-font-setting.js';
@@ -146,9 +147,19 @@ async function save() {
   if ($('module-select').value==='settings'){
     if(!settings)return false;
     if(canSave!==true){afterUnlock='settings';status('🔒 保存需授权','warning');showUnlock();return false;}
+    const rootChanged=settings.workspaceRootChanged;
+    if(rootChanged&&hasUnsavedEdits()){
+      status('请先保存 Markdown 未保存的编辑，再切换工作根目录','warning');
+      return false;
+    }
     buttons.save.disabled=true;
     try{
       const ok=await settings.save();
+      if(ok&&rootChanged){
+        status('✓ 工作目录已切换，正在重新加载文档');
+        window.location.reload();
+        return true;
+      }
       status(ok?'✓ 全局设置已保存':'● 保存期间设置被继续修改',ok?'ok':'warning');
       return ok;
     }catch(error){status('设置保存失败：'+error.message,'error');return false;}
@@ -316,7 +327,7 @@ async function main() {
   settings=createSettingsModule($('settings-workspace'),(message,kind)=>{
     if($('module-select').value==='settings')status(message,kind);
     refreshToolbar();
-  });
+  },workspaceDirectoryPort);
   // Application composition root owns cross-module mounting; Settings may
   // not instantiate AG or the source-file navigator as hidden dependencies.
   // A narrow Shell-owned UI port: AG and navigation cannot locate or mutate
