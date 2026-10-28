@@ -103,7 +103,8 @@ try {
       assert(initial.sourceFileBar.height>=27,'source file toolbar missing');
       assert(initial.sourceFileBar.top>=initial.sourcePane.top,
         'source navigation must live inside the source pane');
-      assert.equal(initial.main.top,initial.toolbar.bottom+37,'module toolbar must sit between top bar and workspace');
+      assert(Math.abs(initial.main.top-initial.toolbar.bottom)<=1,
+        'Main workspace must begin immediately below the compact global status bar');
       assert(Math.abs(initial.main.bottom-initial.viewport.height)<1.5,'workspace fills to bottom edge');
       assert(initial.ag.height>520,'AG must remain full-height below chapter controls');
       assert.equal(initial.panes,3);
