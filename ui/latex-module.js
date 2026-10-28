@@ -42,6 +42,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   const gridHost=document.createElement('div');gridHost.className='ocr-latex-grid';
   host.append(gridHost);
   let grid,disposed=false,active=false,queued=false,rows=[],lastScannedSource=null,nextRowKey=0;
+  let operationScope=Object.freeze({mode:'all'});
   function report(){
     if(!active)return;
     onStatus(`LaTeX ${rows.length} 项 · 渲染成功 ${rows.filter(row=>row.renderStatus==='成功').length} / 失败 ${rows.filter(row=>row.renderStatus==='失败').length} / 未检测 ${rows.filter(row=>row.renderStatus==='未检测').length} · 待复核 ${rows.filter(row=>row.status==='待复核').length} / latex ${rows.filter(row=>row.status==='latex').length} / 忽略 ${rows.filter(row=>row.status==='忽略').length}`);
@@ -53,7 +54,7 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
       const operations=planReviewAnnotations(original,item,review,
         crypto.randomUUID().replaceAll('-','').slice(0,16));
       if(!operations.length)return;
-      getCMD().editAnnotations(operations,{expectedSource:original});
+      getCMD().editAnnotations(operations,{expectedSource:original,agScope:operationScope});
       // CM6 publishes documentRevision and owns all undo/save semantics.
       refresh();
     }catch(error){
@@ -239,18 +240,30 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
   });
   const virtualQuery=createVirtualAGQuery(grid,'latex');
   return {
-    setVirtualQuery:virtualQuery.setVirtualQuery,
+    setVirtualQuery(intent){
+      refresh();
+      virtualQuery.setVirtualQuery(intent);
+      const scope=intent?.operationScope??(intent?.enabled===false?{mode:'all'}:null);
+      if(!scope||!['all','chapter'].includes(scope.mode))throw Error('Invalid LaTeX AG scope');
+      operationScope=Object.freeze(scope.mode==='all'?{mode:'all'}:
+        {mode:'chapter',chapterId:scope.chapterId});
+    },
     api:grid,
     refresh,
     normalizeReviewed(){
       if(disposed)return;
       const source=getMarkdown();
-      const current=findLatex(source).map(item=>({...item,raw:source.slice(item.from,item.to)}));
+      const eligible=operationScope.mode==='chapter'
+        ?new Set(getCMD().queryElements({type:'latex',chapter:operationScope.chapterId})
+          .map(item=>item.from)):null;
+      const current=findLatex(source)
+        .filter(item=>!eligible||eligible.has(item.from))
+        .map(item=>({...item,raw:source.slice(item.from,item.to)}));
       findReviewMarkers(source,current,getCMD()?.readAnnotations()??[]);
       const operations=planNormalizeReviewedInline(source,current);
       if(!operations.length){onStatus('已确认的公式均符合单注释格式');return;}
       try{
-        getCMD().editAnnotations(operations,{expectedSource:source});
+        getCMD().editAnnotations(operations,{expectedSource:source,agScope:operationScope});
         refresh();
         onStatus(`已规范化 ${operations.filter(op=>op.tag==='ocr2md:latex').length} 条公式 · 请全局保存`);
       }catch(error){onStatus(`规范化失败：${error.message}`);}

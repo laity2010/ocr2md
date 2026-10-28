@@ -35,6 +35,7 @@ for(let i=0;i<engines.length;i++){
   const server=spawn('python3',['scripts/v6_serve.py'],{
     cwd:process.cwd(),stdio:'ignore',
     env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:documentPath,
+      V6_SETTINGS_PATH:resolve('.v6/tests/latex-normalize-'+process.pid+'-'+i+'.settings.json'),
       V6_TOKEN_PATH:tokenPath,V6_STATIC_ROOT:resolve('dist')}});
   let browser;
   try{

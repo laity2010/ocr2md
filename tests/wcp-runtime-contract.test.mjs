@@ -57,6 +57,10 @@ test('Chapter, Media and LaTeX AGs own their public semantic query implementatio
   for(const name of ['outline-grid.js','media-module.js','latex-module.js']){
     const source=readFileSync(new URL('../ui/'+name,import.meta.url),'utf8');
     assert.match(source,/createVirtualAGQuery\(/,name);
-    assert.match(source,/setVirtualQuery:virtualQuery\.setVirtualQuery/,name);
+    if(name==='media-module.js'||name==='latex-module.js'){
+      assert.match(source,/setVirtualQuery\(intent\)/,'AG must accept operation-scope intent');
+      assert.match(source,/virtualQuery\.setVirtualQuery\(intent\)/,'AG must delegate Grid query to its owner');
+      assert.match(source,/operationScope/,'AG must retain WCP operation scope');
+    }else assert.match(source,/setVirtualQuery:virtualQuery\.setVirtualQuery/,name);
   }
 });

@@ -24,17 +24,17 @@ INSERT INTO apis VALUES
  ('C11','C','CMDocument.lineAtOffset','ui/cm-document.js','export','CM6 text offset','1-based line number','read only, no EditorView exposure',0),
  ('C12','C','CMDocument.matchesSnapshot','ui/cm-document.js','export','opaque immutable text snapshot','boolean','compare document identity without exposing current EditorView',1),
  ('C13','C','CMDocument.requestMeasure','ui/cm-document.js','export','none','void','requests CM6 layout pass through CMD boundary',0),
- ('C14','C','CMDocument.replaceRanges','ui/cm-document.js','export','array of from/to/expected/insert','changed count','one validated CM6 transaction; forbids original evidence edits',1),
+ ('C14','C','CMDocument.replaceRanges','ui/cm-document.js','export','guarded from/to/expected/insert edits and internal CMD annotations','changed count','one validated CM6 transaction; forbids original evidence edits',1),
  ('C15','C','CMDocument.capturePasteTarget','ui/cm-document.js','export','none','opaque snapshot + selected range','captures insertion position before async file upload',1),
  ('C16','C','CMDocument.pasteAt','ui/cm-document.js','export','captured target, local Markdown image reference','void','one CM6 undo step; rejects changed source and evidence',1),
  ('C17','C','CMDocument.readAnnotations','ui/cm-document.js','export','optional tag/attribute filters','source-positioned annotation records','generic HTML comment syntax in CM6 source; no nesting or business semantics',1),
  ('C18','C','CMDocument.writeAnnotation','ui/cm-document.js','export','tag,attributes,at or target','updated source annotation record','CM6 atomic insert/update with stale-target and immutable evidence safeguards',1),
  ('C19','C','CMDocument.removeAnnotation','ui/cm-document.js','export','annotation record from CMD','removed flag','CM6 atomic exact comment deletion; never deletes associated Markdown content',1),
- ('C20','C','CMDocument.editAnnotations','ui/cm-document.js','export','array of generic comment insert/update/remove and guarded text operations; optional source guard','single undoable CM6 transaction','atomic HTML annotations plus Markdown delimiters; checked target and evidence protection',1),
+ ('C20','C','CMDocument.editAnnotations','ui/cm-document.js','export','array of generic comment insert/update/remove and guarded text operations; optional source guard and registered AG scope','single undoable CM6 transaction','atomic HTML annotations plus Markdown delimiters; checked target and evidence protection',1),
  ('C21','C','parseAnnotation','ui/cmd-annotations.js','export','single HTML comment text','tag and attributes or null','public read-only CMD annotation syntax parser, without business semantics',1),
  ('C22','C','formatAnnotation','ui/cmd-annotations.js','export','tag, attributes, spacing options','single-line HTML comment text','public CMD annotation syntax formatter, rejects invalid attribute names and multiline values',1),
  ('C23','C','scanAnnotations','ui/cmd-annotations.js','export','Markdown source','offset-positioned syntax records','public read-only CMD annotation scanner; no state or writes',1),
- ('C33','C','returned.replaceMediaReferences','ui/wcp-cmd-element-transactions.js','returned','validated media URL edits','changed/skipped counts','CMD validates indexed media references and applies only the active virtual chapter writes; downloaded files remain Media-owned',1),
+ ('C33','C','returned.replaceMediaReferences','ui/wcp-cmd-element-transactions.js','returned','validated media URL edits','changed/skipped counts','CMD validates indexed media references and enforces AG all-CMB versus selected-chapter scope; original evidence stays immutable',1),
  ('G01','G','createOutlineGrid','ui/outline-grid.js','export','host,getMarkdown,getCMD','grid wrapper','mounts AG; subscribes viewStore',1),
  ('G02','G','returned.refresh','ui/outline-grid.js','returned','none','void','reindexes CM6; changes AG rows',1),
  ('G03','G','returned.schedule','ui/outline-grid.js','returned','none','void','debounced reindex',0),
@@ -93,7 +93,7 @@ INSERT INTO apis VALUES
  ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG with lazy thumbnail preview and download workflow',1),
  ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads normal/sized/wikilink image URL ranges outside evidence',1),
  ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media rows and server resume status',1),
- ('A04','A','returned.downloadAll','ui/media-module.js','returned','none','Promise<void>','downloads each remote media without modifying other modules',1),
+ ('A04','A','returned.downloadAll','ui/media-module.js','returned','AG operation scope','Promise<void>','downloads only selected AG scope media, then adopts references via scoped CMD port',1),
  ('A05','A','returned.setActive','ui/media-module.js','returned','boolean','void','toggles Media projection lifecycle',1),
  ('A06','A','download_chunk','scripts/v6_media.py','export','document,url','state/bytes/path','durable validated remote Range chunk, no Markdown edit',1),
  ('A07','A','status','scripts/v6_media.py','export','document,url','state/bytes/path','read persisted media status',1),
@@ -310,7 +310,7 @@ INSERT INTO access_edges VALUES
  ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API'),
  ('X11','L','A','ui/workspace.js','createMediaModule(this.mediaHost','A01','registered','Layout hosts Media panel without accessing its AG internals'),
  ('X12','A','C','ui/media-module.js','cmd().replaceMediaReferences(','C33','registered','Media requests indexed, scope-aware URL replacement through CMD public transaction port'),
- ('X13','L','C','ui/workspace.js','getCMD().replaceMediaReferences(edits)','C33','registered','Layout exposes the narrow indexed CMD media replacement capability without fallback'),
+ ('X13','L','C','ui/workspace.js','getCMD().replaceMediaReferences(edits,scope)','C33','registered','Layout exposes the narrow indexed CMD media replacement capability without fallback'),
  ('X14',NULL,'A','scripts/v6_serve.py','media_download_chunk(active_doc(), url)','A06','registered','HTTP adapter invokes Media-only downloader'),
  ('X15',NULL,'A','scripts/v6_serve.py','media_status(active_doc(), url)','A07','registered','HTTP adapter exposes Media status'),
  ('X16',NULL,'A','scripts/v6_serve.py','media_read_local(active_doc(), path[','A08','registered','HTTP adapter reads only whitelisted media paths'),
@@ -599,7 +599,7 @@ INSERT INTO apis VALUES
  ('W02','W','returned.editorExtensions','ui/wcp-runtime.js','returned','none','CM6 extension array','runtime may provide CM6 extensions only through composition root',1),
  ('W03','W','returned.wrapCMD','ui/wcp-runtime.js','returned','CMD composition object','CMD facade','WCP may extend CMD port; must not give raw CMD to AG consumers',1),
  ('W04','W','returned.onCMReady','ui/wcp-runtime.js','returned','CM6 mount/status port','void','WCP editor extension lifecycle; raw CM6 only at composition root (review pending)',1),
- ('W05','W','returned.onAGReady','ui/wcp-runtime.js','returned','getChapterIndex/getStartNumber/applyChapterQuery','void','read-only bounded chapter port; never AG/Grid/CMD raw objects',1),
+ ('W05','W','returned.onAGReady','ui/wcp-runtime.js','returned','getChapterIndex/getStartNumber/applyChapterQuery including operationScope','void','bounded chapter query and action-scope intent; never AG/Grid/CMD raw objects',1),
  ('W06','W','returned.onPreviewInit','ui/wcp-runtime.js','returned','setScope/repaint/isDisposed','unsubscribe','semantic preview port without raw DOM',1),
  ('W07','W','returned.renderPreview','ui/wcp-runtime.js','returned','source,scope,render','sanitized HTML','WCP may project chapter scope via registered render delegate',1),
  ('W08','W','returned.onLayoutReady','ui/wcp-runtime.js','returned','getRatios/setRatios/onChange','unsubscribe','semantic layout ratio port; no Dockview raw object',1),
@@ -618,8 +618,8 @@ INSERT INTO test_cases VALUES
 -- Virtual chapter filters stay inside their three AG owners.
 INSERT INTO apis VALUES
  ('G15','G','returned.setVirtualQuery','ui/outline-grid.js','returned','chapter key-set + label','void','Heading AG owns its own virtual chapter column and filter',1),
- ('A13','A','returned.setVirtualQuery','ui/media-module.js','returned','chapter key-set + label','void','Media AG owns virtual chapter filter, WCP cannot mutate native Grid',1),
- ('T13','T','returned.setVirtualQuery','ui/latex-module.js','returned','chapter key-set + label','void','LaTeX AG owns virtual chapter filter, WCP cannot mutate native Grid',1);
+ ('A13','A','returned.setVirtualQuery','ui/media-module.js','returned','chapter key-set + operationScope + label','void','Media AG owns virtual chapter filter and action scope without exposing native Grid',1),
+ ('T13','T','returned.setVirtualQuery','ui/latex-module.js','returned','chapter key-set + operationScope + label','void','LaTeX AG owns virtual chapter filter and scoped review/normalization without accessing raw Grid',1);
 INSERT INTO test_cases VALUES
  ('TC-G15','G15',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Heading AG offers semantic chapter query port without raw Grid exposure','direct'),
  ('TC-A13','A13',NULL,NULL,NULL,'tests/wcp-runtime-contract.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Media AG offers semantic chapter query port without raw Grid exposure','direct'),
@@ -648,6 +648,9 @@ INSERT INTO apis VALUES
  ('G18','G','createIndexProjector','ui/wcp-document-index.js','export','CMD source reader','read-only cached semantic index','public AG-owned projection of one mother source; no CM editor access',1),
  ('S07','S','createSourceFileNavigation','ui/wcp-source-file-navigation.js','export','Shell module/workspace ports + reportError','navigation facade','Shell-mounted virtual chapter and Settings source navigator',1),
  ('W10','W','createWCPRuntime','ui/wcp-wcp-virtual-chapters.js','export','none','bounded WCP composition hooks','creates immutable virtual chapter runtime for Main application shell',1);
+INSERT INTO access_edges VALUES
+ ('X92','L','C','ui/workspace.js','getCMD().queryElements(filter)','C29','registered','Media bulk obtains fresh authoritative CMD chapter element identities through Layout semantic port'),
+ ('X93','L','C','ui/workspace.js','getCMD().queryElements(filter)','C29','registered','LaTeX normalization obtains fresh authoritative CMD chapter element identities through Layout semantic port');
 
 INSERT INTO access_edges VALUES ('PROMO01','W','L','ui/wcp-wcp-virtual-chapters.js','import {persistLabWorkspaceLayout} from ''./wcp-layout-persistence.js''','L21','registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public L module entry (wcp-layout-persistence.js); runtime behavior covered by main-promoted browser test and independent AM review');
 INSERT INTO access_edges VALUES ('PROMO02','W','C','ui/wcp-wcp-virtual-chapters.js','import {createCMDTransactionPort} from ''./wcp-cmd-element-transactions.js''','C29','registered','WCP Main promoted ui/wcp-wcp-virtual-chapters.js imports public C module entry (wcp-cmd-element-transactions.js); runtime behavior covered by main-promoted browser test and independent AM review');
@@ -774,4 +777,5 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-B08','B08','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Never overwrite old or preexisting mother Markdown','integration'),
  ('TC-B09','B09','tests/workspace-portability.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Node path configuration works under environment without Homebrew','direct');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-C33-MEDIA-SCOPE','C33','tests/media-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Download in a virtual chapter keeps out-of-scope CMD links unchanged and permits later adoption in full document','integration');
+ ('TC-C33-MEDIA-SCOPE','C33','tests/media-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG 全部 authorizes validated whole-CMB Media adoption while preserving the selected CM6 chapter projection','integration'),
+ ('TC-C20-AG-SCOPE','C20','tests/wcp-promoted-api-direct.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG chapter scope rejects outside LaTeX edit; all-CMB scope permits controlled edit without changing the selected CM6 chapter','direct');

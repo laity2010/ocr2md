@@ -94,8 +94,47 @@ try{
     setVirtualChapter(window.__v6cm6.cm.view,originalScope);
     const cmOk=virtualChapterExtensions.length===3 && scopeChanged && active?.id===scope.id &&
       sameScopeNoop && currentVirtualChapter(window.__v6cm6.cm.view.state)===originalScope;
+    // Direct AG scope proof: a non-selected chapter is protected when AG
+    // 全部 is off, but a registered all-document media/LaTeX action may
+    // edit that element while the CM6 chapter projection stays unchanged.
+    const outsideMedia=index.queryElements({type:'media'}).find(row=>row.chapterId!==scope.id);
+    const outsideLatex=index.queryElements({type:'latex'}).find(row=>row.chapterId!==scope.id);
+    if(!outsideMedia||!outsideLatex)throw Error('Fixture needs outside-scope media/LaTeX');
+    setVirtualChapter(window.__v6cm6.cm.view,scope);
+    const localPath='media/'+('a'.repeat(24))+'.jpg';
+    const mediaEdit={from:outsideMedia.from,to:outsideMedia.to,
+      expected:outsideMedia.url,insert:localPath};
+    const skipped=cmdPort.replaceMediaReferences([mediaEdit],
+      {mode:'chapter',chapterId:scope.id});
+    const mediaAll=cmdPort.replaceMediaReferences([mediaEdit],{mode:'all'});
+    const preservedMediaView=currentVirtualChapter(window.__v6cm6.cm.view.state)?.id===scope.id;
+    const changedMedia=cmdPort.getIndex().queryElements({type:'media'})
+      .find(row=>row.url===localPath);
+    if(!changedMedia)throw Error('Global media adoption missing');
+    cmdPort.replaceMediaReferences([{
+      from:changedMedia.from,to:changedMedia.to,expected:localPath,insert:outsideMedia.url
+    }],{mode:'all'});
+    const originalFormula=markdown.slice(outsideLatex.from,outsideLatex.to);
+    const latexOps=[{action:'text',from:outsideLatex.from,to:outsideLatex.to,
+      expected:originalFormula,insert:originalFormula+' '}];
+    let chapterRejected=false;
+    try{cmdPort.editAnnotations(latexOps,{expectedSource:window.__v6cm6.cm.markdown,
+      agScope:{mode:'chapter',chapterId:scope.id}});}
+    catch{chapterRejected=true;}
+    const beforeFormula=window.__v6cm6.cm.markdown;
+    cmdPort.editAnnotations(latexOps,{expectedSource:beforeFormula,agScope:{mode:'all'}});
+    const formulaChanged=window.__v6cm6.cm.markdown!==beforeFormula;
+    cmdPort.editAnnotations([{action:'text',from:outsideLatex.from,
+      to:outsideLatex.to+1,expected:originalFormula+' ',insert:originalFormula}],
+      {expectedSource:window.__v6cm6.cm.markdown,agScope:{mode:'all'}});
+    const scopedActionOk=skipped.changed===0&&skipped.skipped===1&&
+      mediaAll.changed===1&&preservedMediaView&&chapterRejected&&formulaChanged&&
+      currentVirtualChapter(window.__v6cm6.cm.view.state)?.id===scope.id&&
+      window.__v6cm6.cm.markdown===markdown;
+    setVirtualChapter(window.__v6cm6.cm.view,originalScope);
     return {wcpHooksOk,projected,namesOk,renderOk,invalidPreview,indexOk,unsafeRejected,
-      navSame,toolbarSingle,layoutOk,stopped,cmOk,sourcePreserved:window.__v6cm6.cm.markdown===markdown};
+      navSame,toolbarSingle,layoutOk,stopped,cmOk,scopedActionOk,
+      sourcePreserved:window.__v6cm6.cm.markdown===markdown};
    });
    for(const [key,value] of Object.entries(result))assert(value,`${name} ${key} direct API failed: ${JSON.stringify(result)}`);
    assert.deepEqual(errors,[],`${name} browser errors`);

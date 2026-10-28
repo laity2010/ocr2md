@@ -126,8 +126,9 @@ export class CMDocument {
    * expected source, so an asynchronous download cannot overwrite later edits.
    * One transaction / Undo step; no edits inside immutable MinerU evidence.
    */
-  replaceRanges(edits,cursorAfter=null){
+  replaceRanges(edits,cursorAfter=null,annotations=[]){
     if(!Array.isArray(edits)||!edits.length)throw Error('No source edits');
+    if(!Array.isArray(annotations))throw Error('Invalid CMD annotations');
     const source=this.markdown;
     const sorted=[...edits].sort((a,b)=>a.from-b.from);
     let previousEnd=-1;
@@ -151,7 +152,7 @@ export class CMDocument {
     }
     this.view.dispatch({changes:sorted.map(({from,to,insert})=>({from,to,insert})),
       ...(cursorAfter===null?{}:{selection:{anchor:cursorAfter}}),
-      userEvent:'input',annotations:isolateHistory.of('full')});
+      userEvent:'input',annotations:[isolateHistory.of('full'),...annotations]});
     return {changed:sorted.length};
   }
 
@@ -177,7 +178,7 @@ export class CMDocument {
    * Only optional single hard returns and Markdown quote prefixes are allowed
    * around standalone markers. All unrelated text is left byte-for-byte.
    */
-  editAnnotations(operations,{expectedSource=null}={}){
+  editAnnotations(operations,{expectedSource=null,annotations=[]}={}){
     if(!Array.isArray(operations)||!operations.length)throw Error('No annotation changes');
     const source=this.markdown;
     if(expectedSource!==null&&source!==expectedSource)
@@ -222,7 +223,7 @@ export class CMDocument {
         edits.push({from,to,expected:source.slice(from,to),insert});
       }
     }
-    return this.replaceRanges(edits);
+    return this.replaceRanges(edits,null,annotations);
   }
   /** Backward-compatible single-comment interface backed by the batch API. */
   writeAnnotation({tag,attributes={},at=null,target=null,snapshot=null,prefix='',suffix='',spaced=false}={}){

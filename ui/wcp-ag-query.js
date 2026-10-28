@@ -15,8 +15,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   // uncheck it to filter AG to its current indexed chapter.
   const queryEnabled=()=>!isPhysicalChapter();
   const currentChapter=()=>!queryEnabled()||!isIndexMode()||checkbox.checked?'all':chapterSelect.value;
-  // AG's "全部" controls row membership only. The editor/Markdown/PDF
-  // always project the chapter picked in the source navigation.
+  // AG '全部' is also the scope of AG-initiated operations, independently
+  // from the editor/Markdown/PDF chapter projection.
   const sourceChapter=()=>enabled()?chapterSelect.value:null;
   const locate=(data,type)=>{
     if(type==='heading')return data?.id;
@@ -63,7 +63,10 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       const keys=scopedKeys(type);
       // Cross-module intention only. Each AG owner creates its own column and
       // external filter; WCP never reads/writes raw AG Grid APIs.
-      bridge.applyChapterQuery(name,{enabled:queryEnabled(),keys,chapterLabel:data=>{
+      const chapter=currentChapter();
+      bridge.applyChapterQuery(name,{enabled:queryEnabled(),keys,
+        operationScope:chapter==='all'?{mode:'all'}:{mode:'chapter',chapterId:chapter},
+        chapterLabel:data=>{
         const current=index;
         if(!current||!data)return '';
         const found=type==='heading'?
@@ -161,7 +164,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     dispose(){disposed=true;clearTimeout(updateTimer);
       document.removeEventListener('ocr2md:wp3-ag-ready',onGridReady);
       unsubscribe?.();
-      for(const {name} of grids())bridge?.applyChapterQuery(name,{enabled:false});
+      for(const {name} of grids())bridge?.applyChapterQuery(name,
+        {enabled:false,operationScope:{mode:'all'}});
     },
   });
 }

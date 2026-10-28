@@ -161,9 +161,9 @@ try{
    });
    const adoption=page.locator('.ocr-media-grid .ocr-media-adoption');
    await adoption.first().waitFor({state:'attached',timeout:14000});
-   assert.equal(await adoption.filter({hasText:'未采用'}).count(),1);
-   assert.equal(await adoption.filter({hasText:'已采用'}).count(),12);
-   assert.equal(await adoption.filter({hasText:'未采用'}).first().getAttribute('data-adopted'),'no');
+   // AG virtualizes rows on WebKit. Verify the visible adopted cells here;
+   // the category filter below validates the unadopted orphan independent of scroll.
+   assert((await adoption.filter({hasText:'已采用'}).count())>0);
    assert.equal(await adoption.filter({hasText:'已采用'}).first().getAttribute('data-adopted'),'yes');
    const adoptedHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="adopted"]');
    const statusHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="status"]');
@@ -202,23 +202,14 @@ try{
    assert(thumbnailRequests.length>0,'remote image preview did not load');
    assert.equal(await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-preview-link').getAttribute('target'),'_blank');
    await page.screenshot({path:`.v6/evidence/media-before-${name.toLowerCase()}.png`});
-   // Active virtual chapters are CMD write boundaries, not download errors.
-   // The first image is outside this short chapter; save the file without
-   // changing an out-of-scope Markdown link, then adopt it in full view.
+   // AG 全部=true authorizes a whole-CMB operation even when CM6
+   // keeps a different chapter projected; the visible scope must survive.
    const firstImageLine=sample.lastIndexOf('\n',sample.indexOf(target))+1;
    assert(firstImageLine>0,'test fixture needs a pre-image chapter boundary');
    await page.evaluate(to=>document.dispatchEvent(new CustomEvent('ocr2md:wp4-virtual-scope',{
      detail:{scope:{id:'fixture:before-image',from:0,to}}
    })),firstImageLine);
-   await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').click();
-   await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action')?.textContent==='采用',null,{timeout:30000});
-   assert.equal(readFileSync(doc,'utf8'),sample,'out-of-scope download must not change Markdown');
-   const scopeStatus=await page.locator('#status').textContent();
-   assert(scopeStatus.includes('图片下载成功'),
-     'completed image must not be reported as failed when its link is outside chapter: '+scopeStatus);
-   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('ocr2md:wp4-virtual-scope',{
-     detail:{scope:null}
-   })));
+   assert.equal(await page.locator('input[aria-label="章节所有"]').isChecked(),true);
    await page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-action').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('本地'),null,{timeout:30000});
    assert.equal(readFileSync(doc,'utf8'),sample,'download must not autosave Markdown');
@@ -261,6 +252,54 @@ try{
      const img=document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
      return img?.getAttribute('src')==='/'+path && img.naturalWidth>0;
    },status.path,{timeout:25000});
+   // AG checkbox is the effective bulk-operation scope, not just row
+   // visibility. Intercept the POST so this probe cannot fetch or write data.
+   const select=page.locator('.ocr-source-pane .ocr-lab-file-select');
+   const chapterValues=await select.locator('option[value^="virtual:"]').evaluateAll(
+     options=>options.map(option=>option.value));
+   let scopedUrls=[];
+   for(const value of chapterValues){
+     await select.evaluate((el,v)=>{
+       el.value=v;el.dispatchEvent(new Event('change',{bubbles:true}));
+     },value);
+     await page.waitForFunction(v=>new URLSearchParams(location.search).get('view')===v.slice(8),
+       value,{timeout:12000});
+     if(await page.locator('#module-select').inputValue()!=='media')await selectModule(page,'media');
+     await page.waitForTimeout(140);
+     if(await page.locator('input[aria-label="章节所有"]').isChecked())continue;
+     scopedUrls=(await page.locator('.ocr-media-grid .ag-row .ocr-media-url').allTextContents())
+       .filter(value=>value.startsWith('http'));
+     if(scopedUrls.length&&scopedUrls.length<10)break;
+   }
+   assert(scopedUrls.length>0&&scopedUrls.length<10,'need a chapter with subset media');
+   const requestUrls=[];
+   await page.route('**/api/media/chunk',route=>{
+     requestUrls.push(JSON.parse(route.request().postData()).url);
+     return route.fulfill({status:403,contentType:'text/plain',body:'fixture denied'});
+   });
+   await page.locator('#media-download-all').click();
+   await page.waitForFunction(()=>!document.querySelector('#media-download-all')?.disabled,null,{timeout:20000});
+   if(requestUrls.length!==1)console.log('AG_SCOPE_DIAG',name,JSON.stringify({
+     scopedUrls:scopedUrls.slice(0,3),actualUrls:requestUrls,
+     status:await page.locator('#status').textContent(),
+     chapter:await select.inputValue(),
+     rows:await page.locator('.ocr-media-grid .ag-row .ocr-media-url').allTextContents(),
+     all:await page.locator('input[aria-label="章节所有"]').isChecked(),
+     buttonDisabled:await page.locator('#media-download-all').isDisabled()}));
+   assert.equal(requestUrls.length,1,'stop bulk after authorization rejection');
+   assert(scopedUrls.includes(requestUrls[0]),'unchecked AG downloaded outside selected chapter');
+   requestUrls.length=0;
+   await page.locator('input[aria-label="章节所有"]').check();
+   await page.locator('#media-download-all').click();
+   await page.waitForFunction(()=>!document.querySelector('#media-download-all')?.disabled,null,{timeout:20000});
+   assert.equal(requestUrls.length,1);
+   const globalFirst=findRemoteAfterSave();
+   assert.equal(requestUrls[0],globalFirst,'checked AG must operate over whole CMB');
+   assert.deepEqual(readFileSync(doc,'utf8'),updated,'scope probe must not modify the saved Markdown');
+   function findRemoteAfterSave(){
+     return updated.split('](').slice(1).map(x=>x.split(')')[0])
+       .find(url=>url.startsWith('https://'));
+   }
    assert.deepEqual(errors,[]);
    console.log('MEDIA_END_TO_END_PASS',name,JSON.stringify({items:13,unused:1,chapterOnly:1,filters:'adopted+status',partial:partial.bytes,
      path:status.path,preview:'lazy remote → local',undoRedo:true,chapterPath:true,reopened:true}));

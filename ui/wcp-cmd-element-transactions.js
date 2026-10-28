@@ -10,7 +10,7 @@
  * rejects a cross-chapter business edit.
  */
 import {createIndexProjector} from './wcp-document-index.js';
-import {currentVirtualChapter} from './wcp-cm-virtual-view.js';
+import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 
 function coordinates(from,to,length){
   return Number.isInteger(from)&&Number.isInteger(to)&&
@@ -37,7 +37,7 @@ export function createCMDTransactionPort(cmd){
     throw TypeError('Expected live CMDocument');
   const projector=createIndexProjector(()=>cmd.markdown);
   let transactionCount=0;
-  const preflight=(ranges,source=cmd.markdown)=>{
+  const preflight=(ranges,source=cmd.markdown,{allowAll=false}={})=>{
     if(source!==cmd.markdown)throw Error('CMD source snapshot changed; rescan first');
     const scope=currentVirtualChapter(cmd.view.state);
     // CMD index is a derived immutable projection, not a shadow document.
@@ -47,13 +47,13 @@ export function createCMDTransactionPort(cmd){
         throw Error('Invalid CMD source edit range');
       if(from>=immutableFrom||to>immutableFrom)
         throw Error('CMD original MinerU evidence tail is read-only');
-      if(scope&&(from<scope.from||to>scope.to||
+      if(scope&&!allowAll&&(from<scope.from||to>scope.to||
         (from===to&&from===scope.to)))
         throw Error('CMD virtual chapter boundary: switch to All or the owning chapter');
     }
   };
-  const commit=(run,ranges,{source=cmd.markdown}={})=>{
-    preflight(ranges,source);
+  const commit=(run,ranges,{source=cmd.markdown,allowAll=false}={})=>{
+    preflight(ranges,source,{allowAll});
     const before=cmd.doc;
     const result=run();
     if(cmd.doc.eq(before))
@@ -77,10 +77,19 @@ export function createCMDTransactionPort(cmd){
       if(!Array.isArray(edits))throw Error('CMD expected source edits');
       return commit(()=>cmd.replaceRanges(edits,cursorAfter),edits);
     },
-    editAnnotations:(ops,options={})=>commit(
-      ()=>cmd.editAnnotations(ops,options),
-      operationRanges(ops,cmd.markdown),
-      {source:options.expectedSource??cmd.markdown}),
+    editAnnotations:(ops,options={})=>{
+      const agScope=options.agScope??null;
+      if(agScope&&(!['all','chapter'].includes(agScope.mode)||
+          (agScope.mode==='chapter'&&
+            currentVirtualChapter(cmd.view.state)?.id!==agScope.chapterId)))
+        throw Error('LaTeX AG chapter scope changed; rescan before writing');
+      const all=agScope?.mode==='all';
+      return commit(
+        ()=>cmd.editAnnotations(ops,{expectedSource:options.expectedSource,
+          annotations:all?[agAllDocumentTransaction.of(true)]:[]}),
+        operationRanges(ops,cmd.markdown),
+        {source:options.expectedSource??cmd.markdown,allowAll:all});
+    },
     writeAnnotation:options=>{
       if(!options)throw Error('Missing annotation action');
       const target=options.target;
@@ -102,23 +111,31 @@ export function createCMDTransactionPort(cmd){
     // Explicit, atomic way for media actions to submit URL replacements after
     // an asynchronous fetch while ensuring the result is still an indexed
     // media reference (not an arbitrary matching string in another chapter).
-    replaceMediaReferences(edits){
+    replaceMediaReferences(edits,actionScope){
       if(!Array.isArray(edits)||!edits.length)
         throw Error('Media replacement requires source ranges');
+      if(!actionScope||!['all','chapter'].includes(actionScope.mode)||
+          (actionScope.mode==='chapter'&&typeof actionScope.chapterId!=='string'))
+        throw Error('Media AG operation scope required');
       const index=projector.get();
-      const available=new Set(index.queryElements({type:'media'})
-        .map(item=>String(item.from)+':'+String(item.to)));
+      const media=index.queryElements({type:'media'});
+      const available=new Set(media.map(item=>String(item.from)+':'+String(item.to)));
       for(const edit of edits){
         if(!available.has(edit.from+':'+edit.to))
           throw Error('Media element moved or changed; rescan before writing');
       }
-      // The active virtual chapter is a CMD write boundary, not a Media
-      // download boundary. Accept only authorized in-chapter references;
-      // outside links remain unchanged and the fetched image stays on disk.
       const scope=currentVirtualChapter(cmd.view.state);
-      const writable=scope?edits.filter(edit=>edit.from>=scope.from&&edit.to<=scope.to):edits;
+      if(actionScope.mode==='chapter'&&
+        (!scope||scope.id!==actionScope.chapterId||!index.getChapter(actionScope.chapterId)))
+        throw Error('Selected AG chapter no longer matches CMD view');
+      const selected=actionScope.mode==='chapter'
+        ?new Set(media.filter(row=>row.chapterId===actionScope.chapterId)
+          .map(row=>String(row.from)+':'+String(row.to))):null;
+      const writable=selected?edits.filter(edit=>selected.has(edit.from+':'+edit.to)):edits;
       if(!writable.length)return {changed:0,skipped:edits.length};
-      const result=port.replaceRanges(writable);
+      const all=actionScope.mode==='all';
+      const result=commit(()=>cmd.replaceRanges(writable,null,
+        all?[agAllDocumentTransaction.of(true)]:[]),writable,{allowAll:all});
       return {changed:result.changed,skipped:edits.length-writable.length};
     },
   };

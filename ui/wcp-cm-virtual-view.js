@@ -3,11 +3,14 @@
  * Decoration.replace'd, never split/copy/rewritten. Positions map through
  * CM6 changes; structural boundary edits fail open to the full document.
  */
-import {EditorSelection,EditorState,StateEffect,StateField} from '@codemirror/state';
+import {Annotation,EditorSelection,EditorState,StateEffect,StateField} from '@codemirror/state';
 import {Decoration,EditorView,WidgetType} from '@codemirror/view';
 import './wcp-cm-virtual-view.css';
 
 export const virtualScopeEffect=StateEffect.define();
+// Only WCP CMD's validated AG operation may use an all-document transaction
+// while the editor still displays a selected virtual chapter.
+export const agAllDocumentTransaction=Annotation.define();
 const setScope=virtualScopeEffect;
 class HiddenSection extends WidgetType {
   constructor(side){super();this.side=side;}
@@ -59,11 +62,12 @@ const scopedField=StateField.define({
     // Position changes inside the chapter map without constructing a second
     // CMDocument or re-parsing the full 300KB source on every keystroke.
     if(scope&&transaction.docChanged){
+      const agAll=transaction.annotation(agAllDocumentTransaction)===true;
       let outside=false;
       transaction.changes.iterChangedRanges((fromA,toA)=>{
         if(fromA<scope.from||toA>scope.to)outside=true;
       });
-      if(outside||intersectsBoundary(transaction.changes,transaction.startState.doc))scope=null;
+      if(!agAll&&(outside||intersectsBoundary(transaction.changes,transaction.startState.doc)))scope=null;
       else scope={...scope,from:transaction.changes.mapPos(scope.from,-1),
         to:transaction.changes.mapPos(scope.to,1)};
     }
@@ -83,6 +87,7 @@ function scopeFor(state){return state.field(scopedField,false);}
 const preventCrossChapterEdit=EditorState.changeFilter.of(tr=>{
   const scope=scopeFor(tr.startState);
   if(!scope)return true;
+  if(tr.annotation(agAllDocumentTransaction)===true)return true;
   let inside=true;
   tr.changes.iterChangedRanges((a,b)=>{
     if(a<scope.from||b>scope.to||(a===b&&a===scope.to))inside=false;

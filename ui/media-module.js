@@ -68,6 +68,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   host.append(gridHost);
   let rows=[],grid,active=false,disposed=false,queued=false,allRunning=false;
   let localFiles=[],chapterReferences=new Set();
+  let operationScope=Object.freeze({mode:'all'});
   let renderedStatuses=new Map(),renderedPreviews=new Map();
   const paused=new Set(),running=new Set();
   const states=new Map();
@@ -155,7 +156,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     }
     onStatus(`媒体 ${rows.length} 项，已采用 ${rows.filter(r=>r.adopted).length} 项，未采用 ${rows.filter(r=>!r.adopted).length} 项`);
   }
-  async function downloadOne(url){
+  async function downloadOne(url,scope=operationScope){
     if(running.has(url))return;
     if(!url.startsWith('https://') && !(url.startsWith('http://127.0.0.1:') && location.hostname==='127.0.0.1'))
       throw Error('仅支持 HTTPS 远程媒体');
@@ -179,9 +180,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
           if(matches.length){
             try{
               const result=cmd().replaceMediaReferences(matches.map(row=>({
-                from:row.from,to:row.to,expected:url,insert:state.path})));
+                from:row.from,to:row.to,expected:url,insert:state.path})),scope);
               if(result.changed)onStatus(`✓ 图片已下载，本地化 ${result.changed} 处引用${result.skipped?`；其他 ${result.skipped} 处不在当前章节`:''} · 请保存 Markdown`);
-              else onStatus('✓ 图片下载成功；引用不在当前章节，切换到对应章节或全文后点击「采用」','warning');
+              else onStatus('✓ 图片已下载；当前 AG 章节范围未包含此引用','warning');
             }catch(error){
               // Download and CMD adoption are separate transactions: never
               // report a successfully stored image as a failed download.
@@ -206,9 +207,19 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     if(allRunning)return;
     allRunning=true;
     try{
-      for(const url of [...new Set(findMedia(getMarkdown()).filter(r=>!r.local).map(r=>r.url))]){
+      // Capture the AG operation scope at click time, independent of the
+      // virtual CM/preview display. Source offsets can shift after each URL
+      // replacement, so materialize URL identities before starting I/O.
+      const scope=operationScope;
+      // Scope identities come from CMD at the actual operation time.
+      // AG's asynchronous filter offsets are a view only, and may be stale
+      // immediately after chapter selection or a source edit.
+      const entries=scope.mode==='all'?findMedia(getMarkdown()):
+        cmd().queryElements({type:'media',chapter:scope.chapterId});
+      const urls=[...new Set(entries.filter(row=>!row.local).map(row=>row.url))];
+      for(const url of urls){
         if(!allRunning)break;
-        if(!await downloadOne(url))break; // Stop only on authorization error.
+        if(!await downloadOne(url,scope))break; // Stop only on authorization error.
       }
     }finally{allRunning=false;}
   }
@@ -351,7 +362,16 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   refresh();
   const virtualQuery=createVirtualAGQuery(grid,'media');
   return {
-    setVirtualQuery:virtualQuery.setVirtualQuery,
+    setVirtualQuery(intent){
+      // Keep AG's row positions consistent with the CMD query intent.
+      refresh();
+      virtualQuery.setVirtualQuery(intent);
+      const next=intent?.operationScope??(intent?.enabled===false?{mode:'all'}:null);
+      if(!next||!['all','chapter'].includes(next.mode))
+        throw Error('Media AG requires explicit operation scope');
+      operationScope=Object.freeze(next.mode==='all'?{mode:'all'}:
+        {mode:'chapter',chapterId:next.chapterId});
+    },
     api:grid,
     refresh,scan,downloadAll,
     setActive(enabled){

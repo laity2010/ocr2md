@@ -34,7 +34,7 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
  const port=5660+index,base=`http://127.0.0.1:${port}`;
  const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),stdio:'ignore',
   env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:doc,V6_TOKEN_PATH:token,
-   V6_STATIC_ROOT:resolve('dist')}});
+   V6_SETTINGS_PATH:resolve(root,'settings.json'),V6_STATIC_ROOT:resolve('dist')}});
  let browser;
  try{
   let ready=false;

@@ -33,7 +33,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
   const allToggle=document.createElement('input');
   allToggle.type='checkbox';allToggle.setAttribute('aria-label','章节所有');
   allLabel.append(allToggle,document.createTextNode('全部'));
-  allLabel.title='勾选后 AG 显示所有章节的当前元素；不改变源码或预览的章节范围';
+  allLabel.title='勾选：AG 显示并操作整份 CMB；取消：仅显示并操作当前章节。不改变源码或预览显示范围';
   const chapterSelect=document.createElement('select');
   chapterSelect.className='ocr-wp3-chapter-select';
   chapterSelect.setAttribute('aria-label','虚拟章节');
@@ -85,12 +85,13 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     allLabel.hidden=settings||Boolean(chapter);
     // The mother '章节定界' view must always show all headings/elements.
     // Only a selected virtual chapter file may filter AG membership.
-    // The checkbox never changes the CM6/Markdown source scope.
+    // The checkbox changes AG query AND action scope, but never switches
+    // the CM6/Markdown/PDF projection of the selected chapter.
     if(!virtualMode)allToggle.checked=true;
     allToggle.disabled=Boolean(chapter)||!virtualMode;
     allToggle.title=allToggle.disabled
       ?'章节定界固定显示全部章节；仅在章节文件中可选择'
-      :'勾选显示所有章节；取消则只筛选 AG 当前章节';
+      :'勾选：AG 操作整份 CMB；取消：AG 仅操作当前章节';
     chapterSelect.hidden=true;
     chapterSelect.ocrNavigationSelect?.show();
     allStatus.hidden=Boolean(chapter)||settings||!virtualMode;

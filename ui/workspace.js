@@ -28,12 +28,14 @@ let documentFileLabel='Buffett’s Alpha.minerujson.md';
 // In particular, this port has no EditorView or other editor internals.
 const mediaCMD=Object.freeze({
   // Semantic CMD capability only; no fallback that bypasses virtual chapter guards.
-  replaceMediaReferences:edits=>getCMD().replaceMediaReferences(edits),
+  replaceMediaReferences:(edits,scope)=>getCMD().replaceMediaReferences(edits,scope),
+  queryElements:filter=>getCMD().queryElements(filter),
 });
 // Review plugins only receive optimistic CMD changes, never EditorView or a filesystem port.
 const latexCMD=Object.freeze({
   readAnnotations:filter=>getCMD().readAnnotations(filter),
   editAnnotations:(operations,options)=>getCMD().editAnnotations(operations,options),
+  queryElements:filter=>getCMD().queryElements(filter),
 });
 let reportMediaStatus=()=>{};
 const chapterCMD=Object.freeze({
