@@ -732,3 +732,43 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence)
 SELECT 'TC-DIRECT-'||id,id,'tests/wcp-promoted-api-direct.browser.test.mjs',
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'direct'
 FROM direct;
+
+-- WCP Workspace component v1 (portable contract; no macOS path assumptions).
+-- Public browser boundary is the Workspace capability, not Settings/Shell DOM.
+-- Backend API is a facade over internal v6_workspace_roots.py; HTTP route
+-- dispatch is the sole composition point. No second Settings persistence owner.
+INSERT INTO modules VALUES
+ ('B','Workspace Directory','WCP directory/book port + portable Python service','ui/wcp-workspace-directory-module.js');
+INSERT INTO apis VALUES
+ ('B01','B','createWorkspaceDirectoryModule','ui/wcp-workspace-directory-module.js','export','directoryPort with roots/browse/books','renderBookControl/renderDirectoryControl semantic UI port','Workspace-only DOM controls use injected Settings get/set API; no direct CMD or filesystem access',1),
+ ('B02','B','workspaceDirectoryPort','ui/wcp-workspace-directory-port.js','export','none','roots,browse,books async HTTP capabilities','authorized read-only discovery, no direct persistence',1),
+ ('B03','B','WorkspaceService.roots','scripts/v6_workspace_component.py','export','none','configured root,active book,allowed roots,document identity','read-only authorized root list',1),
+ ('B04','B','WorkspaceService.browse','scripts/v6_workspace_component.py','export','authorized absolute path','directory list and candidate book states','reject traversal and unauthorized paths',1),
+ ('B05','B','WorkspaceService.books','scripts/v6_workspace_component.py','export','catalogue path','first-level books and validation statuses','read-only book discovery',1),
+ ('B06','B','WorkspaceService.active','scripts/v6_workspace_component.py','export','none','immutable ActiveBook with MD/PDF/JSON paths','single selected book resolved per request',1),
+ ('B07','B','WorkspaceService.validate','scripts/v6_workspace_component.py','export','candidate settings JSON','validated book catalogue','pure validation before settings CAS commit',1),
+ ('B08','B','WorkspaceService.prepare','scripts/v6_workspace_component.py','export','candidate settings JSON','existing or newly converted book Markdown','only missing Markdown may be created with hardlink no-overwrite',1),
+ ('B09','B','WorkspaceService.convert','scripts/v6_workspace_component.py','export','source bytes,project root,timeout','MinerU Markdown bytes','Node resolved from V6_NODE_BIN or PATH, never fixed Homebrew pathname',1);
+INSERT INTO access_edges VALUES
+ ('X-B01','S','B','ui/settings-module.js','createWorkspaceDirectoryModule(directoryPort)','B01','registered','Settings delegates directory widget to Workspace through a semantic component API'),
+ ('X-B02',NULL,'B','ui/main.js','workspaceDirectoryPort','B02','registered','Shell supplies HTTP capability at composition root, never touches Workspace internals'),
+ ('X-B03',NULL,'B','scripts/v6_serve.py','WORKSPACE.roots()','B03','registered','Authorized HTTP route delegates to Workspace service'),
+ ('X-B04',NULL,'B','scripts/v6_serve.py','WORKSPACE.browse(value)','B04','registered','Authorized HTTP route delegates to Workspace service'),
+ ('X-B05',NULL,'B','scripts/v6_serve.py','WORKSPACE.books(value)','B05','registered','Authorized HTTP route delegates to Workspace service'),
+ ('X-B06',NULL,'B','scripts/v6_serve.py','WORKSPACE.active()','B06','registered','HTTP composition resolves selected workspace only via facade'),
+ ('X-B07',NULL,'B','scripts/v6_serve.py','WORKSPACE.validate(content)','B07','registered','Settings gate validates selection under same lock'),
+ ('X-B08',NULL,'B','scripts/v6_serve.py','WORKSPACE.prepare(content)','B08','registered','Versioned Settings commit may prepare absent mother document'),
+ ('X-B09',NULL,'B','scripts/v6_serve.py','WORKSPACE.convert(raw','B09','registered','Direct CMB HTTP endpoint reuses Workspace converter');
+-- Settings E09 is the already-declared route for choosing catalogue/book values.
+-- These string-valued Settings keys do not introduce a parallel state store.
+UPDATE messages SET payload='{"key":"string","value":"number|string","origin":"string"}' WHERE id='E09';
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-B01','B01','tests/workspace-root-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit actual Settings book UI uses Workspace widget and CMD save','integration'),
+ ('TC-B02','B02','tests/workspace-root-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Browser HTTP contract returns catalogue and book statuses','integration'),
+ ('TC-B03','B03','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Authorized roots and selected book use one service facade','integration'),
+ ('TC-B04','B04','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Reject forbidden directory and traversal','integration'),
+ ('TC-B05','B05','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','List first-level books and readiness','integration'),
+ ('TC-B06','B06','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Selected document/PDF/JSON have one identity','integration'),
+ ('TC-B07','B07','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CAS checks before conversion and rejects invalid selection','integration'),
+ ('TC-B08','B08','tests/workspace-root-server.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Never overwrite old or preexisting mother Markdown','integration'),
+ ('TC-B09','B09','tests/workspace-portability.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Node path configuration works under environment without Homebrew','direct');

@@ -52,7 +52,8 @@
     "wcp-source-file-navigation.js": "S",
     "wcp-wcp-virtual-chapters.js": "W",
     "workspace.js": "L",
-    "wcp-workspace-directory-port.js": "shell"
+    "wcp-workspace-directory-port.js": "B",
+    "wcp-workspace-directory-module.js": "B"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -86,6 +87,7 @@
     ],
     "http-path.js": [
       "A",
+      "B",
       "C",
       "G",
       "P",
@@ -203,6 +205,12 @@
     ],
     "main.js->wcp-source-file-navigation.js": [
       "createSourceFileNavigation"
+    ],
+    "settings-module.js->wcp-workspace-directory-module.js": [
+      "createWorkspaceDirectoryModule"
+    ],
+    "main.js->wcp-workspace-directory-port.js": [
+      "workspaceDirectoryPort"
     ]
   }
 }

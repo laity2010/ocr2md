@@ -7,7 +7,7 @@ from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
-from v6_workspace_roots import saved_root, saved_selection, selected_book, proposed_root, prepare_selected, check_root, allowed_roots, list_directories, list_books
+from v6_workspace_component import WorkspaceService
 from v6_media import download_chunk as media_download_chunk, status as media_status, read_local as media_read_local, inventory as media_inventory, store_pasted_image as media_store_pasted_image, MAX_PASTE as MAX_MEDIA_PASTE, chapter_media_references
 import json
 import os
@@ -80,25 +80,27 @@ if LAB_ID:
 COOKIE = f'v6lab_{LAB_ID.replace("-", "_")}' if LAB_ID else 'v6edit'
 DOC_WRITE_LOCK = threading.RLock()
 
-# The setting is resolved on each request, not copied into a global mutable
-# DOC variable: concurrent requests must not borrow another workspace path.
+# Workspace is the only owner of catalogue/book identities and file mapping.
+# Requests observe the saved selection; CMD owns the actual settings commit.
+WORKSPACE = WorkspaceService(default_document=DOC, default_pdf=PDF_PATH,
+    default_json=ORIGINAL_JSON, settings_file=SETTINGS, runtime=RUNTIME,
+    code_root=ROOT, is_lab=bool(LAB_ID))
+
+
 def active_root():
-    return saved_root(SETTINGS, DOC, RUNTIME, bool(LAB_ID))
+    return WORKSPACE.active().root
 
 
 def active_doc():
-    book=selected_book(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
-    return book[3] if book else DOC
+    return WORKSPACE.active().document
 
 
 def active_pdf():
-    book=selected_book(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
-    return book[2] if book else PDF_PATH
+    return WORKSPACE.active().pdf
 
 
 def active_json():
-    book=selected_book(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
-    return book[1] if book else ORIGINAL_JSON
+    return WORKSPACE.active().source_json
 
 
 def document_etag(content, path=None):
@@ -222,15 +224,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 if path.endswith('/roots'):
-                    configured,book,_ = saved_selection(SETTINGS,DOC,RUNTIME,bool(LAB_ID))
-                    data = {'activeRoot': str(active_root()),'configuredRoot':configured,
-                            'activeBook':book,
-                            'allowedRoots': [str(root) for root in allowed_roots(DOC, RUNTIME, bool(LAB_ID))],
-                            'documentName':active_doc().name}
+                    data = WORKSPACE.roots()
                 else:
                     value = parse_qs(urlsplit(self.path).query).get('path', [''])[0]
-                    data = (list_books(value,DOC,RUNTIME,bool(LAB_ID)) if path.endswith('/books')
-                            else list_directories(value,DOC,RUNTIME,bool(LAB_ID)))
+                    data = (WORKSPACE.books(value) if path.endswith('/books')
+                            else WORKSPACE.browse(value))
                 self.response(200, json.dumps(data, ensure_ascii=False), 'application/json; charset=utf-8')
             except (OSError, ValueError, TypeError) as error:
                 self.response(422, str(error))
@@ -556,23 +554,15 @@ class Handler(BaseHTTPRequestHandler):
         if len(raw) != length:
             self.response(400, 'Incomplete MinerU JSON')
             return
-        node = '/opt/homebrew/bin/node'
-        if not Path(node).is_file():
-            self.response(503, 'Conversion runtime unavailable')
-            return
-        script = ("import {toMarkdown} from './packages/minerujson-md/dist/index.js';"
-                  "const chunks=[];for await(const c of process.stdin)chunks.push(c);"
-                  "process.stdout.write(toMarkdown(Buffer.concat(chunks).toString('utf8')));")
         try:
-            result = subprocess.run([node,'--input-type=module','-e',script],
-                input=raw,cwd=ROOT,capture_output=True,timeout=20,check=False)
-        except (OSError, subprocess.TimeoutExpired):
-            self.response(503,'MinerU conversion unavailable')
+            converted = WORKSPACE.convert(raw, timeout=20)
+        except ValueError as error:
+            self.response(422, str(error))
             return
-        if result.returncode != 0:
-            self.response(422,'Invalid MinerU JSON or unsupported content')
+        if not converted:
+            self.response(422, 'Empty MinerU Markdown')
             return
-        self.response(200, result.stdout, 'text/markdown; charset=utf-8')
+        self.response(200, converted, 'text/markdown; charset=utf-8')
 
     def do_PUT(self):
         if urlsplit(self.path).path == '/api/settings':
@@ -594,7 +584,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Settings commit and document PUT are serialized by the
                 # same lock. An invalid/disallowed root never reaches disk.
                 with DOC_WRITE_LOCK:
-                    proposed_root(content, DOC, RUNTIME, bool(LAB_ID))
+                    WORKSPACE.validate(content)
                     # Prevent any conversion side effects for stale Settings.
                     previous = self.headers.get('If-Match')
                     if cmd_settings_fingerprint(cmd_settings_read(SETTINGS)) != previous:
@@ -602,7 +592,7 @@ class Handler(BaseHTTPRequestHandler):
                         return
                     # Prepare only the explicitly selected first-level book.
                     # Never overwrite a pre-existing Markdown or source PDF/JSON.
-                    prepare_selected(content, DOC, RUNTIME, ROOT, bool(LAB_ID))
+                    WORKSPACE.prepare(content)
                     saved, _ = cmd_settings_save(SETTINGS, content, previous)
             except ValueError as error:
                 self.response(400, str(error))

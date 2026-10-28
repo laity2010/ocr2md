@@ -48,6 +48,8 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 ### 工作根目录与首层书籍目录（Main）
 
+该目录能力由独立 WCP Workspace 模块实现；公开接口、模块所有权、Mac/Linux 审计方法与隔离数据约束见 [`WORKSPACE_COMPONENT.md`](WORKSPACE_COMPONENT.md)。AM 唯一权威契约位于 `tests/am/registry.sql` 的 `B01–B09`，不要在 Settings/Shell 复制目录浏览和转换逻辑。
+
 「全局设置 → 工作区 → 文件与目录」包含 `rootPath`（书库根目录）与 `bookName`（当前书籍工作目录）。`rootPath` 本身**不是**母 Markdown 文件夹；每个首层子目录是一部书，内含 `mineru json/` 和 `pdf/`，各提供一个 `.json` 和一个 `.pdf` 原始文件。先在根目录控件浏览/选定书库，再在书籍控件选书，最后使用顶栏「保存」统一提交、准备并加载。未选择书籍时，旧母文档保持工作状态。
 
 如果书籍目录没有 `${书名}.minerujson.md`，服务器调用已有 `@ocr2md/minerujson-md` 转换器，从只读 MinerU JSON 生成带原始块锚点与 Markdown 标题的母文档；验证通过才切换。已有母文档仅验证而**绝不覆盖**；转换失败、多个同类原始来源、权限不足均拒绝切换。`pdf/` 原件和 `mineru json/` 原件均不移动、不修改。CMD 的章节独立成章标定仍需人工校阅，初始转换不冒充已完成章节定界。前端保持 AG/CMD/CM6 模块和统一保存，不引入第二编辑器。

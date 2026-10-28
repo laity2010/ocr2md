@@ -1,0 +1,22 @@
+/* Workspace-owned controls mounted in the Settings preview slot. */
+/* Server directory picker reuses the Settings preview pane. */
+.ocr-settings-control #settings-workspace-root{min-height:32px;width:100%;box-sizing:border-box;
+ padding:5px 8px;border:1px solid #61746a;border-radius:5px;
+ background:#293b3c;color:#d3c6aa;font:13px 'OCR2MD Sarasa',monospace}
+.ocr-settings-directory-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ocr-settings-directory-actions button,.ocr-settings-directory-list button{
+ border:1px solid #61746a;border-radius:5px;background:#344a40;color:#d3c6aa;
+ padding:6px 9px;min-height:30px;font:12px 'OCR2MD Sarasa',monospace;cursor:pointer}
+.ocr-settings-directory-list{display:flex;flex-direction:column;align-items:stretch;gap:5px;
+ max-height:190px;overflow-y:auto}
+.ocr-settings-directory-list button{text-align:left;overflow-wrap:anywhere}
+.ocr-settings-directory-list button:disabled{opacity:.45;cursor:default}
+/* No validation state is silently rendered as success. Contrast + icon
+   must communicate error, caution, success even on narrow iPad layouts. */
+.ocr-settings-directory-feedback{color:#aebbb8;font-size:12px;overflow-wrap:anywhere;
+ line-height:1.55;min-height:1.55em}
+.ocr-settings-directory-feedback[data-state="success"]{color:#a7c080}
+.ocr-settings-directory-feedback[data-state="warning"]{color:#e9c46a}
+.ocr-settings-directory-feedback[data-state="error"]{color:#ff9999;font-weight:600}
+.ocr-settings-control #settings-workspace-root[aria-invalid="true"]{border-color:#ff9999;
+ outline:1px solid #ff999988}

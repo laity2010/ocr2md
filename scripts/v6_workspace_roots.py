@@ -7,6 +7,7 @@ JSON/PDF is ever overwritten or moved, and no implied first-book selection.
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -171,6 +172,36 @@ def selected_book(settings_file, default_doc, runtime, is_lab=False):
     return book_paths(folder.parent, book_name)
 
 
+def resolve_node_binary():
+    """Node resolution is explicit and cross-platform; no Homebrew assumption."""
+    configured = os.environ.get('V6_NODE_BIN', '').strip()
+    if configured:
+        resolved = shutil.which(configured)
+        if not resolved:
+            raise ValueError('配置的 V6_NODE_BIN 不可执行')
+        return resolved
+    resolved = shutil.which('node')
+    if not resolved:
+        raise ValueError('MinerU 转换器需要 PATH 中的 node 或 V6_NODE_BIN')
+    return resolved
+
+
+def convert_mineru_json(data, code_root, timeout=20):
+    """Single conversion capability used by Workspace and direct CMB endpoint."""
+    node = resolve_node_binary()
+    program = ("import {toMarkdown} from './packages/minerujson-md/dist/index.js';"
+               "const chunks=[];for await(const c of process.stdin)chunks.push(c);"
+               "process.stdout.write(toMarkdown(Buffer.concat(chunks).toString('utf8')));")
+    try:
+        output = subprocess.run([node, '--input-type=module', '-e', program],
+            input=data, cwd=code_root, capture_output=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError('MinerU 转换执行失败或超时') from error
+    if output.returncode:
+        raise ValueError('MinerU JSON 不符合转换器要求')
+    return output.stdout
+
+
 def prepare_selected(settings_json, default_doc, runtime, code_root, is_lab=False):
     root_name, book_name = _setting_values(json.loads(settings_json.decode('utf-8')))
     catalog=proposed_root(settings_json, default_doc, runtime, is_lab)
@@ -183,24 +214,14 @@ def prepare_selected(settings_json, default_doc, runtime, code_root, is_lab=Fals
         return target
     if json_path.stat().st_size > MAX_JSON_BYTES:
         raise ValueError('MinerU JSON 体积超出转换限制')
-    node='/opt/homebrew/bin/node'
-    if not Path(node).is_file():
-        raise ValueError('MinerU 转换器运行环境不可用')
-    program=("import {toMarkdown} from './packages/minerujson-md/dist/index.js';"
-             "const chunks=[];for await(const c of process.stdin)chunks.push(c);"
-             "process.stdout.write(toMarkdown(Buffer.concat(chunks).toString('utf8')));")
-    try:
-        output=subprocess.run([node,'--input-type=module','-e',program],
-               input=json_path.read_bytes(),cwd=code_root,capture_output=True,timeout=25)
-    except (OSError,subprocess.TimeoutExpired) as error:
-        raise ValueError('MinerU JSON 转换超时或失败') from error
-    if output.returncode or not output.stdout or len(output.stdout)>MAX_MD_BYTES:
-        raise ValueError('MinerU JSON 不符合转换器要求或转换结果超出限制')
+    result=convert_mineru_json(json_path.read_bytes(),code_root,timeout=25)
+    if not result or len(result)>MAX_MD_BYTES:
+        raise ValueError('MinerU 转换结果无效或超出限制')
     tmp_file=None
     try:
         with tempfile.NamedTemporaryFile(dir=folder,prefix='.mineru-stage-',suffix='.md',delete=False) as tmp:
             tmp_file=Path(tmp.name)
-            tmp.write(output.stdout)
+            tmp.write(result)
         if not converted_is_valid(tmp_file):
             raise ValueError('生成的 Markdown 不符合 MinerU 锚点和章节标题要求')
         # Never overwrite an existing Markdown, including concurrent external edits.
