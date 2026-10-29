@@ -5,3 +5,5 @@
   border:0;border-radius:3px;text-decoration:underline;cursor:pointer;
   padding:3px 6px;min-height:27px}
 .ocr-html-jump:hover{background:#43524b}
+
+.ocr-html-elements-grid .ocr-html-incomplete{background:rgba(230,170,80,.12)}

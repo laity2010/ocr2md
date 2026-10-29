@@ -846,3 +846,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-H01-HTML','H01','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit AG HTML rows and WCP multi-pane navigation preserve CMD bytes','integration'),
  ('TC-H02-HTML','H02','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Virtual chapter HTML AG query uses chapter/all scope, never edits CM6','integration'),
  ('TC-H03-HTML','H03','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG HTML count is reported by semantic WCP port','integration');
+
+-- HTML AG grouping: one row per open/close pair or standalone HTML token.
+INSERT INTO apis VALUES
+ ('H04','H','groupHtmlElements','ui/html-element-groups.js','export','CMD immutable HTML token records','immutable grouped rows with open/close lines','nested tag stack is AG presentation only; unmatched tags retained, no CMD writes',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-H04-GROUP','H04','tests/html-element-groups.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Paired and nested tags collapse into one AG row; standalone comments/void tags remain; malformed pairs visibly retained','direct'),
+ ('TC-H01-GROUP-BROWSER','H01','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit AG shows 单行/开合 grouping, separate opening/closing source-line clicks and chapter/all scope','integration');

@@ -5,6 +5,7 @@ import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-
 import {viewStore,publishFocus} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
+import {groupHtmlElements} from './html-element-groups.js';
 import './html-elements-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f383e',
@@ -17,31 +18,44 @@ export function createHtmlElementsModule(host,getCMD,onStatus=()=>{}){
   const gridHost=document.createElement('div');
   gridHost.className='ocr-html-elements-grid';host.append(gridHost);
   let active=false,disposed=false,rows=[],lastRevision=-1,query=null,queued=false;
-  function navigate(row){
+  function navigate(row,edge='open'){
     if(!row)return;
-    publishFocus({sourceLine:row.line,origin:'html',intent:'click'});
+    const line=edge==='close'?row.closeLine:(row.openLine??row.closeLine);
+    if(line)publishFocus({sourceLine:line,origin:'html',intent:'click'});
+  }
+  function locationCell(edge){
+    return p=>{
+      const row=p.data;
+      if(!row)return '';
+      const line=edge==='open'?row.openLine:row.closeLine;
+      if(!line)return row.kind==='单行'&&edge==='close'?'—':'缺失';
+      const button=document.createElement('button');button.type='button';
+      button.className='ocr-html-jump';button.textContent=String(line);
+      button.title='定位 HTML '+(edge==='open'?'开始':'结束')+'标签，联动源码、预览和 PDF';
+      button.setAttribute('aria-label',row.tag+(edge==='open'?'开始':'结束')+'第'+line+'行定位');
+      for(const type of ['pointerdown','mousedown','touchstart'])
+        button.addEventListener(type,event=>event.stopPropagation());
+      button.addEventListener('click',event=>{event.stopPropagation();navigate(row,edge);});
+      return button;
+    };
   }
   const columns=[
     {field:'tag',headerName:'标签名',width:138,minWidth:106,pinned:'left',lockPinned:true,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'kind',headerName:'类型',width:102,minWidth:90,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
-    {field:'line',headerName:'源码行',width:95,minWidth:85,
-      cellRenderer:p=>{
-        if(!p.data)return '';
-        const button=document.createElement('button');button.type='button';
-        button.className='ocr-html-jump';button.textContent=String(p.value);
-        button.title='定位 HTML 所在源码行、Markdown 预览和 PDF';
-        for(const type of ['pointerdown','mousedown','touchstart'])
-          button.addEventListener(type,event=>event.stopPropagation());
-        button.addEventListener('click',event=>{event.stopPropagation();navigate(p.data);});
-        return button;
-      }},
-    {field:'raw',headerName:'源码片段',minWidth:205,flex:1.8,
-      valueFormatter:p=>p.value?.replace(/\s+/g,' ').slice(0,150)??'',
-      tooltipValueGetter:p=>p.data?.raw||''},
+    {field:'openLine',headerName:'开始行',width:95,minWidth:86,
+      cellRenderer:locationCell('open')},
+    {field:'closeLine',headerName:'结束行',width:95,minWidth:86,
+      cellRenderer:locationCell('close')},
+    {colId:'source',headerName:'开合源码',minWidth:205,flex:1.8,
+      valueGetter:p=>p.data?[p.data.openRaw,p.data.closeRaw].filter(Boolean)
+        .join(' … ').replace(/\s+/g,' ').slice(0,180):'',
+      tooltipValueGetter:p=>p.data?[p.data.openRaw,p.data.closeRaw].filter(Boolean)
+        .join('  …  '):''},
   ].map(column=>({resizable:true,sortable:false,suppressMovable:true,...column}));
   const grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:32,
+    getRowClass:p=>p.data?.status!=='完整'?'ocr-html-incomplete':'',
     getRowId:p=>String(p.data.from)+':'+String(p.data.to),
     rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
     onRowClicked:event=>navigate(event.data)});
@@ -56,7 +70,7 @@ export function createHtmlElementsModule(host,getCMD,onStatus=()=>{}){
     const revision=viewStore.getState().documentRevision;
     if(lastRevision!==revision){
       try{
-        rows=getCMD()?.readHtmlElements()||[];
+        rows=groupHtmlElements(getCMD()?.readHtmlElements()||[]);
         lastRevision=revision;
         grid.setGridOption('rowData',rows);
       }catch(error){onStatus('HTML 元素扫描失败：'+error.message,'error');return;}
@@ -75,7 +89,7 @@ export function createHtmlElementsModule(host,getCMD,onStatus=()=>{}){
     if(!active||next.focusTarget===prev.focusTarget||!next.focusTarget||
        next.focusTarget.origin==='html'||next.focusTarget.revision!==next.documentRevision)return;
     const line=next.focusTarget.sourceLine;
-    const row=chapterRows().find(item=>item.line===line);
+    const row=chapterRows().find(item=>item.openLine===line||item.closeLine===line);
     if(row){
       const node=grid.getRowNode(row.from+':'+row.to);
       if(node){node.setSelected(true,true);if(node.rowIndex!=null)grid.ensureIndexVisible(node.rowIndex,'auto');}

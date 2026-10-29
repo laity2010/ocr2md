@@ -39,9 +39,20 @@ try{
       });
       const grid=page.locator('.ocr-html-elements-grid');
       await page.waitForFunction(()=>window.__v6cm6?.scrollState &&
-        document.querySelectorAll('.ocr-html-elements-grid .ag-row').length>=8,null,{timeout:50000});
+        document.querySelectorAll('.ocr-html-elements-grid .ag-row').length>=7,null,{timeout:50000});
       assert.equal(await page.locator('.ocr-html-elements-pane').isVisible(),true);
       assert.match(await grid.innerText(),/sup|table/);
+      assert.equal(await grid.locator('.ag-header-cell-text').allTextContents().then(v=>v.includes('类型')),true);
+      const types=await grid.locator('.ag-row [col-id="kind"]').allTextContents();
+      assert(types.includes('单行')&&types.includes('开合'),'group type should have standalone and paired tags');
+      const tableRow=grid.locator('.ag-row').filter({has:page.locator('.ag-cell[col-id="tag"]', {hasText:'table'})}).first();
+      assert.equal(await tableRow.count(),1,'table opening and closing must share one AG row');
+      assert.equal(await tableRow.locator('[col-id="openLine"] button').textContent(),'15');
+      assert.equal(await tableRow.locator('[col-id="closeLine"] button').textContent(),'17');
+      await tableRow.locator('[col-id="closeLine"] button').click();
+      await page.waitForFunction(()=>window.__v6cm6?.scrollState?.focusTarget?.sourceLine===17,
+        null,{timeout:14000});
+      assert.equal(await tableRow.locator('[col-id="kind"]').textContent(),'开合');
       assert(!(/not an HTML node/.test(await grid.innerText())));
       const raw=await page.locator('.ocr-html-elements-grid .ag-row').allTextContents();
       assert(raw.some(text=>text.includes('<!-- -->')),'general and CMD HTML comments missing');
@@ -67,12 +78,12 @@ try{
         const input=document.querySelector('.ocr-all-chapters-control input');
         return input&&!input.checked&&!input.disabled;
       },null,{timeout:15000});
-      await page.waitForFunction(()=>document.querySelectorAll('.ocr-html-elements-grid .ag-row').length<8,
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-html-elements-grid .ag-row').length<7,
         null,{timeout:15000});
       const chapterRows=await page.locator('.ocr-html-elements-grid .ag-row').count();
-      assert(chapterRows>=3&&chapterRows<=5,'HTML chapter scope did not filter rows');
+      assert(chapterRows===3,'HTML chapter scope did not filter rows');
       await page.locator('.ocr-all-chapters-control input').check();
-      await page.waitForFunction(()=>document.querySelectorAll('.ocr-html-elements-grid .ag-row').length>=10,
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-html-elements-grid .ag-row').length>=7,
         null,{timeout:15000});
       const allRows=await page.locator('.ocr-html-elements-grid .ag-row').count();
       assert(allRows>chapterRows,'AG 全部 did not restore cross-chapter HTML rows');
