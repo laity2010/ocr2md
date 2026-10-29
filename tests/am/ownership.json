@@ -38,6 +38,8 @@
     "pane-layout-ratios.js": "shared",
     "pdf-preview.js": "P",
     "scroll-sync.js": "L",
+    "source-line-callout-menu.js": "L",
+    "source-callout-plan.js": "L",
     "settings-module.js": "S",
     "view-store.js": "shared",
     "virtual-ag-query.js": "shared",

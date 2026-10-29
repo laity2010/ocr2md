@@ -461,6 +461,14 @@ async function main() {
   });
   view=cm.view;
   cmdPort=wcpRuntime.wrapCMD(cm);
+  workspace.mountSourceLineMenu(view,plan=>{
+    try{
+      cmdPort.replaceRanges([{from:plan.from,to:plan.to,
+        expected:plan.expected,insert:plan.insert}],plan.cursorAfter);
+      view.focus();
+      status('✓ 已在光标处插入 Callout · 请全局保存');
+    }catch(error){status('Callout 插入失败：'+error.message,'error');}
+  });
   wcpRuntime.onCMReady({view,status});
   foldInitialMineruComments(view);
   view.contentDOM.addEventListener('click',()=>{

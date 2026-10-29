@@ -15,6 +15,7 @@ import {createMediaModule} from './media-module.js';
 import {createLatexModule} from './latex-module.js';
 import {createNotePairModule} from './note-pair-module.js';
 import {createHtmlElementsModule} from './html-elements-module.js';
+import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
 
@@ -53,6 +54,7 @@ let refreshPreview = () => {};
 let currentPreview=null;
 let scrollSync=null;
 let currentOutline=null;
+let currentSourcePanel=null;
 let outlineTitleFontScale=1;
 let currentPdf=null;
 let toggleSplitPreview=()=>{};
@@ -136,13 +138,20 @@ class SourcePanel {
     files.add(new Option('章节定界/'+documentFileLabel,'document'));
     // Real shared CodeMirror action buttons; no clones or new handlers.
     bar.append(files,document.querySelector('.quote-indent-tools'));
+    this.bar=bar;this.menu=null;currentSourcePanel=this;
     this.element.append(bar,sourceHost);
   }
   init() {}
+  mountLineMenu(view,onInsert){
+    this.menu?.dispose();
+    this.menu=createSourceLineCalloutMenu({host:this.bar,view,onInsert});
+  }
   layout() { getCMD()?.requestMeasure(); }
   dispose() {
     // Dockview may reparent a tab during drag/drop. Do not destroy the CM6
     // instance or its history; it will reattach to the next source pane.
+    this.menu?.dispose();
+    if(currentSourcePanel===this)currentSourcePanel=null;
   }
 }
 
@@ -522,6 +531,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   });
   return {
     editorHost:sourceHost,
+    mountSourceLineMenu:(view,onInsert)=>currentSourcePanel?.mountLineMenu(view,onInsert),
     getPaneRatios:()=>readPaneRatios(dockview,'outline','source','preview'),
     applyPaneRatios:ratios=>{
       // The workbench may just have returned from display:none; resynchronize
