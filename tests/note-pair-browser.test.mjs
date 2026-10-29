@@ -65,9 +65,33 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     await page.waitForFunction(()=>
       document.querySelector('.ocr-lab-element-select option[value="note"]')&&
       document.querySelector('.ocr-note-grid [role="grid"]'),null,{timeout:47000});
+    const assertPreviewToolbar=async stage=>{
+      const state=await page.evaluate(()=>{
+        const toolbar=document.querySelector('.ocr-preview-switchbar');
+        const picker=toolbar?.querySelector('.ts-wrapper.ocr-navigation-preview');
+        const split=toolbar?.querySelector('.ocr-preview-split-toggle');
+        const preview=document.querySelector('.ocr-preview-pane');
+        if(!toolbar||!picker||!split||!preview)return null;
+        const t=toolbar.getBoundingClientRect(),p=picker.getBoundingClientRect(),
+          s=split.getBoundingClientRect(),owner=preview.getBoundingClientRect();
+        const top=document.elementFromPoint(p.left+Math.min(12,p.width/2),p.top+p.height/2);
+        return {toolbar:[t.x,t.y,t.width,t.height],picker:[p.x,p.y,p.width,p.height],
+          split:[s.x,s.y,s.width,s.height],owner:[owner.x,owner.y,owner.width,owner.height],
+          topIsPicker:top===picker||picker.contains(top),
+          display:getComputedStyle(toolbar).display,visibility:getComputedStyle(toolbar).visibility};
+      });
+      assert(state,stage+' preview toolbar not mounted');
+      assert(state.toolbar[2]>160&&state.toolbar[3]>=27,stage+' preview toolbar vanished');
+      assert(state.picker[2]>=100&&state.picker[3]>=25,stage+' preview mode picker hidden');
+      assert(state.split[2]>30&&state.split[3]>10,stage+' split PDF control hidden');
+      assert(state.topIsPicker,stage+' preview picker covered by another pane');
+      assert.equal(state.display,'flex');
+      assert.equal(state.visibility,'visible');
+    };
     await page.locator('.ocr-lab-element-select').evaluate(el=>{
       el.value='note';el.dispatchEvent(new Event('change',{bubbles:true}));
     });
+    await assertPreviewToolbar('note mode selected');
     const grid=page.locator('.ocr-note-grid [role="grid"]');
     await page.waitForFunction(()=>Number(document.querySelector('.ocr-note-grid [role="grid"]')
       ?.getAttribute('aria-rowcount'))===7,null,{timeout:20000});
@@ -196,6 +220,7 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     await page.locator('#save').click();
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
       null,{timeout:25000});
+    await assertPreviewToolbar('after note bulk conversion and Save');
     const bulkSaved=readFileSync(doc,'utf8');
     assert.equal((bulkSaved.match(/<!--ocr2md:note-ref id="2"-->/g)||[]).length,1);
     assert.equal((bulkSaved.match(/<!--ocr2md:note-body id="2"-->/g)||[]).length,1);
