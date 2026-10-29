@@ -1,4 +1,4 @@
-/** Syntax-only CM6 decoration layer, matching Obsidian/Everforest source colors.
+/** Syntax-only CM6 decoration layer, matching Obsidian's actual source rules.
  * Markdown's Lezer tree locates HTML without touching fenced code or evidence.
  * The existing read-only LaTeX scanner locates math; tokenize only the
  * visible neighborhood so typing in a long CMB never rescans the whole book.
@@ -15,7 +15,6 @@ const htmlKinds=Object.freeze({
   TagName:'html-tag',AttributeName:'html-attr',
   AttributeValue:'html-value',Is:'html-punct',SelfCloseEndTag:'html-punct',
 });
-const mathToken=/\\[a-zA-Z]+|\\[^a-zA-Z\s]|\d+(?:\.\d+)?|[{}\[\]]|[_^]/g;
 
 function append(marks,decoration,from,to,visible){
   if(from>=to)return;
@@ -101,17 +100,10 @@ function mathMarks(view,visible,marks){
       bodyTo=Math.max(bodyFrom,ending.from-1);
     }
     if(bodyTo<=bodyFrom)continue;
-    mathToken.lastIndex=0;
-    const body=doc.sliceString(bodyFrom,bodyTo);
-    let token;
-    while((token=mathToken.exec(body))!==null){
-      const value=token[0];
-      const kind=value.startsWith('\\')?'math-command':
-        /^[\d]/.test(value)?'math-number':
-        value==='^'||value==='_'?'math-script':'math-bracket';
-      append(marks,classMark(kind),bodyFrom+token.index,
-        bodyFrom+token.index+value.length,visible);
-    }
+    // Obsidian 1.14.5 app.css: '.cm-math {color:var(--code-normal)}',
+    // '.cm-s-obsidian span.cm-math {font-style:italic}'.
+    // Do not invent command/bracket rainbow syntax absent in Obsidian.
+    append(marks,classMark('math-body'),bodyFrom,bodyTo,visible);
   }
 }
 export const obsidianSourceSyntax=ViewPlugin.fromClass(class {

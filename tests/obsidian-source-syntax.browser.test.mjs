@@ -74,23 +74,28 @@ try{
         })),classes);
       };
       const html=await inspect('class="accent"',['cm-ob-syntax-html-tag',
-        'cm-ob-syntax-html-attr','cm-ob-syntax-html-value']);
-      assert.equal(html['cm-ob-syntax-html-tag'].color,'rgb(230, 152, 117)');
-      assert.equal(html['cm-ob-syntax-html-attr'].color,'rgb(219, 188, 127)');
+        'cm-ob-syntax-html-attr','cm-ob-syntax-html-value','cm-ob-syntax-html-punct']);
+      // Obsidian 1.14.5 app.css maps .cm-tag, .cm-attribute and
+      // .cm-string to Everforest --code-tag/function/string, respectively.
+      assert.equal(html['cm-ob-syntax-html-tag'].color,'rgb(218, 99, 98)');
+      assert.equal(html['cm-ob-syntax-html-attr'].color,'rgb(127, 187, 179)');
       assert.equal(html['cm-ob-syntax-html-value'].color,'rgb(167, 192, 128)');
+      assert.equal(html['cm-ob-syntax-html-punct'].color,'rgb(154, 167, 157)');
       const block=await inspect('class="box"',['cm-ob-syntax-html-tag',
         'cm-ob-syntax-html-attr']);
-      assert.equal(block['cm-ob-syntax-html-tag'].color,'rgb(230, 152, 117)');
+      assert.equal(block['cm-ob-syntax-html-tag'].color,'rgb(218, 99, 98)');
       const comment=await inspect('ocr2md:latex',['cm-ob-syntax-html-comment']);
-      assert.equal(comment['cm-ob-syntax-html-comment'].color,'rgb(127, 137, 125)');
+      assert.equal(comment['cm-ob-syntax-html-comment'].color,'rgb(133, 146, 137)');
       const math=await inspect('\\frac{',['cm-ob-syntax-math-fence',
-        'cm-ob-syntax-math-command','cm-ob-syntax-math-bracket',
-        'cm-ob-syntax-math-script','cm-ob-syntax-math-number']);
-      assert.equal(math['cm-ob-syntax-math-command'].color,'rgb(127, 187, 179)');
-      assert.equal(math['cm-ob-syntax-math-bracket'].color,'rgb(219, 188, 127)');
-      assert.equal(math['cm-ob-syntax-math-script'].color,'rgb(230, 152, 117)');
-      assert.equal(math['cm-ob-syntax-math-fence'].color,'rgb(131, 192, 146)');
-      const inline=await inspect('E=mc^2',['cm-ob-syntax-math-script',
+        'cm-ob-syntax-math-body']);
+      assert.equal(math['cm-ob-syntax-math-body'].color,'rgb(211, 198, 170)');
+      assert.equal(math['cm-ob-syntax-math-fence'].color,'rgb(90, 147, 162)');
+      const mathStyle=await page.locator('#editor .cm-ob-syntax-math-body')
+        .first().evaluate(el=>getComputedStyle(el).fontStyle);
+      assert.equal(mathStyle,'italic');
+      assert((await page.locator('#editor .cm-ob-syntax-math-command').count())===0,
+        'Obsidian colors the math body uniformly instead of separate commands');
+      const inline=await inspect('E=mc^2',['cm-ob-syntax-math-body',
         'cm-ob-syntax-math-fence']);
       assert(inline['cm-ob-syntax-math-fence'].text.includes('$'));
       await page.evaluate(()=>{
