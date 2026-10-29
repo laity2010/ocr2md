@@ -11,6 +11,7 @@
     "cmd-annotations.js": "C",
     "cmd-json-source.js": "C",
     "enum-checkbox-filter.js": "shared",
+    "footnote-popover.js": "M",
     "fontcheck.js": "shell",
     "http-path.js": "shared",
     "ios-native-selection.js": "shared",
@@ -202,6 +203,9 @@
     ],
     "workspace.js->markdown-preview.js": [
       "renderMarkdown"
+    ],
+    "workspace.js->footnote-popover.js": [
+      "createFootnotePopover"
     ],
     "workspace.js->media-module.js": [
       "createMediaModule"

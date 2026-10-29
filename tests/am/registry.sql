@@ -664,6 +664,19 @@ INSERT INTO access_edges VALUES ('PROMO09','G','A','ui/wcp-document-index.js','i
 
 INSERT INTO access_edges VALUES ('PROMO10','C','G','ui/wcp-cmd-element-transactions.js','import {createIndexProjector} from ''./wcp-document-index.js''','G18','registered','CMD wrapper reads chapter index via imported pure source projector; tracked public projection contract, no editor or AG instance imported');
 
+-- Inline footnote reader: official Floating UI positioning, existing
+-- markdown-it-footnote/DOMPurify HTML and a bounded Layout focus callback.
+-- Preview never owns or writes CMD notes; virtual notes are appended only to
+-- a temporary read-only projection, preserving original source coordinates.
+INSERT INTO apis VALUES
+ ('M10','M','createFootnotePopover','ui/footnote-popover.js','export','Markdown root and bounded onLocate(line) callback','handleClick/close/dispose','official Floating UI card with no hash jump; only explicit command publishes navigation',1),
+ ('M11','M','chapterFootnoteProjection','ui/wcp-md-virtual-preview.js','export','full CMD source and virtual excerpt','read-only excerpt plus sourced note definitions/line map','resolves cross-chapter notes without touching CM6 text or duplicating editor state',1);
+INSERT INTO access_edges VALUES
+ ('X-FOOTNOTE-01','L','M','ui/workspace.js','createFootnotePopover({','M10','registered','Layout installs MD-owned note reader via public factory and WCP focus callback');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-FOOTNOTE-M10','M10','tests/footnote-popover.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit card opens without hash/scroll navigation, Floating UI stays in bounds; explicit locate alone navigates; ESC/close and no source write','integration'),
+ ('TC-FOOTNOTE-M11','M11','tests/footnote-popover.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit first virtual chapter resolves definition in another chapter and maps note back to true CMD source line without modifying CMB','integration');
+
 -- Live, cross-component WCP virtual chapter DOM message contract (Main source).
 -- Retired physical file switch listeners and publishers are absent; only
 -- the active virtual chapter message contracts are registered.

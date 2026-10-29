@@ -1,0 +1,38 @@
+/* Floating UI reads the sanitized markdown-it footnote DOM. Body portal
+   is intentionally outside Dockview so iPad split panes cannot clip cards. */
+.ocr-footnote-popover{
+  position:fixed;z-index:12000;box-sizing:border-box;
+  width:min(410px,calc(100vw - 24px));
+  display:flex;flex-direction:column;overflow:hidden;
+  padding:0;border:1px solid #617369;border-radius:9px;
+  background:#2c373a;color:#d3c6aa;
+  box-shadow:0 12px 36px #0009;
+  font:14px/1.5 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+}
+.ocr-footnote-popover[hidden]{display:none!important}
+.ocr-footnote-card-header{display:flex;flex:none;align-items:center;
+  justify-content:space-between;gap:10px;padding:7px 11px;
+  border-bottom:1px solid #4e5e58;background:#34443f}
+.ocr-footnote-card-title{font-size:13px;color:#a7c080}
+.ocr-footnote-card-close{flex:none;min-width:28px;min-height:28px;
+  padding:0 6px;border:0;border-radius:5px;background:transparent;
+  color:#d3c6aa;font-size:23px;line-height:1;cursor:pointer}
+.ocr-footnote-card-close:hover{background:#4b5954}
+.ocr-footnote-card-content{flex:1;min-height:0;overflow-y:auto;
+  overscroll-behavior:contain;padding:9px 12px;overflow-wrap:anywhere}
+.ocr-footnote-card-content p{margin:0 0 .7em}
+.ocr-footnote-card-content p:last-child{margin-bottom:0}
+.ocr-footnote-card-content a{color:#7fbbb3}
+.ocr-footnote-card-content img{max-width:100%;height:auto}
+.ocr-footnote-card-content .ocr-footnote-card-body{overflow-wrap:anywhere}
+.ocr-footnote-card-footer{display:flex;justify-content:flex-end;flex:none;
+  padding:6px 10px;border-top:1px solid #4e5e58}
+.ocr-footnote-card-locate{padding:5px 10px;border:1px solid #6a8579;
+  border-radius:5px;background:#344a40;color:#a7c080;cursor:pointer}
+.ocr-footnote-card-locate[hidden]{display:none!important}
+.ocr-markdown sup.footnote-ref a{cursor:pointer;text-decoration:none;
+  padding:0 2px;border-radius:3px}
+.ocr-markdown sup.footnote-ref a:focus-visible{
+  outline:2px solid #a7c080;outline-offset:2px}
+@media(hover:none){.ocr-footnote-card-close,.ocr-footnote-card-locate{
+  min-height:36px}}

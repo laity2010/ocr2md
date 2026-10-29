@@ -8,6 +8,7 @@ import morphdom from 'morphdom';
 import 'dockview/dist/styles/dockview.css';
 import {viewStore,publishFocus,publishActivePanel} from './view-store.js';
 import {renderMarkdown} from './markdown-preview.js';
+import {createFootnotePopover} from './footnote-popover.js';
 import {createScrollSync} from './scroll-sync.js';
 import {createOutlineGrid} from './wcp-chapter-outline.js';
 import {createMediaModule} from './media-module.js';
@@ -185,7 +186,9 @@ class PreviewPanel {
     this.disposed=false;
     this.mode='md';
     this.lastFocusElement=null;
+    this.footnoteReader=null;
     this.onClick=event=>{
+      if(this.footnoteReader?.handleClick(event))return;
       if(!(event.target instanceof Element) || event.target.closest('a[href]'))return;
       const target=event.target.closest('[data-source-start][data-source-end]');
       if(!target)return;
@@ -197,6 +200,10 @@ class PreviewPanel {
     currentPreview=this;
   }
   init(){
+    this.footnoteReader=createFootnotePopover({
+      root:this.body,
+      onLocate:line=>publishFocus({sourceLine:line,origin:'preview',intent:'click'}),
+    });
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown());
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
@@ -235,6 +242,7 @@ class PreviewPanel {
       return false;
     }
     this.mode=mode;
+    if(mode!=='md')this.footnoteReader?.close();
     this.switcher.value=mode;
     this.element.dataset.previewMode=mode;
     this.mdPane.setAttribute('aria-hidden',String(mode!=='md'));
@@ -267,6 +275,7 @@ class PreviewPanel {
   }
   render(){
     if(this.disposed)return;
+    this.footnoteReader?.close(); // DOM source refs can be replaced by morphdom.
     const source=getMarkdown();
     if(!source)return;
     const pane=this.mdPane;
@@ -311,6 +320,7 @@ class PreviewPanel {
   }
   dispose(){
     this.disposed=true;
+    this.footnoteReader?.dispose();
     clearTimeout(this.timer);
     this.unsubscribe?.();
     this.body.removeEventListener('click',this.onClick);

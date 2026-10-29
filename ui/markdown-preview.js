@@ -17,6 +17,18 @@ const md = new MarkdownIt({
   html:true, linkify:true, breaks:false, typographer:false,
 }).use(footnote).use(taskLists, {enabled:false});
 
+// markdown-it-footnote owns link IDs and full note HTML. Annotate its list
+// item with a source-line coordinate, so the reader's explicit "定位注文"
+// action can use the existing WCP focus message rather than a browser hash.
+const originalFootnoteOpen=md.renderer.rules.footnote_open;
+md.renderer.rules.footnote_open=(tokens,idx,options,env,self)=>{
+  const html=originalFootnoteOpen(tokens,idx,options,env,self);
+  const line=tokens[idx].meta?.ocrSourceLine;
+  return Number.isInteger(line)&&line>0
+    ?html.replace('<li ','<li data-source-start="'+line+'" ')
+    :html;
+};
+
 // Markdown-it maps block tokens back to 0-based, half-open source line ranges.
 // Attach those locations to the rendered element without altering the MD
 // source. The scroll coordinator consumes them after sanitization.
@@ -100,10 +112,21 @@ export function renderMarkdown(source) {
   const {projected,fragments}=projectReviewedInlineLatex(source);
   const env={};
   const tokens=md.parse(projected,env);
-  for(const token of tokens) {
+  for(let idx=0;idx<tokens.length;idx++){
+    const token=tokens[idx];
     if (token.map && mappedTags.has(token.type)) {
       token.attrSet('data-source-start',String(token.map[0]+1));
       token.attrSet('data-source-end',String(token.map[1]+1));
+    }
+    if(token.type==='footnote_open'){
+      // The first mapped paragraph is the footnote definition's CMD line.
+      // This stays in the read-only rendering projection, never in Markdown.
+      for(let end=idx+1;end<tokens.length&&tokens[end].type!=='footnote_close';end++){
+        if(tokens[end].map){
+          token.meta.ocrSourceLine=tokens[end].map[0]+1;
+          break;
+        }
+      }
     }
   }
   let html=DOMPurify.sanitize(md.renderer.render(tokens,md.options,env), {
