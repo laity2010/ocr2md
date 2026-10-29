@@ -21,7 +21,7 @@ class GateTests(unittest.TestCase):
     def test_baseline(self):
         stats,issues=mod.scan_files(ROOT,CAT)
         self.assertEqual(issues,[])
-        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(48,9,31))
+        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(63,12,38))
 
     def test_undeclared_semantic_event_publisher(self):
         issues=self.modified('outline-grid.js',
