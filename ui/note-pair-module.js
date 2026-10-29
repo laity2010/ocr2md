@@ -112,15 +112,19 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
     if(node.rowIndex!=null)grid.ensureIndexVisible(node.rowIndex,'auto');
   }
   function mark(row){
-    if(disposed||!row||row.marked||row.status!=='已配对')return;
+    if(disposed||!row||row.status!=='已配对')return;
     try{
       const source=getMarkdown();
       const ops=planMarkNotePair(source,row);
       if(!ops.length)return;
       getCMD().editAnnotations(ops,{expectedSource:source,agScope:scope});
       refresh();
-      onStatus('注释 '+row.number+' 已在 CMD 标定引用和正文 · 请全局保存');
-    }catch(error){onStatus('注释标定失败：'+error.message);}
+      onStatus('注释 '+row.number+' 已转换为 Obsidian 脚注并完成 CMD 标定 · 请全局保存');
+    }catch(error){
+      const detail=/virtual chapter boundary|chapter scope/i.test(error.message)
+        ?'注引与注文跨章节，请在 AG 勾选「全部」后再转换':error.message;
+      onStatus('注释标定失败：'+detail);
+    }
   }
   const columns=[
     {field:'number',headerName:'注释号',width:86,minWidth:75,pinned:'left',lockPinned:true,
@@ -141,9 +145,12 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
         if(!p.data||p.data.part!=='reference')return '';
         const button=document.createElement('button');
         button.className='ocr-note-mark';button.type='button';
-        button.textContent=p.data.marked?'已标定':'标定';
-        button.disabled=p.data.marked||p.data.status!=='已配对';
-        button.title=button.disabled?'只能标定明确的一对一注释':'写入引用和正文的 CMD 注释标记（不自动保存）';
+        const pair=p.data.pair;
+        const converted=pair.reference===`[^${pair.number}]`&&
+          pair.bodyRaw.startsWith(`[^${pair.number}]: `);
+        button.textContent=p.data.marked&&converted?'已转换': '转换标定';
+        button.disabled=(p.data.marked&&converted)||p.data.status!=='已配对';
+        button.title=button.disabled?'只能处理明确的一对一注释':'一次性转换 Obsidian 脚注并写入 CMD 注释标签（不自动保存）';
         for(const name of ['pointerdown','mousedown','touchstart'])
           button.addEventListener(name,e=>e.stopPropagation());
         button.addEventListener('click',event=>{event.stopPropagation();mark(p.node.data.pair);});

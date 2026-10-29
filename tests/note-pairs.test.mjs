@@ -21,9 +21,33 @@ assert.equal(rows.filter(row=>row.status==='已配对').length,3);
 assert.equal(rows.filter(row=>row.status==='缺引用').length,1);
 assert.equal(rows.find(row=>row.number==='1').bodyLine,4);
 const operations=planMarkNotePair(source,rows[0]);
-assert.equal(operations.length,2);
+assert.equal(operations.length,3);
 assert.equal(operations[0].tag,'ocr2md:note-ref');
 assert.equal(operations[1].tag,'ocr2md:note-body');
+assert.equal(operations[2].action,'text');
+assert.equal(operations[2].expected,'1\\. ');
+assert.equal(operations[2].insert,'[^1]: ');
+const escapedSource='Citation \\<sup>1\\</sup>.\n\n1\\. First note\n';
+const escapedPlan=planMarkNotePair(escapedSource,scanNotePairs(escapedSource)[0]);
+assert.equal(escapedPlan.length,4);
+assert.equal(escapedPlan[1].action,'text');
+assert.equal(escapedPlan[1].insert,'[^1]');
+assert.equal(escapedPlan[3].insert,'[^1]: ');
+const alreadyStandard='Citation [^1].\n\n[^1]: First note\n';
+const standardPlan=planMarkNotePair(alreadyStandard,scanNotePairs(alreadyStandard)[0]);
+assert.equal(standardPlan.length,2,'already-standard notes only need CMD markers');
+const legacyMarked='Citation <!--ocr2md:note-ref id="1"-->\\<sup>1\\</sup>.\n\n'+
+  '<!--ocr2md:note-body id="1"-->\n1\\. First note\n';
+const legacyRow=scanNotePairs(legacyMarked)[0];
+assert.equal(legacyRow.marked,true);
+const migratePlan=planMarkNotePair(legacyMarked,legacyRow);
+assert.deepEqual(migratePlan.map(op=>op.action),['text','text'],
+  'already marked legacy footnotes should normalize without duplicate labels');
+const nativeMarked='Citation <!--ocr2md:note-ref id="1"-->[^1].\n\n'+
+  '<!--ocr2md:note-body id="1"-->\n[^1]: First note\n';
+assert.equal(scanNotePairs(nativeMarked)[0].marked,true);
+assert.deepEqual(planMarkNotePair(nativeMarked,scanNotePairs(nativeMarked)[0]),[],
+  'converted CMD-marked notes must be idempotent');
 const incomplete=scanNotePairs('Only [^2]\n');
 assert.equal(incomplete[0].status,'缺正文');
 const conflicts=scanNotePairs('Claim[^1]\n1\\. First\n1\\. Another\n');

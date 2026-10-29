@@ -69,7 +69,7 @@ export function scanNotePairs(source,template=DEFAULT_NOTE_TEMPLATE){
     const bodyMarker=body&&existingMarker(annotations,content,'ocr2md:note-body',body);
     rows.push({id:'ref:'+ref.from,number:ref.id,from:ref.from,
       reference:ref.raw,referenceFrom:ref.from,referenceTo:ref.to,referenceLine:ref.line,
-      content:body?.content??'',bodyFrom:body?.from??null,bodyTo:body?.to??null,
+      content:body?.content??'',bodyRaw:body?.raw??'',bodyFrom:body?.from??null,bodyTo:body?.to??null,
       bodyLine:body?.line??null,
       status:matches.length>1?'编号冲突':body?'已配对':'缺正文',
       marked:!!refMarker&&!!bodyMarker,refMarker,bodyMarker});
@@ -77,24 +77,41 @@ export function scanNotePairs(source,template=DEFAULT_NOTE_TEMPLATE){
   for(const body of bodies)if(!coveredBodies.has(body.from)){
     rows.push({id:'body:'+body.from,number:body.id,from:body.from,
       reference:'',referenceFrom:null,referenceTo:null,referenceLine:null,
-      content:body.content,bodyFrom:body.from,bodyTo:body.to,bodyLine:body.line,
+      content:body.content,bodyRaw:body.raw,bodyFrom:body.from,bodyTo:body.to,bodyLine:body.line,
       status:(map.get(body.id)?.length||0)>1?'编号冲突':'缺引用',
       marked:false,refMarker:null,bodyMarker:existingMarker(annotations,content,'ocr2md:note-body',body)});
   }
   return rows.sort((a,b)=>a.from-b.from);
 }
 export function planMarkNotePair(source,row){
-  if(!row||row.status!=='已配对'||row.marked||row.referenceFrom==null||row.bodyFrom==null)
-    throw Error('只能标定已配对且尚未标定的注释');
+  if(!row||row.status!=='已配对'||row.referenceFrom==null||row.bodyFrom==null)
+    throw Error('只能标定明确的一对一注释');
   if(source.slice(row.referenceFrom,row.referenceTo)!==row.reference ||
-     !source.slice(row.bodyFrom,row.bodyTo).includes(row.content))
+     source.slice(row.bodyFrom,row.bodyTo)!==row.bodyRaw)
     throw Error('注释来源已变化，请重新扫描');
+  const id=row.number,reference=`[^${id}]`;
+  const body=row.bodyRaw,content=row.content;
+  // Avoid destructive guesses for user-defined rules without a content group.
+  const contentOffset=content?body.indexOf(content):-1;
+  if(contentOffset<0||!content.trim())
+    throw Error('注文正则必须提取非空 (?<content>...)，才能安全转换 Obsidian 脚注');
+  const oldPrefix=body.slice(0,contentOffset);
+  const indent=/^[ \t]*/.exec(oldPrefix)[0];
+  if(indent.length>3)
+    throw Error('注文缩进超过三格，不能直接转换为 Obsidian 脚注');
+  const wantedPrefix=`${indent}[^${id}]: `;
   const annotations=scanAnnotations(source),ops=[];
   if(!existingMarker(annotations,source,'ocr2md:note-ref',{id:row.number,from:row.referenceFrom}))
     ops.push({action:'insert',at:row.referenceFrom,tag:'ocr2md:note-ref',
       attributes:{id:row.number}});
+  if(row.reference!==reference)
+    ops.push({action:'text',from:row.referenceFrom,to:row.referenceTo,
+      expected:row.reference,insert:reference});
   if(!existingMarker(annotations,source,'ocr2md:note-body',{id:row.number,from:row.bodyFrom}))
     ops.push({action:'insert',at:row.bodyFrom,tag:'ocr2md:note-body',
       attributes:{id:row.number},suffix:'\n'});
+  if(oldPrefix!==wantedPrefix)
+    ops.push({action:'text',from:row.bodyFrom,to:row.bodyFrom+oldPrefix.length,
+      expected:oldPrefix,insert:wantedPrefix});
   return ops;
 }

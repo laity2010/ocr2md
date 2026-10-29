@@ -116,21 +116,45 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     assert.equal(await grid.getAttribute('aria-rowcount'),'7');
     await page.locator('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark').click();
     await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark')
-      ?.textContent==='已标定',null,{timeout:17000});
+      ?.textContent==='已转换',null,{timeout:17000});
     assert.equal(readFileSync(doc,'utf8'),documentText,'Unexpected implicit disk write');
+    const inEditor=await page.evaluate(()=>document.querySelector('#editor .cm-content')?.textContent);
+    assert(inEditor.includes('ocr2md:note-ref'));
+    assert(inEditor.includes('ocr2md:note-body'));
+    assert(inEditor.includes('<!--ocr2md:note-ref id="1"-->[^1]'));
+    assert(inEditor.includes('[^1]: First note body'));
+    // The converted ref, definition and both CMD tags must undo in one step.
+    await page.locator('#undo').click();
+    await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark')
+      ?.textContent==='转换标定',null,{timeout:15000});
+    const undone=await page.locator('#editor .cm-content').textContent();
+    assert(undone.includes('cites\\<sup>1\\</sup>')&&
+      undone.includes('1\\. First note body')&&
+      !undone.includes('ocr2md:note-ref')&&!undone.includes('ocr2md:note-body'),
+      'one Undo must restore the original citation, definition and remove both tags');
+    await page.locator('#redo').click();
+    await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark')
+      ?.textContent==='已转换',null,{timeout:15000});
+    const redone=await page.locator('#editor .cm-content').textContent();
+    assert(redone.includes('<!--ocr2md:note-ref id="1"-->[^1]'));
+    assert(redone.includes('[^1]: First note body'));
     await page.locator('#save').click();
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
       null,{timeout:25000});
     const persisted=readFileSync(doc,'utf8');
     assert(persisted.includes('ocr2md:note-ref'));
     assert(persisted.includes('ocr2md:note-body'));
+    assert.match(persisted,/cites<!--ocr2md:note-ref id="1"-->\[\^1\]/);
+    assert.match(persisted,/<!--ocr2md:note-body id="1"-->\n\[\^1\]: First note body/);
+    assert(!persisted.includes('1\\. First note body'));
+    assert(persisted.includes('<sup>2</sup>'),'unreviewed note 2 was modified');
     assert(persisted.includes('First note body'));
     await page.reload({waitUntil:'domcontentloaded'});
     await page.locator('.ocr-lab-element-select').evaluate(el=>{
       el.value='note';el.dispatchEvent(new Event('change',{bubbles:true}));
     });
     await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark')
-      ?.textContent==='已标定',null,{timeout:25000});
+      ?.textContent==='已转换',null,{timeout:25000});
     const sourceSelect=page.locator('.ocr-source-pane .ocr-lab-file-select');
     const chapterFile=await sourceSelect.locator('option[value^="virtual:"]').first().getAttribute('value');
     assert(chapterFile,'chapter scope option exists');
