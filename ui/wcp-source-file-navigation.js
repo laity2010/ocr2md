@@ -147,13 +147,9 @@ export function createSourceFileNavigation({modulePort,workbench,settingsWorkben
   viewStore.subscribe((now,before)=>{
     if(now.documentRevision!==before.documentRevision)scheduleRefresh();
   });
-  document.addEventListener('change',event=>{
-    if(event.target?.matches?.('.ocr-outline-checkbox, #chapter-start-number'))
-      queueMicrotask(()=>scheduleRefresh(true));
-  },true);
-  document.addEventListener('input',event=>{
-    if(event.target?.matches?.('#chapter-start-number'))scheduleRefresh(true);
-  },true);
+  // CMD revision is the contract for chapter marker mutations. The Shell
+  // calls refreshChapters() when its own numbering input changes; do not
+  // inspect AG-owned checkbox classes or Shell-owned input IDs here.
   window.addEventListener('popstate',()=>{
     const next=new URLSearchParams(location.search).get('view');
     if(next===activeChapter)return;
