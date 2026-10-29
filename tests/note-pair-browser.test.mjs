@@ -11,7 +11,7 @@ const documentText=[
   '<!-- minerujson:block:v1:1:0 -->',
   '# Chapter One',
   '',
-  'This quote cites[^1] and another <sup>2</sup>.',
+  'This quote cites\\<sup>1\\</sup> and another <sup>2</sup>.',
   '',
   '<!-- minerujson:block:v1:2:0 -->',
   '# Chapter Two',
@@ -51,6 +51,16 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     page.on('pageerror',e=>errors.push(e.message));
     await page.route('**/*',route=>route.request().url().startsWith(origin)
       ?route.continue():route.abort());
+    // Simulate an iPad/Mac browser that applied and saved the original default.
+    // The app must transparently migrate only that shipped default, not custom.
+    await context.addInitScript(()=>{
+      const key='ocr2md:note-pair-templates:v1';
+      if(localStorage.getItem(key))return;
+      localStorage.setItem(key,JSON.stringify({
+        reference:String.raw`(?:\[\^|<sup\s*>)(?<id>[0-9]{1,3}|[A-Za-z][A-Za-z0-9_-]{0,12})(?:\]|</sup\s*>)`,
+        body:String.raw`^[ \t]*(?:\[\^)?(?<id>[0-9]{1,3})(?:\]:|\\?\.)[ \t]+(?<content>[^\r\n]+)`
+      }));
+    });
     await page.goto(origin,{waitUntil:'domcontentloaded',timeout:60000});
     await page.waitForFunction(()=>
       document.querySelector('.ocr-lab-element-select option[value="note"]')&&
@@ -63,6 +73,12 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
       ?.getAttribute('aria-rowcount'))===4,null,{timeout:20000});
     assert.equal(await page.locator('.toolbar .ocr-global-ag-status').count(),1);
     assert.equal(await grid.getAttribute('aria-rowcount'),'4');
+    const migrated=await page.evaluate(()=>{
+      const parsed=JSON.parse(localStorage.getItem('ocr2md:note-pair-templates:v1'));
+      return {reference:parsed.reference,
+        escapedMatch:!!new RegExp(parsed.reference).exec('\\<sup>1\\</sup>')};
+    });
+    assert(migrated.escapedMatch,'original browser default was not migrated');
     assert.equal(await page.locator('.ocr-note-grid .ag-row[row-index="0"] [col-id="status"]').textContent(),'已配对');
     const first=page.locator('.ocr-note-grid .ag-row[row-index="0"]');
     await first.locator('button[aria-label^="引用第"]').click();

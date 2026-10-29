@@ -4,7 +4,10 @@
 import {scanAnnotations} from './cmd-annotations.js';
 
 export const DEFAULT_NOTE_TEMPLATE=Object.freeze({
-  reference:String.raw`(?:\[\^|<sup\s*>)(?<id>[0-9]{1,3}|[A-Za-z][A-Za-z0-9_-]{0,12})(?:\]|</sup\s*>)`,
+  // Numeric sup references are common MinerU output: \\<sup>1\\</sup>.
+  // Restrict default IDs to digits: OCR also emits M\\<sup>uch\\</sup>.
+  // Users can configure alphabetic IDs for books that genuinely use them.
+  reference:String.raw`(?:\[\^|\\?<sup\s*>)(?<id>[0-9]{1,3})(?:\]|\\?</sup\s*>)`,
   body:String.raw`^[ \t]*(?:\[\^)?(?<id>[0-9]{1,3})(?:\]:|\\?\.)[ \t]+(?<content>[^\r\n]+)`,
 });
 export const NOTE_TEMPLATE_KEY='ocr2md:note-pair-templates:v1';

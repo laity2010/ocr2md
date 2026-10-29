@@ -12,10 +12,20 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',rowHoverColor:'#37464b',selectedRowBackgroundColor:'rgba(86,157,121,.2)',
   oddRowBackgroundColor:'#2d363c',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
+// Existing browsers may have persisted the original shipped template. Move
+// ONLY that exact default forward; do not overwrite user-edited regex rules.
+const previousDefaultReference=String.raw`(?:\[\^|<sup\s*>)(?<id>[0-9]{1,3}|[A-Za-z][A-Za-z0-9_-]{0,12})(?:\]|</sup\s*>)`;
 function loadTemplate(){
-  try{return validateNoteTemplate(JSON.parse(localStorage.getItem(NOTE_TEMPLATE_KEY)));}catch{
-    return {...DEFAULT_NOTE_TEMPLATE};
-  }
+  try{
+    const stored=validateNoteTemplate(JSON.parse(localStorage.getItem(NOTE_TEMPLATE_KEY)));
+    if(stored.reference===previousDefaultReference &&
+       stored.body===DEFAULT_NOTE_TEMPLATE.body){
+      const upgraded={...DEFAULT_NOTE_TEMPLATE};
+      localStorage.setItem(NOTE_TEMPLATE_KEY,JSON.stringify(upgraded));
+      return upgraded;
+    }
+    return stored;
+  }catch{return {...DEFAULT_NOTE_TEMPLATE};}
 }
 function locationCell(which){
   const ref=which==='reference';
