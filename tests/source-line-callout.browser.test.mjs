@@ -38,24 +38,41 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
     await page.goto(base,{waitUntil:'domcontentloaded',timeout:50000});
-    const menu=page.locator('.ocr-source-line-menu'),trigger=page.getByRole('button',{name:'行号菜单'});
-    await trigger.waitFor({timeout:50000});
+    const menu=page.locator('.ocr-source-line-menu');
+    assert.equal(await page.locator('.ocr-source-line-trigger').count(),0,'old toolbar button remained');
     await page.locator('#editor .cm-line').filter({hasText:'Paragraph alpha has a cursor'}).click();
     await page.keyboard.press('End');
-    await trigger.click();
+    const button=page.locator('#editor .ocr-source-caret-line-button');
+    await button.waitFor({timeout:30000});
+    assert.equal(await button.count(),1,'exactly the caret line must become a button');
+    assert.equal(await button.getAttribute('data-line'),'4','active button is not caret line');
+    assert.equal(await page.locator('#editor .cm-lineNumbers button').count(),1);
+    assert.equal(await page.locator('#editor .cm-lineNumbers .cm-gutterElement').filter({hasText:/^\s*2\s*$/}).count(),1,
+      'inactive line number should remain plain text');
+    await button.click();
     assert(await menu.isVisible());
-    const initialLabel=await menu.locator('.ocr-source-line-menu-title').textContent();
-    assert.match(initialLabel,/第 4 行/,'toolbar must use caret line');
+    assert.equal(await menu.getByRole('menuitem').count(),1,'menu must contain exactly one command');
+    assert.equal((await menu.getByRole('menuitem').textContent()).trim(),'插入 Callout');
+    const placement=await page.evaluate(()=>{
+      const button=document.querySelector('#editor .ocr-source-caret-line-button');
+      const menu=document.querySelector('.ocr-source-line-menu');
+      const a=button.getBoundingClientRect(),b=menu.getBoundingClientRect();
+      return {buttonRight:a.right,buttonTop:a.top,menuLeft:b.left,menuTop:b.top};
+    });
+    assert(Math.abs(placement.menuLeft-placement.buttonRight)<15,'menu not anchored beside caret gutter');
+    assert(Math.abs(placement.menuTop-placement.buttonTop)<15,'menu not aligned with caret row');
     await page.keyboard.press('Escape');
     assert.equal(await menu.isVisible(),false);
-    // Gutter click from a different line may open the menu but must not move caret.
-    const gutter=page.locator('#editor .cm-lineNumbers .cm-gutterElement').filter({hasText:/^\s*2\s*$/}).first();
-    assert(await gutter.count(),'real CM6 line gutter missing');
-    await gutter.click();
-    assert(await menu.isVisible(),'clicking CM6 line number did not open menu');
-    assert.match(await menu.locator('.ocr-source-line-menu-title').textContent(),/第 4 行/,
-      'clicking gutter silently changed the cursor');
-    await menu.getByRole('menuitem',{name:'插入 Callout · 默认隐藏'}).click();
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact'}).click();
+    await page.keyboard.press('End');
+    assert.equal(await button.count(),1);
+    assert.equal(await button.getAttribute('data-line'),'9','button did not follow caret');
+    assert.equal(await page.locator('#editor .cm-lineNumbers .cm-gutterElement').filter({hasText:/^\s*4\s*$/}).count(),1,
+      'previous caret line must return to plain number');
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph alpha has a cursor'}).click();
+    await page.keyboard.press('End');
+    await button.click();
+    await menu.getByRole('menuitem',{name:'插入 Callout'}).click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .includes('[!note]- 标题'),null,{timeout:18000});
     await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-markdown details.ocr-callout summary')]
@@ -71,33 +88,29 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     await page.locator('#redo').click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .includes('[!note]- 标题'),null,{timeout:12000});
-    // Button can insert different variants at the CURRENT caret, no shadow doc.
-    await trigger.click();
-    await menu.getByRole('menuitem',{name:'插入 Callout · 默认展开'}).click();
+    // One command only, repeated invocation inserts another folded callout.
+    await button.click();
+    assert.equal(await menu.getByRole('menuitem').count(),1);
+    await menu.getByRole('menuitem',{name:'插入 Callout'}).click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
-      .includes('[!note]+ 标题'),null,{timeout:12000});
-    await trigger.click();
-    await menu.getByRole('menuitem',{name:'插入 Callout · 常显'}).click();
-    await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
-      .includes('[!note] 标题'),null,{timeout:12000});
+      .split('[!note]- 标题').length===3,null,{timeout:12000});
     assert.equal(readFileSync(doc,'utf8'),original,'pre-Save disk changes');
     await page.locator('#save').click();
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
       null,{timeout:22000});
     const saved=readFileSync(doc,'utf8');
     assert(saved.includes('[!note]- 标题'));
-    assert(saved.includes('[!note]+ 标题'));
-    assert(saved.includes('[!note] 标题'));
+    assert.equal(saved.split('[!note]- 标题').length-1,2);
     assert(saved.includes('Paragraph beta remains intact.'));
     assert(saved.slice(saved.indexOf('<!-- minerujson:source:v1'))
       .includes('originalEvidence'));
     await page.reload({waitUntil:'domcontentloaded'});
-    await trigger.waitFor({timeout:20000});
+    await page.locator('#editor .ocr-source-caret-line-button').waitFor({timeout:20000});
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .includes('[!note]- 标题'),null,{timeout:17000});
     assert.deepEqual(errors,[],name+' browser errors');
     console.log('SOURCE_LINE_CALLOUT_BROWSER_PASS',name,
-      JSON.stringify({gutterOpen:true,caretUnchanged:true,threeModes:true,undoRedo:true,
+      JSON.stringify({singleActiveGutterButton:true,oneMenuItem:true,anchoredPopup:true,undoRedo:true,
         explicitSave:true,reload:true,evidenceUnchanged:true}));
   }finally{await browser?.close();server.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}
 }

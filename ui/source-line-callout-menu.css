@@ -1,22 +1,32 @@
-/* A small CM6 line-number action, independent of the AG toolbar and WCP. */
-.ocr-source-line-actions{position:relative;flex:none;z-index:20}
-.ocr-source-line-trigger{background:#303a3e;color:#b8c7b9;border:1px solid #586660;
-  border-radius:5px;padding:4px 10px;font:inherit;white-space:nowrap;cursor:pointer;
-  min-height:30px}
-.ocr-source-line-trigger:hover,.ocr-source-line-trigger[aria-expanded="true"]{
-  background:#3b4849;color:#e3e8d8}
-.ocr-source-line-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:198px;
-  max-width:min(280px,90vw);padding:5px;background:#2d393d;color:#d3c6aa;
-  border:1px solid #596862;border-radius:7px;box-shadow:0 9px 22px rgba(0,0,0,.3);
-  z-index:100}
+/* Current CM6 caret line alone shows a real, keyboard-accessible button.
+ * All other gutter rows remain native line numbers. */
+.ocr-cm-source .ocr-source-caret-line-button {
+  display:inline-block;box-sizing:border-box;min-width:100%;height:1.45em;
+  margin:0;padding:0 3px;border:1px solid #668474;border-radius:4px;
+  background:#38544a;color:#dce8d7;font:inherit;line-height:1.3;
+  cursor:pointer;white-space:nowrap;text-align:right;
+}
+.ocr-cm-source .ocr-source-caret-line-button:hover,
+.ocr-cm-source .ocr-source-caret-line-button[aria-expanded="true"]{
+  background:#456b57;border-color:#a7c080;
+}
+.ocr-cm-source .ocr-source-caret-line-button:focus-visible {
+  outline:2px solid #a7c080;outline-offset:-2px;
+}
+/* Popover is anchored to the gutter button in viewport coordinates, rather
+ * than taking any space from the narrow source toolbar or AG/preview panes. */
+.ocr-source-line-menu {
+  position:fixed;z-index:120000;min-width:138px;max-width:min(240px,90vw);
+  padding:4px;background:#2d393d;color:#d3c6aa;
+  border:1px solid #596862;border-radius:7px;
+  box-shadow:0 9px 22px rgba(0,0,0,.32);
+}
 .ocr-source-line-menu[hidden]{display:none}
-.ocr-source-line-menu-title{padding:4px 9px 7px;color:#9eae9c;font-size:12px;
-  border-bottom:1px solid #4c5b58;margin-bottom:4px}
-.ocr-source-line-menu button{display:block;width:100%;border:0;border-radius:4px;
-  padding:8px 9px;background:transparent;color:inherit;text-align:left;
-  font:inherit;font-size:13px;cursor:pointer}
-.ocr-source-line-menu button:hover,.ocr-source-line-menu button:focus-visible{
-  background:#425450;color:#e0efd9;outline:none}
-.ocr-cm-source .cm-lineNumbers .cm-gutterElement:not(:first-child){cursor:pointer}
-.ocr-cm-source .cm-lineNumbers .cm-gutterElement:not(:first-child):hover{
-  color:#d3e2b7;background:rgba(127,187,179,.12)}
+.ocr-source-line-menu button {
+  display:block;width:100%;min-height:34px;border:0;border-radius:4px;
+  padding:7px 10px;background:transparent;color:inherit;text-align:left;
+  font:inherit;font-size:13px;cursor:pointer;
+}
+.ocr-source-line-menu button:hover,.ocr-source-line-menu button:focus-visible {
+  background:#425450;color:#e0efd9;outline:none;
+}

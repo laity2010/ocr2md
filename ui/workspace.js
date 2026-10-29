@@ -144,7 +144,7 @@ class SourcePanel {
   init() {}
   mountLineMenu(view,onInsert){
     this.menu?.dispose();
-    this.menu=createSourceLineCalloutMenu({host:this.bar,view,onInsert});
+    this.menu=createSourceLineCalloutMenu({host:this.element,view,onInsert});
   }
   layout() { getCMD()?.requestMeasure(); }
   dispose() {
