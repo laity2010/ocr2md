@@ -6,6 +6,7 @@ import {EditorView, basicSetup} from 'codemirror';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
 import {undo, redo, undoDepth, redoDepth} from '@codemirror/commands';
 import {obsidianMarkdown} from './obsidian-markdown.js';
+import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
@@ -424,6 +425,7 @@ async function main() {
       markdown({base:markdownLanguage}),
       mineruCommentFolding,
       obsidianMarkdown,
+      obsidianSourceSyntax,
       obsidianHeadingMarkers,
       outlineLineHighlight,
       EditorView.updateListener.of(update=>{

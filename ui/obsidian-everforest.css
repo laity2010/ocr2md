@@ -75,6 +75,19 @@
   background: #272f34;
   font-weight: 600;
 }
+/* Lezer HTML tag/attribute and existing LaTeX source-range tokens.
+   Obsidian Everforest accents; decorations are visual-only, never source
+   replacements or independently parsed HTML/TeX document states. */
+.ocr-cm-source .cm-ob-syntax-html-punct { color: #859289; }
+.ocr-cm-source .cm-ob-syntax-html-tag { color: #e69875; }
+.ocr-cm-source .cm-ob-syntax-html-attr { color: #dbbc7f; }
+.ocr-cm-source .cm-ob-syntax-html-value { color: #a7c080; }
+.ocr-cm-source .cm-ob-syntax-html-comment { color: #7f897d; }
+.ocr-cm-source .cm-ob-syntax-math-fence { color: #83c092; font-weight: 600; }
+.ocr-cm-source .cm-ob-syntax-math-command { color: #7fbbb3; }
+.ocr-cm-source .cm-ob-syntax-math-bracket { color: #dbbc7f; }
+.ocr-cm-source .cm-ob-syntax-math-script { color: #e69875; }
+.ocr-cm-source .cm-ob-syntax-math-number { color: #d699b6; }
 /* Exact Everforest --hN-size ratios relative to the 16px Sarasa body. */
 .ocr-cm-source .cm-ob-heading-line-1 { font-size: 2.125em; }
 .ocr-cm-source .cm-ob-heading-line-2 { font-size: 1.625em; }

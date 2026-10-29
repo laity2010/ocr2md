@@ -27,6 +27,7 @@
     "obsidian-heading-markers.js": "shell",
     "obsidian-images.js": "M",
     "obsidian-markdown.js": "shell",
+    "obsidian-source-syntax.js": "shell",
     "outline-focus.js": "shell",
     "outline-grid.js": "G",
     "outline-index.js": "G",
@@ -118,6 +119,9 @@
     ],
     "latex-review-markers.js->cmd-annotations.js": [
       "scanAnnotations"
+    ],
+    "obsidian-source-syntax.js->latex-scan.js": [
+      "findLatex"
     ],
     "main.js->chapter-markers.js": [
       "countMarkers"
