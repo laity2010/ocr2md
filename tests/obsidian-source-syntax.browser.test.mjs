@@ -1,5 +1,5 @@
-/** CMD Obsidian-compatible source syntax: only visual spans, one CM6 doc.
- * Both real browsers scroll to virtualized HTML/LaTeX and compare CSS colors.
+/** CMD source syntax: Obsidian Markdown; official CodeMirror sTeX + One Dark.
+ * Both browsers inspect computed syntax colors; never alter CM6 source bytes.
  */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -7,6 +7,17 @@ import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir,homedir} from 'node:os';
 import {join} from 'node:path';
 import {chromium,webkit,devices} from 'playwright';
+import {StreamLanguage} from '@codemirror/language';
+import {stexMath} from '@codemirror/legacy-modes/mode/stex';
+const officialNodes=[];
+StreamLanguage.define(stexMath).parser
+  .parse(String.raw`\mathsf{T A}_t^2 = \frac{x}{3}`)
+  .iterate({enter:n=>officialNodes.push(n.name)});
+assert(officialNodes.includes('tagName') &&
+  officialNodes.includes('variableName.special') &&
+  officialNodes.includes('bracket') &&
+  officialNodes.includes('number'),
+  'sTeX must parse commands, variables, brackets and numbers');
 const folder=mkdtempSync(join(tmpdir(),'ocr2md-syntax-'));
 const doc=join(folder,'probe.md');
 const source=[
@@ -18,7 +29,7 @@ const source=[
   '', // CommonMark HTMLBlock terminates at a blank line.
   '<!-- ocr2md:latex id="0123456789abcdef" review="latex" -->',
   '$$',
-  String.raw`\frac{\alpha_1}{2} = \beta`,
+  String.raw`\frac{\alpha_1}{2} = \mathsf{T A} + \beta`,
   '$$',
   String.raw`Inline $E=mc^2$ formula.`,
   '',
@@ -91,38 +102,30 @@ try{
       const comment=await inspect('ocr2md:latex',['cm-ob-syntax-html-comment']);
       assert.equal(comment['cm-ob-syntax-html-comment'].color,'rgb(133, 146, 137)');
       const math=await inspect('\\frac{',['cm-ob-syntax-math-fence',
-        'cm-ob-syntax-math-command','cm-ob-syntax-math-bracket',
-        'cm-ob-syntax-math-script','cm-ob-syntax-math-number',
-        'cm-ob-syntax-math-operator','cm-ob-syntax-math-body']);
-      const colorMap={
-        'cm-ob-syntax-math-fence':'rgb(90, 147, 162)',
-        'cm-ob-syntax-math-command':'rgb(127, 187, 179)',
-        'cm-ob-syntax-math-bracket':'rgb(154, 167, 157)',
-        'cm-ob-syntax-math-script':'rgb(214, 153, 182)',
-        'cm-ob-syntax-math-number':'rgb(219, 188, 127)',
-        'cm-ob-syntax-math-operator':'rgb(131, 192, 146)',
-        'cm-ob-syntax-math-body':'rgb(211, 198, 170)',
-      };
-      for(const [cls,color] of Object.entries(colorMap))
-        assert.equal(math[cls].color,color,name+' '+cls);
-      const mathStyle=await page.locator('#editor .cm-ob-syntax-math-command')
-        .first().evaluate(el=>getComputedStyle(el).fontStyle);
-      assert.equal(mathStyle,'italic');
-      assert(math['cm-ob-syntax-math-command'].text.includes('\\frac'));
-      const inline=await inspect('E=mc^2',['cm-ob-syntax-math-script',
-        'cm-ob-syntax-math-fence']);
+        'cm-ob-syntax-math-body']);
+      assert.equal(math['cm-ob-syntax-math-fence'].color,'rgb(90, 147, 162)');
+      const tokenSamples=await page.evaluate(()=>[...document.querySelectorAll('#editor .cm-line')]
+        .filter(el=>el.textContent.includes('\\frac{'))
+        .flatMap(line=>[...line.querySelectorAll('span[class]')].map(span=>({
+          text:span.textContent,cls:span.className,color:getComputedStyle(span).color})))
+        .filter(span=>['\\frac','\\alpha','\\mathsf','T','A','1','2'].includes(span.text)));
+      for(const cmd of ['\\frac','\\alpha','\\mathsf'])
+        assert(tokenSamples.some(t=>t.text===cmd && t.color==='rgb(229, 192, 123)'),
+          name+' official One Dark sTeX command '+cmd);
+      assert(tokenSamples.some(t=>t.text==='2'&&t.color==='rgb(209, 154, 102)'),
+        name+' official One Dark sTeX numeric token');
+      // Official sTeX emits variableName.special for identifiers; CM6 may
+      // merge adjacent rendered spans, so do not assert a literal DOM span T.
+      assert(!tokenSamples.some(t=>t.cls.includes('cm-ob-syntax-math-command')),
+        'handwritten TeX token styles must not return');
+      const inline=await inspect('E=mc^2',['cm-ob-syntax-math-fence']);
       assert(inline['cm-ob-syntax-math-fence'].text.includes('$'));
-      assert.equal(inline['cm-ob-syntax-math-script'].color,'rgb(214, 153, 182)');
       await page.evaluate(()=>{
         const view=window.__v6cm6.view,at=view.state.doc.toString().indexOf('\\sqrt{');
         view.dispatch({selection:{anchor:at},scrollIntoView:true});
       });
       await page.waitForFunction(()=>[...document.querySelectorAll('#editor .cm-line')]
-        .some(line=>line.textContent.includes('\\sqrt{')&&
-          line.querySelector('.cm-ob-syntax-math-command')),null,{timeout:13000});
-      const fencedCommand=await page.locator('#editor .cm-line').filter({hasText:'\\sqrt{'})
-        .locator('.cm-ob-syntax-math-command').allTextContents();
-      assert(fencedCommand.includes('\\sqrt'),name+' fenced math command should be highlighted');
+        .some(line=>line.textContent.includes('\\sqrt{')),null,{timeout:13000});
       const fenceLines=await page.locator('#editor .cm-line').filter({hasText:'```math'})
         .locator('.cm-ob-syntax-math-fence').allTextContents();
       assert(fenceLines.some(text=>text.includes('math')),name+' fenced math delimiter should be colored');

@@ -1,12 +1,15 @@
-/** Syntax-only CM6 decoration layer, matching Obsidian's actual source rules.
- * Markdown's Lezer tree locates HTML without touching fenced code or evidence.
- * The existing read-only LaTeX scanner locates math; tokenize only the
- * visible neighborhood so typing in a long CMB never rescans the whole book.
- * No new document state, Markdown writer, or business API.
+/** CM6 read-only source decorations. Markdown/HTML uses the existing Lezer
+ * parser and Obsidian CSS; LaTeX uses CodeMirror's official sTeX lexer and
+ * One Dark token theme within already-recognized formula ranges. Visible
+ * neighborhoods only: no new Markdown state, writer or business API.
  */
 import {Decoration,ViewPlugin} from '@codemirror/view';
 import {markdownLanguage} from '@codemirror/lang-markdown';
+import {StreamLanguage} from '@codemirror/language';
 import {htmlLanguage} from '@codemirror/lang-html';
+import {stexMath} from '@codemirror/legacy-modes/mode/stex';
+import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
+import {highlightTree} from '@lezer/highlight';
 import {findLatex} from './latex-scan.js';
 
 const classMark=name=>Decoration.mark({class:'cm-ob-syntax-'+name});
@@ -15,10 +18,9 @@ const htmlKinds=Object.freeze({
   TagName:'html-tag',AttributeName:'html-attr',
   AttributeValue:'html-value',Is:'html-punct',SelfCloseEndTag:'html-punct',
 });
-// Only tokenize spans that the existing CMD LaTeX scanner has already
-// identified. The source scanner owns math boundaries; this lexer only
-// provides visual token categories, with no editing or Markdown rewriting.
-const mathToken=/\\[a-zA-Z]+\*?|\\[^a-zA-Z\s]|\d+(?:\.\d+)?|[{}\[\]()]|[_^]|[=+\-*/<>]/g;
+// Official CodeMirror sTeX math mode provides tokens. The CMD scanner only
+// selects LaTeX source spans; no independent handwritten TeX lexer remains.
+const stexParser=StreamLanguage.define(stexMath).parser;
 
 function append(marks,decoration,from,to,visible){
   if(from>=to)return;
@@ -107,24 +109,22 @@ function mathMarks(view,visible,marks){
       bodyTo=Math.max(bodyFrom,ending.from-1);
     }
     if(bodyTo<=bodyFrom)continue;
-    // Keep the familiar Obsidian math body, but distinguish LaTeX lexical
-    // elements using *actual* Everforest code syntax roles. Coloring the
-    // whole formula with --code-normal alone hid the syntax from the user.
+    // Official sTeX parser AND official One Dark semantic style: neither
+    // token boundaries nor token colors are hand-maintained by OCR2MD.
+    // Only non-token whitespace/text gets a subdued math-body mark.
     const body=doc.sliceString(bodyFrom,bodyTo);
-    mathToken.lastIndex=0;
-    let last=0,token;
-    while((token=mathToken.exec(body))!==null){
-      if(token.index>last)
-        append(marks,classMark('math-body'),bodyFrom+last,
-          bodyFrom+token.index,visible);
-      const value=token[0];
-      const kind=value.startsWith('\\')?'math-command':
-        /^\d/.test(value)?'math-number':
-        value==='^'||value==='_'?'math-script':
-        /^[{}\[\]()]$/.test(value)?'math-bracket':'math-operator';
-      append(marks,classMark(kind),bodyFrom+token.index,
-        bodyFrom+token.index+value.length,visible);
-      last=mathToken.lastIndex;
+    const tokens=[];
+    highlightTree(stexParser.parse(body),[oneDarkHighlightStyle],(start,end,style)=>{
+      if(start<end&&style)tokens.push({from:start,to:end,style});
+    });
+    let last=0;
+    for(const token of tokens){
+      if(token.from<last)continue;
+      if(token.from>last)append(marks,classMark('math-body'),
+        bodyFrom+last,bodyFrom+token.from,visible);
+      append(marks,Decoration.mark({class:token.style}),
+        bodyFrom+token.from,bodyFrom+token.to,visible);
+      last=token.to;
     }
     if(last<body.length)
       append(marks,classMark('math-body'),bodyFrom+last,bodyTo,visible);

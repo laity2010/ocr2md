@@ -4,6 +4,8 @@ import {createWCPRuntime} from './wcp-wcp-virtual-chapters.js';
 import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
+import {syntaxHighlighting} from '@codemirror/language';
+import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
 import {undo, redo, undoDepth, redoDepth} from '@codemirror/commands';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
@@ -431,6 +433,9 @@ async function main() {
       markdown({base:markdownLanguage}),
       mineruCommentFolding,
       obsidianMarkdown,
+      // Keep Obsidian/Everforest the primary Markdown highlighter. One Dark
+      // contributes its official token CSS only for the nested sTeX ranges.
+      syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
       obsidianSourceSyntax,
       obsidianHeadingMarkers,
       outlineLineHighlight,

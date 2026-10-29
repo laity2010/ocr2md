@@ -22,7 +22,7 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 - **MinerU 无损审阅注释**：原始 JSON 的 `discarded_blocks`（页眉、页脚、页码、侧栏、页脚注释等）、与正文不同的 `preproc_blocks` 及版面元数据，按 PDF 页附于 Markdown 的 HTML 注释中，包含 OCR 文字、坐标和完整结构；正文不混入未审阅的附属内容。原始 JSON 仍压缩保留、可逆还原。对现有已编辑母文档采取仅插入注释的迁移，保留原有章节标定。
 - **工程菜单**：点击顶栏版本标牌可以选择「初始化数据文档」。经编辑授权和确认后，先备份已保存的母文档，再恢复原始转换样本并重载工作台（撤销历史重新开始）；未保存的编辑不在备份中。此前导出的 `chapters/` 不会被此操作删除。
 
-当前界面使用 Everforest 深色风格和完整 Sarasa Fixed SC 字体；Mac Chrome/WebKit 支持模拟 iPad 横屏检查，最终触控体验仍以真实 iPad Safari 验收为准。
+当前界面使用 Everforest 深色风格和完整 Sarasa Fixed SC 字体。**源码着色分工**：Markdown 沿用本机 Obsidian/Everforest；HTML 使用 CodeMirror/Lezer 官方解析；LaTeX 在现有 CMD 公式扫描器的只读范围内，使用官方 `@codemirror/legacy-modes` 的 `stexMath` 识别语法、`@codemirror/theme-one-dark` 的 `oneDarkHighlightStyle` 着色。One Dark 仅用作语法令牌样式，不替换 Markdown 主题、不修改正文或引入第二编辑器。Mac Chrome/WebKit 支持模拟 iPad 横屏检查，最终触控体验仍以真实 iPad Safari 验收为准。
 
 ## 结构与数据
 
