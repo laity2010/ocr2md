@@ -1,5 +1,5 @@
-/** Main continuous deployment: new release reloads immediately without saving dirty buffers.
- * Uses isolated production HTTP service and real Chrome/iPad WebKit, never user data.
+/** A release refreshes a clean Main, while unsaved CM6 / Settings remain safe.
+ * Isolated production HTTP in Chrome/iPad WebKit; no real user-data writes.
  */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -40,9 +40,14 @@ const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...
   V6_TOKEN_PATH:auth,V6_STATIC_ROOT:resolve('dist')},stdio:'ignore'});
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function runScenario(name,engine,device,scenario){
+ // Each browser scenario starts from independent, clean disposable bytes.
+ writeFileSync(doc,original);
+ if(existsSync(settingsFile))rmSync(settingsFile);
  const browser=await engine.launch({headless:true});
  try{
   const page=await browser.newPage(device);
+  await page.context().addCookies([{name:'v6edit',value:readFileSync(auth,'utf8'),
+    domain:'127.0.0.1',path:'/'}]);
   const errors=[],dialogs=[],writes=[];
   let navigations=0,reported=version;
   page.on('pageerror',error=>errors.push(error.message));
@@ -62,7 +67,7 @@ async function runScenario(name,engine,device,scenario){
     await page.locator('#editor .cm-content').click({position:{x:55,y:35}});
     await page.keyboard.type('UNSAVED_MAIN_RELEASE_BUFFER');
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('未保存'));
-  }else{
+  }else if(scenario==='settings'){
     await page.locator('#module-select').evaluate(el=>{
       el.value='settings';el.dispatchEvent(new Event('change',{bubbles:true}));
     });
@@ -76,19 +81,38 @@ async function runScenario(name,engine,device,scenario){
   }
   assert.equal(navigations,1);
   reported=newer;
-  // The running page must detect the new build in <=5 seconds and replace itself,
-  // even when both buffer and dialogs would formerly block updates.
+  if(scenario==='wake')await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  if(scenario==='markdown'||scenario==='settings'){
+    // The running page must discover the new release without reloading or
+    // silently discarding unsaved text/settings. User explicitly saves first.
+    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('新版本已上线'),
+      null,{timeout:16000});
+    await wait(6200); // Wait through at least one additional release poll.
+    assert.equal(navigations,1,`${name} ${scenario}: dirty content was discarded by release reload`);
+    assert.deepEqual(writes,[],`${name} ${scenario}: background release attempted a write`);
+    assert.equal(readFileSync(doc,'utf8'),original,'Release must not write source before user saves');
+    assert.equal(existsSync(settingsFile),false,'Release must not write settings before user saves');
+    await page.locator('#save').click();
+  }
   const deadline=Date.now()+28000;
   while(navigations<2&&Date.now()<deadline)await wait(250);
-  assert(navigations>=2,`${name} ${scenario}: release reload blocked by unsaved state`);
+  assert(navigations>=2,`${name} ${scenario}: clean or saved page did not auto-update`);
   await page.locator('#editor .cm-editor').waitFor({state:'visible',timeout:30000});
-  assert.deepEqual(dialogs,[],`${name} ${scenario}: automatic reload should not ask to save`);
-  assert.deepEqual(writes,[],`${name} ${scenario}: automatic reload must not save drafts`);
-  assert.equal(readFileSync(doc,'utf8'),original,'User data changed on release reload');
-  assert.equal(existsSync(settingsFile),false,'Unsaved Settings must not be written by auto-reload');
+  assert.deepEqual(dialogs,[],`${name} ${scenario}: unexpected browser confirmation`);
+  if(scenario==='markdown'){
+    assert(readFileSync(doc,'utf8').includes('UNSAVED_MAIN_RELEASE_BUFFER'),
+      `${name}: CMD edits were not saved before release reload`);
+  }else{
+    assert.equal(readFileSync(doc,'utf8'),original,'Release mutated unrelated CMD source');
+  }
+  if(scenario==='settings')assert(existsSync(settingsFile),'Settings edits were lost on update');
+  if(scenario==='clean'||scenario==='wake')
+    assert.deepEqual(writes,[],`${name} ${scenario}: clean auto reload made a write`);
   assert.deepEqual(errors,[],`${name} ${scenario}: unexpected browser errors`);
-  console.log('MAIN_AUTO_RELEASE_PASS',name,scenario,JSON.stringify({navigations,autoReload:true,
-    browserDraftDiscarded:true,serverDataUnmodified:true,dialogs,writes,errors}));
+  console.log('MAIN_AUTO_RELEASE_PASS',name,scenario,JSON.stringify({navigations,
+    cleanAutomaticReload:scenario==='clean'||scenario==='wake',
+    dirtyDeferredUntilSave:scenario==='markdown'||scenario==='settings',
+    draftsPreserved:true,dialogs,writes,errors}));
  }finally{await browser.close();}
 }
 try{
@@ -100,7 +124,8 @@ try{
  assert(ready,'isolated production server not ready');
  for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1320,height:840}}],
   ['iPad-WebKit',webkit,{viewport:{width:1024,height:768},isMobile:true,hasTouch:true}]]){
-  for(const scenario of ['markdown','settings'])await runScenario(name,engine,device,scenario);
+  for(const scenario of ['clean','wake','markdown','settings'])
+    await runScenario(name,engine,device,scenario);
  }
- console.log('MAIN_AUTO_RELEASE_4_OF_4_PASS');
+ console.log('MAIN_AUTO_RELEASE_8_OF_8_PASS');
 }finally{server.kill('SIGTERM');rmSync(temp,{force:true,recursive:true});}

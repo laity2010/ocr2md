@@ -40,9 +40,6 @@ let saveConflict = false;
 let revision = 0;
 let saving = false, exporting = false, initializing = false, afterUnlock = null;
 let allowInitializeReload = false;
-// Main is a continuously deployed development workbench: release reloads may
-// discard unsaved browser buffers. Ordinary user navigation still warns.
-let allowReleaseReload = false;
 let canSave = import.meta.env.DEV ? true : null;
 let pendingUpdate = false;
 let releaseReloadRequested = false;
@@ -77,19 +74,28 @@ function renderGlobalStatus() {
 const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));
 function applyPendingUpdate() {
   if (!pendingUpdate || releaseReloadRequested) return;
-  // Do not interrupt an in-flight write; it must complete or fail before
-  // the release takes over. Unsaved local CM6/Settings edits and open dialogs
-  // are NOT a release gate in the constantly updated Main workbench.
+  // The server has a new bundle, but CM6 and Settings own unsaved buffers.
+  // Never silently discard edits or an in-flight write on a release change.
   if (saving || exporting || initializing || buttons.save.disabled) return;
+  if (hasUnsavedEdits() || settings?.hasUnsaved()) {
+    status('● 新版本已上线 · 请先保存未保存内容，随后自动更新','warning');
+    return;
+  }
+  if (document.querySelector('dialog[open]')) {
+    status('● 新版本已上线 · 关闭当前对话框后自动更新','warning');
+    return;
+  }
   releaseReloadRequested = true;
-  allowReleaseReload = true;
   window.location.reload();
 }
 async function checkForNewBuild() {
-  if (checkingVersion || !view || document.hidden) return;
+  if (checkingVersion || releaseReloadRequested || !view || document.hidden) return;
   checkingVersion = true;
   try {
-    const res = await fetch(appPath('/healthz'), {cache:'no-store'});
+    // A stalled network fetch must not lock the poller forever on mobile.
+    const res = await fetch(appPath('/healthz'), {
+      cache:'no-store',signal:AbortSignal.timeout(7000),
+    });
     if (!res.ok) return;
     const {version} = await res.json();
     if (version && version !== currentBuild) {
@@ -634,7 +640,7 @@ async function main() {
     }
   });
   window.addEventListener('beforeunload',event=>{
-    if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload&&!allowReleaseReload) {event.preventDefault(); event.returnValue='';}
+    if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload) {event.preventDefault(); event.returnValue='';}
   });
   window.addEventListener('pagehide',()=>{
     unsubscribeOutlineFocus();
@@ -688,6 +694,12 @@ async function main() {
   document.addEventListener('visibilitychange',() => {
     if (!document.hidden) void checkForNewBuild();
   });
+  // Safari can freeze/restore a page without changing document.hidden.
+  window.addEventListener('pageshow',()=>void checkForNewBuild());
+  window.addEventListener('focus',()=>void checkForNewBuild());
+  window.addEventListener('online',()=>void checkForNewBuild());
+  // If a save was blocked by an open dialog, resume after it is closed.
+  document.addEventListener('close',()=>applyPendingUpdate(),true);
   void checkForNewBuild();
 }
 main().catch(error=>status('加载失败：'+(error?.message||String(error)),'error'));
