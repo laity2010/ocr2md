@@ -893,9 +893,18 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Source Markdown code fence action is planned in Layout and committed only
 -- through the existing guarded CMD replaceRanges port.
 INSERT INTO apis VALUES
- ('L33','L','planFencedBlock','ui/source-fence-plan.js','export','source string,selected range [from,to)','guarded atomic Markdown code-fence insertion plan','expands nonempty selection to whole lines; adapts fence delimiter to embedded backticks; empty caret inserts blank fence',1);
+ ('L33','L','planFencedBlock','ui/source-fence-plan.js','export','source string,selected range [from,to),optional language','guarded atomic Markdown code-fence insertion plan','expands nonempty selection to whole lines; validates language; adapts embedded backticks; empty caret inserts blank fence',1);
 INSERT INTO access_edges VALUES
- ('X-SRC-L33','L','L','ui/source-line-callout-menu.js','planFencedBlock(view.state.doc.toString(),range.from,range.to)','L33','registered','Layout plans fenced block while source writes remain CMD-owned');
+ ('X-SRC-L33','L','L','ui/source-line-callout-menu.js','planFencedBlock(view.state.doc.toString(),range.from,range.to,fenceLanguage.value)','L33','registered','Layout plans fenced block while source writes remain CMD-owned');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-L33-FENCE','L33','tests/source-fence-plan.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','9 pure cases: empty caret, partial/full lines, backticks, invalid ranges and source-byte preservation','direct'),
- ('TC-L33-FENCE-BR','L33','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit real gutter menu blank/selection fence, one CMD transaction and explicit save/reload/evidence safety','integration');
+ ('TC-L33-FENCE','L33','tests/source-fence-plan.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','12 pure cases plus language validation, partial/full lines, backticks and unchanged source bytes','direct'),
+ ('TC-L33-FENCE-BR','L33','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit gutter menu language form, blank/selection fence, one CMD transaction and Save/reload/evidence safety','integration');
+
+-- Read-only Markdown preview syntax highlighting and language-aware source planner.
+INSERT INTO apis VALUES
+ ('M13','M','highlightCodeFence','ui/code-fence-highlight.js','export','source code,language tag','escaped, optional syntax-colored pre/code HTML','registered highlight.js languages only, unknown tags remain escaped; fenced math stays under KaTeX',1);
+INSERT INTO access_edges VALUES
+ ('X-M13-PREV','M','M','ui/markdown-preview.js','highlight:highlightCodeFence','M13','registered','Markdown-it preview renders registered code syntax only');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-M13-SYNTAX','M13','tests/code-fence-highlight.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Python/JSON/HTML/JS highlighted; unknown uncolored; HTML escaped; deterministic output','direct'),
+ ('TC-M13-BROWSER','M13','tests/code-fence-highlight.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit highlight theme styled, DOMPurify safety, source maps and KaTeX unchanged','integration');

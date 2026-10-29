@@ -15,10 +15,13 @@ const blankAfter=after=>!after?'\n':after.startsWith('\n\n')?'':
  * can end up embedded within a paragraph. An empty caret inserts a blank
  * fenced block at that exact offset. All source outside the edit is intact.
  */
-export function planFencedBlock(doc,from,to=from){
+export function planFencedBlock(doc,from,to=from,language=''){
   if(typeof doc!=='string'||!Number.isInteger(from)||!Number.isInteger(to)||
      from<0||to<from||to>doc.length)
     throw Error('无效的源码选区');
+  const lang=String(language??'').trim().toLowerCase();
+  if(!/^[a-z0-9_+#.-]{0,32}$/.test(lang))
+    throw Error('围栏语言只能使用字母、数字和 _ + # . -（最多32字符）');
   let start=from,end=to;
   if(to>from){
     start=doc.lastIndexOf('\n',from-1)+1;
@@ -29,7 +32,7 @@ export function planFencedBlock(doc,from,to=from){
   const before=doc.slice(0,start),after=doc.slice(end),body=doc.slice(start,end);
   const fence=fenceFor(body);
   const prefix=blankBefore(before),suffix=blankAfter(after);
-  const insert=prefix+fence+'\n'+body+'\n'+fence+suffix;
-  const cursorAfter=start+prefix.length+fence.length+1;
+  const insert=prefix+fence+lang+'\n'+body+'\n'+fence+suffix;
+  const cursorAfter=start+prefix.length+fence.length+lang.length+1;
   return Object.freeze({from:start,to:end,expected:body,insert,cursorAfter});
 }

@@ -24,6 +24,13 @@ check(protectedFence,7,31,'before\n\n````\n```js\nconsole.log(2)\n```\n````\n\na
 const more='```\n``````\n```';
 const escaped=check(more,0,more.length,'```````\n'+more+'\n```````\n',more);
 assert(escaped.insert.startsWith('```````'));
+assert.equal(planFencedBlock('',0,0,'python').insert,'```python\n\n```\n');
+assert.equal(planFencedBlock('x\nprint(1)\ny',2,10,'  PYTHON ').insert,
+  '\n```python\nprint(1)\n```\n');
+assert.equal(planFencedBlock('x',1,1,'JSON').insert,'\n\n```json\n\n```\n');
+for(const invalid of ['bad lang','<svg>','py`','x'.repeat(33),'py\ncode'])
+  assert.throws(()=>planFencedBlock('hello',0,0,invalid),/语言/);
+
 for(const args of [['hi',-1,0],['hi',0,3],['hi',1,0],['hi',1.5,2],['hi',1,'2']])
   assert.throws(()=>planFencedBlock(...args),/选区/);
-console.log('SOURCE_FENCE_PLAN_PASS 9');
+console.log('SOURCE_FENCE_PLAN_PASS 12 and language validation');

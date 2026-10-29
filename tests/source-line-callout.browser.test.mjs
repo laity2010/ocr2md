@@ -128,6 +128,8 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     await button.click();
     assert.equal(await menu.getByRole('menuitem').count(),4);
     await menu.getByRole('menuitem',{name:'插入围栏块'}).click();
+    assert(await menu.getByRole('textbox',{name:'围栏语言'}).isVisible());
+    await menu.getByRole('button',{name:'插入',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .includes('```'),null,{timeout:12000});
     // Select the original entire beta paragraph, then wrap it. Gutter click
@@ -138,6 +140,11 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     await button.click();
     assert.match(await menu.locator('.ocr-source-line-menu-summary').textContent(),/已选 1 行/);
     await menu.getByRole('menuitem',{name:'插入围栏块'}).click();
+    const language=menu.getByRole('textbox',{name:'围栏语言'});
+    await language.fill('python');
+    assert.match(await menu.locator('.ocr-source-line-menu-summary').textContent(),/已选 1 行/,
+      'editing fence language lost the CM6 selection');
+    await menu.getByRole('button',{name:'插入',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .includes('Paragraph beta remains intact.'),null,{timeout:12000});
     assert.equal(readFileSync(doc,'utf8'),original,'pre-Save disk changes');
@@ -147,7 +154,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     const saved=readFileSync(doc,'utf8');
     assert(saved.includes('[!note]- 标题'));
     assert.equal(saved.split('[!note]- 标题').length-1,2);
-    assert(saved.includes('```\nParagraph beta remains intact.\n```'),
+    assert(saved.includes('```python\nParagraph beta remains intact.\n```'),
       'selected content not wrapped by a valid fence');
     assert(saved.includes('```\n\n```'), 'empty fence was not inserted');
     assert(saved.includes('Paragraph beta remains intact.'));
@@ -159,7 +166,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:17000});
     assert.deepEqual(errors,[],name+' browser errors');
     console.log('SOURCE_LINE_CALLOUT_BROWSER_PASS',name,
-      JSON.stringify({singleActiveGutterButton:true,fourMenuItems:true,emptyFence:true,selectedFence:true,nonOverlappingWrappedLine:true,anchoredPopup:true,undoRedo:true,
+      JSON.stringify({singleActiveGutterButton:true,fourMenuItems:true,languageInput:true,emptyFence:true,selectedFence:true,nonOverlappingWrappedLine:true,anchoredPopup:true,undoRedo:true,
         explicitSave:true,reload:true,evidenceUnchanged:true}));
   }finally{await browser?.close();server.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}
 }

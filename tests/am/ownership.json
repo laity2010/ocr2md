@@ -22,6 +22,7 @@
     "latex-scan.js": "T",
     "main.js": "shell",
     "markdown-preview.js": "M",
+    "code-fence-highlight.js": "M",
     "media-module.js": "A",
     "mineru-anchors.js": "shared",
     "mineru-comment-folding.js": "shell",

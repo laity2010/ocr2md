@@ -44,6 +44,14 @@
   font:inherit;
 }
 .ocr-markdown pre code {font:inherit;}
+/* highlight.js owns syntax tokens only; reading layout stays Everforest. */
+.ocr-markdown pre.ocr-code-fence {padding:0;overflow-x:auto;background:#272f34;}
+.ocr-markdown pre.ocr-code-fence code.hljs {
+  display:block;padding:12px;white-space:pre;background:transparent;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.93em;line-height:1.55;
+}
+
 .ocr-markdown img {max-width:100%;height:auto;display:block;margin:1em auto;}
 /* Book-table reading skin: native HTML + CSS only.
  * Visual reference: MIT Water.css (kognise) and Simple.css (kevquirk).

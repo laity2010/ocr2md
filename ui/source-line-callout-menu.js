@@ -74,19 +74,47 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   const fence=document.createElement('button');
   fence.type='button';fence.setAttribute('role','menuitem');
   fence.textContent='插入围栏块';
+  fence.setAttribute('aria-expanded','false');
+  const fenceForm=document.createElement('form');
+  fenceForm.className='ocr-source-fence-editor';
+  fenceForm.setAttribute('role','group');
+  fenceForm.setAttribute('aria-label','围栏语言设置');
+  fenceForm.hidden=true;
+  const fenceLabel=document.createElement('label');
+  fenceLabel.textContent='语言（可选）';
+  const fenceLanguage=document.createElement('input');
+  fenceLanguage.className='ocr-source-fence-language';
+  fenceLanguage.type='text';fenceLanguage.placeholder='python / json / html';
+  fenceLanguage.maxLength=32;fenceLanguage.autocomplete='off';
+  fenceLanguage.spellcheck=false;
+  fenceLanguage.setAttribute('autocapitalize','none');
+  fenceLanguage.setAttribute('aria-label','围栏语言');
+  fenceLabel.append(fenceLanguage);
+  const fenceError=document.createElement('div');
+  fenceError.className='ocr-source-fence-error';fenceError.setAttribute('role','alert');
+  const fenceActions=document.createElement('div');
+  fenceActions.className='ocr-source-fence-actions';
+  const fenceCancel=document.createElement('button');
+  fenceCancel.type='button';fenceCancel.textContent='取消';
+  const fenceConfirm=document.createElement('button');
+  fenceConfirm.type='submit';fenceConfirm.textContent='插入';
+  fenceActions.append(fenceCancel,fenceConfirm);
+  fenceForm.append(fenceLabel,fenceError,fenceActions);
   const increase=document.createElement('button');
   increase.type='button';increase.setAttribute('role','menuitem');
   increase.textContent='>+ 增加引用层级';increase.dataset.direction='1';
   const decrease=document.createElement('button');
   decrease.type='button';decrease.setAttribute('role','menuitem');
   decrease.textContent='>− 减少引用层级';decrease.dataset.direction='-1';
-  menu.append(summary,insert,fence,increase,decrease);host.append(menu);
+  menu.append(summary,insert,fence,fenceForm,increase,decrease);host.append(menu);
   function close(){
     viewportAnchorToken++;
     for(const timer of viewportTimers)clearTimeout(timer);
     viewportTimers.clear();
     menu.hidden=true;
     menu.style.maxHeight='';
+    fenceForm.hidden=true;fenceLanguage.value='';fenceError.textContent='';
+    fence.setAttribute('aria-expanded','false');
     activeButton?.setAttribute('aria-expanded','false');
     activeButton=null;target=null;pressSelection=null;
   }
@@ -195,11 +223,28 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   });
   fence.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();
+    fenceForm.hidden=false;
+    fence.setAttribute('aria-expanded','true');
+    positionMenu();
+    fenceLanguage.focus({preventScroll:true});
+  });
+  fenceCancel.addEventListener('click',event=>{
+    event.preventDefault();event.stopPropagation();
+    fenceForm.hidden=true;fenceError.textContent='';
+    fence.setAttribute('aria-expanded','false');
+    positionMenu();fence.focus({preventScroll:true});
+  });
+  fenceLanguage.addEventListener('input',()=>{fenceError.textContent='';});
+  fenceForm.addEventListener('submit',event=>{
+    event.preventDefault();event.stopPropagation();
     const captured=target;
-    close();
-    if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
+    if(!captured||!view.state.doc.eq(captured.snapshot)){close();return;}
     const range=captured.selection.main;
-    const plan=planFencedBlock(view.state.doc.toString(),range.from,range.to);
+    let plan;
+    try{plan=planFencedBlock(view.state.doc.toString(),range.from,range.to,fenceLanguage.value);}
+    catch(error){fenceError.textContent=error.message;positionMenu();return;}
+    close();
+    if(!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
     onBeforeSourceEdit();
     onInsert(plan,'fence');
   });
@@ -239,13 +284,13 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   };
   document.addEventListener('pointerdown',outside);
   document.addEventListener('keydown',escape);
-  window.addEventListener('resize',close);
+  window.addEventListener('resize',positionMenu);
   return Object.freeze({
     dispose(){
       disposed=true;close();view.dispatch({effects:instance.reconfigure([])});
       document.removeEventListener('pointerdown',outside);
       document.removeEventListener('keydown',escape);
-      window.removeEventListener('resize',close);menu.remove();
+      window.removeEventListener('resize',positionMenu);menu.remove();
     },
   });
 }

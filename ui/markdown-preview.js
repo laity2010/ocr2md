@@ -10,12 +10,15 @@ import DOMPurify from 'dompurify';
 import {installObsidianImages} from './obsidian-images.js';
 import {installObsidianCallouts} from './obsidian-callouts.js';
 import {projectReviewedInlineLatex} from './latex-inline-preview.js';
+import {highlightCodeFence} from './code-fence-highlight.js';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import 'highlight.js/styles/github-dark.css';
 import './markdown-preview.css';
 
 const md = new MarkdownIt({
   html:true, linkify:true, breaks:false, typographer:false,
+  highlight:highlightCodeFence,
 }).use(footnote).use(taskLists, {enabled:false});
 
 // markdown-it-footnote owns link IDs and full note HTML. Annotate its list

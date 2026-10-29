@@ -38,3 +38,19 @@
 .ocr-source-line-menu button:hover,.ocr-source-line-menu button:focus-visible {
   background:#425450;color:#e0efd9;outline:none;
 }
+
+/* Compact progressive disclosure; form does not touch CM6 selection/state. */
+.ocr-source-fence-editor {padding:8px 7px 6px;width:205px;max-width:100%;box-sizing:border-box;}
+.ocr-source-fence-editor[hidden]{display:none}
+.ocr-source-fence-editor label {display:block;color:#aab9ad;font-size:12px;line-height:1.55;}
+.ocr-source-fence-editor input {
+  display:block;box-sizing:border-box;width:100%;margin:5px 0 0;
+  padding:7px;border:1px solid #668474;border-radius:4px;
+  background:#232d31;color:#e3e5dd;font:inherit;font-size:13px;
+}
+.ocr-source-fence-editor input:focus-visible {outline:2px solid #a7c080;outline-offset:0;}
+.ocr-source-fence-actions {display:flex;gap:5px;margin-top:7px;}
+.ocr-source-fence-actions button {width:auto;flex:1;text-align:center;}
+.ocr-source-fence-actions button[type="submit"] {background:#456b57;color:#e4eedb;}
+.ocr-source-fence-error:empty {display:none}
+.ocr-source-fence-error {font-size:11px;color:#e67e80;margin-top:5px;}
