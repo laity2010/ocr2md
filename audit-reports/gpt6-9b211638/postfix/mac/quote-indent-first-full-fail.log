@@ -1,0 +1,16 @@
+QUOTE_INDENT_PASS Chrome {"titleLine":661,"quotedBlock":true,"outline":21,"PDF":true,"chapterIndex":true,"undoOneStep":true,"metadataProtected":true,"errors":0}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: caret gutter floated: before={"start":659,"end":661,"count":3,"summary":"已选 3 行 · 第 659–661 行","markerY":212.140625,"scrollTop":35397,"headLine":661,"reverse":false} after={"markerY":189.75,"summary":"已选 3 行 · 第 659–661 行","scrollTop":35397}
+    at quoteAction (file:///Users/daisor/AgentDock/ocr2md-am-gpt6-fixed-86c32a0-isolated/tests/quote-indent-browser.test.mjs:97:8)
+    at async file:///Users/daisor/AgentDock/ocr2md-am-gpt6-fixed-86c32a0-isolated/tests/quote-indent-browser.test.mjs:115:4 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '=='
+}
+
+Node.js v23.11.0

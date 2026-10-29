@@ -47,3 +47,7 @@ Suite 39 `tests/pdf-anchor-viewport-browser.test.mjs` proceeded past actual PDF 
 ### Linux isolated workspace root, WCP ports and settings server
 
 `linux/service-contracts.log` contains **four real PASS suites** with the exact same Node23/ARM64 fix SHA, all driven by disposable `/tmp` catalog/MD/JSON data. Key behavior: `V6_NODE_BIN` portable conversion even with empty PATH; rejection of missing Node; book root selection/one-child conversion; switching PDF; original MinerU JSON unmodified; stale document HTTP 412 and stale settings HTTP 409; WCP API bounded ports and forbid Lab module-graph overrides; CMD settings HTTP contract. No production-root write.
+
+### P1 WebKit source gutter **confirmed reproducible FAIL** (not repaired)
+
+Unchanged `tests/quote-indent-browser.test.mjs`: Chromium passes all quote semantics (source metadata, stable anchors/outline/PDF, Undo), but **iPad WebKit fails** the strict gutter position assertion: selected lines 659–661, before marker top `212.140625px`, after `189.75px`, displacement `-22.390625px` (threshold `<=5px`), with same scrollTop `35397`. This was first captured in `mac/quote-indent-first-full-fail.log`, then **reproduced exactly** in unchanged standalone `mac/quote-indent-standalone-repro.log`. This is a confirmed browser-specific UI regression, not a transient timeout. Do not weaken the test. Requires safe source gutter viewport anchoring correction and full double-browser regression before Main acceptance.
