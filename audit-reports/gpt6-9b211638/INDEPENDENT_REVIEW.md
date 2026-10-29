@@ -1,5 +1,8 @@
 # GPT-6 independent AM/Git audit — frozen OCR2MD V6 9b211638
 
+> **FINAL:** The interim gate status below is superseded by [FINAL_DECISION.md](FINAL_DECISION.md). Completed 57/57-suite Mac audit was **FAIL 235/240**; SOURCE_MERGE=NO, PRODUCTION_CUTOVER=NO.
+
+
 ## Immutable source, delivery and data isolation
 
 - GitHub: `https://github.com/laity2010/ocr2md`; public delivery `audit-public-9b211638` @ `f755ac947904c361d8148d6231b2fa778824a182`.
