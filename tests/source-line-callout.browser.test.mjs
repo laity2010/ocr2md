@@ -8,7 +8,7 @@ import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {chromium,webkit} from 'playwright';
 const original=[
-  '<!-- minerujson:block:v1:0:0 -->','# Chapter One','','Paragraph alpha has a cursor here.','',
+  '<!-- minerujson:block:v1:0:0 -->','# Chapter One','','Paragraph alpha has a cursor here. '+('Long line wraps in Markdown view. '.repeat(7)),'',
   '<!-- minerujson:block:v1:1:0 -->','# Chapter Two','','Paragraph beta remains intact.','',
   '<!-- minerujson:source:v1','{"originalEvidence":true}','-->','',
 ].join('\n');
@@ -59,10 +59,35 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       const button=document.querySelector('#editor .ocr-source-caret-line-button');
       const menu=document.querySelector('.ocr-source-line-menu');
       const a=button.getBoundingClientRect(),b=menu.getBoundingClientRect();
-      return {buttonRight:a.right,buttonTop:a.top,menuLeft:b.left,menuTop:b.top};
+      const textLine=[...document.querySelectorAll('#editor .cm-line')]
+        .find(node=>node.textContent.includes('Paragraph alpha has a cursor'));
+      const c=textLine.getBoundingClientRect();
+      return {buttonRight:a.right,buttonTop:a.top,menuLeft:b.left,menuTop:b.top,
+        menuBottom:b.bottom,lineTop:c.top,lineBottom:c.bottom,
+        placement:menu.dataset.placement,lineHeight:c.height,menuHeight:b.height};
     });
     assert(Math.abs(placement.menuLeft-placement.buttonRight)<15,'menu not anchored beside caret gutter');
-    assert(Math.abs(placement.menuTop-placement.buttonTop)<15,'menu not aligned with caret row');
+    assert(placement.lineHeight>25,'test line should soft-wrap on screen');
+    assert(placement.menuTop>=placement.lineBottom+6 ||
+      placement.menuBottom<=placement.lineTop-6,
+      'popup covers edited source line: '+JSON.stringify(placement));
+    // Quote changes expand and collapse source text while the menu stays open.
+    // The menu must continue clearing the whole wrapped caret line.
+    for(const label of ['>+ 增加引用层级','>− 减少引用层级']){
+      await menu.getByRole('menuitem',{name:label,exact:true}).click();
+      await page.waitForTimeout(170); // deferred wrapped-line height correction
+      assert(await menu.isVisible(),'quote action closed the gutter menu');
+      const geometry=await page.evaluate(()=>{
+        const rect=[...document.querySelectorAll('#editor .cm-line')]
+          .find(node=>node.textContent.includes('Paragraph alpha has a cursor'))
+          .getBoundingClientRect();
+        const popup=document.querySelector('.ocr-source-line-menu').getBoundingClientRect();
+        return {lineTop:rect.top,lineBottom:rect.bottom,popupTop:popup.top,popupBottom:popup.bottom};
+      });
+      assert(geometry.popupTop>=geometry.lineBottom+6 ||
+        geometry.popupBottom<=geometry.lineTop-6,
+        'popup moved over edited line: '+JSON.stringify(geometry));
+    }
     await page.keyboard.press('Escape');
     assert.equal(await menu.isVisible(),false);
     await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact'}).click();
@@ -112,7 +137,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:17000});
     assert.deepEqual(errors,[],name+' browser errors');
     console.log('SOURCE_LINE_CALLOUT_BROWSER_PASS',name,
-      JSON.stringify({singleActiveGutterButton:true,threeMenuItems:true,anchoredPopup:true,undoRedo:true,
+      JSON.stringify({singleActiveGutterButton:true,threeMenuItems:true,nonOverlappingWrappedLine:true,anchoredPopup:true,undoRedo:true,
         explicitSave:true,reload:true,evidenceUnchanged:true}));
   }finally{await browser?.close();server.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}
 }

@@ -82,11 +82,42 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
     for(const timer of viewportTimers)clearTimeout(timer);
     viewportTimers.clear();
     menu.hidden=true;
+    menu.style.maxHeight='';
     activeButton?.setAttribute('aria-expanded','false');
     activeButton=null;target=null;pressSelection=null;
   }
   function refreshSummary(){
     summary.textContent=summarizeSourceLineSelection(view.state.doc,view.state.selection).text;
+  }
+  /** Position the popup outside the ENTIRE current source line, including
+   * multi-row soft wraps. The gutter button itself is too short an anchor:
+   * positioning at its top hides exactly the line being edited. */
+  function positionMenu(){
+    if(menu.hidden||!activeButton)return;
+    const offset=view.state.selection.main.head;
+    const sourceLine=view.state.doc.lineAt(offset);
+    let lineRect=null;
+    try{
+      const node=view.domAtPos(sourceLine.from).node;
+      const el=node instanceof Element?node:node.parentElement;
+      lineRect=el?.closest('.cm-line')?.getBoundingClientRect()??null;
+    }catch{}
+    const buttonRect=activeButton.getBoundingClientRect();
+    const sourceRect=lineRect??buttonRect;
+    const gap=8,edge=6;
+    const menuWidth=menu.offsetWidth;
+    const naturalHeight=menu.scrollHeight;
+    const below=Math.max(0,innerHeight-edge-sourceRect.bottom-gap);
+    const above=Math.max(0,sourceRect.top-gap-edge);
+    const placeBelow=below>=naturalHeight || below>=above;
+    const freeSpace=placeBelow?below:above;
+    // Extremely small mobile viewports still need a usable popup. Scroll
+    // menu items on the chosen side instead of drawing over the active line.
+    menu.style.maxHeight=Math.max(0,freeSpace)+'px';
+    menu.style.left=Math.max(edge,Math.min(buttonRect.right+5,innerWidth-menuWidth-edge))+'px';
+    menu.style.top=(placeBelow?sourceRect.bottom+gap:sourceRect.top-gap-
+      Math.min(naturalHeight,freeSpace))+'px';
+    menu.dataset.placement=placeBelow?'below':'above';
   }
   function keepCaretRowVisibleAt(screenY){
     if(!Number.isFinite(screenY))return;
@@ -102,6 +133,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
         if(!row)return;
         const delta=row.getBoundingClientRect().top-screenY;
         if(Math.abs(delta)>1)view.scrollDOM.scrollTop+=delta;
+        positionMenu();
       },delay);
       viewportTimers.add(timer);
     }
@@ -135,10 +167,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
     refreshSummary();
     button.setAttribute('aria-expanded','true');
     menu.hidden=false;
-    const box=button.getBoundingClientRect();
-    const menuWidth=menu.offsetWidth,menuHeight=menu.offsetHeight;
-    menu.style.left=Math.max(6,Math.min(box.right+5,innerWidth-menuWidth-6))+'px';
-    menu.style.top=Math.max(6,Math.min(box.top,innerHeight-menuHeight-6))+'px';
+    positionMenu();
   }
   const gutter= lineNumberMarkers.compute(['selection'],state=>{
     const offset=state.selection.main.head;
@@ -181,6 +210,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
         target={snapshot:view.state.doc,offset:view.state.selection.main.head,
           selection:view.state.selection};
         refreshSummary();
+        positionMenu();
         keepCaretRowVisibleAt(caretY);
       }finally{actionInProgress=false;}
     });
