@@ -19,3 +19,17 @@ All **five unchanged browser suites** printed real Chromium and WebKit PASS in `
 5. `note-pair-browser` — paired/unpaired/conflict colors, two-row navigation and save/reload, Chrome and WebKit PASS.
 
 **Execution anomaly:** despite all `LINUX_TEST_PASS=...` markers (5/5, no `LINUX_TEST_FAIL`), the outer Docker orchestration process reported exit status **1**. Record this contradiction; individual tests passed, but **do not** call this a fully certified Linux runner PASS. The standard 57-suite AM/Linux run is not complete.
+
+### Two-editor HTTP 412 + protected drafts (not part of AM registered 57)
+
+The **unchanged** `tests/wcp-cas-two-editor-regression.test.mjs` ran on a newly built isolated `cm-html` Lab release from the fix SHA. The test uses a disposable runtime path with an isolated unlock token and dedicated PDF/MD copies; the server only bound a random loopback port. In **both** actual Chromium and WebKit:
+
+- Editor A PUT results `[200,200]`; stale editor B PUT results `[412]`.
+- Stale editor draft and undo remain intact; disk is never overwritten by B.
+- Fixture returned to its exact original content and SHA256, no JS exceptions.
+
+Evidence in `mac/cas-two-editor-test.log`, plus `mac/cas-isolated-lab-build.log` and `mac/cas-isolated-server.log` (no credential content). Do **not** extrapolate this localhost proof to internet HTTPS cutover.
+
+### Main promoted UI baseline test: original missing fixture then real browser PASS
+
+Full `run-all` suite 23 originally FAILed with `ENOENT .v6/settings.json`, because frozen test assumes a local settings fixture the audit cold clone does not supply. This is test-environment fixture incompleteness, not evidence of a failing business API. Without changing frozen/test source, a minimal `{ "settings": {} }` was provisioned ONLY under the ignored isolated test tree; the exact test then PASSed for real Chrome + iPad WebKit, preserving read-only mother chapter selection and settings navigation. See `mac/main-ui-standalone-fixture-repro.log`. The registered full-run FAIL remains unchanged and must not be automatically waived.
