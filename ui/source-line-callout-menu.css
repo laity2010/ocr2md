@@ -22,6 +22,12 @@
   box-shadow:0 9px 22px rgba(0,0,0,.32);
 }
 .ocr-source-line-menu[hidden]{display:none}
+.ocr-source-line-menu-summary {
+  padding:6px 10px 7px;margin-bottom:4px;
+  border-bottom:1px solid #4c5b58;
+  color:#adbdaf;font-size:12px;line-height:1.45;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
 .ocr-source-line-menu button {
   display:block;width:100%;min-height:34px;border:0;border-radius:4px;
   padding:7px 10px;background:transparent;color:inherit;text-align:left;

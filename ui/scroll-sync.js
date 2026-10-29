@@ -20,6 +20,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   let measureFrame=0, sourceFrame=0, previewFrame=0;
   let sourceCorrectionFrame=0, sourceCorrectionTries=0, desiredSource=null;
   let explicitNavigation=false;
+  let sourceMenuEdit=false;
   // Programmatically moved followers generate 'scroll' events too.
   // Ignore exactly that movement, but allow immediate real user input.
   let ignoredSource=null,ignoredPreview=null;
@@ -237,6 +238,22 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   }
 
   const source=sourceElement();
+  /** Source edit initiated from a gutter menu outside CM6's focus tree.
+   * Mark CM6 as the scroll leader just like typing in the editor itself.
+   * Otherwise beforeRender() treats the blurred editor as a review-pane edit
+   * and the preview can drag the source viewport as wrapping is recomputed.
+   */
+  function sourceEditGesture() {
+    const sourceSnapshot=getEditor()?.state.doc;
+    sourceUserInput();
+    sourceMenuEdit=true;
+    // The operation itself is synchronous. If CMD rejected the edit or it
+    // changed nothing, do not leave a stale 'source edit' leadership flag.
+    queueMicrotask(()=>{
+      if(sourceMenuEdit && sourceSnapshot && getEditor()?.state.doc.eq(sourceSnapshot))
+        sourceMenuEdit=false;
+    });
+  }
   function sourceUserInput() {
     if(viewStore.getState().scrollSyncEnabled) lastDriver='cm6';
     suppressSourceUntil=0; ignoredSource=null; desiredSource=null;
@@ -245,6 +262,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     sourceCorrectionFrame=0;
   }
   function previewUserInput() {
+    sourceMenuEdit=false;
     if(viewStore.getState().scrollSyncEnabled) lastDriver='preview';
     suppressPreviewUntil=0; ignoredPreview=null;
     // Stop any stale source correction from a previous navigation gesture.
@@ -313,7 +331,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     // a stale CM6 source position (often the virtual chapter's first line).
     // Typing in focused CM6 still uses the original source-led synchronization.
     if(measuredRevision!==viewStore.getState().documentRevision &&
-       !getEditor()?.hasFocus && previewPane.clientHeight>=4){
+       !getEditor()?.hasFocus && !sourceMenuEdit && previewPane.clientHeight>=4){
       lastDriver='preview';
     }
     if(!viewStore.getState().scrollSyncEnabled) return readPreview();
@@ -321,6 +339,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
   }
   function afterRender(preserved) {
     measure();
+    sourceMenuEdit=false;
     if(!viewStore.getState().scrollSyncEnabled) {
       // No cross-view notification: just preserve this preview's own anchor.
       movePreview(preserved,true);
@@ -345,7 +364,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     [measureFrame,sourceFrame,previewFrame,sourceCorrectionFrame].forEach(x=>x&&cancelAnimationFrame(x));
   }
 
-  return {beforeRender,afterRender,measureLater,dispose,
+  return {beforeRender,afterRender,sourceEditGesture,measureLater,dispose,
     // Read-only diagnostics in development to verify real user scrolls.
     get anchorCount(){return anchors.length;},
     get lastDriver(){return lastDriver;},

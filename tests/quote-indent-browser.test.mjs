@@ -64,9 +64,38 @@ try{
        return s.ranges.map(r=>({anchor:r.anchor,head:r.head}));
      });
      assert.deepEqual(afterOpen,before,'opening gutter menu lost the source selection');
+     const beforeAction=await page.evaluate(()=>{
+       const view=window.__v6cm6.view,s=view.state.selection.main,doc=view.state.doc;
+       const start=doc.lineAt(s.from).number;
+       const end=doc.lineAt(s.empty?s.to:Math.max(s.from,s.to-1)).number;
+       const marker=document.querySelector('#editor .ocr-source-caret-line-button');
+       return {start,end,count:end-start+1,
+         summary:document.querySelector('.ocr-source-line-menu-summary')?.textContent,
+         markerY:marker?.getBoundingClientRect().top??null,
+         scrollTop:view.scrollDOM.scrollTop,
+         headLine:doc.lineAt(s.head).number,
+         reverse:s.anchor>s.head};
+     });
+     const expected=beforeAction.count>1||beforeAction.count===1&&before.some(r=>r.anchor!==r.head)?
+       `已选 ${beforeAction.count} 行 · 第 ${beforeAction.start}${beforeAction.start===beforeAction.end?'':`–${beforeAction.end}`} 行`:
+       `未选区 · 光标第 ${beforeAction.headLine} 行`;
+     assert.equal(beforeAction.summary,expected,'menu range summary does not match the CMD selection');
      const label=direction===1?'>+ 增加引用层级':'>− 减少引用层级';
      const command=menu.getByRole('menuitem',{name:label,exact:true});
      if(name==='iPad WebKit')await command.tap();else await command.click();
+     await sleep(140); // allow CM6's measured gutter/layout pass to settle
+     assert(await menu.isVisible(),'quote action closed the menu unexpectedly');
+     const afterAction=await page.evaluate(()=>{
+       const view=window.__v6cm6.view;
+       const marker=document.querySelector('#editor .ocr-source-caret-line-button');
+       return {markerY:marker?.getBoundingClientRect().top??null,
+         summary:document.querySelector('.ocr-source-line-menu-summary')?.textContent,
+         scrollTop:view.scrollDOM.scrollTop};
+     });
+     assert.equal(afterAction.summary,expected,'menu summary drifted after prefix edit');
+     if(beforeAction.markerY!==null&&afterAction.markerY!==null)
+       assert(Math.abs(afterAction.markerY-beforeAction.markerY)<=5,
+         `caret gutter floated: before=${JSON.stringify(beforeAction)} after=${JSON.stringify(afterAction)}`);
    };
    await page.screenshot({path:`.v6/evidence/quote-indent-toolbar-${name==='Chrome'?'chrome':'ipad-webkit'}.png`});
    const old=await page.evaluate(()=>{

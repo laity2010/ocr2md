@@ -144,7 +144,8 @@ class SourcePanel {
   init() {}
   mountLineMenu(view,handlers){
     this.menu?.dispose();
-    this.menu=createSourceLineCalloutMenu({host:this.element,view,...handlers});
+    this.menu=createSourceLineCalloutMenu({host:this.element,view,...handlers,
+      onBeforeSourceEdit:()=>scrollSync?.sourceEditGesture()});
   }
   layout() { getCMD()?.requestMeasure(); }
   dispose() {

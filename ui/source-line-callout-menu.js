@@ -9,6 +9,24 @@ import './source-line-callout-menu.css';
 
 const markerCompartment=new WeakMap();
 
+/** Share CMD's half-open line-selection rule, including reverse selections. */
+function summarizeSourceLineSelection(doc,selection){
+  const lines=new Set();
+  let selected=false;
+  for(const range of selection.ranges){
+    selected||=!range.empty;
+    const start=doc.lineAt(range.from).number;
+    const end=doc.lineAt(range.empty?range.to:Math.max(range.from,range.to-1)).number;
+    for(let n=start;n<=end;n++)lines.add(n);
+  }
+  const ordered=[...lines].sort((a,b)=>a-b);
+  const start=ordered[0],end=ordered[ordered.length-1];
+  return Object.freeze({selected,count:ordered.length,start,end,
+    text:selected?`已选 ${ordered.length} 行 · 第 ${start}${start===end?'':`–${end}`} 行`:
+      `未选区 · 光标第 ${doc.lineAt(selection.main.head).number} 行`});
+}
+
+
 class CaretLineButton extends GutterMarker {
   constructor(number,onOpen,onPress){super();this.number=number;this.onOpen=onOpen;this.onPress=onPress;}
   eq(other){return other instanceof CaretLineButton&&this.number===other.number&&this.onOpen===other.onOpen&&this.onPress===other.onPress;}
@@ -35,14 +53,20 @@ class CaretLineButton extends GutterMarker {
   }
 }
 
-export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent}){
+export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,onBeforeSourceEdit=()=>{}}){
   if(!(host instanceof HTMLElement)||!view||typeof onInsert!=='function'||
      typeof onQuoteIndent!=='function')
     throw TypeError('Source line menu requires source pane, CM6 and insertion action');
   let disposed=false,activeButton=null,target=null,pressSelection=null,actionInProgress=false;
+  let viewportAnchorToken=0;
+  const viewportTimers=new Set();
   const menu=document.createElement('div');
   menu.className='ocr-source-line-menu';menu.hidden=true;
   menu.setAttribute('role','menu');menu.setAttribute('aria-label','源码行操作');
+  const summary=document.createElement('div');
+  summary.className='ocr-source-line-menu-summary';
+  summary.setAttribute('role','status');
+  summary.setAttribute('aria-live','polite');
   const insert=document.createElement('button');
   insert.type='button';insert.setAttribute('role','menuitem');
   insert.textContent='插入 Callout';
@@ -52,11 +76,35 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent}){
   const decrease=document.createElement('button');
   decrease.type='button';decrease.setAttribute('role','menuitem');
   decrease.textContent='>− 减少引用层级';decrease.dataset.direction='-1';
-  menu.append(insert,increase,decrease);host.append(menu);
+  menu.append(summary,insert,increase,decrease);host.append(menu);
   function close(){
+    viewportAnchorToken++;
+    for(const timer of viewportTimers)clearTimeout(timer);
+    viewportTimers.clear();
     menu.hidden=true;
     activeButton?.setAttribute('aria-expanded','false');
     activeButton=null;target=null;pressSelection=null;
+  }
+  function refreshSummary(){
+    summary.textContent=summarizeSourceLineSelection(view.state.doc,view.state.selection).text;
+  }
+  function keepCaretRowVisibleAt(screenY){
+    if(!Number.isFinite(screenY))return;
+    const token=++viewportAnchorToken;
+    // CM6 may reflow long Markdown rows after the CMD transaction. Use a few
+    // bounded post-layout corrections. iPad WebKit can throttle rAF while the
+    // native selection/menu takes focus, so do not depend on animation frames.
+    for(const delay of [0,55,115]){
+      const timer=setTimeout(()=>{
+        viewportTimers.delete(timer);
+        if(token!==viewportAnchorToken||disposed||menu.hidden)return;
+        const row=view.dom.querySelector('.ocr-source-caret-line-button');
+        if(!row)return;
+        const delta=row.getBoundingClientRect().top-screenY;
+        if(Math.abs(delta)>1)view.scrollDOM.scrollTop+=delta;
+      },delay);
+      viewportTimers.add(timer);
+    }
   }
   function savePointerSelection(){
     pressSelection={doc:view.state.doc,selection:view.state.selection};
@@ -84,6 +132,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent}){
     const number=state.doc.lineAt(offset).number;
     if(button.dataset.line!==String(number))return;
     activeButton=button;target={snapshot:state.doc,offset,selection:state.selection};
+    refreshSummary();
     button.setAttribute('aria-expanded','true');
     menu.hidden=false;
     const box=button.getBoundingClientRect();
@@ -108,6 +157,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent}){
     const captured=target;
     close();
     if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
+    onBeforeSourceEdit();
     onInsert(planCalloutAtCursor(view.state.doc.toString(),captured.offset));
   });
   for(const button of [increase,decrease]){
@@ -123,10 +173,15 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent}){
         if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection})){
           close();return;
         }
-        // CMD maps the full selection. Keep the menu open for repeated levels.
+        // CMD maps the full selection. The Layout's source-edit signal keeps
+        // the editor—not the preview—as the scroll leader during reflow.
+        const caretY=activeButton?.getBoundingClientRect().top;
+        onBeforeSourceEdit();
         onQuoteIndent(Number(button.dataset.direction));
         target={snapshot:view.state.doc,offset:view.state.selection.main.head,
           selection:view.state.selection};
+        refreshSummary();
+        keepCaretRowVisibleAt(caretY);
       }finally{actionInProgress=false;}
     });
   }

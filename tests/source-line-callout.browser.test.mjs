@@ -53,6 +53,8 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     assert(await menu.isVisible());
     assert.equal(await menu.getByRole('menuitem').count(),3,'menu must include Callout and quote +/-');
     assert.equal((await menu.getByRole('menuitem').first().textContent()).trim(),'插入 Callout');
+    assert.equal((await menu.locator('.ocr-source-line-menu-summary').textContent()).trim(),
+      '未选区 · 光标第 4 行');
     const placement=await page.evaluate(()=>{
       const button=document.querySelector('#editor .ocr-source-caret-line-button');
       const menu=document.querySelector('.ocr-source-line-menu');
