@@ -5,6 +5,7 @@
  * MinerU conversion is injected, keeping Node-only tools out of the bundle.
  */
 import {EditorView} from '@codemirror/view';
+import {EditorSelection} from '@codemirror/state';
 import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
 import {unquotePrefix} from './mineru-anchors.js';
 import {isolateHistory} from '@codemirror/commands';
@@ -82,8 +83,18 @@ export class CMDocument {
       if(direction===1){changes.push({from:line.from,insert:'>'});continue;}
       if(line.text.startsWith('>'))changes.push({from:line.from,to:line.from+1});
     }
-    if(changes.length)this.view.dispatch({changes,userEvent:'input',
-      annotations:isolateHistory.of('full')});
+    if(changes.length){
+      // A toolbar click must not collapse a multi-line (or multi-range) CM6
+      // selection. Map BOTH endpoints through the exact change set, including
+      // newly inserted quote prefixes. This also preserves reverse selections
+      // and makes repeated >+ / >- operate on the SAME logical lines.
+      const mapping=state.changes(changes);
+      const ranges=state.selection.ranges.map(range=>EditorSelection.range(
+        mapping.mapPos(range.anchor,1),mapping.mapPos(range.head,1)));
+      this.view.dispatch({changes,
+        selection:EditorSelection.create(ranges,state.selection.mainIndex),
+        userEvent:'input',annotations:isolateHistory.of('full')});
+    }
     return {changed:changes.length,lines:lines.size};
   }
 

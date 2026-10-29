@@ -512,8 +512,15 @@ async function main() {
       if(result.changed)status(`✓ 已${direction>0?'增加':'减少'} ${result.changed} 行引用缩进`);
     }catch(error){status(error.message,'warning');}
   }
-  for(const id of ['quote-indent','quote-outdent'])
-    $(id).addEventListener('mousedown',event=>event.preventDefault());
+  for(const id of ['quote-indent','quote-outdent']){
+    const button=$(id);
+    // Pointerdown includes iPad touch/pen. Prevent the toolbar from stealing
+    // focus or native text selection before CM6 captures the source ranges.
+    button.addEventListener('pointerdown',event=>{
+      if(event.pointerType!=='touch')event.preventDefault();
+    });
+    button.addEventListener('mousedown',event=>event.preventDefault());
+  }
   $('quote-indent').addEventListener('click',()=>quoteIndent(1));
   $('quote-outdent').addEventListener('click',()=>quoteIndent(-1));
   buttons.undo.addEventListener('click',()=> $('module-select').value==='settings'?settings?.undo():history(undo));

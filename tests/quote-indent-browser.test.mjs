@@ -46,13 +46,14 @@ try{
      const to=v.state.doc.line(row.sourceLine).to;
      const before=v.state.doc.sliceString(from,to);
      v.dispatch({selection:{anchor:from,head:to},scrollIntoView:true});
-     return {from,to,line:row.sourceLine,rowId:row.id,before};
+     return {from,to,line:row.sourceLine,rowId:row.id,before,
+      startLine:row.sourceLine-2,endLine:row.sourceLine};
    });
    assert(old.line>100);
    assert.match(old.before,/minerujson:block:v1:/);
    await sleep(240);
    const scrollBefore=await page.evaluate(()=>window.__v6cm6.view.scrollDOM.scrollTop);
-   await page.locator('#quote-indent').click();
+   await (name==='iPad WebKit'?page.locator('#quote-indent').tap():page.locator('#quote-indent').click());
    const plus=await page.evaluate(({rowId,line})=>{
      const m=window.__v6cm6,doc=m.view.state.doc;
      const text=doc.toString(),head=m.outline.rows.find(row=>row.id===rowId);
@@ -62,6 +63,17 @@ try{
        editedLineVisible:m.view.visibleRanges.some(range=>range.from<=offset&&range.to>=offset),
        dirty:m.dirty};
    },old);
+   // Regression: clicking a source button must NOT collapse or trim the range.
+   // The next press must still affect every originally selected line.
+   assert(plus.selection.to>plus.selection.from,'quote+ collapsed the original multi-line selection');
+   assert.equal(plus.text.split('\n')[old.startLine-1].startsWith('>'),true);
+   assert.equal(plus.text.split('\n')[old.endLine-1].startsWith('>'),true);
+   const selectedLines=await page.evaluate(()=>{
+     const v=window.__v6cm6.view,s=v.state.selection.main;
+     return {start:v.state.doc.lineAt(s.from).number,end:v.state.doc.lineAt(s.to).number};
+   });
+   assert.deepEqual(selectedLines,{start:old.startLine,end:old.endLine},
+     'quote+ lost the selected source lines');
    // UI and API must recognize the same source identity after quoting.
    assert(plus.dirty);assert.equal(buildOutline(plus.text).length,21);
    const quotedRows=buildOutline(plus.text);
@@ -76,13 +88,31 @@ try{
      'PDF must still resolve the quoted block source identity');
    assert(plus.editedLineVisible && plus.scroll>500,`indent lost the edited line ${name}: ${scrollBefore} -> ${plus.scroll}`);
    await page.locator('#quote-indent').click();
-   const twice=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
+   const twiceState=await page.evaluate(()=>{
+     const view=window.__v6cm6.view,s=view.state.selection.main;
+     return {text:view.state.doc.toString(),fromLine:view.state.doc.lineAt(s.from).number,
+       toLine:view.state.doc.lineAt(s.to).number,nonempty:!s.empty};
+   });
+   const twice=twiceState.text;
+   assert(twiceState.nonempty,'second >+ collapsed selection');
+   assert.equal(twiceState.fromLine,old.startLine);
+   assert.equal(twiceState.toLine,old.endLine);
+   for(let line=old.startLine;line<=old.endLine;line++)
+     assert(twice.split('\n')[line-1].startsWith('>>'),`second quote+ skipped selected line ${line}`);
    assert.equal((twice.match(/^>> ?<!-- minerujson:block:v1:/gm)||[]).length,1);
    await page.locator('#undo').click();
    const onceAgain=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
    assert.equal(onceAgain,plus.text,'undo must revert exactly one indentation operation');
    await page.locator('#quote-outdent').click();
-   const unquoted=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
+   const minusState=await page.evaluate(()=>{
+     const v=window.__v6cm6.view,s=v.state.selection.main;
+     return {text:v.state.doc.toString(),start:v.state.doc.lineAt(s.from).number,
+       end:v.state.doc.lineAt(s.to).number,empty:s.empty};
+   });
+   const unquoted=minusState.text;
+   assert(!minusState.empty,'quote- collapsed selection');
+   assert.equal(minusState.start,old.startLine);
+   assert.equal(minusState.end,old.endLine);
    assert.equal(unquoted,raw,'outdent must be inverse of indent');
    await page.locator('#undo').click();
    assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),plus.text);
@@ -103,6 +133,46 @@ try{
    assert.equal(afterLine.cursor,lineCase.pos+1);
    await page.locator('#quote-outdent').click();
    assert.equal(await page.evaluate(()=>window.__v6cm6.cm.doc.line(93).text),lineCase.before);
+   // Reverse, multi-line selections survive any number of consecutive
+   // layer operations. A touch tap follows the real iPad event path.
+   const nested=await page.evaluate(()=>{
+     const v=window.__v6cm6.view,doc=v.state.doc;
+     const from=doc.line(93).from,to=doc.line(95).to;
+     const originals=[93,94,95].map(n=>doc.line(n).text);
+     v.dispatch({selection:{anchor:to,head:from},scrollIntoView:true});
+     return {fromLine:93,toLine:95,originals};
+   });
+   await sleep(180);
+   const touchOrClick=async id=>name==='iPad WebKit'?
+     page.locator(id).tap():page.locator(id).click();
+   for(let depth=1;depth<=3;depth++){
+     await touchOrClick('#quote-indent');
+     const snapshot=await page.evaluate(()=>{
+       const v=window.__v6cm6.view,s=v.state.selection.main;
+       return {lines:[93,94,95].map(n=>v.state.doc.line(n).text),
+         fromLine:v.state.doc.lineAt(s.from).number,
+         toLine:v.state.doc.lineAt(s.to).number,
+         reversed:s.anchor>s.head,empty:s.empty};
+     });
+     assert.deepEqual(snapshot.lines,nested.originals.map(line=>'>'.repeat(depth)+line));
+     assert.equal(snapshot.fromLine,93);
+     assert.equal(snapshot.toLine,95);
+     assert(snapshot.reversed&&!snapshot.empty,'repeated >+ changed reverse selection');
+   }
+   for(let depth=2;depth>=0;depth--){
+     await touchOrClick('#quote-outdent');
+     const snapshot=await page.evaluate(()=>{
+       const v=window.__v6cm6.view,s=v.state.selection.main;
+       return {lines:[93,94,95].map(n=>v.state.doc.line(n).text),
+         fromLine:v.state.doc.lineAt(s.from).number,
+         toLine:v.state.doc.lineAt(s.to).number,
+         reversed:s.anchor>s.head,empty:s.empty};
+     });
+     assert.deepEqual(snapshot.lines,nested.originals.map(line=>'>'.repeat(depth)+line));
+     assert.equal(snapshot.fromLine,93);
+     assert.equal(snapshot.toLine,95);
+     assert(snapshot.reversed&&!snapshot.empty,'repeated >- changed reverse selection');
+   }
    // A selection inside the compressed MinerU source must be refused intact.
    const guarded=await page.evaluate(()=>{
      const cm=window.__v6cm6.cm,doc=cm.doc;
