@@ -1,0 +1,30 @@
+=== FIXED SOURCE PROVENANCE ===
+86c32a055a042ad56a26b93f7a82458c897d3999
+9b211638b1791fc0ac4b084cc565230203507d9d
+fix/gpt6-9b211638
+ tests/am/test_boundaries.py      | 10 +++++++++-
+ ui/main.js                       |  5 ++++-
+ ui/wcp-source-file-navigation.js | 10 +++-------
+ 3 files changed, 16 insertions(+), 9 deletions(-)
+commit 86c32a055a042ad56a26b93f7a82458c897d3999
+Author:     laity2010 <laity2010@gmail.com>
+AuthorDate: Fri Oct 30 07:16:39 2026 +0800
+Commit:     laity2010 <laity2010@gmail.com>
+CommitDate: Fri Oct 30 07:16:39 2026 +0800
+
+    fix(wcp,am): remove cross-module DOM snooping and refresh strict boundary baseline
+
+    Frozen 9b211638 carries 63 UI JS files, 12 AM modules and 38 declared cross imports, not historical 48/9/31. Preserve exact assertions and add a no-foreign-DOM contract test. The Shell owns its numbering input and refreshes chapter navigation by a bounded port; AG marker changes already notify through CMD document revision.
+
+    Preliminary: 34 AM Python tests OK (1 skip); node --check on touched UI modules PASS; static AM ownership scan PASS. Full browser/AM suite pending.
+=== UNTOUCHED FROZEN SOURCE ===
+9b211638b1791fc0ac4b084cc565230203507d9d
+=== PACKAGE ===
+f755ac947904c361d8148d6231b2fa778824a182
+9b211638b1791fc0ac4b084cc565230203507d9d
+=== SHA256 FIXTURE ===
+be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab  ../ocr2md-fix-gpt6-9b211638/.v6/workspace/buffetts-alpha.original.pdf
+d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764  ../ocr2md-audit/packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md
+=== GIT FSCK ===
+=== REMOTE FIX BRANCH SHA ===
+86c32a055a042ad56a26b93f7a82458c897d3999	refs/heads/fix/gpt6-9b211638
