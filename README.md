@@ -12,6 +12,7 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 - **Dockview 三窗／四窗切换**：左侧 AG Grid 章节表、右上 CodeMirror 6（CM6）源码、右下共用预览窗。预览栏默认用下拉框切换 Markdown 阅读预览或 PDF.js 原文；勾选「拆分」后 PDF 成为右下独立 Dockview 窗格，与 Markdown 预览左右并排，可拖动分隔线调宽；取消勾选回到原共用窗。PDF.js 实例、缩放和 OCR 定位保持不变，切换无需重新创建 PDF Viewer。
 - **CMD / CM6 单一编辑状态**：CMD（`CMDocument`）是围绕 CodeMirror 6 的轻量文档接口；CM6 EditorState 持有唯一可编辑的 Markdown 正文及 Undo/Redo 历史。CMD 的 `getMarkdown()` 直接返回唯一正文；已完成的一次性 `minerujson:end` 迁移不再给正式编辑器增加过渡输出模式。iOS/iPadOS 使用 Safari 原生光标与文本选区，Mac 保留既有 CM6 选区。AG 与 Markdown 预览从正文派生，Zustand Vanilla 只传递修订号及定位事件。正常保存不清空撤销历史。
+- **AG 功能菜单与状态**：AG 工具栏保留「全部」和元素下拉；所有模块功能按钮以及标题起始编号集中在「功能」下拉中，切换元素模块时同步更换菜单，没有可执行功能时禁用下拉。AG 当前章节范围/元素数量状态显示在全局状态栏，与保存和扫描状态并列；原按钮和业务处理器没有复制或改写。
 - **CMD 统一 HTML 读写**：`CMDocument.readHtml()` / `writeHtml()` 在同一个 CM6 Markdown 文档中处理标准 HTML 元素、自定义 HTML 元素和 HTML 注释；`writeComment()` 只是调用通用写入接口的便捷方法，不构成第二种数据格式。 `readAnnotations({tag?,attributes?})`、`writeAnnotation({tag,attributes,at|target})`、`removeAnnotation(target)`、`editAnnotations(operations)` 统一管理 HTML 注释标签及键值属性，支持行内与独立注释、源码定位和旧格式读取；全部读写同一 CM6 Markdown，修改作为单次撤销事务，禁止改写 MinerU 原始证据；CMD 不推断 `>` 嵌套或业务类型。章节模块通过 CMD 读取标签与属性、写入注释，仍兼容旧自定义标题标签；不设注释／标签双写入管线。
 - **源码引用缩进**：第二行工具栏最右侧的 `>+` / `>−` 按钮针对 CM6 光标行或选区覆盖的多行，各增加或移除一个前导 `>`；整组选区变化为一次撤销步骤，不重新定位源码滚动。`minerujson:block` 锚点允许带一层或多层引用前缀，AG、PDF 和章节导出仍按原 ID 定位；多行原始 JSON／PDF 证据注释不允许缩进以保护原文。
 - **章节定界**：AG 按顺序显示标题（固定首列）、层级、PDF 页码、独立成章、章节文件；勾选通过 CM6 的 HTML 注释标定正文。修改标题和勾选实时更新大纲，保存后持久化。起始编号默认 `000`，保留用户输入的位数及前导零。

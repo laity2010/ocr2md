@@ -81,6 +81,7 @@ for(const [i,[name,engine]] of [['Chrome',chromium],['WebKit',webkit]].entries()
    assert((await page.locator('#status').textContent()).includes('待采用 11'));
    // The existing local files are enough: the download endpoint must return
    // 'complete' without external network access, then CMD adopts them.
+   await page.locator('#ag-functions-toggle').click();
    await page.locator('#media-download-all').click();
    await page.waitForFunction(()=>!document.querySelector('#media-download-all')?.disabled &&
      Number(document.querySelector('.ocr-media-grid [role="grid"]')?.getAttribute('aria-rowcount'))===12 &&

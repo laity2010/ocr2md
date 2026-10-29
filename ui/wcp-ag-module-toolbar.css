@@ -4,6 +4,7 @@
   box-sizing:border-box;height:34px;padding:3px 7px;
   background:#283238;border-bottom:1px solid #4d585d;
   font:12px/1.3 'OCR2MD Sarasa',monospace;
+  position:relative;z-index:10;overflow:visible;
 }
 .ocr-outline-pane > .ocr-lab-ag-toolbar[hidden]{display:none!important}
 .ocr-lab-ag-toolbar > .module-actions{display:flex;align-items:center;gap:8px;min-width:0}
@@ -49,3 +50,32 @@
 .ocr-lab-ag-toolbar > .ocr-navigation-elements{order:1;flex:none;}
 .ocr-lab-ag-toolbar > .module-actions,
 .ocr-lab-ag-toolbar > .ocr-all-chapters-status{order:2;}
+/* One module-aware action menu. Original buttons/inputs are reparented, not
+   copied: their handlers and CMD/WCP permissions stay with the Shell. */
+.ocr-lab-ag-toolbar > .ocr-ag-functions{order:2;flex:none;position:relative;}
+.ocr-lab-ag-toolbar #ag-functions-toggle{
+  height:27px;min-width:75px;padding:2px 9px;
+  border:1px solid #60766b;border-radius:4px;
+  background:#344a40;color:#d3c6aa;
+}
+.ocr-lab-ag-toolbar #ag-functions-toggle:disabled{
+  cursor:default;opacity:.45;filter:grayscale(1);
+}
+.ocr-lab-ag-toolbar .ocr-ag-functions-menu{
+  position:absolute;top:calc(100% + 5px);right:0;z-index:200;
+  display:flex;flex-direction:column;gap:3px;
+  min-width:172px;max-width:min(310px,calc(100vw - 22px));
+  padding:6px;background:#283238;
+  border:1px solid #60766b;border-radius:6px;
+  box-shadow:0 9px 26px #000a;
+}
+.ocr-lab-ag-toolbar .ocr-ag-functions-menu[hidden]{display:none!important}
+.ocr-lab-ag-toolbar .ocr-ag-functions-menu > .module-actions{
+  display:flex;flex-direction:column;align-items:stretch;gap:4px;
+}
+.ocr-lab-ag-toolbar .ocr-ag-functions-menu > .module-actions[hidden]{display:none!important}
+.ocr-lab-ag-toolbar .ocr-ag-functions-menu button{width:100%;text-align:left;}
+.ocr-lab-ag-toolbar .ocr-ag-functions-menu label{align-self:flex-start;}
+.ocr-lab-ag-toolbar .ocr-ag-functions-menu input{
+  width:100%;height:28px;text-align:left;
+}

@@ -99,6 +99,7 @@ try{
    await p.locator('.ocr-lab-element-select').waitFor({state:'attached'});
    await choose(p.locator('.ocr-lab-element-select'),'media');
    await p.waitForFunction(()=>document.querySelector('#module-select')?.value==='media',null,{timeout:10000});
+   await p.locator('#ag-functions-toggle').click();
    await p.locator('#media-refresh').waitFor({state:'visible',timeout:10000});
    await p.locator('#media-download-all').waitFor({state:'visible',timeout:10000});
    assert.equal(await all.isDisabled(),false,'Chapter-file media AG 全部 must be enabled');

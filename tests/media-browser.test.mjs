@@ -294,6 +294,7 @@ try{
      requestUrls.push(JSON.parse(route.request().postData()).url);
      return route.fulfill({status:403,contentType:'text/plain',body:'fixture denied'});
    });
+   await page.locator('#ag-functions-toggle').click();
    await page.locator('#media-download-all').click();
    await page.waitForFunction(()=>!document.querySelector('#media-download-all')?.disabled,null,{timeout:20000});
    if(requestUrls.length!==1)console.log('AG_SCOPE_DIAG',name,JSON.stringify({
@@ -307,6 +308,7 @@ try{
    assert(scopedUrls.includes(requestUrls[0]),'unchecked AG downloaded outside selected chapter');
    requestUrls.length=0;
    await page.locator('input[aria-label="章节所有"]').check();
+   await page.locator('#ag-functions-toggle').click();
    await page.locator('#media-download-all').click();
    await page.waitForFunction(()=>!document.querySelector('#media-download-all')?.disabled,null,{timeout:20000});
    assert.equal(requestUrls.length,1);

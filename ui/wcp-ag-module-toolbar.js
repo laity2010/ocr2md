@@ -38,8 +38,46 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
   chapterSelect.className='ocr-wp3-chapter-select';
   chapterSelect.setAttribute('aria-label','虚拟章节');
   const allStatus=document.createElement('span');
-  allStatus.className='ocr-all-chapters-status';
+  allStatus.className='ocr-all-chapters-status ocr-global-ag-status';
   allStatus.setAttribute('role','status');
+  allStatus.setAttribute('aria-live','polite');
+  const functionHost=document.createElement('div');
+  functionHost.className='ocr-ag-functions';
+  const functionButton=document.createElement('button');
+  functionButton.type='button';
+  functionButton.id='ag-functions-toggle';
+  functionButton.textContent='功能 ▾';
+  functionButton.setAttribute('aria-label','AG 功能菜单');
+  functionButton.setAttribute('aria-haspopup','true');
+  functionButton.setAttribute('aria-expanded','false');
+  const functionMenu=document.createElement('div');
+  functionMenu.id='ag-functions-menu';
+  functionMenu.className='ocr-ag-functions-menu';
+  functionMenu.setAttribute('aria-label','当前 AG 模块功能');
+  functionMenu.hidden=true;
+  functionHost.append(functionButton,functionMenu);
+  functionButton.addEventListener('click',()=>{
+    if(functionButton.disabled)return;
+    const open=functionMenu.hidden;
+    functionMenu.hidden=!open;
+    functionButton.setAttribute('aria-expanded',String(open));
+  });
+  const closeFunctions=()=>{
+    functionMenu.hidden=true;
+    functionButton.setAttribute('aria-expanded','false');
+  };
+  functionMenu.addEventListener('click',event=>{
+    // Preserve original click handlers; the menu is merely a UI host.
+    if(event.target.closest('button'))closeFunctions();
+  });
+  document.addEventListener('pointerdown',event=>{
+    if(!functionHost.contains(event.target))closeFunctions();
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!functionMenu.hidden){
+      closeFunctions();functionButton.focus();
+    }
+  });
   // File navigation and the mainline module handler keep the original select.
   // The chapter's *visible* element picker has only three real options: iPad
   // Safari's native picker can expose <option hidden>, so don't rely on it.
@@ -102,6 +140,15 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     // Original settings option stays intact for source-file navigation,
     // but cannot appear in the separate 3-item native chapter picker.
     modulePort.showActions({selected,settings,chapter:Boolean(chapter),virtualMode});
+    const group=functionMenu.querySelector('.module-actions[data-module="'+selected+'"]');
+    // Count actual active controls, not hidden historical export actions.
+    // Title/index scope with no actionable group must not open a blank menu.
+    const available=!settings&&!!group&&!group.hidden&&
+      [...group.querySelectorAll('button:not([hidden]),input:not([hidden])')].some(
+        control=>control.id!=='export-chapters');
+    functionButton.disabled=!available;
+    if(!available||functionMenu.dataset.module!==selected)closeFunctions();
+    functionMenu.dataset.module=selected;
     if(!settings)bar.hidden=false;
   }
   modulePort.onModuleChange(()=>{
@@ -151,8 +198,9 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     // The first two visible controls are exactly: 全部 ☐ | [标题/媒体/LaTeX].
     bar.append(allLabel,elementSelect);
     modulePort.mountSelector(bar);
-    bar.append(indexLabel,chapterSelect,allStatus);
-    modulePort.mountActionGroups(bar);
+    bar.append(indexLabel,chapterSelect,functionHost);
+    modulePort.mountActionGroups(functionMenu);
+    modulePort.mountAgStatus(allStatus);
     enhanceNavigationSelect(elementSelect,{kind:'elements'});
     enhanceNavigationSelect(chapterSelect,{kind:'virtual-chapters',search:true});
     outline.insertBefore(bar,grid);

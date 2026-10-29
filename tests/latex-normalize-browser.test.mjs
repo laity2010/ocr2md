@@ -56,6 +56,7 @@ for(let i=0;i<engines.length;i++){
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 8'),
       null,{timeout:30000});
     assert.equal(readFileSync(documentPath,'utf8'),source);
+    await page.locator('#ag-functions-toggle').click();
     await page.locator('#latex-normalize').click();
     await page.waitForFunction(()=>document.querySelector('#undo')?.disabled===false&&
       document.querySelector('#status')?.textContent.includes('未保存'),null,{timeout:25000});
@@ -84,6 +85,7 @@ for(let i=0;i<engines.length;i++){
     await selectModule(page,'latex');
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('latex 8'),
       null,{timeout:30000});
+    await page.locator('#ag-functions-toggle').click();
     await page.locator('#latex-normalize').click();
     await sleep(180);
     assert.equal(readFileSync(documentPath,'utf8'),saved,'second normalization changed saved file');

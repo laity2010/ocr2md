@@ -367,6 +367,7 @@ async function main() {
       document.querySelectorAll('.module-actions[data-module]').length>=3,
     mountSelector:parent=>parent.append(moduleSelector),
     mountActionGroups:parent=>parent.append(...document.querySelectorAll('.module-actions[data-module]')),
+    mountAgStatus:element=>$('status').after(element),
     hideSelector:()=>{moduleSelector.hidden=true;},
     labelSelector:label=>moduleSelector.setAttribute('aria-label',label),
     hideLegacyExport:()=>$('export-chapters')?.setAttribute('hidden',''),

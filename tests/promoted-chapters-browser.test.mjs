@@ -57,6 +57,7 @@ for(const [number,[name,engine]] of engines.entries()){
   const originalOptions=await source.locator('option[value^="virtual:"]').evaluateAll(nodes=>nodes.map(n=>({value:n.value,text:n.textContent})));
   assert(originalOptions.length>=3,'real CMD index must project several virtual chapters');
   assert(originalOptions.every(item=>item.text.startsWith('章节chapter/')));
+  await page.locator('#ag-functions-toggle').click();
   assert.equal(await page.locator('#chapter-start-number').inputValue(),'000');
   assert.equal(await source.inputValue(),'document');
   assert(await all.isDisabled(),'章节定界中的 全部 必须勾选置灰');
