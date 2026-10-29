@@ -14,6 +14,9 @@ const source=[
   '',
   'Many words in the main chapter that must not scroll away.',
   '',
+  ...Array.from({length:55},(_,i)=>`Chapter body paragraph ${i+1}. `+
+    'A long text keeps the note definition far away from the cited paragraph. '.repeat(4)),
+  '',
   '<!-- minerujson:block:v1:2:0 -->',
   '# Notes','',
   '<!--ocr2md:note-body id="1"-->',
@@ -94,6 +97,28 @@ try{
       await page.waitForFunction(()=>[...document.querySelectorAll('#editor .cm-outline-focused-line')]
         .some(el=>el.textContent.includes('This note contains')),null,{timeout:15000});
       assert.equal(await card.isVisible(),false);
+      const back=page.getByRole('button',{name:'↩ 返回注引'});
+      assert.equal(await back.isVisible(),true,'no return action after note jump');
+      const arrived=await page.evaluate(()=>{
+        const pane=document.querySelector('.ocr-preview-md-scroll');
+        const note=pane.querySelector('li#fn1');
+        const n=note.getBoundingClientRect(),p=pane.getBoundingClientRect();
+        return {top:pane.scrollTop,inReader:n.top>=p.top&&n.top<p.bottom,
+          focus:window.__v6cm6.scrollState.focusTarget};
+      });
+      assert(arrived.top>initial.top+80,'locate note did not scroll preview');
+      assert(arrived.inReader,'note definition is still off-screen');
+      assert.equal(arrived.focus.origin,'footnote-reader');
+      await back.click();
+      assert.equal(await back.isVisible(),false,'returned annotation button stays visible');
+      const returned=await page.evaluate(()=>({
+        top:document.querySelector('.ocr-preview-md-scroll').scrollTop,
+        line:window.__v6cm6.scrollState.focusTarget.sourceLine,
+        focus:document.activeElement?.getAttribute('href'),
+      }));
+      assert(Math.abs(returned.top-initial.top)<3,'return did not restore original reading scroll');
+      assert.equal(returned.line,4,'return did not focus original citation source line');
+      assert.equal(returned.focus,'#fn1','return did not restore reference keyboard focus');
       // Rendering a virtual chapter must resolve the definition outside it.
       const select=page.locator('.ocr-source-pane .ocr-lab-file-select');
       const value=await select.locator('option[value^="virtual:"]').first().getAttribute('value');
@@ -109,7 +134,14 @@ try{
       await virtualRef.click();
       assert.match(await card.textContent(),/This note contains/);
       assert.equal(await page.locator('.ocr-preview-md-scroll').evaluate(e=>e.scrollTop),virtualTop);
-      assert.equal(await page.locator('.ocr-markdown li#fn1').getAttribute('data-source-start'),'12');
+      const noteLine=source.split('\n').findIndex(line=>line.startsWith('[^1]:'))+1;
+      assert.equal(await page.locator('.ocr-markdown li#fn1').getAttribute('data-source-start'),String(noteLine));
+      await card.getByRole('button',{name:'定位注文'}).click();
+      await page.waitForFunction(()=>document.querySelector('.ocr-preview-md-scroll').scrollTop>120);
+      assert.equal(await back.isVisible(),true,'virtual chapter lost return navigation');
+      await back.click();
+      assert(Math.abs((await page.locator('.ocr-preview-md-scroll').evaluate(e=>e.scrollTop))-virtualTop)<3,
+        'virtual return did not restore original scroll');
       assert.deepEqual(errors,[],name+' JS errors');
       assert.equal(readFileSync(file,'utf8'),source,'reader changed CMD source');
       console.log('FOOTNOTE_READER_PASS',name,JSON.stringify({

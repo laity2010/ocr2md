@@ -164,6 +164,14 @@ class PreviewPanel {
     this.mdTools=document.createElement('div');
     this.mdTools.className='ocr-preview-mode-tools';
     this.mdTools.dataset.mode='md';
+    this.returnNoteButton=document.createElement('button');
+    this.returnNoteButton.type='button';
+    this.returnNoteButton.className='ocr-preview-return-note';
+    this.returnNoteButton.textContent='↩ 返回注引';
+    this.returnNoteButton.title='返回打开注文前的 Markdown 阅读位置';
+    this.returnNoteButton.hidden=true;
+    this.returnNoteButton.addEventListener('click',()=>this.returnToNoteReference());
+    this.mdTools.append(this.returnNoteButton);
     this.toolbar.append(this.mdTools);
     this.pdfTools=document.createElement('div');
     this.pdfTools.className='ocr-preview-mode-tools';
@@ -186,6 +194,7 @@ class PreviewPanel {
     this.disposed=false;
     this.mode='md';
     this.lastFocusElement=null;
+    this.noteReturn=null;
     this.footnoteReader=null;
     this.onClick=event=>{
       if(this.footnoteReader?.handleClick(event))return;
@@ -202,7 +211,7 @@ class PreviewPanel {
   init(){
     this.footnoteReader=createFootnotePopover({
       root:this.body,
-      onLocate:line=>publishFocus({sourceLine:line,origin:'preview',intent:'click'}),
+      onLocate:target=>this.navigateToNote(target),
     });
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown());
     this.pdf.moveToolbarTo(this.pdfTools);
@@ -219,19 +228,56 @@ class PreviewPanel {
       this.splitCheckbox.disabled=!ready;
     });
     this.unsubscribe=viewStore.subscribe((next,prior)=>{
-      if(next.documentRevision!==prior.documentRevision)this.schedule();
+      if(next.documentRevision!==prior.documentRevision){
+        this.clearNoteReturn();this.schedule();
+      }
       if(next.focusTarget!==prior.focusTarget)this.highlight(next.focusTarget);
     });
     // WCP receives only a bounded semantic preview port, never the raw
     // Dockview panel or Markdown DOM. The panel remains the renderer owner.
     this.releaseWPCRenderer=wcpRuntime?.onPreviewInit(Object.freeze({
-      setScope:scope=>{this.virtualScope=scope;},
+      setScope:scope=>{
+        if((scope?.id??null)!==(this.virtualScope?.id??null))this.clearNoteReturn();
+        this.virtualScope=scope;
+      },
       repaint:()=>{if(this.disposed)return;this.render();this.mdPane.scrollTop=0;},
       isDisposed:()=>this.disposed,
     }));
     this.body.addEventListener('click',this.onClick);
     refreshPreview=()=>this.schedule();
     this.schedule(true);
+  }
+  clearNoteReturn(){
+    this.noteReturn=null;
+    this.returnNoteButton.hidden=true;
+  }
+  navigateToNote({sourceLine,noteId,referenceLine,referenceScrollTop,reference}){
+    const note=this.body.querySelector('li.footnote-item[id="'+noteId+'"]');
+    if(!note || !Number.isInteger(sourceLine) || sourceLine<1)return;
+    this.noteReturn={referenceLine,referenceScrollTop,reference,
+      revision:viewStore.getState().documentRevision};
+    this.returnNoteButton.hidden=false;
+    // A normal preview-origin focus moves only CM6, assuming preview is
+    // already at its target. This deliberate annotation navigation must move
+    // ALL panes, including the initiating Markdown reader and PDF.
+    publishFocus({sourceLine,origin:'footnote-reader',intent:'click'});
+    // Footnote list items are not necessarily normal scroll-sync block
+    // anchors. Place the actual rendered definition within the reader.
+    const pane=this.mdPane;
+    pane.scrollTop+=note.getBoundingClientRect().top-
+      pane.getBoundingClientRect().top-18;
+  }
+  returnToNoteReference(){
+    const saved=this.noteReturn;
+    this.clearNoteReturn();
+    if(!saved || saved.revision!==viewStore.getState().documentRevision)return;
+    if(Number.isInteger(saved.referenceLine) && saved.referenceLine>=1)
+      publishFocus({sourceLine:saved.referenceLine,
+        origin:'footnote-reader',intent:'click'});
+    // Restore the exact preview scroll position even if the reference is
+    // mid-paragraph, rather than approximating from its source block line.
+    this.mdPane.scrollTop=saved.referenceScrollTop;
+    if(saved.reference?.isConnected)saved.reference.focus({preventScroll:true});
   }
   setMode(mode){
     if(mode!=='md'&&mode!=='pdf')return false;

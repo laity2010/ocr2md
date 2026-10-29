@@ -61,6 +61,11 @@
   border-radius:4px;font:12px "OCR2MD Sarasa",monospace;padding:2px 7px}
 .ocr-preview-mode-tools {display:flex;align-items:center;gap:5px;min-width:0}
 .ocr-preview-mode-tools[hidden] {display:none}
+.ocr-preview-return-note {white-space:nowrap;flex:none;min-height:27px;
+  border:1px solid #6a8579;border-radius:5px;background:#344a40;
+  color:#a7c080;padding:3px 8px;cursor:pointer;
+  font:12px "OCR2MD Sarasa",monospace}
+.ocr-preview-return-note[hidden]{display:none!important}
 .ocr-preview-mode-tools[data-mode="pdf"] .ocr-pdf-tools {position:static;
   height:28px;padding:0;border:0;background:transparent;z-index:auto}
 .ocr-preview-mode-tools[aria-hidden="true"] {visibility:hidden;pointer-events:none;

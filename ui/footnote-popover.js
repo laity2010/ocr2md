@@ -115,8 +115,16 @@ export function createFootnotePopover({root,onLocate}){
   const onEnter=()=>cancelClose();
   dismiss.addEventListener('click',close);
   locate.addEventListener('click',()=>{
-    const line=sourceLine;close();
-    if(line)onLocate(line);
+    // Capture the reading anchor BEFORE closing the portal. The preview owns
+    // the scroll position; WCP receives only a semantic source-line focus.
+    const target=sourceLine && anchor ? {
+      sourceLine, noteId:anchor.getAttribute('href').slice(1),
+      referenceLine:Number(anchor.closest('[data-source-start]')?.dataset.sourceStart)||null,
+      referenceScrollTop:root.closest('.ocr-preview-md-scroll')?.scrollTop??0,
+      reference:anchor,
+    } : null;
+    close();
+    if(target)onLocate(target);
   });
   popup.addEventListener('pointerenter',onEnter);
   popup.addEventListener('pointerleave',onLeave);
