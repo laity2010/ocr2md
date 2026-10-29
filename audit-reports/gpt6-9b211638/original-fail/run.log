@@ -1,0 +1,222 @@
+Preparing worktree (detached HEAD 9b21163)
+Updating files:  30% (119/390)Updating files:  31% (121/390)Updating files:  32% (125/390)Updating files:  33% (129/390)Updating files:  34% (133/390)Updating files:  35% (137/390)Updating files:  36% (141/390)Updating files:  37% (145/390)Updating files:  38% (149/390)Updating files:  39% (153/390)Updating files:  40% (156/390)Updating files:  41% (160/390)Updating files:  42% (164/390)Updating files:  43% (168/390)Updating files:  44% (172/390)Updating files:  45% (176/390)Updating files:  46% (180/390)Updating files:  47% (184/390)Updating files:  48% (188/390)Updating files:  49% (192/390)Updating files:  50% (195/390)Updating files:  51% (199/390)Updating files:  52% (203/390)Updating files:  53% (207/390)Updating files:  54% (211/390)Updating files:  55% (215/390)Updating files:  56% (219/390)Updating files:  56% (220/390)Updating files:  57% (223/390)Updating files:  58% (227/390)Updating files:  59% (231/390)Updating files:  60% (234/390)Updating files:  61% (238/390)Updating files:  62% (242/390)Updating files:  63% (246/390)Updating files:  64% (250/390)Updating files:  65% (254/390)Updating files:  66% (258/390)Updating files:  67% (262/390)Updating files:  68% (266/390)Updating files:  69% (270/390)Updating files:  70% (273/390)Updating files:  71% (277/390)Updating files:  72% (281/390)Updating files:  73% (285/390)Updating files:  73% (287/390)Updating files:  74% (289/390)Updating files:  75% (293/390)Updating files:  76% (297/390)Updating files:  77% (301/390)Updating files:  78% (305/390)Updating files:  79% (309/390)Updating files:  80% (312/390)Updating files:  81% (316/390)Updating files:  82% (320/390)Updating files:  83% (324/390)Updating files:  84% (328/390)Updating files:  85% (332/390)Updating files:  86% (336/390)Updating files:  87% (340/390)Updating files:  88% (344/390)Updating files:  89% (348/390)Updating files:  90% (351/390)Updating files:  90% (354/390)Updating files:  91% (355/390)Updating files:  92% (359/390)Updating files:  93% (363/390)Updating files:  94% (367/390)Updating files:  95% (371/390)Updating files:  96% (375/390)Updating files:  97% (379/390)Updating files:  98% (383/390)Updating files:  99% (387/390)Updating files: 100% (390/390)Updating files: 100% (390/390), done.
+HEAD is now at 9b21163 feat(source,preview): language-aware fenced blocks with syntax highlighting
+AM_AUDIT_SOURCE=9b211638b1791fc0ac4b084cc565230203507d9d
+AM_AUDIT_TARGET=/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated
+AM_AUDIT_OS=Darwin
+AUDIT_PORT_PREFLIGHT_SELFTEST_PASS live_listener=blocked closed_server=reusable
+AUDIT_TEST_PORT_PREFLIGHT_PASS ports=64
+
+added 74 packages in 1m
+
+added 72 packages in 48s
+
+> @ocr2md/minerujson-md@0.1.0 build
+> tsc -p tsconfig.json
+
+AUDIT_BROWSER_PREFLIGHT_PASS Chromium
+AUDIT_BROWSER_PREFLIGHT_PASS WebKit
+AM_AUDIT_ENV node=v23.11.0 python=Python 3.13.3 playwright=1.64.1
+
+> ocr2md-v6-editor-lab@0.1.0 build
+> vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 200 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/release-version.json                                 0.03 kB │ gzip:     0.05 kB
+../dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff             4.42 kB
+../dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2            4.93 kB
+../dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2            5.21 kB
+../dist/assets/cursor-editorTextHighlight-kG3uUOwL.svg       5.40 kB │ gzip:     2.20 kB
+../dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2            5.47 kB
+../dist/index.html                                           5.48 kB │ gzip:     2.14 kB
+../dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff             5.98 kB
+../dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff             6.19 kB
+../dist/assets/KaTeX_Size1-Regular-C195tn64.woff             6.50 kB
+../dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2      6.91 kB
+../dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2         6.91 kB
+../dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf              7.59 kB
+../dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff       7.66 kB
+../dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff          7.72 kB
+../dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2           9.64 kB
+../dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2       10.34 kB
+../dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf             10.36 kB
+../dist/assets/KaTeX_Script-Regular-D5yQViql.woff           10.59 kB
+../dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2         11.32 kB
+../dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2            11.35 kB
+../dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf             11.51 kB
+../dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2        12.03 kB
+../dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2          12.22 kB
+../dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf             12.23 kB
+../dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff        12.32 kB
+../dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf       12.34 kB
+../dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf          12.37 kB
+../dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff          13.21 kB
+../dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff             13.30 kB
+../dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2      13.57 kB
+../dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff         14.11 kB
+../dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff           14.41 kB
+../dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff       16.03 kB
+../dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2         16.40 kB
+../dist/assets/KaTeX_Math-Italic-t53AETM-.woff2             16.44 kB
+../dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf            16.65 kB
+../dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2         16.78 kB
+../dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2             16.99 kB
+../dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff          18.67 kB
+../dist/assets/KaTeX_Math-Italic-DA0__PXp.woff              18.75 kB
+../dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff          19.41 kB
+../dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf         19.44 kB
+../dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB
+../dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB
+../dist/assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB
+../dist/module-graph.json                                   21.44 kB │ gzip:     9.84 kB
+../dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB
+../dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB
+../dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB
+../dist/assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB
+../dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB
+../dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB
+../dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB
+../dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB
+../dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB
+../dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB
+../dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB
+../dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB
+../dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB
+../dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB
+../dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB
+../dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB
+../dist/assets/pdf.worker.min-CjEcRF4W.mjs               1,264.34 kB
+../dist/assets/index-DuQj_Arn.css                          455.87 kB │ gzip:    73.19 kB
+../dist/assets/fontcheck-CDzPn_qu.js                         1.41 kB │ gzip:     0.96 kB
+../dist/assets/index-CCs1kqU6.js                         3,498.70 kB │ gzip: 1,057.58 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 24.56s
+AM_BUILD_PASS modules/apis/messages/publishers/subscriptions/tests=[12, 167, 13, 19, 28, 240] database=.v6/tests/am.sqlite
+AM_REFERENCES_PASS checked 167 API registry rows and all source/test paths; previous-run records kept=0/0
+............F................./Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a110>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a2f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a4d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a5c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a020>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a3e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a7a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a890>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565a980>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565aa70>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565ab60>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565ac50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565ad40>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565ae30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565af20>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b010>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b100>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b1f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b2e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b3d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b4c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b5b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x105658a90>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b6a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056589a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b790>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b880>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565b970>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565ba60>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565bb50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565bd30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10565be20>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..s
+======================================================================
+FAIL: test_baseline (test_boundaries.GateTests.test_baseline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated/tests/am/test_boundaries.py", line 24, in test_baseline
+    self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(48,9,31))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (63, 12, 38) != (48, 9, 31)
+
+First differing element 0:
+63
+48
+
+- (63, 12, 38)
++ (48, 9, 31)
+
+----------------------------------------------------------------------
+Ran 33 tests in 5.163s
+
+FAILED (failures=1, skipped=1)
+AM_STANDARD_REPORT status=BLOCKED sha=9b211638b1791fc0ac4b084cc565230203507d9d output=/Users/daisor/.agentdock/tmp/tmpl404w0n3
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=53
