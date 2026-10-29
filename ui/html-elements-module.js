@@ -6,6 +6,7 @@ import {viewStore,publishFocus} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {groupHtmlElements} from './html-element-groups.js';
+import {planNormalizeTables} from './html-table-normalize.js';
 import './html-elements-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f383e',
@@ -13,7 +14,7 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
   borderColor:'#525c62',rowHoverColor:'#37464b',selectedRowBackgroundColor:'rgba(86,157,121,.2)',
   oddRowBackgroundColor:'#2d363c',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
-export function createHtmlElementsModule(host,getCMD,onStatus=()=>{}){
+export function createHtmlElementsModule(host,getMarkdown,getCMD,onStatus=()=>{}){
   host.classList.add('ocr-html-elements-pane');
   const gridHost=document.createElement('div');
   gridHost.className='ocr-html-elements-grid';host.append(gridHost);
@@ -80,7 +81,29 @@ export function createHtmlElementsModule(host,getCMD,onStatus=()=>{}){
       virtual.setVirtualQuery({...query,keys:query.operationScope?.mode==='chapter'
         ?new Set(chapter.map(row=>row.from)):null});
     }
-    if(active)onStatus('HTML 元素 '+chapterRows().length+' 项（只读）');
+    if(active)onStatus('HTML 元素 '+chapterRows().length+' 项 · 扫描定位 / 功能菜单批量规范');
+  }
+  function normalizeTables(){
+    if(disposed||!active)return;
+    try{
+      refresh();
+      const source=getMarkdown();
+      const cmd=getCMD();
+      const scope=query?.operationScope??{mode:'all'};
+      const index=cmd.getIndex();
+      const plan=planNormalizeTables(source,rows,{bodyEnd:index.bodyEnd,scope,
+        chapter:scope.mode==='chapter'?cmd.getChapter(scope.chapterId):null});
+      if(!plan.operations.length){
+        onStatus('没有可规范的 HTML 表格'+(plan.skipped?' · 跳过 '+plan.skipped+' 项':'')+' · 源码未改动');
+        return;
+      }
+      // One guarded CMD transaction, including all-chapter permission; no
+      // background save, private EditorView, or shadow document.
+      cmd.editAnnotations(plan.operations,{expectedSource:source,agScope:scope});
+      lastRevision=-1;refresh();
+      onStatus('✓ 已补齐 '+plan.converted+' 组表格三段式占位标签'+
+        (plan.skipped?' · 跳过 '+plan.skipped+' 组待核对':'')+' · 一次撤销 · 请全局保存');
+    }catch(error){onStatus('表格规范化失败：'+error.message,'error');}
   }
   const unsubscribe=viewStore.subscribe((next,prev)=>{
     if(next.documentRevision!==prev.documentRevision && active && !queued){
@@ -97,6 +120,7 @@ export function createHtmlElementsModule(host,getCMD,onStatus=()=>{}){
   });
   return Object.freeze({
     refresh,
+    normalizeTables,
     count:chapter=>{
       if(lastRevision!==viewStore.getState().documentRevision)refresh();
       if(chapter==='all')return rows.length;

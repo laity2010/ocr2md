@@ -853,3 +853,17 @@ INSERT INTO apis VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-H04-GROUP','H04','tests/html-element-groups.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Paired and nested tags collapse into one AG row; standalone comments/void tags remain; malformed pairs visibly retained','direct'),
  ('TC-H01-GROUP-BROWSER','H01','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit AG shows 单行/开合 grouping, separate opening/closing source-line clicks and chapter/all scope','integration');
+
+-- HTML table three-part wrapper, approved provisional OCR2MD review format.
+-- Only a user-clicked HTML AG action writes via one optimistic CMD transaction.
+INSERT INTO apis VALUES
+ ('H05','H','planNormalizeTables','ui/html-table-normalize.js','export','CMD source, read-only HTML groups, body-end and chapter scope','guarded CMD companion text operations + converted/skipped','wraps standalone table with empty editable title and notes/source placeholders; idempotent; skips evidence, existing figure and unsafe nesting',1),
+ ('H06','H','returned.normalizeTables','ui/html-elements-module.js','returned','current AG all/chapter scope','CMD editAnnotations single transaction or reason summary','explicit review-only batch action, does not automatically Save',1),
+ ('L29','L','returned.normalizeHtmlTables','ui/workspace.js','returned','none','void','Layout routes HTML AG table normalization from shell without exposing Grid or CM6 internals',1);
+INSERT INTO access_edges VALUES
+ ('X-HTML-TABLE-01','L','H','ui/workspace.js','currentOutline?.html?.normalizeTables()','H06','registered','Shell routes batch HTML table review via Layout bounded facade'),
+ ('X-HTML-TABLE-02',NULL,'L','ui/main.js','workspace.normalizeHtmlTables()','L29','registered','Shell button invokes Layout API for explicit table normalization');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-H05-TABLE','H05','tests/html-table-normalize.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','All eight existing OCR HTML tables gain three semantic sections; table bytes and original evidence remain unchanged; nested and repeated conversion skip','direct'),
+ ('TC-H06-TABLE','H06','tests/html-table-normalize.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit action wraps current/all chapter tables with one CMD Undo, explicit CAS Save, reload and idempotence; no automatic source writes','integration'),
+ ('TC-L29-TABLE','L29','tests/html-table-normalize.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','User-initiated HTML AG action travels through Layout to scoped CMD edit and global Save','integration');

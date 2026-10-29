@@ -84,7 +84,7 @@ class OutlinePanel {
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
-    this.html=createHtmlElementsModule(this.htmlHost,()=>getCMD(),reportMediaStatus);
+    this.html=createHtmlElementsModule(this.htmlHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -524,6 +524,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     normalizeLatex:()=>currentOutline?.latex?.normalizeReviewed(),
     openNoteTemplates:()=>currentOutline?.note?.openTemplates(),
     convertAllNotes:()=>currentOutline?.note?.convertAll(),
+    normalizeHtmlTables:()=>currentOutline?.html?.normalizeTables(),
     getChapterState(){
       const grid=currentOutline?.grid;
       return {rows:grid?.rows.map(row=>({...row}))||[], startText:grid?.startText||'000'};

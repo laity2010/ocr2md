@@ -60,7 +60,8 @@
     "wcp-workspace-directory-module.js": "B",
     "cmd-html-elements.js": "C",
     "html-elements-module.js": "H",
-    "html-element-groups.js": "H"
+    "html-element-groups.js": "H",
+    "html-table-normalize.js": "H"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [

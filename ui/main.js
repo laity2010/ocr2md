@@ -592,6 +592,7 @@ async function main() {
   $('latex-normalize').addEventListener('click',()=>workspace.normalizeLatex());
   $('note-templates').addEventListener('click',()=>workspace.openNoteTemplates());
   $('note-convert-all').addEventListener('click',()=>workspace.convertAllNotes());
+  $('html-normalize-tables').addEventListener('click',()=>workspace.normalizeHtmlTables());
   $('media-download-all').addEventListener('click',async()=>{
     const button=$('media-download-all');button.disabled=true;
     try{await workspace.downloadMedia();}
