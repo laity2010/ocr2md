@@ -27,26 +27,57 @@ function loadTemplate(){
     return stored;
   }catch{return {...DEFAULT_NOTE_TEMPLATE};}
 }
-function locationCell(which){
-  const ref=which==='reference';
+function navigateNoteRow(row){
+  if(row?.line)publishFocus({sourceLine:row.line,origin:'note',intent:'click'});
+}
+function locationCell(){
   return params=>{
     if(!params.data)return '';
-    const line=params.data[ref?'referenceLine':'bodyLine'];
+    const {line,kind}=params.data;
     if(!line)return '—';
     const button=document.createElement('button');
     button.type='button';
     button.className='ocr-note-jump';
     button.textContent=String(line);
-    button.title=ref?'定位注释引用的源码和原始 PDF':'定位注释正文的源码和原始 PDF';
-    button.setAttribute('aria-label',(ref?'引用':'正文')+'第'+line+'行定位');
+    button.title='定位'+kind+'的源码、Markdown 预览和原始 PDF';
+    button.setAttribute('aria-label',kind+'第'+line+'行定位');
     for(const name of ['pointerdown','mousedown','touchstart'])
       button.addEventListener(name,e=>e.stopPropagation());
     button.addEventListener('click',event=>{
       event.stopPropagation();
-      publishFocus({sourceLine:line,origin:'note',intent:'click'});
+      navigateNoteRow(params.data);
     });
     return button;
   };
+}
+// Each logical pair remains a single CMD annotation transaction. Its AG
+// presentation has exactly two adjacent, independently navigable source rows.
+// Repeated citations retain distinct pairs, even when they share one body.
+function pairDisplayRows(pairs){
+  return [...pairs].sort((a,b)=>{
+    const aNum=Number(a.number),bNum=Number(b.number);
+    return aNum-bNum||a.from-b.from;
+  }).flatMap(pair=>[
+    {id:pair.id+':reference',number:pair.number,kind:'注引',
+      line:pair.referenceLine,text:pair.reference||'（未找到注引）',
+      from:pair.from,status:pair.status,marked:pair.marked,pair,part:'reference'},
+    {id:pair.id+':body',number:pair.number,kind:'注文',
+      line:pair.bodyLine,text:pair.content||'（未找到注文）',
+      from:pair.from,status:pair.status,marked:pair.marked,pair,part:'body'},
+  ]);
+}
+const noteStatuses=Object.freeze({
+  '已配对':'paired','缺引用':'missing','缺正文':'missing',
+  '编号冲突':'conflict','缺有效配对':'conflict',
+});
+function statusCell(params){
+  if(!params.data)return '';
+  const span=document.createElement('span');
+  span.className='ocr-note-status ocr-note-status-'+
+    (noteStatuses[params.value]||'unknown');
+  span.textContent=params.value;
+  span.title=params.data.marked?'已确认并完成 CMD 标定':params.value;
+  return span;
 }
 export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
   host.classList.add('ocr-note-pane');
@@ -71,10 +102,11 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
   function followFocus(target,state){
     if(!active||!target||target.origin==='note'||
        target.revision!==state.documentRevision)return;
-    const row=rows.find(x=>target.sourceLine===x.referenceLine||
+    const pair=rows.find(x=>target.sourceLine===x.referenceLine||
       target.sourceLine===x.bodyLine);
-    if(!row)return;
-    const node=grid.getRowNode(row.id);
+    if(!pair)return;
+    const part=target.sourceLine===pair.referenceLine?'reference':'body';
+    const node=grid.getRowNode(pair.id+':'+part);
     if(!node)return;
     node.setSelected(true,true);
     if(node.rowIndex!=null)grid.ensureIndexVisible(node.rowIndex,'auto');
@@ -91,21 +123,22 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
     }catch(error){onStatus('注释标定失败：'+error.message);}
   }
   const columns=[
-    {field:'number',headerName:'注释号',width:88,minWidth:80,pinned:'left',lockPinned:true,
+    {field:'number',headerName:'注释号',width:86,minWidth:75,pinned:'left',lockPinned:true,
+      valueFormatter:p=>p.data?.part==='reference'?p.value:'',
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
-    {field:'status',headerName:'配对状态',width:105,minWidth:100,
+    {field:'kind',headerName:'元素',width:76,minWidth:68,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
-    {colId:'referenceLine',headerName:'引用行',width:85,minWidth:78,
-      cellRenderer:locationCell('reference')},
-    {field:'reference',headerName:'引用原文',minWidth:130,flex:.7,
-      tooltipField:'reference'},
-    {colId:'bodyLine',headerName:'正文行',width:85,minWidth:78,
-      cellRenderer:locationCell('body')},
-    {field:'content',headerName:'注释正文',minWidth:215,flex:1.6,
-      tooltipField:'content'},
+    {field:'line',headerName:'源码行',width:90,minWidth:82,
+      cellRenderer:locationCell()},
+    {field:'text',headerName:'原文',minWidth:220,flex:1.8,
+      tooltipField:'text',
+      cellClass:p=>p.data?.line?'ocr-note-row-text':'ocr-note-row-missing'},
+    {field:'status',headerName:'配对状态',width:112,minWidth:104,
+      filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
+      cellRenderer:statusCell},
     {colId:'mark',headerName:'CMD 标定',width:92,minWidth:88,
       cellRenderer:p=>{
-        if(!p.data)return '';
+        if(!p.data||p.data.part!=='reference')return '';
         const button=document.createElement('button');
         button.className='ocr-note-mark';button.type='button';
         button.textContent=p.data.marked?'已标定':'标定';
@@ -113,17 +146,15 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
         button.title=button.disabled?'只能标定明确的一对一注释':'写入引用和正文的 CMD 注释标记（不自动保存）';
         for(const name of ['pointerdown','mousedown','touchstart'])
           button.addEventListener(name,e=>e.stopPropagation());
-        button.addEventListener('click',event=>{event.stopPropagation();mark(p.node.data);});
+        button.addEventListener('click',event=>{event.stopPropagation();mark(p.node.data.pair);});
         return button;
       }},
   ].map(c=>({resizable:true,sortable:false,suppressMovable:true,...c}));
-  grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:54,
+  grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:34,
+    getRowClass:p=>p.data?.part==='reference'?'ocr-note-pair-first':'ocr-note-pair-second',
     getRowId:p=>p.data.id,
     rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
-    onRowClicked:e=>{
-      const line=e.data.referenceLine??e.data.bodyLine;
-      if(line)publishFocus({sourceLine:line,origin:'note',intent:'click'});
-    }});
+    onRowClicked:e=>navigateNoteRow(e.data)});
   const virtualQuery=createVirtualAGQuery(grid,'note');
   function refresh(){
     if(disposed)return;
@@ -131,7 +162,7 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
     if(source!==lastSource){
       try{
         rows=scanNotePairs(source,template);
-        grid.setGridOption('rowData',rows);
+        grid.setGridOption('rowData',pairDisplayRows(rows));
         lastSource=source;
       }catch(error){
         onStatus('注释扫描失败：'+error.message);return;

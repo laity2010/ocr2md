@@ -801,7 +801,7 @@ INSERT INTO access_edges VALUES
  ('X-N05','L','N','ui/workspace.js','this.note?.count(chapter)','N05','registered','Global status queries Notes count through bounded semantic count');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-N01','N01','tests/note-pairs.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Default template matches all 10 escaped-HTML superscript citations to the 10 numbered Notes bodies; excludes letter OCR superscript artifacts; synthetic pairs, missing IDs and conflicts','direct'),
- ('TC-N02','N02','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit escaped superscript Notes AG, previous-default migration, regex modal, reference/body source/PDF navigation, CMD annotation and single global Save','integration'),
+ ('TC-N02','N02','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit notes numbered as adjacent reference/body rows; clicking each navigates source/preview/PDF; colored paired/missing/conflict states; regex modal, CMD annotation and Save','integration'),
  ('TC-N03','N03','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter scope filters AG Notes without changing original source','integration'),
  ('TC-N04','N04','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Regex validation, application and browser-local template storage','integration'),
  ('TC-N05','N05','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Global status displays current Notes count','integration');

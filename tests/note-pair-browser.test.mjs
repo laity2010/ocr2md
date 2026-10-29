@@ -70,23 +70,39 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     });
     const grid=page.locator('.ocr-note-grid [role="grid"]');
     await page.waitForFunction(()=>Number(document.querySelector('.ocr-note-grid [role="grid"]')
-      ?.getAttribute('aria-rowcount'))===4,null,{timeout:20000});
+      ?.getAttribute('aria-rowcount'))===7,null,{timeout:20000});
     assert.equal(await page.locator('.toolbar .ocr-global-ag-status').count(),1);
-    assert.equal(await grid.getAttribute('aria-rowcount'),'4');
+    assert.equal(await grid.getAttribute('aria-rowcount'),'7');
     const migrated=await page.evaluate(()=>{
       const parsed=JSON.parse(localStorage.getItem('ocr2md:note-pair-templates:v1'));
       return {reference:parsed.reference,
         escapedMatch:!!new RegExp(parsed.reference).exec('\\<sup>1\\</sup>')};
     });
     assert(migrated.escapedMatch,'original browser default was not migrated');
-    assert.equal(await page.locator('.ocr-note-grid .ag-row[row-index="0"] [col-id="status"]').textContent(),'已配对');
+    const firstReference=page.locator('.ocr-note-grid .ag-row[row-index="0"]');
+    const firstBody=page.locator('.ocr-note-grid .ag-row[row-index="1"]');
+    assert.equal(await firstReference.locator('[col-id="kind"]').textContent(),'注引');
+    assert.equal(await firstBody.locator('[col-id="kind"]').textContent(),'注文');
+    assert.equal(await firstReference.locator('[col-id="number"]').textContent(),'1');
+    assert.equal(await firstBody.locator('[col-id="number"]').textContent(),'');
+    assert.equal(await firstReference.locator('[col-id="status"]').textContent(),'已配对');
+    const pairedColor=await firstReference.locator('.ocr-note-status').evaluate(el=>getComputedStyle(el).color);
+    assert.equal(pairedColor,'rgb(167, 192, 128)','paired note status must be green');
+    const missing=page.locator('.ocr-note-grid .ag-row[row-index="4"]');
+    assert.equal(await missing.locator('[col-id="status"]').textContent(),'缺引用');
+    assert.equal(await missing.locator('[col-id="kind"]').textContent(),'注引');
+    const missingColor=await missing.locator('.ocr-note-status').evaluate(el=>getComputedStyle(el).color);
+    assert.equal(missingColor,'rgb(219, 188, 127)','missing note status must be amber');
     const first=page.locator('.ocr-note-grid .ag-row[row-index="0"]');
-    await first.locator('button[aria-label^="引用第"]').click();
+    await first.locator('button[aria-label^="注引第"]').click();
     await page.waitForFunction(()=>[...document.querySelectorAll('#editor .cm-outline-focused-line')]
       .some(el=>el.textContent.includes('This quote cites')),null,{timeout:17000});
-    await first.locator('button[aria-label^="正文第"]').click();
+    // Clicking the body row itself locates the body, not its matching reference.
+    await firstBody.locator('[col-id="text"]').click();
     await page.waitForFunction(()=>[...document.querySelectorAll('#editor .cm-outline-focused-line')]
       .some(el=>el.textContent.includes('First note body')),null,{timeout:17000});
+    await firstBody.locator('button[aria-label^="注文第"]').click();
+    assert.equal(await firstBody.locator('[col-id="line"]').textContent(),'11');
     await page.locator('#ag-functions-toggle').click();
     await page.locator('#note-templates').click();
     const dialog=page.locator('.ocr-note-template-dialog');
@@ -97,7 +113,7 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     await dialog.getByRole('button',{name:'恢复默认'}).click();
     await dialog.getByRole('button',{name:'应用模板'}).click();
     assert.equal(await dialog.isVisible(),false);
-    assert.equal(await grid.getAttribute('aria-rowcount'),'4');
+    assert.equal(await grid.getAttribute('aria-rowcount'),'7');
     await page.locator('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark').click();
     await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark')
       ?.textContent==='已标定',null,{timeout:17000});
@@ -122,15 +138,28 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
       el.dispatchEvent(new Event('change',{bubbles:true}));},chapterFile);
     await page.waitForFunction(()=>document.querySelector('input[aria-label="章节所有"]')?.checked===false,
       null,{timeout:15000});
-    await page.waitForFunction(()=>Number(document.querySelector('.ocr-note-grid [role="grid"]')?.getAttribute('aria-rowcount'))===3,
+    await page.waitForFunction(()=>Number(document.querySelector('.ocr-note-grid [role="grid"]')?.getAttribute('aria-rowcount'))===5,
       null,{timeout:15000});
     await page.locator('input[aria-label="章节所有"]').check();
-    await page.waitForFunction(()=>Number(document.querySelector('.ocr-note-grid [role="grid"]')?.getAttribute('aria-rowcount'))===4,
+    await page.waitForFunction(()=>Number(document.querySelector('.ocr-note-grid [role="grid"]')?.getAttribute('aria-rowcount'))===7,
       null,{timeout:15000});
     assert.equal(await sourceSelect.inputValue(),chapterFile,'AG 全部 may not move the source file');
+    // A deliberate duplicated note in an isolated fixture must display red
+    // conflict status. No user document is touched.
+    writeFileSync(doc,persisted+'\n1\\. Duplicate note body\n');
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.locator('.ocr-lab-element-select').evaluate(el=>{
+      el.value='note';el.dispatchEvent(new Event('change',{bubbles:true}));
+    });
+    await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-status-conflict'),
+      null,{timeout:22000});
+    const conflictColor=await page.locator('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-status-conflict')
+      .evaluate(el=>getComputedStyle(el).color);
+    assert.equal(conflictColor,'rgb(230, 126, 128)','duplicate number must show red');
     assert.deepEqual(errors,[]);
-    console.log('NOTE_PAIR_BROWSER_PASS',name,JSON.stringify({rows:3,paired:2,
-      missingRef:1,multiview:true,regexModal:true,markerSaved:true,reloaded:true}));
+    console.log('NOTE_PAIR_BROWSER_PASS',name,JSON.stringify({groups:3,rows:6,paired:2,
+      missingRef:1,twoClickableRows:true,pairedGreen:true,missingAmber:true,conflictRed:true,
+      multiview:true,regexModal:true,markerSaved:true,reloaded:true}));
   }finally{
     await browser?.close();server.kill('SIGTERM');
     rmSync(dir,{recursive:true,force:true});

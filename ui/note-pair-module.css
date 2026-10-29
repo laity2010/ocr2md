@@ -3,6 +3,39 @@
 .ocr-note-grid{flex:1;min-width:0;min-height:0}
 .ocr-note-pane .ag-root-wrapper{border:0;border-radius:0}
 .ocr-note-pane .ag-cell{padding:0 5px}
+/* Two adjacent AG rows per numbered note; alternating group bands, not
+   alternating arbitrary individual rows. The source stays one CMD document. */
+.ocr-note-pane .ag-row.ocr-note-pair-first{
+  border-top:1px solid #617168;
+  background:#34413d;
+}
+.ocr-note-pane .ag-row.ocr-note-pair-second{
+  border-bottom:1px solid #45554f;
+  background:#2c3736;
+}
+.ocr-note-pane .ag-row.ocr-note-pair-first.ag-row-hover,
+.ocr-note-pane .ag-row.ocr-note-pair-second.ag-row-hover{
+  background:#40534a;
+}
+.ocr-note-pane .ocr-note-row-text{cursor:pointer;}
+.ocr-note-pane .ocr-note-row-missing{color:#859289;font-style:italic;}
+.ocr-note-pane .ocr-note-status{
+  display:inline-block;padding:2px 7px;border:1px solid;
+  border-radius:4px;font:600 11px/1.55 'OCR2MD Sarasa',monospace;
+  white-space:nowrap;
+}
+.ocr-note-pane .ocr-note-status-paired{
+  color:#a7c080;border-color:#62865f;background:#304438;
+}
+.ocr-note-pane .ocr-note-status-missing{
+  color:#dbbc7f;border-color:#9a7840;background:#443b2c;
+}
+.ocr-note-pane .ocr-note-status-conflict{
+  color:#e67e80;border-color:#a75c62;background:#492e32;
+}
+.ocr-note-pane .ocr-note-status-unknown{
+  color:#9da9a0;border-color:#60716a;background:#343f3c;
+}
 .ocr-note-jump,.ocr-note-mark{font:12px 'OCR2MD Sarasa',monospace;padding:4px 6px;
   background:#344a40;color:#d3c6aa;border:1px solid #60766b;border-radius:4px}
 .ocr-note-jump{color:#a7c080;text-decoration:underline}
