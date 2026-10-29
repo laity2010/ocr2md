@@ -1,0 +1,13 @@
+MEDIA_PREEXISTING_ADOPTION_PASS Chrome {"rows":11,"preexisting":11,"savedLocal":11,"reloaded":true}
+PREEXISTING_DIAG WebKit {"diag":{"status":"媒体 12 项 · 已采用 0 · 待采用 10 · 未下载 1 · 未引用 1 · 3,112行 / 306,869字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · book.minerujson.md","module":"media","count":"13","adoption":["待采用","待采用","待采用","待采用","待采用","未采用","待采用","待采用","待采用","待采用","待采用","未引用"],"rows":"   No Rows To Show           预览                   采用                   源码行                   媒体链接                   状态                   操作                   所属章节                   无预览待采用23https://cdn-mineru.openxlab.org.cn/result/2026-10-08/58e67639-59e6-4952-9d23-511f844956b6/902dda6f5df0dd237d86729fbc60d096425d7def87f5c2450f455611d67ff5de.jpg已下载采用001 · Andrea Frazzini, David Kabiller & Lasse Heje Pedersen无预览待采用31h"},"errors":[]}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 25000ms exceeded.
+    at /Users/daisor/AgentDock/ocr2md-am-gpt6-fixed-86c32a0-isolated/tests/media-preexisting-adoption.browser.test.mjs:68:15 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

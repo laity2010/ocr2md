@@ -33,3 +33,9 @@ Evidence in `mac/cas-two-editor-test.log`, plus `mac/cas-isolated-lab-build.log`
 ### Main promoted UI baseline test: original missing fixture then real browser PASS
 
 Full `run-all` suite 23 originally FAILed with `ENOENT .v6/settings.json`, because frozen test assumes a local settings fixture the audit cold clone does not supply. This is test-environment fixture incompleteness, not evidence of a failing business API. Without changing frozen/test source, a minimal `{ "settings": {} }` was provisioned ONLY under the ignored isolated test tree; the exact test then PASSed for real Chrome + iPad WebKit, preserving read-only mother chapter selection and settings navigation. See `mac/main-ui-standalone-fixture-repro.log`. The registered full-run FAIL remains unchanged and must not be automatically waived.
+
+### Media adopted-file WebKit deviation in first full run; unchanged test recheck
+
+The original full audit suite 27 returned **FAIL**: Chromium correctly found/adopted 11 local images, while WebKit displayed 12 media records, one unreferenced and one undownloaded, with a 25s wait timeout. Captured `mac/media-preexisting-first-full-fail.log` including original WebKit `PREEXISTING_DIAG`. This failure is NOT dismissed by static success.
+
+The exact source test `tests/media-preexisting-adoption.browser.test.mjs` was rerun unchanged in the same detached fix SHA, and **both browsers PASS** 11/11 adopted and persisted without downloading. `mac/media-preexisting-standalone-repro.log` includes `AUDIT_TEST_FIXTURE_RESTORED_FROM_CRASH` from the existing test fixture preloader; this may indicate a test-isolation/environment race but is not conclusive cause. Until the suite is reproducibly clean in a complete fresh run, consider WebKit media adoption an unresolved intermittent regression risk.
