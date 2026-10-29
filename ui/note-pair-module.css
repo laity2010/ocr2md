@@ -1,0 +1,16 @@
+.ocr-note-pane{width:100%;height:100%;min-height:0;min-width:0;display:flex;background:#2f383e;overflow:hidden}
+.ocr-note-pane[hidden]{display:none!important}
+.ocr-note-grid{flex:1;min-width:0;min-height:0}
+.ocr-note-pane .ag-root-wrapper{border:0;border-radius:0}
+.ocr-note-pane .ag-cell{padding:0 5px}
+.ocr-note-jump,.ocr-note-mark{font:12px 'OCR2MD Sarasa',monospace;padding:4px 6px;
+  background:#344a40;color:#d3c6aa;border:1px solid #60766b;border-radius:4px}
+.ocr-note-jump{color:#a7c080;text-decoration:underline}
+.ocr-note-mark:disabled{opacity:.55}
+.ocr-note-template-dialog{width:min(700px,calc(100vw - 32px));max-width:700px}
+.ocr-note-template-dialog textarea{width:100%;min-height:68px;resize:vertical;
+  font:12px/1.5 'OCR2MD Sarasa',monospace;color:#d3c6aa;
+  background:#27352f;border:1px solid #60766b;border-radius:5px;padding:8px;overflow-wrap:anywhere}
+.ocr-note-template-dialog label{display:block;margin:9px 0 4px;color:#a7c080}
+.ocr-note-template-feedback{min-height:18px;color:#f0bd80;margin-top:7px}
+.ocr-note-template-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:10px}

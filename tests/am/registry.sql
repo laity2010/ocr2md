@@ -8,6 +8,7 @@ INSERT INTO modules VALUES
  ('L','Layout','Dockview','ui/workspace.js'),
  ('A','Media','AG Grid + resumable download','ui/media-module.js'),
  ('T','LaTeX','AG Grid + KaTeX review plugin','ui/latex-module.js'),
+ ('N','Note Pair','AG Grid + regex citation/body matching','ui/note-pair-module.js'),
  ('W','WCP Runtime','bounded extension contract','ui/wcp-runtime.js');
 
 INSERT INTO apis VALUES
@@ -786,3 +787,21 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-G16-AG-FUNCTIONS','G16','tests/ag-function-menu.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Unified AG module-owned actions dropdown in Chrome/WebKit, empty menu disabled, scope/count status in global toolbar, no source writes','integration');
 INSERT INTO access_edges VALUES
  ('X94',NULL,'T','ui/obsidian-source-syntax.js',"import {findLatex} from './latex-scan.js'",'T01','registered','Shell source syntax decoration reads only the registered LaTeX public scanner; no state, edits, or private module access');
+INSERT INTO apis VALUES
+ ('N01','N','scanNotePairs','ui/note-pair-scan.js','export','CMD source + validated regex template','positioned citation/body rows','pure read-only match with missing/duplicate statuses',1),
+ ('N02','N','createNotePairModule','ui/note-pair-module.js','export','host,CMD reader,transaction port,status callback','independent Notes AG module','module owns AG, focus actions, template UI and marker planning',1),
+ ('N03','N','returned.setVirtualQuery','ui/note-pair-module.js','returned','chapter query intention','void','owner applies chapter AG filter to its rows',1),
+ ('N04','N','returned.openTemplates','ui/note-pair-module.js','returned','none','dialog','editable browser-local pairing regex templates',1),
+ ('N05','N','returned.count','ui/note-pair-module.js','returned','chapter scope','number','semantic AG note count for global status bar',1);
+INSERT INTO access_edges VALUES
+ ('X-N01','N','C','ui/note-pair-scan.js',"import {scanAnnotations} from './cmd-annotations.js'",'C23','registered','Note scanner reads only CMD annotation syntax for reviewed reference/body markers'),
+ ('X-N02','L','N','ui/workspace.js','createNotePairModule(this.noteHost','N02','registered','Layout mounts Notes AG through its public module factory'),
+ ('X-N03','L','N','ui/workspace.js','owner.setVirtualQuery(intent)','N03','registered','WCP chapter query is routed through Layout semantic AG port'),
+ ('X-N04','L','N','ui/workspace.js','currentOutline?.note?.openTemplates()','N04','registered','Shell invokes Notes template dialog through Layout facade'),
+ ('X-N05','L','N','ui/workspace.js','this.note?.count(chapter)','N05','registered','Global status queries Notes count through bounded semantic count');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-N01','N01','tests/note-pairs.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Default template detects 10 numbered Notes bodies; synthetic pairs, unmatched refs/bodies and duplicate IDs are explicit','direct'),
+ ('TC-N02','N02','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit Notes AG, regex modal, reference/body source/PDF navigation, CMD annotation and single global Save','integration'),
+ ('TC-N03','N03','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter scope filters AG Notes without changing original source','integration'),
+ ('TC-N04','N04','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Regex validation, application and browser-local template storage','integration'),
+ ('TC-N05','N05','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Global status displays current Notes count','integration');

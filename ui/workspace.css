@@ -99,3 +99,5 @@
 
 /* Latex has its own pane; chapter AG and Media remain separate. */
 .ocr-outline-pane > .ocr-latex-pane{flex:1;min-height:0}
+/* Notes is a separate AG projection, not a mixed element grid. */
+.ocr-outline-pane > .ocr-note-pane{flex:1;min-height:0}

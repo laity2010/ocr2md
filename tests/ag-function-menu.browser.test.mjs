@@ -80,6 +80,14 @@ try{
         assert.equal(await popup.isVisible(),false,'function click should close menu');
         assert.equal(await button.getAttribute('aria-expanded'),'false');
       }
+      await choose(page,'note');
+      assert.equal(await button.isDisabled(),false,'Notes has template function');
+      await button.click();
+      assert(await page.locator('#note-templates').isVisible());
+      assert.equal(await page.locator('#latex-normalize').isVisible(),false);
+      await page.locator('#note-templates').click();
+      assert(await page.locator('.ocr-note-template-dialog').isVisible());
+      await page.locator('.ocr-note-template-dialog').getByRole('button',{name:'取消'}).click();
       await choose(page,'chapter-boundary');
       await page.waitForFunction(()=>document.querySelector('.ocr-lab-element-select')?.value==='chapter-boundary',
         null,{timeout:12000});

@@ -24,6 +24,8 @@
     "media-module.js": "A",
     "mineru-anchors.js": "shared",
     "mineru-comment-folding.js": "shell",
+    "note-pair-module.js": "N",
+    "note-pair-scan.js": "N",
     "obsidian-heading-markers.js": "shell",
     "obsidian-images.js": "M",
     "obsidian-markdown.js": "shell",
@@ -60,6 +62,7 @@
     "enum-checkbox-filter.js": [
       "A",
       "G",
+      "N",
       "S",
       "T"
     ],
@@ -76,6 +79,7 @@
     "view-store.js": [
       "A",
       "G",
+      "N",
       "L",
       "P",
       "S",
@@ -97,6 +101,7 @@
     "virtual-ag-query.js": [
       "A",
       "G",
+      "N",
       "T"
     ],
     "wcp-navigation-select.js": [
@@ -111,6 +116,9 @@
     "Existing direct viewStore.setState writes are reported as review findings, not silently classified as zero debt."
   ],
   "crossModuleBindings": {
+    "note-pair-scan.js->cmd-annotations.js": [
+      "scanAnnotations"
+    ],
     "chapter-markers.js->cmd-annotations.js": [
       "parseAnnotation"
     ],
@@ -197,6 +205,9 @@
     ],
     "workspace.js->media-module.js": [
       "createMediaModule"
+    ],
+    "workspace.js->note-pair-module.js": [
+      "createNotePairModule"
     ],
     "workspace.js->pdf-preview.js": [
       "PdfPreview"

@@ -79,12 +79,12 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     }
   });
   // File navigation and the mainline module handler keep the original select.
-  // The chapter's *visible* element picker has only three real options: iPad
+  // The chapter's visible element picker owns explicit per-module options: iPad
   // Safari's native picker can expose <option hidden>, so don't rely on it.
   const elementSelect=document.createElement('select');
   elementSelect.className='ocr-lab-element-select';
   elementSelect.setAttribute('aria-label','文档元素');
-  for(const [value,label] of [['chapter-boundary','标题'],['media','媒体'],['latex','LaTeX']]){
+  for(const [value,label] of [['chapter-boundary','标题'],['media','媒体'],['latex','LaTeX'],['note','注释对']]){
     const option=document.createElement('option');
     option.value=value;option.textContent=label;elementSelect.append(option);
   }
@@ -155,7 +155,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     if(transitioning)return;
     const selected=modulePort.getModule();
     if(selected==='settings'){refresh();return;}
-    if(selected==='chapter-boundary'||selected==='media'||selected==='latex')
+    if(selected==='chapter-boundary'||selected==='media'||selected==='latex'||selected==='note')
       selectedElementModule=selected;
     else{syncModule();return;}
     refresh();
