@@ -28,6 +28,34 @@ V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘
 
 当前界面使用 Everforest 深色风格和完整 Sarasa Fixed SC 字体。**源码着色分工**：Markdown 沿用本机 Obsidian/Everforest；HTML 使用 CodeMirror/Lezer 官方解析；LaTeX 在现有 CMD 公式扫描器的只读范围内，使用官方 `@codemirror/legacy-modes` 的 `stexMath` 识别语法、`@codemirror/theme-one-dark` 的 `oneDarkHighlightStyle` 着色。One Dark 仅用作语法令牌样式，不替换 Markdown 主题、不修改正文或引入第二编辑器。Mac Chrome/WebKit 支持模拟 iPad 横屏检查，最终触控体验仍以真实 iPad Safari 验收为准。
 
+## 表格 HTML 三段式结构（暂定约定，尚未自动转换）
+
+OCR2MD 暂将一张表格视为一个整体，**仅分为三个逻辑部分**：**标题、内容、注释及来源**。
+「注释及来源」合为第三部分，不再拆出第四个并列的结构区。建议用标准 HTML
+`<figure>` 包住三部分；标题用其第一个子元素 `<figcaption>`，内容用 `<table>`，
+表下注释及数据来源放在 `</table>` 后同一个 `<div class="table-notes">` 容器内。
+这里的 `table-notes` 是 OCR2MD 的 CSS/内容约定，不是 HTML 标准标签。
+
+```html
+<figure class="table-block">
+  <figcaption>表 3.1：人口增长</figcaption>
+  <table>
+    <thead><tr><th>年份</th><th>人口</th></tr></thead>
+    <tbody><tr><td>2020</td><td>1,000</td></tr></tbody>
+  </table>
+  <div class="table-notes">
+    <p>注：数据为估计值。</p>
+    <p>来源：统计年鉴。</p>
+  </div>
+</figure>
+```
+
+- **标题**：对应 `<figcaption>`；不使用表格外松散文本的位置来推断归属。使用这个三段式结构时，不再重复设置 `<table><caption>`，以免同一个标题重复两次。
+- **内容**：对应 `<table>`，保留原有表头、表体、合计行及单元格结构。
+- **注释及来源**：对应 `.table-notes`，可以包含多段注释和来源，但仍视为同一个逻辑部分；**不要**把它误写成 `<tfoot>`。
+
+这一约定仅定义后续结构审阅和人工确认后的目标格式：当前 HTML AG 仍只读扫描、显示并定位已有 HTML 标签，**不会自动推断、生成、移动或改写标题、表格及表下注释**。OCR 尚未识别或配对不确定的部分应保留原文，不能补造内容。
+
 ## 结构与数据
 
 | 位置 | 职责 |
