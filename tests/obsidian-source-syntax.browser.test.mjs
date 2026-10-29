@@ -22,6 +22,10 @@ const source=[
   '$$',
   String.raw`Inline $E=mc^2$ formula.`,
   '',
+  '```math',
+  String.raw`\sqrt{a_2 + b^2} = c`,
+  '```',
+  '',
   '```html',
   '<span class="fake">Should stay code</span>',
   '```',
@@ -87,17 +91,41 @@ try{
       const comment=await inspect('ocr2md:latex',['cm-ob-syntax-html-comment']);
       assert.equal(comment['cm-ob-syntax-html-comment'].color,'rgb(133, 146, 137)');
       const math=await inspect('\\frac{',['cm-ob-syntax-math-fence',
-        'cm-ob-syntax-math-body']);
-      assert.equal(math['cm-ob-syntax-math-body'].color,'rgb(211, 198, 170)');
-      assert.equal(math['cm-ob-syntax-math-fence'].color,'rgb(90, 147, 162)');
-      const mathStyle=await page.locator('#editor .cm-ob-syntax-math-body')
+        'cm-ob-syntax-math-command','cm-ob-syntax-math-bracket',
+        'cm-ob-syntax-math-script','cm-ob-syntax-math-number',
+        'cm-ob-syntax-math-operator','cm-ob-syntax-math-body']);
+      const colorMap={
+        'cm-ob-syntax-math-fence':'rgb(90, 147, 162)',
+        'cm-ob-syntax-math-command':'rgb(127, 187, 179)',
+        'cm-ob-syntax-math-bracket':'rgb(154, 167, 157)',
+        'cm-ob-syntax-math-script':'rgb(214, 153, 182)',
+        'cm-ob-syntax-math-number':'rgb(219, 188, 127)',
+        'cm-ob-syntax-math-operator':'rgb(131, 192, 146)',
+        'cm-ob-syntax-math-body':'rgb(211, 198, 170)',
+      };
+      for(const [cls,color] of Object.entries(colorMap))
+        assert.equal(math[cls].color,color,name+' '+cls);
+      const mathStyle=await page.locator('#editor .cm-ob-syntax-math-command')
         .first().evaluate(el=>getComputedStyle(el).fontStyle);
       assert.equal(mathStyle,'italic');
-      assert((await page.locator('#editor .cm-ob-syntax-math-command').count())===0,
-        'Obsidian colors the math body uniformly instead of separate commands');
-      const inline=await inspect('E=mc^2',['cm-ob-syntax-math-body',
+      assert(math['cm-ob-syntax-math-command'].text.includes('\\frac'));
+      const inline=await inspect('E=mc^2',['cm-ob-syntax-math-script',
         'cm-ob-syntax-math-fence']);
       assert(inline['cm-ob-syntax-math-fence'].text.includes('$'));
+      assert.equal(inline['cm-ob-syntax-math-script'].color,'rgb(214, 153, 182)');
+      await page.evaluate(()=>{
+        const view=window.__v6cm6.view,at=view.state.doc.toString().indexOf('\\sqrt{');
+        view.dispatch({selection:{anchor:at},scrollIntoView:true});
+      });
+      await page.waitForFunction(()=>[...document.querySelectorAll('#editor .cm-line')]
+        .some(line=>line.textContent.includes('\\sqrt{')&&
+          line.querySelector('.cm-ob-syntax-math-command')),null,{timeout:13000});
+      const fencedCommand=await page.locator('#editor .cm-line').filter({hasText:'\\sqrt{'})
+        .locator('.cm-ob-syntax-math-command').allTextContents();
+      assert(fencedCommand.includes('\\sqrt'),name+' fenced math command should be highlighted');
+      const fenceLines=await page.locator('#editor .cm-line').filter({hasText:'```math'})
+        .locator('.cm-ob-syntax-math-fence').allTextContents();
+      assert(fenceLines.some(text=>text.includes('math')),name+' fenced math delimiter should be colored');
       await page.evaluate(()=>{
         const view=window.__v6cm6.view,at=view.state.doc.toString().indexOf('Should stay code');
         view.dispatch({selection:{anchor:at},scrollIntoView:true});
@@ -109,8 +137,8 @@ try{
       assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),source);
       assert.deepEqual(errors,[]);
       console.log('OBSIDIAN_SOURCE_SYNTAX_PASS',name,JSON.stringify({htmlTag:true,
-        htmlAttributes:true,htmlBlock:true,math:true,inlineMath:true,
-        fencedCodeExcluded:true,sourceUnchanged:true}));
+        htmlAttributes:true,htmlBlock:true,mathTokens:true,inlineMath:true,
+        fencedMath:true,fencedCodeExcluded:true,sourceUnchanged:true}));
     }finally{await browser?.close();}
   }
 }finally{server.kill('SIGTERM');rmSync(folder,{recursive:true,force:true});}

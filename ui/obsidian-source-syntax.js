@@ -15,6 +15,10 @@ const htmlKinds=Object.freeze({
   TagName:'html-tag',AttributeName:'html-attr',
   AttributeValue:'html-value',Is:'html-punct',SelfCloseEndTag:'html-punct',
 });
+// Only tokenize spans that the existing CMD LaTeX scanner has already
+// identified. The source scanner owns math boundaries; this lexer only
+// provides visual token categories, with no editing or Markdown rewriting.
+const mathToken=/\\[a-zA-Z]+\*?|\\[^a-zA-Z\s]|\d+(?:\.\d+)?|[{}\[\]()]|[_^]|[=+\-*/<>]/g;
 
 function append(marks,decoration,from,to,visible){
   if(from>=to)return;
@@ -96,14 +100,34 @@ function mathMarks(view,visible,marks){
     }else if(formula.syntax.startsWith('```')){
       const beginning=doc.lineAt(a);
       const ending=doc.lineAt(Math.max(a,b-1));
+      append(marks,classMark('math-fence'),beginning.from,beginning.to,visible);
+      if(ending.from>beginning.from)
+        append(marks,classMark('math-fence'),ending.from,ending.to,visible);
       bodyFrom=Math.min(b,beginning.to+1);
       bodyTo=Math.max(bodyFrom,ending.from-1);
     }
     if(bodyTo<=bodyFrom)continue;
-    // Obsidian 1.14.5 app.css: '.cm-math {color:var(--code-normal)}',
-    // '.cm-s-obsidian span.cm-math {font-style:italic}'.
-    // Do not invent command/bracket rainbow syntax absent in Obsidian.
-    append(marks,classMark('math-body'),bodyFrom,bodyTo,visible);
+    // Keep the familiar Obsidian math body, but distinguish LaTeX lexical
+    // elements using *actual* Everforest code syntax roles. Coloring the
+    // whole formula with --code-normal alone hid the syntax from the user.
+    const body=doc.sliceString(bodyFrom,bodyTo);
+    mathToken.lastIndex=0;
+    let last=0,token;
+    while((token=mathToken.exec(body))!==null){
+      if(token.index>last)
+        append(marks,classMark('math-body'),bodyFrom+last,
+          bodyFrom+token.index,visible);
+      const value=token[0];
+      const kind=value.startsWith('\\')?'math-command':
+        /^\d/.test(value)?'math-number':
+        value==='^'||value==='_'?'math-script':
+        /^[{}\[\]()]$/.test(value)?'math-bracket':'math-operator';
+      append(marks,classMark(kind),bodyFrom+token.index,
+        bodyFrom+token.index+value.length,visible);
+      last=mathToken.lastIndex;
+    }
+    if(last<body.length)
+      append(marks,classMark('math-body'),bodyFrom+last,bodyTo,visible);
   }
 }
 export const obsidianSourceSyntax=ViewPlugin.fromClass(class {

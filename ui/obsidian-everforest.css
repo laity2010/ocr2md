@@ -85,6 +85,9 @@
   --ob-code-function: #7fbbb3;     /* --code-function */
   --ob-code-punctuation: #9aa79d;  /* --code-punctuation */
   --ob-code-string: #a7c080;       /* --code-string */
+  --ob-code-operator: #83c092;     /* --code-operator */
+  --ob-code-value: #dbbc7f;        /* --code-value */
+  --ob-code-keyword: #d699b6;      /* --code-keyword */
   --ob-math-formatting: #5a93a2;   /* --text-accent */
 }
 .ocr-cm-source .cm-ob-syntax-html-punct { color: var(--ob-code-punctuation); }
@@ -94,6 +97,11 @@
 .ocr-cm-source .cm-ob-syntax-html-comment { color: var(--ob-code-comment); }
 .ocr-cm-source .cm-ob-syntax-math-fence { color: var(--ob-math-formatting); font-weight: inherit; }
 .ocr-cm-source .cm-ob-syntax-math-body { color: var(--ob-code-normal); font-style: italic; }
+.ocr-cm-source .cm-ob-syntax-math-command { color: var(--ob-code-function); font-style: italic; }
+.ocr-cm-source .cm-ob-syntax-math-bracket { color: var(--ob-code-punctuation); font-style: italic; }
+.ocr-cm-source .cm-ob-syntax-math-script { color: var(--ob-code-keyword); font-style: italic; }
+.ocr-cm-source .cm-ob-syntax-math-number { color: var(--ob-code-value); font-style: italic; }
+.ocr-cm-source .cm-ob-syntax-math-operator { color: var(--ob-code-operator); font-style: italic; }
 /* Exact Everforest --hN-size ratios relative to the 16px Sarasa body. */
 .ocr-cm-source .cm-ob-heading-line-1 { font-size: 2.125em; }
 .ocr-cm-source .cm-ob-heading-line-2 { font-size: 1.625em; }
