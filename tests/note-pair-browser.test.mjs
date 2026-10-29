@@ -71,12 +71,17 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
         const picker=toolbar?.querySelector('.ts-wrapper.ocr-navigation-preview');
         const split=toolbar?.querySelector('.ocr-preview-split-toggle');
         const preview=document.querySelector('.ocr-preview-pane');
-        if(!toolbar||!picker||!split||!preview)return null;
+        const markdown=preview?.querySelector('.ocr-preview-md-scroll');
+        if(!toolbar||!picker||!split||!preview||!markdown)return null;
         const t=toolbar.getBoundingClientRect(),p=picker.getBoundingClientRect(),
-          s=split.getBoundingClientRect(),owner=preview.getBoundingClientRect();
+          s=split.getBoundingClientRect(),owner=preview.getBoundingClientRect(),
+          md=markdown.getBoundingClientRect();
         const top=document.elementFromPoint(p.left+Math.min(12,p.width/2),p.top+p.height/2);
         return {toolbar:[t.x,t.y,t.width,t.height],picker:[p.x,p.y,p.width,p.height],
           split:[s.x,s.y,s.width,s.height],owner:[owner.x,owner.y,owner.width,owner.height],
+          markdown:[md.x,md.y,md.width,md.height],
+          layout:getComputedStyle(preview).display,
+          positioning:getComputedStyle(toolbar).position,
           topIsPicker:top===picker||picker.contains(top),
           display:getComputedStyle(toolbar).display,visibility:getComputedStyle(toolbar).visibility};
       });
@@ -85,6 +90,12 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
       assert(state.picker[2]>=100&&state.picker[3]>=25,stage+' preview mode picker hidden');
       assert(state.split[2]>30&&state.split[3]>10,stage+' split PDF control hidden');
       assert(state.topIsPicker,stage+' preview picker covered by another pane');
+      assert.equal(state.layout,'grid',stage+' preview must reserve toolbar row');
+      assert.equal(state.positioning,'relative');
+      assert(Math.abs(state.toolbar[1]-state.owner[1])<1,
+        stage+' preview toolbar detached from its pane top');
+      assert(Math.abs(state.toolbar[1]+state.toolbar[3]-state.markdown[1])<1,
+        stage+' preview content must begin BELOW its toolbar');
       assert.equal(state.display,'flex');
       assert.equal(state.visibility,'visible');
     };
@@ -209,6 +220,7 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     assert(convertedBulk.includes('<!--ocr2md:note-ref id="2"-->[^2]'));
     // The selected virtual chapter intentionally hides the body, which lives
     // in another chapter. Verify complete CMD bytes after the explicit Save.
+    await assertPreviewToolbar('bulk converted but unsaved in virtual chapter');
     await page.locator('#undo').click();
     await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="2"] [col-id="status"]')
       ?.textContent==='待转换',null,{timeout:17000});

@@ -46,10 +46,14 @@
   height: 100%;
   width: 100%;
 }
-/* One Dockview pane for two long-lived read-only views; visibility keeps
-   geometry so PDF.js and MD line maps can sync while hidden. */
-.ocr-preview-pane {position:relative;overflow:hidden}
-.ocr-preview-switchbar {position:absolute;inset:0 0 auto 0;height:34px;
+/* Reserve a REAL first row for the preview toolbar, not an absolutely
+   positioned overlay. iPad Safari can otherwise paint the scroller above
+   the strip after Dockview sash/virtual-chapter reflow, hiding all controls.
+   Both read-only preview bodies share row 2 and retain their scroll state. */
+.ocr-preview-pane {position:relative;overflow:hidden;display:grid;
+  grid-template-columns:minmax(0,1fr);grid-template-rows:34px minmax(0,1fr)}
+.ocr-preview-switchbar {position:relative;grid-column:1;grid-row:1;inset:auto;height:34px;
+  min-height:34px;min-width:0;
   display:flex;align-items:center;gap:6px;padding:3px 7px;z-index:5;
   background:#283238;border-bottom:1px solid #4d585d}
 .ocr-preview-mode {height:27px;min-width:140px;max-width:46%;
@@ -61,8 +65,11 @@
   height:28px;padding:0;border:0;background:transparent;z-index:auto}
 .ocr-preview-mode-tools[aria-hidden="true"] {visibility:hidden;pointer-events:none;
   width:0;height:0;overflow:hidden}
-.ocr-preview-md-scroll,.ocr-preview-pdf-host {position:absolute;top:34px;
-  bottom:0;left:0;right:0;min-height:0;min-width:0}
+.ocr-preview-pane>.ocr-preview-md-scroll,
+.ocr-preview-pane>.ocr-preview-pdf-host {position:relative;grid-column:1;grid-row:2;
+  top:auto;bottom:auto;left:auto;right:auto;min-height:0;min-width:0;
+  width:100%;height:100%}
+.ocr-preview-pane>.ocr-preview-pdf-host {overflow:hidden}
 .ocr-preview-md-scroll {overflow:auto;scroll-behavior:auto;
   overscroll-behavior:contain;scrollbar-color:#4a555b #272f34}
 .ocr-preview-pane[data-preview-mode="md"] .ocr-preview-pdf-host,
@@ -90,7 +97,9 @@
 .ocr-detached-pdf-tools .ocr-pdf-tools {position:static;height:28px;
   padding:0;border:0;background:transparent;z-index:auto;width:100%}
 .ocr-detached-pdf-host {position:absolute;inset:34px 0 0 0;min-width:0;min-height:0}
-.ocr-detached-pdf-host .ocr-preview-pdf-host {top:0;bottom:0}
+.ocr-detached-pdf-host .ocr-preview-pdf-host {
+  position:absolute;inset:0;width:100%;height:100%
+}
 @media(max-width:950px){.ocr-detached-pdf-title {display:none}}
 
 /* Media is a sibling read-only projection, not an AG chapter grid mutation. */
