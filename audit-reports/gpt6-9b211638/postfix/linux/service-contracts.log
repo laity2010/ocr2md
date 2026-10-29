@@ -1,0 +1,27 @@
+LINUX_WORKSPACE_SHA=86c32a055a042ad56a26b93f7a82458c897d3999
+v23.11.0
+LINUX_SERVICE_START=tests/workspace-portability.test.mjs
+WORKSPACE_PORTABILITY_TEST_PASS {"isolatedNode":true,"missingRuntimeRejected":true,"noHomebrewDependency":true}
+LINUX_SERVICE_PASS=tests/workspace-portability.test.mjs
+LINUX_SERVICE_START=tests/workspace-root-server.test.mjs
+BOOK_CATALOG_ISOLATED_SERVER_PASS {"listFirstLevel":true,"inspectSources":true,"unconvertedBookGenerated":true,"sourceUnchanged":true,"pdfSwitched":true,"oldDocIntact":true,"staleDoc412":true,"staleSettings409":true,"restoreDefault":true}
+LINUX_SERVICE_PASS=tests/workspace-root-server.test.mjs
+LINUX_SERVICE_START=tests/wcp-runtime-contract.test.mjs
+✔ WCP owns declared, default-inert extension points (0.750658ms)
+✔ AG-to-WCP bridge is bounded and cannot expose raw module objects (0.886754ms)
+✔ Lab and Main share exact business module graph; overrides are forbidden (2.298302ms)
+✔ WCP chapter query has no Grid mutation capability (0.614148ms)
+✔ Chapter, Media and LaTeX AGs own their public semantic query implementations (1.169939ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10.234781
+LINUX_SERVICE_PASS=tests/wcp-runtime-contract.test.mjs
+LINUX_SERVICE_START=tests/settings-server.test.mjs
+CMD_SETTINGS_SERVER_PASS {"readOnlyGet":true,"auth":true,"origin":true,"compareAndSave":true,"preserveBytes":true,"staleRejected":true,"invalidRejected":true}
+LINUX_SERVICE_PASS=tests/settings-server.test.mjs
+LINUX_SERVICE_EXIT=0
