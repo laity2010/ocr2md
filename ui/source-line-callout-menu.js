@@ -1,10 +1,11 @@
 /** CM6-native inline source-line action, owned by the source Layout pane.
  * Only the caret line replaces its gutter number with an actual <button>.
- * Three menu items appear next to that button; CMD owns every edit.
+ * Four menu items appear next to that button; CMD owns every edit.
  */
 import {Compartment,RangeSet,StateEffect} from '@codemirror/state';
 import {EditorView,GutterMarker,lineNumberMarkers} from '@codemirror/view';
 import {planCalloutAtCursor} from './source-callout-plan.js';
+import {planFencedBlock} from './source-fence-plan.js';
 import './source-line-callout-menu.css';
 
 const markerCompartment=new WeakMap();
@@ -70,13 +71,16 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   const insert=document.createElement('button');
   insert.type='button';insert.setAttribute('role','menuitem');
   insert.textContent='插入 Callout';
+  const fence=document.createElement('button');
+  fence.type='button';fence.setAttribute('role','menuitem');
+  fence.textContent='插入围栏块';
   const increase=document.createElement('button');
   increase.type='button';increase.setAttribute('role','menuitem');
   increase.textContent='>+ 增加引用层级';increase.dataset.direction='1';
   const decrease=document.createElement('button');
   decrease.type='button';decrease.setAttribute('role','menuitem');
   decrease.textContent='>− 减少引用层级';decrease.dataset.direction='-1';
-  menu.append(summary,insert,increase,decrease);host.append(menu);
+  menu.append(summary,insert,fence,increase,decrease);host.append(menu);
   function close(){
     viewportAnchorToken++;
     for(const timer of viewportTimers)clearTimeout(timer);
@@ -188,6 +192,16 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
     if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
     onBeforeSourceEdit();
     onInsert(planCalloutAtCursor(view.state.doc.toString(),captured.offset));
+  });
+  fence.addEventListener('click',event=>{
+    event.preventDefault();event.stopPropagation();
+    const captured=target;
+    close();
+    if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
+    const range=captured.selection.main;
+    const plan=planFencedBlock(view.state.doc.toString(),range.from,range.to);
+    onBeforeSourceEdit();
+    onInsert(plan,'fence');
   });
   for(const button of [increase,decrease]){
     button.addEventListener('pointerdown',event=>{

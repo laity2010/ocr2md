@@ -51,7 +51,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       'inactive line number should remain plain text');
     await button.click();
     assert(await menu.isVisible());
-    assert.equal(await menu.getByRole('menuitem').count(),3,'menu must include Callout and quote +/-');
+    assert.equal(await menu.getByRole('menuitem').count(),4,'menu must include fence, Callout and quote +/-');
     assert.equal((await menu.getByRole('menuitem').first().textContent()).trim(),'插入 Callout');
     assert.equal((await menu.locator('.ocr-source-line-menu-summary').textContent()).trim(),
       '未选区 · 光标第 4 行');
@@ -117,10 +117,29 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:12000});
     // One command only, repeated invocation inserts another folded callout.
     await button.click();
-    assert.equal(await menu.getByRole('menuitem').count(),3);
+    assert.equal(await menu.getByRole('menuitem').count(),4);
     await menu.getByRole('menuitem',{name:'插入 Callout'}).click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .split('[!note]- 标题').length===3,null,{timeout:12000});
+    // New fence action with no selection: create a syntactically complete
+    // blank Markdown code fence with the caret between its delimiters.
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact.'}).click();
+    await page.keyboard.press('End');
+    await button.click();
+    assert.equal(await menu.getByRole('menuitem').count(),4);
+    await menu.getByRole('menuitem',{name:'插入围栏块'}).click();
+    await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
+      .includes('```'),null,{timeout:12000});
+    // Select the original entire beta paragraph, then wrap it. Gutter click
+    // must preserve that selection until the CMD edit plan is submitted.
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact.'}).click();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Shift+End');
+    await button.click();
+    assert.match(await menu.locator('.ocr-source-line-menu-summary').textContent(),/已选 1 行/);
+    await menu.getByRole('menuitem',{name:'插入围栏块'}).click();
+    await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
+      .includes('Paragraph beta remains intact.'),null,{timeout:12000});
     assert.equal(readFileSync(doc,'utf8'),original,'pre-Save disk changes');
     await page.locator('#save').click();
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
@@ -128,6 +147,9 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     const saved=readFileSync(doc,'utf8');
     assert(saved.includes('[!note]- 标题'));
     assert.equal(saved.split('[!note]- 标题').length-1,2);
+    assert(saved.includes('```\nParagraph beta remains intact.\n```'),
+      'selected content not wrapped by a valid fence');
+    assert(saved.includes('```\n\n```'), 'empty fence was not inserted');
     assert(saved.includes('Paragraph beta remains intact.'));
     assert(saved.slice(saved.indexOf('<!-- minerujson:source:v1'))
       .includes('originalEvidence'));
@@ -137,7 +159,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:17000});
     assert.deepEqual(errors,[],name+' browser errors');
     console.log('SOURCE_LINE_CALLOUT_BROWSER_PASS',name,
-      JSON.stringify({singleActiveGutterButton:true,threeMenuItems:true,nonOverlappingWrappedLine:true,anchoredPopup:true,undoRedo:true,
+      JSON.stringify({singleActiveGutterButton:true,fourMenuItems:true,emptyFence:true,selectedFence:true,nonOverlappingWrappedLine:true,anchoredPopup:true,undoRedo:true,
         explicitSave:true,reload:true,evidenceUnchanged:true}));
   }finally{await browser?.close();server.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}
 }

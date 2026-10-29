@@ -40,6 +40,7 @@
     "scroll-sync.js": "L",
     "source-line-callout-menu.js": "L",
     "source-callout-plan.js": "L",
+    "source-fence-plan.js": "L",
     "settings-module.js": "S",
     "view-store.js": "shared",
     "virtual-ag-query.js": "shared",

@@ -879,13 +879,23 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Shell hands the typed action to the registered CMD transaction port.
 INSERT INTO apis VALUES
  ('L30','L','planCalloutAtCursor','ui/source-callout-plan.js','export','source snapshot,caret offset,mode','safe atomic insertion plan with cursor target','pure Markdown block plan; old bytes preserved, no source write',1),
- ('L31','L','createSourceLineCalloutMenu','ui/source-line-callout-menu.js','export','source pane, CM6 view, bounded action callback','three-item caret-line gutter popup with selected-line summary','caret-line button popup avoids entire soft-wrapped editing line, repositions after quote changes, preserves selection/scroll leadership',1),
+ ('L31','L','createSourceLineCalloutMenu','ui/source-line-callout-menu.js','export','source pane, CM6 view, bounded action callback','four-item caret-line gutter popup with selected-line summary','caret-line popup avoids wrapped source line, offers fenced block insertion and retains selection and scroll leadership',1),
  ('L32','L','returned.mountSourceLineMenu','ui/workspace.js','returned','CM6 view,bounded CMD insertion callback','void','source Layout mounts a CM6 line-number action; no editor edits',1);
 INSERT INTO access_edges VALUES
  ('X-SRC-L31','L','L','ui/workspace.js','createSourceLineCalloutMenu({host:','L31','registered','Layout mounts source line action owned by its own view'),
- ('X-SRC-L32',NULL,'L','ui/main.js','workspace.mountSourceLineMenu(view,{onInsert:plan','L32','registered','Shell supplies bounded source insertion action'),
+ ('X-SRC-L32',NULL,'L','ui/main.js','workspace.mountSourceLineMenu(view,{onInsert:(plan,kind','L32','registered','Shell supplies bounded source insertion action'),
  ('X-SRC-L30','L','L','ui/source-line-callout-menu.js','planCalloutAtCursor(view.state.doc.toString(),captured.offset)','L30','registered','Layout-owned pure planner never mutates CMD or editor state');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-L30-SRC','L30','tests/source-callout-plan.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Markdown block boundaries, cursor placement, bytes preservation in all three folding modes','direct'),
- ('TC-L31-SRC','L31','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit popup has no overlap with edited (including soft-wrapped) line before/after quote actions, preserves range','integration'),
+ ('TC-L31-SRC','L31','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit no overlapping wrapped source; fence action plus Callout and quote levels preserve selection','integration'),
  ('TC-L32-SRC','L32','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit Callout and quote +/- from gutter, Undo/Redo, explicit CAS Save, reload and evidence safety','integration');
+
+-- Source Markdown code fence action is planned in Layout and committed only
+-- through the existing guarded CMD replaceRanges port.
+INSERT INTO apis VALUES
+ ('L33','L','planFencedBlock','ui/source-fence-plan.js','export','source string,selected range [from,to)','guarded atomic Markdown code-fence insertion plan','expands nonempty selection to whole lines; adapts fence delimiter to embedded backticks; empty caret inserts blank fence',1);
+INSERT INTO access_edges VALUES
+ ('X-SRC-L33','L','L','ui/source-line-callout-menu.js','planFencedBlock(view.state.doc.toString(),range.from,range.to)','L33','registered','Layout plans fenced block while source writes remain CMD-owned');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-L33-FENCE','L33','tests/source-fence-plan.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','9 pure cases: empty caret, partial/full lines, backticks, invalid ranges and source-byte preservation','direct'),
+ ('TC-L33-FENCE-BR','L33','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit real gutter menu blank/selection fence, one CMD transaction and explicit save/reload/evidence safety','integration');

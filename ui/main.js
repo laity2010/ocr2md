@@ -461,13 +461,14 @@ async function main() {
   });
   view=cm.view;
   cmdPort=wcpRuntime.wrapCMD(cm);
-  workspace.mountSourceLineMenu(view,{onInsert:plan=>{
+  workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{
       cmdPort.replaceRanges([{from:plan.from,to:plan.to,
         expected:plan.expected,insert:plan.insert}],plan.cursorAfter);
       view.focus();
-      status('✓ 已在光标处插入 Callout · 请全局保存');
-    }catch(error){status('Callout 插入失败：'+error.message,'error');}
+      status(kind==='fence'?'✓ 已插入 Markdown 围栏块 · 请全局保存':
+        '✓ 已在光标处插入 Callout · 请全局保存');
+    }catch(error){status('源码插入失败：'+error.message,'error');}
   },onQuoteIndent:direction=>{
     try{
       const result=cm.adjustQuoteIndent(direction);
