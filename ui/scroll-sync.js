@@ -38,6 +38,13 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     const paneRect=previewPane.getBoundingClientRect();
     const scroll=previewPane.scrollTop;
     anchors=[...previewBody.querySelectorAll('[data-source-start][data-source-end]')]
+      // Closed callout bodies occupy no reading space. Keep the native
+      // <details> summary as the source anchor, but exclude its hidden children
+      // so CM6/preview scroll mapping does not jump into invisible content.
+      .filter(element=>{
+        const closed=element.closest('details.ocr-callout:not([open])');
+        return !closed||closed===element;
+      })
       .map(element=>{
         const start=Number(element.dataset.sourceStart);
         const end=Number(element.dataset.sourceEnd);

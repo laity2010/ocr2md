@@ -8,6 +8,7 @@ import footnote from 'markdown-it-footnote';
 import taskLists from 'markdown-it-task-lists';
 import DOMPurify from 'dompurify';
 import {installObsidianImages} from './obsidian-images.js';
+import {installObsidianCallouts} from './obsidian-callouts.js';
 import {projectReviewedInlineLatex} from './latex-inline-preview.js';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -40,6 +41,7 @@ const sourceAttrs = token => token.map
   : '';
 
 installObsidianImages(md);
+installObsidianCallouts(md);
 // Obsidian-native display math uses its own $$ lines, not a code fence.
 // Keep source-line maps so AG/CM6/PDF navigation remains unchanged.
 md.block.ruler.before('fence','ocr_display_math',(state,startLine,endLine,silent)=>{

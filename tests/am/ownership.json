@@ -29,6 +29,7 @@
     "note-pair-scan.js": "N",
     "obsidian-heading-markers.js": "shell",
     "obsidian-images.js": "M",
+    "obsidian-callouts.js": "M",
     "obsidian-markdown.js": "shell",
     "obsidian-source-syntax.js": "shell",
     "outline-focus.js": "shell",

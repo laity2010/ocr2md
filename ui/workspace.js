@@ -205,9 +205,15 @@ class PreviewPanel {
     this.lastFocusElement=null;
     this.noteReturn=null;
     this.footnoteReader=null;
+    this.renderedCalloutScope=null;
+    this.onCalloutToggle=event=>{
+      if(event.target instanceof Element && event.target.matches('details.ocr-callout'))
+        scrollSync?.measureLater();
+    };
     this.onClick=event=>{
       if(this.footnoteReader?.handleClick(event))return;
-      if(!(event.target instanceof Element) || event.target.closest('a[href]'))return;
+      if(!(event.target instanceof Element) ||
+         event.target.closest('a[href],details.ocr-callout > summary'))return;
       const target=event.target.closest('[data-source-start][data-source-end]');
       if(!target)return;
       publishFocus({sourceLine:Number(target.dataset.sourceStart),
@@ -253,6 +259,7 @@ class PreviewPanel {
       isDisposed:()=>this.disposed,
     }));
     this.body.addEventListener('click',this.onClick);
+    this.body.addEventListener('toggle',this.onCalloutToggle,true);
     refreshPreview=()=>this.schedule();
     this.schedule(true);
   }
@@ -340,6 +347,14 @@ class PreviewPanel {
     const html=wcpRuntime
       ?wcpRuntime.renderPreview(source,{scope:this.virtualScope??null},renderMarkdown)
       :renderMarkdown(source);
+    // Keep the reader's fold choices during a repaint of the SAME chapter.
+    // Native details handles the actual interaction, no handler toggles it.
+    const scopeId=this.virtualScope?.id??null;
+    const foldState=new Map();
+    if(scopeId===this.renderedCalloutScope){
+      for(const detail of this.body.querySelectorAll('details.ocr-callout[data-source-start]'))
+        foldState.set(detail.dataset.sourceStart+':'+detail.dataset.callout,detail.open);
+    }
     // PreviewPanel alone owns Markdown DOM. The Lab requests stable-node
     // reconciliation through a boolean capability; it never receives body DOM.
     if(wcpRuntime?.preservePreviewNodes){
@@ -350,6 +365,11 @@ class PreviewPanel {
           onBeforeElUpdated:(from,to)=>!from.isEqualNode(to)});
       }
     }else this.body.innerHTML=html;
+    for(const detail of this.body.querySelectorAll('details.ocr-callout[data-source-start]')){
+      const key=detail.dataset.sourceStart+':'+detail.dataset.callout;
+      if(foldState.has(key))detail.open=foldState.get(key);
+    }
+    this.renderedCalloutScope=scopeId;
     this.lastFocusElement=null;
     this.highlight(viewStore.getState().focusTarget);
     if(scrollSync)scrollSync.afterRender(preserved);
@@ -379,6 +399,7 @@ class PreviewPanel {
     clearTimeout(this.timer);
     this.unsubscribe?.();
     this.body.removeEventListener('click',this.onClick);
+    this.body.removeEventListener('toggle',this.onCalloutToggle,true);
     this.releaseWPCRenderer?.();
     this.pdf?.dispose();
     scrollSync?.dispose();scrollSync=null;

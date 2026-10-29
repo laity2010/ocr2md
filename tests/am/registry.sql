@@ -867,3 +867,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-H05-TABLE','H05','tests/html-table-normalize.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','All eight existing OCR HTML tables gain three semantic sections; table bytes and original evidence remain unchanged; nested and repeated conversion skip','direct'),
  ('TC-H06-TABLE','H06','tests/html-table-normalize.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit action wraps current/all chapter tables with one CMD Undo, explicit CAS Save, reload and idempotence; no automatic source writes','integration'),
  ('TC-L29-TABLE','L29','tests/html-table-normalize.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','User-initiated HTML AG action travels through Layout to scoped CMD edit and global Save','integration');
+
+-- Obsidian native callout rendering is wholly inside Markdown preview.
+INSERT INTO apis VALUES
+ ('M12','M','installObsidianCallouts','ui/obsidian-callouts.js','export','markdown-it renderer instance','register Markdown-it core callout tokenizer and HTML renderer','read-only title/body splitting; native details for +/-, aside for nonfoldable; nested quote preservation; DOMPurify sanitized',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-M12-CALLOUT','M12','tests/obsidian-callouts.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Native note+/note-, nested, markdown bodies, title-only, plain quote, fenced-code and legacy spaced callouts','direct'),
+ ('TC-M12-BROWSER','M12','tests/obsidian-callouts.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit details fold and restore after CM6 repaint without navigation, while original source stays unchanged','integration');

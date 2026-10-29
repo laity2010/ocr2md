@@ -150,3 +150,75 @@
 /* Confirmed inline formulas remain in normal prose flow. */
 .ocr-markdown .ocr-reviewed-inline-latex{display:inline}
 .ocr-markdown .ocr-reviewed-inline-error{color:#e67e80}
+
+/* Obsidian callouts: native HTML details/summary folding; no JS UI library.
+ * Colour categories follow the current Everforest reading palette.
+ * Only the read-only Markdown surface is affected (plain quotes unchanged).
+ */
+.ocr-markdown .ocr-callout {
+  --callout-accent:#7fbbb3;
+  --callout-tint:rgba(127,187,179,.08);
+  box-sizing:border-box;
+  display:block;
+  min-width:0;
+  max-width:100%;
+  margin:1em 0;
+  padding:0;
+  background:var(--callout-tint);
+  border:1px solid color-mix(in srgb,var(--callout-accent) 42%,#46545a);
+  border-left:3px solid var(--callout-accent);
+  border-radius:6px;
+  overflow:clip;
+}
+.ocr-markdown .ocr-callout--note,
+.ocr-markdown .ocr-callout--info,
+.ocr-markdown .ocr-callout--todo {--callout-accent:#7fbbb3;--callout-tint:rgba(127,187,179,.08);}
+.ocr-markdown .ocr-callout--abstract,
+.ocr-markdown .ocr-callout--tip {--callout-accent:#83c092;--callout-tint:rgba(131,192,146,.08);}
+.ocr-markdown .ocr-callout--success {--callout-accent:#a7c080;--callout-tint:rgba(167,192,128,.08);}
+.ocr-markdown .ocr-callout--question,
+.ocr-markdown .ocr-callout--warning {--callout-accent:#dbbc7f;--callout-tint:rgba(219,188,127,.08);}
+.ocr-markdown .ocr-callout--failure,
+.ocr-markdown .ocr-callout--danger,
+.ocr-markdown .ocr-callout--bug {--callout-accent:#e67e80;--callout-tint:rgba(230,126,128,.08);}
+.ocr-markdown .ocr-callout--example {--callout-accent:#d699b6;--callout-tint:rgba(214,153,182,.08);}
+.ocr-markdown .ocr-callout--quote {--callout-accent:#9da9a0;--callout-tint:rgba(157,169,160,.065);}
+.ocr-markdown .ocr-callout > .ocr-callout-title {
+  display:block;
+  box-sizing:border-box;
+  margin:0;
+  padding:9px 12px;
+  color:var(--callout-accent);
+  font-weight:600;
+  line-height:1.45;
+  overflow-wrap:anywhere;
+}
+.ocr-markdown .ocr-callout-foldable > summary.ocr-callout-title {
+  display:list-item;
+  cursor:pointer;
+  list-style:disclosure-closed inside;
+  user-select:none;
+  -webkit-user-select:none;
+  touch-action:manipulation;
+}
+.ocr-markdown .ocr-callout-foldable[open] > summary.ocr-callout-title {list-style-type:disclosure-open;}
+.ocr-markdown .ocr-callout-foldable > summary.ocr-callout-title:focus-visible {
+  outline:2px solid var(--callout-accent);
+  outline-offset:-3px;
+}
+.ocr-markdown .ocr-callout > .ocr-callout-content {
+  min-width:0;
+  padding:0 12px 10px;
+  color:#d3c6aa;
+  overflow-wrap:anywhere;
+}
+.ocr-markdown .ocr-callout > .ocr-callout-content > :first-child {margin-top:0;}
+.ocr-markdown .ocr-callout > .ocr-callout-content > :last-child {margin-bottom:0;}
+.ocr-markdown .ocr-callout .ocr-callout {margin:.7em 0;}
+@media(max-width:800px) {
+  .ocr-markdown .ocr-callout > .ocr-callout-title {padding:8px 10px;}
+  .ocr-markdown .ocr-callout > .ocr-callout-content {padding:0 10px 9px;}
+}
+/* UA <details> default hiding can be defeated by a later author display rule;
+ * keep folded bodies explicitly out of layout in Chrome and WebKit. */
+.ocr-markdown details.ocr-callout:not([open]) > .ocr-callout-content {display:none;}
