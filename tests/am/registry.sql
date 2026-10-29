@@ -824,3 +824,25 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-N05','N05','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Global status displays current Notes count','integration'),
  ('TC-N06','N06','tests/note-pairs.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','10 real confirmed pairs yield one safe 40-operation batch plan; duplicate references share one definition and CMD label','direct'),
  ('TC-N07','N07','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit explicit AG bulk action shows pending vs converted states, saves once, restores Undo/Redo, skips missing notes, no automatic write','integration');
+
+-- Read-only HTML source locator: CMD owns Lezer syntax; HTML AG only presents.
+-- Reuses registered focusTarget message and WP3 chapter query intention.
+INSERT INTO modules VALUES
+ ('H','HTML Elements','AG Grid + CMD Lezer HTML syntax query','ui/html-elements-module.js');
+INSERT INTO apis VALUES
+ ('C34','C','CMDocument.readHtmlElements','ui/cm-document.js','export','none','source-positioned HTML tags and comments, 1-based lines','CMD read-only parse over the sole CM6 Markdown; skips fenced/inline code',1),
+ ('C35','C','scanHtmlElements','ui/cmd-html-elements.js','export','Markdown source','immutable HTML source token list','Lezer Markdown syntax, including quoted attributes and block HTML; no DOM or writes',1),
+ ('H01','H','createHtmlElementsModule','ui/html-elements-module.js','export','host,CMD read port,status','independent HTML AG view','owns tags/comments display, filtering and existing focus message',1),
+ ('H02','H','returned.setVirtualQuery','ui/html-elements-module.js','returned','chapter/all intent and optional label','void','filters only this AG table; no CMD writes',1),
+ ('H03','H','returned.count','ui/html-elements-module.js','returned','chapter/all','HTML token count','bounded semantic count for WCP status',1);
+INSERT INTO access_edges VALUES
+ ('X-H01','L','H','ui/workspace.js','createHtmlElementsModule(this.htmlHost','H01','registered','Layout mounts HTML AG by public factory without reading its private Grid'),
+ ('X-H02','L','H','ui/workspace.js','this.html?.count(chapter)','H03','registered','WCP status reads bounded HTML count through a Layout bridge'),
+ ('X-H03','H','C','ui/html-elements-module.js','getCMD()?.readHtmlElements()','C34','registered','HTML AG reads semantic CMD syntax via injected read-only CMD capability'),
+ ('X-H04','C','C','ui/cm-document.js','scanHtmlElements(this.markdown)','C35','registered','CMD reads Lezer source tokens within its own ownership boundary');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C34-HTML','C34','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit CMD HTML query contains inline and block elements with exact source locations','integration'),
+ ('TC-C35-HTML','C35','tests/html-elements.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Syntax-aware scanner locates quoted HTML tags and comments; excludes code fences, inline code, comment payload','direct'),
+ ('TC-H01-HTML','H01','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit AG HTML rows and WCP multi-pane navigation preserve CMD bytes','integration'),
+ ('TC-H02-HTML','H02','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Virtual chapter HTML AG query uses chapter/all scope, never edits CM6','integration'),
+ ('TC-H03-HTML','H03','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG HTML count is reported by semantic WCP port','integration');

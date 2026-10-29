@@ -4,8 +4,8 @@
  */
 import {viewStore,publishFocus} from './view-store.js';
 
-const TYPE=Object.freeze({'chapter-boundary':'heading',media:'media',latex:'latex',note:'note'});
-const gridType=Object.freeze({outline:'heading',media:'media',latex:'latex',note:'note'});
+const TYPE=Object.freeze({'chapter-boundary':'heading',media:'media',latex:'latex',note:'note',html:'html'});
+const gridType=Object.freeze({outline:'heading',media:'media',latex:'latex',note:'note',html:'html'});
 export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isPhysicalChapter,isIndexMode}){
   let bridge=null,sourcePort=null,unsubscribe=null,disposed=false,index=null;
   let priorScope=null,updateTimer=null;
@@ -29,7 +29,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     }
   };
   function scopedKeys(type){
-    if(type==='note')return null; // Note's configurable regex owns row membership.
+    if(type==='note'||type==='html')return null; // Each owner's scanner owns row membership.
     const state=index;
     if(!queryEnabled()||!state)return null;
     const chapter=currentChapter();
@@ -73,7 +73,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
         const found=type==='heading'?
           current.elements.find(x=>x.type==='heading'&&x.id==='heading:'+data.id):
           current.elements.find(x=>x.type===type&&x.from===data.from);
-        const chapter=type==='note'?current.chapterAt(data.from):
+        const chapter=(type==='note'||type==='html')?current.chapterAt(data.from):
           found&&current.getChapter(found.chapterId);
         return chapter?chapter.number+' · '+chapter.title:'';
       }});
@@ -92,6 +92,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
     else if(state&&type){
       const chapter=currentChapter();
       const count=type==='note'?bridge.countNotes(chapter):
+        type==='html'?bridge.countHtml(chapter):
         state.queryElements({chapter,type}).length;
       status.textContent='CMD · '+(chapter==='all'?'全部章节':state.getChapter(chapter)?.number||'—')+' · '+count+' 项';
     }
@@ -118,7 +119,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       if(current.focusTarget!==prior.focusTarget &&
          current.focusTarget?.revision===current.documentRevision&&enabled()){
         const target=current.focusTarget;
-        const clickedAG=['outline','media','latex','note'].includes(target.origin);
+        const clickedAG=['outline','media','latex','note','html'].includes(target.origin);
         // A click in an all-chapters AG or original PDF may refer to a line
         // hidden by the current CM6/Markdown virtual scope. Resolve the
         // owning chapter from the *one current CMD index*, not AG row order.

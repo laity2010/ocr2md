@@ -14,6 +14,7 @@ import {createOutlineGrid} from './wcp-chapter-outline.js';
 import {createMediaModule} from './media-module.js';
 import {createLatexModule} from './latex-module.js';
 import {createNotePairModule} from './note-pair-module.js';
+import {createHtmlElementsModule} from './html-elements-module.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
 
@@ -65,21 +66,25 @@ class OutlinePanel {
     this.media=null;
     this.latex=null;
     this.note=null;
+    this.html=null;
     this.mediaHost=document.createElement('div');
     this.mediaHost.hidden=true;
     this.latexHost=document.createElement('div');
     this.latexHost.hidden=true;
     this.noteHost=document.createElement('div');
     this.noteHost.hidden=true;
+    this.htmlHost=document.createElement('div');
+    this.htmlHost.hidden=true;
     currentOutline=this;
   }
   init(){
     this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
     this.grid.setTitleFontScale(outlineTitleFontScale);
-    this.element.append(this.mediaHost,this.latexHost,this.noteHost);
+    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
+    this.html=createHtmlElementsModule(this.htmlHost,()=>getCMD(),reportMediaStatus);
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -87,28 +92,32 @@ class OutlinePanel {
       getStartNumber:()=>this.grid?.startText||'000',
       // Only semantic query intents enter business-owned AGs.
       applyChapterQuery:(module,intent)=>{
-        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note}[module];
+        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html}[module];
         if(!owner?.setVirtualQuery)throw Error('Unknown AG chapter query owner');
         owner.setVirtualQuery(intent);
       },
       countNotes:chapter=>this.note?.count(chapter)??0,
+      countHtml:chapter=>this.html?.count(chapter)??0,
     });
     queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
   }
   setModule(module){
     this.grid?.setChapterBoundaryModuleActive(module==='chapter-boundary');
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
-      module==='latex'?'AG Grid LaTeX 审阅':module==='note'?'AG Grid 注释配对':'AG Grid 章节大纲');
+      module==='latex'?'AG Grid LaTeX 审阅':module==='note'?'AG Grid 注释配对':
+      module==='html'?'AG Grid HTML 元素':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
     this.latex?.setActive(module==='latex');
     this.note?.setActive(module==='note');
+    this.html?.setActive(module==='html');
   }
   layout() {}
   dispose(){
     this.media?.dispose();
     this.latex?.dispose();
     this.note?.dispose();
+    this.html?.dispose();
     this.grid?.dispose();
     if(currentOutline===this)currentOutline=null;
   }

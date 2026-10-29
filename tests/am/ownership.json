@@ -57,7 +57,9 @@
     "wcp-wcp-virtual-chapters.js": "W",
     "workspace.js": "L",
     "wcp-workspace-directory-port.js": "B",
-    "wcp-workspace-directory-module.js": "B"
+    "wcp-workspace-directory-module.js": "B",
+    "cmd-html-elements.js": "C",
+    "html-elements-module.js": "H"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -65,7 +67,8 @@
       "G",
       "N",
       "S",
-      "T"
+      "T",
+      "H"
     ],
     "ios-native-selection.js": [
       "C",
@@ -85,7 +88,8 @@
       "P",
       "S",
       "T",
-      "shell"
+      "shell",
+      "H"
     ],
     "pane-layout-ratios.js": [
       "L",
@@ -103,7 +107,8 @@
       "A",
       "G",
       "N",
-      "T"
+      "T",
+      "H"
     ],
     "wcp-navigation-select.js": [
       "G",
@@ -230,6 +235,9 @@
     ],
     "main.js->wcp-workspace-directory-port.js": [
       "workspaceDirectoryPort"
+    ],
+    "workspace.js->html-elements-module.js": [
+      "createHtmlElementsModule"
     ]
   }
 }

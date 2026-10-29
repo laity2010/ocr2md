@@ -9,6 +9,7 @@ import {ensureSyntaxTree,syntaxTree} from '@codemirror/language';
 import {unquotePrefix} from './mineru-anchors.js';
 import {isolateHistory} from '@codemirror/commands';
 import {scanAnnotations,formatAnnotation} from './cmd-annotations.js';
+import {scanHtmlElements} from './cmd-html-elements.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -245,6 +246,16 @@ export class CMDocument {
        this.markdown.slice(target.from,target.to)!==target.raw||
        !scanAnnotations(target.raw).some(item=>item.from===0&&item.to===target.raw.length))
       throw Error('Annotation source changed; read current annotations again');
+  }
+
+  /** Full-document read-only HTML query; source offsets are CM6 coordinates.
+   * Includes inline/block tags and comments, never code-fence literals.
+   * The list contains only data, no editor state or DOM ownership.
+   */
+  readHtmlElements(){
+    return Object.freeze(scanHtmlElements(this.markdown).map(item=>Object.freeze({
+      ...item,line:this.doc.lineAt(item.from).number,
+    })));
   }
 
   /** Insert HTML immediately before a 1-based document line, or replace the

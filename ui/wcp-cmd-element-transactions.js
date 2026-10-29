@@ -69,6 +69,7 @@ export function createCMDTransactionPort(cmd){
     lineAtOffset:offset=>cmd.lineAtOffset(offset),
     matchesSnapshot:token=>cmd.matchesSnapshot(token),
     readAnnotations:filter=>cmd.readAnnotations(filter),
+    readHtmlElements:()=>cmd.readHtmlElements(),
     getIndex:()=>projector.get(),
     queryElements:filter=>projector.get().queryElements(filter),
     getChapter:id=>projector.get().getChapter(id),
