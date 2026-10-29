@@ -1,3 +1,13 @@
+# 当前审计交付包：9b211638 · 2026-10-30
+
+本分支 **`audit-public-9b211638`** 仅用于 Grok、Muse 与内部审计获取快照。**审计固定源码 SHA：`9b211638b1791fc0ac4b084cc565230203507d9d`**；交付包 HEAD 只是固定源码之上的交付提交，不是受审源码。
+
+从公开 GitHub 匿名克隆 `https://github.com/laity2010/ocr2md.git` 的 `audit-public-9b211638` 分支后执行 **`bash audit.sh`**。它会隔离检出正确的源码 SHA，核对只读 PDF/MD 夹具，再运行 `tests/am/run-standard-audit.sh`。内部审计也运行同一个标准脚本。报告分别保留真实 `PASS/FAIL/BLOCKED/REVIEW_REQUIRED`，不能将 AM 静态 PASS 当成全部消息边界合规。
+
+本轮特别检查新近的 Markdown 围栏代码块、Obsidian Callout、源码行号菜单、注释对与虚拟章节集成是否越过 WCP/CMD/AG 接口及消息机制。保持上轮的标题字号、CM6 滚动、媒体/LaTeX、PDF、保存冲突等关键回归，不删除断言。
+
+---
+
 # OCR2MD · 内部与外部统一 AM/Git 审计工作流
 
 本文件是 OCR2MD **内部与外部审计共用的唯一操作手册**，详细执行 `AGENTS.md` 第 6、7 条；不是独立的工程原则，也不能改变 `AGENTS.md` 的正式授权与发布门禁。Grok、Muse 使用**同一份 Prompt 模板、同一固定 Main SHA**，但在各自环境中独立审计、独立修复。**人工唯一交付动作是转发一份标准审计 Prompt**；主线 AI 必须在此前将源码快照、版本化审计说明、PDF/MD 测试夹具及哈希证据全部放到 GitHub 的实际可下载位置。外部 AI 从 GitHub 自行取得和验证全部资料，绝不要求用户另行传送 bundle、PDF 或其他文件。GitHub 上传成功不等于外部 AI 可取件：经用户授权公开的审计包必须实际通过匿名 HTTPS 冷克隆验证；私有仓库必须确认接收 AI 自身具有可用的连接器或 Git 传输权限，未验证应标为 `BLOCKED: DELIVERY_ACCESS`。不依赖 GitHub Issue 自动派单，也不建设额外审计任务调度系统。
