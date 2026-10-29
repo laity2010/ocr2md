@@ -36,8 +36,38 @@ try{
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:52000});
    await page.waitForFunction(()=>window.__v6cm6?.outline?.rows.length===21 &&
      window.__v6cm6?.pdf?.anchors?.length===224,null,{timeout:75000});
-   assert.equal(await page.locator('#quote-indent').count(),1);
-   assert.equal(await page.locator('#quote-outdent').count(),1);
+   assert.equal(await page.locator('#quote-indent').count(),0);
+   assert.equal(await page.locator('#quote-outdent').count(),0);
+   const menu=page.locator('.ocr-source-line-menu');
+   const quoteAction=async direction=>{
+     const before=await page.evaluate(()=>{
+       const s=window.__v6cm6.view.state.selection;
+       return s.ranges.map(r=>({anchor:r.anchor,head:r.head}));
+     });
+     if(!await menu.isVisible()){
+       // CM6 virtualizes the gutter: newly selected offscreen lines need
+       // scrollIntoView before their active-line button exists in the DOM.
+       await page.evaluate(()=>{const v=window.__v6cm6.view;
+         v.dispatch({selection:v.state.selection,scrollIntoView:true});
+         const position=v.state.selection.main.head;
+         const block=v.lineBlockAt(position);
+         v.scrollDOM.scrollTop=Math.max(0,block.top-v.scrollDOM.clientHeight/2);
+       });
+       await sleep(200);
+       const gutter=page.locator('#editor .ocr-source-caret-line-button');
+       await gutter.waitFor({timeout:12000});
+       if(name==='iPad WebKit')await gutter.tap();else await gutter.click();
+     }
+     assert(await menu.isVisible(),'source gutter menu should stay available');
+     const afterOpen=await page.evaluate(()=>{
+       const s=window.__v6cm6.view.state.selection;
+       return s.ranges.map(r=>({anchor:r.anchor,head:r.head}));
+     });
+     assert.deepEqual(afterOpen,before,'opening gutter menu lost the source selection');
+     const label=direction===1?'>+ 增加引用层级':'>− 减少引用层级';
+     const command=menu.getByRole('menuitem',{name:label,exact:true});
+     if(name==='iPad WebKit')await command.tap();else await command.click();
+   };
    await page.screenshot({path:`.v6/evidence/quote-indent-toolbar-${name==='Chrome'?'chrome':'ipad-webkit'}.png`});
    const old=await page.evaluate(()=>{
      const v=window.__v6cm6.view;
@@ -53,7 +83,7 @@ try{
    assert.match(old.before,/minerujson:block:v1:/);
    await sleep(240);
    const scrollBefore=await page.evaluate(()=>window.__v6cm6.view.scrollDOM.scrollTop);
-   await (name==='iPad WebKit'?page.locator('#quote-indent').tap():page.locator('#quote-indent').click());
+   await quoteAction(1);
    const plus=await page.evaluate(({rowId,line})=>{
      const m=window.__v6cm6,doc=m.view.state.doc;
      const text=doc.toString(),head=m.outline.rows.find(row=>row.id===rowId);
@@ -87,7 +117,7 @@ try{
    assert(plus.anchors.some(a=>a.pageIndex===targetPage&&a.blockIndex===targetBlock),
      'PDF must still resolve the quoted block source identity');
    assert(plus.editedLineVisible && plus.scroll>500,`indent lost the edited line ${name}: ${scrollBefore} -> ${plus.scroll}`);
-   await page.locator('#quote-indent').click();
+   await quoteAction(1);
    const twiceState=await page.evaluate(()=>{
      const view=window.__v6cm6.view,s=view.state.selection.main;
      return {text:view.state.doc.toString(),fromLine:view.state.doc.lineAt(s.from).number,
@@ -103,7 +133,7 @@ try{
    await page.locator('#undo').click();
    const onceAgain=await page.evaluate(()=>window.__v6cm6.view.state.doc.toString());
    assert.equal(onceAgain,plus.text,'undo must revert exactly one indentation operation');
-   await page.locator('#quote-outdent').click();
+   await quoteAction(-1);
    const minusState=await page.evaluate(()=>{
      const v=window.__v6cm6.view,s=v.state.selection.main;
      return {text:v.state.doc.toString(),start:v.state.doc.lineAt(s.from).number,
@@ -118,6 +148,9 @@ try{
    assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),plus.text);
    await page.locator('#redo').click();
    assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),raw);
+   // Disable the separate preview's scroll-sync leader before jumping the
+   // programmatic cursor hundreds of lines away in this UI-specific test.
+   await page.evaluate(()=>window.__v6cm6.setScrollSyncEnabled(false));
    // A collapsed selection applies to one line and preserves selection mapping.
    const lineCase=await page.evaluate(()=>{
      const cm=window.__v6cm6.cm;
@@ -126,12 +159,12 @@ try{
      const before=cm.doc.line(93).text;
      return {pos,before};
    });
-   await page.locator('#quote-indent').click();
+   await quoteAction(1);
    const afterLine=await page.evaluate(()=>({text:window.__v6cm6.cm.doc.line(93).text,
      cursor:window.__v6cm6.view.state.selection.main.head}));
    assert.equal(afterLine.text,'>'+lineCase.before);
    assert.equal(afterLine.cursor,lineCase.pos+1);
-   await page.locator('#quote-outdent').click();
+   await quoteAction(-1);
    assert.equal(await page.evaluate(()=>window.__v6cm6.cm.doc.line(93).text),lineCase.before);
    // Reverse, multi-line selections survive any number of consecutive
    // layer operations. A touch tap follows the real iPad event path.
@@ -143,10 +176,8 @@ try{
      return {fromLine:93,toLine:95,originals};
    });
    await sleep(180);
-   const touchOrClick=async id=>name==='iPad WebKit'?
-     page.locator(id).tap():page.locator(id).click();
    for(let depth=1;depth<=3;depth++){
-     await touchOrClick('#quote-indent');
+     await quoteAction(1);
      const snapshot=await page.evaluate(()=>{
        const v=window.__v6cm6.view,s=v.state.selection.main;
        return {lines:[93,94,95].map(n=>v.state.doc.line(n).text),
@@ -160,7 +191,7 @@ try{
      assert(snapshot.reversed&&!snapshot.empty,'repeated >+ changed reverse selection');
    }
    for(let depth=2;depth>=0;depth--){
-     await touchOrClick('#quote-outdent');
+     await quoteAction(-1);
      const snapshot=await page.evaluate(()=>{
        const v=window.__v6cm6.view,s=v.state.selection.main;
        return {lines:[93,94,95].map(n=>v.state.doc.line(n).text),
@@ -180,7 +211,7 @@ try{
      cm.view.dispatch({selection:{anchor:doc.line(line+1).from}});
      return {source:cm.markdown,position:line};
    });
-   await page.locator('#quote-indent').click();
+   await quoteAction(1);
    const guardResult=await page.evaluate(()=>({text:window.__v6cm6.cm.markdown,
      status:document.querySelector('#status').textContent}));
    assert.equal(guardResult.text,guarded.source);

@@ -46,9 +46,9 @@
   position:sticky;top:0;z-index:1;
 }
 .ocr-navigation-popup .no-results{padding:9px;color:#b7b9ac}
-/* File navigation shares the source bar with > +/-; never grows vertically. */
+/* Source file navigation owns the full bar; > +/- moved to caret-line gutter menu. */
 /* Lab source-file navigator: take ALL remaining toolbar width, after the
- * fixed indent buttons. The old 410px cap wasted 200px on wider panes.
+ * No trailing quote buttons. The old 410px cap wasted space on wider panes.
  * Keep the wrapper entirely inside the 34px source toolbar. */
 .ocr-source-file-toolbar>.ts-wrapper.ocr-navigation-files{
   flex:1 1 0;width:auto;max-width:none;min-width:0;

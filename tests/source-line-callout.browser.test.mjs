@@ -51,8 +51,8 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       'inactive line number should remain plain text');
     await button.click();
     assert(await menu.isVisible());
-    assert.equal(await menu.getByRole('menuitem').count(),1,'menu must contain exactly one command');
-    assert.equal((await menu.getByRole('menuitem').textContent()).trim(),'插入 Callout');
+    assert.equal(await menu.getByRole('menuitem').count(),3,'menu must include Callout and quote +/-');
+    assert.equal((await menu.getByRole('menuitem').first().textContent()).trim(),'插入 Callout');
     const placement=await page.evaluate(()=>{
       const button=document.querySelector('#editor .ocr-source-caret-line-button');
       const menu=document.querySelector('.ocr-source-line-menu');
@@ -90,7 +90,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:12000});
     // One command only, repeated invocation inserts another folded callout.
     await button.click();
-    assert.equal(await menu.getByRole('menuitem').count(),1);
+    assert.equal(await menu.getByRole('menuitem').count(),3);
     await menu.getByRole('menuitem',{name:'插入 Callout'}).click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .split('[!note]- 标题').length===3,null,{timeout:12000});
@@ -110,7 +110,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:17000});
     assert.deepEqual(errors,[],name+' browser errors');
     console.log('SOURCE_LINE_CALLOUT_BROWSER_PASS',name,
-      JSON.stringify({singleActiveGutterButton:true,oneMenuItem:true,anchoredPopup:true,undoRedo:true,
+      JSON.stringify({singleActiveGutterButton:true,threeMenuItems:true,anchoredPopup:true,undoRedo:true,
         explicitSave:true,reload:true,evidenceUnchanged:true}));
   }finally{await browser?.close();server.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}
 }

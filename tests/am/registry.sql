@@ -879,13 +879,13 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Shell hands the typed action to the registered CMD transaction port.
 INSERT INTO apis VALUES
  ('L30','L','planCalloutAtCursor','ui/source-callout-plan.js','export','source snapshot,caret offset,mode','safe atomic insertion plan with cursor target','pure Markdown block plan; old bytes preserved, no source write',1),
- ('L31','L','createSourceLineCalloutMenu','ui/source-line-callout-menu.js','export','source pane, CM6 view, bounded action callback','one-item caret-line gutter popup','only current CM6 caret line number is a button; popup adjacent to it; no toolbar button',1),
+ ('L31','L','createSourceLineCalloutMenu','ui/source-line-callout-menu.js','export','source pane, CM6 view, bounded action callback','three-item caret-line gutter popup','only current caret line number is a button; popup preserves original selection and routes quote plus/minus through CMD',1),
  ('L32','L','returned.mountSourceLineMenu','ui/workspace.js','returned','CM6 view,bounded CMD insertion callback','void','source Layout mounts a CM6 line-number action; no editor edits',1);
 INSERT INTO access_edges VALUES
  ('X-SRC-L31','L','L','ui/workspace.js','createSourceLineCalloutMenu({host:','L31','registered','Layout mounts source line action owned by its own view'),
- ('X-SRC-L32',NULL,'L','ui/main.js','workspace.mountSourceLineMenu(view,plan','L32','registered','Shell supplies bounded source insertion action'),
+ ('X-SRC-L32',NULL,'L','ui/main.js','workspace.mountSourceLineMenu(view,{onInsert:plan','L32','registered','Shell supplies bounded source insertion action'),
  ('X-SRC-L30','L','L','ui/source-line-callout-menu.js','planCalloutAtCursor(view.state.doc.toString(),captured.offset)','L30','registered','Layout-owned pure planner never mutates CMD or editor state');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-L30-SRC','L30','tests/source-callout-plan.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Markdown block boundaries, cursor placement, bytes preservation in all three folding modes','direct'),
- ('TC-L31-SRC','L31','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit only current line number is a button; menu anchored at line, one item, caret preserved','integration'),
- ('TC-L32-SRC','L32','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit one collapsed callout, Undo/Redo, only explicit CAS Save, reload and evidence safety','integration');
+ ('TC-L31-SRC','L31','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit current line button shows Callout and quote +/-; menu opening and repeated clicks keep multi-line selection','integration'),
+ ('TC-L32-SRC','L32','tests/source-line-callout.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit Callout and quote +/- from gutter, Undo/Redo, explicit CAS Save, reload and evidence safety','integration');

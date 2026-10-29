@@ -91,13 +91,10 @@ button, dialog h2, dialog p, dialog label, dialog input, #unlock-error,
 /* Shared CMD action host: moved to the far right of the global status row. */
 .source-actions {display:flex;align-items:center;gap:5px;flex:none;
   margin-left:auto;padding-left:12px;border-left:1px solid #52605a}
-.quote-indent-tools {display:flex;gap:4px;margin-right:4px;
-  border-right:1px solid #52605a;padding-right:8px}
 .source-actions button {font-variant-numeric:tabular-nums}
 .module-controls .source-actions button.primary {background:#2563eb;border-color:#2563eb;color:#fff}
 @media(max-width:720px){
   .source-actions {gap:3px;padding-left:6px}
-  .quote-indent-tools {gap:3px;margin-right:2px;padding-right:5px}
   .module-controls .source-actions button {padding:2px 4px}
 }
 @media(max-width:560px){
@@ -123,7 +120,6 @@ button.danger:hover:not(:disabled) {background:#b3423e}
 .engineering-error {min-height:20px;margin:8px 0;color:#fca5a5;font-size:12px}
 #initialize-dialog strong {color:#fdd18e}
 
-.quote-indent-tools[hidden]{display:none!important}
 
 /* V6 compact global actions on the status row, after all status text. */
 .toolbar > .source-actions{display:flex;align-items:center;gap:4px;flex:none;
@@ -141,13 +137,9 @@ button.danger:hover:not(:disabled) {background:#b3423e}
 .ocr-source-file-select{height:27px;width:min(100%,410px);min-width:90px;flex:1 1 auto;
   background:#344349;color:#d3c6aa;border:1px solid #64736d;border-radius:4px;
   font:12px 'OCR2MD Sarasa',monospace;padding:2px 7px;white-space:nowrap;text-overflow:ellipsis}
-.ocr-source-file-toolbar > .quote-indent-tools{display:flex;flex:none;align-items:center;
-  gap:4px;margin:0;padding:0;border:0}
-.ocr-source-file-toolbar > .quote-indent-tools button{height:27px;padding:2px 8px;
-  font:12pt 'OCR2MD Sarasa',monospace;background:#344a40;border-color:#60766b}
 .ocr-source-pane.ocr-source-file-source #editor{height:auto;flex:1 1 0;min-height:0}
 @media(max-width:720px){.toolbar > .source-actions{padding-left:4px;gap:3px}
   .toolbar > .source-actions #undo,.toolbar > .source-actions #redo{width:31px}
   .toolbar > .source-actions #save{padding:3px 6px}
   .ocr-source-file-toolbar{padding:3px 5px;gap:4px}
-  .ocr-source-file-toolbar > .quote-indent-tools{gap:3px}}
+}

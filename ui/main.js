@@ -461,14 +461,19 @@ async function main() {
   });
   view=cm.view;
   cmdPort=wcpRuntime.wrapCMD(cm);
-  workspace.mountSourceLineMenu(view,plan=>{
+  workspace.mountSourceLineMenu(view,{onInsert:plan=>{
     try{
       cmdPort.replaceRanges([{from:plan.from,to:plan.to,
         expected:plan.expected,insert:plan.insert}],plan.cursorAfter);
       view.focus();
       status('✓ 已在光标处插入 Callout · 请全局保存');
     }catch(error){status('Callout 插入失败：'+error.message,'error');}
-  });
+  },onQuoteIndent:direction=>{
+    try{
+      const result=cm.adjustQuoteIndent(direction);
+      if(result.changed)status(`✓ 已${direction>0?'增加':'减少'} ${result.changed} 行引用缩进`);
+    }catch(error){status(error.message,'warning');}
+  }});
   wcpRuntime.onCMReady({view,status});
   foldInitialMineruComments(view);
   view.contentDOM.addEventListener('click',()=>{
@@ -504,25 +509,6 @@ async function main() {
     })});
     refreshToolbar();
   }
-  // Toolbar controls use the live CM6 selection (also on iPad). They do not
-  // reselect an AG heading or move the editor's scroll position.
-  function quoteIndent(direction){
-    try{
-      const result=cm.adjustQuoteIndent(direction);
-      if(result.changed)status(`✓ 已${direction>0?'增加':'减少'} ${result.changed} 行引用缩进`);
-    }catch(error){status(error.message,'warning');}
-  }
-  for(const id of ['quote-indent','quote-outdent']){
-    const button=$(id);
-    // Pointerdown includes iPad touch/pen. Prevent the toolbar from stealing
-    // focus or native text selection before CM6 captures the source ranges.
-    button.addEventListener('pointerdown',event=>{
-      if(event.pointerType!=='touch')event.preventDefault();
-    });
-    button.addEventListener('mousedown',event=>event.preventDefault());
-  }
-  $('quote-indent').addEventListener('click',()=>quoteIndent(1));
-  $('quote-outdent').addEventListener('click',()=>quoteIndent(-1));
   buttons.undo.addEventListener('click',()=> $('module-select').value==='settings'?settings?.undo():history(undo));
   buttons.redo.addEventListener('click',()=> $('module-select').value==='settings'?settings?.redo():history(redo));
   buttons.save.addEventListener('click',save);
@@ -568,7 +554,6 @@ async function main() {
     const isSettings=selected==='settings';
     $('workspace').hidden=isSettings;
     $('settings-workspace').hidden=!isSettings;
-    document.querySelector('.quote-indent-tools').hidden=isSettings;
     const previous=lastVisibleModule;
     lastVisibleModule=selected;
     if(isSettings){

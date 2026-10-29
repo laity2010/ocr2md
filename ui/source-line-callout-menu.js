@@ -1,17 +1,17 @@
 /** CM6-native inline source-line action, owned by the source Layout pane.
  * Only the caret line replaces its gutter number with an actual <button>.
- * A single menu item appears next to that button; CMD owns every edit.
+ * Three menu items appear next to that button; CMD owns every edit.
  */
 import {Compartment,RangeSet,StateEffect} from '@codemirror/state';
-import {GutterMarker,lineNumberMarkers} from '@codemirror/view';
+import {EditorView,GutterMarker,lineNumberMarkers} from '@codemirror/view';
 import {planCalloutAtCursor} from './source-callout-plan.js';
 import './source-line-callout-menu.css';
 
 const markerCompartment=new WeakMap();
 
 class CaretLineButton extends GutterMarker {
-  constructor(number,onOpen){super();this.number=number;this.onOpen=onOpen;}
-  eq(other){return other instanceof CaretLineButton&&this.number===other.number&&this.onOpen===other.onOpen;}
+  constructor(number,onOpen,onPress){super();this.number=number;this.onOpen=onOpen;this.onPress=onPress;}
+  eq(other){return other instanceof CaretLineButton&&this.number===other.number&&this.onOpen===other.onOpen&&this.onPress===other.onPress;}
   toDOM(){
     const button=document.createElement('button');
     button.type='button';
@@ -22,7 +22,12 @@ class CaretLineButton extends GutterMarker {
     button.setAttribute('aria-haspopup','menu');
     button.setAttribute('aria-expanded','false');
     button.title='当前光标行操作';
-    button.addEventListener('pointerdown',event=>event.stopPropagation());
+    button.addEventListener('pointerdown',event=>{
+      // Capture selection BEFORE touch or mouse focus transfers to the gutter.
+      this.onPress();
+      event.stopPropagation();
+      if(event.pointerType!=='touch')event.preventDefault();
+    });
     button.addEventListener('click',event=>{
       event.preventDefault();event.stopPropagation();this.onOpen(button);
     });
@@ -30,31 +35,55 @@ class CaretLineButton extends GutterMarker {
   }
 }
 
-export function createSourceLineCalloutMenu({host,view,onInsert}){
-  if(!(host instanceof HTMLElement)||!view||typeof onInsert!=='function')
+export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent}){
+  if(!(host instanceof HTMLElement)||!view||typeof onInsert!=='function'||
+     typeof onQuoteIndent!=='function')
     throw TypeError('Source line menu requires source pane, CM6 and insertion action');
-  let disposed=false,activeButton=null,target=null;
+  let disposed=false,activeButton=null,target=null,pressSelection=null,actionInProgress=false;
   const menu=document.createElement('div');
   menu.className='ocr-source-line-menu';menu.hidden=true;
   menu.setAttribute('role','menu');menu.setAttribute('aria-label','源码行操作');
   const insert=document.createElement('button');
   insert.type='button';insert.setAttribute('role','menuitem');
   insert.textContent='插入 Callout';
-  menu.append(insert);host.append(menu);
+  const increase=document.createElement('button');
+  increase.type='button';increase.setAttribute('role','menuitem');
+  increase.textContent='>+ 增加引用层级';increase.dataset.direction='1';
+  const decrease=document.createElement('button');
+  decrease.type='button';decrease.setAttribute('role','menuitem');
+  decrease.textContent='>− 减少引用层级';decrease.dataset.direction='-1';
+  menu.append(insert,increase,decrease);host.append(menu);
   function close(){
     menu.hidden=true;
     activeButton?.setAttribute('aria-expanded','false');
-    activeButton=null;target=null;
+    activeButton=null;target=null;pressSelection=null;
+  }
+  function savePointerSelection(){
+    pressSelection={doc:view.state.doc,selection:view.state.selection};
+  }
+  function restoreSelection(captured){
+    if(!captured||!view.state.doc.eq(captured.doc))return false;
+    if(!view.state.selection.eq(captured.selection)){
+      const wasInProgress=actionInProgress;
+      actionInProgress=true;
+      try{view.dispatch({selection:captured.selection});}
+      finally{actionInProgress=wasInProgress;}
+    }
+    return true;
   }
   function open(button){
     if(disposed)return;
     if(activeButton===button&&!menu.hidden){close();return;}
+    const saved=pressSelection;
     close();
+    // Safari may blur the CM6 content while handling the gutter tap.
+    // Restore the selection captured before pointerdown, if it was changed.
+    if(saved&&!restoreSelection(saved))return;
     const state=view.state;
     const offset=state.selection.main.head;
     const number=state.doc.lineAt(offset).number;
     if(button.dataset.line!==String(number))return;
-    activeButton=button;target={snapshot:state.doc,offset};
+    activeButton=button;target={snapshot:state.doc,offset,selection:state.selection};
     button.setAttribute('aria-expanded','true');
     menu.hidden=false;
     const box=button.getBoundingClientRect();
@@ -65,19 +94,42 @@ export function createSourceLineCalloutMenu({host,view,onInsert}){
   const gutter= lineNumberMarkers.compute(['selection'],state=>{
     const offset=state.selection.main.head;
     const line=state.doc.lineAt(offset);
-    return RangeSet.of([new CaretLineButton(line.number,open).range(line.from)]);
+    return RangeSet.of([new CaretLineButton(line.number,open,savePointerSelection).range(line.from)]);
+  });
+  const selectionObserver=EditorView.updateListener.of(update=>{
+    if(!menu.hidden&&update.selectionSet&&!actionInProgress)close();
   });
   let instance=markerCompartment.get(view);
   if(!instance){instance=new Compartment();markerCompartment.set(view,instance);
-    view.dispatch({effects:StateEffect.appendConfig.of(instance.of(gutter))});
-  }else view.dispatch({effects:instance.reconfigure(gutter)});
+    view.dispatch({effects:StateEffect.appendConfig.of(instance.of([gutter,selectionObserver]))});
+  }else view.dispatch({effects:instance.reconfigure([gutter,selectionObserver])});
   insert.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();
     const captured=target;
     close();
-    if(!captured||!view.state.doc.eq(captured.snapshot))return;
+    if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
     onInsert(planCalloutAtCursor(view.state.doc.toString(),captured.offset));
   });
+  for(const button of [increase,decrease]){
+    button.addEventListener('pointerdown',event=>{
+      actionInProgress=true;
+      if(event.pointerType!=='touch')event.preventDefault();
+    });
+    button.addEventListener('click',event=>{
+      event.preventDefault();event.stopPropagation();
+      actionInProgress=true;
+      try{
+        const captured=target;
+        if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection})){
+          close();return;
+        }
+        // CMD maps the full selection. Keep the menu open for repeated levels.
+        onQuoteIndent(Number(button.dataset.direction));
+        target={snapshot:view.state.doc,offset:view.state.selection.main.head,
+          selection:view.state.selection};
+      }finally{actionInProgress=false;}
+    });
+  }
   const outside=event=>{
     if(!menu.hidden&&!menu.contains(event.target)&&!event.target.closest?.('.ocr-source-caret-line-button'))close();
   };

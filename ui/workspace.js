@@ -136,15 +136,15 @@ class SourcePanel {
     files.className='ocr-source-file-select';
     files.setAttribute('aria-label','源码文件导航');
     files.add(new Option('章节定界/'+documentFileLabel,'document'));
-    // Real shared CodeMirror action buttons; no clones or new handlers.
-    bar.append(files,document.querySelector('.quote-indent-tools'));
+    // Source actions live on the active CM6 gutter line, not in the toolbar.
+    bar.append(files);
     this.bar=bar;this.menu=null;currentSourcePanel=this;
     this.element.append(bar,sourceHost);
   }
   init() {}
-  mountLineMenu(view,onInsert){
+  mountLineMenu(view,handlers){
     this.menu?.dispose();
-    this.menu=createSourceLineCalloutMenu({host:this.element,view,onInsert});
+    this.menu=createSourceLineCalloutMenu({host:this.element,view,...handlers});
   }
   layout() { getCMD()?.requestMeasure(); }
   dispose() {
@@ -531,7 +531,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   });
   return {
     editorHost:sourceHost,
-    mountSourceLineMenu:(view,onInsert)=>currentSourcePanel?.mountLineMenu(view,onInsert),
+    mountSourceLineMenu:(view,handlers)=>currentSourcePanel?.mountLineMenu(view,handlers),
     getPaneRatios:()=>readPaneRatios(dockview,'outline','source','preview'),
     applyPaneRatios:ratios=>{
       // The workbench may just have returned from display:none; resynchronize

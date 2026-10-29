@@ -90,7 +90,7 @@ try {
       });
       assert.deepEqual(initial.buttons,['undo','redo','save'],
         name+' global actions must be in the top status toolbar');
-      assert.deepEqual(initial.quoteIds,['quote-outdent','quote-indent']);
+      assert.deepEqual(initial.quoteIds,[],'quote tools should live only in the caret gutter');
       assert.equal(initial.undoLabel,'↶');assert.equal(initial.redoLabel,'↷');
       assert(initial.undoWidth<=36&&initial.redoWidth<=36,'Undo/Redo must be compact');
       assert.match(initial.build,/^main-\d{6}-\d{4}$/);
@@ -126,16 +126,15 @@ try {
           const source=document.querySelector('header.toolbar > .source-actions').getBoundingClientRect();
           const last=document.querySelector('#save').getBoundingClientRect();
           const bar=document.querySelector('.ocr-source-file-toolbar');
-          const quote=document.querySelector('.ocr-source-file-toolbar > .quote-indent-tools').getBoundingClientRect();
           const selected=bar.querySelector('select').getBoundingClientRect();
           return {sourceRight:source.right,buttonRight:last.right,
             navOverflow:nav.scrollWidth>nav.clientWidth,
-            quoteAfterSelect:quote.left>=selected.right-1,
+            fileSelectWithinBar:selected.right<=bar.getBoundingClientRect().right+2,
             sourceOnScreen:source.left>=0};
         });
         assert(!g.navOverflow,`${name} module strip overflow at ${width}px`);
         assert(g.sourceOnScreen,`${name} header actions clipped at ${width}px`);
-        assert(g.quoteAfterSelect,`${name} quote buttons must follow file navigator at ${width}px`);
+        assert(g.fileSelectWithinBar,`${name} file navigator exceeds its toolbar at ${width}px`);
         assert(Math.abs(g.buttonRight-width)<=12,`${name} save no longer top-right at ${width}px`);
         if(width===834)await page.screenshot({path:`.v6/evidence/compact-shell-portrait-${name.toLowerCase()}.png`});
       }
@@ -157,18 +156,20 @@ try {
       await page.waitForFunction(expected=>document.querySelector('#status')?.textContent.includes(expected),
         `${formatCount(expectedLines)}行`,{timeout:12000});
 
-      // The existing quote actions must still edit live CM6 with the same
-      // selection and support reverse action in the source navigation bar.
+      // Quote actions now live in the current line's gutter menu, not toolbar.
       const quoteSnapshot=await page.evaluate(()=>{
         const view=window.__v6cm6.view;
         const line=view.state.doc.line(25);
-        view.dispatch({selection:{anchor:line.from}});
+        view.dispatch({selection:{anchor:line.from},scrollIntoView:true});
+        view.scrollDOM.scrollTop=Math.max(0,view.lineBlockAt(line.from).top-view.scrollDOM.clientHeight/2);
         return line.text;
       });
-      await page.locator('.ocr-source-file-toolbar #quote-indent').click();
+      await page.locator('#editor .ocr-source-caret-line-button').waitFor({timeout:15000});
+      await page.locator('#editor .ocr-source-caret-line-button').click();
+      await page.locator('.ocr-source-line-menu').getByRole('menuitem',{name:'>+ 增加引用层级',exact:true}).click();
       assert.match(await page.evaluate(()=>window.__v6cm6.view.state.doc.line(25).text),
         /^> ?/,'quote-indent must prefix a Markdown quote marker');
-      await page.locator('.ocr-source-file-toolbar #quote-outdent').click();
+      await page.locator('.ocr-source-line-menu').getByRole('menuitem',{name:'>− 减少引用层级',exact:true}).click();
       assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.line(25).text),quoteSnapshot);
 
       // Sync stays implemented even though there is no fourth toolbar button.
