@@ -222,3 +222,29 @@
 /* UA <details> default hiding can be defeated by a later author display rule;
  * keep folded bodies explicitly out of layout in Chrome and WebKit. */
 .ocr-markdown details.ocr-callout:not([open]) > .ocr-callout-content {display:none;}
+
+/* A *closed* Obsidian callout is a quiet one-line reading marker, not a card.
+ * Restore the richer card styling automatically when its native details opens.
+ * Keep an adequate tap target and visible keyboard focus on iPad / desktop.
+ */
+.ocr-markdown details.ocr-callout:not([open]) {
+  margin:.5em 0;
+  background:rgba(127,187,179,.025);
+  border-color:#48565a;
+  border-left-width:2px;
+  border-left-color:#667b70;
+  border-radius:4px;
+}
+.ocr-markdown details.ocr-callout:not([open]) > summary.ocr-callout-title {
+  box-sizing:border-box;
+  min-height:36px;
+  padding:6px 10px;
+  color:#aab8ab;
+  font-size:.86em;
+  font-weight:400;
+  line-height:1.35;
+}
+.ocr-markdown details.ocr-callout:not([open]) > summary.ocr-callout-title:hover {
+  color:#d0d9ca;
+  background:rgba(127,187,179,.06);
+}
