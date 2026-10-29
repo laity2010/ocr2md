@@ -85,9 +85,9 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     assert.equal(await firstBody.locator('[col-id="kind"]').textContent(),'注文');
     assert.equal(await firstReference.locator('[col-id="number"]').textContent(),'1');
     assert.equal(await firstBody.locator('[col-id="number"]').textContent(),'');
-    assert.equal(await firstReference.locator('[col-id="status"]').textContent(),'已配对');
-    const pairedColor=await firstReference.locator('.ocr-note-status').evaluate(el=>getComputedStyle(el).color);
-    assert.equal(pairedColor,'rgb(167, 192, 128)','paired note status must be green');
+    assert.equal(await firstReference.locator('[col-id="status"]').textContent(),'待转换');
+    const pendingColor=await firstReference.locator('.ocr-note-status').evaluate(el=>getComputedStyle(el).color);
+    assert.equal(pendingColor,'rgb(219, 188, 127)','unconverted matched note must be amber');
     const missing=page.locator('.ocr-note-grid .ag-row[row-index="4"]');
     assert.equal(await missing.locator('[col-id="status"]').textContent(),'缺引用');
     assert.equal(await missing.locator('[col-id="kind"]').textContent(),'注引');
@@ -117,6 +117,10 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     await page.locator('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark').click();
     await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-mark')
       ?.textContent==='已转换',null,{timeout:17000});
+    assert.equal(await page.locator('.ocr-note-grid .ag-row[row-index="0"] [col-id="status"]').textContent(),'已转换');
+    const convertedColor=await page.locator('.ocr-note-grid .ag-row[row-index="0"] .ocr-note-status')
+      .evaluate(el=>getComputedStyle(el).color);
+    assert.equal(convertedColor,'rgb(167, 192, 128)','converted note must be green');
     assert.equal(readFileSync(doc,'utf8'),documentText,'Unexpected implicit disk write');
     const inEditor=await page.evaluate(()=>document.querySelector('#editor .cm-content')?.textContent);
     assert(inEditor.includes('ocr2md:note-ref'));
@@ -168,9 +172,39 @@ for(const [index,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].
     await page.waitForFunction(()=>Number(document.querySelector('.ocr-note-grid [role="grid"]')?.getAttribute('aria-rowcount'))===7,
       null,{timeout:15000});
     assert.equal(await sourceSelect.inputValue(),chapterFile,'AG 全部 may not move the source file');
+    // Current selected virtual chapter remains unchanged while AG All
+    // authorizes one atomic conversion of all remaining matched notes.
+    assert.equal(await page.locator('.ocr-note-grid .ag-row[row-index="2"] [col-id="status"]').textContent(),'待转换');
+    await page.locator('#ag-functions-toggle').click();
+    await page.locator('#note-convert-all').click();
+    await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="2"] [col-id="status"]')
+      ?.textContent==='已转换',null,{timeout:17000});
+    assert.equal(await sourceSelect.inputValue(),chapterFile);
+    assert.equal(readFileSync(doc,'utf8'),persisted,'bulk conversion wrote disk before Save');
+    const convertedBulk=await page.locator('#editor .cm-content').textContent();
+    assert(convertedBulk.includes('<!--ocr2md:note-ref id="2"-->[^2]'));
+    // The selected virtual chapter intentionally hides the body, which lives
+    // in another chapter. Verify complete CMD bytes after the explicit Save.
+    await page.locator('#undo').click();
+    await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="2"] [col-id="status"]')
+      ?.textContent==='待转换',null,{timeout:17000});
+    await page.locator('#redo').click();
+    await page.waitForFunction(()=>document.querySelector('.ocr-note-grid .ag-row[row-index="2"] [col-id="status"]')
+      ?.textContent==='已转换',null,{timeout:17000});
+    await page.locator('#ag-functions-toggle').click();
+    await page.locator('#note-convert-all').click(); // no-op: idempotent
+    await page.locator('#save').click();
+    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
+      null,{timeout:25000});
+    const bulkSaved=readFileSync(doc,'utf8');
+    assert.equal((bulkSaved.match(/<!--ocr2md:note-ref id="2"-->/g)||[]).length,1);
+    assert.equal((bulkSaved.match(/<!--ocr2md:note-body id="2"-->/g)||[]).length,1);
+    assert(bulkSaved.includes('[^2]: Second note body'));
+    assert(bulkSaved.includes('3\\. Unreferenced note body'),
+      'unpaired note must never convert');
     // A deliberate duplicated note in an isolated fixture must display red
     // conflict status. No user document is touched.
-    writeFileSync(doc,persisted+'\n1\\. Duplicate note body\n');
+    writeFileSync(doc,bulkSaved+'\n1\\. Duplicate note body\n');
     await page.reload({waitUntil:'domcontentloaded'});
     await page.locator('.ocr-lab-element-select').evaluate(el=>{
       el.value='note';el.dispatchEvent(new Event('change',{bubbles:true}));

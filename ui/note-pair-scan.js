@@ -115,3 +115,30 @@ export function planMarkNotePair(source,row){
       expected:oldPrefix,insert:wantedPrefix});
   return ops;
 }
+/** Plan one atomic CMD transaction across unambiguous pairs. Shared-body
+ * edits are deduplicated for multiple citations to the same note. */
+export function planConvertNotePairs(source,rows){
+  if(!Array.isArray(rows))throw Error('注释批量转换需要配对清单');
+  const operations=[],seen=new Map();
+  let converted=0,unchanged=0,excluded=0;
+  for(const row of rows){
+    if(row.status!=='已配对'){excluded++;continue;}
+    const planned=planMarkNotePair(source,row);
+    if(!planned.length){unchanged++;continue;}
+    converted++;
+    for(const op of planned){
+      const key=op.action==='insert'
+        ?`insert:${op.at}:${op.tag}`
+        :`text:${op.from}:${op.to}`;
+      const previous=seen.get(key);
+      if(previous){
+        if(JSON.stringify(previous)!==JSON.stringify(op))
+          throw Error('重复注释产生不一致的 CMD 修改，已中止转换');
+        continue;
+      }
+      seen.set(key,op);
+      operations.push(op);
+    }
+  }
+  return {operations,converted,unchanged,excluded};
+}

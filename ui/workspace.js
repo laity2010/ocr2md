@@ -458,6 +458,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     scanLatex:()=>currentOutline?.latex?.refresh(),
     normalizeLatex:()=>currentOutline?.latex?.normalizeReviewed(),
     openNoteTemplates:()=>currentOutline?.note?.openTemplates(),
+    convertAllNotes:()=>currentOutline?.note?.convertAll(),
     getChapterState(){
       const grid=currentOutline?.grid;
       return {rows:grid?.rows.map(row=>({...row}))||[], startText:grid?.startText||'000'};

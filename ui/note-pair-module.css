@@ -27,6 +27,12 @@
 .ocr-note-pane .ocr-note-status-paired{
   color:#a7c080;border-color:#62865f;background:#304438;
 }
+.ocr-note-pane .ocr-note-status-converted{
+  color:#a7c080;border-color:#62865f;background:#304438;
+}
+.ocr-note-pane .ocr-note-status-pending{
+  color:#dbbc7f;border-color:#9a7840;background:#443b2c;
+}
 .ocr-note-pane .ocr-note-status-missing{
   color:#dbbc7f;border-color:#9a7840;background:#443b2c;
 }

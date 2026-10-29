@@ -4,7 +4,7 @@ import {viewStore,publishFocus} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {DEFAULT_NOTE_TEMPLATE,NOTE_TEMPLATE_KEY,validateNoteTemplate,
-  scanNotePairs,planMarkNotePair} from './note-pair-scan.js';
+  scanNotePairs,planMarkNotePair,planConvertNotePairs} from './note-pair-scan.js';
 import './note-pair-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -29,6 +29,11 @@ function loadTemplate(){
 }
 function navigateNoteRow(row){
   if(row?.line)publishFocus({sourceLine:row.line,origin:'note',intent:'click'});
+}
+function convertedPair(pair){
+  return pair?.status==='已配对'&&pair.marked&&
+    pair.reference===`[^${pair.number}]`&&
+    pair.bodyRaw.startsWith(`[^${pair.number}]: `);
 }
 function locationCell(){
   return params=>{
@@ -60,14 +65,19 @@ function pairDisplayRows(pairs){
   }).flatMap(pair=>[
     {id:pair.id+':reference',number:pair.number,kind:'注引',
       line:pair.referenceLine,text:pair.reference||'（未找到注引）',
-      from:pair.from,status:pair.status,marked:pair.marked,pair,part:'reference'},
+      from:pair.from,status:pair.status==='已配对'
+        ?convertedPair(pair)?'已转换':'待转换':pair.status,
+      marked:pair.marked,pair,part:'reference'},
     {id:pair.id+':body',number:pair.number,kind:'注文',
       line:pair.bodyLine,text:pair.content||'（未找到注文）',
-      from:pair.from,status:pair.status,marked:pair.marked,pair,part:'body'},
+      from:pair.from,status:pair.status==='已配对'
+        ?convertedPair(pair)?'已转换':'待转换':pair.status,
+      marked:pair.marked,pair,part:'body'},
   ]);
 }
 const noteStatuses=Object.freeze({
-  '已配对':'paired','缺引用':'missing','缺正文':'missing',
+  '已配对':'paired','已转换':'converted','待转换':'pending',
+  '缺引用':'missing','缺正文':'missing',
   '编号冲突':'conflict','缺有效配对':'conflict',
 });
 function statusCell(params){
@@ -94,9 +104,9 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
   function report(){
     if(!active)return;
     const scoped=currentRows();
-    onStatus('注释对 '+scoped.length+' 项 · 已配对 '+
-      scoped.filter(x=>x.status==='已配对').length+' · 已标定 '+
-      scoped.filter(x=>x.marked).length+' · 待处理 '+
+    onStatus('注释对 '+scoped.length+' 项 · 已转换 '+
+      scoped.filter(convertedPair).length+' · 待转换 '+
+      scoped.filter(x=>x.status==='已配对'&&!convertedPair(x)).length+' · 异常 '+
       scoped.filter(x=>x.status!=='已配对').length);
   }
   function followFocus(target,state){
@@ -126,6 +136,26 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
       onStatus('注释标定失败：'+detail);
     }
   }
+  function convertAll(){
+    if(disposed)return;
+    try{
+      refresh();
+      const source=getMarkdown();
+      const plan=planConvertNotePairs(source,currentRows());
+      if(!plan.operations.length){
+        onStatus('注释对无待转换项目 · 已转换和异常项保持原样');
+        return;
+      }
+      // A single guarded CMD transaction; no background save or shadow text.
+      getCMD().editAnnotations(plan.operations,{expectedSource:source,agScope:scope});
+      refresh();
+      onStatus('✓ 已批量转换 '+plan.converted+' 对 Obsidian 脚注并标定 CMD · 请全局保存');
+    }catch(error){
+      const detail=/virtual chapter boundary|chapter scope/i.test(error.message)
+        ?'注引与注文跨章节，请在 AG 勾选「全部」后再转换':error.message;
+      onStatus('批量转换未执行：'+detail);
+    }
+  }
   const columns=[
     {field:'number',headerName:'注释号',width:86,minWidth:75,pinned:'left',lockPinned:true,
       valueFormatter:p=>p.data?.part==='reference'?p.value:'',
@@ -137,7 +167,7 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
     {field:'text',headerName:'原文',minWidth:220,flex:1.8,
       tooltipField:'text',
       cellClass:p=>p.data?.line?'ocr-note-row-text':'ocr-note-row-missing'},
-    {field:'status',headerName:'配对状态',width:112,minWidth:104,
+    {field:'status',headerName:'配对/转换状态',width:124,minWidth:118,
       filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
       cellRenderer:statusCell},
     {colId:'mark',headerName:'CMD 标定',width:92,minWidth:88,
@@ -146,10 +176,9 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
         const button=document.createElement('button');
         button.className='ocr-note-mark';button.type='button';
         const pair=p.data.pair;
-        const converted=pair.reference===`[^${pair.number}]`&&
-          pair.bodyRaw.startsWith(`[^${pair.number}]: `);
+        const converted=convertedPair(pair);
         button.textContent=p.data.marked&&converted?'已转换': '转换标定';
-        button.disabled=(p.data.marked&&converted)||p.data.status!=='已配对';
+        button.disabled=converted||pair.status!=='已配对';
         button.title=button.disabled?'只能处理明确的一对一注释':'一次性转换 Obsidian 脚注并写入 CMD 注释标签（不自动保存）';
         for(const name of ['pointerdown','mousedown','touchstart'])
           button.addEventListener(name,e=>e.stopPropagation());
@@ -226,6 +255,7 @@ export function createNotePairModule(host,getMarkdown,getCMD,onStatus=()=>{}){
   return Object.freeze({
     api:grid,
     refresh,
+    convertAll,
     openTemplates(){
       refField.value=template.reference;bodyField.value=template.body;
       feedback.textContent='';

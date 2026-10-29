@@ -792,16 +792,22 @@ INSERT INTO apis VALUES
  ('N02','N','createNotePairModule','ui/note-pair-module.js','export','host,CMD reader,transaction port,status callback','independent Notes AG module','module owns AG, focus actions, template UI and marker planning',1),
  ('N03','N','returned.setVirtualQuery','ui/note-pair-module.js','returned','chapter query intention','void','owner applies chapter AG filter to its rows',1),
  ('N04','N','returned.openTemplates','ui/note-pair-module.js','returned','none','dialog','editable browser-local pairing regex templates',1),
- ('N05','N','returned.count','ui/note-pair-module.js','returned','chapter scope','number','semantic AG note count for global status bar',1);
+ ('N05','N','returned.count','ui/note-pair-module.js','returned','chapter scope','number','semantic AG note count for global status bar',1),
+ ('N06','N','planConvertNotePairs','ui/note-pair-scan.js','export','source + selected confirmed pairs','deduplicated CMD ops + counts','pure atomic batch plan for only unambiguous note pairs, no implicit source write',1),
+ ('N07','N','returned.convertAll','ui/note-pair-module.js','returned','current AG chapter/all scope','one CMD annotation transaction or status error','explicit bulk Obsidian conversion, only one Undo step; global Save remains separate',1);
 INSERT INTO access_edges VALUES
  ('X-N01','N','C','ui/note-pair-scan.js',"import {scanAnnotations} from './cmd-annotations.js'",'C23','registered','Note scanner reads only CMD annotation syntax for reviewed reference/body markers'),
  ('X-N02','L','N','ui/workspace.js','createNotePairModule(this.noteHost','N02','registered','Layout mounts Notes AG through its public module factory'),
  ('X-N03','L','N','ui/workspace.js','owner.setVirtualQuery(intent)','N03','registered','WCP chapter query is routed through Layout semantic AG port'),
  ('X-N04','L','N','ui/workspace.js','currentOutline?.note?.openTemplates()','N04','registered','Shell invokes Notes template dialog through Layout facade'),
  ('X-N05','L','N','ui/workspace.js','this.note?.count(chapter)','N05','registered','Global status queries Notes count through bounded semantic count');
+INSERT INTO access_edges VALUES
+ ('X-N07','L','N','ui/workspace.js','currentOutline?.note?.convertAll()','N07','registered','AG global action invokes Notes semantic one-transaction batch method via Layout facade');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-N01','N01','tests/note-pairs.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Default template matches all 10 escaped-HTML superscript citations to the 10 numbered Notes bodies; excludes letter OCR superscript artifacts; synthetic pairs, missing IDs and conflicts','direct'),
  ('TC-N02','N02','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit adjacent ref/body rows with multiview navigation and status colors; explicit confirmed pair converts native Obsidian footnotes and inserts two CMD annotation labels in one Undo step, Save/reload idempotent','integration'),
  ('TC-N03','N03','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter scope filters AG Notes without changing original source','integration'),
  ('TC-N04','N04','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Regex validation, application and browser-local template storage','integration'),
- ('TC-N05','N05','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Global status displays current Notes count','integration');
+ ('TC-N05','N05','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Global status displays current Notes count','integration'),
+ ('TC-N06','N06','tests/note-pairs.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','10 real confirmed pairs yield one safe 40-operation batch plan; duplicate references share one definition and CMD label','direct'),
+ ('TC-N07','N07','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit explicit AG bulk action shows pending vs converted states, saves once, restores Undo/Redo, skips missing notes, no automatic write','integration');

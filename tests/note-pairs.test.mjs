@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {scanNotePairs,planMarkNotePair,validateNoteTemplate} from '../ui/note-pair-scan.js';
+import {scanNotePairs,planMarkNotePair,planConvertNotePairs,validateNoteTemplate} from '../ui/note-pair-scan.js';
 const actual=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const book=scanNotePairs(actual);
 assert.equal(book.length,10);
@@ -48,6 +48,19 @@ const nativeMarked='Citation <!--ocr2md:note-ref id="1"-->[^1].\n\n'+
 assert.equal(scanNotePairs(nativeMarked)[0].marked,true);
 assert.deepEqual(planMarkNotePair(nativeMarked,scanNotePairs(nativeMarked)[0]),[],
   'converted CMD-marked notes must be idempotent');
+const bookPlan=planConvertNotePairs(actual,book);
+assert.equal(bookPlan.converted,10);
+assert.equal(bookPlan.excluded,0);
+assert.equal(bookPlan.operations.filter(op=>op.action==='text').length,20);
+assert.equal(bookPlan.operations.filter(op=>op.action==='insert').length,20);
+const repeatSource='Two citations [^1] and <sup>1</sup>.\n\n1\\. Single body\n';
+const repeatRows=scanNotePairs(repeatSource);
+assert.equal(repeatRows.length,2);
+const repeated=planConvertNotePairs(repeatSource,repeatRows);
+assert.equal(repeated.converted,2);
+assert.equal(repeated.operations.filter(op=>op.tag==='ocr2md:note-body').length,1,
+  'repeated citations must share one CMD body tag');
+assert.equal(repeated.operations.filter(op=>op.action==='text'&&op.insert==='[^1]: ').length,1);
 const incomplete=scanNotePairs('Only [^2]\n');
 assert.equal(incomplete[0].status,'缺正文');
 const conflicts=scanNotePairs('Claim[^1]\n1\\. First\n1\\. Another\n');

@@ -84,6 +84,7 @@ try{
       assert.equal(await button.isDisabled(),false,'Notes has template function');
       await button.click();
       assert(await page.locator('#note-templates').isVisible());
+      assert(await page.locator('#note-convert-all').isVisible());
       assert.equal(await page.locator('#latex-normalize').isVisible(),false);
       await page.locator('#note-templates').click();
       assert(await page.locator('.ocr-note-template-dialog').isVisible());
