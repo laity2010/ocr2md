@@ -1,0 +1,6652 @@
+{
+  "schema": "ocr2md.am-git.standard-audit.v1",
+  "time_utc": "2026-10-29T23:13:13.670034+00:00",
+  "status": "FAIL",
+  "source_sha": "9b211638b1791fc0ac4b084cc565230203507d9d",
+  "checkout_sha": "9b211638b1791fc0ac4b084cc565230203507d9d",
+  "source_clean": true,
+  "environment": {
+    "os": "darwin",
+    "python": "3.13.3"
+  },
+  "source_manifest_sha256": "8ce865d97ddbe0368cb3523c80c50750a41b88580d6411ffa58861f286410d90",
+  "source_hashes": {
+    "AGENTS.md": "0cc797b4c906e108ad759d05d0d69ba2e6c37605cd76422c6ec270c70369c552",
+    "AUDIT.md": "56a5146bff9c60e33ee6cb6924638b9c1566cc953ecaa70ee3ca466ada47de53",
+    "tests/am/schema.sql": "5f528339645d59116c06cfc9d561848c865f85693b1762d5c0af59acf564cbb1",
+    "tests/am/registry.sql": "ca61165521f418a99174df15e76f938b1c002f69145bf223aaf59615897a7aaf",
+    "tests/am/ownership.json": "d9a2998aebe79dc9807b73df6b0ea1a7d7c52ca2296060ffc15116a96b366c58",
+    "tests/am/audit_boundaries.py": "fbe93116c0e2658693469a76ddf6257aa942f96dae81194f54e23f3e5924a212",
+    "tests/am/run-standard-audit.sh": "418a2dc6cb31f82bfdc64880425ab80381d861e3b7b8c2650d1186c8dfd19c01",
+    "tests/am/run-grok-audit.sh": "bbf57fbabe85a553ecfe261cc4ef90c71f83acd0d74205968830efc609bd2f97",
+    "tests/am/standard_audit.py": "afcebef7d247744f1e2dbd721184cfd556e85f8aaa1a949fe263fe163065fcf5",
+    "packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md": "d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764"
+  },
+  "runner_exit_code": 1,
+  "runner_log": "run.log",
+  "isolated_worktree": "/Users/daisor/AgentDock/ocr2md-am-9b211638-gpt6-20261030-isolated",
+  "am": {
+    "status": "INCOMPLETE",
+    "cases_total": 240,
+    "cases_passed": 0,
+    "direct_case_links": 61,
+    "integration_case_links": 179,
+    "apis_total": 167,
+    "api_directly_tested": 0,
+    "api_without_direct_test": [
+      "A01",
+      "A02",
+      "A03",
+      "A04",
+      "A05",
+      "A06",
+      "A07",
+      "A08",
+      "A09",
+      "A10",
+      "A11",
+      "A12",
+      "A13",
+      "B01",
+      "B02",
+      "B03",
+      "B04",
+      "B05",
+      "B06",
+      "B07",
+      "B08",
+      "B09",
+      "C01",
+      "C02",
+      "C03",
+      "C04",
+      "C05",
+      "C06",
+      "C07",
+      "C08",
+      "C09",
+      "C10",
+      "C11",
+      "C12",
+      "C13",
+      "C14",
+      "C15",
+      "C16",
+      "C17",
+      "C18",
+      "C19",
+      "C20",
+      "C21",
+      "C22",
+      "C23",
+      "C24",
+      "C25",
+      "C27",
+      "C28",
+      "C29",
+      "C30",
+      "C31",
+      "C32",
+      "C33",
+      "C34",
+      "C35",
+      "G01",
+      "G02",
+      "G03",
+      "G04",
+      "G05",
+      "G06",
+      "G07",
+      "G08",
+      "G09",
+      "G10",
+      "G11",
+      "G12",
+      "G13",
+      "G14",
+      "G15",
+      "G16",
+      "G17",
+      "G18",
+      "H01",
+      "H02",
+      "H03",
+      "H04",
+      "H05",
+      "H06",
+      "L01",
+      "L02",
+      "L03",
+      "L04",
+      "L05",
+      "L06",
+      "L07",
+      "L08",
+      "L09",
+      "L10",
+      "L11",
+      "L12",
+      "L13",
+      "L14",
+      "L15",
+      "L16",
+      "L17",
+      "L18",
+      "L19",
+      "L20",
+      "L21",
+      "L29",
+      "L30",
+      "L31",
+      "L32",
+      "L33",
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "M05",
+      "M06",
+      "M07",
+      "M08",
+      "M09",
+      "M10",
+      "M11",
+      "M12",
+      "M13",
+      "N01",
+      "N02",
+      "N03",
+      "N04",
+      "N05",
+      "N06",
+      "N07",
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07",
+      "P08",
+      "P09",
+      "P10",
+      "P11",
+      "P12",
+      "P13",
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "T01",
+      "T02",
+      "T03",
+      "T04",
+      "T05",
+      "T06",
+      "T09",
+      "T10",
+      "T11",
+      "T12",
+      "T13",
+      "W01",
+      "W02",
+      "W03",
+      "W04",
+      "W05",
+      "W06",
+      "W07",
+      "W08",
+      "W09",
+      "W10"
+    ],
+    "messages": [
+      {
+        "id": "E01",
+        "transport": "zustand",
+        "topic": "documentRevision"
+      },
+      {
+        "id": "E02",
+        "transport": "zustand",
+        "topic": "sourceOffset"
+      },
+      {
+        "id": "E03",
+        "transport": "zustand",
+        "topic": "focusTarget"
+      },
+      {
+        "id": "E04",
+        "transport": "zustand",
+        "topic": "scrollTarget"
+      },
+      {
+        "id": "E05",
+        "transport": "zustand",
+        "topic": "outlineCount"
+      },
+      {
+        "id": "E06",
+        "transport": "zustand",
+        "topic": "scrollSyncEnabled"
+      },
+      {
+        "id": "E07",
+        "transport": "zustand",
+        "topic": "activePanel"
+      },
+      {
+        "id": "E08",
+        "transport": "dom",
+        "topic": "ocr2md:chapter-error"
+      },
+      {
+        "id": "E09",
+        "transport": "dom",
+        "topic": "settings.changed"
+      },
+      {
+        "id": "E10",
+        "transport": "dom",
+        "topic": "ocr2md:lab-virtual-select"
+      },
+      {
+        "id": "E11",
+        "transport": "dom",
+        "topic": "ocr2md:lab-virtual-open"
+      },
+      {
+        "id": "E12",
+        "transport": "dom",
+        "topic": "ocr2md:wp3-ag-ready"
+      },
+      {
+        "id": "E13",
+        "transport": "dom",
+        "topic": "ocr2md:wp4-virtual-scope"
+      }
+    ],
+    "publishers_total": 19,
+    "subscriptions_total": 28,
+    "access_edges": [
+      {
+        "id": "PROMO01",
+        "caller_module": "W",
+        "target_module": "L",
+        "source_file": "ui/wcp-wcp-virtual-chapters.js",
+        "classification": "registered",
+        "api_id": "L21"
+      },
+      {
+        "id": "PROMO02",
+        "caller_module": "W",
+        "target_module": "C",
+        "source_file": "ui/wcp-wcp-virtual-chapters.js",
+        "classification": "registered",
+        "api_id": "C29"
+      },
+      {
+        "id": "PROMO03",
+        "caller_module": "W",
+        "target_module": "M",
+        "source_file": "ui/wcp-wcp-virtual-chapters.js",
+        "classification": "registered",
+        "api_id": "M09"
+      },
+      {
+        "id": "PROMO05",
+        "caller_module": "S",
+        "target_module": "G",
+        "source_file": "ui/wcp-source-file-navigation.js",
+        "classification": "registered",
+        "api_id": "G17"
+      },
+      {
+        "id": "PROMO06",
+        "caller_module": "G",
+        "target_module": "G",
+        "source_file": "ui/wcp-document-index.js",
+        "classification": "registered",
+        "api_id": null
+      },
+      {
+        "id": "PROMO07",
+        "caller_module": "G",
+        "target_module": "C",
+        "source_file": "ui/wcp-document-index.js",
+        "classification": "registered",
+        "api_id": "C23"
+      },
+      {
+        "id": "PROMO08",
+        "caller_module": "G",
+        "target_module": "T",
+        "source_file": "ui/wcp-document-index.js",
+        "classification": "registered",
+        "api_id": "T01"
+      },
+      {
+        "id": "PROMO09",
+        "caller_module": "G",
+        "target_module": "A",
+        "source_file": "ui/wcp-document-index.js",
+        "classification": "registered",
+        "api_id": "A02"
+      },
+      {
+        "id": "PROMO10",
+        "caller_module": "C",
+        "target_module": "G",
+        "source_file": "ui/wcp-cmd-element-transactions.js",
+        "classification": "registered",
+        "api_id": "G18"
+      },
+      {
+        "id": "X-B01",
+        "caller_module": "S",
+        "target_module": "B",
+        "source_file": "ui/settings-module.js",
+        "classification": "registered",
+        "api_id": "B01"
+      },
+      {
+        "id": "X-B02",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "B02"
+      },
+      {
+        "id": "X-B03",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "B03"
+      },
+      {
+        "id": "X-B04",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "B04"
+      },
+      {
+        "id": "X-B05",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "B05"
+      },
+      {
+        "id": "X-B06",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "B06"
+      },
+      {
+        "id": "X-B07",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "B07"
+      },
+      {
+        "id": "X-B08",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "B08"
+      },
+      {
+        "id": "X-B09",
+        "caller_module": null,
+        "target_module": "B",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "B09"
+      },
+      {
+        "id": "X-FOOTNOTE-01",
+        "caller_module": "L",
+        "target_module": "M",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "M10"
+      },
+      {
+        "id": "X-H01",
+        "caller_module": "L",
+        "target_module": "H",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "H01"
+      },
+      {
+        "id": "X-H02",
+        "caller_module": "L",
+        "target_module": "H",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "H03"
+      },
+      {
+        "id": "X-H03",
+        "caller_module": "H",
+        "target_module": "C",
+        "source_file": "ui/html-elements-module.js",
+        "classification": "registered",
+        "api_id": "C34"
+      },
+      {
+        "id": "X-H04",
+        "caller_module": "C",
+        "target_module": "C",
+        "source_file": "ui/cm-document.js",
+        "classification": "registered",
+        "api_id": "C35"
+      },
+      {
+        "id": "X-HTML-TABLE-01",
+        "caller_module": "L",
+        "target_module": "H",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "H06"
+      },
+      {
+        "id": "X-HTML-TABLE-02",
+        "caller_module": null,
+        "target_module": "L",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "L29"
+      },
+      {
+        "id": "X-M13-PREV",
+        "caller_module": "M",
+        "target_module": "M",
+        "source_file": "ui/markdown-preview.js",
+        "classification": "registered",
+        "api_id": "M13"
+      },
+      {
+        "id": "X-N01",
+        "caller_module": "N",
+        "target_module": "C",
+        "source_file": "ui/note-pair-scan.js",
+        "classification": "registered",
+        "api_id": "C23"
+      },
+      {
+        "id": "X-N02",
+        "caller_module": "L",
+        "target_module": "N",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "N02"
+      },
+      {
+        "id": "X-N03",
+        "caller_module": "L",
+        "target_module": "N",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "N03"
+      },
+      {
+        "id": "X-N04",
+        "caller_module": "L",
+        "target_module": "N",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "N04"
+      },
+      {
+        "id": "X-N05",
+        "caller_module": "L",
+        "target_module": "N",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "N05"
+      },
+      {
+        "id": "X-N07",
+        "caller_module": "L",
+        "target_module": "N",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "N07"
+      },
+      {
+        "id": "X-SHELL-AG",
+        "caller_module": null,
+        "target_module": "G",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "G16"
+      },
+      {
+        "id": "X-SHELL-NAV",
+        "caller_module": null,
+        "target_module": "S",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "S07"
+      },
+      {
+        "id": "X-SHELL-WCP",
+        "caller_module": null,
+        "target_module": "W",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "W10"
+      },
+      {
+        "id": "X-SRC-L30",
+        "caller_module": "L",
+        "target_module": "L",
+        "source_file": "ui/source-line-callout-menu.js",
+        "classification": "registered",
+        "api_id": "L30"
+      },
+      {
+        "id": "X-SRC-L31",
+        "caller_module": "L",
+        "target_module": "L",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "L31"
+      },
+      {
+        "id": "X-SRC-L32",
+        "caller_module": null,
+        "target_module": "L",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "L32"
+      },
+      {
+        "id": "X-SRC-L33",
+        "caller_module": "L",
+        "target_module": "L",
+        "source_file": "ui/source-line-callout-menu.js",
+        "classification": "registered",
+        "api_id": "L33"
+      },
+      {
+        "id": "X-W-VIRTUAL-EXT",
+        "caller_module": "W",
+        "target_module": "C",
+        "source_file": "ui/wcp-wcp-virtual-chapters.js",
+        "classification": "registered",
+        "api_id": "C30"
+      },
+      {
+        "id": "X-W-VIRTUAL-GET",
+        "caller_module": "W",
+        "target_module": "C",
+        "source_file": "ui/wcp-wcp-virtual-chapters.js",
+        "classification": "registered",
+        "api_id": "C32"
+      },
+      {
+        "id": "X-W-VIRTUAL-SET",
+        "caller_module": "W",
+        "target_module": "C",
+        "source_file": "ui/wcp-wcp-virtual-chapters.js",
+        "classification": "registered",
+        "api_id": "C31"
+      },
+      {
+        "id": "X-W01",
+        "caller_module": null,
+        "target_module": "W",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "W01"
+      },
+      {
+        "id": "X-W02",
+        "caller_module": "L",
+        "target_module": "W",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "W05"
+      },
+      {
+        "id": "X01",
+        "caller_module": "G",
+        "target_module": "C",
+        "source_file": "ui/outline-grid.js",
+        "classification": "registered",
+        "api_id": "C05"
+      },
+      {
+        "id": "X02",
+        "caller_module": "G",
+        "target_module": "C",
+        "source_file": "ui/outline-grid.js",
+        "classification": "registered",
+        "api_id": "C10"
+      },
+      {
+        "id": "X03",
+        "caller_module": "L",
+        "target_module": "C",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "C13"
+      },
+      {
+        "id": "X04",
+        "caller_module": null,
+        "target_module": "L",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "L14"
+      },
+      {
+        "id": "X05",
+        "caller_module": null,
+        "target_module": "L",
+        "source_file": "ui/main.js",
+        "classification": "test_only",
+        "api_id": "L11"
+      },
+      {
+        "id": "X06",
+        "caller_module": "L",
+        "target_module": "G",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "G01"
+      },
+      {
+        "id": "X07",
+        "caller_module": "L",
+        "target_module": "M",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "M01"
+      },
+      {
+        "id": "X08",
+        "caller_module": "L",
+        "target_module": "P",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "P07"
+      },
+      {
+        "id": "X09",
+        "caller_module": "L",
+        "target_module": "P",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "P03"
+      },
+      {
+        "id": "X10",
+        "caller_module": "L",
+        "target_module": "P",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "P13"
+      },
+      {
+        "id": "X11",
+        "caller_module": "L",
+        "target_module": "A",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "A01"
+      },
+      {
+        "id": "X12",
+        "caller_module": "A",
+        "target_module": "C",
+        "source_file": "ui/media-module.js",
+        "classification": "registered",
+        "api_id": "C33"
+      },
+      {
+        "id": "X13",
+        "caller_module": "L",
+        "target_module": "C",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "C33"
+      },
+      {
+        "id": "X14",
+        "caller_module": null,
+        "target_module": "A",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "A06"
+      },
+      {
+        "id": "X15",
+        "caller_module": null,
+        "target_module": "A",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "A07"
+      },
+      {
+        "id": "X16",
+        "caller_module": null,
+        "target_module": "A",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "A08"
+      },
+      {
+        "id": "X17",
+        "caller_module": "L",
+        "target_module": "A",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "A05"
+      },
+      {
+        "id": "X18",
+        "caller_module": "L",
+        "target_module": "A",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "A03"
+      },
+      {
+        "id": "X19",
+        "caller_module": "L",
+        "target_module": "A",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "A04"
+      },
+      {
+        "id": "X20",
+        "caller_module": null,
+        "target_module": "A",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "A09"
+      },
+      {
+        "id": "X21",
+        "caller_module": null,
+        "target_module": "C",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "C15"
+      },
+      {
+        "id": "X22",
+        "caller_module": null,
+        "target_module": "C",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "C16"
+      },
+      {
+        "id": "X23",
+        "caller_module": null,
+        "target_module": "A",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "A11"
+      },
+      {
+        "id": "X24",
+        "caller_module": null,
+        "target_module": "A",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "A10"
+      },
+      {
+        "id": "X25",
+        "caller_module": null,
+        "target_module": "A",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "A12"
+      },
+      {
+        "id": "X26",
+        "caller_module": "L",
+        "target_module": "T",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "T03"
+      },
+      {
+        "id": "X27",
+        "caller_module": "L",
+        "target_module": "T",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "T05"
+      },
+      {
+        "id": "X28",
+        "caller_module": "L",
+        "target_module": "T",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "T04"
+      },
+      {
+        "id": "X32",
+        "caller_module": "T",
+        "target_module": "C",
+        "source_file": "ui/latex-module.js",
+        "classification": "registered",
+        "api_id": "C20"
+      },
+      {
+        "id": "X33",
+        "caller_module": "L",
+        "target_module": "C",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "C20"
+      },
+      {
+        "id": "X34",
+        "caller_module": "M",
+        "target_module": "T",
+        "source_file": "ui/markdown-preview.js",
+        "classification": "registered",
+        "api_id": "T11"
+      },
+      {
+        "id": "X35",
+        "caller_module": "G",
+        "target_module": "C",
+        "source_file": "ui/chapter-markers.js",
+        "classification": "registered",
+        "api_id": "C18"
+      },
+      {
+        "id": "X36",
+        "caller_module": "G",
+        "target_module": "C",
+        "source_file": "ui/chapter-markers.js",
+        "classification": "registered",
+        "api_id": "C17"
+      },
+      {
+        "id": "X37",
+        "caller_module": "T",
+        "target_module": "C",
+        "source_file": "ui/latex-module.js",
+        "classification": "registered",
+        "api_id": "C17"
+      },
+      {
+        "id": "X38",
+        "caller_module": null,
+        "target_module": "L",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "L20"
+      },
+      {
+        "id": "X39",
+        "caller_module": "L",
+        "target_module": "T",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "T12"
+      },
+      {
+        "id": "X40",
+        "caller_module": "T",
+        "target_module": "C",
+        "source_file": "ui/latex-module.js",
+        "classification": "registered",
+        "api_id": "C20"
+      },
+      {
+        "id": "X41",
+        "caller_module": "G",
+        "target_module": "C",
+        "source_file": "ui/chapter-markers.js",
+        "classification": "registered",
+        "api_id": "C21"
+      },
+      {
+        "id": "X42",
+        "caller_module": "T",
+        "target_module": "C",
+        "source_file": "ui/latex-review-markers.js",
+        "classification": "registered",
+        "api_id": "C23"
+      },
+      {
+        "id": "X43",
+        "caller_module": "T",
+        "target_module": "C",
+        "source_file": "ui/latex-inline-preview.js",
+        "classification": "registered",
+        "api_id": "C23"
+      },
+      {
+        "id": "X44",
+        "caller_module": null,
+        "target_module": "G",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "G11"
+      },
+      {
+        "id": "X45",
+        "caller_module": null,
+        "target_module": "G",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "G12"
+      },
+      {
+        "id": "X70",
+        "caller_module": "S",
+        "target_module": "C",
+        "source_file": "ui/settings-module.js",
+        "classification": "registered",
+        "api_id": "C24"
+      },
+      {
+        "id": "X71",
+        "caller_module": null,
+        "target_module": "S",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "S01"
+      },
+      {
+        "id": "X72",
+        "caller_module": null,
+        "target_module": "C",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "C25"
+      },
+      {
+        "id": "X73",
+        "caller_module": null,
+        "target_module": "C",
+        "source_file": "scripts/v6_serve.py",
+        "classification": "registered",
+        "api_id": "C27"
+      },
+      {
+        "id": "X74",
+        "caller_module": "S",
+        "target_module": "C",
+        "source_file": "ui/settings-module.js",
+        "classification": "registered",
+        "api_id": "C28"
+      },
+      {
+        "id": "X90",
+        "caller_module": null,
+        "target_module": "G",
+        "source_file": "ui/main.js",
+        "classification": "registered",
+        "api_id": "G13"
+      },
+      {
+        "id": "X91",
+        "caller_module": "L",
+        "target_module": "G",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "G14"
+      },
+      {
+        "id": "X92",
+        "caller_module": "L",
+        "target_module": "C",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "C29"
+      },
+      {
+        "id": "X93",
+        "caller_module": "L",
+        "target_module": "C",
+        "source_file": "ui/workspace.js",
+        "classification": "registered",
+        "api_id": "C29"
+      },
+      {
+        "id": "X94",
+        "caller_module": null,
+        "target_module": "T",
+        "source_file": "ui/obsidian-source-syntax.js",
+        "classification": "registered",
+        "api_id": "T01"
+      }
+    ],
+    "test_cases": [
+      {
+        "id": "TC-A01",
+        "api_id": "A01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "media AG with lazy preview, adoption coloring and categorical filters",
+        "status": null
+      },
+      {
+        "id": "TC-A02",
+        "api_id": "A02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scan of 11 image links excludes immutable MinerU evidence",
+        "status": null
+      },
+      {
+        "id": "TC-A02-SIZED",
+        "api_id": "A02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-adoption-syntax.test.mjs",
+        "evidence": "integration",
+        "expected": "Media references resolve exact real line 103 and resized Markdown/wiki links",
+        "status": null
+      },
+      {
+        "id": "TC-A03",
+        "api_id": "A03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "media scan lists orphan files and stable adopted/status filters",
+        "status": null
+      },
+      {
+        "id": "TC-A04",
+        "api_id": "A04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "download resumes from durable Range part then localizes CMD source",
+        "status": null
+      },
+      {
+        "id": "TC-A04-PREEXISTING",
+        "api_id": "A04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-preexisting-adoption.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "11 predownloaded files + 11 remote CMD links render 11 pending-adoption AG rows, then adopt all through CMD Save and reload in Chrome/WebKit",
+        "status": null
+      },
+      {
+        "id": "TC-A05",
+        "api_id": "A05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "module switching preserves outline and Media views",
+        "status": null
+      },
+      {
+        "id": "TC-A06",
+        "api_id": "A06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "download chunk persists partial and completes with signature check",
+        "status": null
+      },
+      {
+        "id": "TC-A07",
+        "api_id": "A07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "status reports partial and completed files",
+        "status": null
+      },
+      {
+        "id": "TC-A08",
+        "api_id": "A08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "only hashed completed media may be read",
+        "status": null
+      },
+      {
+        "id": "TC-A09",
+        "api_id": "A09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "inventory includes local unreferenced files and published chapter-only files",
+        "status": null
+      },
+      {
+        "id": "TC-A10",
+        "api_id": "A10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-paste-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "validates bytes, MIME and hash before atomic media store",
+        "status": null
+      },
+      {
+        "id": "TC-A11",
+        "api_id": "A11",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-paste-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "clipboard image uploads via authorized Media transport",
+        "status": null
+      },
+      {
+        "id": "TC-A12",
+        "api_id": "A12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-adoption-syntax.test.mjs",
+        "evidence": "integration",
+        "expected": "Published chapter image dimensions count as adopted references",
+        "status": null
+      },
+      {
+        "id": "TC-A13",
+        "api_id": "A13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "direct",
+        "expected": "Media AG offers semantic chapter query port without raw Grid exposure",
+        "status": null
+      },
+      {
+        "id": "TC-B01",
+        "api_id": "B01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/WebKit actual Settings book UI uses Workspace widget and CMD save",
+        "status": null
+      },
+      {
+        "id": "TC-B02",
+        "api_id": "B02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Browser HTTP contract returns catalogue and book statuses",
+        "status": null
+      },
+      {
+        "id": "TC-B03",
+        "api_id": "B03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-server.test.mjs",
+        "evidence": "integration",
+        "expected": "Authorized roots and selected book use one service facade",
+        "status": null
+      },
+      {
+        "id": "TC-B04",
+        "api_id": "B04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-server.test.mjs",
+        "evidence": "integration",
+        "expected": "Reject forbidden directory and traversal",
+        "status": null
+      },
+      {
+        "id": "TC-B05",
+        "api_id": "B05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-server.test.mjs",
+        "evidence": "integration",
+        "expected": "List first-level books and readiness",
+        "status": null
+      },
+      {
+        "id": "TC-B06",
+        "api_id": "B06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-server.test.mjs",
+        "evidence": "integration",
+        "expected": "Selected document/PDF/JSON have one identity",
+        "status": null
+      },
+      {
+        "id": "TC-B07",
+        "api_id": "B07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-server.test.mjs",
+        "evidence": "integration",
+        "expected": "CAS checks before conversion and rejects invalid selection",
+        "status": null
+      },
+      {
+        "id": "TC-B08",
+        "api_id": "B08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-root-server.test.mjs",
+        "evidence": "integration",
+        "expected": "Never overwrite old or preexisting mother Markdown",
+        "status": null
+      },
+      {
+        "id": "TC-B09",
+        "api_id": "B09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/workspace-portability.test.mjs",
+        "evidence": "direct",
+        "expected": "Node path configuration works under environment without Homebrew",
+        "status": null
+      },
+      {
+        "id": "TC-C01",
+        "api_id": "C01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-html-unified-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "CMD source equals actual CM6 document",
+        "status": null
+      },
+      {
+        "id": "TC-C02",
+        "api_id": "C02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-html-unified-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "loading source restores exact Markdown",
+        "status": null
+      },
+      {
+        "id": "TC-C03",
+        "api_id": "C03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Converter reject leaves document unchanged; valid source loads exactly",
+        "status": null
+      },
+      {
+        "id": "TC-C04",
+        "api_id": "C04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-html-unified-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "standard/custom/comment HTML read at source line",
+        "status": null
+      },
+      {
+        "id": "TC-C05",
+        "api_id": "C05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-html-unified-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "HTML written and read unchanged; correct syntax",
+        "status": null
+      },
+      {
+        "id": "TC-C06",
+        "api_id": "C06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-html-unified-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "comment helper emits valid HTML comment",
+        "status": null
+      },
+      {
+        "id": "TC-C07",
+        "api_id": "C07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/quote-indent-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "selected lines indent/outdent with undo safety",
+        "status": null
+      },
+      {
+        "id": "TC-C08",
+        "api_id": "C08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "CMDocument.destroy releases owned EditorView",
+        "status": null
+      },
+      {
+        "id": "TC-C09",
+        "api_id": "C09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cm6-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "EditorView state and title changes remain observable",
+        "status": null
+      },
+      {
+        "id": "TC-C10",
+        "api_id": "C10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Read-only source line snapshot; no mutable CM6 EditorView",
+        "status": null
+      },
+      {
+        "id": "TC-C11",
+        "api_id": "C11",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Offset maps to correct 1-based line",
+        "status": null
+      },
+      {
+        "id": "TC-C12",
+        "api_id": "C12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Snapshot equality remains valid across no-op layout and rejects different snapshot",
+        "status": null
+      },
+      {
+        "id": "TC-C13",
+        "api_id": "C13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Request measurement without exposing native editor",
+        "status": null
+      },
+      {
+        "id": "TC-C14",
+        "api_id": "C14",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CMD URL replacement is atomic undoable and excludes evidence",
+        "status": null
+      },
+      {
+        "id": "TC-C15",
+        "api_id": "C15",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-paste-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "captures exact CM6 range before async upload",
+        "status": null
+      },
+      {
+        "id": "TC-C16",
+        "api_id": "C16",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-paste-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "inserts image link with one undo and preserved source",
+        "status": null
+      },
+      {
+        "id": "TC-C17",
+        "api_id": "C17",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-annotations-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Read chapter and LaTeX annotations by tag/attribute with source offsets; skip provenance comment body",
+        "status": null
+      },
+      {
+        "id": "TC-C18",
+        "api_id": "C18",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-annotations-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Insert inline comment at exact offset and replace attributes in CM6, keeping ordinary Markdown unchanged",
+        "status": null
+      },
+      {
+        "id": "TC-C19",
+        "api_id": "C19",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-annotations-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Reject stale comment target and prohibited evidence modification; remove only annotation",
+        "status": null
+      },
+      {
+        "id": "TC-C20",
+        "api_id": "C20",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-annotations-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Atomic generic annotation/text edits with exact attributes, stale-source rejection and full original-text round-trip",
+        "status": null
+      },
+      {
+        "id": "TC-C20-AG-SCOPE",
+        "api_id": "C20",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "AG chapter scope rejects outside LaTeX edit; all-CMB scope permits controlled edit without changing the selected CM6 chapter",
+        "status": null
+      },
+      {
+        "id": "TC-C20-OBSIDIAN-LATEX",
+        "api_id": "C20",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/obsidian-latex-display.test.mjs",
+        "evidence": "direct",
+        "expected": "Reviewed display formulas preserve TeX newlines and place opening/closing $$ at column zero; repeat normalization is no-op",
+        "status": null
+      },
+      {
+        "id": "TC-C21",
+        "api_id": "C21",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-annotations-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Parse exact HTML comment attributes; reject prose, duplicates and invalid syntax",
+        "status": null
+      },
+      {
+        "id": "TC-C22",
+        "api_id": "C22",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-annotations-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Format safe single-line comments, encode entities, reject invalid attributes",
+        "status": null
+      },
+      {
+        "id": "TC-C23",
+        "api_id": "C23",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cmd-annotations-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Scan source-offset annotation records without mistaking nested MinerU evidence for tags",
+        "status": null
+      },
+      {
+        "id": "TC-C24",
+        "api_id": "C24",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "JSON CM6 source read-write and compare-and-save",
+        "status": null
+      },
+      {
+        "id": "TC-C25",
+        "api_id": "C25",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM source module explicitly registers defaultFontSize and receives changes",
+        "status": null
+      },
+      {
+        "id": "TC-C27",
+        "api_id": "C27",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-server.test.mjs",
+        "evidence": "direct",
+        "expected": "Authenticated CMD JSON settings I/O preserves bytes, rejects stale, invalid and unauthorized writes",
+        "status": null
+      },
+      {
+        "id": "TC-C28",
+        "api_id": "C28",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Startup applies saved font without creating hidden secondary Dockview or CM6",
+        "status": null
+      },
+      {
+        "id": "TC-C30-OBSIDIAN-SOURCE",
+        "api_id": "C30",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/obsidian-cm6-theme.test.mjs",
+        "evidence": "integration",
+        "expected": "CMD CM6 source presents installed Obsidian Everforest code fences and math boundaries without changing document bytes",
+        "status": null
+      },
+      {
+        "id": "TC-C30-OBSIDIAN-SYNTAX",
+        "api_id": "C30",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/obsidian-source-syntax.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome and WebKit verify HTML tag/attribute/value/comment and TeX math token source coloring while fenced HTML and CMD document bytes remain unchanged",
+        "status": null
+      },
+      {
+        "id": "TC-C33-MEDIA-SCOPE",
+        "api_id": "C33",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG 全部 authorizes validated whole-CMB Media adoption while preserving the selected CM6 chapter projection",
+        "status": null
+      },
+      {
+        "id": "TC-C34-HTML",
+        "api_id": "C34",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-elements.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome and iPad WebKit CMD HTML query contains inline and block elements with exact source locations",
+        "status": null
+      },
+      {
+        "id": "TC-C35-HTML",
+        "api_id": "C35",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-elements.test.mjs",
+        "evidence": "direct",
+        "expected": "Syntax-aware scanner locates quoted HTML tags and comments; excludes code fences, inline code, comment payload",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-C29",
+        "api_id": "C29",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "CMD index reads correctly and rejects unsafe source mutation",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-C30",
+        "api_id": "C30",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "CM6 extension array mounts single native document",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-C31",
+        "api_id": "C31",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "explicit chapter selection activates and is idempotent",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-C32",
+        "api_id": "C32",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "current chapter scope returns immutable selection or null",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-G16",
+        "api_id": "G16",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "AG toolbar entrypoint is idempotent and keeps one DOM toolbar",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-G17",
+        "api_id": "G17",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "chapter file projections deterministically name 21 virtual chapters",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-G18",
+        "api_id": "G18",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "semantic CMD projection builds and caches 21 chapter index",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-L21",
+        "api_id": "L21",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "layout port saves ratios and returns a working dispose function",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-M09",
+        "api_id": "M09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "chapter HTML projection preserves semantic global source locations",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-S07",
+        "api_id": "S07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "source navigation facade is idempotent and exposes Settings mount",
+        "status": null
+      },
+      {
+        "id": "TC-DIRECT-W10",
+        "api_id": "W10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-promoted-api-direct.browser.test.mjs",
+        "evidence": "direct",
+        "expected": "promoted WCP facade has complete bounded lifecycle hooks",
+        "status": null
+      },
+      {
+        "id": "TC-E01",
+        "api_id": null,
+        "message_id": "E01",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "documentRevision triggers AG + MD projection refresh",
+        "status": null
+      },
+      {
+        "id": "TC-E02",
+        "api_id": null,
+        "message_id": "E02",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "sourceOffset selection and heading remain aligned",
+        "status": null
+      },
+      {
+        "id": "TC-E03",
+        "api_id": null,
+        "message_id": "E03",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/four-pane-pdf-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "focusTarget maps one OCR identity to the correct panes",
+        "status": null
+      },
+      {
+        "id": "TC-E04",
+        "api_id": null,
+        "message_id": "E04",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/scroll-sync-leadership-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scrollTarget follows only the current user driver",
+        "status": null
+      },
+      {
+        "id": "TC-E05",
+        "api_id": null,
+        "message_id": "E05",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/compact-shell-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "outlineCount shown in single global status",
+        "status": null
+      },
+      {
+        "id": "TC-E06",
+        "api_id": null,
+        "message_id": "E06",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/scroll-sync-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scroll enabled state controls following behavior",
+        "status": null
+      },
+      {
+        "id": "TC-E07",
+        "api_id": null,
+        "message_id": "E07",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Dockview activation changes Zustand activePanel to outline",
+        "status": null
+      },
+      {
+        "id": "TC-E08",
+        "api_id": null,
+        "message_id": "E08",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Real AG stale-checkbox failure publishes DOM CustomEvent and global error status",
+        "status": null
+      },
+      {
+        "id": "TC-E09",
+        "api_id": null,
+        "message_id": "E09",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "DOM settings.changed is emitted on accepted CM source changes",
+        "status": null
+      },
+      {
+        "id": "TC-E10",
+        "api_id": null,
+        "message_id": "E10",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Real Main/Lab Chrome/WebKit source navigator dispatches chapter selection",
+        "status": null
+      },
+      {
+        "id": "TC-E11",
+        "api_id": null,
+        "message_id": "E11",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Real Main/Lab AG heading click in All moves to another chapter via WCP",
+        "status": null
+      },
+      {
+        "id": "TC-E12",
+        "api_id": null,
+        "message_id": "E12",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Real Main/Lab WCP emits semantic AG ready message",
+        "status": null
+      },
+      {
+        "id": "TC-E13",
+        "api_id": null,
+        "message_id": "E13",
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Real Main/Lab WCP bounds CM6 and Markdown from chapter source selection",
+        "status": null
+      },
+      {
+        "id": "TC-FOOTNOTE-M10",
+        "api_id": "M10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/footnote-popover.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome and iPad WebKit card opens without hash/scroll navigation, Floating UI stays in bounds; explicit locate alone navigates; ESC/close and no source write",
+        "status": null
+      },
+      {
+        "id": "TC-FOOTNOTE-M11",
+        "api_id": "M11",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/footnote-popover.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/WebKit first virtual chapter resolves definition in another chapter and maps note back to true CMD source line without modifying CMB",
+        "status": null
+      },
+      {
+        "id": "TC-G01",
+        "api_id": "G01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG outline mounts and indexes expected headings",
+        "status": null
+      },
+      {
+        "id": "TC-G02",
+        "api_id": "G02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG headings rebuild after CM6 edits",
+        "status": null
+      },
+      {
+        "id": "TC-G03",
+        "api_id": "G03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG eventually reflects modified source",
+        "status": null
+      },
+      {
+        "id": "TC-G04",
+        "api_id": "G04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "chapter numbering updates without corrupting source",
+        "status": null
+      },
+      {
+        "id": "TC-G05",
+        "api_id": "G05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "published chapter links bound to source revision",
+        "status": null
+      },
+      {
+        "id": "TC-G06",
+        "api_id": "G06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "AG dispose unsubscribes, destroys grid and clears host",
+        "status": null
+      },
+      {
+        "id": "TC-G07",
+        "api_id": "G07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "heading data reflects document source",
+        "status": null
+      },
+      {
+        "id": "TC-G08",
+        "api_id": "G08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/ag-header-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG native grid column/filters usable",
+        "status": null
+      },
+      {
+        "id": "TC-G09",
+        "api_id": "G09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/ag-header-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "column filter values are stable",
+        "status": null
+      },
+      {
+        "id": "TC-G10",
+        "api_id": "G10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "chapter start text survives formatting",
+        "status": null
+      },
+      {
+        "id": "TC-G11",
+        "api_id": "G11",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/compact-shell-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Global shell status includes detached Chapter marker counts from one CMD document",
+        "status": null
+      },
+      {
+        "id": "TC-G12",
+        "api_id": "G12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/chapter-numbering.test.mjs",
+        "evidence": "direct",
+        "expected": "Pure Chapter export creates correctly numbered and merged MD files without mutating source",
+        "status": null
+      },
+      {
+        "id": "TC-G13",
+        "api_id": "G13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-title-scale-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chapter title multiplier range, decimal step and saved restore",
+        "status": null
+      },
+      {
+        "id": "TC-G14",
+        "api_id": "G14",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-title-scale-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG title scales without clipping or changing other columns",
+        "status": null
+      },
+      {
+        "id": "TC-G15",
+        "api_id": "G15",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "direct",
+        "expected": "Heading AG offers semantic chapter query port without raw Grid exposure",
+        "status": null
+      },
+      {
+        "id": "TC-G16-AG-FUNCTIONS",
+        "api_id": "G16",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/ag-function-menu.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Unified AG module-owned actions dropdown in Chrome/WebKit, empty menu disabled, scope/count status in global toolbar, no source writes",
+        "status": null
+      },
+      {
+        "id": "TC-H01-GROUP-BROWSER",
+        "api_id": "H01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-elements.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/iPad WebKit AG shows 单行/开合 grouping, separate opening/closing source-line clicks and chapter/all scope",
+        "status": null
+      },
+      {
+        "id": "TC-H01-HTML",
+        "api_id": "H01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-elements.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome and iPad WebKit AG HTML rows and WCP multi-pane navigation preserve CMD bytes",
+        "status": null
+      },
+      {
+        "id": "TC-H02-HTML",
+        "api_id": "H02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-elements.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Virtual chapter HTML AG query uses chapter/all scope, never edits CM6",
+        "status": null
+      },
+      {
+        "id": "TC-H03-HTML",
+        "api_id": "H03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-elements.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG HTML count is reported by semantic WCP port",
+        "status": null
+      },
+      {
+        "id": "TC-H04-GROUP",
+        "api_id": "H04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-element-groups.test.mjs",
+        "evidence": "direct",
+        "expected": "Paired and nested tags collapse into one AG row; standalone comments/void tags remain; malformed pairs visibly retained",
+        "status": null
+      },
+      {
+        "id": "TC-H05-TABLE",
+        "api_id": "H05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-table-normalize.test.mjs",
+        "evidence": "direct",
+        "expected": "All eight existing OCR HTML tables gain three semantic sections; table bytes and original evidence remain unchanged; nested and repeated conversion skip",
+        "status": null
+      },
+      {
+        "id": "TC-H06-TABLE",
+        "api_id": "H06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-table-normalize.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome and iPad WebKit action wraps current/all chapter tables with one CMD Undo, explicit CAS Save, reload and idempotence; no automatic source writes",
+        "status": null
+      },
+      {
+        "id": "TC-L01",
+        "api_id": "L01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/compact-shell-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Dockview workspace has AG/source/preview",
+        "status": null
+      },
+      {
+        "id": "TC-L02",
+        "api_id": "L02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/dockview-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "workspace refresh renders latest document",
+        "status": null
+      },
+      {
+        "id": "TC-L03",
+        "api_id": "L03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "workspace refresh updates AG projection",
+        "status": null
+      },
+      {
+        "id": "TC-L04",
+        "api_id": "L04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/mineru-start-only-ui-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF anchors refresh for single-start source",
+        "status": null
+      },
+      {
+        "id": "TC-L05",
+        "api_id": "L05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/preview-split-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "3 to 4 to 3 panes; same persistent PDF viewer",
+        "status": null
+      },
+      {
+        "id": "TC-L06",
+        "api_id": "L06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/shared-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "MD/PDF dropdown retains viewer state",
+        "status": null
+      },
+      {
+        "id": "TC-L07",
+        "api_id": "L07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/scroll-sync-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "source and Markdown preview scroll anchors agree",
+        "status": null
+      },
+      {
+        "id": "TC-L08",
+        "api_id": "L08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/cm6-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM6 editor mounts into workspace DOM host",
+        "status": null
+      },
+      {
+        "id": "TC-L09",
+        "api_id": "L09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG module facade drives chapter export",
+        "status": null
+      },
+      {
+        "id": "TC-L10",
+        "api_id": "L10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/pdf-click-only-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF module facade maintains explicit navigation",
+        "status": null
+      },
+      {
+        "id": "TC-L11",
+        "api_id": "L11",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/dockview-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Dockview groups exist and resize correctly",
+        "status": null
+      },
+      {
+        "id": "TC-L12",
+        "api_id": "L12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/preview-split-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "split state follows checkbox and group changes",
+        "status": null
+      },
+      {
+        "id": "TC-L13",
+        "api_id": "L13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/scroll-sync-leadership-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scroll coordinator preserves user gesture leadership",
+        "status": null
+      },
+      {
+        "id": "TC-L14",
+        "api_id": "L14",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chapter export consumes detached rows and startText",
+        "status": null
+      },
+      {
+        "id": "TC-L15",
+        "api_id": "L15",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Starting number changes AG file projections via Layout",
+        "status": null
+      },
+      {
+        "id": "TC-L16",
+        "api_id": "L16",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Published chapter links tracked via Layout facade",
+        "status": null
+      },
+      {
+        "id": "TC-L17",
+        "api_id": "L17",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "module dropdown selects Media or chapter boundaries",
+        "status": null
+      },
+      {
+        "id": "TC-L18",
+        "api_id": "L18",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scan media through registered facade",
+        "status": null
+      },
+      {
+        "id": "TC-L19",
+        "api_id": "L19",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "download media through registered facade",
+        "status": null
+      },
+      {
+        "id": "TC-L20",
+        "api_id": "L20",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-normalize-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Shell normalization action routes via Workspace facade; no write until global Save",
+        "status": null
+      },
+      {
+        "id": "TC-L29-TABLE",
+        "api_id": "L29",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/html-table-normalize.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "User-initiated HTML AG action travels through Layout to scoped CMD edit and global Save",
+        "status": null
+      },
+      {
+        "id": "TC-L30-SRC",
+        "api_id": "L30",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/source-callout-plan.test.mjs",
+        "evidence": "direct",
+        "expected": "Markdown block boundaries, cursor placement, bytes preservation in all three folding modes",
+        "status": null
+      },
+      {
+        "id": "TC-L31-SRC",
+        "api_id": "L31",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/source-line-callout.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/iPad WebKit no overlapping wrapped source; fence action plus Callout and quote levels preserve selection",
+        "status": null
+      },
+      {
+        "id": "TC-L32-SRC",
+        "api_id": "L32",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/source-line-callout.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/iPad WebKit Callout and quote +/- from gutter, Undo/Redo, explicit CAS Save, reload and evidence safety",
+        "status": null
+      },
+      {
+        "id": "TC-L33-FENCE",
+        "api_id": "L33",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/source-fence-plan.test.mjs",
+        "evidence": "direct",
+        "expected": "12 pure cases plus language validation, partial/full lines, backticks and unchanged source bytes",
+        "status": null
+      },
+      {
+        "id": "TC-L33-FENCE-BR",
+        "api_id": "L33",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/source-line-callout.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/WebKit gutter menu language form, blank/selection fence, one CMD transaction and Save/reload/evidence safety",
+        "status": null
+      },
+      {
+        "id": "TC-M01",
+        "api_id": "M01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/dockview-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "rendered Markdown view follows source changes",
+        "status": null
+      },
+      {
+        "id": "TC-M02",
+        "api_id": "M02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/shared-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "re-render while preserving reading state",
+        "status": null
+      },
+      {
+        "id": "TC-M03",
+        "api_id": "M03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/dockview-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "document updates eventually render in preview",
+        "status": null
+      },
+      {
+        "id": "TC-M04",
+        "api_id": "M04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "source heading focus highlights preview element",
+        "status": null
+      },
+      {
+        "id": "TC-M05",
+        "api_id": "M05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/shared-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "preview dropdown preserves PDF viewer state",
+        "status": null
+      },
+      {
+        "id": "TC-M06",
+        "api_id": "M06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/preview-split-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "splitting reparents same PDF.js viewer",
+        "status": null
+      },
+      {
+        "id": "TC-M07",
+        "api_id": "M07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/preview-split-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "merging restores existing PDF viewer",
+        "status": null
+      },
+      {
+        "id": "TC-M08",
+        "api_id": "M08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/obsidian-image-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Obsidian wiki/alt/link sizing renders real media; source and code unchanged",
+        "status": null
+      },
+      {
+        "id": "TC-M12-BROWSER",
+        "api_id": "M12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/obsidian-callouts.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/WebKit details fold and restore after CM6 repaint without navigation, while original source stays unchanged",
+        "status": null
+      },
+      {
+        "id": "TC-M12-CALLOUT",
+        "api_id": "M12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/obsidian-callouts.test.mjs",
+        "evidence": "direct",
+        "expected": "Native note+/note-, nested, markdown bodies, title-only, plain quote, fenced-code and legacy spaced callouts",
+        "status": null
+      },
+      {
+        "id": "TC-M13-BROWSER",
+        "api_id": "M13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/code-fence-highlight.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome and iPad WebKit highlight theme styled, DOMPurify safety, source maps and KaTeX unchanged",
+        "status": null
+      },
+      {
+        "id": "TC-M13-SYNTAX",
+        "api_id": "M13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/code-fence-highlight.test.mjs",
+        "evidence": "direct",
+        "expected": "Python/JSON/HTML/JS highlighted; unknown uncolored; HTML escaped; deterministic output",
+        "status": null
+      },
+      {
+        "id": "TC-N01",
+        "api_id": "N01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/note-pairs.test.mjs",
+        "evidence": "direct",
+        "expected": "Default template matches all 10 escaped-HTML superscript citations to the 10 numbered Notes bodies; excludes letter OCR superscript artifacts; synthetic pairs, missing IDs and conflicts",
+        "status": null
+      },
+      {
+        "id": "TC-N02",
+        "api_id": "N02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/note-pair-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/WebKit adjacent ref/body rows with multiview navigation and status colors; explicit confirmed pair converts native Obsidian footnotes and inserts two CMD annotation labels in one Undo step, Save/reload idempotent",
+        "status": null
+      },
+      {
+        "id": "TC-N03",
+        "api_id": "N03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/note-pair-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chapter scope filters AG Notes without changing original source",
+        "status": null
+      },
+      {
+        "id": "TC-N04",
+        "api_id": "N04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/note-pair-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Regex validation, application and browser-local template storage",
+        "status": null
+      },
+      {
+        "id": "TC-N05",
+        "api_id": "N05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/note-pair-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Global status displays current Notes count",
+        "status": null
+      },
+      {
+        "id": "TC-N06",
+        "api_id": "N06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/note-pairs.test.mjs",
+        "evidence": "direct",
+        "expected": "10 real confirmed pairs yield one safe 40-operation batch plan; duplicate references share one definition and CMD label",
+        "status": null
+      },
+      {
+        "id": "TC-N07",
+        "api_id": "N07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/note-pair-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chrome/WebKit explicit AG bulk action shows pending vs converted states, saves once, restores Undo/Redo, skips missing notes, no automatic write",
+        "status": null
+      },
+      {
+        "id": "TC-P01",
+        "api_id": "P01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/shared-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF.js viewer loads original PDF+OCR map",
+        "status": null
+      },
+      {
+        "id": "TC-P02",
+        "api_id": "P02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/pdf-click-only-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "explicit navigation reveals OCR bbox only",
+        "status": null
+      },
+      {
+        "id": "TC-P03",
+        "api_id": "P03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/mineru-start-only-ui-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "start-only anchors remain locatable in PDF",
+        "status": null
+      },
+      {
+        "id": "TC-P04",
+        "api_id": "P04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/shared-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF zoom remains usable across mode change",
+        "status": null
+      },
+      {
+        "id": "TC-P05",
+        "api_id": "P05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/preview-split-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "active/split PDF instance remains persistent",
+        "status": null
+      },
+      {
+        "id": "TC-P06",
+        "api_id": "P06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/pdf-anchor-viewport-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF OCR overlay remains visible after resize",
+        "status": null
+      },
+      {
+        "id": "TC-P07",
+        "api_id": "P07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/preview-split-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "viewer toolbar survives reparenting",
+        "status": null
+      },
+      {
+        "id": "TC-P08",
+        "api_id": "P08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "PdfPreview.dispose tears down secondary viewer and observers",
+        "status": null
+      },
+      {
+        "id": "TC-P09",
+        "api_id": "P09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/four-pane-pdf-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "OCR bbox rect matches viewport and PDF page",
+        "status": null
+      },
+      {
+        "id": "TC-P10",
+        "api_id": "P10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/mineru-start-only-ui-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "source anchors retain MinerU page/block IDs",
+        "status": null
+      },
+      {
+        "id": "TC-P11",
+        "api_id": "P11",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/pdf-click-only-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "mode switch does not trigger unsolicited PDF jumps",
+        "status": null
+      },
+      {
+        "id": "TC-P12",
+        "api_id": "P12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "PdfPreview.clearHighlight removes selected state and OCR overlay",
+        "status": null
+      },
+      {
+        "id": "TC-P13",
+        "api_id": "P13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/shared-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF option and split are gated until first page paint; ready/failed result passed via API",
+        "status": null
+      },
+      {
+        "id": "TC-PUB-S01",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB-S01",
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Publisher notifies CM owner only on effective value delta",
+        "status": null
+      },
+      {
+        "id": "TC-PUB-W10",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB-W10",
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "File nav WCP publisher emitted in real browser",
+        "status": null
+      },
+      {
+        "id": "TC-PUB-W11",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB-W11",
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG focus WCP publisher emitted in real browser",
+        "status": null
+      },
+      {
+        "id": "TC-PUB-W12",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB-W12",
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "WCP bridge ready publisher emitted in real browser",
+        "status": null
+      },
+      {
+        "id": "TC-PUB-W13",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB-W13",
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "WCP virtual scope bound for CM6 projection",
+        "status": null
+      },
+      {
+        "id": "TC-PUB-W14",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB-W14",
+        "subscription_id": null,
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG scope change publishes bounded projection",
+        "status": null
+      },
+      {
+        "id": "TC-PUB01",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB01",
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CMD edit increases documentRevision and AG updates",
+        "status": null
+      },
+      {
+        "id": "TC-PUB02",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB02",
+        "subscription_id": null,
+        "script": "tests/cm6-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM6 selectionSet changes sourceOffset",
+        "status": null
+      },
+      {
+        "id": "TC-PUB03",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB03",
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM6 deliberate navigation publishes focusTarget",
+        "status": null
+      },
+      {
+        "id": "TC-PUB04",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB04",
+        "subscription_id": null,
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG heading click publishes focusTarget(origin=outline)",
+        "status": null
+      },
+      {
+        "id": "TC-PUB05",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB05",
+        "subscription_id": null,
+        "script": "tests/four-pane-pdf-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "MD mapped-element click publishes focusTarget(origin=preview)",
+        "status": null
+      },
+      {
+        "id": "TC-PUB06",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB06",
+        "subscription_id": null,
+        "script": "tests/four-pane-pdf-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF OCR click publishes focusTarget(origin=pdf)",
+        "status": null
+      },
+      {
+        "id": "TC-PUB07",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB07",
+        "subscription_id": null,
+        "script": "tests/scroll-sync-leadership-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM6 user scroll publishes scrollTarget(origin=cm6)",
+        "status": null
+      },
+      {
+        "id": "TC-PUB08",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB08",
+        "subscription_id": null,
+        "script": "tests/scroll-sync-leadership-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "MD scroll publishes scrollTarget(origin=preview)",
+        "status": null
+      },
+      {
+        "id": "TC-PUB09",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB09",
+        "subscription_id": null,
+        "script": "tests/compact-shell-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG recomputes outlineCount",
+        "status": null
+      },
+      {
+        "id": "TC-PUB10",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB10",
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "setScrollSyncEnabled publishes false/true updates",
+        "status": null
+      },
+      {
+        "id": "TC-PUB11",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB11",
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Dockview active panel changed to outline",
+        "status": null
+      },
+      {
+        "id": "TC-PUB12",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB12",
+        "subscription_id": null,
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "Stale AG checkbox emits chapter-error from AG catch handler",
+        "status": null
+      },
+      {
+        "id": "TC-PUB13",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": "PUB13",
+        "subscription_id": null,
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Media row focus uses existing focusTarget contract",
+        "status": null
+      },
+      {
+        "id": "TC-S01",
+        "api_id": "S01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Independent AG/CM/Preview panes mount and switch without destroying markdown",
+        "status": null
+      },
+      {
+        "id": "TC-S02",
+        "api_id": "S02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG fixed columns, actual record fields and reused chapter EnumCheckboxFilter",
+        "status": null
+      },
+      {
+        "id": "TC-S03",
+        "api_id": "S03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Registered subscriber receives effective settings.changed",
+        "status": null
+      },
+      {
+        "id": "TC-S04",
+        "api_id": "S04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG slider and CM6 report one effective setting value",
+        "status": null
+      },
+      {
+        "id": "TC-S05",
+        "api_id": "S05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG/source bidirectional AST location, slider changes record.value and undo reverts",
+        "status": null
+      },
+      {
+        "id": "TC-S06",
+        "api_id": "S06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Settings save/reload persists record metadata/range/value without touching markdown",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-C01",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-C01",
+        "script": "tests/settings-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM source receives valid update and applies CSS immediately",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-G01",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-G01",
+        "script": "tests/outline-title-scale-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Registered settings.changed title-scale subscriber updates AG title through public Layout and preserves rows/column heights",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W10",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W10",
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG toolbar reacts to virtual select",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W11",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W11",
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "File navigation reacts to AG-driven virtual open",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W12",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W12",
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG scoped rows via WCP bridge",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W13",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W13",
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "File navigation populated from WCP index",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W14",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W14",
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM6 scope follows semantic message",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W15",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W15",
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Markdown preview follows same WCP virtual chapter scope",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W16",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W16",
+        "script": "tests/wcp-virtual-event-contract.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG/PDF focus to another chapter changes source view by semantic focusTarget",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W17",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W17",
+        "script": "tests/promoted-chapters-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CM6 chapter marker edits immediately refresh virtual chapter file navigation",
+        "status": null
+      },
+      {
+        "id": "TC-SUB-W18",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB-W18",
+        "script": "tests/main-promoted-lab-ui.browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Chapter-boundary mother checkbox editable; chapter-file checkbox read-only; no direct CMD mutation allowed in chapter file",
+        "status": null
+      },
+      {
+        "id": "TC-SUB01",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB01",
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG rebuild on doc revision",
+        "status": null
+      },
+      {
+        "id": "TC-SUB02",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB02",
+        "script": "tests/dockview-preview-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "MD preview re-renders on doc revision",
+        "status": null
+      },
+      {
+        "id": "TC-SUB03",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB03",
+        "script": "tests/mineru-start-only-ui-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF anchor map retains IDs on doc edit",
+        "status": null
+      },
+      {
+        "id": "TC-SUB04",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB04",
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "source selection chooses AG heading",
+        "status": null
+      },
+      {
+        "id": "TC-SUB05",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB05",
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG selection follows explicit focus",
+        "status": null
+      },
+      {
+        "id": "TC-SUB06",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB06",
+        "script": "tests/four-pane-pdf-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "MD highlight shows correct source element",
+        "status": null
+      },
+      {
+        "id": "TC-SUB07",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB07",
+        "script": "tests/pdf-click-only-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "PDF focus only reacts to explicit click",
+        "status": null
+      },
+      {
+        "id": "TC-SUB08",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB08",
+        "script": "tests/outline-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CMD highlights chosen source line",
+        "status": null
+      },
+      {
+        "id": "TC-SUB09",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB09",
+        "script": "tests/scroll-sync-leadership-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "focus navigates followers without feedback loop",
+        "status": null
+      },
+      {
+        "id": "TC-SUB09-LATEX",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB09",
+        "script": "tests/latex-four-view-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "LaTeX AG click reaches selected source line, focused MD math and exact PDF OCR block in split four-window layout",
+        "status": null
+      },
+      {
+        "id": "TC-SUB10",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB10",
+        "script": "tests/scroll-sync-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "AG row follows source scroll target",
+        "status": null
+      },
+      {
+        "id": "TC-SUB11",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB11",
+        "script": "tests/scroll-sync-leadership-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "source or preview follows the active scroll leader",
+        "status": null
+      },
+      {
+        "id": "TC-SUB12",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB12",
+        "script": "tests/compact-shell-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "global status reflects outline count",
+        "status": null
+      },
+      {
+        "id": "TC-SUB13",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB13",
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "scrollSyncEnabled event updates global status line",
+        "status": null
+      },
+      {
+        "id": "TC-SUB14",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB14",
+        "script": "tests/scroll-sync-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scroll sync measurement responds to enable state",
+        "status": null
+      },
+      {
+        "id": "TC-SUB15",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB15",
+        "script": "tests/am/contracts-browser.test.mjs",
+        "evidence": "direct",
+        "expected": "AG chapter-error DOM event is received and displayed in global status",
+        "status": null
+      },
+      {
+        "id": "TC-SUB16",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB16",
+        "script": "tests/media-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Media rows update when CMD changes without a shadow document",
+        "status": null
+      },
+      {
+        "id": "TC-SUB17",
+        "api_id": null,
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": "SUB17",
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "source edit triggers automatic re-scan through documentRevision",
+        "status": null
+      },
+      {
+        "id": "TC-T01",
+        "api_id": "T01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scans 20 real math fences, 22 inferred inline candidates and explicit delimiters; excludes evidence/code/currency",
+        "status": null
+      },
+      {
+        "id": "TC-T02",
+        "api_id": "T02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "KaTeX strict render success/failure/unavailable independent of OCR-boundary review; line 855 fails while marked pending review",
+        "status": null
+      },
+      {
+        "id": "TC-T02-RENDER",
+        "api_id": "T02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "KaTeX render results 成功/失败/未检测 independently filterable; line 855 rendering failure with 待复核 review",
+        "status": null
+      },
+      {
+        "id": "TC-T03",
+        "api_id": "T03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "LaTeX mounts an independent AG panel without altering source or Media",
+        "status": null
+      },
+      {
+        "id": "TC-T04",
+        "api_id": "T04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "scan reflects CMD changes without a Markdown shadow copy",
+        "status": null
+      },
+      {
+        "id": "TC-T05",
+        "api_id": "T05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "module switch preserves chapter outline/Media and PDF viewer",
+        "status": null
+      },
+      {
+        "id": "TC-T06",
+        "api_id": "T06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "MinerU mixed prose LaTeX is recovered as pending-review candidates without touching Markdown or evidence",
+        "status": null
+      },
+      {
+        "id": "TC-T09",
+        "api_id": "T09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-review-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "LaTeX selection plans generic CMD operations; confirmation writes one HTML review comment adjacent to native math delimiters",
+        "status": null
+      },
+      {
+        "id": "TC-T10",
+        "api_id": "T10",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-review-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "CMD annotation scanner restores historical and canonical marker choices after save/reload; TeX unchanged",
+        "status": null
+      },
+      {
+        "id": "TC-T11",
+        "api_id": "T11",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-review-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "Confirmed inline LaTeX renders KaTeX in surrounding MD paragraph; ignore remains plain text; source unchanged",
+        "status": null
+      },
+      {
+        "id": "TC-T12",
+        "api_id": "T12",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/latex-normalize-browser.test.mjs",
+        "evidence": "integration",
+        "expected": "LaTeX module upgrades eight legacy reviews to single-comment native math, preserving IDs/contents and supporting global Save and reload",
+        "status": null
+      },
+      {
+        "id": "TC-T13",
+        "api_id": "T13",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "direct",
+        "expected": "LaTeX AG offers semantic chapter query port without raw Grid exposure",
+        "status": null
+      },
+      {
+        "id": "TC-W01",
+        "api_id": "W01",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "direct",
+        "expected": "default WCP adapter and exported public contract are present",
+        "status": null
+      },
+      {
+        "id": "TC-W02",
+        "api_id": "W05",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "direct",
+        "expected": "WCP AG bridge provides no AG Grid or CMD internals",
+        "status": null
+      },
+      {
+        "id": "TC-W03",
+        "api_id": "W08",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "direct",
+        "expected": "Layout hook consumes only semantic ratio port",
+        "status": null
+      },
+      {
+        "id": "TC-W04",
+        "api_id": "W09",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "direct",
+        "expected": "Preview DOM reconciliation remains Layout-owned",
+        "status": null
+      },
+      {
+        "id": "TC-W05",
+        "api_id": "W02",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "integration",
+        "expected": "CM6 extensions are exposed only via composition-root WCP facade",
+        "status": null
+      },
+      {
+        "id": "TC-W06",
+        "api_id": "W03",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "integration",
+        "expected": "WCP default CMD wrapper preserves CMD facade",
+        "status": null
+      },
+      {
+        "id": "TC-W07",
+        "api_id": "W04",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "integration",
+        "expected": "WCP CM6 lifecycle hook is explicitly declared and callable",
+        "status": null
+      },
+      {
+        "id": "TC-W08",
+        "api_id": "W06",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "integration",
+        "expected": "WCP preview hook exposes a semantic port and unsubscribe",
+        "status": null
+      },
+      {
+        "id": "TC-W09",
+        "api_id": "W07",
+        "message_id": null,
+        "publisher_id": null,
+        "subscription_id": null,
+        "script": "tests/wcp-runtime-contract.test.mjs",
+        "evidence": "integration",
+        "expected": "WCP render hook delegates text projection without raw preview DOM",
+        "status": null
+      }
+    ],
+    "apis": [
+      {
+        "id": "A01",
+        "module_id": "A",
+        "symbol": "createMediaModule",
+        "visibility": "export",
+        "source_file": "ui/media-module.js",
+        "cases": [
+          {
+            "id": "TC-A01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A02",
+        "module_id": "A",
+        "symbol": "findMedia",
+        "visibility": "export",
+        "source_file": "ui/media-module.js",
+        "cases": [
+          {
+            "id": "TC-A02",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-A02-SIZED",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A03",
+        "module_id": "A",
+        "symbol": "returned.scan",
+        "visibility": "returned",
+        "source_file": "ui/media-module.js",
+        "cases": [
+          {
+            "id": "TC-A03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A04",
+        "module_id": "A",
+        "symbol": "returned.downloadAll",
+        "visibility": "returned",
+        "source_file": "ui/media-module.js",
+        "cases": [
+          {
+            "id": "TC-A04",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-A04-PREEXISTING",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A05",
+        "module_id": "A",
+        "symbol": "returned.setActive",
+        "visibility": "returned",
+        "source_file": "ui/media-module.js",
+        "cases": [
+          {
+            "id": "TC-A05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A06",
+        "module_id": "A",
+        "symbol": "download_chunk",
+        "visibility": "export",
+        "source_file": "scripts/v6_media.py",
+        "cases": [
+          {
+            "id": "TC-A06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A07",
+        "module_id": "A",
+        "symbol": "status",
+        "visibility": "export",
+        "source_file": "scripts/v6_media.py",
+        "cases": [
+          {
+            "id": "TC-A07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A08",
+        "module_id": "A",
+        "symbol": "read_local",
+        "visibility": "export",
+        "source_file": "scripts/v6_media.py",
+        "cases": [
+          {
+            "id": "TC-A08",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A09",
+        "module_id": "A",
+        "symbol": "inventory",
+        "visibility": "export",
+        "source_file": "scripts/v6_media.py",
+        "cases": [
+          {
+            "id": "TC-A09",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A10",
+        "module_id": "A",
+        "symbol": "store_pasted_image",
+        "visibility": "export",
+        "source_file": "scripts/v6_media.py",
+        "cases": [
+          {
+            "id": "TC-A10",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A11",
+        "module_id": "A",
+        "symbol": "uploadPastedImage",
+        "visibility": "export",
+        "source_file": "ui/media-module.js",
+        "cases": [
+          {
+            "id": "TC-A11",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A12",
+        "module_id": "A",
+        "symbol": "chapter_media_references",
+        "visibility": "export",
+        "source_file": "scripts/v6_media.py",
+        "cases": [
+          {
+            "id": "TC-A12",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "A13",
+        "module_id": "A",
+        "symbol": "returned.setVirtualQuery",
+        "visibility": "returned",
+        "source_file": "ui/media-module.js",
+        "cases": [
+          {
+            "id": "TC-A13",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B01",
+        "module_id": "B",
+        "symbol": "createWorkspaceDirectoryModule",
+        "visibility": "export",
+        "source_file": "ui/wcp-workspace-directory-module.js",
+        "cases": [
+          {
+            "id": "TC-B01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B02",
+        "module_id": "B",
+        "symbol": "workspaceDirectoryPort",
+        "visibility": "export",
+        "source_file": "ui/wcp-workspace-directory-port.js",
+        "cases": [
+          {
+            "id": "TC-B02",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B03",
+        "module_id": "B",
+        "symbol": "WorkspaceService.roots",
+        "visibility": "export",
+        "source_file": "scripts/v6_workspace_component.py",
+        "cases": [
+          {
+            "id": "TC-B03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B04",
+        "module_id": "B",
+        "symbol": "WorkspaceService.browse",
+        "visibility": "export",
+        "source_file": "scripts/v6_workspace_component.py",
+        "cases": [
+          {
+            "id": "TC-B04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B05",
+        "module_id": "B",
+        "symbol": "WorkspaceService.books",
+        "visibility": "export",
+        "source_file": "scripts/v6_workspace_component.py",
+        "cases": [
+          {
+            "id": "TC-B05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B06",
+        "module_id": "B",
+        "symbol": "WorkspaceService.active",
+        "visibility": "export",
+        "source_file": "scripts/v6_workspace_component.py",
+        "cases": [
+          {
+            "id": "TC-B06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B07",
+        "module_id": "B",
+        "symbol": "WorkspaceService.validate",
+        "visibility": "export",
+        "source_file": "scripts/v6_workspace_component.py",
+        "cases": [
+          {
+            "id": "TC-B07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B08",
+        "module_id": "B",
+        "symbol": "WorkspaceService.prepare",
+        "visibility": "export",
+        "source_file": "scripts/v6_workspace_component.py",
+        "cases": [
+          {
+            "id": "TC-B08",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "B09",
+        "module_id": "B",
+        "symbol": "WorkspaceService.convert",
+        "visibility": "export",
+        "source_file": "scripts/v6_workspace_component.py",
+        "cases": [
+          {
+            "id": "TC-B09",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C01",
+        "module_id": "C",
+        "symbol": "CMDocument.getMarkdown",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C01",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C02",
+        "module_id": "C",
+        "symbol": "CMDocument.loadMarkdown",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C02",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C03",
+        "module_id": "C",
+        "symbol": "CMDocument.loadMineruJson",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C03",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C04",
+        "module_id": "C",
+        "symbol": "CMDocument.readHtml",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C04",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C05",
+        "module_id": "C",
+        "symbol": "CMDocument.writeHtml",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C05",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C06",
+        "module_id": "C",
+        "symbol": "CMDocument.writeComment",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C06",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C07",
+        "module_id": "C",
+        "symbol": "CMDocument.adjustQuoteIndent",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C07",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C08",
+        "module_id": "C",
+        "symbol": "CMDocument.destroy",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C08",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C09",
+        "module_id": "C",
+        "symbol": "CMDocument.view",
+        "visibility": "raw",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C09",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C10",
+        "module_id": "C",
+        "symbol": "CMDocument.readLine",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C10",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C11",
+        "module_id": "C",
+        "symbol": "CMDocument.lineAtOffset",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C11",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C12",
+        "module_id": "C",
+        "symbol": "CMDocument.matchesSnapshot",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C12",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C13",
+        "module_id": "C",
+        "symbol": "CMDocument.requestMeasure",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C13",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C14",
+        "module_id": "C",
+        "symbol": "CMDocument.replaceRanges",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C14",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C15",
+        "module_id": "C",
+        "symbol": "CMDocument.capturePasteTarget",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C15",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C16",
+        "module_id": "C",
+        "symbol": "CMDocument.pasteAt",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C16",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C17",
+        "module_id": "C",
+        "symbol": "CMDocument.readAnnotations",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C17",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C18",
+        "module_id": "C",
+        "symbol": "CMDocument.writeAnnotation",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C18",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C19",
+        "module_id": "C",
+        "symbol": "CMDocument.removeAnnotation",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C19",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C20",
+        "module_id": "C",
+        "symbol": "CMDocument.editAnnotations",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C20",
+            "evidence": "direct",
+            "status": null
+          },
+          {
+            "id": "TC-C20-AG-SCOPE",
+            "evidence": "direct",
+            "status": null
+          },
+          {
+            "id": "TC-C20-OBSIDIAN-LATEX",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C21",
+        "module_id": "C",
+        "symbol": "parseAnnotation",
+        "visibility": "export",
+        "source_file": "ui/cmd-annotations.js",
+        "cases": [
+          {
+            "id": "TC-C21",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C22",
+        "module_id": "C",
+        "symbol": "formatAnnotation",
+        "visibility": "export",
+        "source_file": "ui/cmd-annotations.js",
+        "cases": [
+          {
+            "id": "TC-C22",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C23",
+        "module_id": "C",
+        "symbol": "scanAnnotations",
+        "visibility": "export",
+        "source_file": "ui/cmd-annotations.js",
+        "cases": [
+          {
+            "id": "TC-C23",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C24",
+        "module_id": "C",
+        "symbol": "openCMDJsonSource",
+        "visibility": "export",
+        "source_file": "ui/cmd-json-source.js",
+        "cases": [
+          {
+            "id": "TC-C24",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C25",
+        "module_id": "C",
+        "symbol": "registerCMSourceFontSetting",
+        "visibility": "export",
+        "source_file": "ui/cm-font-setting.js",
+        "cases": [
+          {
+            "id": "TC-C25",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C27",
+        "module_id": "C",
+        "symbol": "save",
+        "visibility": "export",
+        "source_file": "scripts/v6_cmd_settings.py",
+        "cases": [
+          {
+            "id": "TC-C27",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C28",
+        "module_id": "C",
+        "symbol": "readCMDJsonSnapshot",
+        "visibility": "export",
+        "source_file": "ui/cmd-json-source.js",
+        "cases": [
+          {
+            "id": "TC-C28",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C29",
+        "module_id": "C",
+        "symbol": "createCMDTransactionPort",
+        "visibility": "export",
+        "source_file": "ui/wcp-cmd-element-transactions.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-C29",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C30",
+        "module_id": "C",
+        "symbol": "virtualChapterExtensions",
+        "visibility": "export",
+        "source_file": "ui/wcp-cm-virtual-view.js",
+        "cases": [
+          {
+            "id": "TC-C30-OBSIDIAN-SOURCE",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-C30-OBSIDIAN-SYNTAX",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-DIRECT-C30",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C31",
+        "module_id": "C",
+        "symbol": "setVirtualChapter",
+        "visibility": "export",
+        "source_file": "ui/wcp-cm-virtual-view.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-C31",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C32",
+        "module_id": "C",
+        "symbol": "currentVirtualChapter",
+        "visibility": "export",
+        "source_file": "ui/wcp-cm-virtual-view.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-C32",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C33",
+        "module_id": "C",
+        "symbol": "returned.replaceMediaReferences",
+        "visibility": "returned",
+        "source_file": "ui/wcp-cmd-element-transactions.js",
+        "cases": [
+          {
+            "id": "TC-C33-MEDIA-SCOPE",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C34",
+        "module_id": "C",
+        "symbol": "CMDocument.readHtmlElements",
+        "visibility": "export",
+        "source_file": "ui/cm-document.js",
+        "cases": [
+          {
+            "id": "TC-C34-HTML",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "C35",
+        "module_id": "C",
+        "symbol": "scanHtmlElements",
+        "visibility": "export",
+        "source_file": "ui/cmd-html-elements.js",
+        "cases": [
+          {
+            "id": "TC-C35-HTML",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G01",
+        "module_id": "G",
+        "symbol": "createOutlineGrid",
+        "visibility": "export",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G02",
+        "module_id": "G",
+        "symbol": "returned.refresh",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G02",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G03",
+        "module_id": "G",
+        "symbol": "returned.schedule",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G04",
+        "module_id": "G",
+        "symbol": "returned.setStartNumber",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G05",
+        "module_id": "G",
+        "symbol": "returned.setExported",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G06",
+        "module_id": "G",
+        "symbol": "returned.dispose",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G06",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G07",
+        "module_id": "G",
+        "symbol": "returned.rows",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G08",
+        "module_id": "G",
+        "symbol": "returned.api",
+        "visibility": "raw",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G08",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G09",
+        "module_id": "G",
+        "symbol": "returned.filters",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G09",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G10",
+        "module_id": "G",
+        "symbol": "returned.startText",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G10",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G11",
+        "module_id": "G",
+        "symbol": "countMarkers",
+        "visibility": "export",
+        "source_file": "ui/chapter-markers.js",
+        "cases": [
+          {
+            "id": "TC-G11",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G12",
+        "module_id": "G",
+        "symbol": "buildChapterFiles",
+        "visibility": "export",
+        "source_file": "ui/chapter-files.js",
+        "cases": [
+          {
+            "id": "TC-G12",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G13",
+        "module_id": "G",
+        "symbol": "registerOutlineTitleScaleSetting",
+        "visibility": "export",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G13",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G14",
+        "module_id": "G",
+        "symbol": "returned.setTitleFontScale",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G14",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G15",
+        "module_id": "G",
+        "symbol": "returned.setVirtualQuery",
+        "visibility": "returned",
+        "source_file": "ui/outline-grid.js",
+        "cases": [
+          {
+            "id": "TC-G15",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G16",
+        "module_id": "G",
+        "symbol": "mountAgModuleToolbar",
+        "visibility": "export",
+        "source_file": "ui/wcp-ag-module-toolbar.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-G16",
+            "evidence": "direct",
+            "status": null
+          },
+          {
+            "id": "TC-G16-AG-FUNCTIONS",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G17",
+        "module_id": "G",
+        "symbol": "chapterAssignments",
+        "visibility": "export",
+        "source_file": "ui/wcp-chapter-files.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-G17",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "G18",
+        "module_id": "G",
+        "symbol": "createIndexProjector",
+        "visibility": "export",
+        "source_file": "ui/wcp-document-index.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-G18",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "H01",
+        "module_id": "H",
+        "symbol": "createHtmlElementsModule",
+        "visibility": "export",
+        "source_file": "ui/html-elements-module.js",
+        "cases": [
+          {
+            "id": "TC-H01-GROUP-BROWSER",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-H01-HTML",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "H02",
+        "module_id": "H",
+        "symbol": "returned.setVirtualQuery",
+        "visibility": "returned",
+        "source_file": "ui/html-elements-module.js",
+        "cases": [
+          {
+            "id": "TC-H02-HTML",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "H03",
+        "module_id": "H",
+        "symbol": "returned.count",
+        "visibility": "returned",
+        "source_file": "ui/html-elements-module.js",
+        "cases": [
+          {
+            "id": "TC-H03-HTML",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "H04",
+        "module_id": "H",
+        "symbol": "groupHtmlElements",
+        "visibility": "export",
+        "source_file": "ui/html-element-groups.js",
+        "cases": [
+          {
+            "id": "TC-H04-GROUP",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "H05",
+        "module_id": "H",
+        "symbol": "planNormalizeTables",
+        "visibility": "export",
+        "source_file": "ui/html-table-normalize.js",
+        "cases": [
+          {
+            "id": "TC-H05-TABLE",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "H06",
+        "module_id": "H",
+        "symbol": "returned.normalizeTables",
+        "visibility": "returned",
+        "source_file": "ui/html-elements-module.js",
+        "cases": [
+          {
+            "id": "TC-H06-TABLE",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L01",
+        "module_id": "L",
+        "symbol": "createWorkspace",
+        "visibility": "export",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L02",
+        "module_id": "L",
+        "symbol": "returned.refreshPreview",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L02",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L03",
+        "module_id": "L",
+        "symbol": "returned.refreshOutline",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L04",
+        "module_id": "L",
+        "symbol": "returned.refreshPdf",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L05",
+        "module_id": "L",
+        "symbol": "returned.setPreviewSplit",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L06",
+        "module_id": "L",
+        "symbol": "returned.setPreviewMode",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L07",
+        "module_id": "L",
+        "symbol": "returned.startScrollSync",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L08",
+        "module_id": "L",
+        "symbol": "returned.editorHost",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L08",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L09",
+        "module_id": "L",
+        "symbol": "returned.debug.outline",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L09",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L10",
+        "module_id": "L",
+        "symbol": "returned.debug.pdf",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L10",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L11",
+        "module_id": "L",
+        "symbol": "returned.debug.dockview",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L11",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L12",
+        "module_id": "L",
+        "symbol": "returned.previewSplit",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L12",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L13",
+        "module_id": "L",
+        "symbol": "returned.debug.scrollSync",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L13",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L14",
+        "module_id": "L",
+        "symbol": "returned.getChapterState",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L14",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L15",
+        "module_id": "L",
+        "symbol": "returned.setChapterStartNumber",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L15",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L16",
+        "module_id": "L",
+        "symbol": "returned.setChaptersExported",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L16",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L17",
+        "module_id": "L",
+        "symbol": "returned.setWorkModule",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L17",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L18",
+        "module_id": "L",
+        "symbol": "returned.scanMedia",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L18",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L19",
+        "module_id": "L",
+        "symbol": "returned.downloadMedia",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L19",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L20",
+        "module_id": "L",
+        "symbol": "returned.normalizeLatex",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L20",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L21",
+        "module_id": "L",
+        "symbol": "persistLabWorkspaceLayout",
+        "visibility": "export",
+        "source_file": "ui/wcp-layout-persistence.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-L21",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L29",
+        "module_id": "L",
+        "symbol": "returned.normalizeHtmlTables",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L29-TABLE",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L30",
+        "module_id": "L",
+        "symbol": "planCalloutAtCursor",
+        "visibility": "export",
+        "source_file": "ui/source-callout-plan.js",
+        "cases": [
+          {
+            "id": "TC-L30-SRC",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L31",
+        "module_id": "L",
+        "symbol": "createSourceLineCalloutMenu",
+        "visibility": "export",
+        "source_file": "ui/source-line-callout-menu.js",
+        "cases": [
+          {
+            "id": "TC-L31-SRC",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L32",
+        "module_id": "L",
+        "symbol": "returned.mountSourceLineMenu",
+        "visibility": "returned",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-L32-SRC",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "L33",
+        "module_id": "L",
+        "symbol": "planFencedBlock",
+        "visibility": "export",
+        "source_file": "ui/source-fence-plan.js",
+        "cases": [
+          {
+            "id": "TC-L33-FENCE",
+            "evidence": "direct",
+            "status": null
+          },
+          {
+            "id": "TC-L33-FENCE-BR",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M01",
+        "module_id": "M",
+        "symbol": "renderMarkdown",
+        "visibility": "export",
+        "source_file": "ui/markdown-preview.js",
+        "cases": [
+          {
+            "id": "TC-M01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M02",
+        "module_id": "M",
+        "symbol": "PreviewPanel.render",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-M02",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M03",
+        "module_id": "M",
+        "symbol": "PreviewPanel.schedule",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-M03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M04",
+        "module_id": "M",
+        "symbol": "PreviewPanel.highlight",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-M04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M05",
+        "module_id": "M",
+        "symbol": "PreviewPanel.setMode",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-M05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M06",
+        "module_id": "M",
+        "symbol": "PreviewPanel.detachPdf",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-M06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M07",
+        "module_id": "M",
+        "symbol": "PreviewPanel.reattachPdf",
+        "visibility": "internal",
+        "source_file": "ui/workspace.js",
+        "cases": [
+          {
+            "id": "TC-M07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M08",
+        "module_id": "M",
+        "symbol": "installObsidianImages",
+        "visibility": "export",
+        "source_file": "ui/obsidian-images.js",
+        "cases": [
+          {
+            "id": "TC-M08",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M09",
+        "module_id": "M",
+        "symbol": "renderVirtualMarkdown",
+        "visibility": "export",
+        "source_file": "ui/wcp-md-virtual-preview.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-M09",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M10",
+        "module_id": "M",
+        "symbol": "createFootnotePopover",
+        "visibility": "export",
+        "source_file": "ui/footnote-popover.js",
+        "cases": [
+          {
+            "id": "TC-FOOTNOTE-M10",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M11",
+        "module_id": "M",
+        "symbol": "chapterFootnoteProjection",
+        "visibility": "export",
+        "source_file": "ui/wcp-md-virtual-preview.js",
+        "cases": [
+          {
+            "id": "TC-FOOTNOTE-M11",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M12",
+        "module_id": "M",
+        "symbol": "installObsidianCallouts",
+        "visibility": "export",
+        "source_file": "ui/obsidian-callouts.js",
+        "cases": [
+          {
+            "id": "TC-M12-BROWSER",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-M12-CALLOUT",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "M13",
+        "module_id": "M",
+        "symbol": "highlightCodeFence",
+        "visibility": "export",
+        "source_file": "ui/code-fence-highlight.js",
+        "cases": [
+          {
+            "id": "TC-M13-BROWSER",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-M13-SYNTAX",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "N01",
+        "module_id": "N",
+        "symbol": "scanNotePairs",
+        "visibility": "export",
+        "source_file": "ui/note-pair-scan.js",
+        "cases": [
+          {
+            "id": "TC-N01",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "N02",
+        "module_id": "N",
+        "symbol": "createNotePairModule",
+        "visibility": "export",
+        "source_file": "ui/note-pair-module.js",
+        "cases": [
+          {
+            "id": "TC-N02",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "N03",
+        "module_id": "N",
+        "symbol": "returned.setVirtualQuery",
+        "visibility": "returned",
+        "source_file": "ui/note-pair-module.js",
+        "cases": [
+          {
+            "id": "TC-N03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "N04",
+        "module_id": "N",
+        "symbol": "returned.openTemplates",
+        "visibility": "returned",
+        "source_file": "ui/note-pair-module.js",
+        "cases": [
+          {
+            "id": "TC-N04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "N05",
+        "module_id": "N",
+        "symbol": "returned.count",
+        "visibility": "returned",
+        "source_file": "ui/note-pair-module.js",
+        "cases": [
+          {
+            "id": "TC-N05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "N06",
+        "module_id": "N",
+        "symbol": "planConvertNotePairs",
+        "visibility": "export",
+        "source_file": "ui/note-pair-scan.js",
+        "cases": [
+          {
+            "id": "TC-N06",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "N07",
+        "module_id": "N",
+        "symbol": "returned.convertAll",
+        "visibility": "returned",
+        "source_file": "ui/note-pair-module.js",
+        "cases": [
+          {
+            "id": "TC-N07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P01",
+        "module_id": "P",
+        "symbol": "PdfPreview.open",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P02",
+        "module_id": "P",
+        "symbol": "PdfPreview.focusLine",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P02",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P03",
+        "module_id": "P",
+        "symbol": "PdfPreview.refreshAnchors",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P04",
+        "module_id": "P",
+        "symbol": "PdfPreview.setZoom",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P05",
+        "module_id": "P",
+        "symbol": "PdfPreview.setActive",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P06",
+        "module_id": "P",
+        "symbol": "PdfPreview.onResize",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P07",
+        "module_id": "P",
+        "symbol": "PdfPreview.moveToolbarTo",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P08",
+        "module_id": "P",
+        "symbol": "PdfPreview.dispose",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P08",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P09",
+        "module_id": "P",
+        "symbol": "pdfOverlayRect",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P09",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P10",
+        "module_id": "P",
+        "symbol": "sourceBlocks",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P10",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P11",
+        "module_id": "P",
+        "symbol": "PdfPreview.revealCurrentLocation",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P11",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P12",
+        "module_id": "P",
+        "symbol": "PdfPreview.clearHighlight",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P12",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "P13",
+        "module_id": "P",
+        "symbol": "PdfPreview.whenReady",
+        "visibility": "export",
+        "source_file": "ui/pdf-preview.js",
+        "cases": [
+          {
+            "id": "TC-P13",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "S01",
+        "module_id": "S",
+        "symbol": "createSettingsModule",
+        "visibility": "export",
+        "source_file": "ui/settings-module.js",
+        "cases": [
+          {
+            "id": "TC-S01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "S02",
+        "module_id": "S",
+        "symbol": "register",
+        "visibility": "internal",
+        "source_file": "ui/settings-module.js",
+        "cases": [
+          {
+            "id": "TC-S02",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "S03",
+        "module_id": "S",
+        "symbol": "subscribe",
+        "visibility": "internal",
+        "source_file": "ui/settings-module.js",
+        "cases": [
+          {
+            "id": "TC-S03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "S04",
+        "module_id": "S",
+        "symbol": "get",
+        "visibility": "internal",
+        "source_file": "ui/settings-module.js",
+        "cases": [
+          {
+            "id": "TC-S04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "S05",
+        "module_id": "S",
+        "symbol": "set",
+        "visibility": "internal",
+        "source_file": "ui/settings-module.js",
+        "cases": [
+          {
+            "id": "TC-S05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "S06",
+        "module_id": "S",
+        "symbol": "save",
+        "visibility": "internal",
+        "source_file": "ui/settings-module.js",
+        "cases": [
+          {
+            "id": "TC-S06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "S07",
+        "module_id": "S",
+        "symbol": "createSourceFileNavigation",
+        "visibility": "export",
+        "source_file": "ui/wcp-source-file-navigation.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-S07",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T01",
+        "module_id": "T",
+        "symbol": "findLatex",
+        "visibility": "export",
+        "source_file": "ui/latex-scan.js",
+        "cases": [
+          {
+            "id": "TC-T01",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T02",
+        "module_id": "T",
+        "symbol": "checkLatex",
+        "visibility": "export",
+        "source_file": "ui/latex-module.js",
+        "cases": [
+          {
+            "id": "TC-T02",
+            "evidence": "integration",
+            "status": null
+          },
+          {
+            "id": "TC-T02-RENDER",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T03",
+        "module_id": "T",
+        "symbol": "createLatexModule",
+        "visibility": "export",
+        "source_file": "ui/latex-module.js",
+        "cases": [
+          {
+            "id": "TC-T03",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T04",
+        "module_id": "T",
+        "symbol": "returned.refresh",
+        "visibility": "returned",
+        "source_file": "ui/latex-module.js",
+        "cases": [
+          {
+            "id": "TC-T04",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T05",
+        "module_id": "T",
+        "symbol": "returned.setActive",
+        "visibility": "returned",
+        "source_file": "ui/latex-module.js",
+        "cases": [
+          {
+            "id": "TC-T05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T06",
+        "module_id": "T",
+        "symbol": "findUndelimitedInline",
+        "visibility": "export",
+        "source_file": "ui/latex-inline-candidates.js",
+        "cases": [
+          {
+            "id": "TC-T06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T09",
+        "module_id": "T",
+        "symbol": "planReviewAnnotations",
+        "visibility": "export",
+        "source_file": "ui/latex-review-markers.js",
+        "cases": [
+          {
+            "id": "TC-T09",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T10",
+        "module_id": "T",
+        "symbol": "findReviewMarkers",
+        "visibility": "export",
+        "source_file": "ui/latex-review-markers.js",
+        "cases": [
+          {
+            "id": "TC-T10",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T11",
+        "module_id": "T",
+        "symbol": "projectReviewedInlineLatex",
+        "visibility": "export",
+        "source_file": "ui/latex-inline-preview.js",
+        "cases": [
+          {
+            "id": "TC-T11",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T12",
+        "module_id": "T",
+        "symbol": "returned.normalizeReviewed",
+        "visibility": "returned",
+        "source_file": "ui/latex-module.js",
+        "cases": [
+          {
+            "id": "TC-T12",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "T13",
+        "module_id": "T",
+        "symbol": "returned.setVirtualQuery",
+        "visibility": "returned",
+        "source_file": "ui/latex-module.js",
+        "cases": [
+          {
+            "id": "TC-T13",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W01",
+        "module_id": "W",
+        "symbol": "createWCPRuntime",
+        "visibility": "export",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W01",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W02",
+        "module_id": "W",
+        "symbol": "returned.editorExtensions",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W05",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W03",
+        "module_id": "W",
+        "symbol": "returned.wrapCMD",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W06",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W04",
+        "module_id": "W",
+        "symbol": "returned.onCMReady",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W07",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W05",
+        "module_id": "W",
+        "symbol": "returned.onAGReady",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W02",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W06",
+        "module_id": "W",
+        "symbol": "returned.onPreviewInit",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W08",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W07",
+        "module_id": "W",
+        "symbol": "returned.renderPreview",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W09",
+            "evidence": "integration",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W08",
+        "module_id": "W",
+        "symbol": "returned.onLayoutReady",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W03",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W09",
+        "module_id": "W",
+        "symbol": "returned.preservePreviewNodes",
+        "visibility": "returned",
+        "source_file": "ui/wcp-runtime.js",
+        "cases": [
+          {
+            "id": "TC-W04",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      },
+      {
+        "id": "W10",
+        "module_id": "W",
+        "symbol": "createWCPRuntime",
+        "visibility": "export",
+        "source_file": "ui/wcp-wcp-virtual-chapters.js",
+        "cases": [
+          {
+            "id": "TC-DIRECT-W10",
+            "evidence": "direct",
+            "status": null
+          }
+        ]
+      }
+    ]
+  },
+  "boundary": {
+    "ownership": {
+      "ui_js": 63,
+      "modules": 12,
+      "module_helpers": 36,
+      "shared_libraries": 8,
+      "shell_files": 7,
+      "js_imports": 121,
+      "cross_module_imports": 38,
+      "shared_imports": 43,
+      "known_state_writes": 0,
+      "cross_edges": [
+        [
+          "chapter-markers.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "latex-inline-preview.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "latex-review-markers.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "main.js",
+          "wcp-wcp-virtual-chapters.js"
+        ],
+        [
+          "main.js",
+          "workspace.js"
+        ],
+        [
+          "main.js",
+          "wcp-cm-document.js"
+        ],
+        [
+          "main.js",
+          "wcp-settings-module.js"
+        ],
+        [
+          "main.js",
+          "wcp-workspace-directory-port.js"
+        ],
+        [
+          "main.js",
+          "wcp-source-file-navigation.js"
+        ],
+        [
+          "main.js",
+          "wcp-ag-module-toolbar.js"
+        ],
+        [
+          "main.js",
+          "cm-font-setting.js"
+        ],
+        [
+          "main.js",
+          "wcp-chapter-outline.js"
+        ],
+        [
+          "main.js",
+          "media-module.js"
+        ],
+        [
+          "main.js",
+          "chapter-markers.js"
+        ],
+        [
+          "main.js",
+          "wcp-chapter-files.js"
+        ],
+        [
+          "markdown-preview.js",
+          "latex-inline-preview.js"
+        ],
+        [
+          "note-pair-scan.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "obsidian-source-syntax.js",
+          "latex-scan.js"
+        ],
+        [
+          "settings-module.js",
+          "cmd-json-source.js"
+        ],
+        [
+          "settings-module.js",
+          "wcp-workspace-directory-module.js"
+        ],
+        [
+          "wcp-cmd-element-transactions.js",
+          "wcp-document-index.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "latex-scan.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "latex-review-markers.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "media-module.js"
+        ],
+        [
+          "wcp-source-file-navigation.js",
+          "wcp-chapter-files.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-layout-persistence.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-cmd-element-transactions.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-cm-virtual-view.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-md-virtual-preview.js"
+        ],
+        [
+          "workspace.js",
+          "markdown-preview.js"
+        ],
+        [
+          "workspace.js",
+          "footnote-popover.js"
+        ],
+        [
+          "workspace.js",
+          "wcp-chapter-outline.js"
+        ],
+        [
+          "workspace.js",
+          "media-module.js"
+        ],
+        [
+          "workspace.js",
+          "latex-module.js"
+        ],
+        [
+          "workspace.js",
+          "note-pair-module.js"
+        ],
+        [
+          "workspace.js",
+          "html-elements-module.js"
+        ],
+        [
+          "workspace.js",
+          "pdf-preview.js"
+        ]
+      ]
+    },
+    "static_findings": [],
+    "literal_dom_events": [
+      {
+        "file": "ui/main.js",
+        "line": 615,
+        "kind": "subscribe",
+        "topic": "ocr2md:chapter-error",
+        "registered": true
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 227,
+        "kind": "publish",
+        "topic": "ocr2md:chapter-error",
+        "registered": true
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 285,
+        "kind": "subscribe",
+        "topic": "ocr2md:lab-virtual-select",
+        "registered": true
+      },
+      {
+        "file": "ui/settings-module.js",
+        "line": 54,
+        "kind": "subscribe",
+        "topic": "settings.changed",
+        "registered": true
+      },
+      {
+        "file": "ui/settings-module.js",
+        "line": 231,
+        "kind": "publish",
+        "topic": "settings.changed",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-module-toolbar.js",
+        "line": 169,
+        "kind": "subscribe",
+        "topic": "ocr2md:lab-virtual-select",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 85,
+        "kind": "publish",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 131,
+        "kind": "publish",
+        "topic": "ocr2md:lab-virtual-open",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 156,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp3-ag-ready",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 51,
+        "kind": "publish",
+        "topic": "ocr2md:lab-virtual-select",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 127,
+        "kind": "subscribe",
+        "topic": "ocr2md:lab-virtual-open",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 134,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp3-ag-ready",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 16,
+        "kind": "publish",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 32,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 38,
+        "kind": "publish",
+        "topic": "ocr2md:wp3-ag-ready",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 58,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      }
+    ],
+    "unregistered_event_sites": [],
+    "runtime_callsite_review_inventory": [
+      {
+        "file": "ui/fontcheck.js",
+        "line": 21,
+        "expression": "const editor = document.querySelector('.cm-content');"
+      },
+      {
+        "file": "ui/html-elements-module.js",
+        "line": 71,
+        "expression": "const revision=viewStore.getState().documentRevision;"
+      },
+      {
+        "file": "ui/html-elements-module.js",
+        "line": 108,
+        "expression": "const unsubscribe=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/html-elements-module.js",
+        "line": 125,
+        "expression": "if(lastRevision!==viewStore.getState().documentRevision)refresh();"
+      },
+      {
+        "file": "ui/latex-module.js",
+        "line": 236,
+        "expression": "const unsubscribe=viewStore.subscribe((current,prior)=>{"
+      },
+      {
+        "file": "ui/latex-module.js",
+        "line": 275,
+        "expression": "const state=viewStore.getState();"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 29,
+        "expression": "const $ = (id) => document.getElementById(id);"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 59,
+        "expression": "const store=viewStore.getState();"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 86,
+        "expression": "if (document.querySelector('dialog[open]')) {"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 344,
+        "expression": "const unsubscribeGlobalStatus=viewStore.subscribe((next,previous)=>{"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 489,
+        "expression": "const unsubscribeOutlineFocus=viewStore.subscribe((next,previous)=>{"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 679,
+        "expression": "if (import.meta.env.DEV) window.__v6cm6 = {"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 686,
+        "expression": "get scrollState(){return viewStore.getState();},"
+      },
+      {
+        "file": "ui/media-module.js",
+        "line": 373,
+        "expression": "const unsubscribe=viewStore.subscribe((next,previous)=>{"
+      },
+      {
+        "file": "ui/media-module.js",
+        "line": 407,
+        "expression": "const state=viewStore.getState();"
+      },
+      {
+        "file": "ui/note-pair-module.js",
+        "line": 249,
+        "expression": "const unsubscribe=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/note-pair-module.js",
+        "line": 278,
+        "expression": "if(active){refresh();followFocus(viewStore.getState().focusTarget,viewStore.getState());}"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 109,
+        "expression": "indexedRevision=viewStore.getState().documentRevision;"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 133,
+        "expression": "const state=viewStore.getState();"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 152,
+        "expression": "if(indexedRevision!==viewStore.getState().documentRevision)refresh();"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 286,
+        "expression": "const unsub=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/pdf-preview.js",
+        "line": 94,
+        "expression": "this.unsubscribe=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 59,
+        "expression": "measuredRevision=viewStore.getState().documentRevision;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 69,
+        "expression": "if(viewStore.getState().scrollSyncEnabled && anchors.length) {"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 143,
+        "expression": "(!independent && !viewStore.getState().scrollSyncEnabled)) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 144,
+        "expression": "if(measuredRevision!==viewStore.getState().documentRevision) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 158,
+        "expression": "(!viewStore.getState().scrollSyncEnabled && !explicitNavigation)) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 175,
+        "expression": "(!viewStore.getState().scrollSyncEnabled && !explicitNavigation) ||"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 187,
+        "expression": "(!viewStore.getState().scrollSyncEnabled && !force)) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 206,
+        "expression": "if(disposed || !viewStore.getState().scrollSyncEnabled) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 216,
+        "expression": "if(!scroller || disposed || !viewStore.getState().scrollSyncEnabled ||"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 228,
+        "expression": "if(disposed || !viewStore.getState().scrollSyncEnabled ||"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 258,
+        "expression": "if(viewStore.getState().scrollSyncEnabled) lastDriver='cm6';"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 266,
+        "expression": "if(viewStore.getState().scrollSyncEnabled) lastDriver='preview';"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 285,
+        "expression": "const unsubscribe=viewStore.subscribe((state,previous)=>{"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 300,
+        "expression": "const unsubscribeFocus=viewStore.subscribe((state,previous)=>{"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 333,
+        "expression": "if(measuredRevision!==viewStore.getState().documentRevision &&"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 337,
+        "expression": "if(!viewStore.getState().scrollSyncEnabled) return readPreview();"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 343,
+        "expression": "if(!viewStore.getState().scrollSyncEnabled) {"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 19,
+        "expression": "viewStore.setState(s => ({documentRevision:s.documentRevision + 1}));"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 23,
+        "expression": "if (viewStore.getState().sourceOffset !== offset)"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 24,
+        "expression": "viewStore.setState({sourceOffset:offset});"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 31,
+        "expression": "viewStore.setState(state => ({"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 40,
+        "expression": "viewStore.setState({scrollSyncEnabled:Boolean(enabled)});"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 45,
+        "expression": "viewStore.setState(state=>({"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 54,
+        "expression": "if(viewStore.getState().outlineCount!==count)viewStore.setState({outlineCount:count});"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 58,
+        "expression": "if(viewStore.getState().activePanel!==panelId)viewStore.setState({activePanel:panelId});"
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 118,
+        "expression": "unsubscribe=viewStore.subscribe((current,prior)=>{"
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 147,
+        "expression": "viewStore.subscribe((now,before)=>{"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 255,
+        "expression": "this.unsubscribe=viewStore.subscribe((next,prior)=>{"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 284,
+        "expression": "revision:viewStore.getState().documentRevision};"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 299,
+        "expression": "if(!saved || saved.revision!==viewStore.getState().documentRevision)return;"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 384,
+        "expression": "this.highlight(viewStore.getState().focusTarget);"
+      }
+    ],
+    "runtime_exhaustive_proof": false
+  },
+  "failures": [
+    "AUDIT_RUNNER_NONZERO",
+    "AM_RESULTS_INCOMPLETE"
+  ],
+  "manual_review_required": [
+    "Integration-only API evidence does not establish independent API invocation; review each listed API against its real interface and add direct test where needed.",
+    "Manually examine dynamic/DOM/shared-store callsites and trace caller -> registered API/message -> receiver; static ownership PASS alone does not prove all runtime boundaries."
+  ],
+  "git_remediation": "For a confirmed bypass: preserve evidence; git blame/log origin; git revert offending commit or reconstruct last compliant revision in separate worktree; rerun same audit. Do not whitelist bypasses.",
+  "auditor_signoff": {
+    "auditor": null,
+    "runtime_review": "PENDING",
+    "decision": "NOT_SIGNED"
+  }
+}
