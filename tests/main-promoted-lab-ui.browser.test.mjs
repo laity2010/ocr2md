@@ -3,14 +3,15 @@
  */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {chromium,webkit} from 'playwright';
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-main-promoted-'));
 const fixture=readFileSync(process.env.OCR_MAIN_USE_CURRENT_COPY==='1'?'.v6/workspace/buffetts-alpha.minerujson.md':'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 // Isolate navigation from any real Main workspace/book selection.
-const settingsData=JSON.parse(readFileSync('.v6/settings.json','utf8'));
+// Hermetic: untracked .v6/settings.json may not exist in a clean checkout.
+const settingsData=existsSync('.v6/settings.json')?JSON.parse(readFileSync('.v6/settings.json','utf8')):{settings:{}};
 for(const key of ['workspace.files.rootPath','workspace.files.bookName']){
  if(settingsData.settings?.[key])settingsData.settings[key].value='';
 }
