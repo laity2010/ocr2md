@@ -75,6 +75,11 @@ function mathMarks(view,visible,marks){
   const markdownTree=markdownLanguage.parser.parse(source);
   for(const formula of formulas){
     if(formula.syntax==='未定界')continue; // Unconfirmed OCR is still prose.
+    // MinerU block/page provenance is a hard semantic boundary. A damaged
+    // or partly edited $$ range must never carry sTeX syntax past that
+    // boundary and turn ordinary `65% private ...` into a TeX comment.
+    // Genuine formulas (including real TeX % comments) stay highlighted.
+    if(/<!--\s*minerujson:(?:block|page|source|discarded)\b/i.test(formula.content))continue;
     const a=from+formula.from,b=from+formula.to;
     if(!visible.some(range=>range.from<b&&range.to>a))continue;
     let parent=markdownTree.resolveInner(formula.from,1);
