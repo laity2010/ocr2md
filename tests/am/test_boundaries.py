@@ -21,8 +21,13 @@ class GateTests(unittest.TestCase):
     def test_baseline(self):
         stats,issues=mod.scan_files(ROOT,CAT)
         self.assertEqual(issues,[])
-        # Exact inventory for the frozen 9b211638 source tree; retain strict drift detection.
-        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(63,12,38))
+        # The fail-closed source inventory is owned by the versioned AM catalog
+        # and SQL registry, not by a second hard-coded count from an old SHA.
+        # scan_files also rejects orphan files, unknown imports and stale edges.
+        modules,_=mod.load_registry(ROOT)
+        registered=(len(CAT['files']),len(modules),len(CAT['crossModuleBindings']))
+        observed=(stats['ui_js'],stats['modules'],stats['cross_module_imports'])
+        self.assertEqual(observed,registered)
 
     def test_wcp_source_navigation_avoids_foreign_dom_contracts(self):
         navigation=(ROOT/'ui/wcp-source-file-navigation.js').read_text()
@@ -35,6 +40,26 @@ class GateTests(unittest.TestCase):
         issues=self.modified('outline-grid.js',
             "document.dispatchEvent(new CustomEvent('ocr2md:undeclared-topic',{detail:{}}));")
         self.assertTrue(any('UNREGISTERED_DOM_PUBLISH' in issue for issue in issues))
+
+    def test_unregistered_settings_subscription(self):
+        issues=self.modified('cm-font-setting.js',"settings.subscribe({module:'C',key:'x.y'},()=>{});")
+        self.assertFalse(any('SETTINGS' in i for i in issues),issues)
+        issues=self.modified('wcp-workspace-directory-module.js',
+            "settings.subscribe({module:'L',key:'globalUi.x'},()=>{});")
+        self.assertTrue(any('UNREGISTERED_SETTINGS_SUBSCRIPTION' in i for i in issues),issues)
+
+    def test_navigation_font_subscription_module(self):
+        path=ROOT/'ui/wcp-navigation-select.js'
+        body=path.read_text(encoding='utf-8').replace("module:'L'","module:'N'")
+        _,issues=mod.scan_files(ROOT,CAT,{'wcp-navigation-select.js':body})
+        self.assertTrue(any('UNREGISTERED_SETTINGS_SUBSCRIPTION wcp-navigation-select.js module=N' in i for i in issues),issues)
+        self.assertTrue(any('STALE_SETTINGS_SUBSCRIPTION wcp-navigation-select.js module=L' in i for i in issues),issues)
+
+    def test_settings_subscribe_wrong_owner(self):
+        path=ROOT/'ui/outline-grid.js'
+        body=path.read_text(encoding='utf-8').replace("settings.subscribe({module:'G'","settings.subscribe({module:'C'")
+        _,issues=mod.scan_files(ROOT,CAT,{'outline-grid.js':body})
+        self.assertTrue(any('SETTINGS_SUBSCRIBE_WRONG_MODULE outline-grid.js(G) module=C' in i for i in issues),issues)
 
     def test_retired_semantic_event_subscription(self):
         issues=self.modified('wcp-ag-module-toolbar.js',

@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {labProfile} from '../scripts/v6_lab_profile.mjs';
 
 test('Lab profile changes only environment identity and rejects business module replacement',()=>{
@@ -23,4 +24,11 @@ test('Lab profile changes only environment identity and rejects business module 
   writeFileSync(join(dir,'lab.json'),JSON.stringify({apiReplacement:true}));
   assert.throws(()=>labProfile(fake,'check'),/Lab config/);
  }finally{rmSync(fake,{recursive:true});}
+});
+
+test('repository WCP Lab is the same business graph as Main',()=>{
+ const root=fileURLToPath(new URL('../',import.meta.url));
+ const actual=labProfile(root,'wcp-lab');
+ assert.equal(actual.base,'/labs/wcp-lab/');
+ assert.equal(Object.hasOwn(actual,'replacements'),false);
 });

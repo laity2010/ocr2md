@@ -25,6 +25,9 @@ DOM_PUBLISH = re.compile(r'''\bnew\s+CustomEvent\s*\(\s*['"]([^'"]+)['"]''')
 DOM_SUBSCRIBE = re.compile(r'''\baddEventListener\s*\(\s*['"]([^'"]+)['"]''')
 
 
+SETTINGS_SUBSCRIBE=re.compile(r"settings\.subscribe\(\s*\{\s*module\s*:\s*['\"]([A-Za-z]+)['\"]")
+
+
 def load_registry(root):
     con = sqlite3.connect(':memory:')
     con.row_factory = sqlite3.Row
@@ -70,6 +73,9 @@ def scan_files(root, cfg, override=None):
         contracts.executescript((root/'tests/am/schema.sql').read_text())
         contracts.executescript((root/'tests/am/registry.sql').read_text())
         declared_topics={r[0] for r in contracts.execute("SELECT topic FROM messages WHERE transport='dom'")}
+        settings_subs={(r[0],r[1]) for r in contracts.execute(
+            "SELECT s.module_id,s.source_file FROM subscriptions s JOIN messages m ON m.id=s.message_id "
+            "WHERE m.topic='settings.changed' AND s.handler='settings.subscribe'")}
     for name in sorted(found):
         caller = assignments.get(name)
         body = override.get(name, (ui/name).read_text(encoding='utf-8'))
@@ -78,6 +84,20 @@ def scan_files(root, cfg, override=None):
                 topic=match.group(1)
                 if (topic.startswith('ocr2md:') or topic=='settings.changed') and topic not in declared_topics:
                     issues.append(f'UNREGISTERED_DOM_{kind.upper()} {name} {topic}')
+        # Registered-setting subscriptions are settings.changed consumers.
+        # Each settings.subscribe({module:X}) site must be a registered
+        # subscription row of module X in this exact file, and X must be the
+        # file owner (or any real module for a shared library).
+        seen_settings=set()
+        for m in SETTINGS_SUBSCRIBE.finditer(body):
+            module=m.group(1);seen_settings.add(module)
+            if module not in modules or (caller in modules and module!=caller):
+                issues.append(f'SETTINGS_SUBSCRIBE_WRONG_MODULE {name}({caller}) module={module}')
+            if (module,f'ui/{name}') not in settings_subs:
+                issues.append(f'UNREGISTERED_SETTINGS_SUBSCRIPTION {name} module={module}')
+        for module,source in settings_subs:
+            if source==f'ui/{name}' and module not in seen_settings:
+                issues.append(f'STALE_SETTINGS_SUBSCRIPTION {name} module={module}')
         candidates = [(m.group('target'),'static',m.group('bindings')) for m in STATIC.finditer(body)]
         for m in NON_RELATIVE_IMPORT.finditer(body):
             issues.append(f'ABSOLUTE_OR_URL_IMPORT {name} -> {m.group("target")[:100]}')

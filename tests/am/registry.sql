@@ -548,7 +548,8 @@ INSERT INTO publishers VALUES
  ('PUB-S01','E09','S','ui/settings-module.js','container.dispatchEvent','Effective registered JSON value changes');
 INSERT INTO subscriptions VALUES
  ('SUB-C01','E09','C','ui/cm-font-setting.js','settings.subscribe','Registered CM source key change','Set public CSS variable for source editor font size'),
- ('SUB-G01','E09','G','ui/outline-grid.js','settings.subscribe','Registered chapter title scale key change','Send title scale through Workspace semantic port into AG');
+ ('SUB-G01','E09','G','ui/outline-grid.js','settings.subscribe','Registered chapter title scale key change','Send title scale through Workspace semantic port into AG'),
+ ('SUB-L01','E09','L','ui/wcp-navigation-select.js','settings.subscribe','Registered navigation dropdown font-size key change','Set public CSS variable --ocr-navigation-font-size for every navigation picker and popup');
 INSERT INTO access_edges VALUES
  ('X70','S','C','ui/settings-module.js','import {openCMDJsonSource,readCMDJsonSnapshot}','C24','registered','Settings requests JSON text transactions only via CMD port'),
  ('X71',NULL,'S','ui/main.js','createSettingsModule(','S01','registered','Shell mounts Settings facade into the WCP module selector'),
@@ -575,7 +576,8 @@ INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALU
  ('TC-SUB-C01','SUB-C01','tests/settings-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM source receives valid update and applies CSS immediately','integration');
 
 INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
- ('TC-SUB-G01','SUB-G01','tests/outline-title-scale-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Registered settings.changed title-scale subscriber updates AG title through public Layout and preserves rows/column heights','integration');
+ ('TC-SUB-G01','SUB-G01','tests/outline-title-scale-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Registered settings.changed title-scale subscriber updates AG title through public Layout and preserves rows/column heights','integration'),
+ ('TC-SUB-L01','SUB-L01','tests/navigation-font-setting-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Registered navigation font subscriber applies slider value to CSS variable, picker and popup without writes','integration');
 
 -- CMD JSON I/O server is not owned by Settings; enforce authorization and CAS.
 INSERT INTO apis VALUES
