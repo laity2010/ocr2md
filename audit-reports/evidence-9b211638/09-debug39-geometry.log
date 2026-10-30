@@ -1,0 +1,17 @@
+DEBUG geometry engine=Chrome {"page":"3","block":"6","top":1022.78125,"bottom":1038.46875,"left":798.8125,"right":948.3125,"viewportTop":582,"viewportBottom":1056,"viewportLeft":704,"viewportRight":1408,"scrollerBottom":1056,"windowBottom":1056,"scrolled":1933}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: test must exercise the original PDF scrollport cropped by screen
+    at file:///home/hatch/workspace/ocr2md-am-9b211638-isolated/tests/zz-debug-pdfanchor.test.mjs:73:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.22.1
+rc=1

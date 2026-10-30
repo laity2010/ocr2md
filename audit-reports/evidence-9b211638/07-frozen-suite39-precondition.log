@@ -1,0 +1,15 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: test must exercise the original PDF scrollport cropped by screen
+    at file:///home/hatch/workspace/ocr2md-am-9b211638-isolated/tests/pdf-anchor-viewport-browser.test.mjs:72:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.22.1

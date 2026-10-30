@@ -1,0 +1,3 @@
+WORKROOT_BROWSER_PASS Chrome {"bookCatalog":true,"bookSelected":true,"rootNotDocument":true,"saveReload":true,"oldDocIntact":true,"errors":[]}
+AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER api-request-unlock-token-stored
+WORKROOT_BROWSER_PASS iPad-WebKit {"bookCatalog":true,"bookSelected":true,"rootNotDocument":true,"saveReload":true,"oldDocIntact":true,"errors":[]}

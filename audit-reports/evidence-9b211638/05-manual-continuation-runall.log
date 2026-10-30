@@ -1,0 +1,164 @@
+== coverage ==
+total=167 | linked=167 | core_total=139 | core_linked=139
+total_messages=13 | with_publishers=13 | with_subscribers=12 | test_links=240 | actual_runs=0
+publishers=19 | publishers_linked=19 | subscriptions=28 | subscriptions_linked=28 | messages_linked=13
+NOTE: script links are references, NOT certified PASS results or isolated API tests
+coverage_rc=0
+== edges debt ==
+(no results)
+edges_rc=0
+== run-all ==
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_FULL_START git=9b211638 suites=57 contracts=240
+AM_SUITE_START 1/57 tests/ag-function-menu.browser.test.mjs cases=1
+AM_SUITE_PASS 1/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-01-ag-function-menu.browser.test.log
+AM_SUITE_START 2/57 tests/ag-header-browser.test.mjs cases=2
+AM_SUITE_PASS 2/57 cases=2 log=.v6/tests/am-full-20261029T231317Z-9b211638-02-ag-header-browser.test.log
+AM_SUITE_START 3/57 tests/am/contracts-browser.test.mjs cases=16
+AM_SUITE_PASS 3/57 cases=16 log=.v6/tests/am-full-20261029T231317Z-9b211638-03-contracts-browser.test.log
+AM_SUITE_START 4/57 tests/chapter-numbering.test.mjs cases=1
+AM_SUITE_PASS 4/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-04-chapter-numbering.test.log
+AM_SUITE_START 5/57 tests/cm6-browser.test.mjs cases=3
+AM_SUITE_PASS 5/57 cases=3 log=.v6/tests/am-full-20261029T231317Z-9b211638-05-cm6-browser.test.log
+AM_SUITE_START 6/57 tests/cmd-annotations-browser.test.mjs cases=7
+AM_SUITE_PASS 6/57 cases=7 log=.v6/tests/am-full-20261029T231317Z-9b211638-06-cmd-annotations-browser.test.log
+AM_SUITE_START 7/57 tests/cmd-html-unified-browser.test.mjs cases=5
+AM_SUITE_PASS 7/57 cases=5 log=.v6/tests/am-full-20261029T231317Z-9b211638-07-cmd-html-unified-browser.test.log
+AM_SUITE_START 8/57 tests/code-fence-highlight.browser.test.mjs cases=1
+AM_SUITE_PASS 8/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-08-code-fence-highlight.browser.test.log
+AM_SUITE_START 9/57 tests/code-fence-highlight.test.mjs cases=1
+AM_SUITE_PASS 9/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-09-code-fence-highlight.test.log
+AM_SUITE_START 10/57 tests/compact-shell-browser.test.mjs cases=5
+AM_SUITE_PASS 10/57 cases=5 log=.v6/tests/am-full-20261029T231317Z-9b211638-10-compact-shell-browser.test.log
+AM_SUITE_START 11/57 tests/dockview-preview-browser.test.mjs cases=5
+AM_SUITE_PASS 11/57 cases=5 log=.v6/tests/am-full-20261029T231317Z-9b211638-11-dockview-preview-browser.test.log
+AM_SUITE_START 12/57 tests/footnote-popover.browser.test.mjs cases=2
+AM_SUITE_PASS 12/57 cases=2 log=.v6/tests/am-full-20261029T231317Z-9b211638-12-footnote-popover.browser.test.log
+AM_SUITE_START 13/57 tests/four-pane-pdf-browser.test.mjs cases=5
+AM_SUITE_PASS 13/57 cases=5 log=.v6/tests/am-full-20261029T231317Z-9b211638-13-four-pane-pdf-browser.test.log
+AM_SUITE_START 14/57 tests/html-element-groups.test.mjs cases=1
+AM_SUITE_PASS 14/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-14-html-element-groups.test.log
+AM_SUITE_START 15/57 tests/html-elements.browser.test.mjs cases=5
+AM_SUITE_PASS 15/57 cases=5 log=.v6/tests/am-full-20261029T231317Z-9b211638-15-html-elements.browser.test.log
+AM_SUITE_START 16/57 tests/html-elements.test.mjs cases=1
+AM_SUITE_PASS 16/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-16-html-elements.test.log
+AM_SUITE_START 17/57 tests/html-table-normalize.browser.test.mjs cases=2
+AM_SUITE_PASS 17/57 cases=2 log=.v6/tests/am-full-20261029T231317Z-9b211638-17-html-table-normalize.browser.test.log
+AM_SUITE_START 18/57 tests/html-table-normalize.test.mjs cases=1
+AM_SUITE_PASS 18/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-18-html-table-normalize.test.log
+AM_SUITE_START 19/57 tests/latex-browser.test.mjs cases=8
+AM_SUITE_PASS 19/57 cases=8 log=.v6/tests/am-full-20261029T231317Z-9b211638-19-latex-browser.test.log
+AM_SUITE_START 20/57 tests/latex-four-view-browser.test.mjs cases=1
+AM_SUITE_PASS 20/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-20-latex-four-view-browser.test.log
+AM_SUITE_START 21/57 tests/latex-normalize-browser.test.mjs cases=2
+AM_SUITE_PASS 21/57 cases=2 log=.v6/tests/am-full-20261029T231317Z-9b211638-21-latex-normalize-browser.test.log
+AM_SUITE_START 22/57 tests/latex-review-browser.test.mjs cases=3
+AM_SUITE_PASS 22/57 cases=3 log=.v6/tests/am-full-20261029T231317Z-9b211638-22-latex-review-browser.test.log
+AM_SUITE_START 23/57 tests/main-promoted-lab-ui.browser.test.mjs cases=1
+AM_SUITE_FAIL 23/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-23-main-promoted-lab-ui.browser.test.log
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '.v6/settings.json'
+}
+
+Node.js v24.22.1
+AM_SUITE_START 24/57 tests/media-adoption-syntax.test.mjs cases=2
+AM_SUITE_PASS 24/57 cases=2 log=.v6/tests/am-full-20261029T231317Z-9b211638-24-media-adoption-syntax.test.log
+AM_SUITE_START 25/57 tests/media-browser.test.mjs cases=16
+AM_SUITE_PASS 25/57 cases=16 log=.v6/tests/am-full-20261029T231317Z-9b211638-25-media-browser.test.log
+AM_SUITE_START 26/57 tests/media-paste-browser.test.mjs cases=4
+AM_SUITE_PASS 26/57 cases=4 log=.v6/tests/am-full-20261029T231317Z-9b211638-26-media-paste-browser.test.log
+AM_SUITE_START 27/57 tests/media-preexisting-adoption.browser.test.mjs cases=1
+AM_SUITE_PASS 27/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-27-media-preexisting-adoption.browser.test.log
+AM_SUITE_START 28/57 tests/mineru-start-only-ui-browser.test.mjs cases=4
+AM_SUITE_PASS 28/57 cases=4 log=.v6/tests/am-full-20261029T231317Z-9b211638-28-mineru-start-only-ui-browser.test.log
+AM_SUITE_START 29/57 tests/note-pair-browser.test.mjs cases=5
+AM_SUITE_PASS 29/57 cases=5 log=.v6/tests/am-full-20261029T231317Z-9b211638-29-note-pair-browser.test.log
+AM_SUITE_START 30/57 tests/note-pairs.test.mjs cases=2
+AM_SUITE_PASS 30/57 cases=2 log=.v6/tests/am-full-20261029T231317Z-9b211638-30-note-pairs.test.log
+AM_SUITE_START 31/57 tests/obsidian-callouts.browser.test.mjs cases=1
+AM_SUITE_PASS 31/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-31-obsidian-callouts.browser.test.log
+AM_SUITE_START 32/57 tests/obsidian-callouts.test.mjs cases=1
+AM_SUITE_PASS 32/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-32-obsidian-callouts.test.log
+AM_SUITE_START 33/57 tests/obsidian-cm6-theme.test.mjs cases=1
+AM_SUITE_PASS 33/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-33-obsidian-cm6-theme.test.log
+AM_SUITE_START 34/57 tests/obsidian-image-preview-browser.test.mjs cases=1
+AM_SUITE_PASS 34/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-34-obsidian-image-preview-browser.test.log
+AM_SUITE_START 35/57 tests/obsidian-latex-display.test.mjs cases=1
+AM_SUITE_PASS 35/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-35-obsidian-latex-display.test.log
+AM_SUITE_START 36/57 tests/obsidian-source-syntax.browser.test.mjs cases=1
+AM_SUITE_PASS 36/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-36-obsidian-source-syntax.browser.test.log
+AM_SUITE_START 37/57 tests/outline-browser.test.mjs cases=15
+AM_SUITE_PASS 37/57 cases=15 log=.v6/tests/am-full-20261029T231317Z-9b211638-37-outline-browser.test.log
+AM_SUITE_START 38/57 tests/outline-title-scale-browser.test.mjs cases=3
+AM_SUITE_PASS 38/57 cases=3 log=.v6/tests/am-full-20261029T231317Z-9b211638-38-outline-title-scale-browser.test.log
+AM_SUITE_START 39/57 tests/pdf-anchor-viewport-browser.test.mjs cases=1
+AM_SUITE_FAIL 39/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-39-pdf-anchor-viewport-browser.test.log
+    at file:///home/hatch/workspace/ocr2md-am-9b211638-isolated/tests/pdf-anchor-viewport-browser.test.mjs:72:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.22.1
+AM_SUITE_START 40/57 tests/pdf-click-only-browser.test.mjs cases=4
+AM_SUITE_PASS 40/57 cases=4 log=.v6/tests/am-full-20261029T231317Z-9b211638-40-pdf-click-only-browser.test.log
+AM_SUITE_START 41/57 tests/preview-split-browser.test.mjs cases=6
+AM_SUITE_PASS 41/57 cases=6 log=.v6/tests/am-full-20261029T231317Z-9b211638-41-preview-split-browser.test.log
+AM_SUITE_START 42/57 tests/promoted-chapters-browser.test.mjs cases=8
+AM_SUITE_PASS 42/57 cases=8 log=.v6/tests/am-full-20261029T231317Z-9b211638-42-promoted-chapters-browser.test.log
+AM_SUITE_START 43/57 tests/quote-indent-browser.test.mjs cases=1
+AM_SUITE_PASS 43/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-43-quote-indent-browser.test.log
+AM_SUITE_START 44/57 tests/scroll-sync-browser.test.mjs cases=4
+AM_SUITE_PASS 44/57 cases=4 log=.v6/tests/am-full-20261029T231317Z-9b211638-44-scroll-sync-browser.test.log
+AM_SUITE_START 45/57 tests/scroll-sync-leadership-browser.test.mjs cases=6
+AM_SUITE_PASS 45/57 cases=6 log=.v6/tests/am-full-20261029T231317Z-9b211638-45-scroll-sync-leadership-browser.test.log
+AM_SUITE_START 46/57 tests/settings-browser.test.mjs cases=12
+AM_SUITE_PASS 46/57 cases=12 log=.v6/tests/am-full-20261029T231317Z-9b211638-46-settings-browser.test.log
+AM_SUITE_START 47/57 tests/settings-server.test.mjs cases=1
+AM_SUITE_PASS 47/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-47-settings-server.test.log
+AM_SUITE_START 48/57 tests/shared-preview-browser.test.mjs cases=6
+AM_SUITE_PASS 48/57 cases=6 log=.v6/tests/am-full-20261029T231317Z-9b211638-48-shared-preview-browser.test.log
+AM_SUITE_START 49/57 tests/source-callout-plan.test.mjs cases=1
+AM_SUITE_PASS 49/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-49-source-callout-plan.test.log
+AM_SUITE_START 50/57 tests/source-fence-plan.test.mjs cases=1
+AM_SUITE_PASS 50/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-50-source-fence-plan.test.log
+AM_SUITE_START 51/57 tests/source-line-callout.browser.test.mjs cases=3
+AM_SUITE_PASS 51/57 cases=3 log=.v6/tests/am-full-20261029T231317Z-9b211638-51-source-line-callout.browser.test.log
+AM_SUITE_START 52/57 tests/wcp-promoted-api-direct.browser.test.mjs cases=12
+AM_SUITE_PASS 52/57 cases=12 log=.v6/tests/am-full-20261029T231317Z-9b211638-52-wcp-promoted-api-direct.browser.test.log
+AM_SUITE_START 53/57 tests/wcp-runtime-contract.test.mjs cases=12
+AM_SUITE_PASS 53/57 cases=12 log=.v6/tests/am-full-20261029T231317Z-9b211638-53-wcp-runtime-contract.test.log
+AM_SUITE_START 54/57 tests/wcp-virtual-event-contract.browser.test.mjs cases=16
+AM_SUITE_PASS 54/57 cases=16 log=.v6/tests/am-full-20261029T231317Z-9b211638-54-wcp-virtual-event-contract.browser.test.log
+AM_SUITE_START 55/57 tests/workspace-portability.test.mjs cases=1
+AM_SUITE_PASS 55/57 cases=1 log=.v6/tests/am-full-20261029T231317Z-9b211638-55-workspace-portability.test.log
+AM_SUITE_START 56/57 tests/workspace-root-browser.test.mjs cases=2
+AM_SUITE_FAIL 56/57 cases=2 log=.v6/tests/am-full-20261029T231317Z-9b211638-56-workspace-root-browser.test.log
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 30000ms exceeded.
+    at /home/hatch/workspace/ocr2md-am-9b211638-isolated/tests/workspace-root-browser.test.mjs:78:14 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v24.22.1
+AM_SUITE_START 57/57 tests/workspace-root-server.test.mjs cases=6
+AM_SUITE_PASS 57/57 cases=6 log=.v6/tests/am-full-20261029T231317Z-9b211638-57-workspace-root-server.test.log
+AM_FULL_RESULT passed_cases=236/240 failed_suites=3 git=9b211638
+AM_ERROR: AM full suite failed: [('tests/main-promoted-lab-ui.browser.test.mjs', 'FAIL'), ('tests/pdf-anchor-viewport-browser.test.mjs', 'FAIL'), ('tests/workspace-root-browser.test.mjs', 'FAIL')]
+runall_rc=1
+== certify ==
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_ERROR: AM_CERTIFY_FAIL: no complete PASS with unchanged source/test Git tree; run-all required
+certify_rc=1
+DONE

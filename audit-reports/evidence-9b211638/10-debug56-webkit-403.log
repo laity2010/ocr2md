@@ -1,0 +1,14 @@
+WORKROOT_BROWSER_PASS Chrome {"bookCatalog":true,"bookSelected":true,"rootNotDocument":true,"saveReload":true,"oldDocIntact":true,"errors":[]}
+DEBUG validation2 name=iPad-WebKit feedback={"state":"error","text":"✕ 验证失败：Editor authorization required"} diag=["HTTP 404 http://127.0.0.1:44569/api/chapters","CONSOLE Failed to load resource: the server responded with a status of 404 (Not Found)","HTTP 403 http://127.0.0.1:44569/api/workspace/roots","CONSOLE Failed to load resource: the server responded with a status of 403 (Forbidden)","HTTP 403 http://127.0.0.1:44569/api/workspace/books?path=%2Fetc","CONSOLE Failed to load resource: the server responded with a status of 403 (Forbidden)","HTTP 403 http://127.0.0.1:44569/api/workspace/books?path=%2Ftmp%2Focr-book-ui-iPad-WebKit-slc0rf","CONSOLE Failed to load resource: the server responded with a status of 403 (Forbidden)"]
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 30000ms exceeded.
+    at /home/hatch/workspace/ocr2md-am-9b211638-isolated/tests/zz-debug-workroot.test.mjs:84:18 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v24.22.1
+rc=1
