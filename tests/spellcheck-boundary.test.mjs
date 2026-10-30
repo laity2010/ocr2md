@@ -14,4 +14,14 @@ assert(/markSpellingCandidates/.test(cmd)&&/querySpellingElements/.test(cmd),
 assert(/planSpellcheckMarks/.test(syntax)&&/readSpellcheckMarks/.test(syntax),
   'business-owned spell annotation planner reappeared');
 assert(!/window\.|document\.|localStorage|fetch\(/.test(syntax),'CMD syntax is not pure');
+assert(/const readElementSource=\(\)=>getCMD\(\)\?\.readSource\?\.\(\)/.test(layout),
+  'Layout has no single CMD source port for AG elements');
+for(const [factory,host] of [
+  ['createOutlineGrid','this.element'],['createMediaModule','this.mediaHost'],
+  ['createLatexModule','this.latexHost'],['createNotePairModule','this.noteHost'],
+  ['createHtmlElementsModule','this.htmlHost'],
+]){
+  assert(layout.includes(`${factory}(${host},readElementSource`),
+    `${factory} did not receive the unified CMD source`);
+}
 console.log('SPELLCHECK_BOUNDARY_PASS AG projection only, CMD source/transaction owner, CM6 state');

@@ -28,6 +28,8 @@ sourceHost.setAttribute('aria-label','CodeMirror 6 Markdown 编辑器');
 let getMarkdown = () => '';
 let getEditor = () => null;
 let getCMD = () => null;
+// All document-element readers receive the same CM6-backed CMD source port.
+const readElementSource=()=>getCMD()?.readSource?.()??'';
 let documentFileLabel='Buffett’s Alpha.minerujson.md';
 // AG receives only the CMD capabilities needed for chapter projection/marking.
 // In particular, this port has no EditorView or other editor internals.
@@ -83,13 +85,13 @@ class OutlinePanel {
     currentOutline=this;
   }
   init(){
-    this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
+    this.grid=createOutlineGrid(this.element,readElementSource,()=>getCMD()?chapterCMD:null);
     this.grid.setTitleFontScale(outlineTitleFontScale);
     this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost);
-    this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
-    this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
-    this.note=createNotePairModule(this.noteHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
-    this.html=createHtmlElementsModule(this.htmlHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
+    this.media=createMediaModule(this.mediaHost,readElementSource,()=>mediaCMD,reportMediaStatus);
+    this.latex=createLatexModule(this.latexHost,readElementSource,()=>latexCMD,reportMediaStatus);
+    this.note=createNotePairModule(this.noteHost,readElementSource,()=>getCMD(),reportMediaStatus);
+    this.html=createHtmlElementsModule(this.htmlHost,readElementSource,()=>getCMD(),reportMediaStatus);
     this.spellcheck=createSpellcheckModule(this.spellcheckHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.

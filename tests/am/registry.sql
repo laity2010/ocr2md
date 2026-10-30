@@ -948,3 +948,21 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SPELL-BOUNDARY-AG','G19','tests/spellcheck-boundary.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG spelling owns rows/focus only, cannot parse or write source','direct'),
  ('TC-SPELL-BOUNDARY-CMD','C39','tests/spellcheck-boundary.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Spelling syntax and atomic writes belong to CMD and CM6','direct');
+
+-- Single CM6-owned source read route shared by all AG business analyzers.
+-- Recognition rules remain module-owned; no AG module accesses CM6 directly.
+INSERT INTO apis VALUES
+ ('C40','C','returned.readSource','ui/wcp-cmd-element-transactions.js','returned','none','current live CM6 Markdown string','one read-only CMD source port for headings/media/latex/notes/html element analyzers',1);
+INSERT INTO access_edges VALUES
+ ('X-ELEMENT-SOURCE','L','C','ui/workspace.js','getCMD()?.readSource?.()','C40','registered','All AG business sources are injected from CMD, never directly from a CM6 editor or parallel state');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C40-AG','C40','tests/main-promoted-lab-ui.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG title/media/latex data continues to derive from one live CMD source','integration'),
+ ('TC-C40-GUARD','C40','tests/spellcheck-boundary.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','All AG module source injections route through CMD.readSource','direct');
+
+-- The base CMD surface and its WCP wrapper return the SAME CM6 state source.
+INSERT INTO apis VALUES
+ ('C41','C','CMDocument.readSource','ui/cm-document.js','export','none','live EditorState Markdown text','single read-only source accessor; never creates another editor state',1);
+INSERT INTO access_edges VALUES
+ ('X-ELEMENT-READSOURCE','C','C','ui/wcp-cmd-element-transactions.js','cmd.readSource()','C41','registered','WCP CMD adapter delegates to base CMDocument source reader');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C41-UNIFIED','C41','tests/main-promoted-lab-ui.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Main/Lab read-only business sources remain bound to one CM6 EditorState','integration');

@@ -66,6 +66,7 @@ export function createCMDTransactionPort(cmd){
   };
   const port={
     requestMeasure:()=>cmd.requestMeasure(),
+    readSource:()=>cmd.readSource(), // read-only CM6 source snapshot; never a second editor
     readLine:n=>cmd.readLine(n),
     lineAtOffset:offset=>cmd.lineAtOffset(offset),
     matchesSnapshot:token=>cmd.matchesSnapshot(token),

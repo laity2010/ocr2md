@@ -36,6 +36,8 @@ export class CMDocument {
 
   /** Read the only authoritative Markdown source, without a legacy output mode. */
   getMarkdown(){return this.markdown;}
+  /** Unified read-only source port for all business element detectors. */
+  readSource(){return this.markdown;}
   /** Stable, read-only CMD boundary for heading and marker consumers. */
   readLine(number){
     if(!Number.isInteger(number)||number<1||number>this.doc.lines)

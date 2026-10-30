@@ -59,9 +59,12 @@ for(let i=0;i<engines.length;i++){
  const [name,engine,options]=engines[i];
  const path=resolve(`.v6/tests/latex-${process.pid}-${i}.md`);
  writeFileSync(path,content);
+ const isolatedSettings=resolve(`.v6/tests/latex-${process.pid}-${i}.settings.json`);
+ writeFileSync(isolatedSettings,'{}');
  const port=5620+i,url=`http://127.0.0.1:${port}/`;
  const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),stdio:'ignore',
-  env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:path,V6_STATIC_ROOT:resolve('dist')}});
+  env:{...process.env,V6_PORT:String(port),V6_BIND:'127.0.0.1',V6_LAN_TLS_HOST:'',
+  V6_DOCUMENT_PATH:path,V6_SETTINGS_PATH:isolatedSettings,V6_STATIC_ROOT:resolve('dist')}});
  let browser;
  try{
   let healthy=false;
