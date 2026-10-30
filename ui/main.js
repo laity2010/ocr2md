@@ -47,6 +47,11 @@ let enterIllegalBreak=()=>{};
 let stopIllegalBreak=()=>{};
 let scanIllegalBreak=()=>{};
 let illegalBreakDocChanged=()=>{};
+let sentenceEnabled=false;
+let enterSentence=()=>{};
+let stopSentence=()=>{};
+let scanSentence=()=>{};
+let sentenceDocChanged=()=>{};
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
@@ -462,6 +467,7 @@ async function main() {
           documentChanged();
           if(spellcheckEnabled)spellcheckDocChanged();
           if(illegalBreakEnabled)illegalBreakDocChanged();
+          if(sentenceEnabled)sentenceDocChanged();
         }
         if (update.selectionSet) {
           const offset=update.state.selection.main.head;
@@ -638,6 +644,44 @@ async function main() {
   stopIllegalBreak=()=>{
     ++breakRequestId;clearTimeout(breakTimer);clearBreakMarks();
   };
+  // CMD owns the no-loss source projection, sentence boundaries, and
+  // annotations. AG only displays its detached sentence projections; CM6
+  // remains the sole mutable document (one history transaction, manual Save).
+  let sentenceScanTimer=null,sentenceScanDoc=null,sentenceRequest=0;
+  const readSentenceRows=()=>{
+    const result=workspace.getSentences();
+    return Boolean(result.recordCount);
+  };
+  scanSentence=()=>{
+    if(!sentenceEnabled)return;
+    const request=++sentenceRequest;
+    clearTimeout(sentenceScanTimer);
+    workspace.setSentenceLoading();
+    sentenceScanTimer=setTimeout(()=>{
+      if(!sentenceEnabled||request!==sentenceRequest)return;
+      const source=view.state.doc.toString();
+      try{
+        const candidates=workspace.segmentSentenceCandidates();
+        if(request!==sentenceRequest||source!==view.state.doc.toString())return;
+        const outcome=workspace.markSentences(candidates,source);
+        sentenceScanDoc=view.state.doc;
+        const projected=workspace.getSentences();
+        const pending=Math.max(0,candidates.length-projected.rows.length);
+        status(`✓ 识别 ${candidates.length} 句 · CMD 安全标定 ${projected.rows.length} 句`+
+          `${pending?' · '+pending+' 句待后续人工边界审阅':''} · 新增 ${outcome.changed} 个锚点 · 请全局保存`);
+      }catch(error){workspace.setSentenceError(error.message);status('分句失败：'+error.message,'error');}
+    },80);
+  };
+  enterSentence=()=>{
+    if(readSentenceRows())return;
+    if(sentenceScanDoc===null)scanSentence();
+    else workspace.setSentenceError('句子标定已变化，请使用「重新分句并标定」');
+  };
+  sentenceDocChanged=()=>{
+    ++sentenceRequest;clearTimeout(sentenceScanTimer);
+    queueMicrotask(()=>{if(sentenceEnabled)readSentenceRows();});
+  };
+  stopSentence=()=>{++sentenceRequest;clearTimeout(sentenceScanTimer);};
   cmdPort=wcpRuntime.wrapCMD(cm);
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{
@@ -726,6 +770,7 @@ async function main() {
     const selected=$('module-select').value;
     const enableSpellcheck=selected==='spellcheck';
     const enableIllegalBreak=selected==='illegal-break';
+    const enableSentence=selected==='sentence';
     if(view&&enableSpellcheck!==spellcheckEnabled){
       spellcheckEnabled=enableSpellcheck;
       // Native WebKit spellcheck has no reliable visible diagnostics.
@@ -737,6 +782,11 @@ async function main() {
       illegalBreakEnabled=enableIllegalBreak;
       if(enableIllegalBreak)enterIllegalBreak();
       else stopIllegalBreak();
+    }
+    if(view&&enableSentence!==sentenceEnabled){
+      sentenceEnabled=enableSentence;
+      if(enableSentence)enterSentence();
+      else stopSentence();
     }
     if(selected==='settings'&&lastVisibleModule!=='settings')
       sharedPaneRatios=workspace.getPaneRatios()||sharedPaneRatios;
@@ -788,6 +838,7 @@ async function main() {
   $('html-normalize-tables').addEventListener('click',()=>workspace.normalizeHtmlTables());
   $('spellcheck-rescan').addEventListener('click',()=>scheduleSpellcheck());
   $('illegal-break-rescan').addEventListener('click',()=>scanIllegalBreak());
+  $('sentence-rescan').addEventListener('click',()=>scanSentence());
   $('media-download-all').addEventListener('click',async()=>{
     const button=$('media-download-all');button.disabled=true;
     try{await workspace.downloadMedia();}

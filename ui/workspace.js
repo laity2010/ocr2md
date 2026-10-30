@@ -17,6 +17,7 @@ import {createNotePairModule} from './note-pair-module.js';
 import {createHtmlElementsModule} from './html-elements-module.js';
 import {createSpellcheckModule} from './spellcheck-module.js';
 import {createIllegalBreakModule} from './illegal-break-module.js';
+import {createSentenceModule} from './sentence-module.js';
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
@@ -74,6 +75,7 @@ class OutlinePanel {
     this.html=null;
     this.spellcheck=null;
     this.illegalBreak=null;
+    this.sentence=null;
     this.mediaHost=document.createElement('div');
     this.mediaHost.hidden=true;
     this.latexHost=document.createElement('div');
@@ -86,18 +88,21 @@ class OutlinePanel {
     this.spellcheckHost.hidden=true;
     this.illegalBreakHost=document.createElement('div');
     this.illegalBreakHost.hidden=true;
+    this.sentenceHost=document.createElement('div');
+    this.sentenceHost.hidden=true;
     currentOutline=this;
   }
   init(){
     this.grid=createOutlineGrid(this.element,readElementSource,()=>getCMD()?chapterCMD:null);
     this.grid.setTitleFontScale(outlineTitleFontScale);
-    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost,this.illegalBreakHost);
+    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost,this.illegalBreakHost,this.sentenceHost);
     this.media=createMediaModule(this.mediaHost,readElementSource,()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,readElementSource,()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,readElementSource,()=>getCMD(),reportMediaStatus);
     this.html=createHtmlElementsModule(this.htmlHost,readElementSource,()=>getCMD(),reportMediaStatus);
     this.spellcheck=createSpellcheckModule(this.spellcheckHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
     this.illegalBreak=createIllegalBreakModule(this.illegalBreakHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
+    this.sentence=createSentenceModule(this.sentenceHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -105,7 +110,7 @@ class OutlinePanel {
       getStartNumber:()=>this.grid?.startText||'000',
       // Only semantic query intents enter business-owned AGs.
       applyChapterQuery:(module,intent)=>{
-        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html,spellcheck:this.spellcheck,'illegal-break':this.illegalBreak}[module];
+        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html,spellcheck:this.spellcheck,'illegal-break':this.illegalBreak,sentence:this.sentence}[module];
         if(!owner?.setVirtualQuery)throw Error('Unknown AG chapter query owner');
         owner.setVirtualQuery(intent);
       },
@@ -113,6 +118,7 @@ class OutlinePanel {
       countHtml:chapter=>this.html?.count(chapter)??0,
       countSpellcheck:chapter=>this.spellcheck?.count(chapter)??0,
       countIllegalBreak:chapter=>this.illegalBreak?.count(chapter)??0,
+      countSentences:chapter=>this.sentence?.count(chapter)??0,
     });
     queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
   }
@@ -122,7 +128,8 @@ class OutlinePanel {
       module==='latex'?'AG Grid LaTeX 审阅':module==='note'?'AG Grid 注释配对':
       module==='html'?'AG Grid HTML 元素':
       module==='spellcheck'?'AG Grid 英文拼写审阅':
-      module==='illegal-break'?'AG Grid 非法断行审阅':'AG Grid 章节大纲');
+      module==='illegal-break'?'AG Grid 非法断行审阅':
+      module==='sentence'?'AG Grid 分句审阅':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
     this.latex?.setActive(module==='latex');
@@ -130,6 +137,7 @@ class OutlinePanel {
     this.html?.setActive(module==='html');
     this.spellcheck?.setActive(module==='spellcheck');
     this.illegalBreak?.setActive(module==='illegal-break');
+    this.sentence?.setActive(module==='sentence');
   }
   layout() {}
   dispose(){
@@ -139,6 +147,7 @@ class OutlinePanel {
     this.html?.dispose();
     this.spellcheck?.dispose();
     this.illegalBreak?.dispose();
+    this.sentence?.dispose();
     this.grid?.dispose();
     if(currentOutline===this)currentOutline=null;
   }
@@ -578,6 +587,18 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     applySpellingCandidates:(candidates,expectedSource)=>{
       const scope=currentOutline?.spellcheck?.getOperationScope()??{mode:'all'};
       return getCMD().markSpellingCandidates(candidates,{expectedSource,agScope:scope});
+    },
+    setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),
+    setSentenceError:message=>currentOutline?.sentence?.setError(message),
+    getSentences:()=>{
+      const result=getCMD().querySentences();
+      currentOutline?.sentence?.setRows(result);
+      return result;
+    },
+    segmentSentenceCandidates:()=>getCMD().segmentSentenceCandidates(),
+    markSentences:(candidates,source)=>{
+      const scope=currentOutline?.sentence?.getOperationScope()||{mode:'all'};
+      return getCMD().markSentences(candidates,{expectedSource:source,agScope:scope});
     },
     setIllegalBreakPending:()=>currentOutline?.illegalBreak?.setPending(),
     setIllegalBreakError:message=>currentOutline?.illegalBreak?.setError(message),

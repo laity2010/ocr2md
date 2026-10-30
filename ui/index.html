@@ -16,7 +16,7 @@
       </div>
     </header>
     <nav class="module-controls" aria-label="工作台模块工具条">
-      <select id="module-select" aria-label="选择模块"><option value="chapter-boundary">章节定界</option><option value="media">媒体</option><option value="latex">LaTeX</option><option value="note">注释对</option><option value="html">HTML 元素</option><option value="spellcheck">拼写检查</option><option value="illegal-break">非法断行</option><option value="settings">全局设置</option></select>
+      <select id="module-select" aria-label="选择模块"><option value="chapter-boundary">章节定界</option><option value="media">媒体</option><option value="latex">LaTeX</option><option value="note">注释对</option><option value="html">HTML 元素</option><option value="spellcheck">拼写检查</option><option value="illegal-break">非法断行</option><option value="sentence">分句</option><option value="settings">全局设置</option></select>
       <div id="module-actions" class="module-actions" data-module="chapter-boundary">
         <button id="export-chapters" type="button">导出章节</button>
         <label for="chapter-start-number">起始编号</label>
@@ -36,6 +36,9 @@
       </div>
       <div class="module-actions" data-module="spellcheck" hidden>
         <button id="spellcheck-rescan" type="button" title="重新检查正文，并将新发现的疑似错词经 CMD 自动批量标定；不自动保存">重新扫描并标定</button>
+      </div>
+      <div class="module-actions" data-module="sentence" hidden>
+        <button id="sentence-rescan" type="button" title="从当前 CMD 无损提取并重新识别、批量标定句子；不会覆盖源码或自动保存">重新分句并标定</button>
       </div>
       <div class="module-actions" data-module="illegal-break" hidden>
         <button id="illegal-break-rescan" type="button" title="重新扫描并由 CMD 批量标定可信的疑似 OCR 断词；不会自动合并正文或保存">重新扫描并标定</button>

@@ -97,6 +97,12 @@ HTML AG 中点击「功能 → 规范全部表格」会按「全部／当前章�
 Mac 服务器只允许原工作区、`~/Documents`、以及 `V6_WORKSPACE_ALLOWED_ROOTS` 指定的目录。Lab 仍只允许自己的隔离运行目录。首次 iCloud 书库访问可能还需 macOS 给运行服务器的 Python 应用授权；网页白名单不等于系统隐私授权。
 
 
+### CMD 分句模块（无损句子层试验）
+
+AG「元素 → 分句」从当前 CM6 文档经 CMD 提取文本块、页/块编号和字符偏移；`extractTextBlocks()` 返回原文所有片段（包括空格、换行、Markdown、LaTeX、MinerU 注释及不可编辑的证据尾部），`reconstructSource()` 必须逐字符还原。**没有第二份可编辑文档**。首版使用浏览器原生 `Intl.Segmenter` 的 sentence 模式，预留换成 winkNLP 等其它 NLP 引擎的纯函数入口；基于当前正文识别句子时能连接相邻的同页 MinerU 物理文本块，保留同句多个源码片段和稳定句子 ID。
+
+首次进入由 CMD 一次性插入 `ocr2md:sentence` 行内 HTML 注释（锚点位于每个片段的首个完整词之后，以免 Markdown 把行首 HTML 注释误作块级 HTML）；CM6 仍管理唯一来源、一次 Undo/Redo、全局保存。AG 句子表可以浏览正文、句子 ID、跨块来源并点击行号多窗定位。旧文档重入直接读取 CMD；显式「重新分句并标定」用于重新扫描、增量补标。**首版句子状态为待审阅，AG 手工合并/拆分/确认及翻译写入将由后续阶段扩展**，不能据此声称自动分句百分百准确。对不安全的 Markdown 位置保守不插标签。
+
 ### 非法断行审阅（第一版）
 
 AG「元素 → 非法断行」用已有离线英文 Hunspell 词典筛出高置信度 OCR 断词，并检查同一 PDF 页连续 MinerU 块之间的句子续接，例如 `govern\nment` 或 `inter-\nnational`。普通 Markdown 软换行（即使没有句号）不视为非法；跳过标题、列表、引用、表格、代码、公式、空行、HTML 和 MinerU 原文证据。检测只做审阅，**不自动删除换行或替换原词**。

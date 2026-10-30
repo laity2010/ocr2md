@@ -72,7 +72,9 @@
     "html-table-normalize.js": "H",
     "cmd-spellcheck.js": "C",
     "illegal-break-module.js": "G",
-    "cmd-linebreak.js": "C"
+    "cmd-linebreak.js": "C",
+    "cmd-sentences.js": "C",
+    "sentence-module.js": "G"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -260,6 +262,9 @@
     ],
     "spellcheck-worker.js->cmd-linebreak.js": [
       "detectIllegalBreaks"
+    ],
+    "workspace.js->sentence-module.js": [
+      "createSentenceModule"
     ]
   }
 }

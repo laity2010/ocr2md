@@ -1003,3 +1003,45 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- is retained and manual AG rescan appends only the newly recognized 13F.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-REAL-RESCAN','C46','tests/illegal-break-rescan-real.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Buffett legacy about/3 CMD mark remains intact; rescan adds latest/13F once; explicit Save/reload restores both without dictionary Worker','integration');
+
+-- WP1/3 sentence semantic layer: reversible CMD text-block projection plus
+-- pluggable ICU sentence boundaries; AG only owns display/selection/focus.
+INSERT INTO apis VALUES
+ ('C47','C','extractTextBlocks','ui/cmd-sentences.js','export','CM6 live Markdown and bodyEnd','runs with source offsets + exact raw sourcePieces','no Markdown source mutation or extra editor state',1),
+ ('C48','C','reconstructSource','ui/cmd-sentences.js','export','CMD sourcePieces','exact original Markdown string','hard character identity check before any NLP processing',1),
+ ('C49','C','segmentSentences','ui/cmd-sentences.js','export','CMD projection + optional engine','sentences with stable IDs, block fragments, source offsets','uses Intl.Segmenter baseline; can swap engine without AG/CMD contract changes',1),
+ ('C50','C','planSentenceMarks','ui/cmd-sentences.js','export','source, sentence candidates, current CMD annotations','protected CMD inline comment operations','avoid first-column Markdown HTML block hazard, no duplicates',1),
+ ('C51','C','readSentenceMarks','ui/cmd-sentences.js','export','live source and sentence annotations','source-positioned sentence rows with stale detection','cross-block fragments retain shared sentence ID',1),
+ ('C52','C','returned.segmentSentenceCandidates','ui/wcp-cmd-element-transactions.js','returned','none','detached candidates from live CM6 source','CMD owns engine invocation and reversible source validation',1),
+ ('C53','C','returned.querySentences','ui/wcp-cmd-element-transactions.js','returned','none','read-only sentence rows','CMD reads only current live annotations',1),
+ ('C54','C','returned.markSentences','ui/wcp-cmd-element-transactions.js','returned','sentence candidates, expectedSource, AG chapter operation scope','one undoable CM6 annotation batch','CMD verifies chapter/source/immutable evidence; no auto save or text normalization',1),
+ ('G21','G','createSentenceModule','ui/sentence-module.js','export','AG host, read-only CMD chapter reader, status callback','AG sentence list and WCP focus intent','no direct source/CM6/editor state access',1),
+ ('L39','L','returned.segmentSentenceCandidates','ui/workspace.js','returned','none','detached CMD sentence candidates','Layout forwards semantic read API from CMD only',1),
+ ('L40','L','returned.getSentences','ui/workspace.js','returned','none','detached CMD sentence rows','Layout updates AG from CMD query after reload',1),
+ ('L41','L','returned.markSentences','ui/workspace.js','returned','candidate list and optimistic source','CMD atomic mark result','AG provides chapter scope, CMD plans annotation operations',1);
+INSERT INTO access_edges VALUES
+ ('X-SENT-C47','C','C','ui/wcp-cmd-element-transactions.js','extractTextBlocks(source,{bodyEnd:projector.get().bodyEnd})','C47','registered','CMD projects source without replacing Markdown'),
+ ('X-SENT-C48','C','C','ui/wcp-cmd-element-transactions.js','reconstructSource(projection)','C48','registered','CMD hard source identity guard'),
+ ('X-SENT-C49','C','C','ui/wcp-cmd-element-transactions.js','segmentSentences(projection)','C49','registered','CMD controlled pluggable sentence boundary engine'),
+ ('X-SENT-C50','C','C','ui/wcp-cmd-element-transactions.js','planSentenceMarks(expectedSource,eligible,','C50','registered','CMD plans all sentence edits'),
+ ('X-SENT-C51','C','C','ui/wcp-cmd-element-transactions.js','readSentenceMarks(cmd.readSource(),cmd.readAnnotations','C51','registered','CMD projects persisted sentence tags'),
+ ('X-SENT-C52','L','C','ui/workspace.js','getCMD().segmentSentenceCandidates()','C52','registered','layout reads detached candidates only'),
+ ('X-SENT-C53','L','C','ui/workspace.js','getCMD().querySentences()','C53','registered','layout reads CMD source projection'),
+ ('X-SENT-C54','L','C','ui/workspace.js','getCMD().markSentences(candidates,{expectedSource:source,agScope:scope})','C54','registered','layout submits scoped optimistic mark transaction'),
+ ('X-SENT-G21','L','G','ui/workspace.js','createSentenceModule(this.sentenceHost','G21','registered','Layout mounts AG-owned sentence reviewer'),
+ ('X-SENT-L39',NULL,'L','ui/main.js','workspace.segmentSentenceCandidates()','L39','registered','Shell only triggers semantic projection'),
+ ('X-SENT-L40',NULL,'L','ui/main.js','workspace.getSentences()','L40','registered','Shell only reads CMD projection'),
+ ('X-SENT-L41',NULL,'L','ui/main.js','workspace.markSentences(candidates,source)','L41','registered','Shell forwards semantic candidates');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SENT-C47','C47','tests/cmd-sentences.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Reversible source partition protects provenance and code while combining sentence runs','direct'),
+ ('TC-SENT-C48','C48','tests/cmd-sentences.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Byte-identical reconstruction of original Markdown including metadata','direct'),
+ ('TC-SENT-C49','C49','tests/cmd-sentences.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','about/3 and latest/13F are single cross-MinerU sentences','direct'),
+ ('TC-SENT-C50','C50','tests/cmd-sentences.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Safe inline comment positioning retains Markdown renderer, duplicate planning zero','direct'),
+ ('TC-SENT-C51','C51','tests/cmd-sentences.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CMD reads stable sentence fragments with shared IDs and validates stale positions','direct'),
+ ('TC-SENT-C52','C52','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit live CMD sentence candidates from single CM6 source','integration'),
+ ('TC-SENT-C53','C53','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG reload directly reads CMD tags, no second editor state','integration'),
+ ('TC-SENT-C54','C54','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','One CM6 annotation batch, Undo/Redo, Save, no MinerU evidence mutation','integration'),
+ ('TC-SENT-G21','G21','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG sentence list shows cross-block text and source row location','integration'),
+ ('TC-SENT-L39','L39','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG gets only detached CMD projection','integration'),
+ ('TC-SENT-L40','L40','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG restores sentence marks after reload','integration'),
+ ('TC-SENT-L41','L41','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','No auto save or direct AG mutation','integration');

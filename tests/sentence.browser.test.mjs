@@ -1,0 +1,84 @@
+/** Real AG sentence view: CMD single transaction, preserved Markdown, reload. */
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {mkdtempSync,writeFileSync,readFileSync,rmSync,mkdirSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {chromium,webkit} from 'playwright';
+import {extractTextBlocks,reconstructSource,segmentSentences} from '../ui/cmd-sentences.js';
+const original=[
+ '<!-- minerujson:block:v1:6:6 -->','',
+ 'The average cost is about','','<!-- minerujson:block:v1:6:7 -->','',
+ '3 percentage points lower. It matters.','','',
+ '<!-- minerujson:block:v1:8:3 -->','',
+ 'We refreshed the shares on the basis of the latest','','<!-- minerujson:block:v1:8:4 -->','',
+ '13F, and the portfolio was rebalanced.','','',
+ '<!-- minerujson:block:v1:9:0 -->','',
+ 'The formula $x=\\frac{a}{b}$ was used. The result is clear.','',
+ '```python','x = "Hello. Do not segment me."','```','','',
+ '<!-- minerujson:source:v1','{"raw":"cannot change"}','-->',
+].join('\n');
+const proj=extractTextBlocks(original,{bodyEnd:original.indexOf('<!-- minerujson:source:v1')});
+assert.equal(reconstructSource(proj),original);
+const expected=segmentSentences(proj);
+assert(expected.some(x=>x.text.includes('about 3 percentage points')&&x.crossBlock));
+assert(expected.some(x=>x.text.includes('latest 13F')&&x.crossBlock));
+const dir=mkdtempSync(join(tmpdir(),'ocr2md-sentence-ag-'));
+const doc=join(dir,'document.md'),settings=join(dir,'settings.json'),auth=join(dir,'token');
+writeFileSync(settings,'{}');writeFileSync(auth,'sentence-ag-test');
+const port=5974,base=`http://127.0.0.1:${port}`,production=process.env.SENTENCE_PRODUCTION==='1';
+const server=production
+ ?spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),stdio:'ignore',env:{...process.env,
+  V6_PORT:String(port),V6_BIND:'127.0.0.1',V6_LAN_TLS_HOST:'',V6_DOCUMENT_PATH:doc,
+  V6_SETTINGS_PATH:settings,V6_TOKEN_PATH:auth,V6_STATIC_ROOT:resolve('dist')}})
+ :spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{
+  cwd:process.cwd(),stdio:'ignore',env:{...process.env,V6_DOCUMENT_PATH:doc}});
+const sleep=ms=>new Promise(done=>setTimeout(done,ms));
+const shots=join('.v6','evidence','sentence');mkdirSync(shots,{recursive:true});
+async function select(page,value){
+ await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
+ await page.locator(`.ocr-navigation-popup-elements:visible [data-value="${value}"]`).click();
+ await page.waitForFunction(v=>document.querySelector('#module-select')?.value===v,value);
+}
+try{
+ let ready=false;for(let k=0;k<150;k++){try{if((await fetch(base)).ok){ready=true;break;}}catch{}await sleep(100)}
+ assert(ready,'service did not start');
+ for(const [name,engine,mobile] of [['Chrome',chromium,false],['iPad-WebKit',webkit,true]]){
+  writeFileSync(doc,original);
+  const browser=await engine.launch({headless:true});
+  try{
+   const context=await browser.newContext({viewport:{width:1100,height:800},isMobile:mobile,hasTouch:mobile});
+   if(production)await context.addCookies([{name:'v6edit',value:'sentence-ag-test',domain:'127.0.0.1',path:'/'}]);
+   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
+   await page.goto(base,{waitUntil:'domcontentloaded',timeout:50000});
+   await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:40000});
+   await select(page,'sentence');
+   await page.waitForFunction(n=>document.querySelectorAll('.ocr-sentence-grid .ag-row').length===n,expected.length,{timeout:50000});
+   assert.equal(await page.locator('.ocr-sentence-grid .ag-row').count(),expected.length);
+   await page.screenshot({path:join(shots,name+'-marked.png')});
+   const text=await page.locator('.ocr-sentence-grid .ag-cell[col-id="text"]').allTextContents();
+   assert(text.some(x=>x.includes('about 3 percentage points')));
+   assert(text.some(x=>x.includes('latest 13F')));
+   assert.equal(readFileSync(doc,'utf8'),original,'module silently saved');
+   await page.locator('.ocr-sentence-jump').first().click();
+   const tagCount=(await page.locator('#editor .cm-content').textContent()).split('ocr2md:sentence').length-1;
+   assert(tagCount>3,'markers missing from CM6');
+   await page.locator('#undo').click();
+   await page.waitForFunction(()=>!document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:sentence'),null,{timeout:18000});
+   await page.locator('#redo').click();
+   await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:sentence'),null,{timeout:18000});
+   await page.locator('#save').click();
+   for(let i=0;i<80&&!readFileSync(doc,'utf8').includes('ocr2md:sentence');i++)await sleep(100);
+   const saved=readFileSync(doc,'utf8');assert(saved.includes('ocr2md:sentence'));
+   assert(saved.includes('<!-- minerujson:source:v1'),'original evidence lost');
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:40000});
+   await select(page,'sentence');
+   await page.waitForFunction(n=>document.querySelectorAll('.ocr-sentence-grid .ag-row').length===n,expected.length,{timeout:25000});
+   assert.equal(await page.locator('.ocr-sentence-grid .ag-row').count(),expected.length);
+   assert.deepEqual(errors,[],name+' errors');
+   console.log('SENTENCE_AG_PASS',name,{sentences:expected.length,sourceRecovered:true,loaded:true});
+  }finally{await browser.close();}
+ }
+}finally{server.kill('SIGTERM');await sleep(150);rmSync(dir,{recursive:true,force:true});}

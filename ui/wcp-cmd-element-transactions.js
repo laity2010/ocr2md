@@ -13,6 +13,7 @@ import {createIndexProjector} from './wcp-document-index.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
 import {LINEBREAK_TAG,readIllegalBreaks,planIllegalBreakMarks} from './cmd-linebreak.js';
+import {SENTENCE_TAG,extractTextBlocks,segmentSentences,planSentenceMarks,readSentenceMarks,reconstructSource} from './cmd-sentences.js';
 
 function coordinates(from,to,length){
   return Number.isInteger(from)&&Number.isInteger(to)&&
@@ -89,6 +90,13 @@ export function createCMDTransactionPort(cmd){
       return {...result,rows:result.rows.filter(row=>row.to<=index.bodyEnd)};
     },
     getLinebreakScanLimit:()=>projector.get().bodyEnd,
+    extractTextBlocks:()=>extractTextBlocks(cmd.readSource(),{bodyEnd:projector.get().bodyEnd}),
+    querySentences:()=>readSentenceMarks(cmd.readSource(),cmd.readAnnotations({tag:SENTENCE_TAG})),
+    segmentSentenceCandidates:()=>{
+      const source=cmd.readSource(),projection=extractTextBlocks(source,{bodyEnd:projector.get().bodyEnd});
+      if(reconstructSource(projection)!==source)throw Error('CMD 分句无损回组校验失败');
+      return segmentSentences(projection);
+    },
     getChapter:id=>projector.get().getChapter(id),
     get transactionCount(){return transactionCount;},
     replaceRanges:(edits,cursorAfter=null)=>{
@@ -160,6 +168,27 @@ export function createCMDTransactionPort(cmd){
       if(!ops.length)return {changed:0,skipped:candidates.length};
       port.editAnnotations(ops,{expectedSource,agScope});
       return {changed:ops.length,skipped:candidates.length-ops.length};
+    },
+    markSentences:(sentences,{expectedSource,agScope}={})=>{
+      if(typeof expectedSource!=='string'||expectedSource!==cmd.readSource())
+        throw Error('分句过程中源码已变化，请重新扫描');
+      if(!Array.isArray(sentences)||sentences.length>3000)
+        throw Error('分句结果超出一次标定上限（3000 句）');
+      if(!agScope||!['all','chapter'].includes(agScope.mode))throw Error('必须指定分句标定范围');
+      const index=projector.get();let chapter=null;
+      if(agScope.mode==='chapter'){
+        chapter=index.getChapter(agScope.chapterId);
+        if(!chapter||currentVirtualChapter(cmd.view.state)?.id!==chapter.id)
+          throw Error('分句章节范围已改变');
+      }
+      const eligible=sentences.filter(sentence=>sentence.fragments?.length&&
+        sentence.fragments.every(f=>f.from>=0&&f.to<=index.bodyEnd&&
+          (!chapter||(f.from>=chapter.from&&f.to<=chapter.to))));
+      const ops=planSentenceMarks(expectedSource,eligible,
+        cmd.readAnnotations({tag:SENTENCE_TAG}));
+      if(!ops.length)return {changed:0,skipped:sentences.length};
+      port.editAnnotations(ops,{expectedSource,agScope});
+      return {changed:ops.length,skipped:sentences.length-eligible.length};
     },
     writeAnnotation:options=>{
       if(!options)throw Error('Missing annotation action');
