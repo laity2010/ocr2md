@@ -157,3 +157,34 @@ export function paintSentencePreviewHighlight(body,sentence,source,lineAtOffset)
   }
   return {fragmentCount:ranges.length,stopCount:stop?1:0};
 }
+
+/** Map a real preview text click back to a CMD sentence without inspecting
+ * AG internals. Restrict candidates to this markdown-it mapped source block
+ * and test the exact painted Range rectangles. Adjacent sentences on one
+ * source line therefore resolve independently, even across MinerU blocks. */
+export function hitSentencePreview(body,element,sourceLine,clientX,clientY,rows,source,lineAtOffset){
+  if(!Number.isInteger(sourceLine)||sourceLine<1||!Number.isFinite(clientX)||!Number.isFinite(clientY))return null;
+  if(!body.contains(element))return null;
+  const mapped=[...body.querySelectorAll('[data-source-start][data-source-end]')]
+    .filter(node=>node.contains(element)&&
+      Number(node.dataset.sourceStart)<=sourceLine&&sourceLine<Number(node.dataset.sourceEnd))
+    .sort((a,b)=>(Number(a.dataset.sourceEnd)-Number(a.dataset.sourceStart))-
+      (Number(b.dataset.sourceEnd)-Number(b.dataset.sourceStart)));
+  for(const node of mapped){
+    const index=textIndex(node);
+    for(const row of rows){
+      for(const fragment of row.fragments){
+        const line=lineAtOffset(fragment.from);
+        if(line<Number(node.dataset.sourceStart)||line>=Number(node.dataset.sourceEnd))continue;
+        const bounds=findFragment(index,fragment,occurrencesBefore(source,fragment));
+        const range=bounds&&markRange(index,bounds.from,bounds.to);
+        if(!range)continue;
+        for(const rect of range.getClientRects()){
+          if(rect.width>0&&rect.height>0&&clientX>=rect.left-1&&clientX<=rect.right+1&&
+             clientY>=rect.top-2&&clientY<=rect.bottom+2)return row;
+        }
+      }
+    }
+  }
+  return null;
+}

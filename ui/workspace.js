@@ -18,7 +18,7 @@ import {createHtmlElementsModule} from './html-elements-module.js';
 import {createSpellcheckModule} from './spellcheck-module.js';
 import {createIllegalBreakModule} from './illegal-break-module.js';
 import {createSentenceModule} from './sentence-module.js';
-import {paintSentencePreviewHighlight,clearSentencePreviewHighlight} from './sentence-preview-highlight.js';
+import {paintSentencePreviewHighlight,clearSentencePreviewHighlight,hitSentencePreview} from './sentence-preview-highlight.js';
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
@@ -256,6 +256,17 @@ class PreviewPanel {
          event.target.closest('a[href],details.ocr-callout > summary'))return;
       const target=event.target.closest('[data-source-start][data-source-end]');
       if(!target)return;
+      if(currentOutline?.workModule==='sentence'){
+        const cmd=getCMD();
+        const sourceLine=Number(target.dataset.sourceStart);
+        const row=cmd&&hitSentencePreview(this.body,event.target,sourceLine,
+          event.clientX,event.clientY,cmd.querySentences().rows,cmd.readSource(),
+          offset=>cmd.lineAtOffset(offset));
+        if(row){
+          publishFocus({sourceLine:row.line,origin:'preview',elementId:row.id,intent:'click'});
+          return;
+        }
+      }
       publishFocus({sourceLine:Number(target.dataset.sourceStart),
         sourceEnd:Number(target.dataset.sourceEnd),origin:'preview'});
     };
@@ -429,7 +440,7 @@ class PreviewPanel {
     this.lastFocusElement?.classList.remove('ocr-outline-focused-element');
     this.lastFocusElement=null;
     if(!focus)return;
-    if(focus.origin==='sentence'&&focus.elementId&&currentOutline?.workModule==='sentence'&&
+    if((focus.origin==='sentence'||focus.origin==='preview')&&focus.elementId&&currentOutline?.workModule==='sentence'&&
        focus.revision===viewStore.getState().documentRevision){
       const row=getCMD()?.querySentences?.().rows.find(x=>x.id===focus.elementId);
       if(row)paintSentencePreviewHighlight(this.body,row,getCMD().readSource(),

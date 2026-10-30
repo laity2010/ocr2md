@@ -476,7 +476,7 @@ async function main() {
           // read-only views. Typing must not steal reading scroll.
           if(!update.docChanged) {
             const line=update.state.doc.lineAt(offset);
-            publishFocus({sourceLine:line.number,origin:'cm6'});
+            publishFocus({sourceLine:line.number,origin:'cm6',sourceOffset:offset,intent:'cursor'});
           }
         }
         if (update.docChanged || update.transactions.some(tx=>tx.selection)) refreshToolbar();
@@ -699,9 +699,22 @@ async function main() {
   }});
   wcpRuntime.onCMReady({view,status});
   foldInitialMineruComments(view);
-  view.contentDOM.addEventListener('click',()=>{
-    const sourceLine=view.state.doc.lineAt(view.state.selection.main.head).number;
-    publishFocus({sourceLine,origin:'cm6',intent:'click'});
+  view.contentDOM.addEventListener('click',event=>{
+    // Existing CM6 click path is authoritative: emit one focus event with the
+    // precise character offset, not a second line-only event that clears AG.
+    let offset=view.state.selection.main.head;
+    try{
+      const hit=document.caretRangeFromPoint?.(event.clientX,event.clientY);
+      if(hit?.startContainer&&view.contentDOM.contains(hit.startContainer))
+        offset=view.posAtDOM(hit.startContainer,hit.startOffset);
+      else{
+        const pos=document.caretPositionFromPoint?.(event.clientX,event.clientY);
+        if(pos?.offsetNode&&view.contentDOM.contains(pos.offsetNode))
+          offset=view.posAtDOM(pos.offsetNode,pos.offset);
+      }
+    }catch{/* Native CM6 selection is the safe fallback on recycled lines. */}
+    const sourceLine=view.state.doc.lineAt(offset).number;
+    publishFocus({sourceLine,sourceOffset:offset,origin:'cm6',intent:'click'});
   });
   savedDoc=view.state.doc;
   workspace.refreshPreview();

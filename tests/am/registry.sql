@@ -1057,3 +1057,12 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-SEL-42','L42','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit CSS Highlights underline exact selected sentence across source blocks, only terminal period emphasized, second sentence/inline math correctly localized','integration'),
  ('TC-SENT-SEL-43','L43','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Switch module/preview navigation clear highlights, selecting again and reloading redraws, CMD source/DOM remain unchanged','integration');
+
+-- WCP sentence reverse focus: CM6 exact source offsets / Preview Range click
+-- resolve AG-only selection by CMD fragment mapping, not paragraph line.
+INSERT INTO apis VALUES
+ ('L44','L','hitSentencePreview','ui/sentence-preview-highlight.js','export','preview reader root, clicked element, pointer coordinates, CMD sentence fragments, line-offset reader','one matching CMD sentence row or null','read-only precise rendered DOM range hit test for adjacent and cross-block sentences',1);
+INSERT INTO access_edges VALUES
+ ('X-SENT-REVERSE-L44','L','L','ui/workspace.js','hitSentencePreview(this.body,event.target,sourceLine,','L44','registered','Reader translates text click into CMD sentence ID, no AG import');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SENT-REVERSE-L44','L44','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit clicking second sentence of one preview line selects exact AG row; cross-block fragments choose same logical sentence; reverse CM6 click resolves source character and AG scrolls into view','integration');

@@ -40,10 +40,11 @@ export function setScrollSyncEnabled(enabled) {
   viewStore.setState({scrollSyncEnabled:Boolean(enabled)});
 }
 
-export function publishFocus({sourceLine,sourceEnd=sourceLine+1,origin,elementId=null,intent=null}) {
+export function publishFocus({sourceLine,sourceEnd=sourceLine+1,origin,elementId=null,intent=null,sourceOffset=null}) {
   if(!Number.isInteger(sourceLine)||sourceLine<1)return;
+  if(sourceOffset!==null&&(!Number.isInteger(sourceOffset)||sourceOffset<0))return;
   viewStore.setState(state=>({
-    focusTarget:{sourceLine,sourceEnd,origin,elementId,intent,
+    focusTarget:{sourceLine,sourceEnd,origin,elementId,intent,sourceOffset,
       revision:state.documentRevision,
       sequence:(state.focusTarget?.sequence||0)+1},
   }));

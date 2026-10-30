@@ -61,6 +61,82 @@ try{
    assert(text.some(x=>x.includes('about 3 percentage points')));
    assert(text.some(x=>x.includes('latest 13F')));
    assert.equal(readFileSync(doc,'utf8'),original,'module silently saved');
+   // Real pointer/touch clicks in a rendered text node, never invoking an
+   // internal view/store API from tests. Needed for same-source-line sentences.
+   async function tapWord(container,needle){
+     const locate=()=>page.evaluate(({container,needle})=>{
+       const root=document.querySelector(container);
+       if(!root)throw Error('Missing click container '+container);
+       const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+       let node;
+       while((node=walker.nextNode())){
+         const start=node.textContent.indexOf(needle);
+         if(start<0)continue;
+         const range=document.createRange();
+         range.setStart(node,start);range.setEnd(node,start+needle.length);
+         const r=range.getBoundingClientRect();
+         return {x:r.left+r.width/2,y:r.top+r.height/2,
+           viewport:innerHeight,text:node.textContent.slice(0,85)};
+       }
+       throw Error('Missing visible word '+needle+' in '+container);
+     },{container,needle});
+     if(container.includes('#editor')){
+       const scroller=await page.locator('#editor .cm-scroller').boundingBox();
+       if(mobile)await page.touchscreen.tap(scroller.x+scroller.width/2,scroller.y+scroller.height/2);
+       else{
+         await page.mouse.move(scroller.x+scroller.width/2,scroller.y+scroller.height/2);
+         await page.mouse.wheel(0,1); // Explicit CM6 user-scroll ownership.
+       }
+     }
+     await page.evaluate(({container,needle})=>{
+       const root=document.querySelector(container);
+       const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+       let node;
+       while((node=walker.nextNode())){
+         if(node.textContent.includes(needle)){
+           (node.parentElement.closest('.cm-line')||node.parentElement.closest('p')||node.parentElement)
+             .scrollIntoView({block:'center',inline:'nearest'});
+           return;
+         }
+       }
+     },{container,needle});
+     await page.waitForTimeout(100);
+     if(container.includes('#editor')){
+       await page.evaluate(needle=>{
+         const scroller=document.querySelector('#editor .cm-scroller');
+         const walker=document.createTreeWalker(scroller,NodeFilter.SHOW_TEXT);
+         let node;
+         while((node=walker.nextNode())){
+           const start=node.textContent.indexOf(needle);
+           if(start<0)continue;
+           const range=document.createRange();range.setStart(node,start);range.setEnd(node,start+needle.length);
+           const a=range.getBoundingClientRect(),b=scroller.getBoundingClientRect();
+           if(a.top<b.top+20||a.bottom>b.bottom-20)
+             scroller.scrollTop+=a.top-b.top-b.height/2;
+           return;
+         }
+       },needle);
+       await page.waitForTimeout(100);
+     }
+     const rect=await locate();
+     if(container.includes('#editor')){
+       const scroller=await page.locator('#editor .cm-scroller').boundingBox();
+       assert(rect.y>=scroller.y&&rect.y<=scroller.y+scroller.height,
+         `source word not visible: ${needle}, at ${rect.y}, pane ${scroller.y}-${scroller.y+scroller.height}`);
+     }
+     if(mobile)await page.touchscreen.tap(rect.x,rect.y);
+     else await page.mouse.click(rect.x,rect.y);
+
+
+   }
+   const chosenRow=()=>page.locator('.ocr-sentence-grid .ag-row-selected .ag-cell[col-id="text"]').allTextContents();
+   const expectChosen=async (text)=>{
+     await page.waitForFunction(needle=>[...document.querySelectorAll('.ocr-sentence-grid .ag-row-selected .ag-cell[col-id="text"]')]
+       .some(el=>el.textContent.includes(needle)),text,{timeout:12000});
+     const selected=await chosenRow();
+     assert.equal(selected.length,1,'AG must select one exact sentence');
+     assert(selected[0].includes(text),`wrong AG row ${selected[0]} for ${text}`);
+   };
    const highlightState=()=>page.evaluate(()=>{
      const native=[...(CSS.highlights.get('ocr-selected-sentence')||[])].map(range=>range.toString());
      const nativeStop=[...(CSS.highlights.get('ocr-selected-sentence-stop')||[])].map(range=>range.toString());
@@ -78,6 +154,27 @@ try{
    assert.deepEqual(await highlightState(),{selected:['The average cost is about','3 percentage points lower.'],
      punctuation:['.']},'cross-block sentence underline and exact terminal period');
    await page.screenshot({path:join(shots,name+'-sentence-highlight.png')});
+   // Reverse navigation from preview: the second physical OCR block belongs
+   // to the first logical sentence, despite the next sentence on same line.
+   await tapWord('.ocr-markdown','lower.');
+   await expectChosen('The average cost is about');
+   await tapWord('.ocr-markdown','matters.');
+   await expectChosen('It matters.');
+   await tapWord('.ocr-markdown','latest');
+   await expectChosen('We refreshed the shares');
+   await tapWord('.ocr-markdown','rebalanced.');
+   await expectChosen('We refreshed the shares');
+   // Reverse navigation from CM6: the same source line has two CMD sentence
+   // fragments and two independent AG rows. A line-number-only lookup fails.
+   await tapWord('#editor .cm-content','lower.');
+   await expectChosen('The average cost is about');
+   await tapWord('#editor .cm-content','matters.');
+   await expectChosen('It matters.');
+   await tapWord('#editor .cm-content','latest');
+   await expectChosen('We refreshed the shares');
+   await tapWord('#editor .cm-content','rebalanced.');
+   await expectChosen('We refreshed the shares');
+
    await page.locator('.ocr-sentence-grid .ag-row').filter({hasText:'It matters.'}).click();
    await waitForUnderlines(1);
    assert.deepEqual(await highlightState(),{selected:['It matters.'],punctuation:['.']},

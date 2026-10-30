@@ -1,6 +1,6 @@
 /** AG sentence reviewer: renders detached CMD projections only. */
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
-import {publishFocus} from './view-store.js';
+import {publishFocus,viewStore} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './sentence-module.css';
@@ -17,8 +17,50 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
   const gridHost=document.createElement('div');gridHost.className='ocr-sentence-grid';
   host.append(guide,state,gridHost);
   let allRows=[],scope=null,active=false,loading=false,error=null,stale=0,disposed=false;
-  const selectSentence=row=>{if(row?.line)publishFocus({sourceLine:row.line,sourceEnd:row.line+1,
-    origin:'sentence',elementId:row.id,intent:'click'});};
+  let selectedId=null;
+  const findRow=focus=>{
+    if(!focus)return null;
+    if(focus.elementId&&['preview','sentence'].includes(focus.origin))
+      return allRows.find(row=>row.id===focus.elementId)||null;
+    if(focus.origin==='cm6'&&Number.isInteger(focus.sourceOffset)){
+      // CM6/WebKit can position a caret immediately AFTER the tapped last
+      // character. Prefer a following sentence starting at that exact offset,
+      // otherwise include the previous sentence's terminal edge.
+      const contains=row=>row.fragments?.some(f=>
+        focus.sourceOffset>=f.from&&focus.sourceOffset<f.to);
+      return allRows.find(contains)||allRows.find(row=>row.fragments?.some(f=>
+        focus.sourceOffset===f.to))||null;
+    }
+    return null;
+  };
+  const followFocus=focus=>{
+    if(!active||disposed||!focus||focus.origin==='sentence')return;
+    const row=findRow(focus),id=row?.id??null;
+    if(id===selectedId)return;
+    selectedId=id;
+    if(!row){grid.deselectAll();return;}
+    let node=grid.getRowNode(id);
+    if(node&&node.rowIndex===null){
+      // A previous text/status filter must not hide the clicked sentence.
+      grid.setFilterModel(null);
+      grid.onFilterChanged();
+      node=grid.getRowNode(id);
+    }
+    if(!node||node.rowIndex===null)return; // Outside current virtual chapter.
+    node.setSelected(true,true,'api');
+    grid.ensureNodeVisible(node,'middle');
+  };
+  const unsubscribeFocus=viewStore.subscribe((next,prior)=>{
+    if(next.focusTarget!==prior.focusTarget)followFocus(next.focusTarget);
+  });
+  const selectSentence=row=>{
+    if(!row?.line)return;
+    selectedId=row.id;
+    const node=grid.getRowNode(row.id);
+    if(node)node.setSelected(true,true,'api');
+    publishFocus({sourceLine:row.line,sourceEnd:row.line+1,
+      origin:'sentence',elementId:row.id,intent:'click'});
+  };
   const lineRenderer=p=>{
     if(!p.data)return '';
     const button=document.createElement('button');button.className='ocr-sentence-jump';
@@ -59,13 +101,14 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
     setRows(result){
       allRows=(result?.rows||[]).map(x=>({...x,blockLabel:x.blocks?.join(' + ')||'—',
         status:x.status||'待审阅'}));stale=result?.stale||0;loading=false;error=null;
-      grid.setGridOption('rowData',allRows);refresh();
+      grid.setGridOption('rowData',allRows);selectedId=null;refresh();
+      followFocus(viewStore.getState().focusTarget);
     },
     setVirtualQuery(intent){scope=intent;refresh();},
     getOperationScope(){return scope?.operationScope||{mode:'all'};},
     count(chapter){if(chapter==='all')return allRows.length;
       const bound=getChapter(chapter);return bound?allRows.filter(x=>x.from>=bound.from&&x.to<=bound.to).length:0;},
-    setActive(next){active=Boolean(next);host.hidden=!active;if(active)refresh();},
-    dispose(){disposed=true;grid.destroy();},
+    setActive(next){active=Boolean(next);host.hidden=!active;if(active){refresh();followFocus(viewStore.getState().focusTarget);}},
+    dispose(){disposed=true;unsubscribeFocus();grid.destroy();},
   });
 }
