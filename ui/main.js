@@ -579,7 +579,7 @@ async function main() {
       const from=line.from+at;
       return {from,to:from+row.left.length,severity:'warning',
         source:'CMD 非法断行',markClass:'ocr-illegal-break-lint',
-        message:`疑似 OCR 断词：${row.left} ↵ ${row.right} → ${row.joined}；仅提示，不自动合并`};
+        message:`疑似非法断行：${row.left} ↵ ${row.right} → ${row.joined}；仅提示，不自动合并`};
     }).filter(Boolean);
     view.dispatch(setDiagnostics(view.state,diagnostics));
   };
@@ -608,8 +608,8 @@ async function main() {
             if(!showSavedBreakRows()){
               clearBreakMarks();workspace.getIllegalBreakElements();
             }
-            status(issues.length?`✓ CMD 已标定 ${issues.length} 处疑似 OCR 断词 · 请全局保存${truncated?'（结果不完整）':''}`:
-              '✓ 非法断行检查完成 · 没有高置信度断词候选');
+            status(issues.length?`✓ CMD 已标定 ${issues.length} 处疑似断行 · 请全局保存${truncated?'（结果不完整）':''}`:
+              '✓ 非法断行检查完成 · 没有符合保守规则的非法断行候选');
           }catch(markError){workspace.setIllegalBreakError('CMD 标定失败：'+markError.message);
             status('非法断行标定失败：'+markError.message,'error');}
         };

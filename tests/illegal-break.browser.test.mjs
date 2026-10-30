@@ -9,6 +9,10 @@ const original=[
   '<!-- minerujson:block:v1:0:0 -->','# Chapter One','',
   'The govern','ment announced a policy.','','The inter-','national organization agreed.','',
   'The government announced','a new policy today.','','',
+  '<!-- minerujson:block:v1:6:6 -->','',
+  'The estimated insurance float cost was only 1.72%, about','',
+  '<!-- minerujson:block:v1:6:7 -->','',
+  '3 percentage points below the average rate.','','',
   '<!-- minerujson:source:v1','{"some":"govern\\nment"}','-->',
 ].join('\n');
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-illegal-break-'));
@@ -48,11 +52,11 @@ try{
    await page.goto(base,{waitUntil:'domcontentloaded',timeout:60000});
    await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:45000});
    await select(page,'illegal-break');
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===2,null,{timeout:45000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===3,null,{timeout:45000});
    assert.equal(await page.evaluate(()=>window.__illegalBreakScans),1,'expected one automatic scan');
    const grid=page.locator('.ocr-illegal-break-grid');
-   assert.deepEqual((await grid.locator('.ag-cell[col-id="joined"]').allTextContents()).sort(),['government','international']);
-   assert.equal(await grid.locator('.ag-cell[col-id="markState"]').filter({hasText:'已标定'}).count(),2);
+   assert.deepEqual((await grid.locator('.ag-cell[col-id="joined"]').allTextContents()).sort(),['about 3','government','international']);
+   assert.equal(await grid.locator('.ag-cell[col-id="markState"]').filter({hasText:'已标定'}).count(),3);
    assert((await page.locator('.ocr-illegal-break-lint').count())>=1,'CM6 must show visible flagged word');
    assert.equal((await page.locator('#editor .cm-content').textContent()).includes('ocr2md:illegal-break'),true);
    assert.equal(readFileSync(doc,'utf8'),original,'scan silently saved source');
@@ -68,17 +72,17 @@ try{
    await select(page,'illegal-break');
    assert.equal(await page.evaluate(()=>window.__illegalBreakScans),1,'tab return needlessly re-scanned');
    await page.locator('#save').click();
-   for(let n=0;n<90&&readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1!==2;n++)await sleep(100);
-   assert.equal(readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1,2,'CMD marks were not persisted');
+   for(let n=0;n<90&&readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1!==3;n++)await sleep(100);
+   assert.equal(readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1,3,'CMD marks were not persisted');
    assert(readFileSync(doc,'utf8').includes('<!-- minerujson:source:v1'),'evidence lost');
    await page.reload({waitUntil:'domcontentloaded'});
    await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:45000});
    await select(page,'illegal-break');
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===2,null,{timeout:14000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===3,null,{timeout:14000});
    assert.equal(await page.evaluate(()=>window.__illegalBreakScans),0,'reload should restore CMD annotations without rescanning');
-   assert.equal(await grid.locator('.ag-row').count(),2);
+   assert.equal(await grid.locator('.ag-row').count(),3);
    assert.deepEqual(errors,[],name+' JS errors');
-   console.log('ILLEGAL_BREAK_AG_PASS',name,{rows:2,scansAfterReload:0,marked:true});
+   console.log('ILLEGAL_BREAK_AG_PASS',name,{rows:3,scansAfterReload:0,marked:true});
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');await sleep(150);rmSync(dir,{recursive:true,force:true});}

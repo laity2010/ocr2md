@@ -20,4 +20,35 @@ assert.equal(readIllegalBreaks(marked.replace('govern<!--','governed<!--'),scanA
 assert.equal(detectIllegalBreaks('The government announced\na new policy.',spell).issues.length,0);
 assert.equal(detectIllegalBreaks('The govern\n\nment',spell).issues.length,0);
 assert.equal(detectIllegalBreaks('> The govern\n> ment',spell).issues.length,0);
-console.log('CMD_LINEBREAK_PASS conservative detection / comment roundtrip / renderer / no softwrap');
+// Regression from the actual Buffett's Alpha PDF screenshot: same-page
+// adjacent OCR blocks split a *sentence*, not the spelling of one word.
+const realFixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+const realBodyEnd=realFixture.indexOf('<!-- minerujson:source:v1');
+const realResults=detectIllegalBreaks(realFixture,spell,{bodyEnd:realBodyEnd});
+const about=realResults.issues.filter(row=>row.joined==='about 3');
+assert.equal(about.length,1,'must find screenshot about / 3 cross-block continuation');
+assert.match(about[0].context,/1\.72%, about.*MinerU 6:7.*3 percentage points/s);
+assert.equal(about[0].reason,'相邻 MinerU 文本块疑似句子断行');
+const realOperations=planIllegalBreakMarks(realFixture,about,[]);
+assert.equal(realOperations.length,1);
+const realMarked=realFixture.slice(0,realOperations[0].at)+
+ formatAnnotation(realOperations[0].tag,realOperations[0].attributes)+
+ realFixture.slice(realOperations[0].at);
+const realTags=scanAnnotations(realMarked).filter(tag=>tag.tag===LINEBREAK_TAG);
+assert.equal(realTags.length,1);
+const realRead=readIllegalBreaks(realMarked,realTags);
+assert.equal(realRead.rows[0].joined,'about 3');
+assert.equal(realRead.rows[0].reason,'相邻 MinerU 文本块疑似句子断行');
+assert.equal(planIllegalBreakMarks(realMarked,realRead.rows,realTags).length,0);
+assert.equal(render.render(realMarked).replace(/<!--ocr2md:illegal-break[^\n]*?-->/g,''),render.render(realFixture));
+const changed=realMarked.replace('3 percentage points','4 percentage points');
+assert.equal(readIllegalBreaks(changed,scanAnnotations(changed)).stale,1);
+const noMarker='The final result is about\n\n3 percentage points below.';
+assert.equal(detectIllegalBreaks(noMarker,spell).issues.length,0,'plain paragraph separator is not evidence');
+const fullStop='A full sentence ends.\n\n<!-- minerujson:block:v1:6:7 -->\n\n3 percentage points below.';
+assert.equal(detectIllegalBreaks(fullStop,spell).issues.length,0,'finished sentence is not suspicious');
+const differentPage='<!-- minerujson:block:v1:6:6 -->\n\nWe speak about\n\n<!-- minerujson:block:v1:7:7 -->\n\n3 percent.';
+assert.equal(detectIllegalBreaks(differentPage,spell).issues.length,0,'cross-page anchor is not same-page evidence');
+const nonconsecutive='<!-- minerujson:block:v1:6:6 -->\n\nWe speak about\n\n<!-- minerujson:block:v1:6:9 -->\n\n3 percent.';
+assert.equal(detectIllegalBreaks(nonconsecutive,spell).issues.length,0,'non-adjacent OCR blocks excluded');
+console.log('CMD_LINEBREAK_PASS split words + Buffett real 6:6→6:7 continuation / safe Markdown / persisted tags');

@@ -972,7 +972,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Conservative OCR line-break review: CMD owns semantic detection and annotations;
 -- Shell owns only lazy offline Worker and CM6 Lint; AG owns read-only evidence UI.
 INSERT INTO apis VALUES
- ('C42','C','detectIllegalBreaks','ui/cmd-linebreak.js','export','one CMD source string, dictionary, body boundary','bounded high-confidence suspicious split candidates','pure scan excludes plain soft wraps and Markdown/MinerU structure; never edits',1),
+ ('C42','C','detectIllegalBreaks','ui/cmd-linebreak.js','export','one CMD source string, dictionary, body boundary','dictionary word splits and same-page adjacent OCR block continuations','pure scan excludes plain soft wraps, fenced Markdown and immutable MinerU source; never edits',1),
  ('C43','C','planIllegalBreakMarks','ui/cmd-linebreak.js','export','source,review candidates,CMD annotations','guarded CMD comment insertion operations','tag before newline on preceding line preserves renderer, no duplicate markers',1),
  ('C44','C','readIllegalBreaks','ui/cmd-linebreak.js','export','one CMD source, current CMD annotations','anchored rows and stale count','read marker only if both word parts still match the source newline',1),
  ('C45','C','returned.queryIllegalBreakElements','ui/wcp-cmd-element-transactions.js','returned','none','source offset rows and stale count','CMD semantic read projection from CM6, excludes immutable MinerU tail',1),
@@ -990,9 +990,9 @@ INSERT INTO access_edges VALUES
  ('X-BREAK-L37',NULL,'L','ui/main.js','workspace.getIllegalBreakElements()','L37','registered','Shell restores marked Lint without rescanning'),
  ('X-BREAK-L38',NULL,'L','ui/main.js','workspace.markIllegalBreakCandidates(issues,source)','L38','registered','Shell passes only candidates to Layout semantic port');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-BREAK-C42','C42','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Detect only dictionary-supported word splits; exclude structural Markdown and ordinary soft breaks','direct'),
+ ('TC-BREAK-C42','C42','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Detect dictionary word splits plus real Buffett about/3 adjacent MinerU block, exclude ordinary paragraph breaks','direct'),
  ('TC-BREAK-C43','C43','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Comments before newline preserve Markdown rendering; no double insert','direct'),
- ('TC-BREAK-C44','C44','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Anchored persisted read, stale word positions rejected','direct'),
+ ('TC-BREAK-C44','C44','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Anchored persisted read including block continuation, stale word positions rejected','direct'),
  ('TC-BREAK-C45','C45','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CMD marks restore through reload with zero worker scan','integration'),
  ('TC-BREAK-C46','C46','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Automatic scoped single CMD batch, one undo/redo and explicit save','integration'),
  ('TC-BREAK-G20','G20','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG row list and cross-pane focus in Chrome/WebKit','integration'),
