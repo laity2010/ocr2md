@@ -155,22 +155,26 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   function keepCaretRowVisibleAt(screenY){
     if(!Number.isFinite(screenY))return;
     const token=++viewportAnchorToken;
-    // CM6 may reflow long Markdown rows after the CMD transaction. Use a few
-    // bounded post-layout corrections. iPad WebKit can throttle rAF while the
-    // native selection/menu takes focus, so do not depend on animation frames.
-    for(const delay of [0,55,115]){
-      const timer=setTimeout(()=>{
-        viewportTimers.delete(timer);
-        if(token!==viewportAnchorToken||disposed||menu.hidden)return;
-        const row=view.dom.querySelector('.ocr-source-caret-line-button');
-        if(!row)return;
+    // WebKit may recompute a long line's height *after* the first CM6
+    // layout passes (even between consecutive quote actions). While this
+    // menu remains open, keep its current caret row at the original screen
+    // position. Bounded sampling is stopped by the next action/close.
+    const deadline=performance.now()+2200;
+    const settle=()=>{
+      if(token!==viewportAnchorToken||disposed||menu.hidden)return;
+      const row=view.dom.querySelector('.ocr-source-caret-line-button');
+      if(row){
         const delta=row.getBoundingClientRect().top-screenY;
-        if(Math.abs(delta)>1)view.scrollDOM.scrollTop+=delta;
-        positionMenu();
-      },delay);
-      viewportTimers.add(timer);
-    }
+        if(Math.abs(delta)>1){view.scrollDOM.scrollTop+=delta;positionMenu();}
+      }
+      if(performance.now()<deadline){
+        const timer=setTimeout(()=>{viewportTimers.delete(timer);settle();},24);
+        viewportTimers.add(timer);
+      }
+    };
+    settle();
   }
+
   function savePointerSelection(){
     pressSelection={doc:view.state.doc,selection:view.state.selection};
   }
