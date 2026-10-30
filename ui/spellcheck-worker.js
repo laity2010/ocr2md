@@ -2,6 +2,7 @@
 import nspell from 'nspell';
 
 import {spellcheckIssues} from './spellcheck-scan.js';
+import {detectIllegalBreaks} from './cmd-linebreak.js';
 let spell;
 async function getSpell(){
   if(spell)return spell;
@@ -14,10 +15,13 @@ async function getSpell(){
   return spell;
 }
 self.onmessage=async event=>{
-  const {id,source}=event.data||{};
+  const {id,source,kind='spellcheck',bodyEnd}=event.data||{};
   try{
     if(typeof source!=='string'||source.length>2_000_000)
       throw Error('文档超过 200 万字符，暂不执行全文拼写扫描');
-    self.postMessage({id,...spellcheckIssues(source,await getSpell())});
-  }catch(error){self.postMessage({id,error:String(error.message||error)});}
+    const spell=await getSpell();
+    if(kind==='linebreak')self.postMessage({id,kind,...detectIllegalBreaks(source,spell,{bodyEnd})});
+    else if(kind==='spellcheck')self.postMessage({id,kind,...spellcheckIssues(source,spell)});
+    else throw Error('Unknown review scan type');
+  }catch(error){self.postMessage({id,kind,error:String(error.message||error)});}
 };

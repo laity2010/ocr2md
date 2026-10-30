@@ -12,6 +12,7 @@
 import {createIndexProjector} from './wcp-document-index.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
+import {LINEBREAK_TAG,readIllegalBreaks,planIllegalBreakMarks} from './cmd-linebreak.js';
 
 function coordinates(from,to,length){
   return Number.isInteger(from)&&Number.isInteger(to)&&
@@ -82,6 +83,12 @@ export function createCMDTransactionPort(cmd){
       const rows=result.rows.filter(row=>row.from<index.bodyEnd&&row.to<=index.bodyEnd);
       return {rows,stale:result.stale,recordCount:result.recordCount};
     },
+    queryIllegalBreakElements:()=>{
+      const index=projector.get();
+      const result=readIllegalBreaks(cmd.readSource(),cmd.readAnnotations({tag:LINEBREAK_TAG}));
+      return {...result,rows:result.rows.filter(row=>row.to<=index.bodyEnd)};
+    },
+    getLinebreakScanLimit:()=>projector.get().bodyEnd,
     getChapter:id=>projector.get().getChapter(id),
     get transactionCount(){return transactionCount;},
     replaceRanges:(edits,cursorAfter=null)=>{
@@ -126,6 +133,30 @@ export function createCMDTransactionPort(cmd){
         (!chapter||(row.from>=chapter.from&&row.to<=chapter.to)));
       const ops=planSpellcheckMarks(expectedSource,eligible,
         cmd.readAnnotations({tag:SPELL_TAG}));
+      if(!ops.length)return {changed:0,skipped:candidates.length};
+      port.editAnnotations(ops,{expectedSource,agScope});
+      return {changed:ops.length,skipped:candidates.length-ops.length};
+    },
+    markIllegalBreakCandidates:(candidates,{expectedSource,agScope}={})=>{
+      if(typeof expectedSource!=='string'||cmd.readSource()!==expectedSource)
+        throw Error('断行扫描期间源码已变化，请重新扫描');
+      if(!Array.isArray(candidates)||candidates.length>400)
+        throw Error('断行候选数量超过 400 项限制');
+      if(!agScope||!['all','chapter'].includes(agScope.mode))
+        throw Error('非法断行标定必须指定 AG 操作范围');
+      const index=projector.get();
+      let chapter=null;
+      if(agScope.mode==='chapter'){
+        chapter=index.getChapter(agScope.chapterId);
+        const live=currentVirtualChapter(cmd.view.state);
+        if(!chapter||!live||live.id!==chapter.id)
+          throw Error('非法断行章节范围已变化');
+      }
+      const eligible=candidates.filter(row=>row&&Number.isInteger(row.from)&&
+        Number.isInteger(row.to)&&row.from>=0&&row.to<=index.bodyEnd&&
+        (!chapter||(row.from>=chapter.from&&row.to<=chapter.to)));
+      const ops=planIllegalBreakMarks(expectedSource,eligible,
+        cmd.readAnnotations({tag:LINEBREAK_TAG}));
       if(!ops.length)return {changed:0,skipped:candidates.length};
       port.editAnnotations(ops,{expectedSource,agScope});
       return {changed:ops.length,skipped:candidates.length-ops.length};

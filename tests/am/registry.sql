@@ -968,3 +968,33 @@ INSERT INTO access_edges VALUES
  ('X-ELEMENT-READSOURCE','C','C','ui/wcp-cmd-element-transactions.js','cmd.readSource()','C41','registered','WCP CMD adapter delegates to base CMDocument source reader');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C41-UNIFIED','C41','tests/main-promoted-lab-ui.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Main/Lab read-only business sources remain bound to one CM6 EditorState','integration');
+
+-- Conservative OCR line-break review: CMD owns semantic detection and annotations;
+-- Shell owns only lazy offline Worker and CM6 Lint; AG owns read-only evidence UI.
+INSERT INTO apis VALUES
+ ('C42','C','detectIllegalBreaks','ui/cmd-linebreak.js','export','one CMD source string, dictionary, body boundary','bounded high-confidence suspicious split candidates','pure scan excludes plain soft wraps and Markdown/MinerU structure; never edits',1),
+ ('C43','C','planIllegalBreakMarks','ui/cmd-linebreak.js','export','source,review candidates,CMD annotations','guarded CMD comment insertion operations','tag before newline on preceding line preserves renderer, no duplicate markers',1),
+ ('C44','C','readIllegalBreaks','ui/cmd-linebreak.js','export','one CMD source, current CMD annotations','anchored rows and stale count','read marker only if both word parts still match the source newline',1),
+ ('C45','C','returned.queryIllegalBreakElements','ui/wcp-cmd-element-transactions.js','returned','none','source offset rows and stale count','CMD semantic read projection from CM6, excludes immutable MinerU tail',1),
+ ('C46','C','returned.markIllegalBreakCandidates','ui/wcp-cmd-element-transactions.js','returned','candidate offsets,expectedSource,AG scope','one CM6 comment transaction','CMD validates current source, chapter and immutable evidence; no auto correction/save',1),
+ ('G20','G','createIllegalBreakModule','ui/illegal-break-module.js','export','AG host,CMD chapter port, status callback','read-only AG row review and WCP focus','AG owns only display/filter, no direct source or CM6',1),
+ ('L37','L','returned.getIllegalBreakElements','ui/workspace.js','returned','none','CMD projected break rows','Shell restores AG/CM6 lint from CMD without re-scanning',1),
+ ('L38','L','returned.markIllegalBreakCandidates','ui/workspace.js','returned','detached candidates, source guard','CMD commit counts','Layout supplies AG operation scope, CMD owns insertion',1);
+INSERT INTO access_edges VALUES
+ ('X-BREAK-C42',NULL,'C','ui/spellcheck-worker.js','detectIllegalBreaks(source,spell,{bodyEnd})','C42','registered','offline worker requests CMD-owned conservative recognizer'),
+ ('X-BREAK-C43','C','C','ui/wcp-cmd-element-transactions.js','planIllegalBreakMarks(expectedSource,eligible,','C43','registered','CMD creates all annotation operations'),
+ ('X-BREAK-C44','C','C','ui/wcp-cmd-element-transactions.js','readIllegalBreaks(cmd.readSource(),cmd.readAnnotations','C44','registered','CMD consumes its own syntax projection'),
+ ('X-BREAK-C45','L','C','ui/workspace.js','getCMD().queryIllegalBreakElements()','C45','registered','Layout receives only CMD-projected data'),
+ ('X-BREAK-C46','L','C','ui/workspace.js','getCMD().markIllegalBreakCandidates(candidates,{expectedSource,agScope:scope})','C46','registered','AG scope forwards to CMD guarded single transaction'),
+ ('X-BREAK-G20','L','G','ui/workspace.js','createIllegalBreakModule(this.illegalBreakHost','G20','registered','Layout mounts independent read-only AG module'),
+ ('X-BREAK-L37',NULL,'L','ui/main.js','workspace.getIllegalBreakElements()','L37','registered','Shell restores marked Lint without rescanning'),
+ ('X-BREAK-L38',NULL,'L','ui/main.js','workspace.markIllegalBreakCandidates(issues,source)','L38','registered','Shell passes only candidates to Layout semantic port');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-C42','C42','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Detect only dictionary-supported word splits; exclude structural Markdown and ordinary soft breaks','direct'),
+ ('TC-BREAK-C43','C43','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Comments before newline preserve Markdown rendering; no double insert','direct'),
+ ('TC-BREAK-C44','C44','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Anchored persisted read, stale word positions rejected','direct'),
+ ('TC-BREAK-C45','C45','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CMD marks restore through reload with zero worker scan','integration'),
+ ('TC-BREAK-C46','C46','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Automatic scoped single CMD batch, one undo/redo and explicit save','integration'),
+ ('TC-BREAK-G20','G20','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG row list and cross-pane focus in Chrome/WebKit','integration'),
+ ('TC-BREAK-L37','L37','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','On reload read CMD markers, preserve CM6 source authority','integration'),
+ ('TC-BREAK-L38','L38','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Shell/Layouter forward only scanner candidates, no AG writes','integration');

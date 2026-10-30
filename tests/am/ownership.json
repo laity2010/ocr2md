@@ -70,7 +70,9 @@
     "html-elements-module.js": "H",
     "html-element-groups.js": "H",
     "html-table-normalize.js": "H",
-    "cmd-spellcheck.js": "C"
+    "cmd-spellcheck.js": "C",
+    "illegal-break-module.js": "G",
+    "cmd-linebreak.js": "C"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -252,6 +254,12 @@
     ],
     "workspace.js->spellcheck-module.js": [
       "createSpellcheckModule"
+    ],
+    "workspace.js->illegal-break-module.js": [
+      "createIllegalBreakModule"
+    ],
+    "spellcheck-worker.js->cmd-linebreak.js": [
+      "detectIllegalBreaks"
     ]
   }
 }

@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import nspell from 'nspell';import {readFileSync} from 'node:fs';
+import MarkdownIt from 'markdown-it';
+import {detectIllegalBreaks,planIllegalBreakMarks,readIllegalBreaks,LINEBREAK_TAG} from '../ui/cmd-linebreak.js';
+import {formatAnnotation,scanAnnotations} from '../ui/cmd-annotations.js';
+const spell=nspell(readFileSync('node_modules/dictionary-en/index.aff'),readFileSync('node_modules/dictionary-en/index.dic'));
+const source=['# Chapter One','','The govern','ment announced a policy.','','We met this','morning in town.','','The inter-','national organization said.','','- A govern','ment list item.','','| govern | ment |','| --- | --- |','','```python','govern','ment','```','','<!-- minerujson:block:v1:0:0 -->','', '<!-- minerujson:source:v1','{ "govern": "ment" }','-->'].join('\n');
+const result=detectIllegalBreaks(source,spell,{bodyEnd:source.indexOf('<!-- minerujson:source')});
+assert.deepEqual(result.issues.map(r=>r.joined),['government','international']);
+const ops=planIllegalBreakMarks(source,result.issues,[]);
+assert.equal(ops.length,2);
+const marked=ops.sort((a,b)=>b.at-a.at).reduce((doc,op)=>
+  doc.slice(0,op.at)+formatAnnotation(op.tag,op.attributes)+doc.slice(op.at),source);
+const ann=scanAnnotations(marked).filter(a=>a.tag===LINEBREAK_TAG);
+assert.equal(ann.length,2);assert.equal(readIllegalBreaks(marked,ann).recordCount,2);
+assert.equal(planIllegalBreakMarks(marked,readIllegalBreaks(marked,ann).rows,ann).length,0);
+const render=new MarkdownIt({html:true});
+assert.equal(render.render(marked).replace(/<!--ocr2md:illegal-break[^\n]*?-->/g,''),render.render(source));
+assert.equal(readIllegalBreaks(marked.replace('govern<!--','governed<!--'),scanAnnotations(marked.replace('govern<!--','governed<!--'))).stale,1);
+assert.equal(detectIllegalBreaks('The government announced\na new policy.',spell).issues.length,0);
+assert.equal(detectIllegalBreaks('The govern\n\nment',spell).issues.length,0);
+assert.equal(detectIllegalBreaks('> The govern\n> ment',spell).issues.length,0);
+console.log('CMD_LINEBREAK_PASS conservative detection / comment roundtrip / renderer / no softwrap');

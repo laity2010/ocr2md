@@ -42,6 +42,11 @@ let scheduleSpellcheck=()=>{};
 let stopSpellcheck=()=>{};
 let enterSpellcheck=()=>{};
 let spellcheckDocChanged=()=>{};
+let illegalBreakEnabled=false;
+let enterIllegalBreak=()=>{};
+let stopIllegalBreak=()=>{};
+let scanIllegalBreak=()=>{};
+let illegalBreakDocChanged=()=>{};
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
@@ -456,6 +461,7 @@ async function main() {
           revision++;
           documentChanged();
           if(spellcheckEnabled)spellcheckDocChanged();
+          if(illegalBreakEnabled)illegalBreakDocChanged();
         }
         if (update.selectionSet) {
           const offset=update.state.selection.main.head;
@@ -558,6 +564,80 @@ async function main() {
     ++requestId;clearTimeout(scanTimer);clearSpellMarks();
     // Keep the pending review rows so switching views does not scan again.
   };
+  // Illegal-break audit uses the same offline Hunspell Worker and the same
+  // CMD annotation transaction port. CM6 still owns the only editable doc.
+  let breakWorker=null,breakRequestId=0,breakTimer=null,breakScanDoc=null;
+  const clearBreakMarks=()=>view.dispatch(setDiagnostics(view.state,[]));
+  const showBreakRows=rows=>{
+    const doc=view.state.doc;
+    const diagnostics=rows.map(row=>{
+      if(row.from<0||row.from>=doc.length)return null;
+      const line=doc.lineAt(row.from);
+      const prefix=line.text.split('<!--ocr2md:illegal-break')[0];
+      const at=prefix.lastIndexOf(row.left);
+      if(at<0)return null;
+      const from=line.from+at;
+      return {from,to:from+row.left.length,severity:'warning',
+        source:'CMD 非法断行',markClass:'ocr-illegal-break-lint',
+        message:`疑似 OCR 断词：${row.left} ↵ ${row.right} → ${row.joined}；仅提示，不自动合并`};
+    }).filter(Boolean);
+    view.dispatch(setDiagnostics(view.state,diagnostics));
+  };
+  const showSavedBreakRows=()=>{
+    const result=workspace.getIllegalBreakElements();
+    if(!result.recordCount)return false;
+    showBreakRows(result.rows);return true;
+  };
+  scanIllegalBreak=()=>{
+    if(!illegalBreakEnabled)return;
+    clearTimeout(breakTimer);
+    const id=++breakRequestId;
+    clearBreakMarks();workspace.setIllegalBreakPending();
+    breakTimer=setTimeout(()=>{
+      if(!illegalBreakEnabled||id!==breakRequestId)return;
+      if(!breakWorker){
+        breakWorker=new Worker(new URL('./spellcheck-worker.js',import.meta.url),{type:'module'});
+        breakWorker.onmessage=event=>{
+          const {id:received,kind,issues,truncated,error}=event.data||{};
+          if(kind!=='linebreak'||!illegalBreakEnabled||received!==breakRequestId)return;
+          if(error){workspace.setIllegalBreakError(error);clearBreakMarks();return;}
+          const source=view.state.doc.toString();
+          try{
+            workspace.markIllegalBreakCandidates(issues,source);
+            breakScanDoc=view.state.doc;
+            if(!showSavedBreakRows()){
+              clearBreakMarks();workspace.getIllegalBreakElements();
+            }
+            status(issues.length?`✓ CMD 已标定 ${issues.length} 处疑似 OCR 断词 · 请全局保存${truncated?'（结果不完整）':''}`:
+              '✓ 非法断行检查完成 · 没有高置信度断词候选');
+          }catch(markError){workspace.setIllegalBreakError('CMD 标定失败：'+markError.message);
+            status('非法断行标定失败：'+markError.message,'error');}
+        };
+        breakWorker.onerror=()=>workspace.setIllegalBreakError('离线词典加载失败');
+      }
+      breakWorker.postMessage({id,kind:'linebreak',source:view.state.doc.toString(),
+        bodyEnd:workspace.getIllegalBreakScanLimit()});
+    },350);
+  };
+  enterIllegalBreak=()=>{
+    if(showSavedBreakRows())return;
+    if(breakScanDoc===null)scanIllegalBreak();
+    else if(view.state.doc.eq(breakScanDoc)){
+      clearBreakMarks();workspace.getIllegalBreakElements();
+    }else{clearBreakMarks();workspace.setIllegalBreakError('源码已有变更，请使用「重新扫描并标定」');}
+  };
+  illegalBreakDocChanged=()=>{
+    ++breakRequestId;clearTimeout(breakTimer);
+    queueMicrotask(()=>{
+      if(!illegalBreakEnabled)return;
+      if(!showSavedBreakRows()){
+        clearBreakMarks();workspace.setIllegalBreakError('源码有变更，请使用「重新扫描并标定」');
+      }
+    });
+  };
+  stopIllegalBreak=()=>{
+    ++breakRequestId;clearTimeout(breakTimer);clearBreakMarks();
+  };
   cmdPort=wcpRuntime.wrapCMD(cm);
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{
@@ -645,12 +725,18 @@ async function main() {
   const showModule=()=>{
     const selected=$('module-select').value;
     const enableSpellcheck=selected==='spellcheck';
+    const enableIllegalBreak=selected==='illegal-break';
     if(view&&enableSpellcheck!==spellcheckEnabled){
       spellcheckEnabled=enableSpellcheck;
       // Native WebKit spellcheck has no reliable visible diagnostics.
       // Explicitly keep native spellcheck off; CM6 Lint is the only marker owner.
       if(enableSpellcheck)enterSpellcheck();
       else stopSpellcheck();
+    }
+    if(view&&enableIllegalBreak!==illegalBreakEnabled){
+      illegalBreakEnabled=enableIllegalBreak;
+      if(enableIllegalBreak)enterIllegalBreak();
+      else stopIllegalBreak();
     }
     if(selected==='settings'&&lastVisibleModule!=='settings')
       sharedPaneRatios=workspace.getPaneRatios()||sharedPaneRatios;
@@ -701,6 +787,7 @@ async function main() {
   $('note-convert-all').addEventListener('click',()=>workspace.convertAllNotes());
   $('html-normalize-tables').addEventListener('click',()=>workspace.normalizeHtmlTables());
   $('spellcheck-rescan').addEventListener('click',()=>scheduleSpellcheck());
+  $('illegal-break-rescan').addEventListener('click',()=>scanIllegalBreak());
   $('media-download-all').addEventListener('click',async()=>{
     const button=$('media-download-all');button.disabled=true;
     try{await workspace.downloadMedia();}
