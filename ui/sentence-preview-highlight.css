@@ -1,0 +1,30 @@
+/* An ephemeral selection overlay. CSS Highlights do not insert wrapper nodes,
+ * change preview line-height, affect caret/scroll positions, or persist to CMD. */
+::highlight(ocr-selected-sentence){
+  text-decoration-line:underline;
+  text-decoration-color:#8bbba9;
+  text-decoration-thickness:1.5px;
+  text-underline-offset:3px;
+}
+::highlight(ocr-selected-sentence-stop){
+  color:#243039;
+  background-color:#e9c77c;
+  text-decoration-line:underline;
+  text-decoration-color:#e9c77c;
+  text-decoration-thickness:2px;
+}
+
+/* Safari fallback: visual geometry only. No preview text nodes are wrapped,
+ * line metrics unchanged; the overlay moves with the scrolled article. */
+.ocr-markdown{position:relative}
+.ocr-markdown .ocr-sentence-overlay{
+  position:absolute;inset:0;pointer-events:none;z-index:5;
+}
+.ocr-markdown .ocr-sentence-overlay-underline{
+  position:absolute;height:2px;background:#8bbba9;border-radius:1px;
+}
+.ocr-markdown .ocr-sentence-overlay-stop{
+  position:absolute;border-radius:2px;
+  outline:1px solid #e9c77c;
+  background:rgba(233,199,124,.38);
+}

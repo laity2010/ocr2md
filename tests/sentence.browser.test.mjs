@@ -61,6 +61,56 @@ try{
    assert(text.some(x=>x.includes('about 3 percentage points')));
    assert(text.some(x=>x.includes('latest 13F')));
    assert.equal(readFileSync(doc,'utf8'),original,'module silently saved');
+   const highlightState=()=>page.evaluate(()=>{
+     const native=[...(CSS.highlights.get('ocr-selected-sentence')||[])].map(range=>range.toString());
+     const nativeStop=[...(CSS.highlights.get('ocr-selected-sentence-stop')||[])].map(range=>range.toString());
+     const underlines=[...document.querySelectorAll('.ocr-sentence-overlay-underline')];
+     const visible=[...new Map(underlines.map(el=>[el.dataset.fragment,el.dataset.text])).values()];
+     const punctuation=[...document.querySelectorAll('.ocr-sentence-overlay-stop')].map(el=>el.dataset.text);
+     return {selected:native.length?native:visible,punctuation:nativeStop.length?nativeStop:punctuation};
+   });
+   const waitForUnderlines=(count)=>page.waitForFunction(n=>
+     (CSS.highlights.get('ocr-selected-sentence')?.size||
+      new Set([...document.querySelectorAll('.ocr-sentence-overlay-underline')].map(x=>x.dataset.fragment)).size)===n,
+     count,{timeout:12000});
+   await page.locator('.ocr-sentence-jump').first().click();
+   await waitForUnderlines(2);
+   assert.deepEqual(await highlightState(),{selected:['The average cost is about','3 percentage points lower.'],
+     punctuation:['.']},'cross-block sentence underline and exact terminal period');
+   await page.screenshot({path:join(shots,name+'-sentence-highlight.png')});
+   await page.locator('.ocr-sentence-grid .ag-row').filter({hasText:'It matters.'}).click();
+   await waitForUnderlines(1);
+   assert.deepEqual(await highlightState(),{selected:['It matters.'],punctuation:['.']},
+     'select only second sentence in same preview paragraph');
+   await page.locator('.ocr-sentence-grid .ag-row').filter({hasText:'We refreshed the shares'}).click();
+   await waitForUnderlines(2);
+   assert.deepEqual((await highlightState()).punctuation,['.'],'cross-block terminal period');
+   await page.locator('.ocr-sentence-grid .ag-row').filter({hasText:'The formula'}).click();
+   await waitForUnderlines(1);
+   assert.deepEqual((await highlightState()).punctuation,['.'],'math embedded sentence stop');
+   await select(page,'media');
+   // An old Focus event must never repaint a sentence when another AG module
+   // owns the review surface, including after a Markdown preview rerender.
+   await page.evaluate(()=>{
+     const v=window.__v6cm6.view;
+     v.dispatch({changes:{from:v.state.doc.length,insert:'\n'}});
+   });
+   await page.waitForTimeout(400);
+   assert.deepEqual(await highlightState(),{selected:[],punctuation:[]},
+     'source rerender under Media must not revive previous sentence selection');
+   await page.locator('#undo').click();
+   await select(page,'sentence');
+   await page.locator('.ocr-sentence-jump').first().click();
+   await waitForUnderlines(2);
+   await select(page,'media');
+   assert.deepEqual(await highlightState(),{selected:[],punctuation:[]},
+     'highlights must clear when leaving sentence module');
+   await select(page,'sentence');
+   await page.locator('.ocr-sentence-jump').first().click();
+   assert.deepEqual((await highlightState()).punctuation,['.']);
+   await page.locator('.ocr-markdown p').first().click();
+   assert.deepEqual(await highlightState(),{selected:[],punctuation:[]},
+     'regular preview navigation must clear sentence emphasis');
    await page.locator('.ocr-sentence-jump').first().click();
    const tagCount=(await page.locator('#editor .cm-content').textContent()).split('ocr2md:sentence').length-1;
    assert(tagCount>3,'markers missing from CM6');
@@ -68,6 +118,8 @@ try{
    await page.waitForFunction(()=>!document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:sentence'),null,{timeout:18000});
    await page.locator('#redo').click();
    await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:sentence'),null,{timeout:18000});
+   await page.locator('.ocr-sentence-jump').first().click();
+   await waitForUnderlines(2);
    await page.locator('#save').click();
    for(let i=0;i<80&&!readFileSync(doc,'utf8').includes('ocr2md:sentence');i++)await sleep(100);
    const saved=readFileSync(doc,'utf8');assert(saved.includes('ocr2md:sentence'));
@@ -77,6 +129,10 @@ try{
    await select(page,'sentence');
    await page.waitForFunction(n=>document.querySelectorAll('.ocr-sentence-grid .ag-row').length===n,expected.length,{timeout:25000});
    assert.equal(await page.locator('.ocr-sentence-grid .ag-row').count(),expected.length);
+   await page.locator('.ocr-sentence-jump').first().click();
+   await waitForUnderlines(2);
+   assert.deepEqual(await highlightState(),{selected:['The average cost is about','3 percentage points lower.'],
+      punctuation:['.']},'reload should still map sentence spans to preview DOM');
    assert.deepEqual(errors,[],name+' errors');
    console.log('SENTENCE_AG_PASS',name,{sentences:expected.length,sourceRecovered:true,loaded:true});
   }finally{await browser.close();}

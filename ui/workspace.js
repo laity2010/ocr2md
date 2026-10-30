@@ -18,6 +18,7 @@ import {createHtmlElementsModule} from './html-elements-module.js';
 import {createSpellcheckModule} from './spellcheck-module.js';
 import {createIllegalBreakModule} from './illegal-break-module.js';
 import {createSentenceModule} from './sentence-module.js';
+import {paintSentencePreviewHighlight,clearSentencePreviewHighlight} from './sentence-preview-highlight.js';
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
@@ -123,6 +124,7 @@ class OutlinePanel {
     queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
   }
   setModule(module){
+    this.workModule=module;
     this.grid?.setChapterBoundaryModuleActive(module==='chapter-boundary');
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
       module==='latex'?'AG Grid LaTeX 审阅':module==='note'?'AG Grid 注释配对':
@@ -349,6 +351,9 @@ class PreviewPanel {
     this.pdfPane.setAttribute('aria-hidden',String(mode!=='pdf'));
     this.pdfTools.hidden=mode!=='pdf';
     this.pdfTools.setAttribute('aria-hidden',String(mode!=='pdf'));
+    if(mode==='md')requestAnimationFrame(()=>{
+      if(!this.disposed)this.highlight(viewStore.getState().focusTarget);
+    });
     if(this.pdf){
       this.pdf.setActive(mode==='pdf');
       if(mode==='pdf')this.pdf.revealCurrentLocation(); // only pending explicit click
@@ -366,7 +371,12 @@ class PreviewPanel {
     this.pdf?.moveToolbarTo(this.pdfTools);
     this.pdf?.setActive(this.mode==='pdf');
   }
-  layout(){this.pdf?.onResize();scrollSync?.measureLater();}
+  layout(){
+    this.pdf?.onResize();scrollSync?.measureLater();
+    const focus=viewStore.getState().focusTarget;
+    if(focus?.origin==='sentence'&&currentOutline?.workModule==='sentence')
+      requestAnimationFrame(()=>{if(!this.disposed)this.highlight(focus);});
+  }
   schedule(immediate=false){
     if(this.disposed)return;
     clearTimeout(this.timer);
@@ -413,10 +423,19 @@ class PreviewPanel {
     if(scrollSync)scrollSync.afterRender(preserved);
     else pane.scrollTop=ratio*Math.max(0,pane.scrollHeight-pane.clientHeight);
   }
+  clearSentenceSelection(){clearSentencePreviewHighlight();}
   highlight(focus){
+    clearSentencePreviewHighlight();
     this.lastFocusElement?.classList.remove('ocr-outline-focused-element');
     this.lastFocusElement=null;
     if(!focus)return;
+    if(focus.origin==='sentence'&&focus.elementId&&currentOutline?.workModule==='sentence'&&
+       focus.revision===viewStore.getState().documentRevision){
+      const row=getCMD()?.querySentences?.().rows.find(x=>x.id===focus.elementId);
+      if(row)paintSentencePreviewHighlight(this.body,row,getCMD().readSource(),
+        offset=>getCMD().lineAtOffset(offset));
+      return;
+    }
     const elements=[...this.body.querySelectorAll('[data-source-start][data-source-end]')];
     let selected=null;
     for(const element of elements){
@@ -433,6 +452,7 @@ class PreviewPanel {
   }
   dispose(){
     this.disposed=true;
+    this.clearSentenceSelection();
     this.footnoteReader?.dispose();
     clearTimeout(this.timer);
     this.unsubscribe?.();
@@ -577,7 +597,10 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       currentOutline?.grid?.setTitleFontScale(value);
     },
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
-    setWorkModule:module=>currentOutline?.setModule(module),
+    setWorkModule:module=>{
+      if(module!=='sentence')currentPreview?.clearSentenceSelection();
+      currentOutline?.setModule(module);
+    },
     updateSpellcheck:(rows,options)=>currentOutline?.spellcheck?.setResults(rows,options),
     getSpellingElements:()=>{
       const result=getCMD().querySpellingElements();

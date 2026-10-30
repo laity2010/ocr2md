@@ -1045,3 +1045,15 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-L39','L39','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG gets only detached CMD projection','integration'),
  ('TC-SENT-L40','L40','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG restores sentence marks after reload','integration'),
  ('TC-SENT-L41','L41','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','No auto save or direct AG mutation','integration');
+
+-- Sentence reader selection: WCP focus id -> CMD read-only projection ->
+-- CSS Highlights DOM Range overlay. No Markdown rewrite or AG preview DOM access.
+INSERT INTO apis VALUES
+ ('L42','L','paintSentencePreviewHighlight','ui/sentence-preview-highlight.js','export','preview root,CMD sentence row,current source,lineAtOffset','one underlined CSS Highlight per source fragment, one sentence-ending punctuation highlight','read-only browser Range anchored by source block; excludes other sentences and decimal punctuation',1),
+ ('L43','L','clearSentencePreviewHighlight','ui/sentence-preview-highlight.js','export','none','clears transient CSS Highlight registry','no source edit, DOM mutation or scroll reflow',1);
+INSERT INTO access_edges VALUES
+ ('X-SENT-SEL-L42','L','L','ui/workspace.js','paintSentencePreviewHighlight(this.body,row,getCMD().readSource(),','L42','registered','Layout-owned preview paints detached CMD sentence by id'),
+ ('X-SENT-SEL-L43','L','L','ui/workspace.js','clearSentencePreviewHighlight()','L43','registered','Layout-owned preview clears on other focus, module change, render/dispose');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SENT-SEL-42','L42','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit CSS Highlights underline exact selected sentence across source blocks, only terminal period emphasized, second sentence/inline math correctly localized','integration'),
+ ('TC-SENT-SEL-43','L43','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Switch module/preview navigation clear highlights, selecting again and reloading redraws, CMD source/DOM remain unchanged','integration');

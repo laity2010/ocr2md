@@ -74,7 +74,8 @@
     "illegal-break-module.js": "G",
     "cmd-linebreak.js": "C",
     "cmd-sentences.js": "C",
-    "sentence-module.js": "G"
+    "sentence-module.js": "G",
+    "sentence-preview-highlight.js": "L"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [

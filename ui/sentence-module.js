@@ -17,13 +17,15 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
   const gridHost=document.createElement('div');gridHost.className='ocr-sentence-grid';
   host.append(guide,state,gridHost);
   let allRows=[],scope=null,active=false,loading=false,error=null,stale=0,disposed=false;
+  const selectSentence=row=>{if(row?.line)publishFocus({sourceLine:row.line,sourceEnd:row.line+1,
+    origin:'sentence',elementId:row.id,intent:'click'});};
   const lineRenderer=p=>{
     if(!p.data)return '';
     const button=document.createElement('button');button.className='ocr-sentence-jump';
     button.textContent=p.data.line;button.type='button';
     button.setAttribute('aria-label','定位句子第 '+p.data.line+' 行');
     for(const name of ['pointerdown','mousedown','touchstart'])button.addEventListener(name,e=>e.stopPropagation());
-    button.addEventListener('click',event=>{event.stopPropagation();publishFocus({sourceLine:p.data.line,origin:'sentence',intent:'click'});});
+    button.addEventListener('click',event=>{event.stopPropagation();selectSentence(p.data);});
     return button;
   };
   const columns=[
@@ -35,7 +37,7 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
   ].map(x=>({sortable:false,resizable:true,suppressMovable:true,...x}));
   const grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:32,
     getRowId:p=>p.data.id,rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
-    onRowClicked:p=>p.data&&publishFocus({sourceLine:p.data.line,origin:'sentence',intent:'click'})});
+    onRowClicked:p=>selectSentence(p.data)});
   const virtual=createVirtualAGQuery(grid,'sentence');
   const selected=()=>scope?.operationScope?.mode==='chapter'?
     allRows.filter(row=>{
