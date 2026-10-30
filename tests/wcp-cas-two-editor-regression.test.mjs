@@ -3,16 +3,40 @@ import {unlockCode} from './v6-auth.test-helper.mjs';
  * Zero access to production, explicit opt-in source document under Lab runtime.
  */
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {readFileSync,writeFileSync,mkdtempSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {spawn} from 'node:child_process';
+import {createServer} from 'node:net';
 import {chromium,webkit} from 'playwright';
-const base=process.env.OCR_LAB_TEST_URL||'';
-const dir=resolve(process.env.OCR_LAB_FIXTURE_DIR||'/not-set');
-if(!/^http:\/\/127\.0\.0\.1:\d+\/labs\/cm-html\/$/.test(base)||
-  !/\/ocr2md-v6\/labs\/cm-html\/\.runtime\/boundary-regression-[^/]+$/.test(dir))
- throw Error('Reject non-isolated Lab CAS destination');
-const code=unlockCode(readFileSync(dir+'/unlock','utf8'));
-const file=dir+'/document.md';
+// Two modes, both isolated: (1) an explicitly supplied Lab runtime
+// fixture (historical); (2) default for AM run-all: a disposable Main
+// server on a /tmp document, token and settings with the built dist.
+let base=process.env.OCR_LAB_TEST_URL||'',file,code,server=null;
+if(base){
+ const dir=resolve(process.env.OCR_LAB_FIXTURE_DIR||'/not-set');
+ if(!/^http:\/\/127\.0\.0\.1:\d+\/labs\/cm-html\/$/.test(base)||
+   !/\/ocr2md-v6\/labs\/cm-html\/\.runtime\/boundary-regression-[^/]+$/.test(dir))
+  throw Error('Reject non-isolated Lab CAS destination');
+ code=unlockCode(readFileSync(dir+'/unlock','utf8'));
+ file=dir+'/document.md';
+}else{
+ const scratch=mkdtempSync(join(tmpdir(),'ocr2md-cas-two-editor-'));
+ file=join(scratch,'document.md');
+ writeFileSync(file,readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md'));
+ writeFileSync(join(scratch,'settings.json'),'{"settings":{}}\n');
+ const key='CAS_TWO_EDITOR_TEST_TOKEN_'+process.pid+'_'+Date.now();
+ writeFileSync(join(scratch,'token'),key+'\n');code=unlockCode(key);
+ const port=await new Promise((ok,fail)=>{const n=createServer();n.once('error',fail);n.listen(0,'127.0.0.1',()=>{const p=n.address().port;n.close(e=>e?fail(e):ok(p));});});
+ base=`http://127.0.0.1:${port}/`;
+ server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...process.env,V6_PORT:String(port),V6_BIND:'127.0.0.1',
+  V6_LAB_ID:'',V6_DOCUMENT_PATH:file,V6_SETTINGS_PATH:join(scratch,'settings.json'),V6_TOKEN_PATH:join(scratch,'token'),
+  V6_STATIC_ROOT:resolve('dist'),V6_LAN_TLS_HOST:'',V6_LAN_LAB_ROUTES:''},stdio:'ignore'});
+ let ready=false;
+ for(let i=0;i<180;i++){try{if((await fetch(base+'healthz')).ok){ready=true;break}}catch{}await new Promise(r=>setTimeout(r,150))}
+ if(!ready){server.kill();throw Error('isolated Main CAS server unavailable');}
+}
+process.on('exit',()=>server?.kill());
 for(const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]){
  const original=readFileSync(file,'utf8');
  const browser=await engine.launch({headless:true});
@@ -24,6 +48,15 @@ for(const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]){
      data:{code},headers:{Origin:new URL(base).origin}
    });
    assert.equal(r.status(),200,'Isolated Lab authorization failed');
+   if(server){
+    // Main always marks the session cookie Secure. Chromium treats
+    // http://127.0.0.1 as a secure context, WebKit does not and drops it.
+    // Re-add the server-issued value unchanged except for Secure (test-only).
+    const sc=r.headers()['set-cookie'];
+    if(sc){const [nv]=sc.split(';');const i=nv.indexOf('=');
+     await context.addCookies([{name:nv.slice(0,i),value:nv.slice(i+1),url:base,httpOnly:true,sameSite:'Lax'}]);}
+    assert((await context.cookies(base)).length>0,'session cookie missing');
+   }
    const page=await context.newPage();
    page.on('pageerror',e=>errors.push(e.message));
    page.on('response',res=>{
@@ -71,3 +104,4 @@ for(const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]){
     draftProtected:true,undoRetained:true,fixtureRestored:true,jsErrors:0}));
  }finally{await browser.close();}
 }
+server?.kill();

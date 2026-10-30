@@ -922,3 +922,9 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C-AUTH01','C-AUTH01','tests/v6-session-secrecy.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Unlock/access issue HMAC cookie; no response header, cookie or body contains any 12-char window of KEY; legacy raw cookie migrates or is refused','direct'),
  ('TC-C-AUTH02','C-AUTH02','tests/v6-session-secrecy.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Derived unlock code authorizes; KEY[:12] is rejected with 403','direct');
+
+-- Proposal E: two-editor CAS draft protection (412) is an AM-registered contract.
+INSERT INTO apis VALUES
+ ('C-SAVE01','C','do_PUT','scripts/v6_serve.py','export','If-Match ETag + UTF-8 Markdown body','200+ETag, 412 stale, 428 missing precondition, 403 unauthorized','atomic optimistic document save; stale editor keeps local draft and undo history',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C-SAVE01','C-SAVE01','tests/wcp-cas-two-editor-regression.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chromium+WebKit two editors: A saves 200, stale B gets 412 without overwriting disk, B keeps draft and undo, fixture restored, no JS errors','integration');
