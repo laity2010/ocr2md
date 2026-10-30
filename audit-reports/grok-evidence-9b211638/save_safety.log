@@ -1,0 +1,14 @@
+PASS GET returns strong sha256 ETag status=200 etag_matches_body_sha256=True
+PASS PUT without cookie -> 403 status=403
+PASS PUT cross-origin -> 403 status=403
+PASS PUT without Origin -> 403 status=403
+PASS PUT without If-Match -> 428 status=428
+PASS PUT stale If-Match -> 412 status=412
+PASS rejected PUTs leave disk unchanged sha=d86508f69b94
+PASS PUT valid If-Match -> 200 + new ETag status=200
+PASS second editor with old ETag -> 412 (lost update prevented) status=412
+PASS 20 concurrent PUTs same ETag: exactly one 200, others 412, disk==winner wins=[0] codes=[200, 412]
+PASS no temp files left after atomic replace tmp=[]
+PASS unlock wrong code -> 403 status=403
+PASS settings PUT unauthorized -> 403 status=403
+SUMMARY 13 / 13

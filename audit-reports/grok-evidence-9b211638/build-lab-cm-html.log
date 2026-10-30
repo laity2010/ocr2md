@@ -1,0 +1,18 @@
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 200 modules transformed.
+rendering chunks...
+fatal: not a git repository (or any of the parent directories): .git
+✗ Build failed in 6.26s
+error during build:
+[release-identity] Command failed: git rev-parse HEAD
+fatal: not a git repository (or any of the parent directories): .git
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at checkExecSyncError (node:child_process:916:11)
+    at execFileSync (node:child_process:952:15)
+    at Object.generateBundle (file:///tmp/grok-build-9b211638/node_modules/.vite-temp/vite.config.mjs.timestamp-1793315561560-6e42c8a8bb3cb.mjs:109:32)
+    at Object.handler (file:///tmp/grok-build-9b211638/node_modules/vite/dist/node/chunks/config.js:33994:13)
+    at file:///tmp/grok-build-9b211638/node_modules/rollup/dist/es/shared/node-entry.js:23692:40
+RC=1

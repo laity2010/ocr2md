@@ -1,0 +1,1 @@
+Attempt3 (224/240, 6 failed) diagnosis 08:30 CST: 45/55/57 env (packages/minerujson-md/node_modules missing in fix worktree -> unified not found / converter rc!=0); control solo after symlink: orig PASS, fix PASS. 23: orig ENOENT FAIL, fix PASS (attempt3 failure = screenshot font wait timeout, intermittent). See control-runs.log

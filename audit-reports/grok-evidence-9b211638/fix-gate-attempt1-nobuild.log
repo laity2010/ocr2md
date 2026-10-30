@@ -1,0 +1,139 @@
+Fri Oct 30 07:29:49 CST 2026
+=== STEP python3 -m unittest discover -s tests/am -p test_*.py
+............................../tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2020>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2200>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e23e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e24d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e1f30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e22f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e25c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e26b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e27a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2890>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2980>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2a70>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2b60>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2c50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2d40>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2e30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e2f20>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e3010>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e3100>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e31f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e32e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e33d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e09a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e34c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e08b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e35b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e36a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e3790>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e3880>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e3970>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e3b50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f83244e3c40>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...
+----------------------------------------------------------------------
+Ran 33 tests in 4.989s
+
+OK
+AM_STANDARD_REPORT status=BLOCKED sha=94e9dd142ae0a23ae468f7bf813b83328426787a output=/tmp/tmpe_ihhjxt
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=53
+=== RC 0 :: python3 -m unittest discover -s tests/am -p test_*.py
+=== STEP python3 tests/am/am.py check
+usage: am.py [-h]
+             {build,check,modules,apis,route,untested,impact,coverage,cases,run,run-all,certify,edges}
+             [key]
+am.py: error: AM SQLite missing; first run: python3 tests/am/am.py build
+=== RC 2 :: python3 tests/am/am.py check
+=== STEP python3 tests/am/am.py coverage
+usage: am.py [-h]
+             {build,check,modules,apis,route,untested,impact,coverage,cases,run,run-all,certify,edges}
+             [key]
+am.py: error: AM SQLite missing; first run: python3 tests/am/am.py build
+=== RC 2 :: python3 tests/am/am.py coverage
+=== STEP python3 tests/am/am.py edges debt
+usage: am.py [-h]
+             {build,check,modules,apis,route,untested,impact,coverage,cases,run,run-all,certify,edges}
+             [key]
+am.py: error: AM SQLite missing; first run: python3 tests/am/am.py build
+=== RC 2 :: python3 tests/am/am.py edges debt
+=== STEP python3 tests/am/am.py run-all
+usage: am.py [-h]
+             {build,check,modules,apis,route,untested,impact,coverage,cases,run,run-all,certify,edges}
+             [key]
+am.py: error: AM SQLite missing; first run: python3 tests/am/am.py build
+=== RC 2 :: python3 tests/am/am.py run-all
+=== STEP python3 tests/am/am.py certify
+usage: am.py [-h]
+             {build,check,modules,apis,route,untested,impact,coverage,cases,run,run-all,certify,edges}
+             [key]
+am.py: error: AM SQLite missing; first run: python3 tests/am/am.py build
+=== RC 2 :: python3 tests/am/am.py certify
+=== STEP git fsck --full --no-reflogs
+=== RC 0 :: git fsck --full --no-reflogs
+Fri Oct 30 07:29:55 CST 2026

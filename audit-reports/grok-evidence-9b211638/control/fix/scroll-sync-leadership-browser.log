@@ -1,0 +1,4 @@
+LEADERSHIP_TRACE Chrome {"before":{"driver":"preview","sourceY":19160,"previewY":14070,"maxPreviewY":42635,"line":973},"after":{"driver":"preview","sourceY":19235,"previewY":14070},"sourceDriven":{"driver":"cm6","sourceY":19405,"previewY":14454},"dirty":false}
+SCROLL_LEADERSHIP_PASS Chrome
+LEADERSHIP_TRACE iPad WebKit {"before":{"driver":"preview","sourceY":18945,"previewY":14014,"maxPreviewY":42541,"line":973},"after":{"driver":"preview","sourceY":19020,"previewY":14014},"sourceDriven":{"driver":"cm6","sourceY":19190,"previewY":14194},"dirty":false}
+SCROLL_LEADERSHIP_PASS iPad WebKit

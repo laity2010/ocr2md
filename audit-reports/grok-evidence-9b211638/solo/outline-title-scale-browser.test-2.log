@@ -1,0 +1,2 @@
+OUTLINE_TITLE_SCALE_PASS Chrome {"min":0.2,"max":2,"step":0.1,"default":1,"bigTitle":68,"tinyTitle":6.8,"bigRow":88,"persisted":1.7}
+OUTLINE_TITLE_SCALE_PASS WebKit {"min":0.2,"max":2,"step":0.1,"default":1,"bigTitle":68,"tinyTitle":6.8,"bigRow":88,"persisted":1.7}

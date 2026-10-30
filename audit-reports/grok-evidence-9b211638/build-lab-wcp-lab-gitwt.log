@@ -1,0 +1,13 @@
+failed to load config from /tmp/grok-labbuild-9b211638/vite.config.mjs
+error during build:
+Error: LAB_MODULE_OVERRIDE_FORBIDDEN: Lab must use the identical Main module graph
+    at labProfile (file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/.vite-temp/vite.config.mjs.timestamp-1793316245314-89d691f6e7b33.mjs:23:11)
+    at file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/.vite-temp/vite.config.mjs.timestamp-1793316245314-89d691f6e7b33.mjs:63:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
+    at async loadConfigFromBundledFile (file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/vite/dist/node/chunks/config.js:36167:12)
+    at async bundleAndLoadConfigFile (file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/vite/dist/node/chunks/config.js:36055:17)
+    at async loadConfigFromFile (file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/vite/dist/node/chunks/config.js:36022:42)
+    at async resolveConfig (file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/vite/dist/node/chunks/config.js:35671:22)
+    at async createBuilder (file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/vite/dist/node/chunks/config.js:34126:19)
+    at async CAC.<anonymous> (file:///workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/node_modules/vite/dist/node/cli.js:629:10)

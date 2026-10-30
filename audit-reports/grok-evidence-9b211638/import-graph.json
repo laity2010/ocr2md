@@ -1,0 +1,464 @@
+{
+ "unowned": [],
+ "edges": [
+  {
+   "src": "chapter-markers.js",
+   "caller": "G",
+   "dst": "cmd-annotations.js",
+   "owner": "C",
+   "syms": [
+    "parseAnnotation"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "latex-inline-preview.js",
+   "caller": "T",
+   "dst": "cmd-annotations.js",
+   "owner": "C",
+   "syms": [
+    "scanAnnotations"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "latex-review-markers.js",
+   "caller": "T",
+   "dst": "cmd-annotations.js",
+   "owner": "C",
+   "syms": [
+    "scanAnnotations"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-wcp-virtual-chapters.js",
+   "owner": "W",
+   "syms": [
+    "createWCPRuntime"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "workspace.js",
+   "owner": "L",
+   "syms": [
+    "createWorkspace"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-cm-document.js",
+   "owner": "C",
+   "syms": [
+    "CMDocument"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-settings-module.js",
+   "owner": "S",
+   "syms": [
+    "createSettingsModule"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-workspace-directory-port.js",
+   "owner": "B",
+   "syms": [
+    "workspaceDirectoryPort"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-source-file-navigation.js",
+   "owner": "S",
+   "syms": [
+    "createSourceFileNavigation"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-ag-module-toolbar.js",
+   "owner": "G",
+   "syms": [
+    "mountAgModuleToolbar"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "cm-font-setting.js",
+   "owner": "C",
+   "syms": [
+    "registerCMSourceFontSetting"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-chapter-outline.js",
+   "owner": "G",
+   "syms": [
+    "registerOutlineTitleScaleSetting"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "media-module.js",
+   "owner": "A",
+   "syms": [
+    "uploadPastedImage"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "chapter-markers.js",
+   "owner": "G",
+   "syms": [
+    "countMarkers"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "main.js",
+   "caller": "shell",
+   "dst": "wcp-chapter-files.js",
+   "owner": "G",
+   "syms": [
+    "buildChapterFiles"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "markdown-preview.js",
+   "caller": "M",
+   "dst": "latex-inline-preview.js",
+   "owner": "T",
+   "syms": [
+    "projectReviewedInlineLatex"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "note-pair-scan.js",
+   "caller": "N",
+   "dst": "cmd-annotations.js",
+   "owner": "C",
+   "syms": [
+    "scanAnnotations"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "obsidian-source-syntax.js",
+   "caller": "shell",
+   "dst": "latex-scan.js",
+   "owner": "T",
+   "syms": [
+    "findLatex"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "settings-module.js",
+   "caller": "S",
+   "dst": "cmd-json-source.js",
+   "owner": "C",
+   "syms": [
+    "openCMDJsonSource",
+    "readCMDJsonSnapshot"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "settings-module.js",
+   "caller": "S",
+   "dst": "wcp-workspace-directory-module.js",
+   "owner": "B",
+   "syms": [
+    "createWorkspaceDirectoryModule"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-cmd-element-transactions.js",
+   "caller": "C",
+   "dst": "wcp-document-index.js",
+   "owner": "G",
+   "syms": [
+    "createIndexProjector"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-document-index.js",
+   "caller": "G",
+   "dst": "cmd-annotations.js",
+   "owner": "C",
+   "syms": [
+    "scanAnnotations"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-document-index.js",
+   "caller": "G",
+   "dst": "latex-scan.js",
+   "owner": "T",
+   "syms": [
+    "findLatex"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-document-index.js",
+   "caller": "G",
+   "dst": "latex-review-markers.js",
+   "owner": "T",
+   "syms": [
+    "findReviewMarkers"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-document-index.js",
+   "caller": "G",
+   "dst": "media-module.js",
+   "owner": "A",
+   "syms": [
+    "findMedia"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-source-file-navigation.js",
+   "caller": "S",
+   "dst": "wcp-chapter-files.js",
+   "owner": "G",
+   "syms": [
+    "chapterAssignments"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-wcp-virtual-chapters.js",
+   "caller": "W",
+   "dst": "wcp-layout-persistence.js",
+   "owner": "L",
+   "syms": [
+    "persistLabWorkspaceLayout"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-wcp-virtual-chapters.js",
+   "caller": "W",
+   "dst": "wcp-cmd-element-transactions.js",
+   "owner": "C",
+   "syms": [
+    "createCMDTransactionPort"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-wcp-virtual-chapters.js",
+   "caller": "W",
+   "dst": "wcp-cm-virtual-view.js",
+   "owner": "C",
+   "syms": [
+    "virtualChapterExtensions",
+    "setVirtualChapter",
+    "currentVirtualChapter"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "wcp-wcp-virtual-chapters.js",
+   "caller": "W",
+   "dst": "wcp-md-virtual-preview.js",
+   "owner": "M",
+   "syms": [
+    "renderVirtualMarkdown"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "markdown-preview.js",
+   "owner": "M",
+   "syms": [
+    "renderMarkdown"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "footnote-popover.js",
+   "owner": "M",
+   "syms": [
+    "createFootnotePopover"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "wcp-chapter-outline.js",
+   "owner": "G",
+   "syms": [
+    "createOutlineGrid"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "media-module.js",
+   "owner": "A",
+   "syms": [
+    "createMediaModule"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "latex-module.js",
+   "owner": "T",
+   "syms": [
+    "createLatexModule"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "note-pair-module.js",
+   "owner": "N",
+   "syms": [
+    "createNotePairModule"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "html-elements-module.js",
+   "owner": "H",
+   "syms": [
+    "createHtmlElementsModule"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  },
+  {
+   "src": "workspace.js",
+   "caller": "L",
+   "dst": "pdf-preview.js",
+   "owner": "P",
+   "syms": [
+    "PdfPreview"
+   ],
+   "kind": "cross",
+   "edge_registered": true,
+   "binding_approved": true
+  }
+ ]
+}

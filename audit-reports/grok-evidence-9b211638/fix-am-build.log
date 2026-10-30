@@ -1,0 +1,2 @@
+AM_BUILD_PASS modules/apis/messages/publishers/subscriptions/tests=[12, 167, 13, 19, 28, 240] database=.v6/tests/am.sqlite
+AM_REFERENCES_PASS checked 167 API registry rows and all source/test paths; previous-run records kept=0/0

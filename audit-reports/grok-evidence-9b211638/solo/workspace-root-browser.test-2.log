@@ -1,0 +1,12 @@
+WORKROOT_BROWSER_PASS Chrome {"bookCatalog":true,"bookSelected":true,"rootNotDocument":true,"saveReload":true,"oldDocIntact":true,"errors":[]}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 30000ms exceeded.
+    at /workspace/ocr2md-audit/ocr2md-am-9b211638-isolated/tests/workspace-root-browser.test.mjs:78:14 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

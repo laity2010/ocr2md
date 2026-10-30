@@ -1,0 +1,306 @@
+Fri Oct 30 07:30:36 CST 2026
+=== STEP python3 -m unittest discover -s tests/am -p test_*.py
+............................../tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be200>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be3e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be5c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be6b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be110>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be4d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be7a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be890>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3be980>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bea70>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3beb60>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bec50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bed40>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bee30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bef20>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf010>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf100>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf1f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf2e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf3d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf4c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf5b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bc9a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf6a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bc8b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf790>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf880>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bf970>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bfa60>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bfb50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bfd30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fbcdc3bfe20>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...
+----------------------------------------------------------------------
+Ran 33 tests in 5.039s
+
+OK
+AM_STANDARD_REPORT status=BLOCKED sha=94e9dd142ae0a23ae468f7bf813b83328426787a output=/tmp/tmpmz8ij2wm
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=53
+=== RC 0 :: python3 -m unittest discover -s tests/am -p test_*.py
+=== STEP python3 tests/am/am.py check
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_CHECK_PASS apis=167 FK=OK source-and-test-files=OK ui-ownership=OK
+=== RC 0 :: python3 tests/am/am.py check
+=== STEP python3 tests/am/am.py coverage
+total=167 | linked=167 | core_total=139 | core_linked=139
+total_messages=13 | with_publishers=13 | with_subscribers=12 | test_links=240 | actual_runs=0
+publishers=19 | publishers_linked=19 | subscriptions=28 | subscriptions_linked=28 | messages_linked=13
+NOTE: script links are references, NOT certified PASS results or isolated API tests
+=== RC 0 :: python3 tests/am/am.py coverage
+=== STEP python3 tests/am/am.py edges debt
+(no results)
+=== RC 0 :: python3 tests/am/am.py edges debt
+=== STEP python3 tests/am/am.py run-all
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_FULL_START git=94e9dd14 suites=57 contracts=240
+AM_SUITE_START 1/57 tests/ag-function-menu.browser.test.mjs cases=1
+AM_SUITE_PASS 1/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-01-ag-function-menu.browser.test.log
+AM_SUITE_START 2/57 tests/ag-header-browser.test.mjs cases=2
+AM_SUITE_PASS 2/57 cases=2 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-02-ag-header-browser.test.log
+AM_SUITE_START 3/57 tests/am/contracts-browser.test.mjs cases=16
+AM_SUITE_PASS 3/57 cases=16 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-03-contracts-browser.test.log
+AM_SUITE_START 4/57 tests/chapter-numbering.test.mjs cases=1
+AM_SUITE_PASS 4/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-04-chapter-numbering.test.log
+AM_SUITE_START 5/57 tests/cm6-browser.test.mjs cases=3
+AM_SUITE_PASS 5/57 cases=3 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-05-cm6-browser.test.log
+AM_SUITE_START 6/57 tests/cmd-annotations-browser.test.mjs cases=7
+AM_SUITE_PASS 6/57 cases=7 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-06-cmd-annotations-browser.test.log
+AM_SUITE_START 7/57 tests/cmd-html-unified-browser.test.mjs cases=5
+AM_SUITE_PASS 7/57 cases=5 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-07-cmd-html-unified-browser.test.log
+AM_SUITE_START 8/57 tests/code-fence-highlight.browser.test.mjs cases=1
+AM_SUITE_PASS 8/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-08-code-fence-highlight.browser.test.log
+AM_SUITE_START 9/57 tests/code-fence-highlight.test.mjs cases=1
+AM_SUITE_PASS 9/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-09-code-fence-highlight.test.log
+AM_SUITE_START 10/57 tests/compact-shell-browser.test.mjs cases=5
+AM_SUITE_PASS 10/57 cases=5 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-10-compact-shell-browser.test.log
+AM_SUITE_START 11/57 tests/dockview-preview-browser.test.mjs cases=5
+AM_SUITE_PASS 11/57 cases=5 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-11-dockview-preview-browser.test.log
+AM_SUITE_START 12/57 tests/footnote-popover.browser.test.mjs cases=2
+AM_SUITE_PASS 12/57 cases=2 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-12-footnote-popover.browser.test.log
+AM_SUITE_START 13/57 tests/four-pane-pdf-browser.test.mjs cases=5
+AM_SUITE_PASS 13/57 cases=5 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-13-four-pane-pdf-browser.test.log
+AM_SUITE_START 14/57 tests/html-element-groups.test.mjs cases=1
+AM_SUITE_PASS 14/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-14-html-element-groups.test.log
+AM_SUITE_START 15/57 tests/html-elements.browser.test.mjs cases=5
+AM_SUITE_PASS 15/57 cases=5 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-15-html-elements.browser.test.log
+AM_SUITE_START 16/57 tests/html-elements.test.mjs cases=1
+AM_SUITE_PASS 16/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-16-html-elements.test.log
+AM_SUITE_START 17/57 tests/html-table-normalize.browser.test.mjs cases=2
+AM_SUITE_PASS 17/57 cases=2 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-17-html-table-normalize.browser.test.log
+AM_SUITE_START 18/57 tests/html-table-normalize.test.mjs cases=1
+AM_SUITE_PASS 18/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-18-html-table-normalize.test.log
+AM_SUITE_START 19/57 tests/latex-browser.test.mjs cases=8
+AM_SUITE_PASS 19/57 cases=8 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-19-latex-browser.test.log
+AM_SUITE_START 20/57 tests/latex-four-view-browser.test.mjs cases=1
+AM_SUITE_PASS 20/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-20-latex-four-view-browser.test.log
+AM_SUITE_START 21/57 tests/latex-normalize-browser.test.mjs cases=2
+AM_SUITE_PASS 21/57 cases=2 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-21-latex-normalize-browser.test.log
+AM_SUITE_START 22/57 tests/latex-review-browser.test.mjs cases=3
+AM_SUITE_PASS 22/57 cases=3 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-22-latex-review-browser.test.log
+AM_SUITE_START 23/57 tests/main-promoted-lab-ui.browser.test.mjs cases=1
+AM_SUITE_PASS 23/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-23-main-promoted-lab-ui.browser.test.log
+AM_SUITE_START 24/57 tests/media-adoption-syntax.test.mjs cases=2
+AM_SUITE_PASS 24/57 cases=2 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-24-media-adoption-syntax.test.log
+AM_SUITE_START 25/57 tests/media-browser.test.mjs cases=16
+AM_SUITE_PASS 25/57 cases=16 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-25-media-browser.test.log
+AM_SUITE_START 26/57 tests/media-paste-browser.test.mjs cases=4
+AM_SUITE_PASS 26/57 cases=4 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-26-media-paste-browser.test.log
+AM_SUITE_START 27/57 tests/media-preexisting-adoption.browser.test.mjs cases=1
+AM_SUITE_PASS 27/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-27-media-preexisting-adoption.browser.test.log
+AM_SUITE_START 28/57 tests/mineru-start-only-ui-browser.test.mjs cases=4
+AM_SUITE_PASS 28/57 cases=4 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-28-mineru-start-only-ui-browser.test.log
+AM_SUITE_START 29/57 tests/note-pair-browser.test.mjs cases=5
+AM_SUITE_PASS 29/57 cases=5 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-29-note-pair-browser.test.log
+AM_SUITE_START 30/57 tests/note-pairs.test.mjs cases=2
+AM_SUITE_PASS 30/57 cases=2 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-30-note-pairs.test.log
+AM_SUITE_START 31/57 tests/obsidian-callouts.browser.test.mjs cases=1
+AM_SUITE_PASS 31/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-31-obsidian-callouts.browser.test.log
+AM_SUITE_START 32/57 tests/obsidian-callouts.test.mjs cases=1
+AM_SUITE_PASS 32/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-32-obsidian-callouts.test.log
+AM_SUITE_START 33/57 tests/obsidian-cm6-theme.test.mjs cases=1
+AM_SUITE_PASS 33/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-33-obsidian-cm6-theme.test.log
+AM_SUITE_START 34/57 tests/obsidian-image-preview-browser.test.mjs cases=1
+AM_SUITE_PASS 34/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-34-obsidian-image-preview-browser.test.log
+AM_SUITE_START 35/57 tests/obsidian-latex-display.test.mjs cases=1
+AM_SUITE_PASS 35/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-35-obsidian-latex-display.test.log
+AM_SUITE_START 36/57 tests/obsidian-source-syntax.browser.test.mjs cases=1
+AM_SUITE_PASS 36/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-36-obsidian-source-syntax.browser.test.log
+AM_SUITE_START 37/57 tests/outline-browser.test.mjs cases=15
+AM_SUITE_PASS 37/57 cases=15 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-37-outline-browser.test.log
+AM_SUITE_START 38/57 tests/outline-title-scale-browser.test.mjs cases=3
+AM_SUITE_FAIL 38/57 cases=3 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-38-outline-title-scale-browser.test.log
+    '    - waiting for element to be visible, enabled and stable',
+    '    - element is visible, enabled and stable',
+    '    - scrolling into view if needed',
+    '    - done scrolling',
+    '    - performing click action'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4
+AM_SUITE_START 39/57 tests/pdf-anchor-viewport-browser.test.mjs cases=1
+AM_SUITE_FAIL 39/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-39-pdf-anchor-viewport-browser.test.log
+    at file:///tmp/grok-fixgate-9b211638/tests/pdf-anchor-viewport-browser.test.mjs:72:3 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.23.4
+AM_SUITE_START 40/57 tests/pdf-click-only-browser.test.mjs cases=4
+AM_SUITE_PASS 40/57 cases=4 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-40-pdf-click-only-browser.test.log
+AM_SUITE_START 41/57 tests/preview-split-browser.test.mjs cases=6
+AM_SUITE_PASS 41/57 cases=6 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-41-preview-split-browser.test.log
+AM_SUITE_START 42/57 tests/promoted-chapters-browser.test.mjs cases=8
+AM_SUITE_PASS 42/57 cases=8 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-42-promoted-chapters-browser.test.log
+AM_SUITE_START 43/57 tests/quote-indent-browser.test.mjs cases=1
+AM_SUITE_PASS 43/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-43-quote-indent-browser.test.log
+AM_SUITE_START 44/57 tests/scroll-sync-browser.test.mjs cases=4
+AM_SUITE_PASS 44/57 cases=4 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-44-scroll-sync-browser.test.log
+AM_SUITE_START 45/57 tests/scroll-sync-leadership-browser.test.mjs cases=6
+AM_SUITE_FAIL 45/57 cases=6 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-45-scroll-sync-leadership-browser.test.log
+    at defaultResolve (node:internal/modules/esm/resolve:989:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:747:20)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)
+    at ModuleJob._link (node:internal/modules/esm/module_job:182:49) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///tmp/grok-fixgate-9b211638/packages/minerujson-md/dist/index.js'
+}
+
+Node.js v22.23.4
+AM_SUITE_START 46/57 tests/settings-browser.test.mjs cases=12
+AM_SUITE_PASS 46/57 cases=12 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-46-settings-browser.test.log
+AM_SUITE_START 47/57 tests/settings-server.test.mjs cases=1
+AM_SUITE_PASS 47/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-47-settings-server.test.log
+AM_SUITE_START 48/57 tests/shared-preview-browser.test.mjs cases=6
+AM_SUITE_PASS 48/57 cases=6 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-48-shared-preview-browser.test.log
+AM_SUITE_START 49/57 tests/source-callout-plan.test.mjs cases=1
+AM_SUITE_PASS 49/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-49-source-callout-plan.test.log
+AM_SUITE_START 50/57 tests/source-fence-plan.test.mjs cases=1
+AM_SUITE_PASS 50/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-50-source-fence-plan.test.log
+AM_SUITE_START 51/57 tests/source-line-callout.browser.test.mjs cases=3
+AM_SUITE_PASS 51/57 cases=3 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-51-source-line-callout.browser.test.log
+AM_SUITE_START 52/57 tests/wcp-promoted-api-direct.browser.test.mjs cases=12
+AM_SUITE_PASS 52/57 cases=12 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-52-wcp-promoted-api-direct.browser.test.log
+AM_SUITE_START 53/57 tests/wcp-runtime-contract.test.mjs cases=12
+AM_SUITE_PASS 53/57 cases=12 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-53-wcp-runtime-contract.test.log
+AM_SUITE_START 54/57 tests/wcp-virtual-event-contract.browser.test.mjs cases=16
+AM_SUITE_PASS 54/57 cases=16 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-54-wcp-virtual-event-contract.browser.test.log
+AM_SUITE_START 55/57 tests/workspace-portability.test.mjs cases=1
+AM_SUITE_FAIL 55/57 cases=1 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-55-workspace-portability.test.log
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4
+AM_SUITE_START 56/57 tests/workspace-root-browser.test.mjs cases=2
+AM_SUITE_FAIL 56/57 cases=2 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-56-workspace-root-browser.test.log
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 30000ms exceeded.
+    at /tmp/grok-fixgate-9b211638/tests/workspace-root-browser.test.mjs:78:14 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4
+AM_SUITE_START 57/57 tests/workspace-root-server.test.mjs cases=6
+AM_SUITE_FAIL 57/57 cases=6 log=.v6/tests/am-full-20261029T233041Z-94e9dd14-57-workspace-root-server.test.log
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 400,
+  expected: 200,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4
+AM_FULL_RESULT passed_cases=221/240 failed_suites=6 git=94e9dd14
+AM_ERROR: AM full suite failed: [('tests/outline-title-scale-browser.test.mjs', 'FAIL'), ('tests/pdf-anchor-viewport-browser.test.mjs', 'FAIL'), ('tests/scroll-sync-leadership-browser.test.mjs', 'FAIL'), ('tests/workspace-portability.test.mjs', 'FAIL'), ('tests/workspace-root-browser.test.mjs', 'FAIL'), ('tests/workspace-root-server.test.mjs', 'FAIL')]
+=== RC 1 :: python3 tests/am/am.py run-all
+=== STEP python3 tests/am/am.py certify
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_ERROR: AM_CERTIFY_FAIL: no complete PASS with unchanged source/test Git tree; run-all required
+=== RC 1 :: python3 tests/am/am.py certify
+=== STEP git fsck --full --no-reflogs
+=== RC 0 :: git fsck --full --no-reflogs
+Fri Oct 30 07:43:24 CST 2026
