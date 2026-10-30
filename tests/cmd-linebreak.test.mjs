@@ -27,6 +27,11 @@ const realBodyEnd=realFixture.indexOf('<!-- minerujson:source:v1');
 const realResults=detectIllegalBreaks(realFixture,spell,{bodyEnd:realBodyEnd});
 const about=realResults.issues.filter(row=>row.joined==='about 3');
 assert.equal(about.length,1,'must find screenshot about / 3 cross-block continuation');
+const filing=realResults.issues.filter(row=>row.joined==='latest 13F');
+assert.equal(filing.length,1,'must flag real 8:3 → 8:4 latest / 13F');
+assert.match(filing[0].context,/basis of the latest.*MinerU 8:4.*13F, and/s);
+assert.equal(filing[0].reason,'相邻 MinerU 文本块疑似句子断行');
+
 assert.match(about[0].context,/1\.72%, about.*MinerU 6:7.*3 percentage points/s);
 assert.equal(about[0].reason,'相邻 MinerU 文本块疑似句子断行');
 const realOperations=planIllegalBreakMarks(realFixture,about,[]);
@@ -40,6 +45,27 @@ const realRead=readIllegalBreaks(realMarked,realTags);
 assert.equal(realRead.rows[0].joined,'about 3');
 assert.equal(realRead.rows[0].reason,'相邻 MinerU 文本块疑似句子断行');
 assert.equal(planIllegalBreakMarks(realMarked,realRead.rows,realTags).length,0);
+// Existing about/3 has already been CMD-marked by an earlier version. A
+// manual rescan must add only the newly supported latest/13F candidate.
+const fresh=detectIllegalBreaks(realMarked,spell,{bodyEnd:realMarked.indexOf('<!-- minerujson:source:v1')});
+assert.deepEqual(fresh.issues.map(x=>x.joined),['about 3','latest 13F']);
+const newMarks=planIllegalBreakMarks(realMarked,fresh.issues,realTags);
+assert.equal(newMarks.length,1,'old CMD annotation must not duplicate');
+assert.equal(newMarks[0].attributes.left,'latest');
+assert.equal(newMarks[0].attributes.right,'13F');
+const bothMarked=realMarked.slice(0,newMarks[0].at)+
+ formatAnnotation(newMarks[0].tag,newMarks[0].attributes)+realMarked.slice(newMarks[0].at);
+const allAnnotations=scanAnnotations(bothMarked).filter(tag=>tag.tag===LINEBREAK_TAG);
+assert.equal(allAnnotations.length,2);
+assert.deepEqual(readIllegalBreaks(bothMarked,allAnnotations).rows.map(x=>x.joined),['about 3','latest 13F']);
+assert.equal(planIllegalBreakMarks(bothMarked,
+ readIllegalBreaks(bothMarked,allAnnotations).rows,allAnnotations).length,0);
+assert.equal(render.render(bothMarked).replace(/<!--ocr2md:illegal-break[^\n]*?-->/g,''),
+ render.render(realFixture),'CMD comments changed preview or source readability');
+const changedFiling=bothMarked.replace('13F, and the portfolio','14F, and the portfolio');
+assert.equal(readIllegalBreaks(changedFiling,scanAnnotations(changedFiling)).stale,1,
+ 'old latest/13F marker must be stale when identifier is edited');
+
 assert.equal(render.render(realMarked).replace(/<!--ocr2md:illegal-break[^\n]*?-->/g,''),render.render(realFixture));
 const changed=realMarked.replace('3 percentage points','4 percentage points');
 assert.equal(readIllegalBreaks(changed,scanAnnotations(changed)).stale,1);
@@ -51,4 +77,12 @@ const differentPage='<!-- minerujson:block:v1:6:6 -->\n\nWe speak about\n\n<!-- 
 assert.equal(detectIllegalBreaks(differentPage,spell).issues.length,0,'cross-page anchor is not same-page evidence');
 const nonconsecutive='<!-- minerujson:block:v1:6:6 -->\n\nWe speak about\n\n<!-- minerujson:block:v1:6:9 -->\n\n3 percent.';
 assert.equal(detectIllegalBreaks(nonconsecutive,spell).issues.length,0,'non-adjacent OCR blocks excluded');
-console.log('CMD_LINEBREAK_PASS split words + Buffett real 6:6→6:7 continuation / safe Markdown / persisted tags');
+const structured='<!-- minerujson:block:v1:8:3 -->\n\nThe last `code`\n\n<!-- minerujson:block:v1:8:4 -->\n\n13F file.';
+assert.equal(detectIllegalBreaks(structured,spell).issues.length,0,'inline code at boundary is not prose');
+const sameWord='<!-- minerujson:block:v1:8:3 -->\n\nThe latest.\n\n<!-- minerujson:block:v1:8:4 -->\n\n13F report.';
+assert.equal(detectIllegalBreaks(sameWord,spell).issues.length,0,'complete sentence should not be marked');
+const differentPageFiling='<!-- minerujson:block:v1:8:3 -->\n\nThe latest\n\n<!-- minerujson:block:v1:9:4 -->\n\n13F report.';
+assert.equal(detectIllegalBreaks(differentPageFiling,spell).issues.length,0,'different-page filing blocks remain excluded');
+const skippedBlockFiling='<!-- minerujson:block:v1:8:3 -->\n\nThe latest\n\n<!-- minerujson:block:v1:8:5 -->\n\n13F report.';
+assert.equal(detectIllegalBreaks(skippedBlockFiling,spell).issues.length,0,'nonadjacent filing blocks remain excluded');
+console.log('CMD_LINEBREAK_PASS split words + Buffett real 6:6→6:7 and 8:3→8:4; old marker compatibility / renderer / negatives');

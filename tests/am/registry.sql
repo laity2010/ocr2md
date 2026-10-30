@@ -998,3 +998,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-G20','G20','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG row list and cross-pane focus in Chrome/WebKit','integration'),
  ('TC-BREAK-L37','L37','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','On reload read CMD markers, preserve CM6 source authority','integration'),
  ('TC-BREAK-L38','L38','tests/illegal-break.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Shell/Layouter forward only scanner candidates, no AG writes','integration');
+
+-- Regression from real Buffett 8:3→8:4: existing v1 CMD block-break mark
+-- is retained and manual AG rescan appends only the newly recognized 13F.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-REAL-RESCAN','C46','tests/illegal-break-rescan-real.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Buffett legacy about/3 CMD mark remains intact; rescan adds latest/13F once; explicit Save/reload restores both without dictionary Worker','integration');

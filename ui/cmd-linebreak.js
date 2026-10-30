@@ -19,15 +19,23 @@ const CONTINUATION_TAILS=new Set([
   'about','of','to','for','with','by','from','than','between','under','over','into',
   'through','toward','towards','upon','because','while','although','including',
   'the','an','a','its','their','our','his','her','whose','and','or','but',
+  // An unfinished adjective before an alphanumeric filing/code identifier.
+  'latest','previous','following','current','next','last',
 ]);
 const MARKER_SUFFIX=/<!--ocr2md:illegal-break[^\n]*?-->$/;
-const OPENING_TOKEN=/^([a-z]{2,60}|[0-9]{1,5}(?:[.,][0-9]+)?)(?=\b|\s)/;
+const BLOCK_RIGHT=/^(?:[a-z]{2,60}|[0-9]{1,5}[A-Za-z]{1,6}|[0-9]{1,5}(?:[.,][0-9]+)?)$/;
+const OPENING_TOKEN=/^([a-z]{2,60}|[0-9]{1,5}[A-Za-z]{1,6}|[0-9]{1,5}(?:[.,][0-9]+)?)(?=\b|\s|[,.;:!?])/;
 function textWithoutMarker(line){return line.replace(MARKER_SUFFIX,'');}
 function blockContinuation(rows,i,previousAnchor,bodyEnd){
   const current=rows[i];
   if(!previousAnchor||current.to>=bodyEnd)return null;
   const before=textWithoutMarker(current.raw);
-  if(!isSafeLine(before)||/[.!?;:。！？；：]\s*$/.test(before)||/\s{2,}$/.test(before))return null;
+  // Do not reject the *entire* OCR block because its earlier sentences
+  // contain valid inline LaTeX/HTML markup. Only the actual break vicinity
+  // and the Markdown block boundary determine whether it is safe to mark.
+  if(!before.trim()||BAD_STRUCTURE.test(before)||/^\s{4,}/.test(before)||
+     !isSafeLine(before.slice(-100))||
+     /[.!?;:。！？；：]\s*$/.test(before)||/\s{2,}$/.test(before))return null;
   const trailing=/([A-Za-z]{2,45})$/.exec(before);
   if(!trailing||!CONTINUATION_TAILS.has(trailing[1].toLowerCase()))return null;
   let n=i+1;
@@ -52,15 +60,22 @@ function readBlockContinuation(source,at,left,right){
   if(source[at]!=='\n')return null;
   const before=textWithoutMarker(source.slice(source.lastIndexOf('\n',at-1)+1,at));
   if(!before.endsWith(left))return null;
+  const previousBlockStart=source.lastIndexOf('<!-- minerujson:block:v1:',at);
+  if(previousBlockStart<0)return null;
+  const previousBlockLine=source.slice(previousBlockStart,source.indexOf('\n',previousBlockStart));
+  const previous=blockAnchor(previousBlockLine);
+  if(!previous)return null;
   const lines=source.slice(at+1).split('\n',7);
   let n=0;
   if(lines[n]==='')n++;
   const anchor=blockAnchor(lines[n]||'');
-  if(!anchor)return null;
+  if(!anchor||anchor.pageIndex!==previous.pageIndex||
+     anchor.blockIndex!==previous.blockIndex+1)return null;
   n++;
   if(lines[n]==='')n++;
   const next=lines[n]||'';
-  if(!next.startsWith(right)||!isSafeLine(next.slice(0,95))||BAD_STRUCTURE.test(next))return null;
+  const token=OPENING_TOKEN.exec(next);
+  if(!token||token[1]!==right||!isSafeLine(next.slice(0,95))||BAD_STRUCTURE.test(next))return null;
   return {context:before.slice(-100)+' ↵ [MinerU '+anchor.pageIndex+':'+
     anchor.blockIndex+'] ↵ '+next.slice(0,100)};
 }
@@ -127,7 +142,7 @@ export function readIllegalBreaks(source,annotations){
     if(tag.tag!==LINEBREAK_TAG)continue;
     const {left='',right='',joined='',reason=''}=tag.attributes||{};
     const isBlock=reason==='block';
-    if(!WORD.test(left)||!(isBlock?/^[a-z]{2,60}$|^[0-9]{1,5}(?:[.,][0-9]+)?$/.test(right):WORD.test(right))||
+    if(!WORD.test(left)||!(isBlock?BLOCK_RIGHT.test(right):WORD.test(right))||
       joined!==(isBlock?left+' '+right:left+right)||
       !(isBlock?readBlockContinuation(source,tag.to,left,right):isValidAt(source,tag.to,left,right))){stale++;continue;}
     const from=tag.to,line=source.slice(0,from).split('\n').length;
@@ -147,7 +162,7 @@ export function planIllegalBreakMarks(source,candidates,annotations){
   for(const row of candidates){
     const isBlock=row?.reason==='相邻 MinerU 文本块疑似句子断行';
     if(!row||!WORD.test(row.left)||
-       !(isBlock?/^[a-z]{2,60}$|^[0-9]{1,5}(?:[.,][0-9]+)?$/.test(row.right):WORD.test(row.right))||
+       !(isBlock?BLOCK_RIGHT.test(row.right):WORD.test(row.right))||
        row.joined!==(isBlock?row.left+' '+row.right:row.left+row.right)||
        !(isBlock?readBlockContinuation(source,row.from,row.left,row.right):
          isValidAt(source,row.from,row.left,row.right)))
