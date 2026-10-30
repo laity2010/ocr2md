@@ -1,4 +1,4 @@
-import {unlockCode} from './v6-auth.test-helper.mjs';
+import {unlockCode,adoptLoopbackSessionCookie} from './v6-auth.test-helper.mjs';
 /** Browser A/B optimistic save regression for a STRICTLY isolated Lab fixture.
  * Zero access to production, explicit opt-in source document under Lab runtime.
  */
@@ -49,12 +49,7 @@ for(const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]){
    });
    assert.equal(r.status(),200,'Isolated Lab authorization failed');
    if(server){
-    // Main always marks the session cookie Secure. Chromium treats
-    // http://127.0.0.1 as a secure context, WebKit does not and drops it.
-    // Re-add the server-issued value unchanged except for Secure (test-only).
-    const sc=r.headers()['set-cookie'];
-    if(sc){const [nv]=sc.split(';');const i=nv.indexOf('=');
-     await context.addCookies([{name:nv.slice(0,i),value:nv.slice(i+1),url:base,httpOnly:true,sameSite:'Lax'}]);}
+    await adoptLoopbackSessionCookie(context,r,base);
     assert((await context.cookies(base)).length>0,'session cookie missing');
    }
    const page=await context.newPage();
