@@ -81,3 +81,6 @@
   - 412 草稿的浏览器探针本轮未运行；
   - cookie 仍存原始 KEY。
   - 正面证据：保存安全的 HTTP 探针 13/13 PASS，但不足以支撑切换。
+
+## 6. 补充（报告提交后，2026-10-30 CST）
+- 修复分支 wcp-lab Lab 构建：`V6_LAB_ID=wcp-lab vite build` rc=0（fix-build-lab-wcp-lab.log）。P1-3 修复已验证 PASS；第 4 节相应条目作废。
