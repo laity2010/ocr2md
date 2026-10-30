@@ -87,7 +87,9 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
       }));
     }
     const type=TYPE[getModule()];
-    status.hidden=isPhysicalChapter()||(!isIndexMode()&&checkbox.checked);
+    // Experimental spellcheck has no browser-exposed error list. Never leave
+    // the previous review module's CMD row count visible in its status slot.
+    status.hidden=isPhysicalChapter()||(!isIndexMode()&&checkbox.checked)||!type;
     if(isPhysicalChapter())status.textContent='实体章节兼容模式（WP4 尚未接管编辑）';
     else if(state&&type){
       const chapter=currentChapter();

@@ -77,12 +77,23 @@ class OutlinePanel {
     this.noteHost.hidden=true;
     this.htmlHost=document.createElement('div');
     this.htmlHost.hidden=true;
+    this.spellcheckHost=document.createElement('section');
+    this.spellcheckHost.className='ocr-spellcheck-experiment';
+    this.spellcheckHost.setAttribute('aria-label','原生拼写检查实验状态');
+    this.spellcheckHost.hidden=true;
+    const heading=document.createElement('h3');
+    heading.textContent='浏览器原生拼写检查 · 实验';
+    const explanation=document.createElement('p');
+    explanation.textContent='已请求在 CM6 源码窗启用英语拼写检查。请在源码窗观察红色波浪线，长按或右键错误单词尝试纠正。';
+    const limitation=document.createElement('p');
+    limitation.textContent='浏览器没有向网页提供错词清单接口，因此 AG 暂无错误行；iPad WebKit 是否显示拼写标记，以设备实测为准。离开此模块即关闭检查。';
+    this.spellcheckHost.append(heading,explanation,limitation);
     currentOutline=this;
   }
   init(){
     this.grid=createOutlineGrid(this.element,()=>getMarkdown(),()=>getCMD()?chapterCMD:null);
     this.grid.setTitleFontScale(outlineTitleFontScale);
-    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost);
+    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost);
     this.media=createMediaModule(this.mediaHost,()=>getMarkdown(),()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
@@ -107,12 +118,14 @@ class OutlinePanel {
     this.grid?.setChapterBoundaryModuleActive(module==='chapter-boundary');
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
       module==='latex'?'AG Grid LaTeX 审阅':module==='note'?'AG Grid 注释配对':
-      module==='html'?'AG Grid HTML 元素':'AG Grid 章节大纲');
+      module==='html'?'AG Grid HTML 元素':
+      module==='spellcheck'?'浏览器原生拼写检查实验':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
     this.latex?.setActive(module==='latex');
     this.note?.setActive(module==='note');
     this.html?.setActive(module==='html');
+    this.spellcheckHost.hidden=module!=='spellcheck';
   }
   layout() {}
   dispose(){

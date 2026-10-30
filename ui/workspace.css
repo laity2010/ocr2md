@@ -115,3 +115,9 @@
 .ocr-outline-pane > .ocr-latex-pane{flex:1;min-height:0}
 /* Notes is a separate AG projection, not a mixed element grid. */
 .ocr-outline-pane > .ocr-note-pane{flex:1;min-height:0}
+
+/* Read-only native spellcheck probe; error lists are not available from browsers. */
+.ocr-spellcheck-experiment{padding:15px 18px;color:#d3c6aa;font-size:13px;line-height:1.7;overflow:auto;}
+.ocr-spellcheck-experiment[hidden]{display:none!important;}
+.ocr-spellcheck-experiment h3{font-size:14px;margin:0 0 8px;font-weight:600;}
+.ocr-spellcheck-experiment p{margin:0 0 10px;max-width:55ch;}

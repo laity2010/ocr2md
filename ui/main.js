@@ -3,6 +3,7 @@ import './styles.css';
 import {createWCPRuntime} from './wcp-wcp-virtual-chapters.js';
 import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
+import {Compartment} from '@codemirror/state';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
@@ -32,6 +33,9 @@ let view;
 let cm;
 let cmdPort=null;
 const wcpRuntime=createWCPRuntime();
+// Shell-owned CM6 native spellcheck: no shadow text, dictionary or AG internals.
+const spellcheckCompartment=new Compartment();
+let spellcheckEnabled=false;
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
@@ -405,6 +409,7 @@ async function main() {
       ...wcpRuntime.editorExtensions,
       nativeIOSSelection ? nativeIOSBasicSetup : basicSetup,
       EditorView.lineWrapping,
+      spellcheckCompartment.of(EditorView.contentAttributes.of({spellcheck:'false'})),
       // Only image clipboard items are handled here; native CM6 paste retains
       // full control of text and all other clipboard formats.
       EditorView.domEventHandlers({paste(event){
@@ -546,6 +551,13 @@ async function main() {
   let sharedPaneRatios=null;
   const showModule=()=>{
     const selected=$('module-select').value;
+    const enableSpellcheck=selected==='spellcheck';
+    if(view&&enableSpellcheck!==spellcheckEnabled){
+      view.dispatch({effects:spellcheckCompartment.reconfigure(
+        EditorView.contentAttributes.of(enableSpellcheck
+          ?{spellcheck:'true',lang:'en-US'}:{spellcheck:'false'}))});
+      spellcheckEnabled=enableSpellcheck;
+    }
     if(selected==='settings'&&lastVisibleModule!=='settings')
       sharedPaneRatios=workspace.getPaneRatios()||sharedPaneRatios;
     if(selected!=='settings'&&lastVisibleModule==='settings')

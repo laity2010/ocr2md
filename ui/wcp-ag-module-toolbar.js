@@ -84,7 +84,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
   const elementSelect=document.createElement('select');
   elementSelect.className='ocr-lab-element-select';
   elementSelect.setAttribute('aria-label','文档元素');
-  for(const [value,label] of [['chapter-boundary','标题'],['media','媒体'],['latex','LaTeX'],['note','注释对'],['html','HTML 元素']]){
+  for(const [value,label] of [['chapter-boundary','标题'],['media','媒体'],['latex','LaTeX'],['note','注释对'],['html','HTML 元素'],['spellcheck','拼写检查']]){
     const option=document.createElement('option');
     option.value=value;option.textContent=label;elementSelect.append(option);
   }
@@ -155,7 +155,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     if(transitioning)return;
     const selected=modulePort.getModule();
     if(selected==='settings'){refresh();return;}
-    if(selected==='chapter-boundary'||selected==='media'||selected==='latex'||selected==='note'||selected==='html')
+    if(selected==='chapter-boundary'||selected==='media'||selected==='latex'||selected==='note'||selected==='html'||selected==='spellcheck')
       selectedElementModule=selected;
     else{syncModule();return;}
     refresh();
