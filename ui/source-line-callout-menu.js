@@ -165,9 +165,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
         const row=view.dom.querySelector('.ocr-source-caret-line-button');
         if(!row)return;
         const delta=row.getBoundingClientRect().top-screenY;
-        console.debug('AUDIT_CARET timer='+delay+' delta='+delta+' scrollBefore='+view.scrollDOM.scrollTop+' token='+token);
         if(Math.abs(delta)>1)view.scrollDOM.scrollTop+=delta;
-        console.debug('AUDIT_CARET timer='+delay+' scrollAfter='+view.scrollDOM.scrollTop+' markerAfter='+row.getBoundingClientRect().top);
         positionMenu();
       },delay);
       viewportTimers.add(timer);
