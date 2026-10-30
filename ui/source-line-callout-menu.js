@@ -59,6 +59,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
      typeof onQuoteIndent!=='function')
     throw TypeError('Source line menu requires source pane, CM6 and insertion action');
   let disposed=false,activeButton=null,target=null,pressSelection=null,actionInProgress=false;
+  let pressCaretScreenY=null;
   let viewportAnchorToken=0;
   const viewportTimers=new Set();
   const menu=document.createElement('div');
@@ -116,7 +117,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
     fenceForm.hidden=true;fenceLanguage.value='';fenceError.textContent='';
     fence.setAttribute('aria-expanded','false');
     activeButton?.setAttribute('aria-expanded','false');
-    activeButton=null;target=null;pressSelection=null;
+    activeButton=null;target=null;pressSelection=null;pressCaretScreenY=null;
   }
   function refreshSummary(){
     summary.textContent=summarizeSourceLineSelection(view.state.doc,view.state.selection).text;
@@ -164,7 +165,9 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
         const row=view.dom.querySelector('.ocr-source-caret-line-button');
         if(!row)return;
         const delta=row.getBoundingClientRect().top-screenY;
+        console.debug('AUDIT_CARET timer='+delay+' delta='+delta+' scrollBefore='+view.scrollDOM.scrollTop+' token='+token);
         if(Math.abs(delta)>1)view.scrollDOM.scrollTop+=delta;
+        console.debug('AUDIT_CARET timer='+delay+' scrollAfter='+view.scrollDOM.scrollTop+' markerAfter='+row.getBoundingClientRect().top);
         positionMenu();
       },delay);
       viewportTimers.add(timer);
@@ -250,6 +253,9 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   });
   for(const button of [increase,decrease]){
     button.addEventListener('pointerdown',event=>{
+      // Capture before WebKit transfers focus from CM6 to the popover.
+      // A tap may reposition the gutter *before* click is dispatched.
+      pressCaretScreenY=activeButton?.getBoundingClientRect().top??null;
       actionInProgress=true;
       if(event.pointerType!=='touch')event.preventDefault();
     });
@@ -263,7 +269,8 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
         }
         // CMD maps the full selection. The Layout's source-edit signal keeps
         // the editor—not the preview—as the scroll leader during reflow.
-        const caretY=activeButton?.getBoundingClientRect().top;
+        const caretY=pressCaretScreenY??activeButton?.getBoundingClientRect().top;
+        pressCaretScreenY=null;
         onBeforeSourceEdit();
         onQuoteIndent(Number(button.dataset.direction));
         target={snapshot:view.state.doc,offset:view.state.selection.main.head,
