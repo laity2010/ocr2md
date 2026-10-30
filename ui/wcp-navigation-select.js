@@ -107,12 +107,12 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
 // through the public event contract and remains sole CMD JSON editor.
 export const NAVIGATION_FONT_SETTING_KEY='globalUi.navigation.dropdownFontSize';
 export function registerNavigationFontSetting(settings){
-  settings.register({module:'N',key:NAVIGATION_FONT_SETTING_KEY,
+  settings.register({module:'L',key:NAVIGATION_FONT_SETTING_KEY,
     category:['全局 UI','导航下拉'],label:'导航下拉字号',
     comment:'导航下拉框与展开菜单共用字号（8–16 pt）；顶栏高度保持不变',
     type:'number',control:'slider',defaultValue:10,min:8,max:16,step:1,
     message:'settings.changed'});
-  return settings.subscribe({module:'N',key:NAVIGATION_FONT_SETTING_KEY},({value})=>{
+  return settings.subscribe({module:'L',key:NAVIGATION_FONT_SETTING_KEY},({value})=>{
     document.documentElement.style.setProperty('--ocr-navigation-font-size',value+'pt');
   });
 }

@@ -28,6 +28,26 @@ class GateTests(unittest.TestCase):
             "document.dispatchEvent(new CustomEvent('ocr2md:undeclared-topic',{detail:{}}));")
         self.assertTrue(any('UNREGISTERED_DOM_PUBLISH' in issue for issue in issues))
 
+    def test_unregistered_settings_subscription(self):
+        issues=self.modified('cm-font-setting.js',"settings.subscribe({module:'C',key:'x.y'},()=>{});")
+        self.assertFalse(any('SETTINGS' in i for i in issues),issues)
+        issues=self.modified('wcp-workspace-directory-module.js',
+            "settings.subscribe({module:'L',key:'globalUi.x'},()=>{});")
+        self.assertTrue(any('UNREGISTERED_SETTINGS_SUBSCRIPTION' in i for i in issues),issues)
+
+    def test_navigation_font_subscription_module(self):
+        path=ROOT/'ui/wcp-navigation-select.js'
+        body=path.read_text(encoding='utf-8').replace("module:'L'","module:'N'")
+        _,issues=mod.scan_files(ROOT,CAT,{'wcp-navigation-select.js':body})
+        self.assertTrue(any('UNREGISTERED_SETTINGS_SUBSCRIPTION wcp-navigation-select.js module=N' in i for i in issues),issues)
+        self.assertTrue(any('STALE_SETTINGS_SUBSCRIPTION wcp-navigation-select.js module=L' in i for i in issues),issues)
+
+    def test_settings_subscribe_wrong_owner(self):
+        path=ROOT/'ui/outline-grid.js'
+        body=path.read_text(encoding='utf-8').replace("settings.subscribe({module:'G'","settings.subscribe({module:'C'")
+        _,issues=mod.scan_files(ROOT,CAT,{'outline-grid.js':body})
+        self.assertTrue(any('SETTINGS_SUBSCRIBE_WRONG_MODULE outline-grid.js(G) module=C' in i for i in issues),issues)
+
     def test_retired_semantic_event_subscription(self):
         issues=self.modified('wcp-ag-module-toolbar.js',
             "document.addEventListener('ocr2md:lab-file-activated',()=>{});")
