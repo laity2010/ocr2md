@@ -6,13 +6,16 @@ import {formatAnnotation} from './cmd-annotations.js';
 export const SENTENCE_TAG='ocr2md:sentence';
 const tagPattern=/<!--(?:\s*ocr2md:[^\n]*?|\s*minerujson:[^\n]*?)-->/g;
 const inlineMath=/\$[^$\n]+\$|\\\([^\n]+?\\\)/g;
+// Existing Obsidian note references are metadata, not sentence text. Their
+// unchanged-length blanks preserve every CMD source offset for safe marking.
+const noteReference=/\[\^[^\]\n]+\](?!:)/g;
 const structural=/^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||!\[|\[\^|`{3,}|~{3,}|<!--|<\/?[a-z]|\$\$|\\\[)/i;
 const endsSentence=/[.!?。！？]["'”’)]?\s*$/;
 const hash=text=>{let v=2166136261;for(let i=0;i<text.length;i++)v=Math.imul(v^text.charCodeAt(i),16777619);return (v>>>0).toString(36);};
 function safeLine(line){return Boolean(line.trim())&&!structural.test(line)&&!/\s{2}$/.test(line)&&!/^\s{4,}/.test(line);}
 function lineProjection(line,from){
   const clean=line.split('');
-  for(const regex of [tagPattern,inlineMath]){
+  for(const regex of [tagPattern,inlineMath,noteReference]){
     regex.lastIndex=0;
     for(const m of line.matchAll(regex))for(let k=m.index;k<m.index+m[0].length;k++)clean[k]=' ';
   }

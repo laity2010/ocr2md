@@ -6,25 +6,32 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {chromium,webkit} from 'playwright';
 import {extractTextBlocks,segmentSentences,planSentenceMarks} from '../ui/cmd-sentences.js';
-import {formatAnnotation} from '../ui/cmd-annotations.js';
+import {formatAnnotation,scanAnnotations} from '../ui/cmd-annotations.js';
 
 const original=[
  '<!-- minerujson:block:v1:1:0 -->','',
  'Before the chart, this is the first complete sentence. A second sentence is here.','',
  '<!-- minerujson:block:v1:1:10 -->','',
  'An escaped \\# symbol must match its rendered text. This sentence is normal.','',
+ '<!-- minerujson:block:v1:1:11 -->','',
+ 'We show that the portfolio performed well.<!--ocr2md:note-ref id="3"-->[^3] This finding is consistent with the expected trend.','',
  '<!-- minerujson:block:v1:1:1 -->','',
  '![chart](https://example.invalid/delayed-image.png)','',
  '<!-- minerujson:block:v1:1:2 -->','',
  'After the chart, the notes explain the result. Another complete sentence follows.','',
  '<!-- minerujson:block:v1:1:3 -->','',
  'The last paragraph remains independent of the preceding notes.','',
+ '[^3]: Footnote explaining the results.','',
  '<!-- minerujson:source:v1','{"evidence":"preserve"}','-->',
 ].join('\n');
 const rows=segmentSentences(extractTextBlocks(original,{bodyEnd:original.indexOf('<!-- minerujson:source:v1')}));
 const ops=planSentenceMarks(original,rows,[]);
+assert(rows.some(row=>row.text.startsWith('This finding is consistent')),
+  'Footnote reference must not prefix the following sentence');
 const marked=ops.sort((a,b)=>b.at-a.at).reduce((text,op)=>
  text.slice(0,op.at)+formatAnnotation(op.tag,op.attributes)+text.slice(op.at),original);
+assert.equal(planSentenceMarks(marked,segmentSentences(extractTextBlocks(marked,{bodyEnd:marked.indexOf('<!-- minerujson:source:v1')})),
+ scanAnnotations(marked)).length,0,'Re-entering annotated CMD must not duplicate anchors');
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-geometry-'));
 const doc=join(dir,'document.md');writeFileSync(doc,marked);
 const shots=join('.v6','evidence','sentence-geometry');mkdirSync(shots,{recursive:true});
@@ -51,10 +58,18 @@ try{
    await page.locator('#editor .cm-content').waitFor();
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="sentence"]').click();
-   await page.waitForFunction(()=>/CMD 已标定 7 句/.test(document.querySelector('.ocr-sentence-state')?.textContent||''));
+   await page.waitForFunction(()=>/CMD 已标定 9 句/.test(document.querySelector('.ocr-sentence-state')?.textContent||''));
    await page.locator('#sentence-cover-all').check();
    await page.waitForFunction(()=>((CSS.highlights.get('ocr-covered-sentences')?.size||0)+
      document.querySelectorAll('.ocr-sentence-cover-span').length)>=4);
+   const hasFootnoteCoverage=await page.evaluate(()=>{
+     const all=[...(CSS.highlights.get('ocr-covered-sentences')||[])].map(x=>x.toString())
+       .concat([...document.querySelectorAll('.ocr-sentence-cover-span')].map(n=>n.dataset.text||''));
+     return all.some(text=>text.includes('This finding is consistent with the expected trend.'));
+   });
+   assert(hasFootnoteCoverage,'The footnote-following sentence must be visibly painted');
+   await page.locator('.ocr-markdown p').filter({hasText:'This finding is consistent'}).scrollIntoViewIfNeeded();
+   await page.screenshot({path:join(shots,`${name}-footnote-covered.png`)});
    await page.screenshot({path:join(shots,`${name}-01-before-image.png`)});
    releaseImage();
    await page.locator('.ocr-markdown img').evaluate(async img=>{img.loading='eager';await img.decode();});
@@ -80,7 +95,7 @@ try{
    });
    console.log('IMAGE_GEOMETRY_DIAGNOSTIC',name,geometry);
    assert(geometry.imageHeight>=300,'image must load and grow substantially');
-   assert.match(geometry.status,/覆盖 7\/7 句/,'Markdown escapes must be fully covered too');
+   assert.match(geometry.status,/覆盖 9\/9 句/,'Markdown escapes must be fully covered too');
    if(mobile){
      assert.equal(geometry.wrong,0,'Safari coverage must never float over newly loaded image');
      assert(geometry.count>=4,'Safari coverage lost note ranges');

@@ -57,7 +57,7 @@ function markRange(index,from,to){
 // across prose or media is unsafe: a visually convincing wrong highlight is
 // worse than an explicitly unmapped sentence.
 function renderedNeedle(raw){
-  return raw.replace(/\\([\\`*_{}\[\]()#+.!<>-])/g,'$1')
+  return raw.replace(/\\([\\`*_{}\[\]()#+.!<>:-])/g,'$1')
     .replace(/\r?\n[ \t]*/g,' ')
     .replace(/\*\*|__/g,'')
     .replace(/(?<!\w)[*_](?!\w)/g,'')
@@ -116,6 +116,31 @@ function findFragment(index,fragment,occurrence){
   }
   return first>=0&&end-first<=matched+160?{from:first,to:end}:null;
 }
+// CMD annotation markers and inline TeX are not rendered as their literal
+// source text. Locate each *visible prose island* in the original mapped
+// Markdown block, in order. Never join separated islands into one DOM Range:
+// an intervening image, table or rendered formula must not be painted as prose.
+function findRichFragment(index,fragment){
+  const raw=fragment.text.replace(/<!--ocr2md:[^\n]*?-->/g,'');
+  const pieces=raw.split(/\$[^$\n]+\$|\\\([^\n]*?\\\)|\[\^[^\]\n]+\]|\\?<\/?(?:sup|sub)>|`[^`]+`/g)
+    .map(piece=>renderedNeedle(piece).trim()).filter(piece=>piece.length>=5);
+  if(!pieces.length)return null;
+  const normalized=normalizedIndex(index.text);
+  let seek=0,lastEnd=-1,matched=0;const bounds=[];
+  for(const piece of pieces){
+    const expected=piece.replace(/\s+/gu,' ');
+    const at=normalized.text.indexOf(expected,seek);
+    if(at<0 || (lastEnd>=0 && at-lastEnd>240))return null;
+    const from=normalized.locations[at],to=normalized.locations[at+expected.length-1]+1;
+    if(to<=from)return null;
+    bounds.push({from,to});
+    matched+=expected.length;
+    lastEnd=at+expected.length;seek=lastEnd;
+  }
+  // Do not attribute an isolated short word or punctuation to a whole sentence.
+  if(matched<12)return null;
+  return bounds;
+}
 function occurrencesBefore(source,fragment){
   const start=source.lastIndexOf('\n',fragment.from-1)+1;
   const prefix=source.slice(start,fragment.from).replace(/<!--ocr2md:[^\n]*?-->/g,'');
@@ -162,6 +187,7 @@ function paintWebKitOverlay(body,ranges,stop){
 }
 function resolveSentenceRanges(body,sentences,source,lineAtOffset){
   const ranges=[],stops=[];let unmappedCount=0,partiallyMappedCount=0;
+  const unmappedIds=[],partialIds=[];
   const indexes=new WeakMap();
   const mapped=[...body.querySelectorAll('[data-source-start][data-source-end]')];
   for(const sentence of sentences){
@@ -179,23 +205,24 @@ function resolveSentenceRanges(body,sentences,source,lineAtOffset){
     for(const element of eligible){
       let index=indexes.get(element);
       if(!index){index=textIndex(element);indexes.set(element,index);}
-      const bounds=findFragment(index,fragment,occurrencesBefore(source,fragment));
-      if(!bounds)continue;
-      const range=markRange(index,bounds.from,bounds.to);
-      if(!range)continue;
+      const exact=findFragment(index,fragment,occurrencesBefore(source,fragment));
+      const bounds=exact?[exact]:findRichFragment(index,fragment);
+      if(!bounds?.length)continue;
+      const candidate=bounds.map(bound=>markRange(index,bound.from,bound.to));
+      if(candidate.some(range=>!range||range.cloneContents().querySelector('img,figure,table,video,iframe,canvas,svg,hr,pre')))continue;
       // A Range may include nontext descendants between its endpoints.
       // In Safari getClientRects() would also return the intervening IMAGE
       // rectangle, painting a bogus stripe on the figure itself.
-      if(range.cloneContents().querySelector('img,figure,table,video,iframe,canvas,svg,hr,pre'))continue;
-      ranges.push(range);
+      ranges.push(...candidate);
       foundFragments++;
       // The last fragment owns the sentence terminator. Do not mistake
       // decimal 1.72 or a neighbouring sentence's period for the stop.
       if(fragment===sentence.fragments.at(-1)){
         const m=endStop.exec(fragment.text);
         if(m){
-          const position=index.text.lastIndexOf(m[0],bounds.to-1);
-          if(position>=bounds.from){
+          const lastBounds=bounds.at(-1);
+          const position=index.text.lastIndexOf(m[0],lastBounds.to-1);
+          if(position>=lastBounds.from){
             const stop=markRange(index,position,position+m[0].length);
             if(stop)stops.push(stop);
           }
@@ -204,10 +231,10 @@ function resolveSentenceRanges(body,sentences,source,lineAtOffset){
       break;
     }
   }
-  if(ranges.length===startLength)unmappedCount++;
-  else if(foundFragments<sentence.fragments.length)partiallyMappedCount++;
+  if(ranges.length===startLength){unmappedCount++;unmappedIds.push(sentence.id);}
+  else if(foundFragments<sentence.fragments.length){partiallyMappedCount++;partialIds.push(sentence.id);}
   }
-  return {ranges,stops,unmappedCount,partiallyMappedCount};
+  return {ranges,stops,unmappedCount,partiallyMappedCount,unmappedIds,partialIds};
 }
 
 /** @returns {{fragmentCount:number,stopCount:number}} for diagnostics/testing. */
@@ -243,7 +270,7 @@ export function paintSentenceCoverageHighlight(body,sentences,source,lineAtOffse
   if(!body?.isConnected||!Array.isArray(sentences)||!sentences.length||
     (!safari&&(!globalThis.CSS?.highlights||typeof Highlight!=='function')))
     return {sentenceCount:0,fragmentCount:0,stopCount:0};
-  const {ranges,stops,unmappedCount,partiallyMappedCount}=resolveSentenceRanges(body,sentences,source,lineAtOffset);
+  const {ranges,stops,unmappedCount,partiallyMappedCount,unmappedIds,partialIds}=resolveSentenceRanges(body,sentences,source,lineAtOffset);
   if(safari){
     const rootRect=body.getBoundingClientRect();
     const overlay=document.createElement('div');
@@ -281,7 +308,7 @@ export function paintSentenceCoverageHighlight(body,sentences,source,lineAtOffse
     if(stops.length)CSS.highlights.set(coverageStopName,new Highlight(...stops));
   }
   return {sentenceCount:sentences.length,coveredCount:sentences.length-unmappedCount,
-    unmappedCount,partiallyMappedCount,fragmentCount:ranges.length,stopCount:stops.length};
+    unmappedCount,partiallyMappedCount,unmappedIds,partialIds,fragmentCount:ranges.length,stopCount:stops.length};
 }
 
 /** Map a real preview text click back to a CMD sentence without inspecting
@@ -302,12 +329,15 @@ export function hitSentencePreview(body,element,sourceLine,clientX,clientY,rows,
       for(const fragment of row.fragments){
         const line=lineAtOffset(fragment.from);
         if(line<Number(node.dataset.sourceStart)||line>=Number(node.dataset.sourceEnd))continue;
-        const bounds=findFragment(index,fragment,occurrencesBefore(source,fragment));
-        const range=bounds&&markRange(index,bounds.from,bounds.to);
-        if(!range||range.cloneContents().querySelector('img,figure,table,video,iframe,canvas,svg,hr,pre'))continue;
-        for(const rect of range.getClientRects()){
-          if(rect.width>0&&rect.height>0&&clientX>=rect.left-1&&clientX<=rect.right+1&&
-             clientY>=rect.top-2&&clientY<=rect.bottom+2)return row;
+        const exact=findFragment(index,fragment,occurrencesBefore(source,fragment));
+        const bounds=exact?[exact]:findRichFragment(index,fragment);
+        for(const bound of bounds||[]){
+          const range=markRange(index,bound.from,bound.to);
+          if(!range||range.cloneContents().querySelector('img,figure,table,video,iframe,canvas,svg,hr,pre'))continue;
+          for(const rect of range.getClientRects()){
+            if(rect.width>0&&rect.height>0&&clientX>=rect.left-1&&clientX<=rect.right+1&&
+               clientY>=rect.top-2&&clientY<=rect.bottom+2)return row;
+          }
         }
       }
     }
