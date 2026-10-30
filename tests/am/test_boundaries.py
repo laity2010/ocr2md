@@ -21,8 +21,13 @@ class GateTests(unittest.TestCase):
     def test_baseline(self):
         stats,issues=mod.scan_files(ROOT,CAT)
         self.assertEqual(issues,[])
-        # Exact inventory for the frozen 9b211638 source tree; retain strict drift detection.
-        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(63,12,38))
+        # The fail-closed source inventory is owned by the versioned AM catalog
+        # and SQL registry, not by a second hard-coded count from an old SHA.
+        # scan_files also rejects orphan files, unknown imports and stale edges.
+        modules,_=mod.load_registry(ROOT)
+        registered=(len(CAT['files']),len(modules),len(CAT['crossModuleBindings']))
+        observed=(stats['ui_js'],stats['modules'],stats['cross_module_imports'])
+        self.assertEqual(observed,registered)
 
     def test_wcp_source_navigation_avoids_foreign_dom_contracts(self):
         navigation=(ROOT/'ui/wcp-source-file-navigation.js').read_text()
