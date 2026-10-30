@@ -1,4 +1,5 @@
 /** Root is a book catalogue; selecting one direct child prepares/loads its CMD mother MD. */
+import {unlockCode} from './v6-auth.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
@@ -45,7 +46,7 @@ try{
  assert(ready,'isolated Main not ready');
  assert.equal((await fetch(url+'/api/workspace/roots')).status,403);
  const auth=await fetch(url+'/api/unlock',{method:'POST',headers:{Origin:url,'Content-Type':'application/json'},
- body:JSON.stringify({code:readFileSync(token,'utf8').slice(0,12)})});assert.equal(auth.status,200);
+ body:JSON.stringify({code:unlockCode(readFileSync(token,'utf8'))})});assert.equal(auth.status,200);
  const cookie=auth.headers.get('set-cookie').split(';')[0];
  const get=path=>fetch(url+path,{headers:{Cookie:cookie}});
  const pathArg=path=>'?path='+encodeURIComponent(path);

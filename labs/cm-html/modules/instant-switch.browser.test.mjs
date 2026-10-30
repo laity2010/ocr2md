@@ -1,3 +1,4 @@
+import {unlockCode} from '../../../tests/v6-auth.test-helper.mjs';
 // Legacy business contract test: dispatch a native selection on the hidden
 // source select. Real Tom Select touch/menu interaction has its own E2E test.
 const chooseNative=async(locator,value)=>locator.evaluate((el,v)=>{
@@ -79,7 +80,7 @@ for(const [i,[name,engine,context]] of engines.entries()){
     await typeMarker(chapterMarker);
     await page.locator('#save').click();
     await page.locator('#unlock-dialog').waitFor({state:'visible',timeout:6000});
-    await page.locator('#unlock-code').fill(code.slice(0,12));
+    await page.locator('#unlock-code').fill(unlockCode(code));
     await page.locator('#unlock-form button[type=submit]').click();
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),null,{timeout:15000});
     assert(readFileSync(join(data,'chapter',a),'utf8').includes(chapterMarker),'Current chapter did not persist');

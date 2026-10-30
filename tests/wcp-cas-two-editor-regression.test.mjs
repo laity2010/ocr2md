@@ -1,3 +1,4 @@
+import {unlockCode} from './v6-auth.test-helper.mjs';
 /** Browser A/B optimistic save regression for a STRICTLY isolated Lab fixture.
  * Zero access to production, explicit opt-in source document under Lab runtime.
  */
@@ -10,7 +11,7 @@ const dir=resolve(process.env.OCR_LAB_FIXTURE_DIR||'/not-set');
 if(!/^http:\/\/127\.0\.0\.1:\d+\/labs\/cm-html\/$/.test(base)||
   !/\/ocr2md-v6\/labs\/cm-html\/\.runtime\/boundary-regression-[^/]+$/.test(dir))
  throw Error('Reject non-isolated Lab CAS destination');
-const code=readFileSync(dir+'/unlock','utf8').trim().slice(0,12);
+const code=unlockCode(readFileSync(dir+'/unlock','utf8'));
 const file=dir+'/document.md';
 for(const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]){
  const original=readFileSync(file,'utf8');

@@ -206,3 +206,10 @@ LAN HTTPS 使用**现有正式 V6 的 TLS 4443 监听和证书**，仅此监听�
 - V6 的 MinerU 映射与 PDF 只读证据使用 Buffett’s Alpha 样本；扩大到新文档或动态 PDF 绑定，需要另行实现与验证。MinerU JSON 严格逆转换的可编辑范围见组件 README。
 - `labs/cm-html/` 是已冻结的旁路实验（标签 `cm-html-lab-frozen-20261021`）；V6 主线不依赖其运行时文件。
 - [`PROJECT_INIT.md`](./PROJECT_INIT.md) 记录早期 V7/V8 初始化 Git 标签的使用方式，是历史起点，不覆盖当前的 `AGENTS.md`；实现变更查 Git 历史。
+
+## 编辑会话凭据迁移（R2）
+
+- 浏览器 cookie 现在只保存由 `.v6/private/editor-token` 派生的 HMAC-SHA256 会话值，服务器响应不再包含原始 token。
+- 解锁码不再是 token 的前 12 个字符，而是独立的 HMAC 派生值。本机查看新解锁码：`python3 scripts/v6_auth.py`（默认读取 `.v6/private/editor-token`）。
+- 迁移期：旧浏览器里携带原始 token 的 cookie 仍被接受，服务器会在同一响应中把它换成新的 HMAC cookie。全部设备迁移后设 `V6_LEGACY_RAW_COOKIE=0`，即停止接受旧 cookie。
+- `/access/<token>` 链接继续有效，但它发放的同样是 HMAC cookie。

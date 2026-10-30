@@ -1,3 +1,4 @@
+import {unlockCode} from './v6-auth.test-helper.mjs';
 /** Former physical-export regression, now verifies the promoted virtual chapter
  * contract: no export, immediate CMD index projections, one mother document,
  * persistent chapter markers, URL restoration, and strict save authorization.
@@ -108,7 +109,7 @@ for(const [number,[name,engine]] of engines.entries()){
   assert.equal(await all.isChecked(),false,'file navigation should narrow AG scope');
   await page.locator('#save').click();
   await page.locator('#unlock-dialog').waitFor({state:'visible',timeout:13000});
-  await page.locator('#unlock-code').fill(key.slice(0,12));
+  await page.locator('#unlock-code').fill(unlockCode(key));
   await page.locator('#unlock-form button[type=submit]').click();
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),null,{timeout:20000});
   const saved=readFileSync(doc,'utf8');

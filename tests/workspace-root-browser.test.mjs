@@ -1,4 +1,5 @@
 /** Real Main shell: select book catalogue, choose a first-level book and save once. */
+import {unlockCode} from './v6-auth.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
@@ -54,7 +55,7 @@ for(const [name,engine,device] of [['Chrome',chromium,{viewport:{width:1320,heig
   browser=await engine.launch({headless:true});
   const context=await browser.newContext(device);
   const unlock=await context.request.post(origin+'/api/unlock',{headers:{Origin:origin},
-   data:{code:readFileSync(token,'utf8').slice(0,12)}});assert.equal(unlock.status(),200);
+   data:{code:unlockCode(readFileSync(token,'utf8'))}});assert.equal(unlock.status(),200);
   const page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin,{waitUntil:'domcontentloaded',timeout:60000});

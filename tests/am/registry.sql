@@ -910,3 +910,15 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-M13-SYNTAX','M13','tests/code-fence-highlight.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Python/JSON/HTML/JS highlighted; unknown uncolored; HTML escaped; deterministic output','direct'),
  ('TC-M13-BROWSER','M13','tests/code-fence-highlight.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit highlight theme styled, DOMPurify safety, source maps and KaTeX unchanged','integration');
+
+-- R2 proposal D: edit-session credentials are HMAC derivations of the
+-- private editor token; the raw token never leaves the server.
+INSERT INTO apis VALUES
+ ('C-AUTH01','C','session_token','scripts/v6_auth.py','export','editor token,cookie name','HMAC-SHA256 session cookie value','pure derivation; cookie never carries the raw token',1),
+ ('C-AUTH02','C','unlock_code','scripts/v6_auth.py','export','editor token','12-char unlock code','pure derivation; independent of token prefix',1);
+INSERT INTO access_edges VALUES
+ ('X-AUTH01',NULL,'C','scripts/v6_serve.py','session_token(KEY, COOKIE)','C-AUTH01','registered','HTTP composition issues and verifies only the HMAC session cookie'),
+ ('X-AUTH02',NULL,'C','scripts/v6_serve.py','unlock_code(KEY)','C-AUTH02','registered','HTTP unlock compares against the derived code, never KEY[:12]');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-C-AUTH01','C-AUTH01','tests/v6-session-secrecy.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Unlock/access issue HMAC cookie; no response header, cookie or body contains any 12-char window of KEY; legacy raw cookie migrates or is refused','direct'),
+ ('TC-C-AUTH02','C-AUTH02','tests/v6-session-secrecy.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Derived unlock code authorizes; KEY[:12] is rejected with 403','direct');

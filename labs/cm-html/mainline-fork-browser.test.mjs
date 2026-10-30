@@ -1,4 +1,5 @@
 /** Independent acceptance of the V6 core fork: same modules, lab-only I/O. */
+import {unlockCode} from '../../tests/v6-auth.test-helper.mjs';
 import {chromeExecutable,webkitExecutable} from '../../tests/platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -61,7 +62,7 @@ for(const [i,[name,engine,launch]] of engines.entries()){
    await page.waitForFunction(()=>document.querySelector('#unlock-dialog')?.open);
    assert(!existsSync(doc),'Unauthenticated save created a document');
    // Authorized write must only touch this fresh test scope.
-   await page.locator('#unlock-code').fill(readFileSync(token,'utf8').trim().slice(0,12));
+   await page.locator('#unlock-code').fill(unlockCode(readFileSync(token,'utf8')));
    await page.locator('#unlock-form button[type=submit]').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),null,{timeout:12000});
    assert(existsSync(doc),'Lab authorized save did not persist locally');

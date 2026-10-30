@@ -1,3 +1,4 @@
+import {unlockCode} from './v6-auth.test-helper.mjs';
 import {chromeExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -6,7 +7,7 @@ const base=process.env.V6_TEST_BASE || 'http://127.0.0.1:4397';
 const fixture='packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md';
 const isolated='.v6/tests/v6-save-fix.md';
 const evidence='.v6/evidence/save-fix';
-const code=readFileSync('.v6/private/editor-token','utf8').trim().slice(0,12);
+const code=unlockCode(readFileSync('.v6/private/editor-token','utf8'));
 mkdirSync(evidence,{recursive:true});
 const original=readFileSync(fixture);
 writeFileSync(isolated,original);

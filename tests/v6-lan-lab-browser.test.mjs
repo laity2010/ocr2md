@@ -1,4 +1,5 @@
 /** Real TLS listener -> loopback lab; verifies scoped storage and auth in browsers. */
+import {unlockCode} from './v6-auth.test-helper.mjs';
 import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -64,7 +65,7 @@ for(const [idx,[name,engine,config]] of engines.entries()){
   assert.deepEqual(await page.locator('#module-select option').evaluateAll(nodes=>nodes.map(n=>n.value)),['chapter-boundary','media','latex','settings']);
   await page.locator('#save').click();
   await page.waitForFunction(()=>document.querySelector('#unlock-dialog')?.open);
-  await page.locator('#unlock-code').fill(readFileSync(token,'utf8').trim().slice(0,12));
+  await page.locator('#unlock-code').fill(unlockCode(readFileSync(token,'utf8')));
   await page.locator('#unlock-form button[type=submit]').click();
   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),null,{timeout:12000});
   assert(existsSync(doc),'LAN lab save not persisted');

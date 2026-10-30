@@ -1,4 +1,5 @@
 /** No V6 production document is accessed or initialized by this test. */
+import {unlockCode} from './v6-auth.test-helper.mjs';
 import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -74,7 +75,7 @@ for(const [i,[name,engine,options]] of engines.entries()){
     // Reuse existing editor authorization. Confirmation is still a separate step.
     await page.locator('#unlock-dialog').waitFor({state:'visible'});
     assert(readFileSync(doc).equals(changed),'Menu opening must never initialize');
-    await page.locator('#unlock-code').fill(token.slice(0,12));
+    await page.locator('#unlock-code').fill(unlockCode(token));
     await page.locator('#unlock-form button[type="submit"]').click();
     await page.locator('#initialize-dialog').waitFor({state:'visible',timeout:10000});
     assert.equal(await page.locator('#initialize-confirm').isDisabled(),true);

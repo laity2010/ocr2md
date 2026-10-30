@@ -3,6 +3,7 @@
 import hmac
 import hashlib
 import subprocess
+from v6_auth import session_token, unlock_code
 from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
@@ -129,9 +130,12 @@ if LAB_ID:
                      if unlock_fixture else (RUNTIME.parents[2] if os.environ.get('V6_LAB_RUNTIME') else ROOT) / '.v6/private/editor-token')
     if not unlock_source.is_file():
         raise RuntimeError('Mainline save authorization is unavailable for lab')
-    UNLOCK_CODE = unlock_source.read_text().strip()[:12]
+    UNLOCK_CODE = unlock_code(unlock_source.read_text().strip())
 else:
-    UNLOCK_CODE = KEY[:12]
+    UNLOCK_CODE = unlock_code(KEY)
+# Browsers only ever receive this HMAC value, never KEY itself.
+SESSION = session_token(KEY, COOKIE)
+LEGACY_RAW_COOKIE = os.environ.get('V6_LEGACY_RAW_COOKIE', '1') != '0'
 if len(UNLOCK_CODE) != 12:
     raise RuntimeError('Invalid save authorization credential')
 
@@ -162,9 +166,27 @@ class Handler(BaseHTTPRequestHandler):
             cookie = SimpleCookie()
             cookie.load(self.headers.get('Cookie', ''))
             item = cookie.get(COOKIE)
-            return bool(item and hmac.compare_digest(item.value, KEY))
+            if not item:
+                return False
+            if hmac.compare_digest(item.value, SESSION):
+                return True
+            # Pre-R2 cookie carried KEY itself: accept during migration and
+            # replace it with the HMAC session cookie in this response.
+            if LEGACY_RAW_COOKIE and hmac.compare_digest(item.value, KEY):
+                self._upgrade_cookie = True
+                return True
+            return False
         except Exception:
             return False
+
+    def session_cookie(self):
+        return f'{COOKIE}={SESSION}; Path={PREFIX}' + ('; Secure' if not LAB_ID or self.headers.get('Origin','').startswith('https:') else '') + '; HttpOnly; SameSite=Lax; Max-Age=2592000'
+
+    def end_headers(self):
+        if getattr(self, '_upgrade_cookie', False):
+            self._upgrade_cookie = False
+            self.send_header('Set-Cookie', self.session_cookie())
+        super().end_headers()
 
     def do_HEAD(self):
         self.do_GET()
@@ -186,7 +208,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/access/' + KEY:
             self.send_response(302)
-            self.send_header('Set-Cookie', f'{COOKIE}={KEY}; Path={PREFIX}' + ('; Secure' if not LAB_ID or self.headers.get('Origin','').startswith('https:') else '') + '; HttpOnly; SameSite=Strict; Max-Age=86400')
+            self.send_header('Set-Cookie', f'{COOKIE}={SESSION}; Path={PREFIX}' + ('; Secure' if not LAB_ID or self.headers.get('Origin','').startswith('https:') else '') + '; HttpOnly; SameSite=Strict; Max-Age=86400')
             self.send_header('Cache-Control', 'no-store')
             self.send_header('Location', '/')
             self.send_header('Content-Length', '0')
@@ -432,7 +454,7 @@ class Handler(BaseHTTPRequestHandler):
             self.response(403, 'Invalid code')
             return
         self.send_response(200)
-        self.send_header('Set-Cookie', f'{COOKIE}={KEY}; Path={PREFIX}' + ('; Secure' if not LAB_ID or self.headers.get('Origin','').startswith('https:') else '') + '; HttpOnly; SameSite=Lax; Max-Age=2592000')
+        self.send_header('Set-Cookie', self.session_cookie())
         self.send_header('Cache-Control','no-store')
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', '11')
