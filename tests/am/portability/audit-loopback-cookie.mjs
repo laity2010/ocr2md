@@ -69,6 +69,43 @@ if(basename(process.argv[1]||'').endsWith('.test.mjs')){
       } // Linux-only HTTP loopback Cookie jar adapter.
       return page;
     };
+    if(process.platform==='linux'){
+      // Suites that unlock through context.request (APIRequestContext) never
+      // pass through a page route, so the rescue above cannot see their
+      // Set-Cookie. Apply the same verified-token storage for loopback
+      // /api/unlock POSTs issued that way: only the server-issued v6edit
+      // value from the actual 200 response is stored, without Secure, in
+      // this test context. Production HTTPS behavior is unchanged.
+      const originalNewContext=browser.newContext.bind(browser);
+      browser.newContext=async function(...ctxArgs){
+        const context=await originalNewContext(...ctxArgs);
+        const originalPost=context.request.post.bind(context.request);
+        context.request.post=async function(url,...rest){
+          const response=await originalPost(url,...rest);
+          let u;
+          try{u=new URL(String(url));}catch{return response;}
+          if(u.protocol==='http:'&&u.hostname==='127.0.0.1'&&
+             u.pathname.endsWith('/api/unlock')&&response.status()===200){
+            const setCookie=(await response.headersArray())
+              .filter(h=>h.name.toLowerCase()==='set-cookie')
+              .map(h=>h.value).join('\n');
+            const verified=/\bv6edit=([^;]+)/.exec(setCookie);
+            if(verified&&/;\s*Secure(?=;|$)/i.test(setCookie)){
+              await context.addCookies([{name:'v6edit',value:verified[1],
+                url:u.origin+'/',httpOnly:true,secure:false,sameSite:'Lax'}]);
+              const present=(await context.cookies(u.origin))
+                .some(c=>c.name==='v6edit'&&c.value===verified[1]);
+              // Fail closed: an accepted unlock must not quietly pass the
+              // audit when WebKit could not retain the server-issued token.
+              if(!present)throw Error('AUDIT_LOCAL_UNLOCK_COOKIE_NOT_STORED');
+              console.log('AUDIT_LINUX_WEBKIT_LOOPBACK_COOKIE_ADAPTER api-request-unlock-token-stored');
+            }
+          }
+          return response;
+        };
+        return context;
+      };
+    }
     return browser;
   };
 }
