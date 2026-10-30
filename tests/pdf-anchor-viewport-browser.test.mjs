@@ -36,6 +36,16 @@ for(const [i,[name,engine,launch]] of engines.entries()){
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪'&&
    document.querySelectorAll('.ag-row').length>10&&document.querySelector('.ocr-pdf-scroller .page'),
    null,{timeout:65000});
+  // Real iPad Safari lays out against the large viewport (100% incl. hidden
+  // toolbar) while the physical screen is 34px shorter. The app now fits its
+  // window exactly (verified at 229c9a4 vs HEAD: scroller bottom 1090 -> 1056),
+  // so re-create that screen crop explicitly: lay the document out 34px taller
+  // than the window, exactly the original geometry. App CSS is not otherwise changed.
+  const SAFARI_SCREEN_CROP=34;
+  await page.addStyleTag({content:`html{height:calc(100% + ${SAFARI_SCREEN_CROP}px)!important}`});
+  await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+  assert.equal(await page.evaluate(()=>Math.round(document.querySelector('.ocr-pdf-scroller').getBoundingClientRect().bottom-innerHeight)),
+    SAFARI_SCREEN_CROP,'PDF scrollport must extend past the physical screen');
   await selectPreview(page,'pdf');
   await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"][data-block-index="4"]'),null,{timeout:19000});
