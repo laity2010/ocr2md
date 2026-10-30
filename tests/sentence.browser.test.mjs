@@ -91,10 +91,8 @@ try{
    await select(page,'media');
    // An old Focus event must never repaint a sentence when another AG module
    // owns the review surface, including after a Markdown preview rerender.
-   await page.evaluate(()=>{
-     const v=window.__v6cm6.view;
-     v.dispatch({changes:{from:v.state.doc.length,insert:'\n'}});
-   });
+   await page.locator('#editor .cm-content').click();
+   await page.keyboard.insertText('x');
    await page.waitForTimeout(400);
    assert.deepEqual(await highlightState(),{selected:[],punctuation:[]},
      'source rerender under Media must not revive previous sentence selection');
