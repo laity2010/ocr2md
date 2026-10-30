@@ -3,8 +3,7 @@ import {readFileSync} from 'node:fs';
 import MarkdownIt from 'markdown-it';
 import {extractTextBlocks,reconstructSource,segmentSentences,planSentenceMarks,readSentenceMarks,SENTENCE_TAG} from '../ui/cmd-sentences.js';
 import {formatAnnotation,scanAnnotations} from '../ui/cmd-annotations.js';
-for(const source of [readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8'),
-   readFileSync('.v6/workspace/buffetts-alpha.minerujson.md','utf8')]){
+for(const source of [readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8')]){
  const before=source.indexOf('<!-- minerujson:source:v1');const p=extractTextBlocks(source,{bodyEnd:before});
  assert.equal(reconstructSource(p),source,'byte-for-byte source reconstruction failed');
  const rows=segmentSentences(p);
