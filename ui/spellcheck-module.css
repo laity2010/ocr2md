@@ -1,0 +1,7 @@
+.ocr-spellcheck-pane{display:flex;flex-direction:column;min-height:0;height:100%;color:#d3c6aa}
+.ocr-spellcheck-pane[hidden]{display:none!important}
+.ocr-spellcheck-info{padding:7px 9px 3px;font-size:12px;line-height:1.5}
+.ocr-spellcheck-state{padding:2px 9px 7px;color:#a7c080;font-size:12px}
+.ocr-spellcheck-grid{flex:1;min-height:0;min-width:0;width:100%}
+.ocr-spellcheck-jump{border:0;background:transparent;color:#83c092;text-decoration:underline;cursor:pointer;padding:2px 7px}
+.ocr-spellcheck-jump:hover{color:#b7d6ad}

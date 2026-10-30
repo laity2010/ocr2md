@@ -96,6 +96,10 @@ HTML AG 中点击「功能 → 规范全部表格」会按「全部／当前章�
 Mac 服务器只允许原工作区、`~/Documents`、以及 `V6_WORKSPACE_ALLOWED_ROOTS` 指定的目录。Lab 仍只允许自己的隔离运行目录。首次 iCloud 书库访问可能还需 macOS 给运行服务器的 Python 应用授权；网页白名单不等于系统隐私授权。
 
 
+### 拼写审阅（实验）
+
+AG「元素 → 拼写检查」使用离线 `nspell`（MIT）与 `dictionary-en`（词典 MIT AND BSD），在浏览器 Web Worker 中检查英文 Markdown 正文；CM6 官方 `@codemirror/lint` 绘制拼写波浪线，AG Grid 列出疑似错词、词典建议、源码行号和原文片段。点击 AG 行号通过现有 WCP 聚焦消息定位源码、Markdown 与 PDF。切离即清除标记；不自动纠错、不改动 CMD 或保存文档、不联网传送文本。代码围栏、行内代码、HTML/MinerU 证据注释及常见链接不参加拼写检查。最多处理 200 万字符；单轮报告上限 800 项，达到上限会明确提示结果不完整。特定人名/术语可能误报，建议须人工核实。
+
 ## 开发、测试、发布
 
 本机需 Node.js/npm、Python 3；浏览器测试需 Mac 上的 Chrome 与已安装的 Playwright WebKit。

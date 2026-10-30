@@ -908,3 +908,15 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-M13-SYNTAX','M13','tests/code-fence-highlight.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Python/JSON/HTML/JS highlighted; unknown uncolored; HTML escaped; deterministic output','direct'),
  ('TC-M13-BROWSER','M13','tests/code-fence-highlight.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit highlight theme styled, DOMPurify safety, source maps and KaTeX unchanged','integration');
+
+-- Isolated offline spelling review. Layout only calls AG public factory/facade;
+-- CMD remains sole text authority and Shell owns the CM6 Lint/Worker adapter.
+INSERT INTO apis VALUES
+ ('G19','G','createSpellcheckModule','ui/spellcheck-module.js','export','host,readOnlyChapterReader,status callback','bounded AG facade','AG owns spelling rows/filter and emits existing WCP focus intent, no raw CM6 or writes',1),
+ ('L34','L','returned.updateSpellcheck','ui/workspace.js','returned','detached issue rows,scan status','void','Shell sends only immutable diagnostic projections to Layout/AG; no source or AG internals exposed',1);
+INSERT INTO access_edges VALUES
+ ('X-SPELL-G19','L','G','ui/workspace.js','createSpellcheckModule(this.spellcheckHost','G19','registered','Layout mounts AG-owned independent spelling review through its public entry'),
+ ('X-SPELL-L34',NULL,'L','ui/main.js','workspace.updateSpellcheck(rows,{isTruncated:','L34','registered','Shell sends projected findings to Layout, without letting AG inspect CM6');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SPELL-G19','G19','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit spelling AG rows, scoped chapter filter, source focus and lint markers; no source writes','integration'),
+ ('TC-SPELL-L34','L34','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Shell-owned Worker sends detached rows through Layout, marks on/off, undo and stale response safety','integration');

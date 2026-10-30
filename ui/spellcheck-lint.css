@@ -1,0 +1,9 @@
+/* Visible in both Chromium and iPad WebKit; do not rely on native squiggles. */
+.cm-editor .ocr-spelling-lint,
+.cm-editor .cm-lintRange-error{
+  text-decoration-line:underline!important;
+  text-decoration-style:wavy!important;
+  text-decoration-color:#ff7373!important;
+  text-decoration-thickness:1.5px!important;
+  text-underline-offset:3px!important;
+}

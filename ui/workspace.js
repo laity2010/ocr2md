@@ -15,6 +15,7 @@ import {createMediaModule} from './media-module.js';
 import {createLatexModule} from './latex-module.js';
 import {createNotePairModule} from './note-pair-module.js';
 import {createHtmlElementsModule} from './html-elements-module.js';
+import {createSpellcheckModule} from './spellcheck-module.js';
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
@@ -69,6 +70,7 @@ class OutlinePanel {
     this.latex=null;
     this.note=null;
     this.html=null;
+    this.spellcheck=null;
     this.mediaHost=document.createElement('div');
     this.mediaHost.hidden=true;
     this.latexHost=document.createElement('div');
@@ -77,17 +79,8 @@ class OutlinePanel {
     this.noteHost.hidden=true;
     this.htmlHost=document.createElement('div');
     this.htmlHost.hidden=true;
-    this.spellcheckHost=document.createElement('section');
-    this.spellcheckHost.className='ocr-spellcheck-experiment';
-    this.spellcheckHost.setAttribute('aria-label','原生拼写检查实验状态');
+    this.spellcheckHost=document.createElement('div');
     this.spellcheckHost.hidden=true;
-    const heading=document.createElement('h3');
-    heading.textContent='浏览器原生拼写检查 · 实验';
-    const explanation=document.createElement('p');
-    explanation.textContent='已请求在 CM6 源码窗启用英语拼写检查。请在源码窗观察红色波浪线，长按或右键错误单词尝试纠正。';
-    const limitation=document.createElement('p');
-    limitation.textContent='浏览器没有向网页提供错词清单接口，因此 AG 暂无错误行；iPad WebKit 是否显示拼写标记，以设备实测为准。离开此模块即关闭检查。';
-    this.spellcheckHost.append(heading,explanation,limitation);
     currentOutline=this;
   }
   init(){
@@ -98,6 +91,7 @@ class OutlinePanel {
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
     this.html=createHtmlElementsModule(this.htmlHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
+    this.spellcheck=createSpellcheckModule(this.spellcheckHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -105,12 +99,13 @@ class OutlinePanel {
       getStartNumber:()=>this.grid?.startText||'000',
       // Only semantic query intents enter business-owned AGs.
       applyChapterQuery:(module,intent)=>{
-        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html}[module];
+        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html,spellcheck:this.spellcheck}[module];
         if(!owner?.setVirtualQuery)throw Error('Unknown AG chapter query owner');
         owner.setVirtualQuery(intent);
       },
       countNotes:chapter=>this.note?.count(chapter)??0,
       countHtml:chapter=>this.html?.count(chapter)??0,
+      countSpellcheck:chapter=>this.spellcheck?.count(chapter)??0,
     });
     queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
   }
@@ -119,13 +114,13 @@ class OutlinePanel {
     this.element.setAttribute('aria-label',module==='media'?'AG Grid 媒体清单':
       module==='latex'?'AG Grid LaTeX 审阅':module==='note'?'AG Grid 注释配对':
       module==='html'?'AG Grid HTML 元素':
-      module==='spellcheck'?'浏览器原生拼写检查实验':'AG Grid 章节大纲');
+      module==='spellcheck'?'AG Grid 英文拼写审阅':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
     this.latex?.setActive(module==='latex');
     this.note?.setActive(module==='note');
     this.html?.setActive(module==='html');
-    this.spellcheckHost.hidden=module!=='spellcheck';
+    this.spellcheck?.setActive(module==='spellcheck');
   }
   layout() {}
   dispose(){
@@ -133,6 +128,7 @@ class OutlinePanel {
     this.latex?.dispose();
     this.note?.dispose();
     this.html?.dispose();
+    this.spellcheck?.dispose();
     this.grid?.dispose();
     if(currentOutline===this)currentOutline=null;
   }
@@ -563,6 +559,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:module=>currentOutline?.setModule(module),
+    updateSpellcheck:(rows,options)=>currentOutline?.spellcheck?.setResults(rows,options),
     scanMedia:()=>currentOutline?.media?.scan(),
     downloadMedia:()=>currentOutline?.media?.downloadAll(),
     scanLatex:()=>currentOutline?.latex?.refresh(),

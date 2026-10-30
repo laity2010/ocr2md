@@ -4,6 +4,8 @@ import {createWCPRuntime} from './wcp-wcp-virtual-chapters.js';
 import './obsidian-everforest.css';
 import {EditorView, basicSetup} from 'codemirror';
 import {Compartment} from '@codemirror/state';
+import {setDiagnostics} from '@codemirror/lint';
+import './spellcheck-lint.css';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
@@ -33,9 +35,11 @@ let view;
 let cm;
 let cmdPort=null;
 const wcpRuntime=createWCPRuntime();
-// Shell-owned CM6 native spellcheck: no shadow text, dictionary or AG internals.
+// Shell-owned CM6 review state: only marked diagnostics, no shadow document.
 const spellcheckCompartment=new Compartment();
 let spellcheckEnabled=false;
+let scheduleSpellcheck=()=>{};
+let stopSpellcheck=()=>{};
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
@@ -449,6 +453,7 @@ async function main() {
         if (update.docChanged) {
           revision++;
           documentChanged();
+          if(spellcheckEnabled)scheduleSpellcheck();
         }
         if (update.selectionSet) {
           const offset=update.state.selection.main.head;
@@ -465,6 +470,49 @@ async function main() {
     ]
   });
   view=cm.view;
+  // Analysis runs in an isolated Worker. Late results cannot overwrite
+  // another CM6 revision or an inactive module. No network/disk persistence.
+  let worker=null,requestId=0,scanTimer=null;
+  const clearMarks=()=>view.dispatch(setDiagnostics(view.state,[]));
+  scheduleSpellcheck=()=>{
+    if(!spellcheckEnabled)return;
+    clearTimeout(scanTimer);
+    const id=++requestId;
+    clearMarks();
+    workspace.updateSpellcheck([],{pending:true});
+    scanTimer=setTimeout(()=>{
+      if(!spellcheckEnabled||id!==requestId)return;
+      if(!worker){
+        worker=new Worker(new URL('./spellcheck-worker.js',import.meta.url),{type:'module'});
+        worker.onmessage=event=>{
+          const {id:received,issues,truncated,error}=event.data||{};
+          if(!spellcheckEnabled||received!==requestId)return;
+          if(error){clearMarks();workspace.updateSpellcheck([],{error});return;}
+          const source=view.state.doc;
+          const rows=(issues||[]).filter(issue=>issue.from>=0&&issue.to<=source.length&&
+            source.sliceString(issue.from,issue.to)===issue.word).map(issue=>({
+            ...issue,line:source.lineAt(issue.from).number,
+            suggestion:issue.suggestions?.join(' / ')||'—',
+            context:source.lineAt(issue.from).text.trim().slice(0,150),
+          }));
+          view.dispatch(setDiagnostics(view.state,rows.map(row=>({
+            from:row.from,to:row.to,severity:'error',source:'离线英语拼写',
+            markClass:'ocr-spelling-lint',
+            message:row.suggestion==='—'?'疑似拼写错误':`可能的拼写错误 · 建议：${row.suggestion}`,
+          }))));
+          workspace.updateSpellcheck(rows,{isTruncated:Boolean(truncated)});
+        };
+        worker.onerror=()=>{
+          if(spellcheckEnabled)workspace.updateSpellcheck([],{error:'词典加载失败'});
+        };
+      }
+      worker.postMessage({id,source:view.state.doc.toString()});
+    },350);
+  };
+  stopSpellcheck=()=>{
+    ++requestId;clearTimeout(scanTimer);clearMarks();
+    workspace.updateSpellcheck([]);
+  };
   cmdPort=wcpRuntime.wrapCMD(cm);
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{
@@ -553,10 +601,11 @@ async function main() {
     const selected=$('module-select').value;
     const enableSpellcheck=selected==='spellcheck';
     if(view&&enableSpellcheck!==spellcheckEnabled){
-      view.dispatch({effects:spellcheckCompartment.reconfigure(
-        EditorView.contentAttributes.of(enableSpellcheck
-          ?{spellcheck:'true',lang:'en-US'}:{spellcheck:'false'}))});
       spellcheckEnabled=enableSpellcheck;
+      // Native WebKit spellcheck has no reliable visible diagnostics.
+      // Explicitly keep native spellcheck off; CM6 Lint is the only marker owner.
+      if(enableSpellcheck)scheduleSpellcheck();
+      else stopSpellcheck();
     }
     if(selected==='settings'&&lastVisibleModule!=='settings')
       sharedPaneRatios=workspace.getPaneRatios()||sharedPaneRatios;

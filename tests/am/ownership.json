@@ -39,6 +39,9 @@
     "pane-layout-ratios.js": "shared",
     "pdf-preview.js": "P",
     "scroll-sync.js": "L",
+    "spellcheck-module.js": "G",
+    "spellcheck-scan.js": "shell",
+    "spellcheck-worker.js": "shell",
     "source-line-callout-menu.js": "L",
     "source-callout-plan.js": "L",
     "source-fence-plan.js": "L",
@@ -245,6 +248,9 @@
     ],
     "workspace.js->html-elements-module.js": [
       "createHtmlElementsModule"
+    ],
+    "workspace.js->spellcheck-module.js": [
+      "createSpellcheckModule"
     ]
   }
 }
