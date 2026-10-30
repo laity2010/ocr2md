@@ -65,6 +65,9 @@ try{
    await choose(page,'spellcheck');
    const grid=page.locator('.ocr-spellcheck-grid');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-spellcheck-grid .ag-row').length===3,null,{timeout:40000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spellcheck-grid .ag-cell[col-id=\"markState\"]').length===3,null,{timeout:40000});
+   assert.equal(await grid.locator('.ag-cell[col-id="markState"]').filter({hasText:'已标定'}).count(),3,'not automatically CMD marked');
+   assert.equal((await source.textContent()).includes('ocr2md:spellcheck'),true,'source has no inline CMD mark');
    assert.equal(await source.getAttribute('spellcheck'),'false','native spellcheck must stay off');
    assert.equal(await page.locator('.ocr-spellcheck-pane').isVisible(),true);
    const words=await grid.locator('.ag-cell[col-id="word"]').allTextContents();
@@ -101,17 +104,15 @@ try{
    await choose(page,'spellcheck');
    assert.equal(await grid.locator('.ag-row').count(),3);
    assert.equal(await page.evaluate(()=>window.__spellScanCalls),scansBefore,'re-enter triggered redundant scan');
-   // Explicit one-shot CMD mark, one Undo, Redo, and no implicit save.
-   await page.locator('#ag-functions-toggle').click();
-   await page.locator('#spellcheck-mark-all').click();
-   await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-spellcheck-grid .ag-cell[col-id="markState"]')]
-     .filter(el=>el.textContent==='已标定').length===3,null,{timeout:14000});
-   assert((await page.locator('.ocr-spelling-lint').count())>=1,'visible marked word lost lint');
-   assert.equal(readFileSync(doc,'utf8'),original,'mark operation silently saved');
+   // The scan itself already wrote one CMD transaction; no manual mark
+   // control is allowed to bypass CMD. Undo and Redo affect all 3 together.
+   assert.equal(await page.locator('#spellcheck-mark-all').count(),0);
    await page.locator('#undo').click();
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spelling-lint').length===0,null,{timeout:15000});
+   await page.waitForFunction(()=>!document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:spellcheck'),null,{timeout:15000});
+   assert.equal(await page.locator('.ocr-spelling-lint').count(),0,'Undo did not remove all annotations');
    await page.locator('#redo').click();
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spelling-lint').length>=1,null,{timeout:15000});
+   await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:spellcheck'),null,{timeout:15000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spellcheck-grid .ag-row').length===3,null,{timeout:15000});
    assert.equal(readFileSync(doc,'utf8'),original,'Undo/Redo silently saved');
    // Existing CMD marks, not the spell Worker, restore after module switching.
    await choose(page,'media');

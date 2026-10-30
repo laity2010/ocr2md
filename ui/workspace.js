@@ -36,11 +36,6 @@ const mediaCMD=Object.freeze({
   replaceMediaReferences:(edits,scope)=>getCMD().replaceMediaReferences(edits,scope),
   queryElements:filter=>getCMD().queryElements(filter),
 });
-// Review plugins only receive optimistic CMD changes, never EditorView or a filesystem port.
-const spellcheckCMD=Object.freeze({
-  readAnnotations:filter=>getCMD().readAnnotations(filter),
-  editAnnotations:(operations,options)=>getCMD().editAnnotations(operations,options),
-});
 const latexCMD=Object.freeze({
   readAnnotations:filter=>getCMD().readAnnotations(filter),
   editAnnotations:(operations,options)=>getCMD().editAnnotations(operations,options),
@@ -95,8 +90,7 @@ class OutlinePanel {
     this.latex=createLatexModule(this.latexHost,()=>getMarkdown(),()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
     this.html=createHtmlElementsModule(this.htmlHost,()=>getMarkdown(),()=>getCMD(),reportMediaStatus);
-    this.spellcheck=createSpellcheckModule(this.spellcheckHost,id=>getCMD()?.getChapter(id),
-      ()=>getMarkdown(),()=>spellcheckCMD,reportMediaStatus);
+    this.spellcheck=createSpellcheckModule(this.spellcheckHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -565,8 +559,15 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:module=>currentOutline?.setModule(module),
     updateSpellcheck:(rows,options)=>currentOutline?.spellcheck?.setResults(rows,options),
-    readSpellcheckMarks:()=>currentOutline?.spellcheck?.readMarked()??{rows:[],recordCount:0,stale:0},
-    markSpellcheck:()=>currentOutline?.spellcheck?.markAll(),
+    getSpellingElements:()=>{
+      const result=getCMD().querySpellingElements();
+      currentOutline?.spellcheck?.setMarkedRows(result);
+      return result;
+    },
+    applySpellingCandidates:(candidates,expectedSource)=>{
+      const scope=currentOutline?.spellcheck?.getOperationScope()??{mode:'all'};
+      return getCMD().markSpellingCandidates(candidates,{expectedSource,agScope:scope});
+    },
     scanMedia:()=>currentOutline?.media?.scan(),
     downloadMedia:()=>currentOutline?.media?.downloadAll(),
     scanLatex:()=>currentOutline?.latex?.refresh(),

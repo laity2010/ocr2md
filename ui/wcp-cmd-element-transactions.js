@@ -11,6 +11,7 @@
  */
 import {createIndexProjector} from './wcp-document-index.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
+import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
 
 function coordinates(from,to,length){
   return Number.isInteger(from)&&Number.isInteger(to)&&
@@ -72,6 +73,14 @@ export function createCMDTransactionPort(cmd){
     readHtmlElements:()=>cmd.readHtmlElements(),
     getIndex:()=>projector.get(),
     queryElements:filter=>projector.get().queryElements(filter),
+    // Semantic CMD spelling elements derive from CM6's current authoritative
+    // Markdown and the same CMD HTML annotation parser as other element types.
+    querySpellingElements:()=>{
+      const source=cmd.markdown,index=projector.get();
+      const result=readSpellcheckMarks(source,cmd.readAnnotations({tag:SPELL_TAG}));
+      const rows=result.rows.filter(row=>row.from<index.bodyEnd&&row.to<=index.bodyEnd);
+      return {rows,stale:result.stale,recordCount:result.recordCount};
+    },
     getChapter:id=>projector.get().getChapter(id),
     get transactionCount(){return transactionCount;},
     replaceRanges:(edits,cursorAfter=null)=>{
@@ -83,13 +92,42 @@ export function createCMDTransactionPort(cmd){
       if(agScope&&(!['all','chapter'].includes(agScope.mode)||
           (agScope.mode==='chapter'&&
             currentVirtualChapter(cmd.view.state)?.id!==agScope.chapterId)))
-        throw Error('LaTeX AG chapter scope changed; rescan before writing');
+        throw Error('AG chapter scope changed; rescan before writing');
       const all=agScope?.mode==='all';
       return commit(
         ()=>cmd.editAnnotations(ops,{expectedSource:options.expectedSource,
           annotations:all?[agAllDocumentTransaction.of(true)]:[]}),
         operationRanges(ops,cmd.markdown),
         {source:options.expectedSource??cmd.markdown,allowAll:all});
+    },
+    // Business module submits only scan candidates + source guard + AG scope.
+    // CMD itself identifies existing markers, plans annotations and performs
+    // ONE validated CM6 transaction. No AG-owned write plan or second store.
+    markSpellingCandidates:(candidates,{expectedSource,agScope}={})=>{
+      if(typeof expectedSource!=='string'||cmd.markdown!==expectedSource)
+        throw Error('拼写扫描期间源码已变化，请重新扫描');
+      if(!Array.isArray(candidates)||candidates.length>800)
+        throw Error('拼写候选数量非法或超出 800 项限制');
+      if(!agScope||!['all','chapter'].includes(agScope.mode))
+        throw Error('拼写标定必须提供明确的 AG 操作范围');
+      const index=projector.get();
+      let chapter=null;
+      if(agScope.mode==='chapter'){
+        chapter=index.getChapter(agScope.chapterId);
+        const live=currentVirtualChapter(cmd.view.state);
+        if(!chapter||!live||live.id!==chapter.id)
+          throw Error('拼写章节范围已改变，无法提交标定');
+      }
+      // Filter to the authorized current chapter and immutable body BEFORE
+      // CMD plans or inserts anything. The original MinerU tail is untouchable.
+      const eligible=candidates.filter(row=>row&&Number.isInteger(row.from)&&
+        Number.isInteger(row.to)&&row.to<=index.bodyEnd&&row.from>=0&&
+        (!chapter||(row.from>=chapter.from&&row.to<=chapter.to)));
+      const ops=planSpellcheckMarks(expectedSource,eligible,
+        cmd.readAnnotations({tag:SPELL_TAG}));
+      if(!ops.length)return {changed:0,skipped:candidates.length};
+      port.editAnnotations(ops,{expectedSource,agScope});
+      return {changed:ops.length,skipped:candidates.length-ops.length};
     },
     writeAnnotation:options=>{
       if(!options)throw Error('Missing annotation action');

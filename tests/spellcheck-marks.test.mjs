@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import MarkdownIt from 'markdown-it';
 import {formatAnnotation,scanAnnotations} from '../ui/cmd-annotations.js';
-import {SPELL_TAG,planSpellcheckMarks,readSpellcheckMarks} from '../ui/spellcheck-marks.js';
+import {SPELL_TAG,planSpellcheckMarks,readSpellcheckMarks} from '../ui/cmd-spellcheck.js';
 const source=[
   '# The beautifull story','',
   'This is a **recieve** issue and a [paragraf](https://example.com).','',

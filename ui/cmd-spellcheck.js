@@ -1,4 +1,4 @@
-/** Spell review's pure CMD annotation semantics. Only CMD writes source bytes.
+/** CMD-owned spelling element syntax. Only CMD exposes this to consumers.
  * An inline HTML comment immediately BEFORE a word is the stable anchor.
  * No duplicate shadow document or separate JSON sidecar is required.
  */

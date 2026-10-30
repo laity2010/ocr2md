@@ -912,30 +912,39 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Isolated offline spelling review. Layout only calls AG public factory/facade;
 -- CMD remains sole text authority and Shell owns the CM6 Lint/Worker adapter.
 INSERT INTO apis VALUES
- ('G19','G','createSpellcheckModule','ui/spellcheck-module.js','export','host,readOnlyChapterReader,status callback','bounded AG facade','AG owns spelling rows/filter and emits existing WCP focus intent, no raw CM6 or writes',1),
+ ('G19','G','createSpellcheckModule','ui/spellcheck-module.js','export','host,readOnlyChapterReader,status callback','bounded AG facade','AG only renders detached CMD spelling elements and emits existing focus, no source reads/writes',1),
  ('L34','L','returned.updateSpellcheck','ui/workspace.js','returned','detached issue rows,scan status','void','Shell sends only immutable diagnostic projections to Layout/AG; no source or AG internals exposed',1);
 INSERT INTO access_edges VALUES
  ('X-SPELL-G19','L','G','ui/workspace.js','createSpellcheckModule(this.spellcheckHost','G19','registered','Layout mounts AG-owned independent spelling review through its public entry'),
- ('X-SPELL-L34',NULL,'L','ui/main.js','workspace.updateSpellcheck(rows,{isTruncated:','L34','registered','Shell sends projected findings to Layout, without letting AG inspect CM6');
+ ('X-SPELL-L34',NULL,'L','ui/main.js','workspace.updateSpellcheck(rows,{error:','L34','registered','Shell sends projected findings to Layout, without letting AG inspect CM6');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SPELL-G19','G19','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit spelling AG rows, scoped chapter filter, source focus and lint markers; no source writes','integration'),
  ('TC-SPELL-L34','L34','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Shell-owned Worker sends detached rows through Layout, marks on/off, undo and stale response safety','integration');
 
--- Durable, user-initiated spelling flags: no repeat analysis on module entry.
--- Every inline CMD marker sits immediately before its word; read-back
--- checks matching live bytes to avoid stale markers pointing at wrong text.
+-- CMD-owned spelling element syntax/read/mark semantics, all derived from
+-- CM6 live Markdown, no AG read of Markdown or business-owned write plan.
 INSERT INTO apis VALUES
- ('G20','G','planSpellcheckMarks','ui/spellcheck-marks.js','export','CMD Markdown, candidate rows, current annotation records','verified CMD insert operations','pure batch plan, duplicate detection, no source mutation',1),
- ('G21','G','readSpellcheckMarks','ui/spellcheck-marks.js','export','CMD Markdown, exact annotation records','source-positioned issues, stale count','read persisted spelling marks without worker/dictionary scan; skip stale mismatched word',1),
- ('L35','L','returned.markSpellcheck','ui/workspace.js','returned','none','changed/skipped counts','AG owns one scoped CMD editAnnotations transaction; no auto-save or text replacement',1),
- ('L36','L','returned.readSpellcheckMarks','ui/workspace.js','returned','none','detached marked rows','Shell redraws CM6 Lint from CMD annotations without repeat scanning',1);
+ ('C36','C','readSpellcheckMarks','ui/cmd-spellcheck.js','export','source, CMD annotations','word-matched source positioned elements/stale count','pure CMD comment syntax projection',1),
+ ('C37','C','planSpellcheckMarks','ui/cmd-spellcheck.js','export','source, candidates, CMD annotations','guarded annotation operations','CMD pure planner; no AG writes',1),
+ ('C38','C','returned.querySpellingElements','ui/wcp-cmd-element-transactions.js','returned','none','live CM6-derived spelling element projection','read-only authoritative CMD query',1),
+ ('C39','C','returned.markSpellingCandidates','ui/wcp-cmd-element-transactions.js','returned','candidate positions, expectedSource, AG scope','atomic changed/skipped counts','CMD checks chapter and evidence, one CM6 annotation transaction, no auto-save',1),
+ ('L35','L','returned.applySpellingCandidates','ui/workspace.js','returned','detached Worker candidates, source guard','CMD commit results','Layout forwards AG semantic scope to CMD and never plans writes',1),
+ ('L36','L','returned.getSpellingElements','ui/workspace.js','returned','none','CMD position-projected rows','Shell displays CM6 Lint from CMD without duplicate spell analysis',1);
 INSERT INTO access_edges VALUES
- ('X-SPELL-G20','G','G','ui/spellcheck-module.js','planSpellcheckMarks(source,pending,cmd.readAnnotations','G20','registered','AG plans CMD syntax insertion without touching EditorView'),
- ('X-SPELL-G21','G','G','ui/spellcheck-module.js','readSpellcheckMarks(getMarkdown(),getCMD().readAnnotations','G21','registered','AG reopens persisted CMD marks without spell Worker'),
- ('X-SPELL-L35',NULL,'L','ui/main.js','workspace.markSpellcheck()','L35','registered','Shell menu routes explicit one-undo bulk annotation through Layout'),
- ('X-SPELL-L36',NULL,'L','ui/main.js','workspace.readSpellcheckMarks()','L36','registered','Shell receives position-only marked results for its own CM6 lint renderer');
+ ('X-SPELL-C36','C','C','ui/wcp-cmd-element-transactions.js','readSpellcheckMarks(source,cmd.readAnnotations','C36','registered','CMD reads live annotation bytes through its own parser'),
+ ('X-SPELL-C37','C','C','ui/wcp-cmd-element-transactions.js','planSpellcheckMarks(expectedSource,eligible,','C37','registered','CMD plans verified comment insertions itself'),
+ ('X-SPELL-L35',NULL,'L','ui/main.js','workspace.applySpellingCandidates(rows,source.toString())','L35','registered','Shell submits only candidate positions; Layout obtains semantic AG scope'),
+ ('X-SPELL-L36',NULL,'L','ui/main.js','workspace.getSpellingElements()','L36','registered','Shell reads CMD-projected annotations to paint CM6 Lint');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-SPELL-G20','G20','tests/spellcheck-marks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Pure no-shadow batch plans, preserves Markdown structure, skips duplicates and rejects stale source','direct'),
- ('TC-SPELL-G21','G21','tests/spellcheck-marks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Read live CMD markers after source offset shifts; stale word mutations do not show false flags','direct'),
- ('TC-SPELL-L35','L35','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG bulk mark one CMD transaction, scope check, Undo/Redo, explicit save then reload','integration'),
- ('TC-SPELL-L36','L36','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Re-entry/reload reads persisted marks with no Worker message, red lint and AG rows preserved','integration');
+ ('TC-SPELL-C36','C36','tests/spellcheck-marks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CMD comments roundtrip without Markdown meaning change; invalid old word excluded','direct'),
+ ('TC-SPELL-C37','C37','tests/spellcheck-marks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Duplicate protection, optimistic offsets and source matching','direct'),
+ ('TC-SPELL-C38','C38','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Browser CMD live query drives AG rows and CM6 diagnostics, reload no Worker scan','integration'),
+ ('TC-SPELL-C39','C39','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Browser automatic batch mark, one undo/redo, scope and source evidence protection','integration'),
+ ('TC-SPELL-L35','L35','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Layout routes scan results to CMD without AG-owned planner, no auto-save','integration'),
+ ('TC-SPELL-L36','L36','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Show scoped CMD annotations with no duplicate state on re-entry/reload','integration');
+
+-- Spellcheck AG regression guard: forbid business-owned source parsing or
+-- accidental direct CM6 edit/access after CMD semantic port convergence.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SPELL-BOUNDARY-AG','G19','tests/spellcheck-boundary.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG spelling owns rows/focus only, cannot parse or write source','direct'),
+ ('TC-SPELL-BOUNDARY-CMD','C39','tests/spellcheck-boundary.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Spelling syntax and atomic writes belong to CMD and CM6','direct');

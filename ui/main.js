@@ -474,8 +474,7 @@ async function main() {
   view=cm.view;
   // A CMD marker is durable; the Worker scans only on first entry or
   // explicit user request. No reread of the dictionary on every tab switch.
-  let worker=null,requestId=0,scanTimer=null,everScanned=false;
-  let cachedCandidates=null,cachedCandidateSource=null;
+  let worker=null,requestId=0,scanTimer=null,scanResultDoc=null;
   const clearSpellMarks=()=>view.dispatch(setDiagnostics(view.state,[]));
   const showSpellRows=rows=>view.dispatch(setDiagnostics(view.state,rows.map(row=>({
     from:row.from,to:row.to,severity:'error',source:'CMD 拼写审阅',
@@ -483,14 +482,13 @@ async function main() {
     message:row.suggestion==='—'?'疑似拼写错误':`可能的拼写错误 · 建议：${row.suggestion}`,
   }))));
   const showSavedSpellMarks=()=>{
-    const result=workspace.readSpellcheckMarks();
+    const result=workspace.getSpellingElements();
     if(!result.recordCount)return false;
     showSpellRows(result.rows);
     return true;
   };
   scheduleSpellcheck=()=>{
     if(!spellcheckEnabled)return;
-    everScanned=true;
     clearTimeout(scanTimer);
     const id=++requestId;
     clearSpellMarks();
@@ -510,9 +508,21 @@ async function main() {
             suggestion:issue.suggestions?.join(' / ')||'—',
             context:source.lineAt(issue.from).text.trim().slice(0,150),
           }));
-          cachedCandidates=rows;cachedCandidateSource=source.toString();
-          showSpellRows(rows);
-          workspace.updateSpellcheck(rows,{isTruncated:Boolean(truncated)});
+          // CMD performs its own offset/scope/evidence validation and ONE
+          // CM6 annotation transaction. AG receives only CMD's projection.
+          try{
+            workspace.applySpellingCandidates(rows,source.toString());
+            scanResultDoc=view.state.doc;
+            if(!showSavedSpellMarks()){
+              clearSpellMarks();
+              workspace.updateSpellcheck([]);
+            }
+            status(rows.length?`✓ CMD 已批量标定疑似错词 · 请全局保存${truncated?' · 结果上限 800':''}`:
+              '✓ 拼写扫描完成 · 无疑似错误');
+          }catch(markError){
+            workspace.updateSpellcheck(rows,{error:'CMD 标定失败：'+markError.message});
+            status('CMD 拼写标定失败：'+markError.message,'error');
+          }
         };
         worker.onerror=()=>{
           if(spellcheckEnabled)workspace.updateSpellcheck([],{error:'词典加载失败'});
@@ -523,15 +533,13 @@ async function main() {
   };
   enterSpellcheck=()=>{
     if(showSavedSpellMarks())return;
-    const source=view.state.doc.toString();
-    if(cachedCandidates&&cachedCandidateSource===source){
-      workspace.updateSpellcheck(cachedCandidates);
-      showSpellRows(cachedCandidates);
-    }else if(!everScanned){
+    if(scanResultDoc===view.state.doc){
+      clearSpellMarks();workspace.updateSpellcheck([]);
+    }else if(scanResultDoc===null){
       scheduleSpellcheck();
     }else{
       clearSpellMarks();
-      workspace.updateSpellcheck([],{error:'原文已改变；使用「功能 → 重新扫描」后再标定'});
+      workspace.updateSpellcheck([],{error:'正文已更改，请使用「功能 → 重新扫描并标定」'});
     }
   };
   // Invalidate pending Worker replies before attempting to project durable
@@ -542,7 +550,7 @@ async function main() {
       if(!spellcheckEnabled)return;
       if(!showSavedSpellMarks()){
         clearSpellMarks();
-        workspace.updateSpellcheck([],{error:'原文有改动；可使用「功能 → 重新扫描」'});
+        workspace.updateSpellcheck([],{error:'原文有改动；可使用「功能 → 重新扫描并标定」'});
       }
     });
   };
@@ -693,16 +701,6 @@ async function main() {
   $('note-convert-all').addEventListener('click',()=>workspace.convertAllNotes());
   $('html-normalize-tables').addEventListener('click',()=>workspace.normalizeHtmlTables());
   $('spellcheck-rescan').addEventListener('click',()=>scheduleSpellcheck());
-  $('spellcheck-mark-all').addEventListener('click',()=>{
-    try{
-      const result=workspace.markSpellcheck();
-      if(result?.changed){
-        const marked=workspace.readSpellcheckMarks();
-        showSpellRows(marked.rows);
-        status(`✓ 已一次性 CMD 标定 ${result.changed} 处 · 一次撤销 · 请全局保存`);
-      }else status('没有新增的疑似错词需要标定');
-    }catch(error){status('拼写标定失败：'+error.message,'error');}
-  });
   $('media-download-all').addEventListener('click',async()=>{
     const button=$('media-download-all');button.disabled=true;
     try{await workspace.downloadMedia();}

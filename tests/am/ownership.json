@@ -40,7 +40,6 @@
     "pdf-preview.js": "P",
     "scroll-sync.js": "L",
     "spellcheck-module.js": "G",
-    "spellcheck-marks.js": "G",
     "spellcheck-scan.js": "shell",
     "spellcheck-worker.js": "shell",
     "source-line-callout-menu.js": "L",
@@ -70,7 +69,8 @@
     "cmd-html-elements.js": "C",
     "html-elements-module.js": "H",
     "html-element-groups.js": "H",
-    "html-table-normalize.js": "H"
+    "html-table-normalize.js": "H",
+    "cmd-spellcheck.js": "C"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
