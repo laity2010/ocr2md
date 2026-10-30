@@ -42,6 +42,21 @@ try{
      nativeStops:CSS.highlights.get('ocr-covered-sentence-stops')?.size||0,
      safariStops:document.querySelectorAll('.ocr-sentence-cover-stop').length,
    }));
+   const inspection=await page.evaluate(()=>{
+     const fragments=[...(CSS.highlights.get('ocr-covered-sentences')||[])].map(x=>x.toString())
+       .concat([...document.querySelectorAll('.ocr-sentence-cover-span')].map(x=>x.dataset.text||''));
+     const phrases=['Tests of this argument via','Instead, Bufet countered at the conference',
+       'Selecting successfu investors','The balance sheet also provides the book value'];
+     return phrases.map(phrase=>({phrase,covered:fragments.some(x=>x.includes(phrase)),
+       visible:document.querySelector('.ocr-markdown').textContent.includes(phrase)}));
+   });
+   console.log('BUFFETT_VISIBLE_COVERAGE',name,inspection);
+   const target=page.locator('.ocr-markdown p').filter({hasText:'Tests of this argument'}).first();
+   if(await target.count()){
+     await target.scrollIntoViewIfNeeded();
+     await page.waitForTimeout(200);
+     await page.screenshot({path:`.v6/evidence/sentence/${name}-buffett-notes.png`});
+   }
    assert(painted.native+painted.safari>=200,'large document coverage unexpectedly sparse');
    const status=await page.locator('.ocr-sentence-state').textContent();
    assert.match(status,/覆盖 \d+\/440 句/,'AG must distinguish displayed vs actually mapped sentences');

@@ -243,6 +243,14 @@ class PreviewPanel {
     this.pdfUsable=false;
     this.timer=null;
     this.coverageResizeTimer=null;
+    // Safari draws range rectangles, not native CSS Highlights. Image decode,
+    // font reflow, or callout expansion can move text after its first paint.
+    this.coverageObserver=new ResizeObserver(()=>this.scheduleCoverageResize());
+    this.coverageObserver.observe(this.body);
+    this.onCoverageImageLoad=event=>{
+      if(event.target instanceof HTMLImageElement)this.scheduleCoverageResize();
+    };
+    this.body.addEventListener('load',this.onCoverageImageLoad,true);
     this.disposed=false;
     this.mode='md';
     this.lastFocusElement=null;
@@ -502,6 +510,8 @@ class PreviewPanel {
     this.footnoteReader?.dispose();
     clearTimeout(this.timer);
     clearTimeout(this.coverageResizeTimer);
+    this.coverageObserver.disconnect();
+    this.body.removeEventListener('load',this.onCoverageImageLoad,true);
     this.unsubscribe?.();
     this.body.removeEventListener('click',this.onClick);
     this.body.removeEventListener('toggle',this.onCalloutToggle,true);

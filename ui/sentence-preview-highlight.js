@@ -52,32 +52,69 @@ function markRange(index,from,to){
   range.setStart(a.node,a.offset);range.setEnd(b.node,b.offset);
   return range;
 }
+// A CMD fragment preserves source Markdown, whereas the reader displays its
+// parsed text. Normalize ONLY well-understood inline syntax. A broad search
+// across prose or media is unsafe: a visually convincing wrong highlight is
+// worse than an explicitly unmapped sentence.
+function renderedNeedle(raw){
+  return raw.replace(/\\([\\`*_{}\[\]()#+.!<>-])/g,'$1')
+    .replace(/\r?\n[ \t]*/g,' ')
+    .replace(/\*\*|__/g,'')
+    .replace(/(?<!\w)[*_](?!\w)/g,'')
+    .replace(/&(?:amp|lt|gt|quot|apos|nbsp);/g,entity=>
+      ({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'",'&nbsp;':' '})[entity]);
+}
+function normalizedIndex(text){
+  const chars=[],locations=[];
+  for(let i=0;i<text.length;i++){
+    if(/\s/u.test(text[i])){
+      if(chars.at(-1)!==' '){chars.push(' ');locations.push(i);}
+    }else{chars.push(text[i]);locations.push(i);}
+  }
+  return {text:chars.join(''),locations};
+}
 function findFragment(index,fragment,occurrence){
   const text=fragment.text;
   if(!text)return null;
-  let at=-1,begin=0;
-  // Count identical phrases before the original source position in the SAME
-  // Markdown block, when the user selected the later repeated sentence.
-  for(let i=0;i<=occurrence;i++){
-    at=index.text.indexOf(text,begin);
-    if(at<0)break;
-    begin=at+text.length;
+  const candidates=[text,renderedNeedle(text)];
+  for(const needle of [...new Set(candidates)]){
+    if(!needle)continue;
+    let at=-1,begin=0;
+    for(let i=0;i<=occurrence;i++){
+      at=index.text.indexOf(needle,begin);
+      if(at<0)break;
+      begin=at+needle.length;
+    }
+    if(at>=0)return {from:at,to:at+needle.length};
+    // Markdown soft breaks and line wrapping collapse source whitespace.
+    const haystack=normalizedIndex(index.text);
+    const expected=needle.replace(/\s+/gu,' ');
+    let atNormalized=-1,searchFrom=0;
+    for(let i=0;i<=occurrence;i++){
+      atNormalized=haystack.text.indexOf(expected,searchFrom);
+      if(atNormalized<0)break;
+      searchFrom=atNormalized+expected.length;
+    }
+    if(atNormalized>=0){
+      const from=haystack.locations[atNormalized];
+      const last=atNormalized+expected.length-1;
+      return {from,to:haystack.locations[last]+1};
+    }
   }
-  if(at>=0)return {from:at,to:at+text.length};
-  // Inline math, code or emphasis can change the rendered text. Find visible
-  // prose on both sides and include the intervening formatted DOM in one Range.
-  const pieces=text.split(/\$[^$\n]+\$|\\\([^\n]+\\\)|`[^`]+`|<[^>]+>/g)
-    .map(s=>s.replace(/\*\*|__|(?<!\w)[*_]|[*_](?!\w)/g,''))
-    .map(s=>s.trim()).filter(s=>s.length>=4);
-  if(!pieces.length)return null;
-  let first=-1,end=-1;
+  // Limited inline markup (math, code, OCR escaped tags) can transform
+  // the visible text. Match surrounding prose within a tight, contiguous
+  // window, never bridge paragraphs, figures, or unrelated sentences.
+  const pieces=renderedNeedle(text).split(/\$[^$\n]+\$|\\\([^\n]+\\\)|`[^`]+`/g)
+    .map(s=>s.trim()).filter(s=>s.length>=6);
+  if(pieces.length<2)return null;
+  let first=-1,end=-1,matched=0;
   for(const piece of pieces){
     const pos=index.text.indexOf(piece,end<0?0:end);
-    if(pos<0)return null;
+    if(pos<0||(end>=0&&pos-end>160))return null;
     if(first<0)first=pos;
-    end=pos+piece.length;
+    end=pos+piece.length;matched+=piece.length;
   }
-  return first>=0&&end>first?{from:first,to:end}:null;
+  return first>=0&&end-first<=matched+160?{from:first,to:end}:null;
 }
 function occurrencesBefore(source,fragment){
   const start=source.lastIndexOf('\n',fragment.from-1)+1;
@@ -124,11 +161,12 @@ function paintWebKitOverlay(body,ranges,stop){
   if(overlay.childElementCount)body.append(overlay);
 }
 function resolveSentenceRanges(body,sentences,source,lineAtOffset){
-  const ranges=[],stops=[];let unmappedCount=0;
+  const ranges=[],stops=[];let unmappedCount=0,partiallyMappedCount=0;
   const indexes=new WeakMap();
   const mapped=[...body.querySelectorAll('[data-source-start][data-source-end]')];
   for(const sentence of sentences){
   const startLength=ranges.length;
+  let foundFragments=0;
   for(const fragment of sentence.fragments){
     const line=lineAtOffset(fragment.from);
     const eligible=mapped.filter(element=>Number(element.dataset.sourceStart)<=line&&
@@ -145,7 +183,12 @@ function resolveSentenceRanges(body,sentences,source,lineAtOffset){
       if(!bounds)continue;
       const range=markRange(index,bounds.from,bounds.to);
       if(!range)continue;
+      // A Range may include nontext descendants between its endpoints.
+      // In Safari getClientRects() would also return the intervening IMAGE
+      // rectangle, painting a bogus stripe on the figure itself.
+      if(range.cloneContents().querySelector('img,figure,table,video,iframe,canvas,svg,hr,pre'))continue;
       ranges.push(range);
+      foundFragments++;
       // The last fragment owns the sentence terminator. Do not mistake
       // decimal 1.72 or a neighbouring sentence's period for the stop.
       if(fragment===sentence.fragments.at(-1)){
@@ -162,8 +205,9 @@ function resolveSentenceRanges(body,sentences,source,lineAtOffset){
     }
   }
   if(ranges.length===startLength)unmappedCount++;
+  else if(foundFragments<sentence.fragments.length)partiallyMappedCount++;
   }
-  return {ranges,stops,unmappedCount};
+  return {ranges,stops,unmappedCount,partiallyMappedCount};
 }
 
 /** @returns {{fragmentCount:number,stopCount:number}} for diagnostics/testing. */
@@ -199,7 +243,7 @@ export function paintSentenceCoverageHighlight(body,sentences,source,lineAtOffse
   if(!body?.isConnected||!Array.isArray(sentences)||!sentences.length||
     (!safari&&(!globalThis.CSS?.highlights||typeof Highlight!=='function')))
     return {sentenceCount:0,fragmentCount:0,stopCount:0};
-  const {ranges,stops,unmappedCount}=resolveSentenceRanges(body,sentences,source,lineAtOffset);
+  const {ranges,stops,unmappedCount,partiallyMappedCount}=resolveSentenceRanges(body,sentences,source,lineAtOffset);
   if(safari){
     const rootRect=body.getBoundingClientRect();
     const overlay=document.createElement('div');
@@ -237,7 +281,7 @@ export function paintSentenceCoverageHighlight(body,sentences,source,lineAtOffse
     if(stops.length)CSS.highlights.set(coverageStopName,new Highlight(...stops));
   }
   return {sentenceCount:sentences.length,coveredCount:sentences.length-unmappedCount,
-    unmappedCount,fragmentCount:ranges.length,stopCount:stops.length};
+    unmappedCount,partiallyMappedCount,fragmentCount:ranges.length,stopCount:stops.length};
 }
 
 /** Map a real preview text click back to a CMD sentence without inspecting
@@ -260,7 +304,7 @@ export function hitSentencePreview(body,element,sourceLine,clientX,clientY,rows,
         if(line<Number(node.dataset.sourceStart)||line>=Number(node.dataset.sourceEnd))continue;
         const bounds=findFragment(index,fragment,occurrencesBefore(source,fragment));
         const range=bounds&&markRange(index,bounds.from,bounds.to);
-        if(!range)continue;
+        if(!range||range.cloneContents().querySelector('img,figure,table,video,iframe,canvas,svg,hr,pre'))continue;
         for(const rect of range.getClientRects()){
           if(rect.width>0&&rect.height>0&&clientX>=rect.left-1&&clientX<=rect.right+1&&
              clientY>=rect.top-2&&clientY<=rect.bottom+2)return row;
