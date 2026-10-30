@@ -1,0 +1,14 @@
+QUOTE_INDENT_PASS Chrome {"titleLine":661,"quotedBlock":true,"outline":21,"PDF":true,"chapterIndex":true,"undoOneStep":true,"metadataProtected":true,"errors":0}
+AUDIT_LINUX_WAIT_DIAG {"suite":"quote-indent-browser.test.mjs","state":{"documentState":"complete","title":"OCR2MD V6 · 章节定界","agRows":21,"pdfReady":false,"pdfLoading":true,"status":"✓ 已加载 · 3,112行 / 306,869字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","docLength":306869,"selectedModule":"chapter-boundary","latexRows":11,"latexGridPresent":true,"unlockOpen":false,"unlockError":"","url":"http://127.0.0.1:5263/"},"errors":[]}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 75000ms exceeded.
+    at page.waitForFunction (/tmp/grok-fixgate-9b211638/.v6/audit-reports/audit-linux-diagnostics.mjs:76:32)
+    at /tmp/grok-fixgate-9b211638/tests/quote-indent-browser.test.mjs:37:15 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

@@ -1,0 +1,2 @@
+chromium store= ["t:secure=true"] page sent: cookie=t=1
+webkit store= ["t:secure=true"] page sent: cookie=

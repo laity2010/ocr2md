@@ -1,0 +1,10 @@
+v6-session-secrecy.test.mjs rc=0
+v6-public-save.test.mjs rc=1
+v6-lab-shared-unlock.test.mjs rc=1
+workspace-root-server.test.mjs rc=0
+settings-server.test.mjs rc=0
+engineering-initialize-browser.test.mjs rc=0
+promoted-chapters-browser.test.mjs rc=0
+media-paste-browser.test.mjs rc=0
+promoted-converter.test.mjs rc=0
+auto-refresh-browser.test.mjs rc=0

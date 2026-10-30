@@ -1,0 +1,276 @@
+Fri Oct 30 09:52:53 CST 2026
+=== STEP python3 -m unittest discover -s tests/am -p test_*.py
+................................./tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e020>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e200>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e3e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e4d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75df30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e2f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e5c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e6b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e7a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e890>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75e980>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75ea70>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75eb60>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75ec50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75ed40>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75ee30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75ef20>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f010>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f100>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f1f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f2e0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f3d0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75c4f0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f4c0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75c8b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f5b0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f6a0>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f790>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f880>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75f970>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75fa60>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75fb50>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75fc40>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75fd30>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75fe20>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bd75ff10>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bce3c040>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bce3c130>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bce3c310>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/tmp/grok-fixgate-9b211638/tests/am/standard_audit.py:80: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f09bce3c400>
+  api_detail = [dict(row, cases=[{'id':x['id'],'evidence':x['evidence'],'status':x['status']} for x in by_api[row['id']]]) for row in apis]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...
+----------------------------------------------------------------------
+Ran 36 tests in 5.111s
+
+OK
+AM_STANDARD_REPORT status=BLOCKED sha=d254536876c16ddbff4f4d2749ade58fe8beb368 output=/tmp/tmpkm78h4s_
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=53
+=== RC 0 :: python3 -m unittest discover -s tests/am -p test_*.py
+=== STEP python3 tests/am/am.py check
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_CHECK_PASS apis=170 FK=OK source-and-test-files=OK ui-ownership=OK
+=== RC 0 :: python3 tests/am/am.py check
+=== STEP python3 tests/am/am.py coverage
+total=170 | linked=170 | core_total=142 | core_linked=142
+total_messages=13 | with_publishers=13 | with_subscribers=12 | test_links=244 | actual_runs=720
+publishers=19 | publishers_linked=19 | subscriptions=29 | subscriptions_linked=29 | messages_linked=13
+NOTE: script links are references, NOT certified PASS results or isolated API tests
+=== RC 0 :: python3 tests/am/am.py coverage
+=== STEP python3 tests/am/am.py edges debt
+(no results)
+=== RC 0 :: python3 tests/am/am.py edges debt
+=== STEP python3 tests/am/am.py run-all
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_FULL_START git=d2545368 suites=60 contracts=244
+AM_SUITE_START 1/60 tests/ag-function-menu.browser.test.mjs cases=1
+AM_SUITE_PASS 1/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-01-ag-function-menu.browser.test.log
+AM_SUITE_START 2/60 tests/ag-header-browser.test.mjs cases=2
+AM_SUITE_PASS 2/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-02-ag-header-browser.test.log
+AM_SUITE_START 3/60 tests/am/contracts-browser.test.mjs cases=16
+AM_SUITE_PASS 3/60 cases=16 log=.v6/tests/am-full-20261030T015258Z-d2545368-03-contracts-browser.test.log
+AM_SUITE_START 4/60 tests/chapter-numbering.test.mjs cases=1
+AM_SUITE_PASS 4/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-04-chapter-numbering.test.log
+AM_SUITE_START 5/60 tests/cm6-browser.test.mjs cases=3
+AM_SUITE_PASS 5/60 cases=3 log=.v6/tests/am-full-20261030T015258Z-d2545368-05-cm6-browser.test.log
+AM_SUITE_START 6/60 tests/cmd-annotations-browser.test.mjs cases=7
+AM_SUITE_PASS 6/60 cases=7 log=.v6/tests/am-full-20261030T015258Z-d2545368-06-cmd-annotations-browser.test.log
+AM_SUITE_START 7/60 tests/cmd-html-unified-browser.test.mjs cases=5
+AM_SUITE_PASS 7/60 cases=5 log=.v6/tests/am-full-20261030T015258Z-d2545368-07-cmd-html-unified-browser.test.log
+AM_SUITE_START 8/60 tests/code-fence-highlight.browser.test.mjs cases=1
+AM_SUITE_PASS 8/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-08-code-fence-highlight.browser.test.log
+AM_SUITE_START 9/60 tests/code-fence-highlight.test.mjs cases=1
+AM_SUITE_PASS 9/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-09-code-fence-highlight.test.log
+AM_SUITE_START 10/60 tests/compact-shell-browser.test.mjs cases=5
+AM_SUITE_PASS 10/60 cases=5 log=.v6/tests/am-full-20261030T015258Z-d2545368-10-compact-shell-browser.test.log
+AM_SUITE_START 11/60 tests/dockview-preview-browser.test.mjs cases=5
+AM_SUITE_PASS 11/60 cases=5 log=.v6/tests/am-full-20261030T015258Z-d2545368-11-dockview-preview-browser.test.log
+AM_SUITE_START 12/60 tests/footnote-popover.browser.test.mjs cases=2
+AM_SUITE_PASS 12/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-12-footnote-popover.browser.test.log
+AM_SUITE_START 13/60 tests/four-pane-pdf-browser.test.mjs cases=5
+AM_SUITE_PASS 13/60 cases=5 log=.v6/tests/am-full-20261030T015258Z-d2545368-13-four-pane-pdf-browser.test.log
+AM_SUITE_START 14/60 tests/html-element-groups.test.mjs cases=1
+AM_SUITE_PASS 14/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-14-html-element-groups.test.log
+AM_SUITE_START 15/60 tests/html-elements.browser.test.mjs cases=5
+AM_SUITE_PASS 15/60 cases=5 log=.v6/tests/am-full-20261030T015258Z-d2545368-15-html-elements.browser.test.log
+AM_SUITE_START 16/60 tests/html-elements.test.mjs cases=1
+AM_SUITE_PASS 16/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-16-html-elements.test.log
+AM_SUITE_START 17/60 tests/html-table-normalize.browser.test.mjs cases=2
+AM_SUITE_PASS 17/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-17-html-table-normalize.browser.test.log
+AM_SUITE_START 18/60 tests/html-table-normalize.test.mjs cases=1
+AM_SUITE_PASS 18/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-18-html-table-normalize.test.log
+AM_SUITE_START 19/60 tests/latex-browser.test.mjs cases=8
+AM_SUITE_PASS 19/60 cases=8 log=.v6/tests/am-full-20261030T015258Z-d2545368-19-latex-browser.test.log
+AM_SUITE_START 20/60 tests/latex-four-view-browser.test.mjs cases=1
+AM_SUITE_PASS 20/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-20-latex-four-view-browser.test.log
+AM_SUITE_START 21/60 tests/latex-normalize-browser.test.mjs cases=2
+AM_SUITE_PASS 21/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-21-latex-normalize-browser.test.log
+AM_SUITE_START 22/60 tests/latex-review-browser.test.mjs cases=3
+AM_SUITE_PASS 22/60 cases=3 log=.v6/tests/am-full-20261030T015258Z-d2545368-22-latex-review-browser.test.log
+AM_SUITE_START 23/60 tests/main-promoted-lab-ui.browser.test.mjs cases=1
+AM_SUITE_PASS 23/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-23-main-promoted-lab-ui.browser.test.log
+AM_SUITE_START 24/60 tests/media-adoption-syntax.test.mjs cases=2
+AM_SUITE_PASS 24/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-24-media-adoption-syntax.test.log
+AM_SUITE_START 25/60 tests/media-browser.test.mjs cases=16
+AM_SUITE_PASS 25/60 cases=16 log=.v6/tests/am-full-20261030T015258Z-d2545368-25-media-browser.test.log
+AM_SUITE_START 26/60 tests/media-paste-browser.test.mjs cases=4
+AM_SUITE_PASS 26/60 cases=4 log=.v6/tests/am-full-20261030T015258Z-d2545368-26-media-paste-browser.test.log
+AM_SUITE_START 27/60 tests/media-preexisting-adoption.browser.test.mjs cases=1
+AM_SUITE_PASS 27/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-27-media-preexisting-adoption.browser.test.log
+AM_SUITE_START 28/60 tests/mineru-start-only-ui-browser.test.mjs cases=4
+AM_SUITE_PASS 28/60 cases=4 log=.v6/tests/am-full-20261030T015258Z-d2545368-28-mineru-start-only-ui-browser.test.log
+AM_SUITE_START 29/60 tests/navigation-font-setting-browser.test.mjs cases=1
+AM_SUITE_PASS 29/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-29-navigation-font-setting-browser.test.log
+AM_SUITE_START 30/60 tests/note-pair-browser.test.mjs cases=5
+AM_SUITE_PASS 30/60 cases=5 log=.v6/tests/am-full-20261030T015258Z-d2545368-30-note-pair-browser.test.log
+AM_SUITE_START 31/60 tests/note-pairs.test.mjs cases=2
+AM_SUITE_PASS 31/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-31-note-pairs.test.log
+AM_SUITE_START 32/60 tests/obsidian-callouts.browser.test.mjs cases=1
+AM_SUITE_PASS 32/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-32-obsidian-callouts.browser.test.log
+AM_SUITE_START 33/60 tests/obsidian-callouts.test.mjs cases=1
+AM_SUITE_PASS 33/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-33-obsidian-callouts.test.log
+AM_SUITE_START 34/60 tests/obsidian-cm6-theme.test.mjs cases=1
+AM_SUITE_PASS 34/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-34-obsidian-cm6-theme.test.log
+AM_SUITE_START 35/60 tests/obsidian-image-preview-browser.test.mjs cases=1
+AM_SUITE_PASS 35/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-35-obsidian-image-preview-browser.test.log
+AM_SUITE_START 36/60 tests/obsidian-latex-display.test.mjs cases=1
+AM_SUITE_PASS 36/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-36-obsidian-latex-display.test.log
+AM_SUITE_START 37/60 tests/obsidian-source-syntax.browser.test.mjs cases=1
+AM_SUITE_PASS 37/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-37-obsidian-source-syntax.browser.test.log
+AM_SUITE_START 38/60 tests/outline-browser.test.mjs cases=15
+AM_SUITE_PASS 38/60 cases=15 log=.v6/tests/am-full-20261030T015258Z-d2545368-38-outline-browser.test.log
+AM_SUITE_START 39/60 tests/outline-title-scale-browser.test.mjs cases=3
+AM_SUITE_PASS 39/60 cases=3 log=.v6/tests/am-full-20261030T015258Z-d2545368-39-outline-title-scale-browser.test.log
+AM_SUITE_START 40/60 tests/pdf-anchor-viewport-browser.test.mjs cases=1
+AM_SUITE_PASS 40/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-40-pdf-anchor-viewport-browser.test.log
+AM_SUITE_START 41/60 tests/pdf-click-only-browser.test.mjs cases=4
+AM_SUITE_PASS 41/60 cases=4 log=.v6/tests/am-full-20261030T015258Z-d2545368-41-pdf-click-only-browser.test.log
+AM_SUITE_START 42/60 tests/preview-split-browser.test.mjs cases=6
+AM_SUITE_PASS 42/60 cases=6 log=.v6/tests/am-full-20261030T015258Z-d2545368-42-preview-split-browser.test.log
+AM_SUITE_START 43/60 tests/promoted-chapters-browser.test.mjs cases=8
+AM_SUITE_PASS 43/60 cases=8 log=.v6/tests/am-full-20261030T015258Z-d2545368-43-promoted-chapters-browser.test.log
+AM_SUITE_START 44/60 tests/quote-indent-browser.test.mjs cases=1
+AM_SUITE_PASS 44/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-44-quote-indent-browser.test.log
+AM_SUITE_START 45/60 tests/scroll-sync-browser.test.mjs cases=4
+AM_SUITE_PASS 45/60 cases=4 log=.v6/tests/am-full-20261030T015258Z-d2545368-45-scroll-sync-browser.test.log
+AM_SUITE_START 46/60 tests/scroll-sync-leadership-browser.test.mjs cases=6
+AM_SUITE_PASS 46/60 cases=6 log=.v6/tests/am-full-20261030T015258Z-d2545368-46-scroll-sync-leadership-browser.test.log
+AM_SUITE_START 47/60 tests/settings-browser.test.mjs cases=12
+AM_SUITE_PASS 47/60 cases=12 log=.v6/tests/am-full-20261030T015258Z-d2545368-47-settings-browser.test.log
+AM_SUITE_START 48/60 tests/settings-server.test.mjs cases=1
+AM_SUITE_PASS 48/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-48-settings-server.test.log
+AM_SUITE_START 49/60 tests/shared-preview-browser.test.mjs cases=6
+AM_SUITE_PASS 49/60 cases=6 log=.v6/tests/am-full-20261030T015258Z-d2545368-49-shared-preview-browser.test.log
+AM_SUITE_START 50/60 tests/source-callout-plan.test.mjs cases=1
+AM_SUITE_PASS 50/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-50-source-callout-plan.test.log
+AM_SUITE_START 51/60 tests/source-fence-plan.test.mjs cases=1
+AM_SUITE_PASS 51/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-51-source-fence-plan.test.log
+AM_SUITE_START 52/60 tests/source-line-callout.browser.test.mjs cases=3
+AM_SUITE_PASS 52/60 cases=3 log=.v6/tests/am-full-20261030T015258Z-d2545368-52-source-line-callout.browser.test.log
+AM_SUITE_START 53/60 tests/v6-session-secrecy.test.mjs cases=2
+AM_SUITE_PASS 53/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-53-v6-session-secrecy.test.log
+AM_SUITE_START 54/60 tests/wcp-cas-two-editor-regression.test.mjs cases=1
+AM_SUITE_PASS 54/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-54-wcp-cas-two-editor-regression.test.log
+AM_SUITE_START 55/60 tests/wcp-promoted-api-direct.browser.test.mjs cases=12
+AM_SUITE_PASS 55/60 cases=12 log=.v6/tests/am-full-20261030T015258Z-d2545368-55-wcp-promoted-api-direct.browser.test.log
+AM_SUITE_START 56/60 tests/wcp-runtime-contract.test.mjs cases=12
+AM_SUITE_PASS 56/60 cases=12 log=.v6/tests/am-full-20261030T015258Z-d2545368-56-wcp-runtime-contract.test.log
+AM_SUITE_START 57/60 tests/wcp-virtual-event-contract.browser.test.mjs cases=16
+AM_SUITE_PASS 57/60 cases=16 log=.v6/tests/am-full-20261030T015258Z-d2545368-57-wcp-virtual-event-contract.browser.test.log
+AM_SUITE_START 58/60 tests/workspace-portability.test.mjs cases=1
+AM_SUITE_PASS 58/60 cases=1 log=.v6/tests/am-full-20261030T015258Z-d2545368-58-workspace-portability.test.log
+AM_SUITE_START 59/60 tests/workspace-root-browser.test.mjs cases=2
+AM_SUITE_PASS 59/60 cases=2 log=.v6/tests/am-full-20261030T015258Z-d2545368-59-workspace-root-browser.test.log
+AM_SUITE_START 60/60 tests/workspace-root-server.test.mjs cases=6
+AM_SUITE_PASS 60/60 cases=6 log=.v6/tests/am-full-20261030T015258Z-d2545368-60-workspace-root-server.test.log
+AM_FULL_RESULT passed_cases=244/244 failed_suites=0 git=d2545368
+AM_FULL_TABLE_PASS
+=== RC 0 :: python3 tests/am/am.py run-all
+=== STEP python3 tests/am/am.py certify
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_FULL_TABLE_CERTIFIED 244/244 cases; tested_git=d2545368 current_git=d2545368 source_tests_unchanged=True (integrated tests are not separate per-API oracles)
+=== RC 0 :: python3 tests/am/am.py certify
+=== STEP git fsck --full --no-reflogs
+=== RC 0 :: git fsck --full --no-reflogs
+Fri Oct 30 10:11:43 CST 2026

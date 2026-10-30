@@ -1,0 +1,1 @@
+CMD_SETTINGS_SERVER_PASS {"readOnlyGet":true,"auth":true,"origin":true,"compareAndSave":true,"preserveBytes":true,"staleRejected":true,"invalidRejected":true}

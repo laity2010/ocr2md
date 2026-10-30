@@ -1,0 +1,82 @@
+[
+ {
+  "test": "unlock with legacy KEY[:12] -> 403",
+  "result": "PASS",
+  "detail": "status=403"
+ },
+ {
+  "test": "unlock with derived code -> 200, cookie is not raw KEY",
+  "result": "PASS",
+  "detail": "status=200 raw_key_in_cookie=False"
+ },
+ {
+  "test": "PUT with legacy raw-KEY cookie (migration closed) -> 403",
+  "result": "PASS",
+  "detail": "status=403"
+ },
+ {
+  "test": "GET returns strong sha256 ETag",
+  "result": "PASS",
+  "detail": "status=200 etag_matches_body_sha256=True"
+ },
+ {
+  "test": "PUT without cookie -> 403",
+  "result": "PASS",
+  "detail": "status=403"
+ },
+ {
+  "test": "PUT cross-origin -> 403",
+  "result": "PASS",
+  "detail": "status=403"
+ },
+ {
+  "test": "PUT without Origin -> 403",
+  "result": "PASS",
+  "detail": "status=403"
+ },
+ {
+  "test": "PUT without If-Match -> 428",
+  "result": "PASS",
+  "detail": "status=428"
+ },
+ {
+  "test": "PUT stale If-Match -> 412",
+  "result": "PASS",
+  "detail": "status=412"
+ },
+ {
+  "test": "rejected PUTs leave disk unchanged",
+  "result": "PASS",
+  "detail": "sha=d86508f69b94"
+ },
+ {
+  "test": "PUT valid If-Match -> 200 + new ETag",
+  "result": "PASS",
+  "detail": "status=200"
+ },
+ {
+  "test": "second editor with old ETag -> 412 (lost update prevented)",
+  "result": "PASS",
+  "detail": "status=412"
+ },
+ {
+  "test": "20 concurrent PUTs same ETag: exactly one 200, others 412, disk==winner",
+  "result": "PASS",
+  "detail": "wins=[0] codes=[200, 412]"
+ },
+ {
+  "test": "no temp files left after atomic replace",
+  "result": "PASS",
+  "detail": "tmp=[]"
+ },
+ {
+  "test": "unlock wrong code -> 403",
+  "result": "PASS",
+  "detail": "status=403"
+ },
+ {
+  "test": "settings PUT unauthorized -> 403",
+  "result": "PASS",
+  "detail": "status=403"
+ }
+]

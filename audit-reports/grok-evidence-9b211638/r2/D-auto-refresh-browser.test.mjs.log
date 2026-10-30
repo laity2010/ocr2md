@@ -1,0 +1,9 @@
+MAIN_AUTO_RELEASE_PASS Chrome clean {"navigations":2,"cleanAutomaticReload":true,"dirtyDeferredUntilSave":false,"draftsPreserved":true,"dialogs":[],"writes":[],"errors":[]}
+MAIN_AUTO_RELEASE_PASS Chrome wake {"navigations":2,"cleanAutomaticReload":true,"dirtyDeferredUntilSave":false,"draftsPreserved":true,"dialogs":[],"writes":[],"errors":[]}
+MAIN_AUTO_RELEASE_PASS Chrome markdown {"navigations":2,"cleanAutomaticReload":false,"dirtyDeferredUntilSave":true,"draftsPreserved":true,"dialogs":[],"writes":["PUT"],"errors":[]}
+MAIN_AUTO_RELEASE_PASS Chrome settings {"navigations":2,"cleanAutomaticReload":false,"dirtyDeferredUntilSave":true,"draftsPreserved":true,"dialogs":[],"writes":["PUT"],"errors":[]}
+MAIN_AUTO_RELEASE_PASS iPad-WebKit clean {"navigations":2,"cleanAutomaticReload":true,"dirtyDeferredUntilSave":false,"draftsPreserved":true,"dialogs":[],"writes":[],"errors":[]}
+MAIN_AUTO_RELEASE_PASS iPad-WebKit wake {"navigations":2,"cleanAutomaticReload":true,"dirtyDeferredUntilSave":false,"draftsPreserved":true,"dialogs":[],"writes":[],"errors":[]}
+MAIN_AUTO_RELEASE_PASS iPad-WebKit markdown {"navigations":2,"cleanAutomaticReload":false,"dirtyDeferredUntilSave":true,"draftsPreserved":true,"dialogs":[],"writes":["PUT"],"errors":[]}
+MAIN_AUTO_RELEASE_PASS iPad-WebKit settings {"navigations":2,"cleanAutomaticReload":false,"dirtyDeferredUntilSave":true,"draftsPreserved":true,"dialogs":[],"writes":["PUT"],"errors":[]}
+MAIN_AUTO_RELEASE_8_OF_8_PASS

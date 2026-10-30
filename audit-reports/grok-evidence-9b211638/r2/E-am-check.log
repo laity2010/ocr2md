@@ -1,0 +1,7 @@
+AM_BUILD_PASS modules/apis/messages/publishers/subscriptions/tests=[12, 170, 13, 19, 29, 244] database=.v6/tests/am.sqlite
+AM_REFERENCES_PASS checked 170 API registry rows and all source/test paths; previous-run records kept=720/720
+AM_UI_BOUNDARY_PASS files=63 shared=8 cross_imports=38 (runtime message/callsite auditing is separate)
+AM_CHECK_PASS apis=170 FK=OK source-and-test-files=OK ui-ownership=OK
+total_messages=13 | with_publishers=13 | with_subscribers=12 | test_links=244 | actual_runs=720
+publishers=19 | publishers_linked=19 | subscriptions=29 | subscriptions_linked=29 | messages_linked=13
+NOTE: script links are references, NOT certified PASS results or isolated API tests

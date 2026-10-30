@@ -1,0 +1,21 @@
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'oEgtc4X4GBAfPqCXsV3GjAD-BFrHAHrAO0Ly7L9BBh-5pyFA'
+- 'qcnypVxb5jW9v8tPVcJP9nlLO5QIOQLCnTDlNOqtzVU'
+
+    at file:///tmp/grok-fixgate-9b211638/tests/v6-session-secrecy.test.mjs:53:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 'oEgtc4X4GBAfPqCXsV3GjAD-BFrHAHrAO0Ly7L9BBh-5pyFA',
+  expected: 'qcnypVxb5jW9v8tPVcJP9nlLO5QIOQLCnTDlNOqtzVU',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

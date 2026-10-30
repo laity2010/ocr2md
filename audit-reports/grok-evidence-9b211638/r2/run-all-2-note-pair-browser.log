@@ -1,0 +1,16 @@
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.goto: Timeout 60000ms exceeded.
+Call log:
+  - navigating to "http://127.0.0.1:5877/", waiting until "domcontentloaded"
+
+    at /tmp/grok-fixgate-9b211638/tests/note-pair-browser.test.mjs:64:16 {
+  log: [
+    '  - navigating to "http://127.0.0.1:5877/", waiting until "domcontentloaded"'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

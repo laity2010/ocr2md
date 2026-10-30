@@ -1,0 +1,13 @@
+AUDIT_LINUX_WAIT_DIAG {"suite":"pdf-anchor-viewport-browser.test.mjs","state":{"documentState":"complete","title":"OCR2MD V6 · 章节定界","pdfLoading":false,"canvasWidth":1326,"status":"🔒 保存需授权 · 3,112行 / 306,869字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · pdf-anchor-chrome-521072.md","selectedModule":"chapter-boundary","latexRows":11,"latexGridPresent":true,"unlockOpen":false,"unlockError":"","url":"http://127.0.0.1:4800/"},"errors":[]}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 25000ms exceeded.
+    at page.waitForFunction (/tmp/grok-fixgate-9b211638/.v6/audit-reports/audit-linux-diagnostics.mjs:76:32)
+    at /tmp/grok-fixgate-9b211638/tests/pdf-anchor-viewport-browser.test.mjs:69:14 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

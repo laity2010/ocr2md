@@ -1,0 +1,13 @@
+WCP_CAS_TWO_EDITOR_PASS Chromium {"A":[200,200],"B":[412],"draftProtected":true,"undoRetained":true,"fixtureRestored":true,"jsErrors":0}
+DIAG status= 🔒 保存需授权 · 3,112行 / 306,886字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · document.md save.disabled= false reqs= []
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 18000ms exceeded.
+    at /tmp/grok-fixgate-9b211638/tests/wcp-cas-two-editor-regression.test.mjs:75:11 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4
