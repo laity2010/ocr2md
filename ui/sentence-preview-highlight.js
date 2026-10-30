@@ -6,6 +6,8 @@ import './sentence-preview-highlight.css';
 
 const sentenceName='ocr-selected-sentence';
 const punctuationName='ocr-selected-sentence-stop';
+const coverageName='ocr-covered-sentences';
+const coverageStopName='ocr-covered-sentence-stops';
 const endStop=/[.!?。！？](?=["'”’）)\]]*$)/u;
 
 export function clearSentencePreviewHighlight(){
@@ -14,6 +16,14 @@ export function clearSentencePreviewHighlight(){
     CSS.highlights.delete(punctuationName);
   }
   document.querySelectorAll('.ocr-sentence-overlay').forEach(node=>node.remove());
+}
+
+export function clearSentenceCoverageHighlight(){
+  if(globalThis.CSS?.highlights){
+    CSS.highlights.delete(coverageName);
+    CSS.highlights.delete(coverageStopName);
+  }
+  document.querySelectorAll('.ocr-sentence-cover-overlay').forEach(node=>node.remove());
 }
 
 function textIndex(container){
@@ -113,15 +123,12 @@ function paintWebKitOverlay(body,ranges,stop){
   }
   if(overlay.childElementCount)body.append(overlay);
 }
-/** @returns {{fragmentCount:number,stopCount:number}} for diagnostics/testing. */
-export function paintSentencePreviewHighlight(body,sentence,source,lineAtOffset){
-  clearSentencePreviewHighlight();
-  const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(?:Chrome|Chromium|Edg)\//i.test(navigator.userAgent);
-  if(!body?.isConnected||!sentence?.fragments?.length||
-     (!safari&&(!globalThis.CSS?.highlights||typeof Highlight!=='function')))
-    return {fragmentCount:0,stopCount:0};
-  const ranges=[];let stop=null;
+function resolveSentenceRanges(body,sentences,source,lineAtOffset){
+  const ranges=[],stops=[];let unmappedCount=0;
+  const indexes=new WeakMap();
   const mapped=[...body.querySelectorAll('[data-source-start][data-source-end]')];
+  for(const sentence of sentences){
+  const startLength=ranges.length;
   for(const fragment of sentence.fragments){
     const line=lineAtOffset(fragment.from);
     const eligible=mapped.filter(element=>Number(element.dataset.sourceStart)<=line&&
@@ -132,7 +139,8 @@ export function paintSentencePreviewHighlight(body,sentence,source,lineAtOffset)
         return aSpan-bSpan;
       });
     for(const element of eligible){
-      const index=textIndex(element);
+      let index=indexes.get(element);
+      if(!index){index=textIndex(element);indexes.set(element,index);}
       const bounds=findFragment(index,fragment,occurrencesBefore(source,fragment));
       if(!bounds)continue;
       const range=markRange(index,bounds.from,bounds.to);
@@ -144,18 +152,92 @@ export function paintSentencePreviewHighlight(body,sentence,source,lineAtOffset)
         const m=endStop.exec(fragment.text);
         if(m){
           const position=index.text.lastIndexOf(m[0],bounds.to-1);
-          if(position>=bounds.from)stop=markRange(index,position,position+m[0].length);
+          if(position>=bounds.from){
+            const stop=markRange(index,position,position+m[0].length);
+            if(stop)stops.push(stop);
+          }
         }
       }
       break;
     }
   }
+  if(ranges.length===startLength)unmappedCount++;
+  }
+  return {ranges,stops,unmappedCount};
+}
+
+/** @returns {{fragmentCount:number,stopCount:number}} for diagnostics/testing. */
+export function paintSentencePreviewHighlight(body,sentence,source,lineAtOffset){
+  clearSentencePreviewHighlight();
+  const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(?:Chrome|Chromium|Edg)\//i.test(navigator.userAgent);
+  if(!body?.isConnected||!sentence?.fragments?.length||
+     (!safari&&(!globalThis.CSS?.highlights||typeof Highlight!=='function')))
+    return {fragmentCount:0,stopCount:0};
+  const {ranges,stops}=resolveSentenceRanges(body,[sentence],source,lineAtOffset);
+  const stop=stops[0]||null;
   if(safari)paintWebKitOverlay(body,ranges,stop);
   else{
-    if(ranges.length)CSS.highlights.set(sentenceName,new Highlight(...ranges));
-    if(stop)CSS.highlights.set(punctuationName,new Highlight(stop));
+    if(ranges.length){
+      const mark=new Highlight(...ranges);mark.priority=10;
+      CSS.highlights.set(sentenceName,mark);
+    }
+    if(stop){
+      const mark=new Highlight(stop);mark.priority=20;
+      CSS.highlights.set(punctuationName,mark);
+    }
   }
   return {fragmentCount:ranges.length,stopCount:stop?1:0};
+}
+
+/** Coverage lens for every *filtered AG row*, across non-visible AG grid rows.
+ * Never resegment or annotate source. Draw only current rendered Markdown.
+ * Uncovered text is left unpainted so missing sentence mappings are visible.
+ * The user's individually selected sentence keeps its stronger highlight. */
+export function paintSentenceCoverageHighlight(body,sentences,source,lineAtOffset){
+  clearSentenceCoverageHighlight();
+  const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(?:Chrome|Chromium|Edg)\//i.test(navigator.userAgent);
+  if(!body?.isConnected||!Array.isArray(sentences)||!sentences.length||
+    (!safari&&(!globalThis.CSS?.highlights||typeof Highlight!=='function')))
+    return {sentenceCount:0,fragmentCount:0,stopCount:0};
+  const {ranges,stops,unmappedCount}=resolveSentenceRanges(body,sentences,source,lineAtOffset);
+  if(safari){
+    const rootRect=body.getBoundingClientRect();
+    const overlay=document.createElement('div');
+    overlay.className='ocr-sentence-cover-overlay';
+    overlay.setAttribute('aria-hidden','true');
+    for(const range of ranges){
+      for(const rect of range.getClientRects()){
+        if(rect.width<0.7||rect.height<0.7)continue;
+        const mark=document.createElement('span');
+        mark.className='ocr-sentence-cover-span';
+        mark.dataset.text=range.toString();
+        mark.style.left=(rect.left-rootRect.left)+'px';
+        mark.style.top=(rect.top-rootRect.top)+'px';
+        mark.style.width=rect.width+'px';
+        mark.style.height=rect.height+'px';
+        overlay.append(mark);
+      }
+    }
+    for(const range of stops){
+      for(const rect of range.getClientRects()){
+        if(rect.width<0.7||rect.height<0.7)continue;
+        const mark=document.createElement('span');
+        mark.className='ocr-sentence-cover-stop';
+        mark.dataset.text=range.toString();
+        mark.style.left=(rect.left-rootRect.left)+'px';
+        mark.style.top=(rect.top-rootRect.top)+'px';
+        mark.style.width=rect.width+'px';
+        mark.style.height=rect.height+'px';
+        overlay.append(mark);
+      }
+    }
+    if(overlay.childElementCount)body.append(overlay);
+  }else{
+    if(ranges.length)CSS.highlights.set(coverageName,new Highlight(...ranges));
+    if(stops.length)CSS.highlights.set(coverageStopName,new Highlight(...stops));
+  }
+  return {sentenceCount:sentences.length,coveredCount:sentences.length-unmappedCount,
+    unmappedCount,fragmentCount:ranges.length,stopCount:stops.length};
 }
 
 /** Map a real preview text click back to a CMD sentence without inspecting

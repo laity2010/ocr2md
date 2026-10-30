@@ -18,7 +18,8 @@ import {createHtmlElementsModule} from './html-elements-module.js';
 import {createSpellcheckModule} from './spellcheck-module.js';
 import {createIllegalBreakModule} from './illegal-break-module.js';
 import {createSentenceModule} from './sentence-module.js';
-import {paintSentencePreviewHighlight,clearSentencePreviewHighlight,hitSentencePreview} from './sentence-preview-highlight.js';
+import {paintSentencePreviewHighlight,clearSentencePreviewHighlight,
+  paintSentenceCoverageHighlight,clearSentenceCoverageHighlight,hitSentencePreview} from './sentence-preview-highlight.js';
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
 import './workspace.css';
@@ -103,7 +104,8 @@ class OutlinePanel {
     this.html=createHtmlElementsModule(this.htmlHost,readElementSource,()=>getCMD(),reportMediaStatus);
     this.spellcheck=createSpellcheckModule(this.spellcheckHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
     this.illegalBreak=createIllegalBreakModule(this.illegalBreakHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
-    this.sentence=createSentenceModule(this.sentenceHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
+    this.sentence=createSentenceModule(this.sentenceHost,id=>getCMD()?.getChapter(id),
+      reportMediaStatus,()=>currentPreview?.redrawSentenceCoverage());
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -240,6 +242,7 @@ class PreviewPanel {
     this.pdf=null;
     this.pdfUsable=false;
     this.timer=null;
+    this.coverageResizeTimer=null;
     this.disposed=false;
     this.mode='md';
     this.lastFocusElement=null;
@@ -247,8 +250,10 @@ class PreviewPanel {
     this.footnoteReader=null;
     this.renderedCalloutScope=null;
     this.onCalloutToggle=event=>{
-      if(event.target instanceof Element && event.target.matches('details.ocr-callout'))
+      if(event.target instanceof Element && event.target.matches('details.ocr-callout')){
         scrollSync?.measureLater();
+        this.scheduleCoverageResize();
+      }
     };
     this.onClick=event=>{
       if(this.footnoteReader?.handleClick(event))return;
@@ -363,7 +368,9 @@ class PreviewPanel {
     this.pdfTools.hidden=mode!=='pdf';
     this.pdfTools.setAttribute('aria-hidden',String(mode!=='pdf'));
     if(mode==='md')requestAnimationFrame(()=>{
-      if(!this.disposed)this.highlight(viewStore.getState().focusTarget);
+      if(this.disposed)return;
+      this.redrawSentenceCoverage();
+      this.highlight(viewStore.getState().focusTarget);
     });
     if(this.pdf){
       this.pdf.setActive(mode==='pdf');
@@ -382,8 +389,19 @@ class PreviewPanel {
     this.pdf?.moveToolbarTo(this.pdfTools);
     this.pdf?.setActive(this.mode==='pdf');
   }
+  scheduleCoverageResize(){
+    clearTimeout(this.coverageResizeTimer);
+    if(!currentOutline?.sentence?.getCoverageRows())return;
+    this.coverageResizeTimer=setTimeout(()=>{
+      if(!this.disposed){
+        this.redrawSentenceCoverage();
+        this.highlight(viewStore.getState().focusTarget);
+      }
+    },130);
+  }
   layout(){
     this.pdf?.onResize();scrollSync?.measureLater();
+    this.scheduleCoverageResize();
     const focus=viewStore.getState().focusTarget;
     if(focus?.origin==='sentence'&&currentOutline?.workModule==='sentence')
       requestAnimationFrame(()=>{if(!this.disposed)this.highlight(focus);});
@@ -430,11 +448,26 @@ class PreviewPanel {
     }
     this.renderedCalloutScope=scopeId;
     this.lastFocusElement=null;
+    this.redrawSentenceCoverage();
     this.highlight(viewStore.getState().focusTarget);
     if(scrollSync)scrollSync.afterRender(preserved);
     else pane.scrollTop=ratio*Math.max(0,pane.scrollHeight-pane.clientHeight);
   }
-  clearSentenceSelection(){clearSentencePreviewHighlight();}
+  clearSentenceSelection(){clearSentencePreviewHighlight();clearSentenceCoverageHighlight();}
+  redrawSentenceCoverage(){
+    clearSentenceCoverageHighlight();
+    const rows=currentOutline?.sentence?.getCoverageRows();
+    let result={sentenceCount:rows?.length||0,coveredCount:0,unmappedCount:rows?.length||0};
+    if(Array.isArray(rows)){
+      this.highlight(viewStore.getState().focusTarget);
+    }
+    if(rows?.length&&currentOutline?.workModule==='sentence'){
+      const cmd=getCMD();
+      if(cmd)result=paintSentenceCoverageHighlight(this.body,rows,cmd.readSource(),
+        offset=>cmd.lineAtOffset(offset));
+    }
+    currentOutline?.sentence?.setCoverageResult(result);
+  }
   highlight(focus){
     clearSentencePreviewHighlight();
     this.lastFocusElement?.classList.remove('ocr-outline-focused-element');
@@ -443,7 +476,9 @@ class PreviewPanel {
     if((focus.origin==='sentence'||focus.origin==='preview')&&focus.elementId&&currentOutline?.workModule==='sentence'&&
        focus.revision===viewStore.getState().documentRevision){
       const row=getCMD()?.querySentences?.().rows.find(x=>x.id===focus.elementId);
-      if(row)paintSentencePreviewHighlight(this.body,row,getCMD().readSource(),
+      const covered=currentOutline?.sentence?.getCoverageRows();
+      if(row&&(covered===null||covered.some(item=>item.id===row.id)))
+        paintSentencePreviewHighlight(this.body,row,getCMD().readSource(),
         offset=>getCMD().lineAtOffset(offset));
       return;
     }
@@ -466,6 +501,7 @@ class PreviewPanel {
     this.clearSentenceSelection();
     this.footnoteReader?.dispose();
     clearTimeout(this.timer);
+    clearTimeout(this.coverageResizeTimer);
     this.unsubscribe?.();
     this.body.removeEventListener('click',this.onClick);
     this.body.removeEventListener('toggle',this.onCalloutToggle,true);
@@ -611,6 +647,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setWorkModule:module=>{
       if(module!=='sentence')currentPreview?.clearSentenceSelection();
       currentOutline?.setModule(module);
+      currentPreview?.redrawSentenceCoverage();
     },
     updateSpellcheck:(rows,options)=>currentOutline?.spellcheck?.setResults(rows,options),
     getSpellingElements:()=>{
@@ -622,6 +659,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       const scope=currentOutline?.spellcheck?.getOperationScope()??{mode:'all'};
       return getCMD().markSpellingCandidates(candidates,{expectedSource,agScope:scope});
     },
+    setSentenceCoverage:enabled=>currentOutline?.sentence?.setCoverage(enabled),
     setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),
     setSentenceError:message=>currentOutline?.sentence?.setError(message),
     getSentences:()=>{

@@ -34,6 +34,19 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
   allToggle.type='checkbox';allToggle.setAttribute('aria-label','章节所有');
   allLabel.append(allToggle,document.createTextNode('全部'));
   allLabel.title='勾选：AG 显示并操作整份 CMB；取消：仅显示并操作当前章节。不改变源码或预览显示范围';
+  // Sentence-only coverage lens. It is distinct from the existing '全部'
+  // chapter-scope checkbox and never writes CMD or AG row data.
+  const sentenceCoverLabel=document.createElement('label');
+  sentenceCoverLabel.className='ocr-sentence-cover-control';
+  sentenceCoverLabel.hidden=true;
+  const sentenceCoverToggle=document.createElement('input');
+  sentenceCoverToggle.type='checkbox';
+  sentenceCoverToggle.id='sentence-cover-all';
+  sentenceCoverToggle.setAttribute('aria-label','分句全部覆盖');
+  sentenceCoverLabel.append(sentenceCoverToggle,document.createTextNode('全部覆盖'));
+  sentenceCoverLabel.title='高亮 AG 当前章节与筛选结果中的全部句子，检查未被分句覆盖的原文';
+  sentenceCoverToggle.addEventListener('change',()=>
+    modulePort.setSentenceCoverage(sentenceCoverToggle.checked));
   const chapterSelect=document.createElement('select');
   chapterSelect.className='ocr-wp3-chapter-select';
   chapterSelect.setAttribute('aria-label','虚拟章节');
@@ -121,6 +134,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     // dropdown/toggle in AG. The element selector remains module-owned.
     indexLabel.hidden=true;
     allLabel.hidden=settings||Boolean(chapter);
+    sentenceCoverLabel.hidden=settings||selected!=='sentence';
     // The mother '章节定界' view must always show all headings/elements.
     // Only a selected virtual chapter file may filter AG membership.
     // The checkbox changes AG query AND action scope, but never switches
@@ -196,7 +210,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     bar.setAttribute('role','toolbar');
     // No cloned controls. Events and input state stay owned by mainline.
     // The first two visible controls are exactly: 全部 ☐ | [标题/媒体/LaTeX].
-    bar.append(allLabel,elementSelect);
+    bar.append(allLabel,elementSelect,sentenceCoverLabel);
     modulePort.mountSelector(bar);
     bar.append(indexLabel,chapterSelect,functionHost);
     modulePort.mountActionGroups(functionMenu);

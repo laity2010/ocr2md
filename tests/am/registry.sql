@@ -1066,3 +1066,27 @@ INSERT INTO access_edges VALUES
  ('X-SENT-REVERSE-L44','L','L','ui/workspace.js','hitSentencePreview(this.body,event.target,sourceLine,','L44','registered','Reader translates text click into CMD sentence ID, no AG import');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-REVERSE-L44','L44','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit clicking second sentence of one preview line selects exact AG row; cross-block fragments choose same logical sentence; reverse CM6 click resolves source character and AG scrolls into view','integration');
+
+-- Whole sentence coverage review: AG Grid owns row filters and exposes only
+-- current displayed sentence records; reader paints detached CMD ranges.
+INSERT INTO apis VALUES
+ ('G22','G','returned.setCoverage','ui/sentence-module.js','returned','sentence-toolbar checkbox on/off','boolean coverage preference and notify semantic view','no editor/raw AG API exposed, no persisted mutation',1),
+ ('G23','G','returned.getCoverageRows','ui/sentence-module.js','returned','none','detached rows after AG column and virtual chapter filters','AG alone owns row filters, includes all filtered rows not viewport only',1),
+ ('G24','G','returned.setCoverageResult','ui/sentence-module.js','returned','reader coverage mapping stats','AG status actual mapped vs unrenderable count','no feedback into Grid filtering, avoids re-entrant coverage updates',1),
+ ('L45','L','paintSentenceCoverageHighlight','ui/sentence-preview-highlight.js','export','reader root, CMD sentence list, source, line mapper','multi-sentence readonly CSS Highlights/SAFARI geometry overlay and exact coverage stats','paint only safe mapped sentence ranges and terminal marks, never rewrite reader text',1),
+ ('L46','L','clearSentenceCoverageHighlight','ui/sentence-preview-highlight.js','export','none','remove transient coverage marks','module switch and checkbox off leave CMD/preview text unchanged',1),
+ ('L47','L','returned.setSentenceCoverage','ui/workspace.js','returned','boolean coverage preference','AG owner module overlay selection','only semantic callback, no raw AG grid API crossing WCP boundary',1);
+INSERT INTO access_edges VALUES
+ ('X-SENT-COVER-G22','L','G','ui/workspace.js','currentOutline?.sentence?.setCoverage(enabled)','G22','registered','Layout forwards toolbar semantic checkbox value'),
+ ('X-SENT-COVER-G23','L','G','ui/workspace.js','currentOutline?.sentence?.getCoverageRows()','G23','registered','Layout reads filtered AG records without touching Grid API'),
+ ('X-SENT-COVER-G24','L','G','ui/workspace.js','currentOutline?.sentence?.setCoverageResult(result)','G24','registered','Layout returns actual preview mapping diagnostics'),
+ ('X-SENT-COVER-L45','L','L','ui/workspace.js','paintSentenceCoverageHighlight(this.body,rows,cmd.readSource()','L45','registered','Reader owns DOM and transient ranges, AG owns detached sentence IDs'),
+ ('X-SENT-COVER-L46','L','L','ui/workspace.js','clearSentenceCoverageHighlight()','L46','registered','Reader clears coverage before selection changes or repaint'),
+ ('X-SENT-COVER-L47',NULL,'L','ui/main.js','workspace.setSentenceCoverage(enabled)','L47','registered','Shell bridges WCP toolbar event to bounded sentence coverage port');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SENT-COVER-G22','G22','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Sentence toolbar checkbox default off, on paints all AG rows, off clears, no source write','integration'),
+ ('TC-SENT-COVER-G23','G23','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG real status column filter all unchecked yields no preview ranges; restoring filter restores preview ranges','integration'),
+ ('TC-SENT-COVER-G24','G24','tests/sentence-coverage-buffett.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Large corpus status reports real rendered coverage separately from nonmapped OCR/HTML sentences','integration'),
+ ('TC-SENT-COVER-L45','L45','tests/sentence-coverage-buffett.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Full Buffett Chrome/WebKit hundreds of rows mapped by source ranges, visual coverage no document writes','integration'),
+ ('TC-SENT-COVER-L46','L46','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Turning off coverage or switching modules clears both native CSS and WebKit overlays','integration'),
+ ('TC-SENT-COVER-L47','L47','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Toolbar action takes semantic path WCP to AG to reader, keeping source and save state unchanged','integration');

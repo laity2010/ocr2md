@@ -9,7 +9,7 @@ const theme=themeQuartz.withParams({accentColor:'#81b29a',backgroundColor:'#2f38
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',rowHoverColor:'#37464b',fontSize:13,
   selectedRowBackgroundColor:'rgba(129,178,154,.16)',fontFamily:'"OCR2MD Sarasa",monospace',spacing:3});
-export function createSentenceModule(host,getChapter,onStatus=()=>{}){
+export function createSentenceModule(host,getChapter,onStatus=()=>{},onCoverageChange=()=>{}){
   host.classList.add('ocr-sentence-pane');
   const guide=document.createElement('div');guide.className='ocr-sentence-guide';
   guide.textContent='句子层 · 保留所有原文块/公式/换行 · CMD 句子锚点 · 点击源码行多窗定位 · 待审阅句子为翻译预备';
@@ -17,7 +17,25 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
   const gridHost=document.createElement('div');gridHost.className='ocr-sentence-grid';
   host.append(guide,state,gridHost);
   let allRows=[],scope=null,active=false,loading=false,error=null,stale=0,disposed=false;
-  let selectedId=null;
+  let selectedId=null,coverageEnabled=false,coverageQueued=false,coverageResult=null;
+  const emitCoverage=()=>{
+    if(coverageQueued||disposed)return;
+    coverageQueued=true;
+    requestAnimationFrame(()=>{
+      coverageQueued=false;
+      if(!disposed)onCoverageChange();
+    });
+  };
+  // All filtered AG rows, not just the small viewport-window of virtual DOM
+  // rows. AG owns chapter external filtering and its column filter models.
+  const coverageRows=()=>{
+    if(!active||!coverageEnabled||disposed)return null;
+    const rows=[];
+    grid.forEachNodeAfterFilterAndSort(node=>{
+      if(node.data&&!node.group)rows.push(node.data);
+    });
+    return rows;
+  };
   const findRow=focus=>{
     if(!focus)return null;
     if(focus.elementId&&['preview','sentence'].includes(focus.origin))
@@ -79,7 +97,8 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
   ].map(x=>({sortable:false,resizable:true,suppressMovable:true,...x}));
   const grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:32,
     getRowId:p=>p.data.id,rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
-    onRowClicked:p=>selectSentence(p.data)});
+    onRowClicked:p=>selectSentence(p.data),
+    onFilterChanged:()=>emitCoverage(),onModelUpdated:()=>emitCoverage()});
   const virtual=createVirtualAGQuery(grid,'sentence');
   const selected=()=>scope?.operationScope?.mode==='chapter'?
     allRows.filter(row=>{
@@ -93,7 +112,14 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
       ?new Set(items.map(row=>row.from)):null});
     state.textContent=error?'分句失败：'+error:loading?'正在识别句子并验证位置…':
       `CMD 已标定 ${items.length} 句 · 跨文本块 ${items.filter(x=>x.crossBlock).length} 句 · 待人工审阅${stale?' · 失效标注 '+stale:''}`;
+    if(active&&coverageEnabled){
+      const visible=coverageRows()?.length||0;
+      state.textContent+=coverageResult&&coverageResult.sentenceCount===visible?
+        ` · 覆盖 ${coverageResult.coveredCount}/${visible} 句${coverageResult.unmappedCount?` · ${coverageResult.unmappedCount} 句未映射到预览`:''}`:
+        ` · 当前筛选 ${visible} 句 · 预览覆盖计算中`;
+    }
     if(active&&!loading&&!error)onStatus('分句 '+items.length+' 句 · CMD');
+    emitCoverage();
   }
   return Object.freeze({
     setLoading(){loading=true;error=null;state.textContent='正在无损分句…';},
@@ -105,10 +131,23 @@ export function createSentenceModule(host,getChapter,onStatus=()=>{}){
       followFocus(viewStore.getState().focusTarget);
     },
     setVirtualQuery(intent){scope=intent;refresh();},
+    setCoverage(enabled){coverageEnabled=Boolean(enabled);coverageResult=null;refresh();},
+    setCoverageResult(result){
+      coverageResult=result;
+      // Only the local review text is updated; do NOT reapply AG filters or
+      // re-emit preview coverage, which would create a feedback loop.
+      if(!active||!coverageEnabled)return;
+      const sentenceCount=coverageRows()?.length||0;
+      if(result?.sentenceCount!==sentenceCount)return;
+      const base=state.textContent.split(' · 覆盖 ')[0].split(' · 当前筛选 ')[0];
+      state.textContent=base+` · 覆盖 ${result.coveredCount}/${sentenceCount} 句`+
+        (result.unmappedCount?` · ${result.unmappedCount} 句未映射到预览`:'');
+    },
+    getCoverageRows:coverageRows,
     getOperationScope(){return scope?.operationScope||{mode:'all'};},
     count(chapter){if(chapter==='all')return allRows.length;
       const bound=getChapter(chapter);return bound?allRows.filter(x=>x.from>=bound.from&&x.to<=bound.to).length:0;},
-    setActive(next){active=Boolean(next);host.hidden=!active;if(active){refresh();followFocus(viewStore.getState().focusTarget);}},
-    dispose(){disposed=true;unsubscribeFocus();grid.destroy();},
+    setActive(next){active=Boolean(next);host.hidden=!active;if(active){refresh();followFocus(viewStore.getState().focusTarget);}emitCoverage();},
+    dispose(){disposed=true;unsubscribeFocus();grid.destroy();onCoverageChange();},
   });
 }

@@ -56,6 +56,66 @@ try{
    await select(page,'sentence');
    await page.waitForFunction(n=>document.querySelectorAll('.ocr-sentence-grid .ag-row').length===n,expected.length,{timeout:50000});
    assert.equal(await page.locator('.ocr-sentence-grid .ag-row').count(),expected.length);
+   // The separate 全部覆盖 checkbox belongs to the sentence-only AG toolbar.
+   const cover=page.locator('#sentence-cover-all');
+   await cover.waitFor({state:'visible'});
+   assert.equal(await cover.isChecked(),false);
+   const coverState=()=>page.evaluate(()=>({
+     fragments:[...(CSS.highlights.get('ocr-covered-sentences')||[])].map(r=>r.toString())
+       .concat([...new Set([...document.querySelectorAll('.ocr-sentence-cover-span')]
+         .map(x=>x.dataset.text))]),
+     stops:[...(CSS.highlights.get('ocr-covered-sentence-stops')||[])].map(r=>r.toString())
+       .concat([...document.querySelectorAll('.ocr-sentence-cover-stop')].map(x=>x.dataset.text)),
+   }));
+   await cover.check();
+   await page.waitForFunction(()=>{
+     const native=CSS.highlights.get('ocr-covered-sentences')?.size||0;
+     const safari=document.querySelectorAll('.ocr-sentence-cover-span').length;
+     return native+safari>=4;
+   },null,{timeout:14000});
+   const shown=await coverState();
+   assert(shown.fragments.some(x=>x.includes('The average cost is about')));
+   assert(shown.fragments.some(x=>x.includes('3 percentage points lower.')));
+   assert(shown.fragments.some(x=>x.includes('It matters.')));
+   assert(shown.fragments.some(x=>x.includes('13F, and the portfolio was rebalanced.')));
+   assert(shown.stops.length>=3,'whole coverage should show sentence ending punctuation');
+   assert.equal(readFileSync(doc,'utf8'),original,'checkbox must not save or modify CMD');
+   await page.locator('.ocr-sentence-jump').first().click();
+   await page.waitForFunction(()=>((CSS.highlights.get('ocr-selected-sentence')?.size||0)+
+     document.querySelectorAll('.ocr-sentence-overlay-underline').length)>0,null,{timeout:15000});
+   assert((await coverState()).fragments.length>=4,
+     'individual selected sentence must not replace whole coverage');
+   await page.screenshot({path:join(shots,name+'-whole-coverage.png')});
+   // Use the real AG Grid categorical filter, not a fabricated in-memory
+   // filter: zero displayed sentences must immediately yield zero coverage.
+   await page.locator('.ocr-sentence-grid .ag-header-cell[col-id="status"] .ag-header-cell-filter-button').click();
+   const filterAll=page.locator('.ocr-enum-filter [data-filter-value="all"] input');
+   await filterAll.waitFor({state:'visible'});
+   await filterAll.uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-sentence-grid .ag-row').length===0&&
+     !(CSS.highlights.get('ocr-covered-sentences')?.size||0)&&
+     !document.querySelector('.ocr-sentence-cover-span'),null,{timeout:15000});
+   assert.deepEqual(await coverState(),{fragments:[],stops:[]},'AG filter must control coverage');
+   await filterAll.check();
+   await page.waitForFunction(n=>document.querySelectorAll('.ocr-sentence-grid .ag-row').length===n&&
+     ((CSS.highlights.get('ocr-covered-sentences')?.size||0)+
+       document.querySelectorAll('.ocr-sentence-cover-span').length)>=4,
+     expected.length,{timeout:15000});
+   await page.keyboard.press('Escape');
+   // Cover only what the sentence AG currently displays. Switching modules
+   // removes the lens without clearing its checkbox preference.
+   await select(page,'media');
+   assert.equal(await cover.isVisible(),false);
+   await page.waitForFunction(()=>!(CSS.highlights.get('ocr-covered-sentences')?.size||0)&&
+     !document.querySelector('.ocr-sentence-cover-span'),null,{timeout:12000});
+   await select(page,'sentence');
+   assert.equal(await cover.isChecked(),true);
+   await page.waitForFunction(()=>((CSS.highlights.get('ocr-covered-sentences')?.size||0)+
+     document.querySelectorAll('.ocr-sentence-cover-span').length)>=4,null,{timeout:14000});
+   await cover.uncheck();
+   await page.waitForFunction(()=>!(CSS.highlights.get('ocr-covered-sentences')?.size||0)&&
+     !document.querySelector('.ocr-sentence-cover-span'),null,{timeout:12000});
+   assert.deepEqual(await coverState(),{fragments:[],stops:[]});
    await page.screenshot({path:join(shots,name+'-marked.png')});
    const text=await page.locator('.ocr-sentence-grid .ag-cell[col-id="text"]').allTextContents();
    assert(text.some(x=>x.includes('about 3 percentage points')));

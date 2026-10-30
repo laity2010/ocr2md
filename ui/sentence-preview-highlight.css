@@ -28,3 +28,29 @@
   outline:1px solid #e9c77c;
   background:rgba(233,199,124,.38);
 }
+
+/* Whole-coverage inspection mode: a translucent mint tint makes gaps between
+ * mapped sentences immediately visible; individual selection remains stronger. */
+::highlight(ocr-covered-sentences){
+  background-color:rgba(142,193,165,.24);
+  text-decoration-line:underline;
+  text-decoration-color:rgba(148,203,171,.75);
+  text-decoration-thickness:1px;
+  text-underline-offset:3px;
+}
+::highlight(ocr-covered-sentence-stops){
+  background-color:rgba(225,183,100,.33);
+  text-decoration-line:underline;
+  text-decoration-color:#caaa69;
+}
+.ocr-markdown .ocr-sentence-cover-overlay{
+  position:absolute;inset:0;z-index:4;pointer-events:none;
+}
+.ocr-markdown .ocr-sentence-cover-span{
+  position:absolute;background:rgba(142,193,165,.24);
+  border-bottom:1px solid rgba(148,203,171,.75);
+}
+.ocr-markdown .ocr-sentence-cover-stop{
+  position:absolute;background:rgba(225,183,100,.33);
+  border-bottom:1px solid #caaa69;
+}
