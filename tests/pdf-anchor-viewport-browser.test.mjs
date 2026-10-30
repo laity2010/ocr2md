@@ -36,6 +36,17 @@ for(const [i,[name,engine,launch]] of engines.entries()){
    document.querySelectorAll('.ag-row').length>10&&document.querySelector('.ocr-pdf-scroller .page'),
    null,{timeout:65000});
   await selectPreview(page,'pdf');
+  // Recreate the original iPad Safari failure geometry explicitly. The
+  // current flex layout ends exactly at the screen bottom, so the unchanged
+  // default viewport no longer tests clipping (and used to fail the gate).
+  // Extend only this disposable test scrollport 34px BELOW the real screen;
+  // the viewer must position the target inside the physical viewport.
+  await page.locator('.ocr-pdf-scroller').evaluate(scroller=>{
+    const below=window.innerHeight-scroller.getBoundingClientRect().bottom+34;
+    scroller.style.bottom=`-${Math.max(34,below)}px`;
+  });
+  await page.waitForFunction(()=>document.querySelector('.ocr-pdf-scroller')
+    .getBoundingClientRect().bottom>window.innerHeight+30,null,{timeout:5000});
   await page.locator('.ag-row[row-index="4"] [col-id="title"]').click();
   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay[data-pdf-page="3"][data-block-index="4"]'),null,{timeout:19000});
   await delay(1400);

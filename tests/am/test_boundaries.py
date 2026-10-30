@@ -21,7 +21,15 @@ class GateTests(unittest.TestCase):
     def test_baseline(self):
         stats,issues=mod.scan_files(ROOT,CAT)
         self.assertEqual(issues,[])
-        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(48,9,31))
+        # Exact inventory for the frozen 9b211638 source tree; retain strict drift detection.
+        self.assertEqual((stats['ui_js'],stats['modules'],stats['cross_module_imports']),(63,12,38))
+
+    def test_wcp_source_navigation_avoids_foreign_dom_contracts(self):
+        navigation=(ROOT/'ui/wcp-source-file-navigation.js').read_text()
+        shell=(ROOT/'ui/main.js').read_text()
+        self.assertNotIn('.ocr-outline-checkbox',navigation)
+        self.assertNotIn("event.target?.matches?.('#chapter-start-number')",navigation)
+        self.assertIn('sourceNavigation.refreshChapters();',shell)
 
     def test_undeclared_semantic_event_publisher(self):
         issues=self.modified('outline-grid.js',

@@ -606,7 +606,10 @@ async function main() {
     const raw=numberInput.value;
     const valid=/^\d{1,5}$/.test(raw);
     numberInput.setAttribute('aria-invalid',String(!valid));
-    if(valid)workspace.setChapterStartNumber(raw);
+    if(valid){
+      workspace.setChapterStartNumber(raw);
+      sourceNavigation.refreshChapters();
+    }
   });
   numberInput.addEventListener('blur',()=>{
     numberInput.value=workspace.getChapterState().startText;
