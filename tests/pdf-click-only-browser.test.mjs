@@ -1,4 +1,5 @@
 /** PDF navigation is click-only, never driven by Markdown scroll/caret/preview switch. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -28,8 +29,8 @@ const bounded=(label,promise,ms)=>{let timer;return Promise.race([promise,new Pr
   timer=setTimeout(()=>reject(new Error(`${currentEngine}: step "${currentStep}" / ${label} exceeded ${ms}ms`)),ms);})])
   .finally(()=>clearTimeout(timer));};
 const ENGINE_WATCHDOG_MS=150000;
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 for(let i=0;i<engines.length;i++){
  const [name,engine,options]=engines[i],port=4710+i;
  const url=`http://127.0.0.1:${port}/`;

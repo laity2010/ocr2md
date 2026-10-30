@@ -1,4 +1,5 @@
 /** Independent acceptance of the V6 core fork: same modules, lab-only I/O. */
+import {chromeExecutable,webkitExecutable} from '../../tests/platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {existsSync,readFileSync,mkdtempSync} from 'node:fs';
@@ -12,8 +13,8 @@ const prodDoc=join(root,'.v6/workspace/buffetts-alpha.minerujson.md');
 const prodRelease=join(root,'.v6/release/index.html');
 const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
 const before={doc:hash(prodDoc),release:hash(prodRelease)};
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 for(const [i,[name,engine,launch]] of engines.entries()){
  const port=4540+i,base=`http://127.0.0.1:${port}/labs/cm-html/`;

@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 /** iOS CM6 source must use browser-native caret and selection, not CM layers.
  * Non-iOS Mac retains its existing custom CM6 selection drawing.
  */
@@ -18,11 +19,11 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
  cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:testFile},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const cases=[
- ['Mac Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'},
+ ['Mac Chrome',chromium,{executablePath:chromeExecutable()},
   {viewport:{width:1440,height:900}},false],
- ['iPad Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'},
+ ['iPad Chrome',chromium,{executablePath:chromeExecutable()},
   {...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}},true],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'},
+ ['iPad WebKit',webkit,{executablePath:webkitExecutable()},
   {...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}},true],
 ];
 try{

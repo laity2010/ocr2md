@@ -1,4 +1,5 @@
 /** Regression: iPad Safari screen crop, click PDF highlight must be genuinely visible. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -12,8 +13,8 @@ const sample=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru
 const pdf=resolve('.v6/workspace/buffetts-alpha.original.pdf');
 const pdfSha=hash(readFileSync(pdf));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
 for(const [i,[name,engine,launch]] of engines.entries()){
  const port=4800+i, url=`http://127.0.0.1:${port}/`;

@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 /** Regression: LaTeX AG click navigates all four visible peers (AG/CM6/MD/PDF).
  * Test copies source into isolation, never modifies a user's working document.
  */
@@ -24,8 +25,8 @@ assert.equal(math.filter(row=>row.detection==='inferred').length,0);
 assert.equal(math[0].line,757);
 const wait=ms=>new Promise(done=>setTimeout(done,ms));
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 for(let i=0;i<engines.length;i++){
  const [name,engine,options]=engines[i];
  const document=resolve(`.v6/tests/latex-four-view-${process.pid}-${i}.md`);

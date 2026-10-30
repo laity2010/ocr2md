@@ -1,4 +1,5 @@
 /** Shared MD/PDF viewer splits into two Dockview peers without reinitializing PDF.js. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -15,8 +16,8 @@ const port=5265,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
  '--port',String(port),'--strictPort'],{cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:path},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['iPad WebKit',webkit,{executablePath:webkitExecutable()}]];
 try{
  let ready=false;for(let i=0;i<140;i++){try{if((await fetch(url)).ok){ready=true;break;}}catch{}await sleep(120)}
  assert(ready,'isolated dev server unavailable');

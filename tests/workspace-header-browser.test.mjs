@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,copyFileSync,mkdirSync} from 'node:fs';
@@ -13,8 +14,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
   env:{...process.env,V6_DOCUMENT_PATH:process.cwd()+'/'+testFile},stdio:'ignore',
 });
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 try{
  let ready=false;
  for(let i=0;i<150;i++){try{if((await fetch(url)).ok){ready=true;break;}}catch{}await sleep(130);}

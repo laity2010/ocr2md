@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 /** Frozen pre-upgrade OCR formulas -> one comment + native $ / $$.
  * Uses isolated in-browser CM6, not a writable production document.
  */
@@ -16,8 +17,8 @@ try{
  }
  assert(ready,'test Vite not ready');
  for(const [name,engine,options] of [
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]]){
+  ['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}]]){
   const browser=await engine.launch({headless:true,...options});
   try{
     const page=await browser.newPage({viewport:{width:1140,height:740}});

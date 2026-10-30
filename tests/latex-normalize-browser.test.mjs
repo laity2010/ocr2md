@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 /** Full shell -> Layout -> LaTeX -> CMD normalization contract.
  * Uses an isolated writable file seeded by immutable frozen legacy source.
  * Never touches the user's actual Buffett's Alpha workspace document.
@@ -20,8 +21,8 @@ function parse(text){
 }
 const before=parse(source);
 assert.equal(before.filter(x=>x.status==='latex').length,8);
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 const sleep=t=>new Promise(done=>setTimeout(done,t));
 mkdirSync('.v6/tests',{recursive:true});
 mkdirSync('.v6/evidence',{recursive:true});

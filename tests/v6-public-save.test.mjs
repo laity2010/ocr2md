@@ -1,3 +1,4 @@
+import {chromeExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {chromium} from 'playwright';
@@ -9,7 +10,7 @@ const code=readFileSync('.v6/private/editor-token','utf8').trim().slice(0,12);
 mkdirSync(evidence,{recursive:true});
 const original=readFileSync(fixture);
 writeFileSync(isolated,original);
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const browser=await chromium.launch({executablePath:chromeExecutable(),headless:true});
 try {
  const p=await browser.newPage({viewport:{width:1032,height:768}}),errors=[];
  p.on('pageerror',e=>errors.push(e.message));

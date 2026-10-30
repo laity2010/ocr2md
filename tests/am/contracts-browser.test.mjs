@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from '../platform.test-helper.mjs';
 /** Independent checks for AM rows previously lacking direct observable tests.
  * Runs a real isolated V6 page, no writes to the user's workspace.
  */
@@ -15,8 +16,8 @@ const port=5296,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
  '--port',String(port),'--strictPort'],{cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:path},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['iPad WebKit',webkit,{executablePath:webkitExecutable()}]];
 try{
   let ready=false;for(let i=0;i<160;i++){try{if((await fetch(url)).ok){ready=true;break}}catch{}await sleep(140)}
   assert(ready,'isolated Vite server unavailable');

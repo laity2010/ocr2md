@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,webkit,devices} from 'playwright';
 import {homedir} from 'node:os';
@@ -5,8 +6,8 @@ import {homedir} from 'node:os';
 const url=process.env.V6_TEST_URL || 'https://192.168.1.10:4443/';
 const sample='## Andrea Frazzini, David Kabiller & Lasse Heje Pedersen';
 const runtimes=[
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]
+  ['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}]
 ];
 for (const [label,type,launchOptions] of runtimes) {
   const browser=await type.launch({headless:true,...launchOptions});

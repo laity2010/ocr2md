@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {copyFileSync,mkdirSync,readFileSync} from 'node:fs';
@@ -31,8 +32,8 @@ const getState=()=>({source:window.__v6cm6.scrollSync.currentSource,
   previewY:document.querySelector('.ocr-preview-md-scroll').scrollTop,
 });
 const engines=[
-  ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
+  ['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}],
 ];
 try{
   let ready=false;

@@ -1,4 +1,5 @@
 /** Real TLS listener -> loopback lab; verifies scoped storage and auth in browsers. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,existsSync,mkdtempSync} from 'node:fs';
@@ -16,8 +17,8 @@ const prodDoc=join(root,'.v6/workspace/buffetts-alpha.minerujson.md');
 const prodRelease=join(root,'.v6/release/index.html');
 const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
 const before=[hash(prodDoc),hash(prodRelease)];
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function request(url,opts={}){
  return new Promise((resolve,reject)=>{

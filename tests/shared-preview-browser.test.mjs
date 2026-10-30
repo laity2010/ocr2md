@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -10,8 +11,8 @@ const hash=b=>createHash('sha256').update(b).digest('hex');
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 const pdf=resolve('.v6/workspace/buffetts-alpha.original.pdf');
 const pdfHash=hash(readFileSync(pdf));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 for(let i=0;i<engines.length;i++){

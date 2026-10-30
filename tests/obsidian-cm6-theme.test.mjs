@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
@@ -31,8 +32,8 @@ try {
   assert(ready,'V6 style test server did not start');
 
   const variants = [
-    ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-    ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}],
+    ['Chrome',chromium,{executablePath:chromeExecutable()}],
+    ['WebKit',webkit,{executablePath:webkitExecutable()}],
   ];
   for(const [name,engine,launchOptions] of variants) {
     if(process.env.V6_ONLY_WEBKIT&&name!=='WebKit')continue;

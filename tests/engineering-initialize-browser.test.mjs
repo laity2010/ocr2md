@@ -1,4 +1,5 @@
 /** No V6 production document is accessed or initialized by this test. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,readdirSync,existsSync} from 'node:fs';
@@ -15,8 +16,8 @@ const protectedPaths=['packages/minerujson-md/fixtures/buffetts-alpha.minerujson
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const baseline=protectedPaths.map(path=>sha(readFileSync(path)));
 const token=readFileSync('.v6/private/editor-token','utf8').trim();
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let passes=0;
 for(const [i,[name,engine,options]] of engines.entries()){

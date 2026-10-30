@@ -1,4 +1,5 @@
 /** CMD's single HTML I/O must handle standard tags, custom tags and comments. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
@@ -13,8 +14,8 @@ const port=5291,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
  '--port',String(port),'--strictPort'],{env:{...process.env,V6_DOCUMENT_PATH:docFile},stdio:'ignore'});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['iPad WebKit',webkit,{executablePath:webkitExecutable()}]];
 try{
  let available=false;
  for(let i=0;i<150;i++){try{if((await fetch(url)).ok){available=true;break}}catch{}await sleep(130)}

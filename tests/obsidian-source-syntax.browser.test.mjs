@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 /** CMD source syntax: Obsidian Markdown; official CodeMirror sTeX + One Dark.
  * Both browsers inspect computed syntax colors; never alter CM6 source bytes.
  */
@@ -57,8 +58,8 @@ for(let n=0;n<110;n++){
 try{
   assert(ready,'isolated Vite unavailable');
   for(const [name,engine,options] of [
-    ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-    ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]
+    ['Chrome',chromium,{executablePath:chromeExecutable()}],
+    ['WebKit',webkit,{executablePath:webkitExecutable()}]
   ]){
     let browser;
     try{

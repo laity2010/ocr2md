@@ -1,4 +1,5 @@
 /** Generic CMD comment annotation interface: real CM6 state, isolated fixture. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {chromium,webkit} from 'playwright';
@@ -24,8 +25,8 @@ try{
  for(let i=0;i<150;i++){try{if((await fetch(url)).ok){ready=true;break}}catch{}await sleep(130)}
  assert(ready,'isolated Vite unavailable');
  for(const [name,engine,launch] of [
-   ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-   ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]]){
+   ['Chrome',chromium,{executablePath:chromeExecutable()}],
+   ['WebKit',webkit,{executablePath:webkitExecutable()}]]){
    const browser=await engine.launch({headless:true,...launch});
    try{
      const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));

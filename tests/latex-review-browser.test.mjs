@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 /** LaTeX review = CM6 Markdown comments, no separate document persistence.
  * Tests fenced and undelimited inline formulas, Undo/Redo, save/reload.
  */
@@ -22,8 +23,8 @@ assert.deepEqual(intended.map(x=>x.action),['insert','text']);
 assert.equal(intended[0].tag,'ocr2md:latex');
 assert(!intended.some(op=>op.tag==='/ocr2md:latex'));
 
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 mkdirSync('.v6/evidence',{recursive:true});
 for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WEBKIT_ONLY||x[0]==='WebKit').entries()){
  const root=resolve(`.v6/tests/latex-cm-review-${process.pid}-${index}`);

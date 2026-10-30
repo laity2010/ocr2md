@@ -1,3 +1,4 @@
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 /** New lossless comments must stay invisible in MD preview and leave AG
  * headings, original PDF and CM6 editing/scrolling behaviors intact. */
 import {selectPreview} from './navigation-ui.test-helper.mjs';
@@ -13,8 +14,8 @@ const staged=readFileSync(file,'utf8');
 const old=readFileSync('.v6/workspace/buffetts-alpha.minerujson.md','utf8');
 const expectedHeadings=buildOutline(old).length;
 assert.equal(buildOutline(staged).length,expectedHeadings,'staging altered heading index');
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['WebKit',webkit,{executablePath:webkitExecutable()}]];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 for(let i=0;i<engines.length;i++){
  const [name,engine,launch]=engines[i],port=5280+i;

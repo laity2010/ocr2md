@@ -1,4 +1,5 @@
 /** Real WP Settings triple-pane regression: Chrome + WebKit, isolated Vite I/O. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import {selectModule} from './navigation-ui.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,webkit} from 'playwright';
@@ -26,8 +27,8 @@ const pause=t=>new Promise(r=>setTimeout(r,t));
 let ready=false;
 for(let i=0;i<180;i++){try{if((await fetch(base)).ok){ready=true;break;}}catch{}await pause(120);}
 assert(ready,'Vite settings test server failed to start');
-const engines=[['Chromium',chromium,{headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['WebKit',webkit,{headless:true,executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chromium',chromium,{headless:true,executablePath:chromeExecutable()}],
+  ['WebKit',webkit,{headless:true,executablePath:webkitExecutable()}]];
 try{
   for(const [name,engine,options]of engines){
     const browser=await engine.launch(options);

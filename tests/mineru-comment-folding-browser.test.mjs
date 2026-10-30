@@ -1,4 +1,5 @@
 /** Default CM6 MinerU comment folding: Chrome + iPad WebKit, isolated data. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
@@ -16,8 +17,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
  cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:file},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const cases=[
- ['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'},{viewport:{width:1440,height:900}}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'},
+ ['Chrome',chromium,{executablePath:chromeExecutable()},{viewport:{width:1440,height:900}}],
+ ['iPad WebKit',webkit,{executablePath:webkitExecutable()},
   {...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}}],
 ];
 try{

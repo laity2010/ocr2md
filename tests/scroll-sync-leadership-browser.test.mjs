@@ -1,4 +1,5 @@
 /** Prevent delayed follower CM6 layout scrolls from stealing preview scroll leadership. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
@@ -14,8 +15,8 @@ const port=5274,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{
  cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:doc},stdio:'ignore'});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
- ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+ ['iPad WebKit',webkit,{executablePath:webkitExecutable()}]];
 try {
  let up=false;for(let i=0;i<160;i++){try{if((await fetch(url)).ok){up=true;break}}catch{}await pause(120)}
  assert(up,'isolated test server unavailable');

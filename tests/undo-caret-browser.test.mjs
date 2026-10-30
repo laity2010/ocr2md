@@ -1,4 +1,5 @@
 /** Undo/redo must not navigate from CM6 to the AG-selected heading. */
+import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,unlinkSync} from 'node:fs';
@@ -14,8 +15,8 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js',
   '--host','127.0.0.1','--port',String(port),'--strictPort'],{
   cwd:process.cwd(),env:{...process.env,V6_DOCUMENT_PATH:file},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const engines=[['Chrome',chromium,{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}],
-  ['iPad WebKit',webkit,{executablePath:homedir()+'/Library/Caches/ms-playwright/webkit-2359/pw_run.sh'}]];
+const engines=[['Chrome',chromium,{executablePath:chromeExecutable()}],
+  ['iPad WebKit',webkit,{executablePath:webkitExecutable()}]];
 const snapshot=page=>page.evaluate(()=>{
   const v=window.__v6cm6.view,offset=v.state.selection.main.head;
   return {offset,line:v.state.doc.lineAt(offset).number,scrollTop:v.scrollDOM.scrollTop,
