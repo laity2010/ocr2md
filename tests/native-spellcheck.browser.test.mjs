@@ -40,9 +40,22 @@ try{
    await sleep(100);
  }assert(ready,'isolated Vite fixture unavailable');
  for(const [name,engine,mobile] of [['Chrome',chromium,false],['iPad-WebKit',webkit,true]]){
+  if(process.env.SPELLCHECK_ONLY_CHROME==='1'&&name!=='Chrome')continue;
+  writeFileSync(doc,original);
   const browser=await engine.launch({headless:true});
   try{
    const context=await browser.newContext({viewport:{width:1110,height:800},hasTouch:mobile,isMobile:mobile});
+   await context.addInitScript(()=>{
+     window.__spellScanCalls=0;
+     const OriginalWorker=window.Worker;
+     window.Worker=class extends OriginalWorker{
+       postMessage(data,...other){
+         if(data&&typeof data.source==='string')window.__spellScanCalls++;
+         return super.postMessage(data,...other);
+       }
+     };
+   });
+   if(production)await context.addCookies([{name:'v6edit',value:'spellcheck-test-token',domain:'127.0.0.1',path:'/'}]);
    const page=await context.newPage(),errors=[];
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
@@ -80,16 +93,52 @@ try{
    // Restore complete review via the existing AG scope checkbox.
    await page.locator('.ocr-all-chapters-control input').check();
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-spellcheck-grid .ag-row').length===3);
-   // Any edit invalidates outstanding findings; undo recomputes them.
-   await page.locator('#editor .cm-line').filter({hasText:'beautifull'}).click();
-   await page.keyboard.press('End');
-   await page.keyboard.type(' zzwrongspeling');
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spellcheck-grid .ag-row').length===4,null,{timeout:40000});
-   await page.locator('#undo').click();
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spellcheck-grid .ag-row').length===3,null,{timeout:40000});
-   assert.equal(readFileSync(doc,'utf8'),original,'review/undo silently saved');
+   // Re-enter should use existing scan candidates, not run another Worker job.
+   const scansBefore=await page.evaluate(()=>window.__spellScanCalls);
+   assert.equal(scansBefore,1,'initial automatic scan should run once');
    await choose(page,'media');
    assert.equal(await page.locator('.ocr-spelling-lint').count(),0,'marks not cleared on exit');
+   await choose(page,'spellcheck');
+   assert.equal(await grid.locator('.ag-row').count(),3);
+   assert.equal(await page.evaluate(()=>window.__spellScanCalls),scansBefore,'re-enter triggered redundant scan');
+   // Explicit one-shot CMD mark, one Undo, Redo, and no implicit save.
+   await page.locator('#ag-functions-toggle').click();
+   await page.locator('#spellcheck-mark-all').click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-spellcheck-grid .ag-cell[col-id="markState"]')]
+     .filter(el=>el.textContent==='已标定').length===3,null,{timeout:14000});
+   assert((await page.locator('.ocr-spelling-lint').count())>=1,'visible marked word lost lint');
+   assert.equal(readFileSync(doc,'utf8'),original,'mark operation silently saved');
+   await page.locator('#undo').click();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spelling-lint').length===0,null,{timeout:15000});
+   await page.locator('#redo').click();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spelling-lint').length>=1,null,{timeout:15000});
+   assert.equal(readFileSync(doc,'utf8'),original,'Undo/Redo silently saved');
+   // Existing CMD marks, not the spell Worker, restore after module switching.
+   await choose(page,'media');
+   await choose(page,'spellcheck');
+   assert.equal(await page.evaluate(()=>window.__spellScanCalls),scansBefore,'marked re-enter retriggered Worker');
+   await page.screenshot({path:join(screenshotDir,name+'-cmd-marks.png')});
+   // Save is always the global explicit operation.
+   await page.locator('#save').click();
+   for(let retry=0;retry<90&&!readFileSync(doc,'utf8').includes('ocr2md:spellcheck');retry++)await sleep(100);
+   const saved=readFileSync(doc,'utf8');
+   assert.equal((saved.match(/<!--ocr2md:spellcheck /g)||[]).length,3,'expected exactly three persisted CMD annotations');
+   assert(saved.includes('minerujson:source:v1'),'original evidence was lost');
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:45000});
+   await choose(page,'spellcheck');
+   // Browser restore may retain a virtual chapter and scope AG to two of
+   // the three words; switch the existing AG control to All for full review.
+   await page.locator('.ocr-all-chapters-control input').waitFor({state:'attached'});
+   if(!(await page.locator('.ocr-all-chapters-control input').isChecked()) &&
+      !(await page.locator('.ocr-all-chapters-control input').isDisabled()))
+     await page.locator('.ocr-all-chapters-control input').check();
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-spellcheck-grid .ag-row').length===3,null,{timeout:18000});
+   assert((await page.locator('.ocr-spelling-lint').count())>=1,'saved marks lost visible lint');
+   assert.equal(await page.evaluate(()=>window.__spellScanCalls),0,'saved CMD markers should not trigger spell scan after reload');
+   assert.equal(await grid.locator('.ag-cell[col-id="markState"]').filter({hasText:'已标定'}).count(),3);
+   await choose(page,'media');
+   assert.equal(await page.locator('.ocr-spelling-lint').count(),0,'marks remained when module disabled');
    assert.equal(await page.locator('.ocr-spellcheck-pane').isVisible(),false);
    assert.deepEqual(errors,[],name+' page errors');
    console.log('SPELLCHECK_LINT_AG_PASS',name,words);

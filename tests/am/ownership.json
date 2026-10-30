@@ -40,6 +40,7 @@
     "pdf-preview.js": "P",
     "scroll-sync.js": "L",
     "spellcheck-module.js": "G",
+    "spellcheck-marks.js": "G",
     "spellcheck-scan.js": "shell",
     "spellcheck-worker.js": "shell",
     "source-line-callout-menu.js": "L",

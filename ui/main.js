@@ -40,6 +40,8 @@ const spellcheckCompartment=new Compartment();
 let spellcheckEnabled=false;
 let scheduleSpellcheck=()=>{};
 let stopSpellcheck=()=>{};
+let enterSpellcheck=()=>{};
+let spellcheckDocChanged=()=>{};
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
@@ -453,7 +455,7 @@ async function main() {
         if (update.docChanged) {
           revision++;
           documentChanged();
-          if(spellcheckEnabled)scheduleSpellcheck();
+          if(spellcheckEnabled)spellcheckDocChanged();
         }
         if (update.selectionSet) {
           const offset=update.state.selection.main.head;
@@ -470,15 +472,28 @@ async function main() {
     ]
   });
   view=cm.view;
-  // Analysis runs in an isolated Worker. Late results cannot overwrite
-  // another CM6 revision or an inactive module. No network/disk persistence.
-  let worker=null,requestId=0,scanTimer=null;
-  const clearMarks=()=>view.dispatch(setDiagnostics(view.state,[]));
+  // A CMD marker is durable; the Worker scans only on first entry or
+  // explicit user request. No reread of the dictionary on every tab switch.
+  let worker=null,requestId=0,scanTimer=null,everScanned=false;
+  let cachedCandidates=null,cachedCandidateSource=null;
+  const clearSpellMarks=()=>view.dispatch(setDiagnostics(view.state,[]));
+  const showSpellRows=rows=>view.dispatch(setDiagnostics(view.state,rows.map(row=>({
+    from:row.from,to:row.to,severity:'error',source:'CMD 拼写审阅',
+    markClass:'ocr-spelling-lint',
+    message:row.suggestion==='—'?'疑似拼写错误':`可能的拼写错误 · 建议：${row.suggestion}`,
+  }))));
+  const showSavedSpellMarks=()=>{
+    const result=workspace.readSpellcheckMarks();
+    if(!result.recordCount)return false;
+    showSpellRows(result.rows);
+    return true;
+  };
   scheduleSpellcheck=()=>{
     if(!spellcheckEnabled)return;
+    everScanned=true;
     clearTimeout(scanTimer);
     const id=++requestId;
-    clearMarks();
+    clearSpellMarks();
     workspace.updateSpellcheck([],{pending:true});
     scanTimer=setTimeout(()=>{
       if(!spellcheckEnabled||id!==requestId)return;
@@ -487,7 +502,7 @@ async function main() {
         worker.onmessage=event=>{
           const {id:received,issues,truncated,error}=event.data||{};
           if(!spellcheckEnabled||received!==requestId)return;
-          if(error){clearMarks();workspace.updateSpellcheck([],{error});return;}
+          if(error){clearSpellMarks();workspace.updateSpellcheck([],{error});return;}
           const source=view.state.doc;
           const rows=(issues||[]).filter(issue=>issue.from>=0&&issue.to<=source.length&&
             source.sliceString(issue.from,issue.to)===issue.word).map(issue=>({
@@ -495,11 +510,8 @@ async function main() {
             suggestion:issue.suggestions?.join(' / ')||'—',
             context:source.lineAt(issue.from).text.trim().slice(0,150),
           }));
-          view.dispatch(setDiagnostics(view.state,rows.map(row=>({
-            from:row.from,to:row.to,severity:'error',source:'离线英语拼写',
-            markClass:'ocr-spelling-lint',
-            message:row.suggestion==='—'?'疑似拼写错误':`可能的拼写错误 · 建议：${row.suggestion}`,
-          }))));
+          cachedCandidates=rows;cachedCandidateSource=source.toString();
+          showSpellRows(rows);
           workspace.updateSpellcheck(rows,{isTruncated:Boolean(truncated)});
         };
         worker.onerror=()=>{
@@ -509,9 +521,34 @@ async function main() {
       worker.postMessage({id,source:view.state.doc.toString()});
     },350);
   };
+  enterSpellcheck=()=>{
+    if(showSavedSpellMarks())return;
+    const source=view.state.doc.toString();
+    if(cachedCandidates&&cachedCandidateSource===source){
+      workspace.updateSpellcheck(cachedCandidates);
+      showSpellRows(cachedCandidates);
+    }else if(!everScanned){
+      scheduleSpellcheck();
+    }else{
+      clearSpellMarks();
+      workspace.updateSpellcheck([],{error:'原文已改变；使用「功能 → 重新扫描」后再标定'});
+    }
+  };
+  // Invalidate pending Worker replies before attempting to project durable
+  // markers after every edit. Do not silently invoke spellcheck again.
+  spellcheckDocChanged=()=>{
+    ++requestId;clearTimeout(scanTimer);
+    queueMicrotask(()=>{
+      if(!spellcheckEnabled)return;
+      if(!showSavedSpellMarks()){
+        clearSpellMarks();
+        workspace.updateSpellcheck([],{error:'原文有改动；可使用「功能 → 重新扫描」'});
+      }
+    });
+  };
   stopSpellcheck=()=>{
-    ++requestId;clearTimeout(scanTimer);clearMarks();
-    workspace.updateSpellcheck([]);
+    ++requestId;clearTimeout(scanTimer);clearSpellMarks();
+    // Keep the pending review rows so switching views does not scan again.
   };
   cmdPort=wcpRuntime.wrapCMD(cm);
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
@@ -604,7 +641,7 @@ async function main() {
       spellcheckEnabled=enableSpellcheck;
       // Native WebKit spellcheck has no reliable visible diagnostics.
       // Explicitly keep native spellcheck off; CM6 Lint is the only marker owner.
-      if(enableSpellcheck)scheduleSpellcheck();
+      if(enableSpellcheck)enterSpellcheck();
       else stopSpellcheck();
     }
     if(selected==='settings'&&lastVisibleModule!=='settings')
@@ -655,6 +692,17 @@ async function main() {
   $('note-templates').addEventListener('click',()=>workspace.openNoteTemplates());
   $('note-convert-all').addEventListener('click',()=>workspace.convertAllNotes());
   $('html-normalize-tables').addEventListener('click',()=>workspace.normalizeHtmlTables());
+  $('spellcheck-rescan').addEventListener('click',()=>scheduleSpellcheck());
+  $('spellcheck-mark-all').addEventListener('click',()=>{
+    try{
+      const result=workspace.markSpellcheck();
+      if(result?.changed){
+        const marked=workspace.readSpellcheckMarks();
+        showSpellRows(marked.rows);
+        status(`✓ 已一次性 CMD 标定 ${result.changed} 处 · 一次撤销 · 请全局保存`);
+      }else status('没有新增的疑似错词需要标定');
+    }catch(error){status('拼写标定失败：'+error.message,'error');}
+  });
   $('media-download-all').addEventListener('click',async()=>{
     const button=$('media-download-all');button.disabled=true;
     try{await workspace.downloadMedia();}

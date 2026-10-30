@@ -920,3 +920,22 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SPELL-G19','G19','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit spelling AG rows, scoped chapter filter, source focus and lint markers; no source writes','integration'),
  ('TC-SPELL-L34','L34','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Shell-owned Worker sends detached rows through Layout, marks on/off, undo and stale response safety','integration');
+
+-- Durable, user-initiated spelling flags: no repeat analysis on module entry.
+-- Every inline CMD marker sits immediately before its word; read-back
+-- checks matching live bytes to avoid stale markers pointing at wrong text.
+INSERT INTO apis VALUES
+ ('G20','G','planSpellcheckMarks','ui/spellcheck-marks.js','export','CMD Markdown, candidate rows, current annotation records','verified CMD insert operations','pure batch plan, duplicate detection, no source mutation',1),
+ ('G21','G','readSpellcheckMarks','ui/spellcheck-marks.js','export','CMD Markdown, exact annotation records','source-positioned issues, stale count','read persisted spelling marks without worker/dictionary scan; skip stale mismatched word',1),
+ ('L35','L','returned.markSpellcheck','ui/workspace.js','returned','none','changed/skipped counts','AG owns one scoped CMD editAnnotations transaction; no auto-save or text replacement',1),
+ ('L36','L','returned.readSpellcheckMarks','ui/workspace.js','returned','none','detached marked rows','Shell redraws CM6 Lint from CMD annotations without repeat scanning',1);
+INSERT INTO access_edges VALUES
+ ('X-SPELL-G20','G','G','ui/spellcheck-module.js','planSpellcheckMarks(source,pending,cmd.readAnnotations','G20','registered','AG plans CMD syntax insertion without touching EditorView'),
+ ('X-SPELL-G21','G','G','ui/spellcheck-module.js','readSpellcheckMarks(getMarkdown(),getCMD().readAnnotations','G21','registered','AG reopens persisted CMD marks without spell Worker'),
+ ('X-SPELL-L35',NULL,'L','ui/main.js','workspace.markSpellcheck()','L35','registered','Shell menu routes explicit one-undo bulk annotation through Layout'),
+ ('X-SPELL-L36',NULL,'L','ui/main.js','workspace.readSpellcheckMarks()','L36','registered','Shell receives position-only marked results for its own CM6 lint renderer');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SPELL-G20','G20','tests/spellcheck-marks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Pure no-shadow batch plans, preserves Markdown structure, skips duplicates and rejects stale source','direct'),
+ ('TC-SPELL-G21','G21','tests/spellcheck-marks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Read live CMD markers after source offset shifts; stale word mutations do not show false flags','direct'),
+ ('TC-SPELL-L35','L35','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG bulk mark one CMD transaction, scope check, Undo/Redo, explicit save then reload','integration'),
+ ('TC-SPELL-L36','L36','tests/native-spellcheck.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Re-entry/reload reads persisted marks with no Worker message, red lint and AG rows preserved','integration');
