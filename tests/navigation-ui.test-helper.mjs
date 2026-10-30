@@ -7,7 +7,21 @@ import assert from 'node:assert/strict';
 async function choose(page, trigger, popup, value) {
   const control=page.locator(trigger).filter({visible:true}).first();
   await control.waitFor({state:'visible',timeout:20000});
-  await control.click();
+  await control.click().catch(async error=>{
+    // Diagnostic only (no retry): record why actionability failed, then rethrow.
+    const samples=[];
+    for(let i=0;i<8;i++){
+      samples.push(await control.evaluate(el=>{const r=el.getBoundingClientRect();
+        const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+        return {x:+r.x.toFixed(2),y:+r.y.toFixed(2),w:+r.width.toFixed(2),h:+r.height.toFixed(2),
+          hit:hit?(hit.className||hit.tagName).toString().slice(0,60):null,
+          anims:document.getAnimations().length,vv:visualViewport?[visualViewport.offsetTop,visualViewport.scale]:null};
+      }).catch(e=>String(e.message).slice(0,80)));
+      await page.waitForTimeout(100);
+    }
+    console.log('AUDIT_NAV_CLICK_DIAG',trigger,JSON.stringify(samples));
+    throw error;
+  });
   const item=page.locator(`${popup}:visible [data-value="${value}"]`).first();
   await item.waitFor({state:'visible',timeout:12000});
   await item.click();
