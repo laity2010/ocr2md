@@ -14,13 +14,16 @@ const original=[
  'Open Access: The Creative Commons License (htp\\:// creativecommons.org/licenses/by/4.0/) permits distribution.','',
  '<!-- minerujson:block:v1:1:2 -->','',
  'However, Berkshire can deduct many dividends,<!--ocr2md:note-ref id="9"-->[^9] and minimize taxes by allocating earnings abroad.<!--ocr2md:note-ref id="10"-->[^10] Hence, assessing the tax advantage is difficult.','',
+ '<!-- minerujson:block:v1:1:3 -->','',
+ '<!--ocr2md:latex id="equity" review="latex"--> $(Equity_t^{MV} +Debt_t +Float_t)/Equity_t^{MV}$, then we found an average leverage of 1.4 to 1. In any event, note that our measure of leverage is subject to measurement noise.','',
+ '<!--ocr2md:latex id="annotation-only" review="latex"-->','',
  '[^3]: Footnote three.','[^9]: Footnote nine.','[^10]: Footnote ten.','',
  '<!-- minerujson:source:v1','{"evidence":"untouched"}','-->',
 ].join('\n');
 const projection=extractTextBlocks(original,{bodyEnd:original.indexOf('<!-- minerujson:source:v1')});
 assert.equal(reconstructSource(projection),original);
 const segments=segmentSentences(projection);
-for(const needle of ['This finding is consistent','Open Access:','However, Berkshire','Hence, assessing']){
+for(const needle of ['This finding is consistent','Open Access:','However, Berkshire','Hence, assessing','then we found an average leverage','In any event, note that our measure']){
  assert(segments.some(row=>row.text.startsWith(needle)),`not separately segmented: ${needle}`);
 }
 const marks=planSentenceMarks(original,segments,scanAnnotations(original));
@@ -53,11 +56,14 @@ try{
    const observed=await page.evaluate(()=>{
     const text=[...(CSS.highlights.get('ocr-covered-sentences')||[])].map(range=>range.toString())
       .concat([...document.querySelectorAll('.ocr-sentence-cover-span')].map(n=>n.dataset.text||''));
-    return ['This finding is consistent','Open Access:','However, Berkshire','and minimize taxes by allocating','Hence, assessing'].map(phrase=>({phrase,highlighted:text.some(t=>t.includes(phrase))}));
+    return ['This finding is consistent','Open Access:','However, Berkshire','and minimize taxes by allocating','Hence, assessing','then we found an average leverage','In any event, note that our measure'].map(phrase=>({phrase,highlighted:text.some(t=>t.includes(phrase))}));
    });
    assert(observed.every(c=>c.highlighted),`${name}: missing rendered text highlight ${JSON.stringify(observed)}`);
    const paragraph=page.locator('.ocr-markdown p').filter({hasText:'This finding is consistent'}).first();
    await paragraph.screenshot({path:join(shots,`${name}-footnote-covered.png`)});
+   const equationParagraph=page.locator('.ocr-markdown [data-source-start][data-source-end]').filter({hasText:'then we found an average leverage'}).first();
+   assert.equal(await equationParagraph.count(),1,'inline-latex paragraph must appear once');
+   await equationParagraph.screenshot({path:join(shots,`${name}-latex-prefix-covered.png`)});
    assert.equal(readFileSync(doc,'utf8'),marked);
    assert.deepEqual(errors,[]);
    console.log('SENTENCE_FOOTNOTE_COVERAGE_PASS',name,{count:saved.rows.length,observed});

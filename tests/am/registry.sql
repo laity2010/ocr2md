@@ -1095,6 +1095,6 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-COVER-FOOTNOTE-L45','L45','tests/sentence-coverage-geometry.browser.test.mjs','tests/sentence-coverage-geometry.browser.test.mjs','Chrome/WebKit 9/9 mapped; following This finding visible and highlighted; image no overlap, source unchanged','integration');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-SENT-FOOTNOTE-REAL-L45','L45','tests/sentence-footnote-coverage.browser.test.mjs','tests/sentence-footnote-coverage.browser.test.mjs','Chrome/WebKit source-preserving CMD segmentation, idempotent marks, 5/5 preview coverage, screenshot and no source write','integration');
+ ('TC-SENT-FOOTNOTE-REAL-L45','L45','tests/sentence-footnote-coverage.browser.test.mjs','tests/sentence-footnote-coverage.browser.test.mjs','Chrome/WebKit source-preserving CMD segmentation, idempotent marks, 7/7 including leading CMD LaTeX and trailing prose, screenshot and no source write','integration');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-COVER-CONVERTED-NOTE-L45','L45','tests/sentence-footnote-coverage.browser.test.mjs','tests/sentence-footnote-coverage.browser.test.mjs','Chrome/WebKit all marked text highlighted incl. This finding and Open Access; no extra CMD marks or saves','integration');

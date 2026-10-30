@@ -9,6 +9,8 @@ const inlineMath=/\$[^$\n]+\$|\\\([^\n]+?\\\)/g;
 // Existing Obsidian note references are metadata, not sentence text. Their
 // unchanged-length blanks preserve every CMD source offset for safe marking.
 const noteReference=/\[\^[^\]\n]+\](?!:)/g;
+const leadingCmd=/^\s*(?:<!--\s*ocr2md:[^\n]*?-->\s*)+/u;
+const leadingLatex=/^\s*<!--\s*ocr2md:latex\b[^\n]*?-->/u;
 const structural=/^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||!\[|\[\^|`{3,}|~{3,}|<!--|<\/?[a-z]|\$\$|\\\[)/i;
 const endsSentence=/[.!?。！？]["'”’)]?\s*$/;
 const hash=text=>{let v=2166136261;for(let i=0;i<text.length;i++)v=Math.imul(v^text.charCodeAt(i),16777619);return (v>>>0).toString(36);};
@@ -18,6 +20,15 @@ function lineProjection(line,from){
   for(const regex of [tagPattern,inlineMath,noteReference]){
     regex.lastIndex=0;
     for(const m of line.matchAll(regex))for(let k=m.index;k<m.index+m[0].length;k++)clean[k]=' ';
+  }
+  // A displayable prose continuation can begin after a labeled inline
+  // equation: `<!--ocr2md:latex...--> $...$, then we found ...`.
+  // Keep the comma in raw source, but don't mistake it for the sentence's
+  // first character when making lossless, source-offset-aware CMD anchors.
+  if(leadingLatex.test(line)){
+    const first=clean.findIndex(char=>char!==' '&&char!=='\t');
+    if(first>=0&&clean[first]===','&&/^[ \t]*[\p{L}]/u.test(clean.slice(first+1).join('')))
+      clean[first]=' ';
   }
   return {text:clean.join(''),raw:line,from,to:from+line.length};
 }
@@ -33,7 +44,12 @@ export function extractTextBlocks(source,{bodyEnd=source.length}={}){
     const raw=row.text;
     if(comment){if(raw.includes('-->'))comment=false;continue;}
     if(/^\s*<!--/.test(raw)&&!raw.includes('-->')){comment=true;run=null;lastProse=null;continue;}
-    if(/^\s*<!--/.test(raw)&&!blockAnchor(raw)){continue;}
+    if(/^\s*<!--/.test(raw)&&!blockAnchor(raw)){
+      // Ignore genuine annotation-only lines, but not the human-readable
+      // sentence following an inline CMD annotation at column zero.
+      const prefix=leadingCmd.exec(raw)?.[0];
+      if(!prefix||!raw.slice(prefix.length).trim())continue;
+    }
     if(anchoredDocument&&!lastAnchor&&!blockAnchor(raw))continue;
     if(/^\s*(`{3,}|~{3,})/.test(raw)){
       const m=/^\s*(`{3,}|~{3,})/.exec(raw)[1];
@@ -47,14 +63,23 @@ export function extractTextBlocks(source,{bodyEnd=source.length}={}){
     if(mathBlock)continue;
     const anchor=blockAnchor(raw);
     if(anchor){lastAnchor=anchor;continue;}
-    if(!safeLine(raw)){if(raw.trim()&&!/^\s*<!--/.test(raw)){run=null;lastProse=null;}continue;}
     const seg=lineProjection(raw,row.from);
+    // Structural checks see visible prose, not the spaces that replaced
+    // metadata/math. Keep the source's actual indentation rule intact.
+    if(/^[ \t]{4,}/.test(raw)||!safeLine(seg.text.trimStart())){
+      if(seg.text.trim()){run=null;lastProse=null;}
+      continue;
+    }
     if(!seg.text.trim()){continue;}
     // Join only intra-paragraph soft wraps or consecutive OCR blocks on the
     // same page whose preceding fragment lacks sentence-final punctuation.
     const blank=lastProse&&lines.slice(lastProse.line+1,i).filter(x=>x.text.trim()==='');
     const contiguous=lastProse&&i===lastProse.line+1;
-    const adjacent=lastProse&&lastAnchor&&lastProse.anchor&&
+    // Existing reviewed CMD marks may already cover the prose before a
+    // separately annotated equation. Do not retroactively fuse that marked
+    // sentence with its formula tail (which would orphan old part IDs).
+    const startsAfterLabeledEquation=leadingLatex.test(raw);
+    const adjacent=!startsAfterLabeledEquation&&lastProse&&lastAnchor&&lastProse.anchor&&
       lastAnchor.pageIndex===lastProse.anchor.pageIndex&&
       lastAnchor.blockIndex===lastProse.anchor.blockIndex+1&&
       (!blank||blank.length<=2)&&!endsSentence.test(lastProse.text.trim());
