@@ -93,6 +93,12 @@ printf 'AM_AUDIT_ENV node=%s python=%s playwright=%s\n' "$(node -v)" "$(python3 
 mkdir -p .v6/workspace .v6/tests .v6/evidence
 # ONLY isolated disposable mother is initialized; never the source worktree's.
 cp "$MD" .v6/workspace/buffetts-alpha.minerujson.md
+# The promoted-Main UI regression reads this fixture before it starts its
+# own isolated server. Cold worktrees have no ignored .v6/settings.json;
+# initialize an explicitly empty one, never copy a user's live settings.
+if [[ ! -e .v6/settings.json ]]; then
+  printf '{"settings":{}}\n' > .v6/settings.json
+fi
 npm run build
 python3 tests/am/am.py build
 python3 -m unittest discover -s tests/am -p 'test_*.py'
