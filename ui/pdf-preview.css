@@ -5,6 +5,8 @@
   border-bottom:1px solid #4d585d;white-space:nowrap;overflow:hidden}
 .ocr-pdf-tools button {padding:0 6px;height:25px;border-radius:4px;font-size:13px;background:#35474a}
 .ocr-pdf-tools label {display:flex;align-items:center;gap:3px;font-size:12px}
+.ocr-pdf-tools .ocr-pdf-cover-toggle {gap:4px;flex:none;cursor:pointer;user-select:none}
+.ocr-pdf-tools .ocr-pdf-cover-toggle input {width:15px;height:15px;margin:0;accent-color:#569d79;flex:none}
 .ocr-pdf-page {width:43px;height:24px;font-size:12px;padding:1px 2px;
   border:1px solid #617077;background:#1d272e;color:#d3c6aa;text-align:center}
 .ocr-pdf-count,.ocr-pdf-zoom {font-size:11px;font-variant-numeric:tabular-nums}

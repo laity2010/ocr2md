@@ -90,11 +90,3 @@
   width:16px;height:16px;min-width:16px;padding:0;margin:0;
   accent-color:#8fbd9c;flex:none;
 }
-
-/* Text-block coverage is a viewing lens, not a new AG operation or filter. */
-.ocr-lab-ag-toolbar > .ocr-block-cover-control{order:2;display:inline-flex;
-  align-items:center;gap:5px;flex:none;white-space:nowrap;cursor:pointer;color:#bad7cc}
-.ocr-lab-ag-toolbar > .ocr-block-cover-control[hidden]{display:none!important}
-.ocr-lab-ag-toolbar > .ocr-block-cover-control input[type="checkbox"]{
-  width:16px;height:16px;min-width:16px;padding:0;margin:0;
-  accent-color:#79ac99;flex:none}

@@ -30,10 +30,10 @@ try{
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
-   const toggle=page.getByRole('checkbox',{name:'文本块覆盖显示'});
-   assert(await toggle.isVisible());assert.equal(await toggle.isChecked(),false);
-   assert.equal(await page.locator('.ocr-md-block-covered,.ocr-pdf-block-cover').count(),0);
-   await toggle.check();
+   const toggle=page.locator('.ocr-pdf-tools .ocr-pdf-cover-toggle input');
+   assert.equal(await page.locator('.ocr-lab-ag-toolbar [aria-label="文本块覆盖显示"]').count(),0);
+   assert.equal(await toggle.count(),1);
+   assert.equal(await toggle.isChecked(),true,'PDF coverage is checked by default');
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224 &&
      document.querySelectorAll('.ocr-md-block-covered').length>=150,null,{timeout:22000});
    const total=await page.evaluate(()=>({md:document.querySelectorAll('.ocr-md-block-covered').length,
@@ -63,6 +63,7 @@ try{
    assert(focusStyle.shadow.includes('rgb('),'focus border must stay distinct');
    await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
    await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
+   assert(await toggle.isVisible(),'coverage checkbox lives in PDF toolbar');
    await page.locator('.ocr-pdf-region-overlay').waitFor({timeout:17000});
    assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
    const focusPdf=page.locator('.ocr-pdf-region-overlay');
@@ -96,7 +97,7 @@ try{
    await page.screenshot({path:`.v6/evidence/block-coverage-lens/${name}-coverage-off-pair-stays.png`,animations:'disabled'});
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="media"]').click();
-   assert.equal(await toggle.isVisible(),false,'coverage checkbox only in text block module');
+   assert.equal(await toggle.isVisible(),true,'PDF toolbar retains coverage checkbox across AG modules');
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    assert.equal(await toggle.isChecked(),false,'checkbox state must survive module navigation');

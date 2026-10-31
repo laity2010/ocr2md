@@ -29,7 +29,8 @@ try{
       await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').evaluate(el=>el.click());
       await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),
         null,{timeout:30000});
-      await page.getByRole('checkbox',{name:'文本块覆盖显示'}).evaluate(el=>{if(!el.checked)el.click();});
+      assert(await page.locator('.ocr-pdf-tools .ocr-pdf-cover-toggle input').isChecked(),
+        'PDF toolbar coverage must be checked by default');
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:26000});
       await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(el=>el.click());

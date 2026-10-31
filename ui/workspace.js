@@ -71,7 +71,7 @@ let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
 let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
-let textBlockCoverageEnabled=false;
+let textBlockCoverageEnabled=true;
 
 class OutlinePanel {
   constructor(){
@@ -317,7 +317,8 @@ class PreviewPanel {
     });
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
       (id,join)=>blockJoinAction(id,join),
-      (id,targetId,placement)=>blockMoveAction(id,targetId,placement));
+      (id,targetId,placement)=>blockMoveAction(id,targetId,placement),
+      enabled=>{textBlockCoverageEnabled=Boolean(enabled);this.setBlockCoverage(enabled);});
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -747,6 +748,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setSentenceCoverage:enabled=>currentOutline?.sentence?.setCoverage(enabled),
     setTextBlockCoverage:enabled=>{
       textBlockCoverageEnabled=Boolean(enabled);
+      currentPreview?.pdf?.setCoverageChecked(textBlockCoverageEnabled);
       currentPreview?.setBlockCoverage(textBlockCoverageEnabled);
     },
     setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),

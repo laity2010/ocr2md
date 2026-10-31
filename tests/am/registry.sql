@@ -61,7 +61,7 @@ INSERT INTO apis VALUES
  ('P01','P','PdfPreview.open','ui/pdf-preview.js','export','none','Promise<void>','awaits CMD sealed JSON queryLayout + streams /api/pdf; ready after first page paint',1),
  ('P02','P','PdfPreview.focusLine','ui/pdf-preview.js','export','1-based line,explicit:boolean','Promise<void>','locates OCR region; explicit reveal',1),
  ('P03','P','PdfPreview.refreshAnchors','ui/pdf-preview.js','export','none','void','rebuilds anchor source mapping',1),
- ('P04','P','PdfPreview.setZoom','ui/pdf-preview.js','export','mode:string','void','updates PDF.js scale',0),
+ ('P04','P','PdfPreview.setZoom','ui/pdf-preview.js','export','mode:string','void','updates PDF.js scale while preserving current page-relative reading anchor',0),
  ('P05','P','PdfPreview.setActive','ui/pdf-preview.js','export','boolean','void','viewer visibility handling',1),
  ('P06','P','PdfPreview.onResize','ui/pdf-preview.js','export','none','void','reflows viewer width and overlay',0),
  ('P07','P','PdfPreview.moveToolbarTo','ui/pdf-preview.js','export','DOM container','void','reparents toolbar',0),
@@ -71,6 +71,7 @@ INSERT INTO apis VALUES
  ('P11','P','PdfPreview.revealCurrentLocation','ui/pdf-preview.js','export','none','void','reveals only pending explicit click',0),
  ('P12','P','PdfPreview.clearHighlight','ui/pdf-preview.js','export','none','void','removes OCR overlay',0),
  ('P13','P','PdfPreview.whenReady','ui/pdf-preview.js','export','none','Promise<boolean>','reports first-page warm-up result without exposing PDF.js internals',1),
+ ('P14','P','PdfPreview.setCoverageChecked','ui/pdf-preview.js','export','boolean enabled','void','updates PDF toolbar checkbox preference without touching CMD or original block checkbox states',1),
  ('L01','L','createWorkspace','ui/workspace.js','export','host,getDocument,getCurrentEditor,getCommandDocument','workspace facade','builds Dockview panels and wiring',1),
  ('L02','L','returned.refreshPreview','ui/workspace.js','returned','none','void','requests Markdown re-render',1),
  ('L03','L','returned.refreshOutline','ui/workspace.js','returned','none','void','requests AG reindex',1),
@@ -307,6 +308,7 @@ INSERT INTO access_edges VALUES
  ('X06','L','G','ui/workspace.js','createOutlineGrid(this.element','G01','registered','Layout invokes registered AG constructor to mount panel'),
  ('X07','L','M','ui/workspace.js','renderMarkdown(source)','M01','registered','Layout renders a read-only MD projection using public renderer'),
  ('X08','L','P','ui/workspace.js','this.pdf.moveToolbarTo(this.pdfTools)','P07','registered','Layout coordinates PDF toolbar through exposed method'),
+ ('X-PDF-COVER-P14','L','P','ui/workspace.js','currentPreview?.pdf?.setCoverageChecked(textBlockCoverageEnabled)','P14','registered','Layout synchronizes coverage preference through PDF public control API'),
  ('X09','L','P','ui/workspace.js','currentPdf?.pdf?.refreshAnchors()','P03','registered','Layout requests PDF anchor refresh through published method'),
  ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API'),
  ('X11','L','A','ui/workspace.js','createMediaModule(this.mediaHost','A01','registered','Layout hosts Media panel without accessing its AG internals'),
@@ -1174,7 +1176,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Text-block coverage lens is a presentation-only CMD source-anchor overlay:
 -- independent of both individual MD/PDF focus and PDF paired comparison.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G28','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit checkbox paints 224 original PDF bbox and only anchored Markdown blocks; subtle layers below individual focus and two-block comparison, survives PDF zoom and removes only coverage on toggle off','integration');
+ ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G28','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit default-checked PDF toolbar checkbox paints 224 PDF bbox and anchored Markdown Blocks; subtle overlays below focus/A-B comparison; module switch preserves preference; no source writes','integration');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-TOOLBAR-P14','P14','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit PDF toolbar owns the only default-checked coverage checkbox; AG toolbar has none; toggles 224 original Block overlays without any CMD writes','integration'),
+ ('TC-PDF-ZOOM-ANCHOR-P04','P04','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit repeated zoom in/out/fit keeps current page and fractional reading position stable without re-navigating; PDF checkbox and 224 overlays remain intact','integration');
 
 -- CMD reversible logical joins are source annotations, not deletion or
 -- mutation of the original MinerU block anchors, sealed JSON, or PDF bboxes.

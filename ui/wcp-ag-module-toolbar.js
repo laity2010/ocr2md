@@ -47,13 +47,6 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
   sentenceCoverLabel.title='高亮 AG 当前章节与筛选结果中的全部句子，检查未被分句覆盖的原文';
   sentenceCoverToggle.addEventListener('change',()=>
     modulePort.setSentenceCoverage(sentenceCoverToggle.checked));
-  const blockCoverLabel=document.createElement('label');
-  blockCoverLabel.className='ocr-block-cover-control';blockCoverLabel.hidden=true;
-  const blockCoverToggle=document.createElement('input');blockCoverToggle.type='checkbox';
-  blockCoverToggle.setAttribute('aria-label','文本块覆盖显示');
-  blockCoverLabel.append(blockCoverToggle,document.createTextNode('覆盖显示'));
-  blockCoverLabel.title='将 CMD 已标定文本块在 Markdown/PDF 中浅色覆盖；原有单块定位及双框高亮保持独立';
-  blockCoverToggle.addEventListener('change',()=>modulePort.setBlockCoverage(blockCoverToggle.checked));
   const chapterSelect=document.createElement('select');
   chapterSelect.className='ocr-wp3-chapter-select';
   chapterSelect.setAttribute('aria-label','虚拟章节');
@@ -142,7 +135,6 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     indexLabel.hidden=true;
     allLabel.hidden=settings||Boolean(chapter);
     sentenceCoverLabel.hidden=settings||selected!=='sentence';
-    blockCoverLabel.hidden=settings||selected!=='text-block';
     // The mother '章节定界' view must always show all headings/elements.
     // Only a selected virtual chapter file may filter AG membership.
     // The checkbox changes AG query AND action scope, but never switches
@@ -218,7 +210,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     bar.setAttribute('role','toolbar');
     // No cloned controls. Events and input state stay owned by mainline.
     // The first two visible controls are exactly: 全部 ☐ | [标题/媒体/LaTeX].
-    bar.append(allLabel,elementSelect,sentenceCoverLabel,blockCoverLabel);
+    bar.append(allLabel,elementSelect,sentenceCoverLabel);
     modulePort.mountSelector(bar);
     bar.append(indexLabel,chapterSelect,functionHost);
     modulePort.mountActionGroups(functionMenu);

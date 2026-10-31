@@ -52,12 +52,13 @@ function sourceAnchor(anchors,line){
 
 export class PdfPreview {
   constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
-    onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好'))){
+    onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),onCoverageChange=()=>{}){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
     this.onBlockJoin=onBlockJoin;
     this.onBlockMove=onBlockMove;
+    this.onCoverageChange=onCoverageChange;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -65,6 +66,7 @@ export class PdfPreview {
       <button class="ocr-pdf-fit" type="button" title="按宽度缩放">适宽</button>
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
+      <label class="ocr-pdf-cover-toggle" title="显示 CMD 文本块的浅色覆盖，不修改正文或块状态"><input type="checkbox" aria-label="文本块覆盖显示" checked />覆盖显示</label>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -77,6 +79,8 @@ export class PdfPreview {
     this.statusNode=this.host.querySelector('.ocr-pdf-status');
     this.pageInput=this.host.querySelector('.ocr-pdf-page');
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
+    this.coverToggle=this.toolbar.querySelector('.ocr-pdf-cover-toggle input');
+    this.coverToggle.addEventListener('change',()=>this.onCoverageChange(this.coverToggle.checked));
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
     this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
@@ -99,6 +103,7 @@ export class PdfPreview {
     this.map=[];this.anchors=[];
     this.disposed=false;this.explicitUserUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
+    this.zoomAnchorToken=0;this.zoomRestoreTimer=0;this.zoomRestoreBehavior=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
@@ -163,6 +168,7 @@ export class PdfPreview {
     if(this.revealPending)this.scheduleOverlay();
   }
   setStatus(s){this.statusNode.textContent=s;}
+  setCoverageChecked(enabled){this.coverToggle.checked=Boolean(enabled);}
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
     this.scheduleOverlay();
@@ -244,11 +250,64 @@ export class PdfPreview {
   updateZoom(){
     if(this.viewer)this.zoomNode.textContent=`${Math.round(this.viewer.currentScale*100)}%`;
   }
+  captureZoomAnchor(){
+    const viewport=this.scroller.getBoundingClientRect();
+    const x=viewport.left+viewport.width/2,y=viewport.top+viewport.height/2;
+    let best=null,distance=Infinity;
+    // Anchor to an actual visible PDF page, not its changing scrollTop.
+    for(const page of this.pages.querySelectorAll('.page[data-page-number]')){
+      const rect=page.getBoundingClientRect();
+      if(!rect.width||!rect.height)continue;
+      const dx=Math.max(rect.left-x,0,x-rect.right);
+      const dy=Math.max(rect.top-y,0,y-rect.bottom);
+      const d=dx*dx+dy*dy;
+      if(d<distance){
+        distance=d;best={pageNumber:page.dataset.pageNumber,
+          x:clamp((x-rect.left)/rect.width,0,1),
+          y:clamp((y-rect.top)/rect.height,0,1),screenX:x,screenY:y};
+      }
+    }
+    return best;
+  }
+  restoreZoomAnchor(anchor){
+    if(!anchor||this.disposed)return;
+    const page=[...this.pages.querySelectorAll('.page[data-page-number]')]
+      .find(node=>node.dataset.pageNumber===anchor.pageNumber);
+    if(!page)return;
+    const rect=page.getBoundingClientRect();
+    if(!rect.width||!rect.height)return;
+    this.scroller.scrollLeft+=rect.left+anchor.x*rect.width-anchor.screenX;
+    this.scroller.scrollTop+=rect.top+anchor.y*rect.height-anchor.screenY;
+  }
+  preserveZoomLocation(update){
+    const anchor=this.captureZoomAnchor();
+    const token=++this.zoomAnchorToken;
+    clearTimeout(this.zoomRestoreTimer);
+    if(this.zoomRestoreBehavior===null)
+      this.zoomRestoreBehavior=this.scroller.style.scrollBehavior;
+    this.scroller.style.scrollBehavior='auto';
+    // An earlier click-navigation highlight must not pull us back to its
+    // old block after the user explicitly changes PDF magnification.
+    this.revealPending=false;
+    update();
+    const restore=()=>{if(!this.disposed&&token===this.zoomAnchorToken)
+      this.restoreZoomAnchor(anchor);};
+    restore();
+    requestAnimationFrame(()=>{restore();requestAnimationFrame(restore);});
+    this.zoomRestoreTimer=setTimeout(()=>{
+      if(this.disposed||token!==this.zoomAnchorToken)return;
+      restore();
+      this.scroller.style.scrollBehavior=this.zoomRestoreBehavior??'';
+      this.zoomRestoreBehavior=null;this.zoomRestoreTimer=0;
+    },140);
+  }
   setZoom(mode){
     if(!this.ready)return;
     this.zoomMode=mode;
-    this.viewer.currentScaleValue=mode;
-    this.viewer.update();this.updateZoom();this.scheduleOverlay();
+    this.preserveZoomLocation(()=>{
+      this.viewer.currentScaleValue=mode;this.viewer.update();
+    });
+    this.updateZoom();this.scheduleOverlay();
   }
   zoomStep(direction){
     if(!this.ready)return;
@@ -266,7 +325,7 @@ export class PdfPreview {
     // PDF.js reflows its page tree on update; do not update for each new
     // canvas or scroll paint. Only a real Dockview width change needs scaling.
     if(this.ready&&widthChanged&&this.zoomMode==='page-width'){
-      this.viewer.currentScaleValue='page-width';this.viewer.update();this.updateZoom();
+      this.setZoom('page-width');
     }
     this.scheduleOverlay();
   }
@@ -985,6 +1044,11 @@ export class PdfPreview {
   }
   dispose(){
     this.disposed=true;this.finishWarmup?.(false);
+    clearTimeout(this.zoomRestoreTimer);
+    if(this.zoomRestoreBehavior!==null){
+      this.scroller.style.scrollBehavior=this.zoomRestoreBehavior;
+      this.zoomRestoreBehavior=null;
+    }
     this.stopBlockDragScroll();
     this.clearBlockDragListeners();
     if(this.blockDrag){
