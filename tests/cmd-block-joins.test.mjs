@@ -129,8 +129,53 @@ assert.throws(()=>planCMDBlockMove(original,initial,'p6b7','p7b0'),/同一 PDF �
 const joinedMoveSource=original.slice(0,plan.edits[0].from)+plan.edits[0].insert+
   original.slice(plan.edits[0].to);
 const joinedForMove=(await inspectCMDTextBlocks(joinedMoveSource)).rows;
-assert.throws(()=>planCMDBlockMove(joinedMoveSource,joinedForMove,
-  'p6b8','p6b9'),/已有文本块合并/);
+const joinedReorder=planCMDBlockMove(joinedMoveSource,joinedForMove,'p6b8','p6b9');
+assert.equal(joinedReorder.changed,1,'a joined page must no longer forbid all moves');
+const movedJoined=joinedMoveSource.slice(0,joinedReorder.edits[0].from)+
+  joinedReorder.edits[0].insert+joinedMoveSource.slice(joinedReorder.edits[0].to);
+const movedJoinedRows=(await inspectCMDTextBlocks(movedJoined)).rows;
+assert.equal(readCMDBlockJoins(movedJoined,movedJoinedRows).invalid.length,0);
+assert.equal(readCMDBlockJoins(movedJoined,movedJoinedRows).joined.get('p6b7'),'p6b6');
+// Exact reported case on PDF page 17: p16b11 dragged after p16b8,
+// while OTHER blocks have already been joined. Preserve every checkbox state
+// and rewrite affected parent IDs to the new immediate CMD predecessor.
+const applyEdits=(text,edits)=>[...edits].sort((a,b)=>b.from-a.from)
+  .reduce((s,e)=>s.slice(0,e.from)+e.insert+s.slice(e.to),text);
+let page17=original;
+for(const id of ['p16b0','p16b9','p16b11','p16b14']){
+  const items=(await inspectCMDTextBlocks(page17)).rows;
+  page17=applyEdits(page17,planCMDBlockJoin(page17,items,id,true).edits);
+}
+const joinedBefore=readCMDBlockJoins(page17,(await inspectCMDTextBlocks(page17)).rows);
+assert.deepEqual([...joinedBefore.joined.keys()],['p16b0','p16b9','p16b11','p16b14']);
+const move17=planCMDBlockMove(page17,(await inspectCMDTextBlocks(page17)).rows,'p16b11','p16b8');
+const after17=applyEdits(page17,move17.edits);
+const after17Rows=(await inspectCMDTextBlocks(after17)).rows;
+const after17Joins=readCMDBlockJoins(after17,after17Rows);
+assert.deepEqual(after17Joins.invalid,[]);
+assert.equal(after17Joins.joined.get('p16b0'),'p15b11');
+assert.equal(after17Joins.joined.get('p16b11'),'p16b8');
+assert.equal(after17Joins.joined.get('p16b9'),'p16b11');
+assert.equal(after17Joins.joined.get('p16b14'),'p16b13');
+assert.equal(after17Joins.joined.size,4);
+assert.deepEqual(after17Rows.filter(r=>r.pageIndex===16).sort((a,b)=>a.from-b.from)
+  .slice(8,12).map(r=>r.id),['p16b8','p16b11','p16b9','p16b10']);
+const undo17=planCMDBlockMove(after17,after17Rows,'p16b11','p16b10');
+assert.equal(applyEdits(after17,undo17.edits),page17,
+  'reverse movement with existing joins must restore the exact CMD bytes');
+// Also preserve next-page cross-page join if the page tail moves.
+const nextPageJoinSource=applyEdits(original,planCMDBlockJoin(original,initial,'p17b0',true).edits);
+const crossMove=planCMDBlockMove(nextPageJoinSource,(await inspectCMDTextBlocks(nextPageJoinSource)).rows,
+  'p16b15','p16b8');
+assert.equal(crossMove.edits.length,2,'next-page join marker must change atomically');
+const crossMoved=applyEdits(nextPageJoinSource,crossMove.edits);
+const crossMovedRows=(await inspectCMDTextBlocks(crossMoved)).rows;
+const crossMovedJoins=readCMDBlockJoins(crossMoved,crossMovedRows);
+assert.deepEqual(crossMovedJoins.invalid,[]);
+assert.equal(crossMovedJoins.joined.get('p17b0'),'p16b14');
+const undoCross=planCMDBlockMove(crossMoved,crossMovedRows,'p16b15','p16b14');
+assert.equal(applyEdits(crossMoved,undoCross.edits),nextPageJoinSource,
+  'last Block and next-page join can both be restored byte-for-byte');
 const movedLast=planCMDBlockMove(original,initial,'p6b11','p6b6');
 assert.equal(movedLast.changed,1,'last page block can move without copying next page evidence');
 assert(!movedLast.edits[0].expected.includes('<!-- minerujson:page:v1:7'),

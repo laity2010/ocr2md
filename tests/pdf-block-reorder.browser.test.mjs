@@ -79,6 +79,35 @@ try{
         ?.textContent==='p6b7',null,{timeout:25000});
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b9"] .ocr-pdf-block-ctrl span').innerText(),'p6b9');
       assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
+      // Regression: an already unchecked Block is itself draggable. Its
+      // join marker must follow the Block, not remain attached to old source
+      // neighborhood. This is the case previously blocked on page 17.
+      const joined=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
+      await joined.click();
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
+        ?.checked===false,null,{timeout:22000});
+      await src.scrollIntoViewIfNeeded();
+      const fromBox=await src.boundingBox(),toBox=await dst.boundingBox();
+      const from={x:fromBox.x+fromBox.width*.75,y:fromBox.y+fromBox.height/2};
+      const to={x:toBox.x+toBox.width*.75,y:toBox.y+toBox.height/2};
+      await src.dispatchEvent('pointerdown',{...pointer,clientX:from.x,clientY:from.y});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2000});
+      await src.dispatchEvent('pointermove',{...pointer,clientX:to.x,clientY:to.y});
+      await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')
+        .waitFor({timeout:1800});
+      await src.dispatchEvent('pointerup',{...pointer,clientX:to.x,clientY:to.y});
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
+        ?.textContent==='p6b7',null,{timeout:25000});
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input').isChecked(),false);
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
+      assert(!((await page.locator('#status').innerText()).includes('排序失败')));
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
+        ?.textContent==='p6b6',null,{timeout:25000});
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
+        ?.checked===true,null,{timeout:25000});
+      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
       console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'p6b7 after p6b8',

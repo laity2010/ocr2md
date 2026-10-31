@@ -45,9 +45,20 @@ export function readCMDBlockJoins(source,rows){
   return {joined,invalid};
 }
 const marker=(prev,target)=>`<!-- ocr2md:block-join:v1 prev="${prev}" target="${target}" -->`;
-/** Plan one CMD-only, page-local cut/insert. No second ordering state: source
- * order is the reading order. Evidence comments/page delimiters stay fixed.
- * Joined pages are intentionally not draggable in this first experiment.
+/** A join marker occupies the line immediately before its own Block anchor.
+ * Its source range is separate from the previous Block's Markdown body.
+ */
+const joinLineBefore=(source,row)=>{
+  const from=source.lastIndexOf('\n',row.from-2)+1;
+  if(from<0||from>=row.from)return null;
+  const text=source.slice(from,row.from);
+  const m=tag.exec(unquotePrefix(text.trimEnd()).trim());
+  return m?.[2]===row.id?{from,to:row.from,text,prev:m[1]}:null;
+};
+/** Plan one CMD-only, page-local cut/insert. Unchecked state belongs to
+ * the Block, not its old predecessor: rebuild join markers with the new
+ * immediate CMD predecessor in the SAME transaction. Original MinerU
+ * page/evidence comments and all OCR identities remain untouched.
  */
 export function planCMDBlockMove(source,rows,fromId,afterId){
   if(typeof source!=='string'||fromId===afterId)throw Error('无效的文本块移动目标');
@@ -58,27 +69,54 @@ export function planCMDBlockMove(source,rows,fromId,afterId){
   if(page.length<2||page.some(r=>r.anchorCount!==1||!Number.isInteger(r.from)))
     throw Error('当前页存在缺失或重复锚点，不能调整顺序');
   const {joined,invalid}=readCMDBlockJoins(source,rows);
-  if(invalid.length||page.some(r=>joined.has(r.id))||
-    [...joined].some(([target,prev])=>page.some(r=>r.id===prev||r.id===target)))
-    throw Error('本页已有文本块合并，请先勾选恢复独立再调整顺序');
-  const start=page[0].from;
+  if(invalid.length)throw Error('CMD 存在无效的文本块续接标记，请先修复');
+  const marks=page.map(r=>joinLineBefore(source,r));
+  for(let i=0;i<page.length;i++)
+    if(Boolean(marks[i])!==joined.has(page[i].id))
+      throw Error('文本块续接标记位置不匹配，不能安全移动');
+  const start=marks[0]?.from??page[0].from;
   const tail=source.slice(page.at(-1).from);
   const match=/^[ \t]*(?:>[ \t]*)*<!-- minerujson:(?!block:v1:)[^\n]*/gm.exec(tail);
   if(!match)throw Error('当前页缺少安全的 MinerU 证据边界');
   const end=page.at(-1).from+match.index;
   if(end<=page.at(-1).from||end>=source.length)throw Error('文本块区间不完整');
-  const pieces=page.map((r,i)=>source.slice(r.from,i+1<page.length?page[i+1].from:end));
-  const original=pieces.join('');
+  const pieces=page.map((r,i)=>source.slice(r.from,
+    i+1<page.length?(marks[i+1]?.from??page[i+1].from):end));
+  const original=page.map((r,i)=>(marks[i]?.text??'')+pieces[i]).join('');
   if(original!==source.slice(start,end))throw Error('Block 源码边界不连续');
   const moving=page.findIndex(r=>r.id===fromId);
   const target=page.findIndex(r=>r.id===afterId);
   if(moving===target+1)return {changed:0,sourceId:fromId,afterId};
-  const reordered=page.map((r,i)=>({id:r.id,text:pieces[i]}));
+  const reordered=page.map((r,i)=>({id:r.id,row:r,text:pieces[i]}));
   const [item]=reordered.splice(moving,1);
   const insertAt=reordered.findIndex(r=>r.id===afterId);
   reordered.splice(insertAt+1,0,item);
+  const sorted=rows.filter(r=>r.anchorCount===1).sort((x,y)=>x.from-y.from);
+  const firstGlobal=sorted.findIndex(r=>r.id===page[0].id);
+  const priorPage=sorted[firstGlobal-1];
+  if(priorPage&&priorPage.pageIndex!==a.pageIndex-1)
+    throw Error('上一 PDF 页的 Block 顺序不连续');
+  const text=reordered.map((part,i)=>{
+    if(!joined.has(part.id))return part.text;
+    const prev=i?reordered[i-1].id:priorPage?.id;
+    if(!prev)throw Error('文档首块不能处于合并状态，请先恢复独立');
+    const anchorLine=source.slice(part.row.from,source.indexOf('\n',part.row.from));
+    return quotePrefix(anchorLine)+marker(prev,part.id)+'\n'+part.text;
+  }).join('');
+  const edits=[{from:start,to:end,expected:original,insert:text}];
+  // If the first Block of the NEXT page is joined into this page's tail,
+  // moving the tail changes that one cross-page predecessor as well.
+  const next=sorted.find(r=>r.pageIndex===a.pageIndex+1);
+  if(next&&joined.has(next.id)&&reordered.at(-1).id!==page.at(-1).id){
+    const mark=joinLineBefore(source,next);
+    if(!mark||mark.prev!==page.at(-1).id)
+      throw Error('下一页的跨页接续标记不完整');
+    const anchorLine=source.slice(next.from,source.indexOf('\n',next.from));
+    edits.push({from:mark.from,to:mark.to,expected:mark.text,
+      insert:quotePrefix(anchorLine)+marker(reordered.at(-1).id,next.id)+'\n'});
+  }
   return {changed:1,sourceId:fromId,afterId,pageIndex:a.pageIndex,
-    edits:[{from:start,to:end,expected:original,insert:reordered.map(r=>r.text).join('')}]};
+    edits};
 }
 export function planCMDBlockJoin(source,rows,targetId,join){
   if(typeof source!=='string'||typeof targetId!=='string'||typeof join!=='boolean')
