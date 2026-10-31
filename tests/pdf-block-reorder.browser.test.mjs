@@ -108,9 +108,46 @@ try{
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
         ?.checked===true,null,{timeout:25000});
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
+      // Same-row across-column case reported on page 17: p16b9 (right)
+      // moved immediately after p16b0 (left), not just nearby chips.
+      const acrossFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl');
+      const acrossTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
+      await acrossFrom.scrollIntoViewIfNeeded();
+      const fromCross=await acrossFrom.boundingBox(),toCross=await acrossTo.boundingBox();
+      assert(fromCross&&toCross);
+      const crossStart={x:fromCross.x+fromCross.width*.75,y:fromCross.y+fromCross.height/2};
+      const crossEnd={x:toCross.x+toCross.width*.75,y:toCross.y+toCross.height/2};
+      const hit=await page.evaluate(({x,y})=>{
+        const element=document.elementFromPoint(x,y);
+        return {node:element?.tagName,chip:element?.closest('.ocr-pdf-block-cover')?.dataset.blockId,
+          viewport:[window.innerWidth,window.innerHeight]};
+      },crossEnd);
+      console.log('CROSS_COLUMN_HIT',name,{crossStart,crossEnd,hit});
+      assert.equal(hit.chip,'p16b0','the left gutter label must be a real hit target');
+      const fingerEnd={x:toCross.x+toCross.width+17,y:crossEnd.y};
+      assert.notEqual(await page.evaluate(({x,y})=>
+        document.elementFromPoint(x,y)?.closest('.ocr-pdf-block-ctrl')?.closest('.ocr-pdf-block-cover')?.dataset.blockId,
+        fingerEnd),'p16b0','the test must release outside the 9px label');
+      await acrossFrom.dispatchEvent('pointerdown',{...pointer,clientX:crossStart.x,clientY:crossStart.y});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2000});
+      // Move event is dispatched to the DOCUMENT (as can happen on iPad
+      // after losing original source-label pointer capture).
+      await page.locator('body').dispatchEvent('pointermove',
+        {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
+      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"].ocr-pdf-block-drop-target')
+        .waitFor({timeout:1500});
+      await page.locator('body').dispatchEvent('pointerup',
+        {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b1',
+        null,{timeout:25000});
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b1"] .ocr-pdf-block-ctrl span').innerText(),'p16b2');
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b9',
+        null,{timeout:25000});
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
       console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'p6b7 after p6b8',
+        crossColumn:'p16b9 after p16b0 (+17px touch tolerance)',
         arrow:true,checkCount:224,joinAfterMove:true,undoRestores:true,errors:errors.length});
     }finally{await browser.close();}
   }

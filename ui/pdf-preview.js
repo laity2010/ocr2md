@@ -102,6 +102,12 @@ export class PdfPreview {
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
+    this.onBlockDragMove=e=>{
+      if(this.blockDrag?.pointerId===e.pointerId)
+        this.updateBlockDrag(this.blockDrag,e.clientX,e.clientY);
+    };
+    this.onBlockDragUp=e=>this.finishBlockDrag(e);
+    this.onBlockDragCancel=e=>this.finishBlockDrag(e,true);
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
     this.active=false;this.overlayDrawId=0;this.pageViewportCache=new Map();
     this.revealPending=false;this.revealUntil=0;
@@ -377,6 +383,12 @@ export class PdfPreview {
     const item={id,ctrl,pointerId:event.pointerId,x:event.clientX,y:event.clientY,
       startX:event.clientX,startY:event.clientY,active:false,target:null,timer:null,svg:null};
     this.blockDrag=item;
+    // Capture *document-wide* movement while held. On iPad the pointer may
+    // cross between two PDF columns (or out of the source label's DOM tree).
+    // It must still be received on the other side of the page.
+    document.addEventListener('pointermove',this.onBlockDragMove,true);
+    document.addEventListener('pointerup',this.onBlockDragUp,true);
+    document.addEventListener('pointercancel',this.onBlockDragCancel,true);
     try{ctrl.setPointerCapture(event.pointerId);}catch{/* Pointer capture optional. */}
     item.timer=setTimeout(()=>{
       if(this.blockDrag!==item)return;
@@ -390,12 +402,47 @@ export class PdfPreview {
       this.updateBlockDrag(item,item.x,item.y);
     },370);
   }
+  blockDropTarget(item,x,y){
+    const viewport=this.scroller.getBoundingClientRect();
+    if(x<viewport.left||x>viewport.right||y<viewport.top||y>viewport.bottom)
+      return null; // Never drop on an off-pane or hidden page control.
+    const pageId=item.ctrl.closest('.ocr-pdf-block-cover')?.dataset.pdfPage;
+    const direct=document.elementFromPoint(x,y)?.closest?.('.ocr-pdf-block-ctrl')
+      ?.closest('.ocr-pdf-block-cover');
+    if(direct?.dataset.pdfPage===pageId&&direct.dataset.blockId!==item.id)
+      return direct;
+    // Tiny 9px OCR labels are hard to hit by finger. Accept release within a
+    // generous ~24 CSS pixel neighborhood of the nearest same-page tag.
+    // Leave the visible chip small, outside the original PDF text rectangle.
+    let result=null,nearest=25;
+    for(const [id,node] of this.blockCoverageNodes){
+      if(id===item.id||node.dataset.pdfPage!==pageId)continue;
+      const chip=node.querySelector('.ocr-pdf-block-ctrl');
+      if(!chip?.isConnected)continue;
+      const rect=chip.getBoundingClientRect();
+      if(rect.right<viewport.left||rect.left>viewport.right||
+        rect.bottom<viewport.top||rect.top>viewport.bottom)continue;
+      const dx=Math.max(rect.left-x,0,x-rect.right);
+      const dy=Math.max(rect.top-y,0,y-rect.bottom);
+      const d=Math.hypot(dx,dy);
+      if(d<nearest){result=node;nearest=d;}
+    }
+    return result;
+  }
+  clearBlockDragListeners(){
+    document.removeEventListener('pointermove',this.onBlockDragMove,true);
+    document.removeEventListener('pointerup',this.onBlockDragUp,true);
+    document.removeEventListener('pointercancel',this.onBlockDragCancel,true);
+  }
   updateBlockDrag(item,x,y){
     if(this.blockDrag!==item)return;
     item.x=x;item.y=y;
     if(!item.active){
       if(Math.hypot(x-item.startX,y-item.startY)>11){
         clearTimeout(item.timer);this.blockDrag=null;
+        this.clearBlockDragListeners();
+        try{if(item.ctrl.hasPointerCapture(item.pointerId))
+          item.ctrl.releasePointerCapture(item.pointerId);}catch{}
         // A short accidental swipe over a label is neither a drop nor
         // a checkbox command; suppress only this label's synthetic click.
         this.suppressBlockClickCtrl=item.ctrl;
@@ -403,14 +450,16 @@ export class PdfPreview {
       }
       return;
     }
-    const hit=document.elementFromPoint(x,y)?.closest?.('.ocr-pdf-block-ctrl');
-    const node=hit?.closest('.ocr-pdf-block-cover');
-    const valid=node&&node.dataset.blockId!==item.id&&
-      node.dataset.pdfPage===item.ctrl.closest('.ocr-pdf-block-cover')?.dataset.pdfPage;
-    const target=valid?node:null;
+    // A stationary long press is not a move, even if adjacent chips happen
+    // to fall within the enlarged finger-friendly drop neighborhood.
+    const target=Math.hypot(x-item.startX,y-item.startY)>=12
+      ?this.blockDropTarget(item,x,y):null;
     if(item.target!==target){
       item.target?.classList.remove('ocr-pdf-block-drop-target');
       item.target=target;target?.classList.add('ocr-pdf-block-drop-target');
+      this.setStatus(target
+        ?`目标 ${target.dataset.blockId} · 松手将 ${item.id} 排到其后`
+        :`拖动 ${item.id} 至本页块标签（接近标签即可松手）`);
     }
     const box=item.ctrl.getBoundingClientRect();
     const sx=(box.left+box.right)/2,sy=(box.top+box.bottom)/2;
@@ -435,6 +484,7 @@ export class PdfPreview {
     if(active)this.updateBlockDrag(item,event.clientX,event.clientY);
     const target=active&&!cancel?item.target?.dataset.blockId:null;
     clearTimeout(item.timer);
+    this.clearBlockDragListeners();
     item.ctrl.classList.remove('ocr-pdf-block-drag-source');
     item.target?.classList.remove('ocr-pdf-block-drop-target');
     item.svg?.remove();this.blockDrag=null;
@@ -479,15 +529,8 @@ export class PdfPreview {
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
         ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
-        ctrl.addEventListener('pointermove',e=>{
-          if(this.blockDrag?.pointerId===e.pointerId)
-            this.updateBlockDrag(this.blockDrag,e.clientX,e.clientY);
-        });
-        ctrl.addEventListener('pointerup',e=>this.finishBlockDrag(e));
-        ctrl.addEventListener('pointercancel',e=>this.finishBlockDrag(e,true));
-        ctrl.addEventListener('lostpointercapture',e=>{
-          if(this.blockDrag?.pointerId===e.pointerId)this.finishBlockDrag(e,true);
-        });
+        // Move/up/cancel are tracked at document capture scope while dragging.
+        // Do not cancel merely because the original label loses capture.
         ctrl.addEventListener('contextmenu',e=>e.preventDefault());
         ctrl.addEventListener('click',e=>{
           if(this.suppressBlockClickCtrl===ctrl&&performance.now()<this.suppressBlockClickUntil)
@@ -867,6 +910,7 @@ export class PdfPreview {
   }
   dispose(){
     this.disposed=true;this.finishWarmup?.(false);
+    this.clearBlockDragListeners();
     if(this.blockDrag){
       clearTimeout(this.blockDrag.timer);
       this.blockDrag.svg?.remove();
