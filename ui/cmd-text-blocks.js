@@ -15,23 +15,21 @@ async function inflate(bytes){
   const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
-// A single sealed JSON decode is shared across the CMD block inventory and
-// the PDF layout reader. Edits to visible Markdown never invalidate original
-// geometry; switching books or changing the sealed evidence always does.
+// Cache only the small geometry projection. The full decompressed OCR tree
+// is deliberately short-lived: WebKit PDF.js needs its memory for page
+// canvases and can crash on zoom if we retain every OCR span in parallel.
 let cached=null;
 async function sealedJSON(source){
   if(typeof source!=='string')throw Error('CMD 源码无效');
   const match=sealed.exec(source);
   if(!match)throw Error('CMD 缺少无损 MinerU JSON 封存区');
   const key=match[0];
-  if(cached?.key===key)return {data:cached.data,end:match.index};
   const bytes=await inflate(decode(match[2]));
   const sha=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
   if(sha!==match[1])throw Error('CMD 封存 JSON SHA-256 校验失败');
   const data=JSON.parse(new TextDecoder().decode(bytes));
   if(!Array.isArray(data.pdf_info))throw Error('CMD 封存 JSON 无 PDF 页面');
-  cached={key,data,layout:null};
-  return {data,end:match.index};
+  return {data,end:match.index,key};
 }
 /** Pure read-only original MinerU geometry. This is a CMD-owned capability,
  * including page size and text-block rectangles. Detailed line and span
@@ -39,8 +37,11 @@ async function sealedJSON(source){
  * PDF widgets must not independently fetch the workspace OCR JSON.
  */
 export async function queryCMDLayout(source){
-  const {data}=await sealedJSON(source);
-  if(cached.layout)return cached.layout;
+  if(typeof source!=='string')throw Error('CMD 源码无效');
+  const sourceMatch=sealed.exec(source);
+  if(!sourceMatch)throw Error('CMD 缺少无损 MinerU JSON 封存区');
+  if(cached?.key===sourceMatch[0])return cached.layout;
+  const {data,key}=await sealedJSON(source);
   const pages=data.pdf_info.map((page,pageIndex)=>{
     if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
     const pageSize=page.page_size;
@@ -62,7 +63,7 @@ export async function queryCMDLayout(source){
     Object.freeze(page.regions);Object.freeze(page);
   }
   Object.freeze(pages);Object.freeze(layout);
-  cached.layout=layout;
+  cached={key,layout};
   return layout;
 }
 export async function queryCMDBlockGeometry(source,pageIndex,blockIndex){
