@@ -336,22 +336,14 @@ export class PdfPreview {
   updateBlockChip(node,row){
     if(!node)return false;
     const input=node.querySelector('input');
-    const badge=node.querySelector('.ocr-pdf-block-id');
-    const order=node.querySelector('.ocr-pdf-block-order');
+    const badge=node.querySelector('.ocr-pdf-block-ctrl span');
     const chip=node.querySelector('.ocr-pdf-block-ctrl');
-    if(!input||!badge||!order||!chip)return false;
+    if(!input||!badge||!chip)return false;
     let changed=false;
     const logical=row.logicalId||row.id;
-    const number=logical.startsWith(`p${row.pageIndex}b`)?
-      `#${logical.slice(`p${row.pageIndex}b`.length)}`:`↳${logical}`;
-    // The original MinerU ID must NEVER be replaced by a mutable logical
-    // position. After joining p16b0 into page 16, physical p16b3 can have
-    // logical number p16b0; showing only p16b0 misidentifies the hit target.
-    if(badge.textContent!==row.id){badge.textContent=row.id;changed=true;}
-    if(order.textContent!==number){order.textContent=number;changed=true;}
-    if(node.dataset.logicalId!==logical){node.dataset.logicalId=logical;changed=true;}
-    const title=`原始块 ${row.id} · 当前逻辑编号 ${logical}`;
-    if(chip.title!==title)chip.title=title;
+    if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
+    const title=`原始 ${row.id} · 逻辑 ${logical}`;
+    if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
     const disabled=!row.joinable;
@@ -373,7 +365,7 @@ export class PdfPreview {
           const [x0,,x1]=block.bbox;
           const margin=side==='left'?x0:region.pageSize[0]-x1;
           const gutterPixels=page.clientWidth*margin/region.pageSize[0];
-          const nominalWidth=24+row.id.length*5.5+number.length*5;
+          const nominalWidth=20+logical.length*5.5;
           const scale=Math.min(1,Math.max(.2,(gutterPixels-3)/nominalWidth));
           const target=`scale(${scale.toFixed(3)})`;
           if(chip.style.transform!==target)chip.style.transform=target;
@@ -406,7 +398,7 @@ export class PdfPreview {
       svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
         '<path class="ocr-pdf-block-drag-tip" />';
       document.body.append(svg);item.svg=svg;
-      this.setStatus(`拖动原始块 ${id}（${ctrl.closest('.ocr-pdf-block-cover')?.dataset.logicalId||id}）至同页另一块`);
+      this.setStatus(`拖动 ${id} 箭头到本页另一块标签，松手调整 CMD 顺序`);
       this.updateBlockDrag(item,item.x,item.y);
     },370);
   }
@@ -466,8 +458,8 @@ export class PdfPreview {
       item.target?.classList.remove('ocr-pdf-block-drop-target');
       item.target=target;target?.classList.add('ocr-pdf-block-drop-target');
       this.setStatus(target
-        ?`目标原始块 ${target.dataset.blockId}（${target.dataset.logicalId}）· 松手将 ${item.id} 排到其后`
-        :`拖动原始块 ${item.id} 至本页标签（接近标签即可松手）`);
+        ?`目标 ${target.dataset.blockId} · 松手将 ${item.id} 排到其后`
+        :`拖动 ${item.id} 至本页块标签（接近标签即可松手）`);
     }
     const box=item.ctrl.getBoundingClientRect();
     const sx=(box.left+box.right)/2,sy=(box.top+box.bottom)/2;
@@ -534,9 +526,8 @@ export class PdfPreview {
         const ctrl=document.createElement('label');ctrl.className='ocr-pdf-block-ctrl';
         const input=document.createElement('input');input.type='checkbox';
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
-        const badge=document.createElement('span');badge.className='ocr-pdf-block-id';badge.textContent=row.id;
-        const order=document.createElement('span');order.className='ocr-pdf-block-order';
-        ctrl.append(input,badge,order);node.append(ctrl);
+        const badge=document.createElement('span');badge.textContent=row.id;
+        ctrl.append(input,badge);node.append(ctrl);
         ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
         // Move/up/cancel are tracked at document capture scope while dragging.
         // Do not cancel merely because the original label loses capture.
@@ -614,8 +605,7 @@ export class PdfPreview {
         const pagePixels=page.div.clientWidth;
         const gutterPixels=pagePixels*(side==='left'?rect.left:
           100-rect.left-rect.width)/100;
-        const number=chip.querySelector('.ocr-pdf-block-order')?.textContent||'';
-        const nominalWidth=24+row.id.length*5.5+number.length*5;
+        const nominalWidth=20+(row.logicalId||row.id).length*5.5; // 12px box + 2px gap + 4px padding + borders
         const scale=Math.min(1,Math.max(.2,(gutterPixels-3)/nominalWidth));
         const target=`scale(${scale.toFixed(3)})`;
         if(chip.style.transform!==target)chip.style.transform=target;

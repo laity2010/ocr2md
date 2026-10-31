@@ -174,14 +174,11 @@ try{
    await target.click({timeout:15000});
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await target.isChecked(),false);
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"]').getAttribute('data-logical-id'),'p6b6',
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span').innerText(),'p6b6',
      'unchecked block uses previous logical number');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-id').innerText(),'p6b7',
-     'a join may renumber the logical position but must NEVER relabel the original block ID');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-order').innerText(),'#6');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"]').getAttribute('data-logical-id'),'p6b7',
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b7',
      'following block renumbers only this page');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p5b1"]').getAttribute('data-logical-id'),'p5b1',
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p5b1"] .ocr-pdf-block-ctrl span').innerText(),'p5b1',
      'other page numbering cannot change');
    assert.match(await page.locator('#status').innerText(),/已接续 1/);
    assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
@@ -210,7 +207,7 @@ try{
    await target.click({timeout:15000});
    await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert(await target.isChecked());
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"]').getAttribute('data-logical-id'),'p6b8');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b8');
    assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-restored-checkbox.png`,animations:'disabled'});
    // A real OCR-empty placeholder joins the preceding block just like text;
@@ -220,14 +217,14 @@ try{
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await empty.isChecked(),false);
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"]').getAttribute('data-logical-id'),'p2b8');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"]').getAttribute('data-logical-id'),'p6b8');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b8');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b8');
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-blank-block-joined.png`,animations:'disabled'});
    await empty.click({timeout:16000});
    await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert(await empty.isChecked());
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"]').getAttribute('data-logical-id'),'p2b9');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b9');
 
    // The actual p9b0 continues p8b8. Its unchecked label must use the
    // previous page's logical ID; following labels change on page 10 only.
@@ -242,11 +239,9 @@ try{
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await crossHead.isChecked(),false);
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"]').getAttribute('data-logical-id'),'p8b8');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-id').innerText(),'p9b0');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-order').innerText(),'↳p8b8');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b1"]').getAttribute('data-logical-id'),'p9b0');
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p8b8"]').getAttribute('data-logical-id'),'p8b8');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-ctrl span').innerText(),'p8b8');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b1"] .ocr-pdf-block-ctrl span').innerText(),'p9b0');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p8b8"] .ocr-pdf-block-ctrl span').innerText(),'p8b8');
    assert(await previousChip.evaluate(node=>node===window.__previousPageJoinChip),
      'cross-page join must not replace predecessor PDF page DOM');
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-cross-page-p9b0.png`,animations:'disabled'});
@@ -254,7 +249,7 @@ try{
    await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert(await crossHead.isChecked());
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b1"]').getAttribute('data-logical-id'),'p9b1');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b1"] .ocr-pdf-block-ctrl span').innerText(),'p9b1');
 
    assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);
    assert.equal(readFileSync(sample,'utf8'),original,'mother/fixture must not be autosaved');
