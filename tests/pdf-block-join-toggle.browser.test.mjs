@@ -48,6 +48,34 @@ try{
    assert.equal(placements.length,224);
    assert.equal(placements.filter(p=>p.gap<1).length,0,
      'block checkbox must be outside its own text bbox');
+   const inline=await page.locator('.ocr-pdf-block-cover').evaluateAll(nodes=>nodes.map(node=>{
+     const label=node.querySelector('.ocr-pdf-block-ctrl');
+     const checkbox=label.querySelector('input').getBoundingClientRect();
+     const id=label.querySelector('span').getBoundingClientRect();
+     const bounds=label.getBoundingClientRect();
+     return {id:node.dataset.blockId,page:node.dataset.pdfPage,gutter:node.dataset.gutter,
+       bounds:{left:bounds.left,right:bounds.right,top:bounds.top,bottom:bounds.bottom},
+       sameLine:Math.abs((checkbox.top+checkbox.bottom)/2-(id.top+id.bottom)/2)<3,
+       height:bounds.height};
+   }));
+   assert.equal(inline.length,224);
+   assert.equal(inline.filter(x=>!x.sameLine).length,0,
+     'checkbox and Block ID must render on same baseline for every Block');
+   assert(inline.every(x=>x.height<22),'chip must be single-row, not tall');
+   const colliding=[];
+   for(let i=0;i<inline.length;i++)for(let j=i+1;j<inline.length;j++){
+     const a=inline[i],b=inline[j];
+     if(a.page!==b.page)continue;
+     const ax=a.bounds,bx=b.bounds;
+     if(Math.min(ax.right,bx.right)-Math.max(ax.left,bx.left)>2&&
+        Math.min(ax.bottom,bx.bottom)-Math.max(ax.top,bx.top)>2)
+       colliding.push([a.id,b.id]);
+   }
+   assert.equal(colliding.length,0,`gutter labels must not collide: ${JSON.stringify(colliding)}`);
+   console.log('PDF_INLINE_LABEL_GEOMETRY',name,{sameRow:inline.length,
+     minHeight:Math.min(...inline.map(x=>x.height)),maxHeight:Math.max(...inline.map(x=>x.height)),
+     colliding:colliding.slice(0,25),collisionCount:colliding.length});
+
    for(const [id,expectedSide] of [['p6b6','left'],['p6b7','right'],
       ['p2b7','left'],['p2b8','right'],['p15b5','left'],['p15b6','right']]){
      const item=placements.find(p=>p.id===id);

@@ -345,6 +345,50 @@ export class PdfPreview {
       node.style.left=rect.left+'%';node.style.top=rect.top+'%';
       node.style.width=rect.width+'%';node.style.height=rect.height+'%';
       if(node.parentElement!==page.div)page.div.append(node);
+      // Keep checkbox and full Block ID on ONE line without entering OCR
+      // text, including at the default narrow iPad PDF zoom. The available
+      // outer page gutter controls only the chip's *visual scale*; it does
+      // not alter the original PDF/Block geometry or click semantics.
+      const chip=node.querySelector('.ocr-pdf-block-ctrl');
+      if(chip){
+        const pagePixels=page.div.clientWidth;
+        const gutterPixels=pagePixels*(side==='left'?rect.left:
+          100-rect.left-rect.width)/100;
+        const nominalWidth=20+row.id.length*5.5; // 12px box + 2px gap + 4px padding + borders
+        const scale=Math.min(1,Math.max(.2,(gutterPixels-3)/nominalWidth));
+        chip.style.transform=`scale(${scale.toFixed(3)})`;
+        chip.style.top='0px';
+      }
+    }
+    this.avoidBlockChipCollisions();
+  }
+  /** Move only the *labels* within their own outer paper gutter, never the
+   * source bboxes, focus rectangles, or page geometry. Nearby OCR image and
+   * text blocks often start at the same Y coordinate; simply going inline
+   * would cause their chips to collide. Stable page/side reading order gives
+   * each label a nonoverlapping row with at least 2px of separation.
+   */
+  avoidBlockChipCollisions(){
+    const groups=new Map();
+    for(const [id,node] of this.blockCoverageNodes){
+      const page=node.parentElement;
+      const chip=node.querySelector('.ocr-pdf-block-ctrl');
+      if(!page||!chip||!page.classList.contains('page'))continue;
+      const key=`${node.dataset.pdfPage}:${node.dataset.gutter}`;
+      if(!groups.has(key))groups.set(key,[]);
+      groups.get(key).push({id,node,chip,page,anchor:node.offsetTop,
+        height:chip.getBoundingClientRect().height});
+    }
+    for(const items of groups.values()){
+      items.sort((a,b)=>a.anchor-b.anchor||a.id.localeCompare(b.id,undefined,{numeric:true}));
+      let nextTop=2;
+      const pageHeight=items[0].page.clientHeight;
+      for(const item of items){
+        const upper=Math.max(2,pageHeight-item.height-2);
+        const top=Math.min(upper,Math.max(item.anchor,nextTop));
+        item.chip.style.top=`${(top-item.anchor).toFixed(2)}px`;
+        nextTop=top+item.height+2;
+      }
     }
   }
   /** WP4: two independently drawn, labelled original CMD bboxes. Layout

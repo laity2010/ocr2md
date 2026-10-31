@@ -1197,4 +1197,4 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- PDF margin labels must remain outside the corresponding OCR text and inside
 -- their physical page at every supported column, without changing CMD edits.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-JOIN-GUTTER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit all 224 checkbox+Block-ID chips in outer paper gutters; left 133, right 91; no own-bbox overlap or out-of-paper chip; reversible CMD join still works','integration');
+ ('TC-JOIN-GUTTER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit all 224 checkbox+full Block-ID chips render side-by-side in one row in outer paper gutters; left 133, right 91; 0 text-bbox overlaps, 0 chip-to-chip collisions, 0 off-page chips; reversible CMD join still works','integration');
