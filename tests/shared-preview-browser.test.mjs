@@ -16,11 +16,13 @@ mkdirSync('.v6/tests',{recursive:true});mkdirSync('.v6/evidence',{recursive:true
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 for(let i=0;i<engines.length;i++){
  const [name,engine,options]=engines[i];
+ if(process.env.SHARED_ENGINE&&name!==process.env.SHARED_ENGINE)continue;
  const port=4680+i,url=`http://127.0.0.1:${port}/`;
  const document=resolve(`.v6/tests/shared-preview-${name.toLowerCase()}-${process.pid}.md`);
  writeFileSync(document,fixture);
  const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),
-   env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:document,V6_PDF_PATH:pdf,V6_STATIC_ROOT:resolve('dist')},stdio:'ignore'});
+   env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:document,V6_PDF_PATH:pdf,V6_STATIC_ROOT:resolve('dist'),
+     V6_SETTINGS_PATH:resolve(`.v6/tests/shared-preview-settings-${process.pid}.json`)},stdio:'ignore'});
  let browser;
  try{
   let ready=false;for(let x=0;x<110;x++){
@@ -30,6 +32,10 @@ for(let i=0;i<engines.length;i++){
   browser=await engine.launch({headless:true,...options});
   const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  page.on('close',()=>console.log('WEBKIT_DEBUG_PAGE_CLOSED',name));
+  page.on('crash',()=>console.log('WEBKIT_DEBUG_PAGE_CRASHED',name));
+  browser.on('disconnected',()=>console.log('WEBKIT_DEBUG_BROWSER_DISCONNECTED',name));
+  page.on('framenavigated',frame=>{if(frame===page.mainFrame())console.log('WEBKIT_DEBUG_NAVIGATION',name,frame.url());});
   const pdfTransport=[];
   page.on('response',response=>{
     if(new URL(response.url()).pathname==='/api/pdf')
@@ -117,6 +123,7 @@ for(let i=0;i<engines.length;i++){
   }));
   assert.equal(await page.evaluate(()=>document.querySelector('.pdfViewer')===window.__testPdfViewer),true);
   assert.equal(page3.toolbar,'visible');
+  console.log('WEBKIT_DEBUG_BEFORE_ZOOM',name,await page.evaluate(()=>({build:document.querySelector('#build-version')?.textContent,pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,zoom:document.querySelector('.ocr-pdf-zoom')?.textContent,health:performance.getEntriesByType('resource').filter(x=>x.name.includes('/healthz')).length})));
   await page.locator('.ocr-pdf-plus').click();
   const scale=await page.locator('.ocr-pdf-zoom').textContent();
   await selectPreview(page,'md');

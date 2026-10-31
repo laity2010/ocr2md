@@ -34,7 +34,8 @@ async function sealedJSON(source){
   return {data,end:match.index};
 }
 /** Pure read-only original MinerU geometry. This is a CMD-owned capability,
- * including page size, text-block rectangles, line and span coordinates.
+ * including page size and text-block rectangles. Detailed line and span
+ * coordinates are provided on demand by queryCMDBlockGeometry().
  * PDF widgets must not independently fetch the workspace OCR JSON.
  */
 export async function queryCMDLayout(source){
@@ -48,12 +49,7 @@ export async function queryCMDLayout(source){
     const regions=page.para_blocks.flatMap((block,blockIndex)=>{
       const box=block.bbox;
       if(!Array.isArray(box)||box.length!==4||!box.every(Number.isFinite))return [];
-      const lines=(block.lines||[]).map(line=>({
-        bbox:Array.isArray(line.bbox)?[...line.bbox]:null,
-        spans:(line.spans||[]).map(span=>({bbox:Array.isArray(span.bbox)?[...span.bbox]:null,
-          type:span.type||'unknown',content:typeof span.content==='string'?span.content:''})),
-      }));
-      return [{blockIndex,bbox:[...box],type:block.type||'unknown',lines}];
+      return [{blockIndex,bbox:[...box],type:block.type||'unknown'}];
     });
     return {pageIndex,pageSize:[...pageSize],regions};
   });
@@ -61,11 +57,7 @@ export async function queryCMDLayout(source){
   // Prevent accidental mutation of shared cache by layout or AG consumers.
   for(const page of pages){Object.freeze(page.pageSize);
     for(const region of page.regions){Object.freeze(region.bbox);
-      for(const line of region.lines){if(line.bbox)Object.freeze(line.bbox);
-        for(const span of line.spans){if(span.bbox)Object.freeze(span.bbox);Object.freeze(span);}
-        Object.freeze(line.spans);Object.freeze(line);
-      }
-      Object.freeze(region.lines);Object.freeze(region);
+      Object.freeze(region);
     }
     Object.freeze(page.regions);Object.freeze(page);
   }
@@ -79,8 +71,15 @@ export async function queryCMDBlockGeometry(source,pageIndex,blockIndex){
   const layout=await queryCMDLayout(source);
   const page=layout.pages[pageIndex];
   const block=page?.regions.find(r=>r.blockIndex===blockIndex);
-  return block?{pageIndex,blockIndex,pageSize:page.pageSize,bbox:block.bbox,type:block.type,
-    lines:block.lines}:null;
+  if(!block)return null;
+  const {data}=await sealedJSON(source);
+  const original=data.pdf_info[pageIndex].para_blocks[blockIndex];
+  const lines=(original.lines||[]).map(line=>({
+    bbox:Array.isArray(line.bbox)?[...line.bbox]:null,
+    spans:(line.spans||[]).map(span=>({bbox:Array.isArray(span.bbox)?[...span.bbox]:null,
+      type:span.type||'unknown',content:typeof span.content==='string'?span.content:''})),
+  }));
+  return {pageIndex,blockIndex,pageSize:page.pageSize,bbox:block.bbox,type:block.type,lines};
 }
 function anchorLines(source){
   const result=new Map();let from=0;

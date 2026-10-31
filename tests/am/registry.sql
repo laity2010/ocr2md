@@ -1120,14 +1120,14 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- WP2: CMD sealed geometry is the sole runtime PDF overlay source; the
 -- existing /api/pdf-map may remain for legacy diagnostics but is NOT consumed.
 INSERT INTO apis VALUES
- ('L50','L','queryCMDLayout','ui/cmd-text-blocks.js','export','current CMD source','immutable original page/Block/line/span geometry with SHA-verified provenance','cached sealed JSON decode, never external JSON or network',1),
+ ('L50','L','queryCMDLayout','ui/cmd-text-blocks.js','export','current CMD source','immutable original page/Block bbox with SHA-verified provenance; line/span on demand','cached sealed JSON decode, never external JSON or network',1),
  ('L51','L','queryCMDBlockGeometry','ui/cmd-text-blocks.js','export','source,page index,block index','immutable original bbox, page size and text line/span locations or null','read-only; no OCR/PDF/CM6 mutation',1),
- ('C19','C','returned.queryLayout','ui/wcp-cmd-element-transactions.js','returned','none','promise of CMD original page/Block geometry','WCP port exposes semantic CMD capability, no raw AG/source bypass',1);
+ ('C55','C','returned.queryLayout','ui/wcp-cmd-element-transactions.js','returned','none','promise of CMD original page/Block geometry','WCP port exposes semantic CMD capability, no raw AG/source bypass',1);
 INSERT INTO access_edges VALUES
  ('X-WP2-CMD-L50','C','L','ui/cm-document.js','queryCMDLayout(this.readSource())','L50','registered','CM6 CMD source is the sole owner of original layout'),
  ('X-WP2-CMD-L51','C','L','ui/cm-document.js','queryCMDBlockGeometry(this.readSource()','L51','registered','Per-block query shares CMD verified original JSON'),
- ('X-WP2-CMD-C19','L','C','ui/workspace.js','getCMD().queryLayout()','C19','registered','Layout-only geometry port supplied to PDF viewer after CMD readiness');
+ ('X-WP2-CMD-C55','L','C','ui/workspace.js','getCMD().queryLayout()','C55','registered','Layout-only geometry port supplied to PDF viewer after CMD readiness');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP2-L50','L50','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','224 immutable original block bbox, page sizes and line/span boxes; SHA corruption rejects stale input','integration'),
  ('TC-WP2-L51','L51','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','p6b2 exact bbox [51,215,273,272] and first line bbox; invalid page returns null','integration'),
- ('TC-WP2-PDF-C19','C19','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit PDF orange boxes and AG navigation work even if /api/pdf-map returns 503 and no request is sent','integration');
+ ('TC-WP2-PDF-C55','C55','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit PDF orange boxes and AG navigation work even if /api/pdf-map returns 503 and no request is sent','integration');
