@@ -1202,3 +1202,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Page-local logical renumbering never overwrites stable original Block anchors.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-JOIN-PAGE-LOCAL-L56','L56','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Merge p2b8 into p2b7, p2b9 displays logical p2b8; pages 2 and 4 retain original indices; all OCR types supported with exact reversible source','integration');
+
+-- Block join checkbox must not clear, reinsert, or restyle unrelated PDF
+-- page overlays. Inline join metadata is not a geometry change.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-JOIN-PDF-LOCAL-REFRESH-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit monitored all 212 other-page checkbox DOM nodes during p6b7 join: zero mutations, zero detachments, zero label or checked changes; current page renumbers and CMD Undo works','integration');

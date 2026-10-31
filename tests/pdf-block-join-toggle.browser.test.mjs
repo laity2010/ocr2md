@@ -110,6 +110,30 @@ try{
    await target.scrollIntoViewIfNeeded({timeout:18000});
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-side-gutters.png`,animations:'disabled'});
    await page.waitForTimeout(500); // allow PDF.js lazy page canvas paint
+   // Instrument the OTHER pages' existing chips. A single join must neither
+   // replace nodes nor restyle/relabel/reposition 200 unrelated controls.
+   await page.evaluate(()=>{
+     const nodes=[...document.querySelectorAll('.ocr-pdf-block-cover')].filter(x=>x.dataset.pdfPage!=='7');
+     const captures=nodes.map(node=>({node,chip:node.querySelector('.ocr-pdf-block-ctrl'),
+       label:node.querySelector('.ocr-pdf-block-ctrl span'),
+       checked:node.querySelector('input')?.checked,
+       labelText:node.querySelector('span')?.textContent}));
+     const mutations=[];const observers=captures.map(({node})=>{
+       const observer=new MutationObserver(records=>mutations.push(...records));
+       observer.observe(node,{subtree:true,attributes:true,childList:true,characterData:true});
+       return observer;
+     });
+     window.__blockJoinRefreshProbe={captures,mutations,observers};
+   });
+   await page.waitForTimeout(1000); // settle PDF.js page virtualization before measuring join
+   console.log('PROBE_BEFORE_CLICK',name,await page.evaluate(()=>{
+     const p=window.__blockJoinRefreshProbe;
+     const initial=p.mutations.length;
+     p.observers.forEach(o=>o.takeRecords());p.mutations.length=0;
+     return {connected:p.captures.filter(x=>x.node.isConnected).length,
+       preClickMutations:initial,
+       pageNodes:document.querySelectorAll('.ocr-pdf-block-cover').length};
+   }));
    await target.click({timeout:15000});
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await target.isChecked(),false);
@@ -121,6 +145,26 @@ try{
      'other page numbering cannot change');
    assert.match(await page.locator('#status').innerText(),/已接续 1/);
    assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
+   await page.waitForTimeout(850); // include delayed CMD requery, not only click-time changes
+   const untouched=await page.evaluate(()=>{
+     const p=window.__blockJoinRefreshProbe;
+     const count=p.mutations.length;
+     const survivors=p.captures.filter(({node,chip,label,checked,labelText})=>
+       node.isConnected&&node.querySelector('.ocr-pdf-block-ctrl')===chip&&
+       chip.querySelector('span')===label&&node.querySelector('input')?.checked===checked&&
+       label.textContent===labelText).length;
+     const disconnected=p.captures.filter(({node})=>!node.isConnected).length;
+     const changedLabels=p.captures.filter(({label,labelText})=>label.textContent!==labelText).length;
+     const changedChecked=p.captures.filter(({node,checked})=>node.querySelector('input')?.checked!==checked).length;
+     p.observers.forEach(o=>o.disconnect());delete window.__blockJoinRefreshProbe;
+     return {count,survivors,total:p.captures.length,disconnected,changedLabels,changedChecked,
+       mutations:p.mutations.slice(0,4).map(x=>({type:x.type,name:x.attributeName,target:x.target?.className}))};
+   });
+   console.log('BLOCK_JOIN_REFRESH_PROBE',name,untouched);
+   assert.equal(untouched.total,224-12,'other 21 PDF pages should contain original controls');
+   assert.equal(untouched.survivors,untouched.total,'other page controls must not be recreated/rechecked');
+   assert.equal(untouched.count,0,'single join must not mutate unrelated PDF page chips');
+   console.log('BLOCK_JOIN_LOCAL_REFRESH_PASS',name,untouched);
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-joined-checkbox.png`,animations:'disabled'});
    await target.scrollIntoViewIfNeeded({timeout:15000});
    await target.click({timeout:15000});

@@ -12,6 +12,10 @@ import './pdf-preview.css';
 import {blockAnchor} from './mineru-anchors.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+// CMD join annotations change logical grouping, never the sealed OCR pages or
+// their bbox geometry. Avoid invalidating every PDF control for this edit.
+const withoutJoinMarks=source=>source.replace(
+  /^[ \t]*(?:>[ \t]*)*<!-- ocr2md:block-join:v1 prev="p\d+b\d+" target="p\d+b\d+" -->\r?\n/gm,'');
 
 /** Pure geometry: OCR bbox is top-left, in the *already rotated* page space.
  * A mismatch is reported instead of drawing a dishonest highlight. */
@@ -95,13 +99,23 @@ export class PdfPreview {
     this.active=false;this.overlayDrawId=0;this.pageViewportCache=new Map();
     this.revealPending=false;this.revealUntil=0;
     this.geometryRevision=0;
+    this.lastGeometrySource=withoutJoinMarks(this.getMarkdown());
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
       if(next.documentRevision!==prev.documentRevision){
-        this.anchors=sourceBlocks(this.getMarkdown());
-        this.setBlockCoverage([]);
-        this.clearComparison();
-        void this.refreshGeometry();
+        const source=this.getMarkdown();
+        const canonical=withoutJoinMarks(source);
+        const onlyJoinMarks=canonical===this.lastGeometrySource;
+        this.lastGeometrySource=canonical;
+        this.anchors=sourceBlocks(source);
+        // A join/unjoin is one CM6 annotation line. Its text changes source
+        // line offsets but not the original PDF geometry, PDF.js page tree,
+        // single focus, A/B comparison, or any other checkbox. The subsequent
+        // CMD inventory diff updates only changed labels on its own page.
+        if(!onlyJoinMarks){
+          this.clearComparison();
+          void this.refreshGeometry();
+        }
       }
       // PDF pages and Markdown lines have unrelated visual geometry. React
       // ONLY to an explicit click-navigation event, never a scrollTarget,
@@ -281,11 +295,71 @@ export class PdfPreview {
    * never navigate, recenter, mutate CM6, or intercept PDF clicks.
    */
   setBlockCoverage(rows){
-    this.blockCoverageRows=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
+    const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
       .map(({id,pageIndex,blockIndex,joinPrev,joinable,logicalId})=>
         ({id,pageIndex,blockIndex,joinPrev,joinable,logicalId})):[];
-    this.paintBlockCoverage();
+    const prior=this.blockCoverageRows;
+    this.blockCoverageRows=next;
+    // Editing one CMD join annotates only the target Block. The geometry and
+    // immutable OCR identities do not change: do not repaint 224 checkboxes,
+    // reset their checked values, or relayout other pages on every click.
+    const sameGeometry=prior.length===next.length&&prior.every((old,i)=>
+      old.id===next[i].id&&old.pageIndex===next[i].pageIndex&&
+      old.blockIndex===next[i].blockIndex);
+    if(!sameGeometry){this.paintBlockCoverage();return;}
+    const pages=new Set();
+    for(let i=0;i<next.length;i++){
+      const old=prior[i],row=next[i];
+      if(old.joinPrev===row.joinPrev&&old.joinable===row.joinable&&
+        old.logicalId===row.logicalId)continue;
+      if(this.updateBlockChip(this.blockCoverageNodes.get(row.id),row))
+        pages.add(row.pageIndex);
+    }
+    for(const pageIndex of pages)this.avoidBlockChipCollisions(pageIndex);
+  }
+  /** Patch existing controls only when their values actually changed.
+   * Do not replace the DOM node, and never toggle other checkboxes. */
+  updateBlockChip(node,row){
+    if(!node)return false;
+    const input=node.querySelector('input');
+    const badge=node.querySelector('.ocr-pdf-block-ctrl span');
+    const chip=node.querySelector('.ocr-pdf-block-ctrl');
+    if(!input||!badge||!chip)return false;
+    let changed=false;
+    const logical=row.logicalId||row.id;
+    if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
+    const title=`原始 ${row.id} · 本页逻辑 ${logical}`;
+    if(badge.title!==title)badge.title=title;
+    const checked=!row.joinPrev;
+    if(input.checked!==checked){input.checked=checked;changed=true;}
+    const disabled=!row.joinable;
+    if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
+    const help=row.joinable?`取消勾选：并入本页上一 Block；重新勾选：恢复独立。原始 ${row.id}`:
+      `第 ${row.pageIndex+1} 页第一个 Block 必须独立（${row.id}）`;
+    if(input.title!==help)input.title=help;
+    node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
+    // Badge width can change when page-local numbering passes 9/10/100.
+    // Recompute this chip only; neighbor top offsets are corrected on the
+    // same PDF page by avoidBlockChipCollisions(pageIndex).
+    if(changed){
+      const page=node.parentElement;
+      if(page?.classList.contains('page')){
+        const region=this.map[row.pageIndex];
+        const block=region?.regions?.find(b=>b.blockIndex===row.blockIndex);
+        const side=node.dataset.gutter;
+        if(block){
+          const [x0,,x1]=block.bbox;
+          const margin=side==='left'?x0:region.pageSize[0]-x1;
+          const gutterPixels=page.clientWidth*margin/region.pageSize[0];
+          const nominalWidth=20+logical.length*5.5;
+          const scale=Math.min(1,Math.max(.2,(gutterPixels-3)/nominalWidth));
+          const target=`scale(${scale.toFixed(3)})`;
+          if(chip.style.transform!==target)chip.style.transform=target;
+        }
+      }
+    }
+    return changed;
   }
   paintBlockCoverage(){
     if(this.disposed)return;
@@ -326,14 +400,7 @@ export class PdfPreview {
         });
         this.blockCoverageNodes.set(row.id,node);
       }
-      const input=node.querySelector('input');
-      const label=node.querySelector('.ocr-pdf-block-ctrl span');
-      if(label){label.textContent=row.logicalId||row.id;
-        label.title=`原始 ${row.id} · 本页逻辑 ${row.logicalId||row.id}`;}
-      if(input){input.checked=!row.joinPrev;input.disabled=!row.joinable;
-        input.title=row.joinable?`取消勾选：并入本页上一 Block；重新勾选：恢复独立。原始 ${row.id}`:
-          `第 ${row.pageIndex+1} 页第一个 Block 必须独立（${row.id}）`;}
-      node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
+      this.updateBlockChip(node,row);
       // Keep the interactive chip OUTSIDE the OCR text rectangle. Choose
       // the outer paper gutter, never the inter-column gap: left-column
       // blocks go to the left; right-column blocks go to the right.
@@ -343,10 +410,13 @@ export class PdfPreview {
       const leftSide=(x0+x1)/2<=pageWidth/2;
       const fullWidth=(x1-x0)/pageWidth>.65;
       const side=fullWidth?(x0>=pageWidth-x1?'left':'right'):(leftSide?'left':'right');
-      node.dataset.gutter=side;
-      node.querySelector('.ocr-pdf-block-ctrl')?.setAttribute('data-gutter',side);
-      node.style.left=rect.left+'%';node.style.top=rect.top+'%';
-      node.style.width=rect.width+'%';node.style.height=rect.height+'%';
+      if(node.dataset.gutter!==side)node.dataset.gutter=side;
+      const chipGutter=node.querySelector('.ocr-pdf-block-ctrl');
+      if(chipGutter?.dataset.gutter!==side)chipGutter.dataset.gutter=side;
+      const styles={left:rect.left+'%',top:rect.top+'%',
+        width:rect.width+'%',height:rect.height+'%'};
+      for(const [property,value] of Object.entries(styles))
+        if(node.style[property]!==value)node.style[property]=value;
       if(node.parentElement!==page.div)page.div.append(node);
       // Keep checkbox and full Block ID on ONE line without entering OCR
       // text, including at the default narrow iPad PDF zoom. The available
@@ -359,8 +429,9 @@ export class PdfPreview {
           100-rect.left-rect.width)/100;
         const nominalWidth=20+(row.logicalId||row.id).length*5.5; // 12px box + 2px gap + 4px padding + borders
         const scale=Math.min(1,Math.max(.2,(gutterPixels-3)/nominalWidth));
-        chip.style.transform=`scale(${scale.toFixed(3)})`;
-        chip.style.top='0px';
+        const target=`scale(${scale.toFixed(3)})`;
+        if(chip.style.transform!==target)chip.style.transform=target;
+        // preserve existing collision offset until same-page layout diff.
       }
     }
     this.avoidBlockChipCollisions();
@@ -371,9 +442,10 @@ export class PdfPreview {
    * would cause their chips to collide. Stable page/side reading order gives
    * each label a nonoverlapping row with at least 2px of separation.
    */
-  avoidBlockChipCollisions(){
+  avoidBlockChipCollisions(pageIndex=null){
     const groups=new Map();
     for(const [id,node] of this.blockCoverageNodes){
+      if(pageIndex!==null&&Number(node.dataset.pdfPage)!==pageIndex+1)continue;
       const page=node.parentElement;
       const chip=node.querySelector('.ocr-pdf-block-ctrl');
       if(!page||!chip||!page.classList.contains('page'))continue;
@@ -389,7 +461,8 @@ export class PdfPreview {
       for(const item of items){
         const upper=Math.max(2,pageHeight-item.height-2);
         const top=Math.min(upper,Math.max(item.anchor,nextTop));
-        item.chip.style.top=`${(top-item.anchor).toFixed(2)}px`;
+        const target=`${(top-item.anchor).toFixed(2)}px`;
+        if(item.chip.style.top!==target)item.chip.style.top=target;
         nextTop=top+item.height+2;
       }
     }
