@@ -96,6 +96,18 @@ try{
       await page.waitForFunction(()=>document.querySelector(
         '.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl span')
         ?.textContent==='p16b8',null,{timeout:25000});
+      // Entire affected interval shifts together, without changing identities.
+      const shifted=await page.evaluate(()=>Array.from({length:16},(_,i)=>{
+        const node=document.querySelector(`.ocr-pdf-block-cover[data-block-id="p16b${i}"]`);
+        return {id:node?.dataset.blockId,
+          label:node?.querySelector('.ocr-pdf-block-ctrl span')?.textContent,
+          checked:node?.querySelector('input')?.checked};
+      }));
+      assert.deepEqual(shifted,Array.from({length:16},(_,i)=>({
+        id:`p16b${i}`,label:`p16b${i===0?8:i<=8?i-1:i}`,checked:true,
+      })), 'b1..b8 each -1, b0 becomes b8, b9..b15 remain intact');
+      await page.waitForFunction(()=>/跨越 8 块，区间编号整体 −1/.test(
+        document.querySelector('.ocr-pdf-status')?.textContent||''),null,{timeout:9000});
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b8"] .ocr-pdf-block-ctrl span')
         .innerText(),'p16b7',"target's current ordinal shifts but identity stays fixed");
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);

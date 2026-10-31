@@ -87,6 +87,17 @@ export function planCMDBlockMove(source,rows,fromId,afterId){
   const moving=page.findIndex(r=>r.id===fromId);
   const target=page.findIndex(r=>r.id===afterId);
   if(moving===target+1)return {changed:0,sourceId:fromId,afterId};
+  // One interval rotation, not a label swap:
+  // moving forward: crossed Blocks each shift -1; moving backward: +1.
+  // These are source-order slots. Joined Blocks retain their original ID
+  // and checked state while logical labels derive from the final CMD.
+  const insertion=moving<target?target:target+1;
+  const crossed=moving<insertion?
+    page.slice(moving+1,insertion+1):page.slice(insertion,moving);
+  const shift={movedFrom:moving,movedTo:insertion,
+    crossedIds:crossed.map(r=>r.id),
+    delta:moving<insertion?-1:1,
+    allIndependent:!joined.has(fromId)&&crossed.every(r=>!joined.has(r.id))};
   const reordered=page.map((r,i)=>({id:r.id,row:r,text:pieces[i]}));
   const [item]=reordered.splice(moving,1);
   const insertAt=reordered.findIndex(r=>r.id===afterId);
@@ -116,7 +127,7 @@ export function planCMDBlockMove(source,rows,fromId,afterId){
       insert:quotePrefix(anchorLine)+marker(reordered.at(-1).id,next.id)+'\n'});
   }
   return {changed:1,sourceId:fromId,afterId,pageIndex:a.pageIndex,
-    edits};
+    shift,edits};
 }
 export function planCMDBlockJoin(source,rows,targetId,join){
   if(typeof source!=='string'||typeof targetId!=='string'||typeof join!=='boolean')

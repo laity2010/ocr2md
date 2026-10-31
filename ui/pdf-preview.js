@@ -541,8 +541,14 @@ export class PdfPreview {
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
     this.setStatus(`正在将 ${item.id} 移至 ${target} 后…`);
-    void this.onBlockMove(item.id,target).catch(error=>
-      this.setStatus('排序失败：'+error.message));
+    void this.onBlockMove(item.id,target).then(result=>{
+      if(!result?.changed){this.setStatus('该块已位于目标后面，顺序不变');return;}
+      const shift=result.shift;
+      const interval=shift?.crossedIds?.length||0;
+      this.setStatus(shift?.allIndependent
+        ?`已移动 · 跨越 ${interval} 块，区间编号整体 ${shift.delta>0?'+1':'−1'} · 可撤销`
+        :`已移动 · 跨越 ${interval} 个原始块，保留原有接续关系 · 可撤销`);
+    }).catch(error=>this.setStatus('排序失败：'+error.message));
   }
   paintBlockCoverage(){
     if(this.disposed)return;

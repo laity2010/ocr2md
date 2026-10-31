@@ -93,7 +93,7 @@ export function createCMDTransactionPort(cmd){
       if(!plan.changed)return plan;
       commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
         plan.edits,{source,allowAll:true});
-      return {changed:1,sourceId,afterId,pageIndex:plan.pageIndex};
+      return {changed:1,sourceId,afterId,pageIndex:plan.pageIndex,shift:plan.shift};
     },
     queryBlockGeometry:(pageIndex,blockIndex)=>cmd.queryBlockGeometry(pageIndex,blockIndex),
     readLine:n=>cmd.readLine(n),

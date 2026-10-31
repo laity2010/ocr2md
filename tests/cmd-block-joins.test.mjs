@@ -141,6 +141,30 @@ assert.equal(readCMDBlockJoins(movedJoined,movedJoinedRows).joined.get('p6b7'),'
 // and rewrite affected parent IDs to the new immediate CMD predecessor.
 const applyEdits=(text,edits)=>[...edits].sort((a,b)=>b.from-a.from)
   .reduce((s,e)=>s.slice(0,e.from)+e.insert+s.slice(e.to),text);
+// Page 17: b0 inserted after b8 is an interval rotation, NOT a swap.
+// Original b1..b8 retain their relative order, and only these labels -1.
+const p17=planCMDBlockMove(original,initial,'p16b0','p16b8');
+assert.deepEqual(p17.shift,{movedFrom:0,movedTo:8,
+  crossedIds:Array.from({length:8},(_,i)=>`p16b${i+1}`),
+  delta:-1,allIndependent:true});
+const p17Moved=applyEdits(original,p17.edits);
+const p17MovedRows=(await inspectCMDTextBlocks(p17Moved)).rows;
+const p17Labels=projectCMDLogicalTextBlocks(p17Moved,p17MovedRows).assignments;
+assert.equal(p17Labels.get('p16b0'),'p16b8');
+for(let i=1;i<=8;i++)assert.equal(p17Labels.get(`p16b${i}`),`p16b${i-1}`);
+for(let i=9;i<=15;i++)assert.equal(p17Labels.get(`p16b${i}`),`p16b${i}`);
+assert.equal(p17Labels.get('p15b11'),'p15b11','other page labels must remain untouched');
+// Reverse-direction case: b8 moved after b0, b1..b7 all +1.
+const backwards17=planCMDBlockMove(original,initial,'p16b8','p16b0');
+assert.deepEqual(backwards17.shift,{movedFrom:8,movedTo:1,
+  crossedIds:Array.from({length:7},(_,i)=>`p16b${i+1}`),
+  delta:1,allIndependent:true});
+const backwardsRows=(await inspectCMDTextBlocks(applyEdits(original,backwards17.edits))).rows;
+const backwardsLabels=projectCMDLogicalTextBlocks(
+  applyEdits(original,backwards17.edits),backwardsRows).assignments;
+assert.equal(backwardsLabels.get('p16b8'),'p16b1');
+for(let i=1;i<=7;i++)assert.equal(backwardsLabels.get(`p16b${i}`),`p16b${i+1}`);
+for(let i=9;i<=15;i++)assert.equal(backwardsLabels.get(`p16b${i}`),`p16b${i}`);
 let page17=original;
 for(const id of ['p16b0','p16b9','p16b11','p16b14']){
   const items=(await inspectCMDTextBlocks(page17)).rows;
@@ -149,6 +173,7 @@ for(const id of ['p16b0','p16b9','p16b11','p16b14']){
 const joinedBefore=readCMDBlockJoins(page17,(await inspectCMDTextBlocks(page17)).rows);
 assert.deepEqual([...joinedBefore.joined.keys()],['p16b0','p16b9','p16b11','p16b14']);
 const move17=planCMDBlockMove(page17,(await inspectCMDTextBlocks(page17)).rows,'p16b11','p16b8');
+assert.equal(move17.shift.allIndependent,false,'joined intervals must not be described as uniform logical +/-1');
 const after17=applyEdits(page17,move17.edits);
 const after17Rows=(await inspectCMDTextBlocks(after17)).rows;
 const after17Joins=readCMDBlockJoins(after17,after17Rows);
