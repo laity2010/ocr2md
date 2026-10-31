@@ -16,6 +16,10 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // their bbox geometry. Avoid invalidating every PDF control for this edit.
 const withoutJoinMarks=source=>source.replace(
   /^[ \t]*(?:>[ \t]*)*<!-- ocr2md:block-join:v1 prev="p\d+b\d+" target="p\d+b\d+" -->\r?\n/gm,'');
+// Moving source Blocks or annotating joins does not change physical PDF
+// geometry: only replacement of the sealed OCR evidence changes that map.
+const geometryKey=source=>source.match(/<!-- minerujson:source:v1:([a-f0-9]{64})/)?.[1]
+  ??withoutJoinMarks(source);
 
 /** Pure geometry: OCR bbox is top-left, in the *already rotated* page space.
  * A mismatch is reported instead of drawing a dishonest highlight. */
@@ -47,11 +51,13 @@ function sourceAnchor(anchors,line){
 }
 
 export class PdfPreview {
-  constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好'))){
+  constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
+    onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
     this.onBlockJoin=onBlockJoin;
+    this.onBlockMove=onBlockMove;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -95,16 +101,17 @@ export class PdfPreview {
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
+    this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
     this.active=false;this.overlayDrawId=0;this.pageViewportCache=new Map();
     this.revealPending=false;this.revealUntil=0;
     this.geometryRevision=0;
-    this.lastGeometrySource=withoutJoinMarks(this.getMarkdown());
+    this.lastGeometrySource=geometryKey(this.getMarkdown());
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
       if(next.documentRevision!==prev.documentRevision){
         const source=this.getMarkdown();
-        const canonical=withoutJoinMarks(source);
+        const canonical=geometryKey(source);
         const onlyJoinMarks=canonical===this.lastGeometrySource;
         this.lastGeometrySource=canonical;
         this.anchors=sourceBlocks(source);
@@ -361,6 +368,88 @@ export class PdfPreview {
     }
     return changed;
   }
+  /** Long-press the ID (not its checkbox) then point to another ID on this
+   * PDF page. The arrow is a temporary pointer-only visualization; the only
+   * data mutation is the CMD move transaction after a valid pointer release.
+   */
+  armBlockDrag(event,ctrl,id){
+    if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
+    const item={id,ctrl,pointerId:event.pointerId,x:event.clientX,y:event.clientY,
+      startX:event.clientX,startY:event.clientY,active:false,target:null,timer:null,svg:null};
+    this.blockDrag=item;
+    try{ctrl.setPointerCapture(event.pointerId);}catch{/* Pointer capture optional. */}
+    item.timer=setTimeout(()=>{
+      if(this.blockDrag!==item)return;
+      item.active=true;ctrl.classList.add('ocr-pdf-block-drag-source');
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.classList.add('ocr-pdf-block-drag-arrow');
+      svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
+        '<path class="ocr-pdf-block-drag-tip" />';
+      document.body.append(svg);item.svg=svg;
+      this.setStatus(`拖动 ${id} 箭头到本页另一块标签，松手调整 CMD 顺序`);
+      this.updateBlockDrag(item,item.x,item.y);
+    },370);
+  }
+  updateBlockDrag(item,x,y){
+    if(this.blockDrag!==item)return;
+    item.x=x;item.y=y;
+    if(!item.active){
+      if(Math.hypot(x-item.startX,y-item.startY)>11){
+        clearTimeout(item.timer);this.blockDrag=null;
+        // A short accidental swipe over a label is neither a drop nor
+        // a checkbox command; suppress only this label's synthetic click.
+        this.suppressBlockClickCtrl=item.ctrl;
+        this.suppressBlockClickUntil=performance.now()+600;
+      }
+      return;
+    }
+    const hit=document.elementFromPoint(x,y)?.closest?.('.ocr-pdf-block-ctrl');
+    const node=hit?.closest('.ocr-pdf-block-cover');
+    const valid=node&&node.dataset.blockId!==item.id&&
+      node.dataset.pdfPage===item.ctrl.closest('.ocr-pdf-block-cover')?.dataset.pdfPage;
+    const target=valid?node:null;
+    if(item.target!==target){
+      item.target?.classList.remove('ocr-pdf-block-drop-target');
+      item.target=target;target?.classList.add('ocr-pdf-block-drop-target');
+    }
+    const box=item.ctrl.getBoundingClientRect();
+    const sx=(box.left+box.right)/2,sy=(box.top+box.bottom)/2;
+    const tip=target?.querySelector('.ocr-pdf-block-ctrl')?.getBoundingClientRect();
+    const ex=tip?(tip.left+tip.right)/2:x,ey=tip?(tip.top+tip.bottom)/2:y;
+    const svg=item.svg;
+    svg.setAttribute('viewBox',`0 0 ${window.innerWidth} ${window.innerHeight}`);
+    const bend=(sx+ex)/2;
+    svg.querySelector('.ocr-pdf-block-drag-path').setAttribute('d',
+      `M ${sx} ${sy} Q ${bend} ${Math.min(sy,ey)-30} ${ex} ${ey}`);
+    const angle=Math.atan2(ey-(Math.min(sy,ey)-30),ex-bend);
+    const size=11;
+    const x1=ex-size*Math.cos(angle-.55),y1=ey-size*Math.sin(angle-.55);
+    const x2=ex-size*Math.cos(angle+.55),y2=ey-size*Math.sin(angle+.55);
+    svg.querySelector('.ocr-pdf-block-drag-tip').setAttribute('d',
+      `M ${ex} ${ey} L ${x1} ${y1} L ${x2} ${y2} Z`);
+  }
+  finishBlockDrag(event,cancel=false){
+    const item=this.blockDrag;
+    if(!item||item.pointerId!==event.pointerId)return;
+    const active=item.active;
+    if(active)this.updateBlockDrag(item,event.clientX,event.clientY);
+    const target=active&&!cancel?item.target?.dataset.blockId:null;
+    clearTimeout(item.timer);
+    item.ctrl.classList.remove('ocr-pdf-block-drag-source');
+    item.target?.classList.remove('ocr-pdf-block-drop-target');
+    item.svg?.remove();this.blockDrag=null;
+    try{if(item.ctrl.hasPointerCapture(event.pointerId))item.ctrl.releasePointerCapture(event.pointerId);}
+    catch{/* iOS may release capture on pointercancel. */}
+    if(!active)return;
+    event.preventDefault();
+    this.suppressBlockClickCtrl=item.ctrl;
+    this.suppressBlockClickUntil=performance.now()+600;
+    if(cancel){this.setStatus('已取消块排序');return;}
+    if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
+    this.setStatus(`正在将 ${item.id} 移至 ${target} 后…`);
+    void this.onBlockMove(item.id,target).catch(error=>
+      this.setStatus('排序失败：'+error.message));
+  }
   paintBlockCoverage(){
     if(this.disposed)return;
     const wanted=new Set(this.blockCoverageRows.map(row=>row.id));
@@ -389,9 +478,27 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
+        ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
+        ctrl.addEventListener('pointermove',e=>{
+          if(this.blockDrag?.pointerId===e.pointerId)
+            this.updateBlockDrag(this.blockDrag,e.clientX,e.clientY);
+        });
+        ctrl.addEventListener('pointerup',e=>this.finishBlockDrag(e));
+        ctrl.addEventListener('pointercancel',e=>this.finishBlockDrag(e,true));
+        ctrl.addEventListener('lostpointercapture',e=>{
+          if(this.blockDrag?.pointerId===e.pointerId)this.finishBlockDrag(e,true);
+        });
+        ctrl.addEventListener('contextmenu',e=>e.preventDefault());
+        ctrl.addEventListener('click',e=>{
+          if(this.suppressBlockClickCtrl===ctrl&&performance.now()<this.suppressBlockClickUntil)
+            e.preventDefault();
+        },true);
         for(const type of ['pointerdown','mousedown','touchstart','click','dblclick'])
           ctrl.addEventListener(type,e=>e.stopPropagation());
         input.addEventListener('change',async()=>{
+          if(this.suppressBlockClickCtrl===ctrl&&performance.now()<this.suppressBlockClickUntil){
+            input.checked=!input.checked;return;
+          }
           const previous=!input.checked;
           input.disabled=true;
           try{await this.onBlockJoin(row.id,previous);}
@@ -760,6 +867,13 @@ export class PdfPreview {
   }
   dispose(){
     this.disposed=true;this.finishWarmup?.(false);
+    if(this.blockDrag){
+      clearTimeout(this.blockDrag.timer);
+      this.blockDrag.svg?.remove();
+      this.blockDrag.target?.classList.remove('ocr-pdf-block-drop-target');
+      this.blockDrag.ctrl.classList.remove('ocr-pdf-block-drag-source');
+      this.blockDrag=null;
+    }
     this.unsubscribe?.();this.resizeObserver.disconnect();
     clearTimeout(this.overlayTimer);
     this.clearComparison();

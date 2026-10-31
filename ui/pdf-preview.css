@@ -57,7 +57,22 @@
   color:#e4ebd6;background:rgba(39,63,60,.94);border:1px solid #76a497;
   border-radius:4px;font:600 9px/14px monospace;white-space:nowrap;text-align:left;
   pointer-events:auto;cursor:pointer;user-select:none;box-shadow:0 1px 3px #101b1f8c;
+  touch-action:none;
 }
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl span{touch-action:none}
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl.ocr-pdf-block-drag-source{
+  scale:1.42;z-index:12;border-color:#e3d28e;
+  background:rgba(58,83,77,.98);box-shadow:0 0 0 2px #d6cb8d,0 2px 8px #0009;
+}
+.ocr-pdf-block-cover.ocr-pdf-block-drop-target .ocr-pdf-block-ctrl{
+  border-color:#e3d28e;background:#466b5a;
+  box-shadow:0 0 0 3px #e3d28e99,0 2px 8px #0009;
+}
+.ocr-pdf-block-drag-arrow{position:fixed;inset:0;width:100vw;height:100vh;
+  z-index:9999;pointer-events:none;overflow:visible}
+.ocr-pdf-block-drag-path{stroke:#e3d28e;stroke-width:3;stroke-linecap:round;
+  stroke-dasharray:8 5;filter:drop-shadow(0 1px 2px #000)}
+.ocr-pdf-block-drag-tip{fill:#e3d28e;stroke:#1b302d;stroke-width:1}
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl[data-gutter="left"]{
   right:calc(100% + 3px);left:auto;transform-origin:right top;
 }

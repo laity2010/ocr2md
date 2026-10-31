@@ -10,7 +10,7 @@
  * rejects a cross-chapter business edit.
  */
 import {createIndexProjector} from './wcp-document-index.js';
-import {planCMDBlockJoin} from './cmd-block-joins.js';
+import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
@@ -84,6 +84,16 @@ export function createCMDTransactionPort(cmd){
       commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
         plan.edits,{source,allowAll:true});
       return {changed:1,previous:plan.previous,target:plan.target};
+    },
+    async moveBlockAfter(sourceId,afterId){
+      const source=cmd.readSource();
+      const {rows}=await inspectCMDTextBlocks(source);
+      if(source!==cmd.readSource())throw Error('拖动期间 CMD 已变化，请重新操作');
+      const plan=planCMDBlockMove(source,rows,sourceId,afterId);
+      if(!plan.changed)return plan;
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return {changed:1,sourceId,afterId,pageIndex:plan.pageIndex};
     },
     queryBlockGeometry:(pageIndex,blockIndex)=>cmd.queryBlockGeometry(pageIndex,blockIndex),
     readLine:n=>cmd.readLine(n),

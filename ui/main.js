@@ -715,6 +715,13 @@ async function main() {
       return result;
     }catch(error){status('文本块接续失败：'+error.message,'error');throw error;}
   });
+  workspace.setBlockMoveAction(async(sourceId,afterId)=>{
+    try{
+      const result=await cmdPort.moveBlockAfter(sourceId,afterId);
+      if(result.changed)status(`✓ ${sourceId} 已移至 ${afterId} 后 · CMD 未保存，可撤销`);
+      return result;
+    }catch(error){status('文本块排序失败：'+error.message,'error');throw error;}
+  });
   workspace.notifyCMDReady();
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{

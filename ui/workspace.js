@@ -70,6 +70,7 @@ let wcpRuntime=null;
 let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
 let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
+let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockCoverageEnabled=false;
 
 class OutlinePanel {
@@ -315,7 +316,8 @@ class PreviewPanel {
       onLocate:target=>this.navigateToNote(target),
     });
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
-      (id,join)=>blockJoinAction(id,join));
+      (id,join)=>blockJoinAction(id,join),
+      (id,afterId)=>blockMoveAction(id,afterId));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -736,6 +738,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       return getCMD().markSpellingCandidates(candidates,{expectedSource,agScope:scope});
     },
     setBlockJoinAction:action=>{blockJoinAction=action;},
+    setBlockMoveAction:action=>{blockMoveAction=action;},
     setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),
     setTextBlockError:message=>currentOutline?.textBlock?.setError(message),
     setTextBlockContinuationCandidates:result=>currentOutline?.textBlock?.setContinuationCandidates(result),

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {inspectCMDTextBlocks} from '../ui/cmd-text-blocks.js';
-import {planCMDBlockJoin,readCMDBlockJoins,projectCMDLogicalTextBlocks} from '../ui/cmd-block-joins.js';
+import {planCMDBlockJoin,planCMDBlockMove,readCMDBlockJoins,projectCMDLogicalTextBlocks} from '../ui/cmd-block-joins.js';
 const original=readFileSync('.v6/tests/text-blocks/buffett-reinitialized.minerujson.md','utf8');
 const initial=(await inspectCMDTextBlocks(original)).rows;
 const plan=planCMDBlockJoin(original,initial,'p6b7',true);
@@ -106,5 +106,34 @@ assert.equal(readCMDBlockJoins(quotedJoined,quotedJoinedRows).joined.get('p6b7')
 const quotedUndo=planCMDBlockJoin(quotedJoined,quotedJoinedRows,'p6b7',false);
 assert.equal(quotedJoined.slice(0,quotedUndo.edits[0].from)+quotedUndo.edits[0].insert+
   quotedJoined.slice(quotedUndo.edits[0].to),quoted);
+// Drag p6b7 after p6b9. The CMD document itself changes reading order;
+// original OCR Block IDs, PDF geometry, sealed page/evidence comments survive.
+const move=planCMDBlockMove(original,initial,'p6b7','p6b9');
+assert.equal(move.changed,1);
+const shifted=original.slice(0,move.edits[0].from)+move.edits[0].insert+
+  original.slice(move.edits[0].to);
+const shiftedRows=(await inspectCMDTextBlocks(shifted)).rows;
+assert.deepEqual(shiftedRows.filter(x=>x.pageIndex===6)
+  .sort((a,b)=>a.from-b.from).slice(6,11).map(x=>x.id),
+  ['p6b6','p6b8','p6b9','p6b7','p6b10']);
+assert.equal(planCMDBlockJoin(shifted,shiftedRows,'p6b7',true).previous,'p6b9');
+const shiftedLogical=projectCMDLogicalTextBlocks(shifted,shiftedRows);
+assert.equal(shiftedLogical.assignments.get('p6b7'),'p6b9');
+assert.equal(shiftedLogical.assignments.get('p6b9'),'p6b8');
+assert.equal(shiftedLogical.assignments.get('p5b1'),'p5b1');
+assert.equal(planCMDBlockMove(shifted,shiftedRows,'p6b7','p6b9').changed,0);
+const moveBack=planCMDBlockMove(shifted,shiftedRows,'p6b7','p6b6');
+assert.equal(shifted.slice(0,moveBack.edits[0].from)+moveBack.edits[0].insert+
+  shifted.slice(moveBack.edits[0].to),original,'reverse movement must restore byte-for-byte');
+assert.throws(()=>planCMDBlockMove(original,initial,'p6b7','p7b0'),/同一 PDF 页/);
+const joinedMoveSource=original.slice(0,plan.edits[0].from)+plan.edits[0].insert+
+  original.slice(plan.edits[0].to);
+const joinedForMove=(await inspectCMDTextBlocks(joinedMoveSource)).rows;
+assert.throws(()=>planCMDBlockMove(joinedMoveSource,joinedForMove,
+  'p6b8','p6b9'),/已有文本块合并/);
+const movedLast=planCMDBlockMove(original,initial,'p6b11','p6b6');
+assert.equal(movedLast.changed,1,'last page block can move without copying next page evidence');
+assert(!movedLast.edits[0].expected.includes('<!-- minerujson:page:v1:7'),
+  'next page provenance cannot be in a movable segment');
 console.log('CMD_BLOCK_JOIN_PASS',{blocks:224,logicalBlocks:223,originalRestored:true,
   pageLocalLabels:true,crossPage:'p8b8→p9b0',allTypes:true,crossColumn:'p6b6→p6b7'});
