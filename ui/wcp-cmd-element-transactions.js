@@ -70,6 +70,7 @@ export function createCMDTransactionPort(cmd){
     requestMeasure:()=>cmd.requestMeasure(),
     readSource:()=>cmd.readSource(), // read-only CM6 source snapshot; never a second editor
     queryLayout:()=>cmd.queryLayout(),
+    queryBlockAnalysis:()=>cmd.queryBlockAnalysis(),
     queryBlockGeometry:(pageIndex,blockIndex)=>cmd.queryBlockGeometry(pageIndex,blockIndex),
     readLine:n=>cmd.readLine(n),
     lineAtOffset:offset=>cmd.lineAtOffset(offset),

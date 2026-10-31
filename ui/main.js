@@ -15,7 +15,6 @@ import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
-import {inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {CMDocument} from './wcp-cm-document.js';
 import {createSettingsModule} from './wcp-settings-module.js';
 import {workspaceDirectoryPort} from './wcp-workspace-directory-port.js';
@@ -692,9 +691,10 @@ async function main() {
   const scanTextBlocks=()=>{
     const id=++blockRequest,source=cm.getMarkdown();
     workspace.setTextBlockLoading();
-    void inspectCMDTextBlocks(source).then(result=>{
+    void cmdPort.queryBlockAnalysis().then(({inventory,continuations})=>{
       if(id!==blockRequest||source!==cm.getMarkdown())return;
-      workspace.setTextBlockInventory(result);
+      workspace.setTextBlockInventory(inventory);
+      workspace.setTextBlockContinuationCandidates(continuations);
     }).catch(error=>{
       if(id===blockRequest)workspace.setTextBlockError(error.message);
     });

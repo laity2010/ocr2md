@@ -6,3 +6,7 @@
 .ocr-text-block-jump {font:inherit;border:0;background:transparent;color:#e5b36e;text-decoration:underline;cursor:pointer}
 .ocr-block-gap {color:#f3a68e!important;font-weight:600}
 .ocr-block-match {color:#a4ceaa!important}
+
+.ocr-text-block-control {display:flex;gap:6px;align-items:center;padding:2px 9px}
+.ocr-text-block-control button {font:inherit;font-size:12px;background:transparent;color:#c9c6b6;border:1px solid #56636b;border-radius:5px;padding:4px 10px;cursor:pointer}
+.ocr-text-block-control button[aria-pressed="true"] {background:#4a5c61;color:#ffce87;border-color:#9b855d}

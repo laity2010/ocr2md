@@ -1136,3 +1136,17 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Keep separate from the deliberate stalled-PDF warmup transport regression.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP2-PDF-WEBKIT-C55','C55','tests/pdf-normal-webkit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','iPad WebKit normal PDF stream zoom 56→67%, MD/PDF return and page-8 navigation, screenshot, source/pdf hash unchanged','integration');
+
+-- WP3: only text-block continuity hypotheses. No write/merge/confirmation port.
+INSERT INTO apis VALUES
+ ('L52','L','scanCMDContinuationCandidates','ui/cmd-block-continuations.js','export','detached CMD inventory and verified layout','read-only cross-column and next-page seam candidates with bbox, OCR excerpts, heuristic evidence and blockers','uses CMD-owned geometry/text, no PDF/DOM/CM6 writes; no probability claims',1),
+ ('C56','C','returned.queryBlockAnalysis','ui/wcp-cmd-element-transactions.js','returned','none','promise with read-only CMD block inventory and continuation candidates','CMD reads the same CM6 document snapshot and WCP exposes only a bounded query',1),
+ ('G27','G','returned.setContinuationCandidates','ui/text-block-module.js','returned','CMD candidate summary and row evidence','AG local candidate grid, source/target one-at-a-time focus, no merges','AG owns its schema/filter/selection; PDF owns orange overlay',1);
+INSERT INTO access_edges VALUES
+ ('X-WP3-CMD-L52','C','L','ui/cm-document.js','scanCMDContinuationCandidates(inventory,layout)','L52','registered','CMD derives candidate projections without editing anchors'),
+ ('X-WP3-CMD-C56','L','C','ui/main.js','cmdPort.queryBlockAnalysis()','C56','registered','Shell obtains CMD read-only analysis through WCP port'),
+ ('X-WP3-G27','L','G','ui/workspace.js','textBlock?.setContinuationCandidates(result)','G27','registered','Layout relays detached candidate rows to owning AG module');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP3-L52','L52','tests/cmd-block-continuations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','22-page Buffett 4 cross-column + 1 cross-page candidate; five known seams, caption/figure/empty-column blockers and unchanged CMD','integration'),
+ ('TC-WP3-C56','C56','tests/text-block-continuations.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit reads five candidates without mutations or legacy PDF-map fetch','integration'),
+ ('TC-WP3-G27','G27','tests/text-block-continuations.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit AG switches block/candidate schema, buttons focus source and target with sequential PDF orange screenshots','integration');

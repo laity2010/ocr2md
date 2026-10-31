@@ -697,6 +697,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),
     setTextBlockError:message=>currentOutline?.textBlock?.setError(message),
+    setTextBlockContinuationCandidates:result=>currentOutline?.textBlock?.setContinuationCandidates(result),
     setTextBlockInventory:result=>{currentOutline?.textBlock?.setInventory(result);
       currentPreview?.refreshTextBlockCoverage();},
     setSentenceCoverage:enabled=>currentOutline?.sentence?.setCoverage(enabled),

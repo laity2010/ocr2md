@@ -93,6 +93,12 @@ function anchorLines(source){
   }
   return result;
 }
+const blockText=block=>{
+  const lines=(block.lines||[]).map(line=>(line.spans||[]).map(s=>s.content||'').join('')).filter(Boolean);
+  if(lines.length)return lines.join(' ').replace(/\s+/g,' ').trim();
+  for(const child of block.blocks||[]){const value=blockText(child);if(value)return value;}
+  return '';
+};
 const summary=block=>{
   const lines=(block.lines||[]).map(line=>(line.spans||[]).map(s=>s.content||'').join('')).filter(Boolean);
   if(lines.length)return lines.join(' ').replace(/\s+/g,' ').trim().slice(0,240);
@@ -106,6 +112,7 @@ export async function inspectCMDTextBlocks(source){
     if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
     for(const [blockIndex,block] of page.para_blocks.entries()){
       const id=`p${pageIndex}b${blockIndex}`;expected.add(id);
+      const rawText=blockText(block);
       const positions=anchors.get(id)||[];
       const bbox=block.bbox;
       const hasBbox=Array.isArray(bbox)&&bbox.length===4&&bbox.every(Number.isFinite)&&
@@ -114,7 +121,8 @@ export async function inspectCMDTextBlocks(source){
       const validPage=Array.isArray(pageSize)&&pageSize.length===2&&pageSize.every(n=>Number.isFinite(n)&&n>0);
       const geometry=Boolean(hasBbox&&validPage&&bbox[0]>=0&&bbox[1]>=0&&bbox[2]<=pageSize[0]&&bbox[3]<=pageSize[1]);
       rows.push({id,pageIndex,blockIndex,pdfPage:pageIndex+1,type:block.type||'unknown',
-        text:summary(block),bbox:hasBbox?[...bbox]:null,pageSize:validPage?[...pageSize]:null,
+        text:summary(block),textHead:rawText.slice(0,180),textTail:rawText.slice(-220),
+        bbox:hasBbox?[...bbox]:null,pageSize:validPage?[...pageSize]:null,
         geometry,sourceLine:positions[0]?.line??null,from:positions[0]?.from??null,
         anchorCount:positions.length,anchorStatus:positions.length===1?'已匹配':positions.length===0?'缺少锚点':'重复锚点',
         bboxText:hasBbox?bbox.join(', '):'无坐标'});

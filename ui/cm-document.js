@@ -11,7 +11,8 @@ import {unquotePrefix} from './mineru-anchors.js';
 import {isolateHistory} from '@codemirror/commands';
 import {scanAnnotations,formatAnnotation} from './cmd-annotations.js';
 import {scanHtmlElements} from './cmd-html-elements.js';
-import {queryCMDLayout,queryCMDBlockGeometry} from './cmd-text-blocks.js';
+import {queryCMDLayout,queryCMDBlockGeometry,inspectCMDTextBlocks} from './cmd-text-blocks.js';
+import {scanCMDContinuationCandidates} from './cmd-block-continuations.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -41,6 +42,11 @@ export class CMDocument {
   readSource(){return this.markdown;}
   /** One validated CMD geometry provider; text-block AG and PDF share it. */
   queryLayout(){return queryCMDLayout(this.readSource());}
+  async queryBlockAnalysis(){
+    const source=this.readSource();
+    const [inventory,layout]=await Promise.all([inspectCMDTextBlocks(source),queryCMDLayout(source)]);
+    return {inventory,continuations:scanCMDContinuationCandidates(inventory,layout)};
+  }
   queryBlockGeometry(pageIndex,blockIndex){
     return queryCMDBlockGeometry(this.readSource(),pageIndex,blockIndex);
   }
