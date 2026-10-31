@@ -109,7 +109,7 @@ try{
         ?.checked===true,null,{timeout:25000});
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
       // Same-row across-column case reported on page 17: p16b9 (right)
-      // moved immediately after p16b0 (left), not just nearby chips.
+      // moved before earlier p16b0 (left), not just nearby chips.
       const acrossFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl');
       const acrossTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
       await acrossFrom.scrollIntoViewIfNeeded();
@@ -138,8 +138,9 @@ try{
         .waitFor({timeout:1500});
       await page.locator('body').dispatchEvent('pointerup',
         {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b1',
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b0',
         null,{timeout:25000});
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl span').innerText(),'p16b1');
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b1"] .ocr-pdf-block-ctrl span').innerText(),'p16b2');
       await page.locator('#undo').click();
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b9',
@@ -147,7 +148,7 @@ try{
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
       console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'p6b7 after p6b8',
-        crossColumn:'p16b9 after p16b0 (+17px touch tolerance)',
+        crossColumn:'p16b9 before p16b0 (+17px touch tolerance)',
         arrow:true,checkCount:224,joinAfterMove:true,undoRestores:true,errors:errors.length});
     }finally{await browser.close();}
   }

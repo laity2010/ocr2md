@@ -165,6 +165,24 @@ const backwardsLabels=projectCMDLogicalTextBlocks(
 assert.equal(backwardsLabels.get('p16b8'),'p16b1');
 for(let i=1;i<=7;i++)assert.equal(backwardsLabels.get(`p16b${i}`),`p16b${i+1}`);
 for(let i=9;i<=15;i++)assert.equal(backwardsLabels.get(`p16b${i}`),`p16b${i}`);
+// Move Before, not swap: b8 -> b0; old b0..b7 become b1..b8.
+const before17=planCMDBlockMove(original,initial,'p16b8','p16b0','before');
+assert.deepEqual(before17.shift,{movedFrom:8,movedTo:0,
+  crossedIds:Array.from({length:8},(_,i)=>`p16b${i}`),delta:1,allIndependent:true});
+const before17Source=applyEdits(original,before17.edits);
+const before17Rows=(await inspectCMDTextBlocks(before17Source)).rows;
+const before17Labels=projectCMDLogicalTextBlocks(before17Source,before17Rows).assignments;
+assert.equal(before17Labels.get('p16b8'),'p16b0');
+for(let i=0;i<8;i++)assert.equal(before17Labels.get(`p16b${i}`),`p16b${i+1}`);
+for(let i=9;i<=15;i++)assert.equal(before17Labels.get(`p16b${i}`),`p16b${i}`);
+assert.equal(before17Labels.get('p15b11'),'p15b11');
+assert.equal(planCMDBlockMove(before17Source,before17Rows,'p16b8','p16b0','before').changed,0);
+assert.equal(planCMDBlockMove(before17Source,before17Rows,'p16b0','p16b1','before').changed,0);
+const restoreBefore=planCMDBlockMove(before17Source,before17Rows,'p16b8','p16b7','after');
+assert.equal(applyEdits(before17Source,restoreBefore.edits),original,
+  'moving b8 back after b7 must restore original source byte-for-byte');
+assert.throws(()=>planCMDBlockMove(original,initial,'p16b8','p16b0','unknown'),/无效/);
+assert.throws(()=>planCMDBlockMove(original,initial,'p16b8','p15b0','before'),/同一 PDF 页/);
 let page17=original;
 for(const id of ['p16b0','p16b9','p16b11','p16b14']){
   const items=(await inspectCMDTextBlocks(page17)).rows;

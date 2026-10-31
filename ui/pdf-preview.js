@@ -476,6 +476,14 @@ export class PdfPreview {
     document.removeEventListener('pointerup',this.onBlockDragUp,true);
     document.removeEventListener('pointercancel',this.onBlockDragCancel,true);
   }
+  blockDropPlacement(sourceId,targetId){
+    // Use current CMD reading order, never physical PDF coordinates or
+    // changeable badge text, to decide which side the dragged Block lands on.
+    const sourceIndex=this.blockCoverageRows.findIndex(row=>row.id===sourceId);
+    const targetIndex=this.blockCoverageRows.findIndex(row=>row.id===targetId);
+    if(sourceIndex<0||targetIndex<0)throw Error('文本块顺序已变化，请重试');
+    return sourceIndex>targetIndex?'before':'after';
+  }
   updateBlockDrag(item,x,y){
     if(this.blockDrag!==item)return;
     item.x=x;item.y=y;
@@ -500,8 +508,11 @@ export class PdfPreview {
     if(item.target!==target){
       item.target?.classList.remove('ocr-pdf-block-drop-target');
       item.target=target;target?.classList.add('ocr-pdf-block-drop-target');
+      const placement=target?
+        this.blockDropPlacement(item.id,target.dataset.blockId):null;
+      const label=target?.querySelector('.ocr-pdf-block-ctrl span')?.textContent;
       this.setStatus(target
-        ?`目标 ${target.dataset.blockId} · 松手将 ${item.id} 排到其后`
+        ?`目标 ${label} · 松手将当前块排到其${placement==='before'?'前':'后'}`
         :`拖动 ${item.id} 至本页块标签（接近标签即可松手）`);
     }
     const box=item.ctrl.getBoundingClientRect();
@@ -540,9 +551,10 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
-    this.setStatus(`正在将 ${item.id} 移至 ${target} 后…`);
-    void this.onBlockMove(item.id,target).then(result=>{
-      if(!result?.changed){this.setStatus('该块已位于目标后面，顺序不变');return;}
+    const placement=this.blockDropPlacement(item.id,target);
+    this.setStatus(`正在将 ${item.id} 移至 ${target} ${placement==='before'?'前':'后'}…`);
+    void this.onBlockMove(item.id,target,placement).then(result=>{
+      if(!result?.changed){this.setStatus('该块已紧邻目标，顺序不变');return;}
       const shift=result.shift;
       const interval=shift?.crossedIds?.length||0;
       this.setStatus(shift?.allIndependent

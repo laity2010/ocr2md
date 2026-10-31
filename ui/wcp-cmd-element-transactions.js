@@ -68,6 +68,16 @@ export function createCMDTransactionPort(cmd){
     // index lazily rebuilds from that same CM6 state after the transaction.
     return result;
   };
+  const moveBlock=async(sourceId,targetId,placement)=>{
+    const source=cmd.readSource();
+    const {rows}=await inspectCMDTextBlocks(source);
+    if(source!==cmd.readSource())throw Error('拖动期间 CMD 已变化，请重新操作');
+    const plan=planCMDBlockMove(source,rows,sourceId,targetId,placement);
+    if(!plan.changed)return plan;
+    commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+      plan.edits,{source,allowAll:true});
+    return {changed:1,sourceId,targetId,placement,pageIndex:plan.pageIndex,shift:plan.shift};
+  };
   const port={
     requestMeasure:()=>cmd.requestMeasure(),
     readSource:()=>cmd.readSource(), // read-only CM6 source snapshot; never a second editor
@@ -85,16 +95,8 @@ export function createCMDTransactionPort(cmd){
         plan.edits,{source,allowAll:true});
       return {changed:1,previous:plan.previous,target:plan.target};
     },
-    async moveBlockAfter(sourceId,afterId){
-      const source=cmd.readSource();
-      const {rows}=await inspectCMDTextBlocks(source);
-      if(source!==cmd.readSource())throw Error('拖动期间 CMD 已变化，请重新操作');
-      const plan=planCMDBlockMove(source,rows,sourceId,afterId);
-      if(!plan.changed)return plan;
-      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
-        plan.edits,{source,allowAll:true});
-      return {changed:1,sourceId,afterId,pageIndex:plan.pageIndex,shift:plan.shift};
-    },
+    moveBlockAfter:(sourceId,afterId)=>moveBlock(sourceId,afterId,'after'),
+    moveBlockBefore:(sourceId,beforeId)=>moveBlock(sourceId,beforeId,'before'),
     queryBlockGeometry:(pageIndex,blockIndex)=>cmd.queryBlockGeometry(pageIndex,blockIndex),
     readLine:n=>cmd.readLine(n),
     lineAtOffset:offset=>cmd.lineAtOffset(offset),

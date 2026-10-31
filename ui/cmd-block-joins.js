@@ -60,9 +60,10 @@ const joinLineBefore=(source,row)=>{
  * immediate CMD predecessor in the SAME transaction. Original MinerU
  * page/evidence comments and all OCR identities remain untouched.
  */
-export function planCMDBlockMove(source,rows,fromId,afterId){
-  if(typeof source!=='string'||fromId===afterId)throw Error('无效的文本块移动目标');
-  const a=rows.find(r=>r.id===fromId),b=rows.find(r=>r.id===afterId);
+export function planCMDBlockMove(source,rows,fromId,targetId,placement='after'){
+  if(typeof source!=='string'||fromId===targetId||!['before','after'].includes(placement))
+    throw Error('无效的文本块移动目标');
+  const a=rows.find(r=>r.id===fromId),b=rows.find(r=>r.id===targetId);
   if(!a||!b||a.pageIndex!==b.pageIndex||
     a.anchorCount!==1||b.anchorCount!==1)throw Error('只能移动同一 PDF 页中有唯一锚点的 Block');
   const page=rows.filter(r=>r.pageIndex===a.pageIndex).sort((x,y)=>x.from-y.from);
@@ -85,23 +86,24 @@ export function planCMDBlockMove(source,rows,fromId,afterId){
   const original=page.map((r,i)=>(marks[i]?.text??'')+pieces[i]).join('');
   if(original!==source.slice(start,end))throw Error('Block 源码边界不连续');
   const moving=page.findIndex(r=>r.id===fromId);
-  const target=page.findIndex(r=>r.id===afterId);
-  if(moving===target+1)return {changed:0,sourceId:fromId,afterId};
+  const target=page.findIndex(r=>r.id===targetId);
+  const destination=moving<target?
+    target-(placement==='before'?1:0):target+(placement==='after'?1:0);
+  if(moving===destination)return {changed:0,sourceId:fromId,targetId,placement};
   // One interval rotation, not a label swap:
   // moving forward: crossed Blocks each shift -1; moving backward: +1.
   // These are source-order slots. Joined Blocks retain their original ID
   // and checked state while logical labels derive from the final CMD.
-  const insertion=moving<target?target:target+1;
-  const crossed=moving<insertion?
-    page.slice(moving+1,insertion+1):page.slice(insertion,moving);
-  const shift={movedFrom:moving,movedTo:insertion,
+  const crossed=moving<destination?
+    page.slice(moving+1,destination+1):page.slice(destination,moving);
+  const shift={movedFrom:moving,movedTo:destination,
     crossedIds:crossed.map(r=>r.id),
-    delta:moving<insertion?-1:1,
+    delta:moving<destination?-1:1,
     allIndependent:!joined.has(fromId)&&crossed.every(r=>!joined.has(r.id))};
   const reordered=page.map((r,i)=>({id:r.id,row:r,text:pieces[i]}));
   const [item]=reordered.splice(moving,1);
-  const insertAt=reordered.findIndex(r=>r.id===afterId);
-  reordered.splice(insertAt+1,0,item);
+  const insertAt=reordered.findIndex(r=>r.id===targetId);
+  reordered.splice(insertAt+(placement==='after'?1:0),0,item);
   const sorted=rows.filter(r=>r.anchorCount===1).sort((x,y)=>x.from-y.from);
   const firstGlobal=sorted.findIndex(r=>r.id===page[0].id);
   const priorPage=sorted[firstGlobal-1];
@@ -126,7 +128,7 @@ export function planCMDBlockMove(source,rows,fromId,afterId){
     edits.push({from:mark.from,to:mark.to,expected:mark.text,
       insert:quotePrefix(anchorLine)+marker(reordered.at(-1).id,next.id)+'\n'});
   }
-  return {changed:1,sourceId:fromId,afterId,pageIndex:a.pageIndex,
+  return {changed:1,sourceId:fromId,targetId,placement,pageIndex:a.pageIndex,
     shift,edits};
 }
 export function planCMDBlockJoin(source,rows,targetId,join){

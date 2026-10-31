@@ -128,6 +128,62 @@ try{
         '.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl span')
         ?.textContent==='p16b0',null,{timeout:22000});
       assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
+      // Reverse long-distance drag: move exactly b8 BEFORE the current b0.
+      // The old b0..b7 must become b1..b8; b9..b15 are untouched.
+      await dst.scrollIntoViewIfNeeded();
+      const reverseFrom=await dst.boundingBox(),reversePane=await scroller.boundingBox();
+      const reverseTo=await src.boundingBox();
+      assert(reverseFrom&&reversePane&&reverseTo);
+      assert(reverseTo.y+reverseTo.height<reversePane.y,
+        'the earlier b0 target must start above the visible PDF pane');
+      const reverseStart={x:reverseFrom.x+reverseFrom.width*.75,
+        y:reverseFrom.y+reverseFrom.height/2};
+      const reverseEdge={x:Math.max(reversePane.x+15,
+        Math.min(reversePane.x+reversePane.width-15,reverseStart.x)),
+        y:reversePane.y+9};
+      const beforeScroll=await scroller.evaluate(el=>el.scrollTop);
+      await dst.dispatchEvent('pointerdown',{...pointer,pointerId:42,
+        clientX:reverseStart.x,clientY:reverseStart.y});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:1900});
+      await page.locator('body').dispatchEvent('pointermove',{...pointer,pointerId:42,
+        clientX:reverseEdge.x,clientY:reverseEdge.y});
+      await page.waitForFunction(previous=>document.querySelector('.ocr-pdf-scroller')
+        ?.scrollTop<previous-40,beforeScroll,{timeout:7500});
+      await page.waitForFunction(()=>{
+        const viewport=document.querySelector('.ocr-pdf-scroller')?.getBoundingClientRect();
+        const target=document.querySelector(
+          '.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl')?.getBoundingClientRect();
+        return viewport&&target&&target.top>viewport.top+8&&target.bottom<viewport.bottom-8;
+      },null,{timeout:7500});
+      const beforeTarget=await src.boundingBox();
+      const dropBefore={x:beforeTarget.x+beforeTarget.width*.75,
+        y:beforeTarget.y+beforeTarget.height/2};
+      await page.locator('body').dispatchEvent('pointermove',{...pointer,pointerId:42,
+        clientX:dropBefore.x,clientY:dropBefore.y});
+      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"].ocr-pdf-block-drop-target')
+        .waitFor({timeout:2000});
+      assert.match(await page.locator('.ocr-pdf-status').innerText(),/排到其前/);
+      await page.locator('body').dispatchEvent('pointerup',{...pointer,pointerId:42,
+        clientX:dropBefore.x,clientY:dropBefore.y});
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p16b8"] .ocr-pdf-block-ctrl span')
+        ?.textContent==='p16b0',null,{timeout:24000});
+      const beforeLabels=await page.evaluate(()=>Array.from({length:16},(_,i)=>{
+        const node=document.querySelector(`.ocr-pdf-block-cover[data-block-id="p16b${i}"]`);
+        return {id:node?.dataset.blockId,
+          label:node?.querySelector('.ocr-pdf-block-ctrl span')?.textContent,
+          checked:node?.querySelector('input')?.checked};
+      }));
+      assert.deepEqual(beforeLabels,Array.from({length:16},(_,i)=>({
+        id:`p16b${i}`,label:`p16b${i===8?0:i<8?i+1:i}`,checked:true
+      })),'moving b8 before b0 only shifts original b0..b7 +1');
+      await page.waitForFunction(()=>/跨越 8 块，区间编号整体 \+1/.test(
+        document.querySelector('.ocr-pdf-status')?.textContent||''),null,{timeout:9000});
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p16b8"] .ocr-pdf-block-ctrl span')
+        ?.textContent==='p16b8',null,{timeout:22000});
+      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
       assert.equal(readFileSync(sample,'utf8'),original,'fixture must remain byte-exact');
       assert.deepEqual(errors,[]);
       console.log('PDF_BLOCK_EDGE_SCROLL_PASS',name,{source:'p16b0',

@@ -317,7 +317,7 @@ class PreviewPanel {
     });
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
       (id,join)=>blockJoinAction(id,join),
-      (id,afterId)=>blockMoveAction(id,afterId));
+      (id,targetId,placement)=>blockMoveAction(id,targetId,placement));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
