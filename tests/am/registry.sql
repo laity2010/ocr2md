@@ -1120,7 +1120,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- WP2: CMD sealed geometry is the sole runtime PDF overlay source; the
 -- existing /api/pdf-map may remain for legacy diagnostics but is NOT consumed.
 INSERT INTO apis VALUES
- ('L50','L','queryCMDLayout','ui/cmd-text-blocks.js','export','current CMD source','immutable original page/Block bbox with SHA-verified provenance; line/span on demand','caches verified compact rectangles only; large OCR tree discarded after query; no network',1),
+ ('L50','L','queryCMDLayout','ui/cmd-text-blocks.js','export','current CMD source','immutable original page/Block bbox and chart/table caption/notes child rectangles with SHA-verified provenance; line/span on demand','returns each nested OCR bbox under parent Block without inventing Block IDs; compact immutable layout, no network',1),
  ('L51','L','queryCMDBlockGeometry','ui/cmd-text-blocks.js','export','source,page index,block index','immutable original bbox, page size and text line/span locations or null','read-only; no OCR/PDF/CM6 mutation',1),
  ('C55','C','returned.queryLayout','ui/wcp-cmd-element-transactions.js','returned','none','promise of CMD original page/Block geometry','WCP port exposes semantic CMD capability, no raw AG/source bypass',1);
 INSERT INTO access_edges VALUES
@@ -1207,3 +1207,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- page overlays. Inline join metadata is not a geometry change.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-JOIN-PDF-LOCAL-REFRESH-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit monitored all 212 other-page checkbox DOM nodes during p6b7 join: zero mutations, zero detachments, zero label or checked changes; current page renumbers and CMD Undo works','integration');
+
+-- Figure/table caption and notes are MinerU children of one OCR Block.
+-- Their rectangles can extend outside the parent chart/table body bbox.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-TEXTBLOCK-CHILD-RECT-L50','L50','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','p13b1 original chart body and two immutable child bboxes including Notes; p14b0 table caption/footnote; 224 parent Block identities unchanged','integration'),
+ ('TC-TEXTBLOCK-CHILD-COVER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit exact page-scaled chart title/Notes and table title/Notes overlay fragments with no extra checkboxes; 224 controls still locally updated','integration');

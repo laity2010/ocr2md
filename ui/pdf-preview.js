@@ -418,6 +418,34 @@ export class PdfPreview {
       for(const [property,value] of Object.entries(styles))
         if(node.style[property]!==value)node.style[property]=value;
       if(node.parentElement!==page.div)page.div.append(node);
+      // The chart/table is ONE original CMD Block. Its caption and notes can
+      // sit outside the parent's body bbox: paint their genuine OCR rectangles
+      // as inert fragments, without adding fake Block IDs or checkboxes.
+      // Relative positions follow the parent on PDF.js zoom/reflow.
+      const parts=block.subRegions||[];
+      const existing=[...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')];
+      existing.slice(parts.length).forEach(extra=>extra.remove());
+      parts.forEach((part,i)=>{
+        let fragment=existing[i];
+        if(!fragment){
+          fragment=document.createElement('div');
+          fragment.className='ocr-pdf-block-fragment';
+          node.append(fragment);
+        }
+        const kind=part.role==='note'?'注释':'标题';
+        const label=`${row.id} · ${kind}（原始 OCR 子区域）`;
+        if(fragment.title!==label)fragment.title=label;
+        if(fragment.dataset.partType!==part.type)fragment.dataset.partType=part.type;
+        if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;
+        const [sx0,sy0,sx1,sy1]=part.bbox,[bx0,by0,bx1,by1]=block.bbox;
+        const sw=bx1-bx0,sh=by1-by0;
+        const placement={left:`${(sx0-bx0)/sw*100}%`,
+          top:`${(sy0-by0)/sh*100}%`,
+          width:`${(sx1-sx0)/sw*100}%`,
+          height:`${(sy1-sy0)/sh*100}%`};
+        for(const [property,value] of Object.entries(placement))
+          if(fragment.style[property]!==value)fragment.style[property]=value;
+      });
       // Keep checkbox and full Block ID on ONE line without entering OCR
       // text, including at the default narrow iPad PDF zoom. The available
       // outer page gutter controls only the chip's *visual scale*; it does

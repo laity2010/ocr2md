@@ -51,6 +51,34 @@ try{
    assert(await target.isChecked());
    assert(await target.isEnabled());
    assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
+   // MinerU stores chart/table captions and notes as children of the same
+   // original Block, frequently OUTSIDE the parent body bbox. They must be
+   // visibly covered at their exact OCR coordinates, never get fake checkboxes.
+   const childRects=await page.locator('.ocr-pdf-block-cover[data-block-id="p13b1"]').evaluate(node=>{
+     const paper=node.closest('.page').getBoundingClientRect();
+     return [...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')].map(fragment=>{
+       const b=fragment.getBoundingClientRect();
+       return {type:fragment.dataset.partType,role:fragment.dataset.partRole,
+         rect:[(b.left-paper.left)/paper.width*594,(b.top-paper.top)/paper.height*783,
+           (b.right-paper.left)/paper.width*594,(b.bottom-paper.top)/paper.height*783],
+         pointer:getComputedStyle(fragment).pointerEvents,
+         background:getComputedStyle(fragment).backgroundColor};
+     });
+   });
+   assert.deepEqual(childRects.map(x=>x.type),['chart_caption','chart_caption']);
+   assert.deepEqual(childRects.map(x=>x.role),['caption','note']);
+   for(const [i,expected] of [[0,[217,82,494,107]],[1,[206,371,539,490]]]){
+     assert.equal(childRects[i].pointer,'none');
+     assert.notEqual(childRects[i].background,'rgba(0, 0, 0, 0)');
+     childRects[i].rect.forEach((value,j)=>
+       assert(Math.abs(value-expected[j])<3,
+         `chart child bbox ${i}/${j}: expected ${expected[j]}, got ${value}`));
+   }
+   const tableParts=page.locator('.ocr-pdf-block-cover[data-block-id="p14b0"] > .ocr-pdf-block-fragment');
+   assert.deepEqual(await tableParts.evaluateAll(nodes=>nodes.map(n=>n.dataset.partType)),
+     ['table_caption','table_footnote']);
+   assert.equal(await page.locator('.ocr-pdf-block-ctrl input').count(),224,
+     'captions and notes must never create independent Block controls');
    // The right/left gutter chips MUST NOT overlap their own OCR text.
    // Measure the rendered DOM, not just declared CSS or coordinates.
    const placements=await page.locator('.ocr-pdf-block-cover').evaluateAll(nodes=>nodes.map(node=>{
@@ -109,6 +137,8 @@ try{
      page7:placements.filter(p=>['p6b6','p6b7'].includes(p.id))});
    await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
    await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
+   await page.locator('.ocr-pdf-block-cover[data-block-id="p13b1"]').scrollIntoViewIfNeeded();
+   await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-chart-caption-notes.png`,animations:'disabled'});
    await target.scrollIntoViewIfNeeded({timeout:18000});
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-side-gutters.png`,animations:'disabled'});
    await page.waitForTimeout(500); // allow PDF.js lazy page canvas paint

@@ -25,6 +25,21 @@ assert(Array.isArray(block.lines)&&block.lines.length>0);
 assert.deepEqual(block.lines[0].bbox,[53,216,267,234]);
 assert(Array.isArray(block.lines[0].spans[0].bbox));
 assert(Object.isFrozen(layout.pages[6].regions[2].bbox),'layout is immutable');
+const chart=layout.pages[13].regions.find(r=>r.blockIndex===1);
+assert.equal(chart.type,'chart');
+assert.deepEqual(chart.bbox,[219,108,529,357]);
+assert.deepEqual(chart.subRegions,[
+  {type:'chart_caption',role:'caption',bbox:[217,82,494,107]},
+  {type:'chart_caption',role:'note',bbox:[206,371,539,490]},
+]);
+const table=layout.pages[14].regions.find(r=>r.blockIndex===0);
+assert.equal(table.type,'table');
+assert.deepEqual(table.subRegions,[
+  {type:'table_caption',role:'caption',bbox:[57,89,484,104]},
+  {type:'table_footnote',role:'note',bbox:[50,341,523,363]},
+]);
+assert(Object.isFrozen(chart.subRegions)&&Object.isFrozen(chart.subRegions[1].bbox),
+  'child evidence geometry must remain immutable and share parent Block identity');
 assert.equal(await queryCMDBlockGeometry(initial,99,0),null);
 assert.equal(readFileSync(sample,'utf8'),initial,'no CMD writes during inventory');
 const altered=initial.replace('<!-- minerujson:block:v1:13:0 -->','');
