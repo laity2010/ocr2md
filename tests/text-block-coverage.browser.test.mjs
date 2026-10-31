@@ -63,6 +63,16 @@ try{
    const overlay=await page.locator('.ocr-pdf-region-overlay').evaluate(e=>({page:e.dataset.pdfPage,block:e.dataset.blockIndex,
      width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}));
    assert(overlay.width>3&&overlay.height>3,'PDF orange bbox not visible');
+   const zoomBefore=await page.locator('.ocr-pdf-zoom').textContent();
+   await page.locator('.ocr-pdf-plus').click({timeout:12000});
+   const zoomAfter=await page.locator('.ocr-pdf-zoom').textContent();
+   assert.notEqual(zoomBefore,zoomAfter,'PDF Zoom+ must work on WebKit');
+   await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
+   await page.locator('.ocr-navigation-popup-preview:visible [data-value="md"]').click();
+   assert.equal(await page.locator('.ocr-preview-mode').inputValue(),'md');
+   await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
+   await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
+   assert.equal(await page.locator('.ocr-pdf-zoom').textContent(),zoomAfter);
    assert.equal(readFileSync(sample,'utf8'),source,'fixture modified during browser review');
    assert.deepEqual(legacyMapRequests,[],'PDF illegally fetched separate MinerU JSON');
    assert.deepEqual(errors,[]);
