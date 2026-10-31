@@ -11,6 +11,7 @@ import {unquotePrefix} from './mineru-anchors.js';
 import {isolateHistory} from '@codemirror/commands';
 import {scanAnnotations,formatAnnotation} from './cmd-annotations.js';
 import {scanHtmlElements} from './cmd-html-elements.js';
+import {queryCMDLayout,queryCMDBlockGeometry} from './cmd-text-blocks.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -38,6 +39,11 @@ export class CMDocument {
   getMarkdown(){return this.markdown;}
   /** Unified read-only source port for all business element detectors. */
   readSource(){return this.markdown;}
+  /** One validated CMD geometry provider; text-block AG and PDF share it. */
+  queryLayout(){return queryCMDLayout(this.readSource());}
+  queryBlockGeometry(pageIndex,blockIndex){
+    return queryCMDBlockGeometry(this.readSource(),pageIndex,blockIndex);
+  }
   /** Stable, read-only CMD boundary for heading and marker consumers. */
   readLine(number){
     if(!Number.isInteger(number)||number<1||number>this.doc.lines)

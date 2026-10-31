@@ -15,6 +15,73 @@ async function inflate(bytes){
   const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
+// A single sealed JSON decode is shared across the CMD block inventory and
+// the PDF layout reader. Edits to visible Markdown never invalidate original
+// geometry; switching books or changing the sealed evidence always does.
+let cached=null;
+async function sealedJSON(source){
+  if(typeof source!=='string')throw Error('CMD 源码无效');
+  const match=sealed.exec(source);
+  if(!match)throw Error('CMD 缺少无损 MinerU JSON 封存区');
+  const key=match[0];
+  if(cached?.key===key)return {data:cached.data,end:match.index};
+  const bytes=await inflate(decode(match[2]));
+  const sha=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
+  if(sha!==match[1])throw Error('CMD 封存 JSON SHA-256 校验失败');
+  const data=JSON.parse(new TextDecoder().decode(bytes));
+  if(!Array.isArray(data.pdf_info))throw Error('CMD 封存 JSON 无 PDF 页面');
+  cached={key,data,layout:null};
+  return {data,end:match.index};
+}
+/** Pure read-only original MinerU geometry. This is a CMD-owned capability,
+ * including page size, text-block rectangles, line and span coordinates.
+ * PDF widgets must not independently fetch the workspace OCR JSON.
+ */
+export async function queryCMDLayout(source){
+  const {data}=await sealedJSON(source);
+  if(cached.layout)return cached.layout;
+  const pages=data.pdf_info.map((page,pageIndex)=>{
+    if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
+    const pageSize=page.page_size;
+    if(!Array.isArray(pageSize)||pageSize.length!==2||!pageSize.every(v=>Number.isFinite(v)&&v>0))
+      throw Error(`CMD 第 ${pageIndex+1} 页尺寸缺失或无效`);
+    const regions=page.para_blocks.flatMap((block,blockIndex)=>{
+      const box=block.bbox;
+      if(!Array.isArray(box)||box.length!==4||!box.every(Number.isFinite))return [];
+      const lines=(block.lines||[]).map(line=>({
+        bbox:Array.isArray(line.bbox)?[...line.bbox]:null,
+        spans:(line.spans||[]).map(span=>({bbox:Array.isArray(span.bbox)?[...span.bbox]:null,
+          type:span.type||'unknown',content:typeof span.content==='string'?span.content:''})),
+      }));
+      return [{blockIndex,bbox:[...box],type:block.type||'unknown',lines}];
+    });
+    return {pageIndex,pageSize:[...pageSize],regions};
+  });
+  const layout={pages,source:'CMD-sealed-minerujson'};
+  // Prevent accidental mutation of shared cache by layout or AG consumers.
+  for(const page of pages){Object.freeze(page.pageSize);
+    for(const region of page.regions){Object.freeze(region.bbox);
+      for(const line of region.lines){if(line.bbox)Object.freeze(line.bbox);
+        for(const span of line.spans){if(span.bbox)Object.freeze(span.bbox);Object.freeze(span);}
+        Object.freeze(line.spans);Object.freeze(line);
+      }
+      Object.freeze(region.lines);Object.freeze(region);
+    }
+    Object.freeze(page.regions);Object.freeze(page);
+  }
+  Object.freeze(pages);Object.freeze(layout);
+  cached.layout=layout;
+  return layout;
+}
+export async function queryCMDBlockGeometry(source,pageIndex,blockIndex){
+  if(!Number.isInteger(pageIndex)||!Number.isInteger(blockIndex)||pageIndex<0||blockIndex<0)
+    throw Error('CMD Block ID 无效');
+  const layout=await queryCMDLayout(source);
+  const page=layout.pages[pageIndex];
+  const block=page?.regions.find(r=>r.blockIndex===blockIndex);
+  return block?{pageIndex,blockIndex,pageSize:page.pageSize,bbox:block.bbox,type:block.type,
+    lines:block.lines}:null;
+}
 function anchorLines(source){
   const result=new Map();let from=0;
   for(const [index,line] of source.split('\n').entries()){
@@ -33,14 +100,7 @@ const summary=block=>{
   return block.type==='image'?'[图片]':block.type==='table'?'[表格]':block.type==='chart'?'[图表]':'';
 };
 export async function inspectCMDTextBlocks(source){
-  if(typeof source!=='string')throw Error('CMD 源码无效');
-  const match=sealed.exec(source);
-  if(!match)throw Error('CMD 缺少无损 MinerU JSON 封存区');
-  const bytes=await inflate(decode(match[2]));
-  const sha=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
-  if(sha!==match[1])throw Error('CMD 封存 JSON SHA-256 校验失败');
-  const data=JSON.parse(new TextDecoder().decode(bytes));
-  if(!Array.isArray(data.pdf_info))throw Error('CMD 封存 JSON 无 PDF 页面');
+  const {data,end}=await sealedJSON(source);
   const anchors=anchorLines(source),expected=new Set(),rows=[];
   for(const [pageIndex,page] of data.pdf_info.entries()){
     if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
@@ -65,7 +125,7 @@ export async function inspectCMDTextBlocks(source){
   // reader coverage failures while still remaining inventory rows.
   const ordered=rows.filter(row=>row.from!==null).sort((a,b)=>a.from-b.from);
   for(const [i,row] of ordered.entries()){
-    const next=ordered[i+1]?.from??match.index;
+    const next=ordered[i+1]?.from??end;
     const firstEnd=source.indexOf('\n',row.from);
     const prose=source.slice(firstEnd+1,next).replace(/<!--[\s\S]*?-->/g,'').trim();
     row.expectsPreview=Boolean(prose);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
 import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
-import {inspectCMDTextBlocks} from '../ui/cmd-text-blocks.js';
+import {inspectCMDTextBlocks,queryCMDLayout,queryCMDBlockGeometry} from '../ui/cmd-text-blocks.js';
 const source=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const initial=toMarkdown(source);
 const sample='.v6/tests/text-blocks/buffett-reinitialized.minerujson.md';
@@ -14,6 +14,18 @@ assert.equal(baseline.summary.duplicates,0);assert.equal(baseline.summary.unknow
 assert.equal(baseline.summary.readable,215);
 assert.equal(baseline.summary.metadataOnly,9);
 assert.deepEqual(baseline.rows.find(row=>row.id==='p6b2').bbox,[51,215,273,272]);
+const layout=await queryCMDLayout(initial);
+assert.equal(layout.source,'CMD-sealed-minerujson');
+assert.equal(layout.pages.length,22);
+assert.equal(layout.pages.reduce((n,p)=>n+p.regions.length,0),224);
+assert.deepEqual(layout.pages[6].pageSize,[594,783]);
+const block=await queryCMDBlockGeometry(initial,6,2);
+assert.deepEqual(block.bbox,[51,215,273,272]);
+assert(Array.isArray(block.lines)&&block.lines.length>0);
+assert.deepEqual(block.lines[0].bbox,[53,216,267,234]);
+assert(Array.isArray(block.lines[0].spans[0].bbox));
+assert(Object.isFrozen(layout.pages[6].regions[2].bbox),'layout is immutable');
+assert.equal(await queryCMDBlockGeometry(initial,99,0),null);
 assert.equal(readFileSync(sample,'utf8'),initial,'no CMD writes during inventory');
 const altered=initial.replace('<!-- minerujson:block:v1:13:0 -->','');
 const missing=await inspectCMDTextBlocks(altered);
@@ -23,4 +35,6 @@ const duplicate=await inspectCMDTextBlocks(initial.replace('<!-- minerujson:bloc
 assert.equal(duplicate.summary.duplicates,1);
 const broken=initial.replace(/(<!-- minerujson:source:v1:)[a-f0-9]/,'$1f');
 await assert.rejects(inspectCMDTextBlocks(broken),/SHA-256/);
+await assert.rejects(queryCMDLayout(broken),/SHA-256/);
+assert.deepEqual((await queryCMDLayout(initial)).pages[6].regions[2].bbox,[51,215,273,272]);
 console.log('CMD_TEXT_BLOCKS_PASS',baseline.summary,'isolatedSample',sample);

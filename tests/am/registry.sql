@@ -58,7 +58,7 @@ INSERT INTO apis VALUES
  ('M06','M','PreviewPanel.detachPdf','ui/workspace.js','internal','DetachedPdfPanel','void','reparents persistent viewer',0),
  ('M07','M','PreviewPanel.reattachPdf','ui/workspace.js','internal','none','void','reparents persistent viewer',0),
  ('M08','M','installObsidianImages','ui/obsidian-images.js','export','markdown-it renderer instance','void','Obsidian wiki images and Markdown image dimensions; read-only rendering',1),
- ('P01','P','PdfPreview.open','ui/pdf-preview.js','export','none','Promise<void>','loads /api/pdf-map + /api/pdf; ready after first page paint',1),
+ ('P01','P','PdfPreview.open','ui/pdf-preview.js','export','none','Promise<void>','awaits CMD sealed JSON queryLayout + streams /api/pdf; ready after first page paint',1),
  ('P02','P','PdfPreview.focusLine','ui/pdf-preview.js','export','1-based line,explicit:boolean','Promise<void>','locates OCR region; explicit reveal',1),
  ('P03','P','PdfPreview.refreshAnchors','ui/pdf-preview.js','export','none','void','rebuilds anchor source mapping',1),
  ('P04','P','PdfPreview.setZoom','ui/pdf-preview.js','export','mode:string','void','updates PDF.js scale',0),
@@ -1116,3 +1116,18 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-G25','G25','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit text block first dropdown choice, all 224 CMD original blocks visible in AG, orange PDF box follows click','integration'),
  ('TC-TEXTBLOCK-G26','G26','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit 215 real MD source mappings; eight empty text + one metadata-only table excluded; no source writes','integration'),
  ('TC-TEXTBLOCK-L49','L49','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Read-only PDF.js orange geometry matches CMD sealed JSON for 224 of 224 blocks','integration');
+
+-- WP2: CMD sealed geometry is the sole runtime PDF overlay source; the
+-- existing /api/pdf-map may remain for legacy diagnostics but is NOT consumed.
+INSERT INTO apis VALUES
+ ('L50','L','queryCMDLayout','ui/cmd-text-blocks.js','export','current CMD source','immutable original page/Block/line/span geometry with SHA-verified provenance','cached sealed JSON decode, never external JSON or network',1),
+ ('L51','L','queryCMDBlockGeometry','ui/cmd-text-blocks.js','export','source,page index,block index','immutable original bbox, page size and text line/span locations or null','read-only; no OCR/PDF/CM6 mutation',1),
+ ('C19','C','returned.queryLayout','ui/wcp-cmd-element-transactions.js','returned','none','promise of CMD original page/Block geometry','WCP port exposes semantic CMD capability, no raw AG/source bypass',1);
+INSERT INTO access_edges VALUES
+ ('X-WP2-CMD-L50','C','L','ui/cm-document.js','queryCMDLayout(this.readSource())','L50','registered','CM6 CMD source is the sole owner of original layout'),
+ ('X-WP2-CMD-L51','C','L','ui/cm-document.js','queryCMDBlockGeometry(this.readSource()','L51','registered','Per-block query shares CMD verified original JSON'),
+ ('X-WP2-CMD-C19','L','C','ui/workspace.js','getCMD().queryLayout()','C19','registered','Layout-only geometry port supplied to PDF viewer after CMD readiness');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP2-L50','L50','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','224 immutable original block bbox, page sizes and line/span boxes; SHA corruption rejects stale input','integration'),
+ ('TC-WP2-L51','L51','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','p6b2 exact bbox [51,215,273,272] and first line bbox; invalid page returns null','integration'),
+ ('TC-WP2-PDF-C19','C19','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit PDF orange boxes and AG navigation work even if /api/pdf-map returns 503 and no request is sent','integration');

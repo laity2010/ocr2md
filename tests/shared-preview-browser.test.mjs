@@ -36,12 +36,12 @@ for(let i=0;i<engines.length;i++){
       pdfTransport.push(response.status());
   });
   await page.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
-  // Hold the actual PDF metadata request so the UI can be checked during
+  // Hold the PDF stream while CMD geometry loads, so UI can be checked during
   // background warm-up rather than relying on a timing-sensitive delay.
-  let releasePdfMap;
-  const pdfMapGate=new Promise(resolve=>{releasePdfMap=resolve;});
-  await page.route('**/api/pdf-map',async route=>{
-    await pdfMapGate;
+  let releasePdf;
+  const pdfGate=new Promise(resolve=>{releasePdf=resolve;});
+  await page.route('**/api/pdf',async route=>{
+    await pdfGate;
     await route.continue();
   });
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
@@ -68,7 +68,7 @@ for(let i=0;i<engines.length;i++){
     toolbarDisplay:'none',label:'PDF 原文（预热中）',groups:3,
     choiceAfter:'md',splitAfter:false,modeAfter:'md',groupsAfter:3},
     `${name} PDF warm-up gate failed`);
-  releasePdfMap();
+  releasePdf();
   await page.waitForFunction(()=>document.querySelectorAll('.dv-groupview').length===3&&
     document.querySelectorAll('.ocr-outline-checkbox').length===21&&
     document.querySelector('.ocr-pdf-status')?.textContent==='就绪'&&
@@ -174,7 +174,7 @@ for(let i=0;i<engines.length;i++){
   const failed=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
   try{
     await failed.route('**/*',route=>route.request().url().startsWith(url)?route.continue():route.abort());
-    await failed.route('**/api/pdf-map',route=>route.fulfill({status:503,body:'unavailable'}));
+    await failed.route('**/api/pdf',route=>route.fulfill({status:503,body:'unavailable'}));
     await failed.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
     await failed.waitForFunction(()=>document.querySelector('.ocr-preview-mode option[value="pdf"]')?.textContent===
       'PDF 原文（加载失败）',null,{timeout:35000});

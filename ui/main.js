@@ -705,6 +705,7 @@ async function main() {
     blockTimer=setTimeout(scanTextBlocks,650);
   };
   cmdPort=wcpRuntime.wrapCMD(cm);
+  workspace.notifyCMDReady();
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{
       cmdPort.replaceRanges([{from:plan.from,to:plan.to,

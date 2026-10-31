@@ -27,6 +27,13 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1250,height:860},isMobile:mobile,hasTouch:mobile});
    const errors=[];page.on('pageerror',error=>errors.push(error.message));
+   // The compatibility endpoint may still exist, but PDF.js MUST never use
+   // it: the layout is provided by CMD's sealed JSON, not external OCR.
+   const legacyMapRequests=[];
+   await page.route('**/api/pdf-map',route=>{
+     legacyMapRequests.push(route.request().url());
+     return route.fulfill({status:503,body:'legacy bbox endpoint deliberately unavailable'});
+   });
    await page.goto(base,{waitUntil:'domcontentloaded',timeout:50000});
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    const options=await page.locator('.ocr-navigation-popup-elements:visible [data-value]').evaluateAll(els=>els.map(el=>el.getAttribute('data-value')));
@@ -57,8 +64,9 @@ try{
      width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}));
    assert(overlay.width>3&&overlay.height>3,'PDF orange bbox not visible');
    assert.equal(readFileSync(sample,'utf8'),source,'fixture modified during browser review');
+   assert.deepEqual(legacyMapRequests,[],'PDF illegally fetched separate MinerU JSON');
    assert.deepEqual(errors,[]);
-   console.log('TEXT_BLOCK_COVERAGE_PASS',name,JSON.stringify({currentState,firstId,overlay,mapped},null,2));
+   console.log('TEXT_BLOCK_COVERAGE_PASS',name,JSON.stringify({currentState,firstId,overlay,mapped,legacyMapRequests:legacyMapRequests.length},null,2));
    await page.screenshot({path:`${dir}/${name}-pdf-orange.png`,fullPage:false,animations:'disabled'});
   }finally{await browser.close();}
  }

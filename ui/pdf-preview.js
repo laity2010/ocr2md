@@ -43,9 +43,10 @@ function sourceAnchor(anchors,line){
 }
 
 export class PdfPreview {
-  constructor(host,getMarkdown){
+  constructor(host,getMarkdown,getLayout){
     this.host=host;
     this.getMarkdown=getMarkdown;
+    this.getLayout=getLayout;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -90,10 +91,13 @@ export class PdfPreview {
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
     this.active=false;this.overlayDrawId=0;this.pageViewportCache=new Map();
     this.revealPending=false;this.revealUntil=0;
+    this.geometryRevision=0;
     this.ready=false;this.loading=this.open();
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
-      if(next.documentRevision!==prev.documentRevision)
+      if(next.documentRevision!==prev.documentRevision){
         this.anchors=sourceBlocks(this.getMarkdown());
+        void this.refreshGeometry();
+      }
       // PDF pages and Markdown lines have unrelated visual geometry. React
       // ONLY to an explicit click-navigation event, never a scrollTarget,
       // editor cursor movement by keyboard, or an Undo/Redo side effect.
@@ -130,10 +134,25 @@ export class PdfPreview {
     this.anchors=sourceBlocks(this.getMarkdown());
     this.scheduleOverlay();
   }
+  async refreshGeometry(){
+    const revision=++this.geometryRevision;
+    try{
+      const result=await this.getLayout();
+      if(this.disposed||revision!==this.geometryRevision)return;
+      if(this.pdf&&result.pages.length!==this.pdf.numPages)
+        throw Error('PDF 页数与 CMD 原始页面数不一致');
+      this.map=result.pages;
+      this.scheduleOverlay();
+    }catch(error){
+      if(this.disposed||revision!==this.geometryRevision)return;
+      this.map=[];this.clearHighlight();
+      this.setStatus('CMD 版面数据失效：'+error.message);
+    }
+  }
   async open(){
     try{
-      const [meta,loading]=await Promise.all([
-        fetch(appPath('/api/pdf-map'),{cache:'no-store'}),
+      const [geometry,loading]=await Promise.all([
+        this.getLayout(),
         // V6 evidence is a small (~1.4 MB) PDF. Fetch it once, streaming,
         // rather than paying a remote round trip for every 64 KB PDF.js range.
         // Large-document adaptive range loading can be added with file-size
@@ -141,12 +160,11 @@ export class PdfPreview {
         Promise.resolve(getDocument({url:appPath('/api/pdf'),disableRange:true,
           disableStream:false,stopAtErrors:true})),
       ]);
-      if(!meta.ok)throw Error(`PDF 映射 HTTP ${meta.status}`);
-      this.map=(await meta.json()).pages;
+      this.map=geometry.pages;
       this.task=loading;
       const pdf=await loading.promise;
       if(this.disposed){await pdf.destroy();return;}
-      if(this.map.length!==pdf.numPages)throw Error('PDF 页数与 OCR 页数不一致');
+      if(this.map.length!==pdf.numPages)throw Error('PDF 页数与 CMD 原始页数不一致');
       this.pdf=pdf;
       this.toolbar.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
       const bus=new EventBus();

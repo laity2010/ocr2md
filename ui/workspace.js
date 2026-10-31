@@ -66,6 +66,7 @@ let outlineTitleFontScale=1;
 let currentPdf=null;
 let toggleSplitPreview=()=>{};
 let wcpRuntime=null;
+let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 
 class OutlinePanel {
   constructor(){
@@ -303,7 +304,7 @@ class PreviewPanel {
       root:this.body,
       onLocate:target=>this.navigateToNote(target),
     });
-    this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown());
+    this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady());
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -579,6 +580,9 @@ class DetachedPdfPanel {
 }
 
 export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null,documentName=null) {
+  let unlockGeometry;
+  const ready=new Promise(resolve=>{unlockGeometry=resolve;});
+  geometryReady=()=>ready.then(()=>getCMD().queryLayout());
   if(documentName)documentFileLabel=documentName;
   wcpRuntime=runtime;
   getMarkdown=getDocument;
@@ -657,6 +661,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     publishActivePanel(event.panel?.id||null);
   });
   return {
+    notifyCMDReady:()=>unlockGeometry(),
     editorHost:sourceHost,
     mountSourceLineMenu:(view,handlers)=>currentSourcePanel?.mountLineMenu(view,handlers),
     getPaneRatios:()=>readPaneRatios(dockview,'outline','source','preview'),
