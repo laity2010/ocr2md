@@ -71,7 +71,7 @@ INSERT INTO apis VALUES
  ('P11','P','PdfPreview.revealCurrentLocation','ui/pdf-preview.js','export','none','void','reveals only pending explicit click',0),
  ('P12','P','PdfPreview.clearHighlight','ui/pdf-preview.js','export','none','void','removes OCR overlay',0),
  ('P13','P','PdfPreview.whenReady','ui/pdf-preview.js','export','none','Promise<boolean>','reports first-page warm-up result without exposing PDF.js internals',1),
- ('P14','P','PdfPreview.setCoverageChecked','ui/pdf-preview.js','export','boolean enabled','void','updates PDF toolbar checkbox preference without touching CMD or original block checkbox states',1),
+ ('P14','P','PreviewPanel.setCoverageEnabled','ui/workspace.js','internal','boolean enabled','void','shared preview toolbar updates the visible MD/PDF lens, or both when split; read-only coverage and reversible PDF Block controls',1),
  ('L01','L','createWorkspace','ui/workspace.js','export','host,getDocument,getCurrentEditor,getCommandDocument','workspace facade','builds Dockview panels and wiring',1),
  ('L02','L','returned.refreshPreview','ui/workspace.js','returned','none','void','requests Markdown re-render',1),
  ('L03','L','returned.refreshOutline','ui/workspace.js','returned','none','void','requests AG reindex',1),
@@ -88,7 +88,7 @@ INSERT INTO apis VALUES
  ('L14','L','returned.getChapterState','ui/workspace.js','returned','none','detached {rows,startText} projection','source shell reads snapshot without AG wrapper',1),
  ('L15','L','returned.setChapterStartNumber','ui/workspace.js','returned','number|string','void','sets AG filename projection via Layout',1),
  ('L16','L','returned.setChaptersExported','ui/workspace.js','returned','opaque doc snapshot,names','void','sets AG published files via Layout',1),
- ('L17','L','returned.setWorkModule','ui/workspace.js','returned','chapter-boundary|media','void','switches AG view projections',1),
+ ('L17','L','returned.setWorkModule','ui/workspace.js','returned','module name and optional activateTextBlocks flag','void','switches AG view without overwriting MD default on initial load; explicit text-block selection activates current preview lens',1),
  ('L18','L','returned.scanMedia','ui/workspace.js','returned','none','Promise<void>','requests Media scan through API',1),
  ('L19','L','returned.downloadMedia','ui/workspace.js','returned','none','Promise<void>','requests Media download through API',1),
  ('L20','L','returned.normalizeLatex','ui/workspace.js','returned','none','void','routes explicit LaTeX normalization request to module facade; no direct source writes',1),
@@ -308,7 +308,6 @@ INSERT INTO access_edges VALUES
  ('X06','L','G','ui/workspace.js','createOutlineGrid(this.element','G01','registered','Layout invokes registered AG constructor to mount panel'),
  ('X07','L','M','ui/workspace.js','renderMarkdown(source)','M01','registered','Layout renders a read-only MD projection using public renderer'),
  ('X08','L','P','ui/workspace.js','this.pdf.moveToolbarTo(this.pdfTools)','P07','registered','Layout coordinates PDF toolbar through exposed method'),
- ('X-PDF-COVER-P14','L','P','ui/workspace.js','currentPreview?.pdf?.setCoverageChecked(textBlockCoverageEnabled)','P14','registered','Layout synchronizes coverage preference through PDF public control API'),
  ('X09','L','P','ui/workspace.js','currentPdf?.pdf?.refreshAnchors()','P03','registered','Layout requests PDF anchor refresh through published method'),
  ('X10','L','P','ui/workspace.js','this.pdf.whenReady()','P13','registered','Layout gates PDF controls via semantic warm-up readiness API'),
  ('X11','L','A','ui/workspace.js','createMediaModule(this.mediaHost','A01','registered','Layout hosts Media panel without accessing its AG internals'),
@@ -1178,7 +1177,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G28','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit default-checked PDF toolbar checkbox paints 224 PDF bbox and anchored Markdown Blocks; subtle overlays below focus/A-B comparison; module switch preserves preference; no source writes','integration');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-TOOLBAR-P14','P14','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit PDF toolbar owns the default-checked 文本块 toggle; independent of AG module, can join/Undo on title module and toggle 224 controls on media; selecting text-block AG switches it back on','integration'),
+ ('TC-PDF-TOOLBAR-P14','P14','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit shared preview toolbar places 文本块 immediately right of navigation: MD single defaults off, PDF single on; split checkbox synchronizes both; supports PDF Block join/Undo and AG text-block selection','integration'),
  ('TC-PDF-ZOOM-ANCHOR-P04','P04','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit repeated zoom in/out/fit keeps current page and fractional reading position stable without re-navigating; PDF checkbox and 224 overlays remain intact','integration');
 
 -- CMD reversible logical joins are source annotations, not deletion or
@@ -1236,8 +1235,8 @@ INSERT INTO access_edges VALUES
  ('X-PDF-BLOCK-L59',NULL,'L','ui/main.js','workspace.setTextBlockInventoryRefreshAction(scanTextBlocks)','L59','registered','Shell supplies CMD inventory refresh callback while PDF checkbox is independent of AG selected module'),
  ('X-PDF-BLOCK-L60',NULL,'L','ui/main.js','workspace.isTextBlockCoverageEnabled()','L60','registered','Shell reindexes CMD Blocks when PDF lens is on even if AG is showing media/title/etc');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-BLOCK-L59','L59','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit fresh document builds its PDF Block inventory before AG text-block entry; toggling on in another module refreshes read-only CMD projection','integration'),
- ('TC-PDF-BLOCK-L60','L60','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit keep 224 PDF Block chips and allow checkbox join/Undo while AG uses chapter-boundary/media; off hides operations, selecting text-block restores checked state','integration');
+ ('TC-PDF-BLOCK-L59','L59','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit CMD Block inventory is ready regardless of AG selected module; MD and PDF share one source inventory, not separate projections','integration'),
+ ('TC-PDF-BLOCK-L60','L60','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit single preview mode remembers independent MD/PDF lens preferences and split mode uses one common toggle; AG text-block selection turns on active lens without changing original Block evidence','integration');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-MOVE-L57','L57','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p16b8 before p16b0: b8 becomes b0, b0..b7 +1, b9+ unchanged; already joined physical b11 travels with logical root b10, predecessor join marks stay byte-equivalent, before/after reversible, immutable OCR evidence untouched','integration'),
  ('TC-MOVE-C58','C58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long-press CMD move both independent and already joined Blocks; checkbox merges to new predecessor, Undo restores state, 224 controls and unsaved document preserved','integration'),

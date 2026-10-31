@@ -828,7 +828,7 @@ async function main() {
   // their own data-module container without changing the global toolbar.
   // Switching between two independent Dockview hosts must NOT reset their
   // shared AG/source/preview sashes. Transfer only ratios, never editor data.
-  let lastVisibleModule='chapter-boundary';
+  let lastVisibleModule=null;
   let sharedPaneRatios=null;
   const showModule=()=>{
     const selected=$('module-select').value;
@@ -838,10 +838,7 @@ async function main() {
     // The PDF toolbar owns an independent text-block lens. Seed its CMD
     // inventory at startup even while AG is showing another element module.
     if(view&&blockRequest===0&&workspace.isTextBlockCoverageEnabled())scanTextBlocks();
-    if(view&&selected==='text-block'){
-      workspace.setTextBlockCoverage(true);
-      if(lastVisibleModule!=='text-block')scanTextBlocks();
-    }
+    if(view&&selected==='text-block'&&lastVisibleModule!==selected)scanTextBlocks();
     if(view&&enableSpellcheck!==spellcheckEnabled){
       spellcheckEnabled=enableSpellcheck;
       // Native WebKit spellcheck has no reliable visible diagnostics.
@@ -889,7 +886,7 @@ async function main() {
         status('设置载入失败：'+error.message,'error');
       });
     }else{
-      workspace.setWorkModule(selected);
+      workspace.setWorkModule(selected,{activateTextBlocks:previous!==null&&previous!==selected});
       if(previous==='settings'){
         // Re-showing a hidden Dockview can enqueue an additional ResizeObserver
         // layout in the following frame. Restore after both layout passes.

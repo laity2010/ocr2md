@@ -28,9 +28,11 @@ try{
    });
    await page.goto(origin,{waitUntil:'domcontentloaded',timeout:45000});
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
+   await page.locator('.ocr-navigation-popup-elements:visible [data-value="media"]').click();
+   await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
-   const toggle=page.locator('.ocr-pdf-tools .ocr-pdf-cover-toggle input');
+   const toggle=page.locator('.ocr-preview-switchbar .ocr-preview-block-toggle input');
    assert.equal(await page.locator('.ocr-lab-ag-toolbar [aria-label="文本块覆盖显示"]').count(),0);
    assert.equal(await toggle.count(),1);
    assert.equal(await toggle.isChecked(),true,'PDF coverage is checked by default');
@@ -92,7 +94,10 @@ try{
    await page.waitForTimeout(450); // screenshot after PDF.js canvas repaint, not mid-zoom
    await page.screenshot({path:`.v6/evidence/block-coverage-lens/${name}-pdf-pair-on-cover.png`,animations:'disabled'});
    await toggle.uncheck();
-   await page.waitForFunction(()=>!document.querySelector('.ocr-md-block-covered,.ocr-pdf-block-cover'),null,{timeout:15000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===0,
+     null,{timeout:15000});
+   assert(await page.locator('.ocr-md-block-covered').count()>150,
+     'single PDF toggle must leave the remembered Markdown coverage intact');
    assert.equal(await page.locator('.ocr-pdf-pair-overlay').count(),2,'coverage off must preserve A/B selection');
    await page.screenshot({path:`.v6/evidence/block-coverage-lens/${name}-coverage-off-pair-stays.png`,animations:'disabled'});
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();

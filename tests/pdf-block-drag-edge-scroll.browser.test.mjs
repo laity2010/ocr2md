@@ -32,8 +32,8 @@ try{
       await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
       await page.waitForFunction(()=>/原始 224 块/.test(
         document.querySelector('#status')?.textContent||''),null,{timeout:30000});
-      assert(await page.locator('.ocr-pdf-tools .ocr-pdf-cover-toggle input').isChecked(),
-     'PDF toolbar coverage must be checked by default');
+      assert.equal(await page.locator('.ocr-preview-switchbar .ocr-preview-block-toggle input').count(),1,
+        'shared preview toolbar must contain exactly one text-block toggle');
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:30000});
       await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();

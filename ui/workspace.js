@@ -72,7 +72,8 @@ let textBlockActionHost=null;
 let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let refreshTextBlockInventory=()=>{};
-let textBlockCoverageEnabled=true;
+let mdTextBlockCoverageEnabled=false;
+let pdfTextBlockCoverageEnabled=true;
 
 class OutlinePanel {
   constructor(){
@@ -228,6 +229,16 @@ class PreviewPanel {
     this.switcher.innerHTML='<option value="md">Markdown 预览</option><option value="pdf" disabled>PDF 原文（预热中）</option>';
     this.pdfOption=this.switcher.querySelector('option[value="pdf"]');
     this.toolbar.append(this.switcher);
+    this.coverLabel=document.createElement('label');
+    this.coverLabel.className='ocr-preview-block-toggle';
+    this.coverToggle=document.createElement('input');
+    this.coverToggle.type='checkbox';
+    this.coverToggle.setAttribute('aria-label','文本块');
+    this.coverLabel.append(this.coverToggle,document.createTextNode('文本块'));
+    this.coverLabel.title='Markdown/PDF 文本块标记；切分时同时控制两个预览窗';
+    this.coverToggle.addEventListener('change',()=>this.setCoverageEnabled(this.coverToggle.checked));
+    this.toolbar.append(this.coverLabel);
+    this.splitCoverageEnabled=pdfTextBlockCoverageEnabled;
     this.splitLabel=document.createElement('label');
     this.splitLabel.className='ocr-preview-split-toggle';
     this.splitCheckbox=document.createElement('input');
@@ -318,12 +329,7 @@ class PreviewPanel {
     });
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
       (id,join)=>blockJoinAction(id,join),
-      (id,targetId,placement)=>blockMoveAction(id,targetId,placement),
-      enabled=>{
-        textBlockCoverageEnabled=Boolean(enabled);
-        this.setBlockCoverage(enabled);
-        if(enabled)refreshTextBlockInventory();
-      });
+      (id,targetId,placement)=>blockMoveAction(id,targetId,placement));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -397,6 +403,30 @@ class PreviewPanel {
   }
   overviewBlockComparison(){return this.pdf?.overviewComparison();}
   clearBlockComparison(){this.pdf?.clearComparison();}
+  coverageEnabled(mode){
+    return this.splitCheckbox.checked?this.splitCoverageEnabled:
+      mode==='md'?mdTextBlockCoverageEnabled:pdfTextBlockCoverageEnabled;
+  }
+  setCoverageEnabled(enabled){
+    const value=Boolean(enabled);
+    if(this.splitCheckbox.checked){
+      this.splitCoverageEnabled=value;
+      mdTextBlockCoverageEnabled=value;
+      pdfTextBlockCoverageEnabled=value;
+    }else if(this.mode==='md')mdTextBlockCoverageEnabled=value;
+    else pdfTextBlockCoverageEnabled=value;
+    this.setBlockCoverage();
+    if(value)refreshTextBlockInventory();
+  }
+  enterSplitCoverage(){
+    // First split uses the PDF preference (on by default). An explicit
+    // click while split synchronizes the two remembered single-pane states.
+    this.splitCoverageEnabled=pdfTextBlockCoverageEnabled;
+    this.setBlockCoverage();
+  }
+  getCoverageState(){
+    return {md:this.coverageEnabled('md'),pdf:this.coverageEnabled('pdf')};
+  }
   setMode(mode){
     if(mode!=='md'&&mode!=='pdf')return false;
     if(mode==='pdf' && (!this.pdfUsable || this.splitCheckbox.checked)){
@@ -413,6 +443,7 @@ class PreviewPanel {
     this.pdfPane.setAttribute('aria-hidden',String(mode!=='pdf'));
     this.pdfTools.hidden=mode!=='pdf';
     this.pdfTools.setAttribute('aria-hidden',String(mode!=='pdf'));
+    this.setBlockCoverage();
     if(mode==='md')requestAnimationFrame(()=>{
       if(this.disposed)return;
       this.redrawSentenceCoverage();
@@ -438,7 +469,7 @@ class PreviewPanel {
   }
   scheduleCoverageResize(){
     clearTimeout(this.coverageResizeTimer);
-    if(!currentOutline?.sentence?.getCoverageRows()&&!textBlockCoverageEnabled)return;
+    if(!currentOutline?.sentence?.getCoverageRows()&&!this.coverageEnabled('md'))return;
     this.coverageResizeTimer=setTimeout(()=>{
       if(!this.disposed){
         this.redrawSentenceCoverage();
@@ -499,18 +530,19 @@ class PreviewPanel {
     this.redrawSentenceCoverage();
     this.paintBlockCoverage();
     this.highlight(viewStore.getState().focusTarget);
-    if(textBlockCoverageEnabled)this.refreshTextBlockCoverage();
+    if(this.coverageEnabled('md')||this.coverageEnabled('pdf'))this.refreshTextBlockCoverage();
     if(scrollSync)scrollSync.afterRender(preserved);
     else pane.scrollTop=ratio*Math.max(0,pane.scrollHeight-pane.clientHeight);
   }
   paintBlockCoverage(){
-    const blocks=textBlockCoverageEnabled?currentOutline?.textBlock?.getBlocks():null;
+    const blocks=this.coverageEnabled('md')?currentOutline?.textBlock?.getBlocks():null;
     return blocks?.length?paintCMDTextBlockCoverage(this.body,blocks):
       (clearCMDTextBlockCoverage(this.body),{mappedIds:[],painted:0});
   }
-  setBlockCoverage(enabled){
+  setBlockCoverage(){
+    this.coverToggle.checked=this.coverageEnabled(this.mode);
     this.paintBlockCoverage();
-    this.pdf?.setBlockCoverage(enabled?currentOutline?.textBlock?.getBlocks():[]);
+    this.pdf?.setBlockCoverage(this.coverageEnabled('pdf')?currentOutline?.textBlock?.getBlocks():[]);
   }
   refreshTextBlockCoverage(){
     const owner=currentOutline?.textBlock,rows=owner?.getBlocks();
@@ -518,7 +550,7 @@ class PreviewPanel {
     const mapped=[...this.body.querySelectorAll('[data-source-start][data-source-end]')]
       .map(el=>({from:Number(el.dataset.sourceStart),to:Number(el.dataset.sourceEnd)}));
     this.paintBlockCoverage();
-    this.pdf?.setBlockCoverage(textBlockCoverageEnabled?rows:[]);
+    this.pdf?.setBlockCoverage(this.coverageEnabled('pdf')?rows:[]);
     owner.setPreviewCoverage(rows.filter(row=>row.expectsPreview&&row.sourceLine!==null&&
       mapped.some(region=>region.from<=row.sourceLine+2&&row.sourceLine+2<region.to))
       .map(row=>row.id));
@@ -666,6 +698,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     }
     if(enabled){
       preview.setMode('md');
+      preview.enterSplitCoverage();
       try{
         const panel=dockview.addPanel({id:'pdf',component:'pdf',title:'PDF 原文',
           position:{referencePanel:'preview',direction:'right'}});
@@ -689,6 +722,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       const panel=dockview.getPanel('pdf');
       if(panel)dockview.removePanel(panel);
       preview.setMode('md');
+      preview.setBlockCoverage();
     }
     requestAnimationFrame(()=>{
       preview.pdf?.onResize();
@@ -724,16 +758,14 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       currentOutline?.grid?.setTitleFontScale(value);
     },
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
-    setWorkModule:module=>{
-      // Selecting text blocks always enables the independent PDF lens;
-      // other AG modules must never disable it.
-      if(module==='text-block'){
-        textBlockCoverageEnabled=true;
-        currentPreview?.pdf?.setCoverageChecked(true);
-      }
+    setWorkModule:(module,{activateTextBlocks=true}={})=>{
+      // AG text-block selection turns on the active preview lens. In split
+      // mode one change enables MD and PDF together. Initial page load is
+      // NOT a user module switch, and must preserve Markdown's default OFF.
+      if(module==='text-block'&&activateTextBlocks)currentPreview?.setCoverageEnabled(true);
       if(module!=='sentence')currentPreview?.clearSentenceSelection();
       currentOutline?.setModule(module);
-      currentPreview?.setBlockCoverage(textBlockCoverageEnabled);
+      currentPreview?.setBlockCoverage();
       currentPreview?.redrawSentenceCoverage();
     },
     updateSpellcheck:(rows,options)=>currentOutline?.spellcheck?.setResults(rows,options),
@@ -755,13 +787,8 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setTextBlockInventory:result=>{currentOutline?.textBlock?.setInventory(result);
       currentPreview?.refreshTextBlockCoverage();},
     setSentenceCoverage:enabled=>currentOutline?.sentence?.setCoverage(enabled),
-    setTextBlockCoverage:enabled=>{
-      textBlockCoverageEnabled=Boolean(enabled);
-      currentPreview?.pdf?.setCoverageChecked(textBlockCoverageEnabled);
-      currentPreview?.setBlockCoverage(textBlockCoverageEnabled);
-      if(enabled)refreshTextBlockInventory();
-    },
-    isTextBlockCoverageEnabled:()=>textBlockCoverageEnabled,
+    setTextBlockCoverage:enabled=>currentPreview?.setCoverageEnabled(enabled),
+    isTextBlockCoverageEnabled:()=>mdTextBlockCoverageEnabled||pdfTextBlockCoverageEnabled,
     setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),
     setSentenceError:message=>currentOutline?.sentence?.setError(message),
     getSentences:()=>{

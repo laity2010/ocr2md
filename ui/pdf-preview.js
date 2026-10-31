@@ -52,13 +52,12 @@ function sourceAnchor(anchors,line){
 
 export class PdfPreview {
   constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
-    onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),onCoverageChange=()=>{}){
+    onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
     this.onBlockJoin=onBlockJoin;
     this.onBlockMove=onBlockMove;
-    this.onCoverageChange=onCoverageChange;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -66,7 +65,6 @@ export class PdfPreview {
       <button class="ocr-pdf-fit" type="button" title="按宽度缩放">适宽</button>
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
-      <label class="ocr-pdf-cover-toggle" title="显示并操作 PDF 文本块：可勾选接续、长按拖动；关闭后隐藏文本块操作标签"><input type="checkbox" aria-label="PDF 文本块" checked />文本块</label>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -79,8 +77,6 @@ export class PdfPreview {
     this.statusNode=this.host.querySelector('.ocr-pdf-status');
     this.pageInput=this.host.querySelector('.ocr-pdf-page');
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
-    this.coverToggle=this.toolbar.querySelector('.ocr-pdf-cover-toggle input');
-    this.coverToggle.addEventListener('change',()=>this.onCoverageChange(this.coverToggle.checked));
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
     this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
@@ -168,7 +164,6 @@ export class PdfPreview {
     if(this.revealPending)this.scheduleOverlay();
   }
   setStatus(s){this.statusNode.textContent=s;}
-  setCoverageChecked(enabled){this.coverToggle.checked=Boolean(enabled);}
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
     this.scheduleOverlay();

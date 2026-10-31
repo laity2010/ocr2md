@@ -1,4 +1,4 @@
-/** PDF toolbar owns the default-on coverage lens and stable zoom anchor.
+/** Persistent preview toolbar owns MD/PDF/split lenses and stable PDF zoom anchor.
  * Isolated browser fixture: no user CMD/PDF data is written.
  */
 import assert from 'node:assert/strict';
@@ -28,7 +28,7 @@ try{
       const page=await browser.newPage({viewport:{width:1220,height:840},isMobile:mobile,hasTouch:mobile});
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-      const cover=page.locator('.ocr-pdf-tools .ocr-pdf-cover-toggle input');
+      const cover=page.locator('.ocr-preview-switchbar .ocr-preview-block-toggle input');
       const selectElement=async value=>{
         await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control')
           .evaluate(el=>el.click());
@@ -37,13 +37,16 @@ try{
       };
       assert.equal(await page.locator('.ocr-lab-ag-toolbar [aria-label="PDF 文本块"]').count(),0);
       assert.equal(await cover.count(),1);
-      assert.equal(await page.locator('.ocr-pdf-cover-toggle').innerText(),'文本块');
-      assert(await cover.isChecked(),'PDF blocks stay checked by default');
+      assert.equal(await page.locator('.ocr-preview-block-toggle').innerText(),'文本块');
+      assert.equal(await cover.isChecked(),false,'Markdown defaults to no text blocks');
+      assert.equal(await page.locator('.ocr-md-block-covered').count(),0);
       // New requirement: the checkbox works BEFORE the AG text-block module
       // has ever been selected, and an edit is possible in the Title module.
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:30000});
-      assert.equal(await page.locator('.ocr-lab-element-select').inputValue(),'chapter-boundary');
+      assert(['text-block','chapter-boundary'].includes(
+        await page.locator('.ocr-lab-element-select').inputValue()),
+        'the first PDF edit must not depend on which AG view the browser initializes');
       const join=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
       await join.evaluate(input=>input.click());
       await page.waitForFunction(()=>document.querySelector(
@@ -53,20 +56,18 @@ try{
       await page.waitForFunction(()=>document.querySelector(
         '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===true,
         null,{timeout:20000});
-      // PDF checkbox owns BOTH coverage and the individual editing labels,
-      // regardless of AG's current element picker selection.
+      // In single Markdown, this control changes ONLY Markdown coverage.
       await cover.evaluate(input=>input.click());
-      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===0,
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-md-block-covered').length>=150,
         null,{timeout:15000});
-      assert.equal(await cover.isChecked(),false);
-      await cover.evaluate(input=>input.click());
-      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
-        null,{timeout:25000});
-      await selectElement('media');
-      assert(await cover.isChecked(),'another AG module must preserve PDF block state');
       assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
+      assert.equal(await cover.isChecked(),true);
       await cover.evaluate(input=>input.click());
-      assert.equal(await page.locator('.ocr-pdf-block-cover').count(),0);
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-md-block-covered').length===0,
+        null,{timeout:15000});
+      await selectElement('media');
+      assert.equal(await cover.isChecked(),false,'another AG module preserves MD off');
+      assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
       await selectElement('text-block');
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:25000});
@@ -76,6 +77,7 @@ try{
       assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
       await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(el=>el.click());
       await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
+      assert(await cover.isChecked(),'PDF retains its independent ON preference');
       const scroller=page.locator('.ocr-pdf-scroller');
       await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"]')
         .scrollIntoViewIfNeeded({timeout:24000});
@@ -107,6 +109,29 @@ try{
         assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
       }
       assert(await cover.isChecked());
+      // Split: one persistent checkbox beside the preview navigation drives
+      // Markdown and PDF overlay layers together (also on iPad Safari).
+      await page.locator('.ocr-preview-split-toggle input').evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelectorAll('.dv-groupview').length===4,
+        null,{timeout:24000});
+      assert.equal(await cover.count(),1,'split must NOT duplicate the switch');
+      assert(await cover.isChecked());
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-md-block-covered').length>=150&&
+        document.querySelectorAll('.ocr-pdf-block-cover').length===224,
+        null,{timeout:22000});
+      await cover.evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelectorAll(
+        '.ocr-md-block-covered,.ocr-pdf-block-cover').length===0,
+        null,{timeout:18000});
+      assert.equal(await cover.isChecked(),false);
+      await cover.evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-md-block-covered').length>=150&&
+        document.querySelectorAll('.ocr-pdf-block-cover').length===224,
+        null,{timeout:22000});
+      await page.locator('.ocr-preview-split-toggle input').evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelectorAll('.dv-groupview').length===3,
+        null,{timeout:24000});
+      assert(await cover.isChecked(),'explicit split ON synchronizes both mode preferences');
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),original,'coverage and zoom must never edit source');
       console.log('PDF_COVERAGE_ZOOM_PASS',name,{start,after:await location(),
