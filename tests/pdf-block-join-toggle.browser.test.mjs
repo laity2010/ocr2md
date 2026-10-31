@@ -30,8 +30,24 @@ try{
    const first=page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p0b0 独立"]');
    const empty=page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p2b8 独立"]');
    const target=page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p6b7 独立"]');
-   assert(await first.isDisabled());assert(await empty.isDisabled());
-   assert(await target.isChecked());assert(await target.isEnabled());
+   assert(await first.isDisabled(),'page first cannot merge across the page boundary');
+   assert(await empty.isEnabled(),'OCR empty placeholders must be selectable');
+   assert(await page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p0b1 独立"]').isEnabled(),
+     'title block must be selectable');
+   assert(await page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p0b5 独立"]').isEnabled(),
+     'image block must be selectable');
+   assert(await page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p8b6 独立"]').isEnabled(),
+     'formula block must be selectable');
+   assert(await page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p21b2 独立"]').isEnabled(),
+     'reference block must be selectable');
+   const checkboxStatus=await page.locator('.ocr-pdf-block-ctrl input').evaluateAll(inputs=>({
+     checked:inputs.filter(x=>x.checked).length,
+     enabled:inputs.filter(x=>!x.disabled).length,
+     disabled:inputs.filter(x=>x.disabled).length,
+   }));
+   assert.deepEqual(checkboxStatus,{checked:224,enabled:202,disabled:22});
+   assert(await target.isChecked());
+   assert(await target.isEnabled());
    assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
    // The right/left gutter chips MUST NOT overlap their own OCR text.
    // Measure the rendered DOM, not just declared CSS or coordinates.
@@ -97,6 +113,12 @@ try{
    await target.click({timeout:15000});
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await target.isChecked(),false);
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span').innerText(),'p6b6',
+     'unchecked block uses previous logical number');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b7',
+     'following block renumbers only this page');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p5b1"] .ocr-pdf-block-ctrl span').innerText(),'p5b1',
+     'other page numbering cannot change');
    assert.match(await page.locator('#status').innerText(),/已接续 1/);
    assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-joined-checkbox.png`,animations:'disabled'});
@@ -104,12 +126,29 @@ try{
    await target.click({timeout:15000});
    await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert(await target.isChecked());
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b8');
    assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-restored-checkbox.png`,animations:'disabled'});
+   // A real OCR-empty placeholder joins the preceding block just like text;
+   // only logical numbering on that same page moves one position.
+   await empty.scrollIntoViewIfNeeded({timeout:17000});
+   await empty.click({timeout:16000});
+   await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   assert.equal(await empty.isChecked(),false);
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b8');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b8');
+   await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-blank-block-joined.png`,animations:'disabled'});
+   await empty.click({timeout:16000});
+   await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   assert(await empty.isChecked());
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b9');
+
    assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);
    assert.equal(readFileSync(sample,'utf8'),original,'mother/fixture must not be autosaved');
    console.log('PDF_BLOCK_JOIN_TOGGLE_PASS',name,{originalBlocks:224,joinedLogicalBlocks:223,
-     restoredBlocks:224,emptyDisabled:true,requests:requests.length,errors:errors.length});
+     restoredBlocks:224,emptySelectable:true,enabled:202,requests:requests.length,errors:errors.length});
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}

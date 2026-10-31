@@ -193,7 +193,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       if(documentSha!==result.summary.sourceSha){documentSha=result.summary.sourceSha;reviews=restore(documentSha);selectedCandidateId=null;onCompare(null);}
       report=result.summary;previewMapped=null;rows=result.rows.map(row=>({...row,
       geometryLabel:row.geometry?'可定位':'无效',
-      joinLabel:row.joinPrev?'↳ '+row.joinPrev:row.joinable?'独立':'不可接续',
+      joinLabel:row.joinPrev?`↳ ${row.logicalId}`:row.logicalId===row.id?'独立':`独立 · ${row.logicalId}`,
       previewLabel:row.expectsPreview?'待检查':'无需渲染'}));selectedId=null;
       if(mode==='blocks')grid.setGridOption('rowData',rows);error='';refresh();},
     setContinuationCandidates(result){candidateSummary=result.summary;
@@ -203,8 +203,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       if(mode==='candidates')grid.setGridOption('rowData',candidates);
       if(selectedCandidateId&&!selectedCandidate()){selectedCandidateId=null;onCompare(null);}
       refresh();},
-    getBlocks(){return rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable})=>
-      ({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable}));},
+    getBlocks(){return rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>
+      ({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId}));},
     setPreviewCoverage(ids){
       previewMapped=new Set(ids);
       for(const row of rows)row.previewLabel=!row.expectsPreview?'无需渲染':previewMapped.has(row.id)?'可定位':'未映射';

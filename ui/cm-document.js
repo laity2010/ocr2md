@@ -47,18 +47,12 @@ export class CMDocument {
     const source=this.readSource();
     const [inventory,layout]=await Promise.all([inspectCMDTextBlocks(source),queryCMDLayout(source)]);
     const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
-    const ordered=inventory.rows.filter(row=>row.anchorCount===1).sort((a,b)=>a.from-b.from);
     for(const row of inventory.rows){
       row.joinPrev=logical.joined.get(row.id)||null;
-      const idx=ordered.findIndex(other=>other.id===row.id);
-      let prev=idx-1;
-      while(prev>=0&&ordered[prev].type==='text'&&
-        !String(ordered[prev].textHead||'').trim()&&!String(ordered[prev].textTail||'').trim())prev--;
-      const previous=ordered[prev];
-      row.joinable=row.anchorCount===1&&row.type==='text'&&
-        Boolean(String(row.textHead||'').trim()||String(row.textTail||'').trim())&&
-        previous?.anchorCount===1&&previous?.type==='text'&&
-        Boolean(String(previous.textHead||'').trim()||String(previous.textTail||'').trim());
+      row.joinable=row.anchorCount===1&&row.blockIndex>0&&
+        inventory.rows.some(prev=>prev.pageIndex===row.pageIndex&&
+          prev.blockIndex===row.blockIndex-1&&prev.anchorCount===1);
+      row.logicalId=logical.assignments.get(row.id)||row.id;
     }
     inventory.summary.joined=logical.joined.size;
     inventory.summary.logicalBlocks=logical.blocks.length;

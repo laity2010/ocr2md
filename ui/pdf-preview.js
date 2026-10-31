@@ -283,8 +283,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     this.blockCoverageRows=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,pageIndex,blockIndex,joinPrev,joinable})=>
-        ({id,pageIndex,blockIndex,joinPrev,joinable})):[];
+      .map(({id,pageIndex,blockIndex,joinPrev,joinable,logicalId})=>
+        ({id,pageIndex,blockIndex,joinPrev,joinable,logicalId})):[];
     this.paintBlockCoverage();
   }
   paintBlockCoverage(){
@@ -327,9 +327,12 @@ export class PdfPreview {
         this.blockCoverageNodes.set(row.id,node);
       }
       const input=node.querySelector('input');
+      const label=node.querySelector('.ocr-pdf-block-ctrl span');
+      if(label){label.textContent=row.logicalId||row.id;
+        label.title=`原始 ${row.id} · 本页逻辑 ${row.logicalId||row.id}`;}
       if(input){input.checked=!row.joinPrev;input.disabled=!row.joinable;
-        input.title=row.joinable?`取消勾选：接续前一个正文 Block；重新勾选：恢复独立。${row.id}`:
-          `文本块 ${row.id} 不具备可安全接续的相邻正文块`;}
+        input.title=row.joinable?`取消勾选：并入本页上一 Block；重新勾选：恢复独立。原始 ${row.id}`:
+          `第 ${row.pageIndex+1} 页第一个 Block 必须独立（${row.id}）`;}
       node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
       // Keep the interactive chip OUTSIDE the OCR text rectangle. Choose
       // the outer paper gutter, never the inter-column gap: left-column
@@ -354,7 +357,7 @@ export class PdfPreview {
         const pagePixels=page.div.clientWidth;
         const gutterPixels=pagePixels*(side==='left'?rect.left:
           100-rect.left-rect.width)/100;
-        const nominalWidth=20+row.id.length*5.5; // 12px box + 2px gap + 4px padding + borders
+        const nominalWidth=20+(row.logicalId||row.id).length*5.5; // 12px box + 2px gap + 4px padding + borders
         const scale=Math.min(1,Math.max(.2,(gutterPixels-3)/nominalWidth));
         chip.style.transform=`scale(${scale.toFixed(3)})`;
         chip.style.top='0px';

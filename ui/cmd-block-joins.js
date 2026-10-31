@@ -5,8 +5,12 @@
  */
 import {blockAnchor,quotePrefix,unquotePrefix} from './mineru-anchors.js';
 const tag=/^<!-- ocr2md:block-join:v1 prev="(p\d+b\d+)" target="(p\d+b\d+)" -->$/;
-export const isJoinable=r=>r?.anchorCount===1&&r.type==='text'&&
-  (r.textHead?.trim()||r.textTail?.trim());
+// All MinerU Block types (including OCR-empty placeholders) are independent
+// by default. The only non-joinable position is the first Block of a page.
+export const isJoinable=r=>r?.anchorCount===1;
+export const precedingPageBlock=(rows,target)=>rows.find(row=>
+  row.pageIndex===target.pageIndex&&row.blockIndex===target.blockIndex-1&&
+  row.anchorCount===1)||null;
 export function readCMDBlockJoins(source,rows){
   const lines=source.split('\n'),joined=new Map(),invalid=[];
   const byId=new Map(rows.map(r=>[r.id,r]));
@@ -14,8 +18,11 @@ export function readCMDBlockJoins(source,rows){
     const m=tag.exec(unquotePrefix(lines[i]).trim());if(!m)continue;
     const [ ,prev,target]=m;
     const next=blockAnchor(lines[i+1]||'');
+    const previous=byId.get(prev),current=byId.get(target);
     if(!next||`p${next.pageIndex}b${next.blockIndex}`!==target||
-      !byId.has(prev)||!byId.has(target)||joined.has(target)){
+      !previous||!current||previous.anchorCount!==1||current.anchorCount!==1||
+      previous.pageIndex!==current.pageIndex||previous.blockIndex!==current.blockIndex-1||
+      joined.has(target)){
       invalid.push({line:i+1,prev,target});continue;
     }
     joined.set(target,prev);
@@ -26,17 +33,10 @@ const marker=(prev,target)=>`<!-- ocr2md:block-join:v1 prev="${prev}" target="${
 export function planCMDBlockJoin(source,rows,targetId,join){
   if(typeof source!=='string'||typeof targetId!=='string'||typeof join!=='boolean')
     throw Error('非法文本块合并指令');
-  const ordered=rows.filter(r=>r.anchorCount===1).sort((a,b)=>a.from-b.from);
-  const i=ordered.findIndex(r=>r.id===targetId);
-  if(i<0)throw Error('目标文本块没有唯一 CMD 锚点');
-  const target=ordered[i];
-  if(!isJoinable(target))throw Error('空白块、图表和非文本 Block 不能合并正文');
-  let before=i-1;
-  // An OCR-empty placeholder is not a paragraph boundary. Do not jump over
-  // images, headings, formulae or populated non-text blocks.
-  while(before>=0&&ordered[before].type==='text'&&!isJoinable(ordered[before]))before--;
-  const previous=ordered[before];
-  if(!isJoinable(previous))throw Error('找不到相邻且有正文的前一个文本块');
+  const target=rows.find(row=>row.id===targetId);
+  if(!isJoinable(target))throw Error('目标文本块缺少唯一 CMD 锚点');
+  const previous=precedingPageBlock(rows,target);
+  if(!previous)throw Error('本页第一个 Block 没有上一块，必须独立');
   // Reading order is the CMD block-anchor order, not arbitrary PDF bbox order.
   const {joined,invalid}=readCMDBlockJoins(source,rows);
   if(invalid.length)throw Error('CMD 存在无效的文本块续接标记，先修复后再编辑');
@@ -64,7 +64,7 @@ export function planCMDBlockJoin(source,rows,targetId,join){
 export function projectCMDLogicalTextBlocks(source,rows){
   const {joined,invalid}=readCMDBlockJoins(source,rows);
   const ordered=rows.filter(r=>r.anchorCount===1).sort((a,b)=>a.from-b.from);
-  const roots=new Map();const result=[];
+  const roots=new Map();const result=[],pageCounters=new Map(),assignments=new Map();
   for(let i=0;i<ordered.length;i++){
     const row=ordered[i],from=row.from;
     const next=ordered[i+1]?.from??source.indexOf('<!-- minerujson:source:v1:');
@@ -78,12 +78,17 @@ export function projectCMDLogicalTextBlocks(source,rows){
         parent.memberIds.push(row.id);
         parent.text=parent.text?(parent.text.replace(/\s+$/,'')+' '+markdown):markdown;
         roots.set(row.id,parent);
+        assignments.set(row.id,parent.id);
         continue;
       }
       invalid.push({target:row.id,reason:'缺少已存在的前驱逻辑块'});
     }
-    const item={id:row.id,memberIds:[row.id],text:markdown};
-    roots.set(row.id,item);result.push(item);
+    const index=pageCounters.get(row.pageIndex)||0;
+    pageCounters.set(row.pageIndex,index+1);
+    const logicalId=`p${row.pageIndex}b${index}`;
+    const item={id:logicalId,sourceId:row.id,pageIndex:row.pageIndex,
+      memberIds:[row.id],text:markdown};
+    roots.set(row.id,item);assignments.set(row.id,logicalId);result.push(item);
   }
-  return {blocks:result,joined,invalid};
+  return {blocks:result,joined,invalid,assignments};
 }

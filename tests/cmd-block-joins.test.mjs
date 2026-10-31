@@ -23,16 +23,45 @@ merged=merged.slice(0,revert.edits[0].from)+revert.edits[0].insert+merged.slice(
 assert.equal(merged,original,'reverse join must exactly restore original CMD bytes');
 assert.equal(readCMDBlockJoins(merged,initial).joined.size,0);
 assert.equal(projectCMDLogicalTextBlocks(merged,initial).blocks.length,224);
-for(const id of ['p2b8','p11b6','p15b0','p0b0']){
-  assert.throws(()=>planCMDBlockJoin(original,initial,id,true),/不能合并|找不到/);
+// No type or content gate: blanks, images, titles, formulae and reference
+// entries are all independent by default, and can join only prior-page-local
+// Block (including their original OCR/Markdown content when nonempty).
+for(const [id,previous] of [['p2b8','p2b7'],['p11b6','p11b5'],
+  ['p0b1','p0b0'],['p0b5','p0b4'],['p5b5','p5b4'],['p21b2','p21b1']]){
+  const operation=planCMDBlockJoin(original,initial,id,true);
+  assert.equal(operation.previous,previous,`wrong same-page predecessor ${id}`);
+  const joined=original.slice(0,operation.edits[0].from)+operation.edits[0].insert+
+    original.slice(operation.edits[0].to);
+  const updated=(await inspectCMDTextBlocks(joined)).rows;
+  const projected=projectCMDLogicalTextBlocks(joined,updated);
+  assert.equal(projected.blocks.length,223);
+  assert.equal(projected.joined.get(id),previous);
+  const undo=planCMDBlockJoin(joined,updated,id,false);
+  assert.equal(joined.slice(0,undo.edits[0].from)+undo.edits[0].insert+
+    joined.slice(undo.edits[0].to),original);
 }
+// Every page's first block is checked but cannot merge backwards across pages.
+for(const id of ['p0b0','p1b0','p2b0','p6b0','p21b0'])
+  assert.throws(()=>planCMDBlockJoin(original,initial,id,true),/本页第一个/);
+// Changing page 3 must renumber ONLY that page's logical groups; never
+// rewrite an original identity, nor the numbering on pages 2 and 4.
+const emptyPlan=planCMDBlockJoin(original,initial,'p2b8',true);
+const emptyJoined=original.slice(0,emptyPlan.edits[0].from)+emptyPlan.edits[0].insert+
+  original.slice(emptyPlan.edits[0].to);
+const emptyLogical=projectCMDLogicalTextBlocks(emptyJoined,(await inspectCMDTextBlocks(emptyJoined)).rows);
+assert.equal(emptyLogical.assignments.get('p2b8'),'p2b7');
+assert.equal(emptyLogical.assignments.get('p2b9'),'p2b8');
+assert.equal(emptyLogical.assignments.get('p2b10'),'p2b9');
+assert.equal(emptyLogical.assignments.get('p1b10'),'p1b10');
+assert.equal(emptyLogical.assignments.get('p3b0'),'p3b0');
+assert.equal(emptyLogical.blocks.length,223);
 const later=planCMDBlockJoin(original,initial,'p15b6',true);
 assert.equal(later.previous,'p15b5');
 // Stale or corrupted join markers may not silently change a previous ID.
 const broken=original.replace('<!-- minerujson:block:v1:6:7 -->',
   '<!-- ocr2md:block-join:v1 prev="p0b0" target="p6b7" -->\n<!-- minerujson:block:v1:6:7 -->');
 const brokenRows=(await inspectCMDTextBlocks(broken)).rows;
-assert.throws(()=>planCMDBlockJoin(broken,brokenRows,'p6b7',true),/已经接续/);
+assert.throws(()=>planCMDBlockJoin(broken,brokenRows,'p6b7',true),/无效|损坏|错误/);
 // Quoted nested blocks retain quote level for the invisible CMD marker.
 const quoted=original.replace('<!-- minerujson:block:v1:6:7 -->',
   '> <!-- minerujson:block:v1:6:7 -->');
@@ -46,5 +75,5 @@ assert.equal(readCMDBlockJoins(quotedJoined,quotedJoinedRows).joined.get('p6b7')
 const quotedUndo=planCMDBlockJoin(quotedJoined,quotedJoinedRows,'p6b7',false);
 assert.equal(quotedJoined.slice(0,quotedUndo.edits[0].from)+quotedUndo.edits[0].insert+
   quotedJoined.slice(quotedUndo.edits[0].to),quoted);
-console.log('CMD_BLOCK_JOIN_PASS',{blocks:224,logicalBlocks:223,originalRestored:true,
+console.log('CMD_BLOCK_JOIN_PASS',{blocks:224,logicalBlocks:223,originalRestored:true,pageLocal:true,allTypes:true,
   crossColumn:'p6b6→p6b7',other:'p15b5→p15b6'});
