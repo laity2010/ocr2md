@@ -1170,3 +1170,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- but mount all seven controls in the shared Shell AG function dropdown.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit text-block Function menu owns 2 mode options and 5 review actions; global status owns inventory/review summary; no local toolbar/status row','integration');
+
+-- Text-block coverage lens is a presentation-only CMD source-anchor overlay:
+-- independent of both individual MD/PDF focus and PDF paired comparison.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G28','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit checkbox paints 224 original PDF bbox and only anchored Markdown blocks; subtle layers below individual focus and two-block comparison, survives PDF zoom and removes only coverage on toggle off','integration');

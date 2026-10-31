@@ -1,0 +1,11 @@
+/* Low-contrast inventory lens; focus/selection must always remain stronger. */
+.ocr-markdown [data-source-start].ocr-md-block-covered {
+  background:rgba(140,196,181,.14);
+  box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+  border-radius:2px;
+}
+.ocr-markdown [data-source-start].ocr-md-block-covered.ocr-outline-focused-element {
+  background:rgba(131,192,146,.29);
+  box-shadow:inset 3px 0 #83c092,0 0 0 1px rgba(131,192,146,.35);
+}

@@ -89,6 +89,7 @@ export class PdfPreview {
     this.disposed=false;this.explicitUserUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
+    this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
     this.active=false;this.overlayDrawId=0;this.pageViewportCache=new Map();
     this.revealPending=false;this.revealUntil=0;
@@ -97,6 +98,7 @@ export class PdfPreview {
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
       if(next.documentRevision!==prev.documentRevision){
         this.anchors=sourceBlocks(this.getMarkdown());
+        this.setBlockCoverage([]);
         this.clearComparison();
         void this.refreshGeometry();
       }
@@ -144,6 +146,7 @@ export class PdfPreview {
       if(this.pdf&&result.pages.length!==this.pdf.numPages)
         throw Error('PDF 页数与 CMD 原始页面数不一致');
       this.map=result.pages;
+      this.paintBlockCoverage();
       this.scheduleOverlay();
     }catch(error){
       if(this.disposed||revision!==this.geometryRevision)return;
@@ -192,6 +195,7 @@ export class PdfPreview {
           return;
         }
         if(e.pageNumber===1)this.finishWarmup?.(true);
+        this.paintBlockCoverage();
         this.scheduleOverlay();
       });
       this.viewer.setDocument(pdf);
@@ -200,6 +204,7 @@ export class PdfPreview {
       if(this.disposed)return;
       if(!painted)throw Error('PDF 首页渲染失败');
       this.ready=true;
+      this.paintBlockCoverage();
       this.setStatus('就绪');
       if(this.pendingFocus){
         const request=this.pendingFocus;this.pendingFocus=null;
@@ -268,6 +273,47 @@ export class PdfPreview {
       this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex};this.drawOverlay();
       publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
         elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
+    }
+  }
+  /** Independent, very light coverage over the original CMD Block bbox.
+   * Unlike focus/pair overlays these are page-local percentage boxes and
+   * never navigate, recenter, mutate CM6, or intercept PDF clicks.
+   */
+  setBlockCoverage(rows){
+    this.blockCoverageRows=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
+      row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
+      .map(({id,pageIndex,blockIndex})=>({id,pageIndex,blockIndex})):[];
+    this.paintBlockCoverage();
+  }
+  paintBlockCoverage(){
+    if(this.disposed)return;
+    const wanted=new Set(this.blockCoverageRows.map(row=>row.id));
+    for(const [id,node] of this.blockCoverageNodes){
+      if(!wanted.has(id)){node.remove();this.blockCoverageNodes.delete(id);}
+    }
+    if(!this.viewer||!this.map.length)return;
+    for(const row of this.blockCoverageRows){
+      const page=this.viewer.getPageView(row.pageIndex);
+      const region=this.map[row.pageIndex];
+      const block=region?.regions.find(b=>b.blockIndex===row.blockIndex);
+      if(!page?.div||!block)continue;
+      let rect;
+      try{rect=pdfOverlayRect({...block,pageSize:region.pageSize},
+        {width:region.pageSize[0],height:region.pageSize[1]});}
+      catch{continue;} // Invalid geometry is never painted as covered.
+      let node=this.blockCoverageNodes.get(row.id);
+      if(!node){
+        node=document.createElement('div');node.className='ocr-pdf-block-cover';
+        node.dataset.blockId=row.id;
+        node.dataset.pdfPage=String(row.pageIndex+1);
+        node.dataset.blockIndex=String(row.blockIndex);
+        node.setAttribute('aria-hidden','true');
+        node.title='CMD 已标定文本块';
+        this.blockCoverageNodes.set(row.id,node);
+      }
+      node.style.left=rect.left+'%';node.style.top=rect.top+'%';
+      node.style.width=rect.width+'%';node.style.height=rect.height+'%';
+      if(node.parentElement!==page.div)page.div.append(node);
     }
   }
   /** WP4: two independently drawn, labelled original CMD bboxes. Layout
@@ -538,6 +584,7 @@ export class PdfPreview {
     this.unsubscribe?.();this.resizeObserver.disconnect();
     clearTimeout(this.overlayTimer);
     this.clearComparison();
+    this.setBlockCoverage([]);
     this.viewer?.setDocument(null);
     void this.task?.destroy();
   }

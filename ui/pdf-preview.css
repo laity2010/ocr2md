@@ -31,3 +31,12 @@
   height:16px;min-width:18px;text-align:center;line-height:16px;font-size:11px;font-weight:700;
   background:#ffb13d;color:#272218;border-radius:3px 3px 0 0;box-shadow:0 1px 3px #1118}
 .ocr-pdf-pair-to::before {background:#f47c32;color:#211b17}
+
+/* Coverage is always weaker than a clicked selection (z=8) or A/B pair
+ * (z=9); page-relative % geometry follows PDF.js zoom/reflow automatically. */
+.ocr-pdf-scroller .page .ocr-pdf-block-cover{
+  position:absolute;z-index:5;pointer-events:none;
+  background:rgba(144,199,184,.17);
+  outline:1px solid rgba(132,190,178,.24);
+  outline-offset:-1px;border-radius:1px;
+}

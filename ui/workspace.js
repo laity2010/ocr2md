@@ -23,6 +23,7 @@ import {paintSentencePreviewHighlight,clearSentencePreviewHighlight,
   paintSentenceCoverageHighlight,clearSentenceCoverageHighlight,hitSentencePreview} from './sentence-preview-highlight.js';
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
+import {paintCMDTextBlockCoverage,clearCMDTextBlockCoverage} from './text-block-preview-coverage.js';
 import './workspace.css';
 
 const sourceHost = document.createElement('div');
@@ -68,6 +69,7 @@ let toggleSplitPreview=()=>{};
 let wcpRuntime=null;
 let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
+let textBlockCoverageEnabled=false;
 
 class OutlinePanel {
   constructor(){
@@ -404,6 +406,7 @@ class PreviewPanel {
     if(mode==='md')requestAnimationFrame(()=>{
       if(this.disposed)return;
       this.redrawSentenceCoverage();
+      this.paintBlockCoverage();
       this.highlight(viewStore.getState().focusTarget);
     });
     if(this.pdf){
@@ -425,10 +428,11 @@ class PreviewPanel {
   }
   scheduleCoverageResize(){
     clearTimeout(this.coverageResizeTimer);
-    if(!currentOutline?.sentence?.getCoverageRows())return;
+    if(!currentOutline?.sentence?.getCoverageRows()&&!textBlockCoverageEnabled)return;
     this.coverageResizeTimer=setTimeout(()=>{
       if(!this.disposed){
         this.redrawSentenceCoverage();
+        this.paintBlockCoverage();
         this.highlight(viewStore.getState().focusTarget);
       }
     },130);
@@ -483,16 +487,30 @@ class PreviewPanel {
     this.renderedCalloutScope=scopeId;
     this.lastFocusElement=null;
     this.redrawSentenceCoverage();
+    this.paintBlockCoverage();
     this.highlight(viewStore.getState().focusTarget);
     if(currentOutline?.workModule==='text-block')this.refreshTextBlockCoverage();
     if(scrollSync)scrollSync.afterRender(preserved);
     else pane.scrollTop=ratio*Math.max(0,pane.scrollHeight-pane.clientHeight);
+  }
+  paintBlockCoverage(){
+    const blocks=textBlockCoverageEnabled&&currentOutline?.workModule==='text-block'
+      ?currentOutline.textBlock?.getBlocks():null;
+    return blocks?.length?paintCMDTextBlockCoverage(this.body,blocks):
+      (clearCMDTextBlockCoverage(this.body),{mappedIds:[],painted:0});
+  }
+  setBlockCoverage(enabled){
+    this.paintBlockCoverage();
+    this.pdf?.setBlockCoverage(enabled&&currentOutline?.workModule==='text-block'
+      ?currentOutline.textBlock?.getBlocks():[]);
   }
   refreshTextBlockCoverage(){
     const owner=currentOutline?.textBlock,rows=owner?.getBlocks();
     if(!rows?.length)return;
     const mapped=[...this.body.querySelectorAll('[data-source-start][data-source-end]')]
       .map(el=>({from:Number(el.dataset.sourceStart),to:Number(el.dataset.sourceEnd)}));
+    this.paintBlockCoverage();
+    this.pdf?.setBlockCoverage(textBlockCoverageEnabled&&currentOutline?.workModule==='text-block'?rows:[]);
     owner.setPreviewCoverage(rows.filter(row=>row.expectsPreview&&row.sourceLine!==null&&
       mapped.some(region=>region.from<=row.sourceLine+2&&row.sourceLine+2<region.to))
       .map(row=>row.id));
@@ -543,6 +561,7 @@ class PreviewPanel {
   dispose(){
     this.disposed=true;
     this.clearSentenceSelection();
+    clearCMDTextBlockCoverage(this.body);
     this.footnoteReader?.dispose();
     clearTimeout(this.timer);
     clearTimeout(this.coverageResizeTimer);
@@ -698,8 +717,10 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:module=>{
+      if(module!=='text-block')currentPreview?.setBlockCoverage(false);
       if(module!=='sentence')currentPreview?.clearSentenceSelection();
       currentOutline?.setModule(module);
+      currentPreview?.setBlockCoverage(textBlockCoverageEnabled&&module==='text-block');
       currentPreview?.redrawSentenceCoverage();
     },
     updateSpellcheck:(rows,options)=>currentOutline?.spellcheck?.setResults(rows,options),
@@ -718,6 +739,10 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setTextBlockInventory:result=>{currentOutline?.textBlock?.setInventory(result);
       currentPreview?.refreshTextBlockCoverage();},
     setSentenceCoverage:enabled=>currentOutline?.sentence?.setCoverage(enabled),
+    setTextBlockCoverage:enabled=>{
+      textBlockCoverageEnabled=Boolean(enabled);
+      currentPreview?.setBlockCoverage(textBlockCoverageEnabled);
+    },
     setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),
     setSentenceError:message=>currentOutline?.sentence?.setError(message),
     getSentences:()=>{
