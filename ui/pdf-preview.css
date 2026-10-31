@@ -82,6 +82,10 @@
   left:calc(100% + 3px);right:auto;transform-origin:left top;
 }
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl span{white-space:nowrap;line-height:14px}
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl .ocr-pdf-block-id{font-weight:700}
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl .ocr-pdf-block-order{
+  font-size:8px;font-weight:500;color:#c2d8ce;opacity:.9;
+}
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl input{
   width:12px;height:12px;min-width:12px;margin:0;cursor:pointer;
   accent-color:#93c5ad;pointer-events:auto;

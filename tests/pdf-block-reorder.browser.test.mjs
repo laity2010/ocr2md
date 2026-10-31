@@ -55,11 +55,10 @@ try{
         animations:'disabled'});
       await src.dispatchEvent('pointerup',{...pointer,clientX:end.x,clientY:end.y});
       await page.waitForFunction(()=>
-        document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-          ?.textContent==='p6b8',null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b9"] .ocr-pdf-block-ctrl span').innerText(),'p6b9');
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p5b1"] .ocr-pdf-block-ctrl span').innerText(),'p5b1');
+        document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"]')?.dataset.logicalId==='p6b8',null,{timeout:25000});
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"]').getAttribute('data-logical-id'),'p6b7');
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b9"]').getAttribute('data-logical-id'),'p6b9');
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p5b1"]').getAttribute('data-logical-id'),'p5b1');
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224,
         'drag must not automatically uncheck a Block');
       assert.equal(await page.locator('.ocr-pdf-block-drag-arrow').count(),0);
@@ -69,15 +68,14 @@ try{
       await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input').click();
       await page.waitForFunction(()=>/已接续 1/.test(document.querySelector('#status')?.textContent||''),
         null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"]').getAttribute('data-logical-id'),'p6b7');
       // CMD Undo #1 cancels the join; Undo #2 restores original source order.
       await page.locator('#undo').click();
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked,
         null,{timeout:16000});
       await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p6b7',null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b9"] .ocr-pdf-block-ctrl span').innerText(),'p6b9');
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"]')?.dataset.logicalId==='p6b7',null,{timeout:25000});
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b9"]').getAttribute('data-logical-id'),'p6b9');
       assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
       // Regression: an already unchecked Block is itself draggable. Its
       // join marker must follow the Block, not remain attached to old source
@@ -96,14 +94,12 @@ try{
       await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')
         .waitFor({timeout:1800});
       await src.dispatchEvent('pointerup',{...pointer,clientX:to.x,clientY:to.y});
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p6b7',null,{timeout:25000});
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"]')?.dataset.logicalId==='p6b7',null,{timeout:25000});
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input').isChecked(),false);
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"]').getAttribute('data-logical-id'),'p6b7');
       assert(!((await page.locator('#status').innerText()).includes('排序失败')));
       await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p6b6',null,{timeout:25000});
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"]')?.dataset.logicalId==='p6b6',null,{timeout:25000});
       await page.locator('#undo').click();
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
         ?.checked===true,null,{timeout:25000});
@@ -138,12 +134,50 @@ try{
         .waitFor({timeout:1500});
       await page.locator('body').dispatchEvent('pointerup',
         {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b1',
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"]')?.dataset.logicalId==='p16b1',
         null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b1"] .ocr-pdf-block-ctrl span').innerText(),'p16b2');
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b1"]').getAttribute('data-logical-id'),'p16b2');
       await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b9',
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"]')?.dataset.logicalId==='p16b9',
         null,{timeout:25000});
+      // Reproduce the user's screenshot: when early page-17 Blocks join their
+      // predecessors, physical p16b3 gets logical ID p16b0. The screen must
+      // show the stable original p16b3 plus separate order #0, NOT falsely
+      // rename the original p16b3 to p16b0.
+      for(const [id,expected] of [['p16b0','p16b2'],['p16b1','p16b1'],['p16b2','p16b0']]){
+        await page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] input`).click();
+        await page.waitForFunction(([id,expected])=>{
+          const input=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"] input`);
+          return input?.checked===false&&!input.disabled&&document.querySelector(
+            '.ocr-pdf-block-cover[data-block-id="p16b3"]')?.dataset.logicalId===expected;
+        },[id,expected],{timeout:25000});
+      }
+      const unchanged=page.locator('.ocr-pdf-block-cover[data-block-id="p16b3"]');
+      assert.equal(await unchanged.getAttribute('data-logical-id'),'p16b0');
+      assert.equal(await unchanged.locator('.ocr-pdf-block-id').innerText(),'p16b3');
+      assert.equal(await unchanged.locator('.ocr-pdf-block-order').innerText(),'#0');
+      assert.match(await unchanged.locator('.ocr-pdf-block-ctrl').getAttribute('title'),
+        /原始块 p16b3 · 当前逻辑编号 p16b0/);
+      const label=unchanged.locator('.ocr-pdf-block-ctrl');
+      await label.scrollIntoViewIfNeeded();
+      const labelBox=await label.boundingBox();
+      const center={x:labelBox.x+labelBox.width*.7,y:labelBox.y+labelBox.height/2};
+      await label.dispatchEvent('pointerdown',{...pointer,clientX:center.x,clientY:center.y});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2000});
+      assert.match(await page.locator('.ocr-pdf-status').innerText(),
+        /拖动原始块 p16b3（p16b0）/);
+      await label.dispatchEvent('pointerup',{...pointer,clientX:center.x,clientY:center.y});
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-drag-arrow')===null);
+      for(const [id,expected] of [['p16b2','p16b1'],['p16b1','p16b2'],['p16b0','p16b3']]){
+        await page.locator('#undo').click();
+        await page.waitForFunction(([id,expected])=>document.querySelector(
+          `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===true&&
+          document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b3"]')
+            ?.dataset.logicalId===expected,
+          [id,expected],{timeout:25000});
+      }
+      assert.equal(await unchanged.locator('.ocr-pdf-block-id').innerText(),'p16b3');
+      assert.equal(await unchanged.getAttribute('data-logical-id'),'p16b3');
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
       console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'p6b7 after p6b8',
