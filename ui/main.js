@@ -706,6 +706,15 @@ async function main() {
     blockTimer=setTimeout(scanTextBlocks,650);
   };
   cmdPort=wcpRuntime.wrapCMD(cm);
+  workspace.setBlockJoinAction(async(targetId,join)=>{
+    try{
+      const result=await cmdPort.setBlockJoin(targetId,join);
+      if(result.changed)status(join?
+        `✓ ${targetId} 已接续 ${result.previous} · 已写入 CMD，按全局保存持久化`:
+        `✓ ${targetId} 已恢复独立 Block · 按全局保存持久化`);
+      return result;
+    }catch(error){status('文本块接续失败：'+error.message,'error');throw error;}
+  });
   workspace.notifyCMDReady();
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{

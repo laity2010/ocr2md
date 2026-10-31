@@ -10,6 +10,8 @@
  * rejects a cross-chapter business edit.
  */
 import {createIndexProjector} from './wcp-document-index.js';
+import {planCMDBlockJoin} from './cmd-block-joins.js';
+import {inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
 import {LINEBREAK_TAG,readIllegalBreaks,planIllegalBreakMarks} from './cmd-linebreak.js';
@@ -71,6 +73,18 @@ export function createCMDTransactionPort(cmd){
     readSource:()=>cmd.readSource(), // read-only CM6 source snapshot; never a second editor
     queryLayout:()=>cmd.queryLayout(),
     queryBlockAnalysis:()=>cmd.queryBlockAnalysis(),
+    async setBlockJoin(targetId,join){
+      const source=cmd.readSource();
+      const {rows}=await inspectCMDTextBlocks(source);
+      if(source!==cmd.readSource())throw Error('操作期间 CMD 已发生变化，请重新点击');
+      const plan=planCMDBlockJoin(source,rows,targetId,join);
+      if(!plan.changed)return plan;
+      // The PDF click is explicit user intent; CMD still preflights the
+      // exact anchor and forbids edits inside the immutable JSON evidence.
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return {changed:1,previous:plan.previous,target:plan.target};
+    },
     queryBlockGeometry:(pageIndex,blockIndex)=>cmd.queryBlockGeometry(pageIndex,blockIndex),
     readLine:n=>cmd.readLine(n),
     lineAtOffset:offset=>cmd.lineAtOffset(offset),

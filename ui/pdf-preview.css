@@ -40,3 +40,19 @@
   outline:1px solid rgba(132,190,178,.24);
   outline-offset:-1px;border-radius:1px;
 }
+
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl{
+  position:absolute;z-index:2;top:0;left:0;display:flex;align-items:center;
+  gap:3px;padding:0 4px 0 2px;min-height:19px;max-width:135px;
+  color:#e4ebd6;background:rgba(39,63,60,.94);border:1px solid #76a497;
+  border-radius:4px 4px 2px 2px;font:600 10px/17px monospace;white-space:nowrap;
+  pointer-events:auto;cursor:pointer;user-select:none;box-shadow:0 1px 3px #101b1f8c;
+}
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl input{
+  width:13px;height:13px;min-width:13px;margin:0;cursor:pointer;
+  accent-color:#93c5ad;pointer-events:auto;
+}
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl input:disabled{opacity:.4;cursor:not-allowed}
+.ocr-pdf-block-cover.ocr-pdf-block-is-joined{background:rgba(128,169,194,.12);outline-style:dashed}
+.ocr-pdf-block-cover.ocr-pdf-block-is-joined .ocr-pdf-block-ctrl{
+  border-color:#b79c63;background:rgba(73,65,46,.95)}

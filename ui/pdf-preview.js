@@ -43,10 +43,11 @@ function sourceAnchor(anchors,line){
 }
 
 export class PdfPreview {
-  constructor(host,getMarkdown,getLayout){
+  constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
+    this.onBlockJoin=onBlockJoin;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -246,7 +247,7 @@ export class PdfPreview {
     this.overlayTimer=setTimeout(()=>this.drawOverlay(),140);
   }
   onClick(event){
-    if(!this.ready||!(event.target instanceof Element))return;
+    if(!this.ready||!(event.target instanceof Element)||event.target.closest('.ocr-pdf-block-ctrl'))return;
     const page=event.target.closest('.page');
     const canvas=page?.querySelector('canvas');
     const n=Number(page?.dataset.pageNumber);
@@ -282,7 +283,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     this.blockCoverageRows=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,pageIndex,blockIndex})=>({id,pageIndex,blockIndex})):[];
+      .map(({id,pageIndex,blockIndex,joinPrev,joinable})=>
+        ({id,pageIndex,blockIndex,joinPrev,joinable})):[];
     this.paintBlockCoverage();
   }
   paintBlockCoverage(){
@@ -307,10 +309,28 @@ export class PdfPreview {
         node.dataset.blockId=row.id;
         node.dataset.pdfPage=String(row.pageIndex+1);
         node.dataset.blockIndex=String(row.blockIndex);
-        node.setAttribute('aria-hidden','true');
         node.title='CMD 已标定文本块';
+        const ctrl=document.createElement('label');ctrl.className='ocr-pdf-block-ctrl';
+        const input=document.createElement('input');input.type='checkbox';
+        input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
+        const badge=document.createElement('span');badge.textContent=row.id;
+        ctrl.append(input,badge);node.append(ctrl);
+        for(const type of ['pointerdown','mousedown','touchstart','click','dblclick'])
+          ctrl.addEventListener(type,e=>e.stopPropagation());
+        input.addEventListener('change',async()=>{
+          const previous=!input.checked;
+          input.disabled=true;
+          try{await this.onBlockJoin(row.id,previous);}
+          catch(error){input.checked=!input.checked;this.setStatus('接续操作失败：'+error.message);}
+          finally{input.disabled=false;}
+        });
         this.blockCoverageNodes.set(row.id,node);
       }
+      const input=node.querySelector('input');
+      if(input){input.checked=!row.joinPrev;input.disabled=!row.joinable;
+        input.title=row.joinable?`取消勾选：接续前一个正文 Block；重新勾选：恢复独立。${row.id}`:
+          `文本块 ${row.id} 不具备可安全接续的相邻正文块`;}
+      node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
       node.style.left=rect.left+'%';node.style.top=rect.top+'%';
       node.style.width=rect.width+'%';node.style.height=rect.height+'%';
       if(node.parentElement!==page.div)page.div.append(node);

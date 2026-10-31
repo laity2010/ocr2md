@@ -13,6 +13,7 @@ import {scanAnnotations,formatAnnotation} from './cmd-annotations.js';
 import {scanHtmlElements} from './cmd-html-elements.js';
 import {queryCMDLayout,queryCMDBlockGeometry,inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {scanCMDContinuationCandidates} from './cmd-block-continuations.js';
+import {readCMDBlockJoins,projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -45,7 +46,25 @@ export class CMDocument {
   async queryBlockAnalysis(){
     const source=this.readSource();
     const [inventory,layout]=await Promise.all([inspectCMDTextBlocks(source),queryCMDLayout(source)]);
-    return {inventory,continuations:scanCMDContinuationCandidates(inventory,layout)};
+    const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
+    const ordered=inventory.rows.filter(row=>row.anchorCount===1).sort((a,b)=>a.from-b.from);
+    for(const row of inventory.rows){
+      row.joinPrev=logical.joined.get(row.id)||null;
+      const idx=ordered.findIndex(other=>other.id===row.id);
+      let prev=idx-1;
+      while(prev>=0&&ordered[prev].type==='text'&&
+        !String(ordered[prev].textHead||'').trim()&&!String(ordered[prev].textTail||'').trim())prev--;
+      const previous=ordered[prev];
+      row.joinable=row.anchorCount===1&&row.type==='text'&&
+        Boolean(String(row.textHead||'').trim()||String(row.textTail||'').trim())&&
+        previous?.anchorCount===1&&previous?.type==='text'&&
+        Boolean(String(previous.textHead||'').trim()||String(previous.textTail||'').trim());
+    }
+    inventory.summary.joined=logical.joined.size;
+    inventory.summary.logicalBlocks=logical.blocks.length;
+    inventory.summary.invalidJoinMarks=logical.invalid.length;
+    return {inventory,continuations:scanCMDContinuationCandidates(inventory,layout),
+      logicalBlocks:logical.blocks};
   }
   queryBlockGeometry(pageIndex,blockIndex){
     return queryCMDBlockGeometry(this.readSource(),pageIndex,blockIndex);

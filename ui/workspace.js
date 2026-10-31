@@ -69,6 +69,7 @@ let toggleSplitPreview=()=>{};
 let wcpRuntime=null;
 let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
+let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockCoverageEnabled=false;
 
 class OutlinePanel {
@@ -313,7 +314,8 @@ class PreviewPanel {
       root:this.body,
       onLocate:target=>this.navigateToNote(target),
     });
-    this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady());
+    this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
+      (id,join)=>blockJoinAction(id,join));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -733,6 +735,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       const scope=currentOutline?.spellcheck?.getOperationScope()??{mode:'all'};
       return getCMD().markSpellingCandidates(candidates,{expectedSource,agScope:scope});
     },
+    setBlockJoinAction:action=>{blockJoinAction=action;},
     setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),
     setTextBlockError:message=>currentOutline?.textBlock?.setError(message),
     setTextBlockContinuationCandidates:result=>currentOutline?.textBlock?.setContinuationCandidates(result),

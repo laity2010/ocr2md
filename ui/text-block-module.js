@@ -105,6 +105,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     {field:'type',headerName:'原始类型',width:134,minWidth:100,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'text',headerName:'原始文本摘要',flex:1,minWidth:240,tooltipField:'text'},
     {field:'bboxText',headerName:'bbox',width:180,minWidth:140},
+    {field:'joinLabel',headerName:'逻辑接续',width:125,minWidth:108},
     {field:'anchorStatus',headerName:'源码映射',width:122,minWidth:108,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,
       cellClass:p=>p.value==='已匹配'?'ocr-block-match':'ocr-block-gap'},
     {field:'previewLabel',headerName:'MD 定位',width:106,minWidth:92,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
@@ -178,7 +179,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
         `候选 ${candidateSummary.candidates} 组 · 跨栏 ${candidateSummary.acrossColumn} · 跨页 ${candidateSummary.acrossPage} · 已确认 ${candidates.filter(x=>x.status==='已确认').length} · 已否决 ${candidates.filter(x=>x.status==='已否决').length} · 待审阅 ${candidates.filter(x=>x.status==='待审阅').length} · ${candidateSummary.blockedTransitions} 处结构阻断 · 不合并原文` :
         '跨页跨栏候选扫描中…'):
       `原始 ${report.blocks} 块 / ${report.pages} 页 · 源码已匹配 ${report.matched} · 缺失 ${report.missing} · 重复 ${report.duplicates} · PDF bbox ${report.withGeometry} · 无效 ${report.withoutGeometry}`+
-      ` · 可见正文 ${report.readable} · 空块/仅元数据 ${report.metadataOnly}`+
+      ` · 可见正文 ${report.readable} · 空块/仅元数据 ${report.metadataOnly} · 已接续 ${report.joined??0} · 逻辑块 ${report.logicalBlocks??report.blocks}`+
       (previewMapped?` · 当前 MD 定位 ${list.filter(x=>x.expectsPreview&&previewMapped.has(x.id)).length}/${list.filter(x=>x.expectsPreview).length}`:' · MD 定位检查中')+
       ` · 未知锚点 ${report.unknown}`+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
@@ -192,6 +193,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       if(documentSha!==result.summary.sourceSha){documentSha=result.summary.sourceSha;reviews=restore(documentSha);selectedCandidateId=null;onCompare(null);}
       report=result.summary;previewMapped=null;rows=result.rows.map(row=>({...row,
       geometryLabel:row.geometry?'可定位':'无效',
+      joinLabel:row.joinPrev?'↳ '+row.joinPrev:row.joinable?'独立':'不可接续',
       previewLabel:row.expectsPreview?'待检查':'无需渲染'}));selectedId=null;
       if(mode==='blocks')grid.setGridOption('rowData',rows);error='';refresh();},
     setContinuationCandidates(result){candidateSummary=result.summary;
@@ -201,8 +203,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       if(mode==='candidates')grid.setGridOption('rowData',candidates);
       if(selectedCandidateId&&!selectedCandidate()){selectedCandidateId=null;onCompare(null);}
       refresh();},
-    getBlocks(){return rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount})=>
-      ({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount}));},
+    getBlocks(){return rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable})=>
+      ({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable}));},
     setPreviewCoverage(ids){
       previewMapped=new Set(ids);
       for(const row of rows)row.previewLabel=!row.expectsPreview?'无需渲染':previewMapped.has(row.id)?'可定位':'未映射';

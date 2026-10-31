@@ -1175,3 +1175,21 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- independent of both individual MD/PDF focus and PDF paired comparison.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G28','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit checkbox paints 224 original PDF bbox and only anchored Markdown blocks; subtle layers below individual focus and two-block comparison, survives PDF zoom and removes only coverage on toggle off','integration');
+
+-- CMD reversible logical joins are source annotations, not deletion or
+-- mutation of the original MinerU block anchors, sealed JSON, or PDF bboxes.
+INSERT INTO apis VALUES
+ ('L55','L','planCMDBlockJoin','ui/cmd-block-joins.js','export','current source, verified CMD Block rows, target ID and desired join state','source-guarded reversible single-transaction block-join annotation before target anchor','rejects OCR-empty/non-text/first blocks and stale or conflicting join evidence',1),
+ ('L56','L','projectCMDLogicalTextBlocks','ui/cmd-block-joins.js','export','current CMD source and verified Block inventory','detached ordered logical reading blocks with original Block IDs and assembled text','never deletes original text/anchors and does not own an editor',1),
+ ('C57','C','returned.setBlockJoin','ui/wcp-cmd-element-transactions.js','returned','target original Block ID and true/false join state','one CM6 transaction with undo, preserved original JSON and reloadable CMD mark','PDF sends semantic intent only; CMD validates identity, source and evidence',1),
+ ('G29','G','returned.setBlockCoverage','ui/pdf-preview.js','returned','original CMD block inventory with logical join state','PDF coverage rectangles have Block ID labels and clickable join checkbox','PDF owns overlays; labels do not steal original PDF click-to-focus',1);
+INSERT INTO access_edges VALUES
+ ('X-JOIN-L55','C','L','ui/wcp-cmd-element-transactions.js','planCMDBlockJoin(source,rows,targetId,join)','L55','registered','CMD plans minimal change from current verified source'),
+ ('X-JOIN-L56','C','L','ui/cm-document.js','projectCMDLogicalTextBlocks(source,inventory.rows)','L56','registered','CMD returns joined logical text without deleting OCR markers'),
+ ('X-JOIN-C57','L','C','ui/main.js','cmdPort.setBlockJoin(targetId,join)','C57','registered','Shell forwards PDF semantic action through bounded WCP CMD transaction'),
+ ('X-JOIN-G29','L','G','ui/workspace.js','this.pdf?.setBlockCoverage','G29','registered','PDF-only bbox inputs, no direct AG code or raw-source editing');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-JOIN-L55','L55','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p6b6→p6b7 single reversible CMD marker; quoted anchor supported; disallow empty/non-text/first; exact byte restoration','integration'),
+ ('TC-JOIN-L56','L56','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 original OCR blocks remain, 223 logical blocks with two full source contents concatenated; undo restores 224','integration'),
+ ('TC-JOIN-C57','C57','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit PDF checkbox writes one CMD join then reverses it via single CM6 transaction and global unsaved state','integration'),
+ ('TC-JOIN-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 PDF Block labels and checkboxes, disabled OCR-empty and first blocks, click does not fetch legacy map or modify mother fixture','integration');
