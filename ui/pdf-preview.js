@@ -102,6 +102,7 @@ export class PdfPreview {
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
+    this.blockDragScrollTimer=0;this.blockDragScrollBehavior=null;
     this.onBlockDragMove=e=>{
       if(this.blockDrag?.pointerId===e.pointerId)
         this.updateBlockDrag(this.blockDrag,e.clientX,e.clientY);
@@ -400,7 +401,48 @@ export class PdfPreview {
       document.body.append(svg);item.svg=svg;
       this.setStatus(`拖动 ${id} 箭头到本页另一块标签，松手调整 CMD 顺序`);
       this.updateBlockDrag(item,item.x,item.y);
+      this.autoScrollBlockDrag(item);
     },370);
+  }
+  /** Scroll only within the original PDF page while a long-held pointer
+   * approaches the visible pane edge. This enables a page-top Block to be
+   * dropped after a page-bottom Block without changing any labels or source
+   * ordering until release. Never scroll across the page boundary.
+   */
+  autoScrollBlockDrag(item){
+    // The viewer's usual smooth CSS scrolling must not queue dozens of
+    // competing scroll animations while a finger is held at the pane edge.
+    this.blockDragScrollBehavior=this.scroller.style.scrollBehavior;
+    this.scroller.style.scrollBehavior='auto';
+    const tick=()=>{
+      if(this.blockDrag!==item||!item.active){this.stopBlockDragScroll();return;}
+      const pane=this.scroller.getBoundingClientRect();
+      const page=item.ctrl.closest('.page')?.getBoundingClientRect();
+      if(page&&item.x>=pane.left&&item.x<=pane.right&&
+        item.y>=pane.top&&item.y<=pane.bottom){
+        const edge=48,speed=17;
+        const bottom=Math.max(0,Math.min(1,(item.y-(pane.bottom-edge))/edge));
+        const top=Math.max(0,Math.min(1,((pane.top+edge)-item.y)/edge));
+        // Clamp to the original PDF page, not the neighboring PDF pages.
+        const delta=bottom?Math.min(speed*bottom,Math.max(0,page.bottom-pane.bottom)):
+          top?-Math.min(speed*top,Math.max(0,pane.top-page.top)):0;
+        if(delta){
+          this.scroller.scrollTop+=delta;
+          this.updateBlockDrag(item,item.x,item.y);
+        }
+      }
+    };
+    // WebKit may throttle requestAnimationFrame while PDF.js paints pages;
+    // a bounded interval keeps scroll motion alive during that heavy paint.
+    if(!this.blockDragScrollTimer)this.blockDragScrollTimer=setInterval(tick,32);
+  }
+  stopBlockDragScroll(){
+    if(this.blockDragScrollTimer)clearInterval(this.blockDragScrollTimer);
+    this.blockDragScrollTimer=0;
+    if(this.blockDragScrollBehavior!==null){
+      this.scroller.style.scrollBehavior=this.blockDragScrollBehavior;
+      this.blockDragScrollBehavior=null;
+    }
   }
   blockDropTarget(item,x,y){
     const viewport=this.scroller.getBoundingClientRect();
@@ -440,6 +482,7 @@ export class PdfPreview {
     if(!item.active){
       if(Math.hypot(x-item.startX,y-item.startY)>11){
         clearTimeout(item.timer);this.blockDrag=null;
+        this.stopBlockDragScroll();
         this.clearBlockDragListeners();
         try{if(item.ctrl.hasPointerCapture(item.pointerId))
           item.ctrl.releasePointerCapture(item.pointerId);}catch{}
@@ -484,6 +527,7 @@ export class PdfPreview {
     if(active)this.updateBlockDrag(item,event.clientX,event.clientY);
     const target=active&&!cancel?item.target?.dataset.blockId:null;
     clearTimeout(item.timer);
+    this.stopBlockDragScroll();
     this.clearBlockDragListeners();
     item.ctrl.classList.remove('ocr-pdf-block-drag-source');
     item.target?.classList.remove('ocr-pdf-block-drop-target');
@@ -910,6 +954,7 @@ export class PdfPreview {
   }
   dispose(){
     this.disposed=true;this.finishWarmup?.(false);
+    this.stopBlockDragScroll();
     this.clearBlockDragListeners();
     if(this.blockDrag){
       clearTimeout(this.blockDrag.timer);
