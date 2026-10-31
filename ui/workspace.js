@@ -67,6 +67,7 @@ let currentPdf=null;
 let toggleSplitPreview=()=>{};
 let wcpRuntime=null;
 let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
+let textBlockActionHost=null;
 
 class OutlinePanel {
   constructor(){
@@ -120,7 +121,7 @@ class OutlinePanel {
         if(!currentPreview?.pdfUsable){reportMediaStatus('PDF 预热中，双框暂不可用');return;}
         currentPreview.setMode('pdf');
         void currentPreview.compareOriginalBlocks(selection.from,selection.to,selection.reveal);
-      });
+      },textBlockActionHost);
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -592,7 +593,7 @@ class DetachedPdfPanel {
   }
 }
 
-export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null,documentName=null) {
+export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null,documentName=null,textBlockActionsHost=null) {
   let unlockGeometry;
   const ready=new Promise(resolve=>{unlockGeometry=resolve;});
   geometryReady=()=>ready.then(()=>getCMD().queryLayout());
@@ -602,6 +603,9 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   getEditor=getCurrentEditor;
   getCMD=getCommandDocument;
   reportMediaStatus=mediaStatus;
+  if(!(textBlockActionsHost instanceof HTMLElement)||textBlockActionsHost.dataset.module!=='text-block')
+    throw Error('文本块模块需要 Shell 提供功能菜单容器');
+  textBlockActionHost=textBlockActionsHost;
   const dockview=createDockview(container, {
     theme:themeAbyss,
     createComponent: ({name}) => {

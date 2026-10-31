@@ -10,6 +10,10 @@ const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','1
  cwd:process.cwd(),stdio:'ignore',env:{...process.env,V6_DOCUMENT_PATH:file}});
 mkdirSync('.v6/evidence/wp4',{recursive:true});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const action=async(page,label)=>{
+  await page.locator('#ag-functions-toggle').click();
+  await page.locator('#ag-functions-menu').getByRole('button',{name:label,exact:true}).click();
+};
 try{
  let ready=false;for(let i=0;i<300;i++){
   try{if((await fetch(url)).ok){ready=true;break;}}catch{}await sleep(100);
@@ -24,11 +28,24 @@ try{
      forbidden.push(route.request().url());return route.fulfill({status:503,body:'legacy disabled'});
    });
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+   assert.equal(await page.locator('.ocr-text-block-control, .ocr-block-review-bar, .ocr-text-block-state').count(),0,'no local toolbar or status in AG');
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
-   await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:25000});
-   await page.locator('.ocr-text-block-control [aria-label="查看跨页跨栏接续候选"]').click();
-   await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:20000});
+   await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   // Text-block's two mode buttons belong in the existing Shell dropdown.
+   const functionMenu=page.locator('#ag-functions-menu .module-actions[data-module="text-block"]');
+   await page.locator('#ag-functions-toggle').click();
+   assert.equal(await functionMenu.getByRole('button').count(),2,'raw block mode only exposes two choices');
+   await page.keyboard.press('Escape');
+   await action(page,'查看跨页跨栏接续候选');
+   await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('#status')?.textContent||''),null,{timeout:20000});
+   await page.locator('#ag-functions-toggle').click();
+   assert.equal(await functionMenu.getByRole('button').count(),7,'all seven text block operations belong in Function menu');
+   assert.equal(await functionMenu.getByRole('button',{name:'确认所选文本块续接'}).isDisabled(),true);
+   assert.equal(await page.locator('.ocr-text-block-control,.ocr-block-review-bar,.ocr-text-block-state').count(),0);
+   assert.equal(await page.locator('.toolbar #status').count(),1);
+   await page.screenshot({path:`.v6/evidence/wp4/${name}-unified-function-menu.png`,animations:'disabled'});
+   await page.keyboard.press('Escape');
    await page.locator('.ocr-text-block-grid .ag-cell[col-id="toId"]').first().waitFor({timeout:16000});
    await page.waitForFunction(()=>{const nodes=[...document.querySelectorAll('.ocr-text-block-grid .ag-row[row-id]')];
      return nodes.length===5&&nodes.every(node=>node.getAttribute('row-id')?.includes('--'));},null,{timeout:18000});
@@ -36,7 +53,7 @@ try{
      elements.map(el=>({idx:el.getAttribute('row-index'),id:el.getAttribute('row-id'),col:el.querySelector('[col-id="toId"]')?.textContent})).slice(0,40));
    const rows=new Set(rowIds.map(x=>x.id).filter(Boolean)).size;
    assert.equal(rows,5);
-   const state=await page.locator('.ocr-text-block-state').textContent();
+   const state=await page.locator('#status').textContent();
    const first=page.locator('.ocr-text-block-grid .ag-row').filter({hasText:'p6b6'}).first();
    assert.equal(await first.locator('.ag-cell[col-id="toId"]').innerText(),'p6b7');
    await page.screenshot({path:`.v6/evidence/wp4/${name}-candidate-inventory.png`,animations:'disabled'});
@@ -51,7 +68,7 @@ try{
    assert(boxA.width>4&&boxA.height>4&&boxB.width>4&&boxB.height>4);
    assert(boxA.x!==boxB.x,'cross-column frames must be spatially separated');
    await page.screenshot({path:`.v6/evidence/wp4/${name}-dual-orange.png`,animations:'disabled'});
-   await page.locator('[aria-label="同页 PDF 双框概览"]').click();
+   await action(page,'同页 PDF 双框概览');
    await page.waitForFunction(()=>{
      const boxes=[...document.querySelectorAll('.ocr-pdf-pair-overlay')].map(x=>x.getBoundingClientRect());
      const clip=document.querySelector('.ocr-pdf-scroller')?.getBoundingClientRect();
@@ -61,15 +78,15 @@ try{
    // Each end's source navigation preserves the other orange rectangle.
    await first.locator('.ag-cell[col-id="toId"] button').click();
    assert.equal(await page.locator('.ocr-pdf-pair-overlay').count(),2);
-   await page.locator('[aria-label="确认所选文本块续接"]').click();
+   await action(page,'确认所选文本块续接');
    await page.waitForFunction(()=>/已确认 1 · 已否决 0 · 待审阅 4/.test(
-     document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:9000});
-   await page.locator('[aria-label="否决所选文本块续接"]').click();
-   assert.match(await page.locator('.ocr-text-block-state').textContent(),/已确认 0 · 已否决 1/);
-   await page.locator('[aria-label="将所选文本块恢复待审阅"]').click();
-   assert.match(await page.locator('.ocr-text-block-state').textContent(),/已确认 0 · 已否决 0 · 待审阅 5/);
-   await page.locator('[aria-label="确认所选文本块续接"]').click();
-   assert.match(await page.locator('.ocr-text-block-state').textContent(),/已确认 1/);
+     document.querySelector('#status')?.textContent||''),null,{timeout:9000});
+   await action(page,'否决所选文本块续接');
+   assert.match(await page.locator('#status').textContent(),/已确认 0 · 已否决 1/);
+   await action(page,'将所选文本块恢复待审阅');
+   assert.match(await page.locator('#status').textContent(),/已确认 0 · 已否决 0 · 待审阅 5/);
+   await action(page,'确认所选文本块续接');
+   assert.match(await page.locator('#status').textContent(),/已确认 1/);
    // Cross-page pair: both independent DOM boxes exist although on separate
    // pages. PDF scroller may show only one page in the physical viewport.
    const cross=page.locator('.ocr-text-block-grid .ag-row[row-id="p15b11--p16b0"]');
@@ -82,12 +99,12 @@ try{
    await page.reload({waitUntil:'domcontentloaded'});
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
-   await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:25000});
-   await page.locator('.ocr-text-block-control [aria-label="查看跨页跨栏接续候选"]').click();
+   await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   await action(page,'查看跨页跨栏接续候选');
    await page.waitForFunction(()=>/已确认 1 · 已否决 0 · 待审阅 4/.test(
-     document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:20000});
+     document.querySelector('#status')?.textContent||''),null,{timeout:20000});
    const downloadPromise=page.waitForEvent('download');
-   await page.locator('[aria-label="导出文本块续接审阅 JSON"]').click();
+   await action(page,'导出文本块续接审阅 JSON');
    const download=await downloadPromise;
    assert.match(download.suggestedFilename(),/^ocr2md-continuation-review-[a-f0-9]{12}\.json$/);
    const destination=`.v6/evidence/wp4/${name}-review.json`;
@@ -98,10 +115,10 @@ try{
    assert.equal(exported.records.filter(x=>x.status==='待审阅').length,4);
    assert.equal(exported.summary.confirmed,1);
    assert.equal(exported.summary.rejected,0);
-   await page.locator('.ocr-text-block-control [aria-label="查看原始文本块清单"]').click();
+   await action(page,'查看原始文本块清单');
    assert.equal(await page.locator('.ocr-pdf-pair-overlay').count(),0);
 
-   assert.match(await page.locator('.ocr-text-block-state').innerText(),/原始 224 块/);
+   assert.match(await page.locator('#status').innerText(),/原始 224 块/);
    await page.waitForFunction(()=>document.querySelector('.ocr-text-block-grid .ag-row[row-id="p0b0"]')!==null, null,{timeout:16000});
    assert.equal(await page.locator('.ocr-text-block-grid .ag-row[row-id="p0b0"] .ag-cell[col-id="id"]').innerText(),'p0b0');
    assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[]);

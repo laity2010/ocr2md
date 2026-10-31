@@ -1165,3 +1165,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L53','L53','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit show simultaneous labelled A/B original PDF boxes for same page and different pages, without OCR fetch','integration'),
  ('TC-WP4-L54','L54','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit overview renders both p6b6 and p6b7 boxes inside physical PDF viewport','integration'),
  ('TC-WP4-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Confirm, reject, reset, reload restore and downloadable JSON; five candidate IDs and source unchanged','integration');
+
+-- Text-block menu/status consolidation: keep the module's existing handlers,
+-- but mount all seven controls in the shared Shell AG function dropdown.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit text-block Function menu owns 2 mode options and 5 review actions; global status owns inventory/review summary; no local toolbar/status row','integration');

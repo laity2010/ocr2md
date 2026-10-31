@@ -9,19 +9,16 @@ const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f38
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',rowHoverColor:'#37464b',fontSize:13,
   selectedRowBackgroundColor:'rgba(225,161,66,.15)',fontFamily:'"OCR2MD Sarasa",monospace',spacing:3});
-export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{},onCompare=()=>{}){
+export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{},onCompare=()=>{},actionsHost){
   host.classList.add('ocr-text-block-pane');
-  const guide=document.createElement('div');guide.className='ocr-text-block-guide';
-  guide.textContent='原始 Block 不变 · 选候选双框对照 · 审阅草稿仅存当前浏览器，可导出 JSON（跨设备不自动同步），不合并源码';
-  const control=document.createElement('div');control.className='ocr-text-block-control';
+  if(!(actionsHost instanceof HTMLElement)||actionsHost.dataset.module!=='text-block')
+    throw Error('文本块模块功能需挂载至现有 AG 功能菜单');
+  // Reparent the ORIGINAL controls into the Shell-owned module action group.
+  // No second toolbar or status row is created inside the AG pane.
   const blocksButton=document.createElement('button');blocksButton.type='button';blocksButton.textContent='原始文本块';
   blocksButton.setAttribute('aria-label','查看原始文本块清单');
   const candidatesButton=document.createElement('button');candidatesButton.type='button';candidatesButton.textContent='接续候选';
   candidatesButton.setAttribute('aria-label','查看跨页跨栏接续候选');
-  control.append(blocksButton,candidatesButton);
-  const reviewBar=document.createElement('div');reviewBar.className='ocr-block-review-bar';reviewBar.hidden=true;
-  const selectionLabel=document.createElement('span');selectionLabel.className='ocr-block-review-selection';
-  selectionLabel.textContent='点击候选行，PDF 将显示 A/B 两个框';
   const confirmButton=document.createElement('button');confirmButton.type='button';confirmButton.textContent='确认续接';
   confirmButton.setAttribute('aria-label','确认所选文本块续接');
   const rejectButton=document.createElement('button');rejectButton.type='button';rejectButton.textContent='否决续接';
@@ -33,10 +30,9 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   overviewButton.title='缩小同页 PDF，尽量同时看到 A、B；跨页可点击 A/B 分别定位';
   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='导出审阅记录';
   exportButton.setAttribute('aria-label','导出文本块续接审阅 JSON');
-  reviewBar.append(selectionLabel,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
+  actionsHost.append(blocksButton,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
   overviewButton.addEventListener('click',()=>onCompare({overview:true}));
-  const state=document.createElement('div');state.className='ocr-text-block-state';state.setAttribute('role','status');
-  const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(guide,control,reviewBar,state,gridHost);
+  const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(gridHost);
   let rows=[],candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
   let selectedCandidateId=null,documentSha=null,reviews=new Map();
   const storageKey=sha=>`ocr2md:continuation-review:v1:${sha}`;
@@ -58,7 +54,6 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   const chooseCandidate=(row,reveal='from')=>{
     if(!row)return;
     selectedCandidateId=row.id;
-    selectionLabel.textContent=`A ${row.fromId}（第 ${row.fromPage} 页） ↔ B ${row.toId}（第 ${row.toPage} 页）`;
     grid.getRowNode(row.id)?.setSelected(true,true,'api');
     refresh();
     onCompare({from:{pageIndex:row.fromPage-1,blockIndex:row.fromBlockIndex},
@@ -159,8 +154,9 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     // The virtual-chapter adapter caches its projected columnDefs. Reset
     // before switching AG schemas, or it restores the old block columns.
     virtual.setVirtualQuery({enabled:false});
-    reviewBar.hidden=mode!=='candidates';
-    if(mode==='blocks'){onCompare(null);selectedCandidateId=null;selectionLabel.textContent='点击候选行，PDF 将显示 A/B 两个框';}
+    for(const button of [overviewButton,confirmButton,rejectButton,resetButton,exportButton])
+      button.hidden=mode!=='candidates';
+    if(mode==='blocks'){onCompare(null);selectedCandidateId=null;}
     blocksButton.setAttribute('aria-pressed',String(mode==='blocks'));
     candidatesButton.setAttribute('aria-pressed',String(mode==='candidates'));
     grid.setGridOption('columnDefs',mode==='candidates'?candidateColumns:columns);
@@ -177,7 +173,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     overviewButton.disabled=!selected||selectedCandidate().fromPage!==selectedCandidate().toPage;
     const list=scoped();
     if(scope)virtual.setVirtualQuery({...scope,keys:scope.operationScope?.mode==='chapter'?new Set(list.map(r=>r.from)):null});
-    state.textContent=error?'文本块检查失败：'+error:!report?'正在读取 CMD 内嵌的原始 JSON…':
+    const summary=error?'文本块检查失败：'+error:!report?'正在读取 CMD 内嵌的原始 JSON…':
       mode==='candidates'?(candidateSummary?
         `候选 ${candidateSummary.candidates} 组 · 跨栏 ${candidateSummary.acrossColumn} · 跨页 ${candidateSummary.acrossPage} · 已确认 ${candidates.filter(x=>x.status==='已确认').length} · 已否决 ${candidates.filter(x=>x.status==='已否决').length} · 待审阅 ${candidates.filter(x=>x.status==='待审阅').length} · ${candidateSummary.blockedTransitions} 处结构阻断 · 不合并原文` :
         '跨页跨栏候选扫描中…'):
@@ -186,11 +182,11 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       (previewMapped?` · 当前 MD 定位 ${list.filter(x=>x.expectsPreview&&previewMapped.has(x.id)).length}/${list.filter(x=>x.expectsPreview).length}`:' · MD 定位检查中')+
       ` · 未知锚点 ${report.unknown}`+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
-    if(active&&report)onStatus(mode==='candidates'?`接续人工审阅 ${candidates.filter(x=>x.status!=='待审阅').length}/${candidateSummary?.candidates??0}`:`CMD 文本块 ${report.matched}/${report.blocks} · 缺失 ${report.missing}`);
+    if(active)onStatus((mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error?'error':'ok');
   };
   updateGrid();
   return Object.freeze({
-    setLoading(){error='';report=null;candidateSummary=null;state.textContent='读取 CMD 无损封存数据中…';},
+    setLoading(){error='';report=null;candidateSummary=null;refresh();},
     setError(e){error=String(e);refresh();},
     setInventory(result){
       if(documentSha!==result.summary.sourceSha){documentSha=result.summary.sourceSha;reviews=restore(documentSha);selectedCandidateId=null;onCompare(null);}
@@ -215,6 +211,6 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     count(chapter){if(chapter==='all')return rows.length;const c=getChapter(chapter);
       return c?rows.filter(r=>r.from!==null&&r.from>=c.from&&r.from<c.to).length:0;},
     setActive(value){active=Boolean(value);host.hidden=!active;if(!active)onCompare(null);if(active)refresh();},
-    dispose(){disposed=true;onCompare(null);unsubscribe();grid.destroy();},
+    dispose(){disposed=true;onCompare(null);unsubscribe();grid.destroy();actionsHost.replaceChildren();},
   });
 }

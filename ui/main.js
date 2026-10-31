@@ -409,7 +409,7 @@ async function main() {
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
-  },wcpRuntime,documentLabel);
+  },wcpRuntime,documentLabel,$('text-block-actions'));
   registerOutlineTitleScaleSetting(settings,value=>workspace.setOutlineTitleFontScale(value));
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);

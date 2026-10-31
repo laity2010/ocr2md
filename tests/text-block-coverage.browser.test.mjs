@@ -35,13 +35,14 @@ try{
      return route.fulfill({status:503,body:'legacy bbox endpoint deliberately unavailable'});
    });
    await page.goto(base,{waitUntil:'domcontentloaded',timeout:50000});
+   assert.equal(await page.locator('.ocr-text-block-control, .ocr-block-review-bar, .ocr-text-block-state').count(),0);
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    const options=await page.locator('.ocr-navigation-popup-elements:visible [data-value]').evaluateAll(els=>els.map(el=>el.getAttribute('data-value')));
    assert.equal(options[0],'text-block','text block option must be first');
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    await page.waitForFunction(()=>/原始 224 块 \/ 22 页 · 源码已匹配 224 · 缺失 0/.test(
-     document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:25000});
-   const currentState=await page.locator('.ocr-text-block-state').innerText();
+     document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   const currentState=await page.locator('#status').innerText();
    await page.screenshot({path:`${dir}/${name}-inventory.png`,fullPage:false,animations:'disabled'});
    const mapped=await page.evaluate(rows=>{
      const elements=[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
