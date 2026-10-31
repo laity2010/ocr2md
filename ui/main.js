@@ -15,6 +15,7 @@ import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {outlineLineHighlight,markOutlineLine} from './outline-focus.js';
 import {createWorkspace} from './workspace.js';
+import {inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {CMDocument} from './wcp-cm-document.js';
 import {createSettingsModule} from './wcp-settings-module.js';
 import {workspaceDirectoryPort} from './wcp-workspace-directory-port.js';
@@ -52,6 +53,7 @@ let enterSentence=()=>{};
 let stopSentence=()=>{};
 let scanSentence=()=>{};
 let sentenceDocChanged=()=>{};
+let textBlockDocChanged=()=>{};
 let workspace;
 let settings;
 // CM6 immutable document handle, not a shadow Markdown string.
@@ -469,6 +471,7 @@ async function main() {
           if(spellcheckEnabled)spellcheckDocChanged();
           if(illegalBreakEnabled)illegalBreakDocChanged();
           if(sentenceEnabled)sentenceDocChanged();
+          textBlockDocChanged();
         }
         if (update.selectionSet) {
           const offset=update.state.selection.main.head;
@@ -683,6 +686,24 @@ async function main() {
     queueMicrotask(()=>{if(sentenceEnabled)readSentenceRows();});
   };
   stopSentence=()=>{++sentenceRequest;clearTimeout(sentenceScanTimer);};
+  // On-demand, read-only inventory derived only from THIS CMD's sealed JSON.
+  // Coalescing edits avoids inflating megabytes on every CM6 keystroke.
+  let blockRequest=0,blockTimer=null;
+  const scanTextBlocks=()=>{
+    const id=++blockRequest,source=cm.getMarkdown();
+    workspace.setTextBlockLoading();
+    void inspectCMDTextBlocks(source).then(result=>{
+      if(id!==blockRequest||source!==cm.getMarkdown())return;
+      workspace.setTextBlockInventory(result);
+    }).catch(error=>{
+      if(id===blockRequest)workspace.setTextBlockError(error.message);
+    });
+  };
+  textBlockDocChanged=()=>{
+    if($('module-select').value!=='text-block')return;
+    clearTimeout(blockTimer);++blockRequest;
+    blockTimer=setTimeout(scanTextBlocks,650);
+  };
   cmdPort=wcpRuntime.wrapCMD(cm);
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{
@@ -785,6 +806,7 @@ async function main() {
     const enableSpellcheck=selected==='spellcheck';
     const enableIllegalBreak=selected==='illegal-break';
     const enableSentence=selected==='sentence';
+    if(view&&selected==='text-block'&&lastVisibleModule!=='text-block')scanTextBlocks();
     if(view&&enableSpellcheck!==spellcheckEnabled){
       spellcheckEnabled=enableSpellcheck;
       // Native WebKit spellcheck has no reliable visible diagnostics.

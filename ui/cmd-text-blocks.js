@@ -1,0 +1,83 @@
+/** CMD read-only MinerU block inventory. The sealed JSON inside THIS CMD
+ * document is authoritative; never fetch a second, drifting original JSON.
+ * This owner returns detached values and never mutates CM6 source. */
+import {blockAnchor} from './mineru-anchors.js';
+const sealed=/<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\n]+)\n-->\s*$/;
+const decode=encoded=>{
+  const base64=encoded.replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/');
+  const binary=atob(base64);const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  return bytes;
+};
+const hex=bytes=>Array.from(bytes,x=>x.toString(16).padStart(2,'0')).join('');
+async function inflate(bytes){
+  if(typeof DecompressionStream!=='function')throw Error('浏览器不支持解压 CMD 内嵌 JSON');
+  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+function anchorLines(source){
+  const result=new Map();let from=0;
+  for(const [index,line] of source.split('\n').entries()){
+    const key=blockAnchor(line);
+    if(key){const id=`p${key.pageIndex}b${key.blockIndex}`;
+      const existing=result.get(id)||[];existing.push({line:index+1,from});result.set(id,existing);
+    }
+    from+=line.length+1;
+  }
+  return result;
+}
+const summary=block=>{
+  const lines=(block.lines||[]).map(line=>(line.spans||[]).map(s=>s.content||'').join('')).filter(Boolean);
+  if(lines.length)return lines.join(' ').replace(/\s+/g,' ').trim().slice(0,240);
+  for(const child of block.blocks||[]){const value=summary(child);if(value)return value;}
+  return block.type==='image'?'[图片]':block.type==='table'?'[表格]':block.type==='chart'?'[图表]':'';
+};
+export async function inspectCMDTextBlocks(source){
+  if(typeof source!=='string')throw Error('CMD 源码无效');
+  const match=sealed.exec(source);
+  if(!match)throw Error('CMD 缺少无损 MinerU JSON 封存区');
+  const bytes=await inflate(decode(match[2]));
+  const sha=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
+  if(sha!==match[1])throw Error('CMD 封存 JSON SHA-256 校验失败');
+  const data=JSON.parse(new TextDecoder().decode(bytes));
+  if(!Array.isArray(data.pdf_info))throw Error('CMD 封存 JSON 无 PDF 页面');
+  const anchors=anchorLines(source),expected=new Set(),rows=[];
+  for(const [pageIndex,page] of data.pdf_info.entries()){
+    if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
+    for(const [blockIndex,block] of page.para_blocks.entries()){
+      const id=`p${pageIndex}b${blockIndex}`;expected.add(id);
+      const positions=anchors.get(id)||[];
+      const bbox=block.bbox;
+      const hasBbox=Array.isArray(bbox)&&bbox.length===4&&bbox.every(Number.isFinite)&&
+        bbox[2]>bbox[0]&&bbox[3]>bbox[1];
+      const pageSize=page.page_size;
+      const validPage=Array.isArray(pageSize)&&pageSize.length===2&&pageSize.every(n=>Number.isFinite(n)&&n>0);
+      const geometry=Boolean(hasBbox&&validPage&&bbox[0]>=0&&bbox[1]>=0&&bbox[2]<=pageSize[0]&&bbox[3]<=pageSize[1]);
+      rows.push({id,pageIndex,blockIndex,pdfPage:pageIndex+1,type:block.type||'unknown',
+        text:summary(block),bbox:hasBbox?[...bbox]:null,pageSize:validPage?[...pageSize]:null,
+        geometry,sourceLine:positions[0]?.line??null,from:positions[0]?.from??null,
+        anchorCount:positions.length,anchorStatus:positions.length===1?'已匹配':positions.length===0?'缺少锚点':'重复锚点',
+        bboxText:hasBbox?bbox.join(', '):'无坐标'});
+    }
+  }
+  // Visible Markdown body may intentionally be empty: OCR contained a
+  // blank text block or a metadata-only item. These must NOT be counted as
+  // reader coverage failures while still remaining inventory rows.
+  const ordered=rows.filter(row=>row.from!==null).sort((a,b)=>a.from-b.from);
+  for(const [i,row] of ordered.entries()){
+    const next=ordered[i+1]?.from??match.index;
+    const firstEnd=source.indexOf('\n',row.from);
+    const prose=source.slice(firstEnd+1,next).replace(/<!--[\s\S]*?-->/g,'').trim();
+    row.expectsPreview=Boolean(prose);
+  }
+  for(const row of rows)if(row.from===null)row.expectsPreview=false;
+  const unknown=[...anchors].filter(([id])=>!expected.has(id)).map(([id,positions])=>({id,positions}));
+  const duplicate=rows.filter(row=>row.anchorCount>1);
+  return {rows,summary:{pages:data.pdf_info.length,blocks:rows.length,
+    matched:rows.filter(row=>row.anchorCount===1).length,
+    missing:rows.filter(row=>row.anchorCount===0).length,duplicates:duplicate.length,
+    withGeometry:rows.filter(row=>row.geometry).length,
+    withoutGeometry:rows.filter(row=>!row.geometry).length,
+    readable:rows.filter(row=>row.expectsPreview).length,metadataOnly:rows.filter(row=>!row.expectsPreview).length,
+    unknown:unknown.length},unknown};
+}

@@ -18,6 +18,7 @@ import {createHtmlElementsModule} from './html-elements-module.js';
 import {createSpellcheckModule} from './spellcheck-module.js';
 import {createIllegalBreakModule} from './illegal-break-module.js';
 import {createSentenceModule} from './sentence-module.js';
+import {createTextBlockModule} from './text-block-module.js';
 import {paintSentencePreviewHighlight,clearSentencePreviewHighlight,
   paintSentenceCoverageHighlight,clearSentenceCoverageHighlight,hitSentencePreview} from './sentence-preview-highlight.js';
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
@@ -78,6 +79,7 @@ class OutlinePanel {
     this.spellcheck=null;
     this.illegalBreak=null;
     this.sentence=null;
+    this.textBlock=null;
     this.mediaHost=document.createElement('div');
     this.mediaHost.hidden=true;
     this.latexHost=document.createElement('div');
@@ -92,12 +94,14 @@ class OutlinePanel {
     this.illegalBreakHost.hidden=true;
     this.sentenceHost=document.createElement('div');
     this.sentenceHost.hidden=true;
+    this.textBlockHost=document.createElement('div');
+    this.textBlockHost.hidden=true;
     currentOutline=this;
   }
   init(){
     this.grid=createOutlineGrid(this.element,readElementSource,()=>getCMD()?chapterCMD:null);
     this.grid.setTitleFontScale(outlineTitleFontScale);
-    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost,this.illegalBreakHost,this.sentenceHost);
+    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost,this.illegalBreakHost,this.sentenceHost,this.textBlockHost);
     this.media=createMediaModule(this.mediaHost,readElementSource,()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,readElementSource,()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,readElementSource,()=>getCMD(),reportMediaStatus);
@@ -106,6 +110,10 @@ class OutlinePanel {
     this.illegalBreak=createIllegalBreakModule(this.illegalBreakHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
     this.sentence=createSentenceModule(this.sentenceHost,id=>getCMD()?.getChapter(id),
       reportMediaStatus,()=>currentPreview?.redrawSentenceCoverage());
+    this.textBlock=createTextBlockModule(this.textBlockHost,id=>getCMD()?.getChapter(id),
+      reportMediaStatus,point=>{if(currentPreview?.pdfUsable){
+        currentPreview.setMode('pdf');currentPreview.pdf?.focusBlock(point.pageIndex,point.blockIndex);
+      }});
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -113,7 +121,7 @@ class OutlinePanel {
       getStartNumber:()=>this.grid?.startText||'000',
       // Only semantic query intents enter business-owned AGs.
       applyChapterQuery:(module,intent)=>{
-        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html,spellcheck:this.spellcheck,'illegal-break':this.illegalBreak,sentence:this.sentence}[module];
+        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html,spellcheck:this.spellcheck,'illegal-break':this.illegalBreak,sentence:this.sentence,'text-block':this.textBlock}[module];
         if(!owner?.setVirtualQuery)throw Error('Unknown AG chapter query owner');
         owner.setVirtualQuery(intent);
       },
@@ -122,6 +130,7 @@ class OutlinePanel {
       countSpellcheck:chapter=>this.spellcheck?.count(chapter)??0,
       countIllegalBreak:chapter=>this.illegalBreak?.count(chapter)??0,
       countSentences:chapter=>this.sentence?.count(chapter)??0,
+      countTextBlocks:chapter=>this.textBlock?.count(chapter)??0,
     });
     queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
   }
@@ -133,7 +142,7 @@ class OutlinePanel {
       module==='html'?'AG Grid HTML 元素':
       module==='spellcheck'?'AG Grid 英文拼写审阅':
       module==='illegal-break'?'AG Grid 非法断行审阅':
-      module==='sentence'?'AG Grid 分句审阅':'AG Grid 章节大纲');
+      module==='sentence'?'AG Grid 分句审阅':module==='text-block'?'AG Grid 文本块覆盖审阅':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
     this.latex?.setActive(module==='latex');
@@ -142,6 +151,7 @@ class OutlinePanel {
     this.spellcheck?.setActive(module==='spellcheck');
     this.illegalBreak?.setActive(module==='illegal-break');
     this.sentence?.setActive(module==='sentence');
+    this.textBlock?.setActive(module==='text-block');
   }
   layout() {}
   dispose(){
@@ -152,6 +162,7 @@ class OutlinePanel {
     this.spellcheck?.dispose();
     this.illegalBreak?.dispose();
     this.sentence?.dispose();
+    this.textBlock?.dispose();
     this.grid?.dispose();
     if(currentOutline===this)currentOutline=null;
   }
@@ -458,8 +469,18 @@ class PreviewPanel {
     this.lastFocusElement=null;
     this.redrawSentenceCoverage();
     this.highlight(viewStore.getState().focusTarget);
+    if(currentOutline?.workModule==='text-block')this.refreshTextBlockCoverage();
     if(scrollSync)scrollSync.afterRender(preserved);
     else pane.scrollTop=ratio*Math.max(0,pane.scrollHeight-pane.clientHeight);
+  }
+  refreshTextBlockCoverage(){
+    const owner=currentOutline?.textBlock,rows=owner?.getBlocks();
+    if(!rows?.length)return;
+    const mapped=[...this.body.querySelectorAll('[data-source-start][data-source-end]')]
+      .map(el=>({from:Number(el.dataset.sourceStart),to:Number(el.dataset.sourceEnd)}));
+    owner.setPreviewCoverage(rows.filter(row=>row.expectsPreview&&row.sourceLine!==null&&
+      mapped.some(region=>region.from<=row.sourceLine+2&&row.sourceLine+2<region.to))
+      .map(row=>row.id));
   }
   clearSentenceSelection(){clearSentencePreviewHighlight();clearSentenceCoverageHighlight();}
   redrawSentenceCoverage(){
@@ -669,6 +690,10 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       const scope=currentOutline?.spellcheck?.getOperationScope()??{mode:'all'};
       return getCMD().markSpellingCandidates(candidates,{expectedSource,agScope:scope});
     },
+    setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),
+    setTextBlockError:message=>currentOutline?.textBlock?.setError(message),
+    setTextBlockInventory:result=>{currentOutline?.textBlock?.setInventory(result);
+      currentPreview?.refreshTextBlockCoverage();},
     setSentenceCoverage:enabled=>currentOutline?.sentence?.setCoverage(enabled),
     setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),
     setSentenceError:message=>currentOutline?.sentence?.setError(message),

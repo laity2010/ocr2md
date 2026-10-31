@@ -1098,3 +1098,21 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-FOOTNOTE-REAL-L45','L45','tests/sentence-footnote-coverage.browser.test.mjs','tests/sentence-footnote-coverage.browser.test.mjs','Chrome/WebKit source-preserving CMD segmentation, idempotent marks, 7/7 including leading CMD LaTeX and trailing prose, screenshot and no source write','integration');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-COVER-CONVERTED-NOTE-L45','L45','tests/sentence-footnote-coverage.browser.test.mjs','tests/sentence-footnote-coverage.browser.test.mjs','Chrome/WebKit all marked text highlighted incl. This finding and Open Access; no extra CMD marks or saves','integration');
+
+-- Text-block inventory: CMD sealed original JSON is the only evidence source;
+-- AG owns a read-only grid, layout returns semantic DOM coverage, PDF paints bbox.
+INSERT INTO apis VALUES
+ ('L48','L','inspectCMDTextBlocks','ui/cmd-text-blocks.js','export','current CM6 CMD source string','detached block IDs, exact original bbox, SHA-validated geometry, source anchor completeness','does not fetch /api/pdf-map, decompresses only CMD sealed original JSON',1),
+ ('G25','G','createTextBlockModule','ui/text-block-module.js','export','AG host, CMD chapter lookup, bounded status and PDF location callbacks','readonly AG of all original blocks including missing anchors','module owns AG grid, never edits/merges CMD nor reads preview DOM',1),
+ ('G26','G','returned.setPreviewCoverage','ui/text-block-module.js','returned','detached reader-mapped block ID array','AG displays real MD coverage vs metadata-only blocks','reader owns DOM; AG receives IDs only',1),
+ ('L49','L','returned.focusBlock','ui/pdf-preview.js','returned','page index and para block index','show original PDF bbox even if CMD source anchor is missing','PDF viewer alone owns overlay geometry and scroll',1);
+INSERT INTO access_edges VALUES
+ ('X-TEXTBLOCK-L48',NULL,'L','ui/main.js','inspectCMDTextBlocks(source)','L48','registered','Shell asks CMD to inventory the active source without parallel JSON fetch'),
+ ('X-TEXTBLOCK-G25','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G25','registered','Layout mounts AG business owner using bounded ports'),
+ ('X-TEXTBLOCK-G26','L','G','ui/workspace.js','owner.setPreviewCoverage(rows.filter','G26','registered','Renderer supplies mapped IDs only, no direct Grid mutation'),
+ ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','currentPreview.pdf?.focusBlock(point.pageIndex','L49','registered','Missing anchor can locate original PDF without fabricated source line');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-TEXTBLOCK-CMD-L48','L48','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Reinitialized 224 anchors and bbox values; SHA corruption rejected; missing/duplicate source marker visible; no writes','integration'),
+ ('TC-TEXTBLOCK-G25','G25','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit text block first dropdown choice, all 224 CMD original blocks visible in AG, orange PDF box follows click','integration'),
+ ('TC-TEXTBLOCK-G26','G26','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit 215 real MD source mappings; eight empty text + one metadata-only table excluded; no source writes','integration'),
+ ('TC-TEXTBLOCK-L49','L49','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Read-only PDF.js orange geometry matches CMD sealed JSON for 224 of 224 blocks','integration');

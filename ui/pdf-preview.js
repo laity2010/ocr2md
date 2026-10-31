@@ -268,6 +268,21 @@ export class PdfPreview {
     if(this.active&&this.revealPending&&performance.now()>this.explicitUserUntil)
       this.scheduleOverlay();
   }
+  /** Read-only PDF location for orphaned CMD block anchors. AG only sends
+   * semantic page/block IDs; bbox remains PDF-owned and never gets edited. */
+  async focusBlock(pageIndex,blockIndex){
+    if(!Number.isInteger(pageIndex)||!Number.isInteger(blockIndex))return false;
+    if(!this.ready)return false;
+    const block=this.map[pageIndex]?.regions?.find(r=>r.blockIndex===blockIndex);
+    if(!block)return false;
+    this.selected={pageIndex,blockIndex};
+    this.revealPending=true;this.revealUntil=performance.now()+1800;
+    const page=this.viewer.getPageView(pageIndex);
+    const rect=page?.div?.getBoundingClientRect();const clip=this.visibleClip();
+    if(!rect||!clip||rect.bottom<=clip.top||rect.top>=clip.bottom)
+      this.viewer.scrollPageIntoView({pageNumber:pageIndex+1});
+    await this.drawOverlay();return true;
+  }
   async focusLine(line,explicit){
     if(!Number.isInteger(line)||line<1)return;
     if(explicit){
