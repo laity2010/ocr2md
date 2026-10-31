@@ -33,9 +33,38 @@ try{
    assert(await first.isDisabled());assert(await empty.isDisabled());
    assert(await target.isChecked());assert(await target.isEnabled());
    assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
+   // The right/left gutter chips MUST NOT overlap their own OCR text.
+   // Measure the rendered DOM, not just declared CSS or coordinates.
+   const placements=await page.locator('.ocr-pdf-block-cover').evaluateAll(nodes=>nodes.map(node=>{
+     const label=node.querySelector('.ocr-pdf-block-ctrl');
+     const region=node.getBoundingClientRect(),chip=label.getBoundingClientRect();
+     const side=node.dataset.gutter;
+     const page=node.closest('.page')?.getBoundingClientRect();
+     return {id:node.dataset.blockId,side,region:{left:region.left,right:region.right},
+       chip:{left:chip.left,right:chip.right},page:{left:page?.left,right:page?.right},
+       gap:side==='left'?region.left-chip.right:chip.left-region.right,
+       inside:chip.left>=page.left-2&&chip.right<=page.right+2};
+   }));
+   assert.equal(placements.length,224);
+   assert.equal(placements.filter(p=>p.gap<1).length,0,
+     'block checkbox must be outside its own text bbox');
+   for(const [id,expectedSide] of [['p6b6','left'],['p6b7','right'],
+      ['p2b7','left'],['p2b8','right'],['p15b5','left'],['p15b6','right']]){
+     const item=placements.find(p=>p.id===id);
+     assert.equal(item?.side,expectedSide,`wrong column side ${id}`);
+     assert(item.gap>=2,`gutter spacing insufficient for ${id}`);
+     assert(item.inside,`checkbox ${id} must be in page whitespace, not off the page`);
+   }
+   console.log('PDF_GUTTER_GEOMETRY',name,{total:placements.length,
+     left:placements.filter(p=>p.side==='left').length,
+     right:placements.filter(p=>p.side==='right').length,
+     overlap:placements.filter(p=>p.gap<1).length,
+     offPage:placements.filter(p=>!p.inside).map(p=>p.id),
+     page7:placements.filter(p=>['p6b6','p6b7'].includes(p.id))});
    await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
    await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
    await target.scrollIntoViewIfNeeded({timeout:18000});
+   await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-side-gutters.png`,animations:'disabled'});
    await page.waitForTimeout(500); // allow PDF.js lazy page canvas paint
    await target.click({timeout:15000});
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});

@@ -331,6 +331,17 @@ export class PdfPreview {
         input.title=row.joinable?`取消勾选：接续前一个正文 Block；重新勾选：恢复独立。${row.id}`:
           `文本块 ${row.id} 不具备可安全接续的相邻正文块`;}
       node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
+      // Keep the interactive chip OUTSIDE the OCR text rectangle. Choose
+      // the outer paper gutter, never the inter-column gap: left-column
+      // blocks go to the left; right-column blocks go to the right.
+      // A full-width block defaults to the wider outer side margin.
+      const [x0,,x1]=block.bbox;
+      const pageWidth=region.pageSize[0];
+      const leftSide=(x0+x1)/2<=pageWidth/2;
+      const fullWidth=(x1-x0)/pageWidth>.65;
+      const side=fullWidth?(x0>=pageWidth-x1?'left':'right'):(leftSide?'left':'right');
+      node.dataset.gutter=side;
+      node.querySelector('.ocr-pdf-block-ctrl')?.setAttribute('data-gutter',side);
       node.style.left=rect.left+'%';node.style.top=rect.top+'%';
       node.style.width=rect.width+'%';node.style.height=rect.height+'%';
       if(node.parentElement!==page.div)page.div.append(node);

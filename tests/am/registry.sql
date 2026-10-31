@@ -1193,3 +1193,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-JOIN-L56','L56','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 original OCR blocks remain, 223 logical blocks with two full source contents concatenated; undo restores 224','integration'),
  ('TC-JOIN-C57','C57','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit PDF checkbox writes one CMD join then reverses it via single CM6 transaction and global unsaved state','integration'),
  ('TC-JOIN-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 PDF Block labels and checkboxes, disabled OCR-empty and first blocks, click does not fetch legacy map or modify mother fixture','integration');
+
+-- PDF margin labels must remain outside the corresponding OCR text and inside
+-- their physical page at every supported column, without changing CMD edits.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-JOIN-GUTTER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit all 224 checkbox+Block-ID chips in outer paper gutters; left 133, right 91; no own-bbox overlap or out-of-paper chip; reversible CMD join still works','integration');
