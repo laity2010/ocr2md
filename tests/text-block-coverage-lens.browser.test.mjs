@@ -100,8 +100,9 @@ try{
    assert.equal(await toggle.isVisible(),true,'PDF toolbar retains coverage checkbox across AG modules');
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
-   assert.equal(await toggle.isChecked(),false,'checkbox state must survive module navigation');
-   assert.equal(await page.locator('.ocr-pdf-block-cover,.ocr-md-block-covered').count(),0);
+   assert.equal(await toggle.isChecked(),true,'selecting text-block AG automatically enables PDF blocks');
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
+     null,{timeout:18000});
    assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[]);
    assert.equal(readFileSync(sample,'utf8'),source,'must not edit CMD');
    console.log('BLOCK_COVERAGE_LENS_PASS',name,{firstId,total,focusStyle,z,errors,forbidden});

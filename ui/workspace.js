@@ -71,6 +71,7 @@ let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
 let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
+let refreshTextBlockInventory=()=>{};
 let textBlockCoverageEnabled=true;
 
 class OutlinePanel {
@@ -318,7 +319,11 @@ class PreviewPanel {
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
       (id,join)=>blockJoinAction(id,join),
       (id,targetId,placement)=>blockMoveAction(id,targetId,placement),
-      enabled=>{textBlockCoverageEnabled=Boolean(enabled);this.setBlockCoverage(enabled);});
+      enabled=>{
+        textBlockCoverageEnabled=Boolean(enabled);
+        this.setBlockCoverage(enabled);
+        if(enabled)refreshTextBlockInventory();
+      });
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -494,20 +499,18 @@ class PreviewPanel {
     this.redrawSentenceCoverage();
     this.paintBlockCoverage();
     this.highlight(viewStore.getState().focusTarget);
-    if(currentOutline?.workModule==='text-block')this.refreshTextBlockCoverage();
+    if(textBlockCoverageEnabled)this.refreshTextBlockCoverage();
     if(scrollSync)scrollSync.afterRender(preserved);
     else pane.scrollTop=ratio*Math.max(0,pane.scrollHeight-pane.clientHeight);
   }
   paintBlockCoverage(){
-    const blocks=textBlockCoverageEnabled&&currentOutline?.workModule==='text-block'
-      ?currentOutline.textBlock?.getBlocks():null;
+    const blocks=textBlockCoverageEnabled?currentOutline?.textBlock?.getBlocks():null;
     return blocks?.length?paintCMDTextBlockCoverage(this.body,blocks):
       (clearCMDTextBlockCoverage(this.body),{mappedIds:[],painted:0});
   }
   setBlockCoverage(enabled){
     this.paintBlockCoverage();
-    this.pdf?.setBlockCoverage(enabled&&currentOutline?.workModule==='text-block'
-      ?currentOutline.textBlock?.getBlocks():[]);
+    this.pdf?.setBlockCoverage(enabled?currentOutline?.textBlock?.getBlocks():[]);
   }
   refreshTextBlockCoverage(){
     const owner=currentOutline?.textBlock,rows=owner?.getBlocks();
@@ -515,7 +518,7 @@ class PreviewPanel {
     const mapped=[...this.body.querySelectorAll('[data-source-start][data-source-end]')]
       .map(el=>({from:Number(el.dataset.sourceStart),to:Number(el.dataset.sourceEnd)}));
     this.paintBlockCoverage();
-    this.pdf?.setBlockCoverage(textBlockCoverageEnabled&&currentOutline?.workModule==='text-block'?rows:[]);
+    this.pdf?.setBlockCoverage(textBlockCoverageEnabled?rows:[]);
     owner.setPreviewCoverage(rows.filter(row=>row.expectsPreview&&row.sourceLine!==null&&
       mapped.some(region=>region.from<=row.sourceLine+2&&row.sourceLine+2<region.to))
       .map(row=>row.id));
@@ -722,10 +725,15 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:module=>{
-      if(module!=='text-block')currentPreview?.setBlockCoverage(false);
+      // Selecting text blocks always enables the independent PDF lens;
+      // other AG modules must never disable it.
+      if(module==='text-block'){
+        textBlockCoverageEnabled=true;
+        currentPreview?.pdf?.setCoverageChecked(true);
+      }
       if(module!=='sentence')currentPreview?.clearSentenceSelection();
       currentOutline?.setModule(module);
-      currentPreview?.setBlockCoverage(textBlockCoverageEnabled&&module==='text-block');
+      currentPreview?.setBlockCoverage(textBlockCoverageEnabled);
       currentPreview?.redrawSentenceCoverage();
     },
     updateSpellcheck:(rows,options)=>currentOutline?.spellcheck?.setResults(rows,options),
@@ -740,6 +748,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     setBlockJoinAction:action=>{blockJoinAction=action;},
     setBlockMoveAction:action=>{blockMoveAction=action;},
+    setTextBlockInventoryRefreshAction:action=>{refreshTextBlockInventory=action;},
     setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),
     setTextBlockError:message=>currentOutline?.textBlock?.setError(message),
     setTextBlockContinuationCandidates:result=>currentOutline?.textBlock?.setContinuationCandidates(result),
@@ -750,7 +759,9 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       textBlockCoverageEnabled=Boolean(enabled);
       currentPreview?.pdf?.setCoverageChecked(textBlockCoverageEnabled);
       currentPreview?.setBlockCoverage(textBlockCoverageEnabled);
+      if(enabled)refreshTextBlockInventory();
     },
+    isTextBlockCoverageEnabled:()=>textBlockCoverageEnabled,
     setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),
     setSentenceError:message=>currentOutline?.sentence?.setError(message),
     getSentences:()=>{

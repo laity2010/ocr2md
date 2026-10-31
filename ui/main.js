@@ -688,24 +688,33 @@ async function main() {
   stopSentence=()=>{++sentenceRequest;clearTimeout(sentenceScanTimer);};
   // On-demand, read-only inventory derived only from THIS CMD's sealed JSON.
   // Coalescing edits avoids inflating megabytes on every CM6 keystroke.
-  let blockRequest=0,blockTimer=null;
+  let blockRequest=0,blockTimer=null,blockIndexedSource=null,blockPendingSource=null;
   const scanTextBlocks=()=>{
-    const id=++blockRequest,source=cm.getMarkdown();
+    const source=cm.getMarkdown();
+    if(source===blockIndexedSource||source===blockPendingSource)return;
+    const id=++blockRequest;
+    blockPendingSource=source;
     workspace.setTextBlockLoading();
     void cmdPort.queryBlockAnalysis().then(({inventory,continuations})=>{
       if(id!==blockRequest||source!==cm.getMarkdown())return;
+      blockPendingSource=null;
       workspace.setTextBlockInventory(inventory);
       workspace.setTextBlockContinuationCandidates(continuations);
+      blockIndexedSource=source;
     }).catch(error=>{
-      if(id===blockRequest)workspace.setTextBlockError(error.message);
+      if(id!==blockRequest)return;
+      blockPendingSource=null;
+      workspace.setTextBlockError(error.message);
     });
   };
   textBlockDocChanged=()=>{
-    if($('module-select').value!=='text-block')return;
+    if($('module-select').value!=='text-block'&&!workspace.isTextBlockCoverageEnabled())return;
     clearTimeout(blockTimer);++blockRequest;
+    blockPendingSource=null;
     blockTimer=setTimeout(scanTextBlocks,650);
   };
   cmdPort=wcpRuntime.wrapCMD(cm);
+  workspace.setTextBlockInventoryRefreshAction(scanTextBlocks);
   workspace.setBlockJoinAction(async(targetId,join)=>{
     try{
       const result=await cmdPort.setBlockJoin(targetId,join);
@@ -826,7 +835,13 @@ async function main() {
     const enableSpellcheck=selected==='spellcheck';
     const enableIllegalBreak=selected==='illegal-break';
     const enableSentence=selected==='sentence';
-    if(view&&selected==='text-block'&&lastVisibleModule!=='text-block')scanTextBlocks();
+    // The PDF toolbar owns an independent text-block lens. Seed its CMD
+    // inventory at startup even while AG is showing another element module.
+    if(view&&blockRequest===0&&workspace.isTextBlockCoverageEnabled())scanTextBlocks();
+    if(view&&selected==='text-block'){
+      workspace.setTextBlockCoverage(true);
+      if(lastVisibleModule!=='text-block')scanTextBlocks();
+    }
     if(view&&enableSpellcheck!==spellcheckEnabled){
       spellcheckEnabled=enableSpellcheck;
       // Native WebKit spellcheck has no reliable visible diagnostics.

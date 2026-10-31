@@ -28,17 +28,33 @@ try{
       const page=await browser.newPage({viewport:{width:1220,height:840},isMobile:mobile,hasTouch:mobile});
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-      await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').evaluate(el=>el.click());
-      await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').evaluate(el=>el.click());
-      await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),
-        null,{timeout:30000});
       const cover=page.locator('.ocr-pdf-tools .ocr-pdf-cover-toggle input');
-      assert.equal(await page.locator('.ocr-lab-ag-toolbar [aria-label="文本块覆盖显示"]').count(),0);
+      const selectElement=async value=>{
+        await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control')
+          .evaluate(el=>el.click());
+        await page.locator(`.ocr-navigation-popup-elements:visible [data-value="${value}"]`)
+          .evaluate(el=>el.click());
+      };
+      assert.equal(await page.locator('.ocr-lab-ag-toolbar [aria-label="PDF 文本块"]').count(),0);
       assert.equal(await cover.count(),1);
-      assert(await cover.isChecked(),'PDF coverage must default to checked');
+      assert.equal(await page.locator('.ocr-pdf-cover-toggle').innerText(),'文本块');
+      assert(await cover.isChecked(),'PDF blocks stay checked by default');
+      // New requirement: the checkbox works BEFORE the AG text-block module
+      // has ever been selected, and an edit is possible in the Title module.
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
-        null,{timeout:25000});
-      // The PDF toolbar, not AG, is the only source of this view state.
+        null,{timeout:30000});
+      assert.equal(await page.locator('.ocr-lab-element-select').inputValue(),'chapter-boundary');
+      const join=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
+      await join.evaluate(input=>input.click());
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===false,
+        null,{timeout:20000});
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===true,
+        null,{timeout:20000});
+      // PDF checkbox owns BOTH coverage and the individual editing labels,
+      // regardless of AG's current element picker selection.
       await cover.evaluate(input=>input.click());
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===0,
         null,{timeout:15000});
@@ -46,7 +62,18 @@ try{
       await cover.evaluate(input=>input.click());
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:25000});
-      assert(await cover.isChecked());
+      await selectElement('media');
+      assert(await cover.isChecked(),'another AG module must preserve PDF block state');
+      assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
+      await cover.evaluate(input=>input.click());
+      assert.equal(await page.locator('.ocr-pdf-block-cover').count(),0);
+      await selectElement('text-block');
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
+        null,{timeout:25000});
+      assert(await cover.isChecked(),'selecting text-block AG module automatically enables PDF blocks');
+      await selectElement('media');
+      assert(await cover.isChecked(),'leaving text-block module must not hide PDF operations');
+      assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
       await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(el=>el.click());
       await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
       const scroller=page.locator('.ocr-pdf-scroller');

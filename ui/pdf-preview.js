@@ -66,7 +66,7 @@ export class PdfPreview {
       <button class="ocr-pdf-fit" type="button" title="按宽度缩放">适宽</button>
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
-      <label class="ocr-pdf-cover-toggle" title="显示 CMD 文本块的浅色覆盖，不修改正文或块状态"><input type="checkbox" aria-label="文本块覆盖显示" checked />覆盖显示</label>
+      <label class="ocr-pdf-cover-toggle" title="显示并操作 PDF 文本块：可勾选接续、长按拖动；关闭后隐藏文本块操作标签"><input type="checkbox" aria-label="PDF 文本块" checked />文本块</label>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
