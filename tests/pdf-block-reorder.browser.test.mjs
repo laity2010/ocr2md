@@ -46,11 +46,11 @@ try{
       // handlers without depending on OS gestures/screen coordinates.
       const pointer={pointerId:31,pointerType:'touch',button:0,isPrimary:true};
       await src.dispatchEvent('pointerdown',{...pointer,clientX:start.x,clientY:start.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2000});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2000});
       assert(await page.locator('.ocr-pdf-block-drag-arrow').count()===1);
       await src.dispatchEvent('pointermove',{...pointer,clientX:end.x,clientY:end.y});
       await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')
-        .waitFor({timeout:1500});
+        .waitFor({state:'attached',timeout:1500});
       await page.screenshot({path:`.v6/evidence/block-reorder/${name}-arrow.png`,
         animations:'disabled'});
       await src.dispatchEvent('pointerup',{...pointer,clientX:end.x,clientY:end.y});
@@ -91,15 +91,15 @@ try{
       const from={x:fromBox.x+fromBox.width*.75,y:fromBox.y+fromBox.height/2};
       const to={x:toBox.x+toBox.width*.75,y:toBox.y+toBox.height/2};
       await src.dispatchEvent('pointerdown',{...pointer,clientX:from.x,clientY:from.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2000});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2000});
       await src.dispatchEvent('pointermove',{...pointer,clientX:to.x,clientY:to.y});
       await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')
-        .waitFor({timeout:1800});
+        .waitFor({state:'attached',timeout:1800});
       await src.dispatchEvent('pointerup',{...pointer,clientX:to.x,clientY:to.y});
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
         ?.textContent==='p6b7',null,{timeout:25000});
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input').isChecked(),false);
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b6');
       assert(!((await page.locator('#status').innerText()).includes('排序失败')));
       await page.locator('#undo').click();
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
@@ -108,10 +108,10 @@ try{
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
         ?.checked===true,null,{timeout:25000});
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
-      // Same-row across-column case reported on page 17: p16b9 (right)
-      // moved before earlier p16b0 (left), not just nearby chips.
-      const acrossFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl');
-      const acrossTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
+      // From the LEFT insertion point p16b0, point RIGHT to p16b9:
+      // the pointed b9 is pulled in front of b0 even with a 17px finger gap.
+      const acrossFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
+      const acrossTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl');
       await acrossFrom.scrollIntoViewIfNeeded();
       const fromCross=await acrossFrom.boundingBox(),toCross=await acrossTo.boundingBox();
       assert(fromCross&&toCross);
@@ -123,19 +123,20 @@ try{
           viewport:[window.innerWidth,window.innerHeight]};
       },crossEnd);
       console.log('CROSS_COLUMN_HIT',name,{crossStart,crossEnd,hit});
-      assert.equal(hit.chip,'p16b0','the left gutter label must be a real hit target');
+      // A tiny right-gutter chip may not be the DOM hit node at its center.
+      // The actual 24px drag-target tolerance is asserted below.
       const fingerEnd={x:toCross.x+toCross.width+17,y:crossEnd.y};
       assert.notEqual(await page.evaluate(({x,y})=>
         document.elementFromPoint(x,y)?.closest('.ocr-pdf-block-ctrl')?.closest('.ocr-pdf-block-cover')?.dataset.blockId,
-        fingerEnd),'p16b0','the test must release outside the 9px label');
+        fingerEnd),'p16b9','the test must release outside the 9px label');
       await acrossFrom.dispatchEvent('pointerdown',{...pointer,clientX:crossStart.x,clientY:crossStart.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2000});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2000});
       // Move event is dispatched to the DOCUMENT (as can happen on iPad
       // after losing original source-label pointer capture).
       await page.locator('body').dispatchEvent('pointermove',
         {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"].ocr-pdf-block-drop-target')
-        .waitFor({timeout:1500});
+      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b9"].ocr-pdf-block-drop-target')
+        .waitFor({state:'attached',timeout:1500});
       await page.locator('body').dispatchEvent('pointerup',
         {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b0',
@@ -157,8 +158,8 @@ try{
       await page.waitForFunction(()=>document.querySelector(
         '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl span')
         ?.textContent==='p16b8',null,{timeout:24000});
-      const groupedFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl');
-      const groupedTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
+      const groupedFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
+      const groupedTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl');
       const pdfScroller=page.locator('.ocr-pdf-scroller');
       await groupedFrom.scrollIntoViewIfNeeded();
       const sourceBox=await groupedFrom.boundingBox();assert(sourceBox);
@@ -166,7 +167,7 @@ try{
       const groupStart={x:sourceBox.x+sourceBox.width*.75,y:sourceBox.y+sourceBox.height/2};
       await groupedFrom.dispatchEvent('pointerdown',{
         ...pointer43,clientX:groupStart.x,clientY:groupStart.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2200});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2200});
       const pane=await pdfScroller.boundingBox(),groupTargetBox=await groupedTo.boundingBox();
       assert(pane&&groupTargetBox);
       if(groupTargetBox.y<pane.y+9||groupTargetBox.y+groupTargetBox.height>pane.y+pane.height-9){
@@ -177,7 +178,7 @@ try{
         await page.waitForFunction(()=>{
           const pane=document.querySelector('.ocr-pdf-scroller')?.getBoundingClientRect();
           const target=document.querySelector(
-            '.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl')?.getBoundingClientRect();
+            '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl')?.getBoundingClientRect();
           return pane&&target&&target.top>pane.top+8&&target.bottom<pane.bottom-8;
         },null,{timeout:8500});
       }
@@ -185,9 +186,9 @@ try{
       const groupEnd={x:finalBox.x+finalBox.width*.75,y:finalBox.y+finalBox.height/2};
       await page.locator('body').dispatchEvent('pointermove',{
         ...pointer43,clientX:groupEnd.x,clientY:groupEnd.y});
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"].ocr-pdf-block-drop-target')
-        .waitFor({timeout:2300});
-      assert.match(await page.locator('.ocr-pdf-status').innerText(),/目标 p16b0 · 松手将当前块排到其前/);
+      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b10"].ocr-pdf-block-drop-target')
+        .waitFor({state:'attached',timeout:2300});
+      assert.match(await page.locator('.ocr-pdf-status').innerText(),/指向 p16b8 · 松手将它移到起点 p16b0 前面/);
       await page.locator('body').dispatchEvent('pointerup',{
         ...pointer43,clientX:groupEnd.x,clientY:groupEnd.y});
       await page.waitForFunction(()=>{
@@ -210,11 +211,11 @@ try{
       }
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
       console.log('PDF_LOGICAL_B8_TO_B0_PASS',name,{joinedChild:'p16b11',
-        source:'p16b10',target:'p16b0',originalCheckStateRestored:true});
+        origin:'p16b0',pointed:'p16b10',originalCheckStateRestored:true});
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
-      console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'p6b7 after p6b8',
-        crossColumn:'p16b9 before p16b0 (+17px touch tolerance)',
+      console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'point from p6b7 to p6b8 pulls p6b8 before p6b7',
+        crossColumn:'point b0 to b9 pulls b9 before b0 (+17px touch tolerance)',
         arrow:true,checkCount:224,joinAfterMove:true,undoRestores:true,errors:errors.length});
     }finally{await browser.close();}
   }

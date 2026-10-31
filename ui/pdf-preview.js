@@ -476,17 +476,23 @@ export class PdfPreview {
     document.removeEventListener('pointerup',this.onBlockDragUp,true);
     document.removeEventListener('pointercancel',this.onBlockDragCancel,true);
   }
-  blockDropPlacement(sourceId,targetId){
-    // The inventory follows original MinerU blockIndex order, not the
-    // current CMD reading order after a move. Compare current source lines.
-    // Original OCR ID, PDF geometry and displayed badge stay unchanged.
-    const source=this.blockCoverageRows.find(row=>row.id===sourceId);
-    const target=this.blockCoverageRows.find(row=>row.id===targetId);
-    if(!source||!target||source.pageIndex!==target.pageIndex||
-      !Number.isInteger(source.sourceLine)||!Number.isInteger(target.sourceLine)||
-      source.sourceLine===target.sourceLine)
-      throw Error('文本块源码顺序无效，请重新检查');
-    return source.sourceLine>target.sourceLine?'before':'after';
+  blockDropMove(startId,pointedId){
+    // Drag origin is a POSITION, not the piece to move: pointing from b0
+    // to b8 means take the logical b8 and insert it before b0. Do not
+    // depend on OCR block indices, mutable labels, or PDF coordinates.
+    const start=this.blockCoverageRows.find(row=>row.id===startId);
+    const pointed=this.blockCoverageRows.find(row=>row.id===pointedId);
+    if(!start||!pointed||start.pageIndex!==pointed.pageIndex||
+      !Number.isInteger(start.sourceLine)||!Number.isInteger(pointed.sourceLine)||
+      start.id===pointed.id)throw Error('文本块插入目标无效，请重新检查');
+    // An unchecked original Block can share the same displayed logical ID.
+    // Always pull its checked root and attached descendants as ONE item.
+    const root=this.blockCoverageRows.find(row=>row.pageIndex===pointed.pageIndex&&
+      row.logicalId===pointed.logicalId&&!row.joinPrev);
+    if(!root)throw Error('该逻辑文本块跨页接续，不能在本页单独移动');
+    if(root.id===startId||(start.logicalId&&start.logicalId===pointed.logicalId))
+      return null; // A logical block cannot be dragged onto itself.
+    return {sourceId:root.id,targetId:startId,placement:'before'};
   }
   updateBlockDrag(item,x,y){
     if(this.blockDrag!==item)return;
@@ -512,12 +518,11 @@ export class PdfPreview {
     if(item.target!==target){
       item.target?.classList.remove('ocr-pdf-block-drop-target');
       item.target=target;target?.classList.add('ocr-pdf-block-drop-target');
-      const placement=target?
-        this.blockDropPlacement(item.id,target.dataset.blockId):null;
-      const label=target?.querySelector('.ocr-pdf-block-ctrl span')?.textContent;
+      const pointedLabel=target?.querySelector('.ocr-pdf-block-ctrl span')?.textContent;
+      const startLabel=item.ctrl.querySelector('span')?.textContent||item.id;
       this.setStatus(target
-        ?`目标 ${label} · 松手将当前块排到其${placement==='before'?'前':'后'}`
-        :`拖动 ${item.id} 至本页块标签（接近标签即可松手）`);
+        ?`指向 ${pointedLabel} · 松手将它移到起点 ${startLabel} 前面`
+        :`从 ${startLabel} 指向本页要搬来的文本块`);
     }
     const box=item.ctrl.getBoundingClientRect();
     const sx=(box.left+box.right)/2,sy=(box.top+box.bottom)/2;
@@ -555,9 +560,13 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
-    const placement=this.blockDropPlacement(item.id,target);
-    this.setStatus(`正在将 ${item.id} 移至 ${target} ${placement==='before'?'前':'后'}…`);
-    void this.onBlockMove(item.id,target,placement).then(result=>{
+    let move;
+    try{move=this.blockDropMove(item.id,target);}catch(error){
+      this.setStatus('排序失败：'+error.message);return;
+    }
+    if(!move){this.setStatus('同一逻辑块，顺序不变');return;}
+    this.setStatus(`正在将指向块 ${move.sourceId} 移到起点块 ${item.id} 前面…`);
+    void this.onBlockMove(move.sourceId,move.targetId,move.placement).then(result=>{
       if(!result?.changed){this.setStatus('该块已紧邻目标，顺序不变');return;}
       const shift=result.shift;
       const interval=shift?.crossedIds?.length||0;
