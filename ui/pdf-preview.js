@@ -329,14 +329,14 @@ export class PdfPreview {
     let changed=false;
     const logical=row.logicalId||row.id;
     if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
-    const title=`原始 ${row.id} · 本页逻辑 ${logical}`;
+    const title=`原始 ${row.id} · 逻辑 ${logical}`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
     const disabled=!row.joinable;
     if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
-    const help=row.joinable?`取消勾选：并入本页上一 Block；重新勾选：恢复独立。原始 ${row.id}`:
-      `第 ${row.pageIndex+1} 页第一个 Block 必须独立（${row.id}）`;
+    const help=row.joinable?`取消勾选：并入原文上一 Block（可跨页）；重新勾选：恢复独立。原始 ${row.id}`:
+      `没有有效前驱 Block，必须独立（${row.id}）`;
     if(input.title!==help)input.title=help;
     node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
     // Badge width can change when page-local numbering passes 9/10/100.

@@ -6,11 +6,24 @@
 import {blockAnchor,quotePrefix,unquotePrefix} from './mineru-anchors.js';
 const tag=/^<!-- ocr2md:block-join:v1 prev="(p\d+b\d+)" target="(p\d+b\d+)" -->$/;
 // All MinerU Block types (including OCR-empty placeholders) are independent
-// by default. The only non-joinable position is the first Block of a page.
+// by default. A page boundary is NOT a paragraph boundary: p9b0 can continue
+// the last anchored Block of page 8. Only the document's first Block has no
+// predecessor. Keep original OCR identities and geometry unchanged.
 export const isJoinable=r=>r?.anchorCount===1;
-export const precedingPageBlock=(rows,target)=>rows.find(row=>
-  row.pageIndex===target.pageIndex&&row.blockIndex===target.blockIndex-1&&
-  row.anchorCount===1)||null;
+export const precedingPageBlock=(rows,target)=>{
+  const i=rows.findIndex(row=>row.id===target?.id);
+  if(i<=0||target.anchorCount!==1)return null;
+  const previous=rows[i-1];
+  const samePage=previous.pageIndex===target.pageIndex&&
+    previous.blockIndex===target.blockIndex-1;
+  const nextPage=target.blockIndex===0&&
+    previous.pageIndex===target.pageIndex-1;
+  // Only the immediately preceding original Block, in source order, is safe
+  // to join. Never skip missing/duplicate CMD anchors or intervening pages.
+  return (samePage||nextPage)&&previous.anchorCount===1&&
+    Number.isInteger(previous.from)&&Number.isInteger(target.from)&&
+    previous.from<target.from?previous:null;
+};
 export function readCMDBlockJoins(source,rows){
   const lines=source.split('\n'),joined=new Map(),invalid=[];
   const byId=new Map(rows.map(r=>[r.id,r]));
@@ -21,7 +34,7 @@ export function readCMDBlockJoins(source,rows){
     const previous=byId.get(prev),current=byId.get(target);
     if(!next||`p${next.pageIndex}b${next.blockIndex}`!==target||
       !previous||!current||previous.anchorCount!==1||current.anchorCount!==1||
-      previous.pageIndex!==current.pageIndex||previous.blockIndex!==current.blockIndex-1||
+      precedingPageBlock(rows,current)?.id!==previous.id||
       joined.has(target)){
       invalid.push({line:i+1,prev,target});continue;
     }
@@ -36,7 +49,7 @@ export function planCMDBlockJoin(source,rows,targetId,join){
   const target=rows.find(row=>row.id===targetId);
   if(!isJoinable(target))throw Error('目标文本块缺少唯一 CMD 锚点');
   const previous=precedingPageBlock(rows,target);
-  if(!previous)throw Error('本页第一个 Block 没有上一块，必须独立');
+  if(!previous)throw Error('当前 Block 没有有效的前驱 Block，不能合并');
   // Reading order is the CMD block-anchor order, not arbitrary PDF bbox order.
   const {joined,invalid}=readCMDBlockJoins(source,rows);
   if(invalid.length)throw Error('CMD 存在无效的文本块续接标记，先修复后再编辑');

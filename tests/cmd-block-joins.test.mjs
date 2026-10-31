@@ -24,8 +24,8 @@ assert.equal(merged,original,'reverse join must exactly restore original CMD byt
 assert.equal(readCMDBlockJoins(merged,initial).joined.size,0);
 assert.equal(projectCMDLogicalTextBlocks(merged,initial).blocks.length,224);
 // No type or content gate: blanks, images, titles, formulae and reference
-// entries are all independent by default, and can join only prior-page-local
-// Block (including their original OCR/Markdown content when nonempty).
+// entries are all independent by default, and can join the preceding original
+// Block (including the last Block of the preceding PDF page).
 for(const [id,previous] of [['p2b8','p2b7'],['p11b6','p11b5'],
   ['p0b1','p0b0'],['p0b5','p0b4'],['p5b5','p5b4'],['p21b2','p21b1']]){
   const operation=planCMDBlockJoin(original,initial,id,true);
@@ -40,9 +40,40 @@ for(const [id,previous] of [['p2b8','p2b7'],['p11b6','p11b5'],
   assert.equal(joined.slice(0,undo.edits[0].from)+undo.edits[0].insert+
     joined.slice(undo.edits[0].to),original);
 }
-// Every page's first block is checked but cannot merge backwards across pages.
-for(const id of ['p0b0','p1b0','p2b0','p6b0','p21b0'])
-  assert.throws(()=>planCMDBlockJoin(original,initial,id,true),/本页第一个/);
+// Only the first document Block is immutable. Page heads are NOT necessarily
+// paragraph heads. p9b0 is a continuation of p8b8 in this actual OCR source.
+assert.throws(()=>planCMDBlockJoin(original,initial,'p0b0',true),/前驱/);
+for(const id of ['p1b0','p2b0','p6b0','p9b0','p21b0']){
+  const index=initial.findIndex(row=>row.id===id);
+  const previous=initial[index-1].id;
+  const crossPage=planCMDBlockJoin(original,initial,id,true);
+  assert.equal(crossPage.previous,previous);
+  const joinedSource=original.slice(0,crossPage.edits[0].from)+crossPage.edits[0].insert+
+    original.slice(crossPage.edits[0].to);
+  const joinedRows=(await inspectCMDTextBlocks(joinedSource)).rows;
+  const projected=projectCMDLogicalTextBlocks(joinedSource,joinedRows);
+  assert.equal(projected.invalid.length,0);
+  assert.equal(projected.joined.get(id),previous);
+  assert.equal(projected.blocks.length,223);
+  const undo=planCMDBlockJoin(joinedSource,joinedRows,id,false);
+  assert.equal(joinedSource.slice(0,undo.edits[0].from)+undo.edits[0].insert+
+    joinedSource.slice(undo.edits[0].to),original);
+}
+const crossPlan=planCMDBlockJoin(original,initial,'p9b0',true);
+assert.equal(crossPlan.previous,'p8b8');
+const crossSource=original.slice(0,crossPlan.edits[0].from)+crossPlan.edits[0].insert+
+  original.slice(crossPlan.edits[0].to);
+const crossRows=(await inspectCMDTextBlocks(crossSource)).rows;
+const crossLogical=projectCMDLogicalTextBlocks(crossSource,crossRows);
+assert.deepEqual(crossLogical.blocks.find(b=>b.id==='p8b8').memberIds,['p8b8','p9b0']);
+assert.equal(crossLogical.assignments.get('p9b0'),'p8b8');
+assert.equal(crossLogical.assignments.get('p9b1'),'p9b0');
+assert.equal(crossLogical.assignments.get('p8b8'),'p8b8');
+assert.equal(crossLogical.assignments.get('p10b0'),'p10b0');
+// A page transition must not skip an absent previous CMD anchor.
+const missingPrevious=original.replace('<!-- minerujson:block:v1:8:8 -->','<!-- missing:8:8 -->');
+const missingRows=(await inspectCMDTextBlocks(missingPrevious)).rows;
+assert.throws(()=>planCMDBlockJoin(missingPrevious,missingRows,'p9b0',true),/前驱/);
 // Changing page 3 must renumber ONLY that page's logical groups; never
 // rewrite an original identity, nor the numbering on pages 2 and 4.
 const emptyPlan=planCMDBlockJoin(original,initial,'p2b8',true);
@@ -75,5 +106,5 @@ assert.equal(readCMDBlockJoins(quotedJoined,quotedJoinedRows).joined.get('p6b7')
 const quotedUndo=planCMDBlockJoin(quotedJoined,quotedJoinedRows,'p6b7',false);
 assert.equal(quotedJoined.slice(0,quotedUndo.edits[0].from)+quotedUndo.edits[0].insert+
   quotedJoined.slice(quotedUndo.edits[0].to),quoted);
-console.log('CMD_BLOCK_JOIN_PASS',{blocks:224,logicalBlocks:223,originalRestored:true,pageLocal:true,allTypes:true,
-  crossColumn:'p6b6→p6b7',other:'p15b5→p15b6'});
+console.log('CMD_BLOCK_JOIN_PASS',{blocks:224,logicalBlocks:223,originalRestored:true,
+  pageLocalLabels:true,crossPage:'p8b8→p9b0',allTypes:true,crossColumn:'p6b6→p6b7'});

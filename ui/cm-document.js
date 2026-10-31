@@ -13,7 +13,7 @@ import {scanAnnotations,formatAnnotation} from './cmd-annotations.js';
 import {scanHtmlElements} from './cmd-html-elements.js';
 import {queryCMDLayout,queryCMDBlockGeometry,inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {scanCMDContinuationCandidates} from './cmd-block-continuations.js';
-import {readCMDBlockJoins,projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
+import {readCMDBlockJoins,projectCMDLogicalTextBlocks,precedingPageBlock} from './cmd-block-joins.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -49,9 +49,7 @@ export class CMDocument {
     const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
     for(const row of inventory.rows){
       row.joinPrev=logical.joined.get(row.id)||null;
-      row.joinable=row.anchorCount===1&&row.blockIndex>0&&
-        inventory.rows.some(prev=>prev.pageIndex===row.pageIndex&&
-          prev.blockIndex===row.blockIndex-1&&prev.anchorCount===1);
+      row.joinable=Boolean(precedingPageBlock(inventory.rows,row));
       row.logicalId=logical.assignments.get(row.id)||row.id;
     }
     inventory.summary.joined=logical.joined.size;

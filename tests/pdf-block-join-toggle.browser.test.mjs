@@ -30,7 +30,9 @@ try{
    const first=page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p0b0 独立"]');
    const empty=page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p2b8 独立"]');
    const target=page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p6b7 独立"]');
-   assert(await first.isDisabled(),'page first cannot merge across the page boundary');
+   const crossHead=page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p9b0 独立"]');
+   assert(await first.isDisabled(),'only document first has no predecessor');
+   assert(await crossHead.isEnabled(),'page first p9b0 must merge into previous page last p8b8');
    assert(await empty.isEnabled(),'OCR empty placeholders must be selectable');
    assert(await page.locator('.ocr-pdf-block-ctrl input[aria-label="文本块 p0b1 独立"]').isEnabled(),
      'title block must be selectable');
@@ -45,7 +47,7 @@ try{
      enabled:inputs.filter(x=>!x.disabled).length,
      disabled:inputs.filter(x=>x.disabled).length,
    }));
-   assert.deepEqual(checkboxStatus,{checked:224,enabled:202,disabled:22});
+   assert.deepEqual(checkboxStatus,{checked:224,enabled:223,disabled:1});
    assert(await target.isChecked());
    assert(await target.isEnabled());
    assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
@@ -189,10 +191,36 @@ try{
    assert(await empty.isChecked());
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b9');
 
+   // The actual p9b0 continues p8b8. Its unchecked label must use the
+   // previous page's logical ID; following labels change on page 10 only.
+   // The page-9 (zero-indexed 8) chip must remain untouched and connected.
+   const previousChip=page.locator('.ocr-pdf-block-cover[data-block-id="p8b8"]');
+   const previousIdentity=await previousChip.evaluate(node=>{
+     window.__previousPageJoinChip=node;return node.querySelector('span').textContent;
+   });
+   assert.equal(previousIdentity,'p8b8');
+   await crossHead.scrollIntoViewIfNeeded({timeout:17000});
+   await crossHead.click({timeout:16000});
+   await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   assert.equal(await crossHead.isChecked(),false);
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-ctrl span').innerText(),'p8b8');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b1"] .ocr-pdf-block-ctrl span').innerText(),'p9b0');
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p8b8"] .ocr-pdf-block-ctrl span').innerText(),'p8b8');
+   assert(await previousChip.evaluate(node=>node===window.__previousPageJoinChip),
+     'cross-page join must not replace predecessor PDF page DOM');
+   await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-cross-page-p9b0.png`,animations:'disabled'});
+   await crossHead.click({timeout:16000});
+   await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   assert(await crossHead.isChecked());
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p9b1"] .ocr-pdf-block-ctrl span').innerText(),'p9b1');
+
    assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);
    assert.equal(readFileSync(sample,'utf8'),original,'mother/fixture must not be autosaved');
    console.log('PDF_BLOCK_JOIN_TOGGLE_PASS',name,{originalBlocks:224,joinedLogicalBlocks:223,
-     restoredBlocks:224,emptySelectable:true,enabled:202,requests:requests.length,errors:errors.length});
+     restoredBlocks:224,emptySelectable:true,crossPage:'p8b8→p9b0',
+     enabled:223,requests:requests.length,errors:errors.length});
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}
