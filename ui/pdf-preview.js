@@ -311,8 +311,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,pageIndex,blockIndex,joinPrev,joinable,logicalId})=>
-        ({id,pageIndex,blockIndex,joinPrev,joinable,logicalId})):[];
+      .map(({id,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})=>
+        ({id,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})):[];
     const prior=this.blockCoverageRows;
     this.blockCoverageRows=next;
     // Editing one CMD join annotates only the target Block. The geometry and
@@ -477,12 +477,16 @@ export class PdfPreview {
     document.removeEventListener('pointercancel',this.onBlockDragCancel,true);
   }
   blockDropPlacement(sourceId,targetId){
-    // Use current CMD reading order, never physical PDF coordinates or
-    // changeable badge text, to decide which side the dragged Block lands on.
-    const sourceIndex=this.blockCoverageRows.findIndex(row=>row.id===sourceId);
-    const targetIndex=this.blockCoverageRows.findIndex(row=>row.id===targetId);
-    if(sourceIndex<0||targetIndex<0)throw Error('文本块顺序已变化，请重试');
-    return sourceIndex>targetIndex?'before':'after';
+    // The inventory follows original MinerU blockIndex order, not the
+    // current CMD reading order after a move. Compare current source lines.
+    // Original OCR ID, PDF geometry and displayed badge stay unchanged.
+    const source=this.blockCoverageRows.find(row=>row.id===sourceId);
+    const target=this.blockCoverageRows.find(row=>row.id===targetId);
+    if(!source||!target||source.pageIndex!==target.pageIndex||
+      !Number.isInteger(source.sourceLine)||!Number.isInteger(target.sourceLine)||
+      source.sourceLine===target.sourceLine)
+      throw Error('文本块源码顺序无效，请重新检查');
+    return source.sourceLine>target.sourceLine?'before':'after';
   }
   updateBlockDrag(item,x,y){
     if(this.blockDrag!==item)return;

@@ -197,15 +197,49 @@ const after17Rows=(await inspectCMDTextBlocks(after17)).rows;
 const after17Joins=readCMDBlockJoins(after17,after17Rows);
 assert.deepEqual(after17Joins.invalid,[]);
 assert.equal(after17Joins.joined.get('p16b0'),'p15b11');
-assert.equal(after17Joins.joined.get('p16b11'),'p16b8');
-assert.equal(after17Joins.joined.get('p16b9'),'p16b11');
+assert.equal(after17Joins.joined.get('p16b11'),'p16b9');
+assert.equal(after17Joins.joined.get('p16b9'),'p16b8');
 assert.equal(after17Joins.joined.get('p16b14'),'p16b13');
 assert.equal(after17Joins.joined.size,4);
 assert.deepEqual(after17Rows.filter(r=>r.pageIndex===16).sort((a,b)=>a.from-b.from)
-  .slice(8,12).map(r=>r.id),['p16b8','p16b11','p16b9','p16b10']);
+  .slice(8,12).map(r=>r.id),['p16b8','p16b9','p16b11','p16b10']);
 const undo17=planCMDBlockMove(after17,after17Rows,'p16b11','p16b10');
 assert.equal(applyEdits(after17,undo17.edits),page17,
   'reverse movement with existing joins must restore the exact CMD bytes');
+// Screenshot regression: visible logical b8 (physical p16b10 with p16b11
+// already joined) moved BEFORE visible b0. Both physical members travel as
+// one logical block. Old logical b0..b7 follow in their original order.
+let joinedPage=original;
+for(const id of ['p16b3','p16b5','p16b11']){
+  const inventory=(await inspectCMDTextBlocks(joinedPage)).rows;
+  joinedPage=applyEdits(joinedPage,planCMDBlockJoin(joinedPage,inventory,id,true).edits);
+}
+const joinedRows=(await inspectCMDTextBlocks(joinedPage)).rows;
+const joinedLabels=projectCMDLogicalTextBlocks(joinedPage,joinedRows).assignments;
+assert.equal(joinedLabels.get('p16b10'),'p16b8');
+assert.equal(joinedLabels.get('p16b11'),'p16b8');
+const moveLogical=planCMDBlockMove(joinedPage,joinedRows,'p16b10','p16b0','before');
+assert.deepEqual(moveLogical.shift.crossedIds,Array.from({length:10},(_,i)=>`p16b${i}`));
+assert.equal(moveLogical.shift.allIndependent,false);
+const logicalSource=applyEdits(joinedPage,moveLogical.edits);
+const logicalRows=(await inspectCMDTextBlocks(logicalSource)).rows;
+const afterLogical=projectCMDLogicalTextBlocks(logicalSource,logicalRows);
+assert.deepEqual(afterLogical.invalid,[]);
+assert.equal(afterLogical.assignments.get('p16b10'),'p16b0');
+assert.equal(afterLogical.assignments.get('p16b11'),'p16b0');
+for(let i=0;i<10;i++)assert.equal(afterLogical.assignments.get(`p16b${i}`),
+  `p16b${Number(joinedLabels.get(`p16b${i}`).split('b').at(-1))+1}`);
+for(let i=12;i<=15;i++)assert.equal(afterLogical.assignments.get(`p16b${i}`),
+  joinedLabels.get(`p16b${i}`),'unaffected logical labels retain their numbers');
+const oldJoins=readCMDBlockJoins(joinedPage,joinedRows).joined;
+const newJoins=readCMDBlockJoins(logicalSource,logicalRows).joined;
+assert.deepEqual([...newJoins].sort(),[...oldJoins].sort(),
+  'all joined children must keep the SAME predecessor and original checkbox state');
+assert.deepEqual(logicalRows.filter(r=>r.pageIndex===16).sort((a,b)=>a.from-b.from)
+  .slice(0,4).map(r=>r.id),['p16b10','p16b11','p16b0','p16b1']);
+const undoLogical=planCMDBlockMove(logicalSource,logicalRows,'p16b10','p16b9','after');
+assert.equal(applyEdits(logicalSource,undoLogical.edits),joinedPage,
+  'reverse move must restore exact CMD bytes including all join markers');
 // Also preserve next-page cross-page join if the page tail moves.
 const nextPageJoinSource=applyEdits(original,planCMDBlockJoin(original,initial,'p17b0',true).edits);
 const crossMove=planCMDBlockMove(nextPageJoinSource,(await inspectCMDTextBlocks(nextPageJoinSource)).rows,

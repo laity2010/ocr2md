@@ -111,6 +111,18 @@ try{
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b8"] .ocr-pdf-block-ctrl span')
         .innerText(),'p16b7',"target's current ordinal shifts but identity stays fixed");
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
+      // Regression: original OCR list order is not the active CMD reading order.
+      const currentDirection=await page.evaluate(async()=>{
+        const {PdfPreview}=await import('/ui/pdf-preview.js');
+        const pdf=Object.create(PdfPreview.prototype);
+        pdf.blockCoverageRows=[
+          {id:'p16b0',pageIndex:16,sourceLine:702},
+          {id:'p16b8',pageIndex:16,sourceLine:680},
+        ];
+        return pdf.blockDropPlacement('p16b0','p16b8');
+      });
+      assert.equal(currentDirection,'before',
+        'direction MUST follow current CMD source lines, not original OCR list');
       await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] input').click();
       await page.waitForFunction(()=>{
         const node=document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b0"]');

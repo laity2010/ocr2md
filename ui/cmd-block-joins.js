@@ -87,23 +87,40 @@ export function planCMDBlockMove(source,rows,fromId,targetId,placement='after'){
   if(original!==source.slice(start,end))throw Error('Block 源码边界不连续');
   const moving=page.findIndex(r=>r.id===fromId);
   const target=page.findIndex(r=>r.id===targetId);
-  const destination=moving<target?
-    target-(placement==='before'?1:0):target+(placement==='after'?1:0);
-  if(moving===destination)return {changed:0,sourceId:fromId,targetId,placement};
-  // One interval rotation, not a label swap:
-  // moving forward: crossed Blocks each shift -1; moving backward: +1.
-  // These are source-order slots. Joined Blocks retain their original ID
-  // and checked state while logical labels derive from the final CMD.
+  // Checked root + all immediately joined descendants form ONE displayed
+  // logical block. Do not strand the unchecked descendants when a root is
+  // dragged. An explicitly dragged unchecked original block still moves
+  // individually (existing behavior) and keeps its checked state.
+  const chainEnd=start=>{
+    let end=start;
+    while(end+1<page.length&&joined.get(page[end+1].id)===page[end].id)end++;
+    return end;
+  };
+  let movingEnd=moving;
+  if(!joined.has(fromId))movingEnd=chainEnd(moving);
+  let targetStart=target;
+  while(targetStart>0&&joined.get(page[targetStart].id)===page[targetStart-1].id)
+    targetStart--;
+  const targetEnd=chainEnd(targetStart);
+  if(target>=moving&&target<=movingEnd)
+    return {changed:0,sourceId:fromId,targetId,placement};
+  const reordered=page.map((r,i)=>({id:r.id,row:r,text:pieces[i]}));
+  const moved=reordered.splice(moving,movingEnd-moving+1);
+  // Insert relative to the whole target logical block, never between its
+  // root and joined descendants.
+  const insertionAnchor=page[placement==='before'?targetStart:targetEnd].id;
+  const anchorAt=reordered.findIndex(r=>r.id===insertionAnchor);
+  if(anchorAt<0)throw Error('文本块目标接续关系无效');
+  const destination=anchorAt+(placement==='after'?1:0);
+  if(destination===moving)return {changed:0,sourceId:fromId,targetId,placement};
+  reordered.splice(destination,0,...moved);
   const crossed=moving<destination?
-    page.slice(moving+1,destination+1):page.slice(destination,moving);
+    page.slice(movingEnd+1,destination+moved.length):page.slice(destination,moving);
   const shift={movedFrom:moving,movedTo:destination,
     crossedIds:crossed.map(r=>r.id),
-    delta:moving<destination?-1:1,
-    allIndependent:!joined.has(fromId)&&crossed.every(r=>!joined.has(r.id))};
-  const reordered=page.map((r,i)=>({id:r.id,row:r,text:pieces[i]}));
-  const [item]=reordered.splice(moving,1);
-  const insertAt=reordered.findIndex(r=>r.id===targetId);
-  reordered.splice(insertAt+(placement==='after'?1:0),0,item);
+    delta:moving<destination?-moved.length:moved.length,
+    allIndependent:moved.length===1&&!joined.has(fromId)&&
+      crossed.every(r=>!joined.has(r.id))};
   const sorted=rows.filter(r=>r.anchorCount===1).sort((x,y)=>x.from-y.from);
   const firstGlobal=sorted.findIndex(r=>r.id===page[0].id);
   const priorPage=sorted[firstGlobal-1];

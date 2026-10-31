@@ -25,15 +25,15 @@ try{
         isMobile:mobile,hasTouch:mobile});
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-      await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
-      await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
+      await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').evaluate(el=>el.click());
+      await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').evaluate(el=>el.click());
       await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),
         null,{timeout:30000});
-      await page.getByRole('checkbox',{name:'文本块覆盖显示'}).check();
+      await page.getByRole('checkbox',{name:'文本块覆盖显示'}).evaluate(el=>{if(!el.checked)el.click();});
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:26000});
-      await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
-      await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
+      await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(el=>el.click());
+      await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
       const src=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
       const dst=page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl');
       await src.scrollIntoViewIfNeeded();
@@ -145,6 +145,72 @@ try{
       await page.locator('#undo').click();
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b9',
         null,{timeout:25000});
+      // User screenshot: physical p16b10 displays logical b8; p16b11 is
+      // unchecked and joined into b8. Moving b8 ahead of b0 must carry its
+      // child and preserve every other logical block / checkbox state.
+      for(const id of ['p16b3','p16b5','p16b11']){
+        await page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] input`).click();
+        await page.waitForFunction(id=>document.querySelector(
+          `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===false,
+          id,{timeout:24000});
+      }
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl span')
+        ?.textContent==='p16b8',null,{timeout:24000});
+      const groupedFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl');
+      const groupedTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
+      const pdfScroller=page.locator('.ocr-pdf-scroller');
+      await groupedFrom.scrollIntoViewIfNeeded();
+      const sourceBox=await groupedFrom.boundingBox();assert(sourceBox);
+      const pointer43={...pointer,pointerId:43};
+      const groupStart={x:sourceBox.x+sourceBox.width*.75,y:sourceBox.y+sourceBox.height/2};
+      await groupedFrom.dispatchEvent('pointerdown',{
+        ...pointer43,clientX:groupStart.x,clientY:groupStart.y});
+      await page.locator('.ocr-pdf-block-drag-source').waitFor({timeout:2200});
+      const pane=await pdfScroller.boundingBox(),groupTargetBox=await groupedTo.boundingBox();
+      assert(pane&&groupTargetBox);
+      if(groupTargetBox.y<pane.y+9||groupTargetBox.y+groupTargetBox.height>pane.y+pane.height-9){
+        const atBottom=groupTargetBox.y>pane.y+pane.height;
+        await page.locator('body').dispatchEvent('pointermove',{
+          ...pointer43,clientX:Math.max(pane.x+15,Math.min(pane.x+pane.width-15,groupStart.x)),
+          clientY:atBottom?pane.y+pane.height-9:pane.y+9});
+        await page.waitForFunction(()=>{
+          const pane=document.querySelector('.ocr-pdf-scroller')?.getBoundingClientRect();
+          const target=document.querySelector(
+            '.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl')?.getBoundingClientRect();
+          return pane&&target&&target.top>pane.top+8&&target.bottom<pane.bottom-8;
+        },null,{timeout:8500});
+      }
+      const finalBox=await groupedTo.boundingBox();assert(finalBox);
+      const groupEnd={x:finalBox.x+finalBox.width*.75,y:finalBox.y+finalBox.height/2};
+      await page.locator('body').dispatchEvent('pointermove',{
+        ...pointer43,clientX:groupEnd.x,clientY:groupEnd.y});
+      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"].ocr-pdf-block-drop-target')
+        .waitFor({timeout:2300});
+      assert.match(await page.locator('.ocr-pdf-status').innerText(),/目标 p16b0 · 松手将当前块排到其前/);
+      await page.locator('body').dispatchEvent('pointerup',{
+        ...pointer43,clientX:groupEnd.x,clientY:groupEnd.y});
+      await page.waitForFunction(()=>{
+        const label=id=>document.querySelector(
+          `.ocr-pdf-block-cover[data-block-id="${id}"] .ocr-pdf-block-ctrl span`)?.textContent;
+        return label('p16b10')==='p16b0'&&label('p16b11')==='p16b0'&&
+          label('p16b0')==='p16b1';
+      },null,{timeout:26000});
+      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),221);
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl span')
+        ?.textContent==='p16b8',null,{timeout:22000});
+      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b11"] input').isChecked(),false);
+      for(const id of ['p16b11','p16b5','p16b3']){
+        await page.locator('#undo').click();
+        await page.waitForFunction(id=>document.querySelector(
+          `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===true,
+          id,{timeout:22000});
+      }
+      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
+      console.log('PDF_LOGICAL_B8_TO_B0_PASS',name,{joinedChild:'p16b11',
+        source:'p16b10',target:'p16b0',originalCheckStateRestored:true});
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
       console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'p6b7 after p6b8',
