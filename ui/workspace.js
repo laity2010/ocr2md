@@ -113,8 +113,14 @@ class OutlinePanel {
       reportMediaStatus,()=>currentPreview?.redrawSentenceCoverage());
     this.textBlock=createTextBlockModule(this.textBlockHost,id=>getCMD()?.getChapter(id),
       reportMediaStatus,point=>{if(currentPreview?.pdfUsable){
-        currentPreview.setMode('pdf');currentPreview.pdf?.focusBlock(point.pageIndex,point.blockIndex);
-      }});
+        currentPreview.setMode('pdf');void currentPreview.focusOriginalBlock(point.pageIndex,point.blockIndex);
+      }},selection=>{
+        if(!selection){currentPreview?.clearBlockComparison();return;}
+        if(selection.overview){void currentPreview?.overviewBlockComparison();return;}
+        if(!currentPreview?.pdfUsable){reportMediaStatus('PDF 预热中，双框暂不可用');return;}
+        currentPreview.setMode('pdf');
+        void currentPreview.compareOriginalBlocks(selection.from,selection.to,selection.reveal);
+      });
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -371,6 +377,13 @@ class PreviewPanel {
     this.mdPane.scrollTop=saved.referenceScrollTop;
     if(saved.reference?.isConnected)saved.reference.focus({preventScroll:true});
   }
+  // Semantic layout port: no AG or WCP consumer touches the PDF.js owner.
+  focusOriginalBlock(pageIndex,blockIndex){return this.pdf?.focusBlock(pageIndex,blockIndex);}
+  compareOriginalBlocks(from,to,reveal='from'){
+    return this.pdf?.compareBlocks(from,to,{reveal});
+  }
+  overviewBlockComparison(){return this.pdf?.overviewComparison();}
+  clearBlockComparison(){this.pdf?.clearComparison();}
   setMode(mode){
     if(mode!=='md'&&mode!=='pdf')return false;
     if(mode==='pdf' && (!this.pdfUsable || this.splitCheckbox.checked)){

@@ -22,3 +22,12 @@
 
 /* Embedded in the single shared preview pane: toolbar now lives in its header. */
 .ocr-preview-pdf-host .ocr-pdf-scroller {top:0}
+
+/* WP4: two persistent original OCR rectangles; labels stay legible at iPad zoom. */
+.ocr-pdf-pair-overlay {position:absolute;z-index:9;pointer-events:none;border-radius:3px;
+  border:2px solid #ffb13d;background:rgba(255,183,61,.22);box-shadow:0 0 0 1px #1d1912 inset}
+.ocr-pdf-pair-to {border-color:#f47c32;background:rgba(250,122,47,.20)}
+.ocr-pdf-pair-overlay::before {content:attr(data-label);position:absolute;top:-17px;left:-2px;
+  height:16px;min-width:18px;text-align:center;line-height:16px;font-size:11px;font-weight:700;
+  background:#ffb13d;color:#272218;border-radius:3px 3px 0 0;box-shadow:0 1px 3px #1118}
+.ocr-pdf-pair-to::before {background:#f47c32;color:#211b17}

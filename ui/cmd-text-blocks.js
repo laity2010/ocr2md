@@ -141,7 +141,7 @@ export async function inspectCMDTextBlocks(source){
   for(const row of rows)if(row.from===null)row.expectsPreview=false;
   const unknown=[...anchors].filter(([id])=>!expected.has(id)).map(([id,positions])=>({id,positions}));
   const duplicate=rows.filter(row=>row.anchorCount>1);
-  return {rows,summary:{pages:data.pdf_info.length,blocks:rows.length,
+  return {rows,summary:{sourceSha:sealed.exec(source)[1],pages:data.pdf_info.length,blocks:rows.length,
     matched:rows.filter(row=>row.anchorCount===1).length,
     missing:rows.filter(row=>row.anchorCount===0).length,duplicates:duplicate.length,
     withGeometry:rows.filter(row=>row.geometry).length,

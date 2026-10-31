@@ -1150,3 +1150,18 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP3-L52','L52','tests/cmd-block-continuations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','22-page Buffett 4 cross-column + 1 cross-page candidate; five known seams, caption/figure/empty-column blockers and unchanged CMD','integration'),
  ('TC-WP3-C56','C56','tests/text-block-continuations.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit reads five candidates without mutations or legacy PDF-map fetch','integration'),
  ('TC-WP3-G27','G27','tests/text-block-continuations.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit AG switches block/candidate schema, buttons focus source and target with sequential PDF orange screenshots','integration');
+
+-- WP4: human decisions are local review drafts keyed by the CMD original
+-- evidence SHA; never a CMD paragraph-merge API or a second document editor.
+INSERT INTO apis VALUES
+ ('L53','L','returned.compareBlocks','ui/pdf-preview.js','returned','two validated page/Block semantic IDs, reveal side','two labelled A/B original PDF bbox overlays, same-page or cross-page','PDF owns viewport coordinates and renderer; no source/CMD writes',1),
+ ('L54','L','returned.overviewComparison','ui/pdf-preview.js','returned','selected same-page Block pair','fit both orange rectangles into the visible PDF viewport','presentation-only zoom, PDF.js coordinates retained',1),
+ ('G28','G','createTextBlockModule.reviewActions','ui/text-block-module.js','internal','selected candidate and human review action','confirmed/rejected/pending local draft keyed by sealed source SHA and JSON export','AG owns review UI, no merging, no document or PDF mutations',1);
+INSERT INTO access_edges VALUES
+ ('X-WP4-L53','L','L','ui/workspace.js','currentPreview.compareOriginalBlocks(selection.from','L53','registered','Layout forwards semantic candidate IDs to PDF preview owner'),
+ ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner'),
+ ('X-WP4-G28','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G28','registered','AG review remains owner-local; Layout provides only a semantic compare callback');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP4-L53','L53','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit show simultaneous labelled A/B original PDF boxes for same page and different pages, without OCR fetch','integration'),
+ ('TC-WP4-L54','L54','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit overview renders both p6b6 and p6b7 boxes inside physical PDF viewport','integration'),
+ ('TC-WP4-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Confirm, reject, reset, reload restore and downloadable JSON; five candidate IDs and source unchanged','integration');

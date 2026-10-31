@@ -88,6 +88,7 @@ export class PdfPreview {
     this.map=[];this.anchors=[];
     this.disposed=false;this.explicitUserUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
+    this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.lastLayoutWidth=0;this.lastLayoutHeight=0;this.overlayTimer=null;
     this.active=false;this.overlayDrawId=0;this.pageViewportCache=new Map();
     this.revealPending=false;this.revealUntil=0;
@@ -96,6 +97,7 @@ export class PdfPreview {
     this.unsubscribe=viewStore.subscribe((next,prev)=>{
       if(next.documentRevision!==prev.documentRevision){
         this.anchors=sourceBlocks(this.getMarkdown());
+        this.clearComparison();
         void this.refreshGeometry();
       }
       // PDF pages and Markdown lines have unrelated visual geometry. React
@@ -260,6 +262,7 @@ export class PdfPreview {
       if(distance<score){score=distance;chosen=block;}
     }
     if(!chosen)return;
+    this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===n-1&&a.blockIndex===chosen.blockIndex);
     if(anchor){
       this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex};this.drawOverlay();
@@ -267,9 +270,118 @@ export class PdfPreview {
         elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
     }
   }
+  /** WP4: two independently drawn, labelled original CMD bboxes. Layout
+   * keeps semantic IDs; PDF remains the sole owner of canvas geometry.
+   * Across pages both DOM overlays exist, but only one page fits the viewport.
+   */
+  async compareBlocks(from,to,{reveal='from'}={}){
+    const points=[from,to];
+    if(!points.every(point=>Number.isInteger(point?.pageIndex)&&Number.isInteger(point?.blockIndex)&&
+      this.map[point.pageIndex]?.regions?.some(region=>region.blockIndex===point.blockIndex)))
+      return false;
+    this.comparison={points:points.map(point=>({pageIndex:point.pageIndex,blockIndex:point.blockIndex})),
+      token:++this.comparisonDrawId};
+    // Only the comparison's own labelled overlays represent this selection;
+    // the former single-block box would imply three selected regions.
+    this.selected=null;this.overlay?.remove();this.overlay=null;
+    const target=points[reveal==='to'?1:0];
+    if(this.ready){
+      const page=this.viewer.getPageView(target.pageIndex);
+      const rect=page?.div?.getBoundingClientRect(),clip=this.visibleClip();
+      if(!rect||!clip||rect.bottom<clip.top||rect.top>clip.bottom)
+        this.viewer.scrollPageIntoView({pageNumber:target.pageIndex+1});
+    }
+    await this.drawPairOverlays();
+    if(this.active&&this.comparisonNodes.length===2)this.ensureVisible(this.comparisonNodes[reveal==='to'?1:0]);
+    return true;
+  }
+  /** Optional overview for a same-page pair: fit the span of both original
+   * rectangles into the currently available PDF pane without hiding either.
+   * For cross-page pairs use the A/B focus controls instead.
+   */
+  async overviewComparison(){
+    if(!this.ready||!this.comparison)return false;
+    const [a,b]=this.comparison.points;
+    if(a.pageIndex!==b.pageIndex)return false;
+    const page=this.map[a.pageIndex];
+    const first=page?.regions.find(r=>r.blockIndex===a.blockIndex);
+    const second=page?.regions.find(r=>r.blockIndex===b.blockIndex);
+    if(!first||!second)return false;
+    const y0=Math.min(first.bbox[1],second.bbox[1]),y1=Math.max(first.bbox[3],second.bbox[3]);
+    const current=this.viewer.currentScale;
+    const view=this.viewer.getPageView(a.pageIndex);
+    const unscaledHeight=view?.div?.getBoundingClientRect().height/current;
+    if(!Number.isFinite(unscaledHeight)||unscaledHeight<=0)return false;
+    const span=(y1-y0)/page.pageSize[1]*unscaledHeight;
+    if(span<=0)return false;
+    const scale=Math.max(.15,Math.min(current,(this.scroller.clientHeight-52)/span));
+    if(!Number.isFinite(scale))return false;
+    if(scale<current-.005)this.setZoom(String(scale));
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await this.drawPairOverlays();
+    const [overlayA,overlayB]=this.comparisonNodes;
+    if(overlayA&&overlayB){
+      const boxA=overlayA.getBoundingClientRect(),boxB=overlayB.getBoundingClientRect();
+      const clip=this.visibleClip();
+      if(clip){
+        const mid=(Math.min(boxA.top,boxB.top)+Math.max(boxA.bottom,boxB.bottom))/2;
+        this.scroller.scrollTop+=mid-(clip.top+clip.bottom)/2;
+      }
+    }
+    this.scheduleOverlay();
+    return true;
+  }
+  clearComparison(){
+    ++this.comparisonDrawId;
+    this.comparison=null;
+    for(const node of this.comparisonNodes)node.remove();
+    this.comparisonNodes=[];
+  }
+  async drawPairOverlays(){
+    const comparison=this.comparison,token=this.comparisonDrawId;
+    if(!comparison||!this.ready)return;
+    try{
+      const coords=await Promise.all(comparison.points.map(async point=>{
+        const page=this.viewer.getPageView(point.pageIndex);
+        const region=this.map[point.pageIndex];
+        const block=region?.regions.find(r=>r.blockIndex===point.blockIndex);
+        if(!page?.div||!block)throw Error('PDF 候选文本块不可定位');
+        let viewportPromise=this.pageViewportCache.get(point.pageIndex);
+        if(!viewportPromise){
+          viewportPromise=this.pdf.getPage(point.pageIndex+1).then(pdfPage=>pdfPage.getViewport({scale:1}));
+          this.pageViewportCache.set(point.pageIndex,viewportPromise);
+          viewportPromise.catch(()=>this.pageViewportCache.delete(point.pageIndex));
+        }
+        const viewport=await viewportPromise;
+        return {point,page,rect:pdfOverlayRect({...block,pageSize:region.pageSize},viewport)};
+      }));
+      if(this.disposed||!this.comparison||token!==this.comparisonDrawId)return;
+      const scroll=this.scroller.getBoundingClientRect();
+      coords.forEach(({point,page,rect},i)=>{
+        const overlay=this.comparisonNodes[i]||document.createElement('div');
+        overlay.className=`ocr-pdf-pair-overlay ocr-pdf-pair-${i===0?'from':'to'}`;
+        overlay.dataset.role=i===0?'from':'to';
+        overlay.dataset.pdfPage=String(point.pageIndex+1);
+        overlay.dataset.blockIndex=String(point.blockIndex);
+        overlay.dataset.label=i===0?'A':'B';
+        overlay.setAttribute('aria-label',`${i===0?'A 来源':'B 接续'}文本块 PDF 区域`);
+        const paper=page.div.getBoundingClientRect();
+        overlay.style.left=(paper.left-scroll.left+this.scroller.scrollLeft+paper.width*rect.left/100)+'px';
+        overlay.style.top=(paper.top-scroll.top+this.scroller.scrollTop+paper.height*rect.top/100)+'px';
+        overlay.style.width=paper.width*rect.width/100+'px';
+        overlay.style.height=paper.height*rect.height/100+'px';
+        overlay.title=`${i===0?'A 来源':'B 接续'} · 第 ${point.pageIndex+1} 页 Block ${point.blockIndex}`;
+        if(!overlay.isConnected)this.scroller.append(overlay);
+        this.comparisonNodes[i]=overlay;
+      });
+    }catch(error){
+      if(token===this.comparisonDrawId)this.setStatus('双框定位失败：'+error.message);
+    }
+  }
   clearHighlight(){
     ++this.overlayDrawId;
     this.selected=null;
+    this.clearComparison();
     this.overlay?.remove();this.overlay=null;
   }
   sendPdfNavigation(pageNumber){
@@ -293,6 +405,8 @@ export class PdfPreview {
     if(!this.ready)return false;
     const block=this.map[pageIndex]?.regions?.find(r=>r.blockIndex===blockIndex);
     if(!block)return false;
+    if(this.comparison&&!this.comparison.points.some(p=>p.pageIndex===pageIndex&&p.blockIndex===blockIndex))
+      this.clearComparison();
     this.selected={pageIndex,blockIndex};
     this.revealPending=true;this.revealUntil=performance.now()+1800;
     const page=this.viewer.getPageView(pageIndex);
@@ -310,6 +424,13 @@ export class PdfPreview {
     if(!this.ready){this.pendingFocus={line,explicit};return;}
     const source=sourceAnchor(this.anchors,line);
     if(!source)return;
+    if(this.comparison){
+      if(this.comparison.points.some(p=>p.pageIndex===source.pageIndex&&p.blockIndex===source.blockIndex)){
+        await this.compareBlocks(...this.comparison.points,{reveal:this.comparison.points[0].blockIndex===source.blockIndex&&this.comparison.points[0].pageIndex===source.pageIndex?'from':'to'});
+        return;
+      }
+      this.clearComparison();
+    }
     // Never skip another block merely because it lies on the same PDF page.
     if(!explicit&&this.selected?.pageIndex===source.pageIndex&&
       this.selected?.blockIndex===source.blockIndex)return;
@@ -365,6 +486,7 @@ export class PdfPreview {
     }
   }
   async drawOverlay(){
+    if(this.comparison){++this.overlayDrawId;await this.drawPairOverlays();return;}
     const drawId=++this.overlayDrawId;
     const selection=this.selected;
     if(!selection||!this.ready){this.overlay?.remove();this.overlay=null;return;}
@@ -415,6 +537,7 @@ export class PdfPreview {
     this.disposed=true;this.finishWarmup?.(false);
     this.unsubscribe?.();this.resizeObserver.disconnect();
     clearTimeout(this.overlayTimer);
+    this.clearComparison();
     this.viewer?.setDocument(null);
     void this.task?.destroy();
   }

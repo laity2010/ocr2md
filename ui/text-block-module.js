@@ -9,21 +9,86 @@ const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f38
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',rowHoverColor:'#37464b',fontSize:13,
   selectedRowBackgroundColor:'rgba(225,161,66,.15)',fontFamily:'"OCR2MD Sarasa",monospace',spacing:3});
-export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{}){
+export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{},onCompare=()=>{}){
   host.classList.add('ocr-text-block-pane');
   const guide=document.createElement('div');guide.className='ocr-text-block-guide';
-  guide.textContent='只读核对 · 原始 CMD 封存 JSON 中的每个 MinerU Block（包括缺失的源码锚点）· 点击行同步源码、Markdown、PDF 橙框 · 暂不合并文本块';
+  guide.textContent='原始 Block 不变 · 选候选双框对照 · 审阅草稿仅存当前浏览器，可导出 JSON（跨设备不自动同步），不合并源码';
   const control=document.createElement('div');control.className='ocr-text-block-control';
   const blocksButton=document.createElement('button');blocksButton.type='button';blocksButton.textContent='原始文本块';
   blocksButton.setAttribute('aria-label','查看原始文本块清单');
   const candidatesButton=document.createElement('button');candidatesButton.type='button';candidatesButton.textContent='接续候选';
   candidatesButton.setAttribute('aria-label','查看跨页跨栏接续候选');
   control.append(blocksButton,candidatesButton);
+  const reviewBar=document.createElement('div');reviewBar.className='ocr-block-review-bar';reviewBar.hidden=true;
+  const selectionLabel=document.createElement('span');selectionLabel.className='ocr-block-review-selection';
+  selectionLabel.textContent='点击候选行，PDF 将显示 A/B 两个框';
+  const confirmButton=document.createElement('button');confirmButton.type='button';confirmButton.textContent='确认续接';
+  confirmButton.setAttribute('aria-label','确认所选文本块续接');
+  const rejectButton=document.createElement('button');rejectButton.type='button';rejectButton.textContent='否决续接';
+  rejectButton.setAttribute('aria-label','否决所选文本块续接');
+  const resetButton=document.createElement('button');resetButton.type='button';resetButton.textContent='待审阅';
+  resetButton.setAttribute('aria-label','将所选文本块恢复待审阅');
+  const overviewButton=document.createElement('button');overviewButton.type='button';overviewButton.textContent='双框概览';
+  overviewButton.setAttribute('aria-label','同页 PDF 双框概览');
+  overviewButton.title='缩小同页 PDF，尽量同时看到 A、B；跨页可点击 A/B 分别定位';
+  const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='导出审阅记录';
+  exportButton.setAttribute('aria-label','导出文本块续接审阅 JSON');
+  reviewBar.append(selectionLabel,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
+  overviewButton.addEventListener('click',()=>onCompare({overview:true}));
   const state=document.createElement('div');state.className='ocr-text-block-state';state.setAttribute('role','status');
-  const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(guide,control,state,gridHost);
+  const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(guide,control,reviewBar,state,gridHost);
   let rows=[],candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
+  let selectedCandidateId=null,documentSha=null,reviews=new Map();
+  const storageKey=sha=>`ocr2md:continuation-review:v1:${sha}`;
+  const restore=sha=>{
+    try{
+      const record=JSON.parse(localStorage.getItem(storageKey(sha))||'null');
+      if(record?.sourceSha!==sha||record.schemaVersion!==1)return new Map();
+      return new Map(Object.entries(record.decisions||{}).filter(([id,value])=>
+        /^p\d+b\d+--p\d+b\d+$/.test(id)&&['已确认','已否决'].includes(value)));
+    }catch{return new Map();}
+  };
+  const persist=()=>{
+    if(!documentSha)return;
+    try{localStorage.setItem(storageKey(documentSha),JSON.stringify({schemaVersion:1,sourceSha:documentSha,
+      decisions:Object.fromEntries(reviews)}));}
+    catch{onStatus('审阅状态仅保留在当前页面，请导出 JSON 备份');}
+  };
+  const selectedCandidate=()=>candidates.find(x=>x.id===selectedCandidateId)||null;
+  const chooseCandidate=(row,reveal='from')=>{
+    if(!row)return;
+    selectedCandidateId=row.id;
+    selectionLabel.textContent=`A ${row.fromId}（第 ${row.fromPage} 页） ↔ B ${row.toId}（第 ${row.toPage} 页）`;
+    grid.getRowNode(row.id)?.setSelected(true,true,'api');
+    refresh();
+    onCompare({from:{pageIndex:row.fromPage-1,blockIndex:row.fromBlockIndex},
+      to:{pageIndex:row.toPage-1,blockIndex:row.toBlockIndex},reveal});
+  };
+  const setReview=value=>{
+    const row=selectedCandidate();if(!row)return;
+    if(value==='待审阅')reviews.delete(row.id);else reviews.set(row.id,value);
+    persist();row.status=value;
+    grid.refreshCells({force:true});refresh();
+  };
+  confirmButton.addEventListener('click',()=>setReview('已确认'));
+  rejectButton.addEventListener('click',()=>setReview('已否决'));
+  resetButton.addEventListener('click',()=>setReview('待审阅'));
+  exportButton.addEventListener('click',()=>{
+    if(!candidateSummary||!documentSha)return;
+    const payload={schemaVersion:1,kind:'ocr2md-continuation-review',
+      sourceSha:documentSha,reviewedAt:new Date().toISOString(),
+      note:'人工审阅意见，不改变 CMD Block，不代表原始 OCR 关系已合并',
+      summary:{...candidateSummary,confirmed:candidates.filter(c=>c.status==='已确认').length,
+        rejected:candidates.filter(c=>c.status==='已否决').length},
+      records:candidates.map(({id,kind,fromId,toId,fromPage,toPage,fromBbox,toBbox,status,evidence})=>
+        ({id,kind,fromId,toId,fromPage,toPage,fromBbox,toBbox,status,evidence}))};
+    const object=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)+'\n'],{type:'application/json'}));
+    const link=document.createElement('a');link.href=object;link.download=`ocr2md-continuation-review-${documentSha.slice(0,12)}.json`;
+    host.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(object),1500);
+  });
   const navigate=(row,end='from')=>{
     if(!row)return;
+    if(mode==='candidates')chooseCandidate(row,end);
     const id=mode==='candidates'?(end==='to'?row.toId:row.fromId):row.id;
     const target=rows.find(x=>x.id===id);
     if(!target)return;
@@ -66,7 +131,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     {field:'fromTail',headerName:'源块末尾',flex:1,minWidth:210,tooltipField:'fromTail'},
     {field:'toHead',headerName:'目标块开头',flex:1,minWidth:210,tooltipField:'toHead'},
     {field:'reason',headerName:'判断证据',flex:1,minWidth:230,tooltipField:'reason'},
-    {field:'status',headerName:'状态',width:92,minWidth:80},
+    {field:'status',headerName:'人工审阅',width:100,minWidth:92,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
   ].map(col=>({sortable:false,resizable:true,suppressMovable:true,...col}));
   const grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:32,
     getRowId:p=>p.data.id,rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
@@ -94,6 +159,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     // The virtual-chapter adapter caches its projected columnDefs. Reset
     // before switching AG schemas, or it restores the old block columns.
     virtual.setVirtualQuery({enabled:false});
+    reviewBar.hidden=mode!=='candidates';
+    if(mode==='blocks'){onCompare(null);selectedCandidateId=null;selectionLabel.textContent='点击候选行，PDF 将显示 A/B 两个框';}
     blocksButton.setAttribute('aria-pressed',String(mode==='blocks'));
     candidatesButton.setAttribute('aria-pressed',String(mode==='candidates'));
     grid.setGridOption('columnDefs',mode==='candidates'?candidateColumns:columns);
@@ -105,32 +172,39 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   blocksButton.addEventListener('click',()=>{if(mode!=='blocks'){mode='blocks';updateGrid();}});
   candidatesButton.addEventListener('click',()=>{if(mode!=='candidates'){mode='candidates';updateGrid();}});
   const refresh=()=>{
+    const selected=Boolean(selectedCandidate());
+    for(const button of [confirmButton,rejectButton,resetButton,overviewButton])button.disabled=!selected;
+    overviewButton.disabled=!selected||selectedCandidate().fromPage!==selectedCandidate().toPage;
     const list=scoped();
     if(scope)virtual.setVirtualQuery({...scope,keys:scope.operationScope?.mode==='chapter'?new Set(list.map(r=>r.from)):null});
     state.textContent=error?'文本块检查失败：'+error:!report?'正在读取 CMD 内嵌的原始 JSON…':
       mode==='candidates'?(candidateSummary?
-        `只读候选 ${candidateSummary.candidates} 组 · 跨栏 ${candidateSummary.acrossColumn} · 跨页 ${candidateSummary.acrossPage} · 高线索 ${candidateSummary.high} · 中 ${candidateSummary.medium} · 低 ${candidateSummary.low} · ${candidateSummary.doublePages} 页识别双栏 · ${candidateSummary.blockedTransitions} 处结构阻断 · 全部待审阅（非自动合并）`:
+        `候选 ${candidateSummary.candidates} 组 · 跨栏 ${candidateSummary.acrossColumn} · 跨页 ${candidateSummary.acrossPage} · 已确认 ${candidates.filter(x=>x.status==='已确认').length} · 已否决 ${candidates.filter(x=>x.status==='已否决').length} · 待审阅 ${candidates.filter(x=>x.status==='待审阅').length} · ${candidateSummary.blockedTransitions} 处结构阻断 · 不合并原文` :
         '跨页跨栏候选扫描中…'):
       `原始 ${report.blocks} 块 / ${report.pages} 页 · 源码已匹配 ${report.matched} · 缺失 ${report.missing} · 重复 ${report.duplicates} · PDF bbox ${report.withGeometry} · 无效 ${report.withoutGeometry}`+
       ` · 可见正文 ${report.readable} · 空块/仅元数据 ${report.metadataOnly}`+
       (previewMapped?` · 当前 MD 定位 ${list.filter(x=>x.expectsPreview&&previewMapped.has(x.id)).length}/${list.filter(x=>x.expectsPreview).length}`:' · MD 定位检查中')+
       ` · 未知锚点 ${report.unknown}`+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
-    if(active&&report)onStatus(mode==='candidates'?`CMD 接续候选 ${candidateSummary?.candidates??0} · 待审阅`:`CMD 文本块 ${report.matched}/${report.blocks} · 缺失 ${report.missing}`);
+    if(active&&report)onStatus(mode==='candidates'?`接续人工审阅 ${candidates.filter(x=>x.status!=='待审阅').length}/${candidateSummary?.candidates??0}`:`CMD 文本块 ${report.matched}/${report.blocks} · 缺失 ${report.missing}`);
   };
   updateGrid();
   return Object.freeze({
     setLoading(){error='';report=null;candidateSummary=null;state.textContent='读取 CMD 无损封存数据中…';},
     setError(e){error=String(e);refresh();},
-    setInventory(result){report=result.summary;previewMapped=null;rows=result.rows.map(row=>({...row,
+    setInventory(result){
+      if(documentSha!==result.summary.sourceSha){documentSha=result.summary.sourceSha;reviews=restore(documentSha);selectedCandidateId=null;onCompare(null);}
+      report=result.summary;previewMapped=null;rows=result.rows.map(row=>({...row,
       geometryLabel:row.geometry?'可定位':'无效',
       previewLabel:row.expectsPreview?'待检查':'无需渲染'}));selectedId=null;
       if(mode==='blocks')grid.setGridOption('rowData',rows);error='';refresh();},
     setContinuationCandidates(result){candidateSummary=result.summary;
-      candidates=result.candidates.map(row=>({...row,
+      candidates=result.candidates.map(row=>({...row,status:reviews.get(row.id)||'待审阅',
         from:rows.find(block=>block.id===row.fromId)?.from??null,
         reason:row.evidence.join('；')}));
-      if(mode==='candidates')grid.setGridOption('rowData',candidates);refresh();},
+      if(mode==='candidates')grid.setGridOption('rowData',candidates);
+      if(selectedCandidateId&&!selectedCandidate()){selectedCandidateId=null;onCompare(null);}
+      refresh();},
     getBlocks(){return rows.map(({id,sourceLine,expectsPreview})=>({id,sourceLine,expectsPreview}));},
     setPreviewCoverage(ids){
       previewMapped=new Set(ids);
@@ -140,7 +214,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     setVirtualQuery(intent){scope=intent;refresh();},
     count(chapter){if(chapter==='all')return rows.length;const c=getChapter(chapter);
       return c?rows.filter(r=>r.from!==null&&r.from>=c.from&&r.from<c.to).length:0;},
-    setActive(value){active=Boolean(value);host.hidden=!active;if(active)refresh();},
-    dispose(){disposed=true;unsubscribe();grid.destroy();},
+    setActive(value){active=Boolean(value);host.hidden=!active;if(!active)onCompare(null);if(active)refresh();},
+    dispose(){disposed=true;onCompare(null);unsubscribe();grid.destroy();},
   });
 }

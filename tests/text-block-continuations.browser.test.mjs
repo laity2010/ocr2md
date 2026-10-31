@@ -27,7 +27,7 @@ try{
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:25000});
    await page.locator('.ocr-text-block-control [aria-label="查看跨页跨栏接续候选"]').click();
-   await page.waitForFunction(()=>/只读候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:20000});
+   await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('.ocr-text-block-state')?.textContent||''),null,{timeout:20000});
    await page.locator('.ocr-text-block-grid .ag-cell[col-id="toId"]').first().waitFor({timeout:16000});
    await page.waitForFunction(()=>{const nodes=[...document.querySelectorAll('.ocr-text-block-grid .ag-row[row-id]')];
      return nodes.length===5&&nodes.every(node=>node.getAttribute('row-id')?.includes('--'));},null,{timeout:18000});
@@ -42,10 +42,10 @@ try{
    await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
    await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
    await first.locator('.ag-cell[col-id="fromId"] button').click();
-   await page.locator('.ocr-pdf-region-overlay[data-pdf-page="7"][data-block-index="6"]').waitFor({timeout:18000});
+   await page.locator('.ocr-pdf-pair-overlay[data-role="from"][data-pdf-page="7"][data-block-index="6"]').waitFor({timeout:18000});
    await page.screenshot({path:`.v6/evidence/wp3/${name}-source-orange.png`,animations:'disabled'});
    await first.locator('.ag-cell[col-id="toId"] button').click();
-   await page.locator('.ocr-pdf-region-overlay[data-pdf-page="7"][data-block-index="7"]').waitFor({timeout:18000});
+   await page.locator('.ocr-pdf-pair-overlay[data-role="to"][data-pdf-page="7"][data-block-index="7"]').waitFor({timeout:18000});
    await page.screenshot({path:`.v6/evidence/wp3/${name}-target-orange.png`,animations:'disabled'});
    await page.locator('.ocr-text-block-control [aria-label="查看原始文本块清单"]').click();
    assert.match(await page.locator('.ocr-text-block-state').innerText(),/原始 224 块/);
