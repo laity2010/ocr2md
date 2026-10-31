@@ -1211,8 +1211,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Figure/table caption and notes are MinerU children of one OCR Block.
 -- Their rectangles can extend outside the parent chart/table body bbox.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-TEXTBLOCK-CHILD-RECT-L50','L50','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','p13b1 original chart body and two immutable child bboxes including Notes; p14b0 table caption/footnote; 224 parent Block identities unchanged','integration'),
- ('TC-TEXTBLOCK-CHILD-COVER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit exact page-scaled chart title/Notes and table title/Notes overlay fragments with no extra checkboxes; 224 controls still locally updated','integration');
+ ('TC-TEXTBLOCK-CHILD-RECT-L50','L50','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','p13b1 chart title/Notes and p14b0 table caption/footnote retained; false p3b1 Notes bbox overlaps p3b0 96% and is excluded from PDF layout without rewriting sealed OCR data; 224 parent Blocks unchanged','integration'),
+ ('TC-TEXTBLOCK-CHILD-COVER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit genuine chart/table child overlays remain, phantom p3b1 Notes horizontal rectangle absent from p3b0 table; no extra checkbox and 224 controls remain locally updated','integration');
 
 -- Page-local PDF label drag changes real CMD source order, not a shadow
 -- ordering model. Original OCR identity and geometry remain immutable.

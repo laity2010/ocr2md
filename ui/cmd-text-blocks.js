@@ -61,6 +61,21 @@ export async function queryCMDLayout(source){
           if(!Array.isArray(bbox)||bbox.length!==4||!bbox.every(Number.isFinite)||
             bbox[0]<0||bbox[1]<0||bbox[2]<=bbox[0]||bbox[3]<=bbox[1]||
             bbox[2]>pageSize[0]||bbox[3]>pageSize[1])return [];
+          // A MinerU child may carry a wrong bbox belonging visually to an
+          // entirely different top-level Block. Example: page 4's p3b1 table
+          // note was placed inside p3b0 (96% overlap), creating a phantom
+          // selection across the first table. Keep the original OCR JSON
+          // untouched; only suppress provably conflicting PDF overlay evidence.
+          const childArea=(bbox[2]-bbox[0])*(bbox[3]-bbox[1]);
+          const conflicts=page.para_blocks.some((other,i)=>{
+            if(i===blockIndex)return false;
+            const r=other.bbox;
+            if(!Array.isArray(r)||r.length!==4||!r.every(Number.isFinite))return false;
+            const width=Math.max(0,Math.min(bbox[2],r[2])-Math.max(bbox[0],r[0]));
+            const height=Math.max(0,Math.min(bbox[3],r[3])-Math.max(bbox[1],r[1]));
+            return width*height/childArea>0.5;
+          });
+          if(conflicts)return [];
           // MinerU may classify a paragraph beginning "Notes:" as
           // chart_caption rather than chart_footnote. Keep the OCR type
           // intact, expose the display role separately (no text cache).

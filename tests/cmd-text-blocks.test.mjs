@@ -38,6 +38,15 @@ assert.deepEqual(table.subRegions,[
   {type:'table_caption',role:'caption',bbox:[57,89,484,104]},
   {type:'table_footnote',role:'note',bbox:[50,341,523,363]},
 ]);
+const screenshotTable0=layout.pages[3].regions.find(r=>r.blockIndex===0);
+const screenshotTable1=layout.pages[3].regions.find(r=>r.blockIndex===1);
+assert.deepEqual(screenshotTable0.subRegions,[
+  {type:'table_caption',role:'caption',bbox:[74,89,523,104]},
+]);
+assert.deepEqual(screenshotTable1.subRegions,[],
+  'p3b1 Notes original bbox [50,317,521,339] overlaps p3b0 body 96%; do not paint phantom selection');
+assert.deepEqual((await queryCMDBlockGeometry(initial,3,1)).bbox,[68,464,539,684],
+  'the original table geometry and provenance remain available');
 assert(Object.isFrozen(chart.subRegions)&&Object.isFrozen(chart.subRegions[1].bbox),
   'child evidence geometry must remain immutable and share parent Block identity');
 assert.equal(await queryCMDBlockGeometry(initial,99,0),null);

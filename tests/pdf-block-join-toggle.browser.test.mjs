@@ -77,6 +77,11 @@ try{
    const tableParts=page.locator('.ocr-pdf-block-cover[data-block-id="p14b0"] > .ocr-pdf-block-fragment');
    assert.deepEqual(await tableParts.evaluateAll(nodes=>nodes.map(n=>n.dataset.partType)),
      ['table_caption','table_footnote']);
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p3b1"] > .ocr-pdf-block-fragment').count(),0,
+     'invalid p3b1 Notes bbox must not paint an extra horizontal overlay inside the previous table p3b0');
+   assert.deepEqual(await page.locator('.ocr-pdf-block-cover[data-block-id="p3b0"] > .ocr-pdf-block-fragment')
+     .evaluateAll(nodes=>nodes.map(node=>node.dataset.partType)),['table_caption'],
+     'genuine p3b0 caption still renders');
    assert.equal(await page.locator('.ocr-pdf-block-ctrl input').count(),224,
      'captions and notes must never create independent Block controls');
    // The right/left gutter chips MUST NOT overlap their own OCR text.
