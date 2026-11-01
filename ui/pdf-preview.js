@@ -11,6 +11,7 @@ import {viewStore,publishFocus} from './view-store.js';
 import './pdf-preview.css';
 import {blockAnchor} from './mineru-anchors.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
+import {hitPDFRegion} from './pdf-region-hit.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // CMD join annotations change logical grouping, never the sealed OCR pages or
@@ -182,15 +183,20 @@ export class PdfPreview {
     const region=this.map[chosen.pageIndex];
     const block=region?.regions.find(r=>r.blockIndex===chosen.blockIndex);
     if(!block)return;
+    const part=chosen.partIndex===null||chosen.partIndex===undefined?null:
+      block.subRegions?.[chosen.partIndex];
+    if(chosen.partIndex!=null&&!part)return;
     try{
       const page=await this.pdf.getPage(chosen.pageIndex+1);
       const {items}=await page.getTextContent();
-      const text=extractPDFBlockText(items,page.getViewport({scale:1}),region.pageSize,block.bbox);
+      const text=extractPDFBlockText(items,page.getViewport({scale:1}),region.pageSize,
+        part?.bbox||block.bbox);
       if(this.disposed||token!==this.textExtractToken)return;
       if(!text)return;
       this.extractReady={...chosen,text,token};
       this.extractButton.disabled=false;
-      this.extractButton.title=`PDF 原文字层 ${text.length} 字符 · 点击插入源码窗当前光标（原文保留，可 Undo）`;
+      const role=part?.role==='note'?'注释':part?.role==='caption'?'标题':'正文';
+      this.extractButton.title=`PDF ${role}原文字层 ${text.length} 字符 · 点击插入源码窗当前光标（原文保留，可 Undo）`;
     }catch(error){
       if(!this.disposed&&token===this.textExtractToken)
         this.extractButton.title='无法读取 PDF 原文字层：'+error.message;
@@ -199,7 +205,8 @@ export class PdfPreview {
   async insertSelectedPDFText(){
     const item=this.extractReady;
     if(!item||this.extractButton.disabled||this.disposed||
-      this.selected?.pageIndex!==item.pageIndex||this.selected?.blockIndex!==item.blockIndex)return;
+      this.selected?.pageIndex!==item.pageIndex||this.selected?.blockIndex!==item.blockIndex||
+      (this.selected?.partIndex??null)!==(item.partIndex??null))return;
     this.extractButton.disabled=true;
     try{
       const result=await this.onInsertPDFText(item.pageIndex,item.blockIndex,item.text);
@@ -385,21 +392,17 @@ export class PdfPreview {
     if(x<0||x>1||y<0||y>1)return;
     const source=this.map[n-1];
     if(!source)return;
-    let chosen=null,score=Infinity;
-    for(const block of source.regions){
-      const [x0,y0,x1,y1]=block.bbox;
-      const dx=Math.max(x0/source.pageSize[0]-x,0,x-x1/source.pageSize[0]);
-      const dy=Math.max(y0/source.pageSize[1]-y,0,y-y1/source.pageSize[1]);
-      const distance=dx*dx+dy*dy;
-      if(distance<score){score=distance;chosen=block;}
-    }
+    const chosen=hitPDFRegion(source,[x*source.pageSize[0],y*source.pageSize[1]]);
     if(!chosen)return;
     this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===n-1&&a.blockIndex===chosen.blockIndex);
     // A PDF Block without a writable CMD anchor can still supply useful
     // original text. The caret, not the source Block, is the destination.
-    this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex};
+    this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex,
+      partIndex:chosen.partIndex};
     void this.prepareSelectedPDFText();this.drawOverlay();
+    const partLabel=chosen.role==='caption'?'标题':chosen.role==='note'?'注释':'正文';
+    this.setStatus(`第 ${n} 页 · p${n-1}b${chosen.blockIndex} · ${partLabel} 已定位`);
     if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
       elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
   }
@@ -1057,13 +1060,18 @@ export class PdfPreview {
       }
       const viewport=await viewportPromise;
       if(this.disposed||this.selected!==selection||this.overlayDrawId!==drawId)return;
-      const rect=pdfOverlayRect({...block,pageSize:region.pageSize},viewport);
+      const part=selection.partIndex==null?null:block.subRegions?.[selection.partIndex];
+      if(selection.partIndex!=null&&!part)return;
+      const rect=pdfOverlayRect({bbox:part?.bbox||block.bbox,
+        pageSize:region.pageSize},viewport);
       // Reuse the same overlay DOM node across adjacent selections, avoiding
       // highlight flashes while PDF.js reflows or loads a distant page.
       const overlay=this.overlay||document.createElement('div');
       overlay.className='ocr-pdf-region-overlay';
       overlay.dataset.pdfPage=String(selection.pageIndex+1);
       overlay.dataset.blockIndex=String(selection.blockIndex);
+      overlay.dataset.partRole=part?.role||'body';
+      overlay.dataset.partIndex=String(selection.partIndex??-1);
       const paper=page.div.getBoundingClientRect();
       const scroll=this.scroller.getBoundingClientRect();
       overlay.style.left=(paper.left-scroll.left+this.scroller.scrollLeft+
@@ -1072,7 +1080,7 @@ export class PdfPreview {
         paper.height*rect.top/100)+'px';
       overlay.style.width=(paper.width*rect.width/100)+'px';
       overlay.style.height=(paper.height*rect.height/100)+'px';
-      overlay.title='OCR 对应文本区域（待人工复核）';
+      overlay.title=`OCR ${part?.role==='note'?'注释':part?.role==='caption'?'标题':'正文'}区域（待人工复核）`;
       if(!overlay.isConnected)this.scroller.append(overlay);
       this.overlay=overlay;
       if(this.revealPending && this.active){
