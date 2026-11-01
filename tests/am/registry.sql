@@ -361,7 +361,7 @@ WITH mapped(id,script,fixture,expected) AS (VALUES
  ('A01','media-browser.test.mjs','md','media AG origin column colors remote/local, referenced remote counts as adopted, with lazy preview and categorical filters'),
  ('A02','media-browser.test.mjs','md','scan of 11 image links excludes immutable MinerU evidence'),
  ('A03','media-browser.test.mjs','md','media scan lists orphan files and stable adopted/status filters'),
- ('A04','media-browser.test.mjs','md','download all remote URLs regardless of AG chapter scope; single CMD transaction localizes successful downloads without auto-save'),
+ ('A04','media-browser.test.mjs','md','download all remote URLs regardless of AG chapter scope; only changed preview URLs update in place, then one CMD transaction localizes successful downloads without auto-save'),
  ('A05','media-browser.test.mjs','md','module switching preserves outline and Media views'),
  ('A06','media-browser.test.mjs','md','download chunk persists partial and completes with signature check'),
  ('A07','media-browser.test.mjs','md','status reports partial and completed files'),
@@ -388,6 +388,11 @@ SELECT 'TC-'||id,
  'tests/media-browser.test.mjs',
  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',expected,'integration' FROM media_msgs;
 
+
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-A04-PREVIEW-STABLE','A04','tests/media-download-preview-stability.browser.test.mjs',
+  'packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
+  'Chrome and iPad-WebKit simulated sequential downloads keep all 11 thumbnail nodes mounted (0 removed/added), only completed target src changes, and no CMD auto-save','integration');
 
 -- Clipboard paste: CMD position/edit APIs and isolated Media upload transport.
 WITH pasted(id,expected) AS (VALUES
@@ -798,7 +803,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-B09','B09','tests/workspace-portability.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Node path configuration works under environment without Homebrew','direct');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-C33-MEDIA-SCOPE','C33','tests/media-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG 全部 authorizes validated whole-CMB Media adoption while preserving the selected CM6 chapter projection','integration'),
- ('TC-A04-PREEXISTING','A04','tests/media-preexisting-adoption.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','11 predownloaded files + 11 remote CMD links render 11 pending-adoption AG rows, then adopt all through CMD Save and reload in Chrome/WebKit','integration'),
+ ('TC-A04-PREEXISTING','A04','tests/media-preexisting-adoption.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','11 predownloaded files + 11 already-adopted remote CMD links remain 11 AG rows, then localize all through one CMD transaction and reload in Chrome/WebKit','integration'),
+ ('TC-A01-DOWNLOAD-PREVIEW','A01','tests/media-download-preview-stability.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit simulated multi-URL download leaves all 11 thumbnail DOM nodes mounted through complete+pending progress; only the completed URL changes src and never forces refresh of the whole preview column','integration'),
  ('TC-C20-AG-SCOPE','C20','tests/wcp-promoted-api-direct.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG chapter scope rejects outside LaTeX edit; all-CMB scope permits controlled edit without changing the selected CM6 chapter','direct'),
  ('TC-C20-OBSIDIAN-LATEX','C20','tests/obsidian-latex-display.test.mjs','tests/fixtures/latex-legacy-display.md','Reviewed display formulas preserve TeX newlines and place opening/closing $$ at column zero; repeat normalization is no-op','direct'),
  ('TC-C30-OBSIDIAN-SOURCE','C30','tests/obsidian-cm6-theme.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CMD CM6 source presents installed Obsidian Everforest code fences and math boundaries without changing document bytes','integration'),

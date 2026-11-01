@@ -136,7 +136,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       `${valueOf(row)}|${statusKind(row)}|${adoptionOf(row)}|${running.has(row.url)}|${paused.has(row.url)}`]));
     const previews=new Map(nextRows.map(row=>[row.id,mediaPreviewSource(row)]));
     const statusChanged=[...statuses].some(([id,value])=>renderedStatuses.get(id)!==value);
-    const previewChanged=[...previews].some(([id,value])=>renderedPreviews.get(id)!==value);
+    const changedPreviews=[...previews].filter(([id,value])=>renderedPreviews.get(id)!==value);
     renderedStatuses=statuses;renderedPreviews=previews;
     if(!same){
       rows=nextRows;
@@ -148,7 +148,27 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
         grid?.refreshCells({columns:['status','action','adopted'],force:true});
         if(grid?.getFilterModel()?.adopted)grid.onFilterChanged();
       }
-      if(previewChanged)grid?.refreshCells({columns:['preview'],force:true});
+      // Never call refreshCells(force:true) on image renderers: it destroys
+      // EVERY mounted thumbnail, even for a single completed download.
+      // Patch only the link/image whose actual address changed. Offscreen
+      // virtualized rows will mount from mediaPreviewSource() when needed.
+      if(changedPreviews.length){
+        const changed=new Map(changedPreviews);
+        for(const link of gridHost.querySelectorAll('.ocr-media-preview-link')){
+          const address=changed.get(link.dataset.mediaRowId);
+          if(!address)continue;
+          if(link.getAttribute('href')!==address)link.setAttribute('href',address);
+          const image=link.querySelector('.ocr-media-thumb');
+          if(image&&active&&image.getAttribute('src')!==address){
+            // Reset a previous failed remote thumbnail before loading the
+            // now-completed local file; preserve the existing DOM identity.
+            image.hidden=false;
+            const fallback=link.querySelector('.ocr-media-thumb-fallback');
+            if(fallback)fallback.hidden=true;
+            image.setAttribute('src',address);
+          }
+        }
+      }
     }
   }
   function schedule(){if(queued||disposed)return;queued=true;queueMicrotask(()=>{queued=false;refresh();});}
@@ -203,7 +223,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
         if(state.state==='complete'){
           if(!localFiles.some(file=>file.path===state.path))
             localFiles.push({path:state.path,bytes:state.bytes});
-          if(active)grid?.refreshCells({force:true,columns:['preview']});
+          // schedule() updates only this URL's preview address in place.
           // Re-scan the *current* CMD source after network I/O; stale offsets
           // or user edits cannot corrupt the document.
           const matches=replace?findMedia(getMarkdown()).filter(row=>row.url===url):[];
@@ -276,6 +296,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     const address=mediaPreviewSource(row);
     const link=document.createElement('a');
     link.className='ocr-media-preview-link';
+    link.dataset.mediaRowId=row.id;
     link.href=address;
     link.target='_blank';link.rel='noopener noreferrer';
     link.referrerPolicy='no-referrer';
