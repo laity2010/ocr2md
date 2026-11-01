@@ -25,3 +25,10 @@
   width:22px;min-width:22px;margin-right:8px;cursor:pointer}
 .ocr-media-pane .ag-header-cell-resize{width:13px;right:-4px;z-index:2;cursor:col-resize}
 .ocr-media-pane .ag-header-cell-resize::after{width:3px;height:20px;border-radius:2px;background:#859c94}
+
+/* Source is independent of adoption. Orange denotes a remote URL; green a
+ * local media/ path. Only document references qualify as adopted. */
+.ocr-media-origin{display:inline-block;padding:3px 7px;border-radius:3px;
+  font:600 12px "OCR2MD Sarasa",monospace;white-space:nowrap}
+.ocr-media-origin[data-origin="remote"]{color:#efbd81;background:rgba(219,139,72,.18)}
+.ocr-media-origin[data-origin="local"]{color:#a7d8b5;background:rgba(86,157,121,.18)}

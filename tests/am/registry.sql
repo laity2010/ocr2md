@@ -94,8 +94,8 @@ INSERT INTO apis VALUES
  ('L20','L','returned.normalizeLatex','ui/workspace.js','returned','none','void','routes explicit LaTeX normalization request to module facade; no direct source writes',1),
  ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG with lazy thumbnail preview and download workflow',1),
  ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads normal/sized/wikilink image URL ranges outside evidence',1),
- ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media rows and server resume status',1),
- ('A04','A','returned.downloadAll','ui/media-module.js','returned','AG operation scope','Promise<void>','downloads only selected AG scope media, then adopts references via scoped CMD port',1),
+ ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media origin (remote/local), adopted references, unreferenced local files and transfer status independently',1),
+ ('A04','A','returned.downloadAll','ui/media-module.js','returned','none','Promise<void>','downloads all remote URLs in mother CMD, then uses one all-document validated CMD transaction for successfully downloaded references; never auto-saves',1),
  ('A05','A','returned.setActive','ui/media-module.js','returned','boolean','void','toggles Media projection lifecycle',1),
  ('A06','A','download_chunk','scripts/v6_media.py','export','document,url','state/bytes/path','durable validated remote Range chunk, no Markdown edit',1),
  ('A07','A','status','scripts/v6_media.py','export','document,url','state/bytes/path','read persisted media status',1),
@@ -358,10 +358,10 @@ SELECT 'TC-'||id,id,script,
 
 -- First Media module: independent API and CMD optimistic editing contract.
 WITH mapped(id,script,fixture,expected) AS (VALUES
- ('A01','media-browser.test.mjs','md','media AG with lazy preview, adoption coloring and categorical filters'),
+ ('A01','media-browser.test.mjs','md','media AG origin column colors remote/local, referenced remote counts as adopted, with lazy preview and categorical filters'),
  ('A02','media-browser.test.mjs','md','scan of 11 image links excludes immutable MinerU evidence'),
  ('A03','media-browser.test.mjs','md','media scan lists orphan files and stable adopted/status filters'),
- ('A04','media-browser.test.mjs','md','download resumes from durable Range part then localizes CMD source'),
+ ('A04','media-browser.test.mjs','md','download all remote URLs regardless of AG chapter scope; single CMD transaction localizes successful downloads without auto-save'),
  ('A05','media-browser.test.mjs','md','module switching preserves outline and Media views'),
  ('A06','media-browser.test.mjs','md','download chunk persists partial and completes with signature check'),
  ('A07','media-browser.test.mjs','md','status reports partial and completed files'),

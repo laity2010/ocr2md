@@ -83,8 +83,8 @@ try{
   const mediaDir=resolve(folder,'media');mkdirSync(mediaDir,{recursive:true});
   const chapterUsed='media/'+('1'.repeat(24))+'.jpg';
   const orphan='media/'+('2'.repeat(24))+'.jpg';
-  // Same as the real book: completed file exists while CMD still holds a
-  // remote URL. It must be ONE '待采用' row, never another inventory row.
+  // Completed media still referenced remotely is already adopted: the URL
+  // is present in CMD. It must be ONE row, never another inventory row.
   const otherRemote=[...sample.matchAll(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/g)]
     .map(match=>match[1]).find(url=>url!==target);
   assert(otherRemote?.endsWith('.jpg'));
@@ -169,10 +169,16 @@ try{
    await adoption.first().waitFor({state:'attached',timeout:14000});
    // AG virtualizes rows on WebKit. Verify the visible adopted cells here;
    // the category filter below validates the unadopted orphan independent of scroll.
-   // At least one remote file is complete but not yet referenced locally.
+   // Remote Markdown URLs count as adopted, regardless of download state.
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row') &&
-     [...document.querySelectorAll('.ocr-media-adoption')].some(el=>el.textContent==='待采用'),
+     [...document.querySelectorAll('.ocr-media-adoption')].some(el=>el.textContent==='已采用'),
      null,{timeout:15000});
+   const originHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="origin"]');
+   assert.equal((await originHeader.innerText()).trim(),'来源');
+   const remoteBadge=page.locator('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-origin');
+   assert.equal(await remoteBadge.innerText(),'远端');
+   assert.equal(await remoteBadge.getAttribute('data-origin'),'remote');
+   assert.equal(await remoteBadge.evaluate(el=>getComputedStyle(el).color),'rgb(239, 189, 129)');
    assert.equal(await page.locator('.ocr-media-grid [role="grid"]').getAttribute('aria-rowcount'),'14',
      '13 semantic rows plus one grid header: completed remote must not duplicate inventory');
    const adoptedHeader=page.locator('.ocr-media-grid .ag-header-cell[col-id="adopted"]');
@@ -180,8 +186,6 @@ try{
    await adoptedHeader.locator('.ag-header-cell-filter-button').click();
    const selectAdoption=page.locator('.ocr-enum-filter');
    await selectAdoption.locator('[data-filter-value="已采用"] input').uncheck();
-   await selectAdoption.locator('[data-filter-value="未采用"] input').uncheck();
-   await selectAdoption.locator('[data-filter-value="待采用"] input').uncheck();
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-media-grid .ag-row').length===1,null,{timeout:7000});
    assert((await page.locator('.ocr-media-grid .ag-row').textContent()).includes(orphan));
    assert.equal(await adoption.filter({hasText:'未引用'}).count(),1);
@@ -238,9 +242,10 @@ try{
    assert(requests.includes('bytes=524288-1048575'),'Range resume missing');
    await page.locator('#undo').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-media-grid .ag-row[row-index="0"]')?.textContent.includes('image.jpg'),null,{timeout:15000});
-   // Undo leaves the completed local file on disk but now unreferenced.
+   // Undo leaves a completed local file on disk but the remote Markdown
+   // reference itself is still adopted (来源=远端).
    await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-media-grid .ag-row')].some(row=>
-      row.textContent.includes('image.jpg')&&row.textContent.includes('待采用')),
+      row.textContent.includes('image.jpg')&&row.textContent.includes('已采用')),
       null,{timeout:9000});
    assert.equal(await page.locator('.ocr-media-grid [role="grid"]').getAttribute('aria-rowcount'),'14',
      'Undo must retain 13 semantic rows, irrespective of pinned-cell DOM duplication');
@@ -269,8 +274,8 @@ try{
      const img=document.querySelector('.ocr-media-grid .ag-row[row-index="0"] .ocr-media-thumb');
      return img?.getAttribute('src')==='/'+path && img.naturalWidth>0;
    },status.path,{timeout:25000});
-   // AG checkbox is the effective bulk-operation scope, not just row
-   // visibility. Intercept the POST so this probe cannot fetch or write data.
+   // The batch command covers the WHOLE mother CMD, even if AG is showing
+   // one virtual chapter. Intercept POST to avoid any real network or writes.
    const select=page.locator('.ocr-source-pane .ocr-lab-file-select');
    const chapterValues=await select.locator('option[value^="virtual:"]').evaluateAll(
      options=>options.map(option=>option.value));
@@ -305,15 +310,15 @@ try{
      all:await page.locator('input[aria-label="章节所有"]').isChecked(),
      buttonDisabled:await page.locator('#media-download-all').isDisabled()}));
    assert.equal(requestUrls.length,1,'stop bulk after authorization rejection');
-   assert(scopedUrls.includes(requestUrls[0]),'unchecked AG downloaded outside selected chapter');
+   const globalFirst=findRemoteAfterSave();
+   assert.equal(requestUrls[0],globalFirst,'batch must start from the full mother CMD');
    requestUrls.length=0;
    await page.locator('input[aria-label="章节所有"]').check();
    await page.locator('#ag-functions-toggle').click();
    await page.locator('#media-download-all').click();
    await page.waitForFunction(()=>!document.querySelector('#media-download-all')?.disabled,null,{timeout:20000});
    assert.equal(requestUrls.length,1);
-   const globalFirst=findRemoteAfterSave();
-   assert.equal(requestUrls[0],globalFirst,'checked AG must operate over whole CMB');
+   assert.equal(requestUrls[0],globalFirst,'checked AG must also use whole mother CMD');
    assert.deepEqual(readFileSync(doc,'utf8'),updated,'scope probe must not modify the saved Markdown');
    function findRemoteAfterSave(){
      return updated.split('](').slice(1).map(x=>x.split(')')[0])

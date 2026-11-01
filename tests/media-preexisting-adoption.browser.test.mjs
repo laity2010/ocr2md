@@ -65,7 +65,7 @@ for(const [i,[name,engine]] of [['Chrome',chromium],['WebKit',webkit]].entries()
    await page.locator('#module-select').evaluate(el=>{
      el.value='media';el.dispatchEvent(new Event('change',{bubbles:true}));
    });
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('待采用 11') &&
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已采用 11') &&
      Number(document.querySelector('.ocr-media-grid [role="grid"]')?.getAttribute('aria-rowcount'))===12,
      null,{timeout:25000}).catch(async error=>{
        const diag=await page.evaluate(()=>({status:document.querySelector('#status')?.textContent,
@@ -78,8 +78,9 @@ for(const [i,[name,engine]] of [['Chrome',chromium],['WebKit',webkit]].entries()
    const header=page.locator('.ocr-media-grid [role="grid"]');
    assert.equal(await header.getAttribute('aria-rowcount'),'12','11 images must have exactly 11 AG rows');
    assert.equal(await page.locator('input[aria-label="章节所有"]').isChecked(),true);
-   assert((await page.locator('#status').textContent()).includes('待采用 11'));
-   // The existing local files are enough: the download endpoint must return
+   assert((await page.locator('#status').textContent()).includes('已采用 11'));
+   // Preexisting remote references are adopted already. The existing local
+   // files are enough: the download endpoint must return
    // 'complete' without external network access, then CMD adopts them.
    await page.locator('#ag-functions-toggle').click();
    await page.locator('#media-download-all').click();
@@ -88,6 +89,18 @@ for(const [i,[name,engine]] of [['Chrome',chromium],['WebKit',webkit]].entries()
      [...document.querySelectorAll('.ocr-media-adoption')].every(node=>node.textContent==='已采用'),
      null,{timeout:45000});
    assert.equal(readFileSync(doc,'utf8'),source,'adoption must not auto-save');
+   // All 11 remote URLs are rewritten by one CMD transaction; one Undo must
+   // restore all of them, rather than only the last downloaded URL.
+   await page.locator('#undo').click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-media-origin')]
+     .some(el=>el.textContent==='远端'),null,{timeout:12000});
+   const undoText=await page.evaluate(()=>window.__v6cm6?.view?.state?.doc?.toString());
+   for(const url of urls)assert(undoText.includes(url),'one Undo failed to restore all remote URLs');
+   await page.locator('#redo').click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-media-origin')]
+     .some(el=>el.textContent==='本地'),null,{timeout:12000});
+   const redoText=await page.evaluate(()=>window.__v6cm6?.view?.state?.doc?.toString());
+   for(const url of urls)assert(!redoText.includes(url),'Redo failed to localize all URLs');
    // The browser source is the single unsaved CMD document.
    await page.locator('#save').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),

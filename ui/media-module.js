@@ -88,8 +88,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     return {complete:'已下载',error:'失败',paused:'已暂停'}[state.state]||'待下载';
   };
   // A remote source reference is not a local adoption, even if its file exists.
-  const adoptionOf=row=>row.adopted?'已采用':
-    !row.local&&completedPath(row.url)?'待采用':row.local?'未引用':'未采用';
+  const adoptionOf=row=>row.adopted?'已采用':'未引用';
   const valueOf=row=>{
     if(row.local)return '本地';
     const state=stateFor(row.url);
@@ -115,7 +114,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       ...referenced.filter(row=>row.local).map(row=>row.url),
       ...chapterReferences,
     ]);
-    const nextRows=referenced.map(row=>({...row,adopted:row.local}));
+    // A URL present in the Markdown is adopted, regardless of its location.
+    // Transfer completion is tracked separately by the 状态 column.
+    const nextRows=referenced.map(row=>({...row,adopted:true}));
     const linked=new Set(nextRows.filter(row=>row.local).map(row=>row.url));
     // A downloaded file backing a remote CMD image is the same media item,
     // not another 'unadopted' inventory row.
@@ -172,9 +173,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       return;
     }
     const tally=label=>rows.filter(row=>adoptionOf(row)===label).length;
-    onStatus(`媒体 ${rows.length} 项 · 已采用 ${tally('已采用')} · 待采用 ${tally('待采用')} · 未下载 ${tally('未采用')} · 未引用 ${tally('未引用')}`);
+    onStatus(`媒体 ${rows.length} 项 · 远端 ${rows.filter(row=>!row.local).length} · 本地 ${rows.filter(row=>row.local).length} · 已采用 ${tally('已采用')} · 未引用 ${tally('未引用')}`);
   }
-  async function downloadOne(url,scope=operationScope){
+  async function downloadOne(url,scope=operationScope,{replace=true}={}){
     if(running.has(url))return;
     if(!url.startsWith('https://') && !(url.startsWith('http://127.0.0.1:') && location.hostname==='127.0.0.1'))
       throw Error('仅支持 HTTPS 远程媒体');
@@ -194,8 +195,10 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
           if(active)grid?.refreshCells({force:true,columns:['preview']});
           // Re-scan the *current* CMD source after network I/O; stale offsets
           // or user edits cannot corrupt the document.
-          const matches=findMedia(getMarkdown()).filter(row=>row.url===url);
-          if(matches.length){
+          const matches=replace?findMedia(getMarkdown()).filter(row=>row.url===url):[];
+          if(!replace){
+            onStatus('✓ 远端媒体已下载到 media/；等待批量替换 CMD 引用');
+          }else if(matches.length){
             try{
               const result=cmd().replaceMediaReferences(matches.map(row=>({
                 from:row.from,to:row.to,expected:url,insert:state.path})),scope);
@@ -206,7 +209,7 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
               // report a successfully stored image as a failed download.
               onStatus('✓ 图片已下载到 media/；正文引用尚未替换：'+error.message,'warning');
             }
-          }else onStatus('✓ 图片已下载；正文已改变，未替换其他链接');
+          }else if(replace)onStatus('✓ 图片已下载；正文已改变，未替换其他链接');
           break;
         }
         if(state.state!=='partial'||!Number.isFinite(state.bytes))throw Error('Invalid media progress');
@@ -225,20 +228,32 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     if(allRunning)return;
     allRunning=true;
     try{
-      // Capture the AG operation scope at click time, independent of the
-      // virtual CM/preview display. Source offsets can shift after each URL
-      // replacement, so materialize URL identities before starting I/O.
-      const scope=operationScope;
-      // Scope identities come from CMD at the actual operation time.
-      // AG's asynchronous filter offsets are a view only, and may be stale
-      // immediately after chapter selection or a source edit.
-      const entries=scope.mode==='all'?findMedia(getMarkdown()):
-        cmd().queryElements({type:'media',chapter:scope.chapterId});
-      const urls=[...new Set(entries.filter(row=>!row.local).map(row=>row.url))];
+      // This command means ALL remote URLs in the mother CMD document,
+      // regardless of which AG chapter happens to be selected. Each URL is
+      // downloaded only once, even if it appears in multiple chapters.
+      const urls=[...new Set(findMedia(getMarkdown())
+        .filter(row=>!row.local).map(row=>row.url))];
       for(const url of urls){
         if(!allRunning)break;
-        if(!await downloadOne(url,scope))break; // Stop only on authorization error.
+        // Keep the Markdown unmodified throughout transfer; after all network
+        // operations, do ONE atomic, reversible CMD edit for completed URLs.
+        if(!await downloadOne(url,{mode:'all'},{replace:false}))break;
       }
+      const edits=findMedia(getMarkdown()).filter(row=>!row.local)
+        .map(row=>({...row,path:completedPath(row.url)}))
+        .filter(row=>row.path&&urls.includes(row.url))
+        .map(row=>({from:row.from,to:row.to,expected:row.url,insert:row.path}));
+      if(edits.length){
+        try{
+          const result=cmd().replaceMediaReferences(edits,{mode:'all'});
+          onStatus(`✓ 已将 ${result.changed} 处远端媒体链接替换为本地路径 · 请保存 Markdown`);
+        }catch(error){
+          // Transfer succeeded; a concurrent source edit or rejected CMD
+          // guard must never be mistaken for a completed source replacement.
+          onStatus('媒体已下载，CMD 引用尚未替换：'+error.message,'warning');
+        }
+      }else if(urls.length)onStatus('未有成功下载的远端媒体，原链接保持不变','warning');
+      else onStatus('正文中没有需要下载的远端媒体');
     }finally{allRunning=false;}
   }
   // Native image elements use lazy decoding and the AG Grid viewport: no
@@ -284,6 +299,19 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   const columns=[
     {colId:'preview',headerName:'预览',width:96,minWidth:88,pinned:'left',
       lockPinned:true,lockPosition:'left',cellRenderer:previewCell},
+    {colId:'origin',headerName:'来源',width:83,minWidth:75,
+      valueGetter:p=>p.data?p.data.local?'本地':'远端':'',
+      filter:EnumCheckboxFilter,
+      filterValueGetter:p=>p.data?p.data.local?'本地':'远端':'',
+      suppressHeaderMenuButton:true,
+      cellRenderer:p=>{
+        if(!p.data)return '';
+        const el=document.createElement('span');
+        el.className='ocr-media-origin';
+        el.dataset.origin=p.data.local?'local':'remote';
+        el.textContent=p.data.local?'本地':'远端';
+        return el;
+      }},
     {colId:'adopted',headerName:'采用',width:94,minWidth:85,
       valueGetter:p=>p.data?adoptionOf(p.data):'',
       filter:EnumCheckboxFilter,
@@ -313,9 +341,9 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
       const url=p.data.url,button=document.createElement('button');
       button.className='ocr-media-action';
       button.type='button';button.textContent=running.has(url)?'暂停':
-        stateFor(url).state==='complete'?'采用':
+        stateFor(url).state==='complete'?'本地化':
         stateFor(url).state==='partial'||stateFor(url).state==='paused'?'续传':'下载';
-      if(stateFor(url).state==='complete')button.title='图片已下载；将当前章节内的远程链接替换为本地引用';
+      if(stateFor(url).state==='complete')button.title='图片已下载；将当前操作范围内的远程链接替换为本地引用';
       button.addEventListener('click',event=>{
         event.stopPropagation();
         if(running.has(url)){paused.add(url);return;}
