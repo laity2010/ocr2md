@@ -14,3 +14,15 @@ export function blockAnchor(line){
 }
 export function pageHeader(line){return page.test(line);}
 export function sourceHeader(line){return source.test(line);}
+
+/** Paths are zero-based indices in the source MinerU `blocks[]` tree.
+ * Subblocks are NEVER promoted to a top-level para_block identity. */
+const subblock=/^(?: {0,3}>[ \t]?)* {0,3}<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*) -->[ \t]*$/;
+export function subblockAnchor(line){
+  const m=subblock.exec(line);
+  return m?{pageIndex:Number(m[1]),blockIndex:Number(m[2]),
+    path:m[3].split('.').map(Number)}:null;
+}
+export function subblockTag(pageIndex,blockIndex,path){
+  return `<!-- minerujson:subblock:v1:${pageIndex}:${blockIndex}:${path.join('.')} -->`;
+}

@@ -9,12 +9,25 @@ const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f38
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',rowHoverColor:'#37464b',fontSize:13,
   selectedRowBackgroundColor:'rgba(225,161,66,.15)',fontFamily:'"OCR2MD Sarasa",monospace',spacing:3});
-export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{},onCompare=()=>{},actionsHost){
+export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{},onCompare=()=>{},actionsHost,onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好'))){
   host.classList.add('ocr-text-block-pane');
   if(!(actionsHost instanceof HTMLElement)||actionsHost.dataset.module!=='text-block')
     throw Error('文本块模块功能需挂载至现有 AG 功能菜单');
   // Reparent the ORIGINAL controls into the Shell-owned module action group.
   // No second toolbar or status row is created inside the AG pane.
+  const subblocksButton=document.createElement('button');
+  subblocksButton.type='button';subblocksButton.textContent='标定原始子块';
+  subblocksButton.title='只添加 MinerU blocks[] 原始父子路径标签；不重写正文，一次 Undo 可撤销';
+  subblocksButton.addEventListener('click',async()=>{
+    if(subblocksButton.disabled)return;
+    subblocksButton.disabled=true;
+    try{
+      const result=await onMarkSubblocks();
+      onStatus(result.changed?`已标定 ${result.inserted} 个原始子块 · CMD 未保存，可 Undo`:
+        `原始子块已完整标定（${result.existing} 个），无须重复修改`);
+    }catch(error){onStatus('原始子块标定失败：'+error.message);}
+    finally{subblocksButton.disabled=false;}
+  });
   const blocksButton=document.createElement('button');blocksButton.type='button';blocksButton.textContent='原始文本块';
   blocksButton.setAttribute('aria-label','查看原始文本块清单');
   const candidatesButton=document.createElement('button');candidatesButton.type='button';candidatesButton.textContent='接续候选';
@@ -30,7 +43,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   overviewButton.title='缩小同页 PDF，尽量同时看到 A、B；跨页可点击 A/B 分别定位';
   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='导出审阅记录';
   exportButton.setAttribute('aria-label','导出文本块续接审阅 JSON');
-  actionsHost.append(blocksButton,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
+  actionsHost.append(blocksButton,subblocksButton,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
   overviewButton.addEventListener('click',()=>onCompare({overview:true}));
   const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(gridHost);
   let rows=[],candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;

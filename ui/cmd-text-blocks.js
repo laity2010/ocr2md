@@ -1,7 +1,7 @@
 /** CMD read-only MinerU block inventory. The sealed JSON inside THIS CMD
  * document is authoritative; never fetch a second, drifting original JSON.
  * This owner returns detached values and never mutates CM6 source. */
-import {blockAnchor} from './mineru-anchors.js';
+import {blockAnchor,subblockAnchor,subblockTag,quotePrefix} from './mineru-anchors.js';
 const sealed=/<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\n]+)\n-->\s*$/;
 const decode=encoded=>{
   const base64=encoded.replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/');
@@ -31,6 +31,62 @@ async function sealedJSON(source){
   if(!Array.isArray(data.pdf_info))throw Error('CMD 封存 JSON 无 PDF 页面');
   return {data,end:match.index,key};
 }
+/** Annotate native `blocks[]` paths inside existing edited CMD without
+ * regenerating any text. One optimistic CM6 transaction and one Undo.
+ * This is an explicit operation: opening an old document never auto-edits.
+ */
+export async function planCMDSubblockAnnotations(source){
+  const {data}=await sealedJSON(source);
+  const lines=source.split('\n');
+  const rootAnchors=[];
+  for(let i=0;i<lines.length;i++){
+    const a=blockAnchor(lines[i]);
+    if(a)rootAnchors.push({...a,lineIndex:i});
+  }
+  const expectedTotal=data.pdf_info.reduce((n,p)=>n+p.para_blocks.length,0);
+  if(rootAnchors.length!==expectedTotal)throw Error('顶层 CMD 块锚点数量不符，拒绝补标子块');
+  const expectedMarkers=(node,pageIndex,blockIndex)=>{
+    const tags=[];
+    const visit=(parent,path)=>{
+      for(const [i,child] of (parent.blocks||[]).entries()){
+        const next=[...path,i];tags.push(subblockTag(pageIndex,blockIndex,next));
+        visit(child,next);
+      }
+    };
+    visit(node,[]);return tags;
+  };
+  const edits=[];let total=0,existing=0;
+  // Positions are offsets in the one live source, never reconstructed OCR.
+  let offset=0;const starts=[];
+  for(const line of lines){starts.push(offset);offset+=line.length+1;}
+  for(let i=0;i<rootAnchors.length;i++){
+    const root=rootAnchors[i];
+    const block=data.pdf_info[root.pageIndex]?.para_blocks[root.blockIndex];
+    if(!block)throw Error('CMD 块锚点与封存 MinerU 不对应');
+    const expected=expectedMarkers(block,root.pageIndex,root.blockIndex);
+    const stop=rootAnchors[i+1]?.lineIndex??lines.length;
+    const found=[];
+    for(let line=root.lineIndex+1;line<stop;line++){
+      if(lines[line].includes('minerujson:source:v1:'))break;
+      const tag=subblockAnchor(lines[line]);
+      if(tag)found.push(subblockTag(tag.pageIndex,tag.blockIndex,tag.path));
+    }
+    if(found.length){
+      if(JSON.stringify(found)!==JSON.stringify(expected))
+        throw Error(`CMD 子块标定缺失或次序不符：p${root.pageIndex}b${root.blockIndex}`);
+      existing+=found.length;continue;
+    }
+    if(!expected.length)continue;
+    const prefix=quotePrefix(lines[root.lineIndex]);
+    const at=starts[root.lineIndex]+lines[root.lineIndex].length+1;
+    // Do not touch a single existing byte, including chapters, source body,
+    // annotations, sealed JSON and user edits. Keep quote depth if present.
+    const insert=expected.map(tag=>prefix+tag+'\n').join('');
+    edits.push({from:at,to:at,expected:'',insert});total+=expected.length;
+  }
+  return {edits,inserted:total,existing};
+}
+
 /** Pure read-only original MinerU geometry. This is a CMD-owned capability,
  * including page size and text-block rectangles. Detailed line and span
  * coordinates are provided on demand by queryCMDBlockGeometry().
@@ -54,7 +110,7 @@ export async function queryCMDLayout(source){
       // caption and notes use separate original MinerU rectangles, but still
       // belong to ONE CMD Block (no extra anchors/checkboxes).
       const subRegions=['chart','table'].includes(block.type)?
-        (block.blocks||[]).flatMap(child=>{
+        (block.blocks||[]).flatMap((child,childIndex)=>{
           if(![`${block.type}_caption`,`${block.type}_footnote`].includes(child.type))
             return [];
           const bbox=child.bbox;
@@ -82,9 +138,11 @@ export async function queryCMDLayout(source){
           const opening=(child.lines?.[0]?.spans||[]).map(s=>s.content||'').join('').trim();
           const role=child.type.endsWith('_footnote')||/^Notes?\s*[:：]/i.test(opening)?
             'note':'caption';
-          return [{type:child.type,role,bbox:[...bbox]}];
+          return [{type:child.type,role,bbox:[...bbox],path:[childIndex]}];
         }):[];
-      return [{blockIndex,bbox:[...box],type:block.type||'unknown',subRegions}];
+      const bodyIndex=(block.blocks||[]).findIndex(c=>c.type===`${block.type}_body`);
+      return [{blockIndex,bbox:[...box],type:block.type||'unknown',subRegions,
+        bodyPath:bodyIndex<0?null:[bodyIndex]}];
     });
     return {pageIndex,pageSize:[...pageSize],regions};
   });
@@ -92,8 +150,9 @@ export async function queryCMDLayout(source){
   // Prevent accidental mutation of shared cache by layout or AG consumers.
   for(const page of pages){Object.freeze(page.pageSize);
     for(const region of page.regions){Object.freeze(region.bbox);
-      for(const sub of region.subRegions){Object.freeze(sub.bbox);Object.freeze(sub);}
+      for(const sub of region.subRegions){Object.freeze(sub.bbox);Object.freeze(sub.path);Object.freeze(sub);}
       Object.freeze(region.subRegions);
+      if(region.bodyPath)Object.freeze(region.bodyPath);
       Object.freeze(region);
     }
     Object.freeze(page.regions);Object.freeze(page);

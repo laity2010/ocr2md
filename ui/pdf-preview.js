@@ -9,7 +9,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {viewStore,publishFocus} from './view-store.js';
 import './pdf-preview.css';
-import {blockAnchor} from './mineru-anchors.js';
+import {blockAnchor,subblockAnchor} from './mineru-anchors.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
@@ -42,6 +42,15 @@ export function sourceBlocks(text){
     if(anchor)anchors.push({...anchor,sourceLine:index+1});
   }
   return anchors;
+}
+/** Nested path marker is a source location, not a new top-level Block. */
+export function sourceSubblocks(source){
+  const rows=[];
+  for(const [i,line] of source.split('\n').entries()){
+    const mark=subblockAnchor(line);
+    if(mark)rows.push({...mark,sourceLine:i+1});
+  }
+  return rows;
 }
 function sourceAnchor(anchors,line){
   let lo=0,hi=anchors.length-1,best=null;
@@ -131,6 +140,7 @@ export class PdfPreview {
         const onlyJoinMarks=canonical===this.lastGeometrySource;
         this.lastGeometrySource=canonical;
         this.anchors=sourceBlocks(source);
+        this.subAnchors=sourceSubblocks(source);
         if(this.selected)void this.prepareSelectedPDFText();
         // A join/unjoin is one CM6 annotation line. Its text changes source
         // line offsets but not the original PDF geometry, PDF.js page tree,
@@ -154,6 +164,7 @@ export class PdfPreview {
       }
     });
     this.anchors=sourceBlocks(this.getMarkdown());
+    this.subAnchors=sourceSubblocks(this.getMarkdown());
     this.resizeObserver=new ResizeObserver(()=>this.onResize());
     this.resizeObserver.observe(this.scroller);
   }
@@ -217,6 +228,7 @@ export class PdfPreview {
 
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
+    this.subAnchors=sourceSubblocks(this.getMarkdown());
     this.scheduleOverlay();
   }
   async refreshGeometry(){
@@ -396,6 +408,11 @@ export class PdfPreview {
     if(!chosen)return;
     this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===n-1&&a.blockIndex===chosen.blockIndex);
+    const parentRegion=source.regions.find(r=>r.blockIndex===chosen.blockIndex);
+    const chosenPath=chosen.partIndex==null?parentRegion?.bodyPath:
+      parentRegion?.subRegions[chosen.partIndex]?.path;
+    const child=chosenPath&&this.subAnchors.find(a=>a.pageIndex===n-1&&
+      a.blockIndex===chosen.blockIndex&&a.path.join('.')===chosenPath.join('.'));
     // A PDF Block without a writable CMD anchor can still supply useful
     // original text. The caret, not the source Block, is the destination.
     this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex,
@@ -403,7 +420,9 @@ export class PdfPreview {
     void this.prepareSelectedPDFText();this.drawOverlay();
     const partLabel=chosen.role==='caption'?'标题':chosen.role==='note'?'注释':'正文';
     this.setStatus(`第 ${n} 页 · p${n-1}b${chosen.blockIndex} · ${partLabel} 已定位`);
-    if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
+    if(child)publishFocus({sourceLine:child.sourceLine,origin:'pdf',
+      elementId:`mineru:${n-1}:${chosen.blockIndex}:${chosenPath.join('.')}`});
+    else if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
       elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
   }
   /** Independent, very light coverage over the original CMD Block bbox.
@@ -976,7 +995,8 @@ export class PdfPreview {
       this.revealUntil=performance.now()+1700;
     }
     if(!this.ready){this.pendingFocus={line,explicit};return;}
-    const source=sourceAnchor(this.anchors,line);
+    const child=this.subAnchors.find(a=>a.sourceLine===line);
+    const source=child||sourceAnchor(this.anchors,line);
     if(!source)return;
     if(this.comparison){
       if(this.comparison.points.some(p=>p.pageIndex===source.pageIndex&&p.blockIndex===source.blockIndex)){
@@ -986,12 +1006,18 @@ export class PdfPreview {
       this.clearComparison();
     }
     // Never skip another block merely because it lies on the same PDF page.
-    if(!explicit&&this.selected?.pageIndex===source.pageIndex&&
-      this.selected?.blockIndex===source.blockIndex)return;
     const block=this.map[source.pageIndex]?.regions?.find(r=>r.blockIndex===source.blockIndex);
     if(!block)return;
+    const partIndex=child?block.subRegions.findIndex(s=>s.path.join('.')===child.path.join('.')):-1;
+    // A table/image/chart body often shares its parent's bbox. It still has
+    // its own MinerU child marker, without a redundant overlay rectangle.
+    const bodyChild=child&&block.bodyPath?.join('.')===child.path.join('.');
+    if(!explicit&&this.selected?.pageIndex===source.pageIndex&&
+      this.selected?.blockIndex===source.blockIndex&&
+      (this.selected?.partIndex??null)===(partIndex<0?null:partIndex))return;
     const samePage=this.selected?.pageIndex===source.pageIndex;
-    this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex};
+    this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex,
+      partIndex:bodyChild||partIndex<0?null:partIndex};
     void this.prepareSelectedPDFText();
     // PDF.js page navigation resets the scroll position. Never invoke it for
     // another OCR block on the same page; the overlay will scroll only if the

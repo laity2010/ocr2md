@@ -219,6 +219,34 @@ function pageAudit(page: Page,pageIndex: number): string {
   return evidence.join('\n\n');
 }
 
+// CMD child markers preserve the exact native MinerU `blocks[]` ancestry.
+// They are independent source navigation anchors, not Markdown body content.
+function childMarkers(block: Block,pageIndex: number,blockIndex: number): string[] {
+  const output: string[]=[];
+  const visit=(node: Block,path: number[])=>{
+    for(const [index,child] of (node.blocks||[]).entries()){
+      const next=[...path,index];
+      output.push(`<!-- minerujson:subblock:v1:${pageIndex}:${blockIndex}:${next.join('.')} -->`);
+      visit(child,next);
+    }
+  };
+  visit(block,[]);
+  return output;
+}
+function stripChildMarkers(fragment: string,block: Block,pageIndex: number,blockIndex: number): string {
+  const marker=/^<!-- minerujson:subblock:v1:[^\n]* -->[ \t]*$/gm;
+  const found=[...fragment.matchAll(marker)].map(m=>m[0].trim());
+  const expected=childMarkers(block,pageIndex,blockIndex);
+  // Older documents legitimately lack child annotations. Once markers
+  // exist, demand the complete original ordered path set; reject drift.
+  if(found.length){
+    assert(JSON.stringify(found)===JSON.stringify(expected),
+      `block ${pageIndex}:${blockIndex} child anchors changed or incomplete`);
+    fragment=fragment.replace(marker,'').trim();
+  }
+  assert(!fragment.includes('minerujson:subblock:v1:'),'invalid nested child anchor');
+  return fragment;
+}
 /** API 1: MinerU JSON -> a standard CommonMark+GFM document with HTML comments. */
 export function toMarkdown(input: string | Mineru): string {
   const raw = typeof input === 'string' ? input : JSON.stringify(input);
@@ -233,7 +261,9 @@ export function toMarkdown(input: string | Mineru): string {
       const slots = project(block,pageIndex,index,true);
       const body = serialize(slots.map(s => s.node));
       // Anchor identifiers are regular HTML comments, not custom Markdown syntax.
-      pieces.push(`<!-- minerujson:block:v1:${pageIndex}:${index} -->\n\n${body}`);
+      const children=childMarkers(block,pageIndex,index);
+      pieces.push([`<!-- minerujson:block:v1:${pageIndex}:${index} -->`,...children,
+        body].join('\n\n'));
     }
   }
   const bytes = Buffer.from(raw, 'utf8');
@@ -302,6 +332,9 @@ export function toMineruJSON(markdown: string): string {
       };
       fragment=fragment.split('\n').map(stripLine).join('\n').trim();
     }
+    // Strip the independently navigable native child paths before checking
+    // chapter tags and Markdown body syntax; the markers are not OCR text.
+    fragment=stripChildMarkers(fragment,block,pageNo,blockNo);
     // A chapter marker is an editor annotation on its own heading, not
     // text to be projected back into the original MinerU OCR span.
     if(block.type==='title'){

@@ -71,6 +71,7 @@ let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
 let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
+let markSubblocksAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let insertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'));
 let refreshTextBlockInventory=()=>{};
 let mdTextBlockCoverageEnabled=false;
@@ -128,7 +129,7 @@ class OutlinePanel {
         if(!currentPreview?.pdfUsable){reportMediaStatus('PDF 预热中，双框暂不可用');return;}
         currentPreview.setMode('pdf');
         void currentPreview.compareOriginalBlocks(selection.from,selection.to,selection.reveal);
-      },textBlockActionHost);
+      },textBlockActionHost,()=>markSubblocksAction());
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -782,6 +783,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     setBlockJoinAction:action=>{blockJoinAction=action;},
     setBlockMoveAction:action=>{blockMoveAction=action;},
+    setSubblockMarkAction:action=>{markSubblocksAction=action;},
     setPDFTextInsertAction:insert=>{insertPDFText=insert;},
     setTextBlockInventoryRefreshAction:action=>{refreshTextBlockInventory=action;},
     setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),

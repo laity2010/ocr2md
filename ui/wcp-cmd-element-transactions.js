@@ -12,7 +12,7 @@
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
-import {inspectCMDTextBlocks} from './cmd-text-blocks.js';
+import {inspectCMDTextBlocks,planCMDSubblockAnnotations} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
 import {LINEBREAK_TAG,readIllegalBreaks,planIllegalBreakMarks} from './cmd-linebreak.js';
@@ -95,6 +95,15 @@ export function createCMDTransactionPort(cmd){
       commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
         plan.edits,{source,allowAll:true});
       return {changed:1,previous:plan.previous,target:plan.target};
+    },
+    async markOriginalSubblocks(){
+      const source=cmd.readSource();
+      const plan=await planCMDSubblockAnnotations(source);
+      if(source!==cmd.readSource())throw Error('子块扫描期间源码已变化，请重新执行');
+      if(!plan.edits.length)return {...plan,changed:0};
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return {...plan,changed:plan.edits.length};
     },
     moveBlockAfter:(sourceId,afterId)=>moveBlock(sourceId,afterId,'after'),
     moveBlockBefore:(sourceId,beforeId)=>moveBlock(sourceId,beforeId,'before'),

@@ -733,6 +733,11 @@ async function main() {
       return result;
     }catch(error){status('文本块排序失败：'+error.message,'error');throw error;}
   });
+  workspace.setSubblockMarkAction(async()=>{
+    const result=await cmdPort.markOriginalSubblocks();
+    if(result.changed)workspace.refreshPdf();
+    return result;
+  });
   workspace.setPDFTextInsertAction(
     async(pageIndex,blockIndex,text)=>{
       try{

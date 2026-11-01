@@ -1271,3 +1271,20 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TEXT-PARTS','P17','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit page 5 p4b0 caption, body and note can be clicked and highlighted separately with individually extracted native text, one original Block and checkbox','integration'),
  ('TC-PDF-TEXT-C60','C60','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','pure planner inserts at arbitrary source cursor without deleting OCR and rejects invalid text and coordinates','direct'),
  ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration');
+
+-- Native MinerU nested `blocks[]` paths, represented without inventing new
+-- para_block identities or changing sealed original OCR source/content.
+INSERT INTO apis VALUES
+ ('C63','C','planCMDSubblockAnnotations','ui/cmd-text-blocks.js','export','current live CMD Markdown + its verified sealed MinerU JSON','ordered zero-width insertions and insert/existing counts','idempotent explicit tagging of original nested paths; no user prose rewritten',1),
+ ('C64','C','returned.markOriginalSubblocks','ui/wcp-cmd-element-transactions.js','returned','no arguments; current CMD source','single optimistic undoable annotation transaction','virtual chapter and immutable evidence protected by CMD; no implicit save',1),
+ ('L62','L','returned.setSubblockMarkAction','ui/workspace.js','returned','semantic async CMD annotation callback','registers text-block module function-menu action','AG receives no CM6 editor nor sealed JSON internals',1),
+ ('P18','P','sourceSubblocks','ui/pdf-preview.js','export','live source Markdown','read-only original child path / source-line map','child PDF caption/body/note navigates exact CMD subblock line when marked',1);
+INSERT INTO access_edges VALUES
+ ('X-SUBBLOCK-C63','C','C','ui/wcp-cmd-element-transactions.js','planCMDSubblockAnnotations(source)','C63','registered','CMD plans marker edits from sealed source with exact path validation'),
+ ('X-SUBBLOCK-C64','L','C','ui/main.js','cmdPort.markOriginalSubblocks()','C64','registered','Shell requests a single CMD subblock annotation operation'),
+ ('X-SUBBLOCK-L62','L','L','ui/main.js','workspace.setSubblockMarkAction(','L62','registered','Shell injects semantic annotation callback to AG via Layout');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SUBBLOCK-C63','C63','tests/cmd-subblock-annotations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','43 native child markers in 20 parent Blocks; idempotent with byte-identical original Markdown after marker removal, tampering blocked, original MinerU JSON SHA unchanged','direct'),
+ ('TC-SUBBLOCK-C64','C64','tests/pdf-subblock-annotation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit explicit Text Block module marker button creates exactly 43 child paths, remains unsaved until Save, one Undo reverts all 43 in isolated CMD','integration'),
+ ('TC-SUBBLOCK-L62','L62','tests/pdf-subblock-annotation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG function menu invokes CMD semantic operation without accessing PDF or CM6 internal object','integration'),
+ ('TC-SUBBLOCK-P18','P18','tests/pdf-subblock-annotation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','PDF child source location uses new original path without increasing 224 parent blocks','integration');
