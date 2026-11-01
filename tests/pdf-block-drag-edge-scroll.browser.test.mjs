@@ -7,7 +7,8 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {chromium,webkit} from 'playwright';
 
-const sample=resolve('.v6/tests/text-blocks/buffett-reinitialized.minerujson.md');
+import {ensureTextBlockSample} from './fixtures/text-block-sample.mjs';
+const sample=ensureTextBlockSample();
 const original=readFileSync(sample,'utf8'),port=5998,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
   '--port',String(port),'--strictPort'],{cwd:process.cwd(),stdio:'ignore',

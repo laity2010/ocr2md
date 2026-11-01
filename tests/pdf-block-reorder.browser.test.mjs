@@ -4,7 +4,8 @@ import {spawn} from 'node:child_process';
 import {readFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {chromium,webkit} from 'playwright';
-const sample=resolve('.v6/tests/text-blocks/buffett-reinitialized.minerujson.md');
+import {ensureTextBlockSample} from './fixtures/text-block-sample.mjs';
+const sample=ensureTextBlockSample();
 const source=readFileSync(sample,'utf8'),port=5997,url=`http://127.0.0.1:${port}/`;
 mkdirSync('.v6/evidence/block-reorder',{recursive:true});
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
