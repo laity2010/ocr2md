@@ -175,7 +175,26 @@ try{
        preClickMutations:initial,
        pageNodes:document.querySelectorAll('.ocr-pdf-block-cover').length};
    }));
-   await target.click({timeout:15000});
+   const targetTag=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
+   const tapOnce=tag=>mobile?tag.tap({timeout:16000}):tag.click({timeout:16000});
+   const tapThree=async tag=>{
+     if(mobile){
+       // Genuine WebKit touch events: each click.detail stays 1 on iPad.
+       for(let i=0;i<3;i++)await tag.tap({timeout:16000});
+     }else await tag.click({clickCount:3,delay:60,timeout:16000});
+   };
+   // First tap/checkbox tap navigates the PARENT, never silently joins it.
+   await tapOnce(targetTag);
+   const focus=await page.evaluate(async()=>{
+     const {viewStore}=await import('/view-store.js');
+     return viewStore.getState().focusTarget;
+   });
+   assert.equal(focus?.elementId,'mineru:6:7:parent');
+   assert(await target.isChecked(),'single parent tag click cannot toggle its checkbox');
+   await tapOnce(targetTag);
+   assert(await target.isChecked(),'double tap must not toggle checkbox');
+   await page.waitForTimeout(1300); // new triple gesture, not a continuation of double tap
+   await tapThree(targetTag);
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await target.isChecked(),false);
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span').innerText(),'p6b6',
@@ -208,7 +227,7 @@ try{
    console.log('BLOCK_JOIN_LOCAL_REFRESH_PASS',name,untouched);
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-joined-checkbox.png`,animations:'disabled'});
    await target.scrollIntoViewIfNeeded({timeout:15000});
-   await target.click({timeout:15000});
+   await tapThree(targetTag);
    await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert(await target.isChecked());
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b8');
@@ -217,14 +236,14 @@ try{
    // A real OCR-empty placeholder joins the preceding block just like text;
    // only logical numbering on that same page moves one position.
    await empty.scrollIntoViewIfNeeded({timeout:17000});
-   await empty.click({timeout:16000});
+   await tapThree(page.locator('.ocr-pdf-block-cover[data-block-id="p2b8"] .ocr-pdf-block-ctrl'));
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await empty.isChecked(),false);
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b8');
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b8');
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-blank-block-joined.png`,animations:'disabled'});
-   await empty.click({timeout:16000});
+   await tapThree(page.locator('.ocr-pdf-block-cover[data-block-id="p2b8"] .ocr-pdf-block-ctrl'));
    await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert(await empty.isChecked());
@@ -239,7 +258,7 @@ try{
    });
    assert.equal(previousIdentity,'p8b8');
    await crossHead.scrollIntoViewIfNeeded({timeout:17000});
-   await crossHead.click({timeout:16000});
+   await tapThree(page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-ctrl'));
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert.equal(await crossHead.isChecked(),false);
@@ -249,7 +268,7 @@ try{
    assert(await previousChip.evaluate(node=>node===window.__previousPageJoinChip),
      'cross-page join must not replace predecessor PDF page DOM');
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-cross-page-p9b0.png`,animations:'disabled'});
-   await crossHead.click({timeout:16000});
+   await tapThree(page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-ctrl'));
    await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    assert(await crossHead.isChecked());

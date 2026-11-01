@@ -525,15 +525,18 @@ export class PdfPreview {
     let changed=false;
     const logical=row.logicalId||row.id;
     if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
-    const title=`原始 ${row.id} · 逻辑 ${logical}`;
+    const title=`原始 ${row.id} · 逻辑 ${logical} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
     const disabled=!row.joinable;
     if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
-    const help=row.joinable?`取消勾选：并入原文上一 Block（可跨页）；重新勾选：恢复独立。原始 ${row.id}`:
-      `没有有效前驱 Block，必须独立（${row.id}）`;
+    const help=row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
+      `单击定位 ${row.id}；没有有效前驱 Block，不能取消勾选`;
     if(input.title!==help)input.title=help;
+    if(chip.title!==help)chip.title=help;
+    const aria=`原始 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
+    if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
     node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
     // Badge width can change when page-local numbering passes 9/10/100.
     // Recompute this chip only; neighbor top offsets are corrected on the
@@ -780,30 +783,56 @@ export class PdfPreview {
         node.dataset.pdfPage=String(row.pageIndex+1);
         node.dataset.blockIndex=String(row.blockIndex);
         node.title='CMD 已标定文本块';
-        const ctrl=document.createElement('label');ctrl.className='ocr-pdf-block-ctrl';
+        // Not a <label>: native label activation would flip the checkbox on
+        // every tap, before CMD navigation can distinguish tap from triple.
+        // The input is a visual indicator only. The parent chip owns gestures.
+        const ctrl=document.createElement('div');ctrl.className='ocr-pdf-block-ctrl';
+        ctrl.setAttribute('role','button');ctrl.tabIndex=0;
         const input=document.createElement('input');input.type='checkbox';
+        input.tabIndex=-1;
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
         ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
-        // Move/up/cancel are tracked at document capture scope while dragging.
-        // Do not cancel merely because the original label loses capture.
+        // Preserve long-press move: a dragged label's release never counts as
+        // one of the three taps. All changes still go through CMD's API.
         ctrl.addEventListener('contextmenu',e=>e.preventDefault());
-        ctrl.addEventListener('click',e=>{
-          if(this.suppressBlockClickCtrl===ctrl&&performance.now()<this.suppressBlockClickUntil)
-            e.preventDefault();
-        },true);
-        for(const type of ['pointerdown','mousedown','touchstart','click','dblclick'])
-          ctrl.addEventListener(type,e=>e.stopPropagation());
-        input.addEventListener('change',async()=>{
-          if(this.suppressBlockClickCtrl===ctrl&&performance.now()<this.suppressBlockClickUntil){
-            input.checked=!input.checked;return;
+        let tapCount=0,lastTap=0,busy=false;
+        const toggle=async()=>{
+          if(input.disabled||busy){
+            this.setStatus(`${row.id} 没有可切换的前驱块`);return;
           }
-          const previous=!input.checked;
-          input.disabled=true;
-          try{await this.onBlockJoin(row.id,previous);}
-          catch(error){input.checked=!input.checked;this.setStatus('接续操作失败：'+error.message);}
-          finally{input.disabled=false;}
+          busy=true;input.disabled=true;
+          try{await this.onBlockJoin(row.id,input.checked);}
+          catch(error){this.setStatus('接续操作失败：'+error.message);}
+          finally{busy=false;input.disabled=false;}
+        };
+        ctrl.addEventListener('click',event=>{
+          event.stopPropagation();
+          if(this.suppressBlockClickCtrl===ctrl&&performance.now()<this.suppressBlockClickUntil){
+            event.preventDefault();tapCount=0;return;
+          }
+          if(busy)return;
+          const now=performance.now();
+          // iPad WebKit can spend ~830 ms between genuine consecutive touch
+          // clicks while PDF.js is repainting the page. A 1.2 s per-tap
+          // interval recognizes intentional three taps without a timer or
+          // delayed single-click navigation.
+          tapCount=now-lastTap<=1200?tapCount+1:1;
+          lastTap=now;
+          if(tapCount===3){tapCount=0;lastTap=0;void toggle();return;}
+          // Single/double tap both select the parent, never the child, and
+          // never modify a checkbox. The triple action is the ONLY toggle.
+          this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
+            partIndex:null,path:null,role:'parent'});
+        });
+        ctrl.addEventListener('keydown',event=>{
+          if(event.target!==ctrl||!['Enter',' '].includes(event.key))return;
+          event.preventDefault();ctrl.click();
+        });
+        input.addEventListener('click',event=>{
+          // Programmatic checkbox clicks must not bypass the triple gate.
+          event.preventDefault();event.stopPropagation();
         });
         this.blockCoverageNodes.set(row.id,node);
       }
@@ -875,7 +904,9 @@ export class PdfPreview {
           fragment.append(chip);
         }
         if(chip.dataset.partIndex!==String(i))chip.dataset.partIndex=String(i);
-        chip.setAttribute('aria-label',`定位原始 PDF 子块 ${id}`);
+        const childLabel=`定位原始 PDF 子块 ${id}`;
+        if(chip.getAttribute('aria-label')!==childLabel)
+          chip.setAttribute('aria-label',childLabel);
         if(chip.textContent!==id)chip.textContent=id;
         if(chip.title!==label)chip.title=label;
         if(chip.dataset.gutter!==node.dataset.gutter)

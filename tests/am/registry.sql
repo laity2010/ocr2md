@@ -1311,3 +1311,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- auto-adds one undoable/unsaved annotation transaction before navigation.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-LEGACY-CHILD-FOCUS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p3b0s0/s1 and p4b0s0/s1/s2 navigate distinct exact CMD lines from an unannotated legacy doc; blue chip click triggers one unsaved annotation with Undo, no disk mutation','integration');
+
+-- Parent PDF badge is an explicit navigation control; checkbox is an
+-- indicator until a three-click sequence (including iPad touch clicks).
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-PARENT-TRIPLE-TAP','P18','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','one parent badge click emits exact parent CM6 focus, leaves checkbox unchanged; three rapid clicks alone toggle CMD join and Undo; 224 original Block chip IDs retained, no unrelated page relabeling','integration');
