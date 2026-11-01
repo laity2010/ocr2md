@@ -116,6 +116,17 @@ export async function planCMDSubblockAnnotations(source){
   return {edits,inserted:total,existing};
 }
 
+/** Parent display bbox is the minimum enclosing rectangle of *visible*
+ * native MinerU children. Conflicting or invalid child OCR coordinates have
+ * already been excluded by the page-level evidence checks. The sealed parent
+ * bbox is retained separately and never rewritten. */
+export function enclosingChildBBox(children,original){
+  if(!Array.isArray(children)||!children.length)return [...original];
+  const bounds=children.map(child=>child.bbox);
+  return [Math.min(...bounds.map(b=>b[0])),Math.min(...bounds.map(b=>b[1])),
+    Math.max(...bounds.map(b=>b[2])),Math.max(...bounds.map(b=>b[3]))];
+}
+
 /** Pure read-only original MinerU geometry. This is a CMD-owned capability,
  * including page size and text-block rectangles. Detailed line and span
  * coordinates are provided on demand by queryCMDBlockGeometry().
@@ -167,7 +178,8 @@ export async function queryCMDLayout(source){
           return [{type:child.type,role,bbox:[...bbox],path:[childIndex]}];
         }):[];
       const bodyIndex=(block.blocks||[]).findIndex(c=>c.type===`${block.type}_body`);
-      return [{blockIndex,bbox:[...box],type:block.type||'unknown',subRegions,
+      return [{blockIndex,bbox:enclosingChildBBox(subRegions,box),
+        originalBBox:[...box],type:block.type||'unknown',subRegions,
         bodyPath:bodyIndex<0?null:[bodyIndex]}];
     });
     return {pageIndex,pageSize:[...pageSize],regions};
@@ -176,6 +188,7 @@ export async function queryCMDLayout(source){
   // Prevent accidental mutation of shared cache by layout or AG consumers.
   for(const page of pages){Object.freeze(page.pageSize);
     for(const region of page.regions){Object.freeze(region.bbox);
+      Object.freeze(region.originalBBox);
       for(const sub of region.subRegions){Object.freeze(sub.bbox);Object.freeze(sub.path);Object.freeze(sub);}
       Object.freeze(region.subRegions);
       if(region.bodyPath)Object.freeze(region.bodyPath);
@@ -201,7 +214,8 @@ export async function queryCMDBlockGeometry(source,pageIndex,blockIndex){
     spans:(line.spans||[]).map(span=>({bbox:Array.isArray(span.bbox)?[...span.bbox]:null,
       type:span.type||'unknown',content:typeof span.content==='string'?span.content:''})),
   }));
-  return {pageIndex,blockIndex,pageSize:page.pageSize,bbox:block.bbox,type:block.type,lines};
+  return {pageIndex,blockIndex,pageSize:page.pageSize,bbox:[...original.bbox],
+    coverageBBox:[...block.bbox],type:block.type,lines};
 }
 function anchorLines(source){
   const result=new Map();let from=0;

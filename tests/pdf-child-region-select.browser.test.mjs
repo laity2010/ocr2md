@@ -43,6 +43,24 @@ try{
         {id:'p3b0s0',role:'caption',chip:'p3b0s0'},
         {id:'p3b0s1',role:'body',chip:'p3b0s1'},
       ]);
+      const assertParentRect=async(locator,expected,name)=>{
+        const coords=await locator.evaluate(node=>{
+          const b=node.getBoundingClientRect(),p=node.closest('.page').getBoundingClientRect();
+          return [(b.left-p.left)/p.width*594,(b.top-p.top)/p.height*783,
+            (b.right-p.left)/p.width*594,(b.bottom-p.top)/p.height*783];
+        });
+        coords.forEach((value,i)=>assert(Math.abs(value-expected[i])<3,
+          `${name} parent must be the enclosing rectangle of child OCR boxes: ${coords}`));
+      };
+      await assertParentRect(table3,[68,89,538,458],'p3b0');
+      const labels=await table3.evaluate(node=>{
+        const rects=[node.querySelector('.ocr-pdf-block-ctrl'),
+          ...node.querySelectorAll('.ocr-pdf-subblock-chip')]
+          .map(el=>el.getBoundingClientRect());
+        return rects.map(r=>({top:r.top,bottom:r.bottom}));
+      });
+      for(let i=1;i<labels.length;i++)assert(labels[i].top>=labels[i-1].bottom-2,
+        `${name} p3b0 parent and child chip labels cannot stack`);
       for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
         const rects=await table3.evaluate((node,index)=>{
           const frag=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
@@ -65,6 +83,7 @@ try{
       await page.waitForFunction(()=>document.querySelector(
         '.ocr-pdf-block-cover[data-block-id="p4b0"]')?.closest('.page')
         ?.querySelector('canvas')?.width>0,null,{timeout:30000});
+      await assertParentRect(block,[50,89,521,339],'p4b0');
       assert.equal(await block.locator('.ocr-pdf-block-ctrl input').count(),1);
       assert.deepEqual(await block.locator(':scope > .ocr-pdf-block-fragment')
         .evaluateAll(nodes=>nodes.map(el=>el.dataset.partRole)),['caption','body','note']);

@@ -1130,8 +1130,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- WP2: CMD sealed geometry is the sole runtime PDF overlay source; the
 -- existing /api/pdf-map may remain for legacy diagnostics but is NOT consumed.
 INSERT INTO apis VALUES
- ('L50','L','queryCMDLayout','ui/cmd-text-blocks.js','export','current CMD source','immutable original page/Block bbox and chart/table caption/notes child rectangles with SHA-verified provenance; line/span on demand','returns each nested OCR bbox under parent Block without inventing Block IDs; compact immutable layout, no network',1),
- ('L51','L','queryCMDBlockGeometry','ui/cmd-text-blocks.js','export','source,page index,block index','immutable original bbox, page size and text line/span locations or null','read-only; no OCR/PDF/CM6 mutation',1),
+ ('L50','L','queryCMDLayout','ui/cmd-text-blocks.js','export','current CMD source','immutable display union bbox of all valid native child rectangles plus unchanged originalBBox; line/span on demand','CMD owns geometry, ignores clearly conflicting child evidence, no OCR/PDF mutation or new Block identities',1),
+ ('L51','L','queryCMDBlockGeometry','ui/cmd-text-blocks.js','export','source,page index,block index','unmodified original bbox, separate coverageBBox, page size and text line/span locations or null','read-only; no OCR/PDF/CM6 mutation',1),
  ('C55','C','returned.queryLayout','ui/wcp-cmd-element-transactions.js','returned','none','promise of CMD original page/Block geometry','WCP port exposes semantic CMD capability, no raw AG/source bypass',1);
 INSERT INTO access_edges VALUES
  ('X-WP2-CMD-L50','C','L','ui/cm-document.js','queryCMDLayout(this.readSource())','L50','registered','CM6 CMD source is the sole owner of original layout'),
@@ -1297,3 +1297,12 @@ INSERT INTO access_edges VALUES
  ('X-SUBID-PDF-L63','P','L','ui/pdf-preview.js','subblockId(row.pageIndex,row.blockIndex,part.path)','L63','registered','PDF chip uses the exact native indexed bbox identity');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SUBID-L63','L63','tests/cmd-subblock-annotations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p3b0s0 caption and p3b0s1 body map exactly to original child indices; original JSON unchanged','direct');
+
+-- Compute the parent *visual coverage* from the native children; original
+-- parent OCR evidence is never rewritten and remains independently queryable.
+INSERT INTO apis VALUES
+ ('L64','L','enclosingChildBBox','ui/cmd-text-blocks.js','export','validated original child bboxes plus original parent bbox','minimum enclosing rectangle, fallback to original if no children','no sealed MinerU mutation; parent PDF coverage encloses caption/body/note',1);
+INSERT INTO access_edges VALUES
+ ('X-PARENTUNION-L64','L','L','ui/cmd-text-blocks.js','enclosingChildBBox(subRegions,box)','L64','registered','CMD read-only geometry projection, no new OCR representation');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PARENTUNION-L64','L64','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p3b0=[68,89,538,458]; p4b0=[50,89,521,339]; chart p13b1=[206,82,539,490], originalBBox unchanged, exclude foreign conflicting note','direct');

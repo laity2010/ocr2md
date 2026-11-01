@@ -70,7 +70,10 @@ try{
    assert.deepEqual(childRects.map(x=>x.role),['caption','body','note']);
    for(const [i,expected] of [[0,[217,82,494,107]],[1,[219,108,529,357]],[2,[206,371,539,490]]]){
      assert.equal(childRects[i].pointer,'none');
-     assert.notEqual(childRects[i].background,'rgba(0, 0, 0, 0)');
+     if(i===1)assert.equal(childRects[i].background,'rgba(0, 0, 0, 0)',
+       'body child already inherits tinted union parent: avoid painting twice');
+     else assert.notEqual(childRects[i].background,'rgba(0, 0, 0, 0)',
+       'caption/note outside body must remain visibly shaded');
      childRects[i].rect.forEach((value,j)=>
        assert(Math.abs(value-expected[j])<3,
          `chart child bbox ${i}/${j}: expected ${expected[j]}, got ${value}`));

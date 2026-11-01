@@ -786,6 +786,16 @@ export class PdfPreview {
       // Child chips have no checkbox; parent join/move controls stay unchanged.
       // Nested wrappers keep the original page coordinate system on zoom.
       const parts=block.subRegions||[];
+      const pageScaleY=page.div.clientHeight/region.pageSize[1];
+      let nextLabelY=block.bbox[1]*pageScaleY+19;
+      const labelOffsets=new Map();
+      for(const {part,index} of parts.map((part,index)=>({part,index}))
+        .sort((a,b)=>a.part.bbox[1]-b.part.bbox[1]||a.index-b.index)){
+        const naturalY=part.bbox[1]*pageScaleY;
+        const labelY=Math.max(naturalY,nextLabelY);
+        labelOffsets.set(index,labelY-naturalY);
+        nextLabelY=labelY+16;
+      }
       const existing=[...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')];
       existing.slice(parts.length).forEach(extra=>extra.remove());
       parts.forEach((part,i)=>{
@@ -806,8 +816,9 @@ export class PdfPreview {
         if(!chip){chip=document.createElement('span');
           chip.className='ocr-pdf-subblock-chip';fragment.append(chip);}
         if(chip.textContent!==id)chip.textContent=id;
-        chip.title=label;
-        chip.dataset.gutter=node.dataset.gutter;
+        if(chip.title!==label)chip.title=label;
+        if(chip.dataset.gutter!==node.dataset.gutter)
+          chip.dataset.gutter=node.dataset.gutter;
         const [sx0,sy0,sx1,sy1]=part.bbox,[bx0,by0,bx1,by1]=block.bbox;
         const sw=bx1-bx0,sh=by1-by0;
         const placement={left:`${(sx0-bx0)/sw*100}%`,
@@ -816,15 +827,21 @@ export class PdfPreview {
           height:`${(sy1-sy0)/sh*100}%`};
         for(const [property,value] of Object.entries(placement))
           if(fragment.style[property]!==value)fragment.style[property]=value;
-        // Place labels in the physical outer margin, not on PDF text.
-        // The body shares its parent's bbox: move its chip down one row to
-        // avoid colliding with the parent's checkbox/ID label.
-        const childMargin=node.dataset.gutter==='left'?sx0:pageWidth-sx1;
+        // Align every label with the PARENT outer margin, not the narrower
+        // child bbox. Stagger its Y coordinate after the parent checkbox and
+        // preceding child chips, so the enlarged union does not stack tags.
+        const childMargin=node.dataset.gutter==='left'?bx0:pageWidth-bx1;
+        const edgeOffset=(node.dataset.gutter==='left'?sx0-bx0:bx1-sx1)*
+          page.div.clientWidth/pageWidth;
         const nominal=12+id.length*5.4;
         const scale=Math.min(1,Math.max(.2,(childMargin-4)/nominal));
         const transform=`scale(${scale.toFixed(3)})`;
         if(chip.style.transform!==transform)chip.style.transform=transform;
-        chip.style.top=part.role==='body'&&sy0===by0?'19px':'0';
+        const edgeProperty=node.dataset.gutter==='left'?'right':'left';
+        const edgeValue=`calc(100% + ${(edgeOffset+3).toFixed(2)}px)`;
+        if(chip.style[edgeProperty]!==edgeValue)chip.style[edgeProperty]=edgeValue;
+        const yOffset=`${labelOffsets.get(i).toFixed(2)}px`;
+        if(chip.style.top!==yOffset)chip.style.top=yOffset;
       });
       // Keep checkbox and full Block ID on ONE line without entering OCR
       // text, including at the default narrow iPad PDF zoom. The available
