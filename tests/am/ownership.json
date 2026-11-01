@@ -75,7 +75,17 @@
     "cmd-linebreak.js": "C",
     "cmd-sentences.js": "C",
     "sentence-module.js": "G",
-    "sentence-preview-highlight.js": "L"
+    "sentence-preview-highlight.js": "L",
+    "cmd-block-continuations.js": "L",
+    "cmd-block-joins.js": "L",
+    "cmd-pdf-text-insert.js": "C",
+    "cmd-text-blocks.js": "L",
+    "pdf-block-text-extract.js": "P",
+    "pdf-gutter-label-layout.js": "P",
+    "pdf-region-hit.js": "P",
+    "pdf-source-locations.js": "P",
+    "text-block-module.js": "G",
+    "text-block-preview-coverage.js": "L"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -94,7 +104,8 @@
       "A",
       "C",
       "G",
-      "P"
+      "P",
+      "L"
     ],
     "view-store.js": [
       "A",
@@ -266,6 +277,30 @@
     ],
     "workspace.js->sentence-module.js": [
       "createSentenceModule"
+    ],
+    "cm-document.js->cmd-text-blocks.js": [
+      "queryCMDLayout",
+      "queryCMDBlockGeometry",
+      "inspectCMDTextBlocks"
+    ],
+    "cm-document.js->cmd-block-continuations.js": [
+      "scanCMDContinuationCandidates"
+    ],
+    "cm-document.js->cmd-block-joins.js": [
+      "readCMDBlockJoins",
+      "projectCMDLogicalTextBlocks",
+      "precedingPageBlock"
+    ],
+    "wcp-cmd-element-transactions.js->cmd-block-joins.js": [
+      "planCMDBlockJoin",
+      "planCMDBlockMove"
+    ],
+    "wcp-cmd-element-transactions.js->cmd-text-blocks.js": [
+      "inspectCMDTextBlocks",
+      "planCMDSubblockAnnotations"
+    ],
+    "workspace.js->text-block-module.js": [
+      "createTextBlockModule"
     ]
   }
 }

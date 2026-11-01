@@ -1117,10 +1117,10 @@ INSERT INTO apis VALUES
  ('G26','G','returned.setPreviewCoverage','ui/text-block-module.js','returned','detached reader-mapped block ID array','AG displays real MD coverage vs metadata-only blocks','reader owns DOM; AG receives IDs only',1),
  ('L49','L','returned.focusBlock','ui/pdf-preview.js','returned','page index and para block index','show original PDF bbox even if CMD source anchor is missing','PDF viewer alone owns overlay geometry and scroll',1);
 INSERT INTO access_edges VALUES
- ('X-TEXTBLOCK-L48',NULL,'L','ui/main.js','inspectCMDTextBlocks(source)','L48','registered','Shell asks CMD to inventory the active source without parallel JSON fetch'),
+ ('X-TEXTBLOCK-L48','C','L','ui/cm-document.js','inspectCMDTextBlocks(source)','L48','registered','Shell asks CMD to inventory the active source without parallel JSON fetch'),
  ('X-TEXTBLOCK-G25','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G25','registered','Layout mounts AG business owner using bounded ports'),
  ('X-TEXTBLOCK-G26','L','G','ui/workspace.js','owner.setPreviewCoverage(rows.filter','G26','registered','Renderer supplies mapped IDs only, no direct Grid mutation'),
- ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','currentPreview.pdf?.focusBlock(point.pageIndex','L49','registered','Missing anchor can locate original PDF without fabricated source line');
+ ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','currentPreview.focusOriginalBlock(point.pageIndex','L49','registered','Missing anchor can locate original PDF without fabricated source line');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-CMD-L48','L48','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Reinitialized 224 anchors and bbox values; SHA corruption rejected; missing/duplicate source marker visible; no writes','integration'),
  ('TC-TEXTBLOCK-G25','G25','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit text block first dropdown choice, all 224 CMD original blocks visible in AG, orange PDF box follows click','integration'),
@@ -1166,11 +1166,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO apis VALUES
  ('L53','L','returned.compareBlocks','ui/pdf-preview.js','returned','two validated page/Block semantic IDs, reveal side','two labelled A/B original PDF bbox overlays, same-page or cross-page','PDF owns viewport coordinates and renderer; no source/CMD writes',1),
  ('L54','L','returned.overviewComparison','ui/pdf-preview.js','returned','selected same-page Block pair','fit both orange rectangles into the visible PDF viewport','presentation-only zoom, PDF.js coordinates retained',1),
- ('G28','G','createTextBlockModule.reviewActions','ui/text-block-module.js','internal','selected candidate and human review action','confirmed/rejected/pending local draft keyed by sealed source SHA and JSON export','AG owns review UI, no merging, no document or PDF mutations',1);
+ ('G28','G','setReview','ui/text-block-module.js','internal','selected candidate and human review action','confirmed/rejected/pending local draft keyed by sealed source SHA and JSON export','AG owns review UI, no merging, no document or PDF mutations',1);
 INSERT INTO access_edges VALUES
  ('X-WP4-L53','L','L','ui/workspace.js','currentPreview.compareOriginalBlocks(selection.from','L53','registered','Layout forwards semantic candidate IDs to PDF preview owner'),
- ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner'),
- ('X-WP4-G28','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G28','registered','AG review remains owner-local; Layout provides only a semantic compare callback');
+ ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L53','L53','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit show simultaneous labelled A/B original PDF boxes for same page and different pages, without OCR fetch','integration'),
  ('TC-WP4-L54','L54','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit overview renders both p6b6 and p6b7 boxes inside physical PDF viewport','integration'),
@@ -1267,7 +1266,7 @@ INSERT INTO access_edges VALUES
  ('X-PDF-TEXT-C62','L','C','ui/main.js','cmdPort.insertPDFTextAtCaret(pageIndex,blockIndex,text)','C62','registered','Shell forwards user-triggered PDF text insertion to CMD');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TEXT-P15','P15','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','original PDF text-layer order retains initial oversized drop-cap M attached to uch in p1b9 while excluding neighboring columns','direct'),
- ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','page 5 p4b0 OCR body, caption, footnote rectangles','exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
+ ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','tests/pdf-region-hit.test.mjs','exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
  ('TC-PDF-TEXT-PARTS','P17','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit page 5 p4b0 caption, body and note can be clicked and highlighted separately with individually extracted native text, one original Block and checkbox','integration'),
  ('TC-PDF-TEXT-C60','C60','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','pure planner inserts at arbitrary source cursor without deleting OCR and rejects invalid text and coordinates','direct'),
  ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration');
@@ -1328,7 +1327,7 @@ INSERT INTO apis VALUES
 INSERT INTO access_edges VALUES
  ('X-PDF-GUTTER-P19','P','P','ui/pdf-preview.js','layoutPDFGutterLabels(items,page.clientHeight)','P19','registered','page-wide parent and child gutter collision avoidance');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','synthetic page 5 caption/body/note geometry','all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
+ ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','tests/pdf-gutter-label-layout.test.mjs','all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
 
 -- CMD structural comments are provenance, not a claim that MinerU recognized
 -- any corresponding prose. PDF should distinguish actual content lines from
@@ -1353,3 +1352,16 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- parent and child tags. Empty is a visual fact, never an OCR error verdict.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-EMPTY-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit empty parent p4b0 and p2b8 dashed while nonempty p13b0 solid; after child-tag annotation p3b0 empty parent becomes dashed while s0 retains solid text badge; empty p4b0 subblocks dashed; no OCR/CM mutation','integration');
+
+-- Internal AM repair after frozen 75e05598 audit: these were existing
+-- behaviors lacking versioned TEST LINKS, not newly invented capabilities.
+-- Chapter boundary DOM event has an actual Chrome/WebKit browser regression.
+INSERT INTO test_cases(id,message_id,script,fixture,expected,evidence) VALUES
+ ('TC-CHAPTER-BOUNDARY-E14','E14','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG chapter boundary changes trigger a source chapter navigation refresh, as checked by Chrome/WebKit integration','integration');
+INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence) VALUES
+ ('TC-CHAPTER-BOUNDARY-PUB-W15','PUB-W15','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG chapter checkbox emits registered chapter-boundary-changed event','integration');
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
+ ('TC-CHAPTER-BOUNDARY-SUB-W19','SUB-W19','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Source file navigator rebuilds chapter options on registered event','integration');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-TEXT-P16','P16','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','PDF selected native text layer enables explicit extract action, source remains unchanged until user intent, Undo available','integration'),
+ ('TC-PDF-TEXT-L61','L61','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Layout injects semantic insert action; no PDF module direct CM6 write','integration');
