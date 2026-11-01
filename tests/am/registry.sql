@@ -1339,3 +1339,12 @@ INSERT INTO access_edges VALUES
  ('X-PDF-CONTENT-P20','P','P','ui/pdf-preview.js','sourceSubblocks(this.getMarkdown())','P20','registered','PDF child focus distinguishes real child Markdown content from empty OCR source');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-CONTENT-P20','P20','tests/pdf-source-locations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 original parent locations and 43 original child locations; p3b0s0 contentLine is actual caption prose and p3b0s1 actual HTML; all p4b0s0/s1/s2 have NULL contentLine','direct');
+
+-- CMD source tags are lexical boundaries. Parent owns only text before its
+-- first native child; each child owns content up to the next native tag.
+INSERT INTO apis VALUES
+ ('P21','P','sourceBlockScopes','ui/pdf-source-locations.js','export','live CMD Markdown string with original MinerU parent/child tags','ordered inclusive per-tag sourceLine to scopeEndLine plus optional contentLine/contentEndLine','live CM6 line insertions belong to the preceding tag, never overlap or rewrite any OCR/source',1);
+INSERT INTO access_edges VALUES
+ ('X-CMD-SCOPES-P21','P','P','ui/pdf-source-locations.js','sourceBlockScopes(source)','P21','registered','sourceBlocks and sourceSubblocks filter one unified lexical tag interval scan');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-CMD-TAG-SCOPES-P21','P21','tests/pdf-source-locations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p4b0 parent ends immediately before p4b0s0, each s-tag ends before next s-tag; inserting text between tags changes only owning content range; 224 legacy parents and 43 child tags respected, sealed source excluded','direct');

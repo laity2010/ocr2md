@@ -186,6 +186,29 @@ try{
       }
       assert.deepEqual(observations.map(x=>x.enabled),[true,true,true],
         'screenshot regions caption, body and notes each have independently extractable PDF text');
+      // Lexical CMD source scopes include every line from a tag up to (but
+      // not including) the next native tag. Empty lines are owned too, even
+      // if the child has no recognized OCR prose yet.
+      await page.evaluate(async line=>{
+        const {publishFocus}=await import('/view-store.js');
+        publishFocus({sourceLine:line,origin:'source',intent:'click'});
+      },markerLine('p4b0s2')+1);
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
+        ?.dataset.partIndex==='2',null,{timeout:15000});
+      const parentSourceLine=annotated.findIndex(text=>
+        text.includes('<!-- minerujson:block:v1:4:0 -->'))+1;
+      await page.evaluate(async line=>{
+        const {publishFocus}=await import('/view-store.js');
+        publishFocus({sourceLine:line,origin:'source',intent:'click'});
+      },parentSourceLine);
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
+        ?.dataset.partIndex==='-1',null,{timeout:15000});
+      await page.evaluate(async line=>{
+        const {publishFocus}=await import('/view-store.js');
+        publishFocus({sourceLine:line,origin:'source',intent:'click'});
+      },markerLine('p4b0s0'));
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
+        ?.dataset.partIndex==='0',null,{timeout:15000});
       // The source editor must actually render the target child tag, not
       // merely publish a correct but unconsumed focus event.
       await page.waitForFunction(id=>[...document.querySelectorAll('.cm-line')]

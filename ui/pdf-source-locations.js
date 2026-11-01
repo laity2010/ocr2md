@@ -1,7 +1,11 @@
 import {blockAnchor,subblockAnchor} from './mineru-anchors.js';
-// A CMD tag is a provenance anchor, not automatically a text location.
-// Map to actual content when it exists; MinerU metadata-only placeholders
-// and comment tags must NEVER masquerade as an OCR text/body/notes match.
+
+/** A MinerU block or subblock tag owns the interval starting at its own line
+ * and ending immediately before the NEXT native block/subblock tag. This is a
+ * flat, lexical ownership rule: a parent does not also own its children's
+ * content. All ranges are 1-based inclusive and are recomputed from the live
+ * CM6 document, including user text inserted between any two tags.
+ * Original OCR geometry and sealed JSON remain entirely read-only. */
 function sourceBodyRange(lines,start,end){
   let first=null,last=null;
   for(let i=start;i<end;i++){
@@ -13,34 +17,29 @@ function sourceBodyRange(lines,start,end){
   }
   return {contentLine:first,contentEndLine:last};
 }
-export function sourceBlocks(text){
-  const lines=text.split('\n'),anchors=[];
-  const evidenceLine=lines.findIndex(line=>line.includes('<!-- minerujson:source:v1:'));
-  for(const [index,line] of lines.entries()){
-    const anchor=blockAnchor(line);
-    if(anchor)anchors.push({...anchor,sourceLine:index+1});
+
+export function sourceBlockScopes(source){
+  const lines=source.split('\n');
+  const firstEvidence=lines.findIndex(line=>line.includes('<!-- minerujson:source:v1:'));
+  const limit=firstEvidence<0?lines.length:firstEvidence;
+  const tags=[];
+  for(let i=0;i<limit;i++){
+    const parent=blockAnchor(lines[i]);
+    if(parent){tags.push({...parent,kind:'parent',sourceLine:i+1});continue;}
+    const child=subblockAnchor(lines[i]);
+    if(child)tags.push({...child,kind:'child',sourceLine:i+1});
   }
-  return anchors.map((a,i)=>{
-    const end=Math.min(anchors[i+1]?.sourceLine-1??lines.length,
-      evidenceLine<0?lines.length:evidenceLine);
-    return {...a,...sourceBodyRange(lines,a.sourceLine,end)};
+  return tags.map((tag,i)=>{
+    const end=tags[i+1]?.sourceLine-1??limit;
+    // End is inclusive. Source tag owns its own line and its following lines,
+    // including blanks, until the next original parent or child tag.
+    return {...tag,scopeEndLine:end,
+      ...sourceBodyRange(lines,tag.sourceLine,end)};
   });
 }
-/** Read-only map of REAL CMD text and structure-only MinerU child tags. */
+export function sourceBlocks(source){
+  return sourceBlockScopes(source).filter(tag=>tag.kind==='parent');
+}
 export function sourceSubblocks(source){
-  const lines=source.split('\n'),found=[];
-  const evidenceLine=lines.findIndex(line=>line.includes('<!-- minerujson:source:v1:'));
-  for(const [i,line] of lines.entries()){
-    const anchor=subblockAnchor(line);
-    if(anchor)found.push({...anchor,sourceLine:i+1});
-  }
-  return found.map((a,i)=>{
-    const nextChild=found[i+1]?.sourceLine-1??lines.length;
-    let nextParent=lines.length;
-    for(let j=a.sourceLine;j<nextChild;j++){
-      if(blockAnchor(lines[j])){nextParent=j;break;}
-    }
-    const end=Math.min(nextChild,nextParent,evidenceLine<0?lines.length:evidenceLine);
-    return {...a,...sourceBodyRange(lines,a.sourceLine,end)};
-  });
+  return sourceBlockScopes(source).filter(tag=>tag.kind==='child');
 }

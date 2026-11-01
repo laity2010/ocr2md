@@ -42,16 +42,7 @@ export function pdfOverlayRect(region,viewport){
   return {left:x0/w*100,top:y0/h*100,width:(x1-x0)/w*100,height:(y1-y0)/h*100};
 }
 
-export {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
-function sourceAnchor(anchors,line){
-  let lo=0,hi=anchors.length-1,best=null;
-  while(lo<=hi){const mid=(lo+hi)>>1;
-    if(anchors[mid].sourceLine<=line){best=anchors[mid];lo=mid+1;}
-    else hi=mid-1;
-  }
-  return best;
-}
-
+export {sourceBlockScopes,sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
 export class PdfPreview {
   constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
     onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),
@@ -1164,9 +1155,8 @@ export class PdfPreview {
       this.revealUntil=performance.now()+1700;
     }
     if(!this.ready){this.pendingFocus={line,explicit};return;}
-    const child=this.subAnchors.find(a=>a.sourceLine===line||
-      (a.contentLine!==null&&line>=a.contentLine&&line<=a.contentEndLine));
-    const source=child||sourceAnchor(this.anchors,line);
+    const child=this.subAnchors.find(a=>line>=a.sourceLine&&line<=a.scopeEndLine);
+    const source=child||this.anchors.find(a=>line>=a.sourceLine&&line<=a.scopeEndLine);
     if(!source)return;
     if(this.comparison){
       if(this.comparison.points.some(p=>p.pageIndex===source.pageIndex&&p.blockIndex===source.blockIndex)){
