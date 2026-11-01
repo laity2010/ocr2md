@@ -13,7 +13,19 @@ printf 'AM_STANDARD_START sha=%s report=%s\n' "$SHA" "$OUT"
 set +e
 bash "$ROOT/tests/am/run-grok-audit.sh" "$SHA" 2>&1 | tee "$OUT/run.log"
 RUN_EXIT=${PIPESTATUS[0]}
-python3 "$ROOT/tests/am/standard_audit.py" --source-sha "$SHA" --runner-exit "$RUN_EXIT" --isolated-dir "$TARGET" --output-dir "$OUT"
+# Standard reports must inspect the SAME frozen Git tree as the isolated
+# runner, even if daily development advances the caller's branch meanwhile.
+# Fail closed to the caller report when no matching trusted audit worktree
+# exists; never silently reinterpret a different checkout as the audit SHA.
+REPORT_SOURCE="$ROOT"
+if [[ -f "$TARGET/tests/am/standard_audit.py" ]] &&
+   [[ "$(git -C "$TARGET" rev-parse HEAD 2>/dev/null)" == "$SHA" ]] &&
+   [[ "$(git -C "$TARGET" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" == "$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)" ]] &&
+   [[ -z "$(git -C "$TARGET" status --porcelain 2>/dev/null)" ]]; then
+  REPORT_SOURCE="$TARGET"
+fi
+printf 'AM_STANDARD_REPORT_SOURCE=%s\n' "$REPORT_SOURCE"
+python3 "$REPORT_SOURCE/tests/am/standard_audit.py" --source-sha "$SHA" --runner-exit "$RUN_EXIT" --isolated-dir "$TARGET" --output-dir "$OUT"
 REPORT_EXIT=$?
 set -e
 printf 'AM_STANDARD_EXIT runner=%s report=%s report_dir=%s\n' "$RUN_EXIT" "$REPORT_EXIT" "$OUT"
