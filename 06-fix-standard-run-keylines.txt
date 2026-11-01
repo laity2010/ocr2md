@@ -1,0 +1,8 @@
+AM_STANDARD_START sha=dfe1a05e5078ae2998ba405f22d9a89f074aad82 report=/home/hatch/workspace/ocr2md-fix-75e05598/.v6/audit-reports/standard-dfe1a05e-20261101T101259Z
+AM_STANDARD_REPORT status=BLOCKED sha=dfe1a05e5078ae2998ba405f22d9a89f074aad82 output=/tmp/tmpe0_6jio0
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=62
+AM_FULL_START git=dfe1a05e suites=91 contracts=345
+AM_STANDARD_REPORT status=FAIL sha=dfe1a05e5078ae2998ba405f22d9a89f074aad82 output=/home/hatch/workspace/ocr2md-fix-75e05598/.v6/audit-reports/standard-dfe1a05e-20261101T101259Z
+AM_STANDARD_COUNTS direct_api_pass=37/244 static_findings=0 unregistered_event_sites=0 runtime_review=62
+AM_STANDARD_EXIT runner=120 report=1 report_dir=/home/hatch/workspace/ocr2md-fix-75e05598/.v6/audit-reports/standard-dfe1a05e-20261101T101259Z
+FIXRUN_EXIT=1

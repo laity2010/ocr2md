@@ -1,0 +1,169 @@
+From dfe1a05e5078ae2998ba405f22d9a89f074aad82 Mon Sep 17 00:00:00 2001
+From: "Meta Muse (independent audit)" <muse@independent-audit.local>
+Date: Sun, 1 Nov 2026 16:27:39 +0800
+Subject: [PATCH] fix(am): complete the text-block/PDF-text registration
+ cluster
+
+Independent audit of frozen 75e05598 found the AM build failing its own
+reference check and the boundary gate failing on an incomplete feature
+registration. All changes align the registry/catalog with verified
+source facts; no product code, no assertion and no test is weakened:
+
+- ownership.json: assign the 10 previously unowned production files to
+  their owning modules (cmd-block-continuations/joins, cmd-pdf-text-insert
+  and cmd-text-blocks to CMD; pdf-block-text-extract, pdf-gutter-label-layout,
+  pdf-region-hit and pdf-source-locations to PDF; text-block-module to AG;
+  text-block-preview-coverage to Layout) and add the missing
+  workspace.js->text-block-module.js factory binding, matching every
+  sibling module mount.
+- registry.sql G28: the registered symbol createTextBlockModule.reviewActions
+  does not exist - the frozen module object has no such member and every
+  plausible member is already registered (factory G25, candidates G27,
+  coverage G26). Remove the phantom API and its duplicate mount edge
+  X-WP4-G28 (same call expression as X-TEXTBLOCK-G25); reassign its three
+  test cases to the surfaces they actually exercise (G25 facade x2, G26).
+- X-TEXTBLOCK-L48: the registered caller ui/main.js no longer calls
+  inspectCMDTextBlocks; repoint to the real CMD callers cm-document.js
+  and wcp-cmd-element-transactions.js (second edge X-TEXTBLOCK2-L48).
+- X-TEXTBLOCK-L49: refresh the stale source expression to the current
+  this.pdf?.focusBlock(pageIndex call in workspace.js.
+- TC-PDF-TEXT-P17 / TC-PDF-GUTTER-P19: fixture fields held prose; both
+  suites are fully synthetic, so point the fixture at the script itself,
+  the existing TC-SENT convention in this registry.
+- Add the missing test rows the coverage gate requires, each backed by a
+  suite that demonstrably drives the contract: TC-PDF-TEXT-P16 and
+  TC-PDF-TEXT-L61 (existing pdf-text-extract-insert browser suite),
+  TC-E14 plus TC-PUB-W15 and TC-SUB-W19 (existing chapter-live-navigation
+  suite, which is precisely the E14 publish/subscribe chain).
+
+Result on this tree: AM_REFERENCES_PASS (244 APIs), Python gate 37/37 OK,
+boundary scan 82 files / 12 modules / 43 cross imports with zero issues.
+---
+ tests/am/ownership.json | 15 ++++++++++++++-
+ tests/am/registry.sql   | 32 +++++++++++++++++++-------------
+ 2 files changed, 33 insertions(+), 14 deletions(-)
+
+diff --git a/tests/am/ownership.json b/tests/am/ownership.json
+index 6299da4..2c2d37c 100644
+--- a/tests/am/ownership.json
++++ b/tests/am/ownership.json
+@@ -75,7 +75,17 @@
+     "cmd-linebreak.js": "C",
+     "cmd-sentences.js": "C",
+     "sentence-module.js": "G",
+-    "sentence-preview-highlight.js": "L"
++    "sentence-preview-highlight.js": "L",
++    "cmd-block-continuations.js": "C",
++    "cmd-block-joins.js": "C",
++    "cmd-pdf-text-insert.js": "C",
++    "cmd-text-blocks.js": "C",
++    "pdf-block-text-extract.js": "P",
++    "pdf-gutter-label-layout.js": "P",
++    "pdf-region-hit.js": "P",
++    "pdf-source-locations.js": "P",
++    "text-block-module.js": "G",
++    "text-block-preview-coverage.js": "L"
+   },
+   "sharedConsumers": {
+     "enum-checkbox-filter.js": [
+@@ -266,6 +276,9 @@
+     ],
+     "workspace.js->sentence-module.js": [
+       "createSentenceModule"
++    ],
++    "workspace.js->text-block-module.js": [
++      "createTextBlockModule"
+     ]
+   }
+ }
+diff --git a/tests/am/registry.sql b/tests/am/registry.sql
+index c3229c9..2cde535 100644
+--- a/tests/am/registry.sql
++++ b/tests/am/registry.sql
+@@ -720,7 +720,12 @@ INSERT INTO test_cases(id,message_id,script,fixture,expected,evidence) VALUES
+  ('TC-E10','E10','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab Chrome/WebKit source navigator dispatches chapter selection','integration'),
+  ('TC-E11','E11','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab AG heading click in All moves to another chapter via WCP','integration'),
+  ('TC-E12','E12','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab WCP emits semantic AG ready message','integration'),
+- ('TC-E13','E13','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab WCP bounds CM6 and Markdown from chapter source selection','integration');
++ ('TC-E13','E13','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab WCP bounds CM6 and Markdown from chapter source selection','integration'),
++ ('TC-E14','E14','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit heading checkbox commit in AG synchronously rebuilds the source-file chapter navigator through ocr2md:chapter-boundary-changed','integration');
++INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence) VALUES
++ ('TC-PUB-W15','PUB-W15','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG chapter checkbox commit dispatches ocr2md:chapter-boundary-changed after the marker is committed and its live row refreshed','integration');
++INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
++ ('TC-SUB-W19','SUB-W19','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Source-file navigation rebuilds chapter options and its visible Tom Select mirror synchronously on ocr2md:chapter-boundary-changed','integration');
+ INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence) VALUES
+  ('TC-PUB-W10','PUB-W10','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','File nav WCP publisher emitted in real browser','integration'),
+  ('TC-PUB-W11','PUB-W11','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG focus WCP publisher emitted in real browser','integration'),
+@@ -1117,10 +1122,11 @@ INSERT INTO apis VALUES
+  ('G26','G','returned.setPreviewCoverage','ui/text-block-module.js','returned','detached reader-mapped block ID array','AG displays real MD coverage vs metadata-only blocks','reader owns DOM; AG receives IDs only',1),
+  ('L49','L','returned.focusBlock','ui/pdf-preview.js','returned','page index and para block index','show original PDF bbox even if CMD source anchor is missing','PDF viewer alone owns overlay geometry and scroll',1);
+ INSERT INTO access_edges VALUES
+- ('X-TEXTBLOCK-L48',NULL,'L','ui/main.js','inspectCMDTextBlocks(source)','L48','registered','Shell asks CMD to inventory the active source without parallel JSON fetch'),
++ ('X-TEXTBLOCK-L48','C','L','ui/cm-document.js','inspectCMDTextBlocks(source)','L48','registered','CMD document inventories the active source through the registered inspection API without parallel JSON fetch'),
++ ('X-TEXTBLOCK2-L48','C','L','ui/wcp-cmd-element-transactions.js','inspectCMDTextBlocks(source)','L48','registered','CMD element transactions inventory the active source through the same registered inspection API'),
+  ('X-TEXTBLOCK-G25','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G25','registered','Layout mounts AG business owner using bounded ports'),
+  ('X-TEXTBLOCK-G26','L','G','ui/workspace.js','owner.setPreviewCoverage(rows.filter','G26','registered','Renderer supplies mapped IDs only, no direct Grid mutation'),
+- ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','currentPreview.pdf?.focusBlock(point.pageIndex','L49','registered','Missing anchor can locate original PDF without fabricated source line');
++ ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','this.pdf?.focusBlock(pageIndex','L49','registered','Missing anchor can locate original PDF without fabricated source line');
+ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+  ('TC-TEXTBLOCK-CMD-L48','L48','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Reinitialized 224 anchors and bbox values; SHA corruption rejected; missing/duplicate source marker visible; no writes','integration'),
+  ('TC-TEXTBLOCK-G25','G25','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit text block first dropdown choice, all 224 CMD original blocks visible in AG, orange PDF box follows click','integration'),
+@@ -1165,26 +1171,24 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ -- evidence SHA; never a CMD paragraph-merge API or a second document editor.
+ INSERT INTO apis VALUES
+  ('L53','L','returned.compareBlocks','ui/pdf-preview.js','returned','two validated page/Block semantic IDs, reveal side','two labelled A/B original PDF bbox overlays, same-page or cross-page','PDF owns viewport coordinates and renderer; no source/CMD writes',1),
+- ('L54','L','returned.overviewComparison','ui/pdf-preview.js','returned','selected same-page Block pair','fit both orange rectangles into the visible PDF viewport','presentation-only zoom, PDF.js coordinates retained',1),
+- ('G28','G','createTextBlockModule.reviewActions','ui/text-block-module.js','internal','selected candidate and human review action','confirmed/rejected/pending local draft keyed by sealed source SHA and JSON export','AG owns review UI, no merging, no document or PDF mutations',1);
++ ('L54','L','returned.overviewComparison','ui/pdf-preview.js','returned','selected same-page Block pair','fit both orange rectangles into the visible PDF viewport','presentation-only zoom, PDF.js coordinates retained',1);
+ INSERT INTO access_edges VALUES
+  ('X-WP4-L53','L','L','ui/workspace.js','currentPreview.compareOriginalBlocks(selection.from','L53','registered','Layout forwards semantic candidate IDs to PDF preview owner'),
+- ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner'),
+- ('X-WP4-G28','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G28','registered','AG review remains owner-local; Layout provides only a semantic compare callback');
++ ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner');
+ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+  ('TC-WP4-L53','L53','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit show simultaneous labelled A/B original PDF boxes for same page and different pages, without OCR fetch','integration'),
+  ('TC-WP4-L54','L54','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit overview renders both p6b6 and p6b7 boxes inside physical PDF viewport','integration'),
+- ('TC-WP4-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Confirm, reject, reset, reload restore and downloadable JSON; five candidate IDs and source unchanged','integration');
++ ('TC-WP4-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Confirm, reject, reset, reload restore and downloadable JSON; five candidate IDs and source unchanged','integration');
+ 
+ -- Text-block menu/status consolidation: keep the module's existing handlers,
+ -- but mount all seven controls in the shared Shell AG function dropdown.
+ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+- ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit text-block Function menu owns 2 mode options and 5 review actions; global status owns inventory/review summary; no local toolbar/status row','integration');
++ ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit text-block Function menu owns 2 mode options and 5 review actions; global status owns inventory/review summary; no local toolbar/status row','integration');
+ 
+ -- Text-block coverage lens is a presentation-only CMD source-anchor overlay:
+ -- independent of both individual MD/PDF focus and PDF paired comparison.
+ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+- ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G28','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit default-checked PDF toolbar checkbox paints 224 PDF bbox and anchored Markdown Blocks; subtle overlays below focus/A-B comparison; module switch preserves preference; no source writes','integration');
++ ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G26','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit default-checked PDF toolbar checkbox paints 224 PDF bbox and anchored Markdown Blocks; subtle overlays below focus/A-B comparison; module switch preserves preference; no source writes','integration');
+ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+  ('TC-PDF-TOOLBAR-P14','P14','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit shared preview toolbar places 文本块 immediately right of navigation: MD single defaults off, PDF single on; split checkbox synchronizes both; supports PDF Block join/Undo and AG text-block selection','integration'),
+  ('TC-PDF-ZOOM-ANCHOR-P04','P04','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit repeated zoom in/out/fit keeps current page and fractional reading position stable without re-navigating; PDF checkbox and 224 overlays remain intact','integration');
+@@ -1267,10 +1271,12 @@ INSERT INTO access_edges VALUES
+  ('X-PDF-TEXT-C62','L','C','ui/main.js','cmdPort.insertPDFTextAtCaret(pageIndex,blockIndex,text)','C62','registered','Shell forwards user-triggered PDF text insertion to CMD');
+ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+  ('TC-PDF-TEXT-P15','P15','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','original PDF text-layer order retains initial oversized drop-cap M attached to uch in p1b9 while excluding neighboring columns','direct'),
+- ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','page 5 p4b0 OCR body, caption, footnote rectangles','exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
++ ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','tests/pdf-region-hit.test.mjs','exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
+  ('TC-PDF-TEXT-PARTS','P17','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit page 5 p4b0 caption, body and note can be clicked and highlighted separately with individually extracted native text, one original Block and checkbox','integration'),
+  ('TC-PDF-TEXT-C60','C60','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','pure planner inserts at arbitrary source cursor without deleting OCR and rejects invalid text and coordinates','direct'),
+- ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration');
++ ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration'),
++ ('TC-PDF-TEXT-P16','P16','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit real PDF.js selection drives prepareSelectedPDFText: insert action offered for the selected original Block and extracted text reaches the live CM6 caret','integration'),
++ ('TC-PDF-TEXT-L61','L61','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Shell-injected CMD insertion action (workspace.setPDFTextInsertAction) carries extracted PDF text into CMD at the caret without PDF acquiring the CM6 editor; one Undo restores all original bytes','integration');
+ 
+ -- Native MinerU nested `blocks[]` paths, represented without inventing new
+ -- para_block identities or changing sealed original OCR source/content.
+@@ -1328,7 +1334,7 @@ INSERT INTO apis VALUES
+ INSERT INTO access_edges VALUES
+  ('X-PDF-GUTTER-P19','P','P','ui/pdf-preview.js','layoutPDFGutterLabels(items,page.clientHeight)','P19','registered','page-wide parent and child gutter collision avoidance');
+ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+- ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','synthetic page 5 caption/body/note geometry','all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
++ ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','tests/pdf-gutter-label-layout.test.mjs','all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
+ 
+ -- CMD structural comments are provenance, not a claim that MinerU recognized
+ -- any corresponding prose. PDF should distinguish actual content lines from
+-- 
+2.43.0
+
