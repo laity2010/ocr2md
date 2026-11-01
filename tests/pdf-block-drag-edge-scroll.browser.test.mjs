@@ -9,6 +9,14 @@ import {chromium,webkit} from 'playwright';
 
 import {ensureTextBlockSample} from './fixtures/text-block-sample.mjs';
 const sample=ensureTextBlockSample();
+// 9a375d9 contract: the checkbox is a read-only visual; three clicks/taps on
+// the parent .ocr-pdf-block-ctrl toggle the join (same as join-toggle test).
+const toggleJoin=async(page,id,mobile)=>{
+  const tag=page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] .ocr-pdf-block-ctrl`);
+  if(mobile){for(let i=0;i<3;i++)await tag.tap({timeout:16000});}
+  else await tag.click({clickCount:3,delay:60,timeout:16000});
+};
+
 const original=readFileSync(sample,'utf8'),port=5998,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
   '--port',String(port),'--strictPort'],{cwd:process.cwd(),stdio:'ignore',
@@ -113,7 +121,7 @@ try{
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b8"] .ocr-pdf-block-ctrl span')
         .innerText(),'p16b0',"pointed b8 becomes the new b0");
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] input').click();
+      await toggleJoin(page,'p16b0',mobile);
       await page.waitForFunction(()=>{
         const node=document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b0"]');
         return node?.querySelector('input')?.checked===false&&

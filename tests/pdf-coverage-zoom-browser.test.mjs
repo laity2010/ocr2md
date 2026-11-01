@@ -48,8 +48,11 @@ try{
       assert(['text-block','chapter-boundary'].includes(
         await page.locator('.ocr-lab-element-select').inputValue()),
         'the first PDF edit must not depend on which AG view the browser initializes');
-      const join=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
-      await join.evaluate(input=>input.click());
+      // 9a375d9 contract: the checkbox is a read-only visual; three
+      // clicks/taps on the parent control toggle the join.
+      const joinTag=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
+      if(mobile){for(let i=0;i<3;i++)await joinTag.tap({timeout:16000});}
+      else await joinTag.click({clickCount:3,delay:60,timeout:16000});
       await page.waitForFunction(()=>document.querySelector(
         '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===false,
         null,{timeout:20000});
