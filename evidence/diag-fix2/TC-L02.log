@@ -1,0 +1,4 @@
+AM_RUN_START case=TC-L02 git=955c6084 script=tests/dockview-preview-browser.test.mjs
+AM_RUN_PASS case=TC-L02 evidence=.v6/tests/am-TC-L02-20261101T104714Z-955c6084-706324.log
+DOCKVIEW_PREVIEW_PASS Chrome {"width":1032,"groups":3,"images":11,"tables":8,"math":20,"liveUpdate":"pass","undo":"pass","editorInstanceStable":true,"source":"CM6 only","layout":"pass","sanitize":"pass","errors":0}
+DOCKVIEW_PREVIEW_PASS WebKit {"width":1032,"groups":3,"images":11,"tables":8,"math":20,"liveUpdate":"pass","undo":"pass","editorInstanceStable":true,"source":"CM6 only","layout":"pass","sanitize":"pass","errors":0}

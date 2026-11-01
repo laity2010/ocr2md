@@ -1,0 +1,4 @@
+AM_RUN_START case=TC-C09 git=955c6084 script=tests/cm6-browser.test.mjs
+AM_RUN_PASS case=TC-C09 evidence=.v6/tests/am-TC-C09-20261101T104647Z-955c6084-705748.log
+SAVE_POSITION {"before":121929,"after":121929}
+BROWSER_TEST_PASS {"size":306869,"lines":3112,"extract":"✓ 已加载 · 3,112行 / 306,869字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","undoRedo":"pass","savedBytes":306870,"selectionPreserved":true,"scrollPreserved":true,"refreshRoundTrip":true,"sourceFixtureUnchanged":true,"screenshots":[".v6/evidence/wp1/desktop.png",".v6/evidence/wp1/ipad-viewport.png"]}

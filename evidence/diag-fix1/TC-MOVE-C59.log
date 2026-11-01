@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-MOVE-C59 git=b86415ee script=tests/pdf-block-drag-edge-scroll.browser.test.mjs
+AM_ERROR: TC-MOVE-C59: FAIL
+AM_RUN_FAIL case=TC-MOVE-C59 evidence=.v6/tests/am-TC-MOVE-C59-20261101T103347Z-b86415ee-698317.log
+    '       - <div tabindex="0" role="button" data-gutter="left" class="ocr-pdf-block-ctrl" data-source-kind="content" aria-label="原始 p16b0 · 独立 · 单击定位，三击切换接续" title="单击定位 p16b0；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立） · 源码作用域有内容">…</div> intercepts pointer events',
+    '     - retrying click action',
+    '       - waiting 500ms'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

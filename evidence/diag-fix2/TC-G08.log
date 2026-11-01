@@ -1,0 +1,5 @@
+AM_RUN_START case=TC-G08 git=955c6084 script=tests/ag-header-browser.test.mjs
+AM_RUN_PASS case=TC-G08 evidence=.v6/tests/am-TC-G08-20261101T104626Z-955c6084-704922.log
+AG_HEADER_TOUCH_PASS Chrome {"columns":["title","level","pdfPage","independent","virtualChapter"],"titlePinned":true,"measured":[{"col":"title","gap":11,"resizeWidth":16},{"col":"level","gap":11,"resizeWidth":16},{"col":"pdfPage","gap":11,"resizeWidth":16},{"col":"independent","gap":11,"resizeWidth":16},{"col":"virtualChapter","gap":11,"resizeWidth":16}],"beforeWidth":235,"afterWidth":280,"tapFilter":true}
+AG_HEADER_TOUCH_PASS WebKit {"columns":["title","level","pdfPage","independent","virtualChapter"],"titlePinned":true,"measured":[{"col":"title","gap":11,"resizeWidth":16},{"col":"level","gap":11,"resizeWidth":16},{"col":"pdfPage","gap":11,"resizeWidth":16},{"col":"independent","gap":11,"resizeWidth":16},{"col":"virtualChapter","gap":11,"resizeWidth":16}],"beforeWidth":235,"afterWidth":280,"tapFilter":true}
+AG_HEADER_ISOLATED_READONLY_PASS

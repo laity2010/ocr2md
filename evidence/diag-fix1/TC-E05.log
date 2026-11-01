@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-E05 git=b86415ee script=tests/compact-shell-browser.test.mjs
+AM_ERROR: TC-E05: FAIL
+AM_RUN_FAIL case=TC-E05 evidence=.v6/tests/am-TC-E05-20261101T103203Z-b86415ee-697025.log
+page.waitForFunction: Timeout 55000ms exceeded.
+    at page.waitForFunction (/workspace/ocr2md-audit/ocr2md-am--run1/.v6/audit-reports/audit-linux-diagnostics.mjs:76:32)
+    at /workspace/ocr2md-audit/ocr2md-am--run1/tests/compact-shell-browser.test.mjs:47:18 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

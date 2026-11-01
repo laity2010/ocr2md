@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-E14 git=b86415ee script=tests/chapter-live-navigation.browser.test.mjs
+AM_ERROR: TC-E14: FAIL
+AM_RUN_FAIL case=TC-E14 evidence=.v6/tests/am-TC-E14-20261101T103121Z-b86415ee-696338.log
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 21,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

@@ -1,0 +1,10 @@
+AM_RUN_START case=TC-MOVE-C59 git=0b93f105 script=tests/pdf-block-drag-edge-scroll.browser.test.mjs
+AM_RUN_PASS case=TC-MOVE-C59 evidence=.v6/tests/am-TC-MOVE-C59-20261101T110210Z-0b93f105-712096.log
+PDF_BLOCK_EDGE_SCROLL_PASS iPad-WebKit {
+  source: 'p16b0',
+  target: 'p16b8',
+  scrollDelta: 299,
+  checkboxes: 224,
+  undo: true,
+  errors: 0
+}

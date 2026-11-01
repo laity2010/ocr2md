@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-PDF-BLOCK-L59 git=b86415ee script=tests/pdf-coverage-zoom-browser.test.mjs
+AM_ERROR: TC-PDF-BLOCK-L59: FAIL
+AM_RUN_FAIL case=TC-PDF-BLOCK-L59 evidence=.v6/tests/am-TC-PDF-BLOCK-L59-20261101T103510Z-b86415ee-699341.log
+page.waitForFunction: Timeout 20000ms exceeded.
+    at page.waitForFunction (/workspace/ocr2md-audit/ocr2md-am--run1/.v6/audit-reports/audit-linux-diagnostics.mjs:76:32)
+    at /workspace/ocr2md-audit/ocr2md-am--run1/tests/pdf-coverage-zoom-browser.test.mjs:52:18 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

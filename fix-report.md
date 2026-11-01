@@ -22,3 +22,21 @@
 ## 未修复（保持 FAIL）
 - P1-2 / P1-3 业务套件失败：根因未定位，不属于可以安全修复的范围。
 - P2-1 / P2-2 / P2-3 未处理。
+
+## 第二轮修复（fix HEAD cfdc2d4，2026-11-01）
+| 提交 | 内容 | 验证 |
+|---|---|---|
+| 955c608 | #module-select 默认 chapter-boundary（d6f9ead 引入的文本块模块启动瞬时激活导致状态卡在"正在读取 CMD 内嵌的原始 JSON…"）；文本块样本改为 tests/fixtures/text-block-sample.mjs 原子生成（修 cmd-block-joins 顺序依赖 ENOENT） | diag-fix2: G08/C09/E05/L02 PASS；移走 .v6/tests/text-blocks 后 cmd-block-joins PASS |
+| 0b93f10 | contracts 测试补 55409bb 必需的 layout 端口；pdf-block-reorder/drag-edge 按 9a375d9 三击契约切换接续 | diag-fix3: C03、MOVE-C59 PASS |
+| cfdc2d4 | reorder 余下一处 + coverage-zoom 三击迁移；新增 tests/document-cas-http.test.mjs（428/412/403/200/旧版本412，拒绝时字节不变） | diag-fix4: C58、L59 PASS；变异 3/3 被杀 |
+未删测试、未改断言。
+
+## 门禁（cfdc2d4，顺序两次）
+- run3：84/91 PASS，7 FAIL：chapter-live(E14)、illegal-break-rescan-real、note-pair、pdf-child-region-select、preview-split(L05)、shared-preview(L06)、text-block-review(G28)
+- run4：83/91 PASS，8 FAIL：chapter-live、illegal-break-rescan-real、pdf-block-drag-edge-scroll、pdf-child-region-select、pdf-normal-webkit(C55)、preview-split、shared-preview、text-block-review
+## 剩余分类
+- BLOCKED（环境，Linux Playwright WebKit≠iPad Safari，Chrome 同用例通过）：E14、PDF-EMPTY-LABELS、WEBKIT-C55
+- FAIL（规格漂移，需负责人决定；3f06719/01dc503/2de80d1 加按钮未更新测试）：L05（34px 工具栏截断页码框，真实 UX 缺陷）、L06（3→5 按钮）、G28（2→3 选项）
+- 不稳定（两次门禁结果不一致，未用重试通过）：SENT-C52、note-pair（run3 redo 超时）、pdf-block-drag-edge-scroll（run4 拖动阶段第65行超时）
+- illegal-break-rescan-real：单跑 PASS，两次完整门禁均 FAIL（第61行超时）→ 顺序/资源依赖，原因未定位，保留 FAIL
+- 覆盖缺口：PDF↔MD 定位与 CMD 的直接单元测试未新增（仅有既有浏览器测试）；客户端 412/428 处理只由 wcp-cas-two-editor 覆盖

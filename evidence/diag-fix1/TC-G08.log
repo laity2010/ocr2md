@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-G08 git=b86415ee script=tests/ag-header-browser.test.mjs
+AM_ERROR: TC-G08: FAIL
+AM_RUN_FAIL case=TC-G08 evidence=.v6/tests/am-TC-G08-20261101T103111Z-b86415ee-695827.log
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

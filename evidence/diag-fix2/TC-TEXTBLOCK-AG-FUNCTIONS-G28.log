@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-TEXTBLOCK-AG-FUNCTIONS-G28 git=955c6084 script=tests/text-block-review.browser.test.mjs
+AM_ERROR: TC-TEXTBLOCK-AG-FUNCTIONS-G28: FAIL
+AM_RUN_FAIL case=TC-TEXTBLOCK-AG-FUNCTIONS-G28 evidence=.v6/tests/am-TC-TEXTBLOCK-AG-FUNCTIONS-G28-20261101T105022Z-955c6084-709528.log
+  code: 'ERR_ASSERTION',
+  actual: 3,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

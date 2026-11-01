@@ -1,0 +1,10 @@
+AM_RUN_START case=TC-PDF-BLOCK-L59 git=cfdc2d45 script=tests/pdf-coverage-zoom-browser.test.mjs
+AM_RUN_PASS case=TC-PDF-BLOCK-L59 evidence=.v6/tests/am-TC-PDF-BLOCK-L59-20261101T110542Z-cfdc2d45-714676.log
+    distance: 0,
+    scrollTop: 177,
+    zoom: '67%'
+  },
+  zoomClicks: 4,
+  checkboxes: 224,
+  errors: 0
+}

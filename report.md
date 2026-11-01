@@ -69,3 +69,8 @@
 ## 5. 结论
 - **SOURCE_MERGE：有条件建议合入 fix/grok-75e05598 的两个提交**。它们恢复了 AM 构建、补全了归属、去除了 3 处真实越界，属于不改变行为的修复，可以合入开发 Main。但合入不等于门禁通过：业务门禁仍 FAIL，需要主管交叉复验。
 - **PRODUCTION_CUTOVER：不建议（NO-GO）**。原因：业务套件 15 个持续失败；直接测试覆盖 65/245；macOS 和真实设备未测；62 个运行时调用点未核实。
+
+## 更新（fix cfdc2d4）
+见 fix-report.md 第二轮。门禁 run3 84/91、run4 83/91，均 FAIL。
+- SOURCE_MERGE：**不建议合并**（门禁未全绿；L05/L06/G28 需负责人决策，illegal-break-rescan 顺序依赖未解）。955c608/0b93f10/cfdc2d4 可作为候选单独审阅。
+- PRODUCTION_CUTOVER：**不建议切换**（存在真实 UX 缺陷 L05 与未定位的完整门禁失败）。

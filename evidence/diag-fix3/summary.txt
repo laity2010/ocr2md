@@ -1,0 +1,6 @@
+commit=0b93f10518fa0402b404aade82ff87bb9ca7deff
+TC-C03 exit=0
+TC-MOVE-C59 exit=0
+TC-MOVE-C58 exit=1
+TC-PDF-BLOCK-L59 exit=1
+DONE

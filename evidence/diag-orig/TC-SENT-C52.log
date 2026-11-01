@@ -1,0 +1,4 @@
+AM_RUN_START case=TC-SENT-C52 git=f0ad4f11 script=tests/sentence.browser.test.mjs
+AM_RUN_PASS case=TC-SENT-C52 evidence=.v6/tests/am-TC-SENT-C52-20261101T103038Z-f0ad4f11-695018.log
+SENTENCE_AG_PASS Chrome { sentences: 5, sourceRecovered: true, loaded: true }
+SENTENCE_AG_PASS iPad-WebKit { sentences: 5, sourceRecovered: true, loaded: true }

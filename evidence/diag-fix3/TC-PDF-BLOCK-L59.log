@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-PDF-BLOCK-L59 git=0b93f105 script=tests/pdf-coverage-zoom-browser.test.mjs
+AM_ERROR: TC-PDF-BLOCK-L59: FAIL
+AM_RUN_FAIL case=TC-PDF-BLOCK-L59 evidence=.v6/tests/am-TC-PDF-BLOCK-L59-20261101T110323Z-0b93f105-713211.log
+    '       - element is not visible',
+    '     - retrying click action',
+    '       - waiting 500ms'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

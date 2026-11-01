@@ -1,0 +1,4 @@
+AM_RUN_START case=TC-BREAK-REAL-RESCAN git=b86415ee script=tests/illegal-break-rescan-real.browser.test.mjs
+AM_RUN_PASS case=TC-BREAK-REAL-RESCAN evidence=.v6/tests/am-TC-BREAK-REAL-RESCAN-20261101T103332Z-b86415ee-697926.log
+REAL_BUFFETT_BREAK_RESCAN_PASS Chrome { savedMarks: 2, scansAfterReload: 0 }
+REAL_BUFFETT_BREAK_RESCAN_PASS iPad-WebKit { savedMarks: 2, scansAfterReload: 0 }

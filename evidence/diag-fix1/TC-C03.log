@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-C03 git=b86415ee script=tests/am/contracts-browser.test.mjs
+AM_ERROR: TC-C03: FAIL
+AM_RUN_FAIL case=TC-C03 evidence=.v6/tests/am-TC-C03-20261101T103118Z-b86415ee-696152.log
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-PDF-EMPTY-LABELS git=b86415ee script=tests/pdf-child-region-select.browser.test.mjs
+AM_ERROR: TC-PDF-EMPTY-LABELS: FAIL
+AM_RUN_FAIL case=TC-PDF-EMPTY-LABELS evidence=.v6/tests/am-TC-PDF-EMPTY-LABELS-20261101T103459Z-b86415ee-699029.log
+  code: 'ERR_ASSERTION',
+  actual: '',
+  expected: 'dashed',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

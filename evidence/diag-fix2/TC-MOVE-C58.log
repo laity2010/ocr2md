@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-MOVE-C58 git=955c6084 script=tests/pdf-block-reorder.browser.test.mjs
+AM_ERROR: TC-MOVE-C58: FAIL
+AM_RUN_FAIL case=TC-MOVE-C58 evidence=.v6/tests/am-TC-MOVE-C58-20261101T104825Z-955c6084-707550.log
+    '       - <div tabindex="0" role="button" data-gutter="right" class="ocr-pdf-block-ctrl" data-source-kind="content" aria-label="原始 p6b7 · 独立 · 单击定位，三击切换接续" title="单击定位 p6b7；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立） · 源码作用域有内容">…</div> intercepts pointer events',
+    '     - retrying click action',
+    '       - waiting 500ms'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

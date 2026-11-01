@@ -1,0 +1,3 @@
+mut[s/if not previous:/if False:/] exit=1 AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+mut[s/if previous != document_etag(current, doc):/if False:/] exit=1 AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+mut[s/new_revision = document_etag(value, doc)/new_revision = previous/] exit=1 AssertionError [ERR_ASSERTION]: Expected "actual" to be strictly u
