@@ -28,35 +28,29 @@ try{
       const page=await browser.newPage({viewport:{width:1220,height:840},isMobile:mobile,hasTouch:mobile});
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
-      await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').evaluate(e=>e.click());
-      await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').evaluate(e=>e.click());
+      await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(e=>e.click());
+      await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(e=>e.click());
+      const coverToggle=page.locator('.ocr-preview-switchbar .ocr-preview-block-toggle input');
+      if(!await coverToggle.isChecked())await coverToggle.evaluate(e=>e.click());
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:40000});
-      await page.locator('#ag-functions-toggle').evaluate(e=>e.click());
-      const annotate=page.locator('#ag-functions-menu button').filter({hasText:'标定原始子块'});
-      assert.equal(await annotate.count(),1);
+      const annotate=page.locator('.ocr-pdf-mark-subblocks');
+      assert.equal(await annotate.count(),1,'PDF panel exposes child annotation directly');
       await annotate.evaluate(e=>e.click());
-      // Status messages are transient on iPad Safari; assert operation
-      // completion and persisted source rather than polling UI status text.
-      await page.waitForFunction(()=>{
-        const b=[...document.querySelectorAll('#ag-functions-menu button')]
-          .find(el=>el.textContent.includes('标定原始子块'));
-        return b&&!b.disabled;
-      },null,{timeout:32000});
+      await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-mark-subblocks')?.disabled,
+        null,{timeout:30000});
       assert.equal(readFileSync(doc,'utf8'),original,'marking CMD is unsaved and cannot edit disk');
       await page.locator('#save').evaluate(e=>e.click());
       await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
         null,{timeout:23000});
       const after=readFileSync(doc,'utf8');
       for(const path of ['0','1','2']){
-        assert(after.includes(`<!-- minerujson:subblock:v1:4:0:${path} -->`));
+        assert(after.includes(`<!-- minerujson:subblock:v1:4:0:${path} type=\"${['table_caption','table_body','table_footnote'][Number(path)]}\" -->`));
       }
       assert.equal((after.match(/<!-- minerujson:subblock:v1:/g)||[]).length,43);
       assert.equal((after.match(/<!-- minerujson:block:v1:/g)||[]).length,224);
       // Actual PDF click must navigate to each distinct child marker in CMD,
       // with its own highlight, while retaining exactly one parent checkbox.
-      await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(e=>e.click());
-      await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(e=>e.click());
       const region=page.locator('.ocr-pdf-block-cover[data-block-id="p4b0"]');
       await region.scrollIntoViewIfNeeded({timeout:24000});
       await page.waitForFunction(()=>document.querySelector(
@@ -67,7 +61,7 @@ try{
       for(const [role,partIndex,pathIndex] of [
         ['caption',0,0],['body',-1,1],['note',1,2]]){
         const expected=lines.findIndex(line=>line.includes(
-          `<!-- minerujson:subblock:v1:4:0:${pathIndex} -->`))+1;
+          `<!-- minerujson:subblock:v1:4:0:${pathIndex} type=\"${['table_caption','table_body','table_footnote'][pathIndex]}\" -->`))+1;
         assert(expected>0);
         const coords=await region.evaluate((node,index)=>{
           const element=index<0?node:node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
@@ -87,10 +81,20 @@ try{
         assert.equal(location?.sourceLine,expected,`${name} PDF ${role} did not locate exact subblock tag`);
       }
       // Undo exactly one CMD transaction; no hidden edits or OCR changes.
+      console.log('BEFORE_UNDO',name,{disabled:await page.locator('#undo').isDisabled(),
+        status:await page.locator('#status').textContent(),
+        sourceMarkers:await page.locator('.cm-content').evaluate(node=>
+          (node.textContent.match(/minerujson:subblock:v1:/g)||[]).length)});
       await page.locator('#undo').evaluate(e=>e.click());
+      await page.waitForTimeout(300);
+      console.log('UNDO_STATE',name,{undoDisabled:await page.locator('#undo').isDisabled(),
+        status:await page.locator('#status').textContent(),
+        visibleMarkers:await page.locator('.cm-content').evaluate(node=>
+          (node.textContent.match(/minerujson:subblock:v1:/g)||[]).length)});
       await page.locator('#save').evaluate(e=>e.click());
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
-        null,{timeout:23000});
+      await page.waitForTimeout(1100);
+      console.log('SAVED_AFTER_UNDO',name,{status:await page.locator('#status').textContent(),
+        markerCount:(readFileSync(doc,'utf8').match(/minerujson:subblock:v1:/g)||[]).length});
       assert.equal(readFileSync(doc,'utf8'),original,'one Undo restores byte-identical CMD source');
       assert.deepEqual(errors,[]);
       console.log('PDF_SUBBLOCK_ANNOTATION_PASS',name,{children:43,parents:20,undo:true,

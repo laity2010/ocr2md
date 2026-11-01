@@ -94,3 +94,7 @@
 /* PDF text extraction is an explicit, undoable CMD action, never automatic. */
 .ocr-pdf-extract-text{white-space:nowrap;min-width:68px}
 .ocr-pdf-extract-text:disabled{opacity:.38;cursor:default}
+
+/* Clearly exposed native-child annotation; no duplicate Block checkbox. */
+.ocr-pdf-mark-subblocks{white-space:nowrap}
+.ocr-pdf-mark-subblocks:disabled{opacity:.5;cursor:wait}

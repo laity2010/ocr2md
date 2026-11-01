@@ -19,7 +19,7 @@ type Line = {spans?: Span[]};
 type Block = {type?: string; level?: number; lines?: Line[]; blocks?: Block[]; [key: string]: unknown};
 type Page = {para_blocks: Block[]; preproc_blocks?: Block[]; discarded_blocks?: Block[]; [key: string]: unknown};
 type Mineru = {pdf_info: Page[]; [key: string]: unknown};
-type Slot = {node: RootContent; spans: Span[]; kind: 'text'|'html'|'image'|'code'|'literal'};
+type Slot = {node: RootContent; spans: Span[]; kind: 'text'|'html'|'image'|'code'|'literal'; path?: number[]};
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error('MINERUJSON_MD_INVALID: ' + message);
@@ -61,16 +61,17 @@ function contentSlot(block: Block, kind: 'image'|'chart'|'table'): Slot[] {
     : kind === 'chart' ? ['chart_body','chart_caption','chart_footnote']
     : ['table_caption','table_body','table_footnote'];
   for (const name of ordered) {
-    for (const item of sub.filter(b => b.type === name)) {
+    for (const [index,item] of sub.map((b,i)=>[i,b] as const).filter(([,b]) => b.type === name)) {
+      const path=[index];
       const spans = (item.lines || []).flatMap(l => l.spans || []);
       const main = spans.find(s => s.type === kind || (kind === 'chart' && s.type === 'chart'));
       if (main?.html && kind === 'table') {
-        slots.push({kind:'html',spans:[main],node:{type:'html',value:main.html}});
+        slots.push({kind:'html',path,spans:[main],node:{type:'html',value:main.html}});
       } else if (main?.image_path) {
-        slots.push({kind:'image',spans:[main],node:{type:'paragraph',children:[{
+        slots.push({kind:'image',path,spans:[main],node:{type:'paragraph',children:[{
           type:'image',url:main.image_path,alt:kind}]} });
       } else if (spanString(item)) {
-        slots.push(textSlot(item));
+        slots.push({...textSlot(item),path});
       }
     }
   }
@@ -221,12 +222,16 @@ function pageAudit(page: Page,pageIndex: number): string {
 
 // CMD child markers preserve the exact native MinerU `blocks[]` ancestry.
 // They are independent source navigation anchors, not Markdown body content.
-function childMarkers(block: Block,pageIndex: number,blockIndex: number): string[] {
-  const output: string[]=[];
+function childMarkers(block: Block,pageIndex: number,blockIndex: number):
+  {path: string; type: string; tag: string}[] {
+  const output: {path:string;type:string;tag:string}[]=[];
   const visit=(node: Block,path: number[])=>{
     for(const [index,child] of (node.blocks||[]).entries()){
-      const next=[...path,index];
-      output.push(`<!-- minerujson:subblock:v1:${pageIndex}:${blockIndex}:${next.join('.')} -->`);
+      const next=[...path,index],key=next.join('.');
+      const type=child.type||'unknown';
+      assert(/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(type),'invalid child OCR type');
+      output.push({path:key,type,
+        tag:`<!-- minerujson:subblock:v1:${pageIndex}:${blockIndex}:${key} type="${type}" -->`});
       visit(child,next);
     }
   };
@@ -234,14 +239,23 @@ function childMarkers(block: Block,pageIndex: number,blockIndex: number): string
   return output;
 }
 function stripChildMarkers(fragment: string,block: Block,pageIndex: number,blockIndex: number): string {
-  const marker=/^<!-- minerujson:subblock:v1:[^\n]* -->[ \t]*$/gm;
-  const found=[...fragment.matchAll(marker)].map(m=>m[0].trim());
+  const marker=/^<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*)(?: type="([a-zA-Z_][a-zA-Z0-9_-]*)")? -->[ \t]*(?:\r?\n){0,2}/gm;
+  const found=[...fragment.matchAll(marker)].map(m=>({page:Number(m[1]),block:Number(m[2]),
+    path:m[3],type:m[4]??null}));
   const expected=childMarkers(block,pageIndex,blockIndex);
-  // Older documents legitimately lack child annotations. Once markers
-  // exist, demand the complete original ordered path set; reject drift.
+  // Legacy documents may have none or untyped markers. Once annotated,
+  // require every native path exactly once, and validate declared OCR type.
   if(found.length){
-    assert(JSON.stringify(found)===JSON.stringify(expected),
-      `block ${pageIndex}:${blockIndex} child anchors changed or incomplete`);
+    assert(found.length===expected.length,
+      `block ${pageIndex}:${blockIndex} child anchors incomplete`);
+    const lookup=new Map(expected.map(item=>[item.path,item.type]));
+    const seen=new Set<string>();
+    for(const item of found){
+      assert(item.page===pageIndex&&item.block===blockIndex&&lookup.has(item.path)&&
+        !seen.has(item.path)&&(!item.type||item.type===lookup.get(item.path)),
+        `block ${pageIndex}:${blockIndex} child anchor invalid`);
+      seen.add(item.path);
+    }
     fragment=fragment.replace(marker,'').trim();
   }
   assert(!fragment.includes('minerujson:subblock:v1:'),'invalid nested child anchor');
@@ -259,11 +273,19 @@ export function toMarkdown(input: string | Mineru): string {
     pieces.push(pageAudit(page,pageIndex));
     for (const [index,block] of page.para_blocks.entries()) {
       const slots = project(block,pageIndex,index,true);
-      const body = serialize(slots.map(s => s.node));
-      // Anchor identifiers are regular HTML comments, not custom Markdown syntax.
       const children=childMarkers(block,pageIndex,index);
-      pieces.push([`<!-- minerujson:block:v1:${pageIndex}:${index} -->`,...children,
-        body].join('\n\n'));
+      const byPath=new Map(children.map(c=>[c.path,c.tag]));
+      const projectedPaths=new Set(slots.filter(s=>s.path).map(s=>s.path!.join('.')));
+      // For mapped OCR content, locate the child marker immediately BEFORE
+      // that Markdown node, not in an unrelated group at the parent header.
+      // Empty OCR children still get visible source comments (and no invented
+      // heading/prose). Top-level parent identity and original bytes remain.
+      const missing=children.filter(c=>!projectedPaths.has(c.path)).map(c=>c.tag);
+      const sections=slots.map(slot=>[
+        ...(slot.path?[byPath.get(slot.path.join('.'))!]:[]),
+        serialize([slot.node])].join('\n\n'));
+      pieces.push([`<!-- minerujson:block:v1:${pageIndex}:${index} -->`,...missing,
+        ...sections].join('\n\n'));
     }
   }
   const bytes = Buffer.from(raw, 'utf8');
@@ -352,6 +374,7 @@ export function toMineruJSON(markdown: string): string {
     if(audited&&oldSlots.every(s=>s.kind==='literal')&&
       fragment===serialize(project(block,pageNo,blockNo,false).map(s=>s.node)))continue;
     const parsed=parser.parse(fragment) as Root;
+    if(distinctCanonical(parsed.children)===distinctCanonical(oldSlots.map(s=>s.node)))continue;
     assert(parsed.children.length===oldSlots.length,'block element count changed');
     for(let n=0;n<parsed.children.length;n++){
       const prev=oldSlots[n],nextSlot=parsed.children[n];

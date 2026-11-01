@@ -64,13 +64,15 @@ function sourceAnchor(anchors,line){
 export class PdfPreview {
   constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
     onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),
-    onInsertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'))){
+    onInsertPDFText=()=>Promise.reject(Error('CMD 尚未准备好')),
+    onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
     this.onBlockJoin=onBlockJoin;
     this.onBlockMove=onBlockMove;
     this.onInsertPDFText=onInsertPDFText;
+    this.onMarkSubblocks=onMarkSubblocks;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -79,6 +81,7 @@ export class PdfPreview {
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
       <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；插入源码窗当前光标位置，不替换原文；Undo 可撤销">提取文本</button>
+      <button class="ocr-pdf-mark-subblocks" type="button" title="补齐 MinerU 原始父子块类型和源码锚点，不改现有正文；一次 Undo，可手动保存">补标子块</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -93,6 +96,8 @@ export class PdfPreview {
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
     this.extractButton=this.toolbar.querySelector('.ocr-pdf-extract-text');
     this.extractButton.addEventListener('click',()=>void this.insertSelectedPDFText());
+    this.markButton=this.toolbar.querySelector('.ocr-pdf-mark-subblocks');
+    this.markButton.addEventListener('click',()=>void this.markOriginalSubblocks());
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
     this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
@@ -212,6 +217,17 @@ export class PdfPreview {
       if(!this.disposed&&token===this.textExtractToken)
         this.extractButton.title='无法读取 PDF 原文字层：'+error.message;
     }
+  }
+  async markOriginalSubblocks(){
+    if(this.markButton.disabled||this.disposed)return;
+    this.markButton.disabled=true;
+    try{
+      const result=await this.onMarkSubblocks();
+      this.setStatus(result?.changed
+        ?`已补标 ${result.inserted} 个原始子块 · 未保存，可一次 Undo`
+        :`子块标签已完整（${result?.existing??0} 个）`);
+    }catch(error){this.setStatus('子块补标失败：'+error.message);}
+    finally{if(!this.disposed)this.markButton.disabled=false;}
   }
   async insertSelectedPDFText(){
     const item=this.extractReady;
@@ -419,7 +435,8 @@ export class PdfPreview {
       partIndex:chosen.partIndex};
     void this.prepareSelectedPDFText();this.drawOverlay();
     const partLabel=chosen.role==='caption'?'标题':chosen.role==='note'?'注释':'正文';
-    this.setStatus(`第 ${n} 页 · p${n-1}b${chosen.blockIndex} · ${partLabel} 已定位`);
+    const ref=`p${n-1}b${chosen.blockIndex}${chosenPath?'.'+chosenPath.join('.'):''}`;
+    this.setStatus(`第 ${n} 页 · ${ref} ${partLabel} · ${child?'已定位源码子块':'源码未标定（点击补标子块）'}`);
     if(child)publishFocus({sourceLine:child.sourceLine,origin:'pdf',
       elementId:`mineru:${n-1}:${chosen.blockIndex}:${chosenPath.join('.')}`});
     else if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
@@ -779,7 +796,7 @@ export class PdfPreview {
           node.append(fragment);
         }
         const kind=part.role==='note'?'注释':'标题';
-        const label=`${row.id} · ${kind}（原始 OCR 子区域）`;
+        const label=`${row.id}.${part.path?.join('.')??i} · ${part.type} · ${kind}（MinerU 原始子块）`;
         if(fragment.title!==label)fragment.title=label;
         if(fragment.dataset.partType!==part.type)fragment.dataset.partType=part.type;
         if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;

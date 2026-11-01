@@ -49,14 +49,14 @@ export async function planCMDSubblockAnnotations(source){
     const tags=[];
     const visit=(parent,path)=>{
       for(const [i,child] of (parent.blocks||[]).entries()){
-        const next=[...path,i];tags.push(subblockTag(pageIndex,blockIndex,next));
+        const next=[...path,i];tags.push({path:next.join('.'),type:child.type||'unknown',
+          tag:subblockTag(pageIndex,blockIndex,next,child.type||'unknown'),child});
         visit(child,next);
       }
     };
     visit(node,[]);return tags;
   };
   const edits=[];let total=0,existing=0;
-  // Positions are offsets in the one live source, never reconstructed OCR.
   let offset=0;const starts=[];
   for(const line of lines){starts.push(offset);offset+=line.length+1;}
   for(let i=0;i<rootAnchors.length;i++){
@@ -69,21 +69,50 @@ export async function planCMDSubblockAnnotations(source){
     for(let line=root.lineIndex+1;line<stop;line++){
       if(lines[line].includes('minerujson:source:v1:'))break;
       const tag=subblockAnchor(lines[line]);
-      if(tag)found.push(subblockTag(tag.pageIndex,tag.blockIndex,tag.path));
+      if(tag)found.push(tag);
     }
     if(found.length){
-      if(JSON.stringify(found)!==JSON.stringify(expected))
-        throw Error(`CMD 子块标定缺失或次序不符：p${root.pageIndex}b${root.blockIndex}`);
+      const byPath=new Map(expected.map(tag=>[tag.path,tag.type]));
+      const seen=new Set();
+      if(found.length!==expected.length||found.some(tag=>{
+        const path=tag.path.join('.');
+        if(tag.pageIndex!==root.pageIndex||tag.blockIndex!==root.blockIndex||
+          !byPath.has(path)||seen.has(path))return true;
+        seen.add(path);return false;
+      }))throw Error(`CMD 子块标定缺失或次序不符：p${root.pageIndex}b${root.blockIndex}`);
       existing+=found.length;continue;
     }
     if(!expected.length)continue;
-    const prefix=quotePrefix(lines[root.lineIndex]);
-    const at=starts[root.lineIndex]+lines[root.lineIndex].length+1;
-    // Do not touch a single existing byte, including chapters, source body,
-    // annotations, sealed JSON and user edits. Keep quote depth if present.
-    const insert=expected.map(tag=>prefix+tag+'\n').join('');
-    edits.push({from:at,to:at,expected:'',insert});total+=expected.length;
+    const fallback=root.lineIndex+1;
+    const perLine=new Map();
+    for(const entry of expected){
+      const spans=(entry.child.lines||[]).flatMap(line=>line.spans||[]);
+      const plain=(entry.child.lines||[]).map(line=>(line.spans||[])
+        .map(span=>span.content||'').join('')).filter(Boolean).join(' ').trim();
+      const token=plain.slice(0,Math.min(28,plain.length));
+      const html=spans.some(span=>typeof span.html==='string'&&span.html.length);
+      const image=spans.some(span=>typeof span.image_path==='string'&&span.image_path.length);
+      let target=fallback;
+      for(let line=fallback;line<stop;line++){
+        if(lines[line].includes('minerujson:source:v1:'))break;
+        const text=lines[line].replace(/^\s*>\s?/,'').trim();
+        if(token&&text.includes(token)||html&&/^<table[\s>]/i.test(text)||
+          image&&/^!\[/.test(text)){
+          target=line;break;
+        }
+      }
+      const tags=perLine.get(target)||[];tags.push(entry.tag);perLine.set(target,tags);
+      total++;
+    }
+    for(const [line,tags] of perLine){
+      const prefix=quotePrefix(lines[line]||lines[root.lineIndex]);
+      const at=line===fallback?starts[root.lineIndex]+lines[root.lineIndex].length+1:starts[line];
+      // Insert only new comment lines; every pre-existing byte is preserved.
+      const insert=tags.map(tag=>prefix+tag+'\n').join('');
+      edits.push({from:at,to:at,expected:'',insert});
+    }
   }
+  edits.sort((a,b)=>a.from-b.from);
   return {edits,inserted:total,existing};
 }
 

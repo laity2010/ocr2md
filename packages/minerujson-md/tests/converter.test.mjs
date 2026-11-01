@@ -202,18 +202,19 @@ test('quoted MinerU anchors and their contents still reverse to the same origina
 
 test('native MinerU child paths remain distinct, tamper-evident and reversible',()=>{
   const md=toMarkdown(raw);
-  const markers=[...md.matchAll(/<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*) -->/g)];
+  const markers=[...md.matchAll(/<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*)(?: type="[a-zA-Z_][a-zA-Z0-9_-]*")? -->/g)];
   assert.equal(markers.length,43,'all 43 original nested child blocks must be retained');
-  for(const path of ['0','1','2'])
-    assert(md.includes(`<!-- minerujson:subblock:v1:4:0:${path} -->`));
+  for(const [path,type] of [['0','table_caption'],['1','table_body'],['2','table_footnote']])
+    assert(md.includes(`<!-- minerujson:subblock:v1:4:0:${path} type=\"${type}\" -->`));
   assert.equal(toMineruJSON(md),raw);
+  assert(md.includes('type="table_caption"'), 'native child type must be visible in CMD');
   assert.throws(()=>toMineruJSON(md.replace('subblock:v1:4:0:1','subblock:v1:4:0:9')),/INVALID/);
-  assert.throws(()=>toMineruJSON(md.replace('<!-- minerujson:subblock:v1:4:0:1 -->','')),/INVALID/);
+  assert.throws(()=>toMineruJSON(md.replace('<!-- minerujson:subblock:v1:4:0:1 type="table_body" -->','')),/INVALID/);
   assert.equal(toMineruJSON(saved),raw,'old documents without child tags are still valid');
   const nested={pdf_info:[{page_idx:0,para_blocks:[{type:'table',bbox:[0,0,100,100],
     blocks:[{type:'table_caption',lines:[{spans:[{type:'text',content:'caption'}]}],
       blocks:[{type:'text',lines:[{spans:[{type:'text',content:'grandchild'}]}]}]}]}]}]};
   const generated=toMarkdown(nested);
-  assert(generated.includes('<!-- minerujson:subblock:v1:0:0:0.0 -->'));
+  assert(generated.includes('<!-- minerujson:subblock:v1:0:0:0.0 type="text" -->'));
   assert.deepEqual(JSON.parse(toMineruJSON(generated)),nested);
 });

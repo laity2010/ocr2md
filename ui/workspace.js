@@ -332,7 +332,8 @@ class PreviewPanel {
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
       (id,join)=>blockJoinAction(id,join),
       (id,targetId,placement)=>blockMoveAction(id,targetId,placement),
-      (pageIndex,blockIndex,text)=>insertPDFText(pageIndex,blockIndex,text));
+      (pageIndex,blockIndex,text)=>insertPDFText(pageIndex,blockIndex,text),
+      ()=>markSubblocksAction());
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
