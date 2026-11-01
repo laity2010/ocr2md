@@ -10,6 +10,7 @@ import 'pdfjs-dist/web/pdf_viewer.css';
 import {viewStore,publishFocus} from './view-store.js';
 import './pdf-preview.css';
 import {blockAnchor} from './mineru-anchors.js';
+import {extractPDFBlockText} from './pdf-block-text-extract.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // CMD join annotations change logical grouping, never the sealed OCR pages or
@@ -52,12 +53,15 @@ function sourceAnchor(anchors,line){
 
 export class PdfPreview {
   constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
-    onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好'))){
+    onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),
+    canReplacePDFText=()=>false,onReplacePDFText=()=>Promise.reject(Error('CMD 尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
     this.onBlockJoin=onBlockJoin;
     this.onBlockMove=onBlockMove;
+    this.canReplacePDFText=canReplacePDFText;
+    this.onReplacePDFText=onReplacePDFText;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -65,6 +69,7 @@ export class PdfPreview {
       <button class="ocr-pdf-fit" type="button" title="按宽度缩放">适宽</button>
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
+      <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；将原文替换到对应 CMD 块，一次 Undo 可恢复">提取文本</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -77,6 +82,8 @@ export class PdfPreview {
     this.statusNode=this.host.querySelector('.ocr-pdf-status');
     this.pageInput=this.host.querySelector('.ocr-pdf-page');
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
+    this.extractButton=this.toolbar.querySelector('.ocr-pdf-extract-text');
+    this.extractButton.addEventListener('click',()=>void this.replaceSelectedPDFText());
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
     this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
@@ -102,6 +109,7 @@ export class PdfPreview {
     this.zoomAnchorToken=0;this.zoomRestoreTimer=0;this.zoomRestoreBehavior=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
+    this.textExtractToken=0;this.extractReady=null;
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
     this.blockDragScrollTimer=0;this.blockDragScrollBehavior=null;
     this.onBlockDragMove=e=>{
@@ -123,6 +131,7 @@ export class PdfPreview {
         const onlyJoinMarks=canonical===this.lastGeometrySource;
         this.lastGeometrySource=canonical;
         this.anchors=sourceBlocks(source);
+        if(this.selected)void this.prepareSelectedPDFText();
         // A join/unjoin is one CM6 annotation line. Its text changes source
         // line offsets but not the original PDF geometry, PDF.js page tree,
         // single focus, A/B comparison, or any other checkbox. The subsequent
@@ -164,6 +173,43 @@ export class PdfPreview {
     if(this.revealPending)this.scheduleOverlay();
   }
   setStatus(s){this.statusNode.textContent=s;}
+  async prepareSelectedPDFText(){
+    const token=++this.textExtractToken;
+    this.extractReady=null;
+    this.extractButton.disabled=true;
+    this.extractButton.title='当前块无可提取 PDF 文字或包含不可直接覆盖的 MD 结构';
+    const chosen=this.selected;
+    if(!this.pdf||!chosen||this.disposed)return;
+    const region=this.map[chosen.pageIndex];
+    const block=region?.regions.find(r=>r.blockIndex===chosen.blockIndex);
+    if(!block||!['text','title'].includes(block.type))return;
+    try{
+      const page=await this.pdf.getPage(chosen.pageIndex+1);
+      const {items}=await page.getTextContent();
+      const text=extractPDFBlockText(items,page.getViewport({scale:1}),region.pageSize,block.bbox);
+      if(this.disposed||token!==this.textExtractToken)return;
+      if(!text||!this.canReplacePDFText(chosen.pageIndex,chosen.blockIndex,text))return;
+      this.extractReady={...chosen,text,token};
+      this.extractButton.disabled=false;
+      this.extractButton.title=`PDF 原文字层 ${text.length} 字符 · 点击替换此 CMD 文本块（可 Undo）`;
+    }catch(error){
+      if(!this.disposed&&token===this.textExtractToken)
+        this.extractButton.title='无法读取 PDF 原文字层：'+error.message;
+    }
+  }
+  async replaceSelectedPDFText(){
+    const item=this.extractReady;
+    if(!item||this.extractButton.disabled||this.disposed||
+      this.selected?.pageIndex!==item.pageIndex||this.selected?.blockIndex!==item.blockIndex)return;
+    this.extractButton.disabled=true;
+    try{
+      const result=await this.onReplacePDFText(item.pageIndex,item.blockIndex,item.text);
+      if(result?.changed)this.setStatus(`已提取 ${item.text.length} 字符并替换 ${result.id} · Undo 可撤销`);
+      else this.setStatus(`${result?.id||'当前块'} 与 PDF 原文一致，无需替换`);
+    }catch(error){this.setStatus('PDF 原文替换失败：'+error.message);}
+    finally{if(!this.disposed)this.prepareSelectedPDFText();}
+  }
+
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
     this.scheduleOverlay();
@@ -353,7 +399,8 @@ export class PdfPreview {
     this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===n-1&&a.blockIndex===chosen.blockIndex);
     if(anchor){
-      this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex};this.drawOverlay();
+      this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex};
+      void this.prepareSelectedPDFText();this.drawOverlay();
       publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
         elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
     }
@@ -788,6 +835,7 @@ export class PdfPreview {
     // Only the comparison's own labelled overlays represent this selection;
     // the former single-block box would imply three selected regions.
     this.selected=null;this.overlay?.remove();this.overlay=null;
+    this.extractReady=null;this.extractButton.disabled=true;++this.textExtractToken;
     const target=points[reveal==='to'?1:0];
     if(this.ready){
       const page=this.viewer.getPageView(target.pageIndex);
@@ -912,6 +960,7 @@ export class PdfPreview {
     if(this.comparison&&!this.comparison.points.some(p=>p.pageIndex===pageIndex&&p.blockIndex===blockIndex))
       this.clearComparison();
     this.selected={pageIndex,blockIndex};
+    void this.prepareSelectedPDFText();
     this.revealPending=true;this.revealUntil=performance.now()+1800;
     const page=this.viewer.getPageView(pageIndex);
     const rect=page?.div?.getBoundingClientRect();const clip=this.visibleClip();
@@ -942,6 +991,7 @@ export class PdfPreview {
     if(!block)return;
     const samePage=this.selected?.pageIndex===source.pageIndex;
     this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex};
+    void this.prepareSelectedPDFText();
     // PDF.js page navigation resets the scroll position. Never invoke it for
     // another OCR block on the same page; the overlay will scroll only if the
     // target falls outside the physical viewport (including iPad screen crop).
@@ -1038,7 +1088,7 @@ export class PdfPreview {
     }
   }
   dispose(){
-    this.disposed=true;this.finishWarmup?.(false);
+    this.disposed=true;++this.textExtractToken;this.finishWarmup?.(false);
     clearTimeout(this.zoomRestoreTimer);
     if(this.zoomRestoreBehavior!==null){
       this.scroller.style.scrollBehavior=this.zoomRestoreBehavior;

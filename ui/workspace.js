@@ -71,6 +71,8 @@ let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
 let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
+let canReplacePDFText=()=>false;
+let replacePDFText=()=>Promise.reject(Error('CMD 尚未准备好'));
 let refreshTextBlockInventory=()=>{};
 let mdTextBlockCoverageEnabled=false;
 let pdfTextBlockCoverageEnabled=true;
@@ -329,7 +331,9 @@ class PreviewPanel {
     });
     this.pdf=new PdfPreview(this.pdfPane,()=>getMarkdown(),()=>geometryReady(),
       (id,join)=>blockJoinAction(id,join),
-      (id,targetId,placement)=>blockMoveAction(id,targetId,placement));
+      (id,targetId,placement)=>blockMoveAction(id,targetId,placement),
+      (pageIndex,blockIndex,text)=>canReplacePDFText(pageIndex,blockIndex,text),
+      (pageIndex,blockIndex,text)=>replacePDFText(pageIndex,blockIndex,text));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -780,6 +784,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     setBlockJoinAction:action=>{blockJoinAction=action;},
     setBlockMoveAction:action=>{blockMoveAction=action;},
+    setPDFTextReplaceActions:(canReplace,replace)=>{canReplacePDFText=canReplace;replacePDFText=replace;},
     setTextBlockInventoryRefreshAction:action=>{refreshTextBlockInventory=action;},
     setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),
     setTextBlockError:message=>currentOutline?.textBlock?.setError(message),

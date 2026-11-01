@@ -11,6 +11,7 @@
  */
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
+import {planPDFBlockTextReplacement} from './cmd-pdf-text-replace.js';
 import {inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
@@ -97,6 +98,19 @@ export function createCMDTransactionPort(cmd){
     },
     moveBlockAfter:(sourceId,afterId)=>moveBlock(sourceId,afterId,'after'),
     moveBlockBefore:(sourceId,beforeId)=>moveBlock(sourceId,beforeId,'before'),
+    canReplacePDFBlockText:(pageIndex,blockIndex,text)=>{
+      try{planPDFBlockTextReplacement(cmd.readSource(),pageIndex,blockIndex,text);return true;}
+      catch{return false;}
+    },
+    replacePDFBlockText:(pageIndex,blockIndex,text)=>{
+      const source=cmd.readSource();
+      const edit=planPDFBlockTextReplacement(source,pageIndex,blockIndex,text);
+      if(edit.expected===edit.insert)
+        return {changed:0,id:`p${pageIndex}b${blockIndex}`,chars:text.length};
+      commit(()=>cmd.replaceRanges([edit],null,[agAllDocumentTransaction.of(true)]),
+        [edit],{source,allowAll:true});
+      return {changed:1,id:`p${pageIndex}b${blockIndex}`,chars:text.length};
+    },
     queryBlockGeometry:(pageIndex,blockIndex)=>cmd.queryBlockGeometry(pageIndex,blockIndex),
     readLine:n=>cmd.readLine(n),
     lineAtOffset:offset=>cmd.lineAtOffset(offset),

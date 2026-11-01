@@ -1251,3 +1251,21 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-MOVE-C58','C58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long-press CMD move both independent and already joined Blocks; checkbox merges to new predecessor, Undo restores state, 224 controls and unsaved document preserved','integration'),
  ('TC-MOVE-C59','C59','tests/pdf-block-drag-edge-scroll.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long press b0 and point to b8 pulls b8 before b0; b0..b7 shift +1, b9+ unchanged; reverse pointer gesture and Undo restore all 224 checkbox states','integration'),
  ('TC-MOVE-L58','L58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long press starts arrow at insertion point and pointing to another original Block pulls its logical group before origin; 17px cross-column hit tolerance, 224 checkbox identities, Undo retained','integration');
+
+-- PDF original text layer is a source of optional *user-triggered* revisions,
+-- not the authority for OCR geometry or a new editable document.
+INSERT INTO apis VALUES
+ ('P15','P','extractPDFBlockText','ui/pdf-block-text-extract.js','export','PDF.js text items, PDF viewport, original page size and CMD Block bbox','single Block native PDF text or empty','read-only text-layer read; midpoint clipping excludes neighboring columns',1),
+ ('P16','P','PdfPreview.prepareSelectedPDFText','ui/pdf-preview.js','internal','selected original Block identity','Promise<void>','enables extract button only for nonempty native text and a safely replaceable CMD Block',1),
+ ('C60','C','planPDFBlockTextReplacement','ui/cmd-pdf-text-replace.js','export','current CMD source, original Block page/index and native PDF text','optimistic text replacement range','protects source anchors, chapter markers, Markdown structures and sealed original evidence',1),
+ ('C61','C','returned.canReplacePDFBlockText','ui/wcp-cmd-element-transactions.js','returned','original page/index and native PDF text','boolean','CMD checks replaceability before PDF enables action without copying source into PDF',1),
+ ('C62','C','returned.replacePDFBlockText','ui/wcp-cmd-element-transactions.js','returned','original page/index and native PDF text','one undoable CM6 transaction or no-op','source and evidence preflight; no implicit save; chapter/anchor comments unchanged',1),
+ ('L61','L','returned.setPDFTextReplaceActions','ui/workspace.js','returned','read-only permission and semantic replacement callback','void','inject CMD actions through layout without PDF acquiring CM6 editor',1);
+INSERT INTO access_edges VALUES
+ ('X-PDF-TEXT-L61','L','L','ui/main.js','workspace.setPDFTextReplaceActions(','L61','registered','Shell provides CMD semantic permission and replacement callbacks to PDF via Layout'),
+ ('X-PDF-TEXT-C60','C','C','ui/wcp-cmd-element-transactions.js','planPDFBlockTextReplacement(source,pageIndex,blockIndex,text)','C60','registered','CMD validates original anchor and generates a bounded edit'),
+ ('X-PDF-TEXT-C62','L','C','ui/main.js','cmdPort.replacePDFBlockText(pageIndex,blockIndex,text)','C62','registered','Shell forwards explicit PDF extraction request to single CMD transaction');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-TEXT-P15','P15','tests/pdf-text-replace.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','physical text-layer midpoint matching returns only text within selected PDF Block, not neighboring column','direct'),
+ ('TC-PDF-TEXT-C60','C60','tests/pdf-text-replace.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','replace body only, preserve chapter marker/anchors/evidence and reject mixed annotations/empty Blocks','direct'),
+ ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-replace.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit real PDF p16b0 original text is placed into exactly one MD Block with no auto-save; single Undo restores byte-identical document','integration');

@@ -90,3 +90,7 @@
 .ocr-pdf-block-cover.ocr-pdf-block-is-joined{background:rgba(128,169,194,.12);outline-style:dashed}
 .ocr-pdf-block-cover.ocr-pdf-block-is-joined .ocr-pdf-block-ctrl{
   border-color:#b79c63;background:rgba(73,65,46,.95)}
+
+/* PDF text extraction is an explicit, undoable CMD action, never automatic. */
+.ocr-pdf-extract-text{white-space:nowrap;min-width:68px}
+.ocr-pdf-extract-text:disabled{opacity:.38;cursor:default}
