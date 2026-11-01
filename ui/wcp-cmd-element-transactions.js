@@ -12,7 +12,7 @@
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
-import {inspectCMDTextBlocks,planCMDSubblockAnnotations} from './cmd-text-blocks.js';
+import {planCMDSubblockAnnotations} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
 import {LINEBREAK_TAG,readIllegalBreaks,planIllegalBreakMarks} from './cmd-linebreak.js';
@@ -71,7 +71,7 @@ export function createCMDTransactionPort(cmd){
   };
   const moveBlock=async(sourceId,targetId,placement)=>{
     const source=cmd.readSource();
-    const {rows}=await inspectCMDTextBlocks(source);
+    const {rows}=await cmd.inspectTextBlocks(source);
     if(source!==cmd.readSource())throw Error('拖动期间 CMD 已变化，请重新操作');
     const plan=planCMDBlockMove(source,rows,sourceId,targetId,placement);
     if(!plan.changed)return plan;
@@ -86,7 +86,7 @@ export function createCMDTransactionPort(cmd){
     queryBlockAnalysis:()=>cmd.queryBlockAnalysis(),
     async setBlockJoin(targetId,join){
       const source=cmd.readSource();
-      const {rows}=await inspectCMDTextBlocks(source);
+      const {rows}=await cmd.inspectTextBlocks(source);
       if(source!==cmd.readSource())throw Error('操作期间 CMD 已发生变化，请重新点击');
       const plan=planCMDBlockJoin(source,rows,targetId,join);
       if(!plan.changed)return plan;

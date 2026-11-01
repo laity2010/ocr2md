@@ -1117,10 +1117,10 @@ INSERT INTO apis VALUES
  ('G26','G','returned.setPreviewCoverage','ui/text-block-module.js','returned','detached reader-mapped block ID array','AG displays real MD coverage vs metadata-only blocks','reader owns DOM; AG receives IDs only',1),
  ('L49','L','returned.focusBlock','ui/pdf-preview.js','returned','page index and para block index','show original PDF bbox even if CMD source anchor is missing','PDF viewer alone owns overlay geometry and scroll',1);
 INSERT INTO access_edges VALUES
- ('X-TEXTBLOCK-L48',NULL,'L','ui/main.js','inspectCMDTextBlocks(source)','L48','registered','Shell asks CMD to inventory the active source without parallel JSON fetch'),
+ ('X-TEXTBLOCK-L48','C','L','ui/cm-document.js','inspectCMDTextBlocks(source)','L48','registered','CMD document inventories its own active source through L48; CMD transaction helpers call cmd.inspectTextBlocks (grok fix: call moved from main.js in f7c5fbc)'),
  ('X-TEXTBLOCK-G25','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G25','registered','Layout mounts AG business owner using bounded ports'),
  ('X-TEXTBLOCK-G26','L','G','ui/workspace.js','owner.setPreviewCoverage(rows.filter','G26','registered','Renderer supplies mapped IDs only, no direct Grid mutation'),
- ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','currentPreview.pdf?.focusBlock(point.pageIndex','L49','registered','Missing anchor can locate original PDF without fabricated source line');
+ ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','this.pdf?.focusBlock(pageIndex,blockIndex)','L49','registered','Missing anchor can locate original PDF without fabricated source line');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-CMD-L48','L48','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Reinitialized 224 anchors and bbox values; SHA corruption rejected; missing/duplicate source marker visible; no writes','integration'),
  ('TC-TEXTBLOCK-G25','G25','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit text block first dropdown choice, all 224 CMD original blocks visible in AG, orange PDF box follows click','integration'),
@@ -1166,11 +1166,11 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO apis VALUES
  ('L53','L','returned.compareBlocks','ui/pdf-preview.js','returned','two validated page/Block semantic IDs, reveal side','two labelled A/B original PDF bbox overlays, same-page or cross-page','PDF owns viewport coordinates and renderer; no source/CMD writes',1),
  ('L54','L','returned.overviewComparison','ui/pdf-preview.js','returned','selected same-page Block pair','fit both orange rectangles into the visible PDF viewport','presentation-only zoom, PDF.js coordinates retained',1),
- ('G28','G','createTextBlockModule.reviewActions','ui/text-block-module.js','internal','selected candidate and human review action','confirmed/rejected/pending local draft keyed by sealed source SHA and JSON export','AG owns review UI, no merging, no document or PDF mutations',1);
+ ('G28','G','createTextBlockModule.setReview','ui/text-block-module.js','internal','selected candidate and human review action','confirmed/rejected/pending local draft keyed by sealed source SHA and JSON export','AG owns review UI, no merging, no document or PDF mutations',1);
 INSERT INTO access_edges VALUES
  ('X-WP4-L53','L','L','ui/workspace.js','currentPreview.compareOriginalBlocks(selection.from','L53','registered','Layout forwards semantic candidate IDs to PDF preview owner'),
  ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner'),
- ('X-WP4-G28','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G28','registered','AG review remains owner-local; Layout provides only a semantic compare callback');
+ ('X-WP4-G28','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G25','registered','AG review (internal G28) remains owner-local; Layout reaches AG only via exported G25 factory and provides a semantic compare callback');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L53','L53','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit show simultaneous labelled A/B original PDF boxes for same page and different pages, without OCR fetch','integration'),
  ('TC-WP4-L54','L54','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit overview renders both p6b6 and p6b7 boxes inside physical PDF viewport','integration'),
@@ -1267,7 +1267,7 @@ INSERT INTO access_edges VALUES
  ('X-PDF-TEXT-C62','L','C','ui/main.js','cmdPort.insertPDFTextAtCaret(pageIndex,blockIndex,text)','C62','registered','Shell forwards user-triggered PDF text insertion to CMD');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TEXT-P15','P15','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','original PDF text-layer order retains initial oversized drop-cap M attached to uch in p1b9 while excluding neighboring columns','direct'),
- ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','page 5 p4b0 OCR body, caption, footnote rectangles','exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
+ ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','tests/pdf-region-hit.test.mjs','inline page 5 p4b0 OCR body, caption, footnote rectangles; exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
  ('TC-PDF-TEXT-PARTS','P17','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit page 5 p4b0 caption, body and note can be clicked and highlighted separately with individually extracted native text, one original Block and checkbox','integration'),
  ('TC-PDF-TEXT-C60','C60','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','pure planner inserts at arbitrary source cursor without deleting OCR and rejects invalid text and coordinates','direct'),
  ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration');
@@ -1275,12 +1275,12 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Native MinerU nested `blocks[]` paths, represented without inventing new
 -- para_block identities or changing sealed original OCR source/content.
 INSERT INTO apis VALUES
- ('C63','C','planCMDSubblockAnnotations','ui/cmd-text-blocks.js','export','current live CMD Markdown + its verified sealed MinerU JSON','ordered zero-width insertions and insert/existing counts','idempotent explicit tagging of original nested paths; no user prose rewritten',1),
+ ('C63','L','planCMDSubblockAnnotations','ui/cmd-text-blocks.js','export','current live CMD Markdown + its verified sealed MinerU JSON','ordered zero-width insertions and insert/existing counts','idempotent explicit tagging of original nested paths; no user prose rewritten',1),
  ('C64','C','returned.markOriginalSubblocks','ui/wcp-cmd-element-transactions.js','returned','no arguments; current CMD source','single optimistic undoable annotation transaction','virtual chapter and immutable evidence protected by CMD; no implicit save',1),
  ('L62','L','returned.setSubblockMarkAction','ui/workspace.js','returned','semantic async CMD annotation callback','registers text-block module function-menu action','AG receives no CM6 editor nor sealed JSON internals',1),
  ('P18','P','sourceSubblocks','ui/pdf-preview.js','export','live source Markdown','read-only original child path / source-line map','child PDF caption/body/note navigates exact CMD subblock line when marked',1);
 INSERT INTO access_edges VALUES
- ('X-SUBBLOCK-C63','C','C','ui/wcp-cmd-element-transactions.js','planCMDSubblockAnnotations(source)','C63','registered','CMD plans marker edits from sealed source with exact path validation'),
+ ('X-SUBBLOCK-C63','C','L','ui/wcp-cmd-element-transactions.js','planCMDSubblockAnnotations(source)','C63','registered','CMD plans marker edits from sealed source with exact path validation'),
  ('X-SUBBLOCK-C64','L','C','ui/main.js','cmdPort.markOriginalSubblocks()','C64','registered','Shell requests a single CMD subblock annotation operation'),
  ('X-SUBBLOCK-L62','L','L','ui/main.js','workspace.setSubblockMarkAction(','L62','registered','Shell injects semantic annotation callback to AG via Layout');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
@@ -1328,7 +1328,7 @@ INSERT INTO apis VALUES
 INSERT INTO access_edges VALUES
  ('X-PDF-GUTTER-P19','P','P','ui/pdf-preview.js','layoutPDFGutterLabels(items,page.clientHeight)','P19','registered','page-wide parent and child gutter collision avoidance');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','synthetic page 5 caption/body/note geometry','all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
+ ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','tests/pdf-gutter-label-layout.test.mjs','inline synthetic page 5 caption/body/note geometry; all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
 
 -- CMD structural comments are provenance, not a claim that MinerU recognized
 -- any corresponding prose. PDF should distinguish actual content lines from
