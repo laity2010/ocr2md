@@ -80,7 +80,9 @@ try{
         const cleared=!mainPdf.selected && !mainPdf.scroller.querySelector('.ocr-pdf-region-overlay');
         const pdfHost=document.createElement('div');pdfHost.style.width='450px';pdfHost.style.height='300px';
         document.body.append(pdfHost);
-        const secondary=new PdfPreview(pdfHost,()=>original);
+        // 55409bb made the CMD layout port a required PdfPreview dependency; the
+        // contract caller supplies the same CMD-sealed query the workspace uses.
+        const secondary=new PdfPreview(pdfHost,()=>original,()=>primaryCM.queryLayout());
         await secondary.loading;
         const secondaryWasReady=secondary.ready;
         secondary.dispose();

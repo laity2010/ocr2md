@@ -6,6 +6,14 @@ import {resolve} from 'node:path';
 import {chromium,webkit} from 'playwright';
 import {ensureTextBlockSample} from './fixtures/text-block-sample.mjs';
 const sample=ensureTextBlockSample();
+// 9a375d9 contract: the checkbox is a read-only visual; three clicks/taps on
+// the parent .ocr-pdf-block-ctrl toggle the join (same as join-toggle test).
+const toggleJoin=async(page,id,mobile)=>{
+  const tag=page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] .ocr-pdf-block-ctrl`);
+  if(mobile){for(let i=0;i<3;i++)await tag.tap({timeout:16000});}
+  else await tag.click({clickCount:3,delay:60,timeout:16000});
+};
+
 const source=readFileSync(sample,'utf8'),port=5997,url=`http://127.0.0.1:${port}/`;
 mkdirSync('.v6/evidence/block-reorder',{recursive:true});
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
@@ -68,7 +76,7 @@ try{
       await page.screenshot({path:`.v6/evidence/block-reorder/${name}-reordered.png`,
         animations:'disabled'});
       // Uncheck the moved block: its CMD predecessor must now be p6b8.
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input').click();
+      await toggleJoin(page,'p6b7',mobile);
       await page.waitForFunction(()=>/已接续 1/.test(document.querySelector('#status')?.textContent||''),
         null,{timeout:25000});
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
@@ -85,7 +93,7 @@ try{
       // join marker must follow the Block, not remain attached to old source
       // neighborhood. This is the case previously blocked on page 17.
       const joined=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
-      await joined.click();
+      await toggleJoin(page,'p6b7',mobile);
       await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
         ?.checked===false,null,{timeout:22000});
       await src.scrollIntoViewIfNeeded();
