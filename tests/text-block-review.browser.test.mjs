@@ -3,7 +3,8 @@ import {spawn} from 'node:child_process';
 import {readFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {chromium,webkit} from 'playwright';
-const file=resolve('.v6/tests/text-blocks/buffett-reinitialized.minerujson.md');
+import {ensureTextBlockSample} from './fixtures/text-block-sample.mjs';
+const file=ensureTextBlockSample();
 const original=readFileSync(file,'utf8');
 const port=5999,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{

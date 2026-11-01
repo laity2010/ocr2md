@@ -4,7 +4,8 @@ import {readFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {chromium,webkit} from 'playwright';
 import {inspectCMDTextBlocks} from '../ui/cmd-text-blocks.js';
-const sample=resolve('.v6/tests/text-blocks/buffett-reinitialized.minerujson.md');
+import {ensureTextBlockSample} from './fixtures/text-block-sample.mjs';
+const sample=ensureTextBlockSample();
 const source=readFileSync(sample,'utf8');const inventory=await inspectCMDTextBlocks(source);
 const port=5997,base=`http://127.0.0.1:${port}`,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{
