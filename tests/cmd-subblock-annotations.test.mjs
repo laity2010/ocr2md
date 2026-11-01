@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {planCMDSubblockAnnotations} from '../ui/cmd-text-blocks.js';
-import {subblockAnchor} from '../ui/mineru-anchors.js';
+import {subblockAnchor,subblockId} from '../ui/mineru-anchors.js';
 import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
+assert.equal(subblockId(3,0,[0]),'p3b0s0');
+assert.equal(subblockId(3,0,[1]),'p3b0s1');
+assert.equal(subblockId(4,0,[2,1]),'p4b0s2.1');
+assert.throws(()=>subblockId(3,0,[-1]),/Invalid/);
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const old=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const plan=await planCMDSubblockAnnotations(old);
@@ -11,9 +15,9 @@ assert(plan.edits.length>=20&&plan.edits.length<=43,
   'children with actual OCR text get individual source positions');
 const migrated=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((src,e)=>
   src.slice(0,e.from)+e.insert+src.slice(e.to),old);
-assert(migrated.includes('<!-- minerujson:subblock:v1:4:0:0 type="table_caption" -->'));
-assert(migrated.includes('<!-- minerujson:subblock:v1:4:0:1 type="table_body" -->'));
-assert(migrated.includes('<!-- minerujson:subblock:v1:4:0:2 type="table_footnote" -->'));
+assert(migrated.includes('<!-- minerujson:subblock:v1:4:0:0 type="table_caption" id="p4b0s0" -->'));
+assert(migrated.includes('<!-- minerujson:subblock:v1:4:0:1 type="table_body" id="p4b0s1" -->'));
+assert(migrated.includes('<!-- minerujson:subblock:v1:4:0:2 type="table_footnote" id="p4b0s2" -->'));
 // Insertions are the ONLY difference from the user-edited source.
 const stripped=migrated.replace(/^>*(?: )?<!-- minerujson:subblock:v1:[^\n]+ -->\n/gm,'');
 assert.equal(stripped,old,'marker insertion is byte-lossless for existing edits');
@@ -24,10 +28,11 @@ assert.equal(rerun.existing,plan.inserted);
 const wrong=migrated.replace('subblock:v1:4:0:2','subblock:v1:4:0:99');
 await assert.rejects(planCMDSubblockAnnotations(wrong),/次序不符/);
 assert.throws(()=>toMineruJSON(wrong),/INVALID/);
+assert.throws(()=>toMineruJSON(migrated.replace('id="p3b0s0"','id="p3b0s9"')),/INVALID/);
 // Existing nonempty child captions are tagged immediately before their prose,
 // not all clustered after the parent block marker.
-const headingMarker='<!-- minerujson:subblock:v1:3:0:0 type="table_caption" -->';
-const bodyMarker='<!-- minerujson:subblock:v1:3:0:1 type="table_body" -->';
+const headingMarker='<!-- minerujson:subblock:v1:3:0:0 type="table_caption" id="p3b0s0" -->';
+const bodyMarker='<!-- minerujson:subblock:v1:3:0:1 type="table_body" id="p3b0s1" -->';
 const caption=migrated.indexOf(headingMarker),body=migrated.indexOf(bodyMarker);
 assert(caption>=0&&body>caption);
 assert(migrated.slice(caption,body).includes('Table 1.'),'caption label must precede title');

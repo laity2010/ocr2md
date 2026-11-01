@@ -45,7 +45,7 @@ try{
         null,{timeout:23000});
       const after=readFileSync(doc,'utf8');
       for(const path of ['0','1','2']){
-        assert(after.includes(`<!-- minerujson:subblock:v1:4:0:${path} type=\"${['table_caption','table_body','table_footnote'][Number(path)]}\" -->`));
+        assert(after.includes(`<!-- minerujson:subblock:v1:4:0:${path} type=\"${['table_caption','table_body','table_footnote'][Number(path)]}\" id=\"p4b0s${path}\" -->`));
       }
       assert.equal((after.match(/<!-- minerujson:subblock:v1:/g)||[]).length,43);
       assert.equal((after.match(/<!-- minerujson:block:v1:/g)||[]).length,224);
@@ -59,9 +59,9 @@ try{
       assert.equal(await region.locator('.ocr-pdf-block-ctrl input').count(),1);
       const lines=after.split('\n');
       for(const [role,partIndex,pathIndex] of [
-        ['caption',0,0],['body',-1,1],['note',1,2]]){
+        ['caption',0,0],['body',1,1],['note',2,2]]){
         const expected=lines.findIndex(line=>line.includes(
-          `<!-- minerujson:subblock:v1:4:0:${pathIndex} type=\"${['table_caption','table_body','table_footnote'][pathIndex]}\" -->`))+1;
+          `<!-- minerujson:subblock:v1:4:0:${pathIndex} type=\"${['table_caption','table_body','table_footnote'][pathIndex]}\" id=\"p4b0s${pathIndex}\" -->`))+1;
         assert(expected>0);
         const coords=await region.evaluate((node,index)=>{
           const element=index<0?node:node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];

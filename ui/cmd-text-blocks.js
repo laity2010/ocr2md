@@ -135,13 +135,10 @@ export async function queryCMDLayout(source){
     const regions=page.para_blocks.flatMap((block,blockIndex)=>{
       const box=block.bbox;
       if(!Array.isArray(box)||box.length!==4||!box.every(Number.isFinite))return [];
-      // Chart/table parent bbox usually covers the body alone. Its child
-      // caption and notes use separate original MinerU rectangles, but still
-      // belong to ONE CMD Block (no extra anchors/checkboxes).
-      const subRegions=['chart','table'].includes(block.type)?
+      // Native pNbMsN ID is the actual position in MinerU `blocks[]`.
+      // A child carries its OWN bbox; never infer a rectangle from prose.
+      const subRegions=Array.isArray(block.blocks)?
         (block.blocks||[]).flatMap((child,childIndex)=>{
-          if(![`${block.type}_caption`,`${block.type}_footnote`].includes(child.type))
-            return [];
           const bbox=child.bbox;
           if(!Array.isArray(bbox)||bbox.length!==4||!bbox.every(Number.isFinite)||
             bbox[0]<0||bbox[1]<0||bbox[2]<=bbox[0]||bbox[3]<=bbox[1]||
@@ -166,7 +163,7 @@ export async function queryCMDLayout(source){
           // intact, expose the display role separately (no text cache).
           const opening=(child.lines?.[0]?.spans||[]).map(s=>s.content||'').join('').trim();
           const role=child.type.endsWith('_footnote')||/^Notes?\s*[:：]/i.test(opening)?
-            'note':'caption';
+            'note':child.type.endsWith('_caption')?'caption':'body';
           return [{type:child.type,role,bbox:[...bbox],path:[childIndex]}];
         }):[];
       const bodyIndex=(block.blocks||[]).findIndex(c=>c.type===`${block.type}_body`);

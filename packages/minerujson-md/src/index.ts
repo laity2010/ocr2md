@@ -231,7 +231,7 @@ function childMarkers(block: Block,pageIndex: number,blockIndex: number):
       const type=child.type||'unknown';
       assert(/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(type),'invalid child OCR type');
       output.push({path:key,type,
-        tag:`<!-- minerujson:subblock:v1:${pageIndex}:${blockIndex}:${key} type="${type}" -->`});
+        tag:`<!-- minerujson:subblock:v1:${pageIndex}:${blockIndex}:${key} type="${type}" id="p${pageIndex}b${blockIndex}s${key}" -->`});
       visit(child,next);
     }
   };
@@ -239,9 +239,9 @@ function childMarkers(block: Block,pageIndex: number,blockIndex: number):
   return output;
 }
 function stripChildMarkers(fragment: string,block: Block,pageIndex: number,blockIndex: number): string {
-  const marker=/^<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*)(?: type="([a-zA-Z_][a-zA-Z0-9_-]*)")? -->[ \t]*(?:\r?\n){0,2}/gm;
+  const marker=/^<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*)(?: type="([a-zA-Z_][a-zA-Z0-9_-]*)")?(?: id="(p\d+b\d+s\d+(?:\.\d+)*)")? -->[ \t]*(?:\r?\n){0,2}/gm;
   const found=[...fragment.matchAll(marker)].map(m=>({page:Number(m[1]),block:Number(m[2]),
-    path:m[3],type:m[4]??null}));
+    path:m[3],type:m[4]??null,id:m[5]??null}));
   const expected=childMarkers(block,pageIndex,blockIndex);
   // Legacy documents may have none or untyped markers. Once annotated,
   // require every native path exactly once, and validate declared OCR type.
@@ -252,7 +252,8 @@ function stripChildMarkers(fragment: string,block: Block,pageIndex: number,block
     const seen=new Set<string>();
     for(const item of found){
       assert(item.page===pageIndex&&item.block===blockIndex&&lookup.has(item.path)&&
-        !seen.has(item.path)&&(!item.type||item.type===lookup.get(item.path)),
+        !seen.has(item.path)&&(!item.type||item.type===lookup.get(item.path))&&
+        (!item.id||item.id===`p${pageIndex}b${blockIndex}s${item.path}`),
         `block ${pageIndex}:${blockIndex} child anchor invalid`);
       seen.add(item.path);
     }

@@ -98,3 +98,21 @@
 /* Clearly exposed native-child annotation; no duplicate Block checkbox. */
 .ocr-pdf-mark-subblocks{white-space:nowrap}
 .ocr-pdf-mark-subblocks:disabled{opacity:.5;cursor:wait}
+
+/* pNbMsN is a REAL MinerU child index, placed beside its own bbox, outside
+ * the document print area. No independent checkbox or source mutation. */
+.ocr-pdf-block-fragment .ocr-pdf-subblock-chip{
+  position:absolute;z-index:3;display:block;width:max-content;white-space:nowrap;
+  padding:0 3px;border:1px solid #8ab5ca;border-radius:3px;
+  background:rgba(34,56,70,.95);color:#e4effa;
+  font:600 9px/14px monospace;pointer-events:none;user-select:none;
+  box-shadow:0 1px 3px #101b1f8c;
+}
+.ocr-pdf-subblock-chip[data-gutter="left"]{right:calc(100% + 3px);left:auto;transform-origin:right top}
+.ocr-pdf-subblock-chip[data-gutter="right"]{left:calc(100% + 3px);right:auto;transform-origin:left top}
+
+/* Body geometry frequently equals the parent rectangle; do not darken text
+ * by painting two identical green overlays. The child ID stays visible. */
+.ocr-pdf-block-cover .ocr-pdf-block-fragment[data-part-role="body"]{
+  background:transparent;outline:none;
+}

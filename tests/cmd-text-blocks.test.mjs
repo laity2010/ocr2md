@@ -30,21 +30,24 @@ assert.equal(chart.type,'chart');
 assert.deepEqual(chart.bbox,[219,108,529,357]);
 assert.deepEqual(chart.subRegions,[
   {type:'chart_caption',role:'caption',bbox:[217,82,494,107],path:[0]},
+  {type:'chart_body',role:'body',bbox:[219,108,529,357],path:[1]},
   {type:'chart_caption',role:'note',bbox:[206,371,539,490],path:[2]},
 ]);
 const table=layout.pages[14].regions.find(r=>r.blockIndex===0);
 assert.equal(table.type,'table');
 assert.deepEqual(table.subRegions,[
   {type:'table_caption',role:'caption',bbox:[57,89,484,104],path:[0]},
+  {type:'table_body',role:'body',bbox:[51,110,521,335],path:[1]},
   {type:'table_footnote',role:'note',bbox:[50,341,523,363],path:[2]},
 ]);
 const screenshotTable0=layout.pages[3].regions.find(r=>r.blockIndex===0);
 const screenshotTable1=layout.pages[3].regions.find(r=>r.blockIndex===1);
 assert.deepEqual(screenshotTable0.subRegions,[
   {type:'table_caption',role:'caption',bbox:[74,89,523,104],path:[0]},
+  {type:'table_body',role:'body',bbox:[68,111,538,458],path:[1]},
 ]);
-assert.deepEqual(screenshotTable1.subRegions,[],
-  'p3b1 Notes original bbox [50,317,521,339] overlaps p3b0 body 96%; do not paint phantom selection');
+assert.deepEqual(screenshotTable1.subRegions.map(c=>c.type),['table_body'],
+  'p3b1 body is real, but its false Notes child overlaps previous table and is suppressed');
 assert.deepEqual((await queryCMDBlockGeometry(initial,3,1)).bbox,[68,464,539,684],
   'the original table geometry and provenance remain available');
 assert(Object.isFrozen(chart.subRegions)&&Object.isFrozen(chart.subRegions[1].bbox)&&

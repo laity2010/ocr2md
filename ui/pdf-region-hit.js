@@ -13,16 +13,19 @@ export function hitPDFRegion(page,point){
   // parent body. A parent selection carries partIndex=null; child uses its
   // actual subRegions array index, avoiding counterfeit CMD anchors.
   for(const block of page.regions||[]){
-    const candidates=[{bbox:block.bbox,partIndex:null,role:'body'},
-      ...(block.subRegions||[]).map((part,i)=>({bbox:part.bbox,partIndex:i,
-        role:part.role||'caption'}))];
+    // Child first: the `table_body` child may share exactly the parent bbox.
+    // Equal-area hits select its native s-index rather than a generic parent.
+    const candidates=[...(block.subRegions||[]).map((part,i)=>({bbox:part.bbox,
+      partIndex:i,role:part.role||'body',path:part.path})),
+      {bbox:block.bbox,partIndex:null,role:'body',path:null}];
     for(const candidate of candidates){
       const [l,t,r,b]=candidate.bbox||[];
       if(![l,t,r,b].every(Number.isFinite)||r<=l||b<=t||
         x<l||x>r||y<t||y>b)continue;
       const current=(r-l)*(b-t);
       if(current<area){area=current;selected={blockIndex:block.blockIndex,
-        partIndex:candidate.partIndex,role:candidate.role,bbox:candidate.bbox};}
+        partIndex:candidate.partIndex,role:candidate.role,bbox:candidate.bbox,
+        path:candidate.path};}
     }
   }
   return selected;

@@ -66,9 +66,9 @@ try{
          background:getComputedStyle(fragment).backgroundColor};
      });
    });
-   assert.deepEqual(childRects.map(x=>x.type),['chart_caption','chart_caption']);
-   assert.deepEqual(childRects.map(x=>x.role),['caption','note']);
-   for(const [i,expected] of [[0,[217,82,494,107]],[1,[206,371,539,490]]]){
+   assert.deepEqual(childRects.map(x=>x.type),['chart_caption','chart_body','chart_caption']);
+   assert.deepEqual(childRects.map(x=>x.role),['caption','body','note']);
+   for(const [i,expected] of [[0,[217,82,494,107]],[1,[219,108,529,357]],[2,[206,371,539,490]]]){
      assert.equal(childRects[i].pointer,'none');
      assert.notEqual(childRects[i].background,'rgba(0, 0, 0, 0)');
      childRects[i].rect.forEach((value,j)=>
@@ -77,11 +77,11 @@ try{
    }
    const tableParts=page.locator('.ocr-pdf-block-cover[data-block-id="p14b0"] > .ocr-pdf-block-fragment');
    assert.deepEqual(await tableParts.evaluateAll(nodes=>nodes.map(n=>n.dataset.partType)),
-     ['table_caption','table_footnote']);
-   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p3b1"] > .ocr-pdf-block-fragment').count(),0,
-     'invalid p3b1 Notes bbox must not paint an extra horizontal overlay inside the previous table p3b0');
+     ['table_caption','table_body','table_footnote']);
+   assert.deepEqual(await page.locator('.ocr-pdf-block-cover[data-block-id="p3b1"] > .ocr-pdf-block-fragment').evaluateAll(nodes=>nodes.map(n=>n.dataset.partType)),['table_body'],
+     'real p3b1 body renders, but false Notes overlay must not appear');
    assert.deepEqual(await page.locator('.ocr-pdf-block-cover[data-block-id="p3b0"] > .ocr-pdf-block-fragment')
-     .evaluateAll(nodes=>nodes.map(node=>node.dataset.partType)),['table_caption'],
+     .evaluateAll(nodes=>nodes.map(node=>node.dataset.partType)),['table_caption','table_body'],
      'genuine p3b0 caption still renders');
    assert.equal(await page.locator('.ocr-pdf-block-ctrl input').count(),224,
      'captions and notes must never create independent Block controls');

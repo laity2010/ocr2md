@@ -1288,3 +1288,12 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SUBBLOCK-C64','C64','tests/pdf-subblock-annotation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit explicit Text Block module marker button creates exactly 43 child paths, remains unsaved until Save, one Undo reverts all 43 in isolated CMD','integration'),
  ('TC-SUBBLOCK-L62','L62','tests/pdf-subblock-annotation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG function menu invokes CMD semantic operation without accessing PDF or CM6 internal object','integration'),
  ('TC-SUBBLOCK-P18','P18','tests/pdf-subblock-annotation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','PDF child source location uses new original path without increasing 224 parent blocks','integration');
+
+-- Original MinerU subblocks have stable IDs: p<page>b<root>s<children path>.
+-- Their bbox is read from that exact blocks[] node, never inferred or copied.
+INSERT INTO apis VALUES
+ ('L63','L','subblockId','ui/mineru-anchors.js','export','zero-based MinerU PDF page, para_block index, child path','pNbMsN[.N...] stable identifier','pure deterministic ID: PDF label, CMD annotation and source navigation agree',1);
+INSERT INTO access_edges VALUES
+ ('X-SUBID-PDF-L63','P','L','ui/pdf-preview.js','subblockId(row.pageIndex,row.blockIndex,part.path)','L63','registered','PDF chip uses the exact native indexed bbox identity');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SUBID-L63','L63','tests/cmd-subblock-annotations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p3b0s0 caption and p3b0s1 body map exactly to original child indices; original JSON unchanged','direct');

@@ -9,7 +9,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {viewStore,publishFocus} from './view-store.js';
 import './pdf-preview.css';
-import {blockAnchor,subblockAnchor} from './mineru-anchors.js';
+import {blockAnchor,subblockAnchor,subblockId} from './mineru-anchors.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
@@ -435,7 +435,8 @@ export class PdfPreview {
       partIndex:chosen.partIndex};
     void this.prepareSelectedPDFText();this.drawOverlay();
     const partLabel=chosen.role==='caption'?'标题':chosen.role==='note'?'注释':'正文';
-    const ref=`p${n-1}b${chosen.blockIndex}${chosenPath?'.'+chosenPath.join('.'):''}`;
+    const ref=chosenPath?subblockId(n-1,chosen.blockIndex,chosenPath):
+      `p${n-1}b${chosen.blockIndex}`;
     this.setStatus(`第 ${n} 页 · ${ref} ${partLabel} · ${child?'已定位源码子块':'源码未标定（点击补标子块）'}`);
     if(child)publishFocus({sourceLine:child.sourceLine,origin:'pdf',
       elementId:`mineru:${n-1}:${chosen.blockIndex}:${chosenPath.join('.')}`});
@@ -781,10 +782,9 @@ export class PdfPreview {
       for(const [property,value] of Object.entries(styles))
         if(node.style[property]!==value)node.style[property]=value;
       if(node.parentElement!==page.div)page.div.append(node);
-      // The chart/table is ONE original CMD Block. Its caption and notes can
-      // sit outside the parent's body bbox: paint their genuine OCR rectangles
-      // as inert fragments, without adding fake Block IDs or checkboxes.
-      // Relative positions follow the parent on PDF.js zoom/reflow.
+      // Draw exactly one native child chip per original MinerU blocks[] bbox.
+      // Child chips have no checkbox; parent join/move controls stay unchanged.
+      // Nested wrappers keep the original page coordinate system on zoom.
       const parts=block.subRegions||[];
       const existing=[...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')];
       existing.slice(parts.length).forEach(extra=>extra.remove());
@@ -795,11 +795,19 @@ export class PdfPreview {
           fragment.className='ocr-pdf-block-fragment';
           node.append(fragment);
         }
-        const kind=part.role==='note'?'注释':'标题';
-        const label=`${row.id}.${part.path?.join('.')??i} · ${part.type} · ${kind}（MinerU 原始子块）`;
+        const id=subblockId(row.pageIndex,row.blockIndex,part.path);
+        const kind=part.role==='note'?'注释':part.role==='caption'?'标题':'正文';
+        const label=`${id} · ${part.type} · ${kind}`;
         if(fragment.title!==label)fragment.title=label;
+        if(fragment.dataset.subblockId!==id)fragment.dataset.subblockId=id;
         if(fragment.dataset.partType!==part.type)fragment.dataset.partType=part.type;
         if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;
+        let chip=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
+        if(!chip){chip=document.createElement('span');
+          chip.className='ocr-pdf-subblock-chip';fragment.append(chip);}
+        if(chip.textContent!==id)chip.textContent=id;
+        chip.title=label;
+        chip.dataset.gutter=node.dataset.gutter;
         const [sx0,sy0,sx1,sy1]=part.bbox,[bx0,by0,bx1,by1]=block.bbox;
         const sw=bx1-bx0,sh=by1-by0;
         const placement={left:`${(sx0-bx0)/sw*100}%`,
@@ -808,6 +816,15 @@ export class PdfPreview {
           height:`${(sy1-sy0)/sh*100}%`};
         for(const [property,value] of Object.entries(placement))
           if(fragment.style[property]!==value)fragment.style[property]=value;
+        // Place labels in the physical outer margin, not on PDF text.
+        // The body shares its parent's bbox: move its chip down one row to
+        // avoid colliding with the parent's checkbox/ID label.
+        const childMargin=node.dataset.gutter==='left'?sx0:pageWidth-sx1;
+        const nominal=12+id.length*5.4;
+        const scale=Math.min(1,Math.max(.2,(childMargin-4)/nominal));
+        const transform=`scale(${scale.toFixed(3)})`;
+        if(chip.style.transform!==transform)chip.style.transform=transform;
+        chip.style.top=part.role==='body'&&sy0===by0?'19px':'0';
       });
       // Keep checkbox and full Block ID on ONE line without entering OCR
       // text, including at the default narrow iPad PDF zoom. The available

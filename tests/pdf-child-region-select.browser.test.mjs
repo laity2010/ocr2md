@@ -30,6 +30,36 @@ try{
       await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:40000});
+      // p3b0 is the reported page-3 table: MinerU has two native children.
+      // Both MUST have separate VISIBLE IDs at their own original bboxes.
+      const table3=page.locator('.ocr-pdf-block-cover[data-block-id="p3b0"]');
+      await table3.scrollIntoViewIfNeeded({timeout:24000});
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p3b0"]')?.closest('.page')
+        ?.querySelector('canvas')?.width>0,null,{timeout:25000});
+      assert.deepEqual(await table3.locator(':scope > .ocr-pdf-block-fragment')
+        .evaluateAll(parts=>parts.map(part=>({id:part.dataset.subblockId,
+          role:part.dataset.partRole,chip:part.querySelector('.ocr-pdf-subblock-chip')?.textContent}))),[
+        {id:'p3b0s0',role:'caption',chip:'p3b0s0'},
+        {id:'p3b0s1',role:'body',chip:'p3b0s1'},
+      ]);
+      for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
+        const rects=await table3.evaluate((node,index)=>{
+          const frag=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
+          const b=frag.getBoundingClientRect();
+          const tag=frag.querySelector('.ocr-pdf-subblock-chip').getBoundingClientRect();
+          return {x:b.left+b.width/2,y:b.top+b.height/2,
+            outside:tag.right<=b.left+2||tag.left>=b.right-2,
+            labelVisible:tag.width>5&&tag.height>4};
+        },index);
+        assert(rects.outside&&rects.labelVisible,`${name} ${id} must label outside its OCR bbox`);
+        await table3.evaluate((node,xy)=>{
+          node.closest('.page').querySelector('canvas').dispatchEvent(new MouseEvent('click',
+            {bubbles:true,clientX:xy.x,clientY:xy.y}));
+        },rects);
+        await page.waitForFunction(expected=>document.querySelector('.ocr-pdf-status')
+          ?.textContent?.includes(expected),id,{timeout:16000});
+      }
       const block=page.locator('.ocr-pdf-block-cover[data-block-id="p4b0"]');
       await block.scrollIntoViewIfNeeded({timeout:25000});
       await page.waitForFunction(()=>document.querySelector(
@@ -37,7 +67,7 @@ try{
         ?.querySelector('canvas')?.width>0,null,{timeout:30000});
       assert.equal(await block.locator('.ocr-pdf-block-ctrl input').count(),1);
       assert.deepEqual(await block.locator(':scope > .ocr-pdf-block-fragment')
-        .evaluateAll(nodes=>nodes.map(el=>el.dataset.partRole)),['caption','note']);
+        .evaluateAll(nodes=>nodes.map(el=>el.dataset.partRole)),['caption','body','note']);
       const observations=[];
       const bboxFor=async(partIndex)=>block.evaluate((node,partIndex)=>{
         const region=partIndex<0?node:node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[partIndex];
@@ -45,7 +75,7 @@ try{
         return {x:(b.left+b.right)/2,y:(b.top+b.bottom)/2,
           width:b.width,height:b.height};
       },partIndex);
-      for(const [partIndex,role] of [[0,'caption'],[-1,'body'],[1,'note']]){
+      for(const [partIndex,role] of [[0,'caption'],[1,'body'],[2,'note']]){
         const pt=await bboxFor(partIndex);
         await block.evaluate((node,{x,y})=>{
           node.closest('.page').querySelector('canvas').dispatchEvent(
