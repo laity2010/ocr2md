@@ -1,0 +1,2 @@
+TC-JOIN-L55 exit=0
+TC-MOVE-C58 exit=1

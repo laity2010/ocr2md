@@ -1,0 +1,4 @@
+TC-JOIN-L55 exit=0
+TC-MOVE-C58 exit=1
+TC-WP4-L53 exit=1
+TC-PDF-TEXT-PARTS exit=1

@@ -1,0 +1,10 @@
+AM_RUN_START case=TC-JOIN-L55 git=f0ad4f11 script=tests/cmd-block-joins.test.mjs
+AM_RUN_PASS case=TC-JOIN-L55 evidence=.v6/tests/am-TC-JOIN-L55-20261101T094826Z-f0ad4f11-677921.log
+  blocks: 224,
+  logicalBlocks: 223,
+  originalRestored: true,
+  pageLocalLabels: true,
+  crossPage: 'p8b8→p9b0',
+  allTypes: true,
+  crossColumn: 'p6b6→p6b7'
+}

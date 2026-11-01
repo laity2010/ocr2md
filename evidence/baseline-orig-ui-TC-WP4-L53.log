@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-WP4-L53 git=f0ad4f11 script=tests/text-block-review.browser.test.mjs
+AM_ERROR: TC-WP4-L53: FAIL
+AM_RUN_FAIL case=TC-WP4-L53 evidence=.v6/tests/am-TC-WP4-L53-20261101T094904Z-f0ad4f11-678213.log
+  code: 'ERR_ASSERTION',
+  actual: 3,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

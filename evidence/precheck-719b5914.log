@@ -1,0 +1,249 @@
+AM_STANDARD_START sha=719b59147d2a21dc53dd350b6c02dc4101c32605 report=/workspace/grok-evidence-75e05598/fix-run1
+Preparing worktree (detached HEAD 719b591)
+HEAD is now at 719b591 fix(am): restore AM build and complete PDF/CMD module ownership
+AM_AUDIT_SOURCE=719b59147d2a21dc53dd350b6c02dc4101c32605
+AM_AUDIT_TARGET=/workspace/ocr2md-audit/ocr2md-am-719b5914-run1
+AM_AUDIT_OS=Linux
+AUDIT_PORT_PREFLIGHT_SELFTEST_PASS live_listener=blocked closed_server=reusable
+AUDIT_TEST_PORT_PREFLIGHT_PASS ports=80
+
+added 79 packages in 2s
+
+added 72 packages in 421ms
+
+> @ocr2md/minerujson-md@0.1.0 build
+> tsc -p tsconfig.json
+
+AUDIT_BROWSER_PREFLIGHT_PASS Chromium
+AUDIT_BROWSER_PREFLIGHT_PASS WebKit
+AUDIT_LINUX_SIPS_SHIM linux-sips-smoke.png -> linux-sips-smoke.jpg
+AUDIT_LINUX_SIPS_SMOKE_PASS bytes=759
+AM_AUDIT_ENV node=v22.23.4 python=Python 3.13.5 playwright=1.64.1
+
+> ocr2md-v6-editor-lab@0.1.0 build
+> vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 224 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/release-version.json                                 0.03 kB │ gzip:     0.05 kB
+../dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff             4.42 kB
+../dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2            4.93 kB
+../dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2            5.21 kB
+../dist/assets/cursor-editorTextHighlight-kG3uUOwL.svg       5.40 kB │ gzip:     2.15 kB
+../dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2            5.47 kB
+../dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff             5.98 kB
+../dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff             6.19 kB
+../dist/assets/KaTeX_Size1-Regular-C195tn64.woff             6.50 kB
+../dist/index.html                                           6.69 kB │ gzip:     2.51 kB
+../dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2      6.91 kB
+../dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2         6.91 kB
+../dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf              7.59 kB
+../dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff       7.66 kB
+../dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff          7.72 kB
+../dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2           9.64 kB
+../dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2       10.34 kB
+../dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf             10.36 kB
+../dist/assets/KaTeX_Script-Regular-D5yQViql.woff           10.59 kB
+../dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2         11.32 kB
+../dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2            11.35 kB
+../dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf             11.51 kB
+../dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2        12.03 kB
+../dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2          12.22 kB
+../dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf             12.23 kB
+../dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff        12.32 kB
+../dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf       12.34 kB
+../dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf          12.37 kB
+../dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff          13.21 kB
+../dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff             13.30 kB
+../dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2      13.57 kB
+../dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff         14.11 kB
+../dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff           14.41 kB
+../dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff       16.03 kB
+../dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2         16.40 kB
+../dist/assets/KaTeX_Math-Italic-t53AETM-.woff2             16.44 kB
+../dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf            16.65 kB
+../dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2         16.78 kB
+../dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2             16.99 kB
+../dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff          18.67 kB
+../dist/assets/KaTeX_Math-Italic-DA0__PXp.woff              18.75 kB
+../dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff          19.41 kB
+../dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf         19.44 kB
+../dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB
+../dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB
+../dist/assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB
+../dist/assets/spellcheck-worker-B2R9O0_c.js                19.82 kB
+../dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB
+../dist/module-graph.json                                   23.77 kB │ gzip:    10.42 kB
+../dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB
+../dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB
+../dist/assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB
+../dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB
+../dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB
+../dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB
+../dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB
+../dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB
+../dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB
+../dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB
+../dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB
+../dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB
+../dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB
+../dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB
+../dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB
+../dist/assets/index-CmfKht-g.dic                          551.76 kB
+../dist/assets/pdf.worker.min-CjEcRF4W.mjs               1,264.34 kB
+../dist/assets/index-Cj-CXWRX.css                          466.28 kB │ gzip:    75.27 kB
+../dist/assets/fontcheck-CDzPn_qu.js                         1.41 kB │ gzip:     0.97 kB
+../dist/assets/index-DlABYQOu.js                         3,619.87 kB │ gzip: 1,099.95 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 7.81s
+AM_BUILD_PASS modules/apis/messages/publishers/subscriptions/tests=[12, 245, 14, 20, 30, 340] database=.v6/tests/am.sqlite
+AM_REFERENCES_PASS checked 245 API registry rows and all source/test paths; previous-run records kept=0/0
+F................................./workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcca5c0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcca6b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcca890>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcca980>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcca4d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcca7a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccaa70>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccab60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccac50>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccad40>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccae30>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccaf20>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb010>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb100>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb1f0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb2e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb3d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb4c0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb5b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb6a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb790>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb880>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccb970>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcc84f0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccba60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fcc88b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccbb50>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccbc40>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccbd30>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccbe20>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345fccbf10>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f444040>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f444130>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f444220>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f444310>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f444400>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f4444f0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f4445e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f4446d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f4448b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f345f4449a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...
+======================================================================
+FAIL: test_all_contracts_have_test_rows (test_am.AMCatalogTests.test_all_contracts_have_test_rows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/ocr2md-audit/ocr2md-am-719b5914-run1/tests/am/test_am.py", line 55, in test_all_contracts_have_test_rows
+    self.assertEqual(actual,total,tab)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+AssertionError: 243 != 245 : apis
+
+----------------------------------------------------------------------
+Ran 37 tests in 5.866s
+
+FAILED (failures=1)
+AM_STANDARD_REPORT status=BLOCKED sha=719b59147d2a21dc53dd350b6c02dc4101c32605 output=/tmp/tmpw73_kx0n
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=62
+AM_STANDARD_REPORT status=FAIL sha=719b59147d2a21dc53dd350b6c02dc4101c32605 output=/workspace/grok-evidence-75e05598/fix-run1
+AM_STANDARD_COUNTS direct_api_pass=0/245 static_findings=0 unregistered_event_sites=0 runtime_review=62
+AM_STANDARD_EXIT runner=1 report=1 report_dir=/workspace/grok-evidence-75e05598/fix-run1

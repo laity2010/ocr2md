@@ -1,0 +1,136 @@
+{
+  "auditor": "grok",
+  "source_sha": "75e055988df73d3d3899036f6a62ce1e851f2d15",
+  "package_sha": "6aa7acd0c64a4ae6cc54ffdce76acd7b3bfa592f",
+  "fix_branch": "fix/grok-75e05598",
+  "fix_head": "b86415eeb3e37026a63ce7eaaae7c29cd026a60c",
+  "fix_commits": [
+    "719b59147d2a21dc53dd350b6c02dc4101c32605",
+    "b86415eeb3e37026a63ce7eaaae7c29cd026a60c"
+  ],
+  "environment": {
+    "os": "Linux",
+    "node": "v22.23.4",
+    "python": "3.13.5",
+    "playwright": "1.64.1",
+    "browsers": [
+      "chromium-headless",
+      "webkit-headless"
+    ],
+    "macos": "UNTESTED",
+    "real_devices": "UNTESTED"
+  },
+  "gates": [
+    {
+      "name": "original audit.sh",
+      "sha": "75e05598",
+      "status": "FAIL",
+      "exit": 1,
+      "am_build": "FAIL",
+      "cases": "NA",
+      "static_findings": 10,
+      "runtime_review": 62
+    },
+    {
+      "name": "fix run1",
+      "sha": "b86415ee",
+      "status": "FAIL",
+      "exit": 1,
+      "cases_passed": 278,
+      "cases_total": 345,
+      "direct_api_pass": "65/245",
+      "static_findings": 0,
+      "unregistered_event_sites": 0,
+      "runtime_review": 62
+    },
+    {
+      "name": "fix run2",
+      "sha": "b86415ee",
+      "status": "FAIL",
+      "exit": 1,
+      "cases_passed": 265,
+      "cases_total": 345,
+      "direct_api_pass": "65/245",
+      "static_findings": 0,
+      "unregistered_event_sites": 0,
+      "runtime_review": 62
+    }
+  ],
+  "issues": [
+    {
+      "id": "P0-1",
+      "sev": "P0",
+      "status": "FIXED",
+      "commits": [
+        "f7c5fbc",
+        "355fd37",
+        "871b8d4",
+        "c760789"
+      ]
+    },
+    {
+      "id": "P0-2",
+      "sev": "P0",
+      "status": "FIXED",
+      "commits": [
+        "d6f9ead",
+        "f7c5fbc",
+        "9a9bbdb",
+        "a2cb8f4",
+        "01dc503",
+        "3f06719",
+        "871b8d4",
+        "c760789",
+        "641f4a7",
+        "93c363d",
+        "b301867"
+      ]
+    },
+    {
+      "id": "P1-1",
+      "sev": "P1",
+      "status": "FIXED",
+      "commits": [
+        "01dc503",
+        "d703d46"
+      ]
+    },
+    {
+      "id": "P1-2",
+      "sev": "P1",
+      "status": "FAIL",
+      "note": "15 suites fail both runs; spot baseline shows same failures with original UI"
+    },
+    {
+      "id": "P1-3",
+      "sev": "P1",
+      "status": "FAIL",
+      "note": "cmd-block-joins order-dependent ENOENT"
+    },
+    {
+      "id": "P1-4",
+      "sev": "P1",
+      "status": "FAIL",
+      "note": "direct API 65/245"
+    },
+    {
+      "id": "P2-1",
+      "sev": "P2",
+      "status": "OPEN"
+    },
+    {
+      "id": "P2-2",
+      "sev": "P2",
+      "status": "OPEN",
+      "count": 17
+    },
+    {
+      "id": "P2-3",
+      "sev": "P2",
+      "status": "UNVERIFIED",
+      "count": 62
+    }
+  ],
+  "SOURCE_MERGE": "CONDITIONAL_YES (metadata/boundary fix only; gate still FAIL)",
+  "PRODUCTION_CUTOVER": "NO"
+}

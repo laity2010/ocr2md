@@ -1,0 +1,11 @@
+AM_RUN_START case=TC-PDF-TEXT-PARTS git=f0ad4f11 script=tests/pdf-child-region-select.browser.test.mjs
+AM_ERROR: TC-PDF-TEXT-PARTS: FAIL
+AM_RUN_FAIL case=TC-PDF-TEXT-PARTS evidence=.v6/tests/am-TC-PDF-TEXT-PARTS-20261101T094907Z-f0ad4f11-678339.log
+  code: 'ERR_ASSERTION',
+  actual: '',
+  expected: 'dashed',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

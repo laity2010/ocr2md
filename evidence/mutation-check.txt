@@ -1,0 +1,10 @@
+== mutation: drop X-JOIN-L56 edge
+AssertionError: Lists differ: ['cm-document.js->cmd-block-joins.js:projectCMDLogicalTextBlocks'] != []
+'cm-document.js->cmd-block-joins.js:projectCMDLogicalTextBlocks'
+- ['cm-document.js->cmd-block-joins.js:projectCMDLogicalTextBlocks']
+FAILED (failures=1)
+== mutation: G28 symbol reverted to reviewActions w/ edge on G28
+2
+FAILED (errors=2)
+== restored
+OK
