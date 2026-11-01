@@ -124,6 +124,7 @@ export class PdfPreview {
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
     this.textExtractToken=0;this.extractReady=null;
+    this.childFocusSequence=0;this.childMarkerPromise=null;
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
     this.blockDragScrollTimer=0;this.blockDragScrollBehavior=null;
     this.onBlockDragMove=e=>{
@@ -407,8 +408,44 @@ export class PdfPreview {
     clearTimeout(this.overlayTimer);
     this.overlayTimer=setTimeout(()=>this.drawOverlay(),140);
   }
+  /** A child PDF bbox is a real MinerU source identity, never a parent
+   * placeholder. Legacy edited CMDs have no child comments: the first actual
+   * child selection explicitly requests an undoable, unsaved CMD annotation,
+   * then resolves the exact new line from CM6's latest source snapshot. */
+  async focusPDFChild(pageIndex,blockIndex,path,sequence){
+    const key=path.join('.');
+    let child=this.subAnchors.find(a=>a.pageIndex===pageIndex&&
+      a.blockIndex===blockIndex&&a.path.join('.')===key);
+    let annotated=false;
+    if(!child){
+      if(!this.childMarkerPromise){
+        this.markButton.disabled=true;
+        this.childMarkerPromise=Promise.resolve().then(()=>this.onMarkSubblocks())
+          .finally(()=>{this.childMarkerPromise=null;
+            if(!this.disposed)this.markButton.disabled=false;});
+      }
+      const result=await this.childMarkerPromise;
+      annotated=Boolean(result?.changed);
+      if(this.disposed)return;
+      // Do not use stale line numbers after a CM6 transaction. The user may
+      // have edited during the async JSON verification.
+      this.refreshAnchors();
+      child=this.subAnchors.find(a=>a.pageIndex===pageIndex&&
+        a.blockIndex===blockIndex&&a.path.join('.')===key);
+    }
+    if(this.disposed||sequence!==this.childFocusSequence)return;
+    const id=subblockId(pageIndex,blockIndex,path);
+    if(!child){
+      this.setStatus(`${id} 没有独立 CMD 子块锚点，未使用父块行号代替`);
+      return;
+    }
+    publishFocus({sourceLine:child.sourceLine,origin:'pdf',
+      elementId:`mineru:${pageIndex}:${blockIndex}:${key}`});
+    this.setStatus(`${id} → 源码第 ${child.sourceLine} 行 · ${annotated?'已自动补标，未保存，可 Undo':'已定位'}`);
+  }
   onClick(event){
-    if(!this.ready||!(event.target instanceof Element)||event.target.closest('.ocr-pdf-block-ctrl'))return;
+    if(!this.ready||!(event.target instanceof Element)||
+      event.target.closest('.ocr-pdf-block-ctrl,.ocr-pdf-subblock-chip'))return;
     const page=event.target.closest('.page');
     const canvas=page?.querySelector('canvas');
     const n=Number(page?.dataset.pageNumber);
@@ -422,26 +459,32 @@ export class PdfPreview {
     if(!source)return;
     const chosen=hitPDFRegion(source,[x*source.pageSize[0],y*source.pageSize[1]]);
     if(!chosen)return;
+    this.selectPDFRegion(n-1,chosen);
+  }
+  /** Both the PDF rectangle and its gutter ID are actual child controls. */
+  selectPDFRegion(pageIndex,chosen){
+    if(!this.ready||this.disposed)return;
     this.clearComparison();
-    const anchor=this.anchors.find(a=>a.pageIndex===n-1&&a.blockIndex===chosen.blockIndex);
-    const parentRegion=source.regions.find(r=>r.blockIndex===chosen.blockIndex);
-    const chosenPath=chosen.partIndex==null?parentRegion?.bodyPath:
-      parentRegion?.subRegions[chosen.partIndex]?.path;
-    const child=chosenPath&&this.subAnchors.find(a=>a.pageIndex===n-1&&
-      a.blockIndex===chosen.blockIndex&&a.path.join('.')===chosenPath.join('.'));
-    // A PDF Block without a writable CMD anchor can still supply useful
-    // original text. The caret, not the source Block, is the destination.
-    this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex,
+    const anchor=this.anchors.find(a=>a.pageIndex===pageIndex&&a.blockIndex===chosen.blockIndex);
+    // The union parent's whitespace is not a native `table_body` child.
+    // Only an actual hit on the child bbox may request its source marker.
+    const chosenPath=chosen.partIndex==null?null:chosen.path;
+    this.selected={pageIndex,blockIndex:chosen.blockIndex,
       partIndex:chosen.partIndex};
     void this.prepareSelectedPDFText();this.drawOverlay();
-    const partLabel=chosen.role==='caption'?'标题':chosen.role==='note'?'注释':'正文';
-    const ref=chosenPath?subblockId(n-1,chosen.blockIndex,chosenPath):
-      `p${n-1}b${chosen.blockIndex}`;
-    this.setStatus(`第 ${n} 页 · ${ref} ${partLabel} · ${child?'已定位源码子块':'源码未标定（点击补标子块）'}`);
-    if(child)publishFocus({sourceLine:child.sourceLine,origin:'pdf',
-      elementId:`mineru:${n-1}:${chosen.blockIndex}:${chosenPath.join('.')}`});
-    else if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
-      elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
+    const sequence=++this.childFocusSequence;
+    if(chosenPath){
+      this.setStatus(`${subblockId(pageIndex,chosen.blockIndex,chosenPath)} · 正在定位源码…`);
+      void this.focusPDFChild(pageIndex,chosen.blockIndex,chosenPath,sequence)
+        .catch(error=>{
+          if(!this.disposed&&sequence===this.childFocusSequence)
+            this.setStatus('PDF 子块定位失败：'+error.message);
+        });
+    }else if(anchor){
+      this.setStatus(`p${pageIndex}b${chosen.blockIndex} · 父块已定位`);
+      publishFocus({sourceLine:anchor.sourceLine,origin:'pdf',
+        elementId:`mineru:${pageIndex}:${chosen.blockIndex}:parent`});
+    }else this.setStatus(`p${pageIndex}b${chosen.blockIndex} · 源码缺少父块锚点`);
   }
   /** Independent, very light coverage over the original CMD Block bbox.
    * Unlike focus/pair overlays these are page-local percentage boxes and
@@ -814,7 +857,25 @@ export class PdfPreview {
         if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;
         let chip=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
         if(!chip){chip=document.createElement('span');
-          chip.className='ocr-pdf-subblock-chip';fragment.append(chip);}
+          chip.className='ocr-pdf-subblock-chip';
+          chip.setAttribute('role','button');chip.tabIndex=0;
+          const navigate=()=>{
+            const pageIndex=Number(node.dataset.pdfPage)-1;
+            const blockIndex=Number(node.dataset.blockIndex);
+            const current=this.map[pageIndex]?.regions.find(b=>b.blockIndex===blockIndex);
+            const index=Number(chip.dataset.partIndex);
+            const part=current?.subRegions[index];
+            if(part)this.selectPDFRegion(pageIndex,{blockIndex,partIndex:index,
+              role:part.role,path:part.path,bbox:part.bbox});
+          };
+          chip.addEventListener('click',e=>{e.stopPropagation();navigate();});
+          chip.addEventListener('keydown',e=>{
+            if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();navigate();}
+          });
+          fragment.append(chip);
+        }
+        if(chip.dataset.partIndex!==String(i))chip.dataset.partIndex=String(i);
+        chip.setAttribute('aria-label',`定位原始 PDF 子块 ${id}`);
         if(chip.textContent!==id)chip.textContent=id;
         if(chip.title!==label)chip.title=label;
         if(chip.dataset.gutter!==node.dataset.gutter)
@@ -1060,15 +1121,13 @@ export class PdfPreview {
     const block=this.map[source.pageIndex]?.regions?.find(r=>r.blockIndex===source.blockIndex);
     if(!block)return;
     const partIndex=child?block.subRegions.findIndex(s=>s.path.join('.')===child.path.join('.')):-1;
-    // A table/image/chart body often shares its parent's bbox. It still has
-    // its own MinerU child marker, without a redundant overlay rectangle.
-    const bodyChild=child&&block.bodyPath?.join('.')===child.path.join('.');
+
     if(!explicit&&this.selected?.pageIndex===source.pageIndex&&
       this.selected?.blockIndex===source.blockIndex&&
       (this.selected?.partIndex??null)===(partIndex<0?null:partIndex))return;
     const samePage=this.selected?.pageIndex===source.pageIndex;
     this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex,
-      partIndex:bodyChild||partIndex<0?null:partIndex};
+      partIndex:partIndex<0?null:partIndex};
     void this.prepareSelectedPDFText();
     // PDF.js page navigation resets the scroll position. Never invoke it for
     // another OCR block on the same page; the overlay will scroll only if the

@@ -6,7 +6,12 @@ import {mkdtempSync,rmSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {chromium,webkit} from 'playwright';
+import {planCMDSubblockAnnotations} from '../ui/cmd-text-blocks.js';
 const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+const childPlan=await planCMDSubblockAnnotations(original);
+const annotated=[...childPlan.edits].sort((a,b)=>b.from-a.from)
+  .reduce((src,e)=>src.slice(0,e.from)+e.insert+src.slice(e.to),original).split('\n');
+const markerLine=id=>annotated.findIndex(line=>line.includes(`id="${id}"`))+1;
 const temp=mkdtempSync(join(tmpdir(),'ocr2md-pdf-parts-'));
 const doc=join(temp,'document.md');writeFileSync(doc,original);
 const port=5971,url=`http://127.0.0.1:${port}/`;
@@ -61,6 +66,20 @@ try{
       });
       for(let i=1;i<labels.length;i++)assert(labels[i].top>=labels[i-1].bottom-2,
         `${name} p3b0 parent and child chip labels cannot stack`);
+      // Crucial regression: no child anchors exist in the OLD CMD. Clicking
+      // the *visible blue ID* must create one undoable unsaved annotation
+      // transaction and jump to that exact tag (not root p3b0's prose).
+      const childChip=table3.locator('.ocr-pdf-subblock-chip').first();
+      // PDF.js may temporarily set the virtualized page's visibility=hidden;
+      // click handler is tested directly, the physical chip is clickable
+      // once PDF.js has actually presented that page.
+      await childChip.evaluate(el=>el.click());
+      await page.waitForFunction(async expected=>{
+        const {viewStore}=await import('/view-store.js');
+        return viewStore.getState().focusTarget?.sourceLine===expected&&
+          document.querySelector('.ocr-pdf-status')?.textContent?.includes('已自动补标');
+      },markerLine('p3b0s0'),{timeout:28000});
+      assert.equal(readFileSync(doc,'utf8'),original,'PDF child click must not save edits');
       for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
         const rects=await table3.evaluate((node,index)=>{
           const frag=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
@@ -75,8 +94,11 @@ try{
           node.closest('.page').querySelector('canvas').dispatchEvent(new MouseEvent('click',
             {bubbles:true,clientX:xy.x,clientY:xy.y}));
         },rects);
-        await page.waitForFunction(expected=>document.querySelector('.ocr-pdf-status')
-          ?.textContent?.includes(expected),id,{timeout:16000});
+        await page.waitForFunction(async expected=>{
+          const {viewStore}=await import('/view-store.js');
+          return viewStore.getState().focusTarget?.sourceLine===expected.line&&
+            document.querySelector('.ocr-pdf-status')?.textContent?.includes(`源码第 ${expected.line} 行`);
+        },{line:markerLine(id)},{timeout:16000});
       }
       const block=page.locator('.ocr-pdf-block-cover[data-block-id="p4b0"]');
       await block.scrollIntoViewIfNeeded({timeout:25000});
@@ -102,6 +124,10 @@ try{
         },pt);
         await page.waitForFunction(expected=>document.querySelector('.ocr-pdf-region-overlay')
           ?.dataset.partRole===expected,role,{timeout:18000});
+        await page.waitForFunction(async expected=>{
+          const {viewStore}=await import('/view-store.js');
+          return viewStore.getState().focusTarget?.sourceLine===expected;
+        },markerLine(`p4b0s${partIndex}`),{timeout:16000});
         const overlay=page.locator('.ocr-pdf-region-overlay');
         assert.equal(await overlay.getAttribute('data-block-index'),'0');
         assert.equal(await overlay.getAttribute('data-pdf-page'),'5');
@@ -118,8 +144,20 @@ try{
       }
       assert.deepEqual(observations.map(x=>x.enabled),[true,true,true],
         'screenshot regions caption, body and notes each have independently extractable PDF text');
+      // The source editor must actually render the target child tag, not
+      // merely publish a correct but unconsumed focus event.
+      await page.waitForFunction(id=>[...document.querySelectorAll('.cm-line')]
+        .some(line=>line.textContent?.includes(`id="${id}"`)),
+        'p4b0s2',{timeout:15000});
       assert.deepEqual(errors,[]);
-      assert.equal(readFileSync(doc,'utf8'),original,'selection is read-only');
+      assert.equal(readFileSync(doc,'utf8'),original,
+        'automatic legacy child annotation is unsaved until the user saves');
+      await page.locator('#undo').evaluate(e=>e.click());
+      await page.locator('#save').evaluate(e=>e.click());
+      await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
+        null,{timeout:23000});
+      assert.equal(readFileSync(doc,'utf8'),original,
+        'one Undo must reverse all automatically added CMD child tags');
       console.log('PDF_CHILD_REGION_SELECT_PASS',name,observations);
     }finally{await browser.close();writeFileSync(doc,original);}
   }

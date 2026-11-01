@@ -1306,3 +1306,8 @@ INSERT INTO access_edges VALUES
  ('X-PARENTUNION-L64','L','L','ui/cmd-text-blocks.js','enclosingChildBBox(subRegions,box)','L64','registered','CMD read-only geometry projection, no new OCR representation');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PARENTUNION-L64','L64','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p3b0=[68,89,538,458]; p4b0=[50,89,521,339]; chart p13b1=[206,82,539,490], originalBBox unchanged, exclude foreign conflicting note','direct');
+
+-- A legacy document has no child CMD anchors. Clicking a real PDF child
+-- auto-adds one undoable/unsaved annotation transaction before navigation.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-LEGACY-CHILD-FOCUS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p3b0s0/s1 and p4b0s0/s1/s2 navigate distinct exact CMD lines from an unannotated legacy doc; blue chip click triggers one unsaved annotation with Undo, no disk mutation','integration');
