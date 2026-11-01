@@ -720,13 +720,15 @@ INSERT INTO test_cases(id,message_id,script,fixture,expected,evidence) VALUES
  ('TC-E10','E10','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab Chrome/WebKit source navigator dispatches chapter selection','integration'),
  ('TC-E11','E11','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab AG heading click in All moves to another chapter via WCP','integration'),
  ('TC-E12','E12','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab WCP emits semantic AG ready message','integration'),
- ('TC-E13','E13','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab WCP bounds CM6 and Markdown from chapter source selection','integration');
+ ('TC-E13','E13','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Real Main/Lab WCP bounds CM6 and Markdown from chapter source selection','integration'),
+ ('TC-E14','E14','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','grok 75e05598: chapter-boundary-changed payload carries independent flag per commit; CMD file bytes unchanged','direct');
 INSERT INTO test_cases(id,publisher_id,script,fixture,expected,evidence) VALUES
  ('TC-PUB-W10','PUB-W10','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','File nav WCP publisher emitted in real browser','integration'),
  ('TC-PUB-W11','PUB-W11','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG focus WCP publisher emitted in real browser','integration'),
  ('TC-PUB-W12','PUB-W12','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP bridge ready publisher emitted in real browser','integration'),
  ('TC-PUB-W13','PUB-W13','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','WCP virtual scope bound for CM6 projection','integration'),
- ('TC-PUB-W14','PUB-W14','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG scope change publishes bounded projection','integration');
+ ('TC-PUB-W14','PUB-W14','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG scope change publishes bounded projection','integration'),
+ ('TC-PUB-W15','PUB-W15','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','grok 75e05598: AG chapter checkbox publishes detail.independent [false] then [false,true]','direct');
 INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
  ('TC-SUB-W10','SUB-W10','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG toolbar reacts to virtual select','integration'),
  ('TC-SUB-W11','SUB-W11','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','File navigation reacts to AG-driven virtual open','integration'),
@@ -736,7 +738,8 @@ INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALU
  ('TC-SUB-W15','SUB-W15','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Markdown preview follows same WCP virtual chapter scope','integration'),
  ('TC-SUB-W16','SUB-W16','tests/wcp-virtual-event-contract.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG/PDF focus to another chapter changes source view by semantic focusTarget','integration'),
  ('TC-SUB-W17','SUB-W17','tests/promoted-chapters-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','CM6 chapter marker edits immediately refresh virtual chapter file navigation','integration'),
- ('TC-SUB-W18','SUB-W18','tests/main-promoted-lab-ui.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter-boundary mother checkbox editable; chapter-file checkbox read-only; no direct CMD mutation allowed in chapter file','integration');
+ ('TC-SUB-W18','SUB-W18','tests/main-promoted-lab-ui.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chapter-boundary mother checkbox editable; chapter-file checkbox read-only; no direct CMD mutation allowed in chapter file','integration'),
+ ('TC-SUB-W19','SUB-W19','tests/chapter-live-navigation.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','grok 75e05598: AG checkbox uncheck/check/undo/redo rebuilds native and visible source chapter options 21/20/21 without reload','direct');
 
 INSERT INTO access_edges VALUES
  ('X-SHELL-AG',NULL,'G','ui/main.js','mountAgModuleToolbar({modulePort','G16','registered','Shell composes the AG toolbar; Settings cannot mount AG internals'),
@@ -1270,7 +1273,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','tests/pdf-region-hit.test.mjs','inline page 5 p4b0 OCR body, caption, footnote rectangles; exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
  ('TC-PDF-TEXT-PARTS','P17','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit page 5 p4b0 caption, body and note can be clicked and highlighted separately with individually extracted native text, one original Block and checkbox','integration'),
  ('TC-PDF-TEXT-C60','C60','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','pure planner inserts at arbitrary source cursor without deleting OCR and rejects invalid text and coordinates','direct'),
- ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration');
+ ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration'),
+ ('TC-PDF-TEXT-P16-INTEGRATION','P16','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','grok 75e05598: PDF text button disabled without selection, enabled and inserts after real PDF.js selection (integration only; no direct P16 test exists)','integration'),
+ ('TC-PDF-TEXT-L61-INTEGRATION','L61','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','grok 75e05598: shell-injected CMD insertion callback reached by PDF button click inserts at live caret (integration only; no direct L61 test exists)','integration');
 
 -- Native MinerU nested `blocks[]` paths, represented without inventing new
 -- para_block identities or changing sealed original OCR source/content.
