@@ -11,7 +11,7 @@
  */
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
-import {planPDFBlockTextReplacement} from './cmd-pdf-text-replace.js';
+import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
@@ -98,18 +98,18 @@ export function createCMDTransactionPort(cmd){
     },
     moveBlockAfter:(sourceId,afterId)=>moveBlock(sourceId,afterId,'after'),
     moveBlockBefore:(sourceId,beforeId)=>moveBlock(sourceId,beforeId,'before'),
-    canReplacePDFBlockText:(pageIndex,blockIndex,text)=>{
-      try{planPDFBlockTextReplacement(cmd.readSource(),pageIndex,blockIndex,text);return true;}
-      catch{return false;}
-    },
-    replacePDFBlockText:(pageIndex,blockIndex,text)=>{
+    insertPDFTextAtCaret:(pageIndex,blockIndex,text)=>{
+      if(!Number.isInteger(pageIndex)||pageIndex<0||
+         !Number.isInteger(blockIndex)||blockIndex<0)
+        throw Error('PDF 文本块编号无效');
+      // Only the editor owns the caret. A PDF click scrolls the source pane
+      // but MUST NOT redirect its selection to the corresponding OCR Block.
+      const state=cmd.view.state,caret=state.selection.main.head;
       const source=cmd.readSource();
-      const edit=planPDFBlockTextReplacement(source,pageIndex,blockIndex,text);
-      if(edit.expected===edit.insert)
-        return {changed:0,id:`p${pageIndex}b${blockIndex}`,chars:text.length};
-      commit(()=>cmd.replaceRanges([edit],null,[agAllDocumentTransaction.of(true)]),
-        [edit],{source,allowAll:true});
-      return {changed:1,id:`p${pageIndex}b${blockIndex}`,chars:text.length};
+      const edit=planPDFTextInsertion(source,caret,text);
+      commit(()=>cmd.replaceRanges([edit],edit.cursorAfter),[edit],{source});
+      return {changed:1,id:`p${pageIndex}b${blockIndex}`,chars:edit.insert.length,
+        line:state.doc.lineAt(caret).number};
     },
     queryBlockGeometry:(pageIndex,blockIndex)=>cmd.queryBlockGeometry(pageIndex,blockIndex),
     readLine:n=>cmd.readLine(n),

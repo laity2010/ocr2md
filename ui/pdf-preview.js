@@ -54,14 +54,13 @@ function sourceAnchor(anchors,line){
 export class PdfPreview {
   constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
     onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),
-    canReplacePDFText=()=>false,onReplacePDFText=()=>Promise.reject(Error('CMD 尚未准备好'))){
+    onInsertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
     this.onBlockJoin=onBlockJoin;
     this.onBlockMove=onBlockMove;
-    this.canReplacePDFText=canReplacePDFText;
-    this.onReplacePDFText=onReplacePDFText;
+    this.onInsertPDFText=onInsertPDFText;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -69,7 +68,7 @@ export class PdfPreview {
       <button class="ocr-pdf-fit" type="button" title="按宽度缩放">适宽</button>
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
-      <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；将原文替换到对应 CMD 块，一次 Undo 可恢复">提取文本</button>
+      <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；插入源码窗当前光标位置，不替换原文；Undo 可撤销">提取文本</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -83,7 +82,7 @@ export class PdfPreview {
     this.pageInput=this.host.querySelector('.ocr-pdf-page');
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
     this.extractButton=this.toolbar.querySelector('.ocr-pdf-extract-text');
-    this.extractButton.addEventListener('click',()=>void this.replaceSelectedPDFText());
+    this.extractButton.addEventListener('click',()=>void this.insertSelectedPDFText());
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
     this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
@@ -177,36 +176,35 @@ export class PdfPreview {
     const token=++this.textExtractToken;
     this.extractReady=null;
     this.extractButton.disabled=true;
-    this.extractButton.title='当前块无可提取 PDF 文字或包含不可直接覆盖的 MD 结构';
+    this.extractButton.title='当前 PDF 块没有可提取的原文字层文本';
     const chosen=this.selected;
     if(!this.pdf||!chosen||this.disposed)return;
     const region=this.map[chosen.pageIndex];
     const block=region?.regions.find(r=>r.blockIndex===chosen.blockIndex);
-    if(!block||!['text','title'].includes(block.type))return;
+    if(!block)return;
     try{
       const page=await this.pdf.getPage(chosen.pageIndex+1);
       const {items}=await page.getTextContent();
       const text=extractPDFBlockText(items,page.getViewport({scale:1}),region.pageSize,block.bbox);
       if(this.disposed||token!==this.textExtractToken)return;
-      if(!text||!this.canReplacePDFText(chosen.pageIndex,chosen.blockIndex,text))return;
+      if(!text)return;
       this.extractReady={...chosen,text,token};
       this.extractButton.disabled=false;
-      this.extractButton.title=`PDF 原文字层 ${text.length} 字符 · 点击替换此 CMD 文本块（可 Undo）`;
+      this.extractButton.title=`PDF 原文字层 ${text.length} 字符 · 点击插入源码窗当前光标（原文保留，可 Undo）`;
     }catch(error){
       if(!this.disposed&&token===this.textExtractToken)
         this.extractButton.title='无法读取 PDF 原文字层：'+error.message;
     }
   }
-  async replaceSelectedPDFText(){
+  async insertSelectedPDFText(){
     const item=this.extractReady;
     if(!item||this.extractButton.disabled||this.disposed||
       this.selected?.pageIndex!==item.pageIndex||this.selected?.blockIndex!==item.blockIndex)return;
     this.extractButton.disabled=true;
     try{
-      const result=await this.onReplacePDFText(item.pageIndex,item.blockIndex,item.text);
-      if(result?.changed)this.setStatus(`已提取 ${item.text.length} 字符并替换 ${result.id} · Undo 可撤销`);
-      else this.setStatus(`${result?.id||'当前块'} 与 PDF 原文一致，无需替换`);
-    }catch(error){this.setStatus('PDF 原文替换失败：'+error.message);}
+      const result=await this.onInsertPDFText(item.pageIndex,item.blockIndex,item.text);
+      if(result?.changed)this.setStatus(`已提取 ${result.chars} 字符，插入源码第 ${result.line} 行 · Undo 可撤销`);
+    }catch(error){this.setStatus('PDF 原文插入失败：'+error.message);}
     finally{if(!this.disposed)this.prepareSelectedPDFText();}
   }
 
@@ -398,12 +396,12 @@ export class PdfPreview {
     if(!chosen)return;
     this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===n-1&&a.blockIndex===chosen.blockIndex);
-    if(anchor){
-      this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex};
-      void this.prepareSelectedPDFText();this.drawOverlay();
-      publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
-        elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
-    }
+    // A PDF Block without a writable CMD anchor can still supply useful
+    // original text. The caret, not the source Block, is the destination.
+    this.selected={pageIndex:n-1,blockIndex:chosen.blockIndex};
+    void this.prepareSelectedPDFText();this.drawOverlay();
+    if(anchor)publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf',
+      elementId:`mineru:${n-1}:${chosen.blockIndex}:0`});
   }
   /** Independent, very light coverage over the original CMD Block bbox.
    * Unlike focus/pair overlays these are page-local percentage boxes and

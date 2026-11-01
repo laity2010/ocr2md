@@ -1252,20 +1252,19 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-MOVE-C59','C59','tests/pdf-block-drag-edge-scroll.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long press b0 and point to b8 pulls b8 before b0; b0..b7 shift +1, b9+ unchanged; reverse pointer gesture and Undo restore all 224 checkbox states','integration'),
  ('TC-MOVE-L58','L58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long press starts arrow at insertion point and pointing to another original Block pulls its logical group before origin; 17px cross-column hit tolerance, 224 checkbox identities, Undo retained','integration');
 
--- PDF original text layer is a source of optional *user-triggered* revisions,
--- not the authority for OCR geometry or a new editable document.
+-- PDF original text layer is review material only. Inserting at the live
+-- source caret never overwrites OCR; CMD enforces immutable evidence boundaries.
 INSERT INTO apis VALUES
  ('P15','P','extractPDFBlockText','ui/pdf-block-text-extract.js','export','PDF.js text items, PDF viewport, original page size and CMD Block bbox','single Block native PDF text or empty','read-only text-layer read; midpoint clipping excludes neighboring columns',1),
- ('P16','P','PdfPreview.prepareSelectedPDFText','ui/pdf-preview.js','internal','selected original Block identity','Promise<void>','enables extract button only for nonempty native text and a safely replaceable CMD Block',1),
- ('C60','C','planPDFBlockTextReplacement','ui/cmd-pdf-text-replace.js','export','current CMD source, original Block page/index and native PDF text','optimistic text replacement range','protects source anchors, chapter markers, Markdown structures and sealed original evidence',1),
- ('C61','C','returned.canReplacePDFBlockText','ui/wcp-cmd-element-transactions.js','returned','original page/index and native PDF text','boolean','CMD checks replaceability before PDF enables action without copying source into PDF',1),
- ('C62','C','returned.replacePDFBlockText','ui/wcp-cmd-element-transactions.js','returned','original page/index and native PDF text','one undoable CM6 transaction or no-op','source and evidence preflight; no implicit save; chapter/anchor comments unchanged',1),
- ('L61','L','returned.setPDFTextReplaceActions','ui/workspace.js','returned','read-only permission and semantic replacement callback','void','inject CMD actions through layout without PDF acquiring CM6 editor',1);
+ ('P16','P','PdfPreview.prepareSelectedPDFText','ui/pdf-preview.js','internal','selected original Block identity','Promise<void>','button enabled for any block type with nonempty PDF text; no Markdown replaceability gate',1),
+ ('C60','C','planPDFTextInsertion','ui/cmd-pdf-text-insert.js','export','live CMD source, exact source caret and native PDF text','optimistic zero-width insertion range','non-destructive insertion; does not reinterpret or overwrite OCR text',1),
+ ('C62','C','returned.insertPDFTextAtCaret','ui/wcp-cmd-element-transactions.js','returned','original page/index and PDF text','one undoable CM6 insertion at current caret','CMD checks live caret, current virtual chapter and immutable MinerU evidence, no auto-save',1),
+ ('L61','L','returned.setPDFTextInsertAction','ui/workspace.js','returned','semantic CMD insertion callback','void','inject CMD action through layout without PDF acquiring CM6 editor',1);
 INSERT INTO access_edges VALUES
- ('X-PDF-TEXT-L61','L','L','ui/main.js','workspace.setPDFTextReplaceActions(','L61','registered','Shell provides CMD semantic permission and replacement callbacks to PDF via Layout'),
- ('X-PDF-TEXT-C60','C','C','ui/wcp-cmd-element-transactions.js','planPDFBlockTextReplacement(source,pageIndex,blockIndex,text)','C60','registered','CMD validates original anchor and generates a bounded edit'),
- ('X-PDF-TEXT-C62','L','C','ui/main.js','cmdPort.replacePDFBlockText(pageIndex,blockIndex,text)','C62','registered','Shell forwards explicit PDF extraction request to single CMD transaction');
+ ('X-PDF-TEXT-L61','L','L','ui/main.js','workspace.setPDFTextInsertAction(','L61','registered','Shell injects CMD insertion callback through layout'),
+ ('X-PDF-TEXT-C60','C','C','ui/wcp-cmd-element-transactions.js','planPDFTextInsertion(source,caret,text)','C60','registered','CMD prepares non-destructive caret edit from live source and text'),
+ ('X-PDF-TEXT-C62','L','C','ui/main.js','cmdPort.insertPDFTextAtCaret(pageIndex,blockIndex,text)','C62','registered','Shell forwards user-triggered PDF text insertion to CMD');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-TEXT-P15','P15','tests/pdf-text-replace.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','original PDF text-layer order retains initial oversized drop-cap M attached to uch in p1b9 while excluding neighboring columns','direct'),
- ('TC-PDF-TEXT-C60','C60','tests/pdf-text-replace.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','replace body only; allow corrupted OCR inline sup tags in p1b9; preserve chapter markers and anchors and reject actual structured elements','direct'),
- ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-replace.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit original p16b0 and screenshot p1b9 native PDF text extraction with malformed OCR sup tags, no auto-save; each one Undo restores byte-identical document','integration');
+ ('TC-PDF-TEXT-P15','P15','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','original PDF text-layer order retains initial oversized drop-cap M attached to uch in p1b9 while excluding neighboring columns','direct'),
+ ('TC-PDF-TEXT-C60','C60','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','pure planner inserts at arbitrary source cursor without deleting OCR and rejects invalid text and coordinates','direct'),
+ ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration');

@@ -733,12 +733,11 @@ async function main() {
       return result;
     }catch(error){status('文本块排序失败：'+error.message,'error');throw error;}
   });
-  workspace.setPDFTextReplaceActions(
-    (pageIndex,blockIndex,text)=>cmdPort.canReplacePDFBlockText(pageIndex,blockIndex,text),
+  workspace.setPDFTextInsertAction(
     async(pageIndex,blockIndex,text)=>{
       try{
-        const result=cmdPort.replacePDFBlockText(pageIndex,blockIndex,text);
-        status(`✓ ${result.id} 已用 PDF 原文替换 · CMD 未保存，Undo 可恢复`);
+        const result=cmdPort.insertPDFTextAtCaret(pageIndex,blockIndex,text);
+        status(`✓ ${result.id} 提取 ${result.chars} 字符，插入源码第 ${result.line} 行 · 未保存，可 Undo`);
         return result;
       }catch(error){status('提取 PDF 原文失败：'+error.message,'error');throw error;}
     });
