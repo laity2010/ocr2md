@@ -15,6 +15,8 @@ const urls=[...source.matchAll(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/g)].map(ma
 assert.equal(urls.length,11,'fixture must have 11 original image references');
 const basePort=5967;
 for(const [i,[name,engine]] of [['Chrome',chromium],['WebKit',webkit]].entries()){
+ if(process.env.V6_ONLY_CHROME&&name!=='Chrome')continue;
+ if(process.env.V6_ONLY_WEBKIT&&name!=='WebKit')continue;
  const dir=mkdtempSync(join(tmpdir(),'ocr2md-media-preadopt-'));
  const doc=join(dir,'book.minerujson.md'),auth=join(dir,'edit-token');
  const settings=join(dir,'settings.json');
@@ -73,7 +75,10 @@ for(const [i,[name,engine]] of [['Chrome',chromium],['WebKit',webkit]].entries()
          count:document.querySelector('.ocr-media-grid [role="grid"]')?.getAttribute('aria-rowcount'),
          adoption:[...document.querySelectorAll('.ocr-media-adoption')].map(x=>x.textContent),
          rows:document.querySelector('.ocr-media-grid')?.textContent?.slice(0,420)}));
-       console.log('PREEXISTING_DIAG',name,JSON.stringify({diag,errors}));throw error;
+       const rowUrls=await page.locator('.ocr-media-grid .ocr-media-url').allTextContents();
+       const fetchStatus=await Promise.all(urls.map(async url=>(await fetch(origin+'/api/media/status?url='+encodeURIComponent(url))).json()));
+       console.log('PREEXISTING_DIAG',name,JSON.stringify({diag,errors,
+         rows:rowUrls,local,inventory:inventory.files,completed:fetchStatus.map(x=>x.path)}));throw error;
      });
    const header=page.locator('.ocr-media-grid [role="grid"]');
    assert.equal(await header.getAttribute('aria-rowcount'),'12','11 images must have exactly 11 AG rows');
@@ -94,14 +99,18 @@ for(const [i,[name,engine]] of [['Chrome',chromium],['WebKit',webkit]].entries()
    await page.locator('#undo').click();
    await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-media-origin')]
      .some(el=>el.textContent==='远端'),null,{timeout:12000});
-   const undoText=await page.evaluate(()=>window.__v6cm6?.view?.state?.doc?.toString());
-   for(const url of urls)assert(undoText.includes(url),'one Undo failed to restore all remote URLs');
+   assert.equal(readFileSync(doc,'utf8'),source,'Undo must not auto-save');
+   await page.locator('#save').click();
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
+     null,{timeout:25000});
+   assert.equal(readFileSync(doc,'utf8'),source,
+     'ONE Undo must restore all 11 remote links (verified by explicit isolated save)');
    await page.locator('#redo').click();
    await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-media-origin')]
      .some(el=>el.textContent==='本地'),null,{timeout:12000});
-   const redoText=await page.evaluate(()=>window.__v6cm6?.view?.state?.doc?.toString());
-   for(const url of urls)assert(!redoText.includes(url),'Redo failed to localize all URLs');
-   // The browser source is the single unsaved CMD document.
+   assert.equal(readFileSync(doc,'utf8'),source,'Redo must not auto-save');
+   // The browser source is the single unsaved CMD document; the final Save
+   // below validates ALL 11 substitutions, not only the first visible row.
    await page.locator('#save').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('已保存'),
      null,{timeout:25000});

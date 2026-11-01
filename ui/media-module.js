@@ -153,8 +153,16 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
   }
   function schedule(){if(queued||disposed)return;queued=true;queueMicrotask(()=>{queued=false;refresh();});}
   async function getStatus(url){
-    const r=await fetch(appPath('/api/media/status?url=')+encodeURIComponent(url),{cache:'no-store'});
-    if(r.ok){states.set(url,await r.json());schedule();}
+    // A network hiccup must not briefly mark a downloaded file as an orphan.
+    // Scan publishes status and disk inventory as ONE coherent AG projection.
+    for(let attempt=0;attempt<2;attempt++){
+      try{
+        const r=await fetch(appPath('/api/media/status?url=')+encodeURIComponent(url),{cache:'no-store'});
+        if(!r.ok)throw Error('媒体状态 HTTP '+r.status);
+        states.set(url,await r.json());
+        return;
+      }catch(error){if(attempt===1)throw error;}
+    }
   }
   async function scan(){
     refresh();
@@ -164,16 +172,19 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
         const data=await response.json();
         localFiles=Array.isArray(data.files)?data.files:[];
         chapterReferences=new Set(Array.isArray(data.chapterReferences)?data.chapterReferences:[]);
-        refresh();
       });
     const progress=Promise.allSettled([...new Set(rows.filter(r=>!r.local).map(r=>r.url))].map(getStatus));
     const results=await Promise.allSettled([inventory,progress]);
+    refresh();
     if(results[0].status==='rejected'){
       onStatus('媒体清单读取失败：'+results[0].reason.message,'error');
       return;
     }
     const tally=label=>rows.filter(row=>adoptionOf(row)===label).length;
-    onStatus(`媒体 ${rows.length} 项 · 远端 ${rows.filter(row=>!row.local).length} · 本地 ${rows.filter(row=>row.local).length} · 已采用 ${tally('已采用')} · 未引用 ${tally('未引用')}`);
+    const failed=results[1].status==='fulfilled'
+      ?results[1].value.filter(result=>result.status==='rejected').length:1;
+    onStatus(`媒体 ${rows.length} 项 · 远端 ${rows.filter(row=>!row.local).length} · 本地 ${rows.filter(row=>row.local).length} · 已采用 ${tally('已采用')} · 未引用 ${tally('未引用')}${failed?` · ${failed} 个远端状态读取失败`:''}`,
+      failed?'warning':undefined);
   }
   async function downloadOne(url,scope=operationScope,{replace=true}={}){
     if(running.has(url))return;
