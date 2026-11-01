@@ -1,0 +1,2 @@
+# Audit-only immutable PDF fixture is binary, never text/CRLF normalized.
+/.v6/workspace/*.pdf binary
