@@ -74,8 +74,43 @@ try{
       await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
         null,{timeout:22000});
       assert.equal(readFileSync(doc,'utf8'),source,'one Undo must restore byte-identical CMD');
+      // Regression for user's iPad Safari screenshot: page 2 p1b9 has valid
+      // native PDF text but corrupt inline OCR sup tags. The prior overly
+      // strict Markdown guard disabled the extraction button entirely.
+      const screenshotBlock=page.locator('.ocr-pdf-block-cover[data-block-id="p1b9"]');
+      await screenshotBlock.scrollIntoViewIfNeeded({timeout:22000});
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p1b9"]')?.closest('.page')
+        ?.querySelector('canvas')?.width>0,null,{timeout:26000});
+      await screenshotBlock.evaluate(node=>{
+        const canvas=node.closest('.page').querySelector('canvas');
+        const r=node.getBoundingClientRect();
+        canvas.dispatchEvent(new MouseEvent('click',{bubbles:true,
+          clientX:r.left+r.width/2,clientY:r.top+r.height/2}));
+      });
+      await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-extract-text')?.disabled,
+        null,{timeout:23000});
+      await button.evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent?.includes('已提取'),
+        null,{timeout:24000});
+      assert.equal(readFileSync(doc,'utf8'),source,'p1b9 must not auto-save');
+      await page.locator('#save').evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
+        null,{timeout:23000});
+      const screenshotAfter=readFileSync(doc,'utf8');
+      assert(screenshotAfter.includes('Much has been said and written about Warren Buffett'),
+        'p1b9 PDF original should start with its drop-cap M and the word Much');
+      assert(!screenshotAfter.includes('M\\<sup>uch\\</sup>'),
+        'p1b9 malformed OCR superscripts must be replaced with native PDF text');
+      assert(screenshotAfter.includes('<!-- minerujson:block:v1:1:9 -->'),
+        'the original p1b9 CMD anchor must survive');
+      await page.locator('#undo').evaluate(el=>el.click());
+      await page.locator('#save').evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
+        null,{timeout:22000});
+      assert.equal(readFileSync(doc,'utf8'),source,'p1b9 Undo must exactly restore the original OCR');
       assert.deepEqual(errors,[]);
-      console.log('PDF_TEXT_EXTRACT_REPLACE_PASS',name,{block:'p16b0',
+      console.log('PDF_TEXT_EXTRACT_REPLACE_PASS',name,{blocks:['p16b0','p1b9'],
         before:source.length,after:after.length,undo:true,autoSave:false});
     }finally{await browser.close();writeFileSync(doc,source);}
   }

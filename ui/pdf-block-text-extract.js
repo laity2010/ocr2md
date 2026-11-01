@@ -17,10 +17,23 @@ export function extractPDFBlockText(items,viewport,pageSize,bbox){
     // A midpoint test avoids pulling text across neighboring PDF columns.
     const tolerance=1.5;
     if(xc<left-tolerance||xc>right+tolerance||yc<top-tolerance||yc>bottom+tolerance)continue;
-    lines.push({text:item.str.trim(),x,y});
+    lines.push({text:item.str.trim(),x,y,
+      right:x+width,top:y-height,bottom:y});
   }
-  // PDF content streams are not guaranteed to be in reading order. Sort by
-  // physical line first, then left-to-right within the target Block only.
-  lines.sort((a,b)=>Math.abs(a.y-b.y)>3?a.y-b.y:a.x-b.x);
-  return lines.map(i=>i.text).join(' ').replace(/\s+/g,' ').trim();
+  // Keep PDF.js stream order inside an original Block. In this PDF, the
+  // enlarged drop-cap M begins a paragraph before "uch", but its tall
+  // bounding box has a lower midpoint. Sorting item *centers* moves M into
+  // the third line and corrupts the extracted text (p1b9).
+  let joined='';
+  for(let index=0;index<lines.length;index++){
+    const now=lines[index],prior=lines[index-1];
+    const overlaps=prior&&Math.min(prior.bottom,now.bottom)>
+      Math.max(prior.top,now.top);
+    // A split drop cap can touch the following word without a text-space.
+    // Examples: oversized "M" + "uch" on page 2. Other items retain a
+    // readable space, including separate PDF stream lines.
+    const contiguous=overlaps&&Math.abs(now.x-prior.right)<1.5;
+    joined+=(index&&!contiguous?' ':'')+now.text;
+  }
+  return joined.replace(/\s+/g,' ').trim();
 }

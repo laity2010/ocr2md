@@ -33,10 +33,14 @@ export function planPDFBlockTextReplacement(source,pageIndex,blockIndex,rawText)
   const raw=lines.slice(target+1,end).join('\n');
   // Titles may have a CMD chapter marker before their visible Markdown
   // heading. Keep it byte-for-byte; only replace the user-visible title.
-  // Other annotations and nested elements are deliberately not overwritten.
+  // Inline OCR superscripts/subscripts are ordinary block content: MinerU
+  // sometimes incorrectly wraps *words* in <sup>, e.g. page 2 p1b9. The
+  // user explicitly asked to replace those bad OCR words with PDF text.
+  // Other annotations and nested structural elements remain protected.
   const annotationPrefix=/^([\s\n]*(?:<!-- ocr2md:chapter:v1 [^\n]* -->[\s\n]*)*)/.exec(raw)?.[0]||'';
   const body=raw.slice(annotationPrefix.length);
-  if(/<!--|-->|<\/?[a-z][^>]*>|!\[|!\[\[|```|~~~|\$\$|`|\*\*|\[[^\]\n]+\]\(|\^sid-|^\s*\|/im.test(body))
+  const structureProbe=body.replace(/\\?<\/?(?:sup|sub)\b[^>]*>/gi,'');
+  if(/<!--|-->|<\/?[a-z][^>]*>|!\[|!\[\[|```|~~~|\$\$|`|\*\*|\[[^\]\n]+\]\(|\^sid-|^\s*\|/im.test(structureProbe))
     throw Error('该 MD 块包含注释、图片或复杂结构，不能直接覆盖');
   const trimmed=body.trim();
   if(!trimmed)throw Error('MD 对应块没有可替换正文');
