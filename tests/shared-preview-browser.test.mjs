@@ -144,7 +144,7 @@ for(let i=0;i<engines.length;i++){
       parent:controls.parentElement===tools};
   });
   assert(hiddenToolbar.hidden&&hiddenToolbar.display==='none'&&hiddenToolbar.width===0&&
-    hiddenToolbar.buttons===3&&hiddenToolbar.parent,
+    hiddenToolbar.buttons===5&&hiddenToolbar.parent,
     `${name} PDF buttons not retracted on Markdown: ${JSON.stringify(hiddenToolbar)}`);
   await page.screenshot({path:`.v6/evidence/shared-preview-md-${name.toLowerCase()}.png`,timeout:16000});
   assert.equal(await page.locator('.ocr-preview-md-scroll').evaluate(el=>getComputedStyle(el).visibility),'visible');

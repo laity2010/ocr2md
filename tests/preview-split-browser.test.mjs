@@ -76,7 +76,8 @@ try{
    assert(split.docSize===initial.docSize,'split must not touch document data');
    const controls=await page.evaluate(()=>{
      const bar=document.querySelector('.ocr-detached-pdf-toolbar').getBoundingClientRect();
-     return ['.ocr-pdf-minus','.ocr-pdf-fit','.ocr-pdf-plus','.ocr-pdf-page'].map(sel=>{
+     return ['.ocr-pdf-minus','.ocr-pdf-fit','.ocr-pdf-plus','.ocr-pdf-page',
+      '.ocr-pdf-extract-text','.ocr-pdf-mark-subblocks'].map(sel=>{
        const r=document.querySelector(sel).getBoundingClientRect();
        return {name:sel,visible:r.width>10&&r.left>=bar.left-2&&r.right<=bar.right+2,
          right:r.right,barRight:bar.right};
