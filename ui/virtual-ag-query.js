@@ -22,7 +22,7 @@ export function createVirtualAGQuery(api,type){
           filterValueGetter:p=>p.data?activeChapterLabel(p.data):'',
           valueGetter:p=>p.data?activeChapterLabel(p.data):''};
         // Virtual chapters replace physical chapter export, NOT chapter
-        // boundary editing. The '独立成章' checkbox must remain available in
+        // boundary editing. The '章节' checkbox must remain available in
         // the heading AG: its CMD marker drives the virtual chapter list.
         projected=[...original.filter(c=>type!=='heading'||
           c.field!=='chapterFile'),column];

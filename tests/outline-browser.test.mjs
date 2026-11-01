@@ -146,7 +146,7 @@ try{
       for(const field of ['pdfPage','level','title','independent','virtualChapter']){
         await page.evaluate(field=>window.__v6cm6.outline.api.showColumnFilter(field),field);
         const label={pdfPage:'PDF页码',level:'层级',title:'标题',
-          independent:'独立成章',virtualChapter:'所属章节'}[field];
+          independent:'章节',virtualChapter:'所属章节'}[field];
         const popup=page.locator(`.ocr-enum-filter[aria-label="${label} 筛选"]:visible`);
         await popup.waitFor({timeout:10000});
         assert(await popup.locator('[data-filter-value="all"] input').isChecked(),field+' default all');
@@ -200,7 +200,7 @@ try{
       await page.evaluate(()=>window.__v6cm6.outline.api.ensureIndexVisible(1,'top'));
       await page.locator('.ag-row[row-index="1"] .ocr-outline-checkbox').uncheck();
       await page.evaluate(()=>window.__v6cm6.outline.api.showColumnFilter('independent'));
-      await page.locator('.ocr-enum-filter[aria-label="独立成章 筛选"]:visible [data-filter-value="否"]').waitFor();
+      await page.locator('.ocr-enum-filter[aria-label="章节 筛选"]:visible [data-filter-value="否"]').waitFor();
       await page.evaluate(()=>window.__v6cm6.outline.api.hideColumnFilter());
       assert.equal(await selectFilter('independent','否'),1);
       assert.equal(await selectFilter('independent','all'),21);

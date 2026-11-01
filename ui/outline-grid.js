@@ -35,7 +35,7 @@ export function registerOutlineTitleScaleSetting(settings,onChange){
   return settings.subscribe({module:'G',key:OUTLINE_TITLE_SCALE_KEY},({value})=>onChange(value));
 }
 const fields=['title','level','pdfPage','independent','chapterFile'];
-const labels=['标题','层级','PDF页码','独立成章','章节文件'];
+const labels=['标题','层级','PDF页码','章节','章节文件'];
 const valueOf=(row,field)=>{
   if(field==='level')return 'H'+row.level;
   if(field==='independent')return row.independent?'是':'否';
@@ -189,9 +189,9 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
         input.checked=p.data.independent;
         const first=rows[0]?.id===p.data.id;
         input.disabled=first||!canEditMarker();
-        input.title=first?'首项必须独立成章':!canEditMarker()
-          ?'只能在章节定界模块修改独立成章':'写入当前 V6 Markdown 的 CM6 HTML 标定';
-        input.setAttribute('aria-label',p.data.title+' 独立章节');
+        input.title=first?'首项必须作为章节起点':!canEditMarker()
+          ?'只能在章节定界模块修改章节':'勾选后作为章节起点，并即时更新源码窗章节文件导航';
+        input.setAttribute('aria-label',p.data.title+' 章节');
         const hit=document.createElement('label');
         hit.className='ocr-chapter-checkbox-hit';
         hit.append(input);
@@ -221,6 +221,13 @@ export function createOutlineGrid(element,getMarkdown,getCMD) {
             const updated=liveRow(id);
             if(!updated)throw Error('标定后找不到章节标题');
             choose(updated);
+            // A chapter checkbox is a structural edit, not ordinary typing.
+            // Publish the committed semantic intent after the CMD + AG
+            // projection succeeded. The source-file navigator can now update
+            // immediately, independent of the debounced documentRevision
+            // refresh used for every keystroke.
+            document.dispatchEvent(new CustomEvent('ocr2md:chapter-boundary-changed',
+              {detail:{id,independent:updated.independent}}));
             focusLatestCheckbox(id);
           }catch(error){
             input.checked=liveRow(id)?.independent??!checked;

@@ -59,7 +59,15 @@ export function enhanceNavigationSelect(element,{search=false,kind='navigation'}
   const refresh=()=>{
     if(destroyed)return;
     reflectOptions();
-    tom.sync(true); // safe: mutates only proxy, never the original select
+    // Tom Select 2.6 sync() ADDS/UPDATES options, but never removes values
+    // that disappeared from the underlying select. Chapter boundary edits
+    // therefore changed native select options while leaving stale chapter
+    // rows in the visible Tom Select dropdown. Rebuild the proxy-owned
+    // option table before syncing; never touch the original source select.
+    tom.clearOptions(()=>false);
+    tom.clearOptionGroups();
+    tom.sync(true);
+    tom.refreshOptions(false);
     tom.wrapper.title=element.selectedOptions[0]?.textContent||'';
     updateVisibility();
   };

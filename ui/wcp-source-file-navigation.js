@@ -54,6 +54,7 @@ export function createSourceFileNavigation({modulePort,workbench,settingsWorkben
     syncOptions();
   }
   function refreshChapters(){
+    clearTimeout(refreshTimer);refreshTimer=null;
     if(!bridge?.getChapterIndex)return;
     try{
       const index=bridge.getChapterIndex();
@@ -147,6 +148,10 @@ export function createSourceFileNavigation({modulePort,workbench,settingsWorkben
   viewStore.subscribe((now,before)=>{
     if(now.documentRevision!==before.documentRevision)scheduleRefresh();
   });
+  // Chapter AG checkbox edits already committed the CM6 marker when this
+  // semantic event arrives. Rebuild both native select and its Tom Select
+  // mirror NOW, instead of waiting for the generic typing debounce.
+  document.addEventListener('ocr2md:chapter-boundary-changed',()=>refreshChapters());
   // CMD revision is the contract for chapter marker mutations. The Shell
   // calls refreshChapters() when its own numbering input changes; do not
   // inspect AG-owned checkbox classes or Shell-owned input IDs here.

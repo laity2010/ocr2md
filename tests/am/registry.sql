@@ -691,13 +691,15 @@ INSERT INTO messages VALUES
  ('E10','dom','ocr2md:lab-virtual-select','{"type":"object","fields":["id","preserveAll","accepted","error"],"meaning":"source chapter navigation request and accepted status"}',1),
  ('E11','dom','ocr2md:lab-virtual-open','{"type":"object","fields":["id","preserveAll","accepted"],"meaning":"focus-driven navigation across virtual chapters"}',1),
  ('E12','dom','ocr2md:wp3-ag-ready','{"type":"object","fields":["getChapterIndex","getStartNumber","applyChapterQuery"],"meaning":"bounded WCP semantic chapter query port, not AG raw grid"}',1),
- ('E13','dom','ocr2md:wp4-virtual-scope','{"type":"object","fields":["scope","reason"],"meaning":"CM6 and Markdown projection of bounded chapter or whole mother document"}',1);
+ ('E13','dom','ocr2md:wp4-virtual-scope','{"type":"object","fields":["scope","reason"],"meaning":"CM6 and Markdown projection of bounded chapter or whole mother document"}',1),
+ ('E14','dom','ocr2md:chapter-boundary-changed','{"type":"object","fields":["id","independent"],"meaning":"AG chapter checkbox successfully committed its CMD marker; immediately refresh source chapter file navigation"}',1);
 INSERT INTO publishers VALUES
  ('PUB-W10','E10','S','ui/wcp-source-file-navigation.js','document.dispatchEvent','user selects virtual chapter from file navigator'),
  ('PUB-W11','E11','G','ui/wcp-ag-query.js','document.dispatchEvent','cross-chapter focus in AG/PDF while 全部 checked'),
  ('PUB-W12','E12','W','ui/wcp-wcp-virtual-chapters.js','document.dispatchEvent','WCP mounts bounded semantic AG query bridge'),
  ('PUB-W13','E13','W','ui/wcp-wcp-virtual-chapters.js','document.dispatchEvent','CM6 source transaction changes virtual chapter bounds'),
- ('PUB-W14','E13','G','ui/wcp-ag-query.js','document.dispatchEvent','AG chapter filter or navigation changes preview/CM6 source scope');
+ ('PUB-W14','E13','G','ui/wcp-ag-query.js','document.dispatchEvent','AG chapter filter or navigation changes preview/CM6 source scope'),
+ ('PUB-W15','E14','G','ui/outline-grid.js','document.dispatchEvent','AG chapter checkbox committed a marker and refreshed its live row');
 INSERT INTO subscriptions VALUES
  ('SUB-W10','E10','G','ui/wcp-ag-module-toolbar.js','document.addEventListener','virtual chapter selection or mother view change','Update AG all checkbox scope without source data rewrite'),
  ('SUB-W11','E11','S','ui/wcp-source-file-navigation.js','document.addEventListener','cross-chapter AG/PDF focus','Navigate source file select to owning virtual chapter'),
@@ -705,6 +707,7 @@ INSERT INTO subscriptions VALUES
  ('SUB-W13','E12','S','ui/wcp-source-file-navigation.js','document.addEventListener','WCP publishes bounded semantic bridge','Populate file navigation and select requested view'),
  ('SUB-W14','E13','W','ui/wcp-wcp-virtual-chapters.js','onScope','virtual chapter changes','Set CM6 scope using CMD public port'),
  ('SUB-W15','E13','W','ui/wcp-wcp-virtual-chapters.js','onScope','virtual chapter changes','Re-render Markdown virtual chapter preview using MD public port'),
+ ('SUB-W19','E14','S','ui/wcp-source-file-navigation.js','document.addEventListener','AG chapter checkbox marker committed','Immediately rebuild source chapter options and visible Tom Select mirror'),
  ('SUB-W16','E03','G','ui/wcp-ag-query.js','viewStore.subscribe','AG/PDF focus changes within current document revision','Follow focused element into its owning virtual chapter via semantic focus event'),
  ('SUB-W17','E01','S','ui/wcp-source-file-navigation.js','viewStore.subscribe','CM6 document revision changes','Refresh chapter filename projections from CMD index'),
  ('SUB-W18','E10','G','ui/outline-grid.js','document.addEventListener','accepted WCP chapter file changes','Disable independent-chapter CMD marker edits in virtual chapter files; restore in mother chapter-boundary view');
