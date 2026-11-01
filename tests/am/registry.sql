@@ -1168,26 +1168,24 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- evidence SHA; never a CMD paragraph-merge API or a second document editor.
 INSERT INTO apis VALUES
  ('L53','L','returned.compareBlocks','ui/pdf-preview.js','returned','two validated page/Block semantic IDs, reveal side','two labelled A/B original PDF bbox overlays, same-page or cross-page','PDF owns viewport coordinates and renderer; no source/CMD writes',1),
- ('L54','L','returned.overviewComparison','ui/pdf-preview.js','returned','selected same-page Block pair','fit both orange rectangles into the visible PDF viewport','presentation-only zoom, PDF.js coordinates retained',1),
- ('G28','G','createTextBlockModule.setReview','ui/text-block-module.js','internal','selected candidate and human review action','confirmed/rejected/pending local draft keyed by sealed source SHA and JSON export','AG owns review UI, no merging, no document or PDF mutations',1);
+ ('L54','L','returned.overviewComparison','ui/pdf-preview.js','returned','selected same-page Block pair','fit both orange rectangles into the visible PDF viewport','presentation-only zoom, PDF.js coordinates retained',1);
 INSERT INTO access_edges VALUES
  ('X-WP4-L53','L','L','ui/workspace.js','currentPreview.compareOriginalBlocks(selection.from','L53','registered','Layout forwards semantic candidate IDs to PDF preview owner'),
- ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner'),
- ('X-WP4-G28','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G25','registered','AG review (internal G28) remains owner-local; Layout reaches AG only via exported G25 factory and provides a semantic compare callback');
+ ('X-WP4-L54','L','L','ui/workspace.js','currentPreview?.overviewBlockComparison()','L54','registered','Optional viewport fit stays within PDF preview owner');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L53','L53','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit show simultaneous labelled A/B original PDF boxes for same page and different pages, without OCR fetch','integration'),
  ('TC-WP4-L54','L54','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit overview renders both p6b6 and p6b7 boxes inside physical PDF viewport','integration'),
- ('TC-WP4-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Confirm, reject, reset, reload restore and downloadable JSON; five candidate IDs and source unchanged','integration');
+ ('TC-WP4-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Confirm, reject, reset, reload restore and downloadable JSON; five candidate IDs and source unchanged','integration');
 
 -- Text-block menu/status consolidation: keep the module's existing handlers,
 -- but mount all seven controls in the shared Shell AG function dropdown.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G28','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit text-block Function menu owns 2 mode options and 5 review actions; global status owns inventory/review summary; no local toolbar/status row','integration');
+ ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit text-block Function menu owns 3 base actions including original-child annotation and 5 candidate-review actions; global status owns inventory/review summary; no local toolbar/status row','integration');
 
 -- Text-block coverage lens is a presentation-only CMD source-anchor overlay:
 -- independent of both individual MD/PDF focus and PDF paired comparison.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G28','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit default-checked PDF toolbar checkbox paints 224 PDF bbox and anchored Markdown Blocks; subtle overlays below focus/A-B comparison; module switch preserves preference; no source writes','integration');
+ ('TC-TEXTBLOCK-COVERAGE-OVERLAY-G28','G26','tests/text-block-coverage-lens.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad WebKit default-checked PDF toolbar checkbox paints 224 PDF bbox and anchored Markdown Blocks; subtle overlays below focus/A-B comparison; module switch preserves preference; no source writes','integration');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TOOLBAR-P14','P14','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit shared preview toolbar places 文本块 immediately right of navigation: MD single defaults off, PDF single on; split checkbox synchronizes both; supports PDF Block join/Undo and AG text-block selection','integration'),
  ('TC-PDF-ZOOM-ANCHOR-P04','P04','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit repeated zoom in/out/fit keeps current page and fractional reading position stable without re-navigating; PDF checkbox and 224 overlays remain intact','integration');

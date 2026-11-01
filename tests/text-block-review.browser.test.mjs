@@ -33,15 +33,15 @@ try{
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
-   // Text-block's two mode buttons belong in the existing Shell dropdown.
+   // All three base text-block actions, including native subblock annotation, live in Shell dropdown.
    const functionMenu=page.locator('#ag-functions-menu .module-actions[data-module="text-block"]');
    await page.locator('#ag-functions-toggle').click();
-   assert.equal(await functionMenu.getByRole('button').count(),2,'raw block mode only exposes two choices');
+   assert.equal(await functionMenu.getByRole('button').count(),3,'raw block mode exposes three actual actions including native subblock annotation');
    await page.keyboard.press('Escape');
    await action(page,'查看跨页跨栏接续候选');
    await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('#status')?.textContent||''),null,{timeout:20000});
    await page.locator('#ag-functions-toggle').click();
-   assert.equal(await functionMenu.getByRole('button').count(),7,'all seven text block operations belong in Function menu');
+   assert.equal(await functionMenu.getByRole('button').count(),8,'all eight text block operations belong in Function menu');
    assert.equal(await functionMenu.getByRole('button',{name:'确认所选文本块续接'}).isDisabled(),true);
    assert.equal(await page.locator('.ocr-text-block-control,.ocr-block-review-bar,.ocr-text-block-state').count(),0);
    assert.equal(await page.locator('.toolbar #status').count(),1);

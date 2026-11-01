@@ -30,6 +30,17 @@ class BindingRegistryTest(unittest.TestCase):
         self.assertTrue(new)
         bad = [v for v in violations(own, db) if v.split(':')[0] in new]
         self.assertEqual(bad, [])
+    def test_ag_review_is_not_a_phantom_external_api(self):
+        own, db = self.load()
+        ids = {row[0] for row in db.execute('SELECT id FROM apis')}
+        self.assertNotIn('G28', ids, 'setReview is an AG-local closure, not a callable module API')
+        self.assertTrue({'G25', 'G26'}.issubset(ids))
+        for case in ('TC-WP4-G28','TC-TEXTBLOCK-AG-FUNCTIONS-G28',
+                     'TC-TEXTBLOCK-COVERAGE-OVERLAY-G28'):
+            row = db.execute('SELECT api_id FROM test_cases WHERE id=?',(case,)).fetchone()
+            self.assertIsNotNone(row)
+            self.assertIn(row[0], {'G25','G26'})
+
     def test_unregistered_symbol_is_rejected(self):
         own, db = self.load()
         own['crossModuleBindings']['cm-document.js->cmd-block-joins.js'].append('precedingPageBlock')
