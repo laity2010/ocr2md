@@ -13,7 +13,7 @@ import {scanAnnotations,formatAnnotation} from './cmd-annotations.js';
 import {scanHtmlElements} from './cmd-html-elements.js';
 import {queryCMDLayout,queryCMDBlockGeometry,inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {scanCMDContinuationCandidates} from './cmd-block-continuations.js';
-import {readCMDBlockJoins,projectCMDLogicalTextBlocks,precedingPageBlock} from './cmd-block-joins.js';
+import {projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -49,7 +49,7 @@ export class CMDocument {
     const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
     for(const row of inventory.rows){
       row.joinPrev=logical.joined.get(row.id)||null;
-      row.joinable=Boolean(precedingPageBlock(inventory.rows,row));
+      row.joinable=logical.joinable.has(row.id);
       row.logicalId=logical.assignments.get(row.id)||row.id;
     }
     inventory.summary.joined=logical.joined.size;
@@ -58,6 +58,9 @@ export class CMDocument {
     return {inventory,continuations:scanCMDContinuationCandidates(inventory,layout),
       logicalBlocks:logical.blocks};
   }
+  /** Sole CMD caller of registered L48 inventory; CMD transaction helpers use
+   * this method instead of importing the Layout-owned implementation. */
+  inspectTextBlocks(source=this.readSource()){return inspectCMDTextBlocks(source);}
   queryBlockGeometry(pageIndex,blockIndex){
     return queryCMDBlockGeometry(this.readSource(),pageIndex,blockIndex);
   }

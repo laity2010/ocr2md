@@ -208,5 +208,9 @@ export function projectCMDLogicalTextBlocks(source,rows){
       memberIds:[row.id],text:markdown};
     roots.set(row.id,item);assignments.set(row.id,logicalId);result.push(item);
   }
-  return {blocks:result,joined,invalid,assignments};
+  // Grok fix 75e05598: CMD reads per-Block join eligibility through this one
+  // registered L56 projection instead of importing the unregistered helper
+  // precedingPageBlock across the C -> L boundary.
+  const joinable=new Set(rows.filter(row=>precedingPageBlock(rows,row)).map(row=>row.id));
+  return {blocks:result,joined,invalid,assignments,joinable};
 }
