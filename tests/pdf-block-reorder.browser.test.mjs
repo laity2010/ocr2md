@@ -160,7 +160,7 @@ try{
       // unchecked and joined into b8. Moving b8 ahead of b0 must carry its
       // child and preserve every other logical block / checkbox state.
       for(const id of ['p16b3','p16b5','p16b11']){
-        await page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] input`).click();
+        await toggleJoin(page,id,mobile);
         await page.waitForFunction(id=>document.querySelector(
           `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===false,
           id,{timeout:24000});
