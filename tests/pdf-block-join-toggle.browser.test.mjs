@@ -245,9 +245,25 @@ try{
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b8');
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b8');
    await page.screenshot({path:`.v6/evidence/block-join-toggle/${name}-blank-block-joined.png`,animations:'disabled'});
+   await page.evaluate(()=>{
+     window.__emptyCtrlClicks=[];
+     document.querySelector('.ocr-pdf-block-cover[data-block-id="p2b8"] .ocr-pdf-block-ctrl')
+       ?.addEventListener('click',e=>window.__emptyCtrlClicks.push({
+         at:Math.round(performance.now()),detail:e.detail,checked:e.currentTarget.querySelector('input')?.checked
+       }));
+   });
    await tapThree(page.locator('.ocr-pdf-block-cover[data-block-id="p2b8"] .ocr-pdf-block-ctrl'));
-   await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
-     document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   try{
+     await page.waitForFunction(()=>/已接续 0 · 逻辑块 224/.test(
+       document.querySelector('#status')?.textContent||''),null,{timeout:25000});
+   }catch(error){
+     console.error('PDF_EMPTY_TRIPLE_RESTORE_DIAGNOSTIC',name,JSON.stringify(await page.evaluate(()=>({
+       clicks:window.__emptyCtrlClicks, status:document.querySelector('#status')?.textContent,
+       checked:document.querySelector('.ocr-pdf-block-cover[data-block-id="p2b8"] input')?.checked,
+       disabled:document.querySelector('.ocr-pdf-block-cover[data-block-id="p2b8"] input')?.disabled
+     }))));
+     throw error;
+   }
    assert(await empty.isChecked());
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b9');
 

@@ -52,6 +52,12 @@ try{
      await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
      await page.goto(base,{waitUntil:'domcontentloaded',timeout:65000});
      await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:50000});
+     await page.evaluate(()=>{
+       window.__moduleTransitions=[];
+       const module=document.querySelector('#module-select');
+       module?.addEventListener('change',()=>window.__moduleTransitions.push({
+         at:Math.round(performance.now()),value:module.value,trace:'change'}),true);
+     });
      await select(page,'illegal-break');
      await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===1,null,{timeout:16000});
      assert.equal(await page.evaluate(()=>window.__rescanCount),0,'old CMD mark unexpectedly re-scanned');
@@ -70,6 +76,8 @@ try{
          agRows:document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length,
          cmdTags:(window.__v6cm6?.view?.state.doc.toString().match(/<!--ocr2md:illegal-break/g)||[]).length,
          dispatchedWorkerScans:window.__rescanCount,
+         elementValue:document.querySelector('.ocr-lab-element-select')?.value,
+         moduleTransitions:window.__moduleTransitions,
        })).catch(e=>({probeError:String(e)}));
        console.error('ILLEGAL_BREAK_RESCAN_TIMEOUT_EVIDENCE',label,JSON.stringify(observed));
        throw error;

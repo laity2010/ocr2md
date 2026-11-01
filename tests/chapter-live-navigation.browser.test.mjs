@@ -49,6 +49,19 @@ try{
         await control.evaluate(el=>el.click());
         const options=page.locator('body>.ocr-navigation-popup-files:visible [data-value^="virtual:"]');
         const actual=await options.count();
+        if(actual===0){
+          const debug=await page.evaluate(()=>{
+            const native=document.querySelector('.ocr-source-pane .ocr-lab-file-select');
+            const tom=native?.ocrNavigationSelect?.tom;
+            return {nativeChapters:[...(native?.options||[])].filter(x=>x.value.startsWith('virtual:')).length,
+              proxyChapters:[...(tom?.input?.options||[])].filter(x=>x.value.startsWith('virtual:')).length,
+              tomOptionKeys:Object.keys(tom?.options||{}).filter(x=>x.startsWith('virtual:')).length,
+              isOpen:tom?.isOpen,dropdownConnected:tom?.dropdown?.isConnected,
+              dropdownDisplay:tom?.dropdown?getComputedStyle(tom.dropdown).display:null,
+              visibleRows:document.querySelectorAll('body>.ocr-navigation-popup-files [data-value^="virtual:"]').length};
+          });
+          console.error('CHAPTER_NAV_MIRROR_DIAGNOSTIC',name,JSON.stringify(debug));
+        }
         await page.evaluate(()=>document.querySelector('.ocr-source-pane .ocr-lab-file-select')
           ?.ocrNavigationSelect?.tom.close());
         return actual;
