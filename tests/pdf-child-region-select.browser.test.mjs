@@ -58,38 +58,43 @@ try{
           `${name} parent must be the enclosing rectangle of child OCR boxes: ${coords}`));
       };
       await assertParentRect(table3,[68,89,538,458],'p3b0');
-      const labels=await table3.evaluate(node=>{
-        const rects=[node.querySelector('.ocr-pdf-block-ctrl'),
-          ...node.querySelectorAll('.ocr-pdf-subblock-chip')]
-          .map(el=>el.getBoundingClientRect());
-        return rects.map(r=>({top:r.top,bottom:r.bottom}));
-      });
-      for(let i=1;i<labels.length;i++)assert(labels[i].top>=labels[i-1].bottom-2,
-        `${name} p3b0 parent and child chip labels cannot stack`);
-      // Crucial regression: no child anchors exist in the OLD CMD. Clicking
-      // the *visible blue ID* must create one undoable unsaved annotation
-      // transaction and jump to that exact tag (not root p3b0's prose).
-      const childChip=table3.locator('.ocr-pdf-subblock-chip').first();
-      // PDF.js may temporarily set the virtualized page's visibility=hidden;
-      // click handler is tested directly, the physical chip is clickable
-      // once PDF.js has actually presented that page.
-      await childChip.evaluate(el=>el.click());
+      // At rest the PDF margin shows ONLY the green parent label: all blue
+      // child hit targets are hidden, not stacked on neighboring controls.
+      assert.deepEqual(await table3.locator('.ocr-pdf-subblock-chip')
+        .evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).display)),['none','none']);
+      assert.equal(await page.locator('.ocr-pdf-children-menu').count(),0);
+      const parent=table3.locator('.ocr-pdf-block-ctrl');
+      await parent.evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-children-option').length===2);
+      const menu=page.locator('.ocr-pdf-children-menu');
+      assert.deepEqual(await menu.locator('button').evaluateAll(nodes=>nodes.map(n=>n.dataset.subblockId)),
+        ['p3b0s0','p3b0s1']);
+      const menuBoxes=await menu.locator('button').evaluateAll(nodes=>nodes.map(n=>{
+        const r=n.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height};
+      }));
+      assert(menuBoxes.every(b=>b.height>=34),`${name} children need finger-size choices`);
+      assert(menuBoxes[1].top-menuBoxes[0].bottom>=3,
+        `${name} child choices must be visibly separated`);
+      // Child selection uses the SAME original s-index and exact CMD line.
+      const option=menu.locator('[data-subblock-id="p3b0s0"]');
+      // The isolated test server may mount this PDF instance beneath a
+      // visibility:hidden inactive preview host. Exercise the actual menu
+      // callback without assuming the surrounding workspace pane is active.
+      await option.evaluate(el=>el.click());
       await page.waitForFunction(async expected=>{
         const {viewStore}=await import('/view-store.js');
         return viewStore.getState().focusTarget?.sourceLine===expected&&
           document.querySelector('.ocr-pdf-status')?.textContent?.includes('已自动补标');
       },markerLine('p3b0s0'),{timeout:28000});
+      assert.equal(await menu.count(),0,'child picker disappears after selection');
       assert.equal(readFileSync(doc,'utf8'),original,'PDF child click must not save edits');
       for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
         const rects=await table3.evaluate((node,index)=>{
           const frag=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
           const b=frag.getBoundingClientRect();
-          const tag=frag.querySelector('.ocr-pdf-subblock-chip').getBoundingClientRect();
-          return {x:b.left+b.width/2,y:b.top+b.height/2,
-            outside:tag.right<=b.left+2||tag.left>=b.right-2,
-            labelVisible:tag.width>5&&tag.height>4};
+          return {x:b.left+b.width/2,y:b.top+b.height/2};
         },index);
-        assert(rects.outside&&rects.labelVisible,`${name} ${id} must label outside its OCR bbox`);
+
         await table3.evaluate((node,xy)=>{
           node.closest('.page').querySelector('canvas').dispatchEvent(new MouseEvent('click',
             {bubbles:true,clientX:xy.x,clientY:xy.y}));

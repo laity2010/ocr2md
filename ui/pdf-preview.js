@@ -115,7 +115,16 @@ export class PdfPreview {
     };
     for(const type of ['wheel','touchstart','pointerdown','keydown'])
       this.scroller.addEventListener(type,userInput,{passive:true});
-    this.scroller.addEventListener('scroll',()=>this.onScroll(),{passive:true});
+    this.scroller.addEventListener('scroll',()=>{
+      this.hideChildMenu();this.onScroll();
+    },{passive:true});
+    this.host.addEventListener('pointerdown',event=>{
+      if(this.childMenu&&!event.target.closest('.ocr-pdf-children-menu,.ocr-pdf-block-ctrl'))
+        this.hideChildMenu();
+    },true);
+    this.host.addEventListener('keydown',event=>{
+      if(event.key==='Escape'&&this.childMenu){event.preventDefault();this.hideChildMenu();}
+    });
     this.pages.addEventListener('click',e=>this.onClick(e));
     this.map=[];this.anchors=[];
     this.disposed=false;this.explicitUserUntil=0;
@@ -123,6 +132,7 @@ export class PdfPreview {
     this.zoomAnchorToken=0;this.zoomRestoreTimer=0;this.zoomRestoreBehavior=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
+    this.childMenu=null;this.childMenuParent=null;
     this.textExtractToken=0;this.extractReady=null;
     this.childFocusSequence=0;this.childMarkerPromise=null;
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
@@ -461,9 +471,63 @@ export class PdfPreview {
     if(!chosen)return;
     this.selectPDFRegion(n-1,chosen);
   }
+  /** Show one large, on-demand child picker instead of stacking tiny blue
+   * labels beside every original PDF bbox. No source or geometry is changed. */
+  hideChildMenu(){
+    this.childMenu?.remove();
+    this.childMenu=null;this.childMenuParent=null;
+  }
+  showChildMenu(row,ctrl){
+    const block=this.map[row.pageIndex]?.regions.find(b=>b.blockIndex===row.blockIndex);
+    const parts=block?.subRegions||[];
+    if(!parts.length){this.hideChildMenu();return;}
+    if(this.childMenuParent===row.id&&this.childMenu?.isConnected)return;
+    this.hideChildMenu();
+    const menu=document.createElement('div');menu.className='ocr-pdf-children-menu';
+    menu.setAttribute('role','group');
+    menu.setAttribute('aria-label',`${row.id} 的原始子块`);
+    const heading=document.createElement('div');heading.className='ocr-pdf-children-heading';
+    heading.textContent=`${row.id} · ${parts.length} 个子块`;
+    menu.append(heading);
+    for(let index=0;index<parts.length;index++){
+      const part=parts[index];
+      const id=subblockId(row.pageIndex,row.blockIndex,part.path);
+      const kind=part.role==='caption'?'标题':part.role==='note'?'注释':'正文';
+      const button=document.createElement('button');button.type='button';
+      button.className='ocr-pdf-children-option';
+      button.dataset.subblockId=id;button.textContent=`${id}  ${kind}`;
+      button.title=`原始 ${part.type} · 点击定位独立源码锚点`;
+      button.addEventListener('click',event=>{
+        event.stopPropagation();this.hideChildMenu();
+        this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
+          partIndex:index,path:part.path,role:part.role,bbox:part.bbox});
+      });
+      menu.append(button);
+    }
+    this.host.append(menu);
+    this.childMenu=menu;this.childMenuParent=row.id;
+    const viewport=this.scroller.getBoundingClientRect();
+    const parent=ctrl.getBoundingClientRect();
+    const host=this.host.getBoundingClientRect();
+    // Keep the full menu inside the PDF pane. Place it next to, NEVER on top
+    // of, the parent badge so a second/third parent tap remains targetable.
+    const width=Math.min(190,Math.max(130,viewport.width-16));
+    menu.style.width=`${width}px`;
+    const preferRight=ctrl.dataset.gutter==='left';
+    const first=preferRight?parent.right+8:parent.left-width-8;
+    const second=preferRight?parent.left-width-8:parent.right+8;
+    const fits=x=>x>=viewport.left+4&&x+width<=viewport.right-4;
+    const x=fits(first)?first:fits(second)?second:
+      Math.max(viewport.left+4,Math.min(first,viewport.right-width-4));
+    const height=menu.offsetHeight;
+    const y=Math.max(viewport.top+4,
+      Math.min(parent.top,viewport.bottom-height-4));
+    menu.style.left=`${x-host.left}px`;menu.style.top=`${y-host.top}px`;
+  }
   /** Both the PDF rectangle and its gutter ID are actual child controls. */
   selectPDFRegion(pageIndex,chosen){
     if(!this.ready||this.disposed)return;
+    this.hideChildMenu();
     this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===pageIndex&&a.blockIndex===chosen.blockIndex);
     // The union parent's whitespace is not a native `table_body` child.
@@ -820,11 +884,12 @@ export class PdfPreview {
           // delayed single-click navigation.
           tapCount=now-lastTap<=1200?tapCount+1:1;
           lastTap=now;
-          if(tapCount===3){tapCount=0;lastTap=0;void toggle();return;}
+          if(tapCount===3){tapCount=0;lastTap=0;this.hideChildMenu();void toggle();return;}
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
           this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
             partIndex:null,path:null,role:'parent'});
+          this.showChildMenu(row,ctrl);
         });
         ctrl.addEventListener('keydown',event=>{
           if(event.target!==ctrl||!['Enter',' '].includes(event.key))return;
@@ -1261,6 +1326,7 @@ export class PdfPreview {
     }
   }
   dispose(){
+    this.hideChildMenu();
     this.disposed=true;++this.textExtractToken;this.finishWarmup?.(false);
     clearTimeout(this.zoomRestoreTimer);
     if(this.zoomRestoreBehavior!==null){

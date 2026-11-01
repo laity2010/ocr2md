@@ -5,7 +5,8 @@ import {resolve} from 'node:path';
 import {chromium,webkit} from 'playwright';
 const sample=resolve('.v6/tests/text-blocks/buffett-reinitialized.minerujson.md');
 const original=readFileSync(sample,'utf8');
-const port=5995,url=`http://127.0.0.1:${port}/`;
+const port=process.env.ONE_BROWSER==='iPad-WebKit'?5996:5995;
+const url=`http://127.0.0.1:${port}/`;
 mkdirSync('.v6/evidence/block-join-toggle',{recursive:true});
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{
   cwd:process.cwd(),stdio:'ignore',env:{...process.env,V6_DOCUMENT_PATH:sample}});
