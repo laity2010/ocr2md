@@ -35,6 +35,24 @@ try{
       await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:40000});
+      // OCR has PDF coverage even when CMD currently has no text. Show
+      // dashed labels for both parent and child; never infer the cause.
+      const readBadge=async selector=>page.locator(selector).first().evaluate(el=>({
+        kind:el.dataset.sourceKind,
+        style:getComputedStyle(el).borderTopStyle,
+        title:el.title,
+      }));
+      const emptyParent=await readBadge('.ocr-pdf-block-cover[data-block-id="p4b0"] > .ocr-pdf-block-ctrl');
+      assert.equal(emptyParent.kind,'structure');
+      assert.equal(emptyParent.style,'dashed');
+      assert.match(emptyParent.title,/源码作用域为空/);
+      const normalParent=await readBadge('.ocr-pdf-block-cover[data-block-id="p13b0"] > .ocr-pdf-block-ctrl');
+      assert.equal(normalParent.kind,'content',
+        'p13b0 has real Figure 3 caption text in this fixture; only truly empty scopes are dashed');
+      assert.equal(normalParent.style,'solid');
+      const noText=await readBadge('.ocr-pdf-block-cover[data-block-id="p2b8"] > .ocr-pdf-block-ctrl');
+      assert.equal(noText.kind,'structure');
+      assert.equal(noText.style,'dashed');
       // p3b0 is the reported page-3 table: MinerU has two native children.
       // Both MUST have separate VISIBLE IDs at their own original bboxes.
       const table3=page.locator('.ocr-pdf-block-cover[data-block-id="p3b0"]');
@@ -99,6 +117,12 @@ try{
       assert.equal(await table3.locator('.ocr-pdf-subblock-chip').first()
         .getAttribute('data-source-kind'),'content',
         'a real OCR caption must indicate a real matching CMD text line');
+      // After CMD inserts the original child tags, the parent owns only
+      // the empty gap before s0: its chip must switch from solid to dashed.
+      const formerlyFilled=await readBadge('.ocr-pdf-block-cover[data-block-id="p3b0"] > .ocr-pdf-block-ctrl');
+      assert.equal(formerlyFilled.kind,'structure');
+      assert.equal(formerlyFilled.style,'dashed');
+      assert.equal((await readBadge('.ocr-pdf-block-cover[data-block-id="p3b0"] .ocr-pdf-subblock-chip')).kind,'content');
       for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
         const rects=await table3.evaluate((node,index)=>{
           const frag=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
@@ -145,6 +169,11 @@ try{
         .evaluateAll(nodes=>nodes.map(el=>el.dataset.sourceKind)),
         ['structure','structure','structure'],
         'p4b0 caption/body/note have spatial bbox but no matching CMD OCR prose');
+      assert.deepEqual(await block.locator('.ocr-pdf-subblock-chip')
+        .evaluateAll(nodes=>nodes.map(el=>getComputedStyle(el).borderTopStyle)),
+        ['dashed','dashed','dashed'],
+        'all empty child labels are dashed even when their PDF bboxes exist');
+      assert.equal((await readBadge('.ocr-pdf-block-cover[data-block-id="p4b0"] > .ocr-pdf-block-ctrl')).style,'dashed');
       const observations=[];
       const bboxFor=async(partIndex)=>block.evaluate((node,partIndex)=>{
         const region=partIndex<0?node:node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[partIndex];

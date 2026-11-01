@@ -135,8 +135,13 @@
 .ocr-pdf-subblock-chip[data-gutter="left"]::after{left:100%}
 .ocr-pdf-subblock-chip[data-gutter="right"]::after{right:100%}
 
-/* Amber-dashed ID = a real PDF OCR bbox with a valid CMD structural anchor,
- * but without Markdown prose/HTML/media. Never imply a content match. */
-.ocr-pdf-subblock-chip[data-source-kind="structure"]{
+/* Any visible OCR rectangle whose OWN CMD scope has no meaningful content
+ * gets a dashed ID (parents included). A missing child annotation is likewise
+ * unresolved. This signals "empty NOW", not whether OCR or human review
+ * caused it; the checkbox/join semantics and bbox never change. */
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl[data-source-kind="structure"],
+.ocr-pdf-block-cover .ocr-pdf-block-ctrl[data-source-kind="unmarked"],
+.ocr-pdf-subblock-chip[data-source-kind="structure"],
+.ocr-pdf-subblock-chip[data-source-kind="unmarked"]{
   border-style:dashed;border-color:#e3b76a;color:#f9ddb4;
 }

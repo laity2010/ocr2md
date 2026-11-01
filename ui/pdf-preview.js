@@ -16,10 +16,12 @@ import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+// "No text" describes current CMD scope only, not why MinerU or a reviewer
+// left it empty. A PDF coverage rectangle can remain after OCR reconciliation.
 const sourceKindHint=kind=>kind==='structure'?
-  ' · CMD 仅有结构标签，没有对应 OCR 正文':kind==='unmarked'?
-    ' · CMD 尚未标定对应子块':kind==='content'?
-      ' · CMD 有实际 OCR 正文':'';
+  ' · 源码作用域为空（可能已合并或审阅修正）':kind==='unmarked'?
+    ' · 尚无对应 CMD 标签或正文':kind==='content'?
+      ' · 源码作用域有内容':'';
 
 // CMD join annotations change logical grouping, never the sealed OCR pages or
 // their bbox geometry. Avoid invalidating every PDF control for this edit.
@@ -232,16 +234,30 @@ export class PdfPreview {
     this.updateChipContentIndicators();
     this.scheduleOverlay();
   }
-  /** A child may have a real PDF bbox but no original CMD prose.
-   * Mark only those *known* empty-source chips as structural-only, so a PDF
-   * label cannot imply a text match that the source does not contain. */
+  /** Both parent and child badges report the content of their OWN CMD tag
+   * scope, never the content of descendants or the presence of PDF text.
+   * Empty means the scope has no effective Markdown yet; OCR failure and
+   * manual merge/review are deliberately not inferred. Idempotent updates
+   * avoid repainting unrelated labels when one source line changes. */
   updateChipContentIndicators(){
-    const lookup=new Map(this.subAnchors.map(a=>
+    const parents=new Map(this.anchors.map(a=>
+      [`p${a.pageIndex}b${a.blockIndex}`,a]));
+    const children=new Map(this.subAnchors.map(a=>
       [subblockId(a.pageIndex,a.blockIndex,a.path),a]));
     for(const node of this.blockCoverageNodes.values()){
+      const parentChip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
+      if(parentChip){
+        const anchor=parents.get(node.dataset.blockId);
+        const kind=!anchor?'unmarked':anchor.contentLine?'content':'structure';
+        if(parentChip.dataset.sourceKind!==kind)parentChip.dataset.sourceKind=kind;
+        // Preserve the join/restore instructions set by updateBlockChip.
+        const original=parentChip.querySelector('input')?.title||node.dataset.blockId;
+        const title=original+sourceKindHint(kind);
+        if(parentChip.title!==title)parentChip.title=title;
+      }
       for(const chip of node.querySelectorAll('.ocr-pdf-subblock-chip')){
         const id=chip.parentElement?.dataset.subblockId;
-        const anchor=lookup.get(id);
+        const anchor=children.get(id);
         const kind=!anchor?'unmarked':anchor.contentLine?'content':'structure';
         if(chip.dataset.sourceKind!==kind)chip.dataset.sourceKind=kind;
         const label=chip.parentElement?.title||id;
@@ -545,7 +561,8 @@ export class PdfPreview {
     const help=row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
       `单击定位 ${row.id}；没有有效前驱 Block，不能取消勾选`;
     if(input.title!==help)input.title=help;
-    if(chip.title!==help)chip.title=help;
+    const chipTitle=help+sourceKindHint(chip.dataset.sourceKind);
+    if(chip.title!==chipTitle)chip.title=chipTitle;
     const aria=`原始 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
     if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
     node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));

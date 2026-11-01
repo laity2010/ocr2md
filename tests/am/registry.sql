@@ -1348,3 +1348,8 @@ INSERT INTO access_edges VALUES
  ('X-CMD-SCOPES-P21','P','P','ui/pdf-source-locations.js','sourceBlockScopes(source)','P21','registered','sourceBlocks and sourceSubblocks filter one unified lexical tag interval scan');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CMD-TAG-SCOPES-P21','P21','tests/pdf-source-locations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p4b0 parent ends immediately before p4b0s0, each s-tag ends before next s-tag; inserting text between tags changes only owning content range; 224 legacy parents and 43 child tags respected, sealed source excluded','direct');
+
+-- PDF label border is the live *own-scope* content indicator for BOTH
+-- parent and child tags. Empty is a visual fact, never an OCR error verdict.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-EMPTY-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit empty parent p4b0 and p2b8 dashed while nonempty p13b0 solid; after child-tag annotation p3b0 empty parent becomes dashed while s0 retains solid text badge; empty p4b0 subblocks dashed; no OCR/CM mutation','integration');
