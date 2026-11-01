@@ -80,7 +80,11 @@ try{
         const cleared=!mainPdf.selected && !mainPdf.scroller.querySelector('.ocr-pdf-region-overlay');
         const pdfHost=document.createElement('div');pdfHost.style.width='450px';pdfHost.style.height='300px';
         document.body.append(pdfHost);
-        const secondary=new PdfPreview(pdfHost,()=>original);
+        // The second viewer is a real instance: just like production it must
+        // receive the CMD-owned layout provider. Without this dependency,
+        // loading fails before the dispose assertion even runs.
+        const {queryCMDLayout}=await import('/cmd-text-blocks.js');
+        const secondary=new PdfPreview(pdfHost,()=>original,()=>queryCMDLayout(original));
         await secondary.loading;
         const secondaryWasReady=secondary.ready;
         secondary.dispose();
