@@ -1317,7 +1317,15 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-PARENT-TRIPLE-TAP','P18','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','one parent badge click emits exact parent CM6 focus, leaves checkbox unchanged; three rapid clicks alone toggle CMD join and Undo; 224 original Block chip IDs retained, no unrelated page relabeling','integration');
 
--- Default PDF gutter is parent-only; the child picker appears for only the
--- currently selected parent and offers well-spaced accessible touch targets.
+-- Parent and native child IDs are all permanently visible along the page's
+-- two exterior gutters, placed at noncolliding Y positions inside each bbox
+-- whenever physically feasible, with connector lines for provenance.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-SPACED-CHILD-MENU','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit all 224 original parent IDs remain, child chips hidden by default; parent reveals one popup with >=34px separate original child targets; choice focuses exact CMD line and menu disappears without disk write','integration');
+ ('TC-PDF-FULL-GUTTER-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit 224 parent and all valid child tags always visible in page gutter; no child picker; p3b0 parent/caption/body in disjoint Y rows within original bboxes; original CMD child navigation remains exact','integration');
+
+INSERT INTO apis VALUES
+ ('P19','P','layoutPDFGutterLabels','ui/pdf-gutter-label-layout.js','export','native per-page parent/child label Y spans and scaled chip heights','pure deterministic nonoverlap per gutter with flexible bbox height and nearest free-row fallback','read-only geometry; exactly one placement per original OCR label',1);
+INSERT INTO access_edges VALUES
+ ('X-PDF-GUTTER-P19','P','P','ui/pdf-preview.js','layoutPDFGutterLabels(items,page.clientHeight)','P19','registered','page-wide parent and child gutter collision avoidance');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','synthetic page 5 caption/body/note geometry','all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');

@@ -12,6 +12,7 @@ import './pdf-preview.css';
 import {blockAnchor,subblockAnchor,subblockId} from './mineru-anchors.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
+import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // CMD join annotations change logical grouping, never the sealed OCR pages or
@@ -115,16 +116,7 @@ export class PdfPreview {
     };
     for(const type of ['wheel','touchstart','pointerdown','keydown'])
       this.scroller.addEventListener(type,userInput,{passive:true});
-    this.scroller.addEventListener('scroll',()=>{
-      this.hideChildMenu();this.onScroll();
-    },{passive:true});
-    this.host.addEventListener('pointerdown',event=>{
-      if(this.childMenu&&!event.target.closest('.ocr-pdf-children-menu,.ocr-pdf-block-ctrl'))
-        this.hideChildMenu();
-    },true);
-    this.host.addEventListener('keydown',event=>{
-      if(event.key==='Escape'&&this.childMenu){event.preventDefault();this.hideChildMenu();}
-    });
+    this.scroller.addEventListener('scroll',()=>this.onScroll(),{passive:true});
     this.pages.addEventListener('click',e=>this.onClick(e));
     this.map=[];this.anchors=[];
     this.disposed=false;this.explicitUserUntil=0;
@@ -132,7 +124,6 @@ export class PdfPreview {
     this.zoomAnchorToken=0;this.zoomRestoreTimer=0;this.zoomRestoreBehavior=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
-    this.childMenu=null;this.childMenuParent=null;
     this.textExtractToken=0;this.extractReady=null;
     this.childFocusSequence=0;this.childMarkerPromise=null;
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
@@ -471,63 +462,9 @@ export class PdfPreview {
     if(!chosen)return;
     this.selectPDFRegion(n-1,chosen);
   }
-  /** Show one large, on-demand child picker instead of stacking tiny blue
-   * labels beside every original PDF bbox. No source or geometry is changed. */
-  hideChildMenu(){
-    this.childMenu?.remove();
-    this.childMenu=null;this.childMenuParent=null;
-  }
-  showChildMenu(row,ctrl){
-    const block=this.map[row.pageIndex]?.regions.find(b=>b.blockIndex===row.blockIndex);
-    const parts=block?.subRegions||[];
-    if(!parts.length){this.hideChildMenu();return;}
-    if(this.childMenuParent===row.id&&this.childMenu?.isConnected)return;
-    this.hideChildMenu();
-    const menu=document.createElement('div');menu.className='ocr-pdf-children-menu';
-    menu.setAttribute('role','group');
-    menu.setAttribute('aria-label',`${row.id} 的原始子块`);
-    const heading=document.createElement('div');heading.className='ocr-pdf-children-heading';
-    heading.textContent=`${row.id} · ${parts.length} 个子块`;
-    menu.append(heading);
-    for(let index=0;index<parts.length;index++){
-      const part=parts[index];
-      const id=subblockId(row.pageIndex,row.blockIndex,part.path);
-      const kind=part.role==='caption'?'标题':part.role==='note'?'注释':'正文';
-      const button=document.createElement('button');button.type='button';
-      button.className='ocr-pdf-children-option';
-      button.dataset.subblockId=id;button.textContent=`${id}  ${kind}`;
-      button.title=`原始 ${part.type} · 点击定位独立源码锚点`;
-      button.addEventListener('click',event=>{
-        event.stopPropagation();this.hideChildMenu();
-        this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
-          partIndex:index,path:part.path,role:part.role,bbox:part.bbox});
-      });
-      menu.append(button);
-    }
-    this.host.append(menu);
-    this.childMenu=menu;this.childMenuParent=row.id;
-    const viewport=this.scroller.getBoundingClientRect();
-    const parent=ctrl.getBoundingClientRect();
-    const host=this.host.getBoundingClientRect();
-    // Keep the full menu inside the PDF pane. Place it next to, NEVER on top
-    // of, the parent badge so a second/third parent tap remains targetable.
-    const width=Math.min(190,Math.max(130,viewport.width-16));
-    menu.style.width=`${width}px`;
-    const preferRight=ctrl.dataset.gutter==='left';
-    const first=preferRight?parent.right+8:parent.left-width-8;
-    const second=preferRight?parent.left-width-8:parent.right+8;
-    const fits=x=>x>=viewport.left+4&&x+width<=viewport.right-4;
-    const x=fits(first)?first:fits(second)?second:
-      Math.max(viewport.left+4,Math.min(first,viewport.right-width-4));
-    const height=menu.offsetHeight;
-    const y=Math.max(viewport.top+4,
-      Math.min(parent.top,viewport.bottom-height-4));
-    menu.style.left=`${x-host.left}px`;menu.style.top=`${y-host.top}px`;
-  }
   /** Both the PDF rectangle and its gutter ID are actual child controls. */
   selectPDFRegion(pageIndex,chosen){
     if(!this.ready||this.disposed)return;
-    this.hideChildMenu();
     this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===pageIndex&&a.blockIndex===chosen.blockIndex);
     // The union parent's whitespace is not a native `table_body` child.
@@ -884,12 +821,12 @@ export class PdfPreview {
           // delayed single-click navigation.
           tapCount=now-lastTap<=1200?tapCount+1:1;
           lastTap=now;
-          if(tapCount===3){tapCount=0;lastTap=0;this.hideChildMenu();void toggle();return;}
+          if(tapCount===3){tapCount=0;lastTap=0;void toggle();return;}
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
           this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
             partIndex:null,path:null,role:'parent'});
-          this.showChildMenu(row,ctrl);
+
         });
         ctrl.addEventListener('keydown',event=>{
           if(event.target!==ctrl||!['Enter',' '].includes(event.key))return;
@@ -923,16 +860,6 @@ export class PdfPreview {
       // Child chips have no checkbox; parent join/move controls stay unchanged.
       // Nested wrappers keep the original page coordinate system on zoom.
       const parts=block.subRegions||[];
-      const pageScaleY=page.div.clientHeight/region.pageSize[1];
-      let nextLabelY=block.bbox[1]*pageScaleY+19;
-      const labelOffsets=new Map();
-      for(const {part,index} of parts.map((part,index)=>({part,index}))
-        .sort((a,b)=>a.part.bbox[1]-b.part.bbox[1]||a.index-b.index)){
-        const naturalY=part.bbox[1]*pageScaleY;
-        const labelY=Math.max(naturalY,nextLabelY);
-        labelOffsets.set(index,labelY-naturalY);
-        nextLabelY=labelY+16;
-      }
       const existing=[...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')];
       existing.slice(parts.length).forEach(extra=>extra.remove());
       parts.forEach((part,i)=>{
@@ -997,8 +924,12 @@ export class PdfPreview {
         const edgeProperty=node.dataset.gutter==='left'?'right':'left';
         const edgeValue=`calc(100% + ${(edgeOffset+3).toFixed(2)}px)`;
         if(chip.style[edgeProperty]!==edgeValue)chip.style[edgeProperty]=edgeValue;
-        const yOffset=`${labelOffsets.get(i).toFixed(2)}px`;
-        if(chip.style.top!==yOffset)chip.style.top=yOffset;
+        // The all-label page-wide gutter layout determines the actual Y.
+        // Do not pin child IDs to the first row of their OCR rectangles.
+        const linkLen=(edgeOffset+3)/scale;
+        const linkValue=`${linkLen.toFixed(2)}px`;
+        if(chip.style.getPropertyValue('--pdf-chip-link')!==linkValue)
+          chip.style.setProperty('--pdf-chip-link',linkValue);
       });
       // Keep checkbox and full Block ID on ONE line without entering OCR
       // text, including at the default narrow iPad PDF zoom. The available
@@ -1018,34 +949,43 @@ export class PdfPreview {
     }
     this.avoidBlockChipCollisions();
   }
-  /** Move only the *labels* within their own outer paper gutter, never the
-   * source bboxes, focus rectangles, or page geometry. Nearby OCR image and
-   * text blocks often start at the same Y coordinate; simply going inline
-   * would cause their chips to collide. Stable page/side reading order gives
-   * each label a nonoverlapping row with at least 2px of separation.
-   */
+  /** Lay out parent AND child labels together on each page and side.
+   * Prefer a free Y row inside the original OCR bbox's vertical span.
+   * Only tightly clustered/short native bboxes need a short displacement;
+   * connector lines preserve which rectangle each label belongs to.
+   * The placement is deterministic, page-local and DOM-idempotent. */
   avoidBlockChipCollisions(pageIndex=null){
     const groups=new Map();
     for(const [id,node] of this.blockCoverageNodes){
       if(pageIndex!==null&&Number(node.dataset.pdfPage)!==pageIndex+1)continue;
       const page=node.parentElement;
-      const chip=node.querySelector('.ocr-pdf-block-ctrl');
-      if(!page||!chip||!page.classList.contains('page'))continue;
+      const parent=node.querySelector(':scope > .ocr-pdf-block-ctrl');
+      if(!page||!parent||!page.classList.contains('page'))continue;
       const key=`${node.dataset.pdfPage}:${node.dataset.gutter}`;
       if(!groups.has(key))groups.set(key,[]);
-      groups.get(key).push({id,node,chip,page,anchor:node.offsetTop,
-        height:chip.getBoundingClientRect().height});
+      const items=groups.get(key);
+      const from=node.offsetTop;
+      items.push({id,chip:parent,origin:from,
+        from,to:from+node.offsetHeight,
+        height:parent.getBoundingClientRect().height});
+      for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
+        const child=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
+        if(!child)continue;
+        const childFrom=from+fragment.offsetTop;
+        items.push({id:fragment.dataset.subblockId,chip:child,origin:childFrom,
+          from:childFrom,to:childFrom+fragment.offsetHeight,
+          height:child.getBoundingClientRect().height});
+      }
     }
     for(const items of groups.values()){
-      items.sort((a,b)=>a.anchor-b.anchor||a.id.localeCompare(b.id,undefined,{numeric:true}));
-      let nextTop=2;
-      const pageHeight=items[0].page.clientHeight;
-      for(const item of items){
-        const upper=Math.max(2,pageHeight-item.height-2);
-        const top=Math.min(upper,Math.max(item.anchor,nextTop));
-        const target=`${(top-item.anchor).toFixed(2)}px`;
+      const page=items[0]?.chip.closest('.page');
+      if(!page)continue;
+      const slots=layoutPDFGutterLabels(items,page.clientHeight);
+      const targets=new Map(items.map(item=>[item.id,item]));
+      for(const slot of slots){
+        const item=targets.get(slot.id);
+        const target=`${(slot.top-item.origin).toFixed(2)}px`;
         if(item.chip.style.top!==target)item.chip.style.top=target;
-        nextTop=top+item.height+2;
       }
     }
   }
@@ -1326,7 +1266,6 @@ export class PdfPreview {
     }
   }
   dispose(){
-    this.hideChildMenu();
     this.disposed=true;++this.textExtractToken;this.finishWarmup?.(false);
     clearTimeout(this.zoomRestoreTimer);
     if(this.zoomRestoreBehavior!==null){

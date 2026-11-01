@@ -58,35 +58,43 @@ try{
           `${name} parent must be the enclosing rectangle of child OCR boxes: ${coords}`));
       };
       await assertParentRect(table3,[68,89,538,458],'p3b0');
-      // At rest the PDF margin shows ONLY the green parent label: all blue
-      // child hit targets are hidden, not stacked on neighboring controls.
+      // ALL native parent/child chips are visible without interaction.
+      // Each label is laid out at a free Y anywhere along its own OCR bbox,
+      // not forcibly adjacent to the top edge. Parent and child chip share
+      // the SAME page-side collision solver and remain spatially distinct.
       assert.deepEqual(await table3.locator('.ocr-pdf-subblock-chip')
-        .evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).display)),['none','none']);
+        .evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).display)),['block','block']);
       assert.equal(await page.locator('.ocr-pdf-children-menu').count(),0);
-      const parent=table3.locator('.ocr-pdf-block-ctrl');
-      await parent.evaluate(el=>el.click());
-      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-children-option').length===2);
-      const menu=page.locator('.ocr-pdf-children-menu');
-      assert.deepEqual(await menu.locator('button').evaluateAll(nodes=>nodes.map(n=>n.dataset.subblockId)),
-        ['p3b0s0','p3b0s1']);
-      const menuBoxes=await menu.locator('button').evaluateAll(nodes=>nodes.map(n=>{
-        const r=n.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height};
-      }));
-      assert(menuBoxes.every(b=>b.height>=34),`${name} children need finger-size choices`);
-      assert(menuBoxes[1].top-menuBoxes[0].bottom>=3,
-        `${name} child choices must be visibly separated`);
-      // Child selection uses the SAME original s-index and exact CMD line.
-      const option=menu.locator('[data-subblock-id="p3b0s0"]');
-      // The isolated test server may mount this PDF instance beneath a
-      // visibility:hidden inactive preview host. Exercise the actual menu
-      // callback without assuming the surrounding workspace pane is active.
-      await option.evaluate(el=>el.click());
+      const positioned=await table3.evaluate(node=>{
+        const nodes=[node.querySelector(':scope > .ocr-pdf-block-ctrl'),
+          ...node.querySelectorAll('.ocr-pdf-subblock-chip')];
+        return nodes.map(el=>{
+          const r=el.getBoundingClientRect();
+          const box=el.classList.contains('ocr-pdf-block-ctrl')?node:
+            el.closest('.ocr-pdf-block-fragment');
+          const b=box.getBoundingClientRect();
+          return {id:el.textContent,top:r.top,bottom:r.bottom,
+            from:b.top,to:b.bottom,side:el.dataset.gutter,
+            visible:r.width>2&&r.height>3,link:Boolean(getComputedStyle(el,'::after').content!== 'none')};
+        });
+      });
+      assert(positioned.every(x=>x.visible),`${name} every parent and child label visible`);
+      assert(positioned.some(x=>x.id==='p3b0s1'&&x.top-x.from>20),
+        `${name} body label must be free to move down INSIDE its tall bbox`);
+      assert(positioned.every(x=>x.top>=x.from-2&&x.bottom<=x.to+2),
+        `${name} all p3b0 labels should fit inside their own Y ranges`);
+      for(let i=0;i<positioned.length;i++)for(let j=i+1;j<positioned.length;j++){
+        const a=positioned[i],b=positioned[j];
+        assert(a.bottom<=b.top-1||b.bottom<=a.top-1,
+          `${name} parent/child label collision ${a.id} vs ${b.id}`);
+      }
+      const childChip=table3.locator('.ocr-pdf-subblock-chip').first();
+      await childChip.evaluate(el=>el.click());
       await page.waitForFunction(async expected=>{
         const {viewStore}=await import('/view-store.js');
         return viewStore.getState().focusTarget?.sourceLine===expected&&
           document.querySelector('.ocr-pdf-status')?.textContent?.includes('已自动补标');
       },markerLine('p3b0s0'),{timeout:28000});
-      assert.equal(await menu.count(),0,'child picker disappears after selection');
       assert.equal(readFileSync(doc,'utf8'),original,'PDF child click must not save edits');
       for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
         const rects=await table3.evaluate((node,index)=>{

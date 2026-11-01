@@ -123,22 +123,14 @@
   outline:2px solid #eec45b;outline-offset:2px;
 }
 
-/* Dense child chips are kept as read-only geometry metadata but are NOT
- * visible hit targets. Select a green parent to open a single spacious list. */
-.ocr-pdf-block-fragment .ocr-pdf-subblock-chip{display:none;pointer-events:none}
-.ocr-pdf-children-menu{
-  position:absolute;z-index:30;pointer-events:auto;
-  display:flex;flex-direction:column;gap:4px;padding:8px;
-  border:1px solid #81a9b5;border-radius:7px;
-  background:#1d2b34;color:#e1edf3;box-shadow:0 5px 16px #000b;
+/* All original parent and child IDs are shown in the OUTER gutter.
+ * Their Y placement comes from one page-wide collision solver and may be
+ * anywhere along the corresponding original bbox, rather than at top-left. */
+.ocr-pdf-block-fragment .ocr-pdf-subblock-chip{display:block;pointer-events:auto}
+.ocr-pdf-block-fragment .ocr-pdf-subblock-chip::after{
+  content:"";position:absolute;top:50%;height:0;
+  width:var(--pdf-chip-link,5px);border-top:1px solid #8ab5ca;
+  pointer-events:none;
 }
-.ocr-pdf-children-heading{font-size:11px;line-height:17px;color:#bbd3df;padding:0 4px}
-.ocr-pdf-children-menu .ocr-pdf-children-option{
-  display:block;min-height:36px;width:100%;text-align:left;
-  font:600 12px/20px monospace;color:#ebf3fb;background:#304653;
-  border:1px solid #547489;border-radius:5px;padding:6px 9px;
-  cursor:pointer;touch-action:manipulation;white-space:nowrap;
-}
-.ocr-pdf-children-option:focus-visible,.ocr-pdf-children-option:hover{
-  background:#426577;outline:1px solid #e2c36b;
-}
+.ocr-pdf-subblock-chip[data-gutter="left"]::after{left:100%}
+.ocr-pdf-subblock-chip[data-gutter="right"]::after{right:100%}
