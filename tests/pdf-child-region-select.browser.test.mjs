@@ -94,8 +94,11 @@ try{
         const {viewStore}=await import('/view-store.js');
         return viewStore.getState().focusTarget?.sourceLine===expected&&
           document.querySelector('.ocr-pdf-status')?.textContent?.includes('已自动补标');
-      },markerLine('p3b0s0'),{timeout:28000});
+      },markerLine('p3b0s0')+1,{timeout:28000});
       assert.equal(readFileSync(doc,'utf8'),original,'PDF child click must not save edits');
+      assert.equal(await table3.locator('.ocr-pdf-subblock-chip').first()
+        .getAttribute('data-source-kind'),'content',
+        'a real OCR caption must indicate a real matching CMD text line');
       for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
         const rects=await table3.evaluate((node,index)=>{
           const frag=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
@@ -110,9 +113,25 @@ try{
         await page.waitForFunction(async expected=>{
           const {viewStore}=await import('/view-store.js');
           return viewStore.getState().focusTarget?.sourceLine===expected.line&&
-            document.querySelector('.ocr-pdf-status')?.textContent?.includes(`源码第 ${expected.line} 行`);
-        },{line:markerLine(id)},{timeout:16000});
+            document.querySelector('.ocr-pdf-status')?.textContent?.includes(`源码正文第 ${expected.line} 行`);
+        },{line:markerLine(id)+1},{timeout:16000});
       }
+      // Reverse navigation must match the CHILD content line as well as its
+      // HTML-comment marker. Previously it selected only the enclosing parent.
+      await page.evaluate(async line=>{
+        const {publishFocus}=await import('/view-store.js');
+        publishFocus({sourceLine:line,origin:'source',intent:'click'});
+      },markerLine('p3b0s0')+1);
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
+        ?.dataset.partRole==='caption',null,{timeout:16000});
+      await page.evaluate(async line=>{
+        const {publishFocus}=await import('/view-store.js');
+        publishFocus({sourceLine:line,origin:'source',intent:'click'});
+      },markerLine('p3b0s1')+1);
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
+        ?.dataset.partRole==='body'&&
+        document.querySelector('.ocr-pdf-region-overlay')?.dataset.partIndex==='1',
+        null,{timeout:16000});
       const block=page.locator('.ocr-pdf-block-cover[data-block-id="p4b0"]');
       await block.scrollIntoViewIfNeeded({timeout:25000});
       await page.waitForFunction(()=>document.querySelector(
@@ -122,6 +141,10 @@ try{
       assert.equal(await block.locator('.ocr-pdf-block-ctrl input').count(),1);
       assert.deepEqual(await block.locator(':scope > .ocr-pdf-block-fragment')
         .evaluateAll(nodes=>nodes.map(el=>el.dataset.partRole)),['caption','body','note']);
+      assert.deepEqual(await block.locator('.ocr-pdf-subblock-chip')
+        .evaluateAll(nodes=>nodes.map(el=>el.dataset.sourceKind)),
+        ['structure','structure','structure'],
+        'p4b0 caption/body/note have spatial bbox but no matching CMD OCR prose');
       const observations=[];
       const bboxFor=async(partIndex)=>block.evaluate((node,partIndex)=>{
         const region=partIndex<0?node:node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[partIndex];
@@ -141,6 +164,12 @@ try{
           const {viewStore}=await import('/view-store.js');
           return viewStore.getState().focusTarget?.sourceLine===expected;
         },markerLine(`p4b0s${partIndex}`),{timeout:16000});
+        const expectedId=`p4b0s${partIndex}`;
+        const displayed=await page.locator('.ocr-pdf-status').textContent();
+        assert(displayed.includes(`${expectedId} · 源码缺正文`),
+          `${name} ${expectedId} PDF bbox has ZERO MinerU OCR spans; do not claim content match`);
+        assert(displayed.includes(`第 ${markerLine(expectedId)} 行仅标签`),
+          `${name} ${expectedId} source focus must report structural-only marker accurately`);
         const overlay=page.locator('.ocr-pdf-region-overlay');
         assert.equal(await overlay.getAttribute('data-block-index'),'0');
         assert.equal(await overlay.getAttribute('data-pdf-page'),'5');

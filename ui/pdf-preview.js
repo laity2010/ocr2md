@@ -9,12 +9,18 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {viewStore,publishFocus} from './view-store.js';
 import './pdf-preview.css';
-import {blockAnchor,subblockAnchor,subblockId} from './mineru-anchors.js';
+import {subblockId} from './mineru-anchors.js';
+import {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const sourceKindHint=kind=>kind==='structure'?
+  ' · CMD 仅有结构标签，没有对应 OCR 正文':kind==='unmarked'?
+    ' · CMD 尚未标定对应子块':kind==='content'?
+      ' · CMD 有实际 OCR 正文':'';
+
 // CMD join annotations change logical grouping, never the sealed OCR pages or
 // their bbox geometry. Avoid invalidating every PDF control for this edit.
 const withoutJoinMarks=source=>source.replace(
@@ -36,23 +42,7 @@ export function pdfOverlayRect(region,viewport){
   return {left:x0/w*100,top:y0/h*100,width:(x1-x0)/w*100,height:(y1-y0)/h*100};
 }
 
-export function sourceBlocks(text){
-  const anchors=[];
-  for(const [index,line] of text.split('\n').entries()){
-    const anchor=blockAnchor(line);
-    if(anchor)anchors.push({...anchor,sourceLine:index+1});
-  }
-  return anchors;
-}
-/** Nested path marker is a source location, not a new top-level Block. */
-export function sourceSubblocks(source){
-  const rows=[];
-  for(const [i,line] of source.split('\n').entries()){
-    const mark=subblockAnchor(line);
-    if(mark)rows.push({...mark,sourceLine:i+1});
-  }
-  return rows;
-}
+export {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
 function sourceAnchor(anchors,line){
   let lo=0,hi=anchors.length-1,best=null;
   while(lo<=hi){const mid=(lo+hi)>>1;
@@ -148,6 +138,7 @@ export class PdfPreview {
         this.lastGeometrySource=canonical;
         this.anchors=sourceBlocks(source);
         this.subAnchors=sourceSubblocks(source);
+        this.updateChipContentIndicators();
         if(this.selected)void this.prepareSelectedPDFText();
         // A join/unjoin is one CM6 annotation line. Its text changes source
         // line offsets but not the original PDF geometry, PDF.js page tree,
@@ -190,7 +181,7 @@ export class PdfPreview {
     // received while hidden; the selection is already in PDF coordinates.
     if(this.revealPending)this.scheduleOverlay();
   }
-  setStatus(s){this.statusNode.textContent=s;}
+  setStatus(s){this.statusNode.textContent=s;this.statusNode.title=s;}
   async prepareSelectedPDFText(){
     const token=++this.textExtractToken;
     this.extractReady=null;
@@ -247,7 +238,26 @@ export class PdfPreview {
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
     this.subAnchors=sourceSubblocks(this.getMarkdown());
+    this.updateChipContentIndicators();
     this.scheduleOverlay();
+  }
+  /** A child may have a real PDF bbox but no original CMD prose.
+   * Mark only those *known* empty-source chips as structural-only, so a PDF
+   * label cannot imply a text match that the source does not contain. */
+  updateChipContentIndicators(){
+    const lookup=new Map(this.subAnchors.map(a=>
+      [subblockId(a.pageIndex,a.blockIndex,a.path),a]));
+    for(const node of this.blockCoverageNodes.values()){
+      for(const chip of node.querySelectorAll('.ocr-pdf-subblock-chip')){
+        const id=chip.parentElement?.dataset.subblockId;
+        const anchor=lookup.get(id);
+        const kind=!anchor?'unmarked':anchor.contentLine?'content':'structure';
+        if(chip.dataset.sourceKind!==kind)chip.dataset.sourceKind=kind;
+        const label=chip.parentElement?.title||id;
+        const title=label+sourceKindHint(kind);
+        if(chip.title!==title)chip.title=title;
+      }
+    }
   }
   async refreshGeometry(){
     const revision=++this.geometryRevision;
@@ -440,9 +450,16 @@ export class PdfPreview {
       this.setStatus(`${id} 没有独立 CMD 子块锚点，未使用父块行号代替`);
       return;
     }
-    publishFocus({sourceLine:child.sourceLine,origin:'pdf',
+    const targetLine=child.contentLine??child.sourceLine;
+    publishFocus({sourceLine:targetLine,origin:'pdf',
       elementId:`mineru:${pageIndex}:${blockIndex}:${key}`});
-    this.setStatus(`${id} → 源码第 ${child.sourceLine} 行 · ${annotated?'已自动补标，未保存，可 Undo':'已定位'}`);
+    const changed=annotated?' · 子块标签已补标、未保存，可 Undo':'';
+    if(child.contentLine){
+      this.setStatus(`${id} → 源码正文第 ${targetLine} 行（结构标签第 ${child.sourceLine} 行）${changed}`);
+    }else{
+      this.setStatus(`${id} · 源码缺正文（第 ${child.sourceLine} 行仅标签）${changed}`);
+      this.statusNode.title=`${id} 对应 MinerU 原始子块只有 bbox，没有 OCR 文字。源码第 ${child.sourceLine} 行只是结构标签；PDF 原文字层可用时，请点「提取文本」自行审阅和插入。`;
+    }
   }
   onClick(event){
     if(!this.ready||!(event.target instanceof Element)||
@@ -482,8 +499,10 @@ export class PdfPreview {
             this.setStatus('PDF 子块定位失败：'+error.message);
         });
     }else if(anchor){
-      this.setStatus(`p${pageIndex}b${chosen.blockIndex} · 父块已定位`);
-      publishFocus({sourceLine:anchor.sourceLine,origin:'pdf',
+      this.setStatus(anchor.contentLine
+        ?`p${pageIndex}b${chosen.blockIndex} · 父块源码第 ${anchor.contentLine} 行（标签第 ${anchor.sourceLine} 行）`
+        :`p${pageIndex}b${chosen.blockIndex} · 仅有父块结构标签，缺少对应 OCR 内容`);
+      publishFocus({sourceLine:anchor.contentLine??anchor.sourceLine,origin:'pdf',
         elementId:`mineru:${pageIndex}:${chosen.blockIndex}:parent`});
     }else this.setStatus(`p${pageIndex}b${chosen.blockIndex} · 源码缺少父块锚点`);
   }
@@ -900,7 +919,8 @@ export class PdfPreview {
         if(chip.getAttribute('aria-label')!==childLabel)
           chip.setAttribute('aria-label',childLabel);
         if(chip.textContent!==id)chip.textContent=id;
-        if(chip.title!==label)chip.title=label;
+        const title=label+sourceKindHint(chip.dataset.sourceKind);
+        if(chip.title!==title)chip.title=title;
         if(chip.dataset.gutter!==node.dataset.gutter)
           chip.dataset.gutter=node.dataset.gutter;
         const [sx0,sy0,sx1,sy1]=part.bbox,[bx0,by0,bx1,by1]=block.bbox;
@@ -948,6 +968,7 @@ export class PdfPreview {
       }
     }
     this.avoidBlockChipCollisions();
+    this.updateChipContentIndicators();
   }
   /** Lay out parent AND child labels together on each page and side.
    * Prefer a free Y row inside the original OCR bbox's vertical span.
@@ -1143,7 +1164,8 @@ export class PdfPreview {
       this.revealUntil=performance.now()+1700;
     }
     if(!this.ready){this.pendingFocus={line,explicit};return;}
-    const child=this.subAnchors.find(a=>a.sourceLine===line);
+    const child=this.subAnchors.find(a=>a.sourceLine===line||
+      (a.contentLine!==null&&line>=a.contentLine&&line<=a.contentEndLine));
     const source=child||sourceAnchor(this.anchors,line);
     if(!source)return;
     if(this.comparison){

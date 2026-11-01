@@ -134,3 +134,9 @@
 }
 .ocr-pdf-subblock-chip[data-gutter="left"]::after{left:100%}
 .ocr-pdf-subblock-chip[data-gutter="right"]::after{right:100%}
+
+/* Amber-dashed ID = a real PDF OCR bbox with a valid CMD structural anchor,
+ * but without Markdown prose/HTML/media. Never imply a content match. */
+.ocr-pdf-subblock-chip[data-source-kind="structure"]{
+  border-style:dashed;border-color:#e3b76a;color:#f9ddb4;
+}

@@ -1329,3 +1329,13 @@ INSERT INTO access_edges VALUES
  ('X-PDF-GUTTER-P19','P','P','ui/pdf-preview.js','layoutPDFGutterLabels(items,page.clientHeight)','P19','registered','page-wide parent and child gutter collision avoidance');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','synthetic page 5 caption/body/note geometry','all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
+
+-- CMD structural comments are provenance, not a claim that MinerU recognized
+-- any corresponding prose. PDF should distinguish actual content lines from
+-- structural-only anchors for metadata-only source blocks.
+INSERT INTO apis VALUES
+ ('P20','P','sourceSubblocks','ui/pdf-source-locations.js','export','current Markdown with native CMD child tags','immutable-read-only location records with sourceLine and optional contentLine','empty OCR child has no contentLine; source tag never impersonates recognized prose',1);
+INSERT INTO access_edges VALUES
+ ('X-PDF-CONTENT-P20','P','P','ui/pdf-preview.js','sourceSubblocks(this.getMarkdown())','P20','registered','PDF child focus distinguishes real child Markdown content from empty OCR source');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-CONTENT-P20','P20','tests/pdf-source-locations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 original parent locations and 43 original child locations; p3b0s0 contentLine is actual caption prose and p3b0s1 actual HTML; all p4b0s0/s1/s2 have NULL contentLine','direct');
