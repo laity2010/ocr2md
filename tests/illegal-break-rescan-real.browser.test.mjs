@@ -58,7 +58,22 @@ try{
      assert.equal(readFileSync(doc,'utf8'),seeded,'opening old mark modified persisted source');
      await page.locator('#ag-functions-toggle').click();
      await page.locator('#illegal-break-rescan').click();
-     await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===2,null,{timeout:55000});
+     try{
+       await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===2,null,{timeout:55000});
+     }catch(error){
+       // Preserve the exact original FAIL. Gather source/Worker/AG evidence so
+       // a Linux-only timeout cannot be misclassified as successful rescan.
+       const observed=await page.evaluate(()=>({
+         mode:document.querySelector('#module-select')?.value,
+         status:document.querySelector('#status')?.textContent,
+         agStatus:document.querySelector('.ocr-illegal-break-state')?.textContent,
+         agRows:document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length,
+         cmdTags:(window.__v6cm6?.view?.state.doc.toString().match(/<!--ocr2md:illegal-break/g)||[]).length,
+         dispatchedWorkerScans:window.__rescanCount,
+       })).catch(e=>({probeError:String(e)}));
+       console.error('ILLEGAL_BREAK_RESCAN_TIMEOUT_EVIDENCE',label,JSON.stringify(observed));
+       throw error;
+     }
      assert.equal(await page.evaluate(()=>window.__rescanCount),1,'explicit action should scan exactly once');
      const joined=(await page.locator('.ocr-illegal-break-grid .ag-cell[col-id="joined"]').allTextContents()).sort();
      assert.deepEqual(joined,['about 3','latest 13F']);
