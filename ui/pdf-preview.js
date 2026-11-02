@@ -540,8 +540,11 @@ export class PdfPreview {
     // The union parent's whitespace is not a native `table_body` child.
     // Only an actual hit on the child bbox may request its source marker.
     const chosenPath=chosen.partIndex==null?null:chosen.path;
+    // Preserve the immutable child path, not merely its position in a
+    // dynamically reconstructed list. Geometry corrections may recover a
+    // previously invisible native child and shift neighboring list indices.
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
-      partIndex:chosen.partIndex};
+      partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null};
     this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
     const sequence=++this.childFocusSequence;
@@ -566,7 +569,10 @@ export class PdfPreview {
     const chosen=this.selected;if(!chosen)return null;
     const page=this.map[chosen.pageIndex],region=page?.regions.find(r=>r.blockIndex===chosen.blockIndex);
     if(!page||!region)return null;
-    const part=chosen.partIndex==null?null:region.subRegions?.[chosen.partIndex];
+    const part=chosen.partPath?.length?region.subRegions?.find(child=>
+      child.path.length===chosen.partPath.length&&
+      child.path.every((part,i)=>part===chosen.partPath[i])):
+      chosen.partIndex==null?null:region.subRegions?.[chosen.partIndex];
     if(chosen.partIndex!=null&&!part)return null;
     const id=part?subblockId(chosen.pageIndex,chosen.blockIndex,part.path):
       `p${chosen.pageIndex}b${chosen.blockIndex}`;
