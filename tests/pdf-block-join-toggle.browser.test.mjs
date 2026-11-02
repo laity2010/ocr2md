@@ -181,8 +181,21 @@ try{
    const tapOnce=tag=>mobile?tag.tap({timeout:16000}):tag.click({timeout:16000});
    const tapThree=async tag=>{
      if(mobile){
-       // Genuine WebKit touch events: each click.detail stays 1 on iPad.
-       for(let i=0;i<3;i++)await tag.tap({timeout:16000});
+       // One real touch establishes actionability. Subsequent real physical
+       // touches must NOT wait for Playwright to re-evaluate the whole PDF.js
+       // page's render/actionability state: three awaited locator.tap() calls
+       // can introduce 2299ms between clicks even though the gesture is a
+       // deliberate rapid triple tap. touchscreen.tap emits genuine trusted
+       // touch events; unlike .evaluate(el=>el.click()), it does not bypass
+       // native event dispatch or the application's gesture recognizer.
+       await tag.tap({timeout:16000});
+       for(let i=1;i<3;i++){
+         const at=await tag.evaluate(el=>{
+           const r=el.getBoundingClientRect();
+           return {x:(r.left+r.right)/2,y:(r.top+r.bottom)/2};
+         });
+         await page.touchscreen.tap(at.x,at.y);
+       }
      }else await tag.click({clickCount:3,delay:60,timeout:16000});
    };
    // First tap/checkbox tap navigates the PARENT, never silently joins it.
@@ -265,6 +278,14 @@ try{
      throw error;
    }
    assert(await empty.isChecked());
+   if(mobile){
+     const clickTimes=await page.evaluate(()=>window.__emptyCtrlClicks||[]);
+     assert.equal(clickTimes.length,3,'real WebKit triple tap must dispatch exactly 3 click events');
+     const gaps=[clickTimes[1].at-clickTimes[0].at,clickTimes[2].at-clickTimes[1].at];
+     assert(gaps.every(ms=>ms>0&&ms<=1850),
+       `the browser test must deliver real touch taps at intended triple cadence: ${JSON.stringify(gaps)}`);
+     console.log('PDF_NATIVE_TOUCH_TRIPLE_CADENCE_PASS',name,{gaps});
+   }
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] .ocr-pdf-block-ctrl span').innerText(),'p2b9');
 
    // The actual p9b0 continues p8b8. Its unchecked label must use the
