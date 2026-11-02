@@ -62,7 +62,11 @@ const scopedField=StateField.define({
     // Position changes inside the chapter map without constructing a second
     // CMDocument or re-parsing the full 300KB source on every keystroke.
     if(scope&&transaction.docChanged){
-      const agAll=transaction.annotation(agAllDocumentTransaction)===true;
+      // Native CM6 Undo/Redo must be able to reverse an already authorized
+      // whole-document CMD transaction even while a chapter is selected.
+      // It is the history command, not a fresh arbitrary out-of-scope edit.
+      const agAll=transaction.annotation(agAllDocumentTransaction)===true||
+        transaction.isUserEvent('undo')||transaction.isUserEvent('redo');
       let outside=false;
       transaction.changes.iterChangedRanges((fromA,toA)=>{
         if(fromA<scope.from||toA>scope.to)outside=true;
@@ -87,7 +91,8 @@ function scopeFor(state){return state.field(scopedField,false);}
 const preventCrossChapterEdit=EditorState.changeFilter.of(tr=>{
   const scope=scopeFor(tr.startState);
   if(!scope)return true;
-  if(tr.annotation(agAllDocumentTransaction)===true)return true;
+  if(tr.annotation(agAllDocumentTransaction)===true||
+     tr.isUserEvent('undo')||tr.isUserEvent('redo'))return true;
   let inside=true;
   tr.changes.iterChangedRanges((a,b)=>{
     if(a<scope.from||b>scope.to||(a===b&&a===scope.to))inside=false;

@@ -84,9 +84,41 @@ export function createCMDTransactionPort(cmd){
       plan.edits,{source,allowAll:true});
     return {changed:1,sourceId,targetId,placement,pageIndex:plan.pageIndex,shift:plan.shift};
   };
-  const commitChainPlan=plan=>{
-    if(!plan.changed)return plan;
+  const commitChainPlan=(plan,expectedSource=null)=>{
     const source=cmd.readSource();
+    if(expectedSource!==null&&source!==expectedSource)
+      throw Error('CMD BC source snapshot stale; rescan before applying');
+    if(!plan.changed)return plan;
+    if(!Array.isArray(plan.edits)||plan.changed!==plan.edits.length)
+      throw Error('CMD BC plan has inconsistent edit count');
+    const before=readCMDBlockChains(source);
+    if(before.invalid.length)throw Error('CMD BC source has invalid annotations');
+    const byStart=new Map(before.atoms.map(atom=>[atom.from,atom.rawLine]));
+    const sorted=[...plan.edits].sort((a,b)=>a.from-b.from);
+    let cursor=-1;
+    for(const edit of sorted){
+      if(!coordinates(edit.from,edit.to,source.length)||edit.from<cursor||
+        source.slice(edit.from,edit.to)!==edit.expected||typeof edit.insert!=='string')
+        throw Error('CMD BC planned edit is stale or overlaps');
+      cursor=edit.to;
+      const original=byStart.get(edit.from);
+      const isAnchor=original!==undefined&&edit.expected===original&&
+        /^\s*(?:>\s*)*<!-- cmd:block:v1 /.test(edit.insert);
+      const oldJoin=/^\s*(?:>\s*)*<!-- ocr2md:block-join:v1 [^\n]* -->\n$/.test(edit.expected);
+      if(!isAnchor&&!(oldJoin&&edit.insert===''))
+        throw Error('CMD BC plan tried to edit non-annotation Markdown');
+    }
+    const candidate=[...sorted].reverse().reduce((text,edit)=>
+      text.slice(0,edit.from)+edit.insert+text.slice(edit.to),source);
+    const after=readCMDBlockChains(candidate);
+    if(after.invalid.length||after.atoms.length!==before.atoms.length||
+      before.atoms.some((atom,i)=>after.atoms[i].id!==atom.id))
+      throw Error('CMD BC plan changed PBS identities or broke chain membership');
+    const sourceTail=source.indexOf('<!-- minerujson:source:v1:');
+    const resultTail=candidate.indexOf('<!-- minerujson:source:v1:');
+    if((sourceTail<0)!==(resultTail<0)||
+      sourceTail>=0&&source.slice(sourceTail)!==candidate.slice(resultTail))
+      throw Error('CMD BC plan altered sealed MinerU evidence');
     commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
       plan.edits,{source,allowAll:true});
     return plan;
@@ -97,14 +129,17 @@ export function createCMDTransactionPort(cmd){
     queryLayout:()=>cmd.queryLayout(),
     queryBlockAnalysis:()=>cmd.queryBlockAnalysis(),
     queryBlockChains:()=>cmd.queryBlockChains(),
-    arrangeBlockChains:(chains)=>commitChainPlan(planCMDBlockChainArrangement(cmd.readSource(),chains)),
-    migrateLegacyBlockChains:()=>commitChainPlan(planCMDMigrateLegacyBlockChains(cmd.readSource())),
-    mergeBlockChains:(destinationId,sourceId)=>commitChainPlan(
-      planCMDMergeBlockChains(cmd.readSource(),destinationId,sourceId)),
-    splitBlockChainAt:memberId=>commitChainPlan(
-      planCMDSplitBlockChain(cmd.readSource(),memberId)),
-    moveBlockChainMember:(memberId,targetId,placement='after')=>commitChainPlan(
-      planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement)),
+    arrangeBlockChains:(chains,options={})=>commitChainPlan(
+      planCMDBlockChainArrangement(cmd.readSource(),chains),options.expectedSource??null),
+    migrateLegacyBlockChains:(options={})=>commitChainPlan(
+      planCMDMigrateLegacyBlockChains(cmd.readSource()),options.expectedSource??null),
+    mergeBlockChains:(destinationId,sourceId,options={})=>commitChainPlan(
+      planCMDMergeBlockChains(cmd.readSource(),destinationId,sourceId),options.expectedSource??null),
+    splitBlockChainAt:(memberId,options={})=>commitChainPlan(
+      planCMDSplitBlockChain(cmd.readSource(),memberId),options.expectedSource??null),
+    moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
+      planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
+      options.expectedSource??null),
     async setBlockJoin(targetId,join){
       const source=cmd.readSource();
       const current=readCMDBlockChains(source);

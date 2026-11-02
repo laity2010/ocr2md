@@ -1466,3 +1466,12 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP2-C69','C69','tests/cmd-block-chains-wp2.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit BC merge edits in one CMD transaction and Undo/Redo restores exact source','integration'),
  ('TC-WP2-C70','C70','tests/cmd-block-chains-wp2.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit BC split is one CMD transaction with one Undo','integration'),
  ('TC-WP2-C71','C71','tests/cmd-block-chains-wp2.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit logical member reorder is one CMD transaction without source body movement','integration');
+
+
+-- WP3 source-guarded BC transactions and chapter-safe history, with live
+-- loopback HTTP CAS acceptance (no implicit save or data duplicate).
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP3-C67','C67','tests/cmd-block-chains-wp3.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and WebKit CMD BC exact-source planned edits, stale source refusal, invalid BC refusal and preserved source identities across virtual chapter','integration'),
+ ('TC-WP3-C69','C69','tests/cmd-block-chains-wp3.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit cross-chapter authorized BC merge, native Undo/Redo restores exact original and shared PDF predecessor','integration'),
+ ('TC-WP3-C70','C70','tests/cmd-bc-save-reload.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','isolated actual authenticated HTTP save/load, merge and split BC, original OCR byte-exact and stale save HTTP 412/428, unauthenticated 403','integration'),
+ ('TC-WP3-C68','C68','tests/cmd-bc-save-reload.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','real isolated HTTP legacy PBS migration persisted and reloaded, original OCR unchanged','integration');
