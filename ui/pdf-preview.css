@@ -127,8 +127,8 @@
 .ocr-pdf-extract-text:disabled{opacity:.38;cursor:default}
 
 /* Clearly exposed native-child annotation; no duplicate Block checkbox. */
-.ocr-pdf-mark-subblocks{white-space:nowrap}
-.ocr-pdf-mark-subblocks:disabled{opacity:.5;cursor:wait}
+.ocr-pdf-promote-child{white-space:nowrap}
+.ocr-pdf-promote-child:disabled{opacity:.4;cursor:default}
 
 /* pNbMsN is a REAL MinerU child index, placed beside its own bbox, outside
  * the document print area. No independent checkbox or source mutation. */
@@ -190,3 +190,5 @@
 .ocr-pdf-bbox-move{top:50%;left:50%;transform:translate(-50%,-50%);
   width:26px;height:26px;font-size:19px;line-height:17px;cursor:move}
 .ocr-pdf-bbox-edit[aria-pressed="true"]{background:#72532a;color:#ffe2af}
+
+.ocr-pdf-block-fragment[hidden]{display:none!important}

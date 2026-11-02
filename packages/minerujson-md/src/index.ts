@@ -355,12 +355,22 @@ export function toMineruJSON(markdown: string): string {
   // Internally normalize this one annotation syntax for the existing proven
   // strict parent/child round-trip validator. Never modify the user's source.
   const origins: {id:string;origin:string;page:number;parent:number;child:number;source:number}[]=[];
+  const promotions: {id:string;origin:string;page:number;parent:number;child:number;newParent:number}[]=[];
   markdown=markdown.replace(/^(\s*(?:>\s*)*<!-- cmd:block:v1 )id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"((?: [a-z]+="[^"]*")* -->)[ \t]*$/gm,
     (_all,prefix,id,rest)=>{
       const match=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/.exec(id);
       assert(match, 'invalid CMD PBS identity');
-      const provenance=/ origin="(p\d+b\d+)"/.exec(rest);
+      const provenance=/ origin="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"/.exec(rest);
       if(provenance){
+        const promoted=/^p(0|[1-9]\d*)b(0|[1-9]\d*)s(0|[1-9]\d*)$/.exec(provenance[1]);
+        if(promoted){
+          assert(match[3]===undefined&&promoted[1]===match[1]&&
+            rest.indexOf(' origin="')===rest.lastIndexOf(' origin="'),
+            'invalid promoted PBS provenance');
+          promotions.push({id,origin:provenance[1],page:Number(match[1]),
+            parent:Number(promoted[2]),child:Number(promoted[3]),newParent:Number(match[2])});
+          return `${prefix}p="${promoted[1]}" b="${promoted[2]}" s="${promoted[3]}"${rest.replace(provenance[0],'')}`;
+        }
         const original=/^p(0|[1-9]\d*)b(0|[1-9]\d*)$/.exec(provenance[1]);
         assert(original&&match[3]!==undefined&&!match[3].includes('.')&&
           original[1]===match[1]&&rest.indexOf(' origin="')===rest.lastIndexOf(' origin="'),
@@ -427,6 +437,20 @@ export function toMineruJSON(markdown: string): string {
   // content against the immutable MinerU archive, reconstruct ONLY an
   // ephemeral original-order view. Never mutate the user's edited Markdown,
   // bypass body validation, or reserialize the sealed OCR metadata.
+  // A promoted native child retains the OCR child identity while the
+  // visible Markdown scope moves to its page's end. Validate exact original
+  // ownership and monotone page-end numbering before inverse projection.
+  for(const promoted of promotions){
+    const page=data.pdf_info[promoted.page];
+    const block=page?.para_blocks[promoted.parent];
+    assert(block?.blocks?.[promoted.child]&&
+      promoted.newParent>=page.para_blocks.length&&
+      !promotions.some(other=>other!==promoted&&other.origin===promoted.origin),
+      'promoted child has invalid original OCR source or new page index');
+    const expected=page.para_blocks.length+promotions.filter(other=>
+      other.page===promoted.page&&other.newParent<promoted.newParent).length;
+    assert(promoted.newParent===expected,'promoted parents must use consecutive page-end PBS IDs');
+  }
   for(const alias of origins){
     const blocks=data.pdf_info[alias.page]?.para_blocks||[];
     assert(alias.source+1<blocks.length,
@@ -447,6 +471,38 @@ export function toMineruJSON(markdown: string): string {
     assert(following.length===1,'relocated source successor missing');
     const destination=following[0].index!;
     visible=remaining.slice(0,destination)+segment+remaining.slice(destination);
+  }
+  // Inverse-project promoted children only for the strict original-OCR
+  // round-trip comparison. The editable Markdown keeps its new child->parent
+  // page-end location; the recovered native path is never persisted.
+  for(const promoted of [...promotions].sort((a,b)=>a.page-b.page||a.parent-b.parent||a.child-b.child)){
+    const allMarkers=()=>[...visible.matchAll(blockStart),...visible.matchAll(cmdChildAudit)]
+      .sort((a,b)=>a.index!-b.index!);
+    const child=allMarkers().filter(m=>{
+      const line=m[0];
+      return line.includes(`p="${promoted.page}" b="${promoted.parent}" s="${promoted.child}"`);
+    });
+    assert(child.length===1,'promoted child source must be unique');
+    const start=child[0].index!;
+    const next=allMarkers().find(m=>m.index!>start);
+    let end=next?.index??visible.length;
+    const evidence=visible.slice(start,end).search(/<!-- minerujson:(?:page|source):v1:/);
+    if(evidence>=0)end=start+evidence;
+    assert(end>start,'promoted child has empty source scope');
+    const segment=visible.slice(start,end);
+    const remaining=visible.slice(0,start)+visible.slice(end);
+    const root=[...remaining.matchAll(blockStart)].filter(m=>
+      Number(m[2]??m[4])===promoted.page&&Number(m[3]??m[5])===promoted.parent);
+    assert(root.length===1,'promoted source original parent missing');
+    const all=[...remaining.matchAll(blockStart),...remaining.matchAll(cmdChildAudit)]
+      .sort((a,b)=>a.index!-b.index!);
+    const succeeding=all.find(m=>m.index!>root[0].index!&&(
+      m[0].includes(`p="${promoted.page}" b="${promoted.parent}" s="${promoted.child+1}"`)||
+      (m[2]!==undefined||m[4]!==undefined)&&(
+        Number(m[2]??m[4])>promoted.page||
+        Number(m[2]??m[4])===promoted.page&&Number(m[3]??m[5])>promoted.parent)));
+    assert(succeeding,'promoted original source successor missing');
+    visible=remaining.slice(0,succeeding.index!)+segment+remaining.slice(succeeding.index!);
   }
   const markers = [...visible.matchAll(blockStart)];
   const total = data.pdf_info.reduce((n,page)=>n+page.para_blocks.length,0);

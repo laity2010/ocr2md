@@ -12,7 +12,7 @@
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,
-  planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDMergeBlockChains,
+  planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDPromotePBSChild,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDPDFBBoxEdit} from './cmd-pdf-bbox.js';
@@ -166,6 +166,32 @@ export function createCMDTransactionPort(cmd){
       const tail=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
       if(!next.includes('<!-- minerujson:source:v1:')||tail(next)!==tail(source))
         throw Error('Reparent cannot modify sealed OCR evidence');
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    },
+    promotePDFChild(childId,options={}){
+      const source=cmd.readSource();
+      if(options.expectedSource!==undefined&&source!==options.expectedSource)
+        throw Error('PBS child promotion snapshot stale');
+      const before=readCMDBlockChains(source);
+      const plan=planCMDPromotePBSChild(source,childId);
+      if(plan.changed!==2||plan.edits.length!==2)
+        throw Error('Promotion requires one atomic CMD scope move');
+      const next=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((text,edit)=>{
+        if(source.slice(edit.from,edit.to)!==edit.expected)
+          throw Error('Child promotion source was changed');
+        return text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
+      },source);
+      const after=readCMDBlockChains(next);
+      const origins=model=>model.atoms.map(a=>a.origin).sort().join('\n');
+      if(after.invalid.length||after.atoms.length!==before.atoms.length||
+        origins(after)!==origins(before)||
+        !after.atoms.some(a=>a.id===plan.newId&&a.origin===childId&&a.kind==='parent'))
+        throw Error('Promotion changed sealed OCR atom identity or count');
+      const archive=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
+      if(!next.includes('<!-- minerujson:source:v1:')||archive(source)!==archive(next))
+        throw Error('Promotion cannot modify original OCR archive');
       commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
         plan.edits,{source,allowAll:true});
       return plan;

@@ -55,7 +55,8 @@ export class PdfPreview {
     onInsertPDFText=()=>Promise.reject(Error('CMD 尚未准备好')),
     onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好')),
     onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好')),
-    onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好'))){
+    onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好')),
+    onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -65,6 +66,7 @@ export class PdfPreview {
     this.onMarkSubblocks=onMarkSubblocks;
     this.onPDFBBox=onPDFBBox;
     this.onBlockReparent=onBlockReparent;
+    this.onPromoteChild=onPromoteChild;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -73,9 +75,7 @@ export class PdfPreview {
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
       <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；插入源码窗当前光标位置，不替换原文；Undo 可撤销">提取文本</button>
-      <button class="ocr-pdf-bbox-edit" type="button" title="点击一个 PDF 父块或子块后，拖动框角或中心修正覆盖坐标；CMD 未保存，可 Undo" aria-pressed="false">修正覆盖框</button>
-      <button class="ocr-pdf-bbox-reset" type="button" disabled title="清除选中 PBS 的人工覆盖坐标，恢复原始 OCR 坐标">恢复原框</button>
-      <button class="ocr-pdf-mark-subblocks" type="button" title="补齐 MinerU 原始父子块类型和源码锚点，不改现有正文；一次 Undo，可手动保存">补标子块</button>
+      <button class="ocr-pdf-promote-child" type="button" disabled title="请先点击 PDF 的原生子块标签，再将该子块独立为当前页末尾的新父块">独立子块</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -90,17 +90,8 @@ export class PdfPreview {
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
     this.extractButton=this.toolbar.querySelector('.ocr-pdf-extract-text');
     this.extractButton.addEventListener('click',()=>void this.insertSelectedPDFText());
-    this.bboxButton=this.toolbar.querySelector('.ocr-pdf-bbox-edit');
-    this.bboxReset=this.toolbar.querySelector('.ocr-pdf-bbox-reset');
-    this.bboxButton.addEventListener('click',()=>{
-      this.bboxEditing=!this.bboxEditing;
-      this.bboxButton.setAttribute('aria-pressed',String(this.bboxEditing));
-      this.drawBBoxEditor();
-      if(this.bboxEditing&&!this.selected)this.setStatus('先点击 PDF 覆盖块或子块，再拖动框角／中心修正');
-    });
-    this.bboxReset.addEventListener('click',()=>void this.resetSelectedBBox());
-    this.markButton=this.toolbar.querySelector('.ocr-pdf-mark-subblocks');
-    this.markButton.addEventListener('click',()=>void this.markOriginalSubblocks());
+    this.promoteButton=this.toolbar.querySelector('.ocr-pdf-promote-child');
+    this.promoteButton.addEventListener('click',()=>void this.promoteSelectedChild());
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
     this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
@@ -174,6 +165,7 @@ export class PdfPreview {
         this.lastGeometrySource=canonical;
         this.anchors=sourceBlocks(source);
         this.subAnchors=sourceSubblocks(source);
+        this.updatePromoteButton();
         this.updateChipContentIndicators();
         if(this.selected)void this.prepareSelectedPDFText();
         // A join/unjoin is one CM6 annotation line. Its text changes source
@@ -248,15 +240,43 @@ export class PdfPreview {
     }
   }
   async markOriginalSubblocks(){
-    if(this.markButton.disabled||this.disposed)return;
-    this.markButton.disabled=true;
+    if(this.disposed)return;
     try{
       const result=await this.onMarkSubblocks();
       this.setStatus(result?.changed
         ?`已补标 ${result.inserted} 个原始子块 · 未保存，可一次 Undo`
         :`子块标签已完整（${result?.existing??0} 个）`);
     }catch(error){this.setStatus('子块补标失败：'+error.message);}
-    finally{if(!this.disposed)this.markButton.disabled=false;}
+    finally{/* PDF toolbar no longer exposes the legacy mark action. */}
+  }
+  selectedNativeChildId(){
+    const chosen=this.selected;
+    if(!chosen||chosen.partPath?.length!==1||chosen.partIndex==null)return null;
+    const id=subblockId(chosen.pageIndex,chosen.blockIndex,chosen.partPath);
+    const current=this.getMarkdown();
+    // Button must remain off once this original native child was promoted.
+    return current.includes(`<!-- cmd:block:v1 id="${id}"`)&&
+      !current.includes(`origin="${id}"`)?id:null;
+  }
+  updatePromoteButton(){
+    if(!this.promoteButton)return;
+    const id=this.selectedNativeChildId();
+    this.promoteButton.disabled=!id;
+    this.promoteButton.title=id?`${id} → 当前 PDF 页末尾的新独立父块；一次 Undo 可恢复`:
+      '请先点击 PDF 原生子块标签，已独立的子块不可重复操作';
+  }
+  async promoteSelectedChild(){
+    const id=this.selectedNativeChildId();
+    if(!id||this.promoteButton.disabled||this.disposed)return;
+    this.promoteButton.disabled=true;
+    try{
+      const result=await this.onPromoteChild(id);
+      if(result?.changed){
+        this.selected=null;
+        this.setStatus(`✓ ${id} → ${result.newId} · 页末独立父块 · Undo 可撤销`);
+      }
+    }catch(error){this.setStatus('独立子块失败：'+error.message);}
+    finally{if(!this.disposed)this.updatePromoteButton();}
   }
   async insertSelectedPDFText(){
     const item=this.extractReady;
@@ -491,10 +511,8 @@ export class PdfPreview {
     let annotated=false;
     if(!child){
       if(!this.childMarkerPromise){
-        this.markButton.disabled=true;
         this.childMarkerPromise=Promise.resolve().then(()=>this.onMarkSubblocks())
-          .finally(()=>{this.childMarkerPromise=null;
-            if(!this.disposed)this.markButton.disabled=false;});
+          .finally(()=>{this.childMarkerPromise=null;});
       }
       const result=await this.childMarkerPromise;
       annotated=Boolean(result?.changed);
@@ -553,6 +571,7 @@ export class PdfPreview {
     // previously invisible native child and shift neighboring list indices.
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
       partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null};
+    this.updatePromoteButton();
     this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
     const sequence=++this.childFocusSequence;
@@ -592,7 +611,7 @@ export class PdfPreview {
   async resetSelectedBBox(){
     const current=this.chosenBBox();if(!current||this.disposed)return;
     const snapshot=this.getMarkdown();
-    this.bboxReset.disabled=true;
+    if(this.bboxReset)this.bboxReset.disabled=true;
     try{
       const result=await this.onPDFBBox(current.id,null,snapshot);
       this.setStatus(result.changed?`${current.id} 已清除人工覆盖框 · 可 Undo`:
@@ -605,7 +624,7 @@ export class PdfPreview {
     this.bboxGesture?.dispose();this.bboxGesture=null;
     this.bboxNode=null;
     const current=this.chosenBBox();
-    this.bboxReset.disabled=!current||!this.bboxEditing;
+    if(this.bboxReset)this.bboxReset.disabled=!current||!this.bboxEditing;
     if(!this.bboxEditing||!current||!this.ready||this.disposed)return;
     const page=this.viewer?.getPageView(current.pageIndex);
     if(!page?.div||!this.pages.contains(page.div))return;
@@ -624,8 +643,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})=>
-        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})):[];
+      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted})=>
+        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted})):[];
     const prior=this.blockCoverageRows;
     this.blockCoverageRows=next;
     // Editing one CMD join annotates only the target Block. The geometry and
@@ -633,7 +652,7 @@ export class PdfPreview {
     // reset their checked values, or relayout other pages on every click.
     const sameGeometry=prior.length===next.length&&prior.every((old,i)=>
       old.id===next[i].id&&old.pageIndex===next[i].pageIndex&&
-      old.blockIndex===next[i].blockIndex);
+      old.blockIndex===next[i].blockIndex&&old.promoted===next[i].promoted);
     if(!sameGeometry){this.paintBlockCoverage();return;}
     const pages=new Set();
     for(let i=0;i<next.length;i++){
@@ -669,8 +688,9 @@ export class PdfPreview {
     if(chip.title!==chipTitle)chip.title=chipTitle;
     const aria=`来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
     if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
-    const isCorrectedChild=Boolean(row.origin&&row.origin!==row.id);
+    const isCorrectedChild=Boolean(row.origin&&row.origin!==row.id&&!row.promoted);
     node.classList.toggle('ocr-pdf-block-is-child',isCorrectedChild);
+    node.classList.toggle('ocr-pdf-block-is-promoted',Boolean(row.promoted));
     // This physical OCR rectangle now represents a logical child, not a
     // second parent. The original physical hitbox and provenance remain.
     if(isCorrectedChild){
@@ -689,7 +709,7 @@ export class PdfPreview {
         const block=region?.regions?.find(b=>b.blockIndex===row.blockIndex);
         const side=node.dataset.gutter;
         if(block){
-          const [x0,,x1]=block.bbox;
+          const [x0,,x1]=row.promoted?row.bbox:block.bbox;
           const margin=side==='left'?x0:region.pageSize[0]-x1;
           const gutterPixels=page.clientWidth*margin/region.pageSize[0];
           const nominalWidth=20+logical.length*5.5;
@@ -936,7 +956,8 @@ export class PdfPreview {
       const block=region?.regions.find(b=>b.blockIndex===row.blockIndex);
       if(!page?.div||!this.pages.contains(page.div)||!block)continue;
       let rect;
-      try{rect=pdfOverlayRect({...block,pageSize:region.pageSize},
+      try{rect=pdfOverlayRect({...block,bbox:row.promoted?row.bbox:block.bbox,
+        pageSize:region.pageSize},
         {width:region.pageSize[0],height:region.pageSize[1]});}
       catch{continue;} // Invalid geometry is never painted as covered.
       let node=this.blockCoverageNodes.get(row.id);
@@ -990,7 +1011,13 @@ export class PdfPreview {
           if(tapCount===3){tapCount=0;lastTap=0;firstTap=0;void toggle();return;}
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
-          this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
+          if(row.promoted){
+            const original=row.origin.match(/^p(\d+)b(\d+)s(\d+)$/);
+            const child=this.map[row.pageIndex]?.regions.find(r=>r.blockIndex===row.blockIndex)
+              ?.subRegions.findIndex(r=>r.path.length===1&&r.path[0]===Number(original?.[3]));
+            this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
+              partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent'});
+          }else this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
             partIndex:null,path:null,role:'parent'});
 
         });
@@ -1009,7 +1036,7 @@ export class PdfPreview {
       // the outer paper gutter, never the inter-column gap: left-column
       // blocks go to the left; right-column blocks go to the right.
       // A full-width block defaults to the wider outer side margin.
-      const [x0,,x1]=block.bbox;
+      const [x0,,x1]=row.promoted?row.bbox:block.bbox;
       const pageWidth=region.pageSize[0];
       const leftSide=(x0+x1)/2<=pageWidth/2;
       const fullWidth=(x1-x0)/pageWidth>.65;
@@ -1025,7 +1052,7 @@ export class PdfPreview {
       // Draw exactly one native child chip per original MinerU blocks[] bbox.
       // Child chips have no checkbox; parent join/move controls stay unchanged.
       // Nested wrappers keep the original page coordinate system on zoom.
-      const parts=block.subRegions||[];
+      const parts=row.promoted?[]:block.subRegions||[];
       const existing=[...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')];
       existing.slice(parts.length).forEach(extra=>extra.remove());
       parts.forEach((part,i)=>{
@@ -1040,6 +1067,7 @@ export class PdfPreview {
         const label=`${id} · ${part.type} · ${kind}`;
         if(fragment.title!==label)fragment.title=label;
         if(fragment.dataset.subblockId!==id)fragment.dataset.subblockId=id;
+        fragment.hidden=this.blockCoverageRows.some(r=>r.promoted&&r.origin===id);
         if(fragment.dataset.partType!==part.type)fragment.dataset.partType=part.type;
         if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;
         let chip=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
@@ -1138,7 +1166,7 @@ export class PdfPreview {
         height:parent.getBoundingClientRect().height});
       for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
         const child=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
-        if(!child)continue;
+        if(!child||fragment.hidden)continue;
         const childFrom=from+fragment.offsetTop;
         items.push({id:fragment.dataset.subblockId,chip:child,origin:childFrom,
           from:childFrom,to:childFrom+fragment.offsetHeight,
@@ -1170,7 +1198,7 @@ export class PdfPreview {
       token:++this.comparisonDrawId};
     // Only the comparison's own labelled overlays represent this selection;
     // the former single-block box would imply three selected regions.
-    this.selected=null;this.overlay?.remove();this.overlay=null;
+    this.selected=null;this.updatePromoteButton();this.overlay?.remove();this.overlay=null;
     this.extractReady=null;this.extractButton.disabled=true;++this.textExtractToken;
     const target=points[reveal==='to'?1:0];
     if(this.ready){

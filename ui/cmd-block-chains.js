@@ -39,9 +39,10 @@ export function parseCMDBlockTag(line){
     (fields.id!==undefined&&(!pbs||fields.p!==undefined||fields.b!==undefined||fields.s!==undefined))||
     (fields.id===undefined&&(!uint(fields.p)||!uint(fields.b)||
       fields.s!==undefined&&!/^(0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/.test(fields.s)))||
-    (fields.origin!==undefined&&(!pbs||pbs.s.length!==1||
-      !parseCMDPBSId(fields.origin)||parseCMDPBSId(fields.origin).s.length||
-      parseCMDPBSId(fields.origin).p!==pbs.p||fields.origin===pbs.id))||
+    (fields.origin!==undefined&&(!pbs||!parseCMDPBSId(fields.origin)||
+      parseCMDPBSId(fields.origin).p!==pbs.p||fields.origin===pbs.id||
+      !(pbs.s.length===1&&parseCMDPBSId(fields.origin).s.length===0||
+        pbs.s.length===0&&parseCMDPBSId(fields.origin).s.length===1)))||
     fields.bc!==undefined&&!bcPattern.test(fields.bc)||
     (fields.bc===undefined)!==(fields.seq===undefined)||
     fields.seq!==undefined&&!uint(fields.seq)||
@@ -55,8 +56,9 @@ export function parseCMDBlockTag(line){
 export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note}){
   const pbs=parseCMDPBSId(id);
   if(!pbs)throw Error('Invalid PBS identity');
-  if(origin!==undefined&&(!parseCMDPBSId(origin)||parseCMDPBSId(origin).s.length||
-    parseCMDPBSId(origin).p!==pbs.p||pbs.s.length!==1||origin===id))
+  if(origin!==undefined&&(!parseCMDPBSId(origin)||parseCMDPBSId(origin).p!==pbs.p||
+    origin===id||!(pbs.s.length===1&&parseCMDPBSId(origin).s.length===0||
+      pbs.s.length===0&&parseCMDPBSId(origin).s.length===1)))
     throw Error('Invalid original OCR PBS provenance');
   if((bc===undefined)!==(seq===undefined)||bc!==undefined&&!bcPattern.test(bc)||
     seq!==undefined&&(!Number.isSafeInteger(seq)||seq<0))throw Error('Invalid BC membership');
@@ -299,6 +301,57 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   return {changed:edits.length,sourceId,targetId,newId,origin:atom.origin,
     edits,relocatedSourceText:true};
 }
+/** Promote one *native* child to the next free page-level PBS ID.
+ * This is a CMD source-scope move, not a synthetic MinerU OCR block.
+ * The original physical child path survives in origin= for PDF evidence,
+ * converter round-trip, and a single transactional Undo/Redo. */
+export function planCMDPromotePBSChild(source,childId){
+  const model=readCMDBlockChains(source);
+  if(model.invalid.length||model.atoms.some(atom=>atom.format!=='cmd-v1'))
+    throw Error('Invalid CMD document for native-child promotion');
+  const item=model.atoms.find(atom=>atom.id===childId);
+  const path=parseCMDPBSId(childId);
+  if(!item||!path||path.s.length!==1||item.kind!=='child'||item.origin!==childId)
+    throw Error('Only an original direct child may become an independent parent');
+  const chain=model.chains.find(c=>c.members.includes(childId));
+  if(!chain||chain.size!==1||chain.explicit)
+    throw Error('Extract the child from its BC chain before promotion');
+  const root=`p${path.p}b${path.b}`;
+  if(!model.atoms.some(a=>a.id===root&&a.kind==='parent'))
+    throw Error('Original parent PBS marker is missing');
+  const roots=model.atoms.filter(a=>{
+    const p=parseCMDPBSId(a.id);return p?.p===path.p&&p.s.length===0;
+  });
+  const last=Math.max(...roots.map(a=>parseCMDPBSId(a.id).b));
+  const newId=`p${path.p}b${last+1}`;
+  if(model.atoms.some(a=>a.id===newId))throw Error('Next parent PBS already exists');
+  const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
+  const index=ordered.findIndex(a=>a.id===childId);
+  const from=item.from,to=ordered[index+1]?.from;
+  if(!Number.isInteger(to)||to<=from)throw Error('Cannot identify child source scope');
+  const segment=source.slice(from,to);
+  if(/<!-- minerujson:(?:page|source|discarded|document-meta):v1/.test(segment))
+    throw Error('Child source scope crosses sealed MinerU evidence');
+  // Page boundaries are sealed MinerU page headers, not a guessed line
+  // number. If this is the final page, stop before the sealed source archive.
+  const marker=new RegExp(`<!-- minerujson:page:v1:${path.p+1}\\b`);
+  const nextPage=marker.exec(source);
+  const end=source.indexOf('<!-- minerujson:source:v1:');
+  // Original page/evidence comments are immutable at their first byte.
+  // Insert into the preceding blank-line gap, never at the sealed boundary.
+  const boundary=nextPage?nextPage.index:end;
+  const dest=boundary-1;
+  if(boundary<1||source[dest]!=='\n'||dest<=to||dest===from)
+    throw Error('No safe page-end gap before sealed evidence');
+  const parsed=parseCMDBlockTag(item.rawLine);
+  const newTag=commentPrefix(item.rawLine)+serializeCMDBlockTag({
+    id:newId,origin:item.origin,type:parsed.type,role:parsed.role,
+    review:parsed.review,note:parsed.note});
+  const text=newTag+segment.slice(item.rawLine.length);
+  return {changed:2,sourceId:childId,newId,origin:childId,
+    edits:[{from,to,expected:segment,insert:''},
+      {from:dest,to:dest,expected:'',insert:'\n'+text}],pageIndex:path.p};
+}
 /** Split BEFORE the specified member C: [A,B] / [C,D]. The original chain
  * identity remains with the head, the tail gets a new ID only when needed.
  */
@@ -469,7 +522,7 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
       anchorCount:1,anchorStatus:'已匹配',expectsPreview:originalRoot?Boolean(parent?.expectsPreview):Boolean(sourceText),
       previewLabel:sourceText?'待检查':'无需渲染',
       review:atom.review||'',note:atom.note||'',
-      joinPrev:chain?.chainPrev||null,logicalId:parent?.logicalId||parentId,
+      joinPrev:chain?.chainPrev||null,logicalId:root?atom.id:parent?.logicalId||parentId,
       joinLabel:chain?.chainPrev?`↳ ${chain.chainId}`:'独立',
       chainId:chain?.chainId||`implicit:${atom.id}`,
       chainLabel:chain?.chainLabel||'无效关系',chainPosition:chain?.chainPosition??1,

@@ -18,6 +18,10 @@ export function blockAnchor(line){
     // original sealed OCR parent identity for bbox/source verification.
     const old=/ origin="p(\d+)b(\d+)"/.exec(cmd[4]);
     if(old)return {pageIndex:Number(old[1]),blockIndex:Number(old[2])};
+    // Promoted direct child appears as a new logical PBS parent, but its
+    // original OCR evidence remains in the child collection, not a phantom
+    // top-level MinerU para_block beyond the sealed page's parent count.
+    if(/ origin="p\d+b\d+s\d+"/.test(cmd[4]))return null;
     const id=cmd[1],path=id?/(?:s(\d+(?:\.\d+)*))$/.exec(id):null;
     if(!path&&!/ s="/.test(cmd[4])){
       const root=id? /^p(\d+)b(\d+)$/.exec(id):null;
@@ -45,6 +49,9 @@ export function subblockAnchor(line){
     // A corrected child with origin= is not a native MinerU blocks[] child.
     // It is drawn on its original parent's PDF rectangle instead.
     if(cmd&&/ origin="p\d+b\d+"/.test(cmd[4]))return null;
+    const promoted=cmd&&/ origin="p(\d+)b(\d+)s(\d+)"/.exec(cmd[4]);
+    if(promoted)return {pageIndex:Number(promoted[1]),
+      blockIndex:Number(promoted[2]),path:[Number(promoted[3])]};
     const child=cmd&&(cmd[1]?/^p(\d+)b(\d+)s(\d+(?:\.\d+)*)$/.exec(cmd[1]):null);
     const legacy=cmd&&!cmd[1]?/ s="(\d+(?:\.\d+)*)"/.exec(cmd[4]):null;
     if(!child&&!legacy)return null;

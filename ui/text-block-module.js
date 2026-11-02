@@ -449,12 +449,22 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     getBlocks(){
       const alias=new Map(tableRows.filter(r=>r.origin&&r.origin!==r.id)
         .map(r=>[r.origin,r]));
-      return rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>{
+      const physical=rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>{
         const corrected=alias.get(id);
         return {id:corrected?.id||id,origin:id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,
           anchorCount,joinPrev:corrected?null:joinPrev,joinable:corrected?false:joinable,
           logicalId:corrected?.id||logicalId};
       });
+      // A promoted original child is now an independent logical parent.
+      // Add its own PDF overlay, using the *native child bbox*, without
+      // fabricating any new OCR source block in the original 224 parents.
+      for(const row of tableRows)if(row.kind==='parent'&&row.origin!==row.id&&
+        /^p\d+b\d+s\d+$/.test(row.origin)&&row.geometry)
+        physical.push({id:row.id,origin:row.origin,pageIndex:row.pageIndex,
+          blockIndex:row.blockIndex,sourceLine:row.sourceLine,expectsPreview:row.expectsPreview,
+          geometry:true,anchorCount:1,joinPrev:row.joinPrev,joinable:false,
+          logicalId:row.id,bbox:row.bbox,promoted:true});
+      return physical;
     },
     setPreviewCoverage(ids){
       previewMapped=new Set(ids);
