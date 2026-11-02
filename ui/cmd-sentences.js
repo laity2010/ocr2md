@@ -36,7 +36,7 @@ export function extractTextBlocks(source,{bodyEnd=source.length}={}){
   if(typeof source!=='string'||!Number.isInteger(bodyEnd)||bodyEnd<0||bodyEnd>source.length)
     throw Error('CMD invalid source projection');
   const lines=[];let from=0;
-  const anchoredDocument=source.includes('<!-- minerujson:block:v1:');
+  const anchoredDocument=source.includes('<!-- minerujson:block:v1:')||source.includes('<!-- cmd:block:v1 p=');
   for(const line of source.split('\n')){lines.push({text:line,from,to:from+line.length});from+=line.length+1;}
   const runs=[];let run=null,lastProse=null,lastAnchor=null,fence=null,mathBlock=false,comment=false;
   for(let i=0;i<lines.length;i++){

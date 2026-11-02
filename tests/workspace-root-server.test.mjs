@@ -91,7 +91,7 @@ try{
  const built=join(catalog,bookB,bookB+'.minerujson.md');
  assert(existsSync(built),'book B Markdown was not generated');
  const result=readFileSync(built,'utf8');
- assert(result.includes('<!-- minerujson:block:v1:')&&result.includes('<!-- minerujson:source:v1'));
+ assert(result.includes('<!-- cmd:block:v1 p=')&&result.includes('<!-- minerujson:source:v1'));
  assert.deepEqual(readFileSync(join(catalog,bookB,'mineru json','source.json')),rawBefore);
  assert.equal(await (await get('/api/document')).text(),result);
  assert.equal(await (await get('/api/pdf')).text(),'PDF_'+bookB);

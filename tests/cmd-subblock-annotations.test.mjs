@@ -40,8 +40,8 @@ assert(migrated.slice(body,body+400).includes('<table>'),'body label must preced
 const generated=toMarkdown(raw);
 const premarked=await planCMDSubblockAnnotations(generated);
 assert.equal(premarked.edits.length,0,'new converter emits native child tree directly');
-const parentHeader='<!-- minerujson:block:v1:4:0 -->';
-assert(generated.indexOf('subblock:v1:4:0:0')>generated.indexOf(parentHeader));
+const parentHeader='<!-- cmd:block:v1 p="4" b="0" -->';
+assert(generated.indexOf('<!-- cmd:block:v1 p="4" b="0" s="0" -->')>generated.indexOf(parentHeader));
 assert.deepEqual(subblockAnchor('> <!-- minerujson:subblock:v1:4:0:2.1 -->'),
   {pageIndex:4,blockIndex:0,path:[2,1]});
 console.log('CMD_SUBBLOCK_ANNOTATION_PASS',{editRanges:plan.edits.length,parents:20,children:plan.inserted,

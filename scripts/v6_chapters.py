@@ -66,7 +66,8 @@ def export(document, body):
             raise ValueError('Bad or repeated chapter filename')
         if (not isinstance(content, str) or not content.strip() or
             '<!-- minerujson:source:v1:' in content or
-            '<!-- minerujson:block:v1:' not in content):
+            '<!-- minerujson:block:v1:' not in content and
+            '<!-- cmd:block:v1 p=' not in content):
             raise ValueError('Bad chapter Markdown content')
         data = content.encode('utf-8')
         size += len(data)

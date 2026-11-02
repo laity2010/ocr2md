@@ -60,10 +60,10 @@ function readBlockContinuation(source,at,left,right){
   if(source[at]!=='\n')return null;
   const before=textWithoutMarker(source.slice(source.lastIndexOf('\n',at-1)+1,at));
   if(!before.endsWith(left))return null;
-  const previousBlockStart=source.lastIndexOf('<!-- minerujson:block:v1:',at);
-  if(previousBlockStart<0)return null;
-  const previousBlockLine=source.slice(previousBlockStart,source.indexOf('\n',previousBlockStart));
-  const previous=blockAnchor(previousBlockLine);
+  // Both legacy MinerU and canonical CMD PBS anchors are supported.
+  // Reject an intervening non-parent line as a source of a forged identity.
+  const previous=[...source.slice(0,at).split('\n')].reverse()
+    .map(blockAnchor).find(Boolean);
   if(!previous)return null;
   const lines=source.slice(at+1).split('\n',7);
   let n=0;

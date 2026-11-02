@@ -11,7 +11,50 @@ import type {Root, RootContent} from 'mdast';
 const VERSION = '0.1.0';
 const parser = unified().use(remarkParse).use(remarkGfm);
 const writer = unified().use(remarkStringify).use(remarkGfm);
-const blockStart = /^((?: {0,3}>[ \t]?)*)(?: {0,3})<!-- minerujson:block:v1:(\d+):(\d+) -->[ \t]*$/gm;
+// One audited reader accepts both the shipped legacy source labels and new
+// CMD PBS v1 anchors. New documents always serialize as CMD PBS; old bytes
+// remain valid inputs, including native child tags and original OCR evidence.
+const blockStart = /^((?: {0,3}>[ \t]?)*)(?: {0,3})(?:<!-- minerujson:block:v1:(\d+):(\d+) -->|<!-- cmd:block:v1 p="(\d+)" b="(\d+)"((?: (?:bc|seq|type|role|review|note)="[^"]*")*) -->)[ \t]*$/gm;
+const cmdChildStart = /^<!-- cmd:block:v1 p="(\d+)" b="(\d+)" s="(\d+(?:\.\d+)*)"((?: [a-z]+="[^"]*")*) -->[ \t]*(?:\r?\n){0,2}/gm;
+// BC audit also sees child tags inside nested Markdown blockquotes. The
+// block parser strips the quote prefix before strict native child validation.
+const cmdChildAudit = /^(?: {0,3}>[ \t]?)* {0,3}<!-- cmd:block:v1 p="(\d+)" b="(\d+)" s="(\d+(?:\.\d+)*)"((?: [a-z]+="[^"]*")*) -->[ \t]*$/gm;
+const cmdAllowed = new Set(['bc','seq','type','role','review','note']);
+const cmdEnum = /^[a-z][a-z0-9_-]{0,63}$/;
+const cmdBC = /^bc-[a-z0-9][a-z0-9-]{0,63}$/;
+const cmdUnsigned = /^(0|[1-9]\d*)$/;
+function parseCMDFields(raw: string): Record<string,string> {
+  const fields: Record<string,string>={};
+  for(const match of raw.matchAll(/ ([a-z]+)="([^"]*)"/g)){
+    const key=match[1],value=match[2];
+    assert(cmdAllowed.has(key)&&!Object.hasOwn(fields,key),`invalid CMD property: ${key}`);
+    assert(!/[<>]/.test(value),'unsafe CMD property');
+    fields[key]=value;
+  }
+  assert((fields.bc===undefined)===(fields.seq===undefined),'incomplete BC membership');
+  if(fields.bc!==undefined)assert(cmdBC.test(fields.bc),'invalid BC ID');
+  if(fields.seq!==undefined)assert(cmdUnsigned.test(fields.seq)&&Number.isSafeInteger(Number(fields.seq)),'invalid BC sequence');
+  for(const key of ['type','role','review'])
+    if(fields[key]!==undefined)assert(cmdEnum.test(fields[key]),`invalid CMD ${key}`);
+  if(fields.note!==undefined)assert(fields.note.length<=240,'CMD note too long');
+  return fields;
+}
+function verifyBCRelations(entries: {id:string;fields:Record<string,string>}[]){
+  const groups=new Map<string,{id:string;seq:number;type?:string}[]>();
+  for(const entry of entries){
+    if(!entry.fields.bc)continue;
+    const group=groups.get(entry.fields.bc)||[];
+    group.push({id:entry.id,seq:Number(entry.fields.seq),type:entry.fields.type});
+    groups.set(entry.fields.bc,group);
+  }
+  for(const [bc,group] of groups){
+    const seq=new Set(group.map(x=>x.seq));
+    assert(seq.size===group.length&&seq.has(0)&&group.every(x=>x.seq<group.length),`invalid ${bc} member sequence`);
+    const head=group.find(x=>x.seq===0);
+    assert(group.every(x=>!x.type||x.type===head?.type),`conflicting ${bc} type`);
+  }
+}
+
 const sourcePattern = /<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\n]+)\n-->\s*$/;
 
 type Span = {type?: string; content?: string; html?: string; image_path?: string; [key: string]: unknown};
@@ -231,7 +274,7 @@ function childMarkers(block: Block,pageIndex: number,blockIndex: number):
       const type=child.type||'unknown';
       assert(/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(type),'invalid child OCR type');
       output.push({path:key,type,
-        tag:`<!-- minerujson:subblock:v1:${pageIndex}:${blockIndex}:${key} type="${type}" id="p${pageIndex}b${blockIndex}s${key}" -->`});
+        tag:`<!-- cmd:block:v1 p="${pageIndex}" b="${blockIndex}" s="${key}" -->`});
       visit(child,next);
     }
   };
@@ -240,8 +283,17 @@ function childMarkers(block: Block,pageIndex: number,blockIndex: number):
 }
 function stripChildMarkers(fragment: string,block: Block,pageIndex: number,blockIndex: number): string {
   const marker=/^<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*)(?: type="([a-zA-Z_][a-zA-Z0-9_-]*)")?(?: id="(p\d+b\d+s\d+(?:\.\d+)*)")? -->[ \t]*(?:\r?\n){0,2}/gm;
-  const found=[...fragment.matchAll(marker)].map(m=>({page:Number(m[1]),block:Number(m[2]),
+  const legacy=[...fragment.matchAll(marker)].map(m=>({page:Number(m[1]),block:Number(m[2]),
     path:m[3],type:m[4]??null,id:m[5]??null}));
+  const native=[...fragment.matchAll(cmdChildStart)].map(m=>{
+    const page=Number(m[1]),block=Number(m[2]),path=m[3];
+    assert(Number.isSafeInteger(page)&&Number.isSafeInteger(block)&&
+      path.split('.').every(x=>Number.isSafeInteger(Number(x))), 'invalid child PBS path');
+    const fields=parseCMDFields(m[4]);
+    // Relation metadata is for CMD, never an OCR child `type` assertion.
+    return {page,block,path,type:null,id:`p${page}b${block}s${path}`,fields};
+  });
+  const found=[...legacy,...native];
   const expected=childMarkers(block,pageIndex,blockIndex);
   // Legacy documents may have none or untyped markers. Once annotated,
   // require every native path exactly once, and validate declared OCR type.
@@ -257,9 +309,10 @@ function stripChildMarkers(fragment: string,block: Block,pageIndex: number,block
         `block ${pageIndex}:${blockIndex} child anchor invalid`);
       seen.add(item.path);
     }
-    fragment=fragment.replace(marker,'').trim();
+    fragment=fragment.replace(marker,'').replace(cmdChildStart,'').trim();
   }
-  assert(!fragment.includes('minerujson:subblock:v1:'),'invalid nested child anchor');
+  assert(!fragment.includes('minerujson:subblock:v1:')&&!fragment.includes('<!-- cmd:block:v1'),
+    'invalid nested child anchor');
   return fragment;
 }
 /** API 1: MinerU JSON -> a standard CommonMark+GFM document with HTML comments. */
@@ -285,7 +338,7 @@ export function toMarkdown(input: string | Mineru): string {
       const sections=slots.map(slot=>[
         ...(slot.path?[byPath.get(slot.path.join('.'))!]:[]),
         serialize([slot.node])].join('\n\n'));
-      pieces.push([`<!-- minerujson:block:v1:${pageIndex}:${index} -->`,...missing,
+      pieces.push([`<!-- cmd:block:v1 p="${pageIndex}" b="${index}" -->`,...missing,
         ...sections].join('\n\n'));
     }
   }
@@ -318,6 +371,12 @@ export function toMineruJSON(markdown: string): string {
     ? `${AUDIT_VERSION}\n\n<!-- minerujson:document-meta:v1\n${safeJson(meta)}\n-->` : '';
   const blocks=data.pdf_info.flatMap((page,pageNo)=>page.para_blocks.map((block,blockNo)=>
     ({pageNo,blockNo,block})));
+  const bcEntries: {id:string;fields:Record<string,string>}[]=[];
+  for(const m of markers)if(m[6]!==undefined)
+    bcEntries.push({id:`p${m[4]}b${m[5]}`,fields:parseCMDFields(m[6])});
+  for(const child of visible.matchAll(cmdChildAudit))
+    bcEntries.push({id:`p${child[1]}b${child[2]}s${child[3]}`,fields:parseCMDFields(child[4])});
+  verifyBCRelations(bcEntries);
   const auditBetween=(start: number,end: number): string=>audited
     ? data.pdf_info.slice(start,end).map((page,index)=>pageAudit(page,start+index)).join('\n\n')
     : '';
@@ -329,7 +388,9 @@ export function toMineruJSON(markdown: string): string {
     const {pageNo,blockNo,block}=blocks[i];
     const start=markers[i];
     assert(start.index!==undefined,'missing block marker');
-    assert(Number(start[2])===pageNo && Number(start[3])===blockNo,'block order/anchor changed');
+    assert(Number(start[2]??start[4])===pageNo && Number(start[3]??start[5])===blockNo,
+      'block order/anchor changed');
+    if(start[6]!==undefined)parseCMDFields(start[6]);
     const next=markers[i+1];
     const nextPage=next?blocks[i+1].pageNo:data.pdf_info.length;
     const gap=visible.slice(start.index+start[0].length,next?.index??visible.length).trim();

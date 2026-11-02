@@ -69,8 +69,11 @@ export function readCMDBlockChains(source){
     const line=lines[i];
     if(line.includes('<!-- minerujson:source:v1:'))break;
     const parsed=parseCMDBlockTag(line);
-    const legacyParent=parsed?null:blockAnchor(line);
-    const legacyChild=parsed||legacyParent?null:subblockAnchor(line);
+    // Malformed CMD annotations must NEVER masquerade as legacy MinerU tags.
+    const badNew=unquotePrefix(line).trim().startsWith('<!-- cmd:block:v1')&&!parsed;
+    if(badNew)invalid.push({line:i+1,reason:'Malformed CMD PBS/BC annotation'});
+    const legacyParent=parsed||badNew?null:blockAnchor(line);
+    const legacyChild=parsed||badNew||legacyParent?null:subblockAnchor(line);
     if(parsed||legacyParent||legacyChild){
       const id=parsed?.id||`p${(legacyParent||legacyChild).pageIndex}b${(legacyParent||legacyChild).blockIndex}`+
         (legacyChild?`s${legacyChild.path.join('.')}`:'');
@@ -79,8 +82,6 @@ export function readCMDBlockChains(source){
         bc:parsed?.bc??null,seq:parsed?.seq===undefined?null:Number(parsed.seq),
         type:parsed?.type??null,role:parsed?.role??null,
         review:parsed?.review??null,note:parsed?.note??null});
-    }else if(unquotePrefix(line).trim().startsWith('<!-- cmd:block:v1')){
-      invalid.push({line:i+1,reason:'Malformed CMD PBS/BC annotation'});
     }
     offset+=line.length+1;
   }

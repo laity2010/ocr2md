@@ -1430,3 +1430,10 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PBSBC-C66','C66','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','CMD port delegates read-only source-derived chain query', 'direct'),
  ('TC-PBSBC-C67','C67','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','CMD port applies only guarded PBS/BC edits via existing one-transaction CM6 boundary','integration');
+
+-- WP1 new MinerU JSON->CMD PBS serialization is an opt-in format change of
+-- the converter; old source remains supported. Source provenance is immutable.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PBS-WP1-C03','C03','tests/cmd-pbs-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit read 224 parent+43 native children on newly converted CMD, unchanged disk source and correctly populated text-block BC columns','integration'),
+ ('TC-PBS-WP1-L66','L66','tests/cmd-pbs-converter-integration.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','new converter generates exactly 267 PBS atoms, legacy 224 anchors still inspectable, direct BC split/merge plans stay source-only','direct'),
+ ('TC-PBS-WP1-L65','L65','tests/cmd-pbs-converter-integration.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','new CMD PBS parent and child source labels line up with PDF source scope and exact geometry without annotation pass','integration');

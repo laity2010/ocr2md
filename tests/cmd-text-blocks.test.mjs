@@ -69,11 +69,11 @@ assert(Object.isFrozen(chart.subRegions)&&Object.isFrozen(chart.subRegions[1].bb
   'child evidence geometry must remain immutable and share parent Block identity');
 assert.equal(await queryCMDBlockGeometry(initial,99,0),null);
 assert.equal(readFileSync(sample,'utf8'),initial,'no CMD writes during inventory');
-const altered=initial.replace('<!-- minerujson:block:v1:13:0 -->','');
+const altered=initial.replace('<!-- cmd:block:v1 p="13" b="0" -->','');
 const missing=await inspectCMDTextBlocks(altered);
 assert.equal(missing.summary.missing,1);
 assert.equal(missing.rows.find(x=>x.id==='p13b0').anchorStatus,'缺少锚点');
-const duplicate=await inspectCMDTextBlocks(initial.replace('<!-- minerujson:block:v1:13:0 -->','<!-- minerujson:block:v1:13:0 -->\n<!-- minerujson:block:v1:13:0 -->'));
+const duplicate=await inspectCMDTextBlocks(initial.replace('<!-- cmd:block:v1 p="13" b="0" -->','<!-- cmd:block:v1 p="13" b="0" -->\n<!-- cmd:block:v1 p="13" b="0" -->'));
 assert.equal(duplicate.summary.duplicates,1);
 const broken=initial.replace(/(<!-- minerujson:source:v1:)[a-f0-9]/,'$1f');
 await assert.rejects(inspectCMDTextBlocks(broken),/SHA-256/);

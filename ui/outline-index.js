@@ -1,7 +1,7 @@
 /**
  * Read-only, rebuildable Markdown heading index for the AG outline.
  * The PDF page is the actual 0-based pageIndex embedded by toMarkdown() in
- * <!-- minerujson:block:v1:pageIndex:blockIndex -->, displayed as pageIndex+1.
+ * CMD PBS parent anchors (or legacy MinerU blocks), displayed as pageIndex+1.
  *
  * This module only detects headings and stable MinerU IDs. The independent
  * chapter annotations and exported file paths live in separate modules.

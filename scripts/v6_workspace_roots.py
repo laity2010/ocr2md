@@ -92,7 +92,8 @@ def converted_is_valid(path):
     # The converter output supplies stable MinerU source/block anchors and
     # Markdown headings. Chapter-boundary annotations may be added later by CMD.
     data = path.read_text(encoding='utf-8')
-    return (bool(re.search(r'(?m)^\s*<!-- minerujson:block:v1:\d+:\d+ -->\s*$', data))
+    return (bool(re.search(r'(?m)^\s*(?:<!-- minerujson:block:v1:\d+:\d+ -->|'
+                           r'<!-- cmd:block:v1 p="\d+" b="\d+"(?: [a-z]+="[^"]*")* -->)\s*$', data))
             and '<!-- minerujson:source:v1' in data
             and bool(re.search(r'(?m)^#{1,6} +\S', data)))
 

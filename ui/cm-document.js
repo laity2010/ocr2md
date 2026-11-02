@@ -155,7 +155,8 @@ export class CMDocument {
       throw Error('MinerU converter adapter is not configured');
     // Convert first: a failure must leave the CM6 document unchanged.
     const markdown=await this.convertMineruJson(input);
-    if(typeof markdown!=='string'||!markdown.startsWith('<!-- minerujson:block:v1:'))
+    if(typeof markdown!=='string'||!markdown.includes('<!-- minerujson:source:v1:')||
+      !/(?:<!-- cmd:block:v1 p="\d+" b="\d+"|<!-- minerujson:block:v1:\d+:\d+)/.test(markdown))
       throw Error('MinerU converter returned an invalid Markdown document');
     this.loadMarkdown(markdown);
     return this.doc;
