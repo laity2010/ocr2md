@@ -160,8 +160,8 @@ export function createCMDTransactionPort(cmd){
       const origins=atoms=>atoms.map(a=>a.origin).sort().join('\n');
       if(after.invalid.length||before.atoms.length!==after.atoms.length||
         origins(before.atoms)!==origins(after.atoms)||
-        after.atoms.filter(a=>a.origin===sourceId).length!==1||
-        !after.atoms.some(a=>a.id===plan.newId&&a.origin===sourceId))
+        after.atoms.filter(a=>a.origin===plan.origin).length!==1||
+        !after.atoms.some(a=>a.id===plan.newId&&a.origin===plan.origin))
         throw Error('PBS reparent must retain all original OCR atoms and provenance');
       const tail=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
       if(!next.includes('<!-- minerujson:source:v1:')||tail(next)!==tail(source))

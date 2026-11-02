@@ -266,8 +266,14 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   const from=parseCMDPBSId(sourceId),to=parseCMDPBSId(targetId);
   if(!from||!to||from.s.length||to.s.length!==1||from.p!==to.p)
     throw Error('Only a same-page parent can become the next child of a native child');
-  if(atom.origin!==atom.id||model.atoms.some(a=>a.id.startsWith(sourceId+'s')))
-    throw Error('Source already has children or was previously reparented');
+  // A reviewed leaf may be made independent, then reparented again.
+  // This is only legal when its immutable provenance is an original OCR
+  // *parent* on the same page. A promoted native child (origin=...sN) is
+  // not silently converted into a foreign child path.
+  const origin=parseCMDPBSId(atom.origin);
+  if(!origin||origin.p!==from.p||origin.s.length||
+    model.atoms.some(a=>a.id.startsWith(sourceId+'s')))
+    throw Error('Source must be a leaf with original parent OCR provenance');
   const ownChain=model.chains.find(c=>c.members.includes(sourceId));
   if(ownChain?.size!==1||ownChain.explicit)
     throw Error('Extract source to a singleton BC before reparenting');
@@ -284,7 +290,15 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   // This must not include any page/sealed evidence or adjacent source atom.
   const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
   const sourceIndex=ordered.indexOf(atom),targetIndex=ordered.indexOf(target);
-  const stop=ordered[sourceIndex+1]?.from??source.indexOf('<!-- minerujson:source:v1:');
+  // A page-end independently promoted parent can sit immediately before
+  // immutable next-page evidence. Never include that evidence in the moving
+  // block, even when its next CMD atom is in the following page.
+  const nextAtom=ordered[sourceIndex+1]?.from??source.length;
+  const nextPageBoundary=source.indexOf(`<!-- minerujson:page:v1:${from.p+1}` ,atom.from);
+  const archiveBoundary=source.indexOf('<!-- minerujson:source:v1:',atom.from);
+  const stop=Math.min(nextAtom,
+    nextPageBoundary<0?source.length:nextPageBoundary,
+    archiveBoundary<0?source.length:archiveBoundary);
   const destination=ordered[targetIndex+1]?.from;
   if(stop<0||!Number.isInteger(destination)||stop<=atom.from||
     destination>=source.indexOf('<!-- minerujson:source:v1:')||
