@@ -25,7 +25,9 @@ try{
    const page=await browser.newPage({viewport:{width:1032,height:642}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-   await page.locator('#module-select').evaluate(el=>{el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));});
+   await page.waitForFunction(()=>Boolean(window.__v6cm6?.cm&&document.querySelector('#module-select')),null,{timeout:90000});
+   await page.evaluate(()=>{const el=document.querySelector('#module-select');
+     el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));});
    await page.waitForFunction(()=>/PBS 224（子块 0）/.test(document.querySelector('#status')?.textContent||''),null,{timeout:90000});
    await page.locator('#ag-functions-toggle').click();
    const menu=page.locator('#ag-functions-menu [data-module="text-block"]');

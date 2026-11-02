@@ -1531,3 +1531,9 @@ INSERT INTO access_edges VALUES
  ('X-WP6-C-L50','C','L','ui/wcp-cmd-element-transactions.js','queryCMDLayout(source)','L50','registered','CMD bbox port obtains original immutable OCR layout before planning edits');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP6-HTTP-C73','C73','tests/cmd-pdf-bbox-wp6-save-reload.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','actual isolated authenticated HTTP save/load, source revision gates 412/428, persisted PDF bbox correction and exact reset, unchanged original OCR JSON','integration');
+
+-- WP6 PDF-owned transient pointer handles; no CM6 or OCR state access.
+INSERT INTO apis VALUES
+ ('P22','P','createPDFBBoxGesture','ui/pdf-bbox-gesture.js','export','PDF page DOM, verified PBS ID, effective bbox and page dimensions, semantic commit callback','five pointer handles for moving/resizing a transient PDF rectangle','no direct CMD/PDF archive mutation, cancel/no-op safe, one semantic callback on release',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP6-P22','P22','tests/cmd-pdf-bbox-wp6.browser.test.mjs','simulated PDF page DOM, synthetic touch pointer','Chrome and WebKit center drag writes one coordinate correction; no direct source or PDF evidence access','integration');

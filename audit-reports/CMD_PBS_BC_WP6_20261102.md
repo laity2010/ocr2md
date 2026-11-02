@@ -24,3 +24,23 @@ Experimental baseline `e1946aa` (WP5). Only the isolated experiment branch/workt
 - Original PDF double-frame real interaction and physical iPad Safari touch/drag handles are **NOT** certified here because source PDF is not mounted in the experiment. The PDF overlay drag implementation is included but needs native PDF acceptance in WP7; real PDF page zoom/resize handling is not claimed PASS. Independent Linux / full AM/Git dynamic audit also remain WP7 gates. AM static checks, Vite and converter suite are not evidence for full independent audit.
 - Additional PDF-owned pointer gesture acceptance in the same Chrome/iPad-WebKit test uses a synthetic isolated page DOM and real `PdfPreview.drawBBoxEditor()` handles, dispatches `pointerType=touch`, verifies one ID-bound corrected rectangle and same-port reset (`syntheticPDFPointer:true`). This does **not** constitute real PDF.js document or physical touch certification.
 - Converter upstream regression: `npm test --prefix packages/minerujson-md` all 20 tests PASS. WP3 authenticated HTTP BC save/reload regression PASS on isolated rerun; first sequential run encountered an environment EPIPE and was not counted PASS until rerun. WP5 Chrome drag including synthetic pointer and WP4 legacy review Chrome/iPad-WebKit PASS after WP6. 19 targeted static AM tests PASS. Full AM/Git, Linux external and physical PDF/iPad remain unverified.
+
+## WP6 completion notes
+
+- Reused the same AG/CMD source transaction for visual and numeric edits. The original parent row's corrected `bbox` enters the PDF coverage projection, while its `originalBBox` remains separately inspectable; formerly hidden native child rectangles are recoverable with a verified matching child PBS ID.
+- The five PDF move/corner pointer handles have been extracted to `ui/pdf-bbox-gesture.js` (PDF presentation owner). The source port does not know about pointer/DOM details; the gesture receives only a semantic commit callback. The same component has a simulated `pointerType=touch` acceptance on Chrome and iPad WebKit without importing an unrelated PDF.js Viewer into the test fixture.
+- WP6 browser tests run the real Vite AG/CMD application on a temporary Markdown document; synthetic PDF handle testing uses a temporary page-like DOM rather than a genuine PDF file. Do not interpret this as PDF.js zoom/drag device acceptance; the complete native PDF interaction remains BLOCKED until PDF source is available.
+- Converter suite: 20/20 PASS. AM ownership: new PDF gesture helper assigned to module P, semantic callback and footer/planner contracts registered; static 19/19 boundary cases PASS. Vite build PASS. Original PDF visual QA, real iPad Safari and independent Linux audits remain WP7 gates.
+
+## Final regression matrix (experimental branch)
+
+| Evidence | Chrome | Simulated iPad WebKit |
+| --- | --- | --- |
+| WP6 AG bbox → CMD footer → effective layout → Undo/Redo → reset, synthetic PDF pointer | PASS | PASS |
+| WP4 original 267 PBS, grouping, merge/split, no-auto-save | PASS | PASS |
+| WP4 legacy 224 source blocks / five continuation candidates / migration not automatic | PASS | PASS |
+| WP5 atomic drag, cross-chain, extract, Undo/Redo, synthetic pointer | PASS | Previously certified on e1946aa; not separately rerun on this WP6 SHA |
+
+Additionally: `CMD_PDF_BBOX_WP6_PURE_PASS`; `CMD_PDF_BBOX_WP6_HTTP_PASS` (authenticated save/reload, If-Match 412/428); `npm run test --prefix packages/minerujson-md` 20/20; targeted AM static boundary tests 19/19; `npm run build` PASS with only pre-existing large chunk warning; `git diff --check` PASS. These are targeted results, NOT the full AM/Git or real PDF native acceptance.
+
+The test harness now waits for the real application/editor to initialize before selecting the hidden native element dropdown, avoiding an unrelated startup race under concurrent headless browsers. No production assertion was removed. Main worktree, original user PDF and document, and production deployment remain untouched.

@@ -75,7 +75,7 @@ try{
    // Synthetic PDF page DOM checks the actual PDF-owned pointer editor logic.
    // No claim that the original user PDF or hardware iPad was exercised.
    const gesture=await page.evaluate(async()=>{
-     const {PdfPreview}=await import('/pdf-preview.js');
+     const {createPDFBBoxGesture}=await import('/pdf-bbox-gesture.js');
      const root=document.createElement('div'),paper=document.createElement('div');
      root.style.position='fixed';root.style.left='15px';root.style.top='15px';
      root.style.width='400px';root.style.height='800px';root.style.zIndex='2';
