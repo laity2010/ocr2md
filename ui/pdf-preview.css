@@ -15,6 +15,13 @@
 .ocr-pdf-scroller .pdfViewer {padding:8px 0 16px}
 .ocr-pdf-scroller .page {--page-border:1px solid #435055;margin:0 auto 10px;
   box-shadow:0 3px 9px #0007;position:relative}
+/* PDF.js may leave a page.loadingIcon.loading hit region over a nearby
+ * out-of-text gutter chip while a distant page renders. The pending canvas
+ * must not intercept a visible, CMD-backed Block control. Restore normal
+ * page hit testing as soon as PDF.js removes the loading class. */
+.ocr-pdf-scroller .page.loadingIcon.loading{pointer-events:none}
+.ocr-pdf-scroller .page.loadingIcon.loading .ocr-pdf-block-ctrl,
+.ocr-pdf-scroller .page.loadingIcon.loading .ocr-pdf-subblock-chip{pointer-events:auto}
 .ocr-pdf-pane[data-pdf-theme="dark"] .page canvas {filter:invert(1) hue-rotate(180deg)}
 .ocr-pdf-region-overlay {position:absolute;z-index:8;pointer-events:none;
   background:rgba(255,205,60,.30);border:2px solid rgba(255,185,45,.93);

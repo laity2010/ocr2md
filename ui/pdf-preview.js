@@ -107,6 +107,27 @@ export class PdfPreview {
     this.zoomAnchorToken=0;this.zoomRestoreTimer=0;this.zoomRestoreBehavior=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
+    // PDF.js can replace a page's DOM during zoom/reflow without emitting
+    // pagerendered for that exact replacement. Preserve the canonical Block
+    // nodes and restore their attachment after page-tree mutations.
+    this.coverageRepairPending=false;
+    this.coverageDomObserver=new MutationObserver(mutations=>{
+      if(this.disposed||!this.ready||!this.blockCoverageRows.length)return;
+      const touched=mutations.some(m=>[...m.addedNodes,...m.removedNodes].some(n=>
+        n.nodeType===1&&(n.matches?.('.page,.ocr-pdf-block-cover')||
+          n.querySelector?.('.page,.ocr-pdf-block-cover'))));
+      if(!touched||this.coverageRepairPending)return;
+      this.coverageRepairPending=true;
+      queueMicrotask(()=>{
+        this.coverageRepairPending=false;
+        if(this.disposed||!this.ready||!this.blockCoverageRows.length)return;
+        // Only repair actual disconnections, not ordinary PDF.js canvas/text
+        // mutations or a CMD join chip update. No persistent polling timer.
+        if([...this.blockCoverageNodes.values()].some(n=>!this.pages.contains(n)))
+          this.paintBlockCoverage();
+      });
+    });
+    this.coverageDomObserver.observe(this.pages,{subtree:true,childList:true});
     this.textExtractToken=0;this.extractReady=null;
     this.childFocusSequence=0;this.childMarkerPromise=null;
     this.blockDrag=null;this.suppressBlockClickUntil=0;this.suppressBlockClickCtrl=null;
@@ -399,6 +420,10 @@ export class PdfPreview {
     this.zoomMode=mode;
     this.preserveZoomLocation(()=>{
       this.viewer.currentScaleValue=mode;this.viewer.update();
+      // Never depend on an eventual canvas-render event to remount original
+      // CMD Block coverage. PDF.js may replace a page tree on zoom without
+      // repainting a canvas that was already cached.
+      if(this.blockCoverageRows.length)this.paintBlockCoverage();
     });
     this.updateZoom();this.scheduleOverlay();
   }
@@ -799,7 +824,7 @@ export class PdfPreview {
       const page=this.viewer.getPageView(row.pageIndex);
       const region=this.map[row.pageIndex];
       const block=region?.regions.find(b=>b.blockIndex===row.blockIndex);
-      if(!page?.div||!block)continue;
+      if(!page?.div||!this.pages.contains(page.div)||!block)continue;
       let rect;
       try{rect=pdfOverlayRect({...block,pageSize:region.pageSize},
         {width:region.pageSize[0],height:region.pageSize[1]});}
@@ -1299,7 +1324,8 @@ export class PdfPreview {
     }
   }
   dispose(){
-    this.disposed=true;++this.textExtractToken;this.finishWarmup?.(false);
+    this.disposed=true;this.coverageDomObserver.disconnect();
+    ++this.textExtractToken;this.finishWarmup?.(false);
     clearTimeout(this.zoomRestoreTimer);
     if(this.zoomRestoreBehavior!==null){
       this.scroller.style.scrollBehavior=this.zoomRestoreBehavior;

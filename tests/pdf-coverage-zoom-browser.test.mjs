@@ -12,8 +12,13 @@ const sample=ensureTextBlockSample();
 const original=readFileSync(sample,'utf8');
 const port=5994,url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
-  '--port',String(port),'--strictPort'],{cwd:process.cwd(),stdio:'ignore',
+  '--port',String(port),'--strictPort'],{cwd:process.cwd(),stdio:['ignore','pipe','pipe'],
   env:{...process.env,V6_DOCUMENT_PATH:sample}});
+const serverOutput=[];
+for(const stream of [server.stdout,server.stderr])stream.on('data',chunk=>{
+  serverOutput.push(String(chunk));
+  if(serverOutput.length>25)serverOutput.shift();
+});
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 try{
   let ready=false;
@@ -21,7 +26,8 @@ try{
     try{if((await fetch(url)).ok){ready=true;break;}}catch{}
     await delay(120);
   }
-  assert(ready,'V6 isolated fixture server unavailable');
+  assert(ready,'V6 isolated fixture server unavailable: '+
+    JSON.stringify({exitCode:server.exitCode,errors:serverOutput.join('').slice(-1500)}));
   for(const [name,engine,mobile] of [['Chrome',chromium,false],['iPad-WebKit',webkit,true]]){
     if(process.env.ONE_BROWSER&&name!==process.env.ONE_BROWSER)continue;
     const browser=await engine.launch({headless:true});
@@ -29,6 +35,7 @@ try{
       const page=await browser.newPage({viewport:{width:1220,height:840},isMobile:mobile,hasTouch:mobile});
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+      console.log('PDF_COVER_TEST_ENGINE_START',name);
       const cover=page.locator('.ocr-preview-switchbar .ocr-preview-block-toggle input');
       const selectElement=async value=>{
         await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control')
@@ -36,6 +43,16 @@ try{
         await page.locator(`.ocr-navigation-popup-elements:visible [data-value="${value}"]`)
           .evaluate(el=>el.click());
       };
+      // DOMContentLoaded does not mean WCP's async editor/preview toolbar
+      // has mounted (especially WebKit under simultaneous PDF.js load).
+      // Keep the exact single-toolbar invariant after the actual attachment.
+      try{await cover.waitFor({state:'attached',timeout:30000});}
+      catch(error){
+        console.error('PDF_COVER_TOOLBAR_INIT_DIAGNOSTIC',name,JSON.stringify({
+          url:page.url(),errors,status:await page.locator('#status').textContent().catch(()=>null)
+        }));
+        throw error;
+      }
       assert.equal(await page.locator('.ocr-lab-ag-toolbar [aria-label="PDF 文本块"]').count(),0);
       assert.equal(await cover.count(),1);
       assert.equal(await page.locator('.ocr-preview-block-toggle').innerText(),'文本块');
@@ -54,9 +71,25 @@ try{
       // The PDF pane is not shown yet here (the old code also used a DOM
       // click), so deliver the same three DOM clicks the ctrl counts.
       await joinTag.evaluate(el=>{for(let i=0;i<3;i++)el.click();});
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===false,
-        null,{timeout:20000});
+      try{
+        await page.waitForFunction(()=>document.querySelector(
+          '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===false,
+          null,{timeout:20000});
+      }catch(error){
+        const details=await page.evaluate(()=>({
+          mode:document.querySelector('.ocr-lab-element-select')?.value,
+          status:document.querySelector('#status')?.textContent,
+          pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+          total:document.querySelectorAll('.ocr-pdf-block-cover').length,
+          joinInput:document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked,
+          joinDisabled:document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.disabled,
+          pdfReady:window.__v6cm6?.pdf?.ready,
+          sourceJoinCount:(window.__v6cm6?.view?.state?.doc?.toString()?.match(/ocr2md:block-join/g)||[]).length,
+          navType:performance.getEntriesByType('navigation').map(e=>e.type)
+        })).catch(e=>({probeError:String(e)}));
+        console.error('PDF_COVER_INITIAL_JOIN_DIAGNOSTIC',name,JSON.stringify({details,errors}));
+        throw error;
+      }
       await page.locator('#undo').click();
       await page.waitForFunction(()=>document.querySelector(
         '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===true,
@@ -131,6 +164,33 @@ try{
         assert.equal(visible,224);
       }
       assert(await cover.isChecked());
+      // PDF.js zoom/page-tree reflow may detach its original-block overlays
+      // after the last cached canvas paint. Reproduce a loss of only DOM
+      // coverage (never CMD data or PDF pages) and require automatic healing
+      // with the *same* Block node, checked state and original geometry.
+      const detached=await page.evaluate(()=>{
+        const block=document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b0"]');
+        const page=block?.closest('.page');
+        if(!page)return {count:0};
+        const nodes=[...page.querySelectorAll('.ocr-pdf-block-cover')];
+        window.__coverageNodeBeforeReflow=block;
+        const checked=block.querySelector('input')?.checked;
+        const rect=[block.style.left,block.style.top,block.style.width,block.style.height];
+        nodes.forEach(node=>node.remove());
+        return {count:nodes.length,checked,rect,remaining:document.querySelectorAll('.ocr-pdf-block-cover').length};
+      });
+      assert(detached.count>0&&detached.remaining<224,
+        'exercise real DOM disconnection before the recovery gate');
+      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
+        null,{timeout:12000});
+      const repaired=await page.evaluate(()=>{
+        const block=document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b0"]');
+        return {sameNode:block===window.__coverageNodeBeforeReflow,
+          checked:block?.querySelector('input')?.checked,
+          rect:block?[block.style.left,block.style.top,block.style.width,block.style.height]:null};
+      });
+      assert.deepEqual(repaired,{sameNode:true,checked:detached.checked,rect:detached.rect},
+        'PDF coverage must reattach the original DOM node with original CMD/bbox state');
       // Split: one persistent checkbox beside the preview navigation drives
       // Markdown and PDF overlay layers together (also on iPad Safari).
       await page.locator('.ocr-preview-split-toggle input').evaluate(el=>el.click());

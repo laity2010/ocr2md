@@ -276,6 +276,30 @@ try{
    });
    assert.equal(previousIdentity,'p8b8');
    await crossHead.scrollIntoViewIfNeeded({timeout:17000});
+   // Regression: PDF.js may show the page loading hit region while its
+   // CMD-backed gutter controls already exist. That layer must not steal the
+   // actual finger/mouse target from the original p9b0 parent control.
+   const loadingHit=await page.evaluate(()=>{
+     const chip=document.querySelector('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-ctrl');
+     const paper=chip.closest('.page');
+     const before=[paper.classList.contains('loadingIcon'),paper.classList.contains('loading')];
+     paper.classList.add('loadingIcon','loading');
+     try{
+       const box=chip.getBoundingClientRect();
+       const x=(box.left+box.right)/2,y=(box.top+box.bottom)/2;
+       const hit=document.elementFromPoint(x,y);
+       return {pagePointer:getComputedStyle(paper).pointerEvents,
+         chipPointer:getComputedStyle(chip).pointerEvents,
+         hitChip:hit===chip||chip.contains(hit),hitTag:hit?.tagName,
+         targetId:hit?.closest('.ocr-pdf-block-cover')?.dataset.blockId};
+     }finally{
+       if(!before[0])paper.classList.remove('loadingIcon');
+       if(!before[1])paper.classList.remove('loading');
+     }
+   });
+   assert.deepEqual(loadingHit.pagePointer,'none');
+   assert.equal(loadingHit.chipPointer,'auto');
+   assert(loadingHit.hitChip,`loading page blocked PDF Block p9b0: ${JSON.stringify(loadingHit)}`);
    await tapThree(page.locator('.ocr-pdf-block-cover[data-block-id="p9b0"] .ocr-pdf-block-ctrl'));
    await page.waitForFunction(()=>/已接续 1 · 逻辑块 223/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
