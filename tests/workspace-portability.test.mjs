@@ -9,7 +9,7 @@ import {resolve} from 'node:path';
 const python=spawnSync('python3',['-c','import sys;print(sys.executable)'],{encoding:'utf8'});
 assert.equal(python.status,0,'Python 3 runtime required');
 const executable=python.stdout.trim(),root=resolve('.');
-const code=`import sys,os\nsys.path.insert(0,${JSON.stringify(resolve('scripts'))})\nfrom v6_workspace_roots import resolve_node_binary,convert_mineru_json\nfrom pathlib import Path\nassert resolve_node_binary()==${JSON.stringify(process.execPath)}\nraw=Path(${JSON.stringify(resolve('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'))}).read_bytes()\nmd=convert_mineru_json(raw,Path(${JSON.stringify(root)}),timeout=45)\nassert b'cmd:block:v1 p=' in md and b'minerujson:source:v1' in md\nprint('WORKSPACE_NODE_PORTABLE_PASS',os.name,len(md))`;
+const code=`import sys,os\nsys.path.insert(0,${JSON.stringify(resolve('scripts'))})\nfrom v6_workspace_roots import resolve_node_binary,convert_mineru_json\nfrom pathlib import Path\nassert resolve_node_binary()==${JSON.stringify(process.execPath)}\nraw=Path(${JSON.stringify(resolve('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'))}).read_bytes()\nmd=convert_mineru_json(raw,Path(${JSON.stringify(root)}),timeout=45)\nassert b'cmd:block:v1 id=' in md and b'minerujson:source:v1' in md\nprint('WORKSPACE_NODE_PORTABLE_PASS',os.name,len(md))`;
 const env={...process.env,PATH:'',V6_NODE_BIN:process.execPath};
 const result=spawnSync(executable,['-c',code],{env,encoding:'utf8',timeout:60000});
 assert.equal(result.status,0,result.stderr||result.stdout);

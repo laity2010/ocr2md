@@ -31,7 +31,7 @@ try{
    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-   await page.waitForFunction(()=>window.__v6cm6?.cm?.readSource()?.includes('<!-- cmd:block:v1 p="4" b="0" s="1" -->'),null,{timeout:100000});
+   await page.waitForFunction(()=>window.__v6cm6?.cm?.readSource()?.includes('<!-- cmd:block:v1 id="p4b0s1" -->'),null,{timeout:100000});
    const result=await page.evaluate(async(legacyText)=>{
      const cm=window.__v6cm6.cm,source=cm.readSource(),doc=cm.doc;
      const {createCMDTransactionPort}=await import('/wcp-cmd-element-transactions.js');

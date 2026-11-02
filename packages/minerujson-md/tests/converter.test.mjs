@@ -31,8 +31,8 @@ test('real Buffett Alpha fixture: no loss of even JSON whitespace',()=>{
   const count = original.pdf_info.reduce((sum,p)=>sum+p.para_blocks.length,0);
   assert.equal(saved.match(/<!-- minerujson:block:v1:/g)?.length,count);
   assert.equal(count,224);
-  assert.equal(audited.match(/<!-- cmd:block:v1 p=\"\d+\" b=\"\d+\" -->/g)?.length,count);
-  assert.equal(audited.match(/<!-- cmd:block:v1 p=\"\d+\" b=\"\d+\" s=\"[0-9.]+\" -->/g)?.length,43);
+  assert.equal(audited.match(/<!-- cmd:block:v1 id=\"p\d+b\d+\" -->/g)?.length,count);
+  assert.equal(audited.match(/<!-- cmd:block:v1 id=\"p\d+b\d+s[0-9.]+\" -->/g)?.length,43);
   assert(!audited.includes('<!-- minerujson:block:v1:'),'new CMD document has one canonical PBS label format');
   assert.equal(audited.match(/<!-- minerujson:page:v1:/g)?.length,22);
   assert.equal(audited.match(/<!-- minerujson:discarded:v1:/g)?.length,91);
@@ -165,13 +165,13 @@ test('input can also be parsed JSON object; corrupted JSON rejected',()=>{
 
 test('page evidence and start-only boundaries reject injected or changed records',()=>{
   const md=toMarkdown(raw);
-  const next='<!-- cmd:block:v1 p="1" b="0" -->';
+  const next='<!-- cmd:block:v1 id="p1b0" -->';
   assert(md.includes(next));
   assert.equal(toMineruJSON(md),raw);
   assert.throws(()=>toMineruJSON(md.replace('<!-- minerujson:page:v1:1\n',
     '<!-- minerujson:page:v1:7\n')),/INVALID/);
   assert.throws(()=>toMineruJSON(md.replace(next,'injected body\n\n'+next)),/INVALID/);
-  assert.throws(()=>toMineruJSON(md.replace(next,'<!-- cmd:block:v1 p="1" b="5" -->')),/INVALID/);
+  assert.throws(()=>toMineruJSON(md.replace(next,'<!-- cmd:block:v1 id="p1b5" -->')),/INVALID/);
   assert.throws(()=>toMineruJSON(md.replace(next,
     '<!-- minerujson:end:v1:0:16 -->\n\n'+next)),/INVALID/);
   // The last page and EOF also belong outside the preceding body.
@@ -184,8 +184,8 @@ test('zero-block pages and chapter annotations preserve strict source data',()=>
   sample.pdf_info.push({page_idx:1000,para_blocks:[],discarded_blocks:[]});
   const md=toMarkdown(sample);
   assert.equal(toMineruJSON(md),JSON.stringify(sample));
-  const annotated=toMarkdown(raw).replace('<!-- cmd:block:v1 p="0" b="0" -->\n\n',
-    '<!-- cmd:block:v1 p="0" b="0" -->\n\n<!-- ocr2md:chapter:v1 id="mineru:0:0:0" independent="1" -->\n');
+  const annotated=toMarkdown(raw).replace('<!-- cmd:block:v1 id="p0b0" -->\n\n',
+    '<!-- cmd:block:v1 id="p0b0" -->\n\n<!-- ocr2md:chapter:v1 id="mineru:0:0:0" independent="1" -->\n');
   assert.equal(toMineruJSON(annotated),raw);
   assert.throws(()=>toMineruJSON(annotated.replace('id="mineru:0:0:0"','id="mineru:0:1:0"')),/INVALID/);
 });
@@ -204,37 +204,37 @@ test('quoted MinerU anchors and their contents still reverse to the same origina
 
 test('new canonical PBS parent/child paths remain distinct, tamper-evident and reversible',()=>{
   const md=toMarkdown(raw);
-  const markers=[...md.matchAll(/<!-- cmd:block:v1 p="(\d+)" b="(\d+)" s="(\d+(?:\.\d+)*)" -->/g)];
+  const markers=[...md.matchAll(/<!-- cmd:block:v1 id="p(\d+)b(\d+)s(\d+(?:\.\d+)*)" -->/g)];
   assert.equal(markers.length,43,'all 43 original nested child blocks must be retained');
   for(const path of ['0','1','2'])
-    assert(md.includes(`<!-- cmd:block:v1 p="4" b="0" s="${path}" -->`));
+    assert(md.includes(`<!-- cmd:block:v1 id="p4b0s${path}" -->`));
   assert.equal(toMineruJSON(md),raw);
   // OCR child types remain fully present in sealed MinerU evidence, rather
   // than duplicating a second, drift-prone OCR truth on every inline tag.
   const types=JSON.parse(toMineruJSON(md)).pdf_info[4].para_blocks[0].blocks.map(c=>c.type);
   assert.deepEqual(types,['table_caption','table_body','table_footnote']);
-  assert.throws(()=>toMineruJSON(md.replace('s="1" -->','s="9" -->')),/INVALID/);
-  assert.throws(()=>toMineruJSON(md.replace('<!-- cmd:block:v1 p="4" b="0" s="1" -->','')),/INVALID/);
+  assert.throws(()=>toMineruJSON(md.replace('id="p4b0s1" -->','id="p4b0s9" -->')),/INVALID/);
+  assert.throws(()=>toMineruJSON(md.replace('<!-- cmd:block:v1 id="p4b0s1" -->','')),/INVALID/);
   assert.equal(toMineruJSON(saved),raw,'old documents without child tags are still valid');
   const nested={pdf_info:[{page_idx:0,para_blocks:[{type:'table',bbox:[0,0,100,100],
     blocks:[{type:'table_caption',lines:[{spans:[{type:'text',content:'caption'}]}],
       blocks:[{type:'text',lines:[{spans:[{type:'text',content:'grandchild'}]}]}]}]}]}]};
   const generated=toMarkdown(nested);
-  assert(generated.includes('<!-- cmd:block:v1 p="0" b="0" s="0.0" -->'));
+  assert(generated.includes('<!-- cmd:block:v1 id="p0b0s0.0" -->'));
   assert.deepEqual(JSON.parse(toMineruJSON(generated)),nested);
 });
 
 test('new BC metadata is reversible, unique, dense and tamper-evident',()=>{
   const md=toMarkdown(raw);
-  const a='<!-- cmd:block:v1 p="0" b="0" -->';
-  const b='<!-- cmd:block:v1 p="0" b="1" -->';
-  const linked=md.replace(a,'<!-- cmd:block:v1 p="0" b="0" bc="bc-0001" seq="0" type="table" role="header" -->')
-    .replace(b,'<!-- cmd:block:v1 p="0" b="1" bc="bc-0001" seq="1" role="body" -->');
+  const a='<!-- cmd:block:v1 id="p0b0" -->';
+  const b='<!-- cmd:block:v1 id="p0b1" -->';
+  const linked=md.replace(a,'<!-- cmd:block:v1 id="p0b0" bc="bc-0001" seq="0" type="table" role="header" -->')
+    .replace(b,'<!-- cmd:block:v1 id="p0b1" bc="bc-0001" seq="1" role="body" -->');
   assert.equal(toMineruJSON(linked),raw);
   assert.throws(()=>toMineruJSON(linked.replace('seq="1"','seq="0"')),/INVALID/);
   assert.throws(()=>toMineruJSON(linked.replace('bc="bc-0001" seq="1"','bc="bc-0001" seq="2"')),/INVALID/);
   assert.throws(()=>toMineruJSON(linked.replace(' bc="bc-0001" seq="1"',' bc="bc-0001"')),/INVALID/);
   assert.throws(()=>toMineruJSON(linked.replace('type="table"','type="bad<script>"')),/INVALID/);
-  assert.throws(()=>toMineruJSON(linked.replace(' p="0" b="1"',' p="0" b="8"')),/INVALID/);
+  assert.throws(()=>toMineruJSON(linked.replace(' id="p0b1"',' id="p0b8"')),/INVALID/);
   assert.equal(toMineruJSON(saved),raw);
 });

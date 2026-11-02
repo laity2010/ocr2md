@@ -56,7 +56,7 @@ const typedDetach=apply(typed,planCMDExtractBlockChainMember(typed,'p0b1'));
 assert.deepEqual(get(typedDetach,'p0b0').members,['p0b0']);
 assert.equal(get(typedDetach,'p0b0').type,'table');
 assert.equal(readCMDBlockChains(typedDetach).atoms.find(a=>a.id==='p0b1').role,'body');
-assert.throws(()=>planCMDExtractBlockChainMember(source.replace('cmd:block:v1 p="0" b="0"', 'cmd:block:v1 p="0" b="0" bc="bc-wrong" seq="8"'),'p0b1'),/invalid/);
+assert.throws(()=>planCMDExtractBlockChainMember(source.replace('cmd:block:v1 id="p0b0"', 'cmd:block:v1 id="p0b0" bc="bc-wrong" seq="8"'),'p0b1'),/invalid/);
 assert.equal(planCMDMoveBlockChainMember(source,'p0b1','p0b1').changed,0);
 console.log('CMD_PBS_BC_WP5_PURE_PASS',{atoms:267,sourceChain:get(sourceChain,'p4b0s0').members,
   dest:get(sourceChain,'p0b0').members,extracted:'p0b2',evidenceUntouched:true});

@@ -30,12 +30,12 @@ try {
      const errors=[];page.on('pageerror',error=>errors.push(error.message));
      await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
      await page.waitForFunction(()=>window.__v6cm6?.cm?.queryBlockChains &&
-       window.__v6cm6?.view?.state?.doc?.toString().includes('<!-- cmd:block:v1 p="0" b="0" -->'),
+       window.__v6cm6?.view?.state?.doc?.toString().includes('<!-- cmd:block:v1 id="p0b0" -->'),
        null,{timeout:105000});
      const details=await page.evaluate(async()=>{
        const cm=window.__v6cm6.cm,original=cm.readSource();
        const bc=cm.queryBlockChains(),analysis=await cm.queryBlockAnalysis();
-       const sourceLine=original.slice(0,original.indexOf('<!-- cmd:block:v1 p="4" b="0" s="1" -->')).split('\n').length;
+       const sourceLine=original.slice(0,original.indexOf('<!-- cmd:block:v1 id="p4b0s1" -->')).split('\n').length;
        const from=cm.view.state.doc.line(sourceLine).from;
        cm.view.dispatch({selection:{anchor:from},scrollIntoView:true});
        const select=document.getElementById('module-select');

@@ -214,6 +214,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       button.setAttribute('aria-label',`展开或收起 ${p.data.chainId}`);
       button.addEventListener('click',e=>{e.stopPropagation();navigate(p.data);});return button;
     }},
+    {field:'type',headerName:'类型',width:134,minWidth:100,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
+    {field:'text',headerName:'源码',flex:1,minWidth:240,tooltipField:'text'},
     {field:'kind',headerName:'层级',width:85,minWidth:75,valueFormatter:p=>
       p.data?.isChainHeader?'块链':p.value==='child'?`子块 ${p.data.depth}`:'父块'},
     {field:'parentId',headerName:'所属父块',width:112,minWidth:95},
@@ -226,8 +228,6 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     {field:'review',headerName:'审阅',width:90,minWidth:80},
     {field:'note',headerName:'审阅备注',width:145,minWidth:100,tooltipField:'note'},
     {field:'pdfPage',headerName:'PDF 页',width:86,minWidth:76},
-    {field:'type',headerName:'原始类型',width:134,minWidth:100,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
-    {field:'text',headerName:'当前源码内容',flex:1,minWidth:240,tooltipField:'text'},
     {field:'originalText',headerName:'原始 OCR 摘要',width:220,minWidth:150,tooltipField:'originalText'},
     {field:'bboxText',headerName:'有效覆盖 bbox',width:180,minWidth:140},
     {field:'ocrBBoxText',headerName:'OCR 原始 bbox',width:180,minWidth:140},

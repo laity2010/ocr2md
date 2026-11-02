@@ -6,10 +6,10 @@
  */
 import {blockAnchor,subblockAnchor,unquotePrefix} from './mineru-anchors.js';
 
-const pbsPattern=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s(0|[1-9]\d*(?:\.(?:0|[1-9]\d*))*))?$/;
+const pbsPattern=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/;
 const tagPattern=/^<!-- cmd:block:v1((?: [a-z]+="[^"]*")*) -->$/;
 const attributePattern=/ ([a-z]+)="([^"]*)"/g;
-const permitted=new Set(['p','b','s','bc','seq','type','role','review','note']);
+const permitted=new Set(['id','p','b','s','bc','seq','type','role','review','note']);
 const namePattern=/^[a-z][a-z0-9_-]{0,63}$/;
 const bcPattern=/^bc-[a-z0-9][a-z0-9-]{0,63}$/;
 const decode=x=>x.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
@@ -32,8 +32,13 @@ export function parseCMDBlockTag(line){
     if(!permitted.has(m[1])||Object.hasOwn(fields,m[1]))return null;
     fields[m[1]]=decode(m[2]);count++;
   }
-  if(Object.keys(fields).length!==count||!uint(fields.p)||!uint(fields.b)||
-    fields.s!==undefined&&!/^(0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/.test(fields.s)||
+  // Fresh CMD uses one explicit PBS identity, matching PDF and AG exactly.
+  // Previously published p/b/s comments remain readable, never fabricated.
+  const pbs=fields.id===undefined?null:parseCMDPBSId(fields.id);
+  if(Object.keys(fields).length!==count||
+    (fields.id!==undefined&&(!pbs||fields.p!==undefined||fields.b!==undefined||fields.s!==undefined))||
+    (fields.id===undefined&&(!uint(fields.p)||!uint(fields.b)||
+      fields.s!==undefined&&!/^(0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/.test(fields.s)))||
     fields.bc!==undefined&&!bcPattern.test(fields.bc)||
     (fields.bc===undefined)!==(fields.seq===undefined)||
     fields.seq!==undefined&&!uint(fields.seq)||
@@ -41,7 +46,7 @@ export function parseCMDBlockTag(line){
     fields.role!==undefined&&!namePattern.test(fields.role)||
     fields.review!==undefined&&!namePattern.test(fields.review)||
     fields.note!==undefined&&fields.note.length>240)return null;
-  const id=`p${fields.p}b${fields.b}${fields.s===undefined?'':`s${fields.s}`}`;
+  const id=pbs?.id||`p${fields.p}b${fields.b}${fields.s===undefined?'':`s${fields.s}`}`;
   return {...fields,id,...parseCMDPBSId(id)};
 }
 export function serializeCMDBlockTag({id,bc,seq,type,role,review,note}){
@@ -52,8 +57,7 @@ export function serializeCMDBlockTag({id,bc,seq,type,role,review,note}){
   for(const value of [type,role,review])if(value!==undefined&&!namePattern.test(value))
     throw Error('Invalid CMD block metadata');
   if(note!==undefined&&(typeof note!=='string'||note.length>240))throw Error('Invalid CMD review note');
-  const props=[['p',String(pbs.p)],['b',String(pbs.b)],
-    ...(pbs.s.length?[['s',pbs.s.join('.')]]:[]),
+  const props=[['id',pbs.id],
     ...(bc===undefined?[]:[['bc',bc],['seq',String(seq)]]),
     ...(['type','role','review','note'].filter(k=>({type,role,review,note})[k]!==undefined)
       .map(k=>[k,({type,role,review,note})[k]]))];

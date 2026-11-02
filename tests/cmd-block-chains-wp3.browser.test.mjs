@@ -28,7 +28,7 @@ try{
    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-   await page.waitForFunction(()=>window.__v6cm6?.cm?.readSource()?.includes('<!-- cmd:block:v1 p="4" b="0" s="1" -->'),null,{timeout:105000});
+   await page.waitForFunction(()=>window.__v6cm6?.cm?.readSource()?.includes('<!-- cmd:block:v1 id="p4b0s1" -->'),null,{timeout:105000});
    const evaluated=await page.evaluate(async()=>{
     const cm=window.__v6cm6.cm;
     const {createCMDTransactionPort}=await import('/wcp-cmd-element-transactions.js');
@@ -38,13 +38,13 @@ try{
     if(!chapter)throw Error('need a second CMD chapter');
     setVirtualChapter(cm.view,{id:chapter.id,from:chapter.from,to:chapter.to});
     const before=currentVirtualChapter(cm.view.state);
-    const outside=original.indexOf('<!-- cmd:block:v1 p="4" b="0" s="0" -->')<chapter.from||
-      original.indexOf('<!-- cmd:block:v1 p="4" b="0" s="0" -->')>=chapter.to;
+    const outside=original.indexOf('<!-- cmd:block:v1 id="p4b0s0" -->')<chapter.from||
+      original.indexOf('<!-- cmd:block:v1 id="p4b0s0" -->')>=chapter.to;
     // Restrict arbitrary source writes, but allow a registered BC operation
     // spanning chapters. Its original child PBS IDs remain fixed.
     let unscopedRejected=false;
-    try{port.replaceRanges([{from:original.indexOf('<!-- cmd:block:v1 p="4" b="0" s="0" -->'),
-      to:original.indexOf('<!-- cmd:block:v1 p="4" b="0" s="0" -->'),expected:'',insert:'X'}]);}
+    try{port.replaceRanges([{from:original.indexOf('<!-- cmd:block:v1 id="p4b0s0" -->'),
+      to:original.indexOf('<!-- cmd:block:v1 id="p4b0s0" -->'),expected:'',insert:'X'}]);}
     catch{unscopedRejected=true;}
     const merged=port.mergeBlockChains('p0b0','p8b0',{expectedSource:original});
     const linked=cm.readSource(),model=port.queryBlockChains();
@@ -54,12 +54,12 @@ try{
     let staleRejected=false,invalidRejected=false;
     try{port.moveBlockChainMember('p8b0','p0b0','before',{expectedSource:original});}
     catch{staleRejected=true;}
-    const token=linked.indexOf('<!-- cmd:block:v1 p="6" b="7" -->');
+    const token=linked.indexOf('<!-- cmd:block:v1 id="p6b7" -->');
     if(token<0)throw Error('missing test PBS anchor');
     // A regular editor edit into evidence must not slip past CMD port;
     // malicious/duplicate labels must not silently be accepted as a new BC.
-    const forged=linked.replace('<!-- cmd:block:v1 p="6" b="7" -->',
-      '<!-- cmd:block:v1 p="6" b="7" bc="bc-broken" seq="7" -->');
+    const forged=linked.replace('<!-- cmd:block:v1 id="p6b7" -->',
+      '<!-- cmd:block:v1 id="p6b7" bc="bc-broken" seq="7" -->');
     setVirtualChapter(cm.view,null);
     cm.loadMarkdown(forged);
     try{port.mergeBlockChains('p8b0','p6b7');}catch{invalidRejected=true;}

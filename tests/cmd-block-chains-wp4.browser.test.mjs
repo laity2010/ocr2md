@@ -44,8 +44,11 @@ try{
      if(viewport)viewport.scrollLeft=0;
      return [...found];
    });
-   for(const header of ['所属父块','链成员','链前驱','审阅备注','当前源码内容','原始 OCR 摘要'])
+   for(const header of ['PBS / BC','类型','源码','所属父块','链成员','链前驱','审阅备注','原始 OCR 摘要'])
      assert(headers.includes(header),`${name} missing column ${header}: ${headers.join(',')}`);
+   const pbsAt=headers.indexOf('PBS / BC');
+   assert(pbsAt>=0&&headers[pbsAt+1]==='类型'&&headers[pbsAt+2]==='源码',
+     `${name} AG order must be PBS → 类型 → 源码; actual: ${headers.join(' / ')}`);
    const before=await page.evaluate(async()=>{
      const cm=window.__v6cm6.cm;
      const {inventory}=await cm.queryBlockAnalysis();

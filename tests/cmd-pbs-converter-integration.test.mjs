@@ -16,8 +16,8 @@ const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mine
 const next=toMarkdown(raw);
 assert.equal(toMineruJSON(next),raw,'original OCR JSON exact bytes must roundtrip');
 assert.equal(toMineruJSON(original),raw,'legacy files remain readable unchanged');
-assert.equal((next.match(/^<!-- cmd:block:v1 p="\d+" b="\d+" -->$/gm)||[]).length,224);
-assert.equal((next.match(/^<!-- cmd:block:v1 p="\d+" b="\d+" s="[\d.]+" -->$/gm)||[]).length,43);
+assert.equal((next.match(/^<!-- cmd:block:v1 id="p\d+b\d+" -->$/gm)||[]).length,224);
+assert.equal((next.match(/^<!-- cmd:block:v1 id="p\d+b\d+s[\d.]+" -->$/gm)||[]).length,43);
 assert.equal((next.match(/<!-- minerujson:block:v1:/g)||[]).length,0);
 const parsed=readCMDBlockChains(next);
 assert.equal(parsed.invalid.length,0);
@@ -66,8 +66,8 @@ assert.equal(readCMDBlockChains(withChain).summary.chains,266);
 assert.deepEqual(readCMDBlockChains(withChain).chains.find(c=>c.id==='bc-wp1-example').members,
   ['p3b0s0','p4b0s2']);
 assert.equal(sourceSubblocks(withChain).length,43);
-const unknown=next.replace('<!-- cmd:block:v1 p="4" b="0" s="1" -->',
-  '<!-- cmd:block:v1 p="4" b="0" s="9" -->');
+const unknown=next.replace('<!-- cmd:block:v1 id="p4b0s1" -->',
+  '<!-- cmd:block:v1 id="p4b0s9" -->');
 assert.throws(()=>toMineruJSON(unknown),/INVALID/);
 assert.deepEqual(readCMDBlockChains(original).summary,
   {atoms:224,chains:224,singleton:224,multiple:0});

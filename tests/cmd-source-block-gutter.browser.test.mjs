@@ -33,7 +33,7 @@ try{
    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-   await page.waitForFunction(()=>window.__v6cm6?.cm?.readSource()?.includes('<!-- cmd:block:v1 p="0" b="0" -->'),null,{timeout:90000});
+   await page.waitForFunction(()=>window.__v6cm6?.cm?.readSource()?.includes('<!-- cmd:block:v1 id="p0b0" -->'),null,{timeout:90000});
    for(const source of [modern,oldSource]){
     if(source!==modern)await page.evaluate(s=>window.__v6cm6.cm.loadMarkdown(s),source);
     await page.waitForFunction(s=>window.__v6cm6.cm.readSource()===s,source,{timeout:10000});

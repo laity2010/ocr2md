@@ -173,7 +173,7 @@ export class CMDocument {
     // Convert first: a failure must leave the CM6 document unchanged.
     const markdown=await this.convertMineruJson(input);
     if(typeof markdown!=='string'||!markdown.includes('<!-- minerujson:source:v1:')||
-      !/(?:<!-- cmd:block:v1 p="\d+" b="\d+"|<!-- minerujson:block:v1:\d+:\d+)/.test(markdown))
+      !/(?:<!-- cmd:block:v1 (?:id="p\d+b\d+(?:s\d+(?:\.\d+)*)?"|p="\d+" b="\d+")|<!-- minerujson:block:v1:\d+:\d+)/.test(markdown))
       throw Error('MinerU converter returned an invalid Markdown document');
     this.loadMarkdown(markdown);
     return this.doc;

@@ -68,7 +68,7 @@ export async function planCMDSubblockAnnotations(source){
     // Migrated legacy documents may still have unmarked OCR children.
     // Once their parent is canonical PBS, never write old-format child tags.
     if(canonical)for(const entry of expected)
-      entry.tag=`<!-- cmd:block:v1 p="${root.pageIndex}" b="${root.blockIndex}" s="${entry.path}" -->`;
+      entry.tag=`<!-- cmd:block:v1 id="p${root.pageIndex}b${root.blockIndex}s${entry.path}" -->`;
     const stop=rootAnchors[i+1]?.lineIndex??lines.length;
     const found=[];
     for(let line=root.lineIndex+1;line<stop;line++){

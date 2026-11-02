@@ -72,7 +72,7 @@ assert.equal(crossLogical.assignments.get('p9b1'),'p9b0');
 assert.equal(crossLogical.assignments.get('p8b8'),'p8b8');
 assert.equal(crossLogical.assignments.get('p10b0'),'p10b0');
 // A page transition must not skip an absent previous CMD anchor.
-const missingPrevious=original.replace('<!-- cmd:block:v1 p="8" b="8" -->','<!-- missing:8:8 -->');
+const missingPrevious=original.replace('<!-- cmd:block:v1 id="p8b8" -->','<!-- missing:8:8 -->');
 const missingRows=(await inspectCMDTextBlocks(missingPrevious)).rows;
 assert.throws(()=>planCMDBlockJoin(missingPrevious,missingRows,'p9b0',true),/前驱/);
 // Changing page 3 must renumber ONLY that page's logical groups; never
@@ -90,13 +90,13 @@ assert.equal(emptyLogical.blocks.length,223);
 const later=planCMDBlockJoin(original,initial,'p15b6',true);
 assert.equal(later.previous,'p15b5');
 // Stale or corrupted join markers may not silently change a previous ID.
-const broken=original.replace('<!-- cmd:block:v1 p="6" b="7" -->',
-  '<!-- ocr2md:block-join:v1 prev="p0b0" target="p6b7" -->\n<!-- cmd:block:v1 p="6" b="7" -->');
+const broken=original.replace('<!-- cmd:block:v1 id="p6b7" -->',
+  '<!-- ocr2md:block-join:v1 prev="p0b0" target="p6b7" -->\n<!-- cmd:block:v1 id="p6b7" -->');
 const brokenRows=(await inspectCMDTextBlocks(broken)).rows;
 assert.throws(()=>planCMDBlockJoin(broken,brokenRows,'p6b7',true),/无效|损坏|错误/);
 // Quoted nested blocks retain quote level for the invisible CMD marker.
-const quoted=original.replace('<!-- cmd:block:v1 p="6" b="7" -->',
-  '> <!-- cmd:block:v1 p="6" b="7" -->');
+const quoted=original.replace('<!-- cmd:block:v1 id="p6b7" -->',
+  '> <!-- cmd:block:v1 id="p6b7" -->');
 const quotedRows=(await inspectCMDTextBlocks(quoted)).rows;
 const quotedPlan=planCMDBlockJoin(quoted,quotedRows,'p6b7',true);
 assert(quotedPlan.edits[0].insert.startsWith('> <!-- ocr2md:block-join:v1'));

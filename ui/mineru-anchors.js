@@ -3,7 +3,7 @@
  */
 const quoted=/^((?: {0,3}>[ \t]?)+)/;
 const anchor=/^(?: {0,3}>[ \t]?)* {0,3}<!-- minerujson:block:v1:(\d+):(\d+) -->[ \t]*$/;
-const cmdAnchor=/^(?: {0,3}>[ \t]?)* {0,3}<!-- cmd:block:v1 p="(\d+)" b="(\d+)"((?: [a-z]+="[^"]*")*) -->[ \t]*$/;
+const cmdAnchor=/^(?: {0,3}>[ \t]?)* {0,3}<!-- cmd:block:v1 (?:id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"|p="(\d+)" b="(\d+)")((?: [a-z]+="[^"]*")*) -->[ \t]*$/;
 const page=/^(?: {0,3}>[ \t]?)* {0,3}<!-- minerujson:page:v1:/;
 const source=/^(?: {0,3}>[ \t]?)* {0,3}<!-- minerujson:source:v1:/;
 
@@ -13,7 +13,13 @@ export function blockAnchor(line){
   const m=anchor.exec(line);
   if(m)return {pageIndex:Number(m[1]),blockIndex:Number(m[2])};
   const cmd=cmdAnchor.exec(line);
-  if(cmd&&!/ s="/.test(cmd[3]))return {pageIndex:Number(cmd[1]),blockIndex:Number(cmd[2])};
+  if(cmd){
+    const id=cmd[1],path=id?/(?:s(\d+(?:\.\d+)*))$/.exec(id):null;
+    if(!path&&!/ s="/.test(cmd[4])){
+      const root=id? /^p(\d+)b(\d+)$/.exec(id):null;
+      return {pageIndex:Number(root?.[1]??cmd[2]),blockIndex:Number(root?.[2]??cmd[3])};
+    }
+  }
   return null;
 }
 export function pageHeader(line){return page.test(line);}
@@ -32,10 +38,11 @@ export function subblockAnchor(line){
   const m=subblock.exec(line);
   if(!m){
     const cmd=cmdAnchor.exec(line);
-    const child=cmd&&/ s="(\d+(?:\.\d+)*)"/.exec(cmd[3]);
-    if(!child)return null;
-    return {pageIndex:Number(cmd[1]),blockIndex:Number(cmd[2]),
-      path:child[1].split('.').map(Number)};
+    const child=cmd&&(cmd[1]?/^p(\d+)b(\d+)s(\d+(?:\.\d+)*)$/.exec(cmd[1]):null);
+    const legacy=cmd&&!cmd[1]?/ s="(\d+(?:\.\d+)*)"/.exec(cmd[4]):null;
+    if(!child&&!legacy)return null;
+    return {pageIndex:Number(child?.[1]??cmd[2]),blockIndex:Number(child?.[2]??cmd[3]),
+      path:(child?.[3]??legacy[1]).split('.').map(Number)};
   }
   const pageIndex=Number(m[1]),blockIndex=Number(m[2]);
   const path=m[3].split('.').map(Number);

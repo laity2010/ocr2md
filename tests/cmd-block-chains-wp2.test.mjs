@@ -89,7 +89,7 @@ assert(!modern.includes('minerujson:block:v1'));
 const oldQuoted=legacy.replace('<!-- minerujson:block:v1:6:7 -->',
   '> <!-- minerujson:block:v1:6:7 -->');
 const quoted=planCMDMigrateLegacyBlockChains(oldQuoted);
-assert(quoted.edits.some(e=>e.insert==='> <!-- cmd:block:v1 p="6" b="7" -->'));
+assert(quoted.edits.some(e=>e.insert==='> <!-- cmd:block:v1 id="p6b7" -->'));
 assert.equal(quoted.migrated,224);
 const damaged=old.replace('target="p6b7"','target="p1b2"');
 assert.throws(()=>planCMDMigrateLegacyBlockChains(damaged),/Invalid legacy/);

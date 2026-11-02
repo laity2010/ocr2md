@@ -274,7 +274,7 @@ function childMarkers(block: Block,pageIndex: number,blockIndex: number):
       const type=child.type||'unknown';
       assert(/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(type),'invalid child OCR type');
       output.push({path:key,type,
-        tag:`<!-- cmd:block:v1 p="${pageIndex}" b="${blockIndex}" s="${key}" -->`});
+        tag:`<!-- cmd:block:v1 id="p${pageIndex}b${blockIndex}s${key}" -->`});
       visit(child,next);
     }
   };
@@ -338,7 +338,7 @@ export function toMarkdown(input: string | Mineru): string {
       const sections=slots.map(slot=>[
         ...(slot.path?[byPath.get(slot.path.join('.'))!]:[]),
         serialize([slot.node])].join('\n\n'));
-      pieces.push([`<!-- cmd:block:v1 p="${pageIndex}" b="${index}" -->`,...missing,
+      pieces.push([`<!-- cmd:block:v1 id="p${pageIndex}b${index}" -->`,...missing,
         ...sections].join('\n\n'));
     }
   }
@@ -351,6 +351,15 @@ export function toMarkdown(input: string | Mineru): string {
 
 /** API 2: validated .minerujson.md -> MinerU JSON. Unedited documents return byte-identical source text. */
 export function toMineruJSON(markdown: string): string {
+  // v1's public identity is the same canonical PBS ID shown in PDF and AG.
+  // Internally normalize this one annotation syntax for the existing proven
+  // strict parent/child round-trip validator. Never modify the user's source.
+  markdown=markdown.replace(/^(\s*(?:>\s*)*<!-- cmd:block:v1 )id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"((?: [a-z]+="[^"]*")* -->)[ \t]*$/gm,
+    (_all,prefix,id,rest)=>{
+      const match=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/.exec(id);
+      assert(match, 'invalid CMD PBS identity');
+      return `${prefix}p="${match[1]}" b="${match[2]}"${match[3]===undefined?'':` s="${match[3]}"`}${rest}`;
+    });
   const source = sourcePattern.exec(markdown);
   assert(source,'original MinerU metadata comment missing or malformed');
   const compressed = Buffer.from(source[2].replace(/\s+/g,''),'base64url');
