@@ -336,3 +336,71 @@ export function planCMDMigrateLegacyBlockChains(source){
     throw Error('CMD migration partition changed; refusing edits');
   return {changed:edits.length,edits,migrated:legacy.length,joins:removed};
 }
+
+/** WP4: CMD-owned complete AG projection. Keep every PBS atom, including
+ * nested native children; AG never parses source annotations or OCR JSON.
+ * Missing anchors remain evidence rows, NOT invented chain memberships.
+ */
+export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlockChains(source),nativeChildren=[]){
+  if(typeof source!=='string'||!Array.isArray(parentRows)||!Array.isArray(layout?.pages))
+    throw TypeError('CMD block table requires verified layout and parent inventory');
+  const parents=new Map(parentRows.map(row=>[row.id,row]));
+  const children=new Map(nativeChildren.map(row=>[row.id,row]));
+  const member=new Map();
+  for(const chain of model.chains)for(const [position,id] of chain.members.entries())
+    member.set(id,{chainId:chain.id,chainLabel:chain.explicit?chain.id:chain.size>1?'旧接续':'单块',
+      chainPosition:position+1,chainSize:chain.size,chainType:chain.type,
+      chainRole:chain.roles[id]||null,chainPrev:position?chain.members[position-1]:null,
+      chainMembers:[...chain.members]});
+  const tail=source.indexOf('<!-- minerujson:source:v1:');
+  const end=tail<0?source.length:tail;
+  const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
+  const rows=ordered.map((atom,i)=>{
+    const identity=parseCMDPBSId(atom.id);
+    const parentId=`p${identity.p}b${identity.b}`,parent=parents.get(parentId),native=children.get(atom.id);
+    const root=identity.s.length===0;
+    const page=layout.pages[identity.p];
+    const region=page?.regions.find(x=>x.blockIndex===identity.b);
+    // Only direct native children have independently validated geometry in
+    // the current sealed layout. Never substitute a parent's bbox for a child.
+    const sub=identity.s.length===1?region?.subRegions.find(x=>x.path[0]===identity.s[0]):null;
+    const bbox=root?(parent?.geometry?parent.bbox:null):sub?.bbox??null;
+    const bodyStart=atom.from+atom.rawLine.length;
+    const bodyEnd=Math.min(end,ordered[i+1]?.from??end);
+    const sourceText=source.slice(Math.min(end,bodyStart),Math.max(Math.min(end,bodyStart),bodyEnd))
+      .replace(/<!--[^]*?-->/g,'').replace(/\s+/g,' ').trim().slice(0,240);
+    const chain=member.get(atom.id);
+    return {id:atom.id,kind:root?'parent':'child',parentId:root?null:parentId,
+      childPath:identity.s.length?identity.s.join('.'):null,depth:identity.s.length,
+      pageIndex:identity.p,blockIndex:identity.b,pdfPage:identity.p+1,
+      sourceLine:atom.sourceLine,from:atom.from,format:atom.format,
+      type:root?parent?.type||'unknown':native?.type||sub?.type||'native-child',
+      ocrBBoxText:(root?parent?.bbox:native?.originalBBox)?.join(', ')||'—',
+      ocrRole:sub?.role||null,
+      text:sourceText||(root?parent?.text||'':''),sourceText,
+      originalText:root?parent?.text||'':native?.text||'',
+      bbox:bbox?[...bbox]:null,bboxText:bbox?bbox.join(', '):'—',
+      geometry:Boolean(bbox),geometryLabel:bbox?'可定位':'无有效子块坐标',
+      anchorCount:1,anchorStatus:'已匹配',expectsPreview:root?Boolean(parent?.expectsPreview):Boolean(sourceText),
+      previewLabel:sourceText?'待检查':'无需渲染',
+      review:atom.review||'',note:atom.note||'',
+      joinPrev:chain?.chainPrev||null,logicalId:parent?.logicalId||parentId,
+      joinLabel:chain?.chainPrev?`↳ ${chain.chainId}`:'独立',
+      chainId:chain?.chainId||`implicit:${atom.id}`,
+      chainLabel:chain?.chainLabel||'无效关系',chainPosition:chain?.chainPosition??1,
+      chainSize:chain?.chainSize??1,chainType:chain?.chainType||null,
+      chainRole:atom.role||chain?.chainRole||null,chainPrev:chain?.chainPrev||null,
+      chainMembers:chain?.chainMembers||[atom.id]};
+  });
+  const seen=new Set(rows.map(row=>row.id));
+  for(const parent of parentRows)if(!seen.has(parent.id))rows.push({...parent,
+    kind:'parent',parentId:null,childPath:null,depth:0,format:'missing',
+    chainId:null,chainLabel:'未标定',chainPosition:null,chainSize:0,
+    chainType:null,chainRole:null,chainMembers:[],review:'',note:'',
+    sourceText:'',originalText:parent.text||'',previewLabel:'无源码',
+    geometryLabel:parent.geometry?'可定位':'无效'});
+  return {rows,summary:{...model.summary,invalid:model.invalid.length,
+    parents:rows.filter(r=>r.kind==='parent').length,
+    children:rows.filter(r=>r.kind==='child').length,
+    unanchored:rows.filter(r=>r.format==='missing').length}};
+}

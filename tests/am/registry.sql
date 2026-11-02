@@ -1141,8 +1141,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Text-block inventory: CMD sealed original JSON is the only evidence source;
 -- AG owns a read-only grid, layout returns semantic DOM coverage, PDF paints bbox.
 INSERT INTO apis VALUES
- ('L48','L','inspectCMDTextBlocks','ui/cmd-text-blocks.js','export','current CM6 CMD source string','detached block IDs, exact original bbox, SHA-validated geometry, source anchor completeness','does not fetch /api/pdf-map, decompresses only CMD sealed original JSON',1),
- ('G25','G','createTextBlockModule','ui/text-block-module.js','export','AG host, CMD chapter lookup, bounded status and PDF location callbacks','readonly AG of all original blocks including missing anchors','module owns AG grid, never edits/merges CMD nor reads preview DOM',1),
+ ('L48','L','inspectCMDTextBlocks','ui/cmd-text-blocks.js','export','current CM6 CMD source string','detached parent inventory and native child OCR provenance (type, text, original bbox), SHA-validated layout, source anchor completeness','does not fetch /api/pdf-map, decompresses only CMD sealed original JSON',1),
+ ('G25','G','createTextBlockModule','ui/text-block-module.js','export','AG host, CMD chapter lookup, bounded status and PDF location callbacks','AG full parent and child PBS inventory plus BC grouped view and semantic actions','module owns AG grid; mutation requests only through registered CMD action callback; no direct CM6 or PDF writes',1),
  ('G26','G','returned.setPreviewCoverage','ui/text-block-module.js','returned','detached reader-mapped block ID array','AG displays real MD coverage vs metadata-only blocks','reader owns DOM; AG receives IDs only',1),
  ('L49','L','returned.focusBlock','ui/pdf-preview.js','returned','page index and para block index','show original PDF bbox even if CMD source anchor is missing','PDF viewer alone owns overlay geometry and scroll',1);
 INSERT INTO access_edges VALUES
@@ -1475,3 +1475,18 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP3-C69','C69','tests/cmd-block-chains-wp3.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit cross-chapter authorized BC merge, native Undo/Redo restores exact original and shared PDF predecessor','integration'),
  ('TC-WP3-C70','C70','tests/cmd-bc-save-reload.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','isolated actual authenticated HTTP save/load, merge and split BC, original OCR byte-exact and stale save HTTP 412/428, unauthenticated 403','integration'),
  ('TC-WP3-C68','C68','tests/cmd-bc-save-reload.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','real isolated HTTP legacy PBS migration persisted and reloaded, original OCR unchanged','integration');
+
+
+-- WP4: CMD owns the full original-parent / native-child relationship read
+-- model; the AG table owns presentation and sends semantic action intents
+-- back through the Shell -> Layout registered callback to the guarded CMD port.
+INSERT INTO apis VALUES
+ ('L74','L','projectCMDBlockTable','ui/cmd-block-chains.js','export','live CMD source, verified original parent and native child rows, sealed layout and BC partition','detached full parent+native-child AG rows with IDs, member order, roles, review, source scopes and safe child bbox','no AG-owned parsing or persistence; no invented missing-child geometry',1),
+ ('L75','L','returned.setBlockChainAction','ui/workspace.js','returned','semantic action callback merge/split/migrate by PBS ID','AG action requests forwarded to current CMD transaction port','source revision checked by Shell; only CM6 transaction writes CMD',1);
+INSERT INTO access_edges VALUES
+ ('X-WP4-C-L74','C','L','ui/cm-document.js','projectCMDBlockTable(source,inventory.rows,layout,bc,inventory.children)','L74','registered','CMD joins source atoms with sealed verified layout for full AG view'),
+ ('X-WP4-MAIN-L75',NULL,'L','ui/main.js','workspace.setBlockChainAction(async(action,request)','L75','registered','Shell supplies semantic callback to AG without exposing CMD internals');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP4-L74','L74','tests/cmd-block-chains-wp4.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','267 unique PBS rows including 224 parents and 43 native children, validated geometry, source scope, member order and original OCR unchanged','direct'),
+ ('TC-WP4-G25','G25','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit AG full PBS/BC columns and grouping; selecting target, merging and splitting only through guarded CMD; no disk writes','integration'),
+ ('TC-WP4-L75','L75','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG delegated merge/split through Shell to guarded CMD, changed source rescanned; child-inclusive AG projection remains consistent','integration');

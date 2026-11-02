@@ -309,7 +309,8 @@
       "createTextBlockModule"
     ],
     "cm-document.js->cmd-block-chains.js": [
-      "readCMDBlockChains"
+      "readCMDBlockChains",
+      "projectCMDBlockTable"
     ],
     "wcp-cmd-element-transactions.js->cmd-block-chains.js": [
       "planCMDBlockChainArrangement",

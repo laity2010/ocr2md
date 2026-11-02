@@ -247,7 +247,7 @@ const summary=block=>{
 };
 export async function inspectCMDTextBlocks(source){
   const {data,end}=await sealedJSON(source);
-  const anchors=anchorLines(source),expected=new Set(),rows=[];
+  const anchors=anchorLines(source),expected=new Set(),rows=[],children=[];
   for(const [pageIndex,page] of data.pdf_info.entries()){
     if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
     for(const [blockIndex,block] of page.para_blocks.entries()){
@@ -260,6 +260,17 @@ export async function inspectCMDTextBlocks(source){
       const pageSize=page.page_size;
       const validPage=Array.isArray(pageSize)&&pageSize.length===2&&pageSize.every(n=>Number.isFinite(n)&&n>0);
       const geometry=Boolean(hasBbox&&validPage&&bbox[0]>=0&&bbox[1]>=0&&bbox[2]<=pageSize[0]&&bbox[3]<=pageSize[1]);
+      const collectNative=(node,path=[])=>{
+        for(const [idx,child] of (node.blocks||[]).entries()){
+          const next=[...path,idx];
+          const originalBBox=Array.isArray(child.bbox)&&child.bbox.length===4&&
+            child.bbox.every(Number.isFinite)?[...child.bbox]:null;
+          children.push({id:`${id}s${next.join('.')}`,parentId:id,path:next,
+            type:child.type||'unknown',text:summary(child),originalBBox});
+          collectNative(child,next);
+        }
+      };
+      collectNative(block);
       rows.push({id,pageIndex,blockIndex,pdfPage:pageIndex+1,type:block.type||'unknown',
         text:summary(block),textHead:rawText.slice(0,180),textTail:rawText.slice(-220),
         bbox:hasBbox?[...bbox]:null,pageSize:validPage?[...pageSize]:null,
@@ -281,7 +292,7 @@ export async function inspectCMDTextBlocks(source){
   for(const row of rows)if(row.from===null)row.expectsPreview=false;
   const unknown=[...anchors].filter(([id])=>!expected.has(id)).map(([id,positions])=>({id,positions}));
   const duplicate=rows.filter(row=>row.anchorCount>1);
-  return {rows,summary:{sourceSha:sealed.exec(source)[1],pages:data.pdf_info.length,blocks:rows.length,
+  return {rows,children,summary:{sourceSha:sealed.exec(source)[1],pages:data.pdf_info.length,blocks:rows.length,
     matched:rows.filter(row=>row.anchorCount===1).length,
     missing:rows.filter(row=>row.anchorCount===0).length,duplicates:duplicate.length,
     withGeometry:rows.filter(row=>row.geometry).length,

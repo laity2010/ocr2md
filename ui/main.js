@@ -726,6 +726,19 @@ async function main() {
       return result;
     }catch(error){status('文本块接续失败：'+error.message,'error');throw error;}
   });
+  workspace.setBlockChainAction(async(action,request={})=>{
+    // AG sends semantic member IDs only. The document scan owns the source
+    // revision; no second Markdown state or AG-side mutation is permitted.
+    if(blockIndexedSource===null||cm.readSource()!==blockIndexedSource)
+      throw Error('文本块列表已过期，请重新扫描后操作');
+    const options={expectedSource:blockIndexedSource};
+    const result=action==='merge'?cmdPort.mergeBlockChains(request.destinationId,request.sourceId,options):
+      action==='split'?cmdPort.splitBlockChainAt(request.memberId,options):
+      action==='migrate'?cmdPort.migrateLegacyBlockChains(options):null;
+    if(!result)throw Error('未知 CMD 块链操作');
+    if(result.changed){blockIndexedSource=null;scanTextBlocks();}
+    return result;
+  });
   workspace.setBlockMoveAction(async(sourceId,targetId,placement)=>{
     try{
       const result=placement==='before'?

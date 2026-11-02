@@ -14,7 +14,7 @@ import {scanHtmlElements} from './cmd-html-elements.js';
 import {queryCMDLayout,queryCMDBlockGeometry,inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {scanCMDContinuationCandidates} from './cmd-block-continuations.js';
 import {projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
-import {readCMDBlockChains} from './cmd-block-chains.js';
+import {readCMDBlockChains,projectCMDBlockTable} from './cmd-block-chains.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -73,6 +73,7 @@ export class CMDocument {
     inventory.summary.joined=canonical?bc.chains.reduce((sum,c)=>sum+c.size-1,0):logical.joined.size;
     inventory.summary.logicalBlocks=logical.blocks.length;
     inventory.summary.invalidJoinMarks=logical.invalid.length;
+    inventory.atoms=projectCMDBlockTable(source,inventory.rows,layout,bc,inventory.children);
     inventory.summary.bcChains=bc.summary.chains;
     inventory.summary.invalidBCMarks=bc.invalid.length;
     return {inventory,continuations:scanCMDContinuationCandidates(inventory,layout),

@@ -36,7 +36,9 @@ try{
    // All three base text-block actions, including native subblock annotation, live in Shell dropdown.
    const functionMenu=page.locator('#ag-functions-menu .module-actions[data-module="text-block"]');
    await page.locator('#ag-functions-toggle').click();
-   assert.equal(await functionMenu.getByRole('button').count(),3,'raw block mode exposes three actual actions including native subblock annotation');
+   assert.equal(await functionMenu.getByRole('button').count(),8,'block mode exposes existing inventory actions and five new PBS/BC actions');
+   for(const name of ['切换文本块链分组展示','将当前 PBS 设为目标链','把当前 PBS 所在块链并入目标链','在当前 PBS 之前拆分块链','显式迁移旧版 MinerU 块链标签'])
+     assert.equal(await functionMenu.getByRole('button',{name}).count(),1,`missing WP4 block action ${name}`);
    await page.keyboard.press('Escape');
    await action(page,'查看跨页跨栏接续候选');
    await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('#status')?.textContent||''),null,{timeout:20000});
