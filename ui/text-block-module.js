@@ -38,6 +38,12 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   mergeButton.setAttribute('aria-label','把当前 PBS 所在块链并入目标链');
   const splitButton=document.createElement('button');splitButton.type='button';splitButton.textContent='从此拆链';
   splitButton.setAttribute('aria-label','在当前 PBS 之前拆分块链');
+  const moveAfterButton=document.createElement('button');moveAfterButton.type='button';moveAfterButton.textContent='移动至目标后';
+  moveAfterButton.setAttribute('aria-label','仅将所选 PBS 移至目标块后');
+  const firstButton=document.createElement('button');firstButton.type='button';firstButton.textContent='移动至链首';
+  firstButton.setAttribute('aria-label','仅将所选 PBS 移至当前块链最前');
+  const extractButton=document.createElement('button');extractButton.type='button';extractButton.textContent='独立成链';
+  extractButton.setAttribute('aria-label','将所选 PBS 独立成单块链');
   const migrateButton=document.createElement('button');migrateButton.type='button';migrateButton.textContent='迁移旧标签';
   migrateButton.setAttribute('aria-label','显式迁移旧版 MinerU 块链标签');
   const candidatesButton=document.createElement('button');candidatesButton.type='button';candidatesButton.textContent='接续候选';
@@ -53,10 +59,10 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   overviewButton.title='缩小同页 PDF，尽量同时看到 A、B；跨页可点击 A/B 分别定位';
   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='导出审阅记录';
   exportButton.setAttribute('aria-label','导出文本块续接审阅 JSON');
-  actionsHost.append(blocksButton,subblocksButton,groupButton,targetButton,mergeButton,splitButton,migrateButton,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
+  actionsHost.append(blocksButton,subblocksButton,groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
   overviewButton.addEventListener('click',()=>onCompare({overview:true}));
   const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(gridHost);
-  let rows=[],tableRows=[],grouped=false,collapsedChains=new Set(),targetId=null,candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
+  let rows=[],tableRows=[],grouped=false,collapsedChains=new Set(),targetId=null,dragBusy=false,candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
   let selectedCandidateId=null,documentSha=null,reviews=new Map();
   const storageKey=sha=>`ocr2md:continuation-review:v1:${sha}`;
   const restore=sha=>{
@@ -122,7 +128,72 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     for(const e of ['pointerdown','mousedown','touchstart'])button.addEventListener(e,x=>x.stopPropagation());
     button.addEventListener('click',e=>{e.stopPropagation();navigate(p.data);});return button;
   };
+  // Pointer-based drag handle is within the AG owner's grid. It works for
+  // mouse, stylus and iPad pointer-touch, without HTML5 drag ghosts, global
+  // source movement, or reaching into CM6/PDF internals.
+  let drag=null;
+  const dropAt=(x,y)=>{
+    const element=document.elementFromPoint(x,y);
+    const row=element?.closest?.('[row-id]');
+    if(!row||!gridHost.contains(row))return null;
+    const data=grid.getRowNode(row.getAttribute('row-id'))?.data;
+    if(!data)return null;
+    const targetId=data.isChainHeader?data.chainMembers?.at(-1):data.id;
+    const atom=tableRows.find(item=>item.id===targetId);
+    return atom?.format==='cmd-v1'?{targetId,row}:null;
+  };
+  const clearHover=()=>{
+    if(drag?.hover)drag.hover.classList.remove('ocr-pbs-drop-target');
+    if(drag)drag.hover=null;
+  };
+  const handleDrag=p=>{
+    const atom=p.data;
+    if(!atom||atom.isChainHeader||atom.format!=='cmd-v1'||mode!=='blocks'||report?.invalidBCMarks)return '';
+    const handle=document.createElement('button');handle.type='button';
+    handle.className='ocr-pbs-drag-handle';handle.dataset.pbsDragHandle=atom.id;
+    handle.setAttribute('aria-label',`拖动 ${atom.id} 调整块链成员`);
+    handle.title=`拖动 ${atom.id} 到目标块后（只移动这一块）`;
+    handle.textContent='⠿';
+    handle.addEventListener('click',event=>event.stopPropagation());
+    handle.addEventListener('pointerdown',event=>{
+      if(drag||dragBusy||!active||mode!=='blocks'||
+        event.pointerType==='mouse'&&event.button!==0)return;
+      event.preventDefault();event.stopPropagation();
+      drag={id:atom.id,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,
+        moved:false,hover:null};
+      selectedId=atom.id;refreshActionButtons();
+      try{handle.setPointerCapture(event.pointerId);}catch{}
+    });
+    handle.addEventListener('pointermove',event=>{
+      if(!drag||drag.id!==atom.id||event.pointerId!==drag.pointerId)return;
+      const moved=Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY);
+      if(moved<8&&!drag.moved)return;
+      drag.moved=true;event.preventDefault();
+      clearHover();const target=dropAt(event.clientX,event.clientY);
+      if(target&&target.targetId!==drag.id){drag.hover=target.row;
+        target.row.classList.add('ocr-pbs-drop-target');}
+    });
+    const stop=event=>{
+      if(!drag||drag.id!==atom.id||event.pointerId!==drag.pointerId)return;
+      const activeDrag=drag;
+      const target=event.type==='pointerup'&&activeDrag.moved?
+        dropAt(event.clientX,event.clientY):null;
+      clearHover();drag=null;
+      try{if(handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);}catch{}
+      if(target&&target.targetId!==activeDrag.id){
+        void execute('move',{memberId:activeDrag.id,targetId:target.targetId,placement:'after'});
+      }
+      event.preventDefault();event.stopPropagation();
+    };
+    handle.addEventListener('pointerup',stop);
+    handle.addEventListener('pointercancel',stop);
+    handle.addEventListener('lostpointercapture',()=>{
+      if(drag?.id===atom.id){clearHover();drag=null;}
+    });
+    return handle;
+  };
   const columns=[
+    {colId:'pbsDrag',headerName:'拖动',width:56,minWidth:52,maxWidth:64,pinned:'left',lockPinned:true,cellRenderer:handleDrag},
     {field:'sourceLine',headerName:'源码行',width:82,minWidth:75,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'id',headerName:'PBS / BC',width:155,minWidth:128,cellRenderer:p=>{
       if(!p.data?.isChainHeader)return p.value;
@@ -200,7 +271,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     return bounds?set.filter(r=>r.from!==null&&r.from>=bounds.from&&r.from<bounds.to):[];
   };
   const projectedRows=()=>{
-    const atoms=scoped();if(!grouped)return atoms;
+    const atoms=scoped();
     const membership=new Map(),ordered=[];
     for(const atom of atoms){
       const key=atom.chainId||`unmarked:${atom.id}`;
@@ -210,6 +281,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     const result=[];
     for(const key of ordered){
       const members=membership.get(key);
+      if(!grouped){result.push(...[...members].sort((a,b)=>(a.chainPosition??1)-(b.chainPosition??1)));continue;}
       if(members.length===1&&members[0].chainSize<=1){result.push(members[0]);continue;}
       const sortedMembers=[...members].sort((a,b)=>(a.chainPosition??1)-(b.chainPosition??1));
       const first=sortedMembers[0];
@@ -228,22 +300,37 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     targetButton.disabled=!selected||invalid;
     mergeButton.disabled=!selected||invalid||!targetId||selected.chainId===tableRows.find(r=>r.id===targetId)?.chainId;
     splitButton.disabled=!selected||invalid||selected.chainPosition<=1;
+    const target=tableRows.find(r=>r.id===targetId);
+    moveAfterButton.disabled=!selected||invalid||!target||target.format!=='cmd-v1'||target.id===selected.id;
+    firstButton.disabled=!selected||invalid||selected.chainPosition<=1;
+    extractButton.disabled=!selected||invalid||selected.chainSize<=1;
     migrateButton.disabled=invalid||!tableRows.some(r=>r.format==='legacy');
     groupButton.setAttribute('aria-pressed',String(grouped));
     targetButton.title=targetId?`目标 ${targetId}`:'先点击一个 PBS 行设为合并目标';
     mergeButton.title=targetId?`把当前 PBS 所属 BC 并入 ${targetId} 所属 BC`:'请先选定目标链';
   };
   const execute=async(kind,payload={})=>{
+    if(dragBusy)return;
+    dragBusy=true;
     try{
       const result=await onChainAction(kind,payload);
-      if(result.changed)onStatus(`✓ CMD ${kind==='merge'?'合链':kind==='split'?'拆链':'旧标签迁移'} ${result.changed} 处 · 未保存，可 Undo`);
+      if(result.changed)onStatus(`✓ CMD ${({merge:'合链',split:'拆链',migrate:'旧标签迁移',move:'移动单个 PBS',extract:'独立成链'})[kind]||kind} ${result.changed} 处 · 未保存，可 Undo`);
       else onStatus('块链关系无须修改');
     }catch(e){onStatus('CMD 块链操作拒绝：'+e.message,'error');}
+    finally{dragBusy=false;}
   };
   groupButton.addEventListener('click',()=>{grouped=!grouped;updateBlockRows();refreshActionButtons();});
   targetButton.addEventListener('click',()=>{if(selectedAtom()){targetId=selectedId;refreshActionButtons();onStatus(`合并目标已选择：${targetId} · 选另一块再点击「并入目标链」`);}});
   mergeButton.addEventListener('click',()=>{if(selectedAtom()&&targetId&&targetId!==selectedId)
     void execute('merge',{destinationId:targetId,sourceId:selectedId});});
+  moveAfterButton.addEventListener('click',()=>{if(selectedAtom()&&targetId&&targetId!==selectedId)
+    void execute('move',{memberId:selectedId,targetId,placement:'after'});});
+  firstButton.addEventListener('click',()=>{
+    const atom=selectedAtom();if(atom?.chainPosition>1)
+      void execute('move',{memberId:atom.id,targetId:atom.chainMembers[0],placement:'before'});
+  });
+  extractButton.addEventListener('click',()=>{if(selectedAtom()?.chainSize>1)
+    void execute('extract',{memberId:selectedId});});
   splitButton.addEventListener('click',()=>{if(selectedAtom())void execute('split',{memberId:selectedId});});
   migrateButton.addEventListener('click',()=>{if(tableRows.some(r=>r.format==='legacy'))void execute('migrate');});
   const updateGrid=()=>{
@@ -252,7 +339,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     virtual.setVirtualQuery({enabled:false});
     for(const button of [overviewButton,confirmButton,rejectButton,resetButton,exportButton])
       button.hidden=mode!=='candidates';
-    for(const button of [groupButton,targetButton,mergeButton,splitButton,migrateButton])
+    for(const button of [groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton])
       button.hidden=mode!=='blocks';
     if(mode==='blocks'){onCompare(null);selectedCandidateId=null;}
     blocksButton.setAttribute('aria-pressed',String(mode==='blocks'));
@@ -292,8 +379,9 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       report=result.summary;previewMapped=null;rows=result.rows.map(row=>({...row,
       geometryLabel:row.geometry?'可定位':'无效',
       joinLabel:row.joinPrev?`↳ ${row.logicalId}`:row.logicalId===row.id?'独立':`独立 · ${row.logicalId}`,
-      previewLabel:row.expectsPreview?'待检查':'无需渲染'}));selectedId=null;
+      previewLabel:row.expectsPreview?'待检查':'无需渲染'}));
       tableRows=(result.atoms?.rows||rows).map(row=>({...row}));
+      if(selectedId&&!tableRows.some(row=>row.id===selectedId))selectedId=null;
       if(targetId&&!tableRows.some(row=>row.id===targetId))targetId=null;
       if(mode==='blocks')updateBlockRows();error='';refresh();},
     setContinuationCandidates(result){candidateSummary=result.summary;

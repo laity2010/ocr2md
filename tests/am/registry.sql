@@ -1482,7 +1482,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- back through the Shell -> Layout registered callback to the guarded CMD port.
 INSERT INTO apis VALUES
  ('L74','L','projectCMDBlockTable','ui/cmd-block-chains.js','export','live CMD source, verified original parent and native child rows, sealed layout and BC partition','detached full parent+native-child AG rows with IDs, member order, roles, review, source scopes and safe child bbox','no AG-owned parsing or persistence; no invented missing-child geometry',1),
- ('L75','L','returned.setBlockChainAction','ui/workspace.js','returned','semantic action callback merge/split/migrate by PBS ID','AG action requests forwarded to current CMD transaction port','source revision checked by Shell; only CM6 transaction writes CMD',1);
+ ('L75','L','returned.setBlockChainAction','ui/workspace.js','returned','semantic action callback merge/split/move/extract/migrate by PBS ID','AG action requests forwarded to current CMD transaction port','source revision checked by Shell; only CM6 transaction writes CMD',1);
 INSERT INTO access_edges VALUES
  ('X-WP4-C-L74','C','L','ui/cm-document.js','projectCMDBlockTable(source,inventory.rows,layout,bc,inventory.children)','L74','registered','CMD joins source atoms with sealed verified layout for full AG view'),
  ('X-WP4-MAIN-L75',NULL,'L','ui/main.js','workspace.setBlockChainAction(async(action,request)','L75','registered','Shell supplies semantic callback to AG without exposing CMD internals');
@@ -1490,3 +1490,19 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L74','L74','tests/cmd-block-chains-wp4.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','267 unique PBS rows including 224 parents and 43 native children, validated geometry, source scope, member order and original OCR unchanged','direct'),
  ('TC-WP4-G25','G25','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit AG full PBS/BC columns and grouping; selecting target, merging and splitting only through guarded CMD; no disk writes','integration'),
  ('TC-WP4-L75','L75','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG delegated merge/split through Shell to guarded CMD, changed source rescanned; child-inclusive AG projection remains consistent','integration');
+
+
+-- WCP27 WP5: the AG grid's pointer drag is a semantic request to the same
+-- CMD source-guarded transaction. Moving ONE atomic PBS never swaps whole
+-- blocks or moves Markdown prose; extracting a member leaves neighbors ordered.
+INSERT INTO apis VALUES
+ ('L76','L','planCMDExtractBlockChainMember','ui/cmd-block-chains.js','export','CMD source and one selected PBS ID in a multi-member chain','source-guarded single-member extraction plan, remaining BC member order untouched','preserves original MinerU evidence and individual PBS identity; rejects legacy editing',1),
+ ('C72','C','returned.extractBlockChainMember','ui/wcp-cmd-element-transactions.js','returned','member PBS ID and expectedSource','one CM6 transaction extracting only selected atom','no silent source change, one native Undo/Redo step',1);
+INSERT INTO access_edges VALUES
+ ('X-WP5-EXTRACT-L76','C','L','ui/wcp-cmd-element-transactions.js','planCMDExtractBlockChainMember(cmd.readSource(),memberId)','L76','registered','only CMD port may commit a single-member BC extraction');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP5-L73','L73','tests/cmd-block-chains-wp5.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','move p0b1 after p0b3 without swap, put p0b4 first, move native child across page and chains, preserve unrelated member order','direct'),
+ ('TC-WP5-L76','L76','tests/cmd-block-chains-wp5.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','extract one middle atom without moving its tail, preserve member role and OCR byte identity, reject legacy or damaged BC','direct'),
+ ('TC-WP5-C72','C72','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and simulated iPad WebKit AG drag handle and single PBS move/extract through CMD with one Undo/Redo and no auto-save','integration'),
+ ('TC-WP5-G25','G25','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG drag A onto B appends only A after B, row order projects BC logical seq, first and extract actions work in same AG view','integration'),
+ ('TC-WP5-L75','L75','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Shell source-revision checks all AG move/extract action intents before registered CMD mutation','integration');

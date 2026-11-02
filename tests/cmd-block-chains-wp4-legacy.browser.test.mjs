@@ -29,7 +29,9 @@ try{
    await page.waitForFunction(()=>/PBS 224（子块 0）/.test(document.querySelector('#status')?.textContent||''),null,{timeout:90000});
    await page.locator('#ag-functions-toggle').click();
    const menu=page.locator('#ag-functions-menu [data-module="text-block"]');
-   assert.equal(await menu.getByRole('button').count(),8);
+   assert.equal(await menu.getByRole('button').count(),11);
+   assert.equal(await page.locator('[data-pbs-drag-handle]').count(),0,
+     'legacy PBS requires explicit CMD migration before drag');
    assert.equal(await menu.getByRole('button',{name:'显式迁移旧版 MinerU 块链标签'}).isEnabled(),true);
    await menu.getByRole('button',{name:'查看跨页跨栏接续候选'}).click();
    await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('#status')?.textContent||''),null,{timeout:45000});

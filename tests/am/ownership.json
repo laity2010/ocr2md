@@ -318,7 +318,8 @@
       "planCMDMigrateLegacyBlockChains",
       "planCMDMergeBlockChains",
       "planCMDSplitBlockChain",
-      "planCMDMoveBlockChainMember"
+      "planCMDMoveBlockChainMember",
+      "planCMDExtractBlockChainMember"
     ]
   }
 }

@@ -287,6 +287,22 @@ export function planCMDMoveBlockChainMember(source,memberId,targetId,placement='
   }
   return planCMDBlockChainArrangement(source,chains);
 }
+/** Remove exactly one PBS from its BC, preserving all other members in
+ * their existing order. This is not split-at-C (which moves the whole tail).
+ * An extracted atom returns to its implicit singleton unless its semantic
+ * object type requires a typed singleton chain.
+ */
+export function planCMDExtractBlockChainMember(source,memberId){
+  if(!parseCMDPBSId(memberId))throw Error('Invalid PBS member identity');
+  const {chains}=validArrangement(source);
+  const index=findChain(chains,memberId),origin=chains[index];
+  if(origin.members.length===1)return {changed:0,edits:[],reason:'already-singleton'};
+  origin.members.splice(origin.members.indexOf(memberId),1);
+  const role=origin.roles[memberId];delete origin.roles[memberId];
+  // Role belongs to the atom, not to the BC; it survives extraction.
+  chains.push({id:null,type:null,members:[memberId],roles:role?{[memberId]:role}:{}});
+  return {...planCMDBlockChainArrangement(source,chains),memberId};
+}
 /** Explicit, single-transaction migration of old MinerU anchors and legacy
  * predecessor joins. Copies only the original inline identity/BC relationship
  * lines: no content text, sealed OCR evidence, bbox, or other review tags.

@@ -734,6 +734,8 @@ async function main() {
     const options={expectedSource:blockIndexedSource};
     const result=action==='merge'?cmdPort.mergeBlockChains(request.destinationId,request.sourceId,options):
       action==='split'?cmdPort.splitBlockChainAt(request.memberId,options):
+      action==='move'?cmdPort.moveBlockChainMember(request.memberId,request.targetId,request.placement||'after',options):
+      action==='extract'?cmdPort.extractBlockChainMember(request.memberId,options):
       action==='migrate'?cmdPort.migrateLegacyBlockChains(options):null;
     if(!result)throw Error('未知 CMD 块链操作');
     if(result.changed){blockIndexedSource=null;scanTextBlocks();}

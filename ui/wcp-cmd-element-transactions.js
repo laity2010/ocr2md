@@ -13,7 +13,7 @@ import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,
   planCMDMigrateLegacyBlockChains,planCMDMergeBlockChains,
-  planCMDSplitBlockChain,planCMDMoveBlockChainMember} from './cmd-block-chains.js';
+  planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDSubblockAnnotations} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
@@ -137,6 +137,8 @@ export function createCMDTransactionPort(cmd){
       planCMDMergeBlockChains(cmd.readSource(),destinationId,sourceId),options.expectedSource??null),
     splitBlockChainAt:(memberId,options={})=>commitChainPlan(
       planCMDSplitBlockChain(cmd.readSource(),memberId),options.expectedSource??null),
+    extractBlockChainMember:(memberId,options={})=>commitChainPlan(
+      planCMDExtractBlockChainMember(cmd.readSource(),memberId),options.expectedSource??null),
     moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
       planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
       options.expectedSource??null),

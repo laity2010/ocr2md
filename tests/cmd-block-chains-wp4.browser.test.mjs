@@ -36,7 +36,7 @@ try{
    const headers=await page.evaluate(async()=>{
      const viewport=document.querySelector('.ocr-text-block-grid .ag-body-horizontal-scroll-viewport');
      const found=new Set();
-     for(let x=0;x<5000;x+=500){
+     for(let x=0;x<5000;x+=120){
        if(viewport)viewport.scrollLeft=x;
        await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
        document.querySelectorAll('.ocr-text-block-grid .ag-header-cell-text').forEach(el=>found.add(el.textContent));

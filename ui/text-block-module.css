@@ -12,3 +12,9 @@
 #ag-functions-menu [data-module="text-block"] button:disabled{opacity:.4;cursor:default}
 .ocr-text-block-group {font:inherit;white-space:nowrap;border:0;background:transparent;color:#f0c482;font-weight:650;cursor:pointer}
 .ocr-text-block-grid .ag-row:has(.ocr-text-block-group){background:#38474d;border-top:1px solid #617078}
+
+.ocr-pbs-drag-handle{font:inherit;font-size:20px;line-height:22px;width:30px;height:25px;
+ border:1px solid #72858d;border-radius:5px;background:#35474f;color:#f2c88a;
+ cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.ocr-pbs-drag-handle:active{cursor:grabbing;background:#5c644d}
+.ocr-text-block-grid [row-id].ocr-pbs-drop-target{outline:2px solid #e4aa62;outline-offset:-3px;background:#51483b}
