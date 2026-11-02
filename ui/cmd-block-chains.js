@@ -42,7 +42,7 @@ export function parseCMDBlockTag(line){
     (fields.origin!==undefined&&(!pbs||!parseCMDPBSId(fields.origin)||
       parseCMDPBSId(fields.origin).p!==pbs.p||fields.origin===pbs.id||
       !(pbs.s.length===1&&parseCMDPBSId(fields.origin).s.length===0||
-        pbs.s.length===0&&parseCMDPBSId(fields.origin).s.length===1)))||
+        pbs.s.length===0&&parseCMDPBSId(fields.origin).s.length<=1)))||
     fields.bc!==undefined&&!bcPattern.test(fields.bc)||
     (fields.bc===undefined)!==(fields.seq===undefined)||
     fields.seq!==undefined&&!uint(fields.seq)||
@@ -58,7 +58,7 @@ export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note}){
   if(!pbs)throw Error('Invalid PBS identity');
   if(origin!==undefined&&(!parseCMDPBSId(origin)||parseCMDPBSId(origin).p!==pbs.p||
     origin===id||!(pbs.s.length===1&&parseCMDPBSId(origin).s.length===0||
-      pbs.s.length===0&&parseCMDPBSId(origin).s.length===1)))
+      pbs.s.length===0&&parseCMDPBSId(origin).s.length<=1)))
     throw Error('Invalid original OCR PBS provenance');
   if((bc===undefined)!==(seq===undefined)||bc!==undefined&&!bcPattern.test(bc)||
     seq!==undefined&&(!Number.isSafeInteger(seq)||seq<0))throw Error('Invalid BC membership');
@@ -301,9 +301,9 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   return {changed:edits.length,sourceId,targetId,newId,origin:atom.origin,
     edits,relocatedSourceText:true};
 }
-/** Promote one *native* child to the next free page-level PBS ID.
+/** Promote one direct child (native or reviewed) to the next free page-level PBS ID.
  * This is a CMD source-scope move, not a synthetic MinerU OCR block.
- * The original physical child path survives in origin= for PDF evidence,
+ * The original physical identity survives in origin= for PDF evidence,
  * converter round-trip, and a single transactional Undo/Redo. */
 export function planCMDPromotePBSChild(source,childId){
   const model=readCMDBlockChains(source);
@@ -311,8 +311,10 @@ export function planCMDPromotePBSChild(source,childId){
     throw Error('Invalid CMD document for native-child promotion');
   const item=model.atoms.find(atom=>atom.id===childId);
   const path=parseCMDPBSId(childId);
-  if(!item||!path||path.s.length!==1||item.kind!=='child'||item.origin!==childId)
-    throw Error('Only an original direct child may become an independent parent');
+  if(!item||!path||path.s.length!==1||item.kind!=='child'||
+    !parseCMDPBSId(item.origin)||parseCMDPBSId(item.origin).p!==path.p||
+    parseCMDPBSId(item.origin).s.length>1)
+    throw Error('Only an original or reviewed direct child may become an independent parent');
   const chain=model.chains.find(c=>c.members.includes(childId));
   if(!chain||chain.size!==1||chain.explicit)
     throw Error('Extract the child from its BC chain before promotion');
@@ -348,7 +350,7 @@ export function planCMDPromotePBSChild(source,childId){
     id:newId,origin:item.origin,type:parsed.type,role:parsed.role,
     review:parsed.review,note:parsed.note});
   const text=newTag+segment.slice(item.rawLine.length);
-  return {changed:2,sourceId:childId,newId,origin:childId,
+  return {changed:2,sourceId:childId,newId,origin:item.origin,
     edits:[{from,to,expected:segment,insert:''},
       {from:dest,to:dest,expected:'',insert:'\n'+text}],pageIndex:path.p};
 }

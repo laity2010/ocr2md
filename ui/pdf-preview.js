@@ -251,12 +251,18 @@ export class PdfPreview {
   }
   selectedNativeChildId(){
     const chosen=this.selected;
-    if(!chosen||chosen.partPath?.length!==1||chosen.partIndex==null)return null;
-    const id=subblockId(chosen.pageIndex,chosen.blockIndex,chosen.partPath);
+    if(!chosen)return null;
+    // A corrected child has a physical *parent* OCR rectangle, so partPath
+    // is null. Its visible PDF chip carries the logical PBS child ID.
+    const id=chosen.logicalId||(chosen.partPath?.length===1&&chosen.partIndex!=null
+      ?subblockId(chosen.pageIndex,chosen.blockIndex,chosen.partPath):null);
+    if(!id||!/^p\d+b\d+s\d+$/.test(id))return null;
     const current=this.getMarkdown();
-    // Button must remain off once this original native child was promoted.
-    return current.includes(`<!-- cmd:block:v1 id="${id}"`)&&
-      !current.includes(`origin="${id}"`)?id:null;
+    const escaped=id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    // Select only an existing single-level CMD child; once promoted, its
+    // original visible id is gone. This also accepts origin="pNbM" children.
+    return new RegExp(`<!-- cmd:block:v1 id="${escaped}"(?: origin="p\\d+b\\d+")?(?: [a-z]+="[^"]*")* -->`).test(current)
+      ?id:null;
   }
   updatePromoteButton(){
     if(!this.promoteButton)return;
@@ -570,7 +576,8 @@ export class PdfPreview {
     // dynamically reconstructed list. Geometry corrections may recover a
     // previously invisible native child and shift neighboring list indices.
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
-      partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null};
+      partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null,
+      logicalId:chosen.logicalId||null};
     this.updatePromoteButton();
     this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
@@ -688,7 +695,7 @@ export class PdfPreview {
     if(chip.title!==chipTitle)chip.title=chipTitle;
     const aria=`来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
     if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
-    const isCorrectedChild=Boolean(row.origin&&row.origin!==row.id&&!row.promoted);
+    const isCorrectedChild=Boolean(row.origin&&row.origin!==row.id&&!row.promoted&&/^p\d+b\d+s\d+$/.test(row.id));
     node.classList.toggle('ocr-pdf-block-is-child',isCorrectedChild);
     node.classList.toggle('ocr-pdf-block-is-promoted',Boolean(row.promoted));
     // This physical OCR rectangle now represents a logical child, not a
@@ -1018,7 +1025,7 @@ export class PdfPreview {
             this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
               partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent'});
           }else this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
-            partIndex:null,path:null,role:'parent'});
+            partIndex:null,path:null,role:'parent',logicalId:row.id});
 
         });
         ctrl.addEventListener('keydown',event=>{

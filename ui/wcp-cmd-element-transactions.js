@@ -187,7 +187,7 @@ export function createCMDTransactionPort(cmd){
       const origins=model=>model.atoms.map(a=>a.origin).sort().join('\n');
       if(after.invalid.length||after.atoms.length!==before.atoms.length||
         origins(after)!==origins(before)||
-        !after.atoms.some(a=>a.id===plan.newId&&a.origin===childId&&a.kind==='parent'))
+        !after.atoms.some(a=>a.id===plan.newId&&a.origin===plan.origin&&a.kind==='parent'))
         throw Error('Promotion changed sealed OCR atom identity or count');
       const archive=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
       if(!next.includes('<!-- minerujson:source:v1:')||archive(source)!==archive(next))

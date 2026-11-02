@@ -25,8 +25,8 @@ assert(row&&row.geometry&&row.origin==='p1b3s0'&&row.kind==='parent');
 assert(row.text.includes('![image]'));
 assert.equal(projection.rows.filter(a=>a.id==='p1b3s0').length,0);
 assert.equal(projection.summary.parents,225);assert.equal(projection.summary.children,42);
-assert.throws(()=>planCMDPromotePBSChild(source,'p1b3'),/original direct child/);
-assert.throws(()=>planCMDPromotePBSChild(changed,'p1b3s0'),/original direct child/);
+assert.throws(()=>planCMDPromotePBSChild(source,'p1b3'),/original or reviewed direct child/);
+assert.throws(()=>planCMDPromotePBSChild(changed,'p1b3s0'),/original or reviewed direct child/);
 assert.equal(source.slice(source.indexOf('<!-- minerujson:source:v1:')),
  changed.slice(changed.indexOf('<!-- minerujson:source:v1:')));
 console.log('PBS_CHILD_PROMOTION_PASS',{source:'p1b3s0',newId:'p1b14',atomCount:267,originalJsonExact:true,sourceMoved:true});

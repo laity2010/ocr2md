@@ -8,8 +8,13 @@ import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable} from './platform.test-helper.mjs';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
+import {planCMDReparentPBS} from '../ui/cmd-block-chains.js';
 const pdf=resolve('.v6/workspace/buffetts-alpha.original.pdf');
-const src=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
+let src=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
+if(process.env.REVIEWED_CHILD==='1'){
+  const p=planCMDReparentPBS(src,'p1b5','p1b3s0');
+  src=[...p.edits].sort((a,b)=>b.from-a.from).reduce((text,e)=>text.slice(0,e.from)+e.insert+text.slice(e.to),src);
+}
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-child-promote-'));
 const doc=join(dir,'test.md');writeFileSync(doc,src);
 const port=await new Promise((ok,fail)=>{const server=createServer();server.once('error',fail);
@@ -43,14 +48,18 @@ try{
      node.querySelector('.ocr-pdf-extract-text')?.nextElementSibling?.className,
      node.querySelectorAll('.ocr-pdf-bbox-edit,.ocr-pdf-bbox-reset,.ocr-pdf-mark-subblocks').length
    ]),['ocr-pdf-promote-child',0]);
-   const chip=page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"] .ocr-pdf-subblock-chip');
+   const reviewed=process.env.REVIEWED_CHILD==='1';
+   const selectedId=reviewed?'p1b3s1':'p1b3s0';
+   const chip=reviewed?page.locator('.ocr-pdf-block-cover[data-block-id="p1b3s1"] > .ocr-pdf-block-ctrl'):
+     page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"] .ocr-pdf-subblock-chip');
    await chip.waitFor({state:'attached',timeout:60000});
    await chip.scrollIntoViewIfNeeded({timeout:30000});
-   const physical=await page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]').evaluate(el=>{
+   const physical=await (reviewed?page.locator('.ocr-pdf-block-cover[data-block-id="p1b3s1"]'):
+     page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]')).evaluate(el=>{
      const r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};});
    await chip.evaluate(el=>el.click());
    await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-promote-child')?.disabled,null,{timeout:13000});
-   assert((await promote.getAttribute('title')).includes('p1b3s0'));
+   assert((await promote.getAttribute('title')).includes(selectedId));
    console.log('PDF_CHILD_PROMOTE_STEP',name,'enabled');
    await promote.evaluate(el=>el.click());
    await page.waitForTimeout(1200);
@@ -61,8 +70,12 @@ try{
      cover:!!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]')
    }))));
    await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent?.includes('p1b14'),null,{timeout:15000});
-   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]')&&
-     document.querySelector('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]')?.hidden,null,{timeout:40000});
+   await page.waitForFunction(reviewed=>{
+     const promoted=document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]');
+     if(!promoted)return false;
+     return reviewed?!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3s1"]'):
+       document.querySelector('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]')?.hidden;
+   },reviewed,{timeout:40000});
    const result=await page.evaluate(()=>{
      const cover=document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]');
      const old=document.querySelector('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]');
@@ -73,18 +86,21 @@ try{
        oldHidden:old?.hidden,newBox:r?{x:r.x,y:r.y,w:r.width,h:r.height}:null,
        status:document.querySelector('.ocr-pdf-status')?.textContent};
    });
-   assert.deepEqual([result.id,result.origin,result.parent,result.badgeIsParent,result.oldHidden],
-     ['p1b14','p1b3s0','p1b14',true,true],JSON.stringify(result));
+   assert.deepEqual([result.id,result.origin,result.parent,result.badgeIsParent],
+     ['p1b14',reviewed?'p1b5':'p1b3s0','p1b14',true],JSON.stringify(result));
+   if(!reviewed)assert.equal(result.oldHidden,true);
    assert(Math.abs(result.newBox.y-physical.y)<3,'new parent uses original native child y');
    assert.equal(await promote.isDisabled(),true,'re-promotion disabled');
    assert.equal(readFileSync(doc,'utf8'),src,'no implicit disk save');
    await page.locator('#undo').evaluate(el=>el.click());
-   await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]')&&
-     document.querySelector('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]:not([hidden])'),null,{timeout:38000});
+   await page.waitForFunction(reviewed=>!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]')&&
+     (reviewed?!!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3s1"]'):
+      !!document.querySelector('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]:not([hidden])')),
+      reviewed,{timeout:38000});
    await page.locator('#redo').evaluate(el=>el.click());
    await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]'),null,{timeout:38000});
    assert.deepEqual(errors,[]);
-   console.log('PDF_CHILD_PROMOTION_BROWSER_PASS',name,{source:'p1b3s0',parent:'p1b14',
+   console.log('PDF_CHILD_PROMOTION_BROWSER_PASS',name,{source:selectedId,parent:'p1b14',
      originRetained:true,pdfLabelUpdated:true,noDuplicateChild:true,undoRedo:true,noSave:true});
   }finally{await browser.close();}
  }

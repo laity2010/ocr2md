@@ -356,6 +356,7 @@ export function toMineruJSON(markdown: string): string {
   // strict parent/child round-trip validator. Never modify the user's source.
   const origins: {id:string;origin:string;page:number;parent:number;child:number;source:number}[]=[];
   const promotions: {id:string;origin:string;page:number;parent:number;child:number;newParent:number}[]=[];
+  const restoredRoots: {id:string;origin:string;page:number;source:number;newParent:number}[]=[];
   markdown=markdown.replace(/^(\s*(?:>\s*)*<!-- cmd:block:v1 )id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"((?: [a-z]+="[^"]*")* -->)[ \t]*$/gm,
     (_all,prefix,id,rest)=>{
       const match=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/.exec(id);
@@ -372,6 +373,14 @@ export function toMineruJSON(markdown: string): string {
           return `${prefix}p="${promoted[1]}" b="${promoted[2]}" s="${promoted[3]}"${rest.replace(provenance[0],'')}`;
         }
         const original=/^p(0|[1-9]\d*)b(0|[1-9]\d*)$/.exec(provenance[1]);
+        if(original&&match[3]===undefined){
+          assert(original[1]===match[1]&&
+            rest.indexOf(' origin="')===rest.lastIndexOf(' origin="'),
+            'invalid independently restored root provenance');
+          restoredRoots.push({id,origin:provenance[1],page:Number(match[1]),
+            source:Number(original[2]),newParent:Number(match[2])});
+          return `${prefix}p="${original[1]}" b="${original[2]}"${rest.replace(provenance[0],'')}`;
+        }
         assert(original&&match[3]!==undefined&&!match[3].includes('.')&&
           original[1]===match[1]&&rest.indexOf(' origin="')===rest.lastIndexOf(' origin="'),
           'invalid original PBS provenance');
@@ -447,9 +456,22 @@ export function toMineruJSON(markdown: string): string {
       promoted.newParent>=page.para_blocks.length&&
       !promotions.some(other=>other!==promoted&&other.origin===promoted.origin),
       'promoted child has invalid original OCR source or new page index');
-    const expected=page.para_blocks.length+promotions.filter(other=>
+    const expected=page.para_blocks.length+[...promotions,...restoredRoots].filter(other=>
       other.page===promoted.page&&other.newParent<promoted.newParent).length;
     assert(promoted.newParent===expected,'promoted parents must use consecutive page-end PBS IDs');
+  }
+  // Reviewed child sourced from a whole original OCR parent can be
+  // independently restored as a page-end logical parent. Its immutable root
+  // provenance is verified exactly as strictly as native child promotion.
+  for(const root of restoredRoots){
+    const blocks=data.pdf_info[root.page]?.para_blocks;
+    assert(blocks?.[root.source]&&!(blocks[root.source].blocks||[]).length&&
+      root.newParent>=blocks.length&&
+      !restoredRoots.some(other=>other!==root&&other.origin===root.origin),
+      'restored root must refer to one original leaf OCR parent');
+    const expected=blocks.length+[...promotions,...restoredRoots].filter(other=>
+      other.page===root.page&&other.newParent<root.newParent).length;
+    assert(root.newParent===expected,'restored page-end parent identity must be consecutive');
   }
   for(const alias of origins){
     const blocks=data.pdf_info[alias.page]?.para_blocks||[];
@@ -471,6 +493,26 @@ export function toMineruJSON(markdown: string): string {
     assert(following.length===1,'relocated source successor missing');
     const destination=following[0].index!;
     visible=remaining.slice(0,destination)+segment+remaining.slice(destination);
+  }
+  // Inverse-project corrected root -> child -> independent root source
+  // *before* native promotion, preserving every original Markdown scope.
+  for(const root of [...restoredRoots].sort((a,b)=>a.page-b.page||a.source-b.source)){
+    const anchors=[...visible.matchAll(blockStart)];
+    const matches=anchors.filter(m=>Number(m[2]??m[4])===root.page&&
+      Number(m[3]??m[5])===root.source);
+    assert(matches.length===1,'restored OCR parent scope is not unique');
+    const index=anchors.findIndex(m=>m.index===matches[0].index);
+    const from=matches[0].index!;
+    const following=anchors[index+1]?.index??visible.length;
+    let end=following;
+    const evidence=visible.slice(from,end).search(/<!-- minerujson:(?:page|source):v1:/);
+    if(evidence>=0)end=from+evidence;
+    assert(end>from,'restored source has empty scope');
+    const segment=visible.slice(from,end),remaining=visible.slice(0,from)+visible.slice(end);
+    const next=[...remaining.matchAll(blockStart)].find(m=>
+      Number(m[2]??m[4])===root.page&&Number(m[3]??m[5])===root.source+1);
+    assert(next?.index!==undefined,'original OCR root successor missing');
+    visible=remaining.slice(0,next.index)+segment+remaining.slice(next.index);
   }
   // Inverse-project promoted children only for the strict original-OCR
   // round-trip comparison. The editable Markdown keeps its new child->parent
