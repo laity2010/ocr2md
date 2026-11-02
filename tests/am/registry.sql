@@ -1163,7 +1163,7 @@ INSERT INTO apis VALUES
  ('L51','L','queryCMDBlockGeometry','ui/cmd-text-blocks.js','export','source,page index,block index','unmodified original bbox, separate coverageBBox, page size and text line/span locations or null','read-only; no OCR/PDF/CM6 mutation',1),
  ('C55','C','returned.queryLayout','ui/wcp-cmd-element-transactions.js','returned','none','promise of CMD original page/Block geometry','WCP port exposes semantic CMD capability, no raw AG/source bypass',1);
 INSERT INTO access_edges VALUES
- ('X-WP2-CMD-L50','C','L','ui/cm-document.js','queryCMDLayout(this.readSource())','L50','registered','CM6 CMD source is the sole owner of original layout'),
+ ('X-WP2-CMD-L50','C','L','ui/cm-document.js','queryCMDLayout(source)','L50','registered','CM6 CMD source is the sole owner of original layout'),
  ('X-WP2-CMD-L51','C','L','ui/cm-document.js','queryCMDBlockGeometry(this.readSource()','L51','registered','Per-block query shares CMD verified original JSON'),
  ('X-WP2-CMD-C55','L','C','ui/workspace.js','getCMD().queryLayout()','C55','registered','Layout-only geometry port supplied to PDF viewer after CMD readiness');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
@@ -1485,7 +1485,7 @@ INSERT INTO apis VALUES
  ('L75','L','returned.setBlockChainAction','ui/workspace.js','returned','semantic action callback merge/split/move/extract/migrate by PBS ID','AG action requests forwarded to current CMD transaction port','source revision checked by Shell; only CM6 transaction writes CMD',1);
 INSERT INTO access_edges VALUES
  ('X-WP4-C-L74','C','L','ui/cm-document.js','projectCMDBlockTable(source,inventory.rows,layout,bc,inventory.children)','L74','registered','CMD joins source atoms with sealed verified layout for full AG view'),
- ('X-WP4-MAIN-L75',NULL,'L','ui/main.js','workspace.setBlockChainAction(async(action,request)','L75','registered','Shell supplies semantic callback to AG without exposing CMD internals');
+ ('X-WP4-MAIN-L75',NULL,'L','ui/main.js','workspace.setBlockChainAction(async(action,request={})','L75','registered','Shell supplies semantic callback to AG without exposing CMD internals');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L74','L74','tests/cmd-block-chains-wp4.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','267 unique PBS rows including 224 parents and 43 native children, validated geometry, source scope, member order and original OCR unchanged','direct'),
  ('TC-WP4-G25','G25','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit AG full PBS/BC columns and grouping; selecting target, merging and splitting only through guarded CMD; no disk writes','integration'),
@@ -1536,4 +1536,4 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO apis VALUES
  ('P22','P','createPDFBBoxGesture','ui/pdf-bbox-gesture.js','export','PDF page DOM, verified PBS ID, effective bbox and page dimensions, semantic commit callback','five pointer handles for moving/resizing a transient PDF rectangle','no direct CMD/PDF archive mutation, cancel/no-op safe, one semantic callback on release',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-WP6-P22','P22','tests/cmd-pdf-bbox-wp6.browser.test.mjs','simulated PDF page DOM, synthetic touch pointer','Chrome and WebKit center drag writes one coordinate correction; no direct source or PDF evidence access','integration');
+ ('TC-WP6-P22','P22','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and WebKit center drag writes one coordinate correction; no direct source or PDF evidence access','integration');
