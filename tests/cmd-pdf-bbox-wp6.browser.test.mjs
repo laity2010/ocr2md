@@ -39,6 +39,10 @@ try{
    const menu=page.locator('#ag-functions-menu [data-module="text-block"]');
    const inputs=menu.locator('.ocr-pbs-bbox-editor input');
    assert.equal(await inputs.count(),4);
+   await page.waitForFunction(expected=>{
+     const nodes=[...document.querySelectorAll('#ag-functions-menu .ocr-pbs-bbox-editor input')];
+     return nodes.length===4&&nodes.every((n,i)=>n.value!==''&&Number(n.value)===expected[i]);
+   },bbox,{timeout:20000});
    assert.deepEqual((await inputs.evaluateAll(nodes=>nodes.map(n=>Number(n.value)))),bbox);
    assert.equal(await menu.getByRole('button',{name:'清除所选 PBS 的人工 PDF 框修正'}).isDisabled(),true);
    const proposed=[bbox[0]+.5,bbox[1]+.5,bbox[2],bbox[3]];
