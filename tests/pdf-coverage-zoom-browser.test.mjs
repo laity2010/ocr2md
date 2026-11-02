@@ -111,7 +111,24 @@ try{
         assert.equal(after.page,start.page,`zoom ${selector} jumped page: ${JSON.stringify({start,after})}`);
         assert(Math.abs(after.y-start.y)<.034,
           `zoom ${selector} moved reading position: ${JSON.stringify({start,after})}`);
-        assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
+        const visible=await page.locator('.ocr-pdf-block-cover').count();
+        if(visible!==224){
+          // Keep the original immediate PASS/FAIL gate. Capture whether the
+          // canvas/page re-render has briefly detached coverage, or whether
+          // the business-owned block inventory was actually lost.
+          const before=await page.evaluate(()=>({
+            coverChecked:document.querySelector('.ocr-preview-block-toggle input')?.checked,
+            pages:document.querySelectorAll('.ocr-pdf-scroller .page').length,
+            pdfMode:document.querySelector('.ocr-preview-mode')?.value,
+            nodeInventory:window.__v6cm6?.pdf?.blockCoverageNodes?.size,
+            documentMode:document.querySelector('#module-select')?.value,
+          }));
+          await delay(900);
+          const later=await page.locator('.ocr-pdf-block-cover').count();
+          console.error('PDF_COVER_ZOOM_REPAINT_DIAGNOSTIC',name,
+            JSON.stringify({selector,visible,before,later}));
+        }
+        assert.equal(visible,224);
       }
       assert(await cover.isChecked());
       // Split: one persistent checkbox beside the preview navigation drives
