@@ -336,7 +336,8 @@ class PreviewPanel {
       (id,targetId,placement)=>blockMoveAction(id,targetId,placement),
       (pageIndex,blockIndex,text)=>insertPDFText(pageIndex,blockIndex,text),
       ()=>markSubblocksAction(),
-      (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot));
+      (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
+      (sourceId,targetId)=>blockChainAction('reparent',{memberId:sourceId,targetId}));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');

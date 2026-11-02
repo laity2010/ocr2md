@@ -77,6 +77,10 @@
   border-color:#e3d28e;background:#466b5a;
   box-shadow:0 0 0 3px #e3d28e99,0 2px 8px #0009;
 }
+.ocr-pdf-block-cover .ocr-pdf-subblock-chip.ocr-pdf-block-drop-target{
+  border-color:#e3d28e;background:#466b5a;
+  box-shadow:0 0 0 3px #e3d28e99,0 2px 8px #0009;
+}
 .ocr-pdf-block-drag-arrow{position:fixed;inset:0;width:100vw;height:100vh;
   z-index:9999;pointer-events:none;overflow:visible}
 .ocr-pdf-block-drag-path{stroke:#e3d28e;stroke-width:3;stroke-linecap:round;

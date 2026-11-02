@@ -54,7 +54,8 @@ export class PdfPreview {
     onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),
     onInsertPDFText=()=>Promise.reject(Error('CMD 尚未准备好')),
     onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好')),
-    onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好'))){
+    onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好')),
+    onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -63,6 +64,7 @@ export class PdfPreview {
     this.onInsertPDFText=onInsertPDFText;
     this.onMarkSubblocks=onMarkSubblocks;
     this.onPDFBBox=onPDFBBox;
+    this.onBlockReparent=onBlockReparent;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -756,27 +758,34 @@ export class PdfPreview {
   blockDropTarget(item,x,y){
     const viewport=this.scroller.getBoundingClientRect();
     if(x<viewport.left||x>viewport.right||y<viewport.top||y>viewport.bottom)
-      return null; // Never drop on an off-pane or hidden page control.
+      return null;
     const pageId=item.ctrl.closest('.ocr-pdf-block-cover')?.dataset.pdfPage;
-    const direct=document.elementFromPoint(x,y)?.closest?.('.ocr-pdf-block-ctrl')
+    const element=document.elementFromPoint(x,y);
+    // Parent -> native child is structural reparenting, not PDF physical move.
+    const child=element?.closest?.('.ocr-pdf-subblock-chip');
+    const childCover=child?.closest('.ocr-pdf-block-cover');
+    if(childCover?.dataset.pdfPage===pageId&&childCover.dataset.blockId!==item.id)
+      return child;
+    const direct=element?.closest?.('.ocr-pdf-block-ctrl')
       ?.closest('.ocr-pdf-block-cover');
     if(direct?.dataset.pdfPage===pageId&&direct.dataset.blockId!==item.id)
       return direct;
-    // Tiny 9px OCR labels are hard to hit by finger. Accept release within a
-    // generous ~24 CSS pixel neighborhood of the nearest same-page tag.
-    // Leave the visible chip small, outside the original PDF text rectangle.
+    // Finger-friendly tolerance across real OCR parent and child chips.
     let result=null,nearest=25;
-    for(const [id,node] of this.blockCoverageNodes){
-      if(id===item.id||node.dataset.pdfPage!==pageId)continue;
-      const chip=node.querySelector('.ocr-pdf-block-ctrl');
-      if(!chip?.isConnected)continue;
+    const consider=(chip,cover)=>{
+      if(!chip?.isConnected||!cover||cover.dataset.pdfPage!==pageId||
+        cover.dataset.blockId===item.id)return;
       const rect=chip.getBoundingClientRect();
       if(rect.right<viewport.left||rect.left>viewport.right||
-        rect.bottom<viewport.top||rect.top>viewport.bottom)continue;
+        rect.bottom<viewport.top||rect.top>viewport.bottom)return;
       const dx=Math.max(rect.left-x,0,x-rect.right);
       const dy=Math.max(rect.top-y,0,y-rect.bottom);
       const d=Math.hypot(dx,dy);
-      if(d<nearest){result=node;nearest=d;}
+      if(d<nearest){result=chip.classList.contains('ocr-pdf-subblock-chip')?chip:cover;nearest=d;}
+    };
+    for(const node of this.blockCoverageNodes.values()){
+      consider(node.querySelector(':scope > .ocr-pdf-block-ctrl'),node);
+      for(const chip of node.querySelectorAll('.ocr-pdf-subblock-chip'))consider(chip,node);
     }
     return result;
   }
@@ -827,15 +836,18 @@ export class PdfPreview {
     if(item.target!==target){
       item.target?.classList.remove('ocr-pdf-block-drop-target');
       item.target=target;target?.classList.add('ocr-pdf-block-drop-target');
-      const pointedLabel=target?.querySelector('.ocr-pdf-block-ctrl span')?.textContent;
+      const child=target?.classList.contains('ocr-pdf-subblock-chip');
+      const pointedLabel=child?target.textContent:target?.querySelector('.ocr-pdf-block-ctrl span')?.textContent;
       const startLabel=item.ctrl.querySelector('span')?.textContent||item.id;
       this.setStatus(target
-        ?`指向 ${pointedLabel} · 松手将它移到起点 ${startLabel} 前面`
+        ?child?`指向子块 ${pointedLabel} · 松手将 ${startLabel} 归入该父块并重新编号`:
+          `指向 ${pointedLabel} · 松手将它移到起点 ${startLabel} 前面`
         :`从 ${startLabel} 指向本页要搬来的文本块`);
     }
     const box=item.ctrl.getBoundingClientRect();
     const sx=(box.left+box.right)/2,sy=(box.top+box.bottom)/2;
-    const tip=target?.querySelector('.ocr-pdf-block-ctrl')?.getBoundingClientRect();
+    const tip=(target?.classList.contains('ocr-pdf-subblock-chip')?target:
+      target?.querySelector('.ocr-pdf-block-ctrl'))?.getBoundingClientRect();
     const ex=tip?(tip.left+tip.right)/2:x,ey=tip?(tip.top+tip.bottom)/2:y;
     const svg=item.svg;
     svg.setAttribute('viewBox',`0 0 ${window.innerWidth} ${window.innerHeight}`);
@@ -854,7 +866,10 @@ export class PdfPreview {
     if(!item||item.pointerId!==event.pointerId)return;
     const active=item.active;
     if(active)this.updateBlockDrag(item,event.clientX,event.clientY);
-    const target=active&&!cancel?item.target?.dataset.blockId:null;
+    const targetNode=active&&!cancel?item.target:null;
+    const childTarget=targetNode?.classList.contains('ocr-pdf-subblock-chip');
+    const target=childTarget?targetNode.closest('.ocr-pdf-block-fragment')?.dataset.subblockId:
+      targetNode?.dataset.blockId;
     clearTimeout(item.timer);
     this.stopBlockDragScroll();
     this.clearBlockDragListeners();
@@ -869,6 +884,15 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
+    if(childTarget){
+      this.setStatus(`正在将 ${item.id} 归入 ${target} 所属父块…`);
+      void this.onBlockReparent(item.id,target).then(result=>{
+        this.setStatus(result?.changed
+          ?`✓ ${item.id} → ${result.newId} · 原始来源保留 · 未保存，可 Undo`
+          :'PBS 父子关系无需修改');
+      }).catch(error=>this.setStatus('PDF 文本块归入子块失败：'+error.message));
+      return;
+    }
     let move;
     try{move=this.blockDropMove(item.id,target);}catch(error){
       this.setStatus('排序失败：'+error.message);return;
