@@ -1,112 +1,56 @@
-/** CM6's source ID gutter reflects the SAME CMD label/state as the PDF pane. */
+/** WCP27 visual regression: CMD comments already display PBS identity.
+ * No duplicate ID column is added next to CodeMirror line numbers.
+ * Verify old and newly converted source without editing any disk document. */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdtempSync,rmSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {chromium,webkit} from 'playwright';
-import {planCMDSubblockAnnotations} from '../ui/cmd-text-blocks.js';
-
-const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
-const plan=await planCMDSubblockAnnotations(original);
-const annotated=[...plan.edits].sort((a,b)=>b.from-a.from)
-  .reduce((s,e)=>s.slice(0,e.from)+e.insert+s.slice(e.to),original);
-const work=mkdtempSync(join(tmpdir(),'ocr2md-cmd-labels-'));
-const fixture=join(work,'document.md');writeFileSync(fixture,original);
-const port=5964,url=`http://127.0.0.1:${port}/`;
-const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
-  '--port',String(port),'--strictPort'],{cwd:process.cwd(),stdio:['ignore','pipe','pipe'],
-  env:{...process.env,V6_DOCUMENT_PATH:fixture,V6_SETTINGS_PATH:join(work,'settings.json')}});
-const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const jump=async(page,id)=>{
-  const line=await page.evaluate(id=>{
-    const v=window.__v6cm6.view;
-    const pattern=id.includes('s')?new RegExp('id="'+id+'"'):
-      new RegExp('<!-- minerujson:block:v1:'+id.slice(1).replace('b',':')+' -->');
-    const lines=v.state.doc.toString().split('\n');
-    const index=lines.findIndex(line=>pattern.test(line));
-    if(index<0)throw Error('Missing CMD anchor '+id);
-    v.dispatch({selection:{anchor:v.state.doc.line(index+1).from},scrollIntoView:true});
-    return index+1;
-  },id);
-  await page.locator(`.ocr-cmd-block-id[data-source-id="${id}"]`).waitFor({state:'visible',timeout:24000});
-  return line;
-};
+import {createServer} from 'node:net';
+import {chromium,webkit,devices} from 'playwright';
+import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
+import {chromeExecutable} from './platform.test-helper.mjs';
+const oldSource=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+const modern=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
+const work=mkdtempSync(join(tmpdir(),'ocr2md-cmd-no-duplicate-gutter-'));
+const doc=join(work,'document.md');writeFileSync(doc,modern);
+const port=await new Promise((ok,fail)=>{const server=createServer();server.once('error',fail);
+  server.listen(0,'127.0.0.1',()=>{const p=server.address().port;
+    server.close(e=>e?fail(e):ok(p));});});
+const url=`http://127.0.0.1:${port}/`;
+const host=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
+  '--port',String(port),'--strictPort'],{cwd:process.cwd(),env:{...process.env,
+  V6_DOCUMENT_PATH:doc,V6_PDF_PATH:join(work,'no-pdf.pdf')},stdio:'ignore'});
+const wait=ms=>new Promise(ok=>setTimeout(ok,ms));
 try{
-  let ready=false;
-  for(let i=0;i<240;i++){
-    try{if((await fetch(url)).ok){ready=true;break;}}catch{}
-    await delay(140);
-  }
-  assert(ready,'Isolated CMD source label server unavailable');
-  for(const [name,engine,mobile] of [['Chrome',chromium,false],['iPad-WebKit',webkit,true]]){
-    if(process.env.ONE_BROWSER&&process.env.ONE_BROWSER!==name)continue;
-    const browser=await engine.launch({headless:true});
-    try{
-      const page=await browser.newPage({viewport:{width:1220,height:840},isMobile:mobile,hasTouch:mobile});
-      const errors=[];page.on('pageerror',error=>errors.push(error.message));
-      await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
-      await page.waitForFunction(()=>Boolean(window.__v6cm6?.view),null,{timeout:40000});
-      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
-        null,{timeout:35000});
-      assert.equal(await page.locator('.ocr-cm-source .ocr-cmd-block-id-gutter').count(),1);
-      let line=await jump(page,'p4b0');
-      const tag=page.locator('.ocr-cmd-block-id[data-source-id="p4b0"]');
-      assert.equal(await tag.innerText(),'p4b0');
-      assert.deepEqual(await tag.evaluate(el=>({kind:el.dataset.sourceKind,border:getComputedStyle(el).borderTopStyle})),
-        {kind:'structure',border:'dashed'});
-      const pdfTag=page.locator('.ocr-pdf-block-cover[data-block-id="p4b0"] > .ocr-pdf-block-ctrl');
-      assert.deepEqual(await pdfTag.evaluate(el=>({kind:el.dataset.sourceKind,border:getComputedStyle(el).borderTopStyle})),
-        {kind:'structure',border:'dashed'});
-      await tag.evaluate(el=>el.click());
-      await page.waitForFunction(async expected=>{
-        const {viewStore}=await import('/view-store.js');
-        const focus=viewStore.getState().focusTarget;
-        return focus?.origin==='cm6'&&focus?.intent==='click'&&
-          focus?.elementId==='mineru:4:0:parent'&&focus?.sourceLine===expected;
-      },line,{timeout:9000});
-      assert.equal(await page.evaluate(()=>window.__v6cm6.view.state.doc.toString()),original,
-        'view-only source label click must not modify original CMD');
-      // A CMD change immediately reprojects source and PDF labels; no stale
-      // duplicate tag model is allowed in either direction.
-      await page.evaluate(src=>{
-        const view=window.__v6cm6.view,doc=view.state.doc;
-        view.dispatch({changes:{from:0,to:doc.length,insert:src}});
-      },annotated);
-      line=await jump(page,'p4b0s0');
-      const child=page.locator('.ocr-cmd-block-id[data-source-id="p4b0s0"]');
-      assert.equal(await child.innerText(),'p4b0s0');
-      assert.deepEqual(await child.evaluate(el=>({kind:el.dataset.sourceKind,border:getComputedStyle(el).borderTopStyle})),
-        {kind:'structure',border:'dashed'});
-      const pdfChild=page.locator('.ocr-pdf-subblock-chip').filter({hasText:'p4b0s0'}).first();
-      assert.equal(await pdfChild.getAttribute('data-source-kind'),'structure');
-      await child.evaluate(el=>el.click());
-      await page.waitForFunction(async expected=>{
-        const {viewStore}=await import('/view-store.js');const focus=viewStore.getState().focusTarget;
-        return focus?.elementId==='mineru:4:0:0'&&focus?.sourceLine===expected;
-      },line,{timeout:10000});
-      await page.evaluate(src=>{
-        const view=window.__v6cm6.view,doc=view.state.doc;
-        view.dispatch({changes:{from:0,to:doc.length,insert:src}});
-      },original);
-      await jump(page,'p2b9');
-      // Use the actual PDF→CMD join command (not a raw source mutation),
-      // so AG's async CMD inventory and the PDF chips receive the SAME update.
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p2b8"] .ocr-pdf-block-ctrl')
-        .evaluate(el=>{for(let n=0;n<3;n++)el.click();});
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p2b8"] input')?.checked===false,
-        null,{timeout:25000});
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p2b9"] > .ocr-pdf-block-ctrl span')
-        ?.textContent==='p2b8',null,{timeout:25000});
-      await jump(page,'p2b9');
-      assert.equal(await page.locator('.ocr-cmd-block-id[data-source-id="p2b9"]').innerText(),'p2b8');
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p2b9"] > .ocr-pdf-block-ctrl span').textContent(),'p2b8');
-      assert.equal(errors.length,0,JSON.stringify(errors));
-      console.log('CMD_SOURCE_BLOCK_GUTTER_PASS',name,{parents:224,children:43,dashed:'p4b0s0',logical:'p2b9→p2b8'});
-    }finally{await browser.close();}
-  }
-}finally{
-  server.kill('SIGTERM');rmSync(work,{recursive:true,force:true});
-}
+ let ready=false;for(let i=0;i<180;i++){try{if((await fetch(url)).ok){ready=true;break;}}catch{}await wait(160);}
+ assert(ready,'isolated Vite preview did not start');
+ for(const [name,engine,binary] of [['Chrome',chromium,chromeExecutable()],
+   ['iPad-WebKit',webkit,process.env.OCR2MD_WEBKIT_PATH||webkit.executablePath()]]){
+  if(process.env.ONE_BROWSER&&process.env.ONE_BROWSER!==name)continue;
+  const browser=await engine.launch({headless:true,...(binary?{executablePath:binary}:{})});
+  try{
+   const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:642}});
+   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+   await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+   await page.waitForFunction(()=>window.__v6cm6?.cm?.readSource()?.includes('<!-- cmd:block:v1 p="0" b="0" -->'),null,{timeout:90000});
+   for(const source of [modern,oldSource]){
+    if(source!==modern)await page.evaluate(s=>window.__v6cm6.cm.loadMarkdown(s),source);
+    await page.waitForFunction(s=>window.__v6cm6.cm.readSource()===s,source,{timeout:10000});
+    const result=await page.evaluate(()=>({
+      lineNumbers:document.querySelectorAll('.ocr-cm-source .cm-lineNumbers').length,
+      extra:document.querySelectorAll('.ocr-cmd-block-id-gutter,.ocr-cmd-block-id').length,
+      text:window.__v6cm6.cm.readSource(),
+      atoms:window.__v6cm6.cm.queryBlockChains().atoms.length,
+    }));
+    assert.equal(result.lineNumbers,1,'native CM6 line numbers remain visible');
+    assert.equal(result.extra,0,'no second PBS badge beside line numbers');
+    assert.equal(result.text,source,'source annotations are not modified');
+    assert.equal(result.atoms,source===modern?267:224);
+   }
+   assert.deepEqual(errors,[]);
+   assert.equal(readFileSync(doc,'utf8'),modern,'browser operations never save the disk fixture');
+   console.log('CMD_SOURCE_NO_DUPLICATE_BADGES_PASS',name,{legacyParents:224,newPBS:267,lineNumbers:true,noDiskWrite:true});
+  }finally{await browser.close();}
+ }
+}finally{host.kill('SIGTERM');rmSync(work,{recursive:true,force:true});}

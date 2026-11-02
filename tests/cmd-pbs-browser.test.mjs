@@ -50,12 +50,22 @@ try {
      assert(details.headings>=19);
      assert.equal(details.changed,false);assert.equal(details.dirty,false);
      await page.waitForFunction(()=>[...document.querySelectorAll('.ag-header-cell-text')].some(x=>x.textContent.includes('块链 BC')),null,{timeout:60000});
-     await page.waitForFunction(()=>document.querySelector('.ocr-cmd-block-id[data-source-id="p4b0s1"]'),null,{timeout:60000});
-     const visible=await page.evaluate(()=>({column:[...document.querySelectorAll('.ag-header-cell-text')].some(x=>x.textContent.includes('成员角色')),
-       chip:document.querySelector('.ocr-cmd-block-id[data-source-id="p4b0s1"]')?.textContent}));
-     assert(visible.column&&visible.chip==='p4b0s1',JSON.stringify(visible));
+     const visible=await page.evaluate(async()=>{
+       const viewport=document.querySelector('.ocr-text-block-grid .ag-body-horizontal-scroll-viewport');
+       const headers=new Set();
+       for(let x=0;x<5000;x+=120){
+         if(viewport)viewport.scrollLeft=x;
+         await new Promise(ok=>requestAnimationFrame(()=>requestAnimationFrame(ok)));
+         document.querySelectorAll('.ocr-text-block-grid .ag-header-cell-text').forEach(el=>headers.add(el.textContent));
+       }
+       if(viewport)viewport.scrollLeft=0;
+       return {column:[...headers].some(x=>x.includes('成员角色')),
+         extraSourceGutter:document.querySelectorAll('.ocr-cmd-block-id-gutter').length};
+     });
+     assert(visible.column,JSON.stringify(visible));
+     assert.equal(visible.extraSourceGutter,0,'do not repeat PBS as a separate line-number gutter');
      assert.deepEqual(errors,[]);
-     console.log('CMD_PBS_BROWSER_PASS',name,JSON.stringify({...details,chip:visible.chip}));
+     console.log('CMD_PBS_BROWSER_PASS',name,JSON.stringify({...details,noDuplicateGutter:true}));
    }finally{await browser.close();}
  }
  assert.equal(readFileSync(path,'utf8'),source,'source file stayed byte identical');

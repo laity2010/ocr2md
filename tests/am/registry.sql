@@ -1393,12 +1393,10 @@ INSERT INTO access_edges VALUES
 -- renders a projection without editing Markdown or recreating PDF state.
 INSERT INTO apis VALUES
  ('L65','L','projectCMDSourceBlockLabels','ui/cmd-block-labels.js','export','current CMD source containing original MinerU anchors and optional join markers','ordered original IDs, logical parent IDs, exact source lines and own-scope content status','readonly; no invented child anchor; no independent PDF/source identity cache',1);
-INSERT INTO access_edges VALUES
- ('X-CMD-SOURCE-LABELS-L65','L','L','ui/cmd-source-block-gutter.js','projectCMDSourceBlockLabels(doc.toString())','L65','registered','CM6 view-only gutter consumes one CMD label projection');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CMD-SOURCE-LABELS-L65','L65','tests/cmd-source-block-labels.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 native roots, 43 native child tags only after explicit marking; original vs logical root ID, empty own-scope dashed state and exact unchanged source under joins','direct');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-CMD-SOURCE-GUTTER-L65','L65','tests/cmd-source-block-gutter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad-WebKit CM6 displays CMD parent/child IDs, dashed labels match PDF, click moves focus to exact source and PDF, actual CMD join updates logical label in both panes','integration');
+ ('TC-CMD-SOURCE-GUTTER-L65','L65','tests/cmd-source-block-gutter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad-WebKit CM6 retains native line numbers and has no duplicate PBS gutter on old or newly converted CMD documents; no source edits or disk writes','integration');
 
 -- WP0 PBS/BC: a single, read-only CMD chain inventory and a guarded pure
 -- planner; no PDF/AG persistence and no hidden second block state.

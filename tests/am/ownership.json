@@ -81,7 +81,6 @@
     "cmd-block-labels.js": "L",
     "cmd-block-chains.js": "L",
     "cmd-pdf-bbox.js": "L",
-    "cmd-source-block-gutter.js": "L",
     "cmd-text-blocks.js": "L",
     "cmd-pdf-text-insert.js": "C",
     "pdf-block-text-extract.js": "P",
@@ -171,9 +170,6 @@
     ],
     "main.js->chapter-markers.js": [
       "countMarkers"
-    ],
-    "main.js->cmd-source-block-gutter.js": [
-      "cmdSourceBlockGutter"
     ],
     "main.js->cm-font-setting.js": [
       "registerCMSourceFontSetting"
