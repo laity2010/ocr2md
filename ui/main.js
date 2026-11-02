@@ -24,6 +24,7 @@ import {registerCMSourceFontSetting} from './cm-font-setting.js';
 import {registerOutlineTitleScaleSetting} from './wcp-chapter-outline.js';
 import {uploadPastedImage} from './media-module.js';
 import {mineruCommentFolding,foldInitialMineruComments} from './mineru-comment-folding.js';
+import {cmdSourceBlockGutter} from './cmd-source-block-gutter.js';
 import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
 import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './wcp-chapter-files.js';
@@ -457,6 +458,7 @@ async function main() {
       }}),
       markdown({base:markdownLanguage}),
       mineruCommentFolding,
+      cmdSourceBlockGutter,
       obsidianMarkdown,
       // Keep Obsidian/Everforest the primary Markdown highlighter. One Dark
       // contributes its official token CSS only for the nested sTeX ranges.

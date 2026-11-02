@@ -78,6 +78,8 @@
     "sentence-preview-highlight.js": "L",
     "cmd-block-continuations.js": "L",
     "cmd-block-joins.js": "L",
+    "cmd-block-labels.js": "L",
+    "cmd-source-block-gutter.js": "L",
     "cmd-text-blocks.js": "L",
     "cmd-pdf-text-insert.js": "C",
     "pdf-block-text-extract.js": "P",
@@ -166,6 +168,9 @@
     ],
     "main.js->chapter-markers.js": [
       "countMarkers"
+    ],
+    "main.js->cmd-source-block-gutter.js": [
+      "cmdSourceBlockGutter"
     ],
     "main.js->cm-font-setting.js": [
       "registerCMSourceFontSetting"
@@ -295,6 +300,9 @@
     ],
     "wcp-cmd-element-transactions.js->cmd-text-blocks.js": [
       "planCMDSubblockAnnotations"
+    ],
+    "pdf-source-locations.js->cmd-block-labels.js": [
+      "sourceBlockScopes"
     ],
     "workspace.js->text-block-module.js": [
       "createTextBlockModule"

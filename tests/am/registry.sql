@@ -1372,9 +1372,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- CMD source tags are lexical boundaries. Parent owns only text before its
 -- first native child; each child owns content up to the next native tag.
 INSERT INTO apis VALUES
- ('P21','P','sourceBlockScopes','ui/pdf-source-locations.js','export','live CMD Markdown string with original MinerU parent/child tags','ordered inclusive per-tag sourceLine to scopeEndLine plus optional contentLine/contentEndLine','live CM6 line insertions belong to the preceding tag, never overlap or rewrite any OCR/source',1);
+ ('P21','L','sourceBlockScopes','ui/cmd-block-labels.js','export','live CMD Markdown string with original MinerU parent/child tags','ordered inclusive per-tag sourceLine to scopeEndLine plus optional contentLine/contentEndLine','live CM6 line insertions belong to the preceding tag, never overlap or rewrite any OCR/source',1);
 INSERT INTO access_edges VALUES
- ('X-CMD-SCOPES-P21','P','P','ui/pdf-source-locations.js','sourceBlockScopes(source)','P21','registered','sourceBlocks and sourceSubblocks filter one unified lexical tag interval scan');
+ ('X-CMD-SCOPES-P21','L','L','ui/cmd-block-labels.js','sourceBlockScopes(source)','P21','registered','sourceBlocks and sourceSubblocks filter one unified lexical tag interval scan');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CMD-TAG-SCOPES-P21','P21','tests/pdf-source-locations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p4b0 parent ends immediately before p4b0s0, each s-tag ends before next s-tag; inserting text between tags changes only owning content range; 224 legacy parents and 43 child tags respected, sealed source excluded','direct');
 
@@ -1382,3 +1382,20 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- parent and child tags. Empty is a visual fact, never an OCR error verdict.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-EMPTY-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit empty parent p4b0 and p2b8 dashed while nonempty p13b0 solid; after child-tag annotation p3b0 empty parent becomes dashed while s0 retains solid text badge; empty p4b0 subblocks dashed; no OCR/CM mutation','integration');
+
+-- Existing PDF-facing compatibility export is now a registered port from
+-- PDF to the CMD/Layout owner's exact source scope implementation.
+INSERT INTO access_edges VALUES
+ ('X-PDF-SCOPE-PORT','P','L','ui/pdf-source-locations.js','sourceBlockScopes','P21','registered','PDF compatibility re-exports CMD source scope functions; never reparses labels');
+
+-- WCP27: CMD is the only owner of source/PDF parent and child IDs, their
+-- logical parent renumbering, and own-scope empty state. The CM6 gutter
+-- renders a projection without editing Markdown or recreating PDF state.
+INSERT INTO apis VALUES
+ ('L65','L','projectCMDSourceBlockLabels','ui/cmd-block-labels.js','export','current CMD source containing original MinerU anchors and optional join markers','ordered original IDs, logical parent IDs, exact source lines and own-scope content status','readonly; no invented child anchor; no independent PDF/source identity cache',1);
+INSERT INTO access_edges VALUES
+ ('X-CMD-SOURCE-LABELS-L65','L','L','ui/cmd-source-block-gutter.js','projectCMDSourceBlockLabels(doc.toString())','L65','registered','CM6 view-only gutter consumes one CMD label projection');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-CMD-SOURCE-LABELS-L65','L65','tests/cmd-source-block-labels.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 native roots, 43 native child tags only after explicit marking; original vs logical root ID, empty own-scope dashed state and exact unchanged source under joins','direct');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-CMD-SOURCE-GUTTER-L65','L65','tests/cmd-source-block-gutter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad-WebKit CM6 displays CMD parent/child IDs, dashed labels match PDF, click moves focus to exact source and PDF, actual CMD join updates logical label in both panes','integration');
