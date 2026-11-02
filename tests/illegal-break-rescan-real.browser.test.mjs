@@ -41,6 +41,13 @@ try{
    try{
      const context=await browser.newContext({viewport:{width:1110,height:800},hasTouch:mobile,isMobile:mobile});
      await context.addInitScript(()=>{
+       // An unrequested navigation resets all window-local test state. Keep a
+       // counter across same-origin reloads to distinguish this from an AG
+       // module change or a stalled worker; do not change the actual test.
+       const key='__illegalBreakRescanPageLoads';
+       const loads=Number(sessionStorage.getItem(key)||0)+1;
+       sessionStorage.setItem(key,String(loads));
+       window.__rescanPageLoads=loads;
        window.__rescanCount=0;const WorkerBase=window.Worker;
        window.Worker=class extends WorkerBase{postMessage(arg,...rest){
          if(arg?.kind==='linebreak')window.__rescanCount++;
@@ -48,7 +55,32 @@ try{
        }};
      });
      if(production)await context.addCookies([{name:'v6edit',value:'break-real-fixture',domain:'127.0.0.1',path:'/'}]);
-     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+     const page=await context.newPage(),errors=[];
+     page.on('pageerror',e=>errors.push(e.message));
+     const navigations=[];
+     page.on('framenavigated',frame=>{if(frame===page.mainFrame()){
+       navigations.push({url:frame.url(),at:Date.now()});
+       console.error('ILLEGAL_BREAK_PAGE_NAVIGATED',label,JSON.stringify(navigations.at(-1)));
+     }});
+     page.on('console',message=>{
+       if(/full.reload|page reload|update found|hot updated/i.test(message.text()))
+         console.error('ILLEGAL_BREAK_VITE_CONSOLE',label,message.type(),message.text().slice(0,260));
+     });
+     // Vite dev HMR may reload the page without a user action. Inspect actual
+     // WebSocket frames across Chromium/WebKit to distinguish that from
+     // application reload. Passive audit only; it cannot affect the app.
+     const hmrEvents=[];
+     page.on('websocket',socket=>{
+       socket.on('framereceived',frame=>{
+         try{
+           const data=JSON.parse(String(frame?.payload||''));
+           if(!['full-reload','update','prune','error'].includes(data?.type))return;
+           const event={type:data.type,path:data.path||null,at:Date.now()};
+           hmrEvents.push(event);
+           console.error('ILLEGAL_BREAK_HMR_FRAME',label,JSON.stringify(event));
+         }catch{/* non-Vite traffic has no bearing on this race */}
+       });
+     });
      await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
      await page.goto(base,{waitUntil:'domcontentloaded',timeout:65000});
      await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:50000});
@@ -78,8 +110,12 @@ try{
          dispatchedWorkerScans:window.__rescanCount,
          elementValue:document.querySelector('.ocr-lab-element-select')?.value,
          moduleTransitions:window.__moduleTransitions,
+         pageLoads:window.__rescanPageLoads,
+         navigationType:performance.getEntriesByType('navigation').map(x=>x.type),
+         href:location.href,
        })).catch(e=>({probeError:String(e)}));
-       console.error('ILLEGAL_BREAK_RESCAN_TIMEOUT_EVIDENCE',label,JSON.stringify(observed));
+       console.error('ILLEGAL_BREAK_RESCAN_TIMEOUT_EVIDENCE',label,
+         JSON.stringify({...observed,navigations,hmrEvents}));
        throw error;
      }
      assert.equal(await page.evaluate(()=>window.__rescanCount),1,'explicit action should scan exactly once');
