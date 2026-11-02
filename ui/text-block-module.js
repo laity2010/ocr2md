@@ -193,7 +193,11 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       clearHover();drag=null;
       try{if(handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);}catch{}
       if(target&&target.targetId!==activeDrag.id){
-        void execute('move',{memberId:activeDrag.id,targetId:target.targetId,placement:'after'});
+        const source=tableRows.find(atom=>atom.id===activeDrag.id);
+        const destination=tableRows.find(atom=>atom.id===target.targetId);
+        if(source?.kind==='parent'&&destination?.kind==='child')
+          void execute('reparent',{memberId:activeDrag.id,targetId:target.targetId});
+        else void execute('move',{memberId:activeDrag.id,targetId:target.targetId,placement:'after'});
       }
       event.preventDefault();event.stopPropagation();
     };
@@ -208,7 +212,14 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     {colId:'pbsDrag',headerName:'拖动',width:56,minWidth:52,maxWidth:64,pinned:'left',lockPinned:true,cellRenderer:handleDrag},
     {field:'sourceLine',headerName:'源码行',width:82,minWidth:75,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'id',headerName:'PBS / BC',width:155,minWidth:128,cellRenderer:p=>{
-      if(!p.data?.isChainHeader)return p.value;
+      if(!p.data?.isChainHeader){
+        if(p.data?.origin&&p.data.origin!==p.value){
+          const label=document.createElement('span');label.textContent=p.value;
+          label.title=`新 PBS ${p.value} · 原始 OCR ${p.data.origin}`;
+          return label;
+        }
+        return p.value;
+      }
       const button=document.createElement('button');button.className='ocr-text-block-group';
       button.textContent=`${collapsedChains.has(p.data.chainId)?'▸':'▾'} ${p.data.chainId}`;
       button.setAttribute('aria-label',`展开或收起 ${p.data.chainId}`);
@@ -268,7 +279,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     const focus=next.focusTarget;if(!focus)return;
     if(mode==='candidates')return;
     const id=focus.elementId?.startsWith('mineru:')?
-      `p${focus.elementId.split(':')[1]}b${focus.elementId.split(':')[2]}`:
+      (tableRows.find(r=>r.origin===`p${focus.elementId.split(':')[1]}b${focus.elementId.split(':')[2]}`)?.id||
+       `p${focus.elementId.split(':')[1]}b${focus.elementId.split(':')[2]}`):
       tableRows.some(r=>r.id===focus.elementId)?focus.elementId:
       tableRows.filter(r=>r.sourceLine&&r.sourceLine<=focus.sourceLine).at(-1)?.id;
     if(!id||id===selectedId)return;
@@ -284,7 +296,23 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     return bounds?set.filter(r=>r.from!==null&&r.from>=bounds.from&&r.from<bounds.to):[];
   };
   const projectedRows=()=>{
-    const atoms=scoped();
+    // Structural correction is a logical view over immutable original OCR.
+    // Keep CM6 source order and origin= evidence untouched; show the newly
+    // assigned child immediately after its previous sibling in AG.
+    const atoms=[...scoped()];
+    const aliased=atoms.filter(a=>a.kind==='child'&&a.origin&&a.origin!==a.id)
+      .sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}));
+    for(const alias of aliased){
+      const match=/^(p\d+b\d+s)(\d+)$/.exec(alias.id);
+      if(!match)continue;
+      const previous=match[1]+(Number(match[2])-1);
+      const index=atoms.findIndex(a=>a.id===alias.id);
+      const sibling=atoms.findIndex(a=>a.id===previous);
+      if(index<0||sibling<0)continue;
+      atoms.splice(index,1);
+      const dest=atoms.findIndex(a=>a.id===previous);
+      atoms.splice(dest+1,0,alias);
+    }
     const membership=new Map(),ordered=[];
     for(const atom of atoms){
       const key=atom.chainId||`unmarked:${atom.id}`;
@@ -334,7 +362,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     dragBusy=true;
     try{
       const result=await onChainAction(kind,payload);
-      if(result.changed)onStatus(`✓ CMD ${({merge:'合链',split:'拆链',migrate:'旧标签迁移',move:'移动单个 PBS',extract:'独立成链',bbox:'PDF 框修正','bbox-reset':'恢复原框'})[kind]||kind} ${result.changed} 处 · 未保存，可 Undo`);
+      if(result.changed)onStatus(`✓ CMD ${({merge:'合链',split:'拆链',migrate:'旧标签迁移',move:'移动单个 PBS',reparent:'归入子块并重新编号',extract:'独立成链',bbox:'PDF 框修正','bbox-reset':'恢复原框'})[kind]||kind} ${result.changed} 处 · 未保存，可 Undo`);
       else onStatus('块链关系无须修改');
     }catch(e){onStatus('CMD 块链操作拒绝：'+e.message,'error');}
     finally{dragBusy=false;}
@@ -418,8 +446,16 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       if(mode==='candidates')grid.setGridOption('rowData',candidates);
       if(selectedCandidateId&&!selectedCandidate()){selectedCandidateId=null;onCompare(null);}
       refresh();},
-    getBlocks(){return rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>
-      ({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId}));},
+    getBlocks(){
+      const alias=new Map(tableRows.filter(r=>r.origin&&r.origin!==r.id)
+        .map(r=>[r.origin,r]));
+      return rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>{
+        const corrected=alias.get(id);
+        return {id:corrected?.id||id,origin:id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,
+          anchorCount,joinPrev:corrected?null:joinPrev,joinable:corrected?false:joinable,
+          logicalId:corrected?.id||logicalId};
+      });
+    },
     setPreviewCoverage(ids){
       previewMapped=new Set(ids);
       for(const row of rows)row.previewLabel=!row.expectsPreview?'无需渲染':previewMapped.has(row.id)?'可定位':'未映射';

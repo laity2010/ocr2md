@@ -354,10 +354,24 @@ export function toMineruJSON(markdown: string): string {
   // v1's public identity is the same canonical PBS ID shown in PDF and AG.
   // Internally normalize this one annotation syntax for the existing proven
   // strict parent/child round-trip validator. Never modify the user's source.
+  const origins: {id:string;origin:string;page:number;parent:number;child:number;source:number}[]=[];
   markdown=markdown.replace(/^(\s*(?:>\s*)*<!-- cmd:block:v1 )id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"((?: [a-z]+="[^"]*")* -->)[ \t]*$/gm,
     (_all,prefix,id,rest)=>{
       const match=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/.exec(id);
       assert(match, 'invalid CMD PBS identity');
+      const provenance=/ origin="(p\d+b\d+)"/.exec(rest);
+      if(provenance){
+        const original=/^p(0|[1-9]\d*)b(0|[1-9]\d*)$/.exec(provenance[1]);
+        assert(original&&match[3]!==undefined&&!match[3].includes('.')&&
+          original[1]===match[1]&&rest.indexOf(' origin="')===rest.lastIndexOf(' origin="'),
+          'invalid original PBS provenance');
+        origins.push({id,origin:provenance[1],page:Number(match[1]),
+          parent:Number(match[2]),child:Number(match[3]),source:Number(original[2])});
+        // Validate the sealed source at its original physical position. The
+        // renamed id remains intact in the editor, and the original JSON is
+        // never rewritten or reordered by this reversible projection.
+        return `${prefix}p="${original[1]}" b="${original[2]}"${rest.replace(provenance[0],'')}`;
+      }
       return `${prefix}p="${match[1]}" b="${match[2]}"${match[3]===undefined?'':` s="${match[3]}"`}${rest}`;
     });
   const source = sourcePattern.exec(markdown);
@@ -368,6 +382,25 @@ export function toMineruJSON(markdown: string): string {
   catch {throw new Error('MINERUJSON_MD_INVALID: corrupt source metadata');}
   assert(sha(Buffer.from(restored,'utf8'))===source[1], 'original JSON SHA-256 mismatch');
   const data = parseMineru(restored);
+  // A user-corrected child is not an invented MinerU native child.
+  // Check both original OCR ownership and the exact free child slot.
+  const seenOrigins=new Set<string>(),seenAliases=new Set<string>();
+  for(const alias of origins){
+    assert(!seenOrigins.has(alias.origin)&&!seenAliases.has(alias.id),
+      'duplicate PBS provenance');
+    seenOrigins.add(alias.origin);seenAliases.add(alias.id);
+    const blocks=data.pdf_info[alias.page]?.para_blocks;
+    const parent=blocks?.[alias.parent],sourceBlock=blocks?.[alias.source];
+    assert(parent&&sourceBlock&&!(sourceBlock.blocks||[]).length&&
+      (parent.blocks||[]).length>0&&alias.child>=(parent.blocks||[]).length,
+      'structural correction has no corresponding sealed original OCR blocks');
+  }
+  for(const alias of origins){
+    const nativeCount=(data.pdf_info[alias.page].para_blocks[alias.parent].blocks||[]).length;
+    assert(alias.child===nativeCount+origins.filter(a=>a.page===alias.page&&a.parent===alias.parent&&a.child<alias.child).length,
+      'corrected children must follow original native paths without holes');
+  }
+
   // CMD WP6 PDF bbox overrides are presentation metadata outside MinerU OCR.
   // Accept only one strict footer immediately preceding the sealed archive;
   // never interpret its JSON as a Markdown block or silently tolerate garbage.

@@ -733,6 +733,7 @@ async function main() {
     const result=action==='merge'?cmdPort.mergeBlockChains(request.destinationId,request.sourceId,options):
       action==='split'?cmdPort.splitBlockChainAt(request.memberId,options):
       action==='move'?cmdPort.moveBlockChainMember(request.memberId,request.targetId,request.placement||'after',options):
+      action==='reparent'?cmdPort.reparentPBS(request.memberId,request.targetId,options):
       action==='extract'?cmdPort.extractBlockChainMember(request.memberId,options):
       action==='bbox'?await cmdPort.setPDFBBox(request.memberId,request.bbox,options):
       action==='bbox-reset'?await cmdPort.setPDFBBox(request.memberId,null,options):

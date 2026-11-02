@@ -9,7 +9,7 @@ import {blockAnchor,subblockAnchor,unquotePrefix} from './mineru-anchors.js';
 const pbsPattern=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/;
 const tagPattern=/^<!-- cmd:block:v1((?: [a-z]+="[^"]*")*) -->$/;
 const attributePattern=/ ([a-z]+)="([^"]*)"/g;
-const permitted=new Set(['id','p','b','s','bc','seq','type','role','review','note']);
+const permitted=new Set(['id','origin','p','b','s','bc','seq','type','role','review','note']);
 const namePattern=/^[a-z][a-z0-9_-]{0,63}$/;
 const bcPattern=/^bc-[a-z0-9][a-z0-9-]{0,63}$/;
 const decode=x=>x.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
@@ -39,6 +39,9 @@ export function parseCMDBlockTag(line){
     (fields.id!==undefined&&(!pbs||fields.p!==undefined||fields.b!==undefined||fields.s!==undefined))||
     (fields.id===undefined&&(!uint(fields.p)||!uint(fields.b)||
       fields.s!==undefined&&!/^(0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/.test(fields.s)))||
+    (fields.origin!==undefined&&(!pbs||pbs.s.length!==1||
+      !parseCMDPBSId(fields.origin)||parseCMDPBSId(fields.origin).s.length||
+      parseCMDPBSId(fields.origin).p!==pbs.p||fields.origin===pbs.id))||
     fields.bc!==undefined&&!bcPattern.test(fields.bc)||
     (fields.bc===undefined)!==(fields.seq===undefined)||
     fields.seq!==undefined&&!uint(fields.seq)||
@@ -49,15 +52,18 @@ export function parseCMDBlockTag(line){
   const id=pbs?.id||`p${fields.p}b${fields.b}${fields.s===undefined?'':`s${fields.s}`}`;
   return {...fields,id,...parseCMDPBSId(id)};
 }
-export function serializeCMDBlockTag({id,bc,seq,type,role,review,note}){
+export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note}){
   const pbs=parseCMDPBSId(id);
   if(!pbs)throw Error('Invalid PBS identity');
+  if(origin!==undefined&&(!parseCMDPBSId(origin)||parseCMDPBSId(origin).s.length||
+    parseCMDPBSId(origin).p!==pbs.p||pbs.s.length!==1||origin===id))
+    throw Error('Invalid original OCR PBS provenance');
   if((bc===undefined)!==(seq===undefined)||bc!==undefined&&!bcPattern.test(bc)||
     seq!==undefined&&(!Number.isSafeInteger(seq)||seq<0))throw Error('Invalid BC membership');
   for(const value of [type,role,review])if(value!==undefined&&!namePattern.test(value))
     throw Error('Invalid CMD block metadata');
   if(note!==undefined&&(typeof note!=='string'||note.length>240))throw Error('Invalid CMD review note');
-  const props=[['id',pbs.id],
+  const props=[['id',pbs.id],...(origin?[['origin',origin]]:[]),
     ...(bc===undefined?[]:[['bc',bc],['seq',String(seq)]]),
     ...(['type','role','review','note'].filter(k=>({type,role,review,note})[k]!==undefined)
       .map(k=>[k,({type,role,review,note})[k]]))];
@@ -83,17 +89,21 @@ export function readCMDBlockChains(source){
       const id=parsed?.id||`p${(legacyParent||legacyChild).pageIndex}b${(legacyParent||legacyChild).blockIndex}`+
         (legacyChild?`s${legacyChild.path.join('.')}`:'');
       atoms.push({id,sourceLine:i+1,from:offset,rawLine:line,
-        format:parsed?'cmd-v1':'legacy',kind:(parsed?.s.length||legacyChild)?'child':'parent',
+        format:parsed?'cmd-v1':'legacy',origin:parsed?.origin||id,kind:(parsed?.s.length||legacyChild)?'child':'parent',
         bc:parsed?.bc??null,seq:parsed?.seq===undefined?null:Number(parsed.seq),
         type:parsed?.type??null,role:parsed?.role??null,
         review:parsed?.review??null,note:parsed?.note??null});
     }
     offset+=line.length+1;
   }
-  const seen=new Set();for(const a of atoms){
+  const seen=new Set(),origins=new Set();for(const a of atoms){
     if(seen.has(a.id))invalid.push({line:a.sourceLine,id:a.id,reason:'Duplicate PBS identity'});
     seen.add(a.id);
+    if(origins.has(a.origin))invalid.push({line:a.sourceLine,id:a.id,reason:'Duplicate original OCR provenance'});
+    origins.add(a.origin);
   }
+  for(const a of atoms)if(a.origin!==a.id&&seen.has(a.origin))
+    invalid.push({id:a.id,reason:'Original OCR identity cannot also be a visible PBS'});
   // Read-only recognition of legacy contiguous joins. New BC never depends on
   // adjacency; it can reference any PBS atom, including across PDF pages.
   const legacyPredecessor=new Map(),consumedLegacyMarks=new Set();
@@ -176,7 +186,7 @@ export function planCMDBlockChainArrangement(source,chains){
       if(!known.has(id)||seen.has(id))throw Error('Unknown or duplicate PBS member');
       seen.add(id);
       const atom=known.get(id);
-      wanted.set(id,{id,...(materialized?{bc:chain.id,seq}:{}),
+      wanted.set(id,{id,...(atom.origin!==id?{origin:atom.origin}:{}),...(materialized?{bc:chain.id,seq}:{}),
         ...(seq===0&&chain.type?{type:chain.type}:{}),
         ...((chain.roles===undefined?atom.role:chain.roles?.[id])?
           {role:chain.roles===undefined?atom.role:chain.roles[id]}:{}),
@@ -238,6 +248,37 @@ export function planCMDMergeBlockChains(source,destinationId,sourceId){
   chains.push(merged);
   return {...planCMDBlockChainArrangement(source,chains),resultId:merged.id,
     memberIds:[...merged.members]};
+}
+/** OCR structure correction, not a BC move. Re-parent exactly one original
+ * top-level source atom as the next sibling of an existing native child.
+ * The immutable source identity remains in origin=; no original JSON or
+ * physical Markdown content is reordered. One comment line -> one Undo. */
+export function planCMDReparentPBS(source,sourceId,targetId){
+  const model=readCMDBlockChains(source);
+  if(model.invalid.length||model.atoms.some(atom=>atom.format!=='cmd-v1'))
+    throw Error('PBS source is not ready for structural correction');
+  const byId=new Map(model.atoms.map(atom=>[atom.id,atom]));
+  const atom=byId.get(sourceId),target=byId.get(targetId);
+  if(!atom||!target)throw Error('Unknown PBS source or target');
+  const from=parseCMDPBSId(sourceId),to=parseCMDPBSId(targetId);
+  if(!from||!to||from.s.length||to.s.length!==1||from.p!==to.p)
+    throw Error('Only a same-page parent can become the next child of a native child');
+  if(atom.origin!==atom.id||model.atoms.some(a=>a.id.startsWith(sourceId+'s')))
+    throw Error('Source already has children or was previously reparented');
+  const ownChain=model.chains.find(c=>c.members.includes(sourceId));
+  if(ownChain?.size!==1||ownChain.explicit)
+    throw Error('Extract source to a singleton BC before reparenting');
+  if(target.origin!==target.id||target.bc)
+    throw Error('Target must be an original native child without BC rewrites');
+  const newId=`p${to.p}b${to.b}s${to.s[0]+1}`;
+  if(byId.has(newId))throw Error(`${newId} already exists; choose an unoccupied sibling slot`);
+  const parsed=parseCMDBlockTag(atom.rawLine);
+  const insert=commentPrefix(atom.rawLine)+serializeCMDBlockTag({
+    id:newId,origin:atom.origin,type:parsed.type,role:parsed.role,
+    review:parsed.review,note:parsed.note});
+  return {changed:1,sourceId,targetId,newId,origin:atom.origin,
+    edits:[{from:atom.from,to:atom.from+atom.rawLine.length,
+      expected:atom.rawLine,insert}]};
 }
 /** Split BEFORE the specified member C: [A,B] / [C,D]. The original chain
  * identity remains with the head, the tail gets a new ID only when needed.
@@ -377,34 +418,36 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
   const end=footer>=0?footer:tail<0?source.length:tail;
   const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
   const rows=ordered.map((atom,i)=>{
-    const identity=parseCMDPBSId(atom.id);
-    const parentId=`p${identity.p}b${identity.b}`,parent=parents.get(parentId),native=children.get(atom.id);
-    const root=identity.s.length===0;
-    const page=layout.pages[identity.p];
-    const region=page?.regions.find(x=>x.blockIndex===identity.b);
+    const identity=parseCMDPBSId(atom.id),physical=parseCMDPBSId(atom.origin);
+    const parentId=`p${identity.p}b${identity.b}`;
+    const originalParentId=`p${physical.p}b${physical.b}`;
+    const parent=parents.get(originalParentId),native=children.get(atom.origin);
+    const root=identity.s.length===0,originalRoot=physical.s.length===0;
+    const page=layout.pages[physical.p];
+    const region=page?.regions.find(x=>x.blockIndex===physical.b);
     // Only direct native children have independently validated geometry in
     // the current sealed layout. Never substitute a parent's bbox for a child.
-    const sub=identity.s.length===1?region?.subRegions.find(x=>x.path[0]===identity.s[0]):null;
-    const bbox=root?(layout.overrides?.[atom.id]||region?.bbox||null):
-      sub?.bbox||layout.overrides?.[atom.id]||null;
+    const sub=physical.s.length===1?region?.subRegions.find(x=>x.path[0]===physical.s[0]):null;
+    const bbox=originalRoot?(layout.overrides?.[atom.origin]||region?.bbox||null):
+      sub?.bbox||layout.overrides?.[atom.origin]||null;
     const bodyStart=atom.from+atom.rawLine.length;
     const bodyEnd=Math.min(end,ordered[i+1]?.from??end);
     const sourceText=source.slice(Math.min(end,bodyStart),Math.max(Math.min(end,bodyStart),bodyEnd))
       .replace(/<!--[^]*?-->/g,'').replace(/\s+/g,' ').trim().slice(0,240);
     const chain=member.get(atom.id);
-    return {id:atom.id,kind:root?'parent':'child',parentId:root?null:parentId,
+    return {id:atom.id,origin:atom.origin,kind:root?'parent':'child',parentId:root?null:parentId,
       childPath:identity.s.length?identity.s.join('.'):null,depth:identity.s.length,
-      pageIndex:identity.p,blockIndex:identity.b,pdfPage:identity.p+1,
+      pageIndex:physical.p,blockIndex:physical.b,pdfPage:physical.p+1,
       sourceLine:atom.sourceLine,from:atom.from,format:atom.format,
-      type:root?parent?.type||'unknown':native?.type||sub?.type||'native-child',
-      ocrBBoxText:(root?(parent?.originalBBox||parent?.bbox):native?.originalBBox)?.join(', ')||'—',
+      type:originalRoot?parent?.type||'unknown':native?.type||sub?.type||'native-child',
+      ocrBBoxText:(originalRoot?(parent?.originalBBox||parent?.bbox):native?.originalBBox)?.join(', ')||'—',
       ocrRole:sub?.role||null,
-      text:sourceText||(root?parent?.text||'':''),sourceText,
-      originalText:root?parent?.text||'':native?.text||'',
+      text:sourceText||(originalRoot?parent?.text||'':''),sourceText,
+      originalText:originalRoot?parent?.text||'':native?.text||'',
       bbox:bbox?[...bbox]:null,bboxText:bbox?bbox.join(', '):'—',
-      bboxSource:layout.overrides?.[atom.id]?'人工修正':'原始 OCR',
+      bboxSource:layout.overrides?.[atom.origin]?'人工修正':'原始 OCR',
       geometry:Boolean(bbox),geometryLabel:bbox?'可定位':'无有效子块坐标',
-      anchorCount:1,anchorStatus:'已匹配',expectsPreview:root?Boolean(parent?.expectsPreview):Boolean(sourceText),
+      anchorCount:1,anchorStatus:'已匹配',expectsPreview:originalRoot?Boolean(parent?.expectsPreview):Boolean(sourceText),
       previewLabel:sourceText?'待检查':'无需渲染',
       review:atom.review||'',note:atom.note||'',
       joinPrev:chain?.chainPrev||null,logicalId:parent?.logicalId||parentId,
@@ -415,7 +458,7 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
       chainRole:atom.role||chain?.chainRole||null,chainPrev:chain?.chainPrev||null,
       chainMembers:chain?.chainMembers||[atom.id]};
   });
-  const seen=new Set(rows.map(row=>row.id));
+  const seen=new Set(rows.map(row=>row.origin));
   for(const parent of parentRows)if(!seen.has(parent.id))rows.push({...parent,
     kind:'parent',parentId:null,childPath:null,depth:0,format:'missing',
     chainId:null,chainLabel:'未标定',chainPosition:null,chainSize:0,

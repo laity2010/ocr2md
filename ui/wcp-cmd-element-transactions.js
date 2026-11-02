@@ -12,7 +12,7 @@
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,
-  planCMDMigrateLegacyBlockChains,planCMDMergeBlockChains,
+  planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDPDFBBoxEdit} from './cmd-pdf-bbox.js';
@@ -143,6 +143,31 @@ export function createCMDTransactionPort(cmd){
     moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
       planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
       options.expectedSource??null),
+    reparentPBS(sourceId,targetId,options={}){
+      const source=cmd.readSource();
+      if(options.expectedSource!==undefined&&source!==options.expectedSource)
+        throw Error('CMD PBS reparent snapshot stale');
+      const before=readCMDBlockChains(source);
+      const plan=planCMDReparentPBS(source,sourceId,targetId);
+      if(plan.changed!==1||plan.edits.length!==1)throw Error('Reparent requires one guarded CMD edit');
+      const edit=plan.edits[0];
+      if(source.slice(edit.from,edit.to)!==edit.expected)
+        throw Error('Reparent expected source changed');
+      const next=source.slice(0,edit.from)+edit.insert+source.slice(edit.to);
+      const after=readCMDBlockChains(next);
+      const origins=atoms=>atoms.map(a=>a.origin).sort().join('\n');
+      if(after.invalid.length||before.atoms.length!==after.atoms.length||
+        origins(before.atoms)!==origins(after.atoms)||
+        after.atoms.filter(a=>a.origin===sourceId).length!==1||
+        !after.atoms.some(a=>a.id===plan.newId&&a.origin===sourceId))
+        throw Error('PBS reparent must retain all original OCR atoms and provenance');
+      const tail=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
+      if(!next.includes('<!-- minerujson:source:v1:')||tail(next)!==tail(source))
+        throw Error('Reparent cannot modify sealed OCR evidence');
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    },
     async setPDFBBox(memberId,bbox,options={}){
       const source=cmd.readSource();
       if(options.expectedSource!==undefined&&source!==options.expectedSource)
@@ -150,7 +175,12 @@ export function createCMDTransactionPort(cmd){
       // Pure planner consumes original sealed geometry, not an AG/UI bbox.
       const layout=await queryCMDLayout(source);
       if(source!==cmd.readSource())throw Error('PDF bbox source changed during validation');
-      const plan=planCMDPDFBBoxEdit(source,layout,memberId,bbox);
+      // Reparented PBS IDs remain aliases of sealed physical OCR boxes.
+      // Persist geometry under the immutable provenance key, never fabricate
+      // a child bbox in the original MinerU JSON.
+      const identity=readCMDBlockChains(source).atoms.find(a=>a.id===memberId);
+      if(!identity)throw Error('Unknown CMD PBS for PDF correction');
+      const plan=planCMDPDFBBoxEdit(source,layout,identity.origin,bbox);
       if(!plan.changed)return plan;
       const match=source.indexOf('<!-- minerujson:source:v1:');
       if(match<0||plan.edits.some(e=>e.to>match||e.from>match||

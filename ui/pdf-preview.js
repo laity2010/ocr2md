@@ -556,9 +556,11 @@ export class PdfPreview {
             this.setStatus('PDF 子块定位失败：'+error.message);
         });
     }else if(anchor){
+      const displayed=this.blockCoverageRows.find(row=>row.pageIndex===pageIndex&&
+        row.blockIndex===chosen.blockIndex)?.id||`p${pageIndex}b${chosen.blockIndex}`;
       this.setStatus(anchor.contentLine
-        ?`p${pageIndex}b${chosen.blockIndex} · 父块源码第 ${anchor.contentLine} 行（标签第 ${anchor.sourceLine} 行）`
-        :`p${pageIndex}b${chosen.blockIndex} · 仅有父块结构标签，缺少对应 OCR 内容`);
+        ?`${displayed} · 源码第 ${anchor.contentLine} 行（标签第 ${anchor.sourceLine} 行）`
+        :`${displayed} · 仅有结构标签，缺少对应 OCR 内容`);
       publishFocus({sourceLine:anchor.contentLine??anchor.sourceLine,origin:'pdf',
         elementId:`mineru:${pageIndex}:${chosen.blockIndex}:parent`});
     }else this.setStatus(`p${pageIndex}b${chosen.blockIndex} · 源码缺少父块锚点`);
@@ -614,8 +616,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})=>
-        ({id,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})):[];
+      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})=>
+        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId})):[];
     const prior=this.blockCoverageRows;
     this.blockCoverageRows=next;
     // Editing one CMD join annotates only the target Block. The geometry and
@@ -646,7 +648,7 @@ export class PdfPreview {
     let changed=false;
     const logical=row.logicalId||row.id;
     if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
-    const title=`原始 ${row.id} · 逻辑 ${logical} · 单击定位，三击切换 checkbox`;
+    const title=`原始 ${row.origin||row.id} · 显示 ${logical} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
@@ -657,7 +659,7 @@ export class PdfPreview {
     if(input.title!==help)input.title=help;
     const chipTitle=help+sourceKindHint(chip.dataset.sourceKind);
     if(chip.title!==chipTitle)chip.title=chipTitle;
-    const aria=`原始 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
+    const aria=`来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
     if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
     node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
     // Badge width can change when page-local numbering passes 9/10/100.
@@ -901,7 +903,7 @@ export class PdfPreview {
       let node=this.blockCoverageNodes.get(row.id);
       if(!node){
         node=document.createElement('div');node.className='ocr-pdf-block-cover';
-        node.dataset.blockId=row.id;
+        node.dataset.blockId=row.id;node.dataset.originId=row.origin||row.id;
         node.dataset.pdfPage=String(row.pageIndex+1);
         node.dataset.blockIndex=String(row.blockIndex);
         node.title='CMD 已标定文本块';
