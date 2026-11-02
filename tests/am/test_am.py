@@ -35,10 +35,15 @@ class AMCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'non-public cross-module API'):
             am.assert_references(self.db)
 
-    def test_focus_includes_original_and_media_publishers_six_receivers(self):
+    def test_focus_includes_all_ten_observed_receivers(self):
         owners = {row[0] for row in self.db.execute("SELECT module_id FROM publishers WHERE message_id='E03'")}
         self.assertEqual(owners, {'C','G','M','P','A'})
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM subscriptions WHERE message_id='E03'").fetchone()[0], 6)
+        # Exact, not a relaxed lower bound: the four formerly missing focus
+        # consumers must remain registered alongside the six original ones.
+        receiver_ids = {row[0] for row in self.db.execute(
+            "SELECT id FROM subscriptions WHERE message_id='E03'")}
+        self.assertEqual(receiver_ids, {'SUB05','SUB06','SUB07','SUB08','SUB09',
+                                        'SUB-W16','SUB19','SUB21','SUB22','SUB23'})
 
     def test_wcp_shared_store_subscribers_are_explicit(self):
         expected={'SUB-W15':('E13','W'),'SUB-W16':('E03','G'),'SUB-W17':('E01','S')}

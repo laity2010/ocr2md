@@ -844,6 +844,32 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Reuses registered focusTarget message and WP3 chapter query intention.
 INSERT INTO modules VALUES
  ('H','HTML Elements','AG Grid + CMD Lezer HTML syntax query','ui/html-elements-module.js');
+
+-- Reverse audit of live viewStore.subscribe callsites (WCP26 WP2): these
+-- existing consumers were not present in the formal subscriber inventory.
+-- The transport and message IDs already exist; this records observed reads,
+-- not a new authorization for cross-module object access.
+INSERT INTO subscriptions VALUES
+ ('SUB18','E01','H','ui/html-elements-module.js','viewStore.subscribe -> refresh','documentRevision differs AND HTML AG active','refresh HTML AG rows after CM6 source edits'),
+ ('SUB19','E03','H','ui/html-elements-module.js','viewStore.subscribe -> grid.getRowNode','focusTarget changed; external origin, same revision','select and reveal corresponding HTML AG row'),
+ ('SUB20','E01','N','ui/note-pair-module.js','viewStore.subscribe -> queueMicrotask','documentRevision differs','refresh note-pair AG after source edits'),
+ ('SUB21','E03','N','ui/note-pair-module.js','viewStore.subscribe -> followFocus','focusTarget changes','synchronize note-pair selection with source/preview focus'),
+ ('SUB22','E03','G','ui/sentence-module.js','viewStore.subscribe -> followFocus','focusTarget changes','select sentence AG row from source/preview focus'),
+ ('SUB23','E03','G','ui/text-block-module.js','viewStore.subscribe -> grid.getRowNode','focusTarget changes AND text-block AG active','locate CMD text-block AG row without editing source');
+
+
+-- Real existing browser paths demonstrate the registered shared-state
+-- consumer journeys. Evidence is explicitly integration-level, not a direct
+-- isolated API unit test, and never replaces separate runtime edge review.
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
+ ('TC-SUB18','SUB18','tests/html-table-normalize.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','HTML AG re-indexes after CMD/CM6 table edit without shadow document','integration'),
+ ('TC-SUB19','SUB19','tests/html-elements.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','HTML AG and CM6 source coordinate semantic focus and chapter-scoped row selection','integration'),
+ ('TC-SUB20','SUB20','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Note-pair rows reflect CMD conversion and undo/redo across document revisions','integration'),
+ ('TC-SUB21','SUB21','tests/note-pair-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Note-pair AG and source/preview preserve focus after paired-note actions','integration'),
+ ('TC-SUB22','SUB22','tests/sentence.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Sentence AG selection follows CM6 and preview semantic focus','integration'),
+ ('TC-SUB23','SUB23','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Text-block AG and source/PDF review share focused block location','integration');
+
+
 INSERT INTO apis VALUES
  ('C34','C','CMDocument.readHtmlElements','ui/cm-document.js','export','none','source-positioned HTML tags and comments, 1-based lines','CMD read-only parse over the sole CM6 Markdown; skips fenced/inline code',1),
  ('C35','C','scanHtmlElements','ui/cmd-html-elements.js','export','Markdown source','immutable HTML source token list','Lezer Markdown syntax, including quoted attributes and block HTML; no DOM or writes',1),
