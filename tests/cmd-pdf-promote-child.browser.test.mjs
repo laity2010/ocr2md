@@ -57,7 +57,36 @@ try{
    const physical=await (reviewed?page.locator('.ocr-pdf-block-cover[data-block-id="p1b3s1"]'):
      page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]')).evaluate(el=>{
      const r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};});
-   await chip.evaluate(el=>el.click());
+   if(process.env.TOUCH_MODE==='1'){
+     if(process.env.TITLE_MODE==='1'){
+       await page.locator('#module-select').evaluate(el=>{el.value='chapter-boundary';el.dispatchEvent(new Event('change',{bubbles:true}));});
+     }
+     await page.evaluate(()=>{window.__pdfTouchEvents=[];
+       for(const type of ['pointerdown','pointerup','click','touchstart','touchend']){
+         document.addEventListener(type,e=>window.__pdfTouchEvents.push({type,
+           target:e.target?.className?.baseVal||e.target?.className,
+           near:e.target?.closest?.('.ocr-pdf-block-ctrl,.ocr-pdf-subblock-chip')?.textContent?.slice(0,50),
+           status:document.querySelector('.ocr-pdf-status')?.textContent?.slice(0,80),
+           disabled:document.querySelector('.ocr-pdf-promote-child')?.disabled}),true);
+       }
+     });
+     const target=process.env.BODY_TAP==='1'&&reviewed?
+       await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3s1"]').boundingBox():
+       await chip.boundingBox();
+     assert(target,'target PDF label or body visible');
+     const x=target.x+target.width/2,y=target.y+target.height/2;
+     console.log('PDF_TOUCH_HIT',name,JSON.stringify(await page.evaluate(({x,y})=>({
+       target:document.elementFromPoint(x,y)?.tagName,
+       closest:document.elementFromPoint(x,y)?.closest('.ocr-pdf-block-ctrl,.ocr-pdf-subblock-chip')?.textContent||null,
+       x,y}),{x,y})));
+     await page.touchscreen.tap(x,y);
+     await page.waitForTimeout(700);
+     console.log('PDF_REAL_TOUCH_DIAG',name,JSON.stringify(await page.evaluate(()=>({events:window.__pdfTouchEvents,
+       selectedStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+       toolbarDisabled:document.querySelector('.ocr-pdf-promote-child')?.disabled,
+       toolbarTitle:document.querySelector('.ocr-pdf-promote-child')?.title,
+       module:document.querySelector('#module-select')?.value}))));
+   }else await chip.evaluate(el=>el.click());
    await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-promote-child')?.disabled,null,{timeout:13000});
    assert((await promote.getAttribute('title')).includes(selectedId));
    console.log('PDF_CHILD_PROMOTE_STEP',name,'enabled');

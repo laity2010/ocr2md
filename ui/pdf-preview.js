@@ -252,10 +252,15 @@ export class PdfPreview {
   selectedNativeChildId(){
     const chosen=this.selected;
     if(!chosen)return null;
-    // A corrected child has a physical *parent* OCR rectangle, so partPath
-    // is null. Its visible PDF chip carries the logical PBS child ID.
-    const id=chosen.logicalId||(chosen.partPath?.length===1&&chosen.partIndex!=null
-      ?subblockId(chosen.pageIndex,chosen.blockIndex,chosen.partPath):null);
+    // Reviewed child p1b3s1 is physically the original p1b5 rectangle.
+    // A canvas tap has no logicalId; infer the visible id from the current
+    // PDF coverage projection, the same source as the gutter chip/status.
+    const projected=this.blockCoverageRows.find(row=>row.pageIndex===chosen.pageIndex&&
+      row.blockIndex===chosen.blockIndex&&row.origin!==row.id&&
+      /^p\d+b\d+s\d+$/.test(row.id));
+    const id=chosen.logicalId||(!chosen.partPath?.length?projected?.id:null)||
+      (chosen.partPath?.length===1&&chosen.partIndex!=null
+        ?subblockId(chosen.pageIndex,chosen.blockIndex,chosen.partPath):null);
     if(!id||!/^p\d+b\d+s\d+$/.test(id))return null;
     const current=this.getMarkdown();
     const escaped=id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -575,9 +580,17 @@ export class PdfPreview {
     // Preserve the immutable child path, not merely its position in a
     // dynamically reconstructed list. Geometry corrections may recover a
     // previously invisible native child and shift neighboring list indices.
+    // PDF canvas/touch hits report the immutable *physical* block, whereas
+    // gutter chips carry the reviewed visible PBS id. Both selection paths
+    // must produce the SAME logical identity for toolbar actions. Otherwise
+    // a correct status `p1b3s1` can coexist with a disabled action button.
+    const matching=this.blockCoverageRows.find(row=>row.pageIndex===pageIndex&&
+      row.blockIndex===chosen.blockIndex&&row.origin!==row.id&&
+      /^p\d+b\d+s\d+$/.test(row.id));
+    const logicalId=chosen.logicalId||(!chosenPath?matching?.id:null)||null;
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
       partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null,
-      logicalId:chosen.logicalId||null};
+      logicalId};
     this.updatePromoteButton();
     this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
