@@ -312,7 +312,12 @@
       "readCMDBlockChains"
     ],
     "wcp-cmd-element-transactions.js->cmd-block-chains.js": [
-      "planCMDBlockChainArrangement"
+      "planCMDBlockChainArrangement",
+      "readCMDBlockChains",
+      "planCMDMigrateLegacyBlockChains",
+      "planCMDMergeBlockChains",
+      "planCMDSplitBlockChain",
+      "planCMDMoveBlockChainMember"
     ]
   }
 }

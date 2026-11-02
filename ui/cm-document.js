@@ -50,14 +50,19 @@ export class CMDocument {
     const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
     const bc=readCMDBlockChains(source);
     const membership=new Map();
+    const canonical=bc.atoms.length>0&&bc.atoms.every(a=>a.format==='cmd-v1');
     for(const chain of bc.chains)for(const [seq,id] of chain.members.entries())
       membership.set(id,{chainId:chain.id,chainType:chain.type,chainSize:chain.size,
-        chainPosition:seq+1,chainRole:chain.roles[id]||null,chainExplicit:chain.explicit});
+        chainPosition:seq+1,chainPrev:seq?chain.members[seq-1]:null,
+        chainRole:chain.roles[id]||null,chainExplicit:chain.explicit});
     for(const row of inventory.rows){
-      row.joinPrev=logical.joined.get(row.id)||null;
+      const chain=membership.get(row.id);
+      // The existing PDF checkbox is a view of CMD BC, not a second join
+      // datastore. It follows the predecessor in logical BC member order,
+      // which may cross pages or be nonadjacent in the original PDF.
+      row.joinPrev=canonical?(chain?.chainPrev||null):logical.joined.get(row.id)||null;
       row.joinable=logical.joinable.has(row.id);
       row.logicalId=logical.assignments.get(row.id)||row.id;
-      const chain=membership.get(row.id);
       row.chainId=chain?.chainId||`implicit:${row.id}`;
       row.chainLabel=chain?.chainExplicit?chain.chainId:chain?.chainSize>1?'旧接续':'单块';
       row.chainPosition=chain?.chainPosition??1;
@@ -65,7 +70,7 @@ export class CMDocument {
       row.chainType=chain?.chainType||null;
       row.chainRole=chain?.chainRole||null;
     }
-    inventory.summary.joined=logical.joined.size;
+    inventory.summary.joined=canonical?bc.chains.reduce((sum,c)=>sum+c.size-1,0):logical.joined.size;
     inventory.summary.logicalBlocks=logical.blocks.length;
     inventory.summary.invalidJoinMarks=logical.invalid.length;
     inventory.summary.bcChains=bc.summary.chains;

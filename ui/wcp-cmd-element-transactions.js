@@ -11,7 +11,9 @@
  */
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
-import {planCMDBlockChainArrangement} from './cmd-block-chains.js';
+import {planCMDBlockChainArrangement,readCMDBlockChains,
+  planCMDMigrateLegacyBlockChains,planCMDMergeBlockChains,
+  planCMDSplitBlockChain,planCMDMoveBlockChainMember} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDSubblockAnnotations} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
@@ -72,6 +74,8 @@ export function createCMDTransactionPort(cmd){
   };
   const moveBlock=async(sourceId,targetId,placement)=>{
     const source=cmd.readSource();
+    if(readCMDBlockChains(source).atoms.some(a=>a.format==='cmd-v1'))
+      throw Error('PBS/BC 文档请使用 CMD 链内排序；源码物理移动待 WP5 适配');
     const {rows}=await cmd.inspectTextBlocks(source);
     if(source!==cmd.readSource())throw Error('拖动期间 CMD 已变化，请重新操作');
     const plan=planCMDBlockMove(source,rows,sourceId,targetId,placement);
@@ -80,22 +84,51 @@ export function createCMDTransactionPort(cmd){
       plan.edits,{source,allowAll:true});
     return {changed:1,sourceId,targetId,placement,pageIndex:plan.pageIndex,shift:plan.shift};
   };
+  const commitChainPlan=plan=>{
+    if(!plan.changed)return plan;
+    const source=cmd.readSource();
+    commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+      plan.edits,{source,allowAll:true});
+    return plan;
+  };
   const port={
     requestMeasure:()=>cmd.requestMeasure(),
     readSource:()=>cmd.readSource(), // read-only CM6 source snapshot; never a second editor
     queryLayout:()=>cmd.queryLayout(),
     queryBlockAnalysis:()=>cmd.queryBlockAnalysis(),
     queryBlockChains:()=>cmd.queryBlockChains(),
-    arrangeBlockChains:(chains)=>{
-      const source=cmd.readSource();
-      const plan=planCMDBlockChainArrangement(source,chains);
-      if(!plan.changed)return plan;
-      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
-        plan.edits,{source,allowAll:true});
-      return plan;
-    },
+    arrangeBlockChains:(chains)=>commitChainPlan(planCMDBlockChainArrangement(cmd.readSource(),chains)),
+    migrateLegacyBlockChains:()=>commitChainPlan(planCMDMigrateLegacyBlockChains(cmd.readSource())),
+    mergeBlockChains:(destinationId,sourceId)=>commitChainPlan(
+      planCMDMergeBlockChains(cmd.readSource(),destinationId,sourceId)),
+    splitBlockChainAt:memberId=>commitChainPlan(
+      planCMDSplitBlockChain(cmd.readSource(),memberId)),
+    moveBlockChainMember:(memberId,targetId,placement='after')=>commitChainPlan(
+      planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement)),
     async setBlockJoin(targetId,join){
       const source=cmd.readSource();
+      const current=readCMDBlockChains(source);
+      if(current.invalid.length)throw Error('CMD 块链关系存在无效标签，请先修复');
+      if(current.atoms.length&&current.atoms.every(a=>a.format==='cmd-v1')){
+        // Compatibility for PDF's existing checked/unchecked parent control.
+        // Never emit an old block-join tag into canonical CMD PBS documents.
+        const {rows}=await cmd.inspectTextBlocks(source);
+        if(source!==cmd.readSource())throw Error('操作期间 CMD 已发生变化，请重新点击');
+        const targetIndex=rows.filter(r=>r.anchorCount===1).sort((a,b)=>a.from-b.from)
+          .findIndex(row=>row.id===targetId);
+        const ordered=rows.filter(r=>r.anchorCount===1).sort((a,b)=>a.from-b.from);
+        if(targetIndex<0||targetIndex===0)throw Error('当前 Block 没有前驱 Block');
+        const previous=ordered[targetIndex-1].id;
+        if(join){
+          const plan=commitChainPlan(planCMDMergeBlockChains(source,previous,targetId));
+          return {changed:plan.changed?1:0,previous,target:targetId};
+        }
+        const chain=current.chains.find(x=>x.members.includes(targetId));
+        if(!chain||chain.members.indexOf(targetId)===0)
+          return {changed:0,previous,target:targetId};
+        const plan=commitChainPlan(planCMDSplitBlockChain(source,targetId));
+        return {changed:plan.changed?1:0,previous,target:targetId};
+      }
       const {rows}=await cmd.inspectTextBlocks(source);
       if(source!==cmd.readSource())throw Error('操作期间 CMD 已发生变化，请重新点击');
       const plan=planCMDBlockJoin(source,rows,targetId,join);

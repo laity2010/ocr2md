@@ -4,7 +4,7 @@
  * Legacy MinerU anchors and old joins are read-only during migration.
  * No module-local storage, PDF writes, AG writes, or CM6 mutations.
  */
-import {blockAnchor,subblockAnchor,quotePrefix,unquotePrefix} from './mineru-anchors.js';
+import {blockAnchor,subblockAnchor,unquotePrefix} from './mineru-anchors.js';
 
 const pbsPattern=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s(0|[1-9]\d*(?:\.(?:0|[1-9]\d*))*))?$/;
 const tagPattern=/^<!-- cmd:block:v1((?: [a-z]+="[^"]*")*) -->$/;
@@ -14,6 +14,7 @@ const namePattern=/^[a-z][a-z0-9_-]{0,63}$/;
 const bcPattern=/^bc-[a-z0-9][a-z0-9-]{0,63}$/;
 const decode=x=>x.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 const encode=x=>x.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const commentPrefix=line=>line.slice(0,line.indexOf('<!--'));
 const uint=x=>typeof x==='string'&&/^(0|[1-9]\d*)$/.test(x)&&Number.isSafeInteger(Number(x));
 
 export function parseCMDPBSId(id){
@@ -91,7 +92,7 @@ export function readCMDBlockChains(source){
   }
   // Read-only recognition of legacy contiguous joins. New BC never depends on
   // adjacency; it can reference any PBS atom, including across PDF pages.
-  const legacyPredecessor=new Map();
+  const legacyPredecessor=new Map(),consumedLegacyMarks=new Set();
   for(let i=0;i<atoms.length;i++){
     const atom=atoms[i];if(atom.format!=='legacy'||atom.kind!=='parent')continue;
     const preceding=atoms.slice(0,i).reverse().find(a=>a.kind==='parent');
@@ -99,7 +100,15 @@ export function readCMDBlockChains(source){
     const m=/^<!-- ocr2md:block-join:v1 prev="(p\d+b\d+)" target="(p\d+b\d+)" -->$/.exec(unquotePrefix(priorLine).trim());
     if(m){if(m[2]!==atom.id||m[1]!==preceding?.id||!preceding||preceding.bc)
       invalid.push({line:atom.sourceLine-1,id:atom.id,reason:'Invalid legacy join'});
-      else legacyPredecessor.set(atom.id,m[1]);}
+      else {legacyPredecessor.set(atom.id,m[1]);consumedLegacyMarks.add(atom.sourceLine-1);}}
+  }
+  // No dangling/duplicate/forged join marker may be silently dropped while
+  // migrating. A predecessor marker MUST be directly above its target anchor.
+  for(let i=0;i<lines.length;i++){
+    const raw=unquotePrefix(lines[i]).trim();
+    if(!raw.startsWith('<!-- ocr2md:block-join:v1'))continue;
+    if(!consumedLegacyMarks.has(i+1))
+      invalid.push({line:i+1,reason:'Orphaned or invalid legacy join marker'});
   }
   const grouping=new Map();
   for(const a of atoms){
@@ -165,7 +174,8 @@ export function planCMDBlockChainArrangement(source,chains){
       const atom=known.get(id);
       wanted.set(id,{id,...(materialized?{bc:chain.id,seq}:{}),
         ...(seq===0&&chain.type?{type:chain.type}:{}),
-        ...(chain.roles?.[id]?{role:chain.roles[id]}:{}),
+        ...((chain.roles===undefined?atom.role:chain.roles?.[id])?
+          {role:chain.roles===undefined?atom.role:chain.roles[id]}:{}),
         ...(atom.review?{review:atom.review}:{}),...(atom.note?{note:atom.note}:{})});
     }
   }
@@ -173,8 +183,156 @@ export function planCMDBlockChainArrangement(source,chains){
   const edits=[];
   for(const atom of current.atoms){
     const expected=atom.rawLine;
-    const insert=quotePrefix(expected)+serializeCMDBlockTag(wanted.get(atom.id));
+    const insert=commentPrefix(expected)+serializeCMDBlockTag(wanted.get(atom.id));
     if(insert!==expected)edits.push({from:atom.from,to:atom.from+expected.length,expected,insert});
   }
   return {changed:edits.length,edits,chains:chains.length,atoms:current.atoms.length};
+}
+
+/** Keep the complete partition and all member roles when building a new plan.
+ * This is a detached projection of the current CMD source, never AG state.
+ */
+function editableChains(current){
+  return current.chains.map(chain=>({id:chain.explicit?chain.id:null,
+    type:chain.type, members:[...chain.members],roles:{...chain.roles}}));
+}
+function validArrangement(source){
+  const current=readCMDBlockChains(source);
+  if(current.invalid.length)throw Error('CMD BC relationship invalid; repair before editing');
+  if(current.atoms.some(atom=>atom.format!=='cmd-v1'))
+    throw Error('Legacy PBS anchors require explicit CMD migration first');
+  return {current,chains:editableChains(current)};
+}
+function allocateId(chains){
+  const existing=new Set(chains.map(c=>c.id).filter(Boolean));
+  let next=1;
+  while(existing.has(`bc-${String(next).padStart(4,'0')}`))next++;
+  return `bc-${String(next).padStart(4,'0')}`;
+}
+const findChain=(chains,id)=>{
+  const index=chains.findIndex(c=>c.members.includes(id));
+  if(index<0)throw Error('Unknown PBS chain member');
+  return index;
+};
+/** Merge two entire logical objects. Preserve the destination BC identity
+ * where possible, or the one already explicit on the source; never rekey
+ * unrelated members. Conflicting typed objects must be explicitly reviewed.
+ */
+export function planCMDMergeBlockChains(source,destinationId,sourceId){
+  if(!parseCMDPBSId(destinationId)||!parseCMDPBSId(sourceId))throw Error('Invalid PBS ID');
+  const {chains}=validArrangement(source);
+  const a=findChain(chains,destinationId),b=findChain(chains,sourceId);
+  if(a===b)return {changed:0,edits:[],reason:'already-same-chain'};
+  const destination=chains[a],origin=chains[b];
+  if(destination.type&&origin.type&&destination.type!==origin.type)
+    throw Error('Conflicting BC object types; review before merge');
+  const merged={id:destination.id||origin.id||allocateId(chains),
+    type:destination.type||origin.type||null,
+    members:[...destination.members,...origin.members],
+    roles:{...destination.roles,...origin.roles}};
+  chains.splice(Math.max(a,b),1);chains.splice(Math.min(a,b),1);
+  chains.push(merged);
+  return {...planCMDBlockChainArrangement(source,chains),resultId:merged.id,
+    memberIds:[...merged.members]};
+}
+/** Split BEFORE the specified member C: [A,B] / [C,D]. The original chain
+ * identity remains with the head, the tail gets a new ID only when needed.
+ */
+export function planCMDSplitBlockChain(source,memberId){
+  if(!parseCMDPBSId(memberId))throw Error('Invalid PBS ID');
+  const {chains}=validArrangement(source);
+  const i=findChain(chains,memberId),chain=chains[i];
+  const position=chain.members.indexOf(memberId);
+  if(position===0)return {changed:0,edits:[],reason:'already-chain-head'};
+  const left=chain.members.slice(0,position),right=chain.members.slice(position);
+  const head={...chain,members:left,roles:Object.fromEntries(left.filter(id=>chain.roles[id])
+    .map(id=>[id,chain.roles[id]]))};
+  const tail={id:null,type:chain.type,members:right,
+    roles:Object.fromEntries(right.filter(id=>chain.roles[id]).map(id=>[id,chain.roles[id]]))};
+  if(right.length>1||tail.type)tail.id=allocateId(chains);
+  chains.splice(i,1,head,tail);
+  return {...planCMDBlockChainArrangement(source,chains),headId:head.id||`implicit:${left[0]}`,
+    tailId:tail.id||`implicit:${right[0]}`,headMembers:left,tailMembers:right};
+}
+/** Move ONE atomic PBS, not its old chain: before/after any other atom,
+ * including a member on a different PDF page. Neither PDF geometry nor the
+ * source's physical OCR block order changes. A no-op is byte-for-byte inert.
+ */
+export function planCMDMoveBlockChainMember(source,memberId,targetId,placement='after'){
+  if(!parseCMDPBSId(memberId)||!parseCMDPBSId(targetId)||
+    !['before','after'].includes(placement))throw Error('Invalid PBS member movement');
+  const {chains}=validArrangement(source);
+  const a=findChain(chains,memberId),b=findChain(chains,targetId);
+  const origin=chains[a],destination=chains[b];
+  if(a!==b&&origin.type&&destination.type&&origin.type!==destination.type)
+    throw Error('Conflicting BC object types; review before moving member');
+  const old=origin.members.indexOf(memberId);
+  if(memberId===targetId)return {changed:0,edits:[],reason:'same-member'};
+  if(a===b){
+    origin.members.splice(old,1);
+    const next=origin.members.indexOf(targetId)+(placement==='after'?1:0);
+    origin.members.splice(next,0,memberId);
+  }else{
+    origin.members.splice(old,1);
+    const next=destination.members.indexOf(targetId)+(placement==='after'?1:0);
+    destination.members.splice(next,0,memberId);
+    if(origin.roles[memberId]){
+      destination.roles[memberId]=origin.roles[memberId];delete origin.roles[memberId];
+    }
+    if(!destination.type&&origin.type&&origin.members.length===0)
+      destination.type=origin.type;
+    if(!destination.id&&(destination.members.length>1||destination.type))
+      destination.id=origin.members.length===0?origin.id||allocateId(chains):allocateId(chains);
+    if(!origin.members.length)chains.splice(a,1);
+  }
+  return planCMDBlockChainArrangement(source,chains);
+}
+/** Explicit, single-transaction migration of old MinerU anchors and legacy
+ * predecessor joins. Copies only the original inline identity/BC relationship
+ * lines: no content text, sealed OCR evidence, bbox, or other review tags.
+ * Old unannotated child paths are NOT invented during migration.
+ */
+export function planCMDMigrateLegacyBlockChains(source){
+  const current=readCMDBlockChains(source);
+  if(current.invalid.length)throw Error('Invalid legacy CMD join or PBS marker; migration refused');
+  const legacy=current.atoms.filter(a=>a.format==='legacy');
+  if(!legacy.length)return {changed:0,edits:[],migrated:0,joins:0};
+  const lines=source.split('\n');
+  const chains=editableChains(current),assignments=new Map();
+  for(const chain of chains){
+    if(chain.members.length>1&&!chain.id)chain.id=allocateId(chains);
+    for(const [seq,id] of chain.members.entries())assignments.set(id,{
+      id,...(chain.id?{bc:chain.id,seq}:{}),
+      ...(seq===0&&chain.type?{type:chain.type}:{}),
+      ...(chain.roles[id]?{role:chain.roles[id]}:{})});
+  }
+  const edits=[];
+  for(const atom of legacy){
+    const fields=assignments.get(atom.id);
+    const replacement=commentPrefix(atom.rawLine)+serializeCMDBlockTag(fields);
+    edits.push({from:atom.from,to:atom.from+atom.rawLine.length,
+      expected:atom.rawLine,insert:replacement});
+  }
+  let from=0,removed=0;
+  for(const line of lines){
+    if(/^<!-- ocr2md:block-join:v1 prev="p\d+b\d+" target="p\d+b\d+" -->$/.test(unquotePrefix(line).trim())){
+      // Each marker's newline is removed, not the newline/quote indentation
+      // of the corresponding original block identity below it.
+      edits.push({from,to:from+line.length+1,expected:line+'\n',insert:''});removed++;
+    }
+    from+=line.length+1;
+  }
+  const next=[...edits].sort((a,b)=>b.from-a.from).reduce((s,e)=>{
+    if(s.slice(e.from,e.to)!==e.expected)throw Error('Stale migration source');
+    return s.slice(0,e.from)+e.insert+s.slice(e.to);
+  },source);
+  const verified=readCMDBlockChains(next);
+  if(verified.invalid.length||verified.atoms.length!==current.atoms.length||
+    verified.chains.length!==current.chains.length||
+    verified.atoms.some(a=>a.format!=='cmd-v1')||
+    current.chains.some(chain=>!verified.chains.some(other=>
+      other.members.length===chain.members.length&&
+      other.members.every((id,i)=>id===chain.members[i]))))
+    throw Error('CMD migration partition changed; refusing edits');
+  return {changed:edits.length,edits,migrated:legacy.length,joins:removed};
 }

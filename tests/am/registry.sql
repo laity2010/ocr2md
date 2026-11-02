@@ -1426,7 +1426,7 @@ INSERT INTO apis VALUES
  ('C66','C','returned.queryBlockChains','ui/wcp-cmd-element-transactions.js','returned','none','read-only complete CMD block and chain projection','same source used by CMD, exposed through bounded port',1),
  ('C67','C','returned.arrangeBlockChains','ui/wcp-cmd-element-transactions.js','returned','complete block chain partition','planned exact guarded CM6 edits in one Undo/Redo transaction','rejects legacy writes until migration; does not alter original OCR seal',1);
 INSERT INTO access_edges VALUES
- ('X-PBSBC-TRANSACTION-L67','C','L','ui/wcp-cmd-element-transactions.js','planCMDBlockChainArrangement(source,chains)','L67','registered','CMD only owner of BC edit planning, application via guarded port');
+ ('X-PBSBC-TRANSACTION-L67','C','L','ui/wcp-cmd-element-transactions.js','planCMDBlockChainArrangement(cmd.readSource(),chains)','L67','registered','CMD only owner of BC edit planning, application via guarded port');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PBSBC-C66','C66','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','CMD port delegates read-only source-derived chain query', 'direct'),
  ('TC-PBSBC-C67','C67','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','CMD port applies only guarded PBS/BC edits via existing one-transaction CM6 boundary','integration');
@@ -1437,3 +1437,32 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PBS-WP1-C03','C03','tests/cmd-pbs-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit read 224 parent+43 native children on newly converted CMD, unchanged disk source and correctly populated text-block BC columns','integration'),
  ('TC-PBS-WP1-L66','L66','tests/cmd-pbs-converter-integration.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','new converter generates exactly 267 PBS atoms, legacy 224 anchors still inspectable, direct BC split/merge plans stay source-only','direct'),
  ('TC-PBS-WP1-L65','L65','tests/cmd-pbs-converter-integration.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','new CMD PBS parent and child source labels line up with PDF source scope and exact geometry without annotation pass','integration');
+
+
+-- WP2: CMD owns the BC semantic action planners and one guarded CM6
+-- transaction port. Legacy joins migrate only by explicit user command;
+-- new PBS documents must not get old adjacent block-join annotations.
+INSERT INTO apis VALUES
+ ('L70','L','planCMDMigrateLegacyBlockChains','ui/cmd-block-chains.js','export','legacy CMD source with verified join records','exact guarded text edits for canonical PBS/BC migration','one undoable source transaction, original OCR JSON tail and Markdown content untouched',1),
+ ('L71','L','planCMDMergeBlockChains','ui/cmd-block-chains.js','export','two PBS members from distinct BC','one guarded BC member partition edit plan','stable destination chain ID; rejects conflicting object types and legacy source',1),
+ ('L72','L','planCMDSplitBlockChain','ui/cmd-block-chains.js','export','PBS member C in BC','BC head and new tail partitions','C and later members become new chain; original head ID survives',1),
+ ('L73','L','planCMDMoveBlockChainMember','ui/cmd-block-chains.js','export','one PBS ID, target PBS, before/after','one guarded logical member reordering plan','preserves original OCR and stable PBS IDs; refuses incompatible typed BC objects',1),
+ ('C68','C','returned.migrateLegacyBlockChains','ui/wcp-cmd-element-transactions.js','returned','none','one explicit, undoable CMD PBS/BC format migration','no silent auto-migration or unregistered external storage',1),
+ ('C69','C','returned.mergeBlockChains','ui/wcp-cmd-element-transactions.js','returned','destination/source member IDs','one CM6 edit transaction','CMD-only BC merge; no editor/AG/PDF independent state',1),
+ ('C70','C','returned.splitBlockChainAt','ui/wcp-cmd-element-transactions.js','returned','member ID','one CM6 edit transaction','CMD-only BC split with one Undo/Redo',1),
+ ('C71','C','returned.moveBlockChainMember','ui/wcp-cmd-element-transactions.js','returned','member, target, placement','one CM6 edit transaction','CMD-only logical member move preserving original PDF and Markdown body',1);
+INSERT INTO access_edges VALUES
+ ('X-WP2-MIGRATE-L70','C','L','ui/wcp-cmd-element-transactions.js','planCMDMigrateLegacyBlockChains(cmd.readSource())','L70','registered','CMD port uses only Layout-owned migration planner'),
+ ('X-WP2-MERGE-L71','C','L','ui/wcp-cmd-element-transactions.js','planCMDMergeBlockChains(cmd.readSource(),destinationId,sourceId)','L71','registered','CMD BC merge through registered port'),
+ ('X-WP2-SPLIT-L72','C','L','ui/wcp-cmd-element-transactions.js','planCMDSplitBlockChain(cmd.readSource(),memberId)','L72','registered','CMD BC split through registered port'),
+ ('X-WP2-MOVE-L73','C','L','ui/wcp-cmd-element-transactions.js','planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement)','L73','registered','CMD logical move through registered port'),
+ ('X-WP2-READ-L66','C','L','ui/wcp-cmd-element-transactions.js','readCMDBlockChains(source)','L66','registered','CMD compatibility PDF join checks new/legacy source relationship exactly once');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP2-L70','L70','tests/cmd-block-chains-wp2.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 legacy atoms and 2 old joins migrate to the same BC partition without changing OCR bytes or unrelated source, idempotent and reject malformed tags','direct'),
+ ('TC-WP2-L71','L71','tests/cmd-block-chains-wp2.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','merge exact PBS members into stable explicit chain, reject mismatched semantic types and preserve original OCR JSON','direct'),
+ ('TC-WP2-L72','L72','tests/cmd-block-chains-wp2.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','split before member C into head/tail, no-op at chain head, stable original head identity','direct'),
+ ('TC-WP2-L73','L73','tests/cmd-block-chains-wp2.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','single PBS moves before/after any member, reparent across pages, preserve all original OCR evidence','direct'),
+ ('TC-WP2-C68','C68','tests/cmd-block-chains-wp2.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and iPad-WebKit explicit old join migration is one undoable CMD operation, no workspace save','integration'),
+ ('TC-WP2-C69','C69','tests/cmd-block-chains-wp2.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit BC merge edits in one CMD transaction and Undo/Redo restores exact source','integration'),
+ ('TC-WP2-C70','C70','tests/cmd-block-chains-wp2.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit BC split is one CMD transaction with one Undo','integration'),
+ ('TC-WP2-C71','C71','tests/cmd-block-chains-wp2.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit logical member reorder is one CMD transaction without source body movement','integration');
