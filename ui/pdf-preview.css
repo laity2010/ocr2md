@@ -67,6 +67,16 @@
   touch-action:none;
   -webkit-user-select:none;-webkit-touch-callout:none;
 }
+/* A reviewed original OCR parent is now a LOGICAL child. Display the
+ * same blue label language as native sN children; the rectangle stays at
+ * its immutable original OCR coordinates. No ambiguous checkbox on child. */
+.ocr-pdf-block-cover.ocr-pdf-block-is-child .ocr-pdf-block-ctrl{
+  border-color:#8ab5ca;background:rgba(34,56,70,.95);color:#e4effa;
+}
+.ocr-pdf-block-cover.ocr-pdf-block-is-child .ocr-pdf-block-ctrl input{display:none}
+.ocr-pdf-scroller .page .ocr-pdf-block-cover.ocr-pdf-block-is-child{
+  background:rgba(100,157,198,.13);outline-color:rgba(138,181,202,.48);
+}
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl span{
   touch-action:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl.ocr-pdf-block-drag-source{
@@ -91,6 +101,16 @@
 }
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl[data-gutter="right"]{
   left:calc(100% + 3px);right:auto;transform-origin:left top;
+}
+/* A reviewed original OCR parent is now a LOGICAL child. Display the
+ * same blue label language as native sN children; the rectangle stays at
+ * its immutable original OCR coordinates. No ambiguous checkbox on child. */
+.ocr-pdf-block-cover.ocr-pdf-block-is-child .ocr-pdf-block-ctrl{
+  border-color:#8ab5ca;background:rgba(34,56,70,.95);color:#e4effa;
+}
+.ocr-pdf-block-cover.ocr-pdf-block-is-child .ocr-pdf-block-ctrl input{display:none}
+.ocr-pdf-scroller .page .ocr-pdf-block-cover.ocr-pdf-block-is-child{
+  background:rgba(100,157,198,.13);outline-color:rgba(138,181,202,.48);
 }
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl span{white-space:nowrap;line-height:14px}
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl input{

@@ -89,6 +89,18 @@ try {
        origin:cover?.dataset.originId,block:cover?.dataset.blockIndex,child:target?.textContent};
    });
    assert.deepEqual([pdfInfo.label,pdfInfo.origin,pdfInfo.block,pdfInfo.child],['p1b3s1','p1b5','5','p1b3s0']);
+   const style=await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3s1"]').evaluate(el=>({
+     blue:el.classList.contains('ocr-pdf-block-is-child'),
+     chipBackground:getComputedStyle(el.querySelector('.ocr-pdf-block-ctrl')).backgroundColor,
+     kind:el.querySelector('.ocr-pdf-block-ctrl')?.dataset.sourceKind,
+     origin:el.dataset.originId,
+     source:document.querySelector('.cm-content')?.textContent?.slice(0,200)
+   }));
+   assert(style.blue,`${name} reparented PBS must use native-child blue label`);
+   assert.equal(style.kind,'content',`${name} Top Award has body: label must not be dashed`);
+   const root=await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"] .ocr-pdf-block-ctrl').evaluate(
+     el=>el.dataset.sourceKind);
+   assert.equal(root,'content',`${name} native image child counts as real parent content`);
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"]').count(),0);
    assert.equal(readFileSync(doc,'utf8'),source,'PDF drag must not auto-save');
    assert.equal(hash(readFileSync(pdf)),hash(originalPDF));

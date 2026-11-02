@@ -20,8 +20,8 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // "No text" describes current CMD scope only, not why MinerU or a reviewer
 // left it empty. A PDF coverage rectangle can remain after OCR reconciliation.
 const sourceKindHint=kind=>kind==='structure'?
-  ' · 源码作用域为空（可能已合并或审阅修正）':kind==='unmarked'?
-    ' · 尚无对应 CMD 标签或正文':kind==='content'?
+  ' · 虚线标签＝该块尚无独立源码正文，需要核对；父块含有效子块则显示实线':kind==='unmarked'?
+    ' · 虚线标签＝尚无对应 CMD 标签或正文，需要审阅':kind==='content'?
       ' · 源码作用域有内容':'';
 
 // CMD join annotations change logical grouping, never the sealed OCR pages or
@@ -290,8 +290,14 @@ export class PdfPreview {
     for(const node of this.blockCoverageNodes.values()){
       const parentChip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
       if(parentChip){
-        const anchor=parents.get(node.dataset.blockId);
-        const kind=!anchor?'unmarked':anchor.contentLine?'content':'structure';
+        const origin=node.dataset.originId||node.dataset.blockId;
+        const anchor=parents.get(origin);
+        // A valid parent whose body lives in its native child is not missing
+        // OCR. Dashed labels mean *unresolved source*, not normal nesting.
+        const nativeChildHasContent=[...children.entries()].some(([id,child])=>
+          id.startsWith(node.dataset.blockId+'s')&&child.contentLine);
+        const kind=!anchor?'unmarked':
+          anchor.contentLine||nativeChildHasContent?'content':'structure';
         if(parentChip.dataset.sourceKind!==kind)parentChip.dataset.sourceKind=kind;
         // Preserve the join/restore instructions set by updateBlockChip.
         const original=parentChip.querySelector('input')?.title||node.dataset.blockId;
@@ -663,6 +669,15 @@ export class PdfPreview {
     if(chip.title!==chipTitle)chip.title=chipTitle;
     const aria=`来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
     if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
+    const isCorrectedChild=Boolean(row.origin&&row.origin!==row.id);
+    node.classList.toggle('ocr-pdf-block-is-child',isCorrectedChild);
+    // This physical OCR rectangle now represents a logical child, not a
+    // second parent. The original physical hitbox and provenance remain.
+    if(isCorrectedChild){
+      chip.title=`子块 ${row.id} · 原始 PDF 覆盖来源 ${row.origin}`+
+        sourceKindHint(chip.dataset.sourceKind);
+      chip.setAttribute('aria-label',`子块 ${row.id} · 原始来源 ${row.origin}`);
+    }
     node.classList.toggle('ocr-pdf-block-is-joined',Boolean(row.joinPrev));
     // Badge width can change when page-local numbering passes 9/10/100.
     // Recompute this chip only; neighbor top offsets are corrected on the

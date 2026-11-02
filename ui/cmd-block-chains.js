@@ -252,7 +252,8 @@ export function planCMDMergeBlockChains(source,destinationId,sourceId){
 /** OCR structure correction, not a BC move. Re-parent exactly one original
  * top-level source atom as the next sibling of an existing native child.
  * The immutable source identity remains in origin=; no original JSON or
- * physical Markdown content is reordered. One comment line -> one Undo. */
+ * physical content follows its new logical child in the live Markdown, while
+ * the sealed original JSON remains unchanged. Two edits, one CM6 Undo. */
 export function planCMDReparentPBS(source,sourceId,targetId){
   const model=readCMDBlockChains(source);
   if(model.invalid.length||model.atoms.some(atom=>atom.format!=='cmd-v1'))
@@ -276,9 +277,27 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   const insert=commentPrefix(atom.rawLine)+serializeCMDBlockTag({
     id:newId,origin:atom.origin,type:parsed.type,role:parsed.role,
     review:parsed.review,note:parsed.note});
-  return {changed:1,sourceId,targetId,newId,origin:atom.origin,
-    edits:[{from:atom.from,to:atom.from+atom.rawLine.length,
-      expected:atom.rawLine,insert}]};
+  // A PBS tag owns its following Markdown up to the NEXT PBS tag. Move the
+  // complete scope (tag, text, media and trailing whitespace), not just id=.
+  // This must not include any page/sealed evidence or adjacent source atom.
+  const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
+  const sourceIndex=ordered.indexOf(atom),targetIndex=ordered.indexOf(target);
+  const stop=ordered[sourceIndex+1]?.from??source.indexOf('<!-- minerujson:source:v1:');
+  const destination=ordered[targetIndex+1]?.from;
+  if(stop<0||!Number.isInteger(destination)||stop<=atom.from||
+    destination>=source.indexOf('<!-- minerujson:source:v1:')||
+    destination>=atom.from&&destination<=stop)
+    throw Error('Cannot move an overlapping PBS scope or sealed page evidence');
+  const segment=source.slice(atom.from,stop);
+  if(/<!-- minerujson:(?:page|source|document-meta):v1/.test(segment))
+    throw Error('A PBS source scope must not move original OCR evidence');
+  const moved=insert+segment.slice(atom.rawLine.length);
+  const edits=[
+    {from:atom.from,to:stop,expected:segment,insert:''},
+    {from:destination,to:destination,expected:'',insert:moved}
+  ];
+  return {changed:edits.length,sourceId,targetId,newId,origin:atom.origin,
+    edits,relocatedSourceText:true};
 }
 /** Split BEFORE the specified member C: [A,B] / [C,D]. The original chain
  * identity remains with the head, the tail gets a new ID only when needed.

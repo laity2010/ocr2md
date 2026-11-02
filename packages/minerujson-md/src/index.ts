@@ -422,6 +422,32 @@ export function toMineruJSON(markdown: string): string {
     visible=visible.slice(0,found.index).trim();
   }
   assert(!visible.includes('<!-- cmd:pdf-bbox:v1 '),'duplicate or misplaced PDF bbox footer');
+  // A reviewed PBS child (id=...sN origin=pNbM) carries its original OCR
+  // physical *whole Markdown scope* to the new visible position. To verify
+  // content against the immutable MinerU archive, reconstruct ONLY an
+  // ephemeral original-order view. Never mutate the user's edited Markdown,
+  // bypass body validation, or reserialize the sealed OCR metadata.
+  for(const alias of origins){
+    const blocks=data.pdf_info[alias.page]?.para_blocks||[];
+    assert(alias.source+1<blocks.length,
+      'relocated original parent requires a following source anchor');
+    const findRoot=(text:string,p:number,b:number)=>[
+      ...text.matchAll(blockStart)].filter(m=>
+        Number(m[2]??m[4])===p&&Number(m[3]??m[5])===b);
+    const moved=findRoot(visible,alias.page,alias.source);
+    assert(moved.length===1,'relocated original parent marker is not unique');
+    const starts=[...visible.matchAll(blockStart)];
+    const index=starts.findIndex(m=>m.index===moved[0].index);
+    assert(index>=0&&index<starts.length-1,'relocated source scope missing next marker');
+    const start=starts[index].index!,end=starts[index+1].index!;
+    const segment=visible.slice(start,end);
+    assert(!segment.includes('<!-- minerujson:page:v1:'),'relocated scope crosses sealed page evidence');
+    const remaining=visible.slice(0,start)+visible.slice(end);
+    const following=findRoot(remaining,alias.page,alias.source+1);
+    assert(following.length===1,'relocated source successor missing');
+    const destination=following[0].index!;
+    visible=remaining.slice(0,destination)+segment+remaining.slice(destination);
+  }
   const markers = [...visible.matchAll(blockStart)];
   const total = data.pdf_info.reduce((n,page)=>n+page.para_blocks.length,0);
   assert(markers.length === total, `block anchor count ${markers.length} != ${total}`);

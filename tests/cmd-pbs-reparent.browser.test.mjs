@@ -66,6 +66,12 @@ try {
    const after=await page.evaluate(()=>window.__v6cm6.cm.readSource());
    assert(after.includes('<!-- cmd:block:v1 id="p1b3s1" origin="p1b5" -->'));
    assert(!after.includes('<!-- cmd:block:v1 id="p1b5" -->'));
+   assert(after.indexOf('id="p1b3s0"')<after.indexOf('id="p1b3s1"')&&
+     after.indexOf('id="p1b3s1"')<after.indexOf('id="p1b4"'),
+     `${name} entire source block must move immediately after native child`);
+   assert(after.indexOf('id="p1b3s1"')<after.indexOf('Top Award')&&
+     after.indexOf('Top Award')<after.indexOf('id="p1b4"'),
+     `${name} Top Award text must move with the source annotation`);
    assert.equal(toMineruJSON(after),raw);
    await row('p1b3s1').waitFor({state:'attached',timeout:35000});
    // AG replaces virtual rows asynchronously after CM6 source commit;

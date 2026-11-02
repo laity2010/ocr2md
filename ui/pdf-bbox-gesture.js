@@ -9,6 +9,7 @@ export function createPDFBBoxGesture(pageDiv,current,{readSource,commit,status,c
   const node=document.createElement('div');node.className='ocr-pdf-bbox-editor';
   node.dataset.pbsId=current.id;
   node.setAttribute('aria-label',`PDF 覆盖框人工修正 ${current.id}`);
+  node.title=`橙色虚线＝当前选中的 ${current.id} 可编辑覆盖框；拖动角点修改坐标，不代表 OCR 缺失`;
   const paint=bbox=>{
     const [w,h]=current.pageSize,[x0,y0,x1,y1]=bbox;
     node.style.left=x0/w*100+'%';node.style.top=y0/h*100+'%';

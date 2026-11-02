@@ -149,11 +149,13 @@ export function createCMDTransactionPort(cmd){
         throw Error('CMD PBS reparent snapshot stale');
       const before=readCMDBlockChains(source);
       const plan=planCMDReparentPBS(source,sourceId,targetId);
-      if(plan.changed!==1||plan.edits.length!==1)throw Error('Reparent requires one guarded CMD edit');
-      const edit=plan.edits[0];
-      if(source.slice(edit.from,edit.to)!==edit.expected)
-        throw Error('Reparent expected source changed');
-      const next=source.slice(0,edit.from)+edit.insert+source.slice(edit.to);
+      if(plan.changed!==2||plan.edits.length!==2)
+        throw Error('Reparent requires an atomic CMD scope move');
+      const next=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((result,edit)=>{
+        if(source.slice(edit.from,edit.to)!==edit.expected)
+          throw Error('Reparent expected source changed');
+        return result.slice(0,edit.from)+edit.insert+result.slice(edit.to);
+      },source);
       const after=readCMDBlockChains(next);
       const origins=atoms=>atoms.map(a=>a.origin).sort().join('\n');
       if(after.invalid.length||before.atoms.length!==after.atoms.length||

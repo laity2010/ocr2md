@@ -11,10 +11,17 @@ const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mine
 const source=toMarkdown(original);
 const layout=await queryCMDLayout(source), inventory=await inspectCMDTextBlocks(source);
 const plan=planCMDReparentPBS(source,'p1b5','p1b3s0');
-assert.deepEqual([plan.changed,plan.newId,plan.origin],[1,'p1b3s1','p1b5']);
-const {from,to,expected,insert}=plan.edits[0];assert.equal(source.slice(from,to),expected);
-assert.equal(insert,'<!-- cmd:block:v1 id="p1b3s1" origin="p1b5" -->');
-const changed=source.slice(0,from)+insert+source.slice(to);
+assert.deepEqual([plan.changed,plan.newId,plan.origin],[2,'p1b3s1','p1b5']);
+for(const {from,to,expected} of plan.edits)assert.equal(source.slice(from,to),expected);
+const changed=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((text,e)=>
+  text.slice(0,e.from)+e.insert+text.slice(e.to),source);
+const marker='<!-- cmd:block:v1 id="p1b3s1" origin="p1b5" -->';
+const child='<!-- cmd:block:v1 id="p1b3s0" -->',next='<!-- cmd:block:v1 id="p1b4" -->';
+assert(changed.indexOf(child)<changed.indexOf(marker)&&changed.indexOf(marker)<changed.indexOf(next));
+assert(changed.indexOf(marker)<changed.indexOf('Top Award')&&
+  changed.indexOf('Top Award')<changed.indexOf(next));
+assert(!changed.slice(changed.indexOf(next)).includes('<!-- cmd:block:v1 id="p1b5" -->'));
+assert.equal(changed.match(/Top Award/g)?.length,1,'entire OCR text block moves once');
 assert.equal(toMineruJSON(changed),original,'unmodified original OCR JSON must survive rename');
 const bc=readCMDBlockChains(changed);assert.deepEqual(bc.invalid,[]);
 assert.deepEqual([bc.summary.atoms,bc.summary.chains],[267,267]);
@@ -46,4 +53,4 @@ assert.equal(source.slice(source.indexOf('<!-- minerujson:source:v1:')),
 const planMove=planCMDMoveBlockChainMember(changed,'p1b3s1','p1b3s0','after');
 assert.equal(planMove.changed,2,'BC operation must use visible ID while retaining origin');
 console.log('CMD_PBS_REPARENT_SOURCE_PASS',{from:'p1b5',target:'p1b3s0',to:plan.newId,
-  atoms:267,logicalParents:223,logicalChildren:44,originalPDF:224,originalOCRByteExact:true});
+  atoms:267,logicalParents:223,logicalChildren:44,originalPDF:224,originalOCRByteExact:true,sourceMoved:true});
