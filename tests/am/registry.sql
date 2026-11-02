@@ -1399,3 +1399,34 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CMD-SOURCE-LABELS-L65','L65','tests/cmd-source-block-labels.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 native roots, 43 native child tags only after explicit marking; original vs logical root ID, empty own-scope dashed state and exact unchanged source under joins','direct');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CMD-SOURCE-GUTTER-L65','L65','tests/cmd-source-block-gutter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad-WebKit CM6 displays CMD parent/child IDs, dashed labels match PDF, click moves focus to exact source and PDF, actual CMD join updates logical label in both panes','integration');
+
+-- WP0 PBS/BC: a single, read-only CMD chain inventory and a guarded pure
+-- planner; no PDF/AG persistence and no hidden second block state.
+INSERT INTO apis VALUES
+ ('L66','L','readCMDBlockChains','ui/cmd-block-chains.js','export','current CMD source, legacy or cmd:block:v1','all PBS atoms, implicit singleton chains, explicit BC members and validation errors','read-only; preserves existing MinerU evidence and old join tags',1),
+ ('L67','L','planCMDBlockChainArrangement','ui/cmd-block-chains.js','export','current source plus complete PBS partition and BC member order','guarded exact-source edits for one CMD/CM6 undoable transaction','strict unique member/chain IDs and sequence validation; refuses legacy migration',1),
+ ('L68','L','serializeCMDBlockTag','ui/cmd-block-chains.js','export','PBS ID plus optional BC type, seq, role and review','single canonical cmd:block:v1 HTML comment','stable original coordinates, no duplicate serialized state',1),
+ ('L69','L','parseCMDBlockTag','ui/cmd-block-chains.js','export','one CMD block HTML comment line','structured p/b/s and optional BC attributes','validates canonical IDs, no injection or forged additional attributes',1),
+ ('C65','C','CMDocument.queryBlockChains','ui/cm-document.js','export','current CM6 source','full CMD-owned read-only PBS/BC atom and chain inventory','AG and other readers use CMD port, never parse independent state',1);
+INSERT INTO access_edges VALUES
+ ('X-PBSBC-C-L66','C','L','ui/cm-document.js','readCMDBlockChains(source)','L66','registered','CMD analysis consumes one PBS/BC source projection'),
+ ('X-PBSBC-C-C65','C','L','ui/cm-document.js','readCMDBlockChains(this.readSource())','L66','registered','CMD full PBS/BC query delegates to shared projection'),
+ ('X-PBSBC-SERIAL-L68','L','L','ui/cmd-block-chains.js','serializeCMDBlockTag(wanted.get(atom.id))','L68','registered','planner uses canonical single-line CMD serializer'),
+ ('X-PBSBC-PARSE-L69','L','L','ui/cmd-block-chains.js','parseCMDBlockTag(line)','L69','registered','one CMD parser handles optional BC attributes');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PBSBC-L66','L66','tests/cmd-block-chains.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 legacy parent atoms project to 224 implicit singleton chains; legacy join to 223; explicit nonadjacent and crosspage BC validates', 'direct'),
+ ('TC-PBSBC-L67','L67','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','one undoable guarded edit set, complete partition, split, order, rejects duplicates and unsupported legacy writes','direct'),
+ ('TC-PBSBC-L68','L68','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','deterministic canonical single line PBS identity and safe role/note metadata','direct'),
+ ('TC-PBSBC-L69','L69','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','nested child path and p/b/s recovered; invalid or noncanonical tags refused','direct');
+
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PBSBC-C65','C65','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','CMDocument exposes full PBS/BC read-only source projection; AG parent rows obtain chain membership through CMD analysis','integration');
+
+INSERT INTO apis VALUES
+ ('C66','C','returned.queryBlockChains','ui/wcp-cmd-element-transactions.js','returned','none','read-only complete CMD block and chain projection','same source used by CMD, exposed through bounded port',1),
+ ('C67','C','returned.arrangeBlockChains','ui/wcp-cmd-element-transactions.js','returned','complete block chain partition','planned exact guarded CM6 edits in one Undo/Redo transaction','rejects legacy writes until migration; does not alter original OCR seal',1);
+INSERT INTO access_edges VALUES
+ ('X-PBSBC-TRANSACTION-L67','C','L','ui/wcp-cmd-element-transactions.js','planCMDBlockChainArrangement(source,chains)','L67','registered','CMD only owner of BC edit planning, application via guarded port');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PBSBC-C66','C66','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','CMD port delegates read-only source-derived chain query', 'direct'),
+ ('TC-PBSBC-C67','C67','tests/cmd-block-chains.test.mjs','tests/cmd-block-chains.test.mjs','CMD port applies only guarded PBS/BC edits via existing one-transaction CM6 boundary','integration');

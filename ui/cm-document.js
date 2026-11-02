@@ -14,6 +14,7 @@ import {scanHtmlElements} from './cmd-html-elements.js';
 import {queryCMDLayout,queryCMDBlockGeometry,inspectCMDTextBlocks} from './cmd-text-blocks.js';
 import {scanCMDContinuationCandidates} from './cmd-block-continuations.js';
 import {projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
+import {readCMDBlockChains} from './cmd-block-chains.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -47,17 +48,33 @@ export class CMDocument {
     const source=this.readSource();
     const [inventory,layout]=await Promise.all([inspectCMDTextBlocks(source),queryCMDLayout(source)]);
     const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
+    const bc=readCMDBlockChains(source);
+    const membership=new Map();
+    for(const chain of bc.chains)for(const [seq,id] of chain.members.entries())
+      membership.set(id,{chainId:chain.id,chainType:chain.type,chainSize:chain.size,
+        chainPosition:seq+1,chainRole:chain.roles[id]||null,chainExplicit:chain.explicit});
     for(const row of inventory.rows){
       row.joinPrev=logical.joined.get(row.id)||null;
       row.joinable=logical.joinable.has(row.id);
       row.logicalId=logical.assignments.get(row.id)||row.id;
+      const chain=membership.get(row.id);
+      row.chainId=chain?.chainId||`implicit:${row.id}`;
+      row.chainLabel=chain?.chainExplicit?chain.chainId:chain?.chainSize>1?'旧接续':'单块';
+      row.chainPosition=chain?.chainPosition??1;
+      row.chainSize=chain?.chainSize??1;
+      row.chainType=chain?.chainType||null;
+      row.chainRole=chain?.chainRole||null;
     }
     inventory.summary.joined=logical.joined.size;
     inventory.summary.logicalBlocks=logical.blocks.length;
     inventory.summary.invalidJoinMarks=logical.invalid.length;
+    inventory.summary.bcChains=bc.summary.chains;
+    inventory.summary.invalidBCMarks=bc.invalid.length;
     return {inventory,continuations:scanCMDContinuationCandidates(inventory,layout),
       logicalBlocks:logical.blocks};
   }
+  /** Full read-only PBS/BC relationship projection, including child atoms. */
+  queryBlockChains(){return readCMDBlockChains(this.readSource());}
   /** Sole CMD caller of registered L48 inventory; CMD transaction helpers use
    * this method instead of importing the Layout-owned implementation. */
   inspectTextBlocks(source=this.readSource()){return inspectCMDTextBlocks(source);}

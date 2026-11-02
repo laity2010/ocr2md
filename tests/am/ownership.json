@@ -79,6 +79,7 @@
     "cmd-block-continuations.js": "L",
     "cmd-block-joins.js": "L",
     "cmd-block-labels.js": "L",
+    "cmd-block-chains.js": "L",
     "cmd-source-block-gutter.js": "L",
     "cmd-text-blocks.js": "L",
     "cmd-pdf-text-insert.js": "C",
@@ -306,6 +307,12 @@
     ],
     "workspace.js->text-block-module.js": [
       "createTextBlockModule"
+    ],
+    "cm-document.js->cmd-block-chains.js": [
+      "readCMDBlockChains"
+    ],
+    "wcp-cmd-element-transactions.js->cmd-block-chains.js": [
+      "planCMDBlockChainArrangement"
     ]
   }
 }

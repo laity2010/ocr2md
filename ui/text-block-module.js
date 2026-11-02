@@ -114,6 +114,10 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   const columns=[
     {field:'sourceLine',headerName:'源码行',width:82,minWidth:75,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'id',headerName:'Block',width:105,minWidth:88},
+    {field:'chainLabel',headerName:'块链 BC',width:120,minWidth:105},
+    {field:'chainPosition',headerName:'链序',width:74,minWidth:66},
+    {field:'chainType',headerName:'对象类型',width:100,minWidth:85},
+    {field:'chainRole',headerName:'成员角色',width:97,minWidth:85},
     {field:'pdfPage',headerName:'PDF 页',width:86,minWidth:76},
     {field:'type',headerName:'原始类型',width:134,minWidth:100,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'text',headerName:'原始文本摘要',flex:1,minWidth:240,tooltipField:'text'},

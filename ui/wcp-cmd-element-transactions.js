@@ -11,6 +11,7 @@
  */
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
+import {planCMDBlockChainArrangement} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDSubblockAnnotations} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
@@ -84,6 +85,15 @@ export function createCMDTransactionPort(cmd){
     readSource:()=>cmd.readSource(), // read-only CM6 source snapshot; never a second editor
     queryLayout:()=>cmd.queryLayout(),
     queryBlockAnalysis:()=>cmd.queryBlockAnalysis(),
+    queryBlockChains:()=>cmd.queryBlockChains(),
+    arrangeBlockChains:(chains)=>{
+      const source=cmd.readSource();
+      const plan=planCMDBlockChainArrangement(source,chains);
+      if(!plan.changed)return plan;
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    },
     async setBlockJoin(targetId,join){
       const source=cmd.readSource();
       const {rows}=await cmd.inspectTextBlocks(source);
