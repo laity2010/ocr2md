@@ -69,6 +69,10 @@ let releaseReloadRequested = false;
 let checkingVersion = false;
 // This is only a release identifier; CM6 remains the sole editor state.
 const currentBuild = __V6_BUILD_VERSION__;
+// Only the continuously deployed Main development channel may discard
+// browser-local unsaved buffers during a Git-published bundle refresh.
+// Lab and any future production channel retain their leave-page gate.
+const liveMainDevBuild = /^v6-\d{8}-\d{6}$/.test(currentBuild);
 // One visible status channel beside the release badge. Former subbar, AG
 // footer and page footer metadata all converge here without extra UI rows.
 let documentLabel='Buffett’s Alpha.minerujson.md';
@@ -97,9 +101,15 @@ function renderGlobalStatus() {
 const hasUnsavedEdits = () => Boolean(view && savedDoc && !view.state.doc.eq(savedDoc));
 function applyPendingUpdate() {
   if (!pendingUpdate || releaseReloadRequested) return;
-  // The server has a new bundle, but CM6 and Settings own unsaved buffers.
-  // Never silently discard edits or an in-flight write on a release change.
+  // Do not interrupt an in-flight disk write. Once it completes, Main
+  // development updates immediately even when local editor buffers are dirty.
   if (saving || exporting || initializing || buttons.save.disabled) return;
+  if (liveMainDevBuild) {
+    releaseReloadRequested = true;
+    window.location.reload();
+    return;
+  }
+  // Lab / production retain the unsaved-document and dialog protection.
   if (hasUnsavedEdits() || settings?.hasUnsaved()) {
     status('● 新版本已上线 · 请先保存未保存内容，随后自动更新','warning');
     return;
@@ -1004,6 +1014,10 @@ async function main() {
     }
   });
   window.addEventListener('beforeunload',event=>{
+    // A version-triggered reload of development Main must not be stopped by
+    // Safari's unsaved-form confirmation: publication is already authorized.
+    // Manual navigation and non-Main bundles still retain the prompt.
+    if (liveMainDevBuild && releaseReloadRequested) return;
     if ((hasUnsavedEdits()||settings?.hasUnsaved())&&!allowInitializeReload) {event.preventDefault(); event.returnValue='';}
   });
   window.addEventListener('pagehide',()=>{
