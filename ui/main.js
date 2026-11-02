@@ -736,9 +736,17 @@ async function main() {
       action==='split'?cmdPort.splitBlockChainAt(request.memberId,options):
       action==='move'?cmdPort.moveBlockChainMember(request.memberId,request.targetId,request.placement||'after',options):
       action==='extract'?cmdPort.extractBlockChainMember(request.memberId,options):
+      action==='bbox'?await cmdPort.setPDFBBox(request.memberId,request.bbox,options):
+      action==='bbox-reset'?await cmdPort.setPDFBBox(request.memberId,null,options):
       action==='migrate'?cmdPort.migrateLegacyBlockChains(options):null;
     if(!result)throw Error('未知 CMD 块链操作');
     if(result.changed){blockIndexedSource=null;scanTextBlocks();}
+    return result;
+  });
+  workspace.setPDFBBoxAction(async(memberId,bbox,snapshot)=>{
+    const result=await cmdPort.setPDFBBox(memberId,bbox,{expectedSource:snapshot});
+    if(result.changed){blockIndexedSource=null;scanTextBlocks();
+      status(`✓ ${memberId} PDF 覆盖框${bbox?'已人工修正':'已恢复原框'} · 未保存，可 Undo`);}
     return result;
   });
   workspace.setBlockMoveAction(async(sourceId,targetId,placement)=>{

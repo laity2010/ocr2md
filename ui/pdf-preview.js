@@ -14,6 +14,7 @@ import {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
+import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // "No text" describes current CMD scope only, not why MinerU or a reviewer
@@ -29,8 +30,11 @@ const withoutJoinMarks=source=>source.replace(
   /^[ \t]*(?:>[ \t]*)*<!-- ocr2md:block-join:v1 prev="p\d+b\d+" target="p\d+b\d+" -->\r?\n/gm,'');
 // Moving source Blocks or annotating joins does not change physical PDF
 // geometry: only replacement of the sealed OCR evidence changes that map.
-const geometryKey=source=>source.match(/<!-- minerujson:source:v1:([a-f0-9]{64})/)?.[1]
-  ??withoutJoinMarks(source);
+const geometryKey=source=>{
+  const sha=source.match(/<!-- minerujson:source:v1:([a-f0-9]{64})/)?.[1];
+  return sha?`${sha}|${source.match(/<!-- cmd:pdf-bbox:v1 [^\n]* -->/)?.[0]||''}`:
+    withoutJoinMarks(source);
+};
 
 /** Pure geometry: OCR bbox is top-left, in the *already rotated* page space.
  * A mismatch is reported instead of drawing a dishonest highlight. */
@@ -49,7 +53,8 @@ export class PdfPreview {
   constructor(host,getMarkdown,getLayout,onBlockJoin=()=>Promise.reject(Error('CMD 尚未准备好')),
     onBlockMove=()=>Promise.reject(Error('CMD 尚未准备好')),
     onInsertPDFText=()=>Promise.reject(Error('CMD 尚未准备好')),
-    onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好'))){
+    onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好')),
+    onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -57,6 +62,7 @@ export class PdfPreview {
     this.onBlockMove=onBlockMove;
     this.onInsertPDFText=onInsertPDFText;
     this.onMarkSubblocks=onMarkSubblocks;
+    this.onPDFBBox=onPDFBBox;
     this.host.classList.add('ocr-pdf-pane');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
@@ -65,6 +71,8 @@ export class PdfPreview {
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
       <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；插入源码窗当前光标位置，不替换原文；Undo 可撤销">提取文本</button>
+      <button class="ocr-pdf-bbox-edit" type="button" title="点击一个 PDF 父块或子块后，拖动框角或中心修正覆盖坐标；CMD 未保存，可 Undo" aria-pressed="false">修正覆盖框</button>
+      <button class="ocr-pdf-bbox-reset" type="button" disabled title="清除选中 PBS 的人工覆盖坐标，恢复原始 OCR 坐标">恢复原框</button>
       <button class="ocr-pdf-mark-subblocks" type="button" title="补齐 MinerU 原始父子块类型和源码锚点，不改现有正文；一次 Undo，可手动保存">补标子块</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
@@ -80,6 +88,15 @@ export class PdfPreview {
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
     this.extractButton=this.toolbar.querySelector('.ocr-pdf-extract-text');
     this.extractButton.addEventListener('click',()=>void this.insertSelectedPDFText());
+    this.bboxButton=this.toolbar.querySelector('.ocr-pdf-bbox-edit');
+    this.bboxReset=this.toolbar.querySelector('.ocr-pdf-bbox-reset');
+    this.bboxButton.addEventListener('click',()=>{
+      this.bboxEditing=!this.bboxEditing;
+      this.bboxButton.setAttribute('aria-pressed',String(this.bboxEditing));
+      this.drawBBoxEditor();
+      if(this.bboxEditing&&!this.selected)this.setStatus('先点击 PDF 覆盖块或子块，再拖动框角／中心修正');
+    });
+    this.bboxReset.addEventListener('click',()=>void this.resetSelectedBBox());
     this.markButton=this.toolbar.querySelector('.ocr-pdf-mark-subblocks');
     this.markButton.addEventListener('click',()=>void this.markOriginalSubblocks());
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
@@ -102,6 +119,7 @@ export class PdfPreview {
     this.scroller.addEventListener('scroll',()=>this.onScroll(),{passive:true});
     this.pages.addEventListener('click',e=>this.onClick(e));
     this.map=[];this.anchors=[];
+    this.bboxEditing=false;this.bboxNode=null;this.bboxGesture=null;
     this.disposed=false;this.explicitUserUntil=0;
     this.zoomMode='page-width';this.selected=null;this.pendingFocus=null;
     this.zoomAnchorToken=0;this.zoomRestoreTimer=0;this.zoomRestoreBehavior=null;
@@ -125,6 +143,8 @@ export class PdfPreview {
         // mutations or a CMD join chip update. No persistent polling timer.
         if([...this.blockCoverageNodes.values()].some(n=>!this.pages.contains(n)))
           this.paintBlockCoverage();
+        if(this.bboxNode&&!this.pages.contains(this.bboxNode))
+          this.drawBBoxEditor();
       });
     });
     this.coverageDomObserver.observe(this.pages,{subtree:true,childList:true});
@@ -296,6 +316,7 @@ export class PdfPreview {
         throw Error('PDF 页数与 CMD 原始页面数不一致');
       this.map=result.pages;
       this.paintBlockCoverage();
+      this.drawBBoxEditor();
       this.scheduleOverlay();
     }catch(error){
       if(this.disposed||revision!==this.geometryRevision)return;
@@ -521,6 +542,7 @@ export class PdfPreview {
     const chosenPath=chosen.partIndex==null?null:chosen.path;
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
       partIndex:chosen.partIndex};
+    this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
     const sequence=++this.childFocusSequence;
     if(chosenPath){
@@ -537,6 +559,47 @@ export class PdfPreview {
       publishFocus({sourceLine:anchor.contentLine??anchor.sourceLine,origin:'pdf',
         elementId:`mineru:${pageIndex}:${chosen.blockIndex}:parent`});
     }else this.setStatus(`p${pageIndex}b${chosen.blockIndex} · 源码缺少父块锚点`);
+  }
+  /** WP6: transient edit handles. PDF.js DOM is presentation only; the one
+   * persisted change is a verified CMD footer transaction by PBS ID. */
+  chosenBBox(){
+    const chosen=this.selected;if(!chosen)return null;
+    const page=this.map[chosen.pageIndex],region=page?.regions.find(r=>r.blockIndex===chosen.blockIndex);
+    if(!page||!region)return null;
+    const part=chosen.partIndex==null?null:region.subRegions?.[chosen.partIndex];
+    if(chosen.partIndex!=null&&!part)return null;
+    const id=part?subblockId(chosen.pageIndex,chosen.blockIndex,part.path):
+      `p${chosen.pageIndex}b${chosen.blockIndex}`;
+    return {id,pageIndex:chosen.pageIndex,blockIndex:chosen.blockIndex,
+      bbox:[...(part?.bbox||region.bbox)],pageSize:page.pageSize};
+  }
+  async resetSelectedBBox(){
+    const current=this.chosenBBox();if(!current||this.disposed)return;
+    const snapshot=this.getMarkdown();
+    this.bboxReset.disabled=true;
+    try{
+      const result=await this.onPDFBBox(current.id,null,snapshot);
+      this.setStatus(result.changed?`${current.id} 已清除人工覆盖框 · 可 Undo`:
+        `${current.id} 使用原始 OCR 覆盖框，无须恢复`);
+    }catch(error){this.setStatus('恢复原框失败：'+error.message);}
+    finally{if(!this.disposed)this.drawBBoxEditor();}
+  }
+  drawBBoxEditor(){
+    if(this.bboxGesture?.dragging)return; // do not replace pointer capture
+    this.bboxGesture?.dispose();this.bboxGesture=null;
+    this.bboxNode=null;
+    const current=this.chosenBBox();
+    this.bboxReset.disabled=!current||!this.bboxEditing;
+    if(!this.bboxEditing||!current||!this.ready||this.disposed)return;
+    const page=this.viewer?.getPageView(current.pageIndex);
+    if(!page?.div||!this.pages.contains(page.div))return;
+    this.bboxGesture=createPDFBBoxGesture(page.div,current,{
+      readSource:()=>this.getMarkdown(),
+      commit:(id,bbox,snapshot)=>this.onPDFBBox(id,bbox,snapshot),
+      status:message=>this.setStatus(message),
+      canReport:()=>!this.disposed,
+    });
+    this.bboxNode=this.bboxGesture.node;
   }
   /** Independent, very light coverage over the original CMD Block bbox.
    * Unlike focus/pair overlays these are page-local percentage boxes and
@@ -1340,6 +1403,7 @@ export class PdfPreview {
       this.blockDrag.ctrl.classList.remove('ocr-pdf-block-drag-source');
       this.blockDrag=null;
     }
+    this.bboxGesture?.dispose();this.bboxGesture=null;this.bboxNode=null;
     this.unsubscribe?.();this.resizeObserver.disconnect();
     clearTimeout(this.overlayTimer);
     this.clearComparison();

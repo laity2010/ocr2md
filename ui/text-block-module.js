@@ -44,6 +44,17 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   firstButton.setAttribute('aria-label','仅将所选 PBS 移至当前块链最前');
   const extractButton=document.createElement('button');extractButton.type='button';extractButton.textContent='独立成链';
   extractButton.setAttribute('aria-label','将所选 PBS 独立成单块链');
+  const bboxButton=document.createElement('button');bboxButton.type='button';bboxButton.textContent='应用框坐标';
+  bboxButton.setAttribute('aria-label','应用选中 PBS 的 PDF 覆盖框四坐标');
+  const bboxReset=document.createElement('button');bboxReset.type='button';bboxReset.textContent='恢复原框';
+  bboxReset.setAttribute('aria-label','清除所选 PBS 的人工 PDF 框修正');
+  const bboxEditor=document.createElement('div');bboxEditor.className='ocr-pbs-bbox-editor';
+  bboxEditor.setAttribute('aria-label','PDF 覆盖框坐标 x0 y0 x1 y1');
+  const bboxInputs=['x0','y0','x1','y1'].map(key=>{
+    const label=document.createElement('label');label.textContent=key;
+    const input=document.createElement('input');input.type='number';input.step='any';
+    input.setAttribute('aria-label',`PDF bbox ${key}`);label.append(input);bboxEditor.append(label);return input;
+  });
   const migrateButton=document.createElement('button');migrateButton.type='button';migrateButton.textContent='迁移旧标签';
   migrateButton.setAttribute('aria-label','显式迁移旧版 MinerU 块链标签');
   const candidatesButton=document.createElement('button');candidatesButton.type='button';candidatesButton.textContent='接续候选';
@@ -59,7 +70,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   overviewButton.title='缩小同页 PDF，尽量同时看到 A、B；跨页可点击 A/B 分别定位';
   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='导出审阅记录';
   exportButton.setAttribute('aria-label','导出文本块续接审阅 JSON');
-  actionsHost.append(blocksButton,subblocksButton,groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
+  actionsHost.append(blocksButton,subblocksButton,groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton,bboxEditor,bboxButton,bboxReset,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
   overviewButton.addEventListener('click',()=>onCompare({overview:true}));
   const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(gridHost);
   let rows=[],tableRows=[],grouped=false,collapsedChains=new Set(),targetId=null,dragBusy=false,candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
@@ -118,6 +129,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     const target=tableRows.find(x=>x.id===id)||rows.find(x=>x.id===id);
     if(!target)return;
     selectedId=id;refreshActionButtons();
+    syncBBoxFields();
     if(target.sourceLine){publishFocus({sourceLine:target.sourceLine+2,origin:'text-block',intent:'click',elementId:id});}
     else onLocateMissing({pageIndex:target.pageIndex,blockIndex:target.blockIndex});
   };
@@ -219,6 +231,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     {field:'originalText',headerName:'原始 OCR 摘要',width:220,minWidth:150,tooltipField:'originalText'},
     {field:'bboxText',headerName:'有效覆盖 bbox',width:180,minWidth:140},
     {field:'ocrBBoxText',headerName:'OCR 原始 bbox',width:180,minWidth:140},
+    {field:'bboxSource',headerName:'覆盖来源',width:104,minWidth:94},
     {field:'ocrRole',headerName:'OCR 推定角色',width:110,minWidth:90},
     {field:'format',headerName:'标签格式',width:96,minWidth:82},
     {field:'joinLabel',headerName:'逻辑接续',width:125,minWidth:108},
@@ -295,6 +308,11 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   };
   const updateBlockRows=()=>{if(mode==='blocks')grid.setGridOption('rowData',projectedRows());};
   const selectedAtom=()=>tableRows.find(r=>r.id===selectedId&&r.format==='cmd-v1')||null;
+  const syncBBoxFields=()=>{
+    const atom=selectedAtom();
+    for(const [index,input] of bboxInputs.entries())
+      input.value=atom?.bbox?.[index]===undefined?'':String(atom.bbox[index]);
+  };
   const refreshActionButtons=()=>{
     const selected=selectedAtom(),invalid=Boolean(report?.invalidBCMarks);
     targetButton.disabled=!selected||invalid;
@@ -304,6 +322,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     moveAfterButton.disabled=!selected||invalid||!target||target.format!=='cmd-v1'||target.id===selected.id;
     firstButton.disabled=!selected||invalid||selected.chainPosition<=1;
     extractButton.disabled=!selected||invalid||selected.chainSize<=1;
+    bboxButton.disabled=!selected||invalid;
+    bboxReset.disabled=!selected||invalid||selected?.bboxSource!=='人工修正';
     migrateButton.disabled=invalid||!tableRows.some(r=>r.format==='legacy');
     groupButton.setAttribute('aria-pressed',String(grouped));
     targetButton.title=targetId?`目标 ${targetId}`:'先点击一个 PBS 行设为合并目标';
@@ -314,7 +334,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     dragBusy=true;
     try{
       const result=await onChainAction(kind,payload);
-      if(result.changed)onStatus(`✓ CMD ${({merge:'合链',split:'拆链',migrate:'旧标签迁移',move:'移动单个 PBS',extract:'独立成链'})[kind]||kind} ${result.changed} 处 · 未保存，可 Undo`);
+      if(result.changed)onStatus(`✓ CMD ${({merge:'合链',split:'拆链',migrate:'旧标签迁移',move:'移动单个 PBS',extract:'独立成链',bbox:'PDF 框修正','bbox-reset':'恢复原框'})[kind]||kind} ${result.changed} 处 · 未保存，可 Undo`);
       else onStatus('块链关系无须修改');
     }catch(e){onStatus('CMD 块链操作拒绝：'+e.message,'error');}
     finally{dragBusy=false;}
@@ -332,6 +352,13 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   extractButton.addEventListener('click',()=>{if(selectedAtom()?.chainSize>1)
     void execute('extract',{memberId:selectedId});});
   splitButton.addEventListener('click',()=>{if(selectedAtom())void execute('split',{memberId:selectedId});});
+  bboxButton.addEventListener('click',()=>{
+    const selected=selectedAtom();if(!selected)return;
+    const bbox=bboxInputs.map(input=>input.value.trim()===''?NaN:Number(input.value));
+    if(bbox.some(x=>!Number.isFinite(x))){onStatus('请输入全部四个有效 PDF 坐标','error');return;}
+    void execute('bbox',{memberId:selected.id,bbox});
+  });
+  bboxReset.addEventListener('click',()=>{if(selectedAtom())void execute('bbox-reset',{memberId:selectedId});});
   migrateButton.addEventListener('click',()=>{if(tableRows.some(r=>r.format==='legacy'))void execute('migrate');});
   const updateGrid=()=>{
     // The virtual-chapter adapter caches its projected columnDefs. Reset
@@ -339,7 +366,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     virtual.setVirtualQuery({enabled:false});
     for(const button of [overviewButton,confirmButton,rejectButton,resetButton,exportButton])
       button.hidden=mode!=='candidates';
-    for(const button of [groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton])
+    for(const button of [groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton,bboxEditor,bboxButton,bboxReset])
       button.hidden=mode!=='blocks';
     if(mode==='blocks'){onCompare(null);selectedCandidateId=null;}
     blocksButton.setAttribute('aria-pressed',String(mode==='blocks'));
@@ -383,7 +410,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       tableRows=(result.atoms?.rows||rows).map(row=>({...row}));
       if(selectedId&&!tableRows.some(row=>row.id===selectedId))selectedId=null;
       if(targetId&&!tableRows.some(row=>row.id===targetId))targetId=null;
-      if(mode==='blocks')updateBlockRows();error='';refresh();},
+      if(mode==='blocks')updateBlockRows();syncBBoxFields();error='';refresh();},
     setContinuationCandidates(result){candidateSummary=result.summary;
       candidates=result.candidates.map(row=>({...row,status:reviews.get(row.id)||'待审阅',
         from:rows.find(block=>block.id===row.fromId)?.from??null,

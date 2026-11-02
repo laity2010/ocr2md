@@ -71,6 +71,7 @@ let geometryReady=()=>Promise.reject(Error('CMD 尚未准备好'));
 let textBlockActionHost=null;
 let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
+let pdfBBoxAction=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好'));
 let blockChainAction=()=>Promise.reject(Error('CMD 块链尚未准备好'));
 let markSubblocksAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let insertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'));
@@ -334,7 +335,8 @@ class PreviewPanel {
       (id,join)=>blockJoinAction(id,join),
       (id,targetId,placement)=>blockMoveAction(id,targetId,placement),
       (pageIndex,blockIndex,text)=>insertPDFText(pageIndex,blockIndex,text),
-      ()=>markSubblocksAction());
+      ()=>markSubblocksAction(),
+      (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -785,6 +787,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     setBlockJoinAction:action=>{blockJoinAction=action;},
     setBlockMoveAction:action=>{blockMoveAction=action;},
+    setPDFBBoxAction:action=>{pdfBBoxAction=action;},
     setBlockChainAction:action=>{blockChainAction=action;},
     setSubblockMarkAction:action=>{markSubblocksAction=action;},
     setPDFTextInsertAction:insert=>{insertPDFText=insert;},

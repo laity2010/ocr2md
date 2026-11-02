@@ -359,7 +359,27 @@ export function toMineruJSON(markdown: string): string {
   catch {throw new Error('MINERUJSON_MD_INVALID: corrupt source metadata');}
   assert(sha(Buffer.from(restored,'utf8'))===source[1], 'original JSON SHA-256 mismatch');
   const data = parseMineru(restored);
-  const visible = markdown.slice(0,source.index).trim();
+  // CMD WP6 PDF bbox overrides are presentation metadata outside MinerU OCR.
+  // Accept only one strict footer immediately preceding the sealed archive;
+  // never interpret its JSON as a Markdown block or silently tolerate garbage.
+  let visible = markdown.slice(0,source.index).trim();
+  const footer=/<!-- cmd:pdf-bbox:v1 ([^\n]*?) -->$/;
+  const found=footer.exec(visible);
+  if(found){
+    let record: unknown;
+    try{record=JSON.parse(found[1]);}catch{throw new Error('MINERUJSON_MD_INVALID: malformed PDF bbox footer');}
+    const value=record as {schema?:unknown;boxes?:unknown};
+    assert(value&&typeof value==='object'&&!Array.isArray(value)&&value.schema===1&&
+      value.boxes&&typeof value.boxes==='object'&&!Array.isArray(value.boxes)&&
+      Object.keys(value).join(',')==='schema,boxes', 'invalid PDF bbox schema');
+    for(const [id,box] of Object.entries(value.boxes)){
+      assert(/^p\d+b\d+(?:s\d+(?:\.\d+)*)?$/.test(id), 'invalid PDF bbox PBS identity');
+      assert(Array.isArray(box)&&box.length===4&&box.every(n=>typeof n==='number'&&Number.isFinite(n)),
+        'invalid PDF bbox coordinates');
+    }
+    visible=visible.slice(0,found.index).trim();
+  }
+  assert(!visible.includes('<!-- cmd:pdf-bbox:v1 '),'duplicate or misplaced PDF bbox footer');
   const markers = [...visible.matchAll(blockStart)];
   const total = data.pdf_info.reduce((n,page)=>n+page.para_blocks.length,0);
   assert(markers.length === total, `block anchor count ${markers.length} != ${total}`);

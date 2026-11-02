@@ -18,3 +18,7 @@
  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .ocr-pbs-drag-handle:active{cursor:grabbing;background:#5c644d}
 .ocr-text-block-grid [row-id].ocr-pbs-drop-target{outline:2px solid #e4aa62;outline-offset:-3px;background:#51483b}
+
+.ocr-pbs-bbox-editor{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 2px}
+.ocr-pbs-bbox-editor label{display:flex;gap:3px;align-items:center;font-size:11px}
+.ocr-pbs-bbox-editor input{width:65px;min-width:55px;font:inherit;padding:3px;background:#26343b;color:#e0d7be;border:1px solid #6c818c;border-radius:3px}

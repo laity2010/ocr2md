@@ -80,11 +80,13 @@
     "cmd-block-joins.js": "L",
     "cmd-block-labels.js": "L",
     "cmd-block-chains.js": "L",
+    "cmd-pdf-bbox.js": "L",
     "cmd-source-block-gutter.js": "L",
     "cmd-text-blocks.js": "L",
     "cmd-pdf-text-insert.js": "C",
     "pdf-block-text-extract.js": "P",
     "pdf-region-hit.js": "P",
+    "pdf-bbox-gesture.js": "P",
     "pdf-gutter-label-layout.js": "P",
     "pdf-source-locations.js": "P",
     "text-block-module.js": "G",
@@ -300,7 +302,8 @@
       "planCMDBlockMove"
     ],
     "wcp-cmd-element-transactions.js->cmd-text-blocks.js": [
-      "planCMDSubblockAnnotations"
+      "planCMDSubblockAnnotations",
+      "queryCMDLayout"
     ],
     "pdf-source-locations.js->cmd-block-labels.js": [
       "sourceBlockScopes"
@@ -311,6 +314,12 @@
     "cm-document.js->cmd-block-chains.js": [
       "readCMDBlockChains",
       "projectCMDBlockTable"
+    ],
+    "cm-document.js->cmd-pdf-bbox.js": [
+      "applyCMDPDFBBoxOverrides"
+    ],
+    "wcp-cmd-element-transactions.js->cmd-pdf-bbox.js": [
+      "planCMDPDFBBoxEdit"
     ],
     "wcp-cmd-element-transactions.js->cmd-block-chains.js": [
       "planCMDBlockChainArrangement",

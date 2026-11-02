@@ -15,6 +15,7 @@ import {queryCMDLayout,queryCMDBlockGeometry,inspectCMDTextBlocks} from './cmd-t
 import {scanCMDContinuationCandidates} from './cmd-block-continuations.js';
 import {projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
 import {readCMDBlockChains,projectCMDBlockTable} from './cmd-block-chains.js';
+import {applyCMDPDFBBoxOverrides} from './cmd-pdf-bbox.js';
 
 function requireMarkup(html){
   if(typeof html!=='string'||!html.trim().startsWith('<'))
@@ -43,10 +44,20 @@ export class CMDocument {
   /** Unified read-only source port for all business element detectors. */
   readSource(){return this.markdown;}
   /** One validated CMD geometry provider; text-block AG and PDF share it. */
-  queryLayout(){return queryCMDLayout(this.readSource());}
+  async queryLayout(){const source=this.readSource();return applyCMDPDFBBoxOverrides(await queryCMDLayout(source),source);}
   async queryBlockAnalysis(){
     const source=this.readSource();
-    const [inventory,layout]=await Promise.all([inspectCMDTextBlocks(source),queryCMDLayout(source)]);
+    const [inventory,layout]=await Promise.all([inspectCMDTextBlocks(source),
+      queryCMDLayout(source).then(base=>applyCMDPDFBBoxOverrides(base,source))]);
+    // PDF coverage rows are a derived projection of effective CMD geometry;
+    // original OCR boxes remain separately visible and never rewritten.
+    for(const row of inventory.rows){
+      const corrected=layout.overrides?.[row.id];
+      if(!corrected)continue;
+      row.originalBBox=row.bbox?[...row.bbox]:null;
+      row.bbox=[...corrected];row.bboxText=corrected.join(', ');
+      row.geometry=true;row.bboxSource='人工修正';
+    }
     const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
     const bc=readCMDBlockChains(source);
     const membership=new Map();

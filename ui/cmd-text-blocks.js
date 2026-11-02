@@ -185,6 +185,7 @@ export async function queryCMDLayout(source){
       const bodyIndex=(block.blocks||[]).findIndex(c=>c.type===`${block.type}_body`);
       return [{blockIndex,bbox:enclosingChildBBox(subRegions,box),
         originalBBox:[...box],type:block.type||'unknown',subRegions,
+        nativeChildren:(block.blocks||[]).map((child,index)=>({index,type:child.type||'unknown'})),
         bodyPath:bodyIndex<0?null:[bodyIndex]}];
     });
     return {pageIndex,pageSize:[...pageSize],regions};
@@ -194,6 +195,7 @@ export async function queryCMDLayout(source){
   for(const page of pages){Object.freeze(page.pageSize);
     for(const region of page.regions){Object.freeze(region.bbox);
       Object.freeze(region.originalBBox);
+      for(const c of region.nativeChildren)Object.freeze(c);Object.freeze(region.nativeChildren);
       for(const sub of region.subRegions){Object.freeze(sub.bbox);Object.freeze(sub.path);Object.freeze(sub);}
       Object.freeze(region.subRegions);
       if(region.bodyPath)Object.freeze(region.bodyPath);

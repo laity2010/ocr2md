@@ -1506,3 +1506,28 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP5-C72','C72','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and simulated iPad WebKit AG drag handle and single PBS move/extract through CMD with one Undo/Redo and no auto-save','integration'),
  ('TC-WP5-G25','G25','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG drag A onto B appends only A after B, row order projects BC logical seq, first and extract actions work in same AG view','integration'),
  ('TC-WP5-L75','L75','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Shell source-revision checks all AG move/extract action intents before registered CMD mutation','integration');
+
+
+-- WCP27 WP6: CMD footer holds bounded PBS -> user-corrected PDF bbox data.
+-- No source archive, original OCR bbox or content block is rewritten.
+INSERT INTO apis VALUES
+ ('L77','L','readCMDPDFBBoxOverrides','ui/cmd-pdf-bbox.js','export','CMD source, verified original layout','validated, source-bound PDF bbox footer read model','reject duplicate, invalid or orphaned footer data; no AG/PDF independent persistence',1),
+ ('L78','L','planCMDPDFBBoxEdit','ui/cmd-pdf-bbox.js','export','CMD source, original layout, real PBS ID, corrected four coordinates or null','one source-exact footer upsert/remove plan','footer is before sealed evidence; normalized, page-bounded bbox, no original OCR mutation',1),
+ ('L79','L','applyCMDPDFBBoxOverrides','ui/cmd-pdf-bbox.js','export','verified immutable original layout and CMD source','immutable effective bbox projection retaining original OCR bbox','never mutate cached MinerU original layout, recover only proven native child',1),
+ ('C73','C','returned.setPDFBBox','ui/wcp-cmd-element-transactions.js','returned','PBS ID, bbox/null, expectedSource','one CM6 history transaction for PDF overlay correction','stale snapshot, immutable archive and source range preflight, no automatic save',1),
+ ('L80','L','returned.setPDFBBoxAction','ui/workspace.js','returned','semantic PDF bbox correction callback','forward PDF or AG user action to Shell CMD transaction port','no direct renderer data persistence or CM6 bypass',1);
+INSERT INTO access_edges VALUES
+ ('X-WP6-C-L77','L','L','ui/cmd-pdf-bbox.js','readCMDPDFBBoxOverrides(source,layout)','L77','registered','footer validation by one CMD read owner'),
+ ('X-WP6-C-L78','C','L','ui/wcp-cmd-element-transactions.js','planCMDPDFBBoxEdit(source,layout,memberId,bbox)','L78','registered','CMD planned edit before sealed archive'),
+ ('X-WP6-C-L79','C','L','ui/cm-document.js','applyCMDPDFBBoxOverrides(base,source)','L79','registered','shared AG and PDF effective geometry projection'),
+ ('X-WP6-C-C73','L','C','ui/main.js','cmdPort.setPDFBBox(memberId,bbox','C73','registered','Shell owns source-guarded CMD bbox transaction'),
+ ('X-WP6-C-L80',NULL,'L','ui/main.js','workspace.setPDFBBoxAction(async(memberId,bbox,snapshot)','L80','registered','registered Shell -> PDF callback');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP6-L77','L77','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','read footer, exact restore, duplicate and invalid footer fail-closed','direct'),
+ ('TC-WP6-L78','L78','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','correct parent and original child bbox within page, reject invalid and unknown IDs, no-op idempotence','direct'),
+ ('TC-WP6-L79','L79','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','reloaded effective geometry reflects source footer, cached OCR data unchanged, byte-exact sealed original','direct'),
+ ('TC-WP6-C73','C73','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit AG coordinate controls persist one undoable CMD footer transaction, reload semantics, no workspace auto-save','integration');
+INSERT INTO access_edges VALUES
+ ('X-WP6-C-L50','C','L','ui/wcp-cmd-element-transactions.js','queryCMDLayout(source)','L50','registered','CMD bbox port obtains original immutable OCR layout before planning edits');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-WP6-HTTP-C73','C73','tests/cmd-pdf-bbox-wp6-save-reload.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','actual isolated authenticated HTTP save/load, source revision gates 412/428, persisted PDF bbox correction and exact reset, unchanged original OCR JSON','integration');

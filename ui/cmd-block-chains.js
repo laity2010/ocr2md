@@ -369,7 +369,8 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
       chainRole:chain.roles[id]||null,chainPrev:position?chain.members[position-1]:null,
       chainMembers:[...chain.members]});
   const tail=source.indexOf('<!-- minerujson:source:v1:');
-  const end=tail<0?source.length:tail;
+  const footer=source.indexOf('<!-- cmd:pdf-bbox:v1 ');
+  const end=footer>=0?footer:tail<0?source.length:tail;
   const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
   const rows=ordered.map((atom,i)=>{
     const identity=parseCMDPBSId(atom.id);
@@ -380,7 +381,8 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
     // Only direct native children have independently validated geometry in
     // the current sealed layout. Never substitute a parent's bbox for a child.
     const sub=identity.s.length===1?region?.subRegions.find(x=>x.path[0]===identity.s[0]):null;
-    const bbox=root?(parent?.geometry?parent.bbox:null):sub?.bbox??null;
+    const bbox=root?(layout.overrides?.[atom.id]||region?.bbox||null):
+      sub?.bbox||layout.overrides?.[atom.id]||null;
     const bodyStart=atom.from+atom.rawLine.length;
     const bodyEnd=Math.min(end,ordered[i+1]?.from??end);
     const sourceText=source.slice(Math.min(end,bodyStart),Math.max(Math.min(end,bodyStart),bodyEnd))
@@ -391,11 +393,12 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
       pageIndex:identity.p,blockIndex:identity.b,pdfPage:identity.p+1,
       sourceLine:atom.sourceLine,from:atom.from,format:atom.format,
       type:root?parent?.type||'unknown':native?.type||sub?.type||'native-child',
-      ocrBBoxText:(root?parent?.bbox:native?.originalBBox)?.join(', ')||'—',
+      ocrBBoxText:(root?(parent?.originalBBox||parent?.bbox):native?.originalBBox)?.join(', ')||'—',
       ocrRole:sub?.role||null,
       text:sourceText||(root?parent?.text||'':''),sourceText,
       originalText:root?parent?.text||'':native?.text||'',
       bbox:bbox?[...bbox]:null,bboxText:bbox?bbox.join(', '):'—',
+      bboxSource:layout.overrides?.[atom.id]?'人工修正':'原始 OCR',
       geometry:Boolean(bbox),geometryLabel:bbox?'可定位':'无有效子块坐标',
       anchorCount:1,anchorStatus:'已匹配',expectsPreview:root?Boolean(parent?.expectsPreview):Boolean(sourceText),
       previewLabel:sourceText?'待检查':'无需渲染',

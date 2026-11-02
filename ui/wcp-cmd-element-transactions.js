@@ -15,7 +15,8 @@ import {planCMDBlockChainArrangement,readCMDBlockChains,
   planCMDMigrateLegacyBlockChains,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
-import {planCMDSubblockAnnotations} from './cmd-text-blocks.js';
+import {planCMDPDFBBoxEdit} from './cmd-pdf-bbox.js';
+import {planCMDSubblockAnnotations,queryCMDLayout} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
 import {LINEBREAK_TAG,readIllegalBreaks,planIllegalBreakMarks} from './cmd-linebreak.js';
@@ -142,6 +143,25 @@ export function createCMDTransactionPort(cmd){
     moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
       planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
       options.expectedSource??null),
+    async setPDFBBox(memberId,bbox,options={}){
+      const source=cmd.readSource();
+      if(options.expectedSource!==undefined&&source!==options.expectedSource)
+        throw Error('PDF bbox source snapshot stale; rescan before correction');
+      // Pure planner consumes original sealed geometry, not an AG/UI bbox.
+      const layout=await queryCMDLayout(source);
+      if(source!==cmd.readSource())throw Error('PDF bbox source changed during validation');
+      const plan=planCMDPDFBBoxEdit(source,layout,memberId,bbox);
+      if(!plan.changed)return plan;
+      const match=source.indexOf('<!-- minerujson:source:v1:');
+      if(match<0||plan.edits.some(e=>e.to>match||e.from>match||
+        source.slice(e.from,e.to)!==e.expected))throw Error('PDF bbox plan crosses sealed OCR evidence');
+      const candidate=plan.edits.reduce((s,e)=>s.slice(0,e.from)+e.insert+s.slice(e.to),source);
+      if(candidate.slice(candidate.indexOf('<!-- minerujson:source:v1:'))!==source.slice(match))
+        throw Error('Original sealed OCR evidence changed');
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    },
     async setBlockJoin(targetId,join){
       const source=cmd.readSource();
       const current=readCMDBlockChains(source);
