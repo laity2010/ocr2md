@@ -42,6 +42,18 @@ try{
         'shared preview toolbar must contain exactly one text-block toggle');
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:26000});
+      await page.evaluate(()=>{
+        window.__pdfTripleClickTrace=[];
+        document.addEventListener('click',event=>{
+          const ctrl=event.target.closest?.('.ocr-pdf-block-ctrl');
+          if(!ctrl)return;
+          const item=ctrl.closest('.ocr-pdf-block-cover');
+          const trace=window.__pdfTripleClickTrace;
+          trace.push({id:item?.dataset.blockId,target:event.target.tagName,
+            detail:event.detail,time:Math.round(performance.now())});
+          if(trace.length>60)trace.shift();
+        },true);
+      });
       await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(el=>el.click());
       await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
       const src=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
@@ -76,9 +88,32 @@ try{
       await page.screenshot({path:`.v6/evidence/block-reorder/${name}-reordered.png`,
         animations:'disabled'});
       // Uncheck the moved block: its CMD predecessor must now be p6b8.
+      // The drag handler deliberately suppresses a ghost click for 600 ms.
+      // Measure whether a new intentional triple-click overlaps that guard;
+      // keep all existing assertions and the actual user gesture unchanged.
+      const guardAfterDrag=await page.evaluate(()=>{
+        const pdf=window.__v6cm6?.pdf;
+        return {ctrl:pdf?.suppressBlockClickCtrl?.closest('.ocr-pdf-block-cover')?.dataset.blockId,
+          remainingMs:Math.max(0,Math.round((pdf?.suppressBlockClickUntil||0)-performance.now()))};
+      });
+      console.log('PDF_BLOCK_REORDER_DRAG_CLICK_GUARD',name,JSON.stringify(guardAfterDrag));
       await toggleJoin(page,'p6b7',mobile);
-      await page.waitForFunction(()=>/已接续 1/.test(document.querySelector('#status')?.textContent||''),
-        null,{timeout:25000});
+      try{
+        await page.waitForFunction(()=>/已接续 1/.test(document.querySelector('#status')?.textContent||''),
+          null,{timeout:25000});
+      }catch(error){
+        const observed=await page.evaluate(()=>({
+          mode:document.querySelector('#module-select')?.value,
+          status:document.querySelector('#status')?.textContent,
+          pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+          arrowCount:document.querySelectorAll('.ocr-pdf-block-drag-arrow').length,
+          labels:['p6b6','p6b7','p6b8'].map(id=>({id,
+            logical:document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"] .ocr-pdf-block-ctrl span`)?.textContent,
+            checked:document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked})),
+        })).catch(e=>({probeError:String(e)}));
+        console.error('PDF_BLOCK_REORDER_FIRST_JOIN_DIAGNOSTIC',name,JSON.stringify({guardAfterDrag,clickTrace:await page.evaluate(()=>window.__pdfTripleClickTrace?.slice(-20)),...observed}));
+        throw error;
+      }
       assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
       // CMD Undo #1 cancels the join; Undo #2 restores original source order.
       await page.locator('#undo').click();
@@ -160,10 +195,31 @@ try{
       // unchecked and joined into b8. Moving b8 ahead of b0 must carry its
       // child and preserve every other logical block / checkbox state.
       for(const id of ['p16b3','p16b5','p16b11']){
+        const before=await page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] input`).isChecked();
         await toggleJoin(page,id,mobile);
-        await page.waitForFunction(id=>document.querySelector(
-          `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===false,
-          id,{timeout:24000});
+        try{
+          await page.waitForFunction(id=>document.querySelector(
+            `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===false,
+            id,{timeout:24000});
+        }catch(error){
+          // Diagnostic only: never consider a missed triple gesture PASS.
+          // Record all three original/logical labels, current module, reload
+          // state and source CMD annotations before preserving the failure.
+          const observed=await page.evaluate(ids=>({
+            mode:document.querySelector('#module-select')?.value,
+            status:document.querySelector('#status')?.textContent,
+            pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+            joins:ids.map(id=>{
+              const root=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"]`);
+              const chip=root?.querySelector('.ocr-pdf-block-ctrl');
+              return {id,exists:!!root,checked:chip?.querySelector('input')?.checked,
+                logical:chip?.querySelector('span')?.textContent,dragging:chip?.classList.contains('ocr-pdf-block-drag-source')};
+            }),
+            sourceAnnotations:(window.__v6cm6?.view?.state?.doc?.toString().match(/ocr2md:block-join/g)||[]).length,
+          }),['p16b3','p16b5','p16b11']).catch(e=>({probeError:String(e)}));
+          console.error('PDF_BLOCK_REORDER_JOIN_DIAGNOSTIC',name,JSON.stringify({id,before,clickTrace:await page.evaluate(()=>window.__pdfTripleClickTrace?.slice(-20)),...observed}));
+          throw error;
+        }
       }
       await page.waitForFunction(()=>document.querySelector(
         '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl span')
@@ -222,6 +278,29 @@ try{
       assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
       console.log('PDF_LOGICAL_B8_TO_B0_PASS',name,{joinedChild:'p16b11',
         origin:'p16b0',pointed:'p16b10',originalCheckStateRestored:true});
+      // Regression for captured WebKit tap cadence 1294 ms + 743 ms:
+      // three clicks within the bounded burst must toggle once, then Undo.
+      // Three unrelated clicks separated beyond the per-gap gate must NOT.
+      const slowTag=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
+      const slowState=()=>page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
+      await slowTag.evaluate(async el=>{
+        el.click();await new Promise(r=>setTimeout(r,1350));
+        el.click();await new Promise(r=>setTimeout(r,700));el.click();
+      });
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===false,
+        null,{timeout:12000});
+      await page.locator('#undo').click();
+      await page.waitForFunction(()=>document.querySelector(
+        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===true,
+        null,{timeout:12000});
+      await slowTag.evaluate(async el=>{
+        el.click();await new Promise(r=>setTimeout(r,1950));
+        el.click();el.click();
+      });
+      assert.equal(await slowState().isChecked(),true,
+        'slow unrelated singles cannot accidentally merge a CMD block');
+      console.log('PDF_BLOCK_TRIPLE_CADENCE_PASS',name,{acceptedGapsMs:[1350,700],rejectedGapMs:1950});
       assert.deepEqual(errors,[]);
       assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
       console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'point from p6b7 to p6b8 pulls p6b8 before p6b7',

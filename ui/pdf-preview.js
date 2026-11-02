@@ -825,7 +825,7 @@ export class PdfPreview {
         // Preserve long-press move: a dragged label's release never counts as
         // one of the three taps. All changes still go through CMD's API.
         ctrl.addEventListener('contextmenu',e=>e.preventDefault());
-        let tapCount=0,lastTap=0,busy=false;
+        let tapCount=0,lastTap=0,firstTap=0,busy=false;
         const toggle=async()=>{
           if(input.disabled||busy){
             this.setStatus(`${row.id} 没有可切换的前驱块`);return;
@@ -842,13 +842,17 @@ export class PdfPreview {
           }
           if(busy)return;
           const now=performance.now();
-          // iPad WebKit can spend ~830 ms between genuine consecutive touch
-          // clicks while PDF.js is repainting the page. A 1.2 s per-tap
-          // interval recognizes intentional three taps without a timer or
-          // delayed single-click navigation.
-          tapCount=now-lastTap<=1200?tapCount+1:1;
+          // Real iPad WebKit evidence under PDF.js load: successive clicks
+          // on the SAME parent label arrived 1294 ms then 743 ms apart; the
+          // former 1200 ms per-gap gate silently discarded a true triple tap.
+          // Allow paint-delayed taps but cap the WHOLE burst at 3 s, so slow
+          // independent single clicks cannot accumulate indefinitely. Each
+          // label owns its own counter; navigation still happens immediately.
+          if(!tapCount||now-lastTap>1850||now-firstTap>3000){
+            tapCount=1;firstTap=now;
+          }else tapCount++;
           lastTap=now;
-          if(tapCount===3){tapCount=0;lastTap=0;void toggle();return;}
+          if(tapCount===3){tapCount=0;lastTap=0;firstTap=0;void toggle();return;}
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
           this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
