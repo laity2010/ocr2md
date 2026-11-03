@@ -765,7 +765,7 @@ export class PdfPreview {
     if(input.checked!==checked){input.checked=checked;changed=true;}
     const disabled=this.readOnly||!row.joinable;
     if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
-    const help=this.readOnly?`单击定位 ${row.id}；CMD 文本块只读标定`:
+    const help=this.readOnly?`单击定位 ${row.id}；${/^p\d+b\d+$/.test(row.id)?'长按归入同页其他父块':'当前子块只读'}`:
       row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
       `单击定位 ${row.id}；没有有效前驱 Block，不能取消勾选`;
     if(input.title!==help)input.title=help;
