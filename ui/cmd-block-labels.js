@@ -1,5 +1,6 @@
 import {blockAnchor,subblockAnchor,subblockId} from './mineru-anchors.js';
 import {projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
+import {readCMDBlockChains} from './cmd-block-chains.js';
 
 /** A MinerU block or subblock tag owns the interval starting at its own line
  * and ending immediately before the NEXT native block/subblock tag. This is a
@@ -52,6 +53,9 @@ export function sourceSubblocks(source){
  */
 export function projectCMDSourceBlockLabels(source){
   const scopes=sourceBlockScopes(source);
+  // Logical label and immutable OCR location are different namespaces once
+  // the user reorders parents on the fixed PDF page.
+  const visibleByOrigin=new Map(readCMDBlockChains(source).atoms.map(a=>[a.origin,a.id]));
   const parents=scopes.filter(scope=>scope.kind==='parent');
   const offsets=[];let at=0;
   for(const line of source.split('\n')){offsets.push(at);at+=line.length+1;}
@@ -70,7 +74,8 @@ export function projectCMDSourceBlockLabels(source){
     const isParent=scope.kind==='parent';
     const originalId=isParent?`p${scope.pageIndex}b${scope.blockIndex}`:
       subblockId(scope.pageIndex,scope.blockIndex,scope.path);
-    const label=isParent?projection.assignments.get(originalId)||originalId:originalId;
+    const label=visibleByOrigin.get(originalId)||
+      (isParent?projection.assignments.get(originalId)||originalId:originalId);
     return {...scope,id:originalId,label,
       sourceKind:scope.contentLine?'content':'structure',
       elementId:isParent?`mineru:${scope.pageIndex}:${scope.blockIndex}:parent`:

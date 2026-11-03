@@ -664,8 +664,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted})=>
-        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted})):[];
+      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren})=>
+        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren})):[];
     const prior=this.blockCoverageRows;
     this.blockCoverageRows=next;
     // Editing one CMD join annotates only the target Block. The geometry and
@@ -1075,14 +1075,15 @@ export class PdfPreview {
           if(tapCount===3){tapCount=0;lastTap=0;firstTap=0;void toggle();return;}
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
-          if(row.promoted){
-            const original=row.origin.match(/^p(\d+)b(\d+)s(\d+)$/);
-            const child=this.map[row.pageIndex]?.regions.find(r=>r.blockIndex===row.blockIndex)
+          const currentRow=this.blockCoverageRows.find(r=>r.id===node.dataset.blockId)||row;
+          if(currentRow.promoted){
+            const original=currentRow.origin.match(/^p(\d+)b(\d+)s(\d+)$/);
+            const child=this.map[currentRow.pageIndex]?.regions.find(r=>r.blockIndex===currentRow.blockIndex)
               ?.subRegions.findIndex(r=>r.path.length===1&&r.path[0]===Number(original?.[3]));
-            this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
+            this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
               partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent'});
-          }else this.selectPDFRegion(row.pageIndex,{blockIndex:row.blockIndex,
-            partIndex:null,path:null,role:'parent',logicalId:row.id});
+          }else this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
+            partIndex:null,path:null,role:'parent',logicalId:currentRow.id});
 
         });
         ctrl.addEventListener('keydown',event=>{
@@ -1095,6 +1096,12 @@ export class PdfPreview {
         });
         this.blockCoverageNodes.set(row.id,node);
       }
+      // Reused DOM controls are keyed by the current logical ID, but their
+      // physical PDF rectangle may now belong to a different origin.
+      node.dataset.blockId=row.id;
+      node.dataset.originId=row.origin||row.id;
+      node.dataset.pdfPage=String(row.pageIndex+1);
+      node.dataset.blockIndex=String(row.blockIndex);
       this.updateBlockChip(node,row);
       // Keep the interactive chip OUTSIDE the OCR text rectangle. Choose
       // the outer paper gutter, never the inter-column gap: left-column
@@ -1126,12 +1133,13 @@ export class PdfPreview {
           fragment.className='ocr-pdf-block-fragment';
           node.append(fragment);
         }
-        const id=subblockId(row.pageIndex,row.blockIndex,part.path);
+        const originalId=subblockId(row.pageIndex,row.blockIndex,part.path);
+        const id=row.nativeChildren?.[originalId]||originalId;
         const kind=part.role==='note'?'注释':part.role==='caption'?'标题':'正文';
-        const label=`${id} · ${part.type} · ${kind}`;
+        const label=`${id} · OCR 来源 ${originalId} · ${part.type} · ${kind}`;
         if(fragment.title!==label)fragment.title=label;
         if(fragment.dataset.subblockId!==id)fragment.dataset.subblockId=id;
-        fragment.hidden=this.blockCoverageRows.some(r=>r.promoted&&r.origin===id);
+        fragment.hidden=this.blockCoverageRows.some(r=>r.promoted&&r.origin===originalId);
         if(fragment.dataset.partType!==part.type)fragment.dataset.partType=part.type;
         if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;
         let chip=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');

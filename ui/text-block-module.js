@@ -449,11 +449,16 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     getBlocks(){
       const alias=new Map(tableRows.filter(r=>r.origin&&r.origin!==r.id)
         .map(r=>[r.origin,r]));
+      const childAlias=new Map(tableRows.filter(r=>r.kind==='child'&&
+        /^p\d+b\d+s\d+(?:\.\d+)*$/.test(r.origin))
+        .map(r=>[r.origin,r.id]));
       const physical=rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>{
         const corrected=alias.get(id);
+        const nativeChildren=Object.fromEntries([...childAlias].filter(([origin])=>
+          origin.startsWith(id+'s')));
         return {id:corrected?.id||id,origin:id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,
           anchorCount,joinPrev:corrected?null:joinPrev,joinable:corrected?false:joinable,
-          logicalId:corrected?.id||logicalId};
+          logicalId:corrected?.id||logicalId,nativeChildren};
       });
       // A promoted original child is now an independent logical parent.
       // Add its own PDF overlay, using the *native child bbox*, without

@@ -42,7 +42,8 @@ export function parseCMDBlockTag(line){
     (fields.origin!==undefined&&(!pbs||!parseCMDPBSId(fields.origin)||
       parseCMDPBSId(fields.origin).p!==pbs.p||fields.origin===pbs.id||
       !(pbs.s.length===1&&parseCMDPBSId(fields.origin).s.length===0||
-        pbs.s.length===0&&parseCMDPBSId(fields.origin).s.length<=1)))||
+        pbs.s.length===0&&parseCMDPBSId(fields.origin).s.length<=1||
+        pbs.s.length>0&&parseCMDPBSId(fields.origin).s.length===pbs.s.length)))||
     fields.bc!==undefined&&!bcPattern.test(fields.bc)||
     (fields.bc===undefined)!==(fields.seq===undefined)||
     fields.seq!==undefined&&!uint(fields.seq)||
@@ -58,7 +59,8 @@ export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note}){
   if(!pbs)throw Error('Invalid PBS identity');
   if(origin!==undefined&&(!parseCMDPBSId(origin)||parseCMDPBSId(origin).p!==pbs.p||
     origin===id||!(pbs.s.length===1&&parseCMDPBSId(origin).s.length===0||
-      pbs.s.length===0&&parseCMDPBSId(origin).s.length<=1)))
+      pbs.s.length===0&&parseCMDPBSId(origin).s.length<=1||
+      pbs.s.length>0&&parseCMDPBSId(origin).s.length===pbs.s.length)))
     throw Error('Invalid original OCR PBS provenance');
   if((bc===undefined)!==(seq===undefined)||bc!==undefined&&!bcPattern.test(bc)||
     seq!==undefined&&(!Number.isSafeInteger(seq)||seq<0))throw Error('Invalid BC membership');
@@ -104,8 +106,9 @@ export function readCMDBlockChains(source){
     if(origins.has(a.origin))invalid.push({line:a.sourceLine,id:a.id,reason:'Duplicate original OCR provenance'});
     origins.add(a.origin);
   }
-  for(const a of atoms)if(a.origin!==a.id&&seen.has(a.origin))
-    invalid.push({id:a.id,reason:'Original OCR identity cannot also be a visible PBS'});
+  // Logical PBS labels may be reassigned: after swapping b3 and b4 each
+  // physical origin can equal another block's displayed ID. We enforce
+  // uniqueness of both ID and origin above, not cross-namespace equality.
   // Read-only recognition of legacy contiguous joins. New BC never depends on
   // adjacency; it can reference any PBS atom, including across PDF pages.
   const legacyPredecessor=new Map(),consumedLegacyMarks=new Set();
@@ -278,7 +281,13 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   const ownChain=model.chains.find(c=>c.members.includes(sourceId));
   if(ownChain?.size!==1||ownChain.explicit)
     throw Error('Extract source to a singleton BC before reparenting');
-  if(target.origin!==target.id||target.bc)
+  const targetOrigin=parseCMDPBSId(target.origin);
+  const parent=model.atoms.find(a=>a.id===`p${to.p}b${to.b}`);
+  const physicalParent=parseCMDPBSId(parent?.origin);
+  if(target.bc||!targetOrigin||targetOrigin.p!==to.p||
+    targetOrigin.s.length!==to.s.length||
+    (to.s.length!==0&&(!physicalParent||targetOrigin.b!==physicalParent.b||
+      targetOrigin.s.join('.')!==to.s.join('.'))))
     throw Error('Target must have original OCR provenance without BC rewrites');
   const siblings=model.atoms.map(a=>parseCMDPBSId(a.id)).filter(p=>
     p?.p===to.p&&p.b===to.b&&p.s.length===1);
@@ -376,12 +385,48 @@ export function planCMDReorderPBSParents(source,sourceId,targetId,placement='bef
   reordered.splice(place,0,moving);
   if(reordered.every((a,i)=>a.id===parents[i].id))
     return {changed:0,edits:[],reason:'already-ordered'};
+  // The b number is a CURRENT page-sequence label, not the immutable OCR
+  // blockIndex. Renumber every parent and every descendant in its moved
+  // scope, while keeping origin= as the physical identity. Compute all
+  // replacements against the pre-move snapshot (never chained renames).
+  const renamed=new Map();
+  const piecesById=new Map(parents.map((parent,i)=>[parent.id,{
+    from:parent.from,to:parents[i+1]?.from??boundary}]));
+  const text=reordered.map((parent,index)=>{
+    const destinationRoot=`p${from.p}b${index}`;
+    const oldRoot=parent.id;
+    const range=piecesById.get(oldRoot);
+    const memberAtoms=model.atoms.filter(atom=>atom.from>=range.from&&atom.from<range.to);
+    let section=source.slice(range.from,range.to);
+    const edits=[];
+    for(const atom of memberAtoms){
+      const parsed=parseCMDBlockTag(atom.rawLine);
+      if(!parsed)throw Error('Cannot rename a non-CMD PBS child');
+      if(!atom.id.startsWith(oldRoot)||
+        atom.id.length>oldRoot.length&&atom.id[oldRoot.length]!=='s')
+        throw Error('PBS scope does not follow its parent');
+      const nextId=destinationRoot+atom.id.slice(oldRoot.length);
+      if(atom.id===nextId)continue;
+      renamed.set(atom.id,nextId);
+      const replacement=commentPrefix(atom.rawLine)+serializeCMDBlockTag({
+        id:nextId,...(atom.origin===nextId?{}:{origin:atom.origin}),
+        ...(parsed.bc?{bc:parsed.bc,seq:Number(parsed.seq)}:{}),
+        type:parsed.type,role:parsed.role,review:parsed.review,note:parsed.note,
+      });
+      edits.push({from:atom.from-range.from,to:atom.from-range.from+atom.rawLine.length,
+        insert:replacement});
+    }
+    for(const edit of edits.reverse())
+      section=section.slice(0,edit.from)+edit.insert+section.slice(edit.to);
+    return section;
+  }).join('');
   const fromOffset=parents[0].from;
   return {changed:1,edits:[{from:fromOffset,to:boundary,
     expected:source.slice(fromOffset,boundary),
-    insert:reordered.map(a=>a.text).join('')}],
+    insert:text}],
     sourceId,targetId,placement,pageIndex:from.p,
-    order:reordered.map(a=>a.id),relocatedSourceText:true};
+    order:reordered.map((_,i)=>`p${from.p}b${i}`),
+    renamed:Object.fromEntries(renamed),relocatedSourceText:true};
 }
 /** Promote one direct child (native or reviewed) to the next free page-level PBS ID.
  * This is a CMD source-scope move, not a synthetic MinerU OCR block.
@@ -606,7 +651,7 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
       anchorCount:1,anchorStatus:'已匹配',expectsPreview:originalRoot?Boolean(parent?.expectsPreview):Boolean(sourceText),
       previewLabel:sourceText?'待检查':'无需渲染',
       review:atom.review||'',note:atom.note||'',
-      joinPrev:chain?.chainPrev||null,logicalId:root?atom.id:parent?.logicalId||parentId,
+      joinPrev:chain?.chainPrev||null,logicalId:root?atom.id:parentId,
       joinLabel:chain?.chainPrev?`↳ ${chain.chainId}`:'独立',
       chainId:chain?.chainId||`implicit:${atom.id}`,
       chainLabel:chain?.chainLabel||'无效关系',chainPosition:chain?.chainPosition??1,

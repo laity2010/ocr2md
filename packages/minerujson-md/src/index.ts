@@ -354,6 +354,52 @@ export function toMineruJSON(markdown: string): string {
   // v1's public identity is the same canonical PBS ID shown in PDF and AG.
   // Internally normalize this one annotation syntax for the existing proven
   // strict parent/child round-trip validator. Never modify the user's source.
+  const sealed=sourcePattern.exec(markdown);
+  assert(sealed,'original MinerU metadata comment missing or malformed');
+  const compressed=Buffer.from(sealed[2].replace(/\s+/g,''),'base64url');
+  let restored: string;
+  try { restored=gunzipSync(compressed).toString('utf8'); }
+  catch {throw new Error('MINERUJSON_MD_INVALID: corrupt source metadata');}
+  assert(sha(Buffer.from(restored,'utf8'))===sealed[1], 'original JSON SHA-256 mismatch');
+  const data=parseMineru(restored);
+  // A PDF reorder renumbers the public p/b/s IDs but never changes original
+  // OCR provenance. In this ephemeral comparison view, resolve the parent's
+  // logical label to its immutable physical root first, and then resolve all
+  // native child paths through that same parent. Do not accept arbitrary
+  // child aliases pointing at a different sealed parent.
+  const logicalParent=new Map<string,string>();
+  const cmdLine=/^(\s*(?:>\s*)*<!-- cmd:block:v1 )id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"((?: [a-z]+="[^"]*")* -->)[ \t]*$/gm;
+  for(const match of markdown.matchAll(cmdLine)){
+    const id=/^p(\d+)b(\d+)$/.exec(match[2]);
+    if(!id)continue;
+    const origin=/ origin="(p\d+b\d+)"/.exec(match[3]);
+    const original=origin?.[1]||match[2];
+    logicalParent.set(match[2],original);
+  }
+  markdown=markdown.replace(cmdLine,(_all,prefix,id,rest)=>{
+    const match=/^p(\d+)b(\d+)(?:s(\d+(?:\.\d+)*))?$/.exec(id)!;
+    const origin=/ origin="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"/.exec(rest);
+    if(!origin)return `${prefix}id="${id}"${rest}`;
+    const physical=/^p(\d+)b(\d+)(?:s(\d+(?:\.\d+)*))?$/.exec(origin[1])!;
+    const page=Number(match[1]),logicalB=Number(match[2]),physicalB=Number(physical[2]);
+    const originalCount=data.pdf_info[page]?.para_blocks.length||0;
+    const physicalBlock=data.pdf_info[page]?.para_blocks[physicalB];
+    assert(physical[1]===match[1]&&physicalBlock,'invalid renumbered PBS provenance');
+    const logicalRoot=`p${page}b${logicalB}`;
+    const parentPhysical=logicalParent.get(logicalRoot)||logicalRoot;
+    const nativeChild=match[3]!==undefined&&physical[3]!==undefined;
+    if(nativeChild){
+      assert(origin[1].startsWith(parentPhysical+'s')&&
+        physical[3]===match[3], 'renumbered native child changed physical lineage');
+      return `${prefix}id="${origin[1]}"${rest.replace(origin[0],'')}`;
+    }
+    if(match[3]!==undefined&&physical[3]===undefined&&parentPhysical!==logicalRoot)
+      return `${prefix}id="${parentPhysical}s${match[3]}"${rest}`;
+    if(match[3]===undefined&&physical[3]===undefined&&
+      (logicalB<originalCount||(physicalBlock.blocks||[]).length>0))
+      return `${prefix}id="${origin[1]}"${rest.replace(origin[0],'')}`;
+    return `${prefix}id="${id}"${rest}`;
+  });
   const origins: {id:string;origin:string;page:number;parent:number;child:number;source:number}[]=[];
   const promotions: {id:string;origin:string;page:number;parent:number;child:number;newParent:number}[]=[];
   const restoredRoots: {id:string;origin:string;page:number;source:number;newParent:number}[]=[];
@@ -393,14 +439,8 @@ export function toMineruJSON(markdown: string): string {
       }
       return `${prefix}p="${match[1]}" b="${match[2]}"${match[3]===undefined?'':` s="${match[3]}"`}${rest}`;
     });
-  const source = sourcePattern.exec(markdown);
-  assert(source,'original MinerU metadata comment missing or malformed');
-  const compressed = Buffer.from(source[2].replace(/\s+/g,''),'base64url');
-  let restored: string;
-  try { restored = gunzipSync(compressed).toString('utf8'); }
-  catch {throw new Error('MINERUJSON_MD_INVALID: corrupt source metadata');}
-  assert(sha(Buffer.from(restored,'utf8'))===source[1], 'original JSON SHA-256 mismatch');
-  const data = parseMineru(restored);
+  const source=sourcePattern.exec(markdown);
+  assert(source&&source[1]===sealed[1], 'original MinerU metadata comment changed');
   // A user-corrected child is not an invented MinerU native child.
   // Check both original OCR ownership and the exact free child slot.
   const seenOrigins=new Set<string>(),seenAliases=new Set<string>();

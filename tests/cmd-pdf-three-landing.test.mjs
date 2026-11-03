@@ -22,7 +22,9 @@ const check=(source,reason)=>{
   return result;
 };
 const roots=source=>check(source,'intact').atoms.filter(a=>/^p1b\d+$/.test(a.id))
-  .map(a=>a.id);
+  .map(a=>a.origin);
+const visible=(source,origin)=>check(source,'look up physical OCR identity').atoms
+  .find(a=>a.origin===origin)?.id;
 let current=original;
 const before=roots(current);
 const start=before.indexOf('p1b5'),target=before.indexOf('p1b3');
@@ -31,10 +33,13 @@ const first=planCMDReorderPBSParents(current,'p1b5','p1b3','before');
 assert.equal(first.changed,1);
 current=apply(current,first);
 assert.deepEqual(roots(current),[...before.filter(x=>x!=='p1b5')].toSpliced(target,0,'p1b5'));
-assert(current.indexOf('<!-- cmd:block:v1 id="p1b5"')<
-  current.indexOf('<!-- cmd:block:v1 id="p1b3"'));
-assert.equal(planCMDReorderPBSParents(current,'p1b5','p1b3','before').changed,0);
-const back=planCMDReorderPBSParents(current,'p1b5','p1b4','after');
+assert.equal(visible(current,'p1b5'),'p1b3');
+assert.equal(visible(current,'p1b3'),'p1b4');
+assert.equal(visible(current,'p1b3s0'),'p1b4s0');
+assert.equal(planCMDReorderPBSParents(current,visible(current,'p1b5'),
+  visible(current,'p1b3'),'before').changed,0);
+const back=planCMDReorderPBSParents(current,visible(current,'p1b5'),
+  visible(current,'p1b4'),'after');
 current=apply(current,back);
 assert.deepEqual(roots(current),before,'after landing restores original source order');
 const adjacent=planCMDReparentPBS(current,'p1b5','p1b4');
@@ -62,7 +67,7 @@ let promotedForSort=apply(original,planCMDReparentPBS(original,'p1b5','p1b3s0'))
 promotedForSort=apply(promotedForSort,planCMDPromotePBSChild(promotedForSort,'p1b3s1'));
 const sortedPromoted=apply(promotedForSort,
   planCMDReorderPBSParents(promotedForSort,'p1b14','p1b3','before'));
-assert.equal(check(sortedPromoted,'promoted reorder').atoms.find(a=>a.id==='p1b14')?.origin,'p1b5');
+assert.equal(check(sortedPromoted,'promoted reorder').atoms.find(a=>a.origin==='p1b5')?.id,'p1b3');
 assert.throws(()=>planCMDReorderPBSParents(original,'p1b5','p2b0'),/same-page/);
 assert.throws(()=>planCMDReorderPBSParents(original,'p1b5','p1b3','inside'),/landing/);
 console.log('PDF_THREE_LANDING_CMD_PASS',{before:'p1b5 before p1b3',

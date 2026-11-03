@@ -68,6 +68,42 @@ try {
    await parentCtrl.waitFor({state:'attached',timeout:60000});
    await targetChip.waitFor({state:'attached',timeout:60000});
    await targetChip.scrollIntoViewIfNeeded({timeout:35000});
+   // Regression: moving parent p1b3 AFTER p1b4 renumbers its native child
+   // from p1b3s0 -> p1b4s0. The physical PDF cover cannot move one pixel.
+   const physical=page.locator('.ocr-pdf-block-cover[data-origin-id="p1b3"]');
+   const originalRect=await physical.boundingBox();
+   const afterCtrl=page.locator('.ocr-pdf-block-cover[data-block-id="p1b4"] > .ocr-pdf-block-ctrl');
+   const src=await parentCtrl.boundingBox(),dst=await afterCtrl.boundingBox();
+   assert(src&&dst&&originalRect,'physical p1b3 and logical p1b4 labels must exist');
+   const pointerRenumber={bubbles:true,pointerId:91,pointerType:'touch',isPrimary:true,button:0};
+   await parentCtrl.dispatchEvent('pointerdown',{...pointerRenumber,
+     clientX:src.x+src.width/2,clientY:src.y+src.height/2});
+   await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:5000});
+   await page.locator('body').dispatchEvent('pointermove',{...pointerRenumber,
+     clientX:dst.x+dst.width/2,clientY:dst.y+dst.height/2});
+   const renumberRail=page.locator('.ocr-pdf-block-drop-guide[data-kind="parent"]');
+   await renumberRail.waitFor({state:'attached',timeout:6000});
+   const afterZone=await renumberRail.locator('[data-placement="after"]').boundingBox();
+   assert(afterZone,'after landing on p1b4 must be visible');
+   await page.locator('body').dispatchEvent('pointermove',{...pointerRenumber,
+     clientX:afterZone.x+afterZone.width/2,clientY:afterZone.y+afterZone.height/2});
+   await page.locator('body').dispatchEvent('pointerup',{...pointerRenumber,
+     clientX:afterZone.x+afterZone.width/2,clientY:afterZone.y+afterZone.height/2});
+   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-origin-id="p1b3"]')
+     ?.dataset.blockId==='p1b4'&&document.querySelector('.ocr-pdf-block-cover[data-origin-id="p1b3"]')
+     ?.querySelector('.ocr-pdf-block-fragment[data-subblock-id="p1b4s0"] .ocr-pdf-subblock-chip')
+     ?.textContent==='p1b4s0',null,{timeout:50000});
+   const movedPhysical=await physical.boundingBox();
+   for(const key of ['x','y','width','height'])
+     assert(Math.abs(originalRect[key]-movedPhysical[key])<2,
+       name+' PDF OCR bbox must remain at original physical position: '+key);
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-origin-id="p1b4"]').getAttribute('data-block-id'),'p1b3');
+   await page.locator('#undo').evaluate(el=>el.click());
+   await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-origin-id="p1b3"]')
+     ?.dataset.blockId==='p1b3'&&document.querySelector('.ocr-pdf-block-cover[data-origin-id="p1b3"]')
+     ?.querySelector('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"] .ocr-pdf-subblock-chip')
+     ?.textContent==='p1b3s0',null,{timeout:45000});
+   console.log('PDF_PARENT_CHILD_RENUMBER_PASS',name,'p1b3 -> p1b4 / p1b3s0 -> p1b4s0');
    // Explicit parent-label landing rail: before and after must move the
    // SOURCE p1b14, while the PDF bbox and original physical ID remain fixed.
    // Undo each move to restore the same initial fixture for the next gesture.
