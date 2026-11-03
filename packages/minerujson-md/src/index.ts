@@ -380,6 +380,29 @@ export function toMineruJSON(markdown: string): string {
     bodyRoots.add(physicalRoot);
     return ''; // physical parent text remains in its original source scope
   });
+  // A PDF parent with no own body (its OCR content lives wholly in native
+  // child paths) can be flattened into another logical parent. Its visible
+  // pNbM marker is replaced by an explicit provenance record. Only here, in
+  // the ephemeral audit view, reconstruct that original parent marker so
+  // strict sealed-OCR verification still checks every native child and text.
+  const absorbedParents=new Map<string,string>();
+  const absorbedChildren=new Map<string,Set<number>>();
+  const absorbedLine=/^((?: {0,3}>[ \t]?)* {0,3})<!-- cmd:absorbed-parent:v1 origin="(p\d+b\d+)" target="(p\d+b\d+)" -->[ \t]*$/gm;
+  markdown=markdown.replace(absorbedLine,(_line,prefix,physicalRoot,physicalTarget)=>{
+    const source=/^p(\d+)b(\d+)$/.exec(physicalRoot)!;
+    const target=/^p(\d+)b(\d+)$/.exec(physicalTarget)!;
+    const sourceBlock=data.pdf_info[Number(source[1])]?.para_blocks[Number(source[2])];
+    const destination=data.pdf_info[Number(target[1])]?.para_blocks[Number(target[2])];
+    assert(source[1]===target[1]&&physicalRoot!==physicalTarget&&
+      sourceBlock?.blocks?.length&&destination&&
+      !absorbedParents.has(physicalRoot),
+      'invalid absorbed original parent or target');
+    absorbedParents.set(physicalRoot,physicalTarget);
+    absorbedChildren.set(physicalRoot,new Set());
+    return `${prefix}<!-- cmd:block:v1 id="${physicalRoot}" -->`;
+  });
+  assert(!markdown.includes('<!-- cmd:absorbed-parent:v1'),
+    'malformed or duplicate absorbed parent annotation');
   // A PDF reorder renumbers the public p/b/s IDs but never changes original
   // OCR provenance. In this ephemeral comparison view, resolve the parent's
   // logical label to its immutable physical root first, and then resolve all
@@ -407,7 +430,17 @@ export function toMineruJSON(markdown: string): string {
     const parentPhysical=logicalParent.get(logicalRoot)||logicalRoot;
     const nativeChild=match[3]!==undefined&&physical[3]!==undefined;
     if(nativeChild){
-      assert(origin[1].startsWith(parentPhysical+'s')&&
+      const originalRoot=`p${physical[1]}b${physical[2]}`;
+      const absorbedTarget=absorbedParents.get(originalRoot);
+      if(absorbedTarget){
+        const index=Number(physical[3]);
+        const original=data.pdf_info[page].para_blocks[physicalB];
+        const seen=absorbedChildren.get(originalRoot)!;
+        assert(parentPhysical===absorbedTarget&&physical[3]&&!physical[3].includes('.')&&
+          original.blocks?.[index]&&!seen.has(index),
+          'absorbed child has invalid original OCR identity or target');
+        seen.add(index);
+      }else assert(origin[1].startsWith(parentPhysical+'s')&&
         physical[3]===match[3], 'renumbered native child changed physical lineage');
       return `${prefix}id="${origin[1]}"${rest.replace(origin[0],'')}`;
     }
@@ -418,6 +451,12 @@ export function toMineruJSON(markdown: string): string {
       return `${prefix}id="${origin[1]}"${rest.replace(origin[0],'')}`;
     return `${prefix}id="${id}"${rest}`;
   });
+  for(const [root,seen] of absorbedChildren){
+    const physical=/^p(\d+)b(\d+)$/.exec(root)!;
+    const count=data.pdf_info[Number(physical[1])].para_blocks[Number(physical[2])].blocks!.length;
+    assert(seen.size===count&&[...Array(count).keys()].every(i=>seen.has(i)),
+      'absorbed parent lost one or more original OCR children');
+  }
   const origins: {id:string;origin:string;page:number;parent:number;child:number;source:number}[]=[];
   const promotions: {id:string;origin:string;page:number;parent:number;child:number;newParent:number}[]=[];
   const restoredRoots: {id:string;origin:string;page:number;source:number;newParent:number}[]=[];

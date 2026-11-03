@@ -68,6 +68,9 @@
   background:rgba(255,196,67,.32);outline:2px solid rgba(255,193,59,.98);
   outline-offset:-2px;
 }
+.ocr-pdf-block-child-cover > .ocr-pdf-block-ctrl input{
+  display:none;
+}
 
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl{
   position:absolute;z-index:2;top:0;display:inline-flex;flex-direction:row;align-items:center;

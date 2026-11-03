@@ -198,6 +198,48 @@ try {
      &&!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b4s1"]')),null,{timeout:45000});
    assert.equal(await page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b4s0"]').count(),0);
    console.log('PDF_FIRST_BODY_AND_GROUP_HIGHLIGHT_PASS',name,'p1b4 -> p1b4s0 + p1b4s1');
+   // An ORIGINAL parent with native children may be absorbed into another
+   // parent. The old p1b3 label disappears, its original native image child
+   // keeps the same physical bbox but displays p1b5s1. p1b5 body is s0.
+   const sourceParent=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]');
+   const sourceParentCtrl=sourceParent.locator(':scope > .ocr-pdf-block-ctrl');
+   const destParent=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"]');
+   const destParentCtrl=destParent.locator(':scope > .ocr-pdf-block-ctrl');
+   await sourceParentCtrl.scrollIntoViewIfNeeded({timeout:35000});
+   const srcParentRect=await sourceParent.boundingBox();
+   const srcParentChip=await sourceParentCtrl.boundingBox();
+   const dstParentChip=await destParentCtrl.boundingBox();
+   assert(srcParentRect&&srcParentChip&&dstParentChip,'p1b3 and p1b5 must be visible');
+   const mergePointer={bubbles:true,pointerId:94,pointerType:'touch',isPrimary:true,button:0};
+   await sourceParentCtrl.dispatchEvent('pointerdown',{...mergePointer,
+     clientX:srcParentChip.x+srcParentChip.width/2,
+     clientY:srcParentChip.y+srcParentChip.height/2});
+   await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:5500});
+   await page.locator('body').dispatchEvent('pointermove',{...mergePointer,
+     clientX:dstParentChip.x+dstParentChip.width/2,
+     clientY:dstParentChip.y+dstParentChip.height/2});
+   const mergeRail=page.locator('.ocr-pdf-block-drop-guide[data-kind="parent"]');
+   await mergeRail.waitFor({state:'attached',timeout:8500});
+   const mergeZone=await mergeRail.locator('[data-placement="child"]').boundingBox();
+   assert(mergeZone,'parent absorption drop zone must exist');
+   const mx=mergeZone.x+mergeZone.width/2,my=mergeZone.y+mergeZone.height/2;
+   await page.locator('body').dispatchEvent('pointermove',{...mergePointer,clientX:mx,clientY:my});
+   await page.locator('body').dispatchEvent('pointerup',{...mergePointer,clientX:mx,clientY:my});
+   await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')&&
+     document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b5s1"][data-origin-id="p1b3s0"]')&&
+     document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b5"] .ocr-pdf-block-fragment[data-subblock-id="p1b5s0"]'),
+     null,{timeout:55000});
+   const mergedCover=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5s1"]');
+   const mergedRect=await mergedCover.boundingBox();
+   for(const k of ['x','y','width','height'])
+     assert(Math.abs(srcParentRect[k]-mergedRect[k])<2,name+' original absorbed PDF bbox fixed '+k);
+   assert.equal(await mergedCover.evaluate(el=>el.classList.contains('ocr-pdf-block-child-cover')),true);
+   await destParentCtrl.evaluate(el=>el.click());
+   assert.equal(await mergedCover.evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true);
+   await page.locator('#undo').evaluate(el=>el.click());
+   await page.waitForFunction(()=>Boolean(document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')
+     &&!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b5s1"]')),null,{timeout:45000});
+   console.log('PDF_PARENT_ABSORPTION_GESTURE_PASS',name,'p1b3s0 -> p1b5s1, p1b3 removed, undo');
    const from=await sourceCtrl.boundingBox(),to=await targetChip.boundingBox();
    assert(from&&to&&to.width>0&&to.height>0,`${name} real PDF tags visible`);
    const sx=from.x+from.width/2,sy=from.y+from.height/2;

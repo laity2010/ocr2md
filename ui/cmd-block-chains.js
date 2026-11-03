@@ -24,6 +24,13 @@ export function parseCMDPBSId(id){
   if(!Number.isSafeInteger(p)||!Number.isSafeInteger(b)||s.some(x=>!Number.isSafeInteger(x)))return null;
   return {id,p,b,s};
 }
+/** Non-PBS marker retaining the original OCR parent of an absorbed group.
+ * A dissolved parent is no longer a logical block or a visible PDF label. */
+export function readCMDAbsorbedParents(source){
+  const pattern=/^((?: {0,3}>[ \t]?)* {0,3})<!-- cmd:absorbed-parent:v1 origin="(p\d+b\d+)" target="(p\d+b\d+)" -->[ \t]*$/gm;
+  return [...source.matchAll(pattern)].map(m=>({origin:m[2],target:m[3],
+    from:m.index,rawLine:m[0]}));
+}
 export function parseCMDBlockTag(line){
   const raw=unquotePrefix(line).trim();const match=tagPattern.exec(raw);
   if(!match)return null;
@@ -80,6 +87,15 @@ export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note}){
 export function readCMDBlockChains(source){
   if(typeof source!=='string')throw TypeError('CMD source must be a string');
   const lines=source.split('\n');const atoms=[],invalid=[];let offset=0;
+  const absorbedParents=readCMDAbsorbedParents(source);
+  const absorbedOrigins=new Set();
+  for(const record of absorbedParents){
+    const from=parseCMDPBSId(record.origin),to=parseCMDPBSId(record.target);
+    if(absorbedOrigins.has(record.origin)||!from||!to||
+      from.p!==to.p||from.s.length||to.s.length||record.origin===record.target)
+      invalid.push({id:record.origin,reason:'Invalid absorbed-parent provenance'});
+    absorbedOrigins.add(record.origin);
+  }
   for(let i=0;i<lines.length;i++){
     const line=lines[i];
     if(line.includes('<!-- minerujson:source:v1:'))break;
@@ -87,6 +103,9 @@ export function readCMDBlockChains(source){
     // Malformed CMD annotations must NEVER masquerade as legacy MinerU tags.
     const badNew=unquotePrefix(line).trim().startsWith('<!-- cmd:block:v1')&&!parsed;
     if(badNew)invalid.push({line:i+1,reason:'Malformed CMD PBS/BC annotation'});
+    if(unquotePrefix(line).trim().startsWith('<!-- cmd:absorbed-parent:v1')&&
+      !absorbedParents.some(x=>x.from===offset))
+      invalid.push({line:i+1,reason:'Malformed absorbed-parent marker'});
     const legacyParent=parsed||badNew?null:blockAnchor(line);
     const legacyChild=parsed||badNew||legacyParent?null:subblockAnchor(line);
     if(parsed||legacyParent||legacyChild){
@@ -167,7 +186,10 @@ export function readCMDBlockChains(source){
       roles:Object.fromEntries(members.filter(x=>x.role).map(x=>[x.id,x.role]))});
   }
   chains.sort((a,b)=>a.sourceLine-b.sourceLine);
-  return {atoms:[...grouping.values()],chains,invalid,
+  for(const absorbed of absorbedParents)
+    if(atoms.some(atom=>atom.origin===absorbed.origin))
+      invalid.push({id:absorbed.origin,reason:'Absorbed parent cannot remain a visible PBS'});
+  return {atoms:[...grouping.values()],chains,invalid,absorbedParents,
     summary:{atoms:atoms.length,chains:chains.length,
       singleton:chains.filter(x=>x.size===1).length,multiple:chains.filter(x=>x.size>1).length}};
 }
@@ -259,6 +281,108 @@ export function planCMDMergeBlockChains(source,destinationId,sourceId){
   return {...planCMDBlockChainArrangement(source,chains),resultId:merged.id,
     memberIds:[...merged.members]};
 }
+/** Flatten an ORIGINAL OCR parent containing native children into another
+ * same-page parent. The dissolved container is recorded as non-PBS provenance,
+ * while each native child receives a direct destination sN ID in its original
+ * order. The raw OCR markers/contents are never deleted, only moved in one
+ * CM6 transaction; strict inverse MinerU verification restores the container.
+ * Parents with their own separate body or already-reviewed children require
+ * a distinct operation and are deliberately rejected rather than losing text.
+ */
+export function planCMDAbsorbPBSParent(source,model,sourceId,targetId){
+  const from=parseCMDPBSId(sourceId),to=parseCMDPBSId(targetId);
+  if(!from||!to||from.s.length||to.s.length||from.p!==to.p||sourceId===targetId)
+    throw Error('Parent absorption requires two different same-page parents');
+  if(model.invalid.length||model.atoms.some(a=>a.format!=='cmd-v1'))
+    throw Error('Invalid CMD PBS snapshot for parent absorption');
+  const byId=new Map(model.atoms.map(atom=>[atom.id,atom]));
+  const src=byId.get(sourceId),dest=byId.get(targetId);
+  const original=parseCMDPBSId(src?.origin),targetOriginal=parseCMDPBSId(dest?.origin);
+  if(!src||!dest||!original||!targetOriginal||
+    original.s.length||targetOriginal.s.length||original.p!==from.p||
+    targetOriginal.p!==from.p||original.id===targetOriginal.id)
+    throw Error('Absorption requires independent original OCR parent provenance');
+  if(model.absorbedParents.some(record=>record.origin===src.origin))
+    throw Error('Original parent is already absorbed');
+  const direct=model.atoms.filter(atom=>atom.id.startsWith(sourceId+'s')&&
+    parseCMDPBSId(atom.id)?.s.length===1).sort((a,b)=>a.from-b.from);
+  const allChildren=model.atoms.filter(atom=>atom.id.startsWith(sourceId+'s'));
+  if(!direct.length||allChildren.length!==direct.length||
+    direct.some((atom,i)=>atom.id!==sourceId+'s'+i||
+      atom.origin!==src.origin+'s'+i))
+    throw Error('Only an unmodified consecutive native child group can be absorbed');
+  for(const atom of [src,...direct]){
+    const chain=model.chains.find(c=>c.members.includes(atom.id));
+    if(chain?.size!==1||chain.explicit)
+      throw Error('Extract source parent and native children from BC before absorption');
+  }
+  const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
+  const sourceIndex=ordered.indexOf(src);
+  if(ordered[sourceIndex+1]!==direct[0]||
+    direct.some((atom,i)=>ordered[sourceIndex+i+1]!==atom))
+    throw Error('Source child scopes must be contiguous');
+  if(source.slice(src.from+src.rawLine.length,direct[0].from).trim())
+    throw Error('Source parent has its own content; explicit body split is required');
+  const nextRoot=ordered.slice(sourceIndex+direct.length+1)
+    .find(a=>parseCMDPBSId(a.id)?.s.length===0);
+  const nextPage=source.indexOf('<!-- minerujson:page:v1:',src.from);
+  const archive=source.indexOf('<!-- minerujson:source:v1:',src.from);
+  const pageBoundary=Math.min(nextPage<0?source.length:nextPage,
+    archive<0?source.length:archive);
+  const stop=Math.min(nextRoot?.from??pageBoundary,pageBoundary);
+  const segment=source.slice(src.from,stop);
+  if(stop<=direct.at(-1).from||/<!-- minerujson:(?:page|source|discarded|document-meta):v1/.test(segment))
+    throw Error('Absorption cannot move sealed OCR evidence');
+  const destIndex=ordered.indexOf(dest);
+  const destNextRoot=ordered.slice(destIndex+1).find(a=>parseCMDPBSId(a.id)?.s.length===0);
+  const destNextPage=source.indexOf('<!-- minerujson:page:v1:',dest.from);
+  const destArchive=source.indexOf('<!-- minerujson:source:v1:',dest.from);
+  const destBoundary=Math.min(destNextPage<0?source.length:destNextPage,
+    destArchive<0?source.length:destArchive);
+  const insertAt=Math.min(destNextRoot?.from??destBoundary,destBoundary);
+  if(insertAt>=src.from&&insertAt<=stop)
+    throw Error('Cannot absorb a parent into its own source scope');
+  const destChildren=model.atoms.filter(a=>{
+    const p=parseCMDPBSId(a.id);
+    return p?.p===to.p&&p.b===to.b&&p.s.length===1;
+  });
+  const needsBody=!destChildren.length;
+  if(destChildren.some(a=>a.role==='body'&&a.id!==targetId+'s0'))
+    throw Error('Invalid existing destination body child');
+  const bodyMarker=needsBody?commentPrefix(dest.rawLine)+serializeCMDBlockTag({
+    id:targetId+'s0',origin:dest.origin,role:'body'}):null;
+  const firstIndex=needsBody?1:Math.max(...destChildren.map(a=>parseCMDPBSId(a.id).s[0]))+1;
+  const renames=direct.map((atom,i)=>({oldId:atom.id,newId:targetId+'s'+(firstIndex+i),
+    origin:atom.origin}));
+  for(const item of renames)if(byId.has(item.newId))
+    throw Error('Absorbed child would overwrite an existing PBS identity');
+  let moved=segment;
+  const replacements=[
+    {from:0,to:src.rawLine.length,
+      insert:commentPrefix(src.rawLine)+
+        `<!-- cmd:absorbed-parent:v1 origin="${src.origin}" target="${dest.origin}" -->`},
+    ...direct.map((child,i)=>{
+      const parsed=parseCMDBlockTag(child.rawLine);
+      return {from:child.from-src.from,to:child.from-src.from+child.rawLine.length,
+        insert:commentPrefix(child.rawLine)+serializeCMDBlockTag({
+          id:renames[i].newId,origin:child.origin,type:parsed.type,
+          role:parsed.role,review:parsed.review,note:parsed.note})};
+    })
+  ];
+  for(const edit of replacements.sort((a,b)=>b.from-a.from))
+    moved=moved.slice(0,edit.from)+edit.insert+moved.slice(edit.to);
+  const edits=[
+    {from:src.from,to:stop,expected:segment,insert:''},
+    {from:insertAt,to:insertAt,expected:'',insert:moved},
+  ];
+  if(bodyMarker)edits.push({from:dest.from+dest.rawLine.length+1,
+    to:dest.from+dest.rawLine.length+1,expected:'',insert:'\n'+bodyMarker+'\n'});
+  return {changed:edits.length,edits,sourceId,targetId,
+    newId:renames[0].newId,createdBodyId:bodyMarker?targetId+'s0':null,
+    absorbedOrigin:src.origin,absorbedTarget:dest.origin,
+    renamed:Object.fromEntries(renames.map(item=>[item.oldId,item.newId])),
+    memberIds:renames.map(item=>item.newId),relocatedSourceText:true};
+}
 /** OCR structure correction, not a BC move. Re-parent exactly one original
  * top-level source atom as the next sibling of an existing native child.
  * The immutable source identity remains in origin=; no original JSON or
@@ -274,13 +398,16 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   const from=parseCMDPBSId(sourceId),to=parseCMDPBSId(targetId);
   if(!from||!to||from.s.length||to.s.length>1||from.p!==to.p)
     throw Error('Only a same-page independent parent can become a direct child');
+  if(model.atoms.some(a=>a.id.startsWith(sourceId+'s'))){
+    if(to.s.length||targetId.startsWith(sourceId+'s'))
+      throw Error('Source already has children; cannot absorb into a native child; move a leaf instead');
+    return planCMDAbsorbPBSParent(source,model,sourceId,targetId);
+  }
   // A reviewed leaf may be made independent, then reparented again.
   // This is only legal when its immutable provenance is an original OCR
   // *parent* on the same page. A promoted native child (origin=...sN) is
   // not silently converted into a foreign child path.
   const origin=parseCMDPBSId(atom.origin);
-  if(model.atoms.some(a=>a.id.startsWith(sourceId+'s')))
-    throw Error('Source already has children; move a leaf instead');
   if(!origin||origin.p!==from.p||origin.s.length)
     throw Error('Source must be a leaf with original parent OCR provenance');
   const ownChain=model.chains.find(c=>c.members.includes(sourceId));
@@ -679,13 +806,15 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
       chainMembers:chain?.chainMembers||[atom.id]};
   });
   const seen=new Set(rows.map(row=>row.origin));
-  for(const parent of parentRows)if(!seen.has(parent.id))rows.push({...parent,
+  const absorbed=new Set(model.absorbedParents?.map(a=>a.origin)||[]);
+  for(const parent of parentRows)if(!seen.has(parent.id)&&!absorbed.has(parent.id))
+    rows.push({...parent,
     kind:'parent',parentId:null,childPath:null,depth:0,format:'missing',
     chainId:null,chainLabel:'未标定',chainPosition:null,chainSize:0,
     chainType:null,chainRole:null,chainMembers:[],review:'',note:'',
     sourceText:'',originalText:parent.text||'',previewLabel:'无源码',
     geometryLabel:parent.geometry?'可定位':'无效'});
-  return {rows,summary:{...model.summary,invalid:model.invalid.length,
+  return {rows,absorbedParents:model.absorbedParents||[],summary:{...model.summary,invalid:model.invalid.length,
     parents:rows.filter(r=>r.kind==='parent').length,
     children:rows.filter(r=>r.kind==='child').length,
     unanchored:rows.filter(r=>r.format==='missing').length}};

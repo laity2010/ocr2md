@@ -73,7 +73,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   actionsHost.append(blocksButton,subblocksButton,groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton,bboxEditor,bboxButton,bboxReset,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
   overviewButton.addEventListener('click',()=>onCompare({overview:true}));
   const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(gridHost);
-  let rows=[],tableRows=[],grouped=false,collapsedChains=new Set(),targetId=null,dragBusy=false,candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
+  let rows=[],tableRows=[],absorbedRoots=new Set(),grouped=false,collapsedChains=new Set(),targetId=null,dragBusy=false,candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
   let selectedCandidateId=null,documentSha=null,reviews=new Map();
   const storageKey=sha=>`ocr2md:continuation-review:v1:${sha}`;
   const restore=sha=>{
@@ -436,6 +436,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       joinLabel:row.joinPrev?`↳ ${row.logicalId}`:row.logicalId===row.id?'独立':`独立 · ${row.logicalId}`,
       previewLabel:row.expectsPreview?'待检查':'无需渲染'}));
       tableRows=(result.atoms?.rows||rows).map(row=>({...row}));
+      absorbedRoots=new Set((result.atoms?.absorbedParents||[]).map(row=>row.origin));
       if(selectedId&&!tableRows.some(row=>row.id===selectedId))selectedId=null;
       if(targetId&&!tableRows.some(row=>row.id===targetId))targetId=null;
       if(mode==='blocks')updateBlockRows();syncBBoxFields();error='';refresh();},
@@ -455,7 +456,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
         .map(r=>[r.origin,r.id]));
       const bodyAlias=new Map(tableRows.filter(r=>r.kind==='child'&&r.chainRole==='body')
         .map(r=>[r.origin,r.id]));
-      const physical=rows.map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>{
+      const physical=rows.filter(row=>!absorbedRoots.has(row.id))
+        .map(({id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,anchorCount,joinPrev,joinable,logicalId})=>{
         const corrected=alias.get(id);
         const nativeChildren=Object.fromEntries([...childAlias].filter(([origin])=>
           origin.startsWith(id+'s')));
@@ -463,6 +465,18 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
           anchorCount,joinPrev:corrected?null:joinPrev,joinable:corrected?false:joinable,
           logicalId:corrected?.id||logicalId,nativeChildren,bodyChildId:bodyAlias.get(id)||null};
       });
+      // A dissolved OCR parent no longer owns a parent label. Its original
+      // native child bboxes remain in the PDF, now labelled as direct children
+      // of the destination logical parent. Use physical subregion geometry,
+      // never fabricate a new bbox from the current logical s index.
+      for(const row of tableRows)if(row.kind==='child'&&row.geometry&&
+        [...absorbedRoots].some(root=>row.origin.startsWith(root+'s'))){
+        physical.push({id:row.id,origin:row.origin,pageIndex:row.pageIndex,
+          blockIndex:row.blockIndex,sourceLine:row.sourceLine,
+          expectsPreview:row.expectsPreview,geometry:true,anchorCount:1,
+          joinPrev:null,joinable:false,logicalId:row.parentId,bbox:row.bbox,
+          promoted:true,isChildCover:true});
+      }
       // A promoted original child is now an independent logical parent.
       // Add its own PDF overlay, using the *native child bbox*, without
       // fabricating any new OCR source block in the original 224 parents.

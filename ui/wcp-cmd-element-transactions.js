@@ -11,7 +11,7 @@
  */
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
-import {planCMDBlockChainArrangement,readCMDBlockChains,
+import {planCMDBlockChainArrangement,readCMDBlockChains,parseCMDPBSId,
   planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDPromotePBSChild,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember,
   planCMDReorderPBSParents} from './cmd-block-chains.js';
@@ -174,14 +174,25 @@ export function createCMDTransactionPort(cmd){
         return result.slice(0,edit.from)+edit.insert+result.slice(edit.to);
       },source);
       const after=readCMDBlockChains(next);
-      const origins=atoms=>atoms.map(a=>a.origin).sort().join('\n');
+      const origins=model=>[
+        ...model.atoms.filter(a=>!(a.role==='body'&&
+          parseCMDPBSId(a.origin)?.s.length===0&&
+          a.id.endsWith('s0'))).map(a=>a.origin),
+        ...(model.absorbedParents||[]).map(a=>a.origin),
+      ].sort().join('\n');
       const expectedBody=plan.createdBodyId?after.atoms.find(a=>a.id===plan.createdBodyId):null;
       const nextAtoms=expectedBody?after.atoms.filter(a=>a!==expectedBody):after.atoms;
-      if(after.invalid.length||before.atoms.length!==nextAtoms.length||
-        origins(before.atoms)!==origins(nextAtoms)||
+      const expectedCount=before.atoms.length-(plan.absorbedOrigin?1:0);
+      const absorption=plan.absorbedOrigin?after.absorbedParents.find(a=>
+        a.origin===plan.absorbedOrigin&&a.target===plan.absorbedTarget):null;
+      if(after.invalid.length||expectedCount!==nextAtoms.length||
+        origins(before)!==origins(after)||
         (plan.createdBodyId&&(!expectedBody||expectedBody.role!=='body'))||
-        after.atoms.filter(a=>a.origin===plan.origin).length!==1||
-        !after.atoms.some(a=>a.id===plan.newId&&a.origin===plan.origin))
+        (plan.absorbedOrigin&&!absorption)||
+        (!plan.absorbedOrigin&&
+          (after.atoms.filter(a=>a.origin===plan.origin).length!==1||
+           !after.atoms.some(a=>a.id===plan.newId&&a.origin===plan.origin)))||
+        (plan.absorbedOrigin&&!after.atoms.some(a=>a.id===plan.newId)))
         throw Error('PBS reparent must retain all original OCR atoms and provenance');
       const tail=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
       if(!next.includes('<!-- minerujson:source:v1:')||tail(next)!==tail(source))

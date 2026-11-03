@@ -685,8 +685,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId})=>
-        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId})):[];
+      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId,isChildCover})=>
+        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId,isChildCover})):[];
     const prior=this.blockCoverageRows;
     this.blockCoverageRows=next;
     // Editing one CMD join annotates only the target Block. The geometry and
@@ -695,6 +695,7 @@ export class PdfPreview {
     const sameGeometry=prior.length===next.length&&prior.every((old,i)=>
       old.id===next[i].id&&old.pageIndex===next[i].pageIndex&&
       old.blockIndex===next[i].blockIndex&&old.promoted===next[i].promoted&&
+      old.isChildCover===next[i].isChildCover&&
       old.bodyChildId===next[i].bodyChildId&&
       JSON.stringify(old.nativeChildren||{})===JSON.stringify(next[i].nativeChildren||{}));
     if(!sameGeometry){this.paintBlockCoverage();return;}
@@ -1145,6 +1146,7 @@ export class PdfPreview {
       node.dataset.originId=row.origin||row.id;
       node.dataset.pdfPage=String(row.pageIndex+1);
       node.dataset.blockIndex=String(row.blockIndex);
+      node.classList.toggle('ocr-pdf-block-child-cover',Boolean(row.isChildCover));
       this.updateBlockChip(node,row);
       // Keep the interactive chip OUTSIDE the OCR text rectangle. Choose
       // the outer paper gutter, never the inter-column gap: left-column
