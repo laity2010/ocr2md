@@ -24,6 +24,10 @@ const check=(source,reason)=>{
 };
 const roots=source=>check(source,'intact').atoms.filter(a=>/^p1b\d+$/.test(a.id))
   .map(a=>a.origin);
+const logicalOrder=source=>check(source,'logical PBS order').atoms
+  .filter(a=>/^p1b\d+$/.test(a.id))
+  .sort((a,b)=>Number(a.id.split('b')[1])-Number(b.id.split('b')[1]))
+  .map(a=>a.origin);
 const visible=(source,origin)=>check(source,'look up physical OCR identity').atoms
   .find(a=>a.origin===origin)?.id;
 let current=original;
@@ -31,9 +35,11 @@ const before=roots(current);
 const start=before.indexOf('p1b5'),target=before.indexOf('p1b3');
 assert(start>target);
 const first=planCMDReorderPBSParents(current,'p1b5','p1b3','before');
-assert.equal(first.changed,1);
+assert(first.changed>0);
+assert(first.annotationOnly);
 current=apply(current,first);
-assert.deepEqual(roots(current),[...before.filter(x=>x!=='p1b5')].toSpliced(target,0,'p1b5'));
+assert.deepEqual(roots(current),before,'physical source order must not change');
+assert.deepEqual(logicalOrder(current),[...before.filter(x=>x!=='p1b5')].toSpliced(target,0,'p1b5'));
 assert.equal(visible(current,'p1b5'),'p1b3');
 assert.equal(visible(current,'p1b3'),'p1b4');
 assert.equal(visible(current,'p1b3s0'),'p1b4s0');
@@ -42,7 +48,9 @@ assert.equal(planCMDReorderPBSParents(current,visible(current,'p1b5'),
 const back=planCMDReorderPBSParents(current,visible(current,'p1b5'),
   visible(current,'p1b4'),'after');
 current=apply(current,back);
-assert.deepEqual(roots(current),before,'after landing restores original source order');
+assert.deepEqual(roots(current),before,'physical source order remains unchanged');
+assert.deepEqual(logicalOrder(current),before,'logical order restored');
+assert.equal(current,original,'reverse relabeling restores identical source bytes');
 const adjacent=planCMDReparentPBS(current,'p1b5','p1b4');
 assert.equal(adjacent.changed,2,'neighboring leaf needs a body-s0 insertion and tag edit');
 assert.equal(adjacent.createdBodyId,'p1b4s0');

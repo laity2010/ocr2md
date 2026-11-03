@@ -498,10 +498,11 @@ export function planCMDReparentPBS(source,sourceId,targetId){
     edits,createdBodyId:bodyMarker?parentAtom.id+'s0':null,relocatedSourceText:true};
 }
 
-/** Reorder independent page-level PBS scopes in one CM6 operation.
- * The immutable PBS origin (physical PDF bbox) never changes. A parent takes
- * its native/reviewed children with it; all other parents keep relative order.
- * AG projects the new source order and PDF retains the original geometry.
+/** Reorder LOGICAL page-level PBS numbers, never physical source scopes.
+ * The PDF bboxes, Markdown body bytes, original block positions and the
+ * immutable origin= of every parent/child stay unchanged. Only CMD annotation
+ * lines are renamed. The current b index is the authoritative visual order,
+ * so a second reorder must not infer order from unchanged sourceLine offsets.
  */
 export function planCMDReorderPBSParents(source,sourceId,targetId,placement='before'){
   if(!['before','after'].includes(placement))throw Error('Invalid PBS landing');
@@ -514,7 +515,7 @@ export function planCMDReorderPBSParents(source,sourceId,targetId,placement='bef
   const parents=model.atoms.filter(a=>{
     const id=parseCMDPBSId(a.id);
     return id?.p===from.p&&id.s.length===0;
-  }).sort((a,b)=>a.from-b.from);
+  }).sort((a,b)=>parseCMDPBSId(a.id).b-parseCMDPBSId(b.id).b);
   const start=parents.findIndex(a=>a.id===sourceId);
   const target=parents.findIndex(a=>a.id===targetId);
   if(start<0||target<0)throw Error('Unknown PDF parent');
@@ -522,62 +523,40 @@ export function planCMDReorderPBSParents(source,sourceId,targetId,placement='bef
   const group=model.chains.find(c=>c.members.includes(sourceId));
   if(group?.explicit&&group.size>1)
     throw Error('Extract the parent from its BC before reordering');
-  const boundary=[source.indexOf('<!-- minerujson:page:v1:',parents[0].from),
-    source.indexOf('<!-- minerujson:source:v1:',parents[0].from)]
-    .filter(pos=>pos>=0).sort((a,b)=>a-b)[0];
-  if(!Number.isInteger(boundary)||boundary<=parents.at(-1).from)
-    throw Error('No sealed OCR page boundary after PDF parents');
-  const pieces=parents.map((a,i)=>source.slice(a.from,parents[i+1]?.from??boundary));
-  if(pieces.some(x=>/<!-- minerujson:(?:page|source|discarded|document-meta):v1/.test(x)))
-    throw Error('Cannot reorder sealed OCR evidence');
-  const reordered=parents.map((a,i)=>({id:a.id,text:pieces[i]}));
+  const reordered=[...parents];
   const [moving]=reordered.splice(start,1);
   const place=reordered.findIndex(a=>a.id===targetId)+(placement==='after'?1:0);
   reordered.splice(place,0,moving);
   if(reordered.every((a,i)=>a.id===parents[i].id))
     return {changed:0,edits:[],reason:'already-ordered'};
-  // The b number is a CURRENT page-sequence label, not the immutable OCR
-  // blockIndex. Renumber every parent and every descendant in its moved
-  // scope, while keeping origin= as the physical identity. Compute all
-  // replacements against the pre-move snapshot (never chained renames).
-  const renamed=new Map();
-  const piecesById=new Map(parents.map((parent,i)=>[parent.id,{
-    from:parent.from,to:parents[i+1]?.from??boundary}]));
-  const text=reordered.map((parent,index)=>{
-    const destinationRoot=`p${from.p}b${index}`;
-    const oldRoot=parent.id;
-    const range=piecesById.get(oldRoot);
-    const memberAtoms=model.atoms.filter(atom=>atom.from>=range.from&&atom.from<range.to);
-    let section=source.slice(range.from,range.to);
-    const edits=[];
-    for(const atom of memberAtoms){
-      const parsed=parseCMDBlockTag(atom.rawLine);
-      if(!parsed)throw Error('Cannot rename a non-CMD PBS child');
-      if(!atom.id.startsWith(oldRoot)||
-        atom.id.length>oldRoot.length&&atom.id[oldRoot.length]!=='s')
-        throw Error('PBS scope does not follow its parent');
-      const nextId=destinationRoot+atom.id.slice(oldRoot.length);
-      if(atom.id===nextId)continue;
-      renamed.set(atom.id,nextId);
-      const replacement=commentPrefix(atom.rawLine)+serializeCMDBlockTag({
-        id:nextId,...(atom.origin===nextId?{}:{origin:atom.origin}),
-        ...(parsed.bc?{bc:parsed.bc,seq:Number(parsed.seq)}:{}),
-        type:parsed.type,role:parsed.role,review:parsed.review,note:parsed.note,
-      });
-      edits.push({from:atom.from-range.from,to:atom.from-range.from+atom.rawLine.length,
-        insert:replacement});
-    }
-    for(const edit of edits.reverse())
-      section=section.slice(0,edit.from)+edit.insert+section.slice(edit.to);
-    return section;
-  }).join('');
-  const fromOffset=parents[0].from;
-  return {changed:1,edits:[{from:fromOffset,to:boundary,
-    expected:source.slice(fromOffset,boundary),
-    insert:text}],
-    sourceId,targetId,placement,pageIndex:from.p,
+  // A mapping from OLD logical b to NEW logical b. No text or tag crosses
+  // any source offset. Parent and all descendants receive the same mapping.
+  const roots=new Map(reordered.map((atom,index)=>[atom.id,`p${from.p}b${index}`]));
+  const renamed=new Map(),edits=[];
+  for(const atom of model.atoms){
+    const old=parseCMDPBSId(atom.id);
+    if(old?.p!==from.p)continue;
+    const root=`p${old.p}b${old.b}`;
+    const newRoot=roots.get(root);
+    if(!newRoot)throw Error('PBS child has no page-level logical parent');
+    const nextId=newRoot+atom.id.slice(root.length);
+    if(nextId===atom.id)continue;
+    const parsed=parseCMDBlockTag(atom.rawLine);
+    if(!parsed)throw Error('Cannot rename a non-CMD PBS child');
+    // origin is the source's PHYSICAL OCR identity, even when the old public
+    // ID happened to coincide with it. It must never follow logical b.
+    const insert=commentPrefix(atom.rawLine)+serializeCMDBlockTag({
+      id:nextId,...(atom.origin===nextId?{}:{origin:atom.origin}),
+      ...(parsed.bc?{bc:parsed.bc,seq:Number(parsed.seq)}:{}),
+      type:parsed.type,role:parsed.role,review:parsed.review,note:parsed.note,
+    });
+    renamed.set(atom.id,nextId);
+    edits.push({from:atom.from,to:atom.from+atom.rawLine.length,
+      expected:atom.rawLine,insert});
+  }
+  return {changed:edits.length,edits,sourceId,targetId,placement,pageIndex:from.p,
     order:reordered.map((_,i)=>`p${from.p}b${i}`),
-    renamed:Object.fromEntries(renamed),relocatedSourceText:true};
+    renamed:Object.fromEntries(renamed),relocatedSourceText:false,annotationOnly:true};
 }
 /** Promote one direct child (native or reviewed) to the next free page-level PBS ID.
  * This is a CMD source-scope move, not a synthetic MinerU OCR block.

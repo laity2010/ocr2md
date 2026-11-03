@@ -1,5 +1,5 @@
-/** WCP29: logical b numbers follow page source order, while original OCR origin
- * and PDF bboxes remain attached to the same physical atoms, including children. */
+/** WCP30: logical b numbers change WITHOUT moving source scopes, while
+ * original OCR origin, Markdown text and physical bbox remain immutable. */
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
@@ -15,10 +15,14 @@ const apply=(s,plan)=>[...plan.edits].sort((a,b)=>b.from-a.from).reduce((text,ed
   return text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
 },s);
 const plan=planCMDReorderPBSParents(source,'p1b3','p1b4','after');
-assert.equal(plan.changed,1);
+assert.equal(plan.annotationOnly,true);
+assert.equal(plan.changed,plan.edits.length);
+assert(plan.changed>=3);
 assert.deepEqual(Object.fromEntries(['p1b3','p1b3s0','p1b4'].map(id=>[id,plan.renamed[id]])),{
   p1b3:'p1b4',p1b3s0:'p1b4s0',p1b4:'p1b3'});
 const changed=apply(source,plan);
+const stripTags=s=>s.replace(/^((?: {0,3}>[ \t]?)* {0,3})<!-- cmd:block:v1[^\n]* -->[ \t]*$/gm,'$1<!-- PBS TAG -->');
+assert.equal(stripTags(changed),stripTags(source),'source body and tag positions must stay fixed');
 const model=readCMDBlockChains(changed);
 assert.deepEqual(model.invalid,[]);
 assert.equal(model.atoms.length,267);
