@@ -64,7 +64,10 @@ try{
         await from.waitFor({state:'attached',timeout:50000});
         await to.scrollIntoViewIfNeeded({timeout:35000});
         const fr=await from.boundingBox(),tr=await to.boundingBox();assert(fr&&tr);
-        const old=await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]').boundingBox();
+        const oldCover=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]');
+        const old=await oldCover.boundingBox();
+        const originalGeometry=await oldCover.evaluate(el=>({left:el.style.left,top:el.style.top,
+          width:el.style.width,height:el.style.height,pdfPage:el.dataset.pdfPage}));
         const touch={bubbles:true,pointerId:345,pointerType:'touch',button:0,isPrimary:true};
         await from.dispatchEvent('pointerdown',{...touch,...center(fr)});
         await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:7500});
@@ -118,9 +121,11 @@ try{
         const surviving=page.locator('.ocr-pdf-block-cover[data-block-id="p1b4s1"][data-origin-id="p1b3s0"]');
         await surviving.waitFor({state:'attached',timeout:60000});
         assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]').count(),0);
-        const reloaded=await surviving.boundingBox();assert(reloaded);
-        for(const key of ['x','y','width','height'])
-          assert(Math.abs(old[key]-reloaded[key])<2,name+' reload changed original PDF bbox '+key);
+        const reloadedGeometry=await surviving.evaluate(el=>({left:el.style.left,top:el.style.top,
+          width:el.style.width,height:el.style.height,pdfPage:el.dataset.pdfPage}));
+        // Scrolling and zoom may differ after reload: compare coordinates
+        // relative to the PDF page, not global browser-screen y offsets.
+        assert.deepEqual(reloadedGeometry,originalGeometry,name+' reload changed original PDF bbox');
         await page.locator('.ocr-pdf-block-cover[data-block-id="p1b4"] > .ocr-pdf-block-ctrl')
           .evaluate(el=>el.click());
         assert.equal(await surviving.evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true);
