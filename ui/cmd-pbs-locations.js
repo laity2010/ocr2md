@@ -8,7 +8,6 @@ const prefix='<!-- cmd:pbs-locations:v1 ';
 const regex=/^<!-- cmd:pbs-locations:v1 (\{[^\n]*\}) -->\n/gm;
 const id=/^p(?:0|[1-9]\d*)b(?:0|[1-9]\d*)(?:s(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)?$/;
 const parent=/^p(?:0|[1-9]\d*)b(?:0|[1-9]\d*)$/;
-const page=x=>/^p(\d+)b/.exec(x)?.[1];
 export function readCMDPBSLocations(source){
   const tail=source.indexOf('<!-- minerujson:source:v1:');
   if(tail<0)throw Error('Missing sealed MinerU source');
@@ -24,7 +23,9 @@ export function readCMDPBSLocations(source){
     throw Error('Invalid PBS locations schema');
   const entries=Object.entries(object.bindings);
   if(entries.length>20000||object.bodies.length>20000||object.removed.length>20000||
-    entries.some(([key,origin])=>!id.test(key)||!id.test(origin)||page(key)!==page(origin))||
+    // The logical pN page of a reviewed child can differ from its unchanged
+    // original physical PDF page. Bindings are deliberately cross-page.
+    entries.some(([key,origin])=>!id.test(key)||!id.test(origin))||
     object.bodies.some(x=>!id.test(x)||!Object.hasOwn(object.bindings,x))||
     object.removed.some(x=>!parent.test(x))||
     new Set(object.bodies).size!==object.bodies.length||

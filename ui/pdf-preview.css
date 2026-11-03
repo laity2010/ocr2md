@@ -240,3 +240,12 @@
 /* Only p1b3 permits the one reviewed long-press parent-into-b4 gesture. */
 .ocr-pdf-readonly .ocr-pdf-block-cover:not(.ocr-pdf-block-is-child) > .ocr-pdf-block-ctrl,
 .ocr-pdf-readonly .ocr-pdf-block-cover:not(.ocr-pdf-block-is-child) > .ocr-pdf-block-ctrl span{touch-action:none}
+
+/* Unified blue child-label language. A reviewed parent absorbed as a child
+ * uses a separate physical overlay; it must match both native sN chips and
+ * the virtual s0 (body) chip. Do not recolor the destination parent itself. */
+.ocr-pdf-scroller .page .ocr-pdf-block-cover.ocr-pdf-block-child-cover > .ocr-pdf-block-ctrl,
+.ocr-pdf-scroller .page .ocr-pdf-block-cover.ocr-pdf-block-is-child > .ocr-pdf-block-ctrl,
+.ocr-pdf-block-fragment > .ocr-pdf-subblock-chip{
+  border-color:#8ab5ca;background:rgba(34,56,70,.95);color:#e4effa;
+}

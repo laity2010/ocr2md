@@ -55,5 +55,21 @@ assert.equal(locations.bindings.p1b6s3,'p1b2');
 assert.equal(locations.bindings.p1b6s0,'p1b6');
 assert.deepEqual(new Set(locations.removed),new Set(['p1b3','p1b2','p1b4']));
 assert.throws(()=>planCMDAbsorbReviewedParent(source,'p1b3','p1b6'),/Unknown|dissolved/);
-assert.throws(()=>planCMDAbsorbReviewedParent(fixture,'p1b3','p2b3'),/same-page/);
+for(const [a,b,pdfPage] of [['p1b5','p2b0',2],['p2b0','p1b5',3],
+  ['p0b16','p1b0',1],['p21b20','p20b0',22]]){
+  const {source,plan}=edit(fixture,a,b);
+  const inventory=await inspectCMDTextBlocks(source),layout=await queryCMDLayout(source),
+    after=readCMDBlockChains(source);
+  const table=projectCMDBlockTable(source,inventory.rows,layout,after,inventory.children);
+  for(const id of plan.newIds){
+    const row=table.rows.find(r=>r.id===id);
+    assert(row&&row.geometry);
+    assert.equal(row.pdfPage,pdfPage,'physical PDF page MUST NOT follow new CMD id');
+    assert.equal(row.parentId,b,'logical B is destination even cross page');
+    assert.notEqual(Number(id.slice(1,id.indexOf('b')))+1,pdfPage);
+  }
+  console.log('CROSS_PAGE_PARENT_ABSORPTION_PASS',a,b,plan.newIds,pdfPage);
+}
+assert.throws(()=>planCMDAbsorbReviewedParent(fixture,'p1b3','p1b3'),/different parent/);
+
 console.log('GENERIC_REPEATED_PARENT_ABSORPTION_PASS',locations);

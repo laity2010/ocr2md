@@ -450,15 +450,15 @@ export function planCMDJoinP1B3IntoP1B4(source){
   return {...plan,edits:cleanEdits};
 }
 
-/** Human-review parent absorption, valid for ANY same-page parent pair.
+/** Human-review parent absorption, valid across all PDF pages.
  * Only id= appears on block lines. PDF physical keys and dissolved ORIGINAL
  * cover identities live in the CMD footer, not in structural line tags.
  * Parent/child text moves once in a CM6 transaction, never PDF geometry.
  */
 export function planCMDAbsorbReviewedParent(source,sourceId,targetId){
   const a=parseCMDPBSId(sourceId),b=parseCMDPBSId(targetId);
-  if(!a||!b||a.s.length||b.s.length||a.p!==b.p||sourceId===targetId)
-    throw Error('Only two different same-page parents may be joined');
+  if(!a||!b||a.s.length||b.s.length||sourceId===targetId)
+    throw Error('Only two different parent blocks may be joined');
   const model=readCMDBlockChains(source);
   if(model.invalid.length||model.atoms.some(atom=>atom.format!=='cmd-v1'))
     throw Error('Invalid CMD PBS document');

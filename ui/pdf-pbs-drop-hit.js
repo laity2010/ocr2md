@@ -16,7 +16,8 @@ export const pdfArrowLocalPoint=(x,y,rect)=>({x:x-rect.left,y:y-rect.top});
 export function pickPDFDropTarget(candidates,{x,y,sourceId,pageId,clip,pointerType='mouse'}){
   if(!clip||x<clip.left||x>clip.right||y<clip.top||y>clip.bottom)return null;
   const margin=pointerType==='touch'?22:15;
-  const ranked=candidates.filter(c=>c.pageId===pageId&&c.rootId!==sourceId&&
+  const ranked=candidates.filter(c=>(pageId==null||c.pageId===pageId)&&
+    c.rootId!==sourceId&&
     c.rect.width>0&&c.rect.height>0&&intersects(c.rect,clip))
     .map(c=>({...c,distance:distance(c.rect,x,y)}))
     .filter(c=>c.distance<=margin)

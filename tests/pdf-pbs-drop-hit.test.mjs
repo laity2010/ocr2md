@@ -26,6 +26,9 @@ assert.equal(hit(735,260)?.placement,'child');
 assert.equal(hit(735,305),null);
 assert.equal(hit(950,220),null);
 assert.equal(hit(735,220,labels.map(c=>({...c,pageId:'3'}))),null);
+// A held parent may now target another visible PDF page after scrolling.
+assert.equal(pickPDFDropTarget(labels.map(c=>({...c,pageId:'3'})),{
+  x:735,y:220,clip,pageId:null,sourceId:'p1b5',pointerType:'touch'})?.id,'p1b3');
 // Tight intersecting labels with equal hit distance must be rejected.
 const overlap=[{id:'p1b1',rootId:'p1b1',pageId:'2',kind:'parent',rect:r(10,10,6,6)},
  {id:'p1b2',rootId:'p1b2',pageId:'2',kind:'parent',rect:r(10,10,6,6)}];

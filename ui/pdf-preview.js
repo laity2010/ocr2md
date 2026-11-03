@@ -758,14 +758,14 @@ export class PdfPreview {
     const displayId=row.id;
     if(badge.textContent!==displayId){badge.textContent=displayId;changed=true;}
     const title=this.readOnly?
-      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'长按归入其他同页父块':'单击定位（只读）'}`:
+      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'长按归入其他父块（可跨页）':'单击定位（只读）'}`:
       `原始 ${row.origin||row.id} · 显示 ${displayId} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
     const disabled=this.readOnly||!row.joinable;
     if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
-    const help=this.readOnly?`单击定位 ${row.id}；${/^p\d+b\d+$/.test(row.id)?'长按归入同页其他父块':'当前子块只读'}`:
+    const help=this.readOnly?`单击定位 ${row.id}；${/^p\d+b\d+$/.test(row.id)?'长按归入其他父块（可跨页）':'当前子块只读'}`:
       row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
       `单击定位 ${row.id}；没有有效前驱 Block，不能取消勾选`;
     if(input.title!==help)input.title=help;
@@ -808,13 +808,12 @@ export class PdfPreview {
     }
     return changed;
   }
-  /** Long-press the ID (not its checkbox) then point to another ID on this
-   * PDF page. The arrow is a temporary pointer-only visualization; the only
-   * data mutation is the CMD move transaction after a valid pointer release.
+  /** Long-press a parent and drop it on any other PDF page's parent.
+   * The source PDF box stays put; only CMD source ordering changes.
    */
   armBlockDrag(event,ctrl,id){
-    // Every page-level parent may be absorbed into a different same-page
-    // parent; child rearrangement and before/after sorting stay disabled.
+    // Every parent may join another parent, including across PDF pages.
+    // Child rearrangement and before/after sorting stay disabled.
     if(this.readOnly&&!/^p\d+b\d+$/.test(id))return;
     if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
     const item={id,ctrl,pointerId:event.pointerId,pointerType:event.pointerType,
@@ -836,41 +835,35 @@ export class PdfPreview {
       svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
         '<path class="ocr-pdf-block-drag-tip" />';
       document.body.append(svg);item.svg=svg;
-      this.setStatus(`从 ${id} 拖出箭头，指向目标标签，选之前／子块／之后`);
+      this.setStatus(`从 ${id} 拖出箭头，可滚动到其他 PDF 页，指向目标父块并选择子块`);
       this.updateBlockDrag(item,item.x,item.y);
       this.autoScrollBlockDrag(item);
     },370);
   }
-  /** Scroll only within the original PDF page while a long-held pointer
-   * approaches the visible pane edge. This enables a page-top Block to be
-   * dropped after a page-bottom Block without changing any labels or source
-   * ordering until release. Never scroll across the page boundary.
+  /** Dragging near PDF pane edges scrolls through the whole PDF, even
+   * across page boundaries, while the gesture stays captured at its source.
+   * Unrelated browser windows and the Markdown source pane never scroll.
    */
   autoScrollBlockDrag(item){
-    // The viewer's usual smooth CSS scrolling must not queue dozens of
-    // competing scroll animations while a finger is held at the pane edge.
     this.blockDragScrollBehavior=this.scroller.style.scrollBehavior;
     this.scroller.style.scrollBehavior='auto';
     const tick=()=>{
       if(this.blockDrag!==item||!item.active){this.stopBlockDragScroll();return;}
       const pane=this.scroller.getBoundingClientRect();
-      const page=item.ctrl.closest('.page')?.getBoundingClientRect();
-      if(page&&item.x>=pane.left&&item.x<=pane.right&&
+      if(item.x>=pane.left&&item.x<=pane.right&&
         item.y>=pane.top&&item.y<=pane.bottom){
-        const edge=48,speed=17;
+        const edge=48,speed=22;
         const bottom=Math.max(0,Math.min(1,(item.y-(pane.bottom-edge))/edge));
         const top=Math.max(0,Math.min(1,((pane.top+edge)-item.y)/edge));
-        // Clamp to the original PDF page, not the neighboring PDF pages.
-        const delta=bottom?Math.min(speed*bottom,Math.max(0,page.bottom-pane.bottom)):
-          top?-Math.min(speed*top,Math.max(0,pane.top-page.top)):0;
+        const delta=bottom?speed*bottom:top?-speed*top:0;
         if(delta){
-          this.scroller.scrollTop+=delta;
-          this.updateBlockDrag(item,item.x,item.y);
+          const prior=this.scroller.scrollTop;
+          this.scroller.scrollTop=Math.max(0,Math.min(
+            this.scroller.scrollHeight-this.scroller.clientHeight,prior+delta));
+          if(this.scroller.scrollTop!==prior)this.updateBlockDrag(item,item.x,item.y);
         }
       }
     };
-    // WebKit may throttle requestAnimationFrame while PDF.js paints pages;
-    // a bounded interval keeps scroll motion alive during that heavy paint.
     if(!this.blockDragScrollTimer)this.blockDragScrollTimer=setInterval(tick,32);
   }
   stopBlockDragScroll(){
@@ -883,7 +876,8 @@ export class PdfPreview {
   }
   blockDropTarget(item,x,y){
     const clip=this.visibleClip();
-    const pageId=item.ctrl.closest('.ocr-pdf-block-cover')?.dataset.pdfPage;
+    // The target may be on ANY rendered PDF page; still require a visible
+    // unambiguous chip under the pointer in the current PDF viewport.
     // A guide is a deliberate 3-slot landing rail. Keep the selected target
     // while the pointer travels from its fixed label onto that rail; never
     // let an adjacent PDF gutter chip steal its landing.
@@ -907,7 +901,7 @@ export class PdfPreview {
           rootId,kind:'child',pageId,rect:chip.getBoundingClientRect()});
       }
     }
-    return pickPDFDropTarget(candidates,{x,y,sourceId:item.id,pageId,clip,
+    return pickPDFDropTarget(candidates,{x,y,sourceId:item.id,pageId:null,clip,
       pointerType:item.pointerType});
   }
   /** Three semantic positions live beside the fixed PDF label, never inside
@@ -1051,11 +1045,11 @@ export class PdfPreview {
     this.suppressBlockClickCtrl=item.ctrl;
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
-    if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
+    if(!target){this.setStatus('未选择目标父块，结构不变');return;}
     if(this.readOnly&&(!/^p\d+b\d+$/.test(item.id)||placement!=='child'||
       !target||!/^p\d+b\d+(?:s\d+(?:\.\d+)*)?$/.test(target)||
       target.startsWith(item.id+'s')||target===item.id)){
-      this.setStatus('仅允许同页父块整体归入另一父块，其他操作保持只读');
+      this.setStatus('仅允许父块整体归入另一父块，其他操作保持只读');
       return;
     }
     if(placement==='child'){
