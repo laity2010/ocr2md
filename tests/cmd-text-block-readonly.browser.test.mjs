@@ -15,7 +15,7 @@ import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {TEXT_BLOCKS_READ_ONLY,rejectTextBlockEdit} from '../ui/text-block-readonly.js';
 assert.equal(TEXT_BLOCKS_READ_ONLY,true);
-await assert.rejects(rejectTextBlockEdit(),/只读标定/);
+await assert.rejects(rejectTextBlockEdit(),/仅开放 p1b3 归入 p1b4/);
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const source=toMarkdown(raw);
 assert.equal((source.match(/<!-- cmd:block:v1 id=/g)||[]).length,267);
@@ -97,9 +97,12 @@ try{
         await label.evaluate(el=>el.click());
         assert.equal(await root.evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true);
         assert.equal(await child.evaluate(el=>el.classList.contains('ocr-pdf-block-group-child')),true);
-        const rect=await label.boundingBox();assert(rect);
+        // All ordinary labels still reject drag. The only exception belongs
+        // to the separate p1b3 -> p1b4 browser acceptance test.
+        const other=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"] > .ocr-pdf-block-ctrl');
+        const rect=await other.boundingBox();assert(rect);
         const touch={bubbles:true,pointerId:99,pointerType:'touch',button:0,isPrimary:true};
-        await label.dispatchEvent('pointerdown',{...touch,...center(rect)});
+        await other.dispatchEvent('pointerdown',{...touch,...center(rect)});
         await sleep(510);
         const dest=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"] > .ocr-pdf-block-ctrl');
         const target=await dest.boundingBox();assert(target);

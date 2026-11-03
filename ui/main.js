@@ -730,7 +730,16 @@ async function main() {
   // not. Guard every public Shell-to-CMD mutation port, independently of
   // hiding controls, so long-press, triple tap, or stale UI cannot write.
   workspace.setBlockJoinAction(rejectTextBlockEdit);
-  workspace.setBlockChainAction(rejectTextBlockEdit);
+  workspace.setBlockChainAction(async(action,request={})=>{
+    if(action!=='reparent'||request.memberId!=='p1b3'||request.targetId!=='p1b4')
+      return rejectTextBlockEdit();
+    const source=cmdPort.readSource();
+    if(source!==blockIndexedSource)
+      throw Error('文本块列表已变化，请重新进入文本块模块后操作');
+    const result=cmdPort.joinP1B3IntoP1B4({expectedSource:source});
+    if(result.changed){blockIndexedSource=null;scanTextBlocks();}
+    return result;
+  });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
   workspace.setBlockMoveAction(rejectTextBlockEdit);
   workspace.setSubblockMarkAction(rejectTextBlockEdit);

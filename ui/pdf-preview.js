@@ -754,7 +754,7 @@ export class PdfPreview {
     const logical=row.logicalId||row.id;
     if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
     const title=this.readOnly?
-      `原始 ${row.origin||row.id} · 显示 ${logical} · 单击定位（只读）`:
+      `原始 ${row.origin||row.id} · 显示 ${logical} · ${row.id==='p1b3'?'长按归入 p1b4':'单击定位（只读）'}`:
       `原始 ${row.origin||row.id} · 显示 ${logical} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
@@ -809,7 +809,9 @@ export class PdfPreview {
    * data mutation is the CMD move transaction after a valid pointer release.
    */
   armBlockDrag(event,ctrl,id){
-    if(this.readOnly)return;
+    // All other labels remain recognition-only; only this precise gesture
+    // can request the single reviewed p1b3 -> p1b4 source operation.
+    if(this.readOnly&&id!=='p1b3')return;
     if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
     const item={id,ctrl,pointerId:event.pointerId,pointerType:event.pointerType,
       x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
@@ -1046,6 +1048,10 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
+    if(this.readOnly&&(item.id!=='p1b3'||target!=='p1b4'||placement!=='child')){
+      this.setStatus('本次仅开放 p1b3 归入 p1b4，其他结构操作保持只读');
+      return;
+    }
     if(placement==='child'){
       this.setStatus(`正在将 ${item.id} 归入 ${target} 所属父块…`);
       void this.onBlockReparent(item.id,target).then(result=>{
@@ -1104,7 +1110,8 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
-        if(!this.readOnly)ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
+        if(!this.readOnly||row.id==='p1b3')
+          ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
         // Preserve long-press move: a dragged label's release never counts as
         // one of the three taps. All changes still go through CMD's API.
         ctrl.addEventListener('contextmenu',e=>e.preventDefault());

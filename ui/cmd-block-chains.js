@@ -186,6 +186,15 @@ export function readCMDBlockChains(source){
       roles:Object.fromEntries(members.filter(x=>x.role).map(x=>[x.id,x.role]))});
   }
   chains.sort((a,b)=>a.sourceLine-b.sourceLine);
+  // The single reviewed p1b3 -> p1b4 operation intentionally removes the
+  // old parent tag outright. Its relocated child still carries its PHYSICAL
+  // PDF geometry key in origin=, so the read-only PDF/AG projections can
+  // recognize the missing parent without a historical source annotation.
+  if(!atoms.some(a=>a.id==='p1b3')&&
+    atoms.some(a=>a.id==='p1b4s1'&&a.origin==='p1b3s0')&&
+    atoms.some(a=>a.id==='p1b4s0'&&a.role==='body')&&
+    !absorbedParents.some(a=>a.origin==='p1b3'))
+    absorbedParents.push({origin:'p1b3',target:'p1b4',derived:true});
   for(const absorbed of absorbedParents)
     if(atoms.some(atom=>atom.origin===absorbed.origin))
       invalid.push({id:absorbed.origin,reason:'Absorbed parent cannot remain a visible PBS'});
@@ -383,6 +392,28 @@ export function planCMDAbsorbPBSParent(source,model,sourceId,targetId){
     renamed:Object.fromEntries(renames.map(item=>[item.oldId,item.newId])),
     memberIds:renames.map(item=>item.newId),relocatedSourceText:true};
 }
+/** One explicitly authorised manual correction: p1b3 -> p1b4.
+ * The parent line disappears from the editable Markdown entirely; its
+ * original native child text moves after b4s0. The retained origin= on the
+ * renamed child identifies the PDF rectangle, not an old logical parent.
+ * All other text-block edits remain disabled in the WCP shell.
+ */
+export function planCMDJoinP1B3IntoP1B4(source){
+  const plan=planCMDReparentPBS(source,'p1b3','p1b4');
+  if(plan.createdBodyId!=='p1b4s0'||plan.newId!=='p1b4s1'||
+    plan.absorbedOrigin!=='p1b3'||plan.memberIds?.join(',')!=='p1b4s1')
+    throw Error('Unexpected p1b3 -> p1b4 source shape');
+  const annotation='<!-- cmd:absorbed-parent:v1 origin="p1b3" target="p1b4" -->';
+  let stripped=0;
+  const edits=plan.edits.map(edit=>{
+    if(!edit.insert.includes(annotation))return edit;
+    stripped++;
+    return {...edit,insert:edit.insert.replace(annotation,'')};
+  });
+  if(stripped!==1)throw Error('Expected exactly one source parent annotation to remove');
+  return {...plan,edits};
+}
+
 /** OCR structure correction, not a BC move. Re-parent exactly one original
  * top-level source atom as the next sibling of an existing native child.
  * The immutable source identity remains in origin=; no original JSON or

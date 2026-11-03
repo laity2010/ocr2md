@@ -3,7 +3,7 @@
  */
 export const TEXT_BLOCKS_READ_ONLY = true;
 export const TEXT_BLOCK_READ_ONLY_MESSAGE =
-  '文本块处于只读标定阶段，不支持拖动、排序、合并、拆分、父子归属、覆盖框修改或提取写入';
+  '仅开放 p1b3 归入 p1b4；其他文本块结构操作保持只读';
 export function rejectTextBlockEdit(){
   return Promise.reject(new Error(TEXT_BLOCK_READ_ONLY_MESSAGE));
 }

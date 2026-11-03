@@ -236,3 +236,7 @@
 .ocr-pdf-bbox-edit[aria-pressed="true"]{background:#72532a;color:#ffe2af}
 
 .ocr-pdf-block-fragment[hidden]{display:none!important}
+
+/* Only p1b3 permits the one reviewed long-press parent-into-b4 gesture. */
+.ocr-pdf-readonly .ocr-pdf-block-cover[data-block-id="p1b3"] > .ocr-pdf-block-ctrl,
+.ocr-pdf-readonly .ocr-pdf-block-cover[data-block-id="p1b3"] > .ocr-pdf-block-ctrl span{touch-action:none}

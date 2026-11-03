@@ -12,7 +12,7 @@
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,parseCMDPBSId,
-  planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDPromotePBSChild,planCMDMergeBlockChains,
+  planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDJoinP1B3IntoP1B4,planCMDPromotePBSChild,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember,
   planCMDReorderPBSParents} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
@@ -160,6 +160,36 @@ export function createCMDTransactionPort(cmd){
     moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
       planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
       options.expectedSource??null),
+    /** Only the specifically reviewed PDF p1b3 -> p1b4 merge is open. */
+    joinP1B3IntoP1B4(options={}){
+      const source=cmd.readSource();
+      if(options.expectedSource!==undefined&&options.expectedSource!==source)
+        throw Error('p1b3/p1b4 document changed; rescan before joining');
+      const before=readCMDBlockChains(source);
+      const plan=planCMDJoinP1B3IntoP1B4(source);
+      if(before.invalid.length||!before.atoms.some(a=>a.id==='p1b3'))
+        throw Error('Original p1b3 parent missing');
+      const next=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((text,edit)=>{
+        if(text.slice(edit.from,edit.to)!==edit.expected)
+          throw Error('Source changed while planning join');
+        return text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
+      },source);
+      const after=readCMDBlockChains(next);
+      const has=(id,origin,role)=>after.atoms.some(a=>a.id===id&&a.origin===origin&&
+        (role===undefined||a.role===role));
+      if(after.invalid.length||after.atoms.length!==before.atoms.length||
+        after.atoms.some(a=>a.id==='p1b3'||a.id.startsWith('p1b3s'))||
+        !has('p1b4','p1b4')||!has('p1b4s0','p1b4','body')||
+        !has('p1b4s1','p1b3s0')||
+        next.includes('cmd:absorbed-parent:v1 origin="p1b3"')||
+        after.absorbedParents.filter(a=>a.origin==='p1b3').length!==1||
+        source.slice(source.indexOf('<!-- minerujson:source:v1:'))!==
+          next.slice(next.indexOf('<!-- minerujson:source:v1:')))
+        throw Error('p1b3 -> p1b4 must preserve all text, layout, and original sealed PDF');
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    },
     reparentPBS(sourceId,targetId,options={}){
       const source=cmd.readSource();
       if(options.expectedSource!==undefined&&source!==options.expectedSource)
