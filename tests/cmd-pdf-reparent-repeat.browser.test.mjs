@@ -132,6 +132,46 @@ try {
      await page.waitForTimeout(650);
      console.log('PDF_THREE_LANDING_GESTURE_PASS',name,placement);
    }
+   // A parent without native OCR children becomes a container on its FIRST
+   // child. Its original body is virtual s0, the incoming OCR block is s1.
+   // Clicking the unchanged parent ID must highlight BOTH fixed PDF bboxes.
+   const emptyParent=page.locator('.ocr-pdf-block-cover[data-block-id="p1b4"]');
+   const emptyCtrl=emptyParent.locator(':scope > .ocr-pdf-block-ctrl');
+   await emptyCtrl.scrollIntoViewIfNeeded({timeout:35000});
+   const parentBefore=await emptyParent.boundingBox();
+   const srcBox=await sourceCtrl.boundingBox(),tarBox=await emptyCtrl.boundingBox();
+   assert(srcBox&&tarBox&&parentBefore,name+' first body-s0 drag labels rendered');
+   const touchBody={bubbles:true,pointerId:93,pointerType:'touch',isPrimary:true,button:0};
+   await sourceCtrl.dispatchEvent('pointerdown',{...touchBody,
+     clientX:srcBox.x+srcBox.width/2,clientY:srcBox.y+srcBox.height/2});
+   await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:5000});
+   await page.locator('body').dispatchEvent('pointermove',{...touchBody,
+     clientX:tarBox.x+tarBox.width/2,clientY:tarBox.y+tarBox.height/2});
+   const bodyRail=page.locator('.ocr-pdf-block-drop-guide[data-kind="parent"]');
+   await bodyRail.waitFor({state:'attached',timeout:8000});
+   const bodyZone=await bodyRail.locator('span[data-placement="child"]').boundingBox();
+   assert(bodyZone);
+   const bx=bodyZone.x+bodyZone.width/2,by=bodyZone.y+bodyZone.height/2;
+   await page.locator('body').dispatchEvent('pointermove',{...touchBody,clientX:bx,clientY:by});
+   await page.locator('body').dispatchEvent('pointerup',{...touchBody,clientX:bx,clientY:by});
+   await page.waitForFunction(()=>Boolean(document.querySelector(
+     '.ocr-pdf-block-cover[data-block-id="p1b4"] .ocr-pdf-block-fragment[data-subblock-id="p1b4s0"]')
+     &&document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b4s1"]')),null,{timeout:50000});
+   const bodyChip=emptyParent.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b4s0"] .ocr-pdf-subblock-chip');
+   assert.equal(await bodyChip.textContent(),'p1b4s0');
+   const parentAfter=await emptyParent.boundingBox();
+   for(const k of ['x','y','width','height'])
+     assert(Math.abs(parentBefore[k]-parentAfter[k])<2,name+' unchanged PDF bbox '+k);
+   await emptyCtrl.evaluate(el=>el.click());
+   assert.equal(await emptyParent.evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true);
+   assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b4s1"]')
+     .evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true);
+   assert.equal(await bodyChip.evaluate(el=>el.parentElement.classList.contains('ocr-pdf-block-group-child')),true);
+   await page.locator('#undo').evaluate(el=>el.click());
+   await page.waitForFunction(()=>Boolean(document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]')
+     &&!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b4s1"]')),null,{timeout:45000});
+   assert.equal(await page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b4s0"]').count(),0);
+   console.log('PDF_FIRST_BODY_AND_GROUP_HIGHLIGHT_PASS',name,'p1b4 -> p1b4s0 + p1b4s1');
    const from=await sourceCtrl.boundingBox(),to=await targetChip.boundingBox();
    assert(from&&to&&to.width>0&&to.height>0,`${name} real PDF tags visible`);
    const sx=from.x+from.width/2,sy=from.y+from.height/2;

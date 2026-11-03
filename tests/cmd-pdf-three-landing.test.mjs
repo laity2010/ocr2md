@@ -15,7 +15,8 @@ const apply=(source,plan)=>[...plan.edits].sort((a,b)=>b.from-a.from).reduce((te
 const check=(source,reason)=>{
   const result=readCMDBlockChains(source);
   assert.deepEqual(result.invalid,[],reason);
-  assert.equal(result.atoms.length,267,reason);
+  const bodyAliases=result.atoms.filter(a=>a.role==='body');
+  assert.equal(result.atoms.length,267+bodyAliases.length,reason);
   assert.equal(toMineruJSON(source),raw,reason);
   assert.equal(source.slice(source.indexOf('<!-- minerujson:source:v1:')),
     original.slice(original.indexOf('<!-- minerujson:source:v1:')),reason);
@@ -43,8 +44,9 @@ const back=planCMDReorderPBSParents(current,visible(current,'p1b5'),
 current=apply(current,back);
 assert.deepEqual(roots(current),before,'after landing restores original source order');
 const adjacent=planCMDReparentPBS(current,'p1b5','p1b4');
-assert.equal(adjacent.changed,1,'neighboring parent should need tag-only edit');
-assert.equal(adjacent.newId,'p1b4s0');
+assert.equal(adjacent.changed,2,'neighboring leaf needs a body-s0 insertion and tag edit');
+assert.equal(adjacent.createdBodyId,'p1b4s0');
+assert.equal(adjacent.newId,'p1b4s1');
 check(apply(current,adjacent),'parent without native children');
 // Three-way center landing directly on a PARENT label (no special child target).
 const nested=planCMDReparentPBS(current,'p1b5','p1b3');

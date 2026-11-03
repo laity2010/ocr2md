@@ -362,6 +362,24 @@ export function toMineruJSON(markdown: string): string {
   catch {throw new Error('MINERUJSON_MD_INVALID: corrupt source metadata');}
   assert(sha(Buffer.from(restored,'utf8'))===sealed[1], 'original JSON SHA-256 mismatch');
   const data=parseMineru(restored);
+  // A leaf root can become a CONTAINER without fabricating a second OCR
+  // payload: its original content starts at a body alias pNbMs0. The alias
+  // is an editable CMD anchor, but is stripped ONLY in the validated,
+  // ephemeral inverse view. The physical parent source remains authoritative.
+  const bodyRoots=new Set<string>();
+  const bodyLine=/^((?: {0,3}>[ \t]?)* {0,3})<!-- cmd:block:v1 id="(p\d+b\d+)s0" origin="(p\d+b\d+)" role="body" -->[ \t]*$/gm;
+  const allBlocks=[...markdown.matchAll(/^(?: {0,3}>[ \t]?)* {0,3}<!-- cmd:block:v1 id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"((?: [a-z]+="[^"]*")*) -->[ \t]*$/gm)];
+  markdown=markdown.replace(bodyLine,(line,_indent,logicalRoot,physicalRoot,offset)=>{
+    const previous=[...allBlocks].reverse().find(m=>m.index!<offset);
+    const physical=/^p(\d+)b(\d+)$/.exec(physicalRoot);
+    const block=data.pdf_info[Number(physical?.[1])]?.para_blocks[Number(physical?.[2])];
+    const actualRoot=previous?.[1]===logicalRoot;
+    const rootOrigin=/ origin="(p\d+b\d+)"/.exec(previous?.[2]||'')?.[1]||previous?.[1];
+    assert(actualRoot&&rootOrigin===physicalRoot&&block&&!(block.blocks||[]).length&&
+      !bodyRoots.has(physicalRoot), 'invalid parent body-s0 alias');
+    bodyRoots.add(physicalRoot);
+    return ''; // physical parent text remains in its original source scope
+  });
   // A PDF reorder renumbers the public p/b/s IDs but never changes original
   // OCR provenance. In this ephemeral comparison view, resolve the parent's
   // logical label to its immutable physical root first, and then resolve all
@@ -456,7 +474,8 @@ export function toMineruJSON(markdown: string): string {
   }
   for(const alias of origins){
     const nativeCount=(data.pdf_info[alias.page].para_blocks[alias.parent].blocks||[]).length;
-    assert(alias.child===nativeCount+origins.filter(a=>a.page===alias.page&&a.parent===alias.parent&&a.child<alias.child).length,
+    assert(alias.child===nativeCount+(bodyRoots.has(`p${alias.page}b${alias.parent}`)?1:0)+
+      origins.filter(a=>a.page===alias.page&&a.parent===alias.parent&&a.child<alias.child).length,
       'corrected children must follow original native paths without holes');
   }
 

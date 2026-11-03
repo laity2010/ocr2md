@@ -14,6 +14,8 @@ export function blockAnchor(line){
   if(m)return {pageIndex:Number(m[1]),blockIndex:Number(m[2])};
   const cmd=cmdAnchor.exec(line);
   if(cmd){
+    // A leaf parent's virtual s0 BODY is not another physical OCR parent.
+    if(/ role="body"/.test(cmd[4]))return null;
     // The visible ID may have been reassigned by a user. Preserve the
     // original sealed OCR parent identity for bbox/source verification.
     const old=/ origin="p(\d+)b(\d+)"/.exec(cmd[4]);
@@ -46,6 +48,11 @@ export function subblockAnchor(line){
   const m=subblock.exec(line);
   if(!m){
     const cmd=cmdAnchor.exec(line);
+    const body=cmd&&/ role="body"/.test(cmd[4])&&
+      /^p\d+b\d+s0$/.test(cmd[1]||'')?
+      / origin="p(\d+)b(\d+)"/.exec(cmd[4]):null;
+    if(body)return {pageIndex:Number(body[1]),blockIndex:Number(body[2]),
+      path:[0],bodyAlias:true};
     // A corrected child with origin= is not a native MinerU blocks[] child.
     // It is drawn on its original parent's PDF rectangle instead.
     if(cmd&&/ origin="p\d+b\d+"/.test(cmd[4]))return null;

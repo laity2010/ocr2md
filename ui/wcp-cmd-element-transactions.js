@@ -166,7 +166,7 @@ export function createCMDTransactionPort(cmd){
         throw Error('CMD PBS reparent snapshot stale');
       const before=readCMDBlockChains(source);
       const plan=planCMDReparentPBS(source,sourceId,targetId);
-      if(plan.changed<1||plan.changed>2||plan.edits.length!==plan.changed)
+      if(plan.changed<1||plan.changed>3||plan.edits.length!==plan.changed)
         throw Error('Reparent requires an atomic CMD structural edit');
       const next=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((result,edit)=>{
         if(source.slice(edit.from,edit.to)!==edit.expected)
@@ -175,8 +175,11 @@ export function createCMDTransactionPort(cmd){
       },source);
       const after=readCMDBlockChains(next);
       const origins=atoms=>atoms.map(a=>a.origin).sort().join('\n');
-      if(after.invalid.length||before.atoms.length!==after.atoms.length||
-        origins(before.atoms)!==origins(after.atoms)||
+      const expectedBody=plan.createdBodyId?after.atoms.find(a=>a.id===plan.createdBodyId):null;
+      const nextAtoms=expectedBody?after.atoms.filter(a=>a!==expectedBody):after.atoms;
+      if(after.invalid.length||before.atoms.length!==nextAtoms.length||
+        origins(before.atoms)!==origins(nextAtoms)||
+        (plan.createdBodyId&&(!expectedBody||expectedBody.role!=='body'))||
         after.atoms.filter(a=>a.origin===plan.origin).length!==1||
         !after.atoms.some(a=>a.id===plan.newId&&a.origin===plan.origin))
         throw Error('PBS reparent must retain all original OCR atoms and provenance');

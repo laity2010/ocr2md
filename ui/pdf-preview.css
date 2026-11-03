@@ -57,6 +57,17 @@
 .ocr-pdf-block-cover.ocr-pdf-block-is-joined .ocr-pdf-block-fragment{
   background:rgba(128,169,194,.12);outline-style:dashed;
 }
+/* Selection of a parent highlights ALL of its child bboxes, even when a
+ * reviewed child uses a different original OCR rectangle on the same page.
+ * Pure presentation: original PDF bbox and overlay placement are untouched. */
+.ocr-pdf-scroller .page .ocr-pdf-block-cover.ocr-pdf-block-group-active{
+  background:rgba(250,193,69,.23);outline:2px solid rgba(255,193,59,.96);
+  outline-offset:-2px;
+}
+.ocr-pdf-block-cover .ocr-pdf-block-fragment.ocr-pdf-block-group-child{
+  background:rgba(255,196,67,.32);outline:2px solid rgba(255,193,59,.98);
+  outline-offset:-2px;
+}
 
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl{
   position:absolute;z-index:2;top:0;display:inline-flex;flex-direction:row;align-items:center;

@@ -119,6 +119,7 @@ export class PdfPreview {
     this.zoomAnchorToken=0;this.zoomRestoreTimer=0;this.zoomRestoreBehavior=null;
     this.comparison=null;this.comparisonNodes=[];this.comparisonDrawId=0;
     this.blockCoverageRows=[];this.blockCoverageNodes=new Map();
+    this.activeParentOrigin=null;
     // PDF.js can replace a page's DOM during zoom/reflow without emitting
     // pagerendered for that exact replacement. Preserve the canonical Block
     // nodes and restore their attachment after page-tree mutations.
@@ -264,6 +265,9 @@ export class PdfPreview {
         ?subblockId(chosen.pageIndex,chosen.blockIndex,chosen.partPath):null);
     if(!id||!/^p\d+b\d+s\d+$/.test(id))return null;
     const current=this.getMarkdown();
+    if(current.includes('id="'+id+'" origin=')&&
+      new RegExp('<!-- cmd:block:v1 id="'+id+'" origin="p\\d+b\\d+" role="body" -->').test(current))
+      return null;
     const escaped=id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     // Select only an existing single-level CMD child; once promoted, its
     // original visible id is gone. This also accepts origin="pNbM" children.
@@ -573,6 +577,7 @@ export class PdfPreview {
   /** Both the PDF rectangle and its gutter ID are actual child controls. */
   selectPDFRegion(pageIndex,chosen){
     if(!this.ready||this.disposed)return;
+    this.activeParentOrigin=null;this.refreshParentGroupHighlight();
     this.clearComparison();
     const anchor=this.anchors.find(a=>a.pageIndex===pageIndex&&a.blockIndex===chosen.blockIndex);
     // The union parent's whitespace is not a native `table_body` child.
@@ -664,8 +669,8 @@ export class PdfPreview {
   setBlockCoverage(rows){
     const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren})=>
-        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren})):[];
+      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId})=>
+        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId})):[];
     const prior=this.blockCoverageRows;
     this.blockCoverageRows=next;
     // Editing one CMD join annotates only the target Block. The geometry and
@@ -673,7 +678,9 @@ export class PdfPreview {
     // reset their checked values, or relayout other pages on every click.
     const sameGeometry=prior.length===next.length&&prior.every((old,i)=>
       old.id===next[i].id&&old.pageIndex===next[i].pageIndex&&
-      old.blockIndex===next[i].blockIndex&&old.promoted===next[i].promoted);
+      old.blockIndex===next[i].blockIndex&&old.promoted===next[i].promoted&&
+      old.bodyChildId===next[i].bodyChildId&&
+      JSON.stringify(old.nativeChildren||{})===JSON.stringify(next[i].nativeChildren||{}));
     if(!sameGeometry){this.paintBlockCoverage();return;}
     const pages=new Set();
     for(let i=0;i<next.length;i++){
@@ -684,6 +691,27 @@ export class PdfPreview {
         pages.add(row.pageIndex);
     }
     for(const pageIndex of pages)this.avoidBlockChipCollisions(pageIndex);
+    this.refreshParentGroupHighlight();
+  }
+  /** Fixed PDF geometry may contain a parent's original body-s0 and a
+   * relocated reviewed child elsewhere on the same page. Highlight all
+   * actual physical covers by CURRENT logical relation, but keep selection
+   * anchored to the original parent's immutable OCR identity. */
+  highlightParentGroup(row){
+    this.activeParentOrigin=row?.origin||null;
+    this.refreshParentGroupHighlight();
+  }
+  refreshParentGroupHighlight(){
+    const root=this.activeParentOrigin?this.blockCoverageRows.find(row=>
+      row.origin===this.activeParentOrigin&&/^p\d+b\d+$/.test(row.id)):null;
+    const prefix=root?root.id+'s':null;
+    for(const [id,node] of this.blockCoverageNodes){
+      node.classList.toggle('ocr-pdf-block-group-active',
+        Boolean(prefix&&(id===root.id||id.startsWith(prefix))));
+      for(const child of node.querySelectorAll(':scope > .ocr-pdf-block-fragment'))
+        child.classList.toggle('ocr-pdf-block-group-child',
+          Boolean(prefix&&child.dataset.subblockId?.startsWith(prefix)&&!child.hidden));
+    }
   }
   /** Patch existing controls only when their values actually changed.
    * Do not replace the DOM node, and never toggle other checkboxes. */
@@ -1084,6 +1112,7 @@ export class PdfPreview {
               partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent'});
           }else this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
             partIndex:null,path:null,role:'parent',logicalId:currentRow.id});
+          if(/^p\d+b\d+$/.test(currentRow.id))this.highlightParentGroup(currentRow);
 
         });
         ctrl.addEventListener('keydown',event=>{
@@ -1123,7 +1152,8 @@ export class PdfPreview {
       // Draw exactly one native child chip per original MinerU blocks[] bbox.
       // Child chips have no checkbox; parent join/move controls stay unchanged.
       // Nested wrappers keep the original page coordinate system on zoom.
-      const parts=row.promoted?[]:block.subRegions||[];
+      const parts=row.promoted?[]:row.bodyChildId?
+        [{bbox:block.bbox,path:[0],role:'body',type:'text'}]:block.subRegions||[];
       const existing=[...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')];
       existing.slice(parts.length).forEach(extra=>extra.remove());
       parts.forEach((part,i)=>{
@@ -1134,12 +1164,13 @@ export class PdfPreview {
           node.append(fragment);
         }
         const originalId=subblockId(row.pageIndex,row.blockIndex,part.path);
-        const id=row.nativeChildren?.[originalId]||originalId;
+        const id=part.role==='body'?row.bodyChildId:
+          row.nativeChildren?.[originalId]||originalId;
         const kind=part.role==='note'?'注释':part.role==='caption'?'标题':'正文';
-        const label=`${id} · OCR 来源 ${originalId} · ${part.type} · ${kind}`;
+        const label=`${id} · OCR 来源 ${part.role==='body'?row.origin:originalId} · ${part.type} · ${kind}`;
         if(fragment.title!==label)fragment.title=label;
         if(fragment.dataset.subblockId!==id)fragment.dataset.subblockId=id;
-        fragment.hidden=this.blockCoverageRows.some(r=>r.promoted&&r.origin===originalId);
+        fragment.hidden=part.role!=='body'&&this.blockCoverageRows.some(r=>r.promoted&&r.origin===originalId);
         if(fragment.dataset.partType!==part.type)fragment.dataset.partType=part.type;
         if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;
         let chip=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
@@ -1152,6 +1183,11 @@ export class PdfPreview {
             const current=this.map[pageIndex]?.regions.find(b=>b.blockIndex===blockIndex);
             const index=Number(chip.dataset.partIndex);
             const part=current?.subRegions[index];
+            if(chip.dataset.bodyChildId){
+              this.selectPDFRegion(pageIndex,{blockIndex,partIndex:null,
+                role:'body',logicalId:chip.dataset.bodyChildId});
+              return;
+            }
             if(part)this.selectPDFRegion(pageIndex,{blockIndex,partIndex:index,
               role:part.role,path:part.path,bbox:part.bbox});
           };
@@ -1162,6 +1198,8 @@ export class PdfPreview {
           fragment.append(chip);
         }
         if(chip.dataset.partIndex!==String(i))chip.dataset.partIndex=String(i);
+        if(part.role==='body')chip.dataset.bodyChildId=id;
+        else delete chip.dataset.bodyChildId;
         const childLabel=`定位原始 PDF 子块 ${id}`;
         if(chip.getAttribute('aria-label')!==childLabel)
           chip.setAttribute('aria-label',childLabel);
@@ -1216,6 +1254,7 @@ export class PdfPreview {
     }
     this.avoidBlockChipCollisions();
     this.updateChipContentIndicators();
+    this.refreshParentGroupHighlight();
   }
   /** Lay out parent AND child labels together on each page and side.
    * Prefer a free Y row inside the original OCR bbox's vertical span.

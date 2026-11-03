@@ -100,11 +100,16 @@ export function readCMDBlockChains(source){
     }
     offset+=line.length+1;
   }
-  const seen=new Set(),origins=new Set();for(const a of atoms){
+  const seen=new Set(),origins=new Map();for(const a of atoms){
     if(seen.has(a.id))invalid.push({line:a.sourceLine,id:a.id,reason:'Duplicate PBS identity'});
     seen.add(a.id);
-    if(origins.has(a.origin))invalid.push({line:a.sourceLine,id:a.id,reason:'Duplicate original OCR provenance'});
-    origins.add(a.origin);
+    const previous=origins.get(a.origin);
+    const bodyAlias=a.role==='body'&&a.kind==='child'&&
+      previous?.kind==='parent'&&
+      a.id===previous.id+'s0';
+    if(previous&&!bodyAlias)
+      invalid.push({line:a.sourceLine,id:a.id,reason:'Duplicate original OCR provenance'});
+    if(!previous)origins.set(a.origin,a);
   }
   // Logical PBS labels may be reassigned: after swapping b3 and b4 each
   // physical origin can equal another block's displayed ID. We enforce
@@ -291,9 +296,16 @@ export function planCMDReparentPBS(source,sourceId,targetId){
     throw Error('Target must have original OCR provenance without BC rewrites');
   const siblings=model.atoms.map(a=>parseCMDPBSId(a.id)).filter(p=>
     p?.p===to.p&&p.b===to.b&&p.s.length===1);
+  const parentAtom=to.s.length===0?target:parent;
+  const nativeChildren=model.atoms.filter(a=>a.id.startsWith(parentAtom.id+'s'));
+  const firstChild=to.s.length===0&&nativeChildren.length===0&&
+    model.atoms.every(a=>a.origin!==parentAtom.origin||a.id===parentAtom.id);
+  const bodyOrigin=parentAtom.origin;
+  const bodyMarker=firstChild?commentPrefix(parentAtom.rawLine)+serializeCMDBlockTag({
+    id:parentAtom.id+'s0',origin:bodyOrigin,role:'body'}):null;
   // A parent drop appends a direct child. A native-child drop still means
   // "immediately after this native child", preserving older PDF behavior.
-  const nextIndex=to.s.length?to.s[0]+1:
+  const nextIndex=firstChild?1:to.s.length?to.s[0]+1:
     siblings.length?Math.max(...siblings.map(p=>p.s[0]))+1:0;
   const newId=`p${to.p}b${to.b}s${nextIndex}`;
   if(byId.has(newId))throw Error(`${newId} already exists; choose an unoccupied sibling slot`);
@@ -327,9 +339,12 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   // Already adjacent: only the structural annotation changes. No source
   // relocation is necessary, but CM6 still gets exactly one Undoable edit.
   if(destination===atom.from){
-    return {changed:1,sourceId,targetId,newId,origin:atom.origin,
-      edits:[{from:atom.from,to:atom.from+atom.rawLine.length,
-        expected:atom.rawLine,insert}],relocatedSourceText:false};
+    const edits=[{from:atom.from,to:atom.from+atom.rawLine.length,
+      expected:atom.rawLine,insert}];
+    if(bodyMarker)edits.push({from:parentAtom.from+parentAtom.rawLine.length+1,
+      to:parentAtom.from+parentAtom.rawLine.length+1,expected:'',insert:'\n'+bodyMarker+'\n'});
+    return {changed:edits.length,sourceId,targetId,newId,origin:atom.origin,
+      edits,createdBodyId:bodyMarker?parentAtom.id+'s0':null,relocatedSourceText:false};
   }
   if(stop<0||!Number.isInteger(destination)||stop<=atom.from||
     destination>source.indexOf('<!-- minerujson:source:v1:')||
@@ -343,8 +358,10 @@ export function planCMDReparentPBS(source,sourceId,targetId){
     {from:atom.from,to:stop,expected:segment,insert:''},
     {from:destination,to:destination,expected:'',insert:moved}
   ];
+  if(bodyMarker)edits.push({from:parentAtom.from+parentAtom.rawLine.length+1,
+    to:parentAtom.from+parentAtom.rawLine.length+1,expected:'',insert:'\n'+bodyMarker+'\n'});
   return {changed:edits.length,sourceId,targetId,newId,origin:atom.origin,
-    edits,relocatedSourceText:true};
+    edits,createdBodyId:bodyMarker?parentAtom.id+'s0':null,relocatedSourceText:true};
 }
 
 /** Reorder independent page-level PBS scopes in one CM6 operation.
@@ -438,6 +455,8 @@ export function planCMDPromotePBSChild(source,childId){
     throw Error('Invalid CMD document for native-child promotion');
   const item=model.atoms.find(atom=>atom.id===childId);
   const path=parseCMDPBSId(childId);
+  if(item?.role==='body')
+    throw Error('Original parent body-s0 is the container body and cannot be independently promoted');
   if(!item||!path||path.s.length!==1||item.kind!=='child'||
     !parseCMDPBSId(item.origin)||parseCMDPBSId(item.origin).p!==path.p||
     parseCMDPBSId(item.origin).s.length>1)

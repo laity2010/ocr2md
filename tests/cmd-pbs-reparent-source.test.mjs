@@ -46,9 +46,10 @@ assert.throws(()=>planCMDReparentPBS(source,'p1b3','p1b3s0'),/already has childr
 // New three-landing PDF editor accepts a parent label even when it has NO
 // native children. An already-adjacent leaf only needs one CMD tag edit.
 const adjacent=planCMDReparentPBS(source,'p1b5','p1b4');
-assert.deepEqual([adjacent.changed,adjacent.newId,adjacent.origin],[1,'p1b4s0','p1b5']);
-const adjacentSource=source.slice(0,adjacent.edits[0].from)+adjacent.edits[0].insert+
-  source.slice(adjacent.edits[0].to);
+assert.deepEqual([adjacent.changed,adjacent.createdBodyId,adjacent.newId,adjacent.origin],
+  [2,'p1b4s0','p1b4s1','p1b5']);
+const adjacentSource=[...adjacent.edits].sort((a,b)=>b.from-a.from).reduce((text,edit)=>
+  text.slice(0,edit.from)+edit.insert+text.slice(edit.to),source);
 assert.equal(toMineruJSON(adjacentSource),original,'parent-label nesting keeps OCR JSON exact');
 assert.throws(()=>planCMDReparentPBS(source,'p1b5','p1b3s0.0'),/Unknown PBS/i);
 assert.throws(()=>planCMDReparentPBS(source,'p1b5','p4b0s0'),/same-page/i);

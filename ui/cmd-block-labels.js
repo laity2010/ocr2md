@@ -55,7 +55,11 @@ export function projectCMDSourceBlockLabels(source){
   const scopes=sourceBlockScopes(source);
   // Logical label and immutable OCR location are different namespaces once
   // the user reorders parents on the fixed PDF page.
-  const visibleByOrigin=new Map(readCMDBlockChains(source).atoms.map(a=>[a.origin,a.id]));
+  const inventory=readCMDBlockChains(source).atoms;
+  const visibleByOrigin=new Map(inventory.filter(a=>a.role!=='body')
+    .map(a=>[a.origin,a.id]));
+  const bodyByOrigin=new Map(inventory.filter(a=>a.role==='body')
+    .map(a=>[a.origin,a.id]));
   const parents=scopes.filter(scope=>scope.kind==='parent');
   const offsets=[];let at=0;
   for(const line of source.split('\n')){offsets.push(at);at+=line.length+1;}
@@ -74,7 +78,9 @@ export function projectCMDSourceBlockLabels(source){
     const isParent=scope.kind==='parent';
     const originalId=isParent?`p${scope.pageIndex}b${scope.blockIndex}`:
       subblockId(scope.pageIndex,scope.blockIndex,scope.path);
-    const label=visibleByOrigin.get(originalId)||
+    const label=(scope.bodyAlias?
+      bodyByOrigin.get('p'+scope.pageIndex+'b'+scope.blockIndex):null)||
+      visibleByOrigin.get(originalId)||
       (isParent?projection.assignments.get(originalId)||originalId:originalId);
     return {...scope,id:originalId,label,
       sourceKind:scope.contentLine?'content':'structure',
