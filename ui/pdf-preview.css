@@ -71,6 +71,12 @@
 .ocr-pdf-block-child-cover > .ocr-pdf-block-ctrl input{
   display:none;
 }
+/* 06b2901 CMD identification baseline: labels remain clickable for focus,
+ * but they are no longer checkbox inputs or draggable edit handles. */
+.ocr-pdf-readonly .ocr-pdf-block-ctrl input{display:none}
+.ocr-pdf-readonly .ocr-pdf-block-ctrl{cursor:pointer}
+.ocr-pdf-tools .ocr-pdf-extract-text[hidden],
+.ocr-pdf-tools .ocr-pdf-promote-child[hidden]{display:none}
 
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl{
   position:absolute;z-index:2;top:0;display:inline-flex;flex-direction:row;align-items:center;
@@ -150,6 +156,12 @@
   accent-color:#93c5ad;pointer-events:none;
 }
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl input:disabled{opacity:.4;cursor:not-allowed}
+/* Must follow the legacy touch-action:none rules; allow ordinary iPad PDF
+ * scroll and pinch even when the finger begins on a stationary label. */
+.ocr-pdf-readonly .ocr-pdf-block-cover .ocr-pdf-block-ctrl,
+.ocr-pdf-readonly .ocr-pdf-block-cover .ocr-pdf-block-ctrl span{
+  touch-action:manipulation;
+}
 .ocr-pdf-block-cover.ocr-pdf-block-is-joined{background:rgba(128,169,194,.12);outline-style:dashed}
 .ocr-pdf-block-cover.ocr-pdf-block-is-joined .ocr-pdf-block-ctrl{
   border-color:#b79c63;background:rgba(73,65,46,.95)}

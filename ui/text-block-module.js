@@ -3,6 +3,7 @@ import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-
 import {publishFocus,viewStore} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
+import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
 import './text-block-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f383e',
@@ -70,7 +71,9 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   overviewButton.title='缩小同页 PDF，尽量同时看到 A、B；跨页可点击 A/B 分别定位';
   const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='导出审阅记录';
   exportButton.setAttribute('aria-label','导出文本块续接审阅 JSON');
-  actionsHost.append(blocksButton,subblocksButton,groupButton,targetButton,mergeButton,moveAfterButton,firstButton,extractButton,splitButton,migrateButton,bboxEditor,bboxButton,bboxReset,candidatesButton,overviewButton,confirmButton,rejectButton,resetButton,exportButton);
+  // 06b2901 read-only marking surface: keep inventory, grouping, and A/B
+  // lookup. No edit control is mounted into Shell's action menu.
+  actionsHost.append(blocksButton,groupButton,candidatesButton,overviewButton);
   overviewButton.addEventListener('click',()=>onCompare({overview:true}));
   const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(gridHost);
   let rows=[],tableRows=[],absorbedRoots=new Set(),grouped=false,collapsedChains=new Set(),targetId=null,dragBusy=false,candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
@@ -209,7 +212,6 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     return handle;
   };
   const columns=[
-    {colId:'pbsDrag',headerName:'拖动',width:56,minWidth:52,maxWidth:64,pinned:'left',lockPinned:true,cellRenderer:handleDrag},
     {field:'sourceLine',headerName:'源码行',width:82,minWidth:75,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'id',headerName:'PBS / BC',width:155,minWidth:128,cellRenderer:p=>{
       if(!p.data?.isChainHeader){
@@ -358,6 +360,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     mergeButton.title=targetId?`把当前 PBS 所属 BC 并入 ${targetId} 所属 BC`:'请先选定目标链';
   };
   const execute=async(kind,payload={})=>{
+    if(TEXT_BLOCKS_READ_ONLY)throw Error('只读文本块不可执行 CMD 结构编辑');
     if(dragBusy)return;
     dragBusy=true;
     try{
@@ -423,7 +426,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       (previewMapped?` · 当前 MD 定位 ${list.filter(x=>x.kind==='parent'&&x.expectsPreview&&previewMapped.has(x.id)).length}/${list.filter(x=>x.kind==='parent'&&x.expectsPreview).length}`:' · MD 定位检查中')+
       ` · 未知锚点 ${report.unknown}`+(report.invalidBCMarks?` · 无效 BC 标签 ${report.invalidBCMarks}`:'')+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
-    if(active)onStatus((mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
+    if(active)onStatus('文本块只读标定 · '+(mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
   };
   updateGrid();
   return Object.freeze({

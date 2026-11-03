@@ -28,6 +28,7 @@ import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
 import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './wcp-chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
+import {rejectTextBlockEdit} from './text-block-readonly.js';
 
 const $ = (id) => document.getElementById(id);
 const buttons = {undo: $('undo'),redo:$('redo'),save:$('save')};
@@ -725,62 +726,15 @@ async function main() {
   };
   cmdPort=wcpRuntime.wrapCMD(cm);
   workspace.setTextBlockInventoryRefreshAction(scanTextBlocks);
-  workspace.setBlockJoinAction(async(targetId,join)=>{
-    try{
-      const result=await cmdPort.setBlockJoin(targetId,join);
-      if(result.changed)status(join?
-        `✓ ${targetId} 已接续 ${result.previous} · 已写入 CMD，按全局保存持久化`:
-        `✓ ${targetId} 已恢复独立 Block · 按全局保存持久化`);
-      return result;
-    }catch(error){status('文本块接续失败：'+error.message,'error');throw error;}
-  });
-  workspace.setBlockChainAction(async(action,request={})=>{
-    // AG sends semantic member IDs only. The document scan owns the source
-    // revision; no second Markdown state or AG-side mutation is permitted.
-    if(blockIndexedSource===null||cm.readSource()!==blockIndexedSource)
-      throw Error('文本块列表已过期，请重新扫描后操作');
-    const options={expectedSource:blockIndexedSource};
-    const result=action==='merge'?cmdPort.mergeBlockChains(request.destinationId,request.sourceId,options):
-      action==='split'?cmdPort.splitBlockChainAt(request.memberId,options):
-      action==='move'?cmdPort.moveBlockChainMember(request.memberId,request.targetId,request.placement||'after',options):
-      action==='reparent'?cmdPort.reparentPBS(request.memberId,request.targetId,options):
-      action==='promote-child'?cmdPort.promotePDFChild(request.childId,options):
-      action==='extract'?cmdPort.extractBlockChainMember(request.memberId,options):
-      action==='bbox'?await cmdPort.setPDFBBox(request.memberId,request.bbox,options):
-      action==='bbox-reset'?await cmdPort.setPDFBBox(request.memberId,null,options):
-      action==='migrate'?cmdPort.migrateLegacyBlockChains(options):null;
-    if(!result)throw Error('未知 CMD 块链操作');
-    if(result.changed){blockIndexedSource=null;scanTextBlocks();}
-    return result;
-  });
-  workspace.setPDFBBoxAction(async(memberId,bbox,snapshot)=>{
-    const result=await cmdPort.setPDFBBox(memberId,bbox,{expectedSource:snapshot});
-    if(result.changed){blockIndexedSource=null;scanTextBlocks();
-      status(`✓ ${memberId} PDF 覆盖框${bbox?'已人工修正':'已恢复原框'} · 未保存，可 Undo`);}
-    return result;
-  });
-  workspace.setBlockMoveAction(async(sourceId,targetId,placement)=>{
-    try{
-      const result=placement==='before'?
-        await cmdPort.moveBlockBefore(sourceId,targetId):
-        await cmdPort.moveBlockAfter(sourceId,targetId);
-      if(result.changed)status(`✓ ${sourceId} 已移至 ${targetId} ${placement==='before'?'前':'后'} · CMD 未保存，可撤销`);
-      return result;
-    }catch(error){status('文本块排序失败：'+error.message,'error');throw error;}
-  });
-  workspace.setSubblockMarkAction(async()=>{
-    const result=await cmdPort.markOriginalSubblocks();
-    if(result.changed)workspace.refreshPdf();
-    return result;
-  });
-  workspace.setPDFTextInsertAction(
-    async(pageIndex,blockIndex,text)=>{
-      try{
-        const result=cmdPort.insertPDFTextAtCaret(pageIndex,blockIndex,text);
-        status(`✓ ${result.id} 提取 ${result.chars} 字符，插入源码第 ${result.line} 行 · 未保存，可 Undo`);
-        return result;
-      }catch(error){status('提取 PDF 原文失败：'+error.message,'error');throw error;}
-    });
+  // The CMD p/b/s parser and renderer remain live; block structure edits do
+  // not. Guard every public Shell-to-CMD mutation port, independently of
+  // hiding controls, so long-press, triple tap, or stale UI cannot write.
+  workspace.setBlockJoinAction(rejectTextBlockEdit);
+  workspace.setBlockChainAction(rejectTextBlockEdit);
+  workspace.setPDFBBoxAction(rejectTextBlockEdit);
+  workspace.setBlockMoveAction(rejectTextBlockEdit);
+  workspace.setSubblockMarkAction(rejectTextBlockEdit);
+  workspace.setPDFTextInsertAction(rejectTextBlockEdit);
   workspace.notifyCMDReady();
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{

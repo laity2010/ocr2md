@@ -18,6 +18,7 @@ import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
 import {pickPDFDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-drop-hit.js';
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
 import {resolvePDFFragmentId} from './pdf-pbs-fragment-id.js';
+import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // "No text" describes current CMD scope only, not why MinerU or a reviewer
@@ -70,7 +71,9 @@ export class PdfPreview {
     this.onPDFBBox=onPDFBBox;
     this.onBlockReparent=onBlockReparent;
     this.onPromoteChild=onPromoteChild;
+    this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.host.classList.add('ocr-pdf-pane');
+    if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
     this.host.dataset.pdfTheme='dark';
     this.host.innerHTML=`<div class="ocr-pdf-tools" aria-label="PDF 缩放导航">
       <button class="ocr-pdf-minus" type="button" title="缩小">−</button>
@@ -95,6 +98,10 @@ export class PdfPreview {
     this.extractButton.addEventListener('click',()=>void this.insertSelectedPDFText());
     this.promoteButton=this.toolbar.querySelector('.ocr-pdf-promote-child');
     this.promoteButton.addEventListener('click',()=>void this.promoteSelectedChild());
+    if(this.readOnly){
+      this.extractButton.hidden=true;this.extractButton.disabled=true;
+      this.promoteButton.hidden=true;this.promoteButton.disabled=true;
+    }
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
     this.toolbar.querySelector('.ocr-pdf-fit').addEventListener('click',()=>this.setZoom('page-width'));
@@ -218,6 +225,7 @@ export class PdfPreview {
     const token=++this.textExtractToken;
     this.extractReady=null;
     this.extractButton.disabled=true;
+    if(this.readOnly)return;
     this.extractButton.title='当前 PDF 块没有可提取的原文字层文本';
     const chosen=this.selected;
     if(!this.pdf||!chosen||this.disposed)return;
@@ -244,6 +252,7 @@ export class PdfPreview {
     }
   }
   async markOriginalSubblocks(){
+    if(this.readOnly)return;
     if(this.disposed)return;
     try{
       const result=await this.onMarkSubblocks();
@@ -278,12 +287,14 @@ export class PdfPreview {
   }
   updatePromoteButton(){
     if(!this.promoteButton)return;
+    if(this.readOnly){this.promoteButton.disabled=true;return;}
     const id=this.selectedNativeChildId();
     this.promoteButton.disabled=!id;
     this.promoteButton.title=id?`${id} → 当前 PDF 页末尾的新独立父块；一次 Undo 可恢复`:
       '请先点击 PDF 原生子块标签，已独立的子块不可重复操作';
   }
   async promoteSelectedChild(){
+    if(this.readOnly)return;
     const id=this.selectedNativeChildId();
     if(!id||this.promoteButton.disabled||this.disposed)return;
     this.promoteButton.disabled=true;
@@ -297,6 +308,7 @@ export class PdfPreview {
     finally{if(!this.disposed)this.updatePromoteButton();}
   }
   async insertSelectedPDFText(){
+    if(this.readOnly)return;
     const item=this.extractReady;
     if(!item||this.extractButton.disabled||this.disposed||
       this.selected?.pageIndex!==item.pageIndex||this.selected?.blockIndex!==item.blockIndex||
@@ -541,7 +553,7 @@ export class PdfPreview {
     let child=this.subAnchors.find(a=>a.pageIndex===pageIndex&&
       a.blockIndex===blockIndex&&a.path.join('.')===key);
     let annotated=false;
-    if(!child){
+    if(!child&&!this.readOnly){
       if(!this.childMarkerPromise){
         this.childMarkerPromise=Promise.resolve().then(()=>this.onMarkSubblocks())
           .finally(()=>{this.childMarkerPromise=null;});
@@ -651,6 +663,7 @@ export class PdfPreview {
       bbox:[...(part?.bbox||region.bbox)],pageSize:page.pageSize};
   }
   async resetSelectedBBox(){
+    if(this.readOnly)return;
     const current=this.chosenBBox();if(!current||this.disposed)return;
     const snapshot=this.getMarkdown();
     if(this.bboxReset)this.bboxReset.disabled=true;
@@ -662,6 +675,7 @@ export class PdfPreview {
     finally{if(!this.disposed)this.drawBBoxEditor();}
   }
   drawBBoxEditor(){
+    if(this.readOnly){this.bboxGesture?.dispose();this.bboxGesture=null;this.bboxNode=null;return;}
     if(this.bboxGesture?.dragging)return; // do not replace pointer capture
     this.bboxGesture?.dispose();this.bboxGesture=null;
     this.bboxNode=null;
@@ -739,18 +753,23 @@ export class PdfPreview {
     let changed=false;
     const logical=row.logicalId||row.id;
     if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
-    const title=`原始 ${row.origin||row.id} · 显示 ${logical} · 单击定位，三击切换 checkbox`;
+    const title=this.readOnly?
+      `原始 ${row.origin||row.id} · 显示 ${logical} · 单击定位（只读）`:
+      `原始 ${row.origin||row.id} · 显示 ${logical} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
-    const disabled=!row.joinable;
+    const disabled=this.readOnly||!row.joinable;
     if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
-    const help=row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
+    const help=this.readOnly?`单击定位 ${row.id}；CMD 文本块只读标定`:
+      row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
       `单击定位 ${row.id}；没有有效前驱 Block，不能取消勾选`;
     if(input.title!==help)input.title=help;
     const chipTitle=help+sourceKindHint(chip.dataset.sourceKind);
     if(chip.title!==chipTitle)chip.title=chipTitle;
-    const aria=`来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
+    const aria=this.readOnly?
+      `来源 ${row.origin||row.id} · 显示 ${row.id} · 单击定位（只读）`:
+      `来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
     if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
     const isCorrectedChild=Boolean(row.origin&&row.origin!==row.id&&!row.promoted&&/^p\d+b\d+s\d+$/.test(row.id));
     node.classList.toggle('ocr-pdf-block-is-child',isCorrectedChild);
@@ -790,6 +809,7 @@ export class PdfPreview {
    * data mutation is the CMD move transaction after a valid pointer release.
    */
   armBlockDrag(event,ctrl,id){
+    if(this.readOnly)return;
     if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
     const item={id,ctrl,pointerId:event.pointerId,pointerType:event.pointerType,
       x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
@@ -1084,7 +1104,7 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
-        ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
+        if(!this.readOnly)ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
         // Preserve long-press move: a dragged label's release never counts as
         // one of the three taps. All changes still go through CMD's API.
         ctrl.addEventListener('contextmenu',e=>e.preventDefault());
@@ -1115,7 +1135,7 @@ export class PdfPreview {
             tapCount=1;firstTap=now;
           }else tapCount++;
           lastTap=now;
-          if(tapCount===3){tapCount=0;lastTap=0;firstTap=0;void toggle();return;}
+          if(!this.readOnly&&tapCount===3){tapCount=0;lastTap=0;firstTap=0;void toggle();return;}
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
           const currentRow=this.blockCoverageRows.find(r=>r.id===node.dataset.blockId)||row;
