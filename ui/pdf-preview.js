@@ -84,7 +84,7 @@ export class PdfPreview {
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
       <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；插入源码窗当前光标位置，不替换原文；Undo 可撤销">提取文本</button>
-      <button class="ocr-pdf-promote-child" type="button" disabled title="请先点击 PDF 的原生子块标签，再将该子块独立为当前页末尾的新父块">独立子块</button>
+      <button class="ocr-pdf-promote-child" type="button" disabled title="请先点击 PDF 子块标签；拆分后成为当前页末尾的独立父块，可再次归入">拆分子块</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -103,7 +103,8 @@ export class PdfPreview {
     this.promoteButton.addEventListener('click',()=>void this.promoteSelectedChild());
     if(this.readOnly){
       this.extractButton.hidden=true;this.extractButton.disabled=true;
-      this.promoteButton.hidden=true;this.promoteButton.disabled=true;
+      // Only this narrowly verified child-to-parent command is reopened.
+      // All other AG/PDF structure and geometry commands remain disabled.
     }
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
@@ -285,19 +286,17 @@ export class PdfPreview {
     const escaped=id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     // Select only an existing single-level CMD child; once promoted, its
     // original visible id is gone. This also accepts origin="pNbM" children.
-    return new RegExp(`<!-- cmd:block:v1 id="${escaped}"(?: origin="p\\d+b\\d+")?(?: [a-z]+="[^"]*")* -->`).test(current)
+    return new RegExp(`<!-- cmd:block:v1 id="${escaped}"(?: origin="p\\d+b\\d+(?:s\\d+)?")?(?: [a-z]+="[^"]*")* -->`).test(current)
       ?id:null;
   }
   updatePromoteButton(){
     if(!this.promoteButton)return;
-    if(this.readOnly){this.promoteButton.disabled=true;return;}
     const id=this.selectedNativeChildId();
     this.promoteButton.disabled=!id;
     this.promoteButton.title=id?`${id} → 当前 PDF 页末尾的新独立父块；一次 Undo 可恢复`:
       '请先点击 PDF 原生子块标签，已独立的子块不可重复操作';
   }
   async promoteSelectedChild(){
-    if(this.readOnly)return;
     const id=this.selectedNativeChildId();
     if(!id||this.promoteButton.disabled||this.disposed)return;
     this.promoteButton.disabled=true;
@@ -305,9 +304,11 @@ export class PdfPreview {
       const result=await this.onPromoteChild(id);
       if(result?.changed){
         this.selected=null;
-        this.setStatus(`✓ ${id} → ${result.newId} · 页末独立父块 · Undo 可撤销`);
+        const message=`✓ 拆分子块 · ${id} → ${result.newId} · 页末独立父块，可再次归入 · 未保存，可 Undo`;
+        this.setStatus(message);this.onGesturePreview({message});
       }
-    }catch(error){this.setStatus('独立子块失败：'+error.message);}
+    }catch(error){const message='拆分子块失败：'+error.message;
+      this.setStatus(message);this.onGesturePreview({message});}
     finally{if(!this.disposed)this.updatePromoteButton();}
   }
   async insertSelectedPDFText(){
@@ -1169,7 +1170,10 @@ export class PdfPreview {
             const child=this.map[currentRow.pageIndex]?.regions.find(r=>r.blockIndex===currentRow.blockIndex)
               ?.subRegions.findIndex(r=>r.path.length===1&&r.path[0]===Number(original?.[3]));
             this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
-              partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent'});
+              partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent',
+              // A reviewed child retains its original physical bbox, but the
+              // toolbar must act on its CURRENT CMD PBS ID, not on origin=.
+              logicalId:/^p\d+b\d+s\d+$/.test(currentRow.id)?currentRow.id:null});
           }else this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
             partIndex:null,path:null,role:'parent',logicalId:currentRow.id});
           if(/^p\d+b\d+$/.test(currentRow.id))this.highlightParentGroup(currentRow);

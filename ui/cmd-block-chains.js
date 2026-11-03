@@ -411,12 +411,12 @@ export function planCMDReparentPBS(source,sourceId,targetId){
       pointedId:targetId};
   }
   // A reviewed leaf may be made independent, then reparented again.
-  // This is only legal when its immutable provenance is an original OCR
-  // *parent* on the same page. A promoted native child (origin=...sN) is
-  // not silently converted into a foreign child path.
+  // An original *native child* promoted to a page-end parent is also a
+  // legitimate source: its physical origin= pNbMsN must remain unchanged.
+  // Ownership/numbering are purely logical, never OCR bbox identity.
   const origin=parseCMDPBSId(atom.origin);
-  if(!origin||origin.p!==from.p||origin.s.length)
-    throw Error('Source must be a leaf with original parent OCR provenance');
+  if(!origin||origin.p!==from.p||origin.s.length>1)
+    throw Error('Source must retain an original same-page OCR atom');
   const ownChain=model.chains.find(c=>c.members.includes(sourceId));
   if(ownChain?.size!==1||ownChain.explicit)
     throw Error('Extract source to a singleton BC before reparenting');

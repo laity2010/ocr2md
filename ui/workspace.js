@@ -76,6 +76,7 @@ let blockChainAction=()=>Promise.reject(Error('CMD 块链尚未准备好'));
 // Narrow capability: only the PDF 'child' landing can request reparenting.
 // The AG chain editor and all other block write operations stay disabled.
 let pdfReparentAction=()=>Promise.reject(Error('PDF 子块归入尚未准备好'));
+let pdfSplitChildAction=()=>Promise.reject(Error('PDF 拆分子块尚未准备好'));
 let markSubblocksAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let insertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'));
 let refreshTextBlockInventory=()=>{};
@@ -341,7 +342,7 @@ class PreviewPanel {
       ()=>markSubblocksAction(),
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
       (sourceId,targetId)=>pdfReparentAction(sourceId,targetId),
-      childId=>blockChainAction('promote-child',{childId}),
+      childId=>pdfSplitChildAction(childId),
       preview=>reportMediaStatus(preview.message,'pdf-gesture'));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
@@ -796,6 +797,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setPDFBBoxAction:action=>{pdfBBoxAction=action;},
     setBlockChainAction:action=>{blockChainAction=action;},
     setPDFReparentAction:action=>{pdfReparentAction=action;},
+    setPDFSplitChildAction:action=>{pdfSplitChildAction=action;},
     setSubblockMarkAction:action=>{markSubblocksAction=action;},
     setPDFTextInsertAction:insert=>{insertPDFText=insert;},
     setTextBlockInventoryRefreshAction:action=>{refreshTextBlockInventory=action;},

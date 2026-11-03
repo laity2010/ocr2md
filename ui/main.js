@@ -753,6 +753,16 @@ async function main() {
     if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
     return result;
   });
+  workspace.setPDFSplitChildAction(async childId=>{
+    const snapshot=cmdPort.readSource();
+    if(snapshot!==blockIndexedSource)
+      throw Error('文本块标签已变化，请等待 AG 刷新后重试');
+    if(!/^p\d+b\d+s\d+$/.test(childId||''))
+      throw Error('拆分子块需要原生或已归入的一级子块');
+    const result=cmdPort.promotePDFChild(childId,{expectedSource:snapshot});
+    if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
+    return result;
+  });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
   workspace.setBlockMoveAction(rejectTextBlockEdit);
   workspace.setSubblockMarkAction(rejectTextBlockEdit);
