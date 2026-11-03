@@ -97,7 +97,35 @@ try{
             b?.classList.contains('ocr-pdf-block-group-active')&&
             body?.classList.contains('ocr-pdf-block-group-child');
         },null,{timeout:25000});
+        // A DOM node with the right data-block-id is NOT a visual pass:
+        // the user reads the chip text, which must show the exact same id.
+        for(const id of ['p1b4','p1b4s1']){
+          const chip=page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] > .ocr-pdf-block-ctrl span`);
+          assert.equal(await chip.textContent(),id,`Visible PDF label must be ${id}`);
+          assert(await chip.isVisible(),`PDF label ${id} must actually be visible`);
+        }
+        const bodyChip=page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b4s0"] .ocr-pdf-subblock-chip');
+        assert.equal(await bodyChip.textContent(),'p1b4s0');
+        const former=await page.locator('.ocr-pdf-block-ctrl span').allTextContents();
+        assert(!former.includes('p1b3'),'Old parent p1b3 must not survive as visible chip text');
+        console.log('ONLY_B3_B4_VISIBLE_LABELS',name,{parent:'p1b4',body:'p1b4s0',child:'p1b4s1',oldGone:true});
         console.log('ONLY_B3_B4_HIGHLIGHT',name);
+        if(process.env.OCR_PBS_VISUAL_CAPTURE){
+          const locator=page.locator('.ocr-pdf-block-cover[data-block-id="p1b4s1"]');
+          await locator.scrollIntoViewIfNeeded();
+          const visible=await page.evaluate(()=>[...document.querySelectorAll(
+            '.ocr-pdf-block-cover[data-block-id^="p1b"]')].filter(el=>
+              /p1b[34]/.test(el.dataset.blockId)).map(el=>{
+              const rect=el.getBoundingClientRect();const chip=el.querySelector(':scope > .ocr-pdf-block-ctrl');
+              const cr=chip?.getBoundingClientRect();const style=chip?getComputedStyle(chip):null;
+              return {id:el.dataset.blockId,origin:el.dataset.originId,
+                label:chip?.textContent,cover:{x:rect.x,y:rect.y,w:rect.width,h:rect.height},
+                chip:{x:cr?.x,y:cr?.y,w:cr?.width,h:cr?.height},
+                display:style?.display,visibility:style?.visibility,opacity:style?.opacity};
+            }));
+          console.log('ONLY_B3_B4_VISUAL_LAYOUT',name,JSON.stringify(visible));
+          await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE,animations:'disabled'});
+        }
         await page.locator('#undo').evaluate(el=>el.click());
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')&&
           !document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b4s1"]'),null,{timeout:60000});
@@ -129,6 +157,9 @@ try{
         await page.locator('.ocr-pdf-block-cover[data-block-id="p1b4"] > .ocr-pdf-block-ctrl')
           .evaluate(el=>el.click());
         assert.equal(await surviving.evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true);
+        assert.equal(await surviving.locator(':scope > .ocr-pdf-block-ctrl span').textContent(),'p1b4s1');
+        assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b4"] > .ocr-pdf-block-ctrl span').textContent(),'p1b4');
+        assert.equal(await page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b4s0"] .ocr-pdf-subblock-chip').textContent(),'p1b4s0');
         assert.equal(errors.length,0,'JavaScript errors: '+errors.join(';'));
         console.log('P1B3_INTO_P1B4_BROWSER_PASS',name,{oldParentGone:true,b4Parent:true,
           body:'p1b4s0',child:'p1b4s1',bboxUnchanged:true,groupHighlight:true,

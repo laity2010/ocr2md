@@ -751,11 +751,15 @@ export class PdfPreview {
     const chip=node.querySelector('.ocr-pdf-block-ctrl');
     if(!input||!badge||!chip)return false;
     let changed=false;
-    const logical=row.logicalId||row.id;
-    if(badge.textContent!==logical){badge.textContent=logical;changed=true;}
+    // Visible text must be THIS overlay's current CMD PBS identity, not
+    // its group logicalId. The latter is a relation used for navigation and
+    // highlighting: after p1b3->p1b4 it may still contain the former OCR
+    // group's label and would make p1b4s1 LOOK like a duplicate p1b4.
+    const displayId=row.id;
+    if(badge.textContent!==displayId){badge.textContent=displayId;changed=true;}
     const title=this.readOnly?
-      `原始 ${row.origin||row.id} · 显示 ${logical} · ${row.id==='p1b3'?'长按归入 p1b4':'单击定位（只读）'}`:
-      `原始 ${row.origin||row.id} · 显示 ${logical} · 单击定位，三击切换 checkbox`;
+      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${row.id==='p1b3'?'长按归入 p1b4':'单击定位（只读）'}`:
+      `原始 ${row.origin||row.id} · 显示 ${displayId} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
@@ -795,7 +799,7 @@ export class PdfPreview {
           const [x0,,x1]=row.promoted?row.bbox:block.bbox;
           const margin=side==='left'?x0:region.pageSize[0]-x1;
           const gutterPixels=page.clientWidth*margin/region.pageSize[0];
-          const nominalWidth=20+logical.length*5.5;
+          const nominalWidth=20+displayId.length*5.5;
           const scale=Math.min(1,Math.max(.2,(gutterPixels-3)/nominalWidth));
           const target=`scale(${scale.toFixed(3)})`;
           if(chip.style.transform!==target)chip.style.transform=target;
