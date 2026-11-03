@@ -77,6 +77,7 @@ let blockChainAction=()=>Promise.reject(Error('CMD 块链尚未准备好'));
 // The AG chain editor and all other block write operations stay disabled.
 let pdfReparentAction=()=>Promise.reject(Error('PDF 子块归入尚未准备好'));
 let pdfSplitChildAction=()=>Promise.reject(Error('PDF 拆分子块尚未准备好'));
+let pdfParentOrderAction=()=>Promise.reject(Error('PDF 整组父块排序尚未准备好'));
 let markSubblocksAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let insertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'));
 let refreshTextBlockInventory=()=>{};
@@ -343,7 +344,8 @@ class PreviewPanel {
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
       (sourceId,targetId)=>pdfReparentAction(sourceId,targetId),
       childId=>pdfSplitChildAction(childId),
-      preview=>reportMediaStatus(preview.message,'pdf-gesture'));
+      preview=>reportMediaStatus(preview.message,'pdf-gesture'),
+      (sourceId,targetId,placement)=>pdfParentOrderAction(sourceId,targetId,placement));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -798,6 +800,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setBlockChainAction:action=>{blockChainAction=action;},
     setPDFReparentAction:action=>{pdfReparentAction=action;},
     setPDFSplitChildAction:action=>{pdfSplitChildAction=action;},
+    setPDFParentOrderAction:action=>{pdfParentOrderAction=action;},
     setSubblockMarkAction:action=>{markSubblocksAction=action;},
     setPDFTextInsertAction:insert=>{insertPDFText=insert;},
     setTextBlockInventoryRefreshAction:action=>{refreshTextBlockInventory=action;},

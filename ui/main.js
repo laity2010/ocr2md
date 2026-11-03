@@ -763,6 +763,23 @@ async function main() {
     if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
     return result;
   });
+  // The only before/after write lane: one whole page-level parent scope,
+  // including its children, to another parent on that SAME PDF page.
+  // Keep AG's generic block-move port read-only.
+  workspace.setPDFParentOrderAction(async(sourceId,targetId,placement)=>{
+    if(!/^p\d+b\d+$/.test(sourceId||'')||
+       !/^p\d+b\d+$/.test(targetId||'')||
+       !['before','after'].includes(placement))
+      throw Error('只能将整组父块移动到同页父块之前或之后');
+    const snapshot=cmdPort.readSource();
+    if(snapshot!==blockIndexedSource)
+      throw Error('文本块投影已变化，请等待 AG 刷新后重试');
+    const result=placement==='before'?
+      await cmdPort.moveBlockBefore(sourceId,targetId):
+      await cmdPort.moveBlockAfter(sourceId,targetId);
+    if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
+    return result;
+  });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
   workspace.setBlockMoveAction(rejectTextBlockEdit);
   workspace.setSubblockMarkAction(rejectTextBlockEdit);

@@ -66,8 +66,9 @@
   color:#a7c080;padding:3px 8px;cursor:pointer;
   font:12px "OCR2MD Sarasa",monospace}
 .ocr-preview-return-note[hidden]{display:none!important}
+.ocr-preview-mode-tools[data-mode="pdf"] {flex:1 1 0;overflow:hidden}
 .ocr-preview-mode-tools[data-mode="pdf"] .ocr-pdf-tools {position:static;
-  height:28px;padding:0;border:0;background:transparent;z-index:auto}
+  height:28px;width:100%;min-width:0;padding:0;border:0;background:transparent;z-index:auto}
 .ocr-preview-mode-tools[aria-hidden="true"] {visibility:hidden;pointer-events:none;
   width:0;height:0;overflow:hidden}
 .ocr-preview-pane>.ocr-preview-md-scroll,

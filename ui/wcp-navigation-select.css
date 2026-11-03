@@ -74,7 +74,12 @@
 }
 .ocr-lab-ag-toolbar>.ts-wrapper.ocr-navigation-elements{width:112px;flex:0 0 112px}
 .ocr-lab-ag-toolbar>.ts-wrapper.ocr-navigation-elements .ts-control{font-size:var(--ocr-navigation-font-size,10pt)}
-.ocr-preview-switchbar>.ts-wrapper.ocr-navigation-preview{width:155px;max-width:46%;flex:0 1 155px}
+/* PDF drag status changes from a few characters to long hit descriptions
+ * on every pointer move. Do not let its sibling flex row squeeze the preview
+ * picker back and forth while the user's finger is dragging an arrow. */
+.ocr-preview-switchbar>.ts-wrapper.ocr-navigation-preview{
+  width:155px;min-width:155px;max-width:155px;flex:0 0 155px;
+}
 .ocr-preview-switchbar>.ts-wrapper.ocr-navigation-preview .ts-control{font-size:var(--ocr-navigation-font-size,10pt)}
 .ts-wrapper.ocr-navigation-select.disabled{opacity:.65}
 @media(pointer:coarse){

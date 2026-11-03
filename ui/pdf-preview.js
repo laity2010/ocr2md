@@ -62,7 +62,8 @@ export class PdfPreview {
     onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好')),
     onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好')),
     onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好')),
-    onGesturePreview=()=>{}){
+    onGesturePreview=()=>{},
+    onPDFParentOrder=()=>Promise.reject(Error('PDF 整组父块排序尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -74,6 +75,7 @@ export class PdfPreview {
     this.onBlockReparent=onBlockReparent;
     this.onPromoteChild=onPromoteChild;
     this.onGesturePreview=onGesturePreview;
+    this.onPDFParentOrder=onPDFParentOrder;
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.host.classList.add('ocr-pdf-pane');
     if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
@@ -991,7 +993,9 @@ export class PdfPreview {
     if(item.placement!==placement||item.targetId!==hit?.id){
       const label=hit?.id||'';
       const action=placement==='before'?'之前':placement==='after'?'之后':'作为子块';
-      this.setStatus(hit?`将 ${item.id} 移至 ${label} ${action} · ${this.readOnly&&placement!=='child'?'松手仅报告状态':'松手归入，单次 Undo'}`:
+      const parentOrder=/^p\d+b\d+$/.test(item.id)&&
+        /^p\d+b\d+$/.test(label)&&['before','after'].includes(placement);
+      this.setStatus(hit?`将 ${item.id} 移至 ${label} ${action} · ${parentOrder?'整组排序，可 Undo':this.readOnly&&placement!=='child'?'松手仅报告状态':'松手归入，单次 Undo'}`:
         `从 ${item.id} 拖出箭头；未命中唯一目标，不执行移动`);
     }
     item.placement=placement;item.targetId=hit?.id||null;
@@ -1056,6 +1060,23 @@ export class PdfPreview {
     if(!target){
       this.setStatus('未选择同页目标块，顺序不变');
       if(this.readOnly)this.onGesturePreview({message:`PDF 手势预演 · ${item.id} 未命中有效落点 · 未修改 CMD`});
+      return;
+    }
+    if(['before','after'].includes(placement)&&
+       /^p\d+b\d+$/.test(item.id)&&/^p\d+b\d+$/.test(target)){
+      const action=placement==='before'?'之前':'之后';
+      const pending=`正在将整组 ${item.id}（含子块）移至 ${target} ${action}…`;
+      this.setStatus(pending);this.onGesturePreview({message:pending});
+      void this.onPDFParentOrder(item.id,target,placement).then(result=>{
+        const destination=result?.renamed?.[item.id]||item.id;
+        const message=result?.changed?
+          `✓ 父块整组排序 · ${item.id} → ${destination} · 移至 ${target} ${action} · 子块随组移动 · CMD 未保存，可 Undo`:
+          '已在目标相邻位置，父块顺序不变';
+        this.setStatus(message);this.onGesturePreview({message});
+      }).catch(error=>{
+        const message='父块整组排序失败：'+error.message;
+        this.setStatus(message);this.onGesturePreview({message});
+      });
       return;
     }
     if(this.readOnly&&placement!=='child'){

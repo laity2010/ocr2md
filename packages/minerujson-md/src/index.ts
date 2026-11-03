@@ -572,12 +572,19 @@ export function toMineruJSON(markdown: string): string {
     const page=data.pdf_info[promoted.page];
     const block=page?.para_blocks[promoted.parent];
     assert(block?.blocks?.[promoted.child]&&
-      promoted.newParent>=page.para_blocks.length&&
       !promotions.some(other=>other!==promoted&&other.origin===promoted.origin),
       'promoted child has invalid original OCR source or new page index');
-    const expected=page.para_blocks.length+[...promotions,...restoredRoots].filter(other=>
-      other.page===promoted.page&&other.newParent<promoted.newParent).length;
-    assert(promoted.newParent===expected,'promoted parents must use consecutive page-end PBS IDs');
+    // A newly promoted child starts at the page end, but a subsequent
+    // parent-group reorder can move it inside the page and shift a different
+    // original root into the last slot. In that case the explicit origin=
+    // still proves the exact native child, and the complete inverse audit
+    // below checks every original root, child and source scope.
+    if(promoted.newParent>=page.para_blocks.length){
+      const expected=page.para_blocks.length+[...promotions,...restoredRoots].filter(other=>
+        other.page===promoted.page&&other.newParent>=page.para_blocks.length&&
+        other.newParent<promoted.newParent).length;
+      assert(promoted.newParent===expected,'promoted parents must use consecutive page-end PBS IDs');
+    }
   }
   // Reviewed child sourced from a whole original OCR parent can be
   // independently restored as a page-end logical parent. Its immutable root
@@ -589,7 +596,8 @@ export function toMineruJSON(markdown: string): string {
       !restoredRoots.some(other=>other!==root&&other.origin===root.origin),
       'restored root must refer to one original leaf OCR parent');
     const expected=blocks.length+[...promotions,...restoredRoots].filter(other=>
-      other.page===root.page&&other.newParent<root.newParent).length;
+      other.page===root.page&&other.newParent>=blocks.length&&
+      other.newParent<root.newParent).length;
     assert(root.newParent===expected,'restored page-end parent identity must be consecutive');
   }
   for(const alias of origins){
