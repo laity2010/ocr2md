@@ -16,6 +16,7 @@ import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
 import {pickPDFDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-drop-hit.js';
+import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // "No text" describes current CMD scope only, not why MinerU or a reviewer
@@ -702,15 +703,13 @@ export class PdfPreview {
     this.refreshParentGroupHighlight();
   }
   refreshParentGroupHighlight(){
-    const root=this.activeParentOrigin?this.blockCoverageRows.find(row=>
-      row.origin===this.activeParentOrigin&&/^p\d+b\d+$/.test(row.id)):null;
-    const prefix=root?root.id+'s':null;
+    const group=projectPDFParentGroup(this.blockCoverageRows,this.activeParentOrigin);
     for(const [id,node] of this.blockCoverageNodes){
       node.classList.toggle('ocr-pdf-block-group-active',
-        Boolean(prefix&&(id===root.id||id.startsWith(prefix))));
+        group.cover(id));
       for(const child of node.querySelectorAll(':scope > .ocr-pdf-block-fragment'))
         child.classList.toggle('ocr-pdf-block-group-child',
-          Boolean(prefix&&child.dataset.subblockId?.startsWith(prefix)&&!child.hidden));
+          group.child(child.dataset.subblockId)&&!child.hidden);
     }
   }
   /** Patch existing controls only when their values actually changed.

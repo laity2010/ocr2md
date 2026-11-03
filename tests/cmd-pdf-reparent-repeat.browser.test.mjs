@@ -7,26 +7,43 @@ import {resolve,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {createServer} from 'node:net';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable} from './platform.test-helper.mjs';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
 import {planCMDReparentPBS,planCMDPromotePBSChild} from '../ui/cmd-block-chains.js';
 const hash=buf=>createHash('sha256').update(buf).digest('hex');
-const pdf=resolve('.v6/workspace/buffetts-alpha.original.pdf');
-const originalPDF=readFileSync(pdf);
+const originalPath=resolve('.v6/workspace/buffetts-alpha.original.pdf');
+const originalPDF=readFileSync(originalPath);
 assert.equal(hash(originalPDF),'be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab');
-const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
+const dir=mkdtempSync(join(tmpdir(),'ocr2md-pdf-reparent-repeat-'));
+const smallFixture=process.env.SMALL_PDF_FIXTURE==='1';
+const pdf=smallFixture?join(dir,'first-three-pages.pdf'):originalPath;
+const fullRaw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
+if(smallFixture){
+  // Native macOS PDFKit without Swift compilation or external PDF packages:
+  // same real PDF page pixels and OCR bboxes. A third page supplies the
+  // immutable following-page anchor needed when validating a promoted sN.
+  const code='ObjC.import("PDFKit");function run(argv){const src=$.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0]));if(!src||src.pageCount<3)throw Error("invalid PDF");const out=$.PDFDocument.alloc.init;for(let i=0;i<3;i++)out.insertPageAtIndex(src.pageAtIndex(i),i);if(!out.writeToURL($.NSURL.fileURLWithPath(argv[1])))throw Error("PDF slice failed");return out.pageCount}';
+  const p=spawnSync('osascript',['-l','JavaScript','-e',code,originalPath,pdf],
+    {encoding:'utf8',timeout:30000});
+  assert.equal(p.status,0,'PDFKit two-page test fixture: '+p.stderr);
+  assert.equal(p.stdout.trim(),'3','must use the original first three PDF pages');
+}
+const originalJSON=JSON.parse(fullRaw);
+if(smallFixture)originalJSON.pdf_info=originalJSON.pdf_info.slice(0,3);
+const raw=smallFixture?JSON.stringify(originalJSON):fullRaw;
 const initial=toMarkdown(raw);
+const expectedPBS=(initial.match(/<!-- cmd:block:v1 id=/g)||[]).length;
 const apply=(text,plan)=>[...plan.edits].sort((a,b)=>b.from-a.from)
   .reduce((s,e)=>s.slice(0,e.from)+e.insert+s.slice(e.to),text);
 const reviewed=apply(initial,planCMDReparentPBS(initial,'p1b5','p1b3s0'));
 const source=apply(reviewed,planCMDPromotePBSChild(reviewed,'p1b3s1'));
 assert(source.includes('id="p1b14" origin="p1b5"'));
 assert.equal(toMineruJSON(source),raw);
-const dir=mkdtempSync(join(tmpdir(),'ocr2md-pdf-reparent-repeat-'));
 const doc=join(dir,'document.md');writeFileSync(doc,source);
+const pdfSnapshot=readFileSync(pdf);
 const port=await new Promise((ok,fail)=>{const server=createServer();server.once('error',fail);
  server.listen(0,'127.0.0.1',()=>{const p=server.address().port;server.close(e=>e?fail(e):ok(p));});});
 const url=`http://127.0.0.1:${port}/`;
@@ -59,7 +76,8 @@ try {
    await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪'&&
      document.querySelector('.ocr-pdf-scroller .page canvas')?.width>0,null,{timeout:55000});
    await page.locator('#module-select').evaluate(el=>{el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));});
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('PBS 267'),null,{timeout:55000});
+   await page.waitForFunction(count=>document.querySelector('#status')?.textContent?.includes('PBS '+count),
+     expectedPBS,{timeout:55000});
    await selectPreview(page,'pdf');
    const sourceCtrl=page.locator('.ocr-pdf-block-cover[data-block-id="p1b14"] > .ocr-pdf-block-ctrl');
    const parentCtrl=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"] > .ocr-pdf-block-ctrl');
@@ -217,7 +235,7 @@ try {
    assert.equal(root,'content',`${name} native image child counts as real parent content`);
    assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b14"]').count(),0);
    assert.equal(readFileSync(doc,'utf8'),source,'PDF drag must not auto-save');
-   assert.equal(hash(readFileSync(pdf)),hash(originalPDF));
+   assert.equal(hash(readFileSync(pdf)),hash(pdfSnapshot));
    await page.locator('#undo').evaluate(el=>el.click());
    await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b14"]')&&
      !document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3s1"]'),null,{timeout:40000});
