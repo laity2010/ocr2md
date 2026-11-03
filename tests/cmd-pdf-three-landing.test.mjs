@@ -56,6 +56,13 @@ current=apply(current,promoted);
 check(current,'promoted');
 current=apply(current,planCMDReparentPBS(current,'p1b14','p1b3'));
 assert.equal(check(current,'repeat').atoms.find(a=>a.id==='p1b3s1')?.origin,'p1b5');
+// A reviewed child promoted to an independent p1b14 remains sortable
+// BEFORE another original parent without altering its original PDF bbox.
+let promotedForSort=apply(original,planCMDReparentPBS(original,'p1b5','p1b3s0'));
+promotedForSort=apply(promotedForSort,planCMDPromotePBSChild(promotedForSort,'p1b3s1'));
+const sortedPromoted=apply(promotedForSort,
+  planCMDReorderPBSParents(promotedForSort,'p1b14','p1b3','before'));
+assert.equal(check(sortedPromoted,'promoted reorder').atoms.find(a=>a.id==='p1b14')?.origin,'p1b5');
 assert.throws(()=>planCMDReorderPBSParents(original,'p1b5','p2b0'),/same-page/);
 assert.throws(()=>planCMDReorderPBSParents(original,'p1b5','p1b3','inside'),/landing/);
 console.log('PDF_THREE_LANDING_CMD_PASS',{before:'p1b5 before p1b3',
