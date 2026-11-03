@@ -178,7 +178,17 @@ try{
         // Reload from the saved id-only CMD: physical PDF aliases must be
         // reconstructed, not kept in a transient browser memory table.
         await page.reload({waitUntil:'domcontentloaded',timeout:75000});
-        await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:95000});
+        console.log('CROSS_PAGE_RELOAD_DOM',name);
+        try{
+          await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',
+            null,{timeout:95000});
+        }catch(error){
+          console.log('CROSS_PAGE_RELOAD_FAILURE',name,
+            await page.evaluate(()=>({pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+              globalStatus:document.querySelector('#status')?.textContent,
+              pages:document.querySelectorAll('.ocr-pdf-scroller .page').length})),errors);
+          throw error;
+        }
         await page.locator('#module-select').evaluate(el=>{
           el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
         });
