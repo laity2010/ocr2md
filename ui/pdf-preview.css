@@ -160,7 +160,7 @@
  * scroll and pinch even when the finger begins on a stationary label. */
 .ocr-pdf-readonly .ocr-pdf-block-cover .ocr-pdf-block-ctrl,
 .ocr-pdf-readonly .ocr-pdf-block-cover .ocr-pdf-block-ctrl span{
-  touch-action:manipulation;
+  touch-action:none; /* long-press arrow preview needs uninterrupted pointer */
 }
 .ocr-pdf-block-cover.ocr-pdf-block-is-joined{background:rgba(128,169,194,.12);outline-style:dashed}
 .ocr-pdf-block-cover.ocr-pdf-block-is-joined .ocr-pdf-block-ctrl{

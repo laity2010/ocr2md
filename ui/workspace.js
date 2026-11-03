@@ -338,7 +338,8 @@ class PreviewPanel {
       ()=>markSubblocksAction(),
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
       (sourceId,targetId)=>blockChainAction('reparent',{memberId:sourceId,targetId}),
-      childId=>blockChainAction('promote-child',{childId}));
+      childId=>blockChainAction('promote-child',{childId}),
+      preview=>reportMediaStatus(preview.message));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
