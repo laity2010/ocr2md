@@ -473,7 +473,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       // of the destination logical parent. Use physical subregion geometry,
       // never fabricate a new bbox from the current logical s index.
       for(const row of tableRows)if(row.kind==='child'&&row.geometry&&
-        [...absorbedRoots].some(root=>row.origin.startsWith(root+'s'))){
+        [...absorbedRoots].some(root=>row.origin===root||row.origin.startsWith(root+'s'))){
         physical.push({id:row.id,origin:row.origin,pageIndex:row.pageIndex,
           blockIndex:row.blockIndex,sourceLine:row.sourceLine,
           expectsPreview:row.expectsPreview,geometry:true,anchorCount:1,

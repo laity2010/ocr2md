@@ -731,12 +731,15 @@ async function main() {
   // hiding controls, so long-press, triple tap, or stale UI cannot write.
   workspace.setBlockJoinAction(rejectTextBlockEdit);
   workspace.setBlockChainAction(async(action,request={})=>{
-    if(action!=='reparent'||request.memberId!=='p1b3'||request.targetId!=='p1b4')
+    if(action!=='reparent')return rejectTextBlockEdit();
+    const sourceId=request.memberId;
+    const physicalTarget=/^(p\d+b\d+)(?:s\d+(?:\.\d+)*)?$/.exec(request.targetId||'')?.[1];
+    if(!/^p\d+b\d+$/.test(sourceId||'')||!physicalTarget||sourceId===physicalTarget)
       return rejectTextBlockEdit();
     const source=cmdPort.readSource();
     if(source!==blockIndexedSource)
       throw Error('文本块列表已变化，请重新进入文本块模块后操作');
-    const result=cmdPort.joinP1B3IntoP1B4({expectedSource:source});
+    const result=cmdPort.absorbPBSParent(sourceId,physicalTarget,{expectedSource:source});
     if(result.changed){blockIndexedSource=null;scanTextBlocks();}
     return result;
   });

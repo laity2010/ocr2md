@@ -5,6 +5,7 @@
  * No module-local storage, PDF writes, AG writes, or CM6 mutations.
  */
 import {blockAnchor,subblockAnchor,unquotePrefix} from './mineru-anchors.js';
+import {readCMDPBSLocations,planCMDPBSLocationsEdit} from './cmd-pbs-locations.js';
 
 const pbsPattern=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/;
 const tagPattern=/^<!-- cmd:block:v1((?: [a-z]+="[^"]*")*) -->$/;
@@ -88,11 +89,15 @@ export function readCMDBlockChains(source){
   if(typeof source!=='string')throw TypeError('CMD source must be a string');
   const lines=source.split('\n');const atoms=[],invalid=[];let offset=0;
   const absorbedParents=readCMDAbsorbedParents(source);
+  const placement=readCMDPBSLocations(source);
+  for(const origin of placement.removed)
+    if(!absorbedParents.some(x=>x.origin===origin))
+      absorbedParents.push({origin,target:null,derived:true});
   const absorbedOrigins=new Set();
   for(const record of absorbedParents){
     const from=parseCMDPBSId(record.origin),to=parseCMDPBSId(record.target);
-    if(absorbedOrigins.has(record.origin)||!from||!to||
-      from.p!==to.p||from.s.length||to.s.length||record.origin===record.target)
+    if(absorbedOrigins.has(record.origin)||!from||from.s.length||
+      (!record.derived&&(!to||from.p!==to.p||to.s.length||record.origin===record.target)))
       invalid.push({id:record.origin,reason:'Invalid absorbed-parent provenance'});
     absorbedOrigins.add(record.origin);
   }
@@ -119,6 +124,12 @@ export function readCMDBlockChains(source){
     }
     offset+=line.length+1;
   }
+  // Physical PDF bbox lookup is file-footer data, not part of CMD line IDs.
+  // A child's physical rectangle may belong to a removed original parent.
+  for(const atom of atoms){
+    if(Object.hasOwn(placement.bindings,atom.id))atom.origin=placement.bindings[atom.id];
+    if(placement.bodies.includes(atom.id))atom.role='body';
+  }
   // One reviewed structure edit uses only id= in its three source tags.
   // Reconstruct a VIEW-ONLY PDF position alias from that unambiguous shape;
   // neither OCR ownership nor that alias is written back into the CMD source.
@@ -127,7 +138,8 @@ export function readCMDBlockChains(source){
     const body=atoms.find(a=>a.id==='p1b4s0');
     const transferred=atoms.find(a=>a.id==='p1b4s1');
     const exactTag=(a,id)=>a?.rawLine.trim()===`<!-- cmd:block:v1 id="${id}" -->`;
-    if(exactTag(body,'p1b4s0')&&exactTag(transferred,'p1b4s1')&&
+    if(!Object.hasOwn(placement.bindings,'p1b4s1')&&
+      exactTag(body,'p1b4s0')&&exactTag(transferred,'p1b4s1')&&
       !atoms.some(a=>a.id.startsWith('p1b3s'))){
       body.origin='p1b4';body.role='body';
       transferred.origin='p1b3s0';
@@ -210,7 +222,7 @@ export function readCMDBlockChains(source){
     !absorbedParents.some(a=>a.origin==='p1b3'))
     absorbedParents.push({origin:'p1b3',target:'p1b4',derived:true});
   for(const absorbed of absorbedParents)
-    if(atoms.some(atom=>atom.origin===absorbed.origin))
+    if(atoms.some(atom=>atom.kind==='parent'&&atom.origin===absorbed.origin))
       invalid.push({id:absorbed.origin,reason:'Absorbed parent cannot remain a visible PBS'});
   return {atoms:[...grouping.values()],chains,invalid,absorbedParents,
     summary:{atoms:atoms.length,chains:chains.length,
@@ -436,6 +448,154 @@ export function planCMDJoinP1B3IntoP1B4(source){
   if(bodyCount!==1||childCount!==1)
     throw Error('Expected one generated source tag for each destination child');
   return {...plan,edits:cleanEdits};
+}
+
+/** Human-review parent absorption, valid for ANY same-page parent pair.
+ * Only id= appears on block lines. PDF physical keys and dissolved ORIGINAL
+ * cover identities live in the CMD footer, not in structural line tags.
+ * Parent/child text moves once in a CM6 transaction, never PDF geometry.
+ */
+export function planCMDAbsorbReviewedParent(source,sourceId,targetId){
+  const a=parseCMDPBSId(sourceId),b=parseCMDPBSId(targetId);
+  if(!a||!b||a.s.length||b.s.length||a.p!==b.p||sourceId===targetId)
+    throw Error('Only two different same-page parents may be joined');
+  const model=readCMDBlockChains(source);
+  if(model.invalid.length||model.atoms.some(atom=>atom.format!=='cmd-v1'))
+    throw Error('Invalid CMD PBS document');
+  const roots=model.atoms.filter(atom=>!parseCMDPBSId(atom.id)?.s.length)
+    .sort((x,y)=>x.from-y.from);
+  const src=roots.find(atom=>atom.id===sourceId),dst=roots.find(atom=>atom.id===targetId);
+  if(!src||!dst)throw Error('Unknown or already dissolved parent');
+  const ordered=[...model.atoms].sort((x,y)=>x.from-y.from);
+  const nextRoot=atom=>roots.find(other=>other.from>atom.from);
+  const evidenceFrom=from=>{
+    const slice=source.slice(from);
+    const markers=[...slice.matchAll(/<!--\s*minerujson:(?!block:v1:)/g)].map(m=>from+m.index);
+    const pdf=source.indexOf('<!-- cmd:pdf-bbox:v1 ',from);
+    const placement=source.indexOf('<!-- cmd:pbs-locations:v1 ',from);
+    return Math.min(source.length,...markers,...(pdf>=0?[pdf]:[]),
+      ...(placement>=0?[placement]:[]));
+  };
+  let srcEnd=Math.min(nextRoot(src)?.from??source.length,evidenceFrom(src.from));
+  if(srcEnd===evidenceFrom(src.from)){
+    // At the end of a page, the trailing blank gap belongs to the immutable
+    // page/archive separator and can also host the CMD locations footer.
+    // Never delete that gap together with a moved final parent.
+    const whitespace=/\s*$/.exec(source.slice(src.from,srcEnd))?.[0]||'';
+    if(whitespace.includes('\n'))srcEnd-=whitespace.length;
+  }
+  const members=ordered.filter(x=>x.from>=src.from&&x.from<srcEnd);
+  if(!members.length||members[0]!==src||
+    members.slice(1).some(x=>!x.id.startsWith(sourceId+'s')))
+    throw Error('Source parent members are not a contiguous group');
+  const sourceOwn=source.slice(src.from+src.rawLine.length,members[1]?.from??srcEnd);
+  const hasOwn=members.length===1||Boolean(sourceOwn.trim());
+  const destNext=ordered.find(atom=>atom.from>dst.from);
+  const dstEnd=Math.min(nextRoot(dst)?.from??source.length,evidenceFrom(dst.from));
+  const dstOwn=source.slice(dst.from+dst.rawLine.length,Math.min(destNext?.from??dstEnd,dstEnd));
+  const destChildren=model.atoms.filter(x=>{
+    const p=parseCMDPBSId(x.id);return p?.p===b.p&&p.b===b.b&&p.s.length===1;
+  });
+  // A native OCR parent with direct children normally owns no separate body.
+  // If it does, reserve s0 for that real body by shifting native child IDs.
+  const needBody=destChildren.length===0||Boolean(dstOwn.trim());
+  const shift=destChildren.length>0&&needBody;
+  const firstIndex=needBody?destChildren.length?Math.max(...destChildren.map(x=>parseCMDPBSId(x.id).s[0]))+2:1:
+    Math.max(...destChildren.map(x=>parseCMDPBSId(x.id).s[0]))+1;
+  const bindings={...readCMDPBSLocations(source).bindings};
+  const bodies=new Set(readCMDPBSLocations(source).bodies);
+  const removed=new Set(readCMDPBSLocations(source).removed);
+  // Migrated previous p1b3->p1b4 snapshots did not yet have a placement
+  // footer. Capture their already-derived physical positions before editing.
+  for(const atom of model.atoms){
+    if(atom.id!==atom.origin)bindings[atom.id]=atom.origin;
+    if(atom.role==='body')bodies.add(atom.id);
+  }
+  for(const item of model.absorbedParents||[])removed.add(item.origin);
+  const directMap=new Map();let nextIndex=firstIndex;
+  if(hasOwn)directMap.set('',nextIndex++);
+  for(const atom of members.slice(1)){
+    const path=parseCMDPBSId(atom.id).s;
+    if(path.length===1&&!directMap.has(String(path[0])))directMap.set(String(path[0]),nextIndex++);
+  }
+  const renames=new Map();
+  for(const atom of members){
+    const path=parseCMDPBSId(atom.id).s;
+    if(!path.length&&!hasOwn)continue;
+    const head=path.length?String(path[0]):'';
+    if(!directMap.has(head))throw Error('Nested child without direct ancestor');
+    const label=targetId+'s'+directMap.get(head)+(path.length>1?'.'+path.slice(1).join('.'):'');
+    if(model.atoms.some(other=>other.id===label))throw Error('Target PBS child id already exists');
+    renames.set(atom.id,label);
+    bindings[label]=atom.origin;
+    bodies.delete(atom.id);
+    delete bindings[atom.id];
+  }
+  if(shift){
+    // Shifting existing children only affects the destination's own tree.
+    // A complete count/index rewrite is handled in the same CM6 batch below.
+    const own=model.atoms.filter(x=>x.id.startsWith(targetId+'s'));
+    for(const atom of own.sort((x,y)=>y.from-x.from)){
+      const path=parseCMDPBSId(atom.id).s;
+      const label=targetId+'s'+(path[0]+1)+(path.length>1?'.'+path.slice(1).join('.'):'');
+      renames.set(atom.id,label);
+      bindings[label]=atom.origin;
+      delete bindings[atom.id];
+      if(bodies.delete(atom.id))bodies.add(label);
+    }
+  }
+  const idLine=(atom,label)=>commentPrefix(atom.rawLine)+serializeCMDBlockTag({id:label});
+  const edits=[];
+  let moved=source.slice(src.from,srcEnd);
+  const changes=members.map(atom=>({from:atom.from-src.from,
+    to:atom.from-src.from+atom.rawLine.length,
+    insert:renames.has(atom.id)?idLine(atom,renames.get(atom.id)):
+      atom===src?'':''}));
+  for(const edit of changes.sort((x,y)=>y.from-x.from))
+    moved=moved.slice(0,edit.from)+edit.insert+moved.slice(edit.to);
+  if(!moved.trim())throw Error('Source body is empty and has no children');
+  edits.push({from:src.from,to:srcEnd,expected:source.slice(src.from,srcEnd),insert:''});
+  let insertAt=dstEnd;
+  // Never insert at the opening byte of the original PDF evidence block.
+  if(insertAt===evidenceFrom(dst.from)){
+    const trailing=/\s*$/.exec(source.slice(dst.from,insertAt))?.[0]||'';
+    if(!trailing.includes('\n'))throw Error('No editable gap before PDF metadata');
+    insertAt-=trailing.length;
+  }
+  // Page-final insertion occurs immediately before the whitespace gap
+  // preceding original immutable OCR evidence. Preserve a line break so the
+  // new CMD marker starts at column zero rather than after the prior prose.
+  if(insertAt>0&&source[insertAt-1]!=='\n'&&!moved.startsWith('\n'))
+    moved='\n\n'+moved;
+  if(insertAt===src.from){
+    // B immediately precedes A: the child's new source position is exactly
+    // the old A segment position. Replace in place, don't make two overlapping
+    // CM6 edits on the same boundary.
+    edits[0]={from:src.from,to:srcEnd,expected:source.slice(src.from,srcEnd),insert:moved};
+  }else{
+    if(insertAt>src.from&&insertAt<=srcEnd)
+      throw Error('Cannot join a parent into its own source interval');
+    edits.push({from:insertAt,to:insertAt,expected:'',insert:moved});
+  }
+  if(needBody){
+    const bodyId=targetId+'s0';
+    const existing=model.atoms.find(x=>x.id===bodyId);
+    if(existing&&!shift)throw Error('B s0 already in use');
+    bindings[bodyId]=dst.origin;bodies.add(bodyId);
+    edits.push({from:dst.from+dst.rawLine.length+1,to:dst.from+dst.rawLine.length+1,
+      expected:'',insert:'\n'+serializeCMDBlockTag({id:bodyId})+'\n'});
+  }
+  if(shift){
+    for(const atom of model.atoms.filter(x=>x.id.startsWith(targetId+'s')))
+      edits.push({from:atom.from,to:atom.from+atom.rawLine.length,
+        expected:atom.rawLine,insert:idLine(atom,renames.get(atom.id))});
+  }
+  removed.add(src.origin);
+  const placementEdit=planCMDPBSLocationsEdit(source,{bindings,bodies:[...bodies],removed:[...removed]});
+  edits.push(placementEdit);
+  return {changed:edits.length,edits,sourceId,targetId,newIds:[...members]
+    .map(x=>renames.get(x.id)).filter(Boolean),createdBodyId:needBody?targetId+'s0':null,
+    relocatedSourceText:true,removedParent:src.origin};
 }
 
 /** OCR structure correction, not a BC move. Re-parent exactly one original

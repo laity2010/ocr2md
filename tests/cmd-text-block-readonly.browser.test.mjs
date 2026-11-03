@@ -99,7 +99,7 @@ try{
         assert.equal(await child.evaluate(el=>el.classList.contains('ocr-pdf-block-group-child')),true);
         // All ordinary labels still reject drag. The only exception belongs
         // to the separate p1b3 -> p1b4 browser acceptance test.
-        const other=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"] > .ocr-pdf-block-ctrl');
+        const other=page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"] > .ocr-pdf-subblock-chip');
         const rect=await other.boundingBox();assert(rect);
         const touch={bubbles:true,pointerId:99,pointerType:'touch',button:0,isPrimary:true};
         await other.dispatchEvent('pointerdown',{...touch,...center(rect)});

@@ -12,10 +12,10 @@ import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable} from './platform.test-helper.mjs';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
-import {planCMDJoinP1B3IntoP1B4,readCMDBlockChains} from '../ui/cmd-block-chains.js';
+import {planCMDAbsorbReviewedParent,readCMDBlockChains} from '../ui/cmd-block-chains.js';
 
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
-const original=toMarkdown(raw),plan=planCMDJoinP1B3IntoP1B4(original);
+const original=toMarkdown(raw),plan=planCMDAbsorbReviewedParent(original,'p1b3','p1b4');
 const expected=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((s,e)=>{
   assert.equal(s.slice(e.from,e.to),e.expected);return s.slice(0,e.from)+e.insert+s.slice(e.to);
 },original);

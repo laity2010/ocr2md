@@ -14,7 +14,7 @@ import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,parseCMDPBSId,
   planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDJoinP1B3IntoP1B4,planCMDPromotePBSChild,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember,
-  planCMDReorderPBSParents} from './cmd-block-chains.js';
+  planCMDReorderPBSParents,planCMDAbsorbReviewedParent} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDPDFBBoxEdit} from './cmd-pdf-bbox.js';
 import {planCMDSubblockAnnotations,queryCMDLayout} from './cmd-text-blocks.js';
@@ -160,6 +160,39 @@ export function createCMDTransactionPort(cmd){
     moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
       planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
       options.expectedSource??null),
+    /** Universal same-page parent absorption: one undoable source edit. */
+    absorbPBSParent(sourceId,targetId,options={}){
+      const source=cmd.readSource();
+      if(options.expectedSource!==undefined&&options.expectedSource!==source)
+        throw Error('CMD parent-group snapshot changed; rescan');
+      const before=readCMDBlockChains(source);
+      const plan=planCMDAbsorbReviewedParent(source,sourceId,targetId);
+      const edits=[...plan.edits].sort((a,b)=>b.from-a.from);
+      const next=edits.reduce((s,e)=>{
+        if(s.slice(e.from,e.to)!==e.expected)throw Error('Source changed during absorption');
+        return s.slice(0,e.from)+e.insert+s.slice(e.to);
+      },source);
+      const after=readCMDBlockChains(next);
+      const newOrigins=after.atoms.filter(a=>a.role!=='body').map(a=>a.origin).sort();
+      const oldOrigins=before.atoms.filter(a=>a.role!=='body'&&
+        // A pure container has no body. Its former physical parent bbox
+        // is deliberately replaced by the native child boxes, not moved.
+        !(a.id===sourceId&&!newOrigins.includes(a.origin)))
+        .map(a=>a.origin).sort();
+      const newIds=new Set(after.atoms.map(a=>a.id));
+      const oldIds=new Set(before.atoms.map(a=>a.id));
+      if(after.invalid.length||before.invalid.length||
+        !oldIds.has(sourceId)||newIds.has(sourceId)||!newIds.has(targetId)||
+        oldOrigins.join('\n')!==newOrigins.join('\n')||
+        source.slice(source.indexOf('<!-- minerujson:source:v1:'))!==
+          next.slice(next.indexOf('<!-- minerujson:source:v1:'))||
+        !plan.newIds.every(id=>newIds.has(id))||
+        after.absorbedParents.length<=before.absorbedParents.length)
+        throw Error('CMD join would lose text blocks, alter PDF evidence, or leave old parent');
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    },
     /** Only the specifically reviewed PDF p1b3 -> p1b4 merge is open. */
     joinP1B3IntoP1B4(options={}){
       const source=cmd.readSource();

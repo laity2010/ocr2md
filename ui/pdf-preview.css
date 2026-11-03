@@ -238,5 +238,5 @@
 .ocr-pdf-block-fragment[hidden]{display:none!important}
 
 /* Only p1b3 permits the one reviewed long-press parent-into-b4 gesture. */
-.ocr-pdf-readonly .ocr-pdf-block-cover[data-block-id="p1b3"] > .ocr-pdf-block-ctrl,
-.ocr-pdf-readonly .ocr-pdf-block-cover[data-block-id="p1b3"] > .ocr-pdf-block-ctrl span{touch-action:none}
+.ocr-pdf-readonly .ocr-pdf-block-cover:not(.ocr-pdf-block-is-child) > .ocr-pdf-block-ctrl,
+.ocr-pdf-readonly .ocr-pdf-block-cover:not(.ocr-pdf-block-is-child) > .ocr-pdf-block-ctrl span{touch-action:none}

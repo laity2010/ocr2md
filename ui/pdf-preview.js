@@ -758,7 +758,7 @@ export class PdfPreview {
     const displayId=row.id;
     if(badge.textContent!==displayId){badge.textContent=displayId;changed=true;}
     const title=this.readOnly?
-      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${row.id==='p1b3'?'长按归入 p1b4':'单击定位（只读）'}`:
+      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'长按归入其他同页父块':'单击定位（只读）'}`:
       `原始 ${row.origin||row.id} · 显示 ${displayId} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
@@ -813,9 +813,9 @@ export class PdfPreview {
    * data mutation is the CMD move transaction after a valid pointer release.
    */
   armBlockDrag(event,ctrl,id){
-    // All other labels remain recognition-only; only this precise gesture
-    // can request the single reviewed p1b3 -> p1b4 source operation.
-    if(this.readOnly&&id!=='p1b3')return;
+    // Every page-level parent may be absorbed into a different same-page
+    // parent; child rearrangement and before/after sorting stay disabled.
+    if(this.readOnly&&!/^p\d+b\d+$/.test(id))return;
     if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
     const item={id,ctrl,pointerId:event.pointerId,pointerType:event.pointerType,
       x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
@@ -891,7 +891,7 @@ export class PdfPreview {
       const rail=item.guide.getBoundingClientRect();
       if(x>=rail.left-5&&x<=rail.right+5&&y>=rail.top-5&&y<=rail.bottom+5)
         return {node:item.target,id:item.targetId,kind:item.targetKind,
-          placement:pdfDropGuideZone(x,rail,item.targetKind==='child')};
+          placement:pdfDropGuideZone(x,rail,this.readOnly||item.targetKind==='child')};
     }
     const candidates=[];
     for(const node of this.blockCoverageNodes.values()){
@@ -914,7 +914,7 @@ export class PdfPreview {
    * OCR text. This transient guide and arrow disappear after pointerup. */
   paintBlockDropGuide(item){
     if(!item.target){item.guide?.remove();item.guide=null;return;}
-    const child=item.targetKind==='child';
+    const child=this.readOnly||item.targetKind==='child';
     if(!item.guide||item.guide.dataset.kind!==(child?'child':'parent')){
       item.guide?.remove();
       const guide=document.createElement('div');
@@ -1052,15 +1052,17 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
-    if(this.readOnly&&(item.id!=='p1b3'||target!=='p1b4'||placement!=='child')){
-      this.setStatus('本次仅开放 p1b3 归入 p1b4，其他结构操作保持只读');
+    if(this.readOnly&&(!/^p\d+b\d+$/.test(item.id)||placement!=='child'||
+      !target||!/^p\d+b\d+(?:s\d+(?:\.\d+)*)?$/.test(target)||
+      target.startsWith(item.id+'s')||target===item.id)){
+      this.setStatus('仅允许同页父块整体归入另一父块，其他操作保持只读');
       return;
     }
     if(placement==='child'){
       this.setStatus(`正在将 ${item.id} 归入 ${target} 所属父块…`);
       void this.onBlockReparent(item.id,target).then(result=>{
         this.setStatus(result?.changed
-          ?`✓ ${item.id} → ${result.newId} · 原始来源保留 · 未保存，可 Undo`
+          ?`✓ ${item.id} → ${result.newIds?.join('、')||result.newId} · 未保存，可 Undo`
           :'PBS 父子关系无需修改');
       }).catch(error=>this.setStatus('PDF 文本块归入子块失败：'+error.message));
       return;
@@ -1114,7 +1116,7 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
-        if(!this.readOnly||row.id==='p1b3')
+        if(!this.readOnly||/^p\d+b\d+$/.test(row.id))
           ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
         // Preserve long-press move: a dragged label's release never counts as
         // one of the three taps. All changes still go through CMD's API.
