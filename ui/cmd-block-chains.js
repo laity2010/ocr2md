@@ -399,9 +399,16 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   if(!from||!to||from.s.length||to.s.length>1||from.p!==to.p)
     throw Error('Only a same-page independent parent can become a direct child');
   if(model.atoms.some(a=>a.id.startsWith(sourceId+'s'))){
-    if(to.s.length||targetId.startsWith(sourceId+'s'))
-      throw Error('Source already has children; cannot absorb into a native child; move a leaf instead');
-    return planCMDAbsorbPBSParent(source,model,sourceId,targetId);
+    // A parent's native/virtual child chip is also a valid parent-group
+    // landing. Resolve it to the existing parent instead of rejecting it;
+    // a whole group is absorbed, never nested below a single child.
+    if(targetId.startsWith(sourceId+'s'))
+      throw Error('Source already has children; cannot absorb into its own child; move a leaf instead');
+    const destination='p'+to.p+'b'+to.b;
+    if(!byId.has(destination))
+      throw Error('The pointed child has no existing logical parent');
+    return {...planCMDAbsorbPBSParent(source,model,sourceId,destination),
+      pointedId:targetId};
   }
   // A reviewed leaf may be made independent, then reparented again.
   // This is only legal when its immutable provenance is an original OCR

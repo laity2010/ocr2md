@@ -64,7 +64,23 @@ assert.deepEqual(multiModel.invalid,[]);
 assert(!multiModel.atoms.some(a=>a.id==='p4b0'));
 assert.deepEqual(['p4b0s0','p4b0s1','p4b0s2'].map(id=>
   multiModel.atoms.find(a=>a.origin===id)?.id),multi.memberIds);
+// Target may already be a container. A long-pressed source parent may land
+// on its parent label OR its original body / another child chip. Both are
+// the same semantic parent absorption, with the next continuous child ID.
+const prepared=apply(source,planCMDReparentPBS(source,'p1b6','p1b5'));
+for(const pointedId of ['p1b5','p1b5s0','p1b5s1']){
+  const nestedPlan=planCMDReparentPBS(prepared,'p1b3',pointedId);
+  const nested=apply(prepared,nestedPlan),children=readCMDBlockChains(nested);
+  assert.equal(nestedPlan.newId,'p1b5s2',pointedId);
+  assert.equal(nestedPlan.pointedId,pointedId);
+  assert(!children.atoms.some(a=>a.id==='p1b3'),pointedId);
+  assert.equal(children.atoms.find(a=>a.origin==='p1b3s0')?.id,'p1b5s2',pointedId);
+  assert.equal(children.atoms.find(a=>a.id==='p1b5s1')?.origin,'p1b6',pointedId);
+  assert.deepEqual(children.invalid,[],pointedId);
+  assert.equal(toMineruJSON(nested),raw,pointedId);
+}
+assert.throws(()=>planCMDReparentPBS(source,'p1b3','p1b3s0'),/own child/i);
 console.log('PDF_PARENT_ABSORPTION_PASS',{from:'p1b3',
  into:'p1b5',body:'p1b5s0',nativeChild:'p1b5s1',oldParentMissing:true,
  sourceAtoms:267,originalJSONByteExact:true,physicalBBoxUnchanged:true,
- threeNativeChildrenAbsorbed:true});
+ threeNativeChildrenAbsorbed:true,preexistingChildTarget:true});

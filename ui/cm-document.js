@@ -85,6 +85,16 @@ export class CMDocument {
     inventory.summary.logicalBlocks=logical.blocks.length;
     inventory.summary.invalidJoinMarks=logical.invalid.length;
     inventory.atoms=projectCMDBlockTable(source,inventory.rows,layout,bc,inventory.children);
+    // A dissolved original OCR parent remains in the immutable source JSON,
+    // but intentionally no longer has a visible PBS parent tag. Its
+    // non-PBS provenance marker is not a missing or damaged OCR annotation.
+    const absorbed=new Set(bc.absorbedParents?.map(record=>record.origin)||[]);
+    const accounted=inventory.rows.filter(row=>row.anchorCount===0&&absorbed.has(row.id)).length;
+    if(accounted){
+      inventory.summary.missing=Math.max(0,inventory.summary.missing-accounted);
+      inventory.summary.matched+=accounted;
+      inventory.summary.absorbedParents=accounted;
+    }
     inventory.summary.bcChains=bc.summary.chains;
     inventory.summary.invalidBCMarks=bc.invalid.length;
     return {inventory,continuations:scanCMDContinuationCandidates(inventory,layout),
