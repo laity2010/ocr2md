@@ -54,7 +54,8 @@ assert.throws(()=>toMineruJSON(next.replace(
  'cmd:absorbed-parent:v1 origin="p1b4" target="p1b5"')),/invalid|anchor|parent|OCR/i);
 // All three original native table children must be absorbed, in original
 // reading order, after the destination's existing three native children.
-const multi=planCMDReparentPBS(source,'p4b0','p4b1');
+const multi=planCMDReparentPBS(source,'p4b0','p4b1s1');
+assert.equal(multi.pointedId,'p4b1s1','dropping onto B child must append to the parent group');
 assert.deepEqual(multi.memberIds,['p4b1s3','p4b1s4','p4b1s5']);
 assert.equal(multi.createdBodyId,null);
 const multiSource=apply(source,multi);
@@ -64,6 +65,34 @@ assert.deepEqual(multiModel.invalid,[]);
 assert(!multiModel.atoms.some(a=>a.id==='p4b0'));
 assert.deepEqual(['p4b0s0','p4b0s1','p4b0s2'].map(id=>
   multiModel.atoms.find(a=>a.origin===id)?.id),multi.memberIds);
+// Regression: not just PBS numbers. A's child SOURCE SCOPES (Markdown,
+// media and OCR-only markup) must survive byte-for-byte and follow ALL of
+// B's existing child scopes. B's original text must not be overwritten.
+const sourceModel=readCMDBlockChains(source);
+const scopeBody=(text,model,id)=>{
+  const index=model.atoms.findIndex(a=>a.id===id);
+  assert(index>=0,`missing source block ${id}`);
+  const atom=model.atoms[index],start=atom.from+atom.rawLine.length;
+  const boundaries=['<!-- minerujson:page:v1:','<!-- minerujson:source:v1:']
+    .map(marker=>text.indexOf(marker,start)).filter(offset=>offset>=0);
+  const end=Math.min(model.atoms[index+1]?.from??text.length,
+    ...boundaries);
+  return text.slice(start,end);
+};
+const movedChildren=multi.memberIds.map(id=>multiModel.atoms.find(a=>a.id===id));
+const originalChildren=['p4b0s0','p4b0s1','p4b0s2'];
+const bLastChild=multiModel.atoms.find(a=>a.id==='p4b1s2');
+assert(bLastChild&&movedChildren.every((a,i)=>a&&a.from>bLastChild.from&&
+  (i===0||a.from>movedChildren[i-1].from)),
+  'A children must be physically AFTER the last B child, in A order');
+for(let i=0;i<originalChildren.length;i++)
+  assert.equal(scopeBody(multiSource,multiModel,multi.memberIds[i]),
+    scopeBody(source,sourceModel,originalChildren[i]),
+    `A child ${i} Markdown must move byte-for-byte with its CMD label`);
+for(let i=0;i<3;i++)
+  assert(scopeBody(multiSource,multiModel,`p4b1s${i}`).startsWith(
+    scopeBody(source,sourceModel,`p4b1s${i}`)),
+    `B existing child ${i} Markdown must not be modified`);
 // Target may already be a container. A long-pressed source parent may land
 // on its parent label OR its original body / another child chip. Both are
 // the same semantic parent absorption, with the next continuous child ID.
