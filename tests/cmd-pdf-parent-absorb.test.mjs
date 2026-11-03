@@ -60,6 +60,27 @@ assert.deepEqual(multi.memberIds,['p4b1s3','p4b1s4','p4b1s5']);
 assert.equal(multi.createdBodyId,null);
 const multiSource=apply(source,multi);
 assert.equal(toMineruJSON(multiSource),raw);
+const immutableOriginal=source.match(/<!-- minerujson:unmapped:v1:4:0[\s\S]*?-->/)?.[0];
+assert(immutableOriginal,'fixture must contain original table evidence');
+assert(multiSource.includes(immutableOriginal),
+  'the original unmapped evidence must remain byte-for-byte');
+assert(multiSource.indexOf(immutableOriginal)<multiSource.indexOf('id="p4b1"'),
+  'unmapped OCR evidence must stay before B, at A original physical position');
+const protectedOriginal=/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g;
+for(const comment of source.matchAll(protectedOriginal)){
+  const start=comment.index,end=start+comment[0].length;
+  for(const edit of multi.edits)
+    assert(!(edit.from===edit.to?
+      edit.from>=start&&edit.from<end:
+      edit.from<end&&edit.to>start),
+      `CM6 must never touch the protected OCR evidence at ${start}`);
+}
+for(const edit of multi.edits){
+  assert(!edit.expected.includes('<!-- minerujson:unmapped:'),
+    'CM6 cannot remove or replace protected MinerU evidence');
+  assert(!edit.insert.includes('<!-- minerujson:unmapped:'),
+    'CM6 cannot relocate protected MinerU evidence');
+}
 const multiModel=readCMDBlockChains(multiSource);
 assert.deepEqual(multiModel.invalid,[]);
 assert(!multiModel.atoms.some(a=>a.id==='p4b0'));
@@ -73,7 +94,8 @@ const scopeBody=(text,model,id)=>{
   const index=model.atoms.findIndex(a=>a.id===id);
   assert(index>=0,`missing source block ${id}`);
   const atom=model.atoms[index],start=atom.from+atom.rawLine.length;
-  const boundaries=['<!-- minerujson:page:v1:','<!-- minerujson:source:v1:']
+  const boundaries=['<!-- minerujson:page:v1:','<!-- minerujson:source:v1:',
+    '<!-- minerujson:unmapped:v1:', '<!-- minerujson:discarded:v1:']
     .map(marker=>text.indexOf(marker,start)).filter(offset=>offset>=0);
   const end=Math.min(model.atoms[index+1]?.from??text.length,
     ...boundaries);

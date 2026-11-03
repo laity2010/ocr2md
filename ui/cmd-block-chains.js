@@ -329,7 +329,18 @@ export function planCMDAbsorbPBSParent(source,model,sourceId,targetId){
   const archive=source.indexOf('<!-- minerujson:source:v1:',src.from);
   const pageBoundary=Math.min(nextPage<0?source.length:nextPage,
     archive<0?source.length:archive);
-  const stop=Math.min(nextRoot?.from??pageBoundary,pageBoundary);
+  const physicalEnd=Math.min(nextRoot?.from??pageBoundary,pageBoundary);
+  // A native child may be followed by a minerujson:unmapped provenance
+  // comment before the next parent. That comment is immutable ORIGINAL OCR
+  // evidence, not part of the movable Markdown child. Leave the entire
+  // trailing evidence section at its physical source position; never bypass
+  // CM6's evidence read-only guard to implement parent absorption.
+  const physicalScope=source.slice(src.from,physicalEnd);
+  const evidence=/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g;
+  const firstEvidence=evidence.exec(physicalScope);
+  const stop=firstEvidence?src.from+firstEvidence.index:physicalEnd;
+  if(firstEvidence&&physicalScope.slice(firstEvidence.index).replace(evidence,'').trim())
+    throw Error('Original OCR evidence must remain a trailing immutable section');
   const segment=source.slice(src.from,stop);
   if(stop<=direct.at(-1).from||/<!-- minerujson:(?:page|source|discarded|document-meta):v1/.test(segment))
     throw Error('Absorption cannot move sealed OCR evidence');
@@ -339,7 +350,21 @@ export function planCMDAbsorbPBSParent(source,model,sourceId,targetId){
   const destArchive=source.indexOf('<!-- minerujson:source:v1:',dest.from);
   const destBoundary=Math.min(destNextPage<0?source.length:destNextPage,
     destArchive<0?source.length:destArchive);
-  const insertAt=Math.min(destNextRoot?.from??destBoundary,destBoundary);
+  let insertAt=Math.min(destNextRoot?.from??destBoundary,destBoundary);
+  let insertTo=insertAt,insertExpected='',insertPrefix='';
+  // Inserting at the FIRST byte of an immutable page/evidence comment also
+  // counts as editing evidence in CM6. When B is the last parent on a PDF
+  // page, append its new children before the trailing blank separator, not
+  // at the opening '<!-- minerujson:page... -->' boundary.
+  if(/^<!--\s*minerujson:(?!block:v1:)/.test(source.slice(insertAt))){
+    const separator=/\s*$/.exec(source.slice(dest.from,insertAt))?.[0]||'';
+    if(!separator||!separator.includes('\n'))
+      throw Error('No editable separator before immutable page evidence');
+    insertAt-=separator.length;
+    insertTo=destBoundary;
+    insertExpected=separator;
+    insertPrefix=separator;
+  }
   if(insertAt>=src.from&&insertAt<=stop)
     throw Error('Cannot absorb a parent into its own source scope');
   const destChildren=model.atoms.filter(a=>{
@@ -356,24 +381,25 @@ export function planCMDAbsorbPBSParent(source,model,sourceId,targetId){
     origin:atom.origin}));
   for(const item of renames)if(byId.has(item.newId))
     throw Error('Absorbed child would overwrite an existing PBS identity');
-  let moved=segment;
-  const replacements=[
-    {from:0,to:src.rawLine.length,
-      insert:commentPrefix(src.rawLine)+
-        `<!-- cmd:absorbed-parent:v1 origin="${src.origin}" target="${dest.origin}" -->`},
-    ...direct.map((child,i)=>{
-      const parsed=parseCMDBlockTag(child.rawLine);
-      return {from:child.from-src.from,to:child.from-src.from+child.rawLine.length,
-        insert:commentPrefix(child.rawLine)+serializeCMDBlockTag({
-          id:renames[i].newId,origin:child.origin,type:parsed.type,
-          role:parsed.role,review:parsed.review,note:parsed.note})};
-    })
-  ];
+  // Leave the dissolved parent's provenance IN PLACE, immediately before
+  // any original immutable MinerU evidence. Only the native child scopes
+  // move; this allows CM6 to enforce the read-only evidence guard unchanged.
+  const absorbedMarker=commentPrefix(src.rawLine)+
+    `<!-- cmd:absorbed-parent:v1 origin="${src.origin}" target="${dest.origin}" -->`;
+  const childStart=direct[0].from;
+  let moved=source.slice(childStart,stop);
+  const replacements=direct.map((child,i)=>{
+    const parsed=parseCMDBlockTag(child.rawLine);
+    return {from:child.from-childStart,to:child.from-childStart+child.rawLine.length,
+      insert:commentPrefix(child.rawLine)+serializeCMDBlockTag({
+        id:renames[i].newId,origin:child.origin,type:parsed.type,
+        role:parsed.role,review:parsed.review,note:parsed.note})};
+  });
   for(const edit of replacements.sort((a,b)=>b.from-a.from))
     moved=moved.slice(0,edit.from)+edit.insert+moved.slice(edit.to);
   const edits=[
-    {from:src.from,to:stop,expected:segment,insert:''},
-    {from:insertAt,to:insertAt,expected:'',insert:moved},
+    {from:src.from,to:stop,expected:segment,insert:absorbedMarker+'\n\n'},
+    {from:insertAt,to:insertTo,expected:insertExpected,insert:insertPrefix+moved},
   ];
   if(bodyMarker)edits.push({from:dest.from+dest.rawLine.length+1,
     to:dest.from+dest.rawLine.length+1,expected:'',insert:'\n'+bodyMarker+'\n'});
