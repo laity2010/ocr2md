@@ -88,11 +88,19 @@ try{
           await page.waitForFunction(out=>!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')&&
             document.querySelector('.ocr-pdf-block-cover[data-block-id="'+out+'"][data-origin-id="p1b3s0"]'),
             testCase.out,{timeout:60000});
+          await page.waitForFunction(out=>{
+            const status=document.querySelector('#status')?.textContent||'';
+            return status.includes('已归入 p1b3 → '+out)&&status.includes('可 Undo');
+          },testCase.out,{timeout:30000});
           const newRect=await page.locator('.ocr-pdf-block-cover[data-block-id="'+testCase.out+'"]').boundingBox();
           for(const key of ['x','y','width','height'])
             assert(Math.abs(oldRect[key]-newRect[key])<2,name+' PDF bbox moved '+key);
           const inventory=await page.locator('#status').textContent();
-          assert(inventory.includes('缺失 0'),name+' deliberate absorption reported as missing OCR: '+inventory);
+          const ag=page.locator('.ocr-text-block-grid .ag-row[row-id="'+testCase.out+'"]').first();
+          await ag.waitFor({state:'attached',timeout:25000});
+          assert(!(await page.locator('.ocr-text-block-grid .ag-row[row-id="p1b3"]').count()),
+            name+' old parent still in AG');
+          assert(inventory.includes('已归入 p1b3'),name+' global status not updated: '+inventory);
           assert.equal(errors.length,0,'page errors: '+errors.join(';'));
           await page.locator('#undo').evaluate(el=>el.click());
           await page.waitForFunction(out=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')&&

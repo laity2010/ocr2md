@@ -702,11 +702,11 @@ async function main() {
   let blockRequest=0,blockTimer=null,blockIndexedSource=null,blockPendingSource=null;
   const scanTextBlocks=()=>{
     const source=cm.getMarkdown();
-    if(source===blockIndexedSource||source===blockPendingSource)return;
+    if(source===blockIndexedSource||source===blockPendingSource)return Promise.resolve();
     const id=++blockRequest;
     blockPendingSource=source;
     workspace.setTextBlockLoading();
-    void cmdPort.queryBlockAnalysis().then(({inventory,continuations})=>{
+    return cmdPort.queryBlockAnalysis().then(({inventory,continuations})=>{
       if(id!==blockRequest||source!==cm.getMarkdown())return;
       blockPendingSource=null;
       workspace.setTextBlockInventory(inventory);
@@ -731,6 +731,17 @@ async function main() {
   // hiding controls, so long-press, triple tap, or stale UI cannot write.
   workspace.setBlockJoinAction(rejectTextBlockEdit);
   workspace.setBlockChainAction(rejectTextBlockEdit);
+  workspace.setPDFReparentAction(async(sourceId,targetId)=>{
+    const snapshot=cmdPort.readSource();
+    // Never commit a PDF landing against a stale AG/PDF projection.
+    if(snapshot!==blockIndexedSource)
+      throw Error('文本块标签已变化，请重新进入文本块模块后操作');
+    const result=cmdPort.reparentPBS(sourceId,targetId,{expectedSource:snapshot});
+    // Await the AG/PDF projection before reporting success in global status:
+    // the inventory refresh itself publishes a status message.
+    if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
+    return result;
+  });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
   workspace.setBlockMoveAction(rejectTextBlockEdit);
   workspace.setSubblockMarkAction(rejectTextBlockEdit);

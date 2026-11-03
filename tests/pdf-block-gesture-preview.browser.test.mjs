@@ -1,4 +1,5 @@
-/** Live original-PDF 3-zone pointer gesture; STATUS ONLY, no CMD mutations.
+/** Original-PDF before/after gestures remain STATUS ONLY. The child landing
+ * is separately covered by the real CMD parent-absorption browser suite.
  * Disposable server/document. Main and user working files are never edited.
  */
 import assert from 'node:assert/strict';
@@ -57,9 +58,7 @@ try{
         await selectPreview(page,'pdf');
         const cases=[
           {source:'p1b3',target:'p1b5',placement:'before',text:'拟移至 p1b5 之前'},
-          {source:'p1b3',target:'p1b5',placement:'child',text:'拟归入 p1b5 的子块'},
-          {source:'p1b3',target:'p1b5',placement:'after',text:'拟移至 p1b5 之后'},
-          {source:'p1b5',target:'p1b3s0',placement:'child',text:'拟归入 p1b3 的子块'}
+          {source:'p1b3',target:'p1b5',placement:'after',text:'拟移至 p1b5 之后'}
         ];
         for(let index=0;index<cases.length;index++){
           const c=cases[index],touch={

@@ -990,7 +990,7 @@ export class PdfPreview {
     if(item.placement!==placement||item.targetId!==hit?.id){
       const label=hit?.id||'';
       const action=placement==='before'?'之前':placement==='after'?'之后':'作为子块';
-      this.setStatus(hit?`将 ${item.id} 移至 ${label} ${action} · ${this.readOnly?'松手仅报告状态':'松手应用，单次 Undo'}`:
+      this.setStatus(hit?`将 ${item.id} 移至 ${label} ${action} · ${this.readOnly&&placement!=='child'?'松手仅报告状态':'松手归入，单次 Undo'}`:
         `从 ${item.id} 拖出箭头；未命中唯一目标，不执行移动`);
     }
     item.placement=placement;item.targetId=hit?.id||null;
@@ -1057,7 +1057,7 @@ export class PdfPreview {
       if(this.readOnly)this.onGesturePreview({message:`PDF 手势预演 · ${item.id} 未命中有效落点 · 未修改 CMD`});
       return;
     }
-    if(this.readOnly){
+    if(this.readOnly&&placement!=='child'){
       // Deliberately bypass ALL CMD write callbacks and source move plans.
       // This feature only tests iPad hit accuracy on real PDF/label geometry.
       try{
@@ -1070,10 +1070,14 @@ export class PdfPreview {
     if(placement==='child'){
       this.setStatus(`正在将 ${item.id} 归入 ${target} 所属父块…`);
       void this.onBlockReparent(item.id,target).then(result=>{
-        this.setStatus(result?.changed
-          ?`✓ ${item.id} → ${result.newId} · 原始来源保留 · 未保存，可 Undo`
-          :'PBS 父子关系无需修改');
-      }).catch(error=>this.setStatus('PDF 文本块归入子块失败：'+error.message));
+        const label=result?.changed?
+          `✓ 已归入 ${item.id} → ${result.newId} · ${result.absorbedOrigin?'原父标签已消失 · ':''}CMD 未保存，可 Undo`:
+          'PBS 父子关系无需修改';
+        this.setStatus(label);this.onGesturePreview({message:label});
+      }).catch(error=>{
+        const message='PDF 文本块归入子块失败：'+error.message;
+        this.setStatus(message);this.onGesturePreview({message});
+      });
       return;
     }
     let move;

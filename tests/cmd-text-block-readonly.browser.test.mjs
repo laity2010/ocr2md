@@ -15,7 +15,7 @@ import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {TEXT_BLOCKS_READ_ONLY,rejectTextBlockEdit} from '../ui/text-block-readonly.js';
 assert.equal(TEXT_BLOCKS_READ_ONLY,true);
-await assert.rejects(rejectTextBlockEdit(),/只读标定/);
+await assert.rejects(rejectTextBlockEdit(),/仅 PDF 子块落点可归入/);
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const source=toMarkdown(raw);
 assert.equal((source.match(/<!-- cmd:block:v1 id=/g)||[]).length,267);
@@ -64,7 +64,7 @@ try{
           el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
         });
         await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PBS 267')&&
-          document.querySelector('#status')?.textContent.includes('文本块只读标定'),
+          document.querySelector('#status')?.textContent.includes('PDF 仅开放子块归入'),
           null,{timeout:70000});
         await selectPreview(page,'pdf');
         const root=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]');
