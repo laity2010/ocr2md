@@ -166,8 +166,8 @@ export function createCMDTransactionPort(cmd){
         throw Error('CMD PBS reparent snapshot stale');
       const before=readCMDBlockChains(source);
       const plan=planCMDReparentPBS(source,sourceId,targetId);
-      if(plan.changed!==2||plan.edits.length!==2)
-        throw Error('Reparent requires an atomic CMD scope move');
+      if(plan.changed<1||plan.changed>2||plan.edits.length!==plan.changed)
+        throw Error('Reparent requires an atomic CMD structural edit');
       const next=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((result,edit)=>{
         if(source.slice(edit.from,edit.to)!==edit.expected)
           throw Error('Reparent expected source changed');

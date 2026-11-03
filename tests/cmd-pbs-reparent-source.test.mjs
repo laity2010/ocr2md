@@ -43,7 +43,13 @@ assert.equal(sourceBlocks(changed).length,224,'original physical parent PDF over
 assert.equal(sourceSubblocks(changed).length,43,'no invented native OCR child overlay');
 assert.throws(()=>planCMDReparentPBS(changed,'p1b5','p1b3s0'),/Unknown PBS/);
 assert.throws(()=>planCMDReparentPBS(source,'p1b3','p1b3s0'),/already has children/i);
-assert.throws(()=>planCMDReparentPBS(source,'p1b5','p1b4'),/native child/i);
+// New three-landing PDF editor accepts a parent label even when it has NO
+// native children. An already-adjacent leaf only needs one CMD tag edit.
+const adjacent=planCMDReparentPBS(source,'p1b5','p1b4');
+assert.deepEqual([adjacent.changed,adjacent.newId,adjacent.origin],[1,'p1b4s0','p1b5']);
+const adjacentSource=source.slice(0,adjacent.edits[0].from)+adjacent.edits[0].insert+
+  source.slice(adjacent.edits[0].to);
+assert.equal(toMineruJSON(adjacentSource),original,'parent-label nesting keeps OCR JSON exact');
 assert.throws(()=>planCMDReparentPBS(source,'p1b5','p1b3s0.0'),/Unknown PBS/i);
 assert.throws(()=>planCMDReparentPBS(source,'p1b5','p4b0s0'),/same-page/i);
 assert.throws(()=>toMineruJSON(changed.replace('origin="p1b5"','origin="p1b4"')),/INVALID/);

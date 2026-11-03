@@ -411,7 +411,7 @@ export function toMineruJSON(markdown: string): string {
     const blocks=data.pdf_info[alias.page]?.para_blocks;
     const parent=blocks?.[alias.parent],sourceBlock=blocks?.[alias.source];
     assert(parent&&sourceBlock&&!(sourceBlock.blocks||[]).length&&
-      (parent.blocks||[]).length>0&&alias.child>=(parent.blocks||[]).length,
+      alias.child>=(parent.blocks||[]).length,
       'structural correction has no corresponding sealed original OCR blocks');
   }
   for(const alias of origins){

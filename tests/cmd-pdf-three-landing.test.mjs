@@ -37,6 +37,10 @@ assert.equal(planCMDReorderPBSParents(current,'p1b5','p1b3','before').changed,0)
 const back=planCMDReorderPBSParents(current,'p1b5','p1b4','after');
 current=apply(current,back);
 assert.deepEqual(roots(current),before,'after landing restores original source order');
+const adjacent=planCMDReparentPBS(current,'p1b5','p1b4');
+assert.equal(adjacent.changed,1,'neighboring parent should need tag-only edit');
+assert.equal(adjacent.newId,'p1b4s0');
+check(apply(current,adjacent),'parent without native children');
 // Three-way center landing directly on a PARENT label (no special child target).
 const nested=planCMDReparentPBS(current,'p1b5','p1b3');
 assert.equal(nested.newId,'p1b3s1');

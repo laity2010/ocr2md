@@ -271,8 +271,9 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   // *parent* on the same page. A promoted native child (origin=...sN) is
   // not silently converted into a foreign child path.
   const origin=parseCMDPBSId(atom.origin);
-  if(!origin||origin.p!==from.p||origin.s.length||
-    model.atoms.some(a=>a.id.startsWith(sourceId+'s')))
+  if(model.atoms.some(a=>a.id.startsWith(sourceId+'s')))
+    throw Error('Source already has children; move a leaf instead');
+  if(!origin||origin.p!==from.p||origin.s.length)
     throw Error('Source must be a leaf with original parent OCR provenance');
   const ownChain=model.chains.find(c=>c.members.includes(sourceId));
   if(ownChain?.size!==1||ownChain.explicit)
@@ -314,6 +315,13 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   // next-page marker rather than demanding a next PBS anchor.
   const destination=to.s.length?ordered[targetIndex+1]?.from??boundary:
     Math.min(nextRoot?.from??boundary,boundary);
+  // Already adjacent: only the structural annotation changes. No source
+  // relocation is necessary, but CM6 still gets exactly one Undoable edit.
+  if(destination===atom.from){
+    return {changed:1,sourceId,targetId,newId,origin:atom.origin,
+      edits:[{from:atom.from,to:atom.from+atom.rawLine.length,
+        expected:atom.rawLine,insert}],relocatedSourceText:false};
+  }
   if(stop<0||!Number.isInteger(destination)||stop<=atom.from||
     destination>source.indexOf('<!-- minerujson:source:v1:')||
     destination>=atom.from&&destination<=stop)
