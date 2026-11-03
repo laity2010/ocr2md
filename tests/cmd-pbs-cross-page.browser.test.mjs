@@ -83,13 +83,20 @@ try{
           ...touch,clientX:pane.x+pane.width/2,clientY:pane.y+pane.height-6});
         await page.waitForFunction(old=>document.querySelector('.ocr-pdf-scroller')?.scrollTop>old+15,
           before,{timeout:12000});
+        // A real user moves their finger away from the edge before aiming
+        // at the new page's label. Stop auto-scroll explicitly before the
+        // test's programmatic scroll-to-target or the label will drift.
+        await page.locator('body').dispatchEvent('pointermove',{
+          ...touch,clientX:pane.x+pane.width/2,clientY:pane.y+pane.height/2});
         await to.scrollIntoViewIfNeeded({timeout:35000});
         const tr=await to.boundingBox();assert(tr);
         assert.equal(await to.evaluate(el=>el.closest('.ocr-pdf-block-cover').dataset.pdfPage),'3');
         await page.locator('body').dispatchEvent('pointermove',{...touch,...center(tr)});
         const rail=page.locator('.ocr-pdf-block-drop-guide');
         await rail.waitFor({state:'attached',timeout:7500});
-        assert((await page.locator('.ocr-pdf-status').textContent()).includes('p2b0'));
+        const aimedStatus=await page.locator('.ocr-pdf-status').textContent();
+        console.log('CROSS_PAGE_LANDING_TARGET',name,aimedStatus);
+        assert(aimedStatus.includes('p2b0'),name+' target label drifted: '+aimedStatus);
         const zr=await rail.locator('[data-placement="child"]').boundingBox();assert(zr);
         await page.locator('body').dispatchEvent('pointermove',{...touch,...center(zr)});
         await page.locator('body').dispatchEvent('pointerup',{...touch,...center(zr)});
