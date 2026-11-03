@@ -546,6 +546,32 @@ export function toMineruJSON(markdown: string): string {
     assert(succeeding,'promoted original source successor missing');
     visible=remaining.slice(0,succeeding.index!)+segment+remaining.slice(succeeding.index!);
   }
+  // WCP PDF label sorting moves COMPLETE parent scopes in the editable CMD
+  // source, not their immutable OCR identities. Before validating against the
+  // sealed MinerU archive, reconstruct the original page-local block order
+  // in this ephemeral string only. Native children travel with their parent;
+  // page/document evidence stays at its original boundary. A missing,
+  // duplicate or foreign anchor is still rejected by the checks below.
+  for(let pageNo=0;pageNo<data.pdf_info.length;pageNo++){
+    const all=[...visible.matchAll(blockStart)];
+    const page=all.filter(m=>Number(m[2]??m[4])===pageNo);
+    const count=data.pdf_info[pageNo].para_blocks.length;
+    if(page.length!==count||page.length<2)continue;
+    const order=page.map(m=>Number(m[3]??m[5]));
+    if(order.every((n,i)=>n===i))continue;
+    assert(new Set(order).size===count&&order.every(n=>n>=0&&n<count),
+      'page-local reordered PBS must preserve every original OCR block');
+    const from=page[0].index!,last=page.at(-1)!.index!;
+    const following=all.find(m=>m.index!>last)?.index??visible.length;
+    const pageEvidence=visible.indexOf('<!-- minerujson:page:v1:',last);
+    const end=Math.min(following,pageEvidence<0?visible.length:pageEvidence);
+    assert(end>last,'reordered page scope crosses an OCR boundary');
+    const pieces=page.map((m,i)=>visible.slice(m.index!,page[i+1]?.index??end));
+    assert(pieces.every(x=>!(/<!-- minerujson:(?:page|source|document-meta|discarded):v1/.test(x))),
+      'reordered PBS scope contains sealed OCR evidence');
+    visible=visible.slice(0,from)+order.map((_,i)=>pieces[order.indexOf(i)]).join('')+
+      visible.slice(end);
+  }
   const markers = [...visible.matchAll(blockStart)];
   const total = data.pdf_info.reduce((n,page)=>n+page.para_blocks.length,0);
   assert(markers.length === total, `block anchor count ${markers.length} != ${total}`);

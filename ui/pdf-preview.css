@@ -96,6 +96,24 @@
 .ocr-pdf-block-drag-path{stroke:#e3d28e;stroke-width:3;stroke-linecap:round;
   stroke-dasharray:8 5;filter:drop-shadow(0 1px 2px #000)}
 .ocr-pdf-block-drag-tip{fill:#e3d28e;stroke:#1b302d;stroke-width:1}
+/* The three landing slots are TEMPORARY gesture feedback. They are fixed to
+ * the screen-side target chip, never to a changed PDF bbox or Markdown body.
+ * A pointer on the rail is resolved geometrically while capture stays on
+ * the original stationary PDF label (iPad Safari included). */
+.ocr-pdf-block-drop-guide{
+  position:fixed;display:flex;height:29px;box-sizing:border-box;
+  border:1px solid #e1c985;border-radius:5px;overflow:hidden;
+  background:#203a39;color:#f2ebcf;
+  box-shadow:0 2px 9px #0009;z-index:10000;pointer-events:none;
+  font:600 11px/27px system-ui,sans-serif;text-align:center;white-space:nowrap;
+}
+.ocr-pdf-block-drop-guide span{flex:1;min-width:0;padding:0 3px}
+.ocr-pdf-block-drop-guide span+span{border-left:1px solid #6a8178}
+.ocr-pdf-block-drop-guide span.active{background:#edc76c;color:#172b2c}
+.ocr-pdf-block-cover.ocr-pdf-block-drop-target[data-drop-placement="before"]
+  >.ocr-pdf-block-ctrl{border-top:3px solid #edc76c}
+.ocr-pdf-block-cover.ocr-pdf-block-drop-target[data-drop-placement="after"]
+  >.ocr-pdf-block-ctrl{border-bottom:3px solid #edc76c}
 .ocr-pdf-block-cover .ocr-pdf-block-ctrl[data-gutter="left"]{
   right:calc(100% + 3px);left:auto;transform-origin:right top;
 }

@@ -15,6 +15,7 @@ import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
+import {pickPDFDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-drop-hit.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // "No text" describes current CMD scope only, not why MinerU or a reviewer
@@ -747,8 +748,9 @@ export class PdfPreview {
    */
   armBlockDrag(event,ctrl,id){
     if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
-    const item={id,ctrl,pointerId:event.pointerId,x:event.clientX,y:event.clientY,
-      startX:event.clientX,startY:event.clientY,active:false,target:null,timer:null,svg:null};
+    const item={id,ctrl,pointerId:event.pointerId,pointerType:event.pointerType,
+      x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
+      active:false,target:null,placement:null,timer:null,svg:null,guide:null};
     this.blockDrag=item;
     // Capture *document-wide* movement while held. On iPad the pointer may
     // cross between two PDF columns (or out of the source label's DOM tree).
@@ -765,7 +767,7 @@ export class PdfPreview {
       svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
         '<path class="ocr-pdf-block-drag-tip" />';
       document.body.append(svg);item.svg=svg;
-      this.setStatus(`拖动 ${id} 箭头到本页另一块标签，松手调整 CMD 顺序`);
+      this.setStatus(`从 ${id} 拖出箭头，指向目标标签，选之前／子块／之后`);
       this.updateBlockDrag(item,item.x,item.y);
       this.autoScrollBlockDrag(item);
     },370);
@@ -811,61 +813,85 @@ export class PdfPreview {
     }
   }
   blockDropTarget(item,x,y){
-    const viewport=this.scroller.getBoundingClientRect();
-    if(x<viewport.left||x>viewport.right||y<viewport.top||y>viewport.bottom)
-      return null;
+    const clip=this.visibleClip();
     const pageId=item.ctrl.closest('.ocr-pdf-block-cover')?.dataset.pdfPage;
-    const element=document.elementFromPoint(x,y);
-    // Parent -> native child is structural reparenting, not PDF physical move.
-    const child=element?.closest?.('.ocr-pdf-subblock-chip');
-    const childCover=child?.closest('.ocr-pdf-block-cover');
-    if(childCover?.dataset.pdfPage===pageId&&childCover.dataset.blockId!==item.id)
-      return child;
-    const direct=element?.closest?.('.ocr-pdf-block-ctrl')
-      ?.closest('.ocr-pdf-block-cover');
-    if(direct?.dataset.pdfPage===pageId&&direct.dataset.blockId!==item.id)
-      return direct;
-    // Finger-friendly tolerance across real OCR parent and child chips.
-    let result=null,nearest=25;
-    const consider=(chip,cover)=>{
-      if(!chip?.isConnected||!cover||cover.dataset.pdfPage!==pageId||
-        cover.dataset.blockId===item.id)return;
-      const rect=chip.getBoundingClientRect();
-      if(rect.right<viewport.left||rect.left>viewport.right||
-        rect.bottom<viewport.top||rect.top>viewport.bottom)return;
-      const dx=Math.max(rect.left-x,0,x-rect.right);
-      const dy=Math.max(rect.top-y,0,y-rect.bottom);
-      const d=Math.hypot(dx,dy);
-      if(d<nearest){result=chip.classList.contains('ocr-pdf-subblock-chip')?chip:cover;nearest=d;}
-    };
-    for(const node of this.blockCoverageNodes.values()){
-      consider(node.querySelector(':scope > .ocr-pdf-block-ctrl'),node);
-      for(const chip of node.querySelectorAll('.ocr-pdf-subblock-chip'))consider(chip,node);
+    // A guide is a deliberate 3-slot landing rail. Keep the selected target
+    // while the pointer travels from its fixed label onto that rail; never
+    // let an adjacent PDF gutter chip steal its landing.
+    if(item.guide&&item.target){
+      const rail=item.guide.getBoundingClientRect();
+      if(x>=rail.left-5&&x<=rail.right+5&&y>=rail.top-5&&y<=rail.bottom+5)
+        return {node:item.target,id:item.targetId,kind:item.targetKind,
+          placement:pdfDropGuideZone(x,rail,item.targetKind==='child')};
     }
-    return result;
+    const candidates=[];
+    for(const node of this.blockCoverageNodes.values()){
+      if(!node.isConnected)continue;
+      const pageId=node.dataset.pdfPage,rootId=node.dataset.blockId;
+      const ctrl=node.querySelector(':scope > .ocr-pdf-block-ctrl');
+      if(ctrl)candidates.push({node,id:rootId,rootId,kind:'parent',
+        pageId,rect:ctrl.getBoundingClientRect()});
+      for(const chip of node.querySelectorAll('.ocr-pdf-subblock-chip')){
+        if(chip.closest('.ocr-pdf-block-fragment')?.hidden)continue;
+        candidates.push({node:chip,
+          id:chip.closest('.ocr-pdf-block-fragment')?.dataset.subblockId,
+          rootId,kind:'child',pageId,rect:chip.getBoundingClientRect()});
+      }
+    }
+    return pickPDFDropTarget(candidates,{x,y,sourceId:item.id,pageId,clip,
+      pointerType:item.pointerType});
+  }
+  /** Three semantic positions live beside the fixed PDF label, never inside
+   * OCR text. This transient guide and arrow disappear after pointerup. */
+  paintBlockDropGuide(item){
+    if(!item.target){item.guide?.remove();item.guide=null;return;}
+    const child=item.targetKind==='child';
+    if(!item.guide||item.guide.dataset.kind!==(child?'child':'parent')){
+      item.guide?.remove();
+      const guide=document.createElement('div');
+      guide.className='ocr-pdf-block-drop-guide';
+      guide.dataset.kind=child?'child':'parent';
+      guide.setAttribute('aria-hidden','true');
+      guide.innerHTML=child?'<span data-placement="child">成为子块</span>':
+        '<span data-placement="before">之前</span><span data-placement="child">子块</span>'+
+        '<span data-placement="after">之后</span>';
+      document.body.append(guide);item.guide=guide;
+    }
+    const chip=item.targetKind==='child'?item.target:
+      item.target.querySelector(':scope > .ocr-pdf-block-ctrl');
+    if(!chip?.isConnected)return;
+    const rect=chip.getBoundingClientRect(),clip=this.visibleClip();
+    if(!clip)return;
+    const width=child?80:150,height=29;
+    const left=Math.max(clip.left+3,Math.min((rect.left+rect.right-width)/2,
+      clip.right-width-3));
+    const top=rect.bottom+height+8<=clip.bottom?rect.bottom+5:
+      Math.max(clip.top+3,rect.top-height-5);
+    item.guide.style.left=left+'px';item.guide.style.top=top+'px';
+    item.guide.style.width=width+'px';
+    item.guide.dataset.placement=item.placement;
+    for(const span of item.guide.children)
+      span.classList.toggle('active',span.dataset.placement===item.placement);
   }
   clearBlockDragListeners(){
     document.removeEventListener('pointermove',this.onBlockDragMove,true);
     document.removeEventListener('pointerup',this.onBlockDragUp,true);
     document.removeEventListener('pointercancel',this.onBlockDragCancel,true);
   }
-  blockDropMove(startId,pointedId){
-    // Drag origin is a POSITION, not the piece to move: pointing from b0
-    // to b8 means take the logical b8 and insert it before b0. Do not
-    // depend on OCR block indices, mutable labels, or PDF coordinates.
+  blockDropMove(startId,pointedId,placement){
+    // The finger starts on the actual MOVING block. Its old OCR position is
+    // irrelevant; source order and AG display derive from the one CMD edit.
     const start=this.blockCoverageRows.find(row=>row.id===startId);
     const pointed=this.blockCoverageRows.find(row=>row.id===pointedId);
     if(!start||!pointed||start.pageIndex!==pointed.pageIndex||
       !Number.isInteger(start.sourceLine)||!Number.isInteger(pointed.sourceLine)||
       start.id===pointed.id)throw Error('文本块插入目标无效，请重新检查');
-    // An unchecked original Block can share the same displayed logical ID.
-    // Always pull its checked root and attached descendants as ONE item.
-    const root=this.blockCoverageRows.find(row=>row.pageIndex===pointed.pageIndex&&
-      row.logicalId===pointed.logicalId&&!row.joinPrev);
+    const root=this.blockCoverageRows.find(row=>row.pageIndex===start.pageIndex&&
+      row.logicalId===start.logicalId&&!row.joinPrev);
     if(!root)throw Error('该逻辑文本块跨页接续，不能在本页单独移动');
-    if(root.id===startId||(start.logicalId&&start.logicalId===pointed.logicalId))
+    if(root.id===pointedId||(start.logicalId&&start.logicalId===pointed.logicalId))
       return null; // A logical block cannot be dragged onto itself.
-    return {sourceId:root.id,targetId:startId,placement:'before'};
+    return {sourceId:root.id,targetId:pointed.id,placement};
   }
   updateBlockDrag(item,x,y){
     if(this.blockDrag!==item)return;
@@ -886,26 +912,44 @@ export class PdfPreview {
     }
     // A stationary long press is not a move, even if adjacent chips happen
     // to fall within the enlarged finger-friendly drop neighborhood.
-    const target=Math.hypot(x-item.startX,y-item.startY)>=12
+    const hit=Math.hypot(x-item.startX,y-item.startY)>=12
       ?this.blockDropTarget(item,x,y):null;
+    const target=hit?.node||null,placement=hit?.placement||null;
     if(item.target!==target){
       item.target?.classList.remove('ocr-pdf-block-drop-target');
+      item.target?.removeAttribute('data-drop-placement');
+      item.guide?.remove();item.guide=null;
       item.target=target;target?.classList.add('ocr-pdf-block-drop-target');
-      const child=target?.classList.contains('ocr-pdf-subblock-chip');
-      const pointedLabel=child?target.textContent:target?.querySelector('.ocr-pdf-block-ctrl span')?.textContent;
-      const startLabel=item.ctrl.querySelector('span')?.textContent||item.id;
-      this.setStatus(target
-        ?child?`指向子块 ${pointedLabel} · 松手将 ${startLabel} 归入该父块并重新编号`:
-          `指向 ${pointedLabel} · 松手将它移到起点 ${startLabel} 前面`
-        :`从 ${startLabel} 指向本页要搬来的文本块`);
     }
+    if(item.placement!==placement||item.targetId!==hit?.id){
+      const label=hit?.id||'';
+      const action=placement==='before'?'之前':placement==='after'?'之后':'作为子块';
+      this.setStatus(hit?`将 ${item.id} 移至 ${label} ${action} · 松手应用，单次 Undo`:
+        `从 ${item.id} 拖出箭头；未命中唯一目标，不执行移动`);
+    }
+    item.placement=placement;item.targetId=hit?.id||null;
+    item.targetKind=hit?.kind||null;
+    if(target){target.dataset.dropPlacement=placement;this.paintBlockDropGuide(item);}
+    else this.paintBlockDropGuide(item);
     const box=item.ctrl.getBoundingClientRect();
-    const sx=(box.left+box.right)/2,sy=(box.top+box.bottom)/2;
-    const tip=(target?.classList.contains('ocr-pdf-subblock-chip')?target:
-      target?.querySelector('.ocr-pdf-block-ctrl'))?.getBoundingClientRect();
-    const ex=tip?(tip.left+tip.right)/2:x,ey=tip?(tip.top+tip.bottom)/2:y;
     const svg=item.svg;
-    svg.setAttribute('viewBox',`0 0 ${window.innerWidth} ${window.innerHeight}`);
+    // Derive the SAME CSS-client coordinate system for the pointer, fixed
+    // SVG, transformed chip and guide. window.innerWidth is wrong on iPad
+    // under visual viewport pan/zoom and causes displaced arrow tips.
+    const bounds=svg.getBoundingClientRect();
+    svg.setAttribute('viewBox',`0 0 ${bounds.width} ${bounds.height}`);
+    const start=pdfArrowLocalPoint((box.left+box.right)/2,
+      (box.top+box.bottom)/2,bounds);
+    const sx=start.x,sy=start.y;
+    let ex=x-bounds.left,ey=y-bounds.top;
+    if(target&&item.guide){
+      const rect=item.guide.getBoundingClientRect();
+      const index=item.targetKind==='child'?0:
+        {before:0,child:1,after:2}[placement]??1;
+      const slots=item.targetKind==='child'?1:3;
+      ex=rect.left+(index+.5)*rect.width/slots-bounds.left;
+      ey=(rect.top+rect.bottom)/2-bounds.top;
+    }
     const bend=(sx+ex)/2;
     svg.querySelector('.ocr-pdf-block-drag-path').setAttribute('d',
       `M ${sx} ${sy} Q ${bend} ${Math.min(sy,ey)-30} ${ex} ${ey}`);
@@ -921,15 +965,15 @@ export class PdfPreview {
     if(!item||item.pointerId!==event.pointerId)return;
     const active=item.active;
     if(active)this.updateBlockDrag(item,event.clientX,event.clientY);
-    const targetNode=active&&!cancel?item.target:null;
-    const childTarget=targetNode?.classList.contains('ocr-pdf-subblock-chip');
-    const target=childTarget?targetNode.closest('.ocr-pdf-block-fragment')?.dataset.subblockId:
-      targetNode?.dataset.blockId;
+    const target=active&&!cancel?item.targetId:null;
+    const placement=item.placement;
     clearTimeout(item.timer);
     this.stopBlockDragScroll();
     this.clearBlockDragListeners();
     item.ctrl.classList.remove('ocr-pdf-block-drag-source');
     item.target?.classList.remove('ocr-pdf-block-drop-target');
+    item.target?.removeAttribute('data-drop-placement');
+    item.guide?.remove();
     item.svg?.remove();this.blockDrag=null;
     try{if(item.ctrl.hasPointerCapture(event.pointerId))item.ctrl.releasePointerCapture(event.pointerId);}
     catch{/* iOS may release capture on pointercancel. */}
@@ -939,7 +983,7 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
-    if(childTarget){
+    if(placement==='child'){
       this.setStatus(`正在将 ${item.id} 归入 ${target} 所属父块…`);
       void this.onBlockReparent(item.id,target).then(result=>{
         this.setStatus(result?.changed
@@ -949,18 +993,18 @@ export class PdfPreview {
       return;
     }
     let move;
-    try{move=this.blockDropMove(item.id,target);}catch(error){
+    try{move=this.blockDropMove(item.id,target,placement);}catch(error){
       this.setStatus('排序失败：'+error.message);return;
     }
     if(!move){this.setStatus('同一逻辑块，顺序不变');return;}
-    this.setStatus(`正在将指向块 ${move.sourceId} 移到起点块 ${item.id} 前面…`);
+    this.setStatus(`正在将 ${move.sourceId} 移至 ${move.targetId} ${placement==='before'?'之前':'之后'}…`);
     void this.onBlockMove(move.sourceId,move.targetId,move.placement).then(result=>{
       if(!result?.changed){this.setStatus('该块已紧邻目标，顺序不变');return;}
       const shift=result.shift;
       const interval=shift?.crossedIds?.length||0;
       this.setStatus(shift?.allIndependent
-        ?`已移动 · 跨越 ${interval} 块，区间编号整体 ${shift.delta>0?'+1':'−1'} · 可撤销`
-        :`已移动 · 跨越 ${interval} 个原始块，保留原有接续关系 · 可撤销`);
+        ?`已重排 · 跨越 ${interval} 块，CMD 序列已更新 · 可撤销`
+        :`已重排 ${move.sourceId} → ${move.targetId} ${placement==='before'?'之前':'之后'} · 可撤销`);
     }).catch(error=>this.setStatus('排序失败：'+error.message));
   }
   paintBlockCoverage(){
@@ -1494,7 +1538,9 @@ export class PdfPreview {
     if(this.blockDrag){
       clearTimeout(this.blockDrag.timer);
       this.blockDrag.svg?.remove();
+      this.blockDrag.guide?.remove();
       this.blockDrag.target?.classList.remove('ocr-pdf-block-drop-target');
+      this.blockDrag.target?.removeAttribute('data-drop-placement');
       this.blockDrag.ctrl.classList.remove('ocr-pdf-block-drag-source');
       this.blockDrag=null;
     }

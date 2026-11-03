@@ -264,8 +264,8 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   const atom=byId.get(sourceId),target=byId.get(targetId);
   if(!atom||!target)throw Error('Unknown PBS source or target');
   const from=parseCMDPBSId(sourceId),to=parseCMDPBSId(targetId);
-  if(!from||!to||from.s.length||to.s.length!==1||from.p!==to.p)
-    throw Error('Only a same-page parent can become the next child of a native child');
+  if(!from||!to||from.s.length||to.s.length>1||from.p!==to.p)
+    throw Error('Only a same-page independent parent can become a direct child');
   // A reviewed leaf may be made independent, then reparented again.
   // This is only legal when its immutable provenance is an original OCR
   // *parent* on the same page. A promoted native child (origin=...sN) is
@@ -278,8 +278,14 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   if(ownChain?.size!==1||ownChain.explicit)
     throw Error('Extract source to a singleton BC before reparenting');
   if(target.origin!==target.id||target.bc)
-    throw Error('Target must be an original native child without BC rewrites');
-  const newId=`p${to.p}b${to.b}s${to.s[0]+1}`;
+    throw Error('Target must have original OCR provenance without BC rewrites');
+  const siblings=model.atoms.map(a=>parseCMDPBSId(a.id)).filter(p=>
+    p?.p===to.p&&p.b===to.b&&p.s.length===1);
+  // A parent drop appends a direct child. A native-child drop still means
+  // "immediately after this native child", preserving older PDF behavior.
+  const nextIndex=to.s.length?to.s[0]+1:
+    siblings.length?Math.max(...siblings.map(p=>p.s[0]))+1:0;
+  const newId=`p${to.p}b${to.b}s${nextIndex}`;
   if(byId.has(newId))throw Error(`${newId} already exists; choose an unoccupied sibling slot`);
   const parsed=parseCMDBlockTag(atom.rawLine);
   const insert=commentPrefix(atom.rawLine)+serializeCMDBlockTag({
@@ -299,9 +305,17 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   const stop=Math.min(nextAtom,
     nextPageBoundary<0?source.length:nextPageBoundary,
     archiveBoundary<0?source.length:archiveBoundary);
-  const destination=ordered[targetIndex+1]?.from;
+  const boundaryCandidates=['<!-- minerujson:page:v1:','<!-- minerujson:source:v1:']
+    .map(tag=>source.indexOf(tag,target.from+target.rawLine.length))
+    .filter(pos=>pos>=0);
+  const boundary=boundaryCandidates.length?Math.min(...boundaryCandidates):source.length;
+  const nextRoot=ordered.slice(targetIndex+1).find(a=>parseCMDPBSId(a.id)?.s.length===0);
+  // The insertion may be the last body on the page. Preserve the immutable
+  // next-page marker rather than demanding a next PBS anchor.
+  const destination=to.s.length?ordered[targetIndex+1]?.from??boundary:
+    Math.min(nextRoot?.from??boundary,boundary);
   if(stop<0||!Number.isInteger(destination)||stop<=atom.from||
-    destination>=source.indexOf('<!-- minerujson:source:v1:')||
+    destination>source.indexOf('<!-- minerujson:source:v1:')||
     destination>=atom.from&&destination<=stop)
     throw Error('Cannot move an overlapping PBS scope or sealed page evidence');
   const segment=source.slice(atom.from,stop);
@@ -314,6 +328,52 @@ export function planCMDReparentPBS(source,sourceId,targetId){
   ];
   return {changed:edits.length,sourceId,targetId,newId,origin:atom.origin,
     edits,relocatedSourceText:true};
+}
+
+/** Reorder independent page-level PBS scopes in one CM6 operation.
+ * The immutable PBS origin (physical PDF bbox) never changes. A parent takes
+ * its native/reviewed children with it; all other parents keep relative order.
+ * AG projects the new source order and PDF retains the original geometry.
+ */
+export function planCMDReorderPBSParents(source,sourceId,targetId,placement='before'){
+  if(!['before','after'].includes(placement))throw Error('Invalid PBS landing');
+  const model=readCMDBlockChains(source);
+  if(model.invalid.length||model.atoms.some(a=>a.format!=='cmd-v1'))
+    throw Error('CMD PBS migration required before source reordering');
+  const from=parseCMDPBSId(sourceId),to=parseCMDPBSId(targetId);
+  if(!from||!to||from.s.length||to.s.length||from.p!==to.p)
+    throw Error('Only same-page independent parents can be reordered');
+  const parents=model.atoms.filter(a=>{
+    const id=parseCMDPBSId(a.id);
+    return id?.p===from.p&&id.s.length===0;
+  }).sort((a,b)=>a.from-b.from);
+  const start=parents.findIndex(a=>a.id===sourceId);
+  const target=parents.findIndex(a=>a.id===targetId);
+  if(start<0||target<0)throw Error('Unknown PDF parent');
+  if(start===target)return {changed:0,edits:[],reason:'same-parent'};
+  const group=model.chains.find(c=>c.members.includes(sourceId));
+  if(group?.explicit&&group.size>1)
+    throw Error('Extract the parent from its BC before reordering');
+  const boundary=[source.indexOf('<!-- minerujson:page:v1:',parents[0].from),
+    source.indexOf('<!-- minerujson:source:v1:',parents[0].from)]
+    .filter(pos=>pos>=0).sort((a,b)=>a-b)[0];
+  if(!Number.isInteger(boundary)||boundary<=parents.at(-1).from)
+    throw Error('No sealed OCR page boundary after PDF parents');
+  const pieces=parents.map((a,i)=>source.slice(a.from,parents[i+1]?.from??boundary));
+  if(pieces.some(x=>/<!-- minerujson:(?:page|source|discarded|document-meta):v1/.test(x)))
+    throw Error('Cannot reorder sealed OCR evidence');
+  const reordered=parents.map((a,i)=>({id:a.id,text:pieces[i]}));
+  const [moving]=reordered.splice(start,1);
+  const place=reordered.findIndex(a=>a.id===targetId)+(placement==='after'?1:0);
+  reordered.splice(place,0,moving);
+  if(reordered.every((a,i)=>a.id===parents[i].id))
+    return {changed:0,edits:[],reason:'already-ordered'};
+  const fromOffset=parents[0].from;
+  return {changed:1,edits:[{from:fromOffset,to:boundary,
+    expected:source.slice(fromOffset,boundary),
+    insert:reordered.map(a=>a.text).join('')}],
+    sourceId,targetId,placement,pageIndex:from.p,
+    order:reordered.map(a=>a.id),relocatedSourceText:true};
 }
 /** Promote one direct child (native or reviewed) to the next free page-level PBS ID.
  * This is a CMD source-scope move, not a synthetic MinerU OCR block.

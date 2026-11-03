@@ -13,7 +13,8 @@ import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,
   planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDPromotePBSChild,planCMDMergeBlockChains,
-  planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember} from './cmd-block-chains.js';
+  planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember,
+  planCMDReorderPBSParents} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDPDFBBoxEdit} from './cmd-pdf-bbox.js';
 import {planCMDSubblockAnnotations,queryCMDLayout} from './cmd-text-blocks.js';
@@ -75,8 +76,24 @@ export function createCMDTransactionPort(cmd){
   };
   const moveBlock=async(sourceId,targetId,placement)=>{
     const source=cmd.readSource();
-    if(readCMDBlockChains(source).atoms.some(a=>a.format==='cmd-v1'))
-      throw Error('PBS/BC 文档请使用 CMD 链内排序；源码物理移动待 WP5 适配');
+    const current=readCMDBlockChains(source);
+    if(current.atoms.some(a=>a.format==='cmd-v1')){
+      const plan=planCMDReorderPBSParents(source,sourceId,targetId,placement);
+      if(!plan.changed)return plan;
+      const edit=plan.edits[0];
+      if(source.slice(edit.from,edit.to)!==edit.expected||
+        source!==cmd.readSource())throw Error('CMD PBS source changed before reordering');
+      const next=source.slice(0,edit.from)+edit.insert+source.slice(edit.to);
+      const after=readCMDBlockChains(next);
+      const origins=model=>model.atoms.map(a=>a.origin).sort().join('\n');
+      const tail=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
+      if(after.invalid.length||after.atoms.length!==current.atoms.length||
+        origins(after)!==origins(current)||tail(next)!==tail(source))
+        throw Error('PBS reorder must preserve every OCR atom and sealed evidence');
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    }
     const {rows}=await cmd.inspectTextBlocks(source);
     if(source!==cmd.readSource())throw Error('拖动期间 CMD 已变化，请重新操作');
     const plan=planCMDBlockMove(source,rows,sourceId,targetId,placement);
