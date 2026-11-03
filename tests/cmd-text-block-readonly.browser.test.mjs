@@ -82,7 +82,8 @@ try{
           agDrag:document.querySelectorAll('.ocr-pbs-drag-handle').length,
           readOnly:!!document.querySelector('.ocr-pdf-pane.ocr-pdf-readonly'),
           extractHidden:!!document.querySelector('.ocr-pdf-extract-text')?.hidden,
-          promoteHidden:!!document.querySelector('.ocr-pdf-promote-child')?.hidden,
+          splitLabel:document.querySelector('.ocr-pdf-promote-child')?.textContent,
+          splitDisabled:document.querySelector('.ocr-pdf-promote-child')?.disabled,
           checkboxDisplay:getComputedStyle(
             document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"] input')).display,
           hasDragArrow:!!document.querySelector('.ocr-pdf-block-drag-arrow')
@@ -91,7 +92,8 @@ try{
         assert.equal(controls.agDrag,0);
         assert.equal(controls.checkboxDisplay,'none');
         assert.equal(controls.extractHidden,true);
-        assert.equal(controls.promoteHidden,true);
+        assert.equal(controls.splitLabel,'拆分子块');
+        assert.equal(controls.splitDisabled,true,'must select an actual child first');
         assert.equal(controls.hasDragArrow,false);
         for(const namePart of ['并入','拆链','合并','移动','独立成链','坐标','迁移旧标签',
           '确认续接','否决续接','标定原始子块'])

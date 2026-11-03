@@ -77,13 +77,15 @@ try{
           await page.locator('body').dispatchEvent('pointermove',{...touch,...center(rect)});
           await page.locator('body').dispatchEvent('pointerup',{...touch,...center(rect)});
         };
-        const originalRect=await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]').boundingBox();
         await drag('p1b3','p1b5',501);
         await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')&&
           document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b5s1"][data-origin-id="p1b3s0"]'),
           null,{timeout:60000});
         const newChild=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5s1"] > .ocr-pdf-block-ctrl');
         await newChild.waitFor({state:'attached',timeout:30000});
+        // Compare the SAME native OCR child rectangle before and after
+        // splitting, not the old union bbox of its former parent p1b3.
+        const nativeRect=await page.locator('.ocr-pdf-block-cover[data-block-id="p1b5s1"]').boundingBox();
         await newChild.evaluate(el=>el.click());
         await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-promote-child')?.disabled,
           null,{timeout:10000});
@@ -95,8 +97,8 @@ try{
         await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes(
           '拆分子块 · p1b5s1 → p1b14'),null,{timeout:30000});
         const rect=await page.locator('.ocr-pdf-block-cover[data-block-id="p1b14"]').boundingBox();
-        assert(rect&&originalRect);
-        for(const key of ['x','y','width','height'])assert(Math.abs(rect[key]-originalRect[key])<2,
+        assert(rect&&nativeRect);
+        for(const key of ['x','y','width','height'])assert(Math.abs(rect[key]-nativeRect[key])<2,
           name+' split moved bbox '+key);
         assert.equal(await split.isDisabled(),true,'parent cannot be split again');
         assert.equal(readFileSync(doc,'utf8'),source,'split wrote disk');
