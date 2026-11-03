@@ -19,6 +19,10 @@ const original=toMarkdown(raw),plan=planCMDJoinP1B3IntoP1B4(original);
 const expected=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((s,e)=>{
   assert.equal(s.slice(e.from,e.to),e.expected);return s.slice(0,e.from)+e.insert+s.slice(e.to);
 },original);
+for(const id of ['p1b4','p1b4s0','p1b4s1']){
+  assert.equal(readCMDBlockChains(expected).atoms.find(a=>a.id===id)?.rawLine,
+    `<!-- cmd:block:v1 id="${id}" -->`);
+}
 assert(!expected.includes('<!-- cmd:block:v1 id="p1b3"'));
 assert(!expected.includes('<!-- cmd:absorbed-parent:v1 origin="p1b3"'));
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-only-p1b3-to-p1b4-'));
@@ -103,6 +107,23 @@ try{
         await page.locator('#unlock-form button[type=submit]').click();
         await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),null,{timeout:35000});
         assert.equal(readFileSync(doc,'utf8'),expected,'browser saved source must equal expected exact bytes');
+        // Reload from the saved id-only CMD: physical PDF aliases must be
+        // reconstructed, not kept in a transient browser memory table.
+        await page.reload({waitUntil:'domcontentloaded',timeout:75000});
+        await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:95000});
+        await page.locator('#module-select').evaluate(el=>{
+          el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+        await selectPreview(page,'pdf');
+        const surviving=page.locator('.ocr-pdf-block-cover[data-block-id="p1b4s1"][data-origin-id="p1b3s0"]');
+        await surviving.waitFor({state:'attached',timeout:60000});
+        assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]').count(),0);
+        const reloaded=await surviving.boundingBox();assert(reloaded);
+        for(const key of ['x','y','width','height'])
+          assert(Math.abs(old[key]-reloaded[key])<2,name+' reload changed original PDF bbox '+key);
+        await page.locator('.ocr-pdf-block-cover[data-block-id="p1b4"] > .ocr-pdf-block-ctrl')
+          .evaluate(el=>el.click());
+        assert.equal(await surviving.evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true);
         assert.equal(errors.length,0,'JavaScript errors: '+errors.join(';'));
         console.log('P1B3_INTO_P1B4_BROWSER_PASS',name,{oldParentGone:true,b4Parent:true,
           body:'p1b4s0',child:'p1b4s1',bboxUnchanged:true,groupHighlight:true,

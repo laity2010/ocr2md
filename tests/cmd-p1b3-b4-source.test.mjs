@@ -21,6 +21,12 @@ assert.equal(after.atoms.length,before.atoms.length);
 assert.deepEqual(after.atoms.filter(a=>a.id.startsWith('p1b4')).map(a=>a.id),
   ['p1b4','p1b4s0','p1b4s1']);
 assert(!after.atoms.some(a=>a.id==='p1b3'||a.id.startsWith('p1b3s')));
+for(const id of ['p1b4','p1b4s0','p1b4s1']){
+  const entry=after.atoms.find(a=>a.id===id);
+  assert.equal(entry?.rawLine,`<!-- cmd:block:v1 id="${id}" -->`,id+' must have id ONLY');
+  assert(!/\borigin=|\brole=/.test(entry.rawLine),id+' leaked internal PDF mapping into Markdown');
+}
+assert.equal((next.match(/<!-- cmd:block:v1 id="p1b4s[01]" -->/g)||[]).length,2);
 assert(!next.includes('<!-- cmd:block:v1 id="p1b3"'));
 assert(!next.includes('<!-- cmd:absorbed-parent:v1 origin="p1b3"'));
 const b4=after.atoms.find(x=>x.id==='p1b4');

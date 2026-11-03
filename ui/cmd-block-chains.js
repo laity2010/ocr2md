@@ -119,6 +119,20 @@ export function readCMDBlockChains(source){
     }
     offset+=line.length+1;
   }
+  // One reviewed structure edit uses only id= in its three source tags.
+  // Reconstruct a VIEW-ONLY PDF position alias from that unambiguous shape;
+  // neither OCR ownership nor that alias is written back into the CMD source.
+  const hasId=id=>atoms.some(a=>a.id===id);
+  if(!hasId('p1b3')&&hasId('p1b4')){
+    const body=atoms.find(a=>a.id==='p1b4s0');
+    const transferred=atoms.find(a=>a.id==='p1b4s1');
+    const exactTag=(a,id)=>a?.rawLine.trim()===`<!-- cmd:block:v1 id="${id}" -->`;
+    if(exactTag(body,'p1b4s0')&&exactTag(transferred,'p1b4s1')&&
+      !atoms.some(a=>a.id.startsWith('p1b3s'))){
+      body.origin='p1b4';body.role='body';
+      transferred.origin='p1b3s0';
+    }
+  }
   const seen=new Set(),origins=new Map();for(const a of atoms){
     if(seen.has(a.id))invalid.push({line:a.sourceLine,id:a.id,reason:'Duplicate PBS identity'});
     seen.add(a.id);
@@ -411,7 +425,17 @@ export function planCMDJoinP1B3IntoP1B4(source){
     return {...edit,insert:edit.insert.replace(annotation,'')};
   });
   if(stripped!==1)throw Error('Expected exactly one source parent annotation to remove');
-  return {...plan,edits};
+  // Source must contain the exact three id-only labels. PDF geometry is
+  // reconstructed by the read-only model above, never stored as extra attrs.
+  let bodyCount=0,childCount=0;
+  const cleanEdits=edits.map(edit=>({...edit,insert:edit.insert
+    .replace('<!-- cmd:block:v1 id="p1b4s0" origin="p1b4" role="body" -->',()=>{
+      bodyCount++;return '<!-- cmd:block:v1 id="p1b4s0" -->';})
+    .replace('<!-- cmd:block:v1 id="p1b4s1" origin="p1b3s0" -->',()=>{
+      childCount++;return '<!-- cmd:block:v1 id="p1b4s1" -->';})}));
+  if(bodyCount!==1||childCount!==1)
+    throw Error('Expected one generated source tag for each destination child');
+  return {...plan,edits:cleanEdits};
 }
 
 /** OCR structure correction, not a BC move. Re-parent exactly one original
