@@ -17,6 +17,7 @@ import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
 import {pickPDFDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-drop-hit.js';
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
+import {resolvePDFFragmentId} from './pdf-pbs-fragment-id.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // "No text" describes current CMD scope only, not why MinerU or a reviewer
@@ -370,9 +371,13 @@ export class PdfPreview {
     }
   }
   async open(){
+    let stage='geometry-and-document';
     try{
       const [geometry,loading]=await Promise.all([
-        this.getLayout(),
+        Promise.resolve().then(()=>this.getLayout()).then(layout=>{
+          console.info('[ocr-pdf-init] CMD geometry ready',layout?.pages?.length);
+          return layout;
+        }),
         // V6 evidence is a small (~1.4 MB) PDF. Fetch it once, streaming,
         // rather than paying a remote round trip for every 64 KB PDF.js range.
         // Large-document adaptive range loading can be added with file-size
@@ -380,9 +385,13 @@ export class PdfPreview {
         Promise.resolve(getDocument({url:appPath('/api/pdf'),disableRange:true,
           disableStream:false,stopAtErrors:true})),
       ]);
+      console.info('[ocr-pdf-init] PDF.js task created');
+      stage='pdf-document';
       this.map=geometry.pages;
       this.task=loading;
       const pdf=await loading.promise;
+      console.info('[ocr-pdf-init] PDF document parsed',pdf.numPages);
+      stage='pdf-viewer';
       if(this.disposed){await pdf.destroy();return;}
       if(this.map.length!==pdf.numPages)throw Error('PDF 页数与 CMD 原始页数不一致');
       this.pdf=pdf;
@@ -414,6 +423,8 @@ export class PdfPreview {
         this.scheduleOverlay();
       });
       this.viewer.setDocument(pdf);
+      stage='first-page-render';
+      console.info('[ocr-pdf-init] PDF viewer document assigned');
       const painted=await firstPagePaint;
       this.finishWarmup=null;
       if(this.disposed)return;
@@ -425,7 +436,11 @@ export class PdfPreview {
         const request=this.pendingFocus;this.pendingFocus=null;
         await this.focusLine(request.line,request.explicit);
       }
-    }catch(err){this.ready=false;this.setStatus('PDF 失败：'+err.message);}
+    }catch(err){
+      this.ready=false;
+      console.error('[ocr-pdf-init] FAILED',stage,err?.message,err?.stack||err);
+      this.setStatus('PDF 失败（'+stage+'）：'+err.message);
+    }
   }
   updateZoom(){
     if(this.viewer)this.zoomNode.textContent=`${Math.round(this.viewer.currentScale*100)}%`;
@@ -1152,7 +1167,7 @@ export class PdfPreview {
       // Child chips have no checkbox; parent join/move controls stay unchanged.
       // Nested wrappers keep the original page coordinate system on zoom.
       const parts=row.promoted?[]:row.bodyChildId?
-        [{bbox:block.bbox,path:[0],role:'body',type:'text'}]:block.subRegions||[];
+        [{bbox:block.bbox,path:[0],role:'body',type:'text',virtualBody:true}]:block.subRegions||[];
       const existing=[...node.querySelectorAll(':scope > .ocr-pdf-block-fragment')];
       existing.slice(parts.length).forEach(extra=>extra.remove());
       parts.forEach((part,i)=>{
@@ -1163,13 +1178,12 @@ export class PdfPreview {
           node.append(fragment);
         }
         const originalId=subblockId(row.pageIndex,row.blockIndex,part.path);
-        const id=part.role==='body'?row.bodyChildId:
-          row.nativeChildren?.[originalId]||originalId;
+        const id=resolvePDFFragmentId(row,part,originalId);
         const kind=part.role==='note'?'注释':part.role==='caption'?'标题':'正文';
-        const label=`${id} · OCR 来源 ${part.role==='body'?row.origin:originalId} · ${part.type} · ${kind}`;
+        const label=`${id} · OCR 来源 ${part.virtualBody?row.origin:originalId} · ${part.type} · ${kind}`;
         if(fragment.title!==label)fragment.title=label;
         if(fragment.dataset.subblockId!==id)fragment.dataset.subblockId=id;
-        fragment.hidden=part.role!=='body'&&this.blockCoverageRows.some(r=>r.promoted&&r.origin===originalId);
+        fragment.hidden=!part.virtualBody&&this.blockCoverageRows.some(r=>r.promoted&&r.origin===originalId);
         if(fragment.dataset.partType!==part.type)fragment.dataset.partType=part.type;
         if(fragment.dataset.partRole!==part.role)fragment.dataset.partRole=part.role;
         let chip=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
@@ -1197,7 +1211,7 @@ export class PdfPreview {
           fragment.append(chip);
         }
         if(chip.dataset.partIndex!==String(i))chip.dataset.partIndex=String(i);
-        if(part.role==='body')chip.dataset.bodyChildId=id;
+        if(part.virtualBody)chip.dataset.bodyChildId=id;
         else delete chip.dataset.bodyChildId;
         const childLabel=`定位原始 PDF 子块 ${id}`;
         if(chip.getAttribute('aria-label')!==childLabel)

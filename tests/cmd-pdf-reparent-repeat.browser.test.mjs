@@ -63,6 +63,14 @@ try {
    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1032,height:900}});
    page.setDefaultTimeout(22000);
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+   page.on('console',msg=>{
+     if(msg.text().includes('[ocr-pdf-init]'))
+       console.log('PDF_INIT_CONSOLE',name,msg.type(),msg.text());
+   });
+   page.on('requestfailed',request=>{
+     if(/pdf|worker/i.test(request.url()))
+       console.log('PDF_INIT_REQUEST_FAILED',name,request.url(),request.failure()?.errorText);
+   });
    const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:70000});
    console.log('PDF_REPARENT_AGAIN_STEP',name,'page',response.status());
    await page.waitForTimeout(8000);
