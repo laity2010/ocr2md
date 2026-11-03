@@ -342,7 +342,7 @@ class PreviewPanel {
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
       (sourceId,targetId)=>pdfReparentAction(sourceId,targetId),
       childId=>blockChainAction('promote-child',{childId}),
-      preview=>reportMediaStatus(preview.message));
+      preview=>reportMediaStatus(preview.message,'pdf-gesture'));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');

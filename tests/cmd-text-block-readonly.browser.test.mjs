@@ -1,7 +1,9 @@
 /** WCP text-block recognition-only baseline (06b2901 semantics).
  * Real original PDF and disposable CMD document; no user document writes.
  * AG inventory, PDF p/b/s overlays and click focus must remain functional.
- * Long press, triple tap and every structure-edit control must be absent.
+ * A canceled long-press and triple tap never edit. Only an explicitly
+ * completed PDF child-drop may attach; all other structure controls remain
+ * absent.
  */
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
@@ -104,7 +106,9 @@ try{
         const dest=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"] > .ocr-pdf-block-ctrl');
         const target=await dest.boundingBox();assert(target);
         await page.locator('body').dispatchEvent('pointermove',{...touch,...center(target)});
-        await page.locator('body').dispatchEvent('pointerup',{...touch,...center(target)});
+        // Cancel the real long-press gesture rather than releasing on a child
+        // landing, which is now intentionally a supported edit.
+        await page.locator('body').dispatchEvent('pointercancel',{...touch,...center(target)});
         await label.evaluate(el=>{el.click();el.click();el.click();});
         const unchanged=await page.evaluate(()=>({
           p1b3:!!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]'),

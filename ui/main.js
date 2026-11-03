@@ -418,7 +418,18 @@ async function main() {
     reportError:message=>$('status')?.setAttribute('data-file-switch-error',message)});
   mountAgModuleToolbar({modulePort,workspace:$('workspace')});
   registerCMSourceFontSetting(settings);
+  // A completed user gesture is more important than an AG background
+  // inventory scan. Let AG finish updating without hiding the result that
+  // the user needs to verify; Undo explicitly releases this short priority.
+  let pdfGestureStatusUntil=0;
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
+    if(kind==='pdf-gesture'){
+      pdfGestureStatusUntil=performance.now()+3500;
+      const dirty=hasUnsavedEdits();
+      status(dirty?'● 未保存 · '+message:message,dirty?'warning':'ok');
+      return;
+    }
+    if(message.startsWith('文本块标定')&&performance.now()<pdfGestureStatusUntil)return;
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
   },wcpRuntime,documentLabel,$('text-block-actions'));
@@ -794,6 +805,7 @@ async function main() {
     view.dispatch({effects:markOutlineLine.of(next.focusTarget.sourceLine)});
   });
   function history(command){
+    pdfGestureStatusUntil=0;
     // Keep CM6's own history event (changes, selection, effects, annotations)
     // but do not force-scroll to its restored selection. AG edits can be made
     // while the caret remains at offset 0 although a later page is visible.

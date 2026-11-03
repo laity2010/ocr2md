@@ -98,8 +98,11 @@ try{
           const inventory=await page.locator('#status').textContent();
           const ag=page.locator('.ocr-text-block-grid .ag-row[row-id="'+testCase.out+'"]').first();
           await ag.waitFor({state:'attached',timeout:25000});
-          assert(!(await page.locator('.ocr-text-block-grid .ag-row[row-id="p1b3"]').count()),
-            name+' old parent still in AG');
+          // AG Grid may keep a removed DOM row alive briefly for its exit
+          // animation, even after setGridOption has the new CMD projection.
+          await page.waitForFunction(()=>
+            !document.querySelector('.ocr-text-block-grid .ag-row[row-id="p1b3"]'),
+            null,{timeout:12000});
           assert(inventory.includes('已归入 p1b3'),name+' global status not updated: '+inventory);
           assert.equal(errors.length,0,'page errors: '+errors.join(';'));
           await page.locator('#undo').evaluate(el=>el.click());
