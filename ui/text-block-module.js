@@ -426,7 +426,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       (previewMapped?` · 当前 MD 定位 ${list.filter(x=>x.kind==='parent'&&x.expectsPreview&&previewMapped.has(x.id)).length}/${list.filter(x=>x.kind==='parent'&&x.expectsPreview).length}`:' · MD 定位检查中')+
       ` · 未知锚点 ${report.unknown}`+(report.invalidBCMarks?` · 无效 BC 标签 ${report.invalidBCMarks}`:'')+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
-    if(active)onStatus('文本块标定 · PDF 子块归入／拆分子块／整组父块排序 · '+(mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
+    if(active)onStatus('文本块只读标定 · '+(mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
   };
   updateGrid();
   return Object.freeze({

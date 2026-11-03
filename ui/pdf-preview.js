@@ -19,7 +19,6 @@ import {pickPDFDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-d
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
 import {resolvePDFFragmentId} from './pdf-pbs-fragment-id.js';
 import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
-import {describePDFBlockGesture} from './pdf-block-gesture-preview.js';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // "No text" describes current CMD scope only, not why MinerU or a reviewer
@@ -61,9 +60,7 @@ export class PdfPreview {
     onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好')),
     onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好')),
     onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好')),
-    onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好')),
-    onGesturePreview=()=>{},
-    onPDFParentOrder=()=>Promise.reject(Error('PDF 整组父块排序尚未准备好'))){
+    onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好'))){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -74,8 +71,6 @@ export class PdfPreview {
     this.onPDFBBox=onPDFBBox;
     this.onBlockReparent=onBlockReparent;
     this.onPromoteChild=onPromoteChild;
-    this.onGesturePreview=onGesturePreview;
-    this.onPDFParentOrder=onPDFParentOrder;
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.host.classList.add('ocr-pdf-pane');
     if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
@@ -86,7 +81,7 @@ export class PdfPreview {
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
       <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；插入源码窗当前光标位置，不替换原文；Undo 可撤销">提取文本</button>
-      <button class="ocr-pdf-promote-child" type="button" disabled title="请先点击 PDF 子块标签；拆分后成为当前页末尾的独立父块，可再次归入">拆分子块</button>
+      <button class="ocr-pdf-promote-child" type="button" disabled title="请先点击 PDF 的原生子块标签，再将该子块独立为当前页末尾的新父块">独立子块</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
       <span class="ocr-pdf-count">/ —</span>
       <span class="ocr-pdf-status" aria-live="polite">加载中</span></div>
@@ -105,8 +100,7 @@ export class PdfPreview {
     this.promoteButton.addEventListener('click',()=>void this.promoteSelectedChild());
     if(this.readOnly){
       this.extractButton.hidden=true;this.extractButton.disabled=true;
-      // Only this narrowly verified child-to-parent command is reopened.
-      // All other AG/PDF structure and geometry commands remain disabled.
+      this.promoteButton.hidden=true;this.promoteButton.disabled=true;
     }
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
     this.toolbar.querySelector('.ocr-pdf-plus').addEventListener('click',()=>this.zoomStep(1));
@@ -288,17 +282,19 @@ export class PdfPreview {
     const escaped=id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     // Select only an existing single-level CMD child; once promoted, its
     // original visible id is gone. This also accepts origin="pNbM" children.
-    return new RegExp(`<!-- cmd:block:v1 id="${escaped}"(?: origin="p\\d+b\\d+(?:s\\d+)?")?(?: [a-z]+="[^"]*")* -->`).test(current)
+    return new RegExp(`<!-- cmd:block:v1 id="${escaped}"(?: origin="p\\d+b\\d+")?(?: [a-z]+="[^"]*")* -->`).test(current)
       ?id:null;
   }
   updatePromoteButton(){
     if(!this.promoteButton)return;
+    if(this.readOnly){this.promoteButton.disabled=true;return;}
     const id=this.selectedNativeChildId();
     this.promoteButton.disabled=!id;
     this.promoteButton.title=id?`${id} → 当前 PDF 页末尾的新独立父块；一次 Undo 可恢复`:
       '请先点击 PDF 原生子块标签，已独立的子块不可重复操作';
   }
   async promoteSelectedChild(){
+    if(this.readOnly)return;
     const id=this.selectedNativeChildId();
     if(!id||this.promoteButton.disabled||this.disposed)return;
     this.promoteButton.disabled=true;
@@ -306,11 +302,9 @@ export class PdfPreview {
       const result=await this.onPromoteChild(id);
       if(result?.changed){
         this.selected=null;
-        const message=`✓ 拆分子块 · ${id} → ${result.newId} · 页末独立父块，可再次归入 · 未保存，可 Undo`;
-        this.setStatus(message);this.onGesturePreview({message});
+        this.setStatus(`✓ ${id} → ${result.newId} · 页末独立父块 · Undo 可撤销`);
       }
-    }catch(error){const message='拆分子块失败：'+error.message;
-      this.setStatus(message);this.onGesturePreview({message});}
+    }catch(error){this.setStatus('独立子块失败：'+error.message);}
     finally{if(!this.disposed)this.updatePromoteButton();}
   }
   async insertSelectedPDFText(){
@@ -810,12 +804,12 @@ export class PdfPreview {
     }
     return changed;
   }
-  /** Long-press the ID then point to another ID on this PDF page.
-   * In CMD read-only mode, the temporary arrow reports only a gesture intent
-   * to the Shell global status; it cannot invoke a CMD edit transaction.
+  /** Long-press the ID (not its checkbox) then point to another ID on this
+   * PDF page. The arrow is a temporary pointer-only visualization; the only
+   * data mutation is the CMD move transaction after a valid pointer release.
    */
   armBlockDrag(event,ctrl,id){
-    // Read-only marking mode may preview the pointer gesture, never commit.
+    if(this.readOnly)return;
     if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
     const item={id,ctrl,pointerId:event.pointerId,pointerType:event.pointerType,
       x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
@@ -836,7 +830,7 @@ export class PdfPreview {
       svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
         '<path class="ocr-pdf-block-drag-tip" />';
       document.body.append(svg);item.svg=svg;
-      this.setStatus(`从 ${id} 拖出箭头，选之前／子块／之后 · 松手仅报告状态，不改变文本块`);
+      this.setStatus(`从 ${id} 拖出箭头，指向目标标签，选之前／子块／之后`);
       this.updateBlockDrag(item,item.x,item.y);
       this.autoScrollBlockDrag(item);
     },370);
@@ -993,9 +987,7 @@ export class PdfPreview {
     if(item.placement!==placement||item.targetId!==hit?.id){
       const label=hit?.id||'';
       const action=placement==='before'?'之前':placement==='after'?'之后':'作为子块';
-      const parentOrder=/^p\d+b\d+$/.test(item.id)&&
-        /^p\d+b\d+$/.test(label)&&['before','after'].includes(placement);
-      this.setStatus(hit?`将 ${item.id} 移至 ${label} ${action} · ${parentOrder?'整组排序，可 Undo':this.readOnly&&placement!=='child'?'松手仅报告状态':'松手归入，单次 Undo'}`:
+      this.setStatus(hit?`将 ${item.id} 移至 ${label} ${action} · 松手应用，单次 Undo`:
         `从 ${item.id} 拖出箭头；未命中唯一目标，不执行移动`);
     }
     item.placement=placement;item.targetId=hit?.id||null;
@@ -1052,54 +1044,15 @@ export class PdfPreview {
     event.preventDefault();
     this.suppressBlockClickCtrl=item.ctrl;
     this.suppressBlockClickUntil=performance.now()+600;
-    if(cancel){
-      this.setStatus('已取消文本块拖动');
-      if(this.readOnly)this.onGesturePreview({message:`PDF 手势预演 · ${item.id} 已取消 · 未修改 CMD`});
-      return;
-    }
-    if(!target){
-      this.setStatus('未选择同页目标块，顺序不变');
-      if(this.readOnly)this.onGesturePreview({message:`PDF 手势预演 · ${item.id} 未命中有效落点 · 未修改 CMD`});
-      return;
-    }
-    if(['before','after'].includes(placement)&&
-       /^p\d+b\d+$/.test(item.id)&&/^p\d+b\d+$/.test(target)){
-      const action=placement==='before'?'之前':'之后';
-      const pending=`正在将整组 ${item.id}（含子块）移至 ${target} ${action}…`;
-      this.setStatus(pending);this.onGesturePreview({message:pending});
-      void this.onPDFParentOrder(item.id,target,placement).then(result=>{
-        const destination=result?.renamed?.[item.id]||item.id;
-        const message=result?.changed?
-          `✓ 父块整组排序 · ${item.id} → ${destination} · 移至 ${target} ${action} · 子块随组移动 · CMD 未保存，可 Undo`:
-          '已在目标相邻位置，父块顺序不变';
-        this.setStatus(message);this.onGesturePreview({message});
-      }).catch(error=>{
-        const message='父块整组排序失败：'+error.message;
-        this.setStatus(message);this.onGesturePreview({message});
-      });
-      return;
-    }
-    if(this.readOnly&&placement!=='child'){
-      // Deliberately bypass ALL CMD write callbacks and source move plans.
-      // This feature only tests iPad hit accuracy on real PDF/label geometry.
-      try{
-        const preview=describePDFBlockGesture({sourceId:item.id,targetId:target,placement});
-        this.onGesturePreview(preview);
-        this.setStatus(preview.message);
-      }catch(error){this.setStatus('手势预演失败：'+error.message);}
-      return;
-    }
+    if(cancel){this.setStatus('已取消块排序');return;}
+    if(!target){this.setStatus('未选择同页目标块，顺序不变');return;}
     if(placement==='child'){
       this.setStatus(`正在将 ${item.id} 归入 ${target} 所属父块…`);
       void this.onBlockReparent(item.id,target).then(result=>{
-        const label=result?.changed?
-          `✓ 已归入 ${item.id} → ${result.newId} · ${result.absorbedOrigin?'原父标签已消失 · ':''}CMD 未保存，可 Undo`:
-          'PBS 父子关系无需修改';
-        this.setStatus(label);this.onGesturePreview({message:label});
-      }).catch(error=>{
-        const message='PDF 文本块归入子块失败：'+error.message;
-        this.setStatus(message);this.onGesturePreview({message});
-      });
+        this.setStatus(result?.changed
+          ?`✓ ${item.id} → ${result.newId} · 原始来源保留 · 未保存，可 Undo`
+          :'PBS 父子关系无需修改');
+      }).catch(error=>this.setStatus('PDF 文本块归入子块失败：'+error.message));
       return;
     }
     let move;
@@ -1151,9 +1104,9 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
-        ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
-        // Gesture preview uses no CMD mutation. Its release never counts as
-        // one of the three taps; the checkbox edit gesture stays disabled.
+        if(!this.readOnly)ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
+        // Preserve long-press move: a dragged label's release never counts as
+        // one of the three taps. All changes still go through CMD's API.
         ctrl.addEventListener('contextmenu',e=>e.preventDefault());
         let tapCount=0,lastTap=0,firstTap=0,busy=false;
         const toggle=async()=>{
@@ -1191,10 +1144,7 @@ export class PdfPreview {
             const child=this.map[currentRow.pageIndex]?.regions.find(r=>r.blockIndex===currentRow.blockIndex)
               ?.subRegions.findIndex(r=>r.path.length===1&&r.path[0]===Number(original?.[3]));
             this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
-              partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent',
-              // A reviewed child retains its original physical bbox, but the
-              // toolbar must act on its CURRENT CMD PBS ID, not on origin=.
-              logicalId:/^p\d+b\d+s\d+$/.test(currentRow.id)?currentRow.id:null});
+              partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent'});
           }else this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
             partIndex:null,path:null,role:'parent',logicalId:currentRow.id});
           if(/^p\d+b\d+$/.test(currentRow.id))this.highlightParentGroup(currentRow);

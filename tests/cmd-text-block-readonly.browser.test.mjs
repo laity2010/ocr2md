@@ -1,9 +1,7 @@
 /** WCP text-block recognition-only baseline (06b2901 semantics).
  * Real original PDF and disposable CMD document; no user document writes.
  * AG inventory, PDF p/b/s overlays and click focus must remain functional.
- * A canceled long-press and triple tap never edit. Only an explicitly
- * completed PDF child-drop may attach; all other structure controls remain
- * absent.
+ * Long press, triple tap and every structure-edit control must be absent.
  */
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
@@ -17,7 +15,7 @@ import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {TEXT_BLOCKS_READ_ONLY,rejectTextBlockEdit} from '../ui/text-block-readonly.js';
 assert.equal(TEXT_BLOCKS_READ_ONLY,true);
-await assert.rejects(rejectTextBlockEdit(),/仅 PDF 子块落点可归入/);
+await assert.rejects(rejectTextBlockEdit(),/只读标定/);
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const source=toMarkdown(raw);
 assert.equal((source.match(/<!-- cmd:block:v1 id=/g)||[]).length,267);
@@ -66,7 +64,7 @@ try{
           el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
         });
         await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PBS 267')&&
-          document.querySelector('#status')?.textContent.includes('PDF 仅开放子块归入'),
+          document.querySelector('#status')?.textContent.includes('文本块只读标定'),
           null,{timeout:70000});
         await selectPreview(page,'pdf');
         const root=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]');
@@ -82,8 +80,7 @@ try{
           agDrag:document.querySelectorAll('.ocr-pbs-drag-handle').length,
           readOnly:!!document.querySelector('.ocr-pdf-pane.ocr-pdf-readonly'),
           extractHidden:!!document.querySelector('.ocr-pdf-extract-text')?.hidden,
-          splitLabel:document.querySelector('.ocr-pdf-promote-child')?.textContent,
-          splitDisabled:document.querySelector('.ocr-pdf-promote-child')?.disabled,
+          promoteHidden:!!document.querySelector('.ocr-pdf-promote-child')?.hidden,
           checkboxDisplay:getComputedStyle(
             document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"] input')).display,
           hasDragArrow:!!document.querySelector('.ocr-pdf-block-drag-arrow')
@@ -92,8 +89,7 @@ try{
         assert.equal(controls.agDrag,0);
         assert.equal(controls.checkboxDisplay,'none');
         assert.equal(controls.extractHidden,true);
-        assert.equal(controls.splitLabel,'拆分子块');
-        assert.equal(controls.splitDisabled,true,'must select an actual child first');
+        assert.equal(controls.promoteHidden,true);
         assert.equal(controls.hasDragArrow,false);
         for(const namePart of ['并入','拆链','合并','移动','独立成链','坐标','迁移旧标签',
           '确认续接','否决续接','标定原始子块'])
@@ -108,9 +104,7 @@ try{
         const dest=page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"] > .ocr-pdf-block-ctrl');
         const target=await dest.boundingBox();assert(target);
         await page.locator('body').dispatchEvent('pointermove',{...touch,...center(target)});
-        // Cancel the real long-press gesture rather than releasing on a child
-        // landing, which is now intentionally a supported edit.
-        await page.locator('body').dispatchEvent('pointercancel',{...touch,...center(target)});
+        await page.locator('body').dispatchEvent('pointerup',{...touch,...center(target)});
         await label.evaluate(el=>{el.click();el.click();el.click();});
         const unchanged=await page.evaluate(()=>({
           p1b3:!!document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]'),

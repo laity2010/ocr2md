@@ -418,18 +418,7 @@ async function main() {
     reportError:message=>$('status')?.setAttribute('data-file-switch-error',message)});
   mountAgModuleToolbar({modulePort,workspace:$('workspace')});
   registerCMSourceFontSetting(settings);
-  // A completed user gesture is more important than an AG background
-  // inventory scan. Let AG finish updating without hiding the result that
-  // the user needs to verify; Undo explicitly releases this short priority.
-  let pdfGestureStatusUntil=0;
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
-    if(kind==='pdf-gesture'){
-      pdfGestureStatusUntil=performance.now()+3500;
-      const dirty=hasUnsavedEdits();
-      status(dirty?'● 未保存 · '+message:message,dirty?'warning':'ok');
-      return;
-    }
-    if(message.startsWith('文本块标定')&&performance.now()<pdfGestureStatusUntil)return;
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
   },wcpRuntime,documentLabel,$('text-block-actions'));
@@ -713,11 +702,11 @@ async function main() {
   let blockRequest=0,blockTimer=null,blockIndexedSource=null,blockPendingSource=null;
   const scanTextBlocks=()=>{
     const source=cm.getMarkdown();
-    if(source===blockIndexedSource||source===blockPendingSource)return Promise.resolve();
+    if(source===blockIndexedSource||source===blockPendingSource)return;
     const id=++blockRequest;
     blockPendingSource=source;
     workspace.setTextBlockLoading();
-    return cmdPort.queryBlockAnalysis().then(({inventory,continuations})=>{
+    void cmdPort.queryBlockAnalysis().then(({inventory,continuations})=>{
       if(id!==blockRequest||source!==cm.getMarkdown())return;
       blockPendingSource=null;
       workspace.setTextBlockInventory(inventory);
@@ -742,44 +731,6 @@ async function main() {
   // hiding controls, so long-press, triple tap, or stale UI cannot write.
   workspace.setBlockJoinAction(rejectTextBlockEdit);
   workspace.setBlockChainAction(rejectTextBlockEdit);
-  workspace.setPDFReparentAction(async(sourceId,targetId)=>{
-    const snapshot=cmdPort.readSource();
-    // Never commit a PDF landing against a stale AG/PDF projection.
-    if(snapshot!==blockIndexedSource)
-      throw Error('文本块标签已变化，请重新进入文本块模块后操作');
-    const result=cmdPort.reparentPBS(sourceId,targetId,{expectedSource:snapshot});
-    // Await the AG/PDF projection before reporting success in global status:
-    // the inventory refresh itself publishes a status message.
-    if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
-    return result;
-  });
-  workspace.setPDFSplitChildAction(async childId=>{
-    const snapshot=cmdPort.readSource();
-    if(snapshot!==blockIndexedSource)
-      throw Error('文本块标签已变化，请等待 AG 刷新后重试');
-    if(!/^p\d+b\d+s\d+$/.test(childId||''))
-      throw Error('拆分子块需要原生或已归入的一级子块');
-    const result=cmdPort.promotePDFChild(childId,{expectedSource:snapshot});
-    if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
-    return result;
-  });
-  // The only before/after write lane: one whole page-level parent scope,
-  // including its children, to another parent on that SAME PDF page.
-  // Keep AG's generic block-move port read-only.
-  workspace.setPDFParentOrderAction(async(sourceId,targetId,placement)=>{
-    if(!/^p\d+b\d+$/.test(sourceId||'')||
-       !/^p\d+b\d+$/.test(targetId||'')||
-       !['before','after'].includes(placement))
-      throw Error('只能将整组父块移动到同页父块之前或之后');
-    const snapshot=cmdPort.readSource();
-    if(snapshot!==blockIndexedSource)
-      throw Error('文本块投影已变化，请等待 AG 刷新后重试');
-    const result=placement==='before'?
-      await cmdPort.moveBlockBefore(sourceId,targetId):
-      await cmdPort.moveBlockAfter(sourceId,targetId);
-    if(result.changed){blockIndexedSource=null;await scanTextBlocks();}
-    return result;
-  });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
   workspace.setBlockMoveAction(rejectTextBlockEdit);
   workspace.setSubblockMarkAction(rejectTextBlockEdit);
@@ -832,7 +783,6 @@ async function main() {
     view.dispatch({effects:markOutlineLine.of(next.focusTarget.sourceLine)});
   });
   function history(command){
-    pdfGestureStatusUntil=0;
     // Keep CM6's own history event (changes, selection, effects, annotations)
     // but do not force-scroll to its restored selection. AG edits can be made
     // while the caret remains at offset 0 although a later page is visible.

@@ -73,11 +73,6 @@ let blockJoinAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let blockMoveAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let pdfBBoxAction=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好'));
 let blockChainAction=()=>Promise.reject(Error('CMD 块链尚未准备好'));
-// Narrow capability: only the PDF 'child' landing can request reparenting.
-// The AG chain editor and all other block write operations stay disabled.
-let pdfReparentAction=()=>Promise.reject(Error('PDF 子块归入尚未准备好'));
-let pdfSplitChildAction=()=>Promise.reject(Error('PDF 拆分子块尚未准备好'));
-let pdfParentOrderAction=()=>Promise.reject(Error('PDF 整组父块排序尚未准备好'));
 let markSubblocksAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let insertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'));
 let refreshTextBlockInventory=()=>{};
@@ -342,10 +337,8 @@ class PreviewPanel {
       (pageIndex,blockIndex,text)=>insertPDFText(pageIndex,blockIndex,text),
       ()=>markSubblocksAction(),
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
-      (sourceId,targetId)=>pdfReparentAction(sourceId,targetId),
-      childId=>pdfSplitChildAction(childId),
-      preview=>reportMediaStatus(preview.message,'pdf-gesture'),
-      (sourceId,targetId,placement)=>pdfParentOrderAction(sourceId,targetId,placement));
+      (sourceId,targetId)=>blockChainAction('reparent',{memberId:sourceId,targetId}),
+      childId=>blockChainAction('promote-child',{childId}));
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -798,9 +791,6 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setBlockMoveAction:action=>{blockMoveAction=action;},
     setPDFBBoxAction:action=>{pdfBBoxAction=action;},
     setBlockChainAction:action=>{blockChainAction=action;},
-    setPDFReparentAction:action=>{pdfReparentAction=action;},
-    setPDFSplitChildAction:action=>{pdfSplitChildAction=action;},
-    setPDFParentOrderAction:action=>{pdfParentOrderAction=action;},
     setSubblockMarkAction:action=>{markSubblocksAction=action;},
     setPDFTextInsertAction:insert=>{insertPDFText=insert;},
     setTextBlockInventoryRefreshAction:action=>{refreshTextBlockInventory=action;},
