@@ -62,10 +62,40 @@ try {
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('PBS 267'),null,{timeout:55000});
    await selectPreview(page,'pdf');
    const sourceCtrl=page.locator('.ocr-pdf-block-cover[data-block-id="p1b14"] > .ocr-pdf-block-ctrl');
+   const parentCtrl=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"] > .ocr-pdf-block-ctrl');
    const targetChip=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"] .ocr-pdf-block-fragment[data-subblock-id="p1b3s0"] > .ocr-pdf-subblock-chip');
    await sourceCtrl.waitFor({state:'attached',timeout:60000});
+   await parentCtrl.waitFor({state:'attached',timeout:60000});
    await targetChip.waitFor({state:'attached',timeout:60000});
    await targetChip.scrollIntoViewIfNeeded({timeout:35000});
+   // Explicit parent-label landing rail: before and after must move the
+   // SOURCE p1b14, while the PDF bbox and original physical ID remain fixed.
+   // Undo each move to restore the same initial fixture for the next gesture.
+   for(const [placement,pointerId] of [['before',81],['after',82]]){
+     const fromBox=await sourceCtrl.boundingBox(),targetBox=await parentCtrl.boundingBox();
+     assert(fromBox&&targetBox, 'both fixed PDF labels must be rendered');
+     const sx=fromBox.x+fromBox.width/2,sy=fromBox.y+fromBox.height/2;
+     const tx=targetBox.x+targetBox.width/2,ty=targetBox.y+targetBox.height/2;
+     const pointer={bubbles:true,pointerId,pointerType:'touch',isPrimary:true,button:0};
+     await sourceCtrl.dispatchEvent('pointerdown',{...pointer,clientX:sx,clientY:sy});
+     await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:5000});
+     await page.locator('body').dispatchEvent('pointermove',{...pointer,clientX:tx,clientY:ty});
+     const rail=page.locator('.ocr-pdf-block-drop-guide[data-kind="parent"]');
+     await rail.waitFor({state:'attached',timeout:6500});
+     const zone=rail.locator('span[data-placement="'+placement+'"]');
+     const z=await zone.boundingBox();assert(z&&z.width>=30,'three landing zones must be finger-sized');
+     const zx=z.x+z.width/2,zy=z.y+z.height/2;
+     await page.locator('body').dispatchEvent('pointermove',{...pointer,clientX:zx,clientY:zy});
+     assert.equal(await zone.evaluate(el=>el.classList.contains('active')),true,
+       name+' exact '+placement+' zone is selected');
+     await page.locator('body').dispatchEvent('pointerup',{...pointer,clientX:zx,clientY:zy});
+     await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent?.includes('已重排'),
+       null,{timeout:40000});
+     assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b14"]').count(),1);
+     await page.locator('#undo').evaluate(el=>el.click());
+     await page.waitForTimeout(650);
+     console.log('PDF_THREE_LANDING_GESTURE_PASS',name,placement);
+   }
    const from=await sourceCtrl.boundingBox(),to=await targetChip.boundingBox();
    assert(from&&to&&to.width>0&&to.height>0,`${name} real PDF tags visible`);
    const sx=from.x+from.width/2,sy=from.y+from.height/2;
