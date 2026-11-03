@@ -80,12 +80,10 @@ export function createCMDTransactionPort(cmd){
     if(current.atoms.some(a=>a.format==='cmd-v1')){
       const plan=planCMDReorderPBSParents(source,sourceId,targetId,placement);
       if(!plan.changed)return plan;
-      if(source!==cmd.readSource())throw Error('CMD PBS source changed before renumbering');
-      const next=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((text,edit)=>{
-        if(text.slice(edit.from,edit.to)!==edit.expected)
-          throw Error('CMD PBS annotation changed before renumbering');
-        return text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
-      },source);
+      const edit=plan.edits[0];
+      if(source.slice(edit.from,edit.to)!==edit.expected||
+        source!==cmd.readSource())throw Error('CMD PBS source changed before reordering');
+      const next=source.slice(0,edit.from)+edit.insert+source.slice(edit.to);
       const after=readCMDBlockChains(next);
       const origins=model=>model.atoms.map(a=>a.origin).sort().join('\n');
       const tail=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));

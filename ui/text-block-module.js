@@ -298,11 +298,10 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     return bounds?set.filter(r=>r.from!==null&&r.from>=bounds.from&&r.from<bounds.to):[];
   };
   const projectedRows=()=>{
-    // PBS b is the logical display order even when source positions stay
-    // unchanged. Never infer AG parent order from sourceLine after renumbering.
-    // Physical page/line coordinates still come from origin= and CMD.
-    const atoms=[...scoped()].sort((a,b)=>
-      (a.id||'').localeCompare(b.id||'',undefined,{numeric:true}));
+    // Structural correction is a logical view over immutable original OCR.
+    // Keep CM6 source order and origin= evidence untouched; show the newly
+    // assigned child immediately after its previous sibling in AG.
+    const atoms=[...scoped()];
     const aliased=atoms.filter(a=>a.kind==='child'&&a.origin&&a.origin!==a.id)
       .sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}));
     for(const alias of aliased){
