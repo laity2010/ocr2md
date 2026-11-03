@@ -64,7 +64,7 @@ try{
           el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
         });
         await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PBS 267')&&
-          document.querySelector('#status')?.textContent.includes('文本块只读标定'),
+          document.querySelector('#status')?.textContent.includes('父块跨页归入可用'),
           null,{timeout:70000});
         await selectPreview(page,'pdf');
         const root=page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]');
