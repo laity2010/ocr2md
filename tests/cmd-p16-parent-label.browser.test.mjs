@@ -143,7 +143,7 @@ try{
           'no PDF side label may intersect ANY other label or coverage rectangle');
         for(const id of ['p16b10','p16b10s0','p16b10s1'])
           assert(railReview.ids.includes(id),'missing rail label '+id);
-        assert(parentChip.rect.x<parentChip.box.x||parentChip.rect.x>parentChip.box.x+parentChip.box.w,
+        assert(parentChip.rect.x<parentChip.box.x||parentChip.rect.x>parentChip.box.x+parentChip.box.width,
           'parent label must live outside the PDF coverage in a fixed gutter');
         assert(parentChip.hit[0]?.[1]==='p16b10',
           'parent chip must be the frontmost hit target');
