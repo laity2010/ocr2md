@@ -134,6 +134,12 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     const id=mode==='candidates'?(end==='to'?row.toId:row.fromId):row.id;
     const target=tableRows.find(x=>x.id===id)||rows.find(x=>x.id===id);
     if(!target)return;
+    // The per-row 源码行 jump button stops AG's row click to preserve
+    // pointer gestures, so explicitly select the SAME logical PBS row here.
+    // Otherwise source/PDF update while AG remains on the preceding block.
+    const rowNode=grid.getRowNode(id);
+    if(rowNode&&rowNode.rowIndex!==null&&!rowNode.isSelected())
+      rowNode.setSelected(true,true,'api');
     selectedId=id;refreshActionButtons();
     syncBBoxFields();
     if(target.sourceLine){publishFocus({sourceLine:target.contentLine??target.sourceLine,
