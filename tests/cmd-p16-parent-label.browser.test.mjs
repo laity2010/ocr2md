@@ -108,8 +108,43 @@ try{
         assert(parentChip&&bodyChipInfo&&!parentChip.missing&&!bodyChipInfo.missing);
         assert(Math.abs(parentChip.rect.y-bodyChipInfo.rect.y)>=15,
           'parent p16b10 must have its own visible label row');
-        assert(Math.abs(parentChip.rect.y-parentChip.box.y)<25,
-          'parent label must stay near original Editor Note PDF bbox');
+        const railReview=await page.evaluate(()=>{
+          const root=document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b10"]')?.closest('.page');
+          if(!root)return {error:'Editor Note page not found'};
+          const all=[...root.querySelectorAll('.ocr-pdf-block-ctrl,.ocr-pdf-subblock-chip')]
+            .filter(el=>el.checkVisibility()&&el.classList.contains('ocr-pdf-rail-label'));
+          const overlays=[...root.querySelectorAll('.ocr-pdf-block-cover,.ocr-pdf-block-fragment:not([hidden])')]
+            .filter(el=>el.checkVisibility());
+          const geometry=el=>{
+            const r=el.getBoundingClientRect();return {x:r.left,y:r.top,w:r.width,h:r.height};
+          };
+          const intersects=(a,b)=>a.x<b.x+b.w-.5&&b.x<a.x+a.w-.5&&
+            a.y<b.y+b.h-.5&&b.y<a.y+a.h-.5;
+          const bad=[];
+          for(const chip of all){
+            const r=geometry(chip);
+            for(const cover of overlays)if(intersects(r,geometry(cover)))
+              bad.push({chip:chip.textContent,with:cover.dataset.blockId||cover.dataset.subblockId,
+                type:'coverage'});
+            for(const other of all)if(other!==chip&&intersects(r,geometry(other)))
+              bad.push({chip:chip.textContent,with:other.textContent,type:'label'});
+          }
+          const paths=[...root.querySelectorAll(':scope > svg.ocr-pdf-label-leaders path')];
+          const ids=all.map(el=>el.textContent.trim());
+          return {labels:all.length,paths:paths.length,ids,bad,
+            pageRect:geometry(root),rects:all.filter(el=>/p16b10/.test(el.textContent)).map(el=>
+              ({id:el.textContent,rect:geometry(el),gutter:el.dataset.gutter}))};
+        });
+        console.log('P16_FIXED_RAILS',name,JSON.stringify(railReview));
+        assert(!railReview.error);
+        assert(railReview.labels>=10&&railReview.paths>=railReview.labels,
+          'every visible PBS label must have a leader connector');
+        assert.deepEqual(railReview.bad,[],
+          'no PDF side label may intersect ANY other label or coverage rectangle');
+        for(const id of ['p16b10','p16b10s0','p16b10s1'])
+          assert(railReview.ids.includes(id),'missing rail label '+id);
+        assert(parentChip.rect.x<parentChip.box.x||parentChip.rect.x>parentChip.box.x+parentChip.box.w,
+          'parent label must live outside the PDF coverage in a fixed gutter');
         assert(parentChip.hit[0]?.[1]==='p16b10',
           'parent chip must be the frontmost hit target');
         const overlaps=(a,b)=>a.rect.x<b.rect.x+b.rect.w&&b.rect.x<a.rect.x+a.rect.w&&

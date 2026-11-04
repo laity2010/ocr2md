@@ -263,3 +263,23 @@
   outline:3px solid #f2c957;outline-offset:-2px;
   box-shadow:inset 0 0 0 1px #fff1aa66;
 }
+
+/* Label rails: both parent and child IDs are visually placed by ONE page-wide
+ * solver outside every PDF source bbox, regardless of nested DOM ancestry.
+ * Every chip remains interactive. One inert SVG connects it to its box. */
+.ocr-pdf-block-ctrl.ocr-pdf-rail-label,
+.ocr-pdf-subblock-chip.ocr-pdf-rail-label{
+  position:absolute;right:auto;transform-origin:top left;
+  z-index:14;
+}
+.ocr-pdf-subblock-chip.ocr-pdf-rail-label::after{display:none}
+.ocr-pdf-scroller .page .ocr-pdf-label-leaders{
+  position:absolute;inset:0;width:100%;height:100%;overflow:visible;
+  pointer-events:none;z-index:4;
+}
+.ocr-pdf-label-leaders path{
+  fill:none;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round;
+  opacity:.82;vector-effect:non-scaling-stroke;
+}
+.ocr-pdf-label-leaders .ocr-pdf-parent-leader{stroke:#8cb6a3}
+.ocr-pdf-label-leaders .ocr-pdf-child-leader{stroke:#8ab5da}

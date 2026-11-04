@@ -13,7 +13,7 @@ import {subblockId} from './mineru-anchors.js';
 import {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
-import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
+import {layoutPDFEdgeRails} from './pdf-gutter-label-layout.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
 import {pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint,pdfDropGuideCorridor} from './pdf-pbs-drop-hit.js';
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
@@ -1326,43 +1326,82 @@ export class PdfPreview {
     this.updateChipContentIndicators();
     this.refreshParentGroupHighlight();
   }
-  /** Lay out parent AND child labels together on each page and side.
-   * Prefer a free Y row inside the original OCR bbox's vertical span.
-   * Only tightly clustered/short native bboxes need a short displacement;
-   * connector lines preserve which rectangle each label belongs to.
-   * The placement is deterministic, page-local and DOM-idempotent. */
+  /** Every native parent and child chip shares one page-wide, TWO-side rail
+   * layout. The chips stay DOM-owned by their original PDF blocks for click,
+   * focus, and gesture semantics, but are visually positioned in the outer
+   * page gutters using absolute page-space offsets. A dedicated, inert SVG
+   * contains the leader lines; no PDF bbox or CMD source is modified.
+   */
   avoidBlockChipCollisions(pageIndex=null){
-    const groups=new Map();
+    const pages=new Map();
     for(const [id,node] of this.blockCoverageNodes){
       if(pageIndex!==null&&Number(node.dataset.pdfPage)!==pageIndex+1)continue;
       const page=node.parentElement;
-      const parent=node.querySelector(':scope > .ocr-pdf-block-ctrl');
-      if(!page||!parent||!page.classList.contains('page'))continue;
-      const key=`${node.dataset.pdfPage}:${node.dataset.gutter}`;
-      if(!groups.has(key))groups.set(key,[]);
-      const items=groups.get(key);
-      const from=node.offsetTop;
-      items.push({id,chip:parent,origin:from,
-        from,to:from+node.offsetHeight,
-        height:parent.getBoundingClientRect().height});
+      if(!page||!page.classList.contains('page'))continue;
+      if(!pages.has(page))pages.set(page,{items:[],covers:[]});
+      const group=pages.get(page);
+      const rect={left:node.offsetLeft,top:node.offsetTop,
+        right:node.offsetLeft+node.offsetWidth,
+        bottom:node.offsetTop+node.offsetHeight};
+      group.covers.push(rect);
+      const chip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
+      if(chip)group.items.push({id,chip,owner:node,rect,
+        target:rect,anchorY:(rect.top+rect.bottom)/2,
+        side:node.dataset.gutter,kind:node.classList.contains('ocr-pdf-block-child-cover')?'child':'parent',
+        width:chip.offsetWidth,height:chip.offsetHeight});
       for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
+        if(fragment.hidden)continue;
         const child=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
-        if(!child||fragment.hidden)continue;
-        const childFrom=from+fragment.offsetTop;
-        items.push({id:fragment.dataset.subblockId,chip:child,origin:childFrom,
-          from:childFrom,to:childFrom+fragment.offsetHeight,
-          height:child.getBoundingClientRect().height});
+        if(!child)continue;
+        const part={left:node.offsetLeft+fragment.offsetLeft,
+          top:node.offsetTop+fragment.offsetTop,
+          right:node.offsetLeft+fragment.offsetLeft+fragment.offsetWidth,
+          bottom:node.offsetTop+fragment.offsetTop+fragment.offsetHeight};
+        group.covers.push(part);
+        group.items.push({id:fragment.dataset.subblockId,chip:child,
+          owner:fragment,rect:part,target:part,
+          anchorY:(part.top+part.bottom)/2,
+          side:node.dataset.gutter,kind:'child',
+          width:child.offsetWidth,height:child.offsetHeight});
       }
     }
-    for(const items of groups.values()){
-      const page=items[0]?.chip.closest('.page');
-      if(!page)continue;
-      const slots=layoutPDFGutterLabels(items,page.clientHeight);
-      const targets=new Map(items.map(item=>[item.id,item]));
-      for(const slot of slots){
-        const item=targets.get(slot.id);
-        const target=`${(slot.top-item.origin).toFixed(2)}px`;
-        if(item.chip.style.top!==target)item.chip.style.top=target;
+    for(const [page,group] of pages){
+      const geometry=layoutPDFEdgeRails(group.items,{pageWidth:page.clientWidth,
+        pageHeight:page.clientHeight,covers:group.covers});
+      const all=new Map(group.items.map(item=>[item.id,item]));
+      for(const slot of geometry.slots){
+        const item=all.get(slot.id);if(!item)continue;
+        const {chip,owner}=item;
+        const ownerRect=item.kind==='child'&&owner.classList.contains('ocr-pdf-block-fragment')?
+          {x:owner.parentElement.offsetLeft+owner.offsetLeft,
+            y:owner.parentElement.offsetTop+owner.offsetTop}:
+          {x:owner.offsetLeft,y:owner.offsetTop};
+        const x=`${(slot.left-ownerRect.x).toFixed(2)}px`;
+        const y=`${(slot.top-ownerRect.y).toFixed(2)}px`;
+        if(chip.style.left!==x)chip.style.left=x;
+        if(chip.style.top!==y)chip.style.top=y;
+        if(chip.style.right!=='auto')chip.style.right='auto';
+        const scale=`scale(${slot.scale.toFixed(4)})`;
+        if(chip.style.transform!==scale)chip.style.transform=scale;
+        chip.style.transformOrigin='top left';
+        chip.classList.add('ocr-pdf-rail-label');
+        chip.dataset.gutter=slot.side;
+        // The original CSS pseudo-line uses the child fragment's own local
+        // coordinates; a single SVG leader below replaces it entirely.
+      }
+      const ns='http://www.w3.org/2000/svg';
+      let svg=page.querySelector(':scope > svg.ocr-pdf-label-leaders');
+      if(!svg){svg=document.createElementNS(ns,'svg');
+        svg.setAttribute('class','ocr-pdf-label-leaders');
+        svg.setAttribute('aria-hidden','true');page.append(svg);}
+      svg.setAttribute('viewBox',`0 0 ${page.clientWidth} ${page.clientHeight}`);
+      svg.replaceChildren();
+      for(const line of geometry.leaders){
+        const path=document.createElementNS(ns,'path');
+        path.setAttribute('d',line.path);
+        path.setAttribute('data-pbs-id',line.id);
+        path.setAttribute('class',line.kind==='parent'?'ocr-pdf-parent-leader':'ocr-pdf-child-leader');
+        svg.append(path);
       }
     }
   }

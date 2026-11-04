@@ -54,3 +54,76 @@ export function layoutPDFGutterLabels(items,pageHeight,{gap=2}={}){
   return placed.sort((a,b)=>a.from-b.from||a.id.localeCompare(b.id,undefined,{numeric:true}))
     .map(({id,top,from,to,h})=>({id,top,height:h,from,to}));
 }
+
+/** Place PDF labels in TWO fixed edge rails, with no label collisions.
+ * Both rails are guaranteed to lie completely outside the horizontal union
+ * of all original PDF cover rectangles on that page; labels never sit inside
+ * their own or a neighbor's OCR region. Leaders connect labels back to their
+ * immutable target boxes. This is a pure, page-local layout calculation.
+ *
+ * Input: {id,side,anchorY,target:{left,top,right,bottom},width,height};
+ * geometry is expressed in PDF page CSS pixels, AFTER PDF.js zoom.
+ */
+export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,padding=3}){
+  if(!Number.isFinite(pageWidth)||!Number.isFinite(pageHeight)||pageWidth<=0||pageHeight<=0)
+    return {slots:[],leaders:[],safe:{left:0,right:0}};
+  const bounds=covers.length?covers:[{left:pageWidth/2,right:pageWidth/2}];
+  const leftLimit=Math.max(0,Math.min(...bounds.map(c=>c.left)));
+  const rightLimit=Math.min(pageWidth,Math.max(...bounds.map(c=>c.right)));
+  const safe={left:Math.max(0,leftLimit-padding),
+    right:Math.max(0,pageWidth-rightLimit-padding)};
+  const sideItems={left:[],right:[]};
+  for(const item of items){
+    if(!item?.target||!Number.isFinite(item.anchorY)||
+      !Number.isFinite(item.width)||!Number.isFinite(item.height))continue;
+    let side=item.side==='right'?'right':'left';
+    // If one gutter is too thin even for a scaled chip, use the other page
+    // edge instead. Both choices remain OUTSIDE all PDF source rectangles.
+    if(safe[side]<item.width*.35&&safe[side==='left'?'right':'left']>safe[side])
+      side=side==='left'?'right':'left';
+    sideItems[side].push({...item,side});
+  }
+  const slots=[];const leaders=[];
+  for(const side of ['left','right']){
+    const group=sideItems[side].sort((a,b)=>a.anchorY-b.anchorY||
+      a.id.localeCompare(b.id,undefined,{numeric:true}));
+    if(!group.length)continue;
+    const usableWidth=safe[side];
+    const widest=Math.max(...group.map(x=>x.width));
+    const heightTotal=group.reduce((sum,x)=>sum+x.height,0);
+    const vertical=Math.max(.08,(pageHeight-padding*2-gap*(group.length-1))/heightTotal);
+    // Never allow the displayed chip to extend into any OCR rectangle.
+    const horizontal=widest>0?usableWidth/widest:1;
+    const scale=Math.min(1,Math.max(0,horizontal),Math.max(0,vertical));
+    const visual=group.map(item=>({...item,scale,
+      vw:item.width*scale,vh:item.height*scale,
+      desired:Math.max(padding,Math.min(pageHeight-padding-item.height*scale,
+        item.anchorY-item.height*scale/2))}));
+    if(scale===0)continue; // no safe physical rail in either direction
+    const rows=visual.map(item=>item.desired);
+    for(let i=1;i<rows.length;i++)
+      rows[i]=Math.max(rows[i],rows[i-1]+visual[i-1].vh+gap);
+    // Backpropagate page-bottom overflow without allowing any collision.
+    rows[rows.length-1]=Math.min(rows.at(-1),pageHeight-padding-visual.at(-1).vh);
+    for(let i=rows.length-2;i>=0;i--)
+      rows[i]=Math.min(rows[i],rows[i+1]-gap-visual[i].vh);
+    if(rows[0]<padding){
+      const shift=padding-rows[0];for(let i=0;i<rows.length;i++)rows[i]+=shift;
+    }
+    visual.forEach((item,i)=>{
+      const top=rows[i];
+      const left=side==='left'?padding:pageWidth-padding-item.vw;
+      const slot={...item,left,top,width:item.vw,height:item.vh};
+      slots.push(slot);
+      const xStart=side==='left'?left+slot.width:left;
+      const xGuide=side==='left'?leftLimit-padding/2:rightLimit+padding/2;
+      const xEnd=side==='left'?item.target.left:item.target.right;
+      const yStart=top+slot.height/2;
+      const yEnd=(item.target.top+item.target.bottom)/2;
+      leaders.push({id:item.id,side:item.side,kind:item.kind,
+        path:`M ${xStart.toFixed(2)} ${yStart.toFixed(2)} H ${xGuide.toFixed(2)} V ${yEnd.toFixed(2)} H ${xEnd.toFixed(2)}`,
+        endpoint:{x:xEnd,y:yEnd}});
+    });
+  }
+  return {slots,leaders,safe};
+}
