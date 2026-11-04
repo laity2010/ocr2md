@@ -146,6 +146,48 @@ try{
         const rail=await cleanRails(page);assert(!rail.error);
         assert(rail.labels>=10);assert.equal(rail.leaders,rail.labels);
         assert.deepEqual(rail.colliding,[],`${name} scaled PDF labels must avoid source boxes`);
+        // The screenshot's front page contains dense parent+child chips at
+        // the comfortable 1.5x size. Every leader must be an independent
+        // one-to-one segment, with an obvious iPad tap spotlight.
+        const firstPageLabel=tag(page,'p0b7');
+        await firstPageLabel.scrollIntoViewIfNeeded({timeout:35000});
+        const firstPage=page.locator('.page[data-page-number="1"]');
+        const directPath=firstPage.locator('svg.ocr-pdf-label-leaders path[data-pbs-id="p0b7"]');
+        await directPath.waitFor({state:'attached',timeout:30000});
+        const pathD=await directPath.getAttribute('d');
+        assert(pathD?.includes(' L ')&&!pathD.includes(' V '),
+          'each PDF label must have an independent direct leader, no shared vertical bus');
+        assert.equal(await firstPage.evaluate(el=>el.classList.contains('ocr-pdf-rail-dense')),true,
+          'front page dense labels must default to quieter guides');
+        const faint=Number(await directPath.evaluate(el=>getComputedStyle(el).opacity));
+        assert(faint<0.2,'non-focused dense guides must be quiet');
+        if(process.env.OCR_PBS_VISUAL_CAPTURE)
+          await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
+            `-${name}-page1-dense.png`),animations:'disabled'});
+        await firstPageLabel.click({timeout:35000});
+        assert.equal(await directPath.evaluate(el=>el.classList.contains('ocr-pdf-rail-focused-line')),
+          true,'tapping label highlights only its own leader');
+        assert.equal(await firstPageLabel.evaluate(el=>el.classList.contains('ocr-pdf-rail-focused-label')),
+          true);
+        assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p0b7"]')
+          .evaluate(el=>el.classList.contains('ocr-pdf-block-group-active')),true,
+          'parent group highlighting must remain intact');
+        assert(Number(await directPath.evaluate(el=>getComputedStyle(el).opacity))>0.95,
+          'tapped leader must be bright');
+        const others=await firstPage.locator('svg.ocr-pdf-label-leaders path.ocr-pdf-rail-focused-line').count();
+        assert.equal(others,1,'only the chosen PBS id has a strong leader');
+        if(process.env.OCR_PBS_VISUAL_CAPTURE)
+          await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
+            `-${name}-page1-focused.png`),animations:'disabled'});
+        // Child tap switches precise one-to-one focus while retaining its
+        // existing PDF-to-source mapping. Its parent cover must not be moved.
+        const child=page.locator('.ocr-pdf-block-fragment[data-subblock-id="p0b7s0"] > .ocr-pdf-subblock-chip');
+        await child.click({timeout:35000});
+        assert.equal(await firstPage.locator('svg.ocr-pdf-label-leaders path.ocr-pdf-rail-focused-line')
+          .getAttribute('data-pbs-id'),'p0b7s0');
+        const p1=await inspectPageLabels(page,'p0b7');
+        assert.deepEqual(p1.outside,[],'page1 label spotlight must remain on PDF paper');
+        assert.deepEqual(p1.collisions,[],'page1 focus must not overlap any PDF bbox or label');
         // Recreate reported iPad page-7 / 100% situation with abundant empty
         // Dockview space beside the paper; both left and right rails must
         // remain on the paper, NOT near the scroller's far right edge.

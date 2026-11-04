@@ -73,6 +73,7 @@ export class PdfPreview {
     this.onPromoteChild=onPromoteChild;
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.blockLabelScale=1;
+    this.pinnedRailId=null;this.hoverRailId=null;
     this.host.classList.add('ocr-pdf-pane');
     if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
     this.host.dataset.pdfTheme='dark';
@@ -1149,6 +1150,10 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
+        ctrl.addEventListener('pointerenter',()=>
+          this.setRailSpotlight(node.dataset.blockId,{hover:true}));
+        ctrl.addEventListener('pointerleave',()=>
+          this.setRailSpotlight(null,{hover:true}));
         if(!this.readOnly||/^p\d+b\d+$/.test(row.id))
           ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
         // Preserve long-press move: a dragged label's release never counts as
@@ -1185,6 +1190,7 @@ export class PdfPreview {
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
           const currentRow=this.blockCoverageRows.find(r=>r.id===node.dataset.blockId)||row;
+          this.setRailSpotlight(currentRow.id,{pin:true});
           if(currentRow.promoted){
             const original=currentRow.origin.match(/^p(\d+)b(\d+)s(\d+)$/);
             const child=this.map[currentRow.pageIndex]?.regions.find(r=>r.blockIndex===currentRow.blockIndex)
@@ -1272,7 +1278,15 @@ export class PdfPreview {
             if(part)this.selectPDFRegion(pageIndex,{blockIndex,partIndex:index,
               role:part.role,path:part.path,bbox:part.bbox});
           };
-          chip.addEventListener('click',e=>{e.stopPropagation();navigate();});
+          chip.addEventListener('pointerenter',()=>
+            this.setRailSpotlight(chip.closest('.ocr-pdf-block-fragment')?.dataset.subblockId,{hover:true}));
+          chip.addEventListener('pointerleave',()=>
+            this.setRailSpotlight(null,{hover:true}));
+          chip.addEventListener('click',e=>{
+            e.stopPropagation();
+            this.setRailSpotlight(chip.closest('.ocr-pdf-block-fragment')?.dataset.subblockId,{pin:true});
+            navigate();
+          });
           chip.addEventListener('keydown',e=>{
             if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();navigate();}
           });
@@ -1348,6 +1362,32 @@ export class PdfPreview {
     if(this.blockLabelScale===value)return;
     this.blockLabelScale=value;
     if(this.blockCoverageNodes.size)this.avoidBlockChipCollisions();
+  }
+  /** Rail spotlight is PDF-only presentation. A tap pins one-to-one
+   * label -> leader -> original bbox; mouse hover is provisional. Do not
+   * touch CMD/CM6/AG, or the existing parent-group selection semantics. */
+  setRailSpotlight(id,{pin=false,hover=false}={}){
+    if(pin)this.pinnedRailId=id||null;
+    if(hover)this.hoverRailId=id||null;
+    this.refreshRailSpotlight();
+  }
+  refreshRailSpotlight(){
+    const focus=this.hoverRailId||this.pinnedRailId;
+    for(const [id,node] of this.blockCoverageNodes){
+      node.classList.toggle('ocr-pdf-rail-focused-cover',id===focus);
+      const chip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
+      chip?.classList.toggle('ocr-pdf-rail-focused-label',id===focus);
+      for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
+        const isActive=!fragment.hidden&&fragment.dataset.subblockId===focus;
+        fragment.classList.toggle('ocr-pdf-rail-focused-fragment',isActive);
+        fragment.querySelector(':scope > .ocr-pdf-subblock-chip')?.classList
+          .toggle('ocr-pdf-rail-focused-label',isActive);
+      }
+    }
+    for(const page of this.pages.querySelectorAll('.page')){
+      for(const path of page.querySelectorAll(':scope > svg.ocr-pdf-label-leaders path'))
+        path.classList.toggle('ocr-pdf-rail-focused-line',path.dataset.pbsId===focus);
+    }
   }
   /** Every native parent and child chip shares one page-wide, TWO-side rail
    * layout. The chips stay DOM-owned by their original PDF blocks for click,
@@ -1434,6 +1474,11 @@ export class PdfPreview {
         svg.setAttribute('aria-hidden','true');page.append(svg);}
       svg.setAttribute('viewBox',`0 0 ${page.clientWidth} ${page.clientHeight}`);
       svg.replaceChildren();
+      // Dense pages use quiet guides by default. A single tap reveals a
+      // bright, exact leader without reducing the 1.5× touch target.
+      const anchors=geometry.slots.map(slot=>slot.anchorY).sort((a,b)=>a-b);
+      const dense=anchors.some((y,i)=>i+5<anchors.length&&anchors[i+5]-y<240);
+      page.classList.toggle('ocr-pdf-rail-dense',dense);
       for(const line of geometry.leaders){
         const path=document.createElementNS(ns,'path');
         path.setAttribute('d',line.path);
@@ -1442,6 +1487,7 @@ export class PdfPreview {
         svg.append(path);
       }
     }
+    this.refreshRailSpotlight();
   }
   /** WP4: two independently drawn, labelled original CMD bboxes. Layout
    * keeps semantic IDs; PDF remains the sole owner of canvas geometry.

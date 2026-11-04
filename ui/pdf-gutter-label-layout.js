@@ -120,13 +120,14 @@ export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,p
       const slot={...item,left,top,width:item.vw,height:item.vh};
       slots.push(slot);
       const xStart=side==='left'?left+slot.width:left;
-      const xGuide=side==='left'?Math.max(0,leftLimit-padding/2):
-        Math.min(pageWidth,rightLimit+padding/2);
       const xEnd=side==='left'?item.target.left:item.target.right;
       const yStart=top+slot.height/2;
       const yEnd=(item.target.top+item.target.bottom)/2;
+      // Each ID gets its OWN direct leader. The former H–V–H routing
+      // shared one vertical bus for the entire page and made dense labels
+      // impossible to trace visually (notably page 1 at 1.5×).
       leaders.push({id:item.id,side:item.side,kind:item.kind,
-        path:`M ${xStart.toFixed(2)} ${yStart.toFixed(2)} H ${xGuide.toFixed(2)} V ${yEnd.toFixed(2)} H ${xEnd.toFixed(2)}`,
+        path:`M ${xStart.toFixed(2)} ${yStart.toFixed(2)} L ${xEnd.toFixed(2)} ${yEnd.toFixed(2)}`,
         endpoint:{x:xEnd,y:yEnd}});
     });
   }

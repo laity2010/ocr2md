@@ -283,3 +283,32 @@
 }
 .ocr-pdf-label-leaders .ocr-pdf-parent-leader{stroke:#8cb6a3}
 .ocr-pdf-label-leaders .ocr-pdf-child-leader{stroke:#8ab5da}
+
+/* Dense PDF rail legibility: every connector is independently routed.
+ * No shared vertical bus; the chosen label has one high-contrast line and
+ * original box, while other guides fade without hiding their touch targets. */
+.ocr-pdf-scroller .page .ocr-pdf-label-leaders path{
+  opacity:.43;stroke-width:1.15;
+}
+.ocr-pdf-scroller .page.ocr-pdf-rail-dense .ocr-pdf-label-leaders path{
+  opacity:.13;stroke-width:1;
+}
+.ocr-pdf-scroller .page .ocr-pdf-label-leaders path.ocr-pdf-rail-focused-line{
+  opacity:1;stroke:#ffcb60;stroke-width:2.5;
+  filter:drop-shadow(0 0 2px #ffcb6088);
+}
+.ocr-pdf-block-ctrl.ocr-pdf-rail-focused-label,
+.ocr-pdf-subblock-chip.ocr-pdf-rail-focused-label{
+  border-color:#ffe08e!important;color:#fff9dc!important;
+  background:#43564a!important;
+  box-shadow:0 0 0 2px #f3c968aa,0 1px 7px #000b!important;
+  z-index:30;
+}
+.ocr-pdf-scroller .page .ocr-pdf-block-cover.ocr-pdf-rail-focused-cover{
+  background:rgba(255,201,80,.25);outline:2px solid #ffd36c;
+  outline-offset:-2px;
+}
+.ocr-pdf-block-cover .ocr-pdf-block-fragment.ocr-pdf-rail-focused-fragment{
+  background:rgba(255,201,80,.28);outline:2px solid #ffd36c;
+  outline-offset:-2px;
+}
