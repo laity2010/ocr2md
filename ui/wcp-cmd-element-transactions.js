@@ -14,7 +14,7 @@ import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,parseCMDPBSId,
   planCMDMigrateLegacyBlockChains,projectCMDAtomLocations,planCMDReparentPBS,planCMDJoinP1B3IntoP1B4,planCMDPromotePBSChild,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember,
-  planCMDReorderPBSParents,planCMDAbsorbReviewedParent,planCMDInsertPBSParentAt} from './cmd-block-chains.js';
+  planCMDReorderPBSParents,planCMDReorderPBSChildren,planCMDAbsorbReviewedParent,planCMDInsertPBSParentAt} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDPDFBBoxEdit} from './cmd-pdf-bbox.js';
 import {planCMDSubblockAnnotations,queryCMDLayout} from './cmd-text-blocks.js';
@@ -169,6 +169,33 @@ export function createCMDTransactionPort(cmd){
     moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
       planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
       options.expectedSource??null),
+    /** Reorder same-parent direct OCR children as one undoable CMD transaction. */
+    reorderPBSChildren(sourceId,targetId,placement='before',options={}){
+      const source=cmd.readSource();
+      if(options.expectedSource!==undefined&&source!==options.expectedSource)
+        throw Error('CMD source changed before child drop; rescan');
+      const before=readCMDBlockChains(source);
+      const plan=planCMDReorderPBSChildren(source,sourceId,targetId,placement);
+      if(!plan.changed)return plan;
+      const edits=[...plan.edits].sort((a,b)=>b.from-a.from);
+      const candidate=edits.reduce((text,edit)=>{
+        if(text.slice(edit.from,edit.to)!==edit.expected)
+          throw Error('Stale child reorder edit');
+        return text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
+      },source);
+      const after=readCMDBlockChains(candidate);
+      const origins=model=>model.atoms.map(a=>`${a.origin}|${a.role||''}`).sort().join('\n');
+      const seal=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
+      if(after.invalid.length||before.invalid.length||
+        before.atoms.length!==after.atoms.length||
+        origins(before)!==origins(after)||seal(source)!==seal(candidate)||
+        !after.atoms.some(atom=>atom.id===plan.newId&&
+          atom.origin===before.atoms.find(old=>old.id===sourceId)?.origin))
+        throw Error('Child reordering must preserve every physical OCR atom');
+      commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
+        plan.edits,{source,allowAll:true});
+      return plan;
+    },
     /** Insert independent A immediately BEFORE or AFTER B, one CM6 edit. */
     insertPBSAt(sourceId,targetId,placement='after',options={}){
       const source=cmd.readSource();

@@ -4,7 +4,8 @@
 const intersects=(a,b)=>a.right>b.left&&a.left<b.right&&a.bottom>b.top&&a.top<b.bottom;
 const distance=(rect,x,y)=>Math.hypot(Math.max(rect.left-x,0,x-rect.right),
   Math.max(rect.top-y,0,y-rect.bottom));
-export const pdfDropGuideZone=(x,rect,child=false,childAndAfter=false)=>{
+export const pdfDropGuideZone=(x,rect,child=false,childAndAfter=false,siblingChild=false)=>{
+  if(siblingChild)return x<(rect.left+rect.right)/2?'before':'after';
   if(child)return 'child';
   if(childAndAfter){const third=rect.width/3;return x<rect.left+third?'before':
     x<rect.left+third*2?'child':'after';}

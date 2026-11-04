@@ -845,6 +845,107 @@ export const planCMDInsertPBSParentAfter=(source,sourceId,targetId)=>
 export const planCMDInsertPBSParentBefore=(source,sourceId,targetId)=>
   planCMDInsertPBSParentAt(source,sourceId,targetId,'before');
 
+/** Insert one direct child before/after another child of the SAME PBS parent.
+ * Source order is authoritative; physical origins stay sealed and must be
+ * tracked after sN renumbering. Move whole child scopes including nested tags,
+ * text, media and whitespace. Never touch the original OCR/PDF geometry.
+ */
+export function planCMDReorderPBSChildren(source,sourceId,targetId,placement='before'){
+  if(!['before','after'].includes(placement))throw Error('Invalid child insert position');
+  const a=parseCMDPBSId(sourceId),b=parseCMDPBSId(targetId);
+  if(!a||!b||a.s.length!==1||b.s.length!==1||
+     a.p!==b.p||a.b!==b.b)throw Error('Only direct children of the same parent may be reordered');
+  const model=readCMDBlockChains(source);
+  if(model.invalid.length||model.atoms.some(atom=>atom.format!=='cmd-v1'))
+    throw Error('CMD PBS labels must be valid before child reordering');
+  const parentId=`p${a.p}b${a.b}`;
+  const root=model.atoms.find(atom=>atom.id===parentId);
+  if(!root)throw Error('Child parent is missing');
+  const siblings=model.atoms.filter(atom=>{
+    const id=parseCMDPBSId(atom.id);
+    return id?.p===a.p&&id.b===a.b&&id.s.length===1;
+  }).sort((x,y)=>x.from-y.from);
+  const from=siblings.findIndex(atom=>atom.id===sourceId);
+  const target=siblings.findIndex(atom=>atom.id===targetId);
+  if(from<0||target<0)throw Error('Unknown child drop target');
+  if(from===target)return {changed:0,edits:[],reason:'same-child'};
+  // The synthetic root-body must remain the first s0 child: it is not a
+  // free-standing OCR subregion. Native OCR table_body children are movable.
+  if(siblings.some((atom,i)=>atom.role==='body'&&i!==0)||
+     siblings[from].role==='body'||siblings[target].role==='body')
+    throw Error('Virtual parent body s0 is fixed; reorder its other children');
+  for(const atom of siblings){
+    const chain=model.chains.find(chain=>chain.members.includes(atom.id));
+    if(chain?.explicit&&chain.size>1)
+      throw Error('Extract the child from its explicit BC before reordering');
+  }
+  const roots=model.atoms.filter(atom=>{
+    const id=parseCMDPBSId(atom.id);
+    return id?.p===a.p&&id.s.length===0&&atom.from>root.from;
+  }).sort((x,y)=>x.from-y.from);
+  const nextRoot=roots[0]?.from??source.length;
+  const boundaries=[nextRoot,...[
+    '<!-- minerujson:page:v1:','<!-- minerujson:source:v1:',
+    '<!-- cmd:pbs-locations:v1 ','<!-- cmd:pdf-bbox:v1 '
+  ].map(mark=>source.indexOf(mark,siblings[0].from)).filter(i=>i>=0)];
+  const end=Math.min(...boundaries);
+  if(end<=siblings.at(-1).from)throw Error('Invalid PBS child scope boundary');
+  const pieces=siblings.map((atom,i)=>{
+    const stop=siblings[i+1]?.from??end;
+    const members=model.atoms.filter(x=>x.from>=atom.from&&x.from<stop);
+    if(members.some(x=>!x.id.startsWith(atom.id)||
+       x.id.length>atom.id.length&&x.id[atom.id.length]!=='.'))
+      throw Error('Child scope crosses an unrelated PBS identity');
+    const text=source.slice(atom.from,stop);
+    if(/<!-- (?:minerujson:(?:page|source|discarded|document-meta)|cmd:(?:absorbed-parent|pdf-bbox|pbs-locations)):v1/.test(text))
+      throw Error('Child scope contains evidence or structural footer');
+    return {id:atom.id,text,members,from:atom.from};
+  });
+  const ordered=[...pieces];
+  const [moving]=ordered.splice(from,1);
+  const destination=ordered.findIndex(x=>x.id===targetId)+(placement==='after'?1:0);
+  ordered.splice(destination,0,moving);
+  if(ordered.every((x,i)=>x===pieces[i]))
+    return {changed:0,edits:[],reason:'already-adjacent'};
+  const renamed=new Map();
+  const next=ordered.map((piece,index)=>{
+    const oldId=piece.id,newId=`${parentId}s${index}`;
+    let text=piece.text;
+    const replacements=[];
+    for(const atom of piece.members){
+      const id=newId+atom.id.slice(oldId.length);
+      renamed.set(atom.id,id);
+      const parsed=parseCMDBlockTag(atom.rawLine);
+      if(!parsed)throw Error('Child scope has a legacy annotation');
+      const line=commentPrefix(atom.rawLine)+serializeCMDBlockTag({
+        id,...(atom.origin!==id?{origin:atom.origin}:{}),
+        ...(parsed.bc?{bc:parsed.bc,seq:Number(parsed.seq)}:{}),
+        type:parsed.type,role:parsed.role,review:parsed.review,note:parsed.note});
+      replacements.push({from:atom.from-piece.from,to:atom.from-piece.from+atom.rawLine.length,line});
+    }
+    for(const change of replacements.reverse())
+      text=text.slice(0,change.from)+change.line+text.slice(change.to);
+    return text;
+  }).join('');
+  const mapping={};const bodies=[];
+  for(const atom of model.atoms){
+    const id=renamed.get(atom.id)||atom.id;
+    if(id!==atom.origin)mapping[id]=atom.origin;
+    if(atom.role==='body')bodies.push(id);
+  }
+  const locations=readCMDPBSLocations(source);
+  const edit={from:siblings[0].from,to:end,
+    expected:source.slice(siblings[0].from,end),insert:next};
+  const mappingEdit=planCMDPBSLocationsEdit(source,{
+    bindings:mapping,bodies,removed:locations.removed});
+  const edits=[edit,mappingEdit].sort((x,y)=>x.from-y.from);
+  if(edits[0].to>edits[1].from)
+    throw Error('Child source and PDF mapping footer overlap');
+  return {changed:edits.length,edits,sourceId,targetId,placement,parentId,
+    newId:renamed.get(sourceId),renamed:Object.fromEntries(renamed),
+    relocatedSourceText:true};
+}
+
 /** Reorder independent page-level PBS scopes in one CM6 operation.
  * The immutable PBS origin (physical PDF bbox) never changes. A parent takes
  * its native/reviewed children with it; all other parents keep relative order.

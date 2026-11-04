@@ -3,7 +3,7 @@
  */
 export const TEXT_BLOCKS_READ_ONLY = true;
 export const TEXT_BLOCK_READ_ONLY_MESSAGE =
-  '父块可跨页选择「作为子块」或「之后」；「之前」、拆分、PDF 覆盖框编辑仍只读';
+  '父块支持「之前」「作为子块」「之后」；同父子块支持「之前」「之后」；其他结构操作仍只读';
 export function rejectTextBlockEdit(){
   return Promise.reject(new Error(TEXT_BLOCK_READ_ONLY_MESSAGE));
 }

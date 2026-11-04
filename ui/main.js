@@ -765,13 +765,19 @@ async function main() {
   });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
   workspace.setBlockMoveAction(async(sourceId,targetId,placement)=>{
-    if(!['before','after'].includes(placement)||!/^p\d+b\d+$/.test(sourceId||'')||
-      !/^p\d+b\d+$/.test(targetId||'')||sourceId===targetId)
-      return rejectTextBlockEdit();
+    const parent=/^p\d+b\d+$/;
+    const child=/^(p\d+b\d+)s\d+$/;
+    const sameParentChildren=child.test(sourceId||'')&&child.test(targetId||'')&&
+      child.exec(sourceId)[1]===child.exec(targetId)[1];
+    const independentParents=parent.test(sourceId||'')&&parent.test(targetId||'');
+    if(!['before','after'].includes(placement)||sourceId===targetId||
+       !(independentParents||sameParentChildren))return rejectTextBlockEdit();
     const source=cmdPort.readSource();
     if(source!==blockIndexedSource)
       throw Error('文本块列表已变化，请重新进入文本块模块后操作');
-    const result=cmdPort.insertPBSAt(sourceId,targetId,placement,{expectedSource:source});
+    const result=sameParentChildren?
+      cmdPort.reorderPBSChildren(sourceId,targetId,placement,{expectedSource:source}):
+      cmdPort.insertPBSAt(sourceId,targetId,placement,{expectedSource:source});
     if(result.changed){blockIndexedSource=null;scanTextBlocks();}
     return result;
   });

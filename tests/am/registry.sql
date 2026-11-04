@@ -1622,3 +1622,19 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-FOCUS-C64','C64','tests/cmd-three-pane-focus.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG selection correct under reverse/shuffled display order, stale explicit ids fail closed','direct'),
  ('TC-FOCUS-C65','C65','tests/cmd-three-pane-focus.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit actual CM6 click source p1b12→PDF physical p1b10→AG current p1b12','integration'),
  ('TC-FOCUS-P26','P26','tests/cmd-three-pane-focus.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit PDF chip/canvas and AG clicks select identical current CMD p1b12','integration');
+
+-- WCP31 same-parent direct-child drag insertion is CMD-owned. PDF conveys
+-- semantic A/B/placement only; AG and PDF render the current logical IDs with
+-- unchanged original OCR bounding boxes from the CMD location sidecar.
+INSERT INTO apis VALUES
+ ('C120','C','planCMDReorderPBSChildren','ui/cmd-block-chains.js','export','same-parent direct child IDs, before/after, live CMD source','full-scoped reordered child Markdown plus original-origin footer edits','no direct PDF/AG writes, sealed original MinerU JSON unchanged',1),
+ ('C121','C','returned.reorderPBSChildren','ui/wcp-cmd-element-transactions.js','returned','direct child IDs, before/after, expected source snapshot','one optimistic CM6 Undo/Redo transaction containing scope and footer','reject stale source, foreign parent and duplicate/mutated OCR origin',1),
+ ('P40','P','pdfDropGuideZone','ui/pdf-pbs-drop-hit.js','export','pointer coordinate, temporary guide rectangle and same-parent child intent','semantic before or after drop selection','no pixel-based source mutation, no persistent PDF geometry change',1);
+INSERT INTO access_edges VALUES
+ ('X-CHILD-REORDER-C120','C','C','ui/wcp-cmd-element-transactions.js','planCMDReorderPBSChildren(source,sourceId,targetId,placement)','C120','registered','CMD pure transaction planner owns child identity and source-scope relocation'),
+ ('X-CHILD-REORDER-C121','L','C','ui/main.js','cmdPort.reorderPBSChildren(sourceId,targetId,placement,options)','C121','registered','Shell forwards only semantic child IDs; CM6 is the sole source writer'),
+ ('X-CHILD-REORDER-P40','P','P','ui/pdf-preview.js','pdfDropGuideZone(x,rail,child,this.readOnly,childDrag)','P40','registered','PDF maps transient rail pointer to semantic before/after without CMD internals');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-CHILD-REORDER-C120','C120','tests/cmd-pbs-child-reorder.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','before/after insertion stable native physical origins, full scopes, PDF geometry, 0 sealed evidence edits','direct'),
+ ('TC-CHILD-REORDER-C121','C121','tests/cmd-pbs-child-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','actual Chrome/WebKit child drag commits one undoable source plus footer edit with consistent AG/PDF label','integration'),
+ ('TC-CHILD-REORDER-P40','P40','tests/cmd-pbs-child-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','same-parent two-position guide, foreign parent drop rejected, actual subblock chip pointer capture','integration');

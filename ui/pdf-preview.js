@@ -882,9 +882,9 @@ export class PdfPreview {
    * The source PDF box stays put; only CMD source ordering changes.
    */
   armBlockDrag(event,ctrl,id){
-    // Every parent may join another parent, including across PDF pages.
-    // Child rearrangement and before/after sorting stay disabled.
-    if(this.readOnly&&!/^p\d+b\d+$/.test(id))return;
+    // Only direct child siblings can reorder; parents retain their existing
+    // cross-page insertion/absorption gestures.
+    if(this.readOnly&&!/^p\d+b\d+(?:s\d+)?$/.test(id))return;
     if(event.button!==0||this.blockDrag||event.target.closest('input'))return;
     const item={id,ctrl,pointerId:event.pointerId,pointerType:event.pointerType,
       x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
@@ -905,7 +905,9 @@ export class PdfPreview {
       svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
         '<path class="ocr-pdf-block-drag-tip" />';
       document.body.append(svg);item.svg=svg;
-      this.setStatus(`从 ${id} 拖出箭头，可跨页选择「之前」「作为子块」「之后」`);
+      this.setStatus(/s\d+$/.test(id)?
+        `从 ${id} 拖至同父子块，选择「之前」或「之后」`:
+        `从 ${id} 拖出箭头，可跨页选择「之前」「作为子块」「之后」`);
       this.updateBlockDrag(item,item.x,item.y);
       this.autoScrollBlockDrag(item);
     },370);
@@ -955,7 +957,8 @@ export class PdfPreview {
       const rail=item.guide.getBoundingClientRect();
       if(x>=rail.left-5&&x<=rail.right+5&&y>=rail.top-5&&y<=rail.bottom+5)
         return {node:item.target,id:item.targetId,kind:item.targetKind,
-          placement:pdfDropGuideZone(x,rail,item.targetKind==='child',this.readOnly)};
+          placement:pdfDropGuideZone(x,rail,item.targetKind==='child',this.readOnly,
+            /^p\d+b\d+s\d+$/.test(item.id))};
     }
     // Once a parent bbox is caught, the short handoff towards its action
     // rail owns the pointer. Otherwise a native child rectangle nested in
@@ -967,18 +970,21 @@ export class PdfPreview {
       return {node:item.target,id:item.targetId,kind:item.targetKind,
         placement:item.placement||'child'};
     const candidates=[];
+    const childDrag=/^p\d+b\d+s\d+$/.test(item.id);
+    const siblingPrefix=childDrag?item.id.slice(0,item.id.lastIndexOf('s')+1):null;
     for(const node of this.blockCoverageNodes.values()){
       if(!node.isConnected)continue;
       const pageId=node.dataset.pdfPage,rootId=node.dataset.blockId;
       // The original PDF bbox, including its full interior, is the hit area.
       // Gutter chips are not part of the bbox and never steal a drag target.
-      candidates.push({node,id:rootId,rootId,
+      if(!childDrag)candidates.push({node,id:rootId,rootId,
         kind:node.classList.contains('ocr-pdf-block-is-child')?'child':'parent',
         pageId,rect:node.getBoundingClientRect()});
       for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
         if(fragment.hidden)continue;
         const id=fragment.dataset.subblockId;
-        if(!id)continue;
+        if(!id||childDrag&&(!/^p\d+b\d+s\d+$/.test(id)||
+            !id.startsWith(siblingPrefix)||id===item.id))continue;
         candidates.push({node:fragment,id,rootId,kind:'child',
           pageId,rect:fragment.getBoundingClientRect()});
       }
@@ -991,13 +997,16 @@ export class PdfPreview {
   paintBlockDropGuide(item){
     if(!item.target){item.guide?.remove();item.guide=null;return;}
     const child=item.targetKind==='child';
-    if(!item.guide||item.guide.dataset.kind!==(child?'child':'parent')){
+    const siblingChild=child&&/^p\d+b\d+s\d+$/.test(item.id);
+    const kind=siblingChild?'sibling':child?'child':'parent';
+    if(!item.guide||item.guide.dataset.kind!==kind){
       item.guide?.remove();
       const guide=document.createElement('div');
       guide.className='ocr-pdf-block-drop-guide';
-      guide.dataset.kind=child?'child':'parent';
+      guide.dataset.kind=kind;
       guide.setAttribute('aria-hidden','true');
-      guide.innerHTML=child?'<span data-placement="child">成为子块</span>':
+      guide.innerHTML=siblingChild?'<span data-placement="before">之前</span><span data-placement="after">之后</span>':
+        child?'<span data-placement="child">成为子块</span>':
         this.readOnly?'<span data-placement="before">之前</span><span data-placement="child">作为子块</span><span data-placement="after">之后</span>':
         '<span data-placement="before">之前</span><span data-placement="child">子块</span>'+
         '<span data-placement="after">之后</span>';
@@ -1012,7 +1021,7 @@ export class PdfPreview {
     if(!chip?.isConnected)return;
     const rect=chip.getBoundingClientRect(),clip=this.visibleClip();
     if(!clip)return;
-    const width=child?80:this.readOnly?213:150,height=29;
+    const width=siblingChild?132:child?80:this.readOnly?213:150,height=29;
     const left=Math.max(clip.left+3,Math.min((rect.left+rect.right-width)/2,
       clip.right-width-3));
     const top=rect.bottom+height+8<=clip.bottom?rect.bottom+5:
@@ -1094,9 +1103,10 @@ export class PdfPreview {
     let ex=x-bounds.left,ey=y-bounds.top;
     if(target&&item.guide){
       const rect=item.guide.getBoundingClientRect();
-      const index=item.targetKind==='child'?0:this.readOnly?
-        ({before:0,child:1,after:2}[placement]??1):({before:0,child:1,after:2}[placement]??1);
-      const slots=item.targetKind==='child'?1:3;
+      const siblingChild=item.targetKind==='child'&&/^p\d+b\d+s\d+$/.test(item.id);
+      const index=siblingChild?(placement==='after'?1:0):item.targetKind==='child'?0:
+        ({before:0,child:1,after:2}[placement]??1);
+      const slots=siblingChild?2:item.targetKind==='child'?1:3;
       ex=rect.left+(index+.5)*rect.width/slots-bounds.left;
       ey=(rect.top+rect.bottom)/2-bounds.top;
     }
@@ -1133,6 +1143,23 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择目标父块，结构不变');return;}
+    // Direct child insertion is separate from parent absorption and keeps
+    // the original physical child bboxes stable through CMD origin mapping.
+    if(/^p\d+b\d+s\d+$/.test(item.id)){
+      const parent=id=>id.slice(0,id.lastIndexOf('s'));
+      if(!['before','after'].includes(placement)||
+        !/^p\d+b\d+s\d+$/.test(target)||parent(item.id)!==parent(target)||
+        item.id===target){
+        this.setStatus('子块只能移动到同一父块内其他子块的「之前」或「之后」');return;
+      }
+      this.setStatus(`正在将 ${item.id} 插入 ${target} ${placement==='before'?'之前':'之后'}…`);
+      void this.onBlockMove(item.id,target,placement).then(result=>{
+        this.setStatus(result?.changed?
+          `✓ 子块 ${item.id} → ${result.newId} · 同父插入 · 未保存，可 Undo`:
+          '已相邻，子块顺序不变');
+      }).catch(error=>this.setStatus('子块排序失败：'+error.message));
+      return;
+    }
     if(this.readOnly&&(!/^p\d+b\d+$/.test(item.id)||
       !['child','before','after'].includes(placement)||!target||
       !/^p\d+b\d+(?:s\d+(?:\.\d+)*)?$/.test(target)||
@@ -1336,7 +1363,18 @@ export class PdfPreview {
               role:part.role,path:part.path,bbox:part.bbox,
               logicalId:chip.parentElement?.dataset.subblockId});
           };
-          chip.addEventListener('click',e=>{e.stopPropagation();navigate();});
+          chip.addEventListener('pointerdown',e=>{
+            e.stopPropagation();
+            if(/^p\d+b\d+s\d+$/.test(fragment.dataset.subblockId||''))
+              this.armBlockDrag(e,chip,fragment.dataset.subblockId);
+          });
+          chip.addEventListener('click',e=>{
+            e.stopPropagation();
+            if(this.suppressBlockClickCtrl===chip&&performance.now()<this.suppressBlockClickUntil){
+              e.preventDefault();return;
+            }
+            navigate();
+          });
           chip.addEventListener('keydown',e=>{
             if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();navigate();}
           });
