@@ -828,7 +828,7 @@ async function main() {
       cmdPort?.blockIdAtSourceLine(sourceLine)??null:null;
     publishFocus({sourceLine,sourceOffset:offset,origin:'cm6',
       elementId,intent:'click'});
-  });
+  },true); // CM6 may stop bubbling clicks; capture them before its handlers.
   savedDoc=view.state.doc;
   workspace.refreshPreview();
   workspace.refreshOutline();
