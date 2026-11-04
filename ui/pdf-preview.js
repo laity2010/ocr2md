@@ -8,6 +8,7 @@ import {EventBus,PDFViewer} from 'pdfjs-dist/web/pdf_viewer.mjs';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {viewStore,publishFocus} from './view-store.js';
+import {sourceLabelLocations} from './pdf-source-locations.js';
 import './pdf-preview.css';
 import {subblockId} from './mineru-anchors.js';
 import {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
@@ -179,6 +180,7 @@ export class PdfPreview {
         this.lastGeometrySource=canonical;
         this.anchors=sourceBlocks(source);
         this.subAnchors=sourceSubblocks(source);
+        this.labelSources=sourceLabelLocations(source);
         this.updatePromoteButton();
         this.updateChipContentIndicators();
         if(this.selected)void this.prepareSelectedPDFText();
@@ -205,6 +207,7 @@ export class PdfPreview {
     });
     this.anchors=sourceBlocks(this.getMarkdown());
     this.subAnchors=sourceSubblocks(this.getMarkdown());
+    this.labelSources=sourceLabelLocations(this.getMarkdown());
     this.resizeObserver=new ResizeObserver(()=>this.onResize());
     this.resizeObserver.observe(this.scroller);
   }
@@ -334,6 +337,8 @@ export class PdfPreview {
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
     this.subAnchors=sourceSubblocks(this.getMarkdown());
+    this.labelSources=sourceLabelLocations(this.getMarkdown());
+    this.labelSources=sourceLabelLocations(this.getMarkdown());
     this.updateChipContentIndicators();
     this.scheduleOverlay();
   }
@@ -351,10 +356,10 @@ export class PdfPreview {
       const parentChip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
       if(parentChip){
         const origin=node.dataset.originId||node.dataset.blockId;
-        const anchor=parents.get(origin);
+        const anchor=this.labelSources?.get(node.dataset.blockId)||parents.get(origin);
         // A valid parent whose body lives in its native child is not missing
         // OCR. Dashed labels mean *unresolved source*, not normal nesting.
-        const nativeChildHasContent=[...children.entries()].some(([id,child])=>
+        const nativeChildHasContent=[...(this.labelSources||children).entries()].some(([id,child])=>
           id.startsWith(node.dataset.blockId+'s')&&child.contentLine);
         const kind=!anchor?'unmarked':
           anchor.contentLine||nativeChildHasContent?'content':'structure';
@@ -366,7 +371,7 @@ export class PdfPreview {
       }
       for(const chip of node.querySelectorAll('.ocr-pdf-subblock-chip')){
         const id=chip.parentElement?.dataset.subblockId;
-        const anchor=children.get(id);
+        const anchor=this.labelSources?.get(id)||children.get(id);
         const kind=!anchor?'unmarked':anchor.contentLine?'content':'structure';
         if(chip.dataset.sourceKind!==kind)chip.dataset.sourceKind=kind;
         const label=chip.parentElement?.title||id;
@@ -613,6 +618,33 @@ export class PdfPreview {
     if(!chosen)return;
     this.selectPDFRegion(n-1,chosen);
   }
+  /** Physical hit coordinates and current PBS tag IDs live in different
+   * namespaces after manual renumbering. Read the current CMD label's scope
+   * before using legacy physical marker fallback. */
+  resolvePDFClickedId(pageIndex,blockIndex,path){
+    const origin=`p${pageIndex}b${blockIndex}`;
+    const child=path?.length?subblockId(pageIndex,blockIndex,path):null;
+    if(child){
+      const parent=this.blockCoverageRows.find(row=>row.origin===origin&&!row.promoted&&!row.isChildCover);
+      const alias=parent?.nativeChildren?.[child];
+      if(alias)return alias;
+      const moved=this.blockCoverageRows.find(row=>row.origin===child&&row.id!==child);
+      return moved?.id||child;
+    }
+    return this.blockCoverageRows.find(row=>row.origin===origin&&
+      !row.promoted&&!row.isChildCover)?.id||
+      this.blockCoverageRows.find(row=>row.origin===origin)?.id||origin;
+  }
+  focusVisiblePDFLabel(id){
+    const anchor=this.labelSources?.get(id);
+    if(!anchor)return false;
+    const line=anchor.contentLine??anchor.sourceLine;
+    publishFocus({sourceLine:line,origin:'pdf',elementId:id});
+    this.setStatus(anchor.contentLine?
+      `${id} → 源码正文第 ${line} 行（标签第 ${anchor.sourceLine} 行）`:
+      `${id} · 源码第 ${line} 行为结构标签，当前没有正文`);
+    return true;
+  }
   /** Both the PDF rectangle and its gutter ID are actual child controls. */
   selectPDFRegion(pageIndex,chosen){
     if(!this.ready||this.disposed)return;
@@ -629,10 +661,8 @@ export class PdfPreview {
     // gutter chips carry the reviewed visible PBS id. Both selection paths
     // must produce the SAME logical identity for toolbar actions. Otherwise
     // a correct status `p1b3s1` can coexist with a disabled action button.
-    const matching=this.blockCoverageRows.find(row=>row.pageIndex===pageIndex&&
-      row.blockIndex===chosen.blockIndex&&row.origin!==row.id&&
-      /^p\d+b\d+s\d+$/.test(row.id));
-    const logicalId=chosen.logicalId||(!chosenPath?matching?.id:null)||null;
+    const logicalId=chosen.logicalId||
+      this.resolvePDFClickedId(pageIndex,chosen.blockIndex,chosenPath);
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
       partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null,
       logicalId};
@@ -640,6 +670,13 @@ export class PdfPreview {
     this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
     const sequence=++this.childFocusSequence;
+    // A displayed logical PBS ID must ALWAYS take precedence over stale
+    // physical page/block/path anchors, which refer to old OCR positions.
+    if(this.focusVisiblePDFLabel(logicalId))return;
+    if(chosen.logicalId){
+      this.setStatus(`${logicalId} · 当前 CMD 源码缺少同名标签，未跳至其他 OCR 块`);
+      return;
+    }
     if(chosenPath){
       this.setStatus(`${subblockId(pageIndex,chosen.blockIndex,chosenPath)} · 正在定位源码…`);
       void this.focusPDFChild(pageIndex,chosen.blockIndex,chosenPath,sequence)
@@ -1193,7 +1230,8 @@ export class PdfPreview {
             const child=this.map[currentRow.pageIndex]?.regions.find(r=>r.blockIndex===currentRow.blockIndex)
               ?.subRegions.findIndex(r=>r.path.length===1&&r.path[0]===Number(original?.[3]));
             this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
-              partIndex:child??null,path:original?[Number(original[3])]:null,role:'parent'});
+              partIndex:child??null,path:original?[Number(original[3])]:null,
+              role:'parent',logicalId:currentRow.id});
           }else this.selectPDFRegion(currentRow.pageIndex,{blockIndex:currentRow.blockIndex,
             partIndex:null,path:null,role:'parent',logicalId:currentRow.id});
           if(/^p\d+b\d+$/.test(currentRow.id))this.highlightParentGroup(currentRow);
@@ -1273,7 +1311,8 @@ export class PdfPreview {
               return;
             }
             if(part)this.selectPDFRegion(pageIndex,{blockIndex,partIndex:index,
-              role:part.role,path:part.path,bbox:part.bbox});
+              role:part.role,path:part.path,bbox:part.bbox,
+              logicalId:chip.parentElement?.dataset.subblockId});
           };
           chip.addEventListener('click',e=>{e.stopPropagation();navigate();});
           chip.addEventListener('keydown',e=>{

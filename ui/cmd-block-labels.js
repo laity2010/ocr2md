@@ -58,6 +58,11 @@ export function projectCMDSourceBlockLabels(source){
   const inventory=readCMDBlockChains(source).atoms;
   const visibleByOrigin=new Map(inventory.filter(a=>a.role!=='body')
     .map(a=>[a.origin,a.id]));
+  // Current source tag line, not immutable OCR origin, identifies the new
+  // PBS label after insert-before/after, parent absorption and promotion.
+  // Different tags may share an OCR-root namespace after renumbering, so
+  // resolving solely by p/b index or by origin can select the NEXT block.
+  const visibleBySourceLine=new Map(inventory.map(a=>[a.sourceLine,a.id]));
   const bodyByOrigin=new Map(inventory.filter(a=>a.role==='body')
     .map(a=>[a.origin,a.id]));
   const parents=scopes.filter(scope=>scope.kind==='parent');
@@ -78,8 +83,8 @@ export function projectCMDSourceBlockLabels(source){
     const isParent=scope.kind==='parent';
     const originalId=isParent?`p${scope.pageIndex}b${scope.blockIndex}`:
       subblockId(scope.pageIndex,scope.blockIndex,scope.path);
-    const label=(scope.bodyAlias?
-      bodyByOrigin.get('p'+scope.pageIndex+'b'+scope.blockIndex):null)||
+    const label=visibleBySourceLine.get(scope.sourceLine)||
+      (scope.bodyAlias?bodyByOrigin.get('p'+scope.pageIndex+'b'+scope.blockIndex):null)||
       visibleByOrigin.get(originalId)||
       (isParent?projection.assignments.get(originalId)||originalId:originalId);
     return {...scope,id:originalId,label,
@@ -87,4 +92,14 @@ export function projectCMDSourceBlockLabels(source){
       elementId:isParent?`mineru:${scope.pageIndex}:${scope.blockIndex}:parent`:
         `mineru:${scope.pageIndex}:${scope.blockIndex}:${scope.path.join('.')}`};
   });
+}
+
+/** The PDF badge uses the current visible PBS ID, whereas the PDF rectangle
+ * uses its immutable OCR origin. Resolve each badge to the ACTUAL current CMD
+ * tag line; this remains correct after renumbering or parent/child promotion.
+ * A missing tag is not silently replaced with the old physical tag's body.
+ */
+export function mapCMDVisibleLabelSources(source){
+  const labels=projectCMDSourceBlockLabels(source);
+  return new Map(labels.map(({label,...location})=>[label,{...location,label}]));
 }

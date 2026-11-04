@@ -1560,3 +1560,15 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-AG-PAGE-G31','G31','tests/text-block-page-scope.test.mjs','tests/text-block-page-scope.test.mjs','page model overrides manual page on PDF navigation, clears on all, retains other filters and never mutates prior model','direct'),
  ('TC-AG-PAGE-MANUAL-G31','G31','tests/text-block-ag-page-filter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit header filter exposes all 22 pages; manual selection of another page, PDF page update and All toggle work','integration');
+
+-- PDF current-label navigation must be an exact CMD source-line lookup,
+-- never a best-effort jump by immutable OCR p/b physical numbering.
+INSERT INTO apis VALUES
+ ('L82','L','mapCMDVisibleLabelSources','ui/cmd-block-labels.js','export','current CMD source with legal PBS atoms and source-tag lexical scopes','map of visible/current PBS IDs to exact same-tag sourceLine and optional contentLine','current tag/source-line identity wins over immutable OCR origin after renumbering, absorption or promotion',1),
+ ('P24','P','sourceLabelLocations','ui/pdf-source-locations.js','export','live CMD source string','read-only PDF adapter to CMD visible-label source-line projection','never modify source or original bbox; do not invent old physical tag fallback',1);
+INSERT INTO access_edges VALUES
+ ('X-PDF-FOCUS-L82','P','L','ui/pdf-source-locations.js','mapCMDVisibleLabelSources(source)','L82','registered','PDF adapter consumes CMD-owned current PBS label/source-line mapping'),
+ ('X-PDF-FOCUS-P24','P','P','ui/pdf-preview.js','sourceLabelLocations(this.getMarkdown())','P24','registered','PDF click uses current logical PBS ID while preserving native OCR rectangle for drawing');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-FOCUS-L82','L82','tests/pdf-renumbered-cmd-location.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','current source-line map remains one-to-one across after insertion, absorbed child and promotion','direct'),
+ ('TC-PDF-FOCUS-P24','P24','tests/pdf-renumbered-cmd-location.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit PDF badge and canvas select current PBS tag/source body, not physical origin; no user document writes','integration');
