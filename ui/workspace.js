@@ -774,6 +774,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       pdfBlockLabelScale=value;
       currentPdf?.pdf?.setBlockLabelScale(value);
     },
+    refreshPDFBlockLabels:()=>currentPdf?.pdf?.refreshBlockLabelLayout(),
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:(module,{activateTextBlocks=true}={})=>{
       // AG text-block selection turns on the active preview lens. In split

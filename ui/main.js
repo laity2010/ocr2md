@@ -919,7 +919,13 @@ async function main() {
         const restore=()=>{
           if($('module-select').value===selected)workspace.applyPaneRatios(sharedPaneRatios);
         };
-        requestAnimationFrame(()=>{restore();requestAnimationFrame(restore);});
+        requestAnimationFrame(()=>{restore();requestAnimationFrame(()=>{
+          restore();
+          // The PDF pane stayed display:none while the Settings slider was
+          // edited, so its measured page width was zero. Relayout labels now
+          // that the Shell has re-shown the established PDF page tree.
+          workspace.refreshPDFBlockLabels();
+        });});
       }
     }
     refreshToolbar();

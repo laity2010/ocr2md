@@ -1337,6 +1337,10 @@ export class PdfPreview {
     this.updateChipContentIndicators();
     this.refreshParentGroupHighlight();
   }
+  /** Reconcile global-label settings once a hidden PDF pane becomes visible. */
+  refreshBlockLabelLayout(){
+    if(!this.disposed&&this.scroller?.clientWidth)this.avoidBlockChipCollisions();
+  }
   /** User's global display multiplier. Never scale PDF evidence bboxes. */
   setBlockLabelScale(value){
     if(!Number.isFinite(value)||value<0.5||value>2.5)
