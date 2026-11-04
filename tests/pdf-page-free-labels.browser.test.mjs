@@ -66,7 +66,19 @@ try{
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       try{
         await page.goto(base,{waitUntil:'domcontentloaded',timeout:75000});
-        await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:95000});
+        try{await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:95000});}
+        catch(error){
+          const diagnostic=await page.evaluate(()=>({
+            status:document.querySelector('.ocr-pdf-status')?.textContent,
+            title:document.title,
+            pages:document.querySelectorAll('.page').length,
+            covers:document.querySelectorAll('.ocr-pdf-block-cover').length,
+            chips:document.querySelectorAll('.ocr-pdf-rail-label').length,
+            labels:document.querySelectorAll('#module-select option').length,
+            body:document.body.innerText.slice(0,900)})).catch(e=>({error:String(e)}));
+          console.error('PDF_BROWSER_BOOT_DIAGNOSTIC',name,JSON.stringify({diagnostic,errors}));
+          throw error;
+        }
         await page.locator('#module-select').evaluate(el=>{el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));});
         await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='text-block');
         await selectPreview(page,'pdf');

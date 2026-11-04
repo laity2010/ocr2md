@@ -19,9 +19,13 @@ const validate=(items,covers,width,height,label)=>{
       .2&&slot.top+slot.height<=height-2+.2,`${label}: escaped page: ${slot.id}`);
     for(const cover of covers)
       assert(!intersects(slot,cover),`${label}: OCR cover collision: ${slot.id}`);
-    for(const other of result.slots)if(slot!==other)
-      assert(!intersects(slot,{...other,right:other.left+other.width,bottom:other.top+other.height}),
-        `${label}: ${slot.id} intersects ${other.id}`);
+    for(const other of result.slots)if(slot!==other){
+      const apart=slot.left+slot.width+8.5<=other.left||
+        other.left+other.width+8.5<=slot.left||
+        slot.top+slot.height+8.5<=other.top||
+        other.top+other.height+8.5<=slot.top;
+      assert(apart,`${label}: tags too tightly packed: ${slot.id} and ${other.id}`);
+    }
   }
   return result;
 };

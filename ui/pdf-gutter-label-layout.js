@@ -142,7 +142,7 @@ export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,p
  * when the geometry has insufficient space for the requested magnitude.
  * This is view-only geometry: CMD identities, owners and OCR boxes stay put.
  */
-export function layoutPDFFreePageLabels(items,{pageWidth,pageHeight,covers=[],gap=2,padding=3}={}){
+export function layoutPDFFreePageLabels(items,{pageWidth,pageHeight,covers=[],gap=9,padding=3}={}){
   if(!items.length)return {slots:[],leaders:[],scale:1};
   const valid=items.filter(i=>i?.target&&Number.isFinite(i.width)&&i.width>0&&
     Number.isFinite(i.height)&&i.height>0&&Number.isFinite(i.anchorY));
