@@ -1,6 +1,7 @@
-/** Original-PDF before/after gestures remain STATUS ONLY. The child landing
- * is separately covered by the real CMD parent-absorption browser suite.
- * Disposable server/document. Main and user working files are never edited.
+/** Original-PDF before/after drag TARGETS: immutable OCR cover hit,
+ * transient guide placement, then CANCEL without a CMD edit. Actual
+ * before/after mutations are validated separately by CMD operation suites.
+ * Disposable server/document. No persistent user data is ever edited.
  */
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
@@ -65,12 +66,14 @@ try{
             bubbles:true,pointerId:800+index,pointerType:'touch',button:0,isPrimary:true
           };
           const from=page.locator('.ocr-pdf-block-cover[data-block-id="'+c.source+'"] > .ocr-pdf-block-ctrl');
-          const dest=c.target.includes('s')?
-            page.locator('.ocr-pdf-block-fragment[data-subblock-id="'+c.target+'"] > .ocr-pdf-subblock-chip'):
-            page.locator('.ocr-pdf-block-cover[data-block-id="'+c.target+'"] > .ocr-pdf-block-ctrl');
+          // Drop targets are the immutable OCR COVER, never the label.
+          // Labels now float freely around the page and are not hit regions.
+          const destCover=c.target.includes('s')?
+            page.locator('.ocr-pdf-block-fragment[data-subblock-id="'+c.target+'"]'):
+            page.locator('.ocr-pdf-block-cover[data-block-id="'+c.target+'"]');
           await from.waitFor({state:'attached',timeout:45000});
-          await dest.scrollIntoViewIfNeeded({timeout:30000});
-          const fr=await from.boundingBox(),dr=await dest.boundingBox();assert(fr&&dr);
+          await destCover.scrollIntoViewIfNeeded({timeout:30000});
+          const fr=await from.boundingBox(),dr=await destCover.boundingBox();assert(fr&&dr);
           await from.dispatchEvent('pointerdown',{...touch,...center(fr)});
           await page.locator('.ocr-pdf-block-drag-arrow').waitFor({state:'attached',timeout:5000});
           await page.locator('body').dispatchEvent('pointermove',{...touch,...center(dr)});
@@ -81,23 +84,24 @@ try{
           await page.locator('body').dispatchEvent('pointermove',{...touch,...center(zr)});
           const hover=await page.locator('.ocr-pdf-status').textContent();
           assert(hover.includes(c.target),name+' hover target '+hover);
-          await page.locator('body').dispatchEvent('pointerup',{...touch,...center(zr)});
-          await page.waitForFunction(args=>{
-            const status=document.querySelector('#status')?.textContent||'';
-            return status.includes('PDF 手势预演')&&status.includes(args.source+' → '+args.target)&&
-              status.includes(args.text)&&status.includes('未修改 CMD、编号或覆盖框');
-          },c,{timeout:10000});
+          assert(hover.includes(c.placement==='before'?'之前':'之后'),
+            name+' expected '+c.placement+' rail '+hover);
+          assert.equal(await zone.evaluate(el=>el.classList.contains('active')),true,
+            'the exact before/after landing zone must be selected');
+          // Cancel rather than release: this test owns pointer targeting,
+          // while the real CMD integration suite owns document mutation.
+          await page.locator('body').dispatchEvent('pointercancel',{...touch,...center(zr)});
           assert.equal(await page.locator('.ocr-pdf-block-drag-arrow').count(),0);
           assert.equal(await page.locator('.ocr-pdf-block-drop-guide').count(),0);
           assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]').count(),1);
           assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p1b5"]').count(),1);
           assert.equal(await page.locator('.ocr-pdf-block-fragment[data-subblock-id="p1b3s0"]').count(),1);
           assert.equal(readFileSync(doc,'utf8'),source,'gesture wrote source file');
-          console.log('PDF_GESTURE_PREVIEW_PASS',name,c.placement,
-            c.source,'->',c.target,'GLOBAL_STATUS_ONLY');
+          console.log('PDF_GESTURE_COVER_TARGET_CANCEL_PASS',name,c.placement,
+            c.source,'->',c.target);
         }
         assert.deepEqual(errors,[]);
-        console.log('PDF_GESTURE_PREVIEW_BROWSER_ALL_PASS',name);
+        console.log('PDF_GESTURE_COVER_TARGET_BROWSER_ALL_PASS',name);
       }finally{await page.close();}
     }finally{await browser.close();}
   }
