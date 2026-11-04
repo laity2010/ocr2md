@@ -13,7 +13,7 @@ import {subblockId} from './mineru-anchors.js';
 import {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
-import {layoutPDFFreePageLabels} from './pdf-gutter-label-layout.js';
+import {layoutPDFEdgeRails} from './pdf-gutter-label-layout.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
 import {pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint,pdfDropGuideCorridor} from './pdf-pbs-drop-hit.js';
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
@@ -73,7 +73,6 @@ export class PdfPreview {
     this.onPromoteChild=onPromoteChild;
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.blockLabelScale=1;
-    this.pinnedRailId=null;this.hoverRailId=null;
     this.host.classList.add('ocr-pdf-pane');
     if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
     this.host.dataset.pdfTheme='dark';
@@ -858,19 +857,6 @@ export class PdfPreview {
     this.scroller.style.scrollBehavior='auto';
     const tick=()=>{
       if(this.blockDrag!==item||!item.active){this.stopBlockDragScroll();return;}
-      // Once a PDF coverage box has been captured and its action rail is
-      // visible, scrolling near the pane edge must pause *while the finger
-      // travels from that box to its rail*. Otherwise a bottom-page target
-      // scrolls away under a stationary finger: the AFTER landing switches
-      // to another cover/CHILD even though the user never changed intent.
-      // Outside this short handoff corridor scrolling resumes, preserving
-      // cross-page drag navigation.
-      if(item.target?.isConnected&&item.guide?.isConnected)return;
-      // Scrolling resumes as soon as the pointer leaves the selected target
-      // and its landing rail, because updateBlockDrag clears both. Keeping
-      // scroll stopped for the ENTIRE selected-target phase is necessary:
-      // the guide itself lies inside the 48px edge-scroll trigger on small
-      // iPads, and a small finger wobble must not restart the scroll loop.
       const pane=this.scroller.getBoundingClientRect();
       if(item.x>=pane.left&&item.x<=pane.right&&
         item.y>=pane.top&&item.y<=pane.bottom){
@@ -1163,10 +1149,6 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
-        ctrl.addEventListener('pointerenter',()=>
-          this.setRailSpotlight(node.dataset.blockId,{hover:true}));
-        ctrl.addEventListener('pointerleave',()=>
-          this.setRailSpotlight(null,{hover:true}));
         if(!this.readOnly||/^p\d+b\d+$/.test(row.id))
           ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
         // Preserve long-press move: a dragged label's release never counts as
@@ -1203,7 +1185,6 @@ export class PdfPreview {
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
           const currentRow=this.blockCoverageRows.find(r=>r.id===node.dataset.blockId)||row;
-          this.setRailSpotlight(currentRow.id,{pin:true});
           if(currentRow.promoted){
             const original=currentRow.origin.match(/^p(\d+)b(\d+)s(\d+)$/);
             const child=this.map[currentRow.pageIndex]?.regions.find(r=>r.blockIndex===currentRow.blockIndex)
@@ -1291,15 +1272,7 @@ export class PdfPreview {
             if(part)this.selectPDFRegion(pageIndex,{blockIndex,partIndex:index,
               role:part.role,path:part.path,bbox:part.bbox});
           };
-          chip.addEventListener('pointerenter',()=>
-            this.setRailSpotlight(chip.closest('.ocr-pdf-block-fragment')?.dataset.subblockId,{hover:true}));
-          chip.addEventListener('pointerleave',()=>
-            this.setRailSpotlight(null,{hover:true}));
-          chip.addEventListener('click',e=>{
-            e.stopPropagation();
-            this.setRailSpotlight(chip.closest('.ocr-pdf-block-fragment')?.dataset.subblockId,{pin:true});
-            navigate();
-          });
+          chip.addEventListener('click',e=>{e.stopPropagation();navigate();});
           chip.addEventListener('keydown',e=>{
             if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();navigate();}
           });
@@ -1376,37 +1349,12 @@ export class PdfPreview {
     this.blockLabelScale=value;
     if(this.blockCoverageNodes.size)this.avoidBlockChipCollisions();
   }
-  /** Rail spotlight is PDF-only presentation. A tap pins one-to-one
-   * label -> leader -> original bbox; mouse hover is provisional. Do not
-   * touch CMD/CM6/AG, or the existing parent-group selection semantics. */
-  setRailSpotlight(id,{pin=false,hover=false}={}){
-    if(pin)this.pinnedRailId=id||null;
-    if(hover)this.hoverRailId=id||null;
-    this.refreshRailSpotlight();
-  }
-  refreshRailSpotlight(){
-    const focus=this.hoverRailId||this.pinnedRailId;
-    for(const [id,node] of this.blockCoverageNodes){
-      node.classList.toggle('ocr-pdf-rail-focused-cover',id===focus);
-      const chip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
-      chip?.classList.toggle('ocr-pdf-rail-focused-label',id===focus);
-      for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
-        const isActive=!fragment.hidden&&fragment.dataset.subblockId===focus;
-        fragment.classList.toggle('ocr-pdf-rail-focused-fragment',isActive);
-        fragment.querySelector(':scope > .ocr-pdf-subblock-chip')?.classList
-          .toggle('ocr-pdf-rail-focused-label',isActive);
-      }
-    }
-    for(const page of this.pages.querySelectorAll('.page')){
-      for(const path of page.querySelectorAll(':scope > svg.ocr-pdf-label-leaders path'))
-        path.classList.toggle('ocr-pdf-rail-focused-line',path.dataset.pbsId===focus);
-      for(const end of page.querySelectorAll(':scope > svg.ocr-pdf-label-leaders circle'))
-        end.classList.toggle('ocr-pdf-rail-focused-end',end.dataset.pbsId===focus);
-    }
-  }
-  /** Arrange every native parent and child label in real blank space on
-   * this PDF page. The original owner element keeps every click/drag gesture;
-   * only the presentation position changes, never its coverage rectangle. */
+  /** Every native parent and child chip shares one page-wide, TWO-side rail
+   * layout. The chips stay DOM-owned by their original PDF blocks for click,
+   * focus, and gesture semantics, but are visually positioned in the outer
+   * page gutters using absolute page-space offsets. A dedicated, inert SVG
+   * contains the leader lines; no PDF bbox or CMD source is modified.
+   */
   avoidBlockChipCollisions(pageIndex=null){
     const pages=new Map();
     for(const [id,node] of this.blockCoverageNodes){
@@ -1420,7 +1368,7 @@ export class PdfPreview {
         bottom:node.offsetTop+node.offsetHeight};
       group.covers.push(rect);
       const chip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
-      if(chip)group.items.push({id,chip,owner:node,
+      if(chip)group.items.push({id,chip,owner:node,rect,
         target:rect,anchorY:(rect.top+rect.bottom)/2,
         side:node.dataset.gutter,kind:node.classList.contains('ocr-pdf-block-child-cover')?'child':'parent',
         width:chip.offsetWidth,height:chip.offsetHeight});
@@ -1434,18 +1382,29 @@ export class PdfPreview {
           bottom:node.offsetTop+fragment.offsetTop+fragment.offsetHeight};
         group.covers.push(part);
         group.items.push({id:fragment.dataset.subblockId,chip:child,
-          owner:fragment,target:part,anchorY:(part.top+part.bottom)/2,
+          owner:fragment,rect:part,target:part,
+          anchorY:(part.top+part.bottom)/2,
           side:node.dataset.gutter,kind:'child',
           width:child.offsetWidth,height:child.offsetHeight});
       }
     }
     for(const [page,group] of pages){
       const width=page.clientWidth,height=page.clientHeight;
-      if(!width||!height)continue;
-      const desired=group.items.map(item=>({...item,
-        width:item.width*this.blockLabelScale,
-        height:item.height*this.blockLabelScale}));
-      const geometry=layoutPDFFreePageLabels(desired,{pageWidth:width,
+      if(!width||!height)continue; // hidden Settings pane: relayout on reveal
+      // The baseline is the currently accepted, auto-fitted 1.0× appearance.
+      // Multiplying raw label width before auto-fit would be canceled by
+      // the same gutter cap, making e.g. 0.6× look IDENTICAL to 1.0×.
+      const baseline=layoutPDFEdgeRails(group.items,{pageWidth:width,
+        pageHeight:height,covers:group.covers});
+      const nativeFit=new Map(baseline.slots.map(slot=>[slot.id,slot.scale]));
+      const desired=group.items.map(item=>{
+        const mult=(nativeFit.get(item.id)??1)*this.blockLabelScale;
+        return {...item,width:item.width*mult,height:item.height*mult};
+      });
+      // Fit only within the two ORIGINAL PDF page-edge rails. Magnification
+      // is bounded by the real paper margin; it may saturate when a PDF has
+      // narrow gutters, but never throw tags out into the workspace void.
+      const geometry=layoutPDFEdgeRails(desired,{pageWidth:width,
         pageHeight:height,covers:group.covers});
       const all=new Map(group.items.map(item=>[item.id,item]));
       for(const slot of geometry.slots){
@@ -1460,45 +1419,29 @@ export class PdfPreview {
         if(chip.style.left!==x)chip.style.left=x;
         if(chip.style.top!==y)chip.style.top=y;
         if(chip.style.right!=='auto')chip.style.right='auto';
-        const transform=`scale(${(this.blockLabelScale*slot.scale).toFixed(4)})`;
-        if(chip.style.transform!==transform)chip.style.transform=transform;
+        const scale=`scale(${((nativeFit.get(slot.id)??1)*this.blockLabelScale*slot.scale).toFixed(4)})`;
+        if(chip.style.transform!==scale)chip.style.transform=scale;
         chip.style.transformOrigin='top left';
         chip.classList.add('ocr-pdf-rail-label');
         chip.dataset.gutter=slot.side;
+        // The original CSS pseudo-line uses the child fragment's own local
+        // coordinates; a single SVG leader below replaces it entirely.
       }
-      for(const old of page.querySelectorAll(':scope > button.ocr-pdf-rail-group'))old.remove();
-      for(const item of group.items)item.chip.classList.remove('ocr-pdf-rail-group-collapsed');
       const ns='http://www.w3.org/2000/svg';
       let svg=page.querySelector(':scope > svg.ocr-pdf-label-leaders');
       if(!svg){svg=document.createElementNS(ns,'svg');
         svg.setAttribute('class','ocr-pdf-label-leaders');
         svg.setAttribute('aria-hidden','true');page.append(svg);}
-      svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+      svg.setAttribute('viewBox',`0 0 ${page.clientWidth} ${page.clientHeight}`);
       svg.replaceChildren();
-      const anchors=geometry.slots.map(slot=>slot.anchorY).sort((a,b)=>a-b);
-      page.classList.toggle('ocr-pdf-rail-dense',
-        anchors.some((y,i)=>i+5<anchors.length&&anchors[i+5]-y<240));
       for(const line of geometry.leaders){
         const path=document.createElementNS(ns,'path');
         path.setAttribute('d',line.path);
         path.setAttribute('data-pbs-id',line.id);
         path.setAttribute('class',line.kind==='parent'?'ocr-pdf-parent-leader':'ocr-pdf-child-leader');
         svg.append(path);
-        // Endpoint stays on the immutable OCR bbox boundary. The visible
-        // colored dot makes even a short connector unambiguous in Safari.
-        const end=document.createElementNS(ns,'circle');
-        end.setAttribute('cx',line.endpoint.x.toFixed(2));
-        end.setAttribute('cy',line.endpoint.y.toFixed(2));
-        end.setAttribute('r','2.8');
-        end.setAttribute('data-pbs-id',line.id);
-        end.setAttribute('class',line.kind==='parent'?
-          'ocr-pdf-parent-leader-end':'ocr-pdf-child-leader-end');
-        svg.append(end);
       }
-      if(geometry.unplaced?.length)
-        this.setStatus(`PDF 第 ${page.dataset.pageNumber} 页空白不足：${geometry.unplaced.join('、')}`);
     }
-    this.refreshRailSpotlight();
   }
   /** WP4: two independently drawn, labelled original CMD bboxes. Layout
    * keeps semantic IDs; PDF remains the sole owner of canvas geometry.

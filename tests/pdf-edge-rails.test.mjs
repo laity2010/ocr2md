@@ -27,7 +27,7 @@ for(const label of a){
   }
   for(const other of a.filter(x=>x!==label))
     assert(!intersect(l,other),'labels overlap: '+label.id+' with '+other.id);
-  assert(output.leaders.some(x=>x.id===label.id&&x.path.includes(' L ')&&!x.path.includes(' V ')));
+  assert(output.leaders.some(x=>x.id===label.id&&x.path.includes(' V ')));
 }
 assert(a.find(x=>x.id==='p16b10s0').left>=895,
   'right-side label should remain outside the rightmost PDF bbox');

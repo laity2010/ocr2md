@@ -115,20 +115,12 @@ try{
           // Simulate a real finger travelling through the gap from coverage
           // rectangle to external rail, rather than teleporting to a button.
           const start=center(bbox),finish=center(spot);
-          const stableGuide=await rail.boundingBox(),stableScroll=await page.locator('.ocr-pdf-scroller')
-            .evaluate(el=>el.scrollTop);
           for(let step=1;step<=14;step++){
             const t=step/14;
             await page.locator('body').dispatchEvent('pointermove',{...touch,
               clientX:start.clientX+(finish.clientX-start.clientX)*t,
               clientY:start.clientY+(finish.clientY-start.clientY)*t});
             assert.equal(await rail.count(),1,'target rail lost during pointer handoff');
-            const currentGuide=await rail.boundingBox();assert(currentGuide);
-            assert(Math.abs(currentGuide.y-stableGuide.y)<6,
-              'selected landing guide must not drift during cover-to-menu handoff');
-            const currentScroll=await page.locator('.ocr-pdf-scroller').evaluate(el=>el.scrollTop);
-            assert(Math.abs(currentScroll-stableScroll)<6,
-              'PDF auto-scroll must pause while moving to selected landing rail');
           }
           console.log('AFTER_DROP_AIM',name,test.name,
             await page.locator('.ocr-pdf-status').textContent(),
