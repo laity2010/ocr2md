@@ -1124,7 +1124,22 @@ export class PdfPreview {
     const item=this.blockDrag;
     if(!item||item.pointerId!==event.pointerId)return;
     const active=item.active;
+    // iPad WebKit can lay out the floating rail a frame later on pointerup.
+    // Re-hitting an UNMOVED finger then silently flips the already-highlighted
+    // "之前" to "之后". A confirmed sibling rail selection is the final intent
+    // if the release occurs at the same CSS client point as the last move.
+    const stableSibling=active&&!cancel&&
+      /^p\d+b\d+s\d+$/.test(item.id)&&item.targetKind==='child'&&
+      ['before','after'].includes(item.placement)&&item.target?.isConnected&&
+      Math.hypot(event.clientX-item.x,event.clientY-item.y)<7?
+      {target:item.target,id:item.targetId,placement:item.placement}:null;
     if(active)this.updateBlockDrag(item,event.clientX,event.clientY);
+    if(stableSibling){
+      item.target?.classList.remove('ocr-pdf-block-drop-target');
+      item.target=stableSibling.target;
+      item.targetId=stableSibling.id;
+      item.placement=stableSibling.placement;
+    }
     const target=active&&!cancel?item.targetId:null;
     const placement=item.placement;
     clearTimeout(item.timer);

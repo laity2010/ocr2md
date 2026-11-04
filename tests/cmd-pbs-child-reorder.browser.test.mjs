@@ -81,12 +81,24 @@ try{
               `child-${name}-${spec.placement}-hover.png`),animations:'disabled'});
           }
           await page.locator('body').dispatchEvent('pointerup',{...touch,...center(zone)});
-          await page.waitForFunction(({parent,physical,newId})=>{
-            const node=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${parent}"]`);
-            return [...(node?.querySelectorAll('.ocr-pdf-block-fragment')||[])].some(el=>
-              el.querySelector('.ocr-pdf-subblock-chip')?.dataset.partIndex===String(physical)&&
-              el.dataset.subblockId===newId);
-          },spec,{timeout:25000});
+          try{
+            await page.waitForFunction(({parent,physical,newId})=>{
+              const node=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${parent}"]`);
+              return [...(node?.querySelectorAll('.ocr-pdf-block-fragment')||[])].some(el=>
+                el.querySelector('.ocr-pdf-subblock-chip')?.dataset.partIndex===String(physical)&&
+                el.dataset.subblockId===newId);
+            },spec,{timeout:25000});
+          }catch(error){
+            console.log('CHILD_DROP_DIAG',name,spec,await page.evaluate(parent=>({
+              global:document.querySelector('#status')?.textContent,
+              pdf:document.querySelector('.ocr-pdf-status')?.textContent,
+              source:document.querySelector('.ocr-pdf-block-drag-source')?.textContent,
+              rail:document.querySelector('.ocr-pdf-block-drop-guide')?.outerHTML,
+              children:[...(document.querySelector(`.ocr-pdf-block-cover[data-block-id="${parent}"]`)?.querySelectorAll('.ocr-pdf-block-fragment')||[])].map(el=>({id:el.dataset.subblockId,
+                  part:el.querySelector('.ocr-pdf-subblock-chip')?.dataset.partIndex}))
+            }),spec.parent));
+            throw error;
+          }
           assert.equal(await page.locator('.ocr-pdf-block-drop-guide').count(),0);
           assert.equal(await page.locator('.ocr-pdf-block-drag-arrow').count(),0);
           assert.equal(readFileSync(doc,'utf8'),original,'source only changes in CM6 until global Save');
