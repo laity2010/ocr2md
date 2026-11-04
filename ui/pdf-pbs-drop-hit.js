@@ -72,3 +72,17 @@ export function pickPDFCoverDropTarget(candidates,{x,y,sourceId,pageId,clip}){
   }
   return {...first,placement:'child'};
 }
+
+/** Narrow temporary handoff from a captured PDF bbox to its outboard action
+ * rail. Walking there should not drop the captured target mid-gesture. The
+ * entire PDF page is NOT a sticky region: elsewhere the hover clears.
+ */
+export function pdfDropGuideCorridor(x,y,cover,rail,margin=21){
+  if(!cover||!rail)return false;
+  const center=r=>({x:(r.left+r.right)/2,y:(r.top+r.bottom)/2});
+  const a=center(cover),b=center(rail),dx=b.x-a.x,dy=b.y-a.y;
+  const denom=dx*dx+dy*dy;
+  if(denom<1)return Math.hypot(x-a.x,y-a.y)<=margin;
+  const t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/denom));
+  return Math.hypot(x-(a.x+t*dx),y-(a.y+t*dy))<=margin;
+}

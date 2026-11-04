@@ -15,7 +15,7 @@ import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
-import {pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-drop-hit.js';
+import {pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint,pdfDropGuideCorridor} from './pdf-pbs-drop-hit.js';
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
 import {resolvePDFFragmentId} from './pdf-pbs-fragment-id.js';
 import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
@@ -904,7 +904,16 @@ export class PdfPreview {
           pageId,rect:fragment.getBoundingClientRect()});
       }
     }
-    return pickPDFCoverDropTarget(candidates,{x,y,sourceId:item.id,pageId:null,clip});
+    const hit=pickPDFCoverDropTarget(candidates,{x,y,sourceId:item.id,pageId:null,clip});
+    if(hit)return hit;
+    // Between the captured PDF bbox and its outboard landing rail is a small
+    // gutter. Preserve only that narrow transit path so a real continuous
+    // finger movement can reach '之后' without losing the selected box.
+    if(item.target&&item.guide&&pdfDropGuideCorridor(x,y,
+      item.target.getBoundingClientRect(),item.guide.getBoundingClientRect()))
+      return {node:item.target,id:item.targetId,kind:item.targetKind,
+        placement:item.placement||'child'};
+    return null;
   }
   /** Three semantic positions live beside the fixed PDF label, never inside
    * OCR text. This transient guide and arrow disappear after pointerup. */

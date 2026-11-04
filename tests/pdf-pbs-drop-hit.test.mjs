@@ -1,7 +1,7 @@
 /** Tight, zoomed and crowded PDF gutter labels: never guess a drop target.
  * These are CSS client coordinates, independent from PDF source/page scale. */
 import assert from 'node:assert/strict';
-import {pickPDFDropTarget,pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from '../ui/pdf-pbs-drop-hit.js';
+import {pickPDFDropTarget,pickPDFCoverDropTarget,pdfDropGuideCorridor,pdfDropGuideZone,pdfArrowLocalPoint} from '../ui/pdf-pbs-drop-hit.js';
 const clip={left:0,top:0,right:900,bottom:700};
 const r=(x,y,w,h)=>({left:x,top:y,right:x+w,bottom:y+h,width:w,height:h});
 const labels=[
@@ -76,3 +76,17 @@ assert.equal(coverHit(235,200,[targetCover,equalUnrelated]),null,
   'ambiguous overlap between unrelated equally sized boxes must not guess');
 assert.equal(coverHit(950,205,[targetCover]),null);
 console.log('PDF_COVERAGE_RECT_DROP_HIT_PASS');
+
+// Moving from the actual PDF rectangle to the adjacent operation rail must
+// preserve the selected box, without making unrelated blank space sticky.
+const body=r(200,180,180,90),railBox=r(90,178,72,29);
+for(const fraction of [0,.2,.4,.6,.8,1]){
+  const centerA={x:(body.left+body.right)/2,y:(body.top+body.bottom)/2};
+  const centerB={x:(railBox.left+railBox.right)/2,y:(railBox.top+railBox.bottom)/2};
+  const x=centerA.x+(centerB.x-centerA.x)*fraction;
+  const y=centerA.y+(centerB.y-centerA.y)*fraction;
+  assert(pdfDropGuideCorridor(x,y,body,railBox),`handoff at ${fraction}`);
+}
+assert.equal(pdfDropGuideCorridor(700,520,body,railBox),false,
+  'distant blank PDF space cannot keep stale hover');
+console.log('PDF_COVER_TO_RAIL_CORRIDOR_PASS');
