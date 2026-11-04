@@ -797,6 +797,37 @@ async function main() {
   }});
   wcpRuntime.onCMReady({view,status});
   foldInitialMineruComments(view);
+  // Touch-enabled Chromium/WebKit can move CM6's cursor on pointerdown
+  // without dispatching a bubbling/capturing `click` to CM6 contentDOM.
+  // A short, completed pointer gesture must publish the same explicit click
+  // focus once; swipes, long drags and text selection remain navigation-free.
+  let sourceTap=null,lastSourceTap=null;
+  const clickedSourceLine=event=>{
+    const node=event.target instanceof Element?event.target:event.target?.parentElement;
+    const line=node?.closest?.('.cm-line');
+    if(!line||!view.contentDOM.contains(line))return null;
+    try{return view.state.doc.lineAt(view.posAtDOM(line,0)).number;}
+    catch{return null;}
+  };
+  view.contentDOM.addEventListener('pointerdown',event=>{
+    if(event.pointerType==='mouse'&&event.button!==0)return;
+    const line=clickedSourceLine(event);
+    sourceTap=line?{pointerId:event.pointerId,x:event.clientX,y:event.clientY,
+      line,time:performance.now()}:null;
+  },true);
+  document.addEventListener('pointerup',event=>{
+    const tap=sourceTap;sourceTap=null;
+    if(!tap||event.pointerId!==tap.pointerId||
+       performance.now()-tap.time>1300||
+       Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>11)return;
+    lastSourceTap={line:tap.line,time:performance.now()};
+    const offset=view.state.doc.line(tap.line).from;
+    const elementId=moduleSelector.value==='text-block'?
+      cmdPort?.blockIdAtSourceLine(tap.line)??null:null;
+    publishFocus({sourceLine:tap.line,sourceOffset:offset,origin:'cm6',
+      elementId,intent:'click'});
+  },true);
+  document.addEventListener('pointercancel',()=>{sourceTap=null;},true);
   view.contentDOM.addEventListener('click',event=>{
     // Existing CM6 click path is authoritative: emit one focus event with the
     // precise character offset, not a second line-only event that clears AG.
@@ -824,6 +855,8 @@ async function main() {
       sourceLine=domLine.number;
       if(view.state.doc.lineAt(offset).number!==sourceLine)offset=domLine.from;
     }
+    if(lastSourceTap?.line===sourceLine&&
+       performance.now()-lastSourceTap.time<500)return;
     const elementId=moduleSelector.value==='text-block'?
       cmdPort?.blockIdAtSourceLine(sourceLine)??null:null;
     publishFocus({sourceLine,sourceOffset:offset,origin:'cm6',
