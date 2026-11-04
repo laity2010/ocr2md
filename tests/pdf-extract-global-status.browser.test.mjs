@@ -39,7 +39,7 @@ try{
           null,{timeout:90000});
         await page.locator('#module-select').evaluate(el=>{el.value='text-block';
           el.dispatchEvent(new Event('change',{bubbles:true}));});
-        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('CMD ·'),
+        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('文本块：'),
           null,{timeout:45000});
         await selectPreview(page,'pdf');
         const extract=page.locator('.ocr-pdf-extract-text');
