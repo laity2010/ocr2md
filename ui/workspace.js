@@ -339,7 +339,8 @@ class PreviewPanel {
       ()=>markSubblocksAction(),
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
       (sourceId,targetId)=>blockChainAction('reparent',{memberId:sourceId,targetId}),
-      childId=>blockChainAction('promote-child',{childId}));
+      childId=>blockChainAction('promote-child',{childId}),
+      pageNumber=>currentOutline?.textBlock?.setCurrentPDFPage(pageNumber));
     this.pdf.setBlockLabelScale(pdfBlockLabelScale);
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
@@ -803,6 +804,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setSubblockMarkAction:action=>{markSubblocksAction=action;},
     setPDFTextInsertAction:insert=>{insertPDFText=insert;},
     setTextBlockInventoryRefreshAction:action=>{refreshTextBlockInventory=action;},
+    setTextBlockShowAll:enabled=>currentOutline?.textBlock?.setShowAllPages(enabled),
     setTextBlockLoading:()=>currentOutline?.textBlock?.setLoading(),
     setTextBlockError:message=>currentOutline?.textBlock?.setError(message),
     setTextBlockContinuationCandidates:result=>currentOutline?.textBlock?.setContinuationCandidates(result),

@@ -23,6 +23,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
   let bar=null;
   let virtualQuery=null;
   let transitioning=false;
+  let previousModule=null,chapterAllBeforeTextBlock=true;
   const indexLabel=document.createElement('label');
   indexLabel.className='ocr-wp3-index-toggle';
   const indexToggle=document.createElement('input');
@@ -123,6 +124,13 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     if(!bar)return;
     const selected=modulePort.getModule();
     const settings=selected==='settings';
+    const textBlocks=selected==='text-block';
+    if(selected!==previousModule){
+      if(textBlocks){chapterAllBeforeTextBlock=allToggle.checked;allToggle.checked=false;}
+      else if(previousModule==='text-block')allToggle.checked=chapterAllBeforeTextBlock;
+      previousModule=selected;
+    }
+    if(textBlocks)modulePort.setTextBlockShowAll(allToggle.checked);
       bar.hidden=settings;
     bar.setAttribute('aria-label',chapter?'实体章节兼容工具栏':
       virtualMode?'CMD 虚拟章节元素工具栏':'章节定界工具栏');
@@ -133,17 +141,17 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     // The source navigation owns virtual-chapter selection; no second chapter
     // dropdown/toggle in AG. The element selector remains module-owned.
     indexLabel.hidden=true;
-    allLabel.hidden=settings||Boolean(chapter);
+    allLabel.hidden=settings||(Boolean(chapter)&&!textBlocks);
     sentenceCoverLabel.hidden=settings||selected!=='sentence';
     // The mother '章节定界' view must always show all headings/elements.
     // Only a selected virtual chapter file may filter AG membership.
     // The checkbox changes AG query AND action scope, but never switches
     // the CM6/Markdown/PDF projection of the selected chapter.
-    if(!virtualMode)allToggle.checked=true;
-    allToggle.disabled=Boolean(chapter)||!virtualMode;
-    allToggle.title=allToggle.disabled
-      ?'章节定界固定显示全部章节；仅在章节文件中可选择'
-      :'勾选：AG 操作整份 CMB；取消：AG 仅操作当前章节';
+    if(!virtualMode&&!textBlocks)allToggle.checked=true;
+    allToggle.disabled=!textBlocks&&(Boolean(chapter)||!virtualMode);
+    allToggle.title=textBlocks?'文本块：勾选显示全部 PDF 页；取消只显示当前 PDF 页':
+      allToggle.disabled?'章节定界固定显示全部章节；仅在章节文件中可选择':
+      '勾选：AG 操作整份 CMB；取消：AG 仅操作当前章节';
     chapterSelect.hidden=true;
     chapterSelect.ocrNavigationSelect?.show();
     allStatus.hidden=Boolean(chapter)||settings||!virtualMode;
@@ -165,6 +173,9 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     functionMenu.dataset.module=selected;
     if(!settings)bar.hidden=false;
   }
+  allToggle.addEventListener('change',()=>{
+    if(modulePort.getModule()==='text-block')modulePort.setTextBlockShowAll(allToggle.checked);
+  });
   modulePort.onModuleChange(()=>{
     if(transitioning)return;
     const selected=modulePort.getModule();

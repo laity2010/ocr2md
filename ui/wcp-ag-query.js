@@ -14,7 +14,8 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   // document '全部' is locked on. Only a selected chapter file can
   // uncheck it to filter AG to its current indexed chapter.
   const queryEnabled=()=>!isPhysicalChapter();
-  const currentChapter=()=>!queryEnabled()||!isIndexMode()||checkbox.checked?'all':chapterSelect.value;
+  // Text-block '全部' is a PDF PAGE control, not the chapter scope.
+  const currentChapter=()=>getModule()==='text-block'||!queryEnabled()||!isIndexMode()||checkbox.checked?'all':chapterSelect.value;
   // AG '全部' is also the scope of AG-initiated operations, independently
   // from the editor/Markdown/PDF chapter projection.
   const sourceChapter=()=>enabled()?chapterSelect.value:null;
@@ -163,7 +164,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   checkbox.checked=true;
   checkbox.addEventListener('change',()=>{
     // Even synthetic changes cannot leave the mother view in a filtered state.
-    if(!isIndexMode())checkbox.checked=true;
+    if(!isIndexMode()&&getModule()!=='text-block')checkbox.checked=true;
     chapterSelect.hidden=true;apply();
   });
   chapterSelect.addEventListener('change',()=>{apply();focusChapterStart();});

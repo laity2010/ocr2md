@@ -4,6 +4,7 @@ import {publishFocus,viewStore} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
+import {filterTextBlockPageRows} from './text-block-page-scope.js';
 import './text-block-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f383e',
@@ -78,6 +79,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   const gridHost=document.createElement('div');gridHost.className='ocr-text-block-grid';host.append(gridHost);
   let rows=[],tableRows=[],absorbedRoots=new Set(),grouped=false,collapsedChains=new Set(),targetId=null,dragBusy=false,candidates=[],candidateSummary=null,mode='blocks',report=null,scope=null,active=false,disposed=false,error='',selectedId=null,previewMapped=null;
   let selectedCandidateId=null,documentSha=null,reviews=new Map();
+  let currentPDFPage=1,showAllPages=false;
   const storageKey=sha=>`ocr2md:continuation-review:v1:${sha}`;
   const restore=sha=>{
     try{
@@ -212,6 +214,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     return handle;
   };
   const columns=[
+    {field:'pdfPage',headerName:'页码',width:68,minWidth:60,pinned:'left',lockPinned:true},
     {field:'sourceLine',headerName:'源码行',width:82,minWidth:75,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'id',headerName:'PBS / BC',width:155,minWidth:128,cellRenderer:p=>{
       if(!p.data?.isChainHeader){
@@ -240,7 +243,6 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     {field:'chainRole',headerName:'成员角色',width:97,minWidth:85},
     {field:'review',headerName:'审阅',width:90,minWidth:80},
     {field:'note',headerName:'审阅备注',width:145,minWidth:100,tooltipField:'note'},
-    {field:'pdfPage',headerName:'PDF 页',width:86,minWidth:76},
     {field:'originalText',headerName:'原始 OCR 摘要',width:220,minWidth:150,tooltipField:'originalText'},
     {field:'bboxText',headerName:'有效覆盖 bbox',width:180,minWidth:140},
     {field:'ocrBBoxText',headerName:'OCR 原始 bbox',width:180,minWidth:140},
@@ -293,9 +295,12 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   });
   const scoped=()=>{
     const set=mode==='candidates'?candidates:tableRows;
-    if(scope?.operationScope?.mode!=='chapter')return set;
-    const bounds=getChapter(scope.operationScope.chapterId);
-    return bounds?set.filter(r=>r.from!==null&&r.from>=bounds.from&&r.from<bounds.to):[];
+    const bounds=scope?.operationScope?.mode==='chapter'?getChapter(scope.operationScope.chapterId):null;
+    const inChapter=scope?.operationScope?.mode!=='chapter'?set:
+      bounds?set.filter(r=>r.from!==null&&r.from>=bounds.from&&r.from<bounds.to):[];
+    // PDF navigation affects ONLY the text-block AG view. Every original
+    // parent/child CMD atom remains in tableRows for PDF overlay and Undo.
+    return mode==='blocks'?filterTextBlockPageRows(inChapter,currentPDFPage,showAllPages):inChapter;
   };
   const projectedRows=()=>{
     // Structural correction is a logical view over immutable original OCR.
@@ -424,6 +429,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       `原始 ${report.blocks} 块 / ${report.pages} 页 · PBS ${tableRows.length}（子块 ${tableRows.filter(r=>r.kind==='child').length}） · BC ${report.bcChains??0} 链 · 源码已匹配 ${report.matched} · 缺失 ${report.missing} · 重复 ${report.duplicates} · PDF bbox ${report.withGeometry} · 无效 ${report.withoutGeometry}`+
       ` · 可见正文 ${report.readable} · 空块/仅元数据 ${report.metadataOnly} · 已接续 ${report.joined??0} · 逻辑块 ${report.logicalBlocks??report.blocks}`+
       (previewMapped?` · 当前 MD 定位 ${list.filter(x=>x.kind==='parent'&&x.expectsPreview&&previewMapped.has(x.id)).length}/${list.filter(x=>x.kind==='parent'&&x.expectsPreview).length}`:' · MD 定位检查中')+
+      ` · AG ${showAllPages?'全部页':`第 ${currentPDFPage} 页`} ${list.length} 块`+
       ` · 未知锚点 ${report.unknown}`+(report.invalidBCMarks?` · 无效 BC 标签 ${report.invalidBCMarks}`:'')+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
     if(active)onStatus('文本块：父块跨页「之前」「作为子块」「之后」可用，其他结构操作只读 · '+(mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
@@ -438,7 +444,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       geometryLabel:row.geometry?'可定位':'无效',
       joinLabel:row.joinPrev?`↳ ${row.logicalId}`:row.logicalId===row.id?'独立':`独立 · ${row.logicalId}`,
       previewLabel:row.expectsPreview?'待检查':'无需渲染'}));
-      tableRows=(result.atoms?.rows||rows).map(row=>({...row}));
+      tableRows=(result.atoms?.rows||rows).map(row=>({...row,
+        pdfPage:Number.isInteger(row.pdfPage)?row.pdfPage:row.pageIndex+1}));
       absorbedRoots=new Set((result.atoms?.absorbedParents||[]).map(row=>row.origin));
       if(selectedId&&!tableRows.some(row=>row.id===selectedId))selectedId=null;
       if(targetId&&!tableRows.some(row=>row.id===targetId))targetId=null;
@@ -508,6 +515,14 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       if(mode==='blocks')grid.refreshCells({force:true});refresh();
     },
     setVirtualQuery(intent){scope=intent;updateBlockRows();refresh();},
+    setCurrentPDFPage(pageNumber){
+      if(!Number.isInteger(pageNumber)||pageNumber<1||pageNumber===currentPDFPage)return;
+      currentPDFPage=pageNumber;updateBlockRows();if(active)refresh();
+    },
+    setShowAllPages(enabled){
+      const next=Boolean(enabled);if(next===showAllPages)return;
+      showAllPages=next;updateBlockRows();if(active)refresh();
+    },
     count(chapter){if(chapter==='all')return rows.length;const c=getChapter(chapter);
       return c?rows.filter(r=>r.from!==null&&r.from>=c.from&&r.from<c.to).length:0;},
     setActive(value){active=Boolean(value);host.hidden=!active;if(!active)onCompare(null);if(active){updateBlockRows();refresh();}},

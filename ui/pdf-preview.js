@@ -60,7 +60,8 @@ export class PdfPreview {
     onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好')),
     onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好')),
     onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好')),
-    onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好'))){
+    onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好')),
+    onCurrentPageChange=()=>{}){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -71,6 +72,7 @@ export class PdfPreview {
     this.onPDFBBox=onPDFBBox;
     this.onBlockReparent=onBlockReparent;
     this.onPromoteChild=onPromoteChild;
+    this.onCurrentPageChange=onCurrentPageChange;
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.blockLabelScale=1;
     this.host.classList.add('ocr-pdf-pane');
@@ -428,6 +430,7 @@ export class PdfPreview {
       bus.on('pagechanging',e=>{
         this.pageInput.value=String(e.pageNumber);
         this.toolbar.querySelector('.ocr-pdf-count').textContent=`/ ${pdf.numPages}`;
+        this.onCurrentPageChange(e.pageNumber);
       });
       // Loading the PDF metadata is not enough: the viewer is usable only
       // after PDF.js has painted its first page in the hidden warm-up pane.

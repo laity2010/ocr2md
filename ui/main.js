@@ -398,6 +398,7 @@ async function main() {
     onModuleChange:handler=>moduleSelector.addEventListener('change',handler),
     setSentenceCoverage:enabled=>workspace.setSentenceCoverage(enabled),
     setBlockCoverage:enabled=>workspace.setTextBlockCoverage(enabled),
+    setTextBlockShowAll:enabled=>workspace.setTextBlockShowAll(enabled),
     hasModuleActions:()=>Boolean($('module-actions'))&&
       document.querySelectorAll('.module-actions[data-module]').length>=3,
     mountSelector:parent=>parent.append(moduleSelector),

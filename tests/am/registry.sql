@@ -1535,3 +1535,18 @@ INSERT INTO apis VALUES
  ('P22','P','createPDFBBoxGesture','ui/pdf-bbox-gesture.js','export','PDF page DOM, verified PBS ID, effective bbox and page dimensions, semantic commit callback','five pointer handles for moving/resizing a transient PDF rectangle','no direct CMD/PDF archive mutation, cancel/no-op safe, one semantic callback on release',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP6-P22','P22','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and WebKit center drag writes one coordinate correction; no direct source or PDF evidence access','integration');
+
+-- WCP30: PDF current page is a scalar view event, AG alone owns its filter.
+-- The toolbar's existing 「全部」 is a PDF-page lens ONLY in text-block mode.
+INSERT INTO apis VALUES
+ ('G30','G','filterTextBlockPageRows','ui/text-block-page-scope.js','export','CMD text-block atoms, one-based current PDF page and show-all boolean','read-only same-page atoms or the entire inventory','no source, CMD labels, bbox or PDF geometry mutation',1),
+ ('P23','P','PdfPreview.onCurrentPageChange','ui/pdf-preview.js','callback','PDF.js pagechanging one-based page number','scalar navigation notice to Workspace text-block owner','PDF does not access AG Grid or module internals',1),
+ ('L81','L','returned.setTextBlockShowAll','ui/workspace.js','returned','Shell-owned toolbar checkbox Boolean','semantic all-pages toggle to text-block AG owner','does not alter chapter or CMD query for unrelated modules',1);
+INSERT INTO access_edges VALUES
+ ('X-AG-PAGE-G30','G','G','ui/text-block-module.js','filterTextBlockPageRows(inChapter,currentPDFPage,showAllPages)','G30','registered','AG owner filters its own source-independent view rows'),
+ ('X-AG-PAGE-P23','P','P','ui/workspace.js','new PdfPreview(...,pageNumber=>currentOutline?.textBlock?.setCurrentPDFPage(pageNumber))','P23','registered','only page number crosses PDF to AG via workspace callback'),
+ ('X-AG-PAGE-L81','L','L','ui/main.js','workspace.setTextBlockShowAll(enabled)','L81','registered','Shell toolbar user intent forwarded only through Workspace port');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-AG-PAGE-G30','G30','tests/text-block-page-scope.test.mjs','tests/text-block-page-scope.test.mjs','same page parent/child rows; all returns full unchanged inventory','direct'),
+ ('TC-AG-PAGE-P23','P23','tests/text-block-ag-page-filter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit pagechanging switches AG page with no data edit','integration'),
+ ('TC-AG-PAGE-L81','L81','tests/text-block-ag-page-filter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','checkbox defaults unchecked, check displays all, uncheck returns current PDF page, non-block chapter control unchanged','integration');
