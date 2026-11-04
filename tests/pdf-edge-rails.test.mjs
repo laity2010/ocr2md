@@ -32,3 +32,44 @@ for(const label of a){
 assert(a.find(x=>x.id==='p16b10s0').left>=895,
   'right-side label should remain outside the rightmost PDF bbox');
 console.log('PDF_EDGE_RAILS_NO_OVERLAP_PASS',a.map(x=>({id:x.id,left:x.left,top:x.top,scale:x.scale})));
+
+// Exercise every one of the 22 original PDF pages, not just the screenshot.
+// The physical frame never moves; labels are separate page-rail geometry.
+import {readFileSync} from 'node:fs';
+import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
+import {queryCMDLayout} from '../ui/cmd-text-blocks.js';
+const src=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
+const physical=await queryCMDLayout(src);
+let total=0;
+for(const [index,page] of physical.pages.entries()){
+  const rectangles=[];const rows=[];
+  const P=`p${index}`;
+  const add=(id,bbox,kind)=>{
+    const [left,top,right,bottom]=bbox;
+    rectangles.push({left,top,right,bottom});
+    rows.push({id,side:(left+right)/2<=page.pageSize[0]/2?'left':'right',
+      kind,target:{left,top,right,bottom},anchorY:(top+bottom)/2,
+      width:11+id.length*6.2,height:kind==='parent'?18:16});
+  };
+  for(const block of page.regions){
+    add(`${P}b${block.blockIndex}`,block.bbox,'parent');
+    for(const sub of block.subRegions||[])add(`${P}b${block.blockIndex}s${sub.path.join('.')}`,
+      sub.bbox,'child');
+  }
+  const out=layoutPDFEdgeRails(rows,{pageWidth:page.pageSize[0],
+    pageHeight:page.pageSize[1],covers:rectangles});
+  assert.equal(out.slots.length,rows.length,`page ${index+1} drops labels`);
+  assert.equal(out.leaders.length,rows.length,`page ${index+1} drops leaders`);
+  for(const slot of out.slots){
+    assert(slot.width>0&&slot.height>0,`page ${index+1} nonvisible label`);
+    for(const box of rectangles)
+      assert(!intersect(slot,{left:box.left,top:box.top,
+        width:box.right-box.left,height:box.bottom-box.top}),
+        `page ${index+1} label ${slot.id} overlaps coverage`);
+    for(const other of out.slots.filter(x=>x!==slot))
+      assert(!intersect(slot,other),
+        `page ${index+1} labels ${slot.id} & ${other.id} overlap`);
+  }
+  total+=rows.length;
+}
+console.log('PDF_22_PAGE_GLOBAL_RAILS_NO_COLLISION_PASS',{pages:physical.pages.length,labels:total});
