@@ -11,8 +11,16 @@ import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable} from './platform.test-helper.mjs';
 import {selectModule,selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
+import {planCMDAbsorbReviewedParent} from '../ui/cmd-block-chains.js';
 import {PDF_BLOCK_LABEL_SCALE_KEY as KEY} from '../ui/pdf-block-label-setting.js';
-const source=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
+// Reviewed case from the reported iPad screenshot: a real p6b6s1 child
+// shares the same page as independent p6b8. Keep all other pages unchanged.
+const original=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
+const merge=planCMDAbsorbReviewedParent(original,'p6b7','p6b6');
+const source=[...merge.edits].sort((a,b)=>b.from-a.from).reduce((text,edit)=>{
+  assert.equal(text.slice(edit.from,edit.to),edit.expected);
+  return text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
+},original);
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-pdf-label-scale-'));
 const doc=join(dir,'document.md'),settingsFile=join(dir,'settings.json'),token=join(dir,'token');
 writeFileSync(doc,source);
@@ -59,11 +67,13 @@ const cleanRails=page=>page.evaluate(()=>{
 // avoid every OCR box yet be hundreds of pixels OUTSIDE the paper, as the
 // iPad screenshot at PDF page 7 / 100% demonstrated.
 const inspectPageLabels=async(page,id)=>{
-  const target=page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"]`);
+  const target=page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"],`+
+    `.ocr-pdf-block-fragment[data-subblock-id="${id}"]`);
   await target.waitFor({state:'attached',timeout:40000});
   await target.scrollIntoViewIfNeeded({timeout:30000});
   return page.evaluate(blockId=>{
-    const node=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${blockId}"]`);
+    const node=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${blockId}"]`)||
+      document.querySelector(`.ocr-pdf-block-fragment[data-subblock-id="${blockId}"]`);
     const paper=node?.closest('.page');if(!paper)return {error:'PDF paper absent for '+blockId};
     const bounds=paper.getBoundingClientRect();
     const chips=[...paper.querySelectorAll('.ocr-pdf-rail-label')]
@@ -83,6 +93,7 @@ const inspectPageLabels=async(page,id)=>{
         collisions.push(chip.textContent.trim()+' intersects '+c.textContent.trim());
     }
     return {page:paper.dataset.pageNumber,paperWidth:bounds.width,
+      ids:chips.map(chip=>chip.textContent.trim()),
       labels:chips.length,leaders:paper.querySelectorAll('svg.ocr-pdf-label-leaders path').length,
       outside,collisions};
   },id);
@@ -150,6 +161,8 @@ try{
         console.log('PDF_PAGE7_PAPER_RAILS',name,JSON.stringify(p7));
         assert.deepEqual(p7.outside,[],'page 7: every label must stay INSIDE PDF paper');
         assert.deepEqual(p7.collisions,[],'page 7: labels must not overlap OCR covers');
+        assert(p7.ids.includes('p6b8')&&p7.ids.includes('p6b6s1'),
+          'the exact reported independent and reviewed-child labels must exist');
         if(process.env.OCR_PBS_VISUAL_CAPTURE)
           await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
             `-${name}-page7-100pct.png`),animations:'disabled'});
