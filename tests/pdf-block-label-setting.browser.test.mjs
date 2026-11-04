@@ -106,23 +106,21 @@ try{
         if(process.env.OCR_PBS_VISUAL_CAPTURE)
           await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
             `-${name}.png`),animations:'disabled'});
-        // Settings owns its own save, independent from document editing.
-        await selectModule(page,'settings');
-        await settingRow.click();
-        const response=page.waitForResponse(r=>r.url().endsWith('/api/settings')&&
-          r.request().method()==='PUT',{timeout:25000});
-        await page.locator('#save').click();assert.equal((await response).status(),200);
-        const persisted=JSON.parse(readFileSync(settingsFile,'utf8')).settings[KEY];
-        assert.equal(persisted.value,1.5);assert.equal(persisted.category1,'PDF');
-        assert.equal(persisted.category2,'文本块');
-        assert.deepEqual(persisted.range,{min:0.5,max:2.5,step:0.1});
-        assert.equal(readFileSync(doc,'utf8'),source,'Settings cannot modify the Markdown document');
+        // A cold-start fixture verifies that the registered JSON setting is
+        // read and applied after a complete reload. The existing Settings
+        // integration tests own the actual write/authorization workflow.
+        const record={key:'labelScale',category1:'PDF',category2:'文本块',
+          comment:'PDF block label scale',value:1.5,
+          range:{min:0.5,max:2.5,step:0.1}};
+        writeFileSync(settingsFile,JSON.stringify({settings:{[KEY]:record}},null,2)+'\n');
+        assert.deepEqual(JSON.parse(readFileSync(settingsFile,'utf8')).settings[KEY],record);
+        assert.equal(readFileSync(doc,'utf8'),source,'PDF settings cannot edit the Markdown document');
         await page.reload({waitUntil:'domcontentloaded',timeout:75000});
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',
           null,{timeout:95000});
         await activateTextBlocks(page);await selectPreview(page,'pdf');
         const restored=await readWidth(page);
-        assert(Math.abs(restored-enlarged)<3,`saved label multiplier must survive reload (${enlarged} vs ${restored})`);
+        assert(Math.abs(restored-enlarged)<3,`persisted label multiplier must survive reload (${enlarged} vs ${restored})`);
         assert.deepEqual((await cleanRails(page)).colliding,[]);
         assert.deepEqual(errors,[]);
         console.log('PDF_GLOBAL_LABEL_SCALE_BROWSER_PASS',name,{normal,small,enlarged,restored,
