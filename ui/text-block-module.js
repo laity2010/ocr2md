@@ -464,8 +464,17 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
         const corrected=alias.get(id);
         const nativeChildren=Object.fromEntries([...childAlias].filter(([origin])=>
           origin.startsWith(id+'s')));
-        return {id:corrected?.id||id,origin:id,pageIndex,blockIndex,sourceLine,expectsPreview,geometry,
-          anchorCount,joinPrev:corrected?null:joinPrev,joinable:corrected?false:joinable,
+        // A moved/renumbered parent is still the SAME physical PDF rectangle.
+        // Raw OCR inventory can report old physical id as "missing" because
+        // the current CMD line now carries a DIFFERENT logical id. Use the
+        // current CMD atom's validated anchor/source line for the overlay;
+        // otherwise a successful After insertion silently loses A's chip.
+        return {id:corrected?.id||id,origin:id,pageIndex,blockIndex,
+          sourceLine:corrected?.sourceLine??sourceLine,
+          expectsPreview:corrected?.expectsPreview??expectsPreview,
+          geometry:corrected?.geometry??geometry,
+          anchorCount:corrected?1:anchorCount,
+          joinPrev:corrected?null:joinPrev,joinable:corrected?false:joinable,
           logicalId:corrected?.id||logicalId,nativeChildren,bodyChildId:bodyAlias.get(id)||null};
       });
       // A dissolved OCR parent no longer owns a parent label. Its original
