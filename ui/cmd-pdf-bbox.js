@@ -42,10 +42,13 @@ export function readCMDPDFBBoxOverrides(source,layout){
      Object.keys(parsed).join(',')!=='schema,boxes'||
      typeof parsed.boxes!=='object'||Object.getPrototypeOf(parsed.boxes)!==Object.prototype)
     throw Error('Unexpected PDF bbox footer schema');
-  const atoms=new Set(readCMDBlockChains(source).atoms.map(a=>a.id));
+  // Bbox overrides belong to the PHYSICAL original PDF coordinates.
+  // A reviewed PBS parent may be re-numbered after an "After" insertion,
+  // but the same original rectangle stays marked through its CMD origin.
+  const physicalAtoms=new Set(readCMDBlockChains(source).atoms.map(a=>a.origin));
   const boxes={};
   for(const [id,bbox] of Object.entries(parsed.boxes)){
-    if(!atoms.has(id))throw Error('PDF bbox override references an unmarked PBS');
+    if(!physicalAtoms.has(id))throw Error('PDF bbox override references an unmarked physical PBS');
     const {page}=known(layout,id);
     boxes[id]=bounds(page.pageSize,bbox);
   }

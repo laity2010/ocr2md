@@ -44,8 +44,14 @@ export function planCMDPBSLocationsEdit(source,{bindings,bodies,removed}){
   const tail=source.indexOf('<!-- minerujson:source:v1:');
   const bbox=source.indexOf('<!-- cmd:pdf-bbox:v1 ');
   // Keep the PDF bbox footer immediately before original sealed source.
-  const boundary=bbox>=0&&bbox<tail?bbox:tail;
-  const at=boundary>0&&source[boundary-1]==='\n'?boundary-1:boundary;
+  if(bbox>=0&&bbox<tail){
+    // The PDF bbox comment is CMD-owned, not sealed MinerU evidence. Insert
+    // on its first byte, retaining the already-existing line separator;
+    // unlike a sealed OCR comment this editable CMD boundary is safe.
+    if(bbox<1||source[bbox-1]!=='\n')throw Error('No editable PDF bbox footer separator');
+    return {from:bbox,to:bbox,expected:'',insert:value};
+  }
+  const at=tail>0&&source[tail-1]==='\n'?tail-1:tail;
   if(at<1||source[at-1]!=='\n')throw Error('No editable CMD footer separator');
   return {from:at,to:at,expected:'',insert:value};
 }

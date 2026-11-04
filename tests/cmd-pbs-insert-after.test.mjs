@@ -6,6 +6,7 @@ import {planCMDInsertPBSParentAfter,planCMDAbsorbReviewedParent,readCMDBlockChai
   projectCMDBlockTable} from '../ui/cmd-block-chains.js';
 import {readCMDPBSLocations} from '../ui/cmd-pbs-locations.js';
 import {inspectCMDTextBlocks,queryCMDLayout} from '../ui/cmd-text-blocks.js';
+import {planCMDPDFBBoxEdit,readCMDPDFBBoxOverrides,applyCMDPDFBBoxOverrides} from '../ui/cmd-pdf-bbox.js';
 const original=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
 const archived=s=>s.slice(s.indexOf('<!-- minerujson:source:v1:'));
 function apply(source,plan){
@@ -68,6 +69,18 @@ const moved=ag.rows.find(x=>x.id==='p2b1'),pre=layout.pages[1].regions.find(x=>x
 assert.equal(moved.pageIndex,1,'logical page 3 ID should still have physical PDF page 2');
 assert.deepEqual(moved.bbox,pre.bbox);
 assert(!ag.rows.some(x=>x.id==='p1b5'));
+// Bbox overrides are physically indexed. Moving a block must not orphan a
+// corrected physical rectangle just because its current CMD id changed.
+const originalLayout=await queryCMDLayout(original);
+const physical=originalLayout.pages[1].regions.find(r=>r.blockIndex===5).bbox;
+const bounds=originalLayout.pages[1].pageSize;
+const corrected=[Math.max(0,physical[0]-1),Math.max(0,physical[1]-1),
+  Math.min(bounds[0],physical[2]+1),Math.min(bounds[1],physical[3]+1)];
+const correctedSource=apply(original,planCMDPDFBBoxEdit(original,originalLayout,'p1b5',corrected));
+const movedCorrected=checked(correctedSource,'p1b5','p1b6').text;
+assert.deepEqual(readCMDPDFBBoxOverrides(movedCorrected,originalLayout).boxes.p1b5,corrected);
+assert.deepEqual(applyCMDPDFBBoxOverrides(originalLayout,movedCorrected).pages[1]
+  .regions.find(r=>r.blockIndex===5).bbox,corrected);
 const joined=apply(original,planCMDAbsorbReviewedParent(original,'p1b3','p1b4'));
 const afterJoin=checked(joined,'p1b4','p1b0');
 assert(afterJoin.after.atoms.some(x=>x.id==='p1b1s0'&&x.role==='body'));
