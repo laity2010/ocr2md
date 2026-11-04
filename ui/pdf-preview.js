@@ -883,9 +883,12 @@ export class PdfPreview {
       // to another cover/CHILD even though the user never changed intent.
       // Outside this short handoff corridor scrolling resumes, preserving
       // cross-page drag navigation.
-      if(item.target?.isConnected&&item.guide?.isConnected&&
-        pdfDropGuideCorridor(item.x,item.y,
-          item.target.getBoundingClientRect(),item.guide.getBoundingClientRect()))return;
+      if(item.target?.isConnected&&item.guide?.isConnected)return;
+      // Scrolling resumes as soon as the pointer leaves the selected target
+      // and its landing rail, because updateBlockDrag clears both. Keeping
+      // scroll stopped for the ENTIRE selected-target phase is necessary:
+      // the guide itself lies inside the 48px edge-scroll trigger on small
+      // iPads, and a small finger wobble must not restart the scroll loop.
       const pane=this.scroller.getBoundingClientRect();
       if(item.x>=pane.left&&item.x<=pane.right&&
         item.y>=pane.top&&item.y<=pane.bottom){
