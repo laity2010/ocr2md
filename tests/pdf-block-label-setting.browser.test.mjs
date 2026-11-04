@@ -54,10 +54,10 @@ const cleanRails=page=>page.evaluate(()=>{
   if(!root)return {error:'PDF page 2 not found'};
   const labels=[...root.querySelectorAll('.ocr-pdf-rail-label')];
   const chips=[...root.querySelectorAll('.ocr-pdf-rail-label,button.ocr-pdf-rail-group')]
-    .filter(n=>n.checkVisibility());
+    .filter(n=>n.checkVisibility()&&getComputedStyle(n).visibility!=='hidden');
   const groups=[...root.querySelectorAll('button.ocr-pdf-rail-group:not([hidden])')];
   const boxes=[...root.querySelectorAll('.ocr-pdf-block-cover,.ocr-pdf-block-fragment:not([hidden])')]
-    .filter(n=>n.checkVisibility());
+    .filter(n=>n.checkVisibility()&&getComputedStyle(n).visibility!=='hidden');
   const r=n=>n.getBoundingClientRect();
   const overlap=(a,b)=>a.left<b.right-.5&&b.left<a.right-.5&&a.top<b.bottom-.5&&b.top<a.bottom-.5;
   const colliding=[];
@@ -89,7 +89,8 @@ const inspectPageLabels=async(page,id)=>{
     const original=[...paper.querySelectorAll('.ocr-pdf-rail-label')];
     const groups=[...paper.querySelectorAll('button.ocr-pdf-rail-group:not([hidden])')];
     const chips=[...original,...groups]
-      .filter(el=>el.getBoundingClientRect().width>0&&el.checkVisibility());
+      .filter(el=>el.getBoundingClientRect().width>0&&el.checkVisibility()&&
+        getComputedStyle(el).visibility!=='hidden');
     const covers=[...paper.querySelectorAll('.ocr-pdf-block-cover,.ocr-pdf-block-fragment:not([hidden])')];
     const cross=(a,b)=>a.left<b.right-.5&&b.left<a.right-.5&&a.top<b.bottom-.5&&b.top<a.bottom-.5;
     const outside=[],collisions=[];
