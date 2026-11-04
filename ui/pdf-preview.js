@@ -165,7 +165,7 @@ export class PdfPreview {
     this.blockDragScrollTimer=0;this.blockDragScrollBehavior=null;
     this.onBlockDragMove=e=>{
       if(this.blockDrag?.pointerId===e.pointerId)
-        this.updateBlockDrag(this.blockDrag,e.clientX,e.clientY);
+        this.updateBlockDrag(this.blockDrag,e.clientX,e.clientY,true);
     };
     this.onBlockDragUp=e=>this.finishBlockDrag(e);
     this.onBlockDragCancel=e=>this.finishBlockDrag(e,true);
@@ -1052,7 +1052,7 @@ export class PdfPreview {
       return null; // A logical block cannot be dragged onto itself.
     return {sourceId:root.id,targetId:pointed.id,placement};
   }
-  updateBlockDrag(item,x,y){
+  updateBlockDrag(item,x,y,userPointerMove=false){
     if(this.blockDrag!==item)return;
     item.x=x;item.y=y;
     if(!item.active){
@@ -1090,6 +1090,17 @@ export class PdfPreview {
     item.targetKind=hit?.kind||null;
     if(target){target.dataset.dropPlacement=placement;this.paintBlockDropGuide(item);}
     else this.paintBlockDropGuide(item);
+    // Only a genuine POINTERMOVE over the two-slot sibling rail commits a
+    // preferred release direction. Auto-scroll repaint and pointerup are
+    // render events, not new user intent; they must not replace this choice.
+    if(userPointerMove){
+      const rail=item.guide?.getBoundingClientRect();
+      const inside=rail&&x>=rail.left-5&&x<=rail.right+5&&
+        y>=rail.top-5&&y<=rail.bottom+5;
+      item.siblingLanding=inside&&/^p\d+b\d+s\d+$/.test(item.id)&&
+        item.targetKind==='child'&&['before','after'].includes(placement)?
+        {target:item.target,id:item.targetId,placement,x,y}:null;
+    }
     const box=item.ctrl.getBoundingClientRect();
     const svg=item.svg;
     // Derive the SAME CSS-client coordinate system for the pointer, fixed
@@ -1124,15 +1135,12 @@ export class PdfPreview {
     const item=this.blockDrag;
     if(!item||item.pointerId!==event.pointerId)return;
     const active=item.active;
-    // iPad WebKit can lay out the floating rail a frame later on pointerup.
-    // Re-hitting an UNMOVED finger then silently flips the already-highlighted
-    // "之前" to "之后". A confirmed sibling rail selection is the final intent
-    // if the release occurs at the same CSS client point as the last move.
-    const stableSibling=active&&!cancel&&
-      /^p\d+b\d+s\d+$/.test(item.id)&&item.targetKind==='child'&&
-      ['before','after'].includes(item.placement)&&item.target?.isConnected&&
-      Math.hypot(event.clientX-item.x,event.clientY-item.y)<7?
-      {target:item.target,id:item.targetId,placement:item.placement}:null;
+    // WebKit can relayout a floating drop rail between the last finger move
+    // and pointerup. Preserve the LAST user-confirmed slot, not a frame-tick
+    // reinterpretation of the same unmoved finger coordinates.
+    const last=item.siblingLanding;
+    const stableSibling=active&&!cancel&&last?.target?.isConnected&&
+      Math.hypot(event.clientX-last.x,event.clientY-last.y)<7?last:null;
     if(active)this.updateBlockDrag(item,event.clientX,event.clientY);
     if(stableSibling){
       item.target?.classList.remove('ocr-pdf-block-drop-target');
