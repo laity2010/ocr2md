@@ -14,6 +14,7 @@ import {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
 import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFEdgeRails} from './pdf-gutter-label-layout.js';
+import {planPDFRailDensityGroups} from './pdf-rail-density-groups.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
 import {pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint,pdfDropGuideCorridor} from './pdf-pbs-drop-hit.js';
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
@@ -74,6 +75,7 @@ export class PdfPreview {
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.blockLabelScale=1;
     this.pinnedRailId=null;this.hoverRailId=null;
+    this.expandedRailGroupKey=null;
     this.host.classList.add('ocr-pdf-pane');
     if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
     this.host.dataset.pdfTheme='dark';
@@ -122,7 +124,23 @@ export class PdfPreview {
     for(const type of ['wheel','touchstart','pointerdown','keydown'])
       this.scroller.addEventListener(type,userInput,{passive:true});
     this.scroller.addEventListener('scroll',()=>this.onScroll(),{passive:true});
-    this.pages.addEventListener('click',e=>this.onClick(e));
+    this.pages.addEventListener('click',e=>{
+      // Clicking empty paper closes the temporary expanded rail cluster.
+      // Real block chips stop propagation, so long press/selection semantics
+      // are preserved while the currently expanded labels remain usable.
+      if(this.expandedRailGroupKey&&
+        !e.target.closest('.ocr-pdf-rail-label,.ocr-pdf-rail-group')){
+        this.expandedRailGroupKey=null;
+        this.avoidBlockChipCollisions();
+      }
+      this.onClick(e);
+    });
+    this.scroller.addEventListener('keydown',e=>{
+      if(e.key==='Escape'&&this.expandedRailGroupKey){
+        this.expandedRailGroupKey=null;
+        this.avoidBlockChipCollisions();
+      }
+    });
     this.map=[];this.anchors=[];
     this.bboxEditing=false;this.bboxNode=null;this.bboxGesture=null;
     this.disposed=false;this.explicitUserUntil=0;
@@ -1479,11 +1497,62 @@ export class PdfPreview {
       const anchors=geometry.slots.map(slot=>slot.anchorY).sort((a,b)=>a-b);
       const dense=anchors.some((y,i)=>i+5<anchors.length&&anchors[i+5]-y<240);
       page.classList.toggle('ocr-pdf-rail-dense',dense);
+      // Reduce clutter on dense pages without shrinking the comfortable
+      // 1.5× target size. Clusters are PAGE-ONLY presentation: none of the
+      // real labels, CMD IDs or original PDF bboxes is removed. A badge tap
+      // expands one group; tapping paper (or Escape) collapses it again.
+      const groups=planPDFRailDensityGroups(geometry.slots);
+      const hiddenIds=new Set();
+      const usedGroupKeys=new Set();
+      const oldGroupButtons=new Map([...page.querySelectorAll(':scope > button.ocr-pdf-rail-group')]
+        .map(btn=>[btn.dataset.groupKey,btn]));
+      for(const cluster of groups){
+        const key=`${page.dataset.pageNumber}:${cluster.key}`;
+        usedGroupKeys.add(key);
+        const open=this.expandedRailGroupKey===key;
+        if(!open)for(const id of cluster.ids)hiddenIds.add(id);
+        let badge=oldGroupButtons.get(key);
+        if(!badge){
+          badge=document.createElement('button');badge.type='button';
+          badge.className='ocr-pdf-rail-group';badge.dataset.groupKey=key;
+          badge.addEventListener('click',event=>{
+            event.preventDefault();event.stopPropagation();
+            this.expandedRailGroupKey=this.expandedRailGroupKey===key?null:key;
+            this.avoidBlockChipCollisions(Number(page.dataset.pageNumber)-1);
+            this.setStatus(this.expandedRailGroupKey?
+              `已展开 ${cluster.ids.length} 个 PDF 标签 · 点击空白处收起`:
+              '已收起密集 PDF 标签');
+          });
+          page.append(badge);
+        }
+        badge.hidden=open;
+        badge.dataset.memberCount=String(cluster.ids.length);
+        badge.dataset.memberIds=cluster.ids.join(' ');
+        badge.textContent=`${cluster.ids.length}块`;
+        badge.title=`展开 ${cluster.ids.length} 个标签：${cluster.ids.join('、')}`;
+        badge.setAttribute('aria-label',badge.title);
+        badge.setAttribute('aria-expanded',String(open));
+        // Occupy exactly the old first label's already collision-free slot.
+        // Do not borrow space outside the paper or overlap OCR rectangles.
+        const slot=cluster.slot;
+        badge.style.left=`${slot.left.toFixed(2)}px`;
+        badge.style.top=`${slot.top.toFixed(2)}px`;
+        badge.style.width=`${slot.width.toFixed(2)}px`;
+        badge.style.height=`${slot.height.toFixed(2)}px`;
+      }
+      for(const [key,button] of oldGroupButtons)
+        if(!usedGroupKeys.has(key))button.remove();
+      // Only the expanded cluster's underlying nodes participate in hit
+      // testing and drawing. Every original chip keeps its DOM owner so the
+      // same long-press, AG navigation and CMD edit flows remain available.
+      for(const item of group.items)
+        item.chip.classList.toggle('ocr-pdf-rail-group-collapsed',hiddenIds.has(item.id));
       for(const line of geometry.leaders){
         const path=document.createElementNS(ns,'path');
         path.setAttribute('d',line.path);
         path.setAttribute('data-pbs-id',line.id);
         path.setAttribute('class',line.kind==='parent'?'ocr-pdf-parent-leader':'ocr-pdf-child-leader');
+        if(hiddenIds.has(line.id))path.style.visibility='hidden';
         svg.append(path);
       }
     }
