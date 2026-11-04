@@ -94,6 +94,14 @@ try{
           assert.equal(await targetCover.evaluate(el=>el.classList.contains('ocr-pdf-block-drop-target')),true,
             'Cover bbox, not outboard label, must be highlighted');
           assert.equal(await targetCover.evaluate(el=>getComputedStyle(el).outlineWidth),'3px');
+          // Outside the PDF pane there is no hovered bbox: clear highlight
+          // and menu rather than keeping a stale target, then reacquire B.
+          await page.locator('body').dispatchEvent('pointermove',{...touch,clientX:0,clientY:0});
+          assert.equal(await targetCover.evaluate(el=>el.classList.contains('ocr-pdf-block-drop-target')),
+            false,'leaving PDF coverage must clear the target highlight');
+          assert.equal(await page.locator('.ocr-pdf-block-drop-guide').count(),0);
+          await page.locator('body').dispatchEvent('pointermove',{...touch,...center(bbox)});
+          assert.equal(await targetCover.evaluate(el=>el.classList.contains('ocr-pdf-block-drop-target')),true);
           const rail=page.locator('.ocr-pdf-block-drop-guide');
           await rail.waitFor({state:'attached',timeout:7500});
           assert.deepEqual(await rail.locator('[data-placement]').evaluateAll(nodes=>
