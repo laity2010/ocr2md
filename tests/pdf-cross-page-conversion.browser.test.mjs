@@ -65,6 +65,11 @@ try{
         const focus=document.querySelector('#editor .cm-outline-focused-line')?.textContent?.trim();
         return focus===value;
       },text.trim(),{timeout:30000});
+      // PDF.js pagechanging and the CM6 source highlight settle on separate
+      // frames in WebKit. Wait for both real states, not one stale frame.
+      await page.waitForFunction(expected=>
+        document.querySelector('.ocr-pdf-page')?.value===String(expected),
+        expectedPhysicalPage,{timeout:24000});
       assert.equal(await page.locator('.ocr-pdf-page').inputValue(),String(expectedPhysicalPage));
       if(id==='p4b0s1'){
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-page')?.value==='5');
