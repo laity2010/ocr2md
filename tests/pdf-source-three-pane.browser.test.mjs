@@ -74,7 +74,22 @@ try{
     const sourceLine=page.locator('#editor .cm-line').filter({hasText:content.slice(0,22)}).first();
     await sourceLine.waitFor({state:'visible',timeout:23000});
     await sourceLine.click({position:{x:Math.min(80,await sourceLine.evaluate(el=>el.clientWidth/3)),y:12},timeout:27000});
-    await overlay(page,physicalIndex);
+    try{await overlay(page,physicalIndex);}catch(error){
+      const debug=await page.evaluate(()=>({
+        overlay:Object.assign({},document.querySelector('.ocr-pdf-region-overlay')?.dataset),
+        activeLine:document.querySelector('#editor .cm-activeLine')?.textContent?.slice(0,110),
+        highlighted:document.querySelector('#editor .cm-outline-focused-line')?.textContent?.slice(0,110),
+        selected:document.querySelector('.ocr-text-block-grid .ag-row-selected')?.getAttribute('row-id'),
+        pane:document.querySelector('.ocr-preview-pane')?.dataset.previewMode,
+        pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+        global:document.querySelector('#status')?.textContent?.slice(0,240)
+      }));console.error('SOURCE_PDF_FOCUS_DIAGNOSTIC',browserName,JSON.stringify(debug));
+      if(process.env.FOCUS_SCREENSHOT_DIR){
+        mkdirSync(process.env.FOCUS_SCREENSHOT_DIR,{recursive:true});
+        await page.screenshot({path:resolve(process.env.FOCUS_SCREENSHOT_DIR,`failed-${id}-${browserName}.png`)});
+      }
+      throw error;
+    }
     await page.waitForFunction(identity=>{
       const selected=document.querySelector('.ocr-text-block-grid .ag-row-selected');
       return selected?.getAttribute('row-id')===identity;
