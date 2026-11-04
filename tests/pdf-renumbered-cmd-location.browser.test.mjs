@@ -75,7 +75,17 @@ try{
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       try{
         await page.goto(url,{waitUntil:'domcontentloaded',timeout:75000});
-        await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:95000});
+        try{await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:22000});}
+        catch(error){
+          const debug=await page.evaluate(()=>({status:document.querySelector('.ocr-pdf-status')?.textContent,
+            global:document.querySelector('#status')?.textContent?.slice(0,420),
+            pages:document.querySelectorAll('.ocr-pdf-scroller .page').length,
+            pdfLabels:document.querySelectorAll('.ocr-pdf-block-cover').length,
+            module:document.querySelector('#module-select')?.value,
+            body:document.body.innerText.slice(0,350)}));
+          console.error('RENUMBER_PDF_BOOT_DIAGNOSTIC',name,JSON.stringify({debug,errors}));
+          throw error;
+        }
         await page.locator('#module-select').evaluate(el=>{el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));});
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b7"][data-origin-id="p1b5"]'),null,{timeout:50000});
         await selectPreview(page,'pdf');

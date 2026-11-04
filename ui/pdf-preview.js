@@ -458,6 +458,7 @@ export class PdfPreview {
       if(this.disposed)return;
       if(!painted)throw Error('PDF 首页渲染失败');
       this.ready=true;
+      this.refreshAnchors();
       this.paintBlockCoverage();
       this.setStatus('就绪');
       if(this.pendingFocus){
