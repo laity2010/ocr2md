@@ -244,7 +244,11 @@ export class PdfPreview {
     // published through the Workspace -> Shell global status callback.
     this.statusNode.textContent=s;this.statusNode.title=s;
     const kind=/失败|错误|失效|无效/.test(s)?'error':'ok';
-    if(this.active||kind==='error')this.onStatus('PDF · '+s,kind);
+    // Selection and command feedback must reach the global bar even while
+    // split preview moves the PDF pane or switches its active presentation.
+    // Only passive hidden-pane warmup messages are withheld.
+    if(this.active||kind==='error'||!['加载中','就绪'].includes(s))
+      this.onStatus('PDF · '+s,kind);
   }
   async prepareSelectedPDFText(){
     const token=++this.textExtractToken;

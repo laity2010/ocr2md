@@ -66,8 +66,18 @@ try{
         assert.equal((await page.locator('#status').textContent()).includes('CMD ·'),true,
           'AG count is now part of the one global status line');
         await extract.evaluate(el=>el.click());
-        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PDF · 已提取'),
-          null,{timeout:22000});
+        try{await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PDF · 已提取'),
+          null,{timeout:12000});}catch(error){
+          const debug=await page.evaluate(()=>({
+            global:document.querySelector('#status')?.textContent?.slice(0,650),
+            pdf:document.querySelector('.ocr-pdf-status')?.textContent,
+            button:{disabled:document.querySelector('.ocr-pdf-extract-text')?.disabled,
+              title:document.querySelector('.ocr-pdf-extract-text')?.title},
+            first:document.querySelector('#editor .cm-content .cm-line')?.textContent?.slice(0,320),
+            modal:document.querySelector('#unlock-dialog')?.open
+          }));
+          console.error('PDF_EXTRACT_DIAG',name,JSON.stringify({debug,errors}));throw error;
+        }
         assert.equal(readFileSync(doc,'utf8'),original,'PDF extraction must not save CMD on disk');
         await page.waitForFunction(previous=>document.querySelector('#editor .cm-content .cm-line')
           ?.textContent!==previous,before,{timeout:14000});
