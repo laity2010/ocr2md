@@ -65,8 +65,8 @@ try{
       }));
       assert.equal(await page.locator('#settings-workspace .cm-editor').count(),1);
       assert.equal(await page.locator('#editor .cm-editor').count(),1);
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),5,
-        'CM font, title scale, navigation dropdown, workspace root and selected book are registered');
+      assert.equal(await page.locator('#settings-workspace .ag-row').count(),6,
+        'CM font, PDF label scale, title scale, navigation dropdown, workspace root and book are registered');
       assert.deepEqual(await page.locator('#settings-workspace .ag-header-cell-text').allTextContents(),
         ['一级分类','二级分类','键名','键注释']);
       assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3,
@@ -131,10 +131,10 @@ try{
       await nativeFilter.waitFor();
       assert.equal(await nativeFilter.locator('[data-filter-value="全局 UI"]').count(),1);
       await nativeFilter.locator('[data-filter-value="全局 UI"] input').uncheck();
-      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===3);
+      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===4);
       // Click the source record: it must clear a filter that hides that row.
       await page.locator('#settings-workspace .cm-line').filter({hasText:'"key": "defaultFontSize"'}).first().click();
-      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===5);
+      await page.waitForFunction(()=>document.querySelectorAll('#settings-workspace .ag-row').length===6);
       assert.equal(await page.locator('#settings-workspace .ag-row-selected').count(),1);
       assert.equal(await page.locator('#settings-workspace .ag-header-cell-filter-button').count(),3);
       await page.locator('#settings-workspace .ag-row').filter({hasText:'defaultFontSize'}).click();

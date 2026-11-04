@@ -72,6 +72,7 @@ export class PdfPreview {
     this.onBlockReparent=onBlockReparent;
     this.onPromoteChild=onPromoteChild;
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
+    this.blockLabelScale=1;
     this.host.classList.add('ocr-pdf-pane');
     if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
     this.host.dataset.pdfTheme='dark';
@@ -835,7 +836,7 @@ export class PdfPreview {
       svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
         '<path class="ocr-pdf-block-drag-tip" />';
       document.body.append(svg);item.svg=svg;
-      this.setStatus(`从 ${id} 拖出箭头，可跨页选择目标父块的「作为子块」或「之后」`);
+      this.setStatus(`从 ${id} 拖出箭头，可跨页选择「之前」「作为子块」「之后」`);
       this.updateBlockDrag(item,item.x,item.y);
       this.autoScrollBlockDrag(item);
     },370);
@@ -928,7 +929,7 @@ export class PdfPreview {
       guide.dataset.kind=child?'child':'parent';
       guide.setAttribute('aria-hidden','true');
       guide.innerHTML=child?'<span data-placement="child">成为子块</span>':
-        this.readOnly?'<span data-placement="child">作为子块</span><span data-placement="after">之后</span>':
+        this.readOnly?'<span data-placement="before">之前</span><span data-placement="child">作为子块</span><span data-placement="after">之后</span>':
         '<span data-placement="before">之前</span><span data-placement="child">子块</span>'+
         '<span data-placement="after">之后</span>';
       document.body.append(guide);item.guide=guide;
@@ -942,7 +943,7 @@ export class PdfPreview {
     if(!chip?.isConnected)return;
     const rect=chip.getBoundingClientRect(),clip=this.visibleClip();
     if(!clip)return;
-    const width=child?80:this.readOnly?148:150,height=29;
+    const width=child?80:this.readOnly?213:150,height=29;
     const left=Math.max(clip.left+3,Math.min((rect.left+rect.right-width)/2,
       clip.right-width-3));
     const top=rect.bottom+height+8<=clip.bottom?rect.bottom+5:
@@ -1025,8 +1026,8 @@ export class PdfPreview {
     if(target&&item.guide){
       const rect=item.guide.getBoundingClientRect();
       const index=item.targetKind==='child'?0:this.readOnly?
-        ({child:0,after:1}[placement]??0):({before:0,child:1,after:2}[placement]??1);
-      const slots=item.targetKind==='child'?1:this.readOnly?2:3;
+        ({before:0,child:1,after:2}[placement]??1):({before:0,child:1,after:2}[placement]??1);
+      const slots=item.targetKind==='child'?1:3;
       ex=rect.left+(index+.5)*rect.width/slots-bounds.left;
       ey=(rect.top+rect.bottom)/2-bounds.top;
     }
@@ -1064,11 +1065,11 @@ export class PdfPreview {
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择目标父块，结构不变');return;}
     if(this.readOnly&&(!/^p\d+b\d+$/.test(item.id)||
-      !['child','after'].includes(placement)||!target||
+      !['child','before','after'].includes(placement)||!target||
       !/^p\d+b\d+(?:s\d+(?:\.\d+)*)?$/.test(target)||
-      (placement==='after'&&!/^p\d+b\d+$/.test(target))||
+      (['before','after'].includes(placement)&&!/^p\d+b\d+$/.test(target))||
       target.startsWith(item.id+'s')||target===item.id)){
-      this.setStatus('仅开放父块「作为子块」和「之后」两个落点');
+      this.setStatus('仅开放父块「之前」「作为子块」「之后」三个落点');
       return;
     }
     if(placement==='child'){
@@ -1080,13 +1081,16 @@ export class PdfPreview {
       }).catch(error=>this.setStatus('PDF 文本块归入子块失败：'+error.message));
       return;
     }
-    if(this.readOnly&&placement==='after'){
-      this.setStatus(`正在把 ${item.id} 整组插入 ${target} 之后，顺延后续编号…`);
-      void this.onBlockMove(item.id,target,'after').then(result=>{
+    if(this.readOnly&&['before','after'].includes(placement)){
+      const action=placement==='before'?'之前':'之后';
+      this.setStatus(`正在把 ${item.id} 整组插入 ${target} ${action}，顺延后续编号…`);
+      void this.onBlockMove(item.id,target,placement).then(result=>{
         this.setStatus(result?.changed?
-          `✓ ${target} 不变 · ${item.id} → ${result.newId} · 后续编号顺延 · 未保存，可 Undo`:
-          'A 已位于 B 之后，顺序不变');
-      }).catch(error=>this.setStatus('父块「之后」插入失败：'+error.message));
+          (placement==='before'?`✓ ${item.id} → ${result.newId} · ${target} 及后续编号顺延`:
+            `✓ ${target} 不变 · ${item.id} → ${result.newId} · 后续编号顺延`)+
+            ' · 未保存，可 Undo':
+          `A 已位于 B ${action}，顺序不变`);
+      }).catch(error=>this.setStatus(`父块「${action}」插入失败：`+error.message));
       return;
     }
     let move;
@@ -1326,6 +1330,14 @@ export class PdfPreview {
     this.updateChipContentIndicators();
     this.refreshParentGroupHighlight();
   }
+  /** User's global display multiplier. Never scale PDF evidence bboxes. */
+  setBlockLabelScale(value){
+    if(!Number.isFinite(value)||value<0.5||value>2.5)
+      throw Error('Invalid PDF block label scale');
+    if(this.blockLabelScale===value)return;
+    this.blockLabelScale=value;
+    if(this.blockCoverageNodes.size)this.avoidBlockChipCollisions();
+  }
   /** Every native parent and child chip shares one page-wide, TWO-side rail
    * layout. The chips stay DOM-owned by their original PDF blocks for click,
    * focus, and gesture semantics, but are visually positioned in the outer
@@ -1348,7 +1360,8 @@ export class PdfPreview {
       if(chip)group.items.push({id,chip,owner:node,rect,
         target:rect,anchorY:(rect.top+rect.bottom)/2,
         side:node.dataset.gutter,kind:node.classList.contains('ocr-pdf-block-child-cover')?'child':'parent',
-        width:chip.offsetWidth,height:chip.offsetHeight});
+        width:chip.offsetWidth*this.blockLabelScale,
+        height:chip.offsetHeight*this.blockLabelScale});
       for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
         if(fragment.hidden)continue;
         const child=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
@@ -1362,7 +1375,8 @@ export class PdfPreview {
           owner:fragment,rect:part,target:part,
           anchorY:(part.top+part.bottom)/2,
           side:node.dataset.gutter,kind:'child',
-          width:child.offsetWidth,height:child.offsetHeight});
+          width:child.offsetWidth*this.blockLabelScale,
+          height:child.offsetHeight*this.blockLabelScale});
       }
     }
     for(const [page,group] of pages){
@@ -1381,7 +1395,7 @@ export class PdfPreview {
         if(chip.style.left!==x)chip.style.left=x;
         if(chip.style.top!==y)chip.style.top=y;
         if(chip.style.right!=='auto')chip.style.right='auto';
-        const scale=`scale(${slot.scale.toFixed(4)})`;
+        const scale=`scale(${(slot.scale*this.blockLabelScale).toFixed(4)})`;
         if(chip.style.transform!==scale)chip.style.transform=scale;
         chip.style.transformOrigin='top left';
         chip.classList.add('ocr-pdf-rail-label');

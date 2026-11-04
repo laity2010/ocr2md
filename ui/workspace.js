@@ -64,6 +64,7 @@ let scrollSync=null;
 let currentOutline=null;
 let currentSourcePanel=null;
 let outlineTitleFontScale=1;
+let pdfBlockLabelScale=1;
 let currentPdf=null;
 let toggleSplitPreview=()=>{};
 let wcpRuntime=null;
@@ -339,6 +340,7 @@ class PreviewPanel {
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
       (sourceId,targetId)=>blockChainAction('reparent',{memberId:sourceId,targetId}),
       childId=>blockChainAction('promote-child',{childId}));
+    this.pdf.setBlockLabelScale(pdfBlockLabelScale);
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
     this.setMode('md');
@@ -765,6 +767,12 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       if(!Number.isFinite(value)||value<0.2||value>2)throw Error('Invalid title font scale');
       outlineTitleFontScale=value;
       currentOutline?.grid?.setTitleFontScale(value);
+    },
+    setPDFBlockLabelScale(value){
+      if(!Number.isFinite(value)||value<0.5||value>2.5)
+        throw Error('Invalid PDF text block label scale');
+      pdfBlockLabelScale=value;
+      currentPdf?.pdf?.setBlockLabelScale(value);
     },
     refreshPdf:()=>currentPdf?.pdf?.refreshAnchors(),
     setWorkModule:(module,{activateTextBlocks=true}={})=>{

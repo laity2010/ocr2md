@@ -14,7 +14,7 @@ import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,parseCMDPBSId,
   planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDJoinP1B3IntoP1B4,planCMDPromotePBSChild,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember,
-  planCMDReorderPBSParents,planCMDAbsorbReviewedParent,planCMDInsertPBSParentAfter} from './cmd-block-chains.js';
+  planCMDReorderPBSParents,planCMDAbsorbReviewedParent,planCMDInsertPBSParentAt} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
 import {planCMDPDFBBoxEdit} from './cmd-pdf-bbox.js';
 import {planCMDSubblockAnnotations,queryCMDLayout} from './cmd-text-blocks.js';
@@ -160,13 +160,13 @@ export function createCMDTransactionPort(cmd){
     moveBlockChainMember:(memberId,targetId,placement='after',options={})=>commitChainPlan(
       planCMDMoveBlockChainMember(cmd.readSource(),memberId,targetId,placement),
       options.expectedSource??null),
-    /** Insert any independent parent A AFTER B; B's id must not change. */
-    insertPBSAfter(sourceId,targetId,options={}){
+    /** Insert independent A immediately BEFORE or AFTER B, one CM6 edit. */
+    insertPBSAt(sourceId,targetId,placement='after',options={}){
       const source=cmd.readSource();
       if(options.expectedSource!==undefined&&options.expectedSource!==source)
         throw Error('CMD after-drop source changed; rescan');
       const before=readCMDBlockChains(source);
-      const plan=planCMDInsertPBSParentAfter(source,sourceId,targetId);
+      const plan=planCMDInsertPBSParentAt(source,sourceId,targetId,placement);
       if(!plan.changed)return plan;
       const result=[...plan.edits].sort((a,b)=>b.from-a.from).reduce((s,e)=>{
         if(s.slice(e.from,e.to)!==e.expected)throw Error('Stale CMD after-drop edit');
@@ -174,7 +174,10 @@ export function createCMDTransactionPort(cmd){
       },source);
       const after=readCMDBlockChains(result);
       const current=before.atoms.find(atom=>atom.id===targetId);
-      const preserved=after.atoms.find(atom=>atom.id===targetId);
+      const newTargetId=placement==='before'?
+        `p${/^p(\d+)/.exec(targetId)[1]}b${Number(/b(\d+)/.exec(targetId)[1])+1}`:
+        targetId;
+      const preserved=after.atoms.find(atom=>atom.id===newTargetId);
       const origins=m=>m.atoms.map(atom=>`${atom.origin}|${atom.role||''}`).sort().join('\n');
       if(after.invalid.length||before.invalid.length||
         after.atoms.length!==before.atoms.length||
@@ -184,10 +187,16 @@ export function createCMDTransactionPort(cmd){
           atom.origin===before.atoms.find(old=>old.id===sourceId)?.origin)||
         source.slice(source.indexOf('<!-- minerujson:source:v1:'))!==
           result.slice(result.indexOf('<!-- minerujson:source:v1:')))
-        throw Error('After-drop must preserve all PDF atoms, B id and sealed OCR');
+        throw Error('Parent insertion must preserve all PDF atoms, target identity and sealed OCR');
       commit(()=>cmd.replaceRanges(plan.edits,null,[agAllDocumentTransaction.of(true)]),
         plan.edits,{source,allowAll:true});
       return plan;
+    },
+    insertPBSAfter(sourceId,targetId,options={}){
+      return this.insertPBSAt(sourceId,targetId,'after',options);
+    },
+    insertPBSBefore(sourceId,targetId,options={}){
+      return this.insertPBSAt(sourceId,targetId,'before',options);
     },
     /** Universal same-page parent absorption: one undoable source edit. */
     absorbPBSParent(sourceId,targetId,options={}){

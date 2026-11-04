@@ -720,7 +720,8 @@ export function planCMDReparentPBS(source,sourceId,targetId){
  * The source moves in one CM6 transaction and the CMD footer is the sole
  * owner of old-physical-PDF -> new-logical-PBS identities.
  */
-export function planCMDInsertPBSParentAfter(source,sourceId,targetId){
+export function planCMDInsertPBSParentAt(source,sourceId,targetId,placement='after'){
+  if(!['before','after'].includes(placement))throw Error('Invalid parent insert placement');
   const a=parseCMDPBSId(sourceId),b=parseCMDPBSId(targetId);
   if(!a||!b||a.s.length||b.s.length||sourceId===targetId)
     throw Error('After landing requires two different independent parents');
@@ -732,14 +733,15 @@ export function planCMDInsertPBSParentAfter(source,sourceId,targetId){
   const sourceRoot=roots.find(root=>root.id===sourceId);
   const targetRoot=roots.find(root=>root.id===targetId);
   if(!sourceRoot||!targetRoot)throw Error('Unknown parent block');
-  const immediatelyAfter=roots[roots.indexOf(targetRoot)+1]===sourceRoot;
-  if(a.p===b.p&&a.b===b.b+1&&immediatelyAfter)
-    return {changed:0,edits:[],sourceId,targetId,reason:'already-after'};
-  const parentMap=new Map([[sourceId,`p${b.p}b${b.b+1}`]]);
+  const adjacent=placement==='after'?roots[roots.indexOf(targetRoot)+1]===sourceRoot:
+    roots[roots.indexOf(targetRoot)-1]===sourceRoot;
+  if(a.p===b.p&&adjacent)
+    return {changed:0,edits:[],sourceId,targetId,reason:'already-'+placement};
+  const parentMap=new Map([[sourceId,`p${b.p}b${b.b+(placement==='after'?1:0)}`]]);
   for(const root of roots){
-    if(root.id===sourceId||root.id===targetId)continue;
+    if(root.id===sourceId||(placement==='after'&&root.id===targetId))continue;
     const number=parseCMDPBSId(root.id);
-    if(number.p!==b.p||number.b<=b.b)continue;
+    if(number.p!==b.p||(placement==='after'?number.b<=b.b:number.b<b.b))continue;
     if(a.p===b.p&&a.b>b.b&&number.b>=a.b)continue;
     parentMap.set(root.id,`p${b.p}b${number.b+1}`);
   }
@@ -790,7 +792,7 @@ export function planCMDInsertPBSParentAfter(source,sourceId,targetId){
   // Restore a fresh line boundary when moving it before another CMD marker.
   if(!moved.endsWith('\n'))moved+='\n\n';
   const edits=[];
-  const destination=sourceEnd(targetRoot);
+  const destination=placement==='before'?targetRoot.from:sourceEnd(targetRoot);
   if(destination>=from&&destination<=to){
     if(destination!==from)throw Error('Overlapping insertion into moving scope');
     // B immediately precedes A. Replace A's own scope with its new labels.
@@ -834,8 +836,14 @@ export function planCMDInsertPBSParentAfter(source,sourceId,targetId){
     renamed:Object.fromEntries([...idMap].filter(([old,now])=>old!==now)),
     shifted:roots.filter(root=>root.id!==sourceId&&parentMap.has(root.id))
       .map(root=>[root.id,parentMap.get(root.id)]),
-    movedIds:members.map(atom=>idMap.get(atom.id)),relocatedSourceText:true};
+    movedIds:members.map(atom=>idMap.get(atom.id)),relocatedSourceText:true,placement};
 }
+
+
+export const planCMDInsertPBSParentAfter=(source,sourceId,targetId)=>
+  planCMDInsertPBSParentAt(source,sourceId,targetId,'after');
+export const planCMDInsertPBSParentBefore=(source,sourceId,targetId)=>
+  planCMDInsertPBSParentAt(source,sourceId,targetId,'before');
 
 /** Reorder independent page-level PBS scopes in one CM6 operation.
  * The immutable PBS origin (physical PDF bbox) never changes. A parent takes

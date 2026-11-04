@@ -21,6 +21,7 @@ import {workspaceDirectoryPort} from './wcp-workspace-directory-port.js';
 import {createSourceFileNavigation} from './wcp-source-file-navigation.js';
 import {mountAgModuleToolbar} from './wcp-ag-module-toolbar.js';
 import {registerCMSourceFontSetting} from './cm-font-setting.js';
+import {registerPDFBlockLabelScaleSetting} from './pdf-block-label-setting.js';
 import {registerOutlineTitleScaleSetting} from './wcp-chapter-outline.js';
 import {uploadPastedImage} from './media-module.js';
 import {mineruCommentFolding,foldInitialMineruComments} from './mineru-comment-folding.js';
@@ -423,6 +424,7 @@ async function main() {
     else status(message,kind);
   },wcpRuntime,documentLabel,$('text-block-actions'));
   registerOutlineTitleScaleSetting(settings,value=>workspace.setOutlineTitleFontScale(value));
+  registerPDFBlockLabelScaleSetting(settings,value=>workspace.setPDFBlockLabelScale(value));
   const nativeIOSSelection=isIOSWebKit();
   workspace.editorHost.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   cm = new CMDocument({
@@ -745,13 +747,13 @@ async function main() {
   });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
   workspace.setBlockMoveAction(async(sourceId,targetId,placement)=>{
-    if(placement!=='after'||!/^p\d+b\d+$/.test(sourceId||'')||
+    if(!['before','after'].includes(placement)||!/^p\d+b\d+$/.test(sourceId||'')||
       !/^p\d+b\d+$/.test(targetId||'')||sourceId===targetId)
       return rejectTextBlockEdit();
     const source=cmdPort.readSource();
     if(source!==blockIndexedSource)
       throw Error('文本块列表已变化，请重新进入文本块模块后操作');
-    const result=cmdPort.insertPBSAfter(sourceId,targetId,{expectedSource:source});
+    const result=cmdPort.insertPBSAt(sourceId,targetId,placement,{expectedSource:source});
     if(result.changed){blockIndexedSource=null;scanTextBlocks();}
     return result;
   });

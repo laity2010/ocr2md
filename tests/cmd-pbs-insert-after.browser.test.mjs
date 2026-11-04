@@ -105,8 +105,8 @@ try{
           const rail=page.locator('.ocr-pdf-block-drop-guide');
           await rail.waitFor({state:'attached',timeout:7500});
           assert.deepEqual(await rail.locator('[data-placement]').evaluateAll(nodes=>
-            nodes.map(n=>n.dataset.placement)),['child','after'],
-            'Parent landing should have only reviewed child and AFTER options');
+            nodes.map(n=>n.dataset.placement)),['before','child','after'],
+            'Parent landing must offer before, child, after');
           assert((await page.locator('.ocr-pdf-status').textContent()).includes(test.B));
           const spot=await rail.locator('[data-placement="after"]').boundingBox();assert(spot);
           if(process.env.OCR_PBS_HOVER_CAPTURE)

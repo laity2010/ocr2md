@@ -6,7 +6,8 @@ const distance=(rect,x,y)=>Math.hypot(Math.max(rect.left-x,0,x-rect.right),
   Math.max(rect.top-y,0,y-rect.bottom));
 export const pdfDropGuideZone=(x,rect,child=false,childAndAfter=false)=>{
   if(child)return 'child';
-  if(childAndAfter)return x<rect.left+rect.width/2?'child':'after';
+  if(childAndAfter){const third=rect.width/3;return x<rect.left+third?'before':
+    x<rect.left+third*2?'child':'after';}
   const third=rect.width/3;
   return x<rect.left+third?'before':x>=rect.right-third?'after':'child';
 };
