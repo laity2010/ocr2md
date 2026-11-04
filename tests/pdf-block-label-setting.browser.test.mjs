@@ -25,6 +25,14 @@ const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...
   V6_STATIC_ROOT:resolve('dist'),V6_SETTINGS_PATH:settingsFile,V6_TOKEN_PATH:token},stdio:'ignore'});
 const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
 const tag=(page,id)=>page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] > .ocr-pdf-block-ctrl`);
+const activateTextBlocks=async page=>{
+  if(await page.locator('#module-select').inputValue()==='settings')
+    await selectModule(page,'chapter-boundary');
+  await page.locator('#module-select').evaluate(el=>{
+    el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='text-block');
+};
 const readWidth=async page=>{
   await tag(page,'p1b3').scrollIntoViewIfNeeded({timeout:35000});
   const bbox=await tag(page,'p1b3').boundingBox();assert(bbox);
@@ -64,7 +72,7 @@ try{
         await page.goto(base,{waitUntil:'domcontentloaded',timeout:75000});
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',
           null,{timeout:95000});
-        await selectModule(page,'text-block');await selectPreview(page,'pdf');
+        await activateTextBlocks(page);await selectPreview(page,'pdf');
         const normal=await readWidth(page);
         await selectModule(page,'settings');
         const settingRow=page.locator('#settings-workspace .ag-row').filter({hasText:'labelScale'}).first();
@@ -81,7 +89,7 @@ try{
           el.dispatchEvent(new Event('input',{bubbles:true}));},value);
         await set(0.6);
         await page.waitForFunction(()=>document.querySelector('#settings-font-slider')?.value==='0.6');
-        await selectModule(page,'text-block');await selectPreview(page,'pdf');
+        await activateTextBlocks(page);await selectPreview(page,'pdf');
         const small=await readWidth(page);
         assert(small<normal*.85,`0.6x must shrink PDF chip (${normal} -> ${small})`);
         await selectModule(page,'settings');
@@ -89,7 +97,7 @@ try{
         assert.equal(await slider.inputValue(),'0.6');
         await set(1.5);
         await page.waitForFunction(()=>document.querySelector('#settings-font-slider')?.value==='1.5');
-        await selectModule(page,'text-block');await selectPreview(page,'pdf');
+        await activateTextBlocks(page);await selectPreview(page,'pdf');
         const enlarged=await readWidth(page);
         assert(enlarged>small*1.3,`1.5x must enlarge PDF chip visibly (${small} -> ${enlarged})`);
         const rail=await cleanRails(page);assert(!rail.error);
@@ -112,7 +120,7 @@ try{
         await page.reload({waitUntil:'domcontentloaded',timeout:75000});
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',
           null,{timeout:95000});
-        await selectModule(page,'text-block');await selectPreview(page,'pdf');
+        await activateTextBlocks(page);await selectPreview(page,'pdf');
         const restored=await readWidth(page);
         assert(Math.abs(restored-enlarged)<3,`saved label multiplier must survive reload (${enlarged} vs ${restored})`);
         assert.deepEqual((await cleanRails(page)).colliding,[]);
