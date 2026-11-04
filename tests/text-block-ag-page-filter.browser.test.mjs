@@ -25,8 +25,25 @@ const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...
   V6_TOKEN_PATH:join(dir,'token')},stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const current=page=>page.locator('.ocr-text-block-grid .ag-cell[col-id="pdfPage"]').allTextContents();
-const waitView=(page,fragment)=>page.waitForFunction(text=>
-  document.querySelector('#status')?.textContent.includes(text),fragment,{timeout:55000});
+const waitPageCells=(page,number)=>page.waitForFunction(expected=>{
+  const cells=[...document.querySelectorAll('.ocr-text-block-grid .ag-cell[col-id="pdfPage"]')];
+  return cells.length>0&&cells.every(cell=>cell.textContent.trim()===String(expected));
+},number,{timeout:30000});
+const waitView=async(page,fragment)=>{
+  try{return await page.waitForFunction(text=>
+    document.querySelector('#status')?.textContent.includes(text),fragment,{timeout:20000});}
+  catch(error){
+    const info=await page.evaluate(()=>({
+      status:document.querySelector('#status')?.textContent,
+      pdfInput:document.querySelector('.ocr-pdf-page')?.value,
+      pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+      agRows:[...document.querySelectorAll('.ocr-text-block-grid .ag-cell[col-id="pdfPage"]')].slice(0,7).map(x=>x.textContent),
+      module:document.querySelector('#module-select')?.value,
+      all:document.querySelector('.ocr-all-chapters-control input')?.checked
+    }));
+    console.error('AG_PAGE_DIAGNOSTIC',fragment,JSON.stringify(info));throw error;
+  }
+};
 try{
   let ready=false;
   for(let i=0;i<240;i++){try{if((await fetch(`${base}/healthz`)).ok){ready=true;break;}}catch{}await sleep(120);}
@@ -49,25 +66,22 @@ try{
         const header=page.locator('.ocr-text-block-grid .ag-header-cell[col-id="pdfPage"]');
         assert.equal(await header.locator('.ag-header-cell-text').innerText(),'页码');
         assert.equal(await page.locator('.ocr-text-block-grid .ag-header-cell[col-id="pdfPage"]').count(),1);
-        assert((await current(page)).length>0);
-        assert((await current(page)).every(x=>x.trim()==='1'),'first page includes page 1 only');
+        await waitPageCells(page,1);
         await selectPreview(page,'pdf');
         const pager=page.locator('.ocr-pdf-page');
-        await pager.fill('2');await pager.press('Enter');
+        await page.locator('.ocr-pdf-scroller .page[data-page-number="2"]').scrollIntoViewIfNeeded({timeout:35000});
         await waitView(page,'AG 第 2 页');
-        assert((await current(page)).length>0);
-        assert((await current(page)).every(x=>x.trim()==='2'),'PDF navigation filters AG to page 2');
+        await waitPageCells(page,2);
         await toggle.check();
         await waitView(page,'AG 全部页');
         assert((await current(page)).some(x=>x.trim()==='1'),'all mode restores page 1 rows');
-        await pager.fill('3');await pager.press('Enter');
+        await page.locator('.ocr-pdf-scroller .page[data-page-number="3"]').scrollIntoViewIfNeeded({timeout:35000});
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-page')?.value==='3');
         assert.equal(await toggle.isChecked(),true,'scroll/page change preserves all mode');
         assert((await current(page)).some(x=>x.trim()==='1'),'all mode remains cross-page');
         await toggle.uncheck();
         await waitView(page,'AG 第 3 页');
-        assert((await current(page)).length>0);
-        assert((await current(page)).every(x=>x.trim()==='3'),'uncheck returns to current PDF page');
+        await waitPageCells(page,3);
         await page.locator('#module-select').evaluate(el=>{el.value='chapter-boundary';el.dispatchEvent(new Event('change',{bubbles:true}));});
         await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='chapter-boundary');
         assert.equal(await toggle.isChecked(),true,'other AG module keeps chapter-wide semantics');
