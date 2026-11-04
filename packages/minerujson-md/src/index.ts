@@ -96,7 +96,79 @@ function textSlot(block: Block, heading = false): Slot {
        children:[{type:'text',value}]}
     : childrenOfText(value)};
 }
-function contentSlot(block: Block, kind: 'image'|'chart'|'table'): Slot[] {
+// MinerU occasionally merges a table continued on the next PDF page into
+// the preceding para_blocks HTML, leaving the next page's para table empty.
+// Do not infer a split from titles or row counts alone: both original per-page
+// preproc HTML fragments must reproduce EVERY row of the merged para table,
+// with exactly the repeated header rows removed. Otherwise keep MinerU's
+// para_blocks authoritative and retain preproc evidence only in comments.
+const tableRowPattern=/<tr\b[^>]*>[\s\S]*?<\/tr\s*>/gi;
+function tableRows(html:string):string[]{return [...html.matchAll(tableRowPattern)].map(m=>m[0]);}
+function tableBodySpan(block:Block):{index:number;span:Span}|null{
+  if(block.type!=='table')return null;
+  for(const [index,child] of (block.blocks||[]).entries()){
+    if(child.type!=='table_body')continue;
+    for(const line of child.lines||[])for(const span of line.spans||[])
+      if(span.type==='table'&&typeof span.html==='string')return {index,span};
+  }
+  return null;
+}
+type CrossPageTablePair={head:Span;tail:Span;merged:Span;originalHead:string;originalTail:string;overlap:number};
+function crossPageTableProjection(data:Mineru):{slots:Map<string,Span>;pairs:CrossPageTablePair[]}{
+  const slots=new Map<string,Span>(),pairs:CrossPageTablePair[]=[];
+  const pages=data.pdf_info;
+  for(let page=0;page<pages.length-1;page++){
+    const current=pages[page],following=pages[page+1];
+    for(const [blockIndex,para] of current.para_blocks.entries()){
+      const pre=current.preproc_blocks?.[blockIndex];
+      if(!pre||pre.type!=='table'||para.type!=='table')continue;
+      const before=tableBodySpan(pre),merged=tableBodySpan(para);
+      if(!before||!merged)continue;
+      const beforeRows=tableRows(before.span.html!),mergedRows=tableRows(merged.span.html!);
+      if(beforeRows.length<3||mergedRows.length<=beforeRows.length||
+         !beforeRows.every((row,index)=>mergedRows[index]===row))continue;
+      for(const [nextIndex,nextPara] of following.para_blocks.entries()){
+        const nextPre=following.preproc_blocks?.[nextIndex];
+        if(!nextPre||nextPre.type!=='table'||nextPara.type!=='table'||
+           tableBodySpan(nextPara)||nextPara.blocks?.every(c=>c.type!=='table_body'))continue;
+        const tail=tableBodySpan(nextPre);
+        if(!tail||tail.span.html===undefined)continue;
+        const tailRows=tableRows(tail.span.html),max=Math.min(tailRows.length,beforeRows.length);
+        let overlap=0;
+        while(overlap<max&&tailRows[overlap]===beforeRows[overlap])overlap++;
+        if(overlap<1||overlap>=tailRows.length||
+           mergedRows.length!==beforeRows.length+tailRows.length-overlap||
+           !tailRows.slice(overlap).every((row,index)=>mergedRows[beforeRows.length+index]===row))continue;
+        const firstKey=`${page}:${blockIndex}:${before.index}`;
+        const lastKey=`${page+1}:${nextIndex}:${tail.index}`;
+        assert(!slots.has(firstKey)&&!slots.has(lastKey),'duplicate cross-page table ownership');
+        slots.set(firstKey,before.span);slots.set(lastKey,tail.span);
+        pairs.push({head:before.span,tail:tail.span,merged:merged.span,
+          originalHead:before.span.html!,originalTail:tail.span.html!,overlap});
+        break;
+      }
+    }
+  }
+  return {slots,pairs};
+}
+function synchronizeEditedCrossPageTables(pairs:CrossPageTablePair[]):void{
+  for(const pair of pairs){
+    const head=pair.head.html!,tail=pair.tail.html!;
+    if(head===pair.originalHead&&tail===pair.originalTail)continue;
+    const topRows=tableRows(head),bottomRows=tableRows(tail);
+    const oldRows=tableRows(pair.merged.html!);
+    assert(topRows.length===tableRows(pair.originalHead).length&&
+      bottomRows.length===tableRows(pair.originalTail).length&&
+      topRows.slice(0,pair.overlap).every((r,i)=>r===bottomRows[i]),
+      'cross-page table edit changed row structure or repeated table headings');
+    const result=[...topRows,...bottomRows.slice(pair.overlap)];
+    assert(result.length===oldRows.length,'cross-page table edit changed merged row count');
+    let index=0;
+    pair.merged.html=pair.merged.html!.replace(tableRowPattern,()=>result[index++]);
+    assert(index===result.length,'cross-page merged HTML row reconstruction failed');
+  }
+}
+function contentSlot(block: Block, kind: 'image'|'chart'|'table',override?:Map<string,Span>,page=0,blockIndex=0): Slot[] {
   const sub = block.blocks || [];
   const slots: Slot[] = [];
   const ordered = kind === 'image'
@@ -107,7 +179,8 @@ function contentSlot(block: Block, kind: 'image'|'chart'|'table'): Slot[] {
     for (const [index,item] of sub.map((b,i)=>[i,b] as const).filter(([,b]) => b.type === name)) {
       const path=[index];
       const spans = (item.lines || []).flatMap(l => l.spans || []);
-      const main = spans.find(s => s.type === kind || (kind === 'chart' && s.type === 'chart'));
+      const main = kind==='table'&&override?.get(`${page}:${blockIndex}:${index}`)
+        ||spans.find(s => s.type === kind || (kind === 'chart' && s.type === 'chart'));
       if (main?.html && kind === 'table') {
         slots.push({kind:'html',path,spans:[main],node:{type:'html',value:main.html}});
       } else if (main?.image_path) {
@@ -121,13 +194,13 @@ function contentSlot(block: Block, kind: 'image'|'chart'|'table'): Slot[] {
   if (!slots.length) slots.push({kind:'literal',spans:[],node:childrenOfText(`[MinerU ${kind}: source metadata only]`)});
   return slots;
 }
-function project(block: Block,pageIndex=0,index=0,audited=false): Slot[] {
+function project(block: Block,pageIndex=0,index=0,audited=false,overrides?:Map<string,Span>): Slot[] {
   switch (block.type) {
     case 'title': return [textSlot(block,true)];
     case 'text': case 'ref_text': case 'list': case 'index': return [textSlot(block)];
     case 'interline_equation': return [{kind:'code',spans:spansFrom(block),node:{type:'code',lang:'math',value:spanString(block)}}];
     case 'image': case 'table': case 'chart': {
-      const slots=contentSlot(block,block.type);
+      const slots=contentSlot(block,block.type,overrides,pageIndex,index);
       return audited&&slots.every(s=>s.kind==='literal')
         ? [{kind:'literal',spans:[],node:{type:'html',value:auditBlock('unmapped',pageIndex,index,block)}}]
         : slots;
@@ -319,6 +392,7 @@ function stripChildMarkers(fragment: string,block: Block,pageIndex: number,block
 export function toMarkdown(input: string | Mineru): string {
   const raw = typeof input === 'string' ? input : JSON.stringify(input);
   const data = parseMineru(raw);
+  const restoration=crossPageTableProjection(data);
   const meta: Record<string,unknown>={};
   for(const [key,value] of Object.entries(data))if(key!=='pdf_info')meta[key]=value;
   const pieces: string[] = [AUDIT_VERSION,
@@ -326,7 +400,7 @@ export function toMarkdown(input: string | Mineru): string {
   for (const [pageIndex,page] of data.pdf_info.entries()) {
     pieces.push(pageAudit(page,pageIndex));
     for (const [index,block] of page.para_blocks.entries()) {
-      const slots = project(block,pageIndex,index,true);
+      const slots = project(block,pageIndex,index,true,restoration.slots);
       const children=childMarkers(block,pageIndex,index);
       const byPath=new Map(children.map(c=>[c.path,c.tag]));
       const projectedPaths=new Set(slots.filter(s=>s.path).map(s=>s.path!.join('.')));
@@ -362,6 +436,10 @@ export function toMineruJSON(markdown: string): string {
   catch {throw new Error('MINERUJSON_MD_INVALID: corrupt source metadata');}
   assert(sha(Buffer.from(restored,'utf8'))===sealed[1], 'original JSON SHA-256 mismatch');
   const data=parseMineru(restored);
+  const restoration=crossPageTableProjection(data);
+  // Preserve immutable original evidence while editable spans are being
+  // patched, particularly preproc-diff HTML on cross-page table fragments.
+  const originalAuditPages=data.pdf_info.map((page,index)=>pageAudit(page,index));
   // A leaf root can become a CONTAINER without fabricating a second OCR
   // payload: its original content starts at a body alias pNbMs0. The alias
   // is an editable CMD anchor, but is stripped ONLY in the validated,
@@ -688,8 +766,7 @@ export function toMineruJSON(markdown: string): string {
     bcEntries.push({id:`p${child[1]}b${child[2]}s${child[3]}`,fields:parseCMDFields(child[4])});
   verifyBCRelations(bcEntries);
   const auditBetween=(start: number,end: number): string=>audited
-    ? data.pdf_info.slice(start,end).map((page,index)=>pageAudit(page,start+index)).join('\n\n')
-    : '';
+    ? originalAuditPages.slice(start,end).join('\n\n') : '';
   const beforeFirst=auditBetween(0,blocks[0]?.pageNo===undefined?data.pdf_info.length:blocks[0].pageNo+1);
   assert(visible.slice(0,markers[0]?.index??visible.length).trim()===
     [documentHeader,beforeFirst].filter(Boolean).join('\n\n').trim(),
@@ -739,9 +816,16 @@ export function toMineruJSON(markdown: string): string {
         fragment=fragment.slice(prefix[0].length).trim();
       }
     }
-    const oldSlots=project(block,pageNo,blockNo,audited);
+    const oldSlots=project(block,pageNo,blockNo,audited,restoration.slots);
     const oldFragment=serialize(oldSlots.map(x=>x.node));
     if(fragment===oldFragment)continue;
+    // Older V6 documents retain the original merged para table and a
+    // metadata-only placeholder on the following page. Accept only their
+    // exact historical projection so the new split cannot break old files.
+    if(restoration.slots.size){
+      const previous=project(block,pageNo,blockNo,audited);
+      if(fragment===serialize(previous.map(s=>s.node)))continue;
+    }
     // Earlier V6 files used a placeholder instead of a metadata-only block.
     if(audited&&oldSlots.every(s=>s.kind==='literal')&&
       fragment===serialize(project(block,pageNo,blockNo,false).map(s=>s.node)))continue;
@@ -757,6 +841,7 @@ export function toMineruJSON(markdown: string): string {
     }
     modified=true;
   }
+  if(modified)synchronizeEditedCrossPageTables(restoration.pairs);
   return modified ? JSON.stringify(data,null,2) : restored;
 }
 

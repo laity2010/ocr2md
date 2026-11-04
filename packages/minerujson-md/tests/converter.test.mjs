@@ -43,6 +43,41 @@ test('real Buffett Alpha fixture: no loss of even JSON whitespace',()=>{
   assert.equal(toMineruJSON(saved),raw,'single-start unaudited fixture must roundtrip');
 });
 
+test('cross-page table HTML is split back into its real PDF pages, with sealed and legacy round trips',()=>{
+  const md=toMarkdown(raw);
+  const pre=original.pdf_info[3].preproc_blocks[1].blocks[0].lines[0].spans[0].html;
+  const continuation=original.pdf_info[4].preproc_blocks[0].blocks[1].lines[0].spans[0].html;
+  assert.equal((pre.match(/<tr>/g)||[]).length,9);
+  assert.equal((continuation.match(/<tr>/g)||[]).length,9);
+  assert(md.includes('<!-- cmd:block:v1 id="p3b1s0" -->\n\n'+pre),
+    'the first 9-row table belongs to p3b1s0 on PDF page 4');
+  assert(md.includes('<!-- cmd:block:v1 id="p4b0s1" -->\n\n'+continuation),
+    'the remaining 9-row table belongs to p4b0s1 on PDF page 5');
+  assert.equal(toMineruJSON(md),raw,'unchanged split HTML must roundtrip byte-for-byte');
+  assert.equal(toMineruJSON(saved),raw,'historical combined HTML/empty body remains compatible');
+  const edited=md.replace(continuation,continuation.replace('1,655','1,656'));
+  assert.notEqual(edited,md);
+  const restored=JSON.parse(toMineruJSON(edited));
+  assert(restored.pdf_info[4].preproc_blocks[0].blocks[1].lines[0].spans[0].html.includes('1,656'),
+    'an edit on the second PDF page must update that preproc body');
+  assert(restored.pdf_info[3].para_blocks[1].blocks[0].lines[0].spans[0].html.includes('1,656'),
+    'the merged para body must mirror a legitimate edit to the continuation');
+  const changedTail=continuation.replace('1,655','1,656');
+  const tailRows=[...changedTail.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi)];
+  const removedRow=edited.replace(changedTail,changedTail.replace(tailRows.at(-1)[0],''));
+  assert.notEqual(removedRow,edited);
+  assert.throws(()=>toMineruJSON(removedRow),/INVALID/,
+    'row-count-altering edits cannot silently violate the sealed split mapping');
+  // A superficially similar table without exact merged row evidence is NOT
+  // rewritten. The original raw JSON remains authoritative in that case.
+  const altered=JSON.parse(raw);
+  altered.pdf_info[4].preproc_blocks[0].blocks[1].lines[0].spans[0].html=continuation.replace('1,655','1,999');
+  const fromAltered=toMarkdown(altered);
+  assert(!fromAltered.includes('<!-- cmd:block:v1 id="p4b0s1" -->\n\n'+continuation),
+    'unsupported cross-page ownership is never inferred from headings alone');
+  assert.deepEqual(JSON.parse(toMineruJSON(fromAltered)),altered);
+});
+
 test('valid GFM / HTML comments / images / math code / tables',()=>{
   const tree=parse.parse(toMarkdown(raw));
   assert.equal(tree.type,'root');
