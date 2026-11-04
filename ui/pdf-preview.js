@@ -1771,6 +1771,7 @@ export class PdfPreview {
       overlay.className='ocr-pdf-region-overlay';
       overlay.dataset.pdfPage=String(selection.pageIndex+1);
       overlay.dataset.blockIndex=String(selection.blockIndex);
+      overlay.dataset.pbsId=selection.logicalId||'';
       overlay.dataset.partRole=part?.role||'body';
       overlay.dataset.partIndex=String(selection.partIndex??-1);
       const paper=page.div.getBoundingClientRect();

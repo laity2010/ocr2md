@@ -31,13 +31,27 @@ const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
 const PDF=page=>page.locator('.ocr-pdf-region-overlay');
 const selectedAG=page=>page.locator('.ocr-text-block-grid .ag-row-selected[row-id]');
 const badge=(page,id)=>page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] > .ocr-pdf-block-ctrl`);
-const waitMatch=(page,{id='p1b12',physical=10,text=targetLineText,native=false}={})=>page.waitForFunction(x=>{
-  const ag=document.querySelector('.ocr-text-block-grid .ag-row-selected[row-id]');
-  const pdf=document.querySelector('.ocr-pdf-region-overlay');
-  const line=document.querySelector(x.native?'#editor .cm-activeLine':'#editor .cm-outline-focused-line');
-  return ag?.getAttribute('row-id')===x.id&&pdf?.dataset.pdfPage==='2'
-     &&pdf?.dataset.blockIndex===String(x.physical)&&line?.textContent?.trim()===x.text;
-},{id,physical,text,native},{timeout:24000});
+const waitMatch=async(page,{id='p1b12',physical=10,text=targetLineText,native=false}={})=>{
+  try{return await page.waitForFunction(x=>{
+    const ag=document.querySelector('.ocr-text-block-grid .ag-row-selected[row-id]');
+    const pdf=document.querySelector('.ocr-pdf-region-overlay');
+    const line=document.querySelector(x.native?'#editor .cm-activeLine':'#editor .cm-outline-focused-line');
+    return ag?.getAttribute('row-id')===x.id&&pdf?.dataset.pdfPage==='2'
+       &&pdf?.dataset.blockIndex===String(x.physical)
+       &&pdf?.dataset.pbsId===x.id&&line?.textContent?.trim()===x.text;
+  },{id,physical,text,native},{timeout:13000});}
+  catch(error){
+    const diagnostic=await page.evaluate(()=>({
+      ag:document.querySelector('.ocr-text-block-grid .ag-row-selected[row-id]')?.getAttribute('row-id'),
+      pdf:document.querySelector('.ocr-pdf-region-overlay')?.dataset,
+      active:document.querySelector('#editor .cm-activeLine')?.textContent?.trim().slice(0,160),
+      focused:document.querySelector('#editor .cm-outline-focused-line')?.textContent?.trim().slice(0,160),
+      global:document.querySelector('#status')?.textContent?.slice(0,350),
+      pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+    }));
+    console.error('THREE_PANE_DIAGNOSTIC',JSON.stringify({id,native,expected:text.slice(0,160),diagnostic}));throw error;
+  }
+};
 try{
   let live=false;for(let i=0;i<250;i++){
     try{if((await fetch(url+'/healthz')).ok){live=true;break;}}catch{}await sleep(130);

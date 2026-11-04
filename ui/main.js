@@ -811,7 +811,19 @@ async function main() {
           offset=view.posAtDOM(pos.offsetNode,pos.offset);
       }
     }catch{/* Native CM6 selection is the safe fallback on recycled lines. */}
-    const sourceLine=view.state.doc.lineAt(offset).number;
+    // CodeMirror's clicked DOM line is the authoritative source identity.
+    // On wrapped lines or after a PDF-driven scroll, caretRangeFromPoint can
+    // occasionally resolve a neighbouring row although the visual CM6
+    // active line is correct. Do not broadcast that stale line to PDF/AG.
+    const clickedNode=event.target instanceof Element?event.target:
+      event.target?.parentElement;
+    const clickedLine=clickedNode?.closest?.('.cm-line');
+    let sourceLine=view.state.doc.lineAt(offset).number;
+    if(clickedLine&&view.contentDOM.contains(clickedLine)){
+      const domLine=view.state.doc.lineAt(view.posAtDOM(clickedLine,0));
+      sourceLine=domLine.number;
+      if(view.state.doc.lineAt(offset).number!==sourceLine)offset=domLine.from;
+    }
     const elementId=moduleSelector.value==='text-block'?
       cmdPort?.blockIdAtSourceLine(sourceLine)??null:null;
     publishFocus({sourceLine,sourceOffset:offset,origin:'cm6',
