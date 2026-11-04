@@ -58,8 +58,8 @@ try{
           const target=page.locator(`.ocr-pdf-block-fragment[data-subblock-id="${spec.target}"]`);
           await from.waitFor({state:'attached',timeout:50000});
           await target.scrollIntoViewIfNeeded({timeout:35000});
-          const fr=await from.boundingBox(),bbox=await target.boundingBox();
-          assert(fr&&bbox,'child label and physical target bbox visible');
+          const fr=await from.boundingBox();
+          assert(fr,'child label visible');
           const physicalNode=page.locator(`.ocr-pdf-block-cover[data-block-id="${spec.parent}"] > .ocr-pdf-block-fragment`)
             .filter({has:page.locator(`.ocr-pdf-subblock-chip[data-part-index="${spec.physical}"]`)});
           const physicalBefore=await physicalNode.evaluate(el=>({
@@ -67,9 +67,24 @@ try{
           const touch={bubbles:true,pointerType:'touch',button:0,isPrimary:true,pointerId:787};
           await from.dispatchEvent('pointerdown',{...touch,...center(fr)});
           await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:8000});
-          await page.locator('body').dispatchEvent('pointermove',{...touch,...center(bbox)});
           const guide=page.locator('.ocr-pdf-block-drop-guide');
-          await guide.waitFor({state:'attached',timeout:8000});
+          // WebKit may finish PDF.js viewport layout during the long press.
+          // Always re-hit the CURRENT real bbox, never a pre-press coordinate.
+          for(let attempt=0;attempt<4&&!(await guide.count());attempt++){
+            const rect=await target.boundingBox();assert(rect);
+            await page.locator('body').dispatchEvent('pointermove',{...touch,...center(rect)});
+            if(!(await guide.count()))await page.waitForTimeout(180);
+          }
+          try{await guide.waitFor({state:'attached',timeout:8000});}
+          catch(error){
+            console.log('CHILD_HIT_DIAG',name,spec,await page.evaluate(()=>({
+              global:document.querySelector('#status')?.textContent,
+              pdf:document.querySelector('.ocr-pdf-status')?.textContent,
+              drag:document.querySelector('.ocr-pdf-block-drag-source')?.outerHTML.slice(0,180),
+              cover:document.querySelector('.ocr-pdf-block-drop-target')?.dataset.subblockId
+            })));
+            throw error;
+          }
           assert.deepEqual(await guide.locator('[data-placement]').evaluateAll(nodes=>nodes.map(n=>n.dataset.placement)),
             ['before','after'],'child sibling rail must offer only before and after');
           const zone=await guide.locator(`[data-placement="${spec.placement}"]`).boundingBox();assert(zone);

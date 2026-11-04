@@ -921,6 +921,9 @@ export class PdfPreview {
     this.scroller.style.scrollBehavior='auto';
     const tick=()=>{
       if(this.blockDrag!==item||!item.active){this.stopBlockDragScroll();return;}
+      // A stationary long press near a page edge is NOT an intent to scroll.
+      // Auto-scroll only after the finger actually starts dragging.
+      if(Math.hypot(item.x-item.startX,item.y-item.startY)<12)return;
       const pane=this.scroller.getBoundingClientRect();
       if(item.x>=pane.left&&item.x<=pane.right&&
         item.y>=pane.top&&item.y<=pane.bottom){
