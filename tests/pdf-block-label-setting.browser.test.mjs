@@ -42,9 +42,12 @@ const activateTextBlocks=async page=>{
   await page.waitForFunction(()=>document.querySelector('#module-select')?.value==='text-block');
 };
 const readWidth=async page=>{
-  await tag(page,'p1b3').scrollIntoViewIfNeeded({timeout:35000});
-  const bbox=await tag(page,'p1b3').boundingBox();assert(bbox);
-  return bbox.width;
+  await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]')
+    .scrollIntoViewIfNeeded({timeout:35000});
+  await tag(page,'p1b3').waitFor({state:'attached',timeout:35000});
+  // A dense rail can represent this label via a group button. The DOM-owned
+  // original keeps its proper physical size even when temporarily hidden.
+  return tag(page,'p1b3').evaluate(el=>el.getBoundingClientRect().width);
 };
 const cleanRails=page=>page.evaluate(()=>{
   const root=document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')?.closest('.page');
@@ -165,7 +168,8 @@ try{
         // the comfortable 1.5x size. Every leader must be an independent
         // one-to-one segment, with an obvious iPad tap spotlight.
         const firstPageLabel=tag(page,'p0b7');
-        await firstPageLabel.scrollIntoViewIfNeeded({timeout:35000});
+        await page.locator('.ocr-pdf-block-cover[data-block-id="p0b7"]')
+          .scrollIntoViewIfNeeded({timeout:35000});
         const firstPage=page.locator('.page[data-page-number="1"]');
         const directPath=firstPage.locator('svg.ocr-pdf-label-leaders path[data-pbs-id="p0b7"]');
         await directPath.waitFor({state:'attached',timeout:30000});

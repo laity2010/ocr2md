@@ -1474,8 +1474,33 @@ export class PdfPreview {
       // narrow gutters, but never throw tags out into the workspace void.
       const geometry=layoutPDFEdgeRails(desired,{pageWidth:width,
         pageHeight:height,covers:group.covers});
+      const groups=planPDFRailDensityGroups(geometry.slots);
+      const hiddenIds=new Set(),groupBadgeItems=[];
+      const usedGroupKeys=new Set();
+      const slotById=new Map(geometry.slots.map(slot=>[slot.id,slot]));
+      for(const cluster of groups){
+        const key=`${page.dataset.pageNumber}:${cluster.key}`;
+        usedGroupKeys.add(key);
+        if(this.expandedRailGroupKey===key)continue;
+        for(const id of cluster.ids)hiddenIds.add(id);
+        const anchors=cluster.ids.map(id=>slotById.get(id)?.anchorY||cluster.slot.anchorY);
+        const badgeId=`pdf-rail-group:${key}`;
+        groupBadgeItems.push({id:badgeId,side:cluster.side,
+          kind:'summary',width:Math.max(27,cluster.slot.width),
+          height:Math.max(21,cluster.slot.height),
+          anchorY:anchors.reduce((a,b)=>a+b,0)/anchors.length,
+          target:cluster.slot.target});
+      }
+      // A summary badge is a first-class item in the SAME gutter solver.
+      // Reserving the first hidden member's old position directly caused two
+      // badge-vs-live-label collisions in the real page-1 Chrome screenshot.
+      const packed=layoutPDFEdgeRails([
+        ...desired.filter(item=>!hiddenIds.has(item.id)),...groupBadgeItems],
+      {pageWidth:width,pageHeight:height,covers:group.covers});
+      for(const slot of packed.slots)slotById.set(slot.id,slot);
       const all=new Map(group.items.map(item=>[item.id,item]));
-      for(const slot of geometry.slots){
+      for(const slot of slotById.values()){
+        if(!all.has(slot.id))continue;
         const item=all.get(slot.id);if(!item)continue;
         const {chip,owner}=item;
         const ownerRect=item.kind==='child'&&owner.classList.contains('ocr-pdf-block-fragment')?
@@ -1507,13 +1532,8 @@ export class PdfPreview {
       const anchors=geometry.slots.map(slot=>slot.anchorY).sort((a,b)=>a-b);
       const dense=anchors.some((y,i)=>i+5<anchors.length&&anchors[i+5]-y<240);
       page.classList.toggle('ocr-pdf-rail-dense',dense);
-      // Reduce clutter on dense pages without shrinking the comfortable
-      // 1.5× target size. Clusters are PAGE-ONLY presentation: none of the
-      // real labels, CMD IDs or original PDF bboxes is removed. A badge tap
-      // expands one group; tapping paper (or Escape) collapses it again.
-      const groups=planPDFRailDensityGroups(geometry.slots);
-      const hiddenIds=new Set();
-      const usedGroupKeys=new Set();
+      // Busy runs become paper-edge groups; source labels remain intact and
+      // one group at a time expands to their original 1.5× tap targets.
       const oldGroupButtons=new Map([...page.querySelectorAll(':scope > button.ocr-pdf-rail-group')]
         .map(btn=>[btn.dataset.groupKey,btn]));
       for(const cluster of groups){
@@ -1542,13 +1562,15 @@ export class PdfPreview {
         badge.title=`展开 ${cluster.ids.length} 个标签：${cluster.ids.join('、')}`;
         badge.setAttribute('aria-label',badge.title);
         badge.setAttribute('aria-expanded',String(open));
-        // Occupy exactly the old first label's already collision-free slot.
-        // Do not borrow space outside the paper or overlap OCR rectangles.
-        const slot=cluster.slot;
-        badge.style.left=`${slot.left.toFixed(2)}px`;
-        badge.style.top=`${slot.top.toFixed(2)}px`;
-        badge.style.width=`${slot.width.toFixed(2)}px`;
-        badge.style.height=`${slot.height.toFixed(2)}px`;
+        // Final page-wide packing includes all visible original IDs AND
+        // closed group badges, so none of them can intersect each other.
+        const slot=slotById.get(`pdf-rail-group:${key}`);
+        if(slot){
+          badge.style.left=`${slot.left.toFixed(2)}px`;
+          badge.style.top=`${slot.top.toFixed(2)}px`;
+          badge.style.width=`${slot.width.toFixed(2)}px`;
+          badge.style.height=`${slot.height.toFixed(2)}px`;
+        }
       }
       for(const [key,button] of oldGroupButtons)
         if(!usedGroupKeys.has(key))button.remove();
@@ -1557,7 +1579,13 @@ export class PdfPreview {
       // same long-press, AG navigation and CMD edit flows remain available.
       for(const item of group.items)
         item.chip.classList.toggle('ocr-pdf-rail-group-collapsed',hiddenIds.has(item.id));
-      for(const line of geometry.leaders){
+      // Hidden originals keep their one-to-one path in DOM (not painted);
+      // visible originals use the SECOND packing's true y and x positions.
+      const displayLines=[
+        ...packed.leaders.filter(line=>!line.id.startsWith('pdf-rail-group:')),
+        ...geometry.leaders.filter(line=>hiddenIds.has(line.id))
+      ];
+      for(const line of displayLines){
         const path=document.createElementNS(ns,'path');
         path.setAttribute('d',line.path);
         path.setAttribute('data-pbs-id',line.id);
