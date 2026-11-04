@@ -80,13 +80,18 @@ const liveMainDevBuild = /^v6-\d{8}-\d{6}$/.test(currentBuild);
 let documentLabel='Buffett’s Alpha.minerujson.md';
 let statusMessage='正在加载';
 let agStatusSummary='';
+let textBlockSummary='';
 let statusKind='ok';
 let documentLines=null,documentChars=null;
 
 function renderGlobalStatus() {
   const store=viewStore.getState();
   const segments=[statusMessage];
-  if(agStatusSummary)segments.push(agStatusSummary);
+  // Ambient module counts belong in the SAME status line but never replace
+  // the most recent user operation (e.g. PDF selection or text extraction).
+  if($('module-select')?.value==='text-block'&&textBlockSummary)
+    segments.push(textBlockSummary);
+  else if(agStatusSummary)segments.push(agStatusSummary);
   if(documentLines!==null && documentChars!==null)
     segments.push(`${documentLines.toLocaleString()}行 / ${documentChars.toLocaleString()}字`);
   if(store.outlineCount!==null)
@@ -429,7 +434,13 @@ async function main() {
   workspace = createWorkspace($('workspace'), () => view?.state.doc.toString() || '', () => view, () => cmdPort??cm, (message,kind)=>{
     if(hasUnsavedEdits()&&kind!=='error')status('● 未保存 · '+message,'warning');
     else status(message,kind);
-  },wcpRuntime,documentLabel,$('text-block-actions'));
+  },wcpRuntime,documentLabel,$('text-block-actions'),message=>{
+    const next=String(message||'');
+    if(next!==textBlockSummary){
+      textBlockSummary=next;
+      if($('module-select')?.value==='text-block')renderGlobalStatus();
+    }
+  });
   registerOutlineTitleScaleSetting(settings,value=>workspace.setOutlineTitleFontScale(value));
   registerPDFBlockLabelScaleSetting(settings,value=>workspace.setPDFBlockLabelScale(value));
   const nativeIOSSelection=isIOSWebKit();

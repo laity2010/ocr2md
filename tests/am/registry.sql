@@ -1584,3 +1584,12 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TEXT-RESTORE-P25','P25','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit: PDF text button restored, enable-on-select, single undoable insertion, Shell-only status, no auto-save','integration'),
  ('TC-AG-GLOBAL-L83','L83','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG summary rendered in #status, former separate AG and PDF status spans hidden','integration');
+
+-- Ambient text-block AG inventory counts must not overwrite the user's
+-- latest PDF/CM6 operation message within the unified Shell status line.
+INSERT INTO apis VALUES
+ ('L84','L','createWorkspace.onTextBlockSummary','ui/workspace.js','constructor-callback','text-block AG inventory and active page diagnostic summary','append a read-only Shell global-status segment without replacing operation message','no DOM status writes from AG and no duplicate visible status row',1);
+INSERT INTO access_edges VALUES
+ ('X-TEXTBLOCK-GLOBAL-L84','L','L','ui/main.js','createWorkspace(...,onTextBlockSummary)','L84','registered','Shell owns final status text, Workspace forwards only module summary string');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-TEXTBLOCK-STATUS-L84','L84','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit AG scan summary appended to Shell status while latest PDF action stays primary','integration');

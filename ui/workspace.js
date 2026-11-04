@@ -77,6 +77,7 @@ let blockChainAction=()=>Promise.reject(Error('CMD 块链尚未准备好'));
 let markSubblocksAction=()=>Promise.reject(Error('CMD 尚未准备好'));
 let insertPDFText=()=>Promise.reject(Error('CMD 尚未准备好'));
 let refreshTextBlockInventory=()=>{};
+let reportTextBlockSummary=()=>{};
 let mdTextBlockCoverageEnabled=false;
 let pdfTextBlockCoverageEnabled=true;
 
@@ -132,7 +133,8 @@ class OutlinePanel {
         if(!currentPreview?.pdfUsable){reportMediaStatus('PDF 预热中，双框暂不可用');return;}
         currentPreview.setMode('pdf');
         void currentPreview.compareOriginalBlocks(selection.from,selection.to,selection.reveal);
-      },textBlockActionHost,()=>markSubblocksAction(),(action,request)=>blockChainAction(action,request));
+      },textBlockActionHost,()=>markSubblocksAction(),(action,request)=>blockChainAction(action,request),
+      (message,kind)=>reportTextBlockSummary(message,kind));
     // Only scalar/immutable chapter projections cross WCP: no raw AG API or
     // CMD editor objects leave Layout's ownership boundary.
     const bridge=Object.freeze({
@@ -665,7 +667,7 @@ class DetachedPdfPanel {
   }
 }
 
-export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null,documentName=null,textBlockActionsHost=null) {
+export function createWorkspace(container, getDocument, getCurrentEditor, getCommandDocument, mediaStatus=()=>{},runtime=null,documentName=null,textBlockActionsHost=null,onTextBlockSummary=()=>{}) {
   let unlockGeometry;
   const ready=new Promise(resolve=>{unlockGeometry=resolve;});
   geometryReady=()=>ready.then(()=>getCMD().queryLayout());
@@ -675,6 +677,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
   getEditor=getCurrentEditor;
   getCMD=getCommandDocument;
   reportMediaStatus=mediaStatus;
+  reportTextBlockSummary=onTextBlockSummary;
   if(!(textBlockActionsHost instanceof HTMLElement)||textBlockActionsHost.dataset.module!=='text-block')
     throw Error('文本块模块需要 Shell 提供功能菜单容器');
   textBlockActionHost=textBlockActionsHost;

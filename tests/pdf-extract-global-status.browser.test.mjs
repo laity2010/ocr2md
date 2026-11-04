@@ -61,10 +61,17 @@ try{
         assert.match(await extract.getAttribute('title'),/原文字层 .* 字符/);
         assert.equal(await page.locator('.ocr-pdf-status').evaluate(el=>getComputedStyle(el).display),'none');
         assert.equal(await page.locator('.ocr-global-ag-status').evaluate(el=>getComputedStyle(el).display),'none');
-        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PDF · p1b9'),
-          null,{timeout:16000});
-        assert.equal((await page.locator('#status').textContent()).includes('CMD ·'),true,
-          'AG count is now part of the one global status line');
+        try{await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PDF · p1b9'),
+          null,{timeout:6500});}catch(error){
+          const debug=await page.evaluate(()=>({global:document.querySelector('#status')?.textContent?.slice(0,520),
+            pdf:document.querySelector('.ocr-pdf-status')?.textContent,
+            active:document.querySelector('.ocr-preview-pane')?.dataset.previewMode,
+            ag:document.querySelector('.ocr-global-ag-status')?.textContent,
+            extract:document.querySelector('.ocr-pdf-extract-text')?.disabled}));
+          console.error('PDF_GLOBAL_STATUS_DIAG',name,JSON.stringify({debug,errors}));throw error;
+        }
+        assert.equal((await page.locator('#status').textContent()).includes('文本块：'),true,
+          'text-block AG summary is now part of the one global status line');
         await extract.evaluate(el=>el.click());
         try{await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('PDF · 已提取'),
           null,{timeout:12000});}catch(error){

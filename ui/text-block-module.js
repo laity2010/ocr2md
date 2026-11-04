@@ -11,7 +11,7 @@ const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f38
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',rowHoverColor:'#37464b',fontSize:13,
   selectedRowBackgroundColor:'rgba(225,161,66,.15)',fontFamily:'"OCR2MD Sarasa",monospace',spacing:3});
-export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{},onCompare=()=>{},actionsHost,onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好')),onChainAction=()=>Promise.reject(Error('CMD 块链操作不可用'))){
+export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMissing=()=>{},onCompare=()=>{},actionsHost,onMarkSubblocks=()=>Promise.reject(Error('CMD 尚未准备好')),onChainAction=()=>Promise.reject(Error('CMD 块链操作不可用')),onSummary=()=>{}){
   host.classList.add('ocr-text-block-pane');
   if(!(actionsHost instanceof HTMLElement)||actionsHost.dataset.module!=='text-block')
     throw Error('文本块模块功能需挂载至现有 AG 功能菜单');
@@ -453,7 +453,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       ` · AG ${pageDescription} ${pageRowCount} 块`+
       ` · 未知锚点 ${report.unknown}`+(report.invalidBCMarks?` · 无效 BC 标签 ${report.invalidBCMarks}`:'')+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
-    if(active)onStatus('文本块：父块跨页「之前」「作为子块」「之后」可用，其他结构操作只读 · '+(mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
+    if(active)onSummary('文本块：父块跨页「之前」「作为子块」「之后」可用，其他结构操作只读 · '+(mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
   };
   updateGrid();
   return Object.freeze({
