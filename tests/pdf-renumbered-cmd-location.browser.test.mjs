@@ -39,8 +39,9 @@ async function verify(page,id,origin,locator){
   const targetLine=expected.contentLine??expected.sourceLine;
   await page.waitForFunction(expected=>{
     const status=document.querySelector('.ocr-pdf-status')?.textContent||'';
-    return status.includes(expected.id)&&status.includes(`第 ${expected.line} 行`);
-  },{id,line:targetLine},{timeout:19000});
+    return status.includes(expected.id)&&(status.includes(`第 ${expected.line} 行`)
+      ||expected.structureOnly&&status.includes('仅有结构标签'));
+  },{id,line:targetLine,structureOnly:expected.contentLine===null},{timeout:19000});
   const lineText=source.split('\n')[targetLine-1]?.trim();
   await page.waitForFunction(text=>{
     const highlighted=document.querySelector('#editor .cm-outline-focused-line');
