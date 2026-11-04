@@ -98,7 +98,17 @@ try{
           assert((await page.locator('.ocr-pdf-status').textContent()).includes(test.B));
           const spot=await rail.locator('[data-placement="after"]').boundingBox();assert(spot);
           await page.locator('body').dispatchEvent('pointermove',{...touch,...center(spot)});
+          console.log('AFTER_DROP_AIM',name,test.name,
+            await page.locator('.ocr-pdf-status').textContent(),
+            await rail.getAttribute('data-placement'));
           await page.locator('body').dispatchEvent('pointerup',{...touch,...center(spot)});
+          await page.waitForTimeout(1700);
+          console.log('AFTER_DROP_STATUS',name,test.name,{
+            pdf:await page.locator('.ocr-pdf-status').textContent(),
+            global:await page.locator('#status').textContent(),
+            ids:await page.locator('.ocr-pdf-block-cover[data-block-id^="p1b"]').count(),
+            new:await cover(page,test.newId).count(),original:await cover(page,test.A).count(),
+            shifted:await cover(page,test.shift).count()});
           await page.waitForFunction(([A,newId,shift,B])=>{
             const find=id=>document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"]`);
             return !find(A)&&find(newId)&&find(shift)&&find(B);
