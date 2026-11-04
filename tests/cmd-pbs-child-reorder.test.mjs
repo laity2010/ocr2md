@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {planCMDReorderPBSChildren,readCMDBlockChains,
-  projectCMDBlockTable} from '../ui/cmd-block-chains.js';
+  projectCMDBlockTable,planCMDAbsorbReviewedParent} from '../ui/cmd-block-chains.js';
 import {readCMDPBSLocations} from '../ui/cmd-pbs-locations.js';
 import {resolvePDFFragmentId} from '../ui/pdf-pbs-fragment-id.js';
 import {inspectCMDTextBlocks,queryCMDLayout} from '../ui/cmd-text-blocks.js';
@@ -63,3 +63,19 @@ const nativeChildren=Object.fromEntries(rows.filter(x=>x.kind==='child'&&x.paren
 assert.equal(resolvePDFFragmentId({nativeChildren},{path:[2],role:'note'},'p4b0s2'),'p4b0s0');
 assert.equal(resolvePDFFragmentId({nativeChildren},{path:[0],role:'caption'},'p4b0s0'),'p4b0s1');
 console.log('CMD_SAME_PARENT_CHILD_INSERT_BEFORE_AFTER_PASS');
+
+// p13b1s3 has physical origin p13b0, a formerly independent OCR parent.
+// It has its own PDF cover, not a native .ocr-pdf-block-fragment chip.
+const absorbed=apply(original,planCMDAbsorbReviewedParent(original,'p13b0','p13b1'));
+for(const [a,b,position,nextId] of [
+  ['p13b1s3','p13b1s0','before','p13b1s0'],
+  ['p13b1s0','p13b1s3','after','p13b1s3']]){
+  const plan=planCMDReorderPBSChildren(absorbed,a,b,position);
+  const result=apply(absorbed,plan),model=readCMDBlockChains(result);
+  assert.deepEqual(model.invalid,[]);
+  assert.equal(tail(result),tail(absorbed));
+  assert.equal(plan.newId,nextId);
+  assert.equal(model.atoms.find(x=>x.origin==='p13b0')?.id,
+    position==='before'?'p13b1s0':'p13b1s2');
+}
+console.log('CMD_ABSORBED_PARENT_CHILD_INSERT_PASS');

@@ -980,8 +980,15 @@ export class PdfPreview {
       const pageId=node.dataset.pdfPage,rootId=node.dataset.blockId;
       // The original PDF bbox, including its full interior, is the hit area.
       // Gutter chips are not part of the bbox and never steal a drag target.
-      if(!childDrag)candidates.push({node,id:rootId,rootId,
-        kind:node.classList.contains('ocr-pdf-block-is-child')?'child':'parent',
+      // Absorbing a whole OCR parent creates a logical direct child backed by
+      // its OWN full parent bbox (e.g. p13b1s3 from physical p13b0). It has
+      // no native .ocr-pdf-block-fragment, so it must participate as a child
+      // COVER hit in the same-parent before/after workflow.
+      const childCover=childDrag&&node.classList.contains('ocr-pdf-block-child-cover')&&
+        /^p\d+b\d+s\d+$/.test(rootId)&&rootId.startsWith(siblingPrefix)&&
+        rootId!==item.id;
+      if(!childDrag||childCover)candidates.push({node,id:rootId,rootId,
+        kind:childCover||node.classList.contains('ocr-pdf-block-is-child')?'child':'parent',
         pageId,rect:node.getBoundingClientRect()});
       for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
         if(fragment.hidden)continue;
@@ -1264,7 +1271,10 @@ export class PdfPreview {
         input.setAttribute('aria-label',`文本块 ${row.id} 独立`);
         const badge=document.createElement('span');badge.textContent=row.id;
         ctrl.append(input,badge);node.append(ctrl);
-        if(!this.readOnly||/^p\d+b\d+$/.test(row.id))
+        // Native children use the fragment chip. Absorbed original parents
+        // instead appear as a logical child cover with a parent-shaped chip;
+        // its p...sN ID is still a direct child and must be draggable.
+        if(!this.readOnly||/^p\d+b\d+$/.test(row.id)||row.isChildCover)
           ctrl.addEventListener('pointerdown',e=>this.armBlockDrag(e,ctrl,row.id));
         // Preserve long-press move: a dragged label's release never counts as
         // one of the three taps. All changes still go through CMD's API.

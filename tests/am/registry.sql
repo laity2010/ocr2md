@@ -1638,3 +1638,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CHILD-REORDER-C120','C120','tests/cmd-pbs-child-reorder.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','before/after insertion stable native physical origins, full scopes, PDF geometry, 0 sealed evidence edits','direct'),
  ('TC-CHILD-REORDER-C121','C121','tests/cmd-pbs-child-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','actual Chrome/WebKit child drag commits one undoable source plus footer edit with consistent AG/PDF label','integration'),
  ('TC-CHILD-REORDER-P40','P40','tests/cmd-pbs-child-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','same-parent two-position guide, foreign parent drop rejected, actual subblock chip pointer capture','integration');
+
+-- Regression: an absorbed OCR parent is a current direct child with its own
+-- original full-block PDF cover, not a native fragment (p13b1s3 <- p13b0).
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-CHILD-ABSORBED-C121','C121','tests/cmd-pbs-absorbed-child-cover.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','absorbed child cover can be drag source and target; current sN and physical source origin stay consistent through one Undo','integration'),
+ ('TC-CHILD-ABSORBED-P40','P40','tests/cmd-pbs-absorbed-child-cover.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit same-parent before/after rail for physical parent-backed child cover','integration');
