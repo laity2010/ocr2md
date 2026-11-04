@@ -1572,3 +1572,15 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-FOCUS-L82','L82','tests/pdf-renumbered-cmd-location.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','current source-line map remains one-to-one across after insertion, absorbed child and promotion','direct'),
  ('TC-PDF-FOCUS-P24','P24','tests/pdf-renumbered-cmd-location.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit PDF badge and canvas select current PBS tag/source body, not physical origin; no user document writes','integration');
+
+-- PDF extraction remains a text-only CMD capability while PBS structural
+-- editing is locked. All user-facing module feedback converges at Shell status.
+INSERT INTO apis VALUES
+ ('P25','P','PdfPreview.onStatus','ui/pdf-preview.js','constructor-callback','PDF operation message and severity','reports through Workspace-owned status callback','no second visible PDF status bar; does not mutate CMD or bypass read-only PBS structure',1),
+ ('L83','L','modulePort.setAgStatusSummary','ui/main.js','module-port','module CMD scope and count summary string','append summary inside Shell global #status','AG toolbar does not mount visible duplicate status line',1);
+INSERT INTO access_edges VALUES
+ ('X-PDF-TEXT-STATUS-P25','P','L','ui/workspace.js','new PdfPreview(...,onStatus=>reportMediaStatus)','P25','registered','PDF reports display-only event via Workspace status port'),
+ ('X-AG-GLOBAL-L83','L','L','ui/wcp-ag-module-toolbar.js','modulePort.setAgStatusSummary(summary)','L83','registered','AG summary uses semantic Shell module port, not DOM status write');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-TEXT-RESTORE-P25','P25','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit: PDF text button restored, enable-on-select, single undoable insertion, Shell-only status, no auto-save','integration'),
+ ('TC-AG-GLOBAL-L83','L83','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','AG summary rendered in #status, former separate AG and PDF status spans hidden','integration');

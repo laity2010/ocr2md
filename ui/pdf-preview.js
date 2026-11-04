@@ -62,7 +62,7 @@ export class PdfPreview {
     onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好')),
     onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好')),
     onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好')),
-    onCurrentPageChange=()=>{}){
+    onCurrentPageChange=()=>{},onStatus=()=>{}){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -74,6 +74,7 @@ export class PdfPreview {
     this.onBlockReparent=onBlockReparent;
     this.onPromoteChild=onPromoteChild;
     this.onCurrentPageChange=onCurrentPageChange;
+    this.onStatus=onStatus;
     this.readOnly=TEXT_BLOCKS_READ_ONLY;
     this.blockLabelScale=1;
     this.host.classList.add('ocr-pdf-pane');
@@ -102,8 +103,10 @@ export class PdfPreview {
     this.extractButton.addEventListener('click',()=>void this.insertSelectedPDFText());
     this.promoteButton=this.toolbar.querySelector('.ocr-pdf-promote-child');
     this.promoteButton.addEventListener('click',()=>void this.promoteSelectedChild());
+    // Structural PBS editing stays read-only, but extracting original PDF
+    // text into the CM6 caret is a separate undoable text-edit capability.
+    // Never hide extraction merely because parent/child structure is locked.
     if(this.readOnly){
-      this.extractButton.hidden=true;this.extractButton.disabled=true;
       this.promoteButton.hidden=true;this.promoteButton.disabled=true;
     }
     this.toolbar.querySelector('.ocr-pdf-minus').addEventListener('click',()=>this.zoomStep(-1));
@@ -220,6 +223,8 @@ export class PdfPreview {
     // Merely opening the PDF preview never performs source-line navigation.
     // If an explicit click arrived while PDF was hidden, reveal its anchor.
     if(this.active){
+      if(this.statusNode.textContent&&this.statusNode.textContent!=='加载中')
+        this.onStatus('PDF · '+this.statusNode.textContent);
       if(this.revealPending)this.scheduleOverlay();
       // Global Settings may have changed while this PDF pane was display:none.
       // Relayout once the page has a measured width again.
@@ -233,12 +238,18 @@ export class PdfPreview {
     // received while hidden; the selection is already in PDF coordinates.
     if(this.revealPending)this.scheduleOverlay();
   }
-  setStatus(s){this.statusNode.textContent=s;this.statusNode.title=s;}
+  setStatus(s){
+    // Keep the private text node for diagnostic/legacy tests, but never show
+    // a second visible status bar inside PDF. All operational feedback is
+    // published through the Workspace -> Shell global status callback.
+    this.statusNode.textContent=s;this.statusNode.title=s;
+    const kind=/失败|错误|失效|无效/.test(s)?'error':'ok';
+    if(this.active||kind==='error')this.onStatus('PDF · '+s,kind);
+  }
   async prepareSelectedPDFText(){
     const token=++this.textExtractToken;
     this.extractReady=null;
     this.extractButton.disabled=true;
-    if(this.readOnly)return;
     this.extractButton.title='当前 PDF 块没有可提取的原文字层文本';
     const chosen=this.selected;
     if(!this.pdf||!chosen||this.disposed)return;
@@ -321,7 +332,6 @@ export class PdfPreview {
     finally{if(!this.disposed)this.updatePromoteButton();}
   }
   async insertSelectedPDFText(){
-    if(this.readOnly)return;
     const item=this.extractReady;
     if(!item||this.extractButton.disabled||this.disposed||
       this.selected?.pageIndex!==item.pageIndex||this.selected?.blockIndex!==item.blockIndex||

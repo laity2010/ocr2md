@@ -8,7 +8,7 @@
 .ocr-pdf-page {width:43px;height:24px;font-size:12px;padding:1px 2px;
   border:1px solid #617077;background:#1d272e;color:#d3c6aa;text-align:center}
 .ocr-pdf-count,.ocr-pdf-zoom {font-size:11px;font-variant-numeric:tabular-nums}
-.ocr-pdf-status {font-size:11px;color:#9db19f;overflow:hidden;text-overflow:ellipsis}
+.ocr-pdf-status {display:none!important} /* Shell global #status is the only visible status */
 .ocr-pdf-scroller {position:absolute;top:32px;left:0;right:0;bottom:0;
   overflow:auto;direction:ltr;scroll-behavior:smooth;overscroll-behavior:contain;
   --scale-factor:1;scrollbar-color:#52605f #263136}

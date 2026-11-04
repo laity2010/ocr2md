@@ -88,7 +88,8 @@ try{
         assert.equal(controls.readOnly,true);
         assert.equal(controls.agDrag,0);
         assert.equal(controls.checkboxDisplay,'none');
-        assert.equal(controls.extractHidden,true);
+        assert.equal(controls.extractHidden,false,
+          'PDF original text extraction is independent of structural PBS read-only mode');
         assert.equal(controls.promoteHidden,true);
         assert.equal(controls.hasDragArrow,false);
         for(const namePart of ['并入','拆链','合并','移动','独立成链','坐标','迁移旧标签',

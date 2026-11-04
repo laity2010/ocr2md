@@ -90,3 +90,7 @@
   width:16px;height:16px;min-width:16px;padding:0;margin:0;
   accent-color:#8fbd9c;flex:none;
 }
+
+/* AG diagnostics are retained for compatibility, but all user-visible
+ * summaries are now inside the Shell's single global #status line. */
+.ocr-global-ag-status {display:none!important}

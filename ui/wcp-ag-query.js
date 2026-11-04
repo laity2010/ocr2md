@@ -6,7 +6,7 @@ import {viewStore,publishFocus} from './view-store.js';
 
 const TYPE=Object.freeze({'text-block':'text-block','chapter-boundary':'heading',media:'media',latex:'latex',note:'note',html:'html',spellcheck:'spellcheck','illegal-break':'illegal-break',sentence:'sentence'});
 const gridType=Object.freeze({'text-block':'text-block',outline:'heading',media:'media',latex:'latex',note:'note',html:'html',spellcheck:'spellcheck','illegal-break':'illegal-break',sentence:'sentence'});
-export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isPhysicalChapter,isIndexMode}){
+export function mountVirtualAgQuery({checkbox,chapterSelect,status,onSummary=()=>{},getModule,isPhysicalChapter,isIndexMode}){
   let bridge=null,sourcePort=null,unsubscribe=null,disposed=false,index=null;
   let priorScope=null,updateTimer=null;
   const enabled=()=>!isPhysicalChapter()&&isIndexMode();
@@ -26,7 +26,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
   const refreshIndex=()=>{
     if(!sourcePort)return null;
     try{index=sourcePort.get();return index;}catch(error){
-      index=null;status.textContent='CMD 索引失败：'+error.message;return null;
+      index=null;status.textContent='CMD 索引失败：'+error.message;onSummary(status.textContent);return null;
     }
   };
   function scopedKeys(type){
@@ -103,6 +103,10 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,getModule,isP
         state.queryElements({chapter,type}).length;
       status.textContent='CMD · '+(chapter==='all'?'全部章节':state.getChapter(chapter)?.number||'—')+' · '+count+' 项';
     }
+    // AG contributes one summary segment to the Shell's existing status,
+    // not an additional visible sibling banner. It never replaces operation
+    // outcomes or silently changes the current CMD filter state.
+    onSummary(isPhysicalChapter()||!type?'':status.textContent);
   }
   const populate=()=>{
     const state=refreshIndex();if(!state)return;

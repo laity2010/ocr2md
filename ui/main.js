@@ -79,12 +79,14 @@ const liveMainDevBuild = /^v6-\d{8}-\d{6}$/.test(currentBuild);
 // footer and page footer metadata all converge here without extra UI rows.
 let documentLabel='Buffett’s Alpha.minerujson.md';
 let statusMessage='正在加载';
+let agStatusSummary='';
 let statusKind='ok';
 let documentLines=null,documentChars=null;
 
 function renderGlobalStatus() {
   const store=viewStore.getState();
   const segments=[statusMessage];
+  if(agStatusSummary)segments.push(agStatusSummary);
   if(documentLines!==null && documentChars!==null)
     segments.push(`${documentLines.toLocaleString()}行 / ${documentChars.toLocaleString()}字`);
   if(store.outlineCount!==null)
@@ -404,6 +406,10 @@ async function main() {
     mountSelector:parent=>parent.append(moduleSelector),
     mountActionGroups:parent=>parent.append(...document.querySelectorAll('.module-actions[data-module]')),
     mountAgStatus:element=>$('status').after(element),
+    setAgStatusSummary:summary=>{
+      const next=String(summary||'');
+      if(next!==agStatusSummary){agStatusSummary=next;renderGlobalStatus();}
+    },
     hideSelector:()=>{moduleSelector.hidden=true;},
     labelSelector:label=>moduleSelector.setAttribute('aria-label',label),
     hideLegacyExport:()=>$('export-chapters')?.setAttribute('hidden',''),
@@ -759,7 +765,10 @@ async function main() {
     return result;
   });
   workspace.setSubblockMarkAction(rejectTextBlockEdit);
-  workspace.setPDFTextInsertAction(rejectTextBlockEdit);
+  // This text-only, undoable CMD insertion is independent of the reviewed
+  // PBS structural read-only gate. It never auto-saves or replaces OCR text.
+  workspace.setPDFTextInsertAction(async(pageIndex,blockIndex,text)=>
+    cmdPort.insertPDFTextAtCaret(pageIndex,blockIndex,text));
   workspace.notifyCMDReady();
   workspace.mountSourceLineMenu(view,{onInsert:(plan,kind='callout')=>{
     try{

@@ -230,7 +230,8 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     enhanceNavigationSelect(chapterSelect,{kind:'virtual-chapters',search:true});
     outline.insertBefore(bar,grid);
     virtualQuery=mountVirtualAgQuery({checkbox:allToggle,chapterSelect,
-      status:allStatus,getModule:()=>modulePort.getModule(),
+      status:allStatus,onSummary:summary=>modulePort.setAgStatusSummary(summary),
+      getModule:()=>modulePort.getModule(),
       isPhysicalChapter:()=>Boolean(chapter),isIndexMode:()=>virtualMode});
     refresh();
     // Startup may have deep-linked directly into a chapter. The mainline's

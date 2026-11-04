@@ -340,7 +340,8 @@ class PreviewPanel {
       (id,bbox,snapshot)=>pdfBBoxAction(id,bbox,snapshot),
       (sourceId,targetId)=>blockChainAction('reparent',{memberId:sourceId,targetId}),
       childId=>blockChainAction('promote-child',{childId}),
-      pageNumber=>currentOutline?.textBlock?.setCurrentPDFPage(pageNumber));
+      pageNumber=>currentOutline?.textBlock?.setCurrentPDFPage(pageNumber),
+      (message,kind)=>reportMediaStatus(message,kind));
     this.pdf.setBlockLabelScale(pdfBlockLabelScale);
     this.pdf.moveToolbarTo(this.pdfTools);
     currentPdf=this;
