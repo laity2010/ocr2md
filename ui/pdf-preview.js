@@ -876,6 +876,16 @@ export class PdfPreview {
     this.scroller.style.scrollBehavior='auto';
     const tick=()=>{
       if(this.blockDrag!==item||!item.active){this.stopBlockDragScroll();return;}
+      // Once a PDF coverage box has been captured and its action rail is
+      // visible, scrolling near the pane edge must pause *while the finger
+      // travels from that box to its rail*. Otherwise a bottom-page target
+      // scrolls away under a stationary finger: the AFTER landing switches
+      // to another cover/CHILD even though the user never changed intent.
+      // Outside this short handoff corridor scrolling resumes, preserving
+      // cross-page drag navigation.
+      if(item.target?.isConnected&&item.guide?.isConnected&&
+        pdfDropGuideCorridor(item.x,item.y,
+          item.target.getBoundingClientRect(),item.guide.getBoundingClientRect()))return;
       const pane=this.scroller.getBoundingClientRect();
       if(item.x>=pane.left&&item.x<=pane.right&&
         item.y>=pane.top&&item.y<=pane.bottom){
