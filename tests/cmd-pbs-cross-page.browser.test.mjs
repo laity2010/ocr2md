@@ -91,7 +91,11 @@ try{
         await to.scrollIntoViewIfNeeded({timeout:35000});
         const tr=await to.boundingBox();assert(tr);
         assert.equal(await to.evaluate(el=>el.closest('.ocr-pdf-block-cover').dataset.pdfPage),'3');
-        await page.locator('body').dispatchEvent('pointermove',{...touch,...center(tr)});
+        const targetCover=page.locator('.ocr-pdf-block-cover[data-block-id="p2b0"]');
+        const bbox=await targetCover.boundingBox();assert(bbox);
+        await page.locator('body').dispatchEvent('pointermove',{...touch,...center(bbox)});
+        assert.equal(await targetCover.evaluate(el=>el.classList.contains('ocr-pdf-block-drop-target')),true);
+        assert.equal(await targetCover.evaluate(el=>getComputedStyle(el).outlineWidth),'3px');
         const rail=page.locator('.ocr-pdf-block-drop-guide');
         await rail.waitFor({state:'attached',timeout:7500});
         const aimedStatus=await page.locator('.ocr-pdf-status').textContent();

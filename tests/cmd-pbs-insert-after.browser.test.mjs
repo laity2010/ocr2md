@@ -89,7 +89,11 @@ try{
           }
           await to.scrollIntoViewIfNeeded({timeout:35000});
           const b=await to.boundingBox();assert(b);
-          await page.locator('body').dispatchEvent('pointermove',{...touch,...center(b)});
+          const targetCover=cover(page,test.B),bbox=await targetCover.boundingBox();assert(bbox);
+          await page.locator('body').dispatchEvent('pointermove',{...touch,...center(bbox)});
+          assert.equal(await targetCover.evaluate(el=>el.classList.contains('ocr-pdf-block-drop-target')),true,
+            'Cover bbox, not outboard label, must be highlighted');
+          assert.equal(await targetCover.evaluate(el=>getComputedStyle(el).outlineWidth),'3px');
           const rail=page.locator('.ocr-pdf-block-drop-guide');
           await rail.waitFor({state:'attached',timeout:7500});
           assert.deepEqual(await rail.locator('[data-placement]').evaluateAll(nodes=>

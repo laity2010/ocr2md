@@ -71,7 +71,11 @@ try{
         const touch={bubbles:true,pointerId:345,pointerType:'touch',button:0,isPrimary:true};
         await from.dispatchEvent('pointerdown',{...touch,...center(fr)});
         await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:7500});
-        await page.locator('body').dispatchEvent('pointermove',{...touch,...center(tr)});
+        const targetCover=page.locator('.ocr-pdf-block-cover[data-block-id="p1b6"]');
+        const targetRect=await targetCover.boundingBox();assert(targetRect);
+        await page.locator('body').dispatchEvent('pointermove',{...touch,...center(targetRect)});
+        assert.equal(await targetCover.evaluate(el=>el.classList.contains('ocr-pdf-block-drop-target')),true);
+        assert.equal(await targetCover.evaluate(el=>getComputedStyle(el).outlineWidth),'3px');
         const rail=page.locator('.ocr-pdf-block-drop-guide');
         await rail.waitFor({state:'attached',timeout:7500});
         assert((await page.locator('.ocr-pdf-status').textContent()).includes('p1b6'));

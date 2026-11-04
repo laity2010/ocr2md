@@ -1,7 +1,7 @@
 /** Tight, zoomed and crowded PDF gutter labels: never guess a drop target.
  * These are CSS client coordinates, independent from PDF source/page scale. */
 import assert from 'node:assert/strict';
-import {pickPDFDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from '../ui/pdf-pbs-drop-hit.js';
+import {pickPDFDropTarget,pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from '../ui/pdf-pbs-drop-hit.js';
 const clip={left:0,top:0,right:900,bottom:700};
 const r=(x,y,w,h)=>({left:x,top:y,right:x+w,bottom:y+h,width:w,height:h});
 const labels=[
@@ -46,3 +46,33 @@ console.log('PDF_FIXED_LABEL_DROP_HIT_PASS');
 assert.equal(pdfDropGuideZone(100,{left:80,right:240,width:160},false,true),'child');
 assert.equal(pdfDropGuideZone(200,{left:80,right:240,width:160},false,true),'after');
 assert.equal(pdfDropGuideZone(235,{left:80,right:240,width:160},true,true),'child');
+
+// Drop acquisition must follow the ORIGINAL PDF coverage area, not a small
+// label outside that area. The hovered physical box itself is highlighted.
+const targetCover={node:{},id:'p1b4',rootId:'p1b4',pageId:'2',kind:'parent',
+  rect:r(180,150,250,180)};
+const childCover={node:{},id:'p1b4s1',rootId:'p1b4',pageId:'2',kind:'child',
+  rect:r(230,185,95,72)};
+const selfCover={node:{},id:'p1b3',rootId:'p1b3',pageId:'2',kind:'parent',
+  rect:r(175,130,100,100)};
+const coverHit=(x,y,items=[targetCover,childCover,selfCover])=>
+  pickPDFCoverDropTarget(items,{x,y,clip,pageId:null,sourceId:'p1b3'});
+assert.equal(coverHit(195,165)?.id,'p1b4','interior of parent bbox selects parent');
+assert.equal(coverHit(260,205)?.id,'p1b4s1','inner child bbox selects child');
+assert.equal(coverHit(260,205)?.node,childCover.node,'target is physical child box, not chip');
+assert.equal(coverHit(230,140),null,'outside any eligible bbox must not select a gutter label');
+assert.equal(coverHit(340,225)?.id,'p1b4','parent free space still selects parent');
+assert.equal(coverHit(188,133),null,'source bbox is excluded');
+assert.equal(coverHit(260,205,[{...childCover,pageId:'3'}])?.id,'p1b4s1',
+  'any visible PDF page is eligible when pageId is unbounded');
+assert.equal(pickPDFCoverDropTarget([childCover],{x:260,y:205,clip,
+  pageId:'3',sourceId:'p1b3'}),null,'explicit page scoping respected');
+const nativeFull={...childCover,id:'p1b4s0',rect:{...targetCover.rect}};
+assert.equal(coverHit(220,190,[nativeFull,targetCover])?.id,'p1b4',
+  'identical parent and body geometry prioritizes reachable parent');
+const equalUnrelated={...targetCover,id:'p1b5',rootId:'p1b5',node:{},
+  rect:r(200,160,250,180)};
+assert.equal(coverHit(235,200,[targetCover,equalUnrelated]),null,
+  'ambiguous overlap between unrelated equally sized boxes must not guess');
+assert.equal(coverHit(950,205,[targetCover]),null);
+console.log('PDF_COVERAGE_RECT_DROP_HIT_PASS');

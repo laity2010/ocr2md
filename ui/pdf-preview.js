@@ -15,7 +15,7 @@ import {extractPDFBlockText} from './pdf-block-text-extract.js';
 import {hitPDFRegion} from './pdf-region-hit.js';
 import {layoutPDFGutterLabels} from './pdf-gutter-label-layout.js';
 import {createPDFBBoxGesture} from './pdf-bbox-gesture.js';
-import {pickPDFDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-drop-hit.js';
+import {pickPDFCoverDropTarget,pdfDropGuideZone,pdfArrowLocalPoint} from './pdf-pbs-drop-hit.js';
 import {projectPDFParentGroup} from './pdf-pbs-group-highlight.js';
 import {resolvePDFFragmentId} from './pdf-pbs-fragment-id.js';
 import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
@@ -876,11 +876,11 @@ export class PdfPreview {
   }
   blockDropTarget(item,x,y){
     const clip=this.visibleClip();
-    // The target may be on ANY rendered PDF page; still require a visible
-    // unambiguous chip under the pointer in the current PDF viewport.
-    // A guide is a deliberate 3-slot landing rail. Keep the selected target
+    // The target may be on ANY rendered PDF page. Hit the real visible
+    // coverage rectangle, never the outboard label or its proximity.
+    // A guide is a deliberate operation landing rail. Keep the selected target
     // while the pointer travels from its fixed label onto that rail; never
-    // let an adjacent PDF gutter chip steal its landing.
+    // let an adjacent PDF cover steal its landing.
     if(item.guide&&item.target){
       const rail=item.guide.getBoundingClientRect();
       if(x>=rail.left-5&&x<=rail.right+5&&y>=rail.top-5&&y<=rail.bottom+5)
@@ -891,18 +891,20 @@ export class PdfPreview {
     for(const node of this.blockCoverageNodes.values()){
       if(!node.isConnected)continue;
       const pageId=node.dataset.pdfPage,rootId=node.dataset.blockId;
-      const ctrl=node.querySelector(':scope > .ocr-pdf-block-ctrl');
-      if(ctrl)candidates.push({node,id:rootId,rootId,kind:'parent',
-        pageId,rect:ctrl.getBoundingClientRect()});
-      for(const chip of node.querySelectorAll('.ocr-pdf-subblock-chip')){
-        if(chip.closest('.ocr-pdf-block-fragment')?.hidden)continue;
-        candidates.push({node:chip,
-          id:chip.closest('.ocr-pdf-block-fragment')?.dataset.subblockId,
-          rootId,kind:'child',pageId,rect:chip.getBoundingClientRect()});
+      // The original PDF bbox, including its full interior, is the hit area.
+      // Gutter chips are not part of the bbox and never steal a drag target.
+      candidates.push({node,id:rootId,rootId,
+        kind:node.classList.contains('ocr-pdf-block-is-child')?'child':'parent',
+        pageId,rect:node.getBoundingClientRect()});
+      for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
+        if(fragment.hidden)continue;
+        const id=fragment.dataset.subblockId;
+        if(!id)continue;
+        candidates.push({node:fragment,id,rootId,kind:'child',
+          pageId,rect:fragment.getBoundingClientRect()});
       }
     }
-    return pickPDFDropTarget(candidates,{x,y,sourceId:item.id,pageId:null,clip,
-      pointerType:item.pointerType});
+    return pickPDFCoverDropTarget(candidates,{x,y,sourceId:item.id,pageId:null,clip});
   }
   /** Three semantic positions live beside the fixed PDF label, never inside
    * OCR text. This transient guide and arrow disappear after pointerup. */
@@ -921,7 +923,11 @@ export class PdfPreview {
         '<span data-placement="after">之后</span>';
       document.body.append(guide);item.guide=guide;
     }
-    const chip=item.targetKind==='child'?item.target:
+    // The highlighted target is the physical bbox. Keep the operation rail
+    // beside its label, outside OCR text; it never changes the hit rectangle.
+    const chip=item.targetKind==='child'?
+      (item.target.querySelector(':scope > .ocr-pdf-subblock-chip')||
+        item.target.querySelector(':scope > .ocr-pdf-block-ctrl')):
       item.target.querySelector(':scope > .ocr-pdf-block-ctrl');
     if(!chip?.isConnected)return;
     const rect=chip.getBoundingClientRect(),clip=this.visibleClip();
@@ -974,8 +980,8 @@ export class PdfPreview {
       }
       return;
     }
-    // A stationary long press is not a move, even if adjacent chips happen
-    // to fall within the enlarged finger-friendly drop neighborhood.
+    // A stationary long press is not a move, even if the source bbox also
+    // overlaps the pointer. Actual movement is needed to select a target.
     const hit=Math.hypot(x-item.startX,y-item.startY)>=12
       ?this.blockDropTarget(item,x,y):null;
     const target=hit?.node||null,placement=hit?.placement||null;

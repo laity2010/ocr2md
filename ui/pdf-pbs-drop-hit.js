@@ -35,3 +35,40 @@ export function pickPDFDropTarget(candidates,{x,y,sourceId,pageId,clip,pointerTy
   return {id:hit.id,rootId:hit.rootId,kind:hit.kind,placement,
     node:hit.node,rect:hit.rect};
 }
+
+/** The PDF *coverage rectangle*, not its outboard label, owns a drag hit.
+ * The deepest actual rectangle wins. A child and parent with the SAME bbox
+ * are physically indistinguishable: keep the parent as target so the two
+ * parent landing actions remain reachable. Two overlapping unrelated boxes
+ * with indistinguishable area are ambiguous and must not silently select one.
+ */
+export function pickPDFCoverDropTarget(candidates,{x,y,sourceId,pageId,clip}){
+  if(!clip||x<clip.left||x>clip.right||y<clip.top||y>clip.bottom)return null;
+  const inside=rect=>Number.isFinite(rect?.left)&&Number.isFinite(rect?.right)&&
+    Number.isFinite(rect?.top)&&Number.isFinite(rect?.bottom)&&
+    rect.right>rect.left&&rect.bottom>rect.top&&
+    x>=rect.left&&x<=rect.right&&y>=rect.top&&y<=rect.bottom;
+  const contained=(a,b)=>a.left>=b.left-1&&a.right<=b.right+1&&
+    a.top>=b.top-1&&a.bottom<=b.bottom+1;
+  const area=rect=>(rect.right-rect.left)*(rect.bottom-rect.top);
+  const matched=candidates.filter(c=>c.rootId!==sourceId&&
+    (pageId==null||c.pageId===pageId)&&c.node&&
+    intersects(c.rect,clip)&&inside(c.rect))
+    .sort((a,b)=>area(a.rect)-area(b.rect));
+  if(!matched.length)return null;
+  const first=matched[0],second=matched[1];
+  if(second){
+    const firstArea=area(first.rect),secondArea=area(second.rect);
+    const sameSize=Math.abs(firstArea-secondArea)<Math.max(3,firstArea*.015);
+    const nested=contained(first.rect,second.rect);
+    // A virtual body overlay can have the exact same physical bbox as its
+    // parent. Prefer the parent there; otherwise the parent is unreachable.
+    if(sameSize&&nested&&first.rootId===second.rootId&&first.kind!==second.kind){
+      const chosen=first.kind==='parent'?first:second;
+      return {...chosen,placement:'child'};
+    }
+    if(sameSize&&!nested)return null;
+    if(sameSize&&first.rootId!==second.rootId)return null;
+  }
+  return {...first,placement:'child'};
+}
