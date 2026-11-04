@@ -55,6 +55,38 @@ const cleanRails=page=>page.evaluate(()=>{
   }
   return {labels:chips.length,colliding,leaders:root.querySelectorAll('svg.ocr-pdf-label-leaders path').length};
 });
+// Page-relative acceptance is distinct from collision testing: a label can
+// avoid every OCR box yet be hundreds of pixels OUTSIDE the paper, as the
+// iPad screenshot at PDF page 7 / 100% demonstrated.
+const inspectPageLabels=async(page,id)=>{
+  const target=page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"]`);
+  await target.waitFor({state:'attached',timeout:40000});
+  await target.scrollIntoViewIfNeeded({timeout:30000});
+  return page.evaluate(blockId=>{
+    const node=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${blockId}"]`);
+    const paper=node?.closest('.page');if(!paper)return {error:'PDF paper absent for '+blockId};
+    const bounds=paper.getBoundingClientRect();
+    const chips=[...paper.querySelectorAll('.ocr-pdf-rail-label')]
+      .filter(el=>el.getBoundingClientRect().width>0);
+    const covers=[...paper.querySelectorAll('.ocr-pdf-block-cover,.ocr-pdf-block-fragment:not([hidden])')];
+    const cross=(a,b)=>a.left<b.right-.5&&b.left<a.right-.5&&a.top<b.bottom-.5&&b.top<a.bottom-.5;
+    const outside=[],collisions=[];
+    for(const chip of chips){
+      const r=chip.getBoundingClientRect();
+      if(r.left<bounds.left-.7||r.right>bounds.right+.7||
+        r.top<bounds.top-.7||r.bottom>bounds.bottom+.7)
+        outside.push({id:chip.textContent.trim(),left:Math.round(r.left-bounds.left),
+          right:Math.round(r.right-bounds.right),pageWidth:Math.round(bounds.width)});
+      for(const c of covers)if(cross(r,c.getBoundingClientRect()))
+        collisions.push(chip.textContent.trim()+' intersects a PDF cover');
+      for(const c of chips)if(c!==chip&&cross(r,c.getBoundingClientRect()))
+        collisions.push(chip.textContent.trim()+' intersects '+c.textContent.trim());
+    }
+    return {page:paper.dataset.pageNumber,paperWidth:bounds.width,
+      labels:chips.length,leaders:paper.querySelectorAll('svg.ocr-pdf-label-leaders path').length,
+      outside,collisions};
+  },id);
+};
 try{
   let ready=false;
   for(let i=0;i<190;i++){try{if((await fetch(base+'/healthz')).ok){ready=true;break;}}catch{}await sleep(160);}
@@ -103,9 +135,30 @@ try{
         const rail=await cleanRails(page);assert(!rail.error);
         assert(rail.labels>=10);assert.equal(rail.leaders,rail.labels);
         assert.deepEqual(rail.colliding,[],`${name} scaled PDF labels must avoid source boxes`);
+        // Recreate reported iPad page-7 / 100% situation with abundant empty
+        // Dockview space beside the paper; both left and right rails must
+        // remain on the paper, NOT near the scroller's far right edge.
+        for(let step=0;step<9;step++){
+          const zoom=Number.parseFloat((await page.locator('.ocr-pdf-zoom').textContent())||'0');
+          if(zoom>=99.5)break;
+          await page.locator('.ocr-pdf-plus').click();
+        }
+        await page.locator('.ocr-pdf-page').fill('7');
+        await page.locator('.ocr-pdf-page').dispatchEvent('change');
+        const p7=await inspectPageLabels(page,'p6b8');
+        assert(!p7.error);assert(p7.labels>=8);assert.equal(p7.leaders,p7.labels);
+        console.log('PDF_PAGE7_PAPER_RAILS',name,JSON.stringify(p7));
+        assert.deepEqual(p7.outside,[],'page 7: every label must stay INSIDE PDF paper');
+        assert.deepEqual(p7.collisions,[],'page 7: labels must not overlap OCR covers');
         if(process.env.OCR_PBS_VISUAL_CAPTURE)
           await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
-            `-${name}.png`),animations:'disabled'});
+            `-${name}-page7-100pct.png`),animations:'disabled'});
+        await page.locator('.ocr-pdf-page').fill('17');
+        await page.locator('.ocr-pdf-page').dispatchEvent('change');
+        const p17=await inspectPageLabels(page,'p16b10');
+        assert(!p17.error);assert.equal(p17.leaders,p17.labels);
+        assert.deepEqual(p17.outside,[],'page 17 parent/child labels must stay on PDF paper');
+        assert.deepEqual(p17.collisions,[],'page 17 parent/child rail collision');
         // A cold-start fixture verifies that the registered JSON setting is
         // read and applied after a complete reload. The existing Settings
         // integration tests own the actual write/authorization workflow.

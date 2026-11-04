@@ -64,15 +64,18 @@ export function layoutPDFGutterLabels(items,pageHeight,{gap=2}={}){
  * Input: {id,side,anchorY,target:{left,top,right,bottom},width,height};
  * geometry is expressed in PDF page CSS pixels, AFTER PDF.js zoom.
  */
-export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,padding=3,
-  outerLeft=0,outerRight=0}={}){
+export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,padding=3}={}){
   if(!Number.isFinite(pageWidth)||!Number.isFinite(pageHeight)||pageWidth<=0||pageHeight<=0)
     return {slots:[],leaders:[],safe:{left:0,right:0}};
   const bounds=covers.length?covers:[{left:pageWidth/2,right:pageWidth/2}];
   const leftLimit=Math.max(0,Math.min(...bounds.map(c=>c.left)));
   const rightLimit=Math.min(pageWidth,Math.max(...bounds.map(c=>c.right)));
-  const safe={left:Math.max(0,leftLimit+outerLeft-padding),
-    right:Math.max(0,pageWidth-rightLimit+outerRight-padding)};
+  // The rails are part of the physical PDF PAGE, never the PDF pane.
+  // An arbitrarily wide surrounding Dockview/scroller MUST NOT become
+  // available label space: that caused p6b6s1/p6b8 to escape to the far
+  // right of the iPad workspace at 100% page zoom.
+  const safe={left:Math.max(0,leftLimit-padding),
+    right:Math.max(0,pageWidth-rightLimit-padding)};
   const sideItems={left:[],right:[]};
   for(const item of items){
     if(!item?.target||!Number.isFinite(item.anchorY)||
@@ -113,12 +116,12 @@ export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,p
     }
     visual.forEach((item,i)=>{
       const top=rows[i];
-      const left=side==='left'?padding-outerLeft:
-        pageWidth+outerRight-padding-item.vw;
+      const left=side==='left'?padding:pageWidth-padding-item.vw;
       const slot={...item,left,top,width:item.vw,height:item.vh};
       slots.push(slot);
       const xStart=side==='left'?left+slot.width:left;
-      const xGuide=side==='left'?leftLimit-padding/2:rightLimit+padding/2;
+      const xGuide=side==='left'?Math.max(0,leftLimit-padding/2):
+        Math.min(pageWidth,rightLimit+padding/2);
       const xEnd=side==='left'?item.target.left:item.target.right;
       const yStart=top+slot.height/2;
       const yEnd=(item.target.top+item.target.bottom)/2;

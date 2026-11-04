@@ -70,6 +70,32 @@ for(const [index,page] of physical.pages.entries()){
       assert(!intersect(slot,other),
         `page ${index+1} labels ${slot.id} & ${other.id} overlap`);
   }
+  // Settings multiplier must NEVER authorize page-edge escape, even at
+  // 2.5x and with arbitrarily wide neighboring Dockview/scroller space.
+  // Apply the same baseline-nativeFit * userScale calculation as PdfPreview.
+  const nativeFit=new Map(out.slots.map(slot=>[slot.id,slot.scale]));
+  for(const factor of [0.5,1,1.5,2.5]){
+    const desired=rows.map(row=>{
+      const zoom=(nativeFit.get(row.id)??1)*factor;
+      return {...row,width:row.width*zoom,height:row.height*zoom};
+    });
+    const enlarged=layoutPDFEdgeRails(desired,{pageWidth:page.pageSize[0],
+      pageHeight:page.pageSize[1],covers:rectangles});
+    assert.equal(enlarged.slots.length,rows.length,`page ${index+1} lost a zoomed label`);
+    for(const slot of enlarged.slots){
+      assert(slot.left>=-0.001&&slot.left+slot.width<=page.pageSize[0]+.001,
+        `page ${index+1} scale ${factor} escaped PDF paper: ${slot.id}`);
+      assert(slot.top>=-0.001&&slot.top+slot.height<=page.pageSize[1]+.001,
+        `page ${index+1} scale ${factor} escaped vertically: ${slot.id}`);
+      for(const box of rectangles)
+        assert(!intersect(slot,{left:box.left,top:box.top,
+          width:box.right-box.left,height:box.bottom-box.top}),
+          `page ${index+1} scale ${factor} overlays OCR: ${slot.id}`);
+      for(const other of enlarged.slots.filter(x=>x!==slot))
+        assert(!intersect(slot,other),
+          `page ${index+1} scale ${factor} collides with ${other.id}: ${slot.id}`);
+    }
+  }
   total+=rows.length;
 }
 console.log('PDF_22_PAGE_GLOBAL_RAILS_NO_COLLISION_PASS',{pages:physical.pages.length,labels:total});

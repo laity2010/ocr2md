@@ -1401,17 +1401,11 @@ export class PdfPreview {
         const mult=(nativeFit.get(item.id)??1)*this.blockLabelScale;
         return {...item,width:item.width*mult,height:item.height*mult};
       });
-      // At >1× use the genuine blank scroller gutters OUTSIDE the page
-      // instead of squeezing enlarged labels back to the 1.0× size. Neither
-      // PDF canvas nor OCR bbox changes, and the scroller bounds still limit
-      // the available width (landscape iPad included).
-      const pageRect=page.getBoundingClientRect(),scrollerRect=this.scroller.getBoundingClientRect();
-      const outerLeft=this.blockLabelScale>1?
-        Math.max(0,pageRect.left-scrollerRect.left-4):0;
-      const outerRight=this.blockLabelScale>1?
-        Math.max(0,scrollerRect.right-pageRect.right-4):0;
+      // Fit only within the two ORIGINAL PDF page-edge rails. Magnification
+      // is bounded by the real paper margin; it may saturate when a PDF has
+      // narrow gutters, but never throw tags out into the workspace void.
       const geometry=layoutPDFEdgeRails(desired,{pageWidth:width,
-        pageHeight:height,covers:group.covers,outerLeft,outerRight});
+        pageHeight:height,covers:group.covers});
       const all=new Map(group.items.map(item=>[item.id,item]));
       for(const slot of geometry.slots){
         const item=all.get(slot.id);if(!item)continue;
