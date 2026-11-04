@@ -15,7 +15,7 @@ import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {TEXT_BLOCKS_READ_ONLY,rejectTextBlockEdit} from '../ui/text-block-readonly.js';
 assert.equal(TEXT_BLOCKS_READ_ONLY,true);
-await assert.rejects(rejectTextBlockEdit(),/允许跨页父块归入其他父块/);
+await assert.rejects(rejectTextBlockEdit(),/父块可跨页选择/);
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const source=toMarkdown(raw);
 assert.equal((source.match(/<!-- cmd:block:v1 id=/g)||[]).length,267);

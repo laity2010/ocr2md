@@ -758,14 +758,14 @@ export class PdfPreview {
     const displayId=row.id;
     if(badge.textContent!==displayId){badge.textContent=displayId;changed=true;}
     const title=this.readOnly?
-      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'长按归入其他父块（可跨页）':'单击定位（只读）'}`:
+      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'长按选择作为子块／之后':'单击定位（只读）'}`:
       `原始 ${row.origin||row.id} · 显示 ${displayId} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
     const disabled=this.readOnly||!row.joinable;
     if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
-    const help=this.readOnly?`单击定位 ${row.id}；${/^p\d+b\d+$/.test(row.id)?'长按归入其他父块（可跨页）':'当前子块只读'}`:
+    const help=this.readOnly?`单击定位 ${row.id}；${/^p\d+b\d+$/.test(row.id)?'长按选择作为子块／之后':'当前子块只读'}`:
       row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
       `单击定位 ${row.id}；没有有效前驱 Block，不能取消勾选`;
     if(input.title!==help)input.title=help;
@@ -835,7 +835,7 @@ export class PdfPreview {
       svg.innerHTML='<path class="ocr-pdf-block-drag-path" fill="none" />'+
         '<path class="ocr-pdf-block-drag-tip" />';
       document.body.append(svg);item.svg=svg;
-      this.setStatus(`从 ${id} 拖出箭头，可滚动到其他 PDF 页，指向目标父块并选择子块`);
+      this.setStatus(`从 ${id} 拖出箭头，可跨页选择目标父块的「作为子块」或「之后」`);
       this.updateBlockDrag(item,item.x,item.y);
       this.autoScrollBlockDrag(item);
     },370);
@@ -885,7 +885,7 @@ export class PdfPreview {
       const rail=item.guide.getBoundingClientRect();
       if(x>=rail.left-5&&x<=rail.right+5&&y>=rail.top-5&&y<=rail.bottom+5)
         return {node:item.target,id:item.targetId,kind:item.targetKind,
-          placement:pdfDropGuideZone(x,rail,this.readOnly||item.targetKind==='child')};
+          placement:pdfDropGuideZone(x,rail,item.targetKind==='child',this.readOnly)};
     }
     const candidates=[];
     for(const node of this.blockCoverageNodes.values()){
@@ -908,7 +908,7 @@ export class PdfPreview {
    * OCR text. This transient guide and arrow disappear after pointerup. */
   paintBlockDropGuide(item){
     if(!item.target){item.guide?.remove();item.guide=null;return;}
-    const child=this.readOnly||item.targetKind==='child';
+    const child=item.targetKind==='child';
     if(!item.guide||item.guide.dataset.kind!==(child?'child':'parent')){
       item.guide?.remove();
       const guide=document.createElement('div');
@@ -916,6 +916,7 @@ export class PdfPreview {
       guide.dataset.kind=child?'child':'parent';
       guide.setAttribute('aria-hidden','true');
       guide.innerHTML=child?'<span data-placement="child">成为子块</span>':
+        this.readOnly?'<span data-placement="child">作为子块</span><span data-placement="after">之后</span>':
         '<span data-placement="before">之前</span><span data-placement="child">子块</span>'+
         '<span data-placement="after">之后</span>';
       document.body.append(guide);item.guide=guide;
@@ -925,7 +926,7 @@ export class PdfPreview {
     if(!chip?.isConnected)return;
     const rect=chip.getBoundingClientRect(),clip=this.visibleClip();
     if(!clip)return;
-    const width=child?80:150,height=29;
+    const width=child?80:this.readOnly?148:150,height=29;
     const left=Math.max(clip.left+3,Math.min((rect.left+rect.right-width)/2,
       clip.right-width-3));
     const top=rect.bottom+height+8<=clip.bottom?rect.bottom+5:
@@ -1007,9 +1008,9 @@ export class PdfPreview {
     let ex=x-bounds.left,ey=y-bounds.top;
     if(target&&item.guide){
       const rect=item.guide.getBoundingClientRect();
-      const index=item.targetKind==='child'?0:
-        {before:0,child:1,after:2}[placement]??1;
-      const slots=item.targetKind==='child'?1:3;
+      const index=item.targetKind==='child'?0:this.readOnly?
+        ({child:0,after:1}[placement]??0):({before:0,child:1,after:2}[placement]??1);
+      const slots=item.targetKind==='child'?1:this.readOnly?2:3;
       ex=rect.left+(index+.5)*rect.width/slots-bounds.left;
       ey=(rect.top+rect.bottom)/2-bounds.top;
     }
@@ -1046,10 +1047,12 @@ export class PdfPreview {
     this.suppressBlockClickUntil=performance.now()+600;
     if(cancel){this.setStatus('已取消块排序');return;}
     if(!target){this.setStatus('未选择目标父块，结构不变');return;}
-    if(this.readOnly&&(!/^p\d+b\d+$/.test(item.id)||placement!=='child'||
-      !target||!/^p\d+b\d+(?:s\d+(?:\.\d+)*)?$/.test(target)||
+    if(this.readOnly&&(!/^p\d+b\d+$/.test(item.id)||
+      !['child','after'].includes(placement)||!target||
+      !/^p\d+b\d+(?:s\d+(?:\.\d+)*)?$/.test(target)||
+      (placement==='after'&&!/^p\d+b\d+$/.test(target))||
       target.startsWith(item.id+'s')||target===item.id)){
-      this.setStatus('仅允许父块整体归入另一父块，其他操作保持只读');
+      this.setStatus('仅开放父块「作为子块」和「之后」两个落点');
       return;
     }
     if(placement==='child'){
@@ -1059,6 +1062,15 @@ export class PdfPreview {
           ?`✓ ${item.id} → ${result.newIds?.join('、')||result.newId} · 未保存，可 Undo`
           :'PBS 父子关系无需修改');
       }).catch(error=>this.setStatus('PDF 文本块归入子块失败：'+error.message));
+      return;
+    }
+    if(this.readOnly&&placement==='after'){
+      this.setStatus(`正在把 ${item.id} 整组插入 ${target} 之后，顺延后续编号…`);
+      void this.onBlockMove(item.id,target,'after').then(result=>{
+        this.setStatus(result?.changed?
+          `✓ ${target} 不变 · ${item.id} → ${result.newId} · 后续编号顺延 · 未保存，可 Undo`:
+          'A 已位于 B 之后，顺序不变');
+      }).catch(error=>this.setStatus('父块「之后」插入失败：'+error.message));
       return;
     }
     let move;

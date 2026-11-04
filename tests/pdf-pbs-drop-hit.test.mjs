@@ -41,3 +41,8 @@ assert.deepEqual([pdfDropGuideZone(408,guide),pdfDropGuideZone(474,guide),
 assert.equal(pdfDropGuideZone(408,guide,true),'child');
 assert.deepEqual(pdfArrowLocalPoint(250,320,r(30,60,850,640)),{x:220,y:260});
 console.log('PDF_FIXED_LABEL_DROP_HIT_PASS');
+
+// Parent-only two-choice rail: "child" and "after" ("before" stays locked).
+assert.equal(pdfDropGuideZone(100,{left:80,right:240,width:160},false,true),'child');
+assert.equal(pdfDropGuideZone(200,{left:80,right:240,width:160},false,true),'after');
+assert.equal(pdfDropGuideZone(235,{left:80,right:240,width:160},true,true),'child');

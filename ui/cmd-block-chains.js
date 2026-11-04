@@ -713,6 +713,130 @@ export function planCMDReparentPBS(source,sourceId,targetId){
     edits,createdBodyId:bodyMarker?parentAtom.id+'s0':null,relocatedSourceText:true};
 }
 
+/** Insert A's entire independent parent scope immediately AFTER parent B.
+ * B's displayed ID is frozen; A becomes B+1. Existing target-page parent
+ * IDs between B and A (or all following B when A was before/on another
+ * page) shift by one. Never exchange blocks or move immutable PDF geometry.
+ * The source moves in one CM6 transaction and the CMD footer is the sole
+ * owner of old-physical-PDF -> new-logical-PBS identities.
+ */
+export function planCMDInsertPBSParentAfter(source,sourceId,targetId){
+  const a=parseCMDPBSId(sourceId),b=parseCMDPBSId(targetId);
+  if(!a||!b||a.s.length||b.s.length||sourceId===targetId)
+    throw Error('After landing requires two different independent parents');
+  const model=readCMDBlockChains(source);
+  if(model.invalid.length||model.atoms.some(atom=>atom.format!=='cmd-v1'))
+    throw Error('Invalid CMD PBS annotations for parent insertion');
+  const roots=model.atoms.filter(atom=>!parseCMDPBSId(atom.id)?.s.length)
+    .sort((x,y)=>x.from-y.from);
+  const sourceRoot=roots.find(root=>root.id===sourceId);
+  const targetRoot=roots.find(root=>root.id===targetId);
+  if(!sourceRoot||!targetRoot)throw Error('Unknown parent block');
+  const immediatelyAfter=roots[roots.indexOf(targetRoot)+1]===sourceRoot;
+  if(a.p===b.p&&a.b===b.b+1&&immediatelyAfter)
+    return {changed:0,edits:[],sourceId,targetId,reason:'already-after'};
+  const parentMap=new Map([[sourceId,`p${b.p}b${b.b+1}`]]);
+  for(const root of roots){
+    if(root.id===sourceId||root.id===targetId)continue;
+    const number=parseCMDPBSId(root.id);
+    if(number.p!==b.p||number.b<=b.b)continue;
+    if(a.p===b.p&&a.b>b.b&&number.b>=a.b)continue;
+    parentMap.set(root.id,`p${b.p}b${number.b+1}`);
+  }
+  const idMap=new Map();
+  for(const atom of model.atoms){
+    const parsed=parseCMDPBSId(atom.id);
+    const root=`p${parsed.p}b${parsed.b}`;
+    const mapped=parentMap.get(root);
+    idMap.set(atom.id,mapped?mapped+atom.id.slice(root.length):atom.id);
+  }
+  if(new Set(idMap.values()).size!==idMap.size)
+    throw Error('After landing creates duplicate parent or child IDs');
+  const sealed=source.indexOf('<!-- minerujson:source:v1:');
+  if(sealed<0)throw Error('Missing immutable OCR archive');
+  const physicalBoundary=from=>{
+    const remainder=source.slice(from);
+    const markers=[...remainder.matchAll(/<!--\s*minerujson:(?!block:v1:)/g)]
+      .map(match=>from+match.index);
+    const other=['<!-- cmd:pbs-locations:v1 ','<!-- cmd:pdf-bbox:v1 ']
+      .map(x=>source.indexOf(x,from)).filter(x=>x>=0);
+    return Math.min(source.length,...markers,...other);
+  };
+  const sourceEnd=root=>{
+    const next=roots.find(other=>other.from>root.from)?.from??source.length;
+    const evidence=physicalBoundary(root.from);
+    let end=Math.min(next,evidence);
+    if(end===evidence){
+      const blank=/\s*$/.exec(source.slice(root.from,end))?.[0]||'';
+      if(blank.includes('\n'))end-=blank.length;
+    }
+    return end;
+  };
+  const from=sourceRoot.from,to=sourceEnd(sourceRoot);
+  if(to<=from)throw Error('Empty parent source scope');
+  const members=model.atoms.filter(atom=>atom.from>=from&&atom.from<to);
+  if(!members.length||members[0]!==sourceRoot||
+    members.slice(1).some(atom=>!atom.id.startsWith(sourceId+'s')))
+    throw Error('Parent scope must contain only its own descendants');
+  let moved=source.slice(from,to);
+  const replacement=atom=>commentPrefix(atom.rawLine)+serializeCMDBlockTag({
+    id:idMap.get(atom.id)});
+  for(const atom of [...members].reverse()){
+    const old=atom.from-from;
+    moved=moved.slice(0,old)+replacement(atom)+moved.slice(old+atom.rawLine.length);
+  }
+  // A source parent at the end of its original PDF page may have had its
+  // trailing blank lines excluded so OCR page evidence stays in place.
+  // Restore a fresh line boundary when moving it before another CMD marker.
+  if(!moved.endsWith('\n'))moved+='\n\n';
+  const edits=[];
+  const destination=sourceEnd(targetRoot);
+  if(destination>=from&&destination<=to){
+    if(destination!==from)throw Error('Overlapping insertion into moving scope');
+    // B immediately precedes A. Replace A's own scope with its new labels.
+    edits.push({from,to,expected:source.slice(from,to),insert:moved});
+  }else{
+    edits.push({from,to,expected:source.slice(from,to),insert:''});
+    const prefix=destination>0&&source[destination-1]!=='\n'&&!moved.startsWith('\n')
+      ?'\n\n':'';
+    // If the next parent's tag also needs renumbering, apply insertion and
+    // its replacement in ONE non-overlapping edit. Separate same-offset
+    // CM6 insertion/replacement edits can overwrite one another.
+    const atDestination=model.atoms.find(atom=>atom.from===destination);
+    if(atDestination){
+      edits.push({from:destination,to:destination+atDestination.rawLine.length,
+        expected:atDestination.rawLine,
+        insert:prefix+moved+(idMap.get(atDestination.id)===atDestination.id
+          ?atDestination.rawLine:replacement(atDestination))});
+    }else edits.push({from:destination,to:destination,expected:'',insert:prefix+moved});
+  }
+  for(const atom of model.atoms){
+    if(atom.from>=from&&atom.from<to)continue;
+    if(edits.some(e=>e.from===atom.from&&e.to===atom.from+atom.rawLine.length))continue;
+    if(idMap.get(atom.id)===atom.id)continue;
+    edits.push({from:atom.from,to:atom.from+atom.rawLine.length,
+      expected:atom.rawLine,insert:replacement(atom)});
+  }
+  // Refresh every physical alias from the parser's already-validated state.
+  // Even untouched body tags may have an alias to their physical OCR parent.
+  const bindings={},bodies=[];
+  for(const atom of model.atoms){
+    const id=idMap.get(atom.id);
+    if(id!==atom.origin)bindings[id]=atom.origin;
+    if(atom.role==='body')bodies.push(id);
+  }
+  const locations=readCMDPBSLocations(source);
+  edits.push(planCMDPBSLocationsEdit(source,{bindings,bodies,removed:locations.removed}));
+  const sorted=[...edits].sort((x,y)=>x.from-y.from);
+  for(let i=1;i<sorted.length;i++)if(sorted[i].from<sorted[i-1].to)
+    throw Error('After insertion source ranges overlap');
+  return {changed:edits.length,edits,sourceId,targetId,newId:idMap.get(sourceId),
+    renamed:Object.fromEntries([...idMap].filter(([old,now])=>old!==now)),
+    shifted:roots.filter(root=>root.id!==sourceId&&parentMap.has(root.id))
+      .map(root=>[root.id,parentMap.get(root.id)]),
+    movedIds:members.map(atom=>idMap.get(atom.id)),relocatedSourceText:true};
+}
+
 /** Reorder independent page-level PBS scopes in one CM6 operation.
  * The immutable PBS origin (physical PDF bbox) never changes. A parent takes
  * its native/reviewed children with it; all other parents keep relative order.

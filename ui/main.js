@@ -744,7 +744,17 @@ async function main() {
     return result;
   });
   workspace.setPDFBBoxAction(rejectTextBlockEdit);
-  workspace.setBlockMoveAction(rejectTextBlockEdit);
+  workspace.setBlockMoveAction(async(sourceId,targetId,placement)=>{
+    if(placement!=='after'||!/^p\d+b\d+$/.test(sourceId||'')||
+      !/^p\d+b\d+$/.test(targetId||'')||sourceId===targetId)
+      return rejectTextBlockEdit();
+    const source=cmdPort.readSource();
+    if(source!==blockIndexedSource)
+      throw Error('文本块列表已变化，请重新进入文本块模块后操作');
+    const result=cmdPort.insertPBSAfter(sourceId,targetId,{expectedSource:source});
+    if(result.changed){blockIndexedSource=null;scanTextBlocks();}
+    return result;
+  });
   workspace.setSubblockMarkAction(rejectTextBlockEdit);
   workspace.setPDFTextInsertAction(rejectTextBlockEdit);
   workspace.notifyCMDReady();
