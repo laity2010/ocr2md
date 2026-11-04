@@ -130,12 +130,20 @@ try{
               `-${name}-${test.name}.png`),animations:'disabled'});
           }
           await page.locator('#undo').evaluate(el=>el.click());
-          await page.waitForFunction(([A,newId])=>!!document.querySelector(
-            `.ocr-pdf-block-cover[data-block-id="${A}"]`)&&!document.querySelector(
-            `.ocr-pdf-block-cover[data-block-id="${newId}"]`),
-            [test.A,test.newId],{timeout:70000});
+          await page.waitForFunction(([A,newId,oldShift])=>{
+            const original=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${A}"]`);
+            const following=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${newId}"]`);
+            // "newId" is a PRE-EXISTING ID in most cases; after Undo it
+            // must point back to its own original physical PDF frame.
+            return original?.dataset.originId===A&&
+              (!following||following.dataset.originId!==A);
+          },[test.A,test.newId,test.oldShift],{timeout:70000});
           await page.locator('#redo').evaluate(el=>el.click());
-          await moved.waitFor({state:'attached',timeout:70000});
+          await page.waitForFunction(([A,newId])=>{
+            const old=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${A}"]`);
+            const current=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${newId}"]`);
+            return !old&&current?.dataset.originId===A;
+          },[test.A,test.newId],{timeout:70000});
           assert.equal(await tag(page,test.B).locator('span').textContent(),test.B);
           await page.locator('#save').evaluate(el=>el.click());
           await page.waitForFunction(()=>document.querySelector('#unlock-dialog')?.open,
