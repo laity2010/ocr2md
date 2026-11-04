@@ -1,6 +1,6 @@
 import {blockAnchor,subblockAnchor,subblockId} from './mineru-anchors.js';
 import {projectCMDLogicalTextBlocks} from './cmd-block-joins.js';
-import {readCMDBlockChains} from './cmd-block-chains.js';
+import {readCMDBlockChains,projectCMDAtomLocations} from './cmd-block-chains.js';
 
 /** A MinerU block or subblock tag owns the interval starting at its own line
  * and ending immediately before the NEXT native block/subblock tag. This is a
@@ -62,7 +62,8 @@ export function projectCMDSourceBlockLabels(source){
   // PBS label after insert-before/after, parent absorption and promotion.
   // Different tags may share an OCR-root namespace after renumbering, so
   // resolving solely by p/b index or by origin can select the NEXT block.
-  const visibleBySourceLine=new Map(inventory.map(a=>[a.sourceLine,a.id]));
+  const atomBySourceLine=new Map(inventory.map(a=>[a.sourceLine,a]));
+  const visibleBySourceLine=new Map([...atomBySourceLine].map(([line,a])=>[line,a.id]));
   const bodyByOrigin=new Map(inventory.filter(a=>a.role==='body')
     .map(a=>[a.origin,a.id]));
   const parents=scopes.filter(scope=>scope.kind==='parent');
@@ -87,7 +88,12 @@ export function projectCMDSourceBlockLabels(source){
       (scope.bodyAlias?bodyByOrigin.get('p'+scope.pageIndex+'b'+scope.blockIndex):null)||
       visibleByOrigin.get(originalId)||
       (isParent?projection.assignments.get(originalId)||originalId:originalId);
+    const atom=atomBySourceLine.get(scope.sourceLine);
     return {...scope,id:originalId,label,
+      // The current visible PBS identity and its original MinerU PDF bbox
+      // are distinct after insert-before/after or absorption. Only CMD's
+      // current atom owns the actual physical-origin relationship.
+      origin:atom?.origin??originalId,role:atom?.role??null,
       sourceKind:scope.contentLine?'content':'structure',
       elementId:isParent?`mineru:${scope.pageIndex}:${scope.blockIndex}:parent`:
         `mineru:${scope.pageIndex}:${scope.blockIndex}:${scope.path.join('.')}`};
@@ -100,6 +106,13 @@ export function projectCMDSourceBlockLabels(source){
  * A missing tag is not silently replaced with the old physical tag's body.
  */
 export function mapCMDVisibleLabelSources(source){
-  const labels=projectCMDSourceBlockLabels(source);
-  return new Map(labels.map(({label,...location})=>[label,{...location,label}]));
+  const locations=projectCMDAtomLocations(source);
+  // An invalid duplicate CMD ID must never silently select a different tag.
+  const unique=new Map(),ambiguous=new Set();
+  for(const item of locations){
+    if(unique.has(item.id))ambiguous.add(item.id);
+    else unique.set(item.id,item);
+  }
+  for(const id of ambiguous)unique.delete(id);
+  return unique;
 }

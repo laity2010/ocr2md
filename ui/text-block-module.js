@@ -5,6 +5,7 @@ import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
 import {textBlockPageFilterModel} from './text-block-page-scope.js';
+import {resolveCMDBlockFocusRow} from './cmd-block-chains.js';
 import './text-block-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f383e',
@@ -135,7 +136,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     if(!target)return;
     selectedId=id;refreshActionButtons();
     syncBBoxFields();
-    if(target.sourceLine){publishFocus({sourceLine:target.sourceLine+2,origin:'text-block',intent:'click',elementId:id});}
+    if(target.sourceLine){publishFocus({sourceLine:target.contentLine??target.sourceLine,
+      origin:'text-block',intent:'click',elementId:id});}
     else onLocateMissing({pageIndex:target.pageIndex,blockIndex:target.blockIndex});
   };
   const jump=p=>{
@@ -283,15 +285,17 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     if(!active||disposed||next.focusTarget===previous.focusTarget)return;
     const focus=next.focusTarget;if(!focus)return;
     if(mode==='candidates')return;
-    const id=focus.elementId?.startsWith('mineru:')?
-      (tableRows.find(r=>r.origin===`p${focus.elementId.split(':')[1]}b${focus.elementId.split(':')[2]}`)?.id||
-       `p${focus.elementId.split(':')[1]}b${focus.elementId.split(':')[2]}`):
-      tableRows.some(r=>r.id===focus.elementId)?focus.elementId:
-      tableRows.filter(r=>r.sourceLine&&r.sourceLine<=focus.sourceLine).at(-1)?.id;
+    const target=resolveCMDBlockFocusRow(tableRows,focus);
+    const id=target?.id;
     if(!id||id===selectedId)return;
     let node=grid.getRowNode(id);
     if(grouped&&!node&&tableRows.some(r=>r.id===id)){collapsedChains.delete(tableRows.find(r=>r.id===id).chainId);updateBlockRows();node=grid.getRowNode(id);}
-    if(node?.rowIndex===null){grid.setFilterModel(null);grid.onFilterChanged();}
+    if(node?.rowIndex===null&&target?.pdfPage){
+      // A source/PDF focus changes only the page column's visible selection,
+      // not the user's unrelated AG filters or the full underlying row set.
+      grid.setFilterModel(textBlockPageFilterModel(grid.getFilterModel(),target.pdfPage));
+      node=grid.getRowNode(id);
+    }
     if(node&&node.rowIndex!==null){node.setSelected(true,true,'api');grid.ensureNodeVisible(node,'middle');selectedId=id;}
   });
   const scoped=()=>{

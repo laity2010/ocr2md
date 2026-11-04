@@ -1099,6 +1099,67 @@ export function planCMDMigrateLegacyBlockChains(source){
   return {changed:edits.length,edits,migrated:legacy.length,joins:removed};
 }
 
+/** One CMD-owned source/physical locator per reviewed PBS atom.
+ * The visible ID is never a PDF coordinate. OCR origin (which can live in
+ * cmd:pbs-locations footer) is the ONLY physical page/block/child identity.
+ * Source ranges are lexical and computed by numeric CMD tag lines, not by
+ * AG presentation order, or by legacy MinerU p/b indexes after renumbering.
+ */
+export function projectCMDAtomLocations(source,model=readCMDBlockChains(source)){
+  if(typeof source!=='string')throw TypeError('CMD source must be text');
+  const lines=source.split('\n');
+  const evidence=lines.findIndex(line=>line.includes('<!-- minerujson:source:v1:')||
+    line.includes('<!-- cmd:pdf-bbox:v1 '));
+  const limit=evidence<0?lines.length:evidence;
+  const atoms=[...model.atoms].sort((a,b)=>a.sourceLine-b.sourceLine);
+  return atoms.map((atom,i)=>{
+    const physical=parseCMDPBSId(atom.origin);
+    const end=Math.min(limit,atoms[i+1]?.sourceLine-1??limit);
+    let contentLine=null,contentEndLine=null;
+    for(let n=atom.sourceLine+1;n<=end;n++){
+      const line=lines[n-1]?.trim()||'';
+      if(!line||line.startsWith('<!--')||
+         /^\\?\[MinerU [^\n]*source metadata only\]$/i.test(line))continue;
+      if(contentLine===null)contentLine=n;
+      contentEndLine=n;
+    }
+    return {id:atom.id,label:atom.id,origin:atom.origin,role:atom.role,
+      kind:atom.kind,sourceLine:atom.sourceLine,scopeEndLine:end,
+      contentLine,contentEndLine,
+      pageIndex:physical?.p??null,blockIndex:physical?.b??null,
+      path:physical?.s||[]};
+  });
+}
+
+/** Resolve a focus event against the actual CMD inventory, independent of
+ * AG sorting/grouping. Explicit current PBS ID wins; legacy MinerU IDs
+ * are *physical origins*; otherwise choose the numerically nearest owning
+ * CMD tag line. Never use the last item in display/table array order. */
+export function resolveCMDBlockFocusRow(rows,focus){
+  if(!Array.isArray(rows)||!focus)return null;
+  const id=focus.elementId;
+  if(typeof id==='string'){
+    const exact=rows.find(row=>row.id===id);
+    if(exact)return exact;
+    // Explicit current PBS identity is authoritative. If AG inventory is
+    // stale (e.g. while CMD rescans after a parent reorder), never silently
+    // select a different numbered block by line as a fallback.
+    if(parseCMDPBSId(id))return null;
+    const legacy=/^mineru:(\d+):(\d+):(parent|\d+(?:\.\d+)*)$/.exec(id);
+    if(legacy){
+      const physical=`p${legacy[1]}b${legacy[2]}`+
+        (legacy[3]==='parent'?'':`s${legacy[3]}`);
+      const fromOrigin=rows.find(row=>row.origin===physical);
+      if(fromOrigin)return fromOrigin;
+      return null;
+    }
+  }
+  if(!Number.isInteger(focus.sourceLine)||focus.sourceLine<1)return null;
+  return rows.filter(row=>Number.isInteger(row.sourceLine)&&
+    row.sourceLine<=focus.sourceLine)
+    .reduce((best,row)=>!best||row.sourceLine>best.sourceLine?row:best,null);
+}
+
 /** WP4: CMD-owned complete AG projection. Keep every PBS atom, including
  * nested native children; AG never parses source annotations or OCR JSON.
  * Missing anchors remain evidence rows, NOT invented chain memberships.
@@ -1118,6 +1179,7 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
   const footer=source.indexOf('<!-- cmd:pdf-bbox:v1 ');
   const end=footer>=0?footer:tail<0?source.length:tail;
   const ordered=[...model.atoms].sort((a,b)=>a.from-b.from);
+  const locations=new Map(projectCMDAtomLocations(source,model).map(loc=>[loc.id,loc]));
   const rows=ordered.map((atom,i)=>{
     const identity=parseCMDPBSId(atom.id),physical=parseCMDPBSId(atom.origin);
     const parentId=`p${identity.p}b${identity.b}`;
@@ -1139,7 +1201,8 @@ export function projectCMDBlockTable(source,parentRows,layout,model=readCMDBlock
     return {id:atom.id,origin:atom.origin,kind:root?'parent':'child',parentId:root?null:parentId,
       childPath:identity.s.length?identity.s.join('.'):null,depth:identity.s.length,
       pageIndex:physical.p,blockIndex:physical.b,pdfPage:physical.p+1,
-      sourceLine:atom.sourceLine,from:atom.from,format:atom.format,
+      sourceLine:atom.sourceLine,contentLine:locations.get(atom.id)?.contentLine??null,
+      from:atom.from,format:atom.format,
       type:originalRoot?parent?.type||'unknown':native?.type||sub?.type||'native-child',
       ocrBBoxText:(originalRoot?(parent?.originalBBox||parent?.bbox):native?.originalBBox)?.join(', ')||'—',
       ocrRole:sub?.role||null,

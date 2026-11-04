@@ -812,7 +812,10 @@ async function main() {
       }
     }catch{/* Native CM6 selection is the safe fallback on recycled lines. */}
     const sourceLine=view.state.doc.lineAt(offset).number;
-    publishFocus({sourceLine,sourceOffset:offset,origin:'cm6',intent:'click'});
+    const elementId=moduleSelector.value==='text-block'?
+      cmdPort?.blockIdAtSourceLine(sourceLine)??null:null;
+    publishFocus({sourceLine,sourceOffset:offset,origin:'cm6',
+      elementId,intent:'click'});
   });
   savedDoc=view.state.doc;
   workspace.refreshPreview();

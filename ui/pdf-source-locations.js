@@ -14,3 +14,22 @@ export function sourceLabelLocations(source){
   if(typeof source!=='string'||!source.includes('<!-- minerujson:source:v1:'))return new Map();
   return mapCMDVisibleLabelSources(source);
 }
+
+/** Resolve a SOURCE-initiated position to the immutable PDF geometry of the
+ * current CMD atom, not a p/b parsed from its now-renumbered visible tag.
+ * The CMD-owned projection already provides exact lexical source scopes.
+ */
+export function sourcePDFLocationAtLine(locations,line){
+  if(!(locations instanceof Map)||!Number.isInteger(line)||line<1)return null;
+  let match=null;
+  for(const entry of locations.values()){
+    if(line>=entry.sourceLine&&line<=entry.scopeEndLine&&
+      (!match||entry.sourceLine>match.sourceLine))match=entry;
+  }
+  if(!match)return null;
+  // Do not reparse a PBS-looking origin into OCR geometry inside PDF.
+  // The CMD source projection has already resolved footer remappings and
+  // returns the authoritative immutable physical page, block and path.
+  if(!Number.isInteger(match.pageIndex)||!Number.isInteger(match.blockIndex))return null;
+  return match;
+}

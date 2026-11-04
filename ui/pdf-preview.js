@@ -8,7 +8,7 @@ import {EventBus,PDFViewer} from 'pdfjs-dist/web/pdf_viewer.mjs';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {viewStore,publishFocus} from './view-store.js';
-import {sourceLabelLocations} from './pdf-source-locations.js';
+import {sourceLabelLocations,sourcePDFLocationAtLine} from './pdf-source-locations.js';
 import './pdf-preview.css';
 import {subblockId} from './mineru-anchors.js';
 import {sourceBlocks,sourceSubblocks} from './pdf-source-locations.js';
@@ -352,7 +352,6 @@ export class PdfPreview {
     this.anchors=sourceBlocks(this.getMarkdown());
     this.subAnchors=sourceSubblocks(this.getMarkdown());
     this.labelSources=sourceLabelLocations(this.getMarkdown());
-    this.labelSources=sourceLabelLocations(this.getMarkdown());
     this.updateChipContentIndicators();
     this.scheduleOverlay();
   }
@@ -639,6 +638,9 @@ export class PdfPreview {
   resolvePDFClickedId(pageIndex,blockIndex,path){
     const origin=`p${pageIndex}b${blockIndex}`;
     const child=path?.length?subblockId(pageIndex,blockIndex,path):null;
+    const current=[...(this.labelSources?.values()||[])].find(loc=>
+      loc.origin===(child||origin)&&loc.role!=='body');
+    if(current)return current.id;
     if(child){
       const parent=this.blockCoverageRows.find(row=>row.origin===origin&&!row.promoted&&!row.isChildCover);
       const alias=parent?.nativeChildren?.[child];
@@ -679,7 +681,7 @@ export class PdfPreview {
     const physicalId=chosenPath?subblockId(pageIndex,chosen.blockIndex,chosenPath):
       `p${pageIndex}b${chosen.blockIndex}`;
     const mappedId=this.resolvePDFClickedId(pageIndex,chosen.blockIndex,chosenPath);
-    const logicalId=chosen.logicalId||(mappedId!==physicalId?mappedId:null);
+    const logicalId=chosen.logicalId||mappedId;
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
       partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null,
       logicalId};
@@ -687,14 +689,16 @@ export class PdfPreview {
     this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
     const sequence=++this.childFocusSequence;
-    // Route the RENAMED label by its current CMD ID, never its old OCR
-    // location. Unchanged native tags retain the existing parent/child
-    // marker workflow (including automatic child marker annotation).
-    if(logicalId&&logicalId!==physicalId){
-      if(this.focusVisiblePDFLabel(logicalId))return;
+    // An existing logical atom takes priority even when its ID happens to
+    // equal another atom's original OCR p/b. This is especially important
+    // for renumbered parent B and its physical neighbour with the same ID.
+    if(logicalId&&this.focusVisiblePDFLabel(logicalId))return;
+    if(chosen.logicalId||logicalId!==physicalId){
       this.setStatus(`${logicalId} · 当前 CMD 源码缺少同名标签，未跳至其他 OCR 块`);
       return;
     }
+    // A never-marked native child can still use the legacy physical marker
+    // fallback (and its existing annotation path); do not invent a CMD id.
     if(chosenPath){
       this.setStatus(`${subblockId(pageIndex,chosen.blockIndex,chosenPath)} · 正在定位源码…`);
       void this.focusPDFChild(pageIndex,chosen.blockIndex,chosenPath,sequence)
@@ -1619,10 +1623,16 @@ export class PdfPreview {
     this.overlay?.remove();this.overlay=null;
   }
   sendPdfNavigation(pageNumber){
-    const anchor=this.anchors.find(a=>a.pageIndex===pageNumber-1);
+    // The page input is a physical PDF page navigation. Its first real
+    // logical CMD block, not an old OCR b-index, owns the corresponding
+    // source position. Never infer tag lines using +2 magic offsets.
+    const anchor=[...(this.labelSources?.values()||[])]
+      .filter(loc=>loc.pageIndex===pageNumber-1&&loc.kind==='parent')
+      .sort((a,b)=>a.blockIndex-b.blockIndex||a.sourceLine-b.sourceLine)[0];
     if(anchor){
-      void this.focusLine(anchor.sourceLine+2,true);
-      publishFocus({sourceLine:anchor.sourceLine+2,origin:'pdf'});
+      const sourceLine=anchor.contentLine??anchor.sourceLine;
+      void this.focusLine(sourceLine,true);
+      publishFocus({sourceLine,origin:'pdf',elementId:anchor.id});
     }
   }
   onScroll(){
@@ -1657,9 +1667,14 @@ export class PdfPreview {
       this.revealUntil=performance.now()+1700;
     }
     if(!this.ready){this.pendingFocus={line,explicit};return;}
-    const child=this.subAnchors.find(a=>line>=a.sourceLine&&line<=a.scopeEndLine);
-    const source=child||this.anchors.find(a=>line>=a.sourceLine&&line<=a.scopeEndLine);
-    if(!source)return;
+    // A source line denotes a current CMD PBS atom; its logical ID can be
+    // p1b12 while its original physical rectangle is p1b10. Legacy
+    // blockAnchor() decodes only visible p/b and will select the wrong PDF
+    // block when source tags were renumbered using the PBS footer bindings.
+    const source=sourcePDFLocationAtLine(this.labelSources,line);
+    if(!source||!Number.isInteger(source.pageIndex)||
+      !Number.isInteger(source.blockIndex))return;
+    const child=source.path.length>0&&source.role!=='body'?source:null;
     if(this.comparison){
       if(this.comparison.points.some(p=>p.pageIndex===source.pageIndex&&p.blockIndex===source.blockIndex)){
         await this.compareBlocks(...this.comparison.points,{reveal:this.comparison.points[0].blockIndex===source.blockIndex&&this.comparison.points[0].pageIndex===source.pageIndex?'from':'to'});
@@ -1677,7 +1692,7 @@ export class PdfPreview {
       (this.selected?.partIndex??null)===(partIndex<0?null:partIndex))return;
     const samePage=this.selected?.pageIndex===source.pageIndex;
     this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex,
-      partIndex:partIndex<0?null:partIndex};
+      partIndex:partIndex<0?null:partIndex,logicalId:source.id};
     void this.prepareSelectedPDFText();
     // PDF.js page navigation resets the scroll position. Never invoke it for
     // another OCR block on the same page; the overlay will scroll only if the

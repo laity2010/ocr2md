@@ -1593,3 +1593,21 @@ INSERT INTO access_edges VALUES
  ('X-TEXTBLOCK-GLOBAL-L84','L','L','ui/main.js','createWorkspace(...,onTextBlockSummary)','L84','registered','Shell owns final status text, Workspace forwards only module summary string');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-STATUS-L84','L84','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit AG scan summary appended to Shell status while latest PDF action stays primary','integration');
+
+-- WCP30 three-pane reconciliation: current CMD id, source tag range, original
+-- OCR physical bbox are ONE canonical locator, never equal-by-number guesses.
+INSERT INTO apis VALUES
+ ('C63','C','projectCMDAtomLocations','ui/cmd-block-chains.js','export','live CM6 source, optional CMD chain model','lexical tag and content scopes keyed by current PBS id with immutable OCR origin, physical page/block/path','source id never substituted for OCR bbox; no user data writes',1),
+ ('C64','C','resolveCMDBlockFocusRow','ui/cmd-block-chains.js','export','CMD table rows plus semantic focus event','one exact current PBS row by id, physical MinerU origin or numeric source-line scope','must refuse stale explicit ID rather than silently select different AG row',1),
+ ('C65','C','returned.blockIdAtSourceLine','ui/wcp-cmd-element-transactions.js','returned','CM6 absolute source line number','current CMD PBS id or null','CMD owns mapping; Shell receives only scalar ID, no cross-module source parsing',1),
+ ('P26','P','sourcePDFLocationAtLine','ui/pdf-source-locations.js','export','CMD-labelled physical source projection and source line','exact current PBS id, original physical page/block/child and text scope','PDF does not parse current p/b as physical coordinates',1);
+INSERT INTO access_edges VALUES
+ ('X-FOCUS-P26','P','P','ui/pdf-preview.js','sourcePDFLocationAtLine(this.labelSources,line)','P26','registered','PDF source-click focus resolves source range through CMD-origin adapter'),
+ ('X-FOCUS-C63','P','C','ui/cmd-block-labels.js','projectCMDAtomLocations(source)','C63','registered','CMD canonical source-to-original-geometry projections'),
+ ('X-FOCUS-C64','G','C','ui/text-block-module.js','resolveCMDBlockFocusRow(tableRows,focus)','C64','registered','AG selects by identity or actual CMD tag range, not displayed array order'),
+ ('X-FOCUS-C65','L','C','ui/main.js','cmdPort.blockIdAtSourceLine(sourceLine)','C65','registered','CM6 explicit text click publishes current PBS ID across WCP event bus');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-FOCUS-C63','C63','tests/cmd-three-pane-focus.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','after move p1b10→p1b12, source tag and body map to physical p1b10, with one-to-one current IDs','direct'),
+ ('TC-FOCUS-C64','C64','tests/cmd-three-pane-focus.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG selection correct under reverse/shuffled display order, stale explicit ids fail closed','direct'),
+ ('TC-FOCUS-C65','C65','tests/cmd-three-pane-focus.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit actual CM6 click source p1b12→PDF physical p1b10→AG current p1b12','integration'),
+ ('TC-FOCUS-P26','P26','tests/cmd-three-pane-focus.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit PDF chip/canvas and AG clicks select identical current CMD p1b12','integration');

@@ -12,7 +12,7 @@
 import {createIndexProjector} from './wcp-document-index.js';
 import {planCMDBlockJoin,planCMDBlockMove} from './cmd-block-joins.js';
 import {planCMDBlockChainArrangement,readCMDBlockChains,parseCMDPBSId,
-  planCMDMigrateLegacyBlockChains,planCMDReparentPBS,planCMDJoinP1B3IntoP1B4,planCMDPromotePBSChild,planCMDMergeBlockChains,
+  planCMDMigrateLegacyBlockChains,projectCMDAtomLocations,planCMDReparentPBS,planCMDJoinP1B3IntoP1B4,planCMDPromotePBSChild,planCMDMergeBlockChains,
   planCMDSplitBlockChain,planCMDMoveBlockChainMember,planCMDExtractBlockChainMember,
   planCMDReorderPBSParents,planCMDAbsorbReviewedParent,planCMDInsertPBSParentAt} from './cmd-block-chains.js';
 import {planPDFTextInsertion} from './cmd-pdf-text-insert.js';
@@ -147,6 +147,15 @@ export function createCMDTransactionPort(cmd){
     queryLayout:()=>cmd.queryLayout(),
     queryBlockAnalysis:()=>cmd.queryBlockAnalysis(),
     queryBlockChains:()=>cmd.queryBlockChains(),
+    // On an explicit CM6 click, carry the CURRENT PBS identity across WCP.
+    // A line-only event can otherwise be mistaken for another reordered AG
+    // row before the async inventory has caught up.
+    blockIdAtSourceLine:line=>{
+      if(!Number.isInteger(line)||line<1)return null;
+      const loc=projectCMDAtomLocations(cmd.readSource()).find(item=>
+        line>=item.sourceLine&&line<=item.scopeEndLine);
+      return loc?.id||null;
+    },
     arrangeBlockChains:(chains,options={})=>commitChainPlan(
       planCMDBlockChainArrangement(cmd.readSource(),chains),options.expectedSource??null),
     migrateLegacyBlockChains:(options={})=>commitChainPlan(
