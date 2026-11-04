@@ -36,6 +36,11 @@ const inspect=page=>page.evaluate(()=>{
     getComputedStyle(el).visibility!=='hidden');
   const paths=[...paper.querySelectorAll('svg.ocr-pdf-label-leaders path')]
     .filter(path=>getComputedStyle(path).visibility!=='hidden');
+  const ends=[...paper.querySelectorAll('svg.ocr-pdf-label-leaders circle')];
+  const svg=paper.querySelector('svg.ocr-pdf-label-leaders');
+  const leaderStyle=paths.length?{opacity:Number(getComputedStyle(paths[0]).opacity),
+    width:Number.parseFloat(getComputedStyle(paths[0]).strokeWidth),
+    layer:Number(getComputedStyle(svg).zIndex)}:null;
   const covers=[...paper.querySelectorAll('.ocr-pdf-block-cover,.ocr-pdf-block-fragment:not([hidden])')];
   const collide=(a,b)=>a.left<b.right-.6&&b.left<a.right-.6&&a.top<b.bottom-.6&&b.top<a.bottom-.6;
   const problems=[];
@@ -50,7 +55,7 @@ const inspect=page=>page.evaluate(()=>{
   }
   return {paperWidth:bounds.width,original:labels.length,visible:visible.length,
     groups:groups.length,represented:visible.length,
-    leaders:paths.length,problems,
+    leaders:paths.length,endpointCount:ends.length,leaderStyle,problems,
     sides:{left:visible.filter(el=>el.getBoundingClientRect().left<bounds.left+bounds.width*.45).length,
       right:visible.filter(el=>el.getBoundingClientRect().right>bounds.left+bounds.width*.55).length}};
 });
@@ -93,6 +98,10 @@ try{
         assert.equal(before.visible,before.original,'every real block label is always visible');
         assert.equal(before.represented,before.original,'no PBS ID can disappear');
         assert.equal(before.leaders,before.visible,'every block has a direct leader');
+        assert.equal(before.endpointCount,before.visible,'every connector ends at a marked OCR edge');
+        assert(before.leaderStyle.opacity>=.78&&before.leaderStyle.width>=1.6,
+          'unfocused leaders must remain readable at 1.5×');
+        assert(before.leaderStyle.layer>5,'leader SVG must paint above OCR cover tint');
         assert.deepEqual(before.problems,[]);
         assert(before.sides.left>0&&before.sides.right>0,
           'dense page must use both sides of the paper, not one crowded rail');
@@ -106,10 +115,14 @@ try{
         const one=first.locator('svg.ocr-pdf-label-leaders path.ocr-pdf-rail-focused-line');
         assert.equal(await one.count(),1);
         assert.equal(await one.getAttribute('data-pbs-id'),'p0b7');
+        assert.equal(await first.locator('svg.ocr-pdf-label-leaders circle.ocr-pdf-rail-focused-end').getAttribute('data-pbs-id'),
+          'p0b7','focused leader must highlight its exact endpoint');
         assert(await native.evaluate(el=>el.classList.contains('ocr-pdf-rail-focused-label')));
         const child=first.locator('.ocr-pdf-block-fragment[data-subblock-id="p0b7s0"] > .ocr-pdf-subblock-chip');
         await child.click({timeout:35000});
         assert.equal(await one.getAttribute('data-pbs-id'),'p0b7s0');
+        assert.equal(await first.locator('svg.ocr-pdf-label-leaders circle.ocr-pdf-rail-focused-end').getAttribute('data-pbs-id'),
+          'p0b7s0','child focus must migrate its endpoint marker');
         assert.deepEqual((await inspect(page)).problems,[]);
         console.log('PDF_FREE_PAGE_FOCUS_PASS',name);
         assert.equal(readFileSync(doc,'utf8'),source,'PDF group selection cannot modify Markdown');

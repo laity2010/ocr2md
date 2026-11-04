@@ -215,12 +215,14 @@ export function layoutPDFFreePageLabels(items,{pageWidth,pageHeight,covers=[],ga
   }
   if(!slots)return {slots:[],leaders:[],scale:0,unplaced:valid.map(i=>i.id)};
   const leaders=slots.map(item=>{
-    const xEnd=item.side==='right'?item.target.right:item.target.left;
-    const yEnd=(item.target.top+item.target.bottom)/2;
-    const xStart=xEnd<item.left?item.left:
-      xEnd>item.left+item.width?item.left+item.width:
-      clamp(xEnd,item.left,item.left+item.width);
-    const yStart=item.top+item.height/2;
+    // A label can move to the opposite gutter or below its target.
+    // Connect the nearest two rectangle boundaries, not the target's
+    // originally assigned left/right edge; that would cross OCR content.
+    const cx=item.left+item.width/2,cy=item.top+item.height/2;
+    const xEnd=clamp(cx,item.target.left,item.target.right);
+    const yEnd=clamp(cy,item.target.top,item.target.bottom);
+    const xStart=clamp(xEnd,item.left,item.left+item.width);
+    const yStart=clamp(yEnd,item.top,item.top+item.height);
     return {id:item.id,side:item.side,kind:item.kind,
       path:`M ${xStart.toFixed(2)} ${yStart.toFixed(2)} L ${xEnd.toFixed(2)} ${yEnd.toFixed(2)}`,
       endpoint:{x:xEnd,y:yEnd}};

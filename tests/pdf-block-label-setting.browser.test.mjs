@@ -175,10 +175,17 @@ try{
         const pathD=await directPath.getAttribute('d');
         assert(pathD?.includes(' L ')&&!pathD.includes(' V '),
           'each PDF label must have an independent direct leader, no shared vertical bus');
-        assert.equal(await firstPage.evaluate(el=>el.classList.contains('ocr-pdf-rail-dense')),true,
-          'front page dense labels must default to quieter guides');
-        const faint=Number(await directPath.evaluate(el=>getComputedStyle(el).opacity));
-        assert(faint<0.2,'non-focused dense guides must be quiet');
+        assert.equal(await firstPage.evaluate(el=>el.classList.contains('ocr-pdf-rail-dense')),true);
+        const leaderStyle=await directPath.evaluate(el=>({
+          opacity:Number(getComputedStyle(el).opacity),
+          width:Number.parseFloat(getComputedStyle(el).strokeWidth),
+          layer:Number(getComputedStyle(el.ownerSVGElement).zIndex)
+        }));
+        assert(leaderStyle.opacity>=.78&&leaderStyle.width>=1.6,
+          'even dense pages must show a high-contrast connector: '+JSON.stringify(leaderStyle));
+        assert(leaderStyle.layer>5,'leaders must paint above PDF cover overlay');
+        assert.equal(await firstPage.locator('svg.ocr-pdf-label-leaders circle[data-pbs-id="p0b7"]').count(),1,
+          'every direct connector must mark the OCR bbox edge');
         const page1=await inspectPageLabels(page,'p0b7');
         assert.equal(page1.groups,0,'all original labels must remain visible, without groups');
         assert.equal(page1.labels,page1.original);

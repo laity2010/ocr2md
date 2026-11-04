@@ -275,7 +275,7 @@
 .ocr-pdf-subblock-chip.ocr-pdf-rail-label::after{display:none}
 .ocr-pdf-scroller .page .ocr-pdf-label-leaders{
   position:absolute;inset:0;width:100%;height:100%;overflow:visible;
-  pointer-events:none;z-index:4;
+  pointer-events:none;z-index:7;
 }
 .ocr-pdf-label-leaders path{
   fill:none;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round;
@@ -284,14 +284,21 @@
 .ocr-pdf-label-leaders .ocr-pdf-parent-leader{stroke:#8cb6a3}
 .ocr-pdf-label-leaders .ocr-pdf-child-leader{stroke:#8ab5da}
 
-/* Dense PDF rail legibility: every connector is independently routed.
- * No shared vertical bus; the chosen label has one high-contrast line and
- * original box, while other guides fade without hiding their touch targets. */
-.ocr-pdf-scroller .page .ocr-pdf-label-leaders path{
-  opacity:.43;stroke-width:1.15;
-}
+/* Every PBS label needs an always visible connector even on dense pages.
+ * The former .13 opacity hid nearly all lines on iPad Safari. Paint SVG
+ * above cover tint (z=5), below selection/pair overlays and outside hit tests. */
+.ocr-pdf-scroller .page .ocr-pdf-label-leaders path,
 .ocr-pdf-scroller .page.ocr-pdf-rail-dense .ocr-pdf-label-leaders path{
-  opacity:.13;stroke-width:1;
+  opacity:.88;stroke-width:1.8;
+  filter:drop-shadow(0 0 1px #061317);
+}
+.ocr-pdf-label-leaders circle{
+  fill:#b6e9d1;stroke:#102b2b;stroke-width:1.5;
+  opacity:.98;vector-effect:non-scaling-stroke;
+}
+.ocr-pdf-label-leaders circle.ocr-pdf-child-leader-end{fill:#b4d9ff}
+.ocr-pdf-label-leaders circle.ocr-pdf-rail-focused-end{
+  fill:#ffcd65;stroke:#2f250d;stroke-width:2.2;
 }
 .ocr-pdf-scroller .page .ocr-pdf-label-leaders path.ocr-pdf-rail-focused-line{
   opacity:1;stroke:#ffcb60;stroke-width:2.5;

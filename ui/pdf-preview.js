@@ -1400,6 +1400,8 @@ export class PdfPreview {
     for(const page of this.pages.querySelectorAll('.page')){
       for(const path of page.querySelectorAll(':scope > svg.ocr-pdf-label-leaders path'))
         path.classList.toggle('ocr-pdf-rail-focused-line',path.dataset.pbsId===focus);
+      for(const end of page.querySelectorAll(':scope > svg.ocr-pdf-label-leaders circle'))
+        end.classList.toggle('ocr-pdf-rail-focused-end',end.dataset.pbsId===focus);
     }
   }
   /** Arrange every native parent and child label in real blank space on
@@ -1482,6 +1484,16 @@ export class PdfPreview {
         path.setAttribute('data-pbs-id',line.id);
         path.setAttribute('class',line.kind==='parent'?'ocr-pdf-parent-leader':'ocr-pdf-child-leader');
         svg.append(path);
+        // Endpoint stays on the immutable OCR bbox boundary. The visible
+        // colored dot makes even a short connector unambiguous in Safari.
+        const end=document.createElementNS(ns,'circle');
+        end.setAttribute('cx',line.endpoint.x.toFixed(2));
+        end.setAttribute('cy',line.endpoint.y.toFixed(2));
+        end.setAttribute('r','2.8');
+        end.setAttribute('data-pbs-id',line.id);
+        end.setAttribute('class',line.kind==='parent'?
+          'ocr-pdf-parent-leader-end':'ocr-pdf-child-leader-end');
+        svg.append(end);
       }
       if(geometry.unplaced?.length)
         this.setStatus(`PDF 第 ${page.dataset.pageNumber} 页空白不足：${geometry.unplaced.join('、')}`);
