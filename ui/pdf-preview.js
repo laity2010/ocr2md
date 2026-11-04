@@ -214,7 +214,14 @@ export class PdfPreview {
     this.active=Boolean(active);
     // Merely opening the PDF preview never performs source-line navigation.
     // If an explicit click arrived while PDF was hidden, reveal its anchor.
-    if(this.active&&this.revealPending)this.scheduleOverlay();
+    if(this.active){
+      if(this.revealPending)this.scheduleOverlay();
+      // Global Settings may have changed while this PDF pane was display:none.
+      // Relayout once the page has a measured width again.
+      requestAnimationFrame(()=>{
+        if(this.active&&!this.disposed)this.avoidBlockChipCollisions();
+      });
+    }
   }
   revealCurrentLocation(){
     // Mode switching is presentation-only. A pending click may have been
@@ -1360,8 +1367,7 @@ export class PdfPreview {
       if(chip)group.items.push({id,chip,owner:node,rect,
         target:rect,anchorY:(rect.top+rect.bottom)/2,
         side:node.dataset.gutter,kind:node.classList.contains('ocr-pdf-block-child-cover')?'child':'parent',
-        width:chip.offsetWidth*this.blockLabelScale,
-        height:chip.offsetHeight*this.blockLabelScale});
+        width:chip.offsetWidth,height:chip.offsetHeight});
       for(const fragment of node.querySelectorAll(':scope > .ocr-pdf-block-fragment')){
         if(fragment.hidden)continue;
         const child=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
@@ -1375,13 +1381,33 @@ export class PdfPreview {
           owner:fragment,rect:part,target:part,
           anchorY:(part.top+part.bottom)/2,
           side:node.dataset.gutter,kind:'child',
-          width:child.offsetWidth*this.blockLabelScale,
-          height:child.offsetHeight*this.blockLabelScale});
+          width:child.offsetWidth,height:child.offsetHeight});
       }
     }
     for(const [page,group] of pages){
-      const geometry=layoutPDFEdgeRails(group.items,{pageWidth:page.clientWidth,
-        pageHeight:page.clientHeight,covers:group.covers});
+      const width=page.clientWidth,height=page.clientHeight;
+      if(!width||!height)continue; // hidden Settings pane: relayout on reveal
+      // The baseline is the currently accepted, auto-fitted 1.0× appearance.
+      // Multiplying raw label width before auto-fit would be canceled by
+      // the same gutter cap, making e.g. 0.6× look IDENTICAL to 1.0×.
+      const baseline=layoutPDFEdgeRails(group.items,{pageWidth:width,
+        pageHeight:height,covers:group.covers});
+      const nativeFit=new Map(baseline.slots.map(slot=>[slot.id,slot.scale]));
+      const desired=group.items.map(item=>{
+        const mult=(nativeFit.get(item.id)??1)*this.blockLabelScale;
+        return {...item,width:item.width*mult,height:item.height*mult};
+      });
+      // At >1× use the genuine blank scroller gutters OUTSIDE the page
+      // instead of squeezing enlarged labels back to the 1.0× size. Neither
+      // PDF canvas nor OCR bbox changes, and the scroller bounds still limit
+      // the available width (landscape iPad included).
+      const pageRect=page.getBoundingClientRect(),scrollerRect=this.scroller.getBoundingClientRect();
+      const outerLeft=this.blockLabelScale>1?
+        Math.max(0,pageRect.left-scrollerRect.left-4):0;
+      const outerRight=this.blockLabelScale>1?
+        Math.max(0,scrollerRect.right-pageRect.right-4):0;
+      const geometry=layoutPDFEdgeRails(desired,{pageWidth:width,
+        pageHeight:height,covers:group.covers,outerLeft,outerRight});
       const all=new Map(group.items.map(item=>[item.id,item]));
       for(const slot of geometry.slots){
         const item=all.get(slot.id);if(!item)continue;
@@ -1395,7 +1421,7 @@ export class PdfPreview {
         if(chip.style.left!==x)chip.style.left=x;
         if(chip.style.top!==y)chip.style.top=y;
         if(chip.style.right!=='auto')chip.style.right='auto';
-        const scale=`scale(${(slot.scale*this.blockLabelScale).toFixed(4)})`;
+        const scale=`scale(${((nativeFit.get(slot.id)??1)*this.blockLabelScale*slot.scale).toFixed(4)})`;
         if(chip.style.transform!==scale)chip.style.transform=scale;
         chip.style.transformOrigin='top left';
         chip.classList.add('ocr-pdf-rail-label');
