@@ -31,13 +31,13 @@ const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
 const PDF=page=>page.locator('.ocr-pdf-region-overlay');
 const selectedAG=page=>page.locator('.ocr-text-block-grid .ag-row-selected[row-id]');
 const badge=(page,id)=>page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] > .ocr-pdf-block-ctrl`);
-const waitMatch=(page,{id='p1b12',physical=10,text=targetLineText}={})=>page.waitForFunction(x=>{
+const waitMatch=(page,{id='p1b12',physical=10,text=targetLineText,native=false}={})=>page.waitForFunction(x=>{
   const ag=document.querySelector('.ocr-text-block-grid .ag-row-selected[row-id]');
   const pdf=document.querySelector('.ocr-pdf-region-overlay');
-  const line=document.querySelector('#editor .cm-outline-focused-line');
+  const line=document.querySelector(x.native?'#editor .cm-activeLine':'#editor .cm-outline-focused-line');
   return ag?.getAttribute('row-id')===x.id&&pdf?.dataset.pdfPage==='2'
      &&pdf?.dataset.blockIndex===String(x.physical)&&line?.textContent?.trim()===x.text;
-},{id,physical,text},{timeout:24000});
+},{id,physical,text,native},{timeout:24000});
 try{
   let live=false;for(let i=0;i<250;i++){
     try{if((await fetch(url+'/healthz')).ok){live=true;break;}}catch{}await sleep(130);
@@ -76,7 +76,7 @@ try{
           .filter({hasText:targetLineText}).first();
         await sourceLine.waitFor({state:'visible',timeout:21000});
         await sourceLine.click();
-        await waitMatch(page);
+        await waitMatch(page,{native:true});
         console.log('THREE_PANE_CM6_TO_ALL_OK',name,'source p1b12→OCR b10→AG p1b12');
         // AG → source → PDF: activate a neighbour to change the physical
         // overlay, then click the real AG source-line navigation button.
