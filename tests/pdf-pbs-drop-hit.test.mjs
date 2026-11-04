@@ -87,6 +87,19 @@ for(const fraction of [0,.2,.4,.6,.8,1]){
   const y=centerA.y+(centerB.y-centerA.y)*fraction;
   assert(pdfDropGuideCorridor(x,y,body,railBox),`handoff at ${fraction}`);
 }
+// A real AFTER drop aims for the right half of a 2-option rail, NOT its
+// center. Every interpolated movement must stay in the same selected target.
+for(const slot of [0.25,0.75]){
+  const start={x:(body.left+body.right)/2,y:(body.top+body.bottom)/2};
+  const finish={x:railBox.left+(railBox.right-railBox.left)*slot,
+    y:(railBox.top+railBox.bottom)/2};
+  for(let n=0;n<=14;n++){
+    const t=n/14;
+    assert(pdfDropGuideCorridor(start.x+(finish.x-start.x)*t,
+      start.y+(finish.y-start.y)*t,body,railBox),
+      `coverage-to-menu slot ${slot} position ${n}/14`);
+  }
+}
 assert.equal(pdfDropGuideCorridor(700,520,body,railBox),false,
   'distant blank PDF space cannot keep stale hover');
 console.log('PDF_COVER_TO_RAIL_CORRIDOR_PASS');

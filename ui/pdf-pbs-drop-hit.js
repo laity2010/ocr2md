@@ -84,5 +84,11 @@ export function pdfDropGuideCorridor(x,y,cover,rail,margin=21){
   const denom=dx*dx+dy*dy;
   if(denom<1)return Math.hypot(x-a.x,y-a.y)<=margin;
   const t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/denom));
-  return Math.hypot(x-(a.x+t*dx),y-(a.y+t*dy))<=margin;
+  // The user may be aiming at the RIGHT-HAND "之后" slot, not the guide
+  // center. Widen progressively into the full rail rectangle; a fixed-width
+  // centerline loses the captured parent halfway and selects its native child.
+  const railHalfWidth=Math.max(0,rail.right-rail.left)/2;
+  const railHalfHeight=Math.max(0,rail.bottom-rail.top)/2;
+  const allowance=margin+t*Math.max(railHalfWidth,railHalfHeight);
+  return Math.hypot(x-(a.x+t*dx),y-(a.y+t*dy))<=allowance;
 }
