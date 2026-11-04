@@ -45,17 +45,15 @@ const readWidth=async page=>{
   await page.locator('.ocr-pdf-block-cover[data-block-id="p1b3"]')
     .scrollIntoViewIfNeeded({timeout:35000});
   await tag(page,'p1b3').waitFor({state:'attached',timeout:35000});
-  // A dense rail can represent this label via a group button. The DOM-owned
-  // original keeps its proper physical size even when temporarily hidden.
+  // Every original label stays rendered: never hidden inside a group badge.
   return tag(page,'p1b3').evaluate(el=>el.getBoundingClientRect().width);
 };
 const cleanRails=page=>page.evaluate(()=>{
   const root=document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b3"]')?.closest('.page');
   if(!root)return {error:'PDF page 2 not found'};
   const labels=[...root.querySelectorAll('.ocr-pdf-rail-label')];
-  const chips=[...root.querySelectorAll('.ocr-pdf-rail-label,button.ocr-pdf-rail-group')]
+  const chips=[...root.querySelectorAll('.ocr-pdf-rail-label')]
     .filter(n=>n.checkVisibility()&&getComputedStyle(n).visibility!=='hidden');
-  const groups=[...root.querySelectorAll('button.ocr-pdf-rail-group:not([hidden])')];
   const boxes=[...root.querySelectorAll('.ocr-pdf-block-cover,.ocr-pdf-block-fragment:not([hidden])')]
     .filter(n=>n.checkVisibility()&&getComputedStyle(n).visibility!=='hidden');
   const r=n=>n.getBoundingClientRect();
@@ -69,8 +67,8 @@ const cleanRails=page=>page.evaluate(()=>{
   }
   const leaders=[...root.querySelectorAll('svg.ocr-pdf-label-leaders path')]
     .filter(path=>getComputedStyle(path).visibility!=='hidden').length;
-  return {labels:chips.length,groups:groups.length,
-    represented:chips.length-groups.length+groups.reduce((n,g)=>n+Number(g.dataset.memberCount),0),
+  return {labels:chips.length,groups:root.querySelectorAll('button.ocr-pdf-rail-group').length,
+    represented:chips.length,
     original:labels.length,colliding,leaders};
 });
 // Page-relative acceptance is distinct from collision testing: a label can
@@ -87,8 +85,7 @@ const inspectPageLabels=async(page,id)=>{
     const paper=node?.closest('.page');if(!paper)return {error:'PDF paper absent for '+blockId};
     const bounds=paper.getBoundingClientRect();
     const original=[...paper.querySelectorAll('.ocr-pdf-rail-label')];
-    const groups=[...paper.querySelectorAll('button.ocr-pdf-rail-group:not([hidden])')];
-    const chips=[...original,...groups]
+    const chips=[...original]
       .filter(el=>el.getBoundingClientRect().width>0&&el.checkVisibility()&&
         getComputedStyle(el).visibility!=='hidden');
     const covers=[...paper.querySelectorAll('.ocr-pdf-block-cover,.ocr-pdf-block-fragment:not([hidden])')];
@@ -108,8 +105,8 @@ const inspectPageLabels=async(page,id)=>{
     return {page:paper.dataset.pageNumber,paperWidth:bounds.width,
       ids:original.map(chip=>chip.textContent.trim()),
       visibleIds:chips.map(chip=>chip.textContent.trim()),
-      labels:chips.length,groups:groups.length,
-      represented:chips.length-groups.length+groups.reduce((n,g)=>n+Number(g.dataset.memberCount),0),
+      labels:chips.length,groups:paper.querySelectorAll('button.ocr-pdf-rail-group').length,
+      represented:chips.length,
       original:original.length,
       leaders:[...paper.querySelectorAll('svg.ocr-pdf-label-leaders path')]
         .filter(el=>getComputedStyle(el).visibility!=='hidden').length,
@@ -163,7 +160,8 @@ try{
         assert(enlarged>small*1.3,`1.5x must enlarge PDF chip visibly (${small} -> ${enlarged})`);
         const rail=await cleanRails(page);assert(!rail.error);
         assert(rail.represented>=10);assert.equal(rail.represented,rail.original);
-        assert.equal(rail.leaders,rail.labels-rail.groups);
+        assert.equal(rail.groups,0);
+        assert.equal(rail.leaders,rail.labels);
         assert.deepEqual(rail.colliding,[],`${name} scaled PDF labels must avoid source boxes`);
         // The screenshot's front page contains dense parent+child chips at
         // the comfortable 1.5x size. Every leader must be an independent
@@ -181,22 +179,16 @@ try{
           'front page dense labels must default to quieter guides');
         const faint=Number(await directPath.evaluate(el=>getComputedStyle(el).opacity));
         assert(faint<0.2,'non-focused dense guides must be quiet');
-        const grouped=firstPage.locator('button.ocr-pdf-rail-group:not([hidden])');
-        const groupCount=await grouped.count();
-        assert(groupCount>=2,'dense page must have collapsible groups, not a wall of tiny IDs');
-        const p0Group=firstPage.locator('button.ocr-pdf-rail-group:not([hidden])[data-member-ids~="p0b7"]');
-        assert.equal(await p0Group.count(),1,'the reviewed p0b7 must be recoverable via one group');
-        const groupOriginals=(await p0Group.getAttribute('data-member-ids')).split(' ');
-        assert(groupOriginals.length>=4);
-        assert.equal(await firstPageLabel.evaluate(el=>getComputedStyle(el).visibility),'hidden');
+        const page1=await inspectPageLabels(page,'p0b7');
+        assert.equal(page1.groups,0,'all original labels must remain visible, without groups');
+        assert.equal(page1.labels,page1.original);
+        assert.equal(page1.leaders,page1.original);
+        assert.deepEqual(page1.outside,[]);
+        assert.deepEqual(page1.collisions,[]);
+        assert.equal(await firstPageLabel.evaluate(el=>getComputedStyle(el).visibility),'visible');
         if(process.env.OCR_PBS_VISUAL_CAPTURE)
           await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
             `-${name}-page1-dense.png`),animations:'disabled'});
-        await p0Group.click({timeout:35000});
-        assert.equal(await firstPageLabel.evaluate(el=>getComputedStyle(el).visibility),'visible');
-        assert.equal(await p0Group.isVisible(),false,'expanded cluster summary gives way to original IDs');
-        assert.equal(await firstPage.locator('button.ocr-pdf-rail-group:not([hidden])').count(),
-          groupCount-1);
         await firstPageLabel.click({timeout:35000});
         assert.equal(await directPath.evaluate(el=>el.classList.contains('ocr-pdf-rail-focused-line')),
           true,'tapping label highlights only its own leader');
@@ -215,10 +207,7 @@ try{
         // Child tap switches precise one-to-one focus while retaining its
         // existing PDF-to-source mapping. Its parent cover must not be moved.
         const child=page.locator('.ocr-pdf-block-fragment[data-subblock-id="p0b7s0"] > .ocr-pdf-subblock-chip');
-        if(await child.evaluate(el=>getComputedStyle(el).visibility)==='hidden'){
-          const childGroup=firstPage.locator('button.ocr-pdf-rail-group[data-member-ids~="p0b7s0"]');
-          await childGroup.click({timeout:35000});
-        }
+        assert.equal(await child.evaluate(el=>getComputedStyle(el).visibility),'visible');
         await child.click({timeout:35000});
         assert.equal(await firstPage.locator('svg.ocr-pdf-label-leaders path.ocr-pdf-rail-focused-line')
           .getAttribute('data-pbs-id'),'p0b7s0');
@@ -238,7 +227,8 @@ try{
         const p7=await inspectPageLabels(page,'p6b8');
         assert(!p7.error);assert(p7.represented>=8);
         assert.equal(p7.represented,p7.original);
-        assert.equal(p7.leaders,p7.labels-p7.groups);
+        assert.equal(p7.leaders,p7.labels);
+        assert.equal(p7.groups,0);
         console.log('PDF_PAGE7_PAPER_RAILS',name,JSON.stringify(p7));
         assert.deepEqual(p7.outside,[],'page 7: every label must stay INSIDE PDF paper');
         assert.deepEqual(p7.collisions,[],'page 7: labels must not overlap OCR covers');
@@ -250,7 +240,8 @@ try{
         await page.locator('.ocr-pdf-page').fill('17');
         await page.locator('.ocr-pdf-page').dispatchEvent('change');
         const p17=await inspectPageLabels(page,'p16b10');
-        assert(!p17.error);assert.equal(p17.leaders,p17.labels-p17.groups);
+        assert(!p17.error);assert.equal(p17.leaders,p17.labels);
+        assert.equal(p17.groups,0);
         assert.equal(p17.represented,p17.original);
         assert.deepEqual(p17.outside,[],'page 17 parent/child labels must stay on PDF paper');
         assert.deepEqual(p17.collisions,[],'page 17 parent/child rail collision');

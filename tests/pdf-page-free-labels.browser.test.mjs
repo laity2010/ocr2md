@@ -1,4 +1,4 @@
-/** Real first-page dense PDF 1.5x badge expansion: Chrome/WebKit.
+/** Real first-page dense PDF 1.5x free-page labels: Chrome/WebKit.
  * Disposable original document and settings, no CMD writes.
  */
 import assert from 'node:assert/strict';
@@ -12,7 +12,7 @@ import {chromeExecutable} from './platform.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {selectPreview} from './navigation-ui.test-helper.mjs';
 const source=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
-const dir=mkdtempSync(join(tmpdir(),'ocr2md-rail-groups-'));
+const dir=mkdtempSync(join(tmpdir(),'ocr2md-page-free-labels-'));
 const doc=join(dir,'document.md');writeFileSync(doc,source);
 const settingsFile=join(dir,'settings.json');
 writeFileSync(settingsFile,JSON.stringify({settings:{'pdf.textBlocks.labelScale':{
@@ -31,8 +31,8 @@ const inspect=page=>page.evaluate(()=>{
   if(!paper)return {error:'paper 1 missing'};
   const bounds=paper.getBoundingClientRect();
   const labels=[...paper.querySelectorAll('.ocr-pdf-rail-label')];
-  const groups=[...paper.querySelectorAll('button.ocr-pdf-rail-group:not([hidden])')];
-  const visible=[...labels,...groups].filter(el=>el.checkVisibility()&&
+  const groups=[...paper.querySelectorAll('button.ocr-pdf-rail-group')];
+  const visible=[...labels].filter(el=>el.checkVisibility()&&
     getComputedStyle(el).visibility!=='hidden');
   const paths=[...paper.querySelectorAll('svg.ocr-pdf-label-leaders path')]
     .filter(path=>getComputedStyle(path).visibility!=='hidden');
@@ -49,10 +49,10 @@ const inspect=page=>page.evaluate(()=>{
       problems.push('label collision '+el.textContent.trim()+' / '+other.textContent.trim());
   }
   return {paperWidth:bounds.width,original:labels.length,visible:visible.length,
-    groups:groups.length,represented:visible.length-groups.length+
-      groups.reduce((sum,g)=>sum+Number(g.dataset.memberCount),0),
+    groups:groups.length,represented:visible.length,
     leaders:paths.length,problems,
-    keys:groups.map(g=>({ids:g.dataset.memberIds,count:g.dataset.memberCount}))};
+    sides:{left:visible.filter(el=>el.getBoundingClientRect().left<bounds.left+bounds.width*.45).length,
+      right:visible.filter(el=>el.getBoundingClientRect().right>bounds.left+bounds.width*.55).length}};
 });
 try{
   let ready=false;
@@ -75,44 +75,34 @@ try{
         await page.locator('.ocr-pdf-block-cover[data-block-id="p0b7"]').scrollIntoViewIfNeeded({timeout:60000});
         await page.waitForFunction(()=>document.querySelectorAll('.page[data-page-number="1"] .ocr-pdf-rail-label').length>15,
           null,{timeout:60000});
-        let before=await inspect(page);
+        const before=await inspect(page);
         assert(!before.error);assert(before.original>15);
-        assert(before.groups>=2,'dense page must reduce visible labels with group badges');
-        assert(before.visible<before.original,'summaries should materially reduce initial clutter');
-        assert.equal(before.represented,before.original,'no ID may be lost when collapsed');
-        assert.equal(before.leaders,before.visible-before.groups);
+        assert.equal(before.groups,0,'no label grouping UI may remain');
+        assert.equal(before.visible,before.original,'every real block label is always visible');
+        assert.equal(before.represented,before.original,'no PBS ID can disappear');
+        assert.equal(before.leaders,before.visible,'every block has a direct leader');
         assert.deepEqual(before.problems,[]);
-        console.log('PDF_RAIL_GROUP_COLLAPSED_PASS',name,JSON.stringify(before));
+        assert(before.sides.left>0&&before.sides.right>0,
+          'dense page must use both sides of the paper, not one crowded rail');
+        console.log('PDF_FREE_PAGE_LABELS_VISIBLE_PASS',name,JSON.stringify(before));
         if(process.env.OCR_PBS_VISUAL_CAPTURE)
           await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
-            `-${name}-collapsed.png`),animations:'disabled'});
-        const group=first.locator('button.ocr-pdf-rail-group:not([hidden])[data-member-ids~="p0b7"]');
-        assert.equal(await group.count(),1);
-        const included=(await group.getAttribute('data-member-ids')).split(' ');
-        assert(included.length>=4);
+            `-${name}-all.png`),animations:'disabled'});
         const native=page.locator('.ocr-pdf-block-cover[data-block-id="p0b7"] > .ocr-pdf-block-ctrl');
-        assert.equal(await native.evaluate(el=>getComputedStyle(el).visibility),'hidden');
-        await group.click({timeout:35000});
         assert.equal(await native.evaluate(el=>getComputedStyle(el).visibility),'visible');
-        const expanded=await inspect(page);
-        assert.equal(expanded.groups,before.groups-1);
-        assert.equal(expanded.represented,expanded.original);
-        assert.deepEqual(expanded.problems,[]);
         await native.click({timeout:35000});
         const one=first.locator('svg.ocr-pdf-label-leaders path.ocr-pdf-rail-focused-line');
         assert.equal(await one.count(),1);
         assert.equal(await one.getAttribute('data-pbs-id'),'p0b7');
         assert(await native.evaluate(el=>el.classList.contains('ocr-pdf-rail-focused-label')));
-        console.log('PDF_RAIL_GROUP_EXPANDED_PASS',name,JSON.stringify(expanded));
-        if(process.env.OCR_PBS_VISUAL_CAPTURE)
-          await page.screenshot({path:process.env.OCR_PBS_VISUAL_CAPTURE.replace(/\.png$/,
-            `-${name}-expanded.png`),animations:'disabled'});
-        await page.locator('.ocr-pdf-scroller').press('Escape');
-        const closed=await inspect(page);
-        assert.equal(closed.groups,before.groups);assert.deepEqual(closed.problems,[]);
+        const child=first.locator('.ocr-pdf-block-fragment[data-subblock-id="p0b7s0"] > .ocr-pdf-subblock-chip');
+        await child.click({timeout:35000});
+        assert.equal(await one.getAttribute('data-pbs-id'),'p0b7s0');
+        assert.deepEqual((await inspect(page)).problems,[]);
+        console.log('PDF_FREE_PAGE_FOCUS_PASS',name);
         assert.equal(readFileSync(doc,'utf8'),source,'PDF group selection cannot modify Markdown');
         assert.deepEqual(errors,[]);
-        console.log('PDF_RAIL_GROUP_BROWSER_PASS',name);
+        console.log('PDF_FREE_PAGE_BROWSER_PASS',name);
       }finally{await page.close();}
     }finally{await browser.close();}
   }

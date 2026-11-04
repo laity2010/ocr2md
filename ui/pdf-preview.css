@@ -312,23 +312,3 @@
   background:rgba(255,201,80,.28);outline:2px solid #ffd36c;
   outline-offset:-2px;
 }
-
-/* Progressive disclosure for densely packed paper-rail IDs. A summary badge
- * occupies a real former label slot; all original IDs stay in their own DOM
- * node and regain their full 1.5x touch/drag behavior after expansion. */
-.ocr-pdf-scroller .page .ocr-pdf-rail-label.ocr-pdf-rail-group-collapsed{
-  visibility:hidden!important;pointer-events:none!important;
-}
-.ocr-pdf-scroller .page .ocr-pdf-rail-group{
-  position:absolute;z-index:21;box-sizing:border-box;display:flex;
-  align-items:center;justify-content:center;white-space:nowrap;
-  padding:0 1px;min-width:0;min-height:0;overflow:hidden;
-  font:700 11px/1.1 "OCR2MD Sarasa",system-ui,sans-serif;
-  background:#485e51;color:#f5e5b6;border:1px solid #d8c383;
-  border-radius:5px;box-shadow:0 1px 5px #000a;
-  cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
-}
-.ocr-pdf-scroller .page .ocr-pdf-rail-group[hidden]{display:none!important}
-.ocr-pdf-scroller .page .ocr-pdf-rail-group:focus-visible{
-  outline:2px solid #ffc960;outline-offset:2px;
-}

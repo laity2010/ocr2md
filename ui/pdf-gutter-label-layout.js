@@ -133,3 +133,97 @@ export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,p
   }
   return {slots,leaders,safe};
 }
+
+/** Pack every real PBS label into unused space of its OWN PDF page.
+ * All original OCR rectangles are exclusion zones, not an artificial
+ * page-wide two-rail bounding union. Side strips, the other side, gaps
+ * between columns and whitespace below the text can all be used.
+ * Full-size labels are attempted first; fallback scale is only considered
+ * when the geometry has insufficient space for the requested magnitude.
+ * This is view-only geometry: CMD identities, owners and OCR boxes stay put.
+ */
+export function layoutPDFFreePageLabels(items,{pageWidth,pageHeight,covers=[],gap=2,padding=3}={}){
+  if(!items.length)return {slots:[],leaders:[],scale:1};
+  const valid=items.filter(i=>i?.target&&Number.isFinite(i.width)&&i.width>0&&
+    Number.isFinite(i.height)&&i.height>0&&Number.isFinite(i.anchorY));
+  const obstacles=covers.filter(r=>[r.left,r.right,r.top,r.bottom].every(Number.isFinite));
+  const widths=[1,.97,.93,.89,.84,.78,.7,.6,.5];
+  const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+  const intersectsX=(x,w,r)=>x<r.right+gap&&x+w>r.left-gap;
+  const pack=(scale,sortMode)=>{
+    const placed=[];
+    const prepared=valid.map(item=>({...item,w:item.width*scale,h:item.height*scale}));
+    prepared.sort((a,b)=>sortMode===0?
+      a.anchorY-b.anchorY||b.w-a.w||a.id.localeCompare(b.id,undefined,{numeric:true}):
+      sortMode===1?b.w*b.h-a.w*a.h||a.anchorY-b.anchorY:
+      a.side.localeCompare(b.side)||a.anchorY-b.anchorY);
+    for(const item of prepared){
+      const {w,h}=item;
+      const limitX=pageWidth-padding-w,limitY=pageHeight-padding-h;
+      if(limitX<padding||limitY<padding)return null;
+      const xSet=new Set();
+      const add=x=>{if(Number.isFinite(x))xSet.add(Math.round(clamp(x,padding,limitX)*10)/10);};
+      add(padding);add(limitX);
+      add(item.target.left-gap-w);add(item.target.right+gap);
+      const interval=Math.max(9,Math.min(23,w*.45));
+      for(let x=padding;x<=limitX;x+=interval)add(x);
+      for(const r of obstacles){add(r.left-gap-w);add(r.right+gap);}
+      for(const r of placed){add(r.left-gap-w);add(r.left+r.width+gap);}
+      let best=null;
+      const preferredY=clamp(item.anchorY-h/2,padding,limitY);
+      const preferredX=item.side==='right'?item.target.right+gap:item.target.left-gap-w;
+      for(const x of xSet){
+        const occupied=[];
+        for(const r of obstacles)if(intersectsX(x,w,r))
+          occupied.push([r.top-gap-h,r.bottom+gap]);
+        for(const r of placed)if(intersectsX(x,w,{left:r.left,right:r.left+r.width,top:r.top,bottom:r.top+r.height}))
+          occupied.push([r.top-gap-h,r.top+r.height+gap]);
+        occupied.sort((a,b)=>a[0]-b[0]);
+        let current=padding;
+        const candidateY=[];
+        for(const [start,end] of occupied){
+          if(start>=current&&current<=limitY)
+            candidateY.push(clamp(preferredY,current,Math.min(start,limitY)));
+          current=Math.max(current,end);
+          if(current>limitY)break;
+        }
+        if(current<=limitY)candidateY.push(clamp(preferredY,current,limitY));
+        for(const y of candidateY){
+          const sideMismatch=item.side==='right'?(x+w/2<pageWidth/2):
+            (x+w/2>pageWidth/2);
+          const insideTargetX=x+w>item.target.left&&x<item.target.right;
+          const score=Math.abs(y-preferredY)*1.65+
+            Math.abs(x-preferredX)*.20+(sideMismatch?20:0)+
+            (insideTargetX?14:0)+Math.abs(y-(item.anchorY-h/2))*.12;
+          if(!best||score<best.score)best={left:x,top:y,score};
+        }
+      }
+      if(!best)return null;
+      placed.push({...item,left:best.left,top:best.top,width:w,height:h,scale,side:item.side});
+    }
+    return placed;
+  };
+  let slots=null,scale=1;
+  for(const size of widths){
+    // Different deterministic orders avoid one greedy first-fit placement
+    // turning otherwise adequate page whitespace into a false shortage.
+    for(let order=0;order<3;order++){
+      const attempt=pack(size,order);
+      if(attempt){slots=attempt;scale=size;break;}
+    }
+    if(slots)break;
+  }
+  if(!slots)return {slots:[],leaders:[],scale:0,unplaced:valid.map(i=>i.id)};
+  const leaders=slots.map(item=>{
+    const xEnd=item.side==='right'?item.target.right:item.target.left;
+    const yEnd=(item.target.top+item.target.bottom)/2;
+    const xStart=xEnd<item.left?item.left:
+      xEnd>item.left+item.width?item.left+item.width:
+      clamp(xEnd,item.left,item.left+item.width);
+    const yStart=item.top+item.height/2;
+    return {id:item.id,side:item.side,kind:item.kind,
+      path:`M ${xStart.toFixed(2)} ${yStart.toFixed(2)} L ${xEnd.toFixed(2)} ${yEnd.toFixed(2)}`,
+      endpoint:{x:xEnd,y:yEnd}};
+  });
+  return {slots,leaders,scale};
+}

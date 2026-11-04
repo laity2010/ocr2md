@@ -1535,3 +1535,12 @@ INSERT INTO apis VALUES
  ('P22','P','createPDFBBoxGesture','ui/pdf-bbox-gesture.js','export','PDF page DOM, verified PBS ID, effective bbox and page dimensions, semantic commit callback','five pointer handles for moving/resizing a transient PDF rectangle','no direct CMD/PDF archive mutation, cancel/no-op safe, one semantic callback on release',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP6-P22','P22','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and WebKit center drag writes one coordinate correction; no direct source or PDF evidence access','integration');
+
+-- One-to-one PDF label placement in all free space within the source page.
+-- CMD blocks and original bbox geometry remain immutable; no summary badges.
+INSERT INTO apis VALUES
+ ('P23','P','layoutPDFFreePageLabels','ui/pdf-gutter-label-layout.js','export','immutable page size, source covers and individually measured PBS tag dimensions','deterministic one-to-one page-local free-space packing and direct SVG leader geometry','all labels visible; use left/right/bottom free space before reducing label size; no OCR bbox mutations',1);
+INSERT INTO access_edges VALUES
+ ('X-PDF-FREE-P23','P','P','ui/pdf-preview.js','layoutPDFFreePageLabels(desired,{pageWidth:width,pageHeight:height,covers:group.covers})','P23','registered','native interactive source chips positioned in same-page free space without grouping');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-PDF-FREE-P23','P23','tests/pdf-free-page-labels.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','22 pages of original PBS labels at 0.5x/1x/1.5x/2.5x; no bbox or label overlap; synthetic lower page whitespace and opposite side; 1.5x original sizes unchanged','direct');
