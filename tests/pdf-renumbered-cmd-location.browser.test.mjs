@@ -28,13 +28,9 @@ const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...
 const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
 const badge=(page,id)=>page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] > .ocr-pdf-block-ctrl`);
 const fragment=(page,id)=>page.locator(`.ocr-pdf-block-fragment[data-subblock-id="${id}"] > .ocr-pdf-subblock-chip`);
-const focus=page=>page.evaluate(async()=>{
-  const {viewStore}=await import('/view-store.js');
-  const latest=viewStore.getState().focusTarget;
-  const view=window.__v6cm6?.view;
-  return {sourceLine:latest?.sourceLine,elementId:latest?.elementId,origin:latest?.origin,
-    cmLine:view?.state.doc.lineAt(view.state.selection.main.head).number};
-});
+// Production bundles do not expose viewStore.js or a developer-only CM6
+// global. The actual highlighted CM6 line is the browser-visible evidence.
+const focusedLine=page=>page.locator('#editor .cm-outline-focused-line').first().textContent();
 async function verify(page,id,origin,locator){
   const expected=labels.get(id);assert(expected,`Missing CMD current label ${id}`);
   await locator.waitFor({state:'attached',timeout:42000});
@@ -45,21 +41,20 @@ async function verify(page,id,origin,locator){
     const status=document.querySelector('.ocr-pdf-status')?.textContent||'';
     return status.includes(expected.id)&&status.includes(`第 ${expected.line} 行`);
   },{id,line:targetLine},{timeout:19000});
-  await page.waitForFunction(async expected=>{
-    const {viewStore}=await import('/view-store.js');
-    return viewStore.getState().focusTarget?.sourceLine===expected.line&&
-      viewStore.getState().focusTarget?.elementId===expected.id;
-  },{id,line:targetLine},{timeout:20000});
-  const actual=await focus(page);
-  assert.equal(actual.sourceLine,targetLine);
-  assert.equal(actual.elementId,id);
-  assert.equal(actual.origin,'pdf');
+  const lineText=source.split('\n')[targetLine-1]?.trim();
+  await page.waitForFunction(text=>{
+    const highlighted=document.querySelector('#editor .cm-outline-focused-line');
+    return highlighted?.textContent?.trim()===text;
+  },lineText,{timeout:20000});
+  const actual=await focusedLine(page);
+  assert.equal(actual.trim(),lineText,
+    'CM6 must highlight the EXACT currently named CMD text line');
   if(origin){
     const physical=locator.locator('xpath=ancestor::*[contains(@class,"ocr-pdf-block-cover")]').first();
     assert.equal(await physical.getAttribute('data-origin-id'),origin,
       'label must keep its original physical OCR bbox identity');
   }
-  console.log('PDF_RENUMBER_FOCUS_OK',id,origin||'-',JSON.stringify(actual));
+  console.log('PDF_RENUMBER_FOCUS_OK',id,origin||'-',JSON.stringify(actual.trim().slice(0,100)));
 }
 try{
   let live=false;for(let i=0;i<280;i++){
@@ -92,7 +87,8 @@ try{
         await verify(page,'p1b7','p1b5',badge(page,'p1b7'));
         await verify(page,'p1b8','p1b7',badge(page,'p1b8'));
         await verify(page,'p6b6s1','p6b7',badge(page,'p6b6s1'));
-        await verify(page,promotedId,'p9b1',badge(page,promotedId));
+        await verify(page,promotedId,'p3b0s1',badge(page,promotedId));
+        await verify(page,'p3b0s0',null,fragment(page,'p3b0s0'));
         await verify(page,'p3b0',null,badge(page,'p3b0'));
         // Canvas hits have only native physical geometry; these too must
         // resolve the moved parent's current logical label.
@@ -103,11 +99,14 @@ try{
         });
         await physical.evaluate((node,{x,y})=>node.closest('.page').querySelector('canvas')
           .dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:x,clientY:y})),point);
-        await page.waitForFunction(async expected=>{
-          const {viewStore}=await import('/view-store.js');
-          return viewStore.getState().focusTarget?.elementId===expected.id&&
-            viewStore.getState().focusTarget?.sourceLine===expected.line;
-        },{id:'p1b7',line:labels.get('p1b7').contentLine??labels.get('p1b7').sourceLine},{timeout:17000});
+        await page.waitForFunction(expected=>{
+          const status=document.querySelector('.ocr-pdf-status')?.textContent||'';
+          const line=document.querySelector('#editor .cm-outline-focused-line')?.textContent?.trim();
+          return status.includes(expected.id)&&status.includes(`第 ${expected.line} 行`)
+            &&line===expected.text;
+        },{id:'p1b7',line:labels.get('p1b7').contentLine??labels.get('p1b7').sourceLine,
+          text:source.split('\n')[(labels.get('p1b7').contentLine??labels.get('p1b7').sourceLine)-1].trim()},
+        {timeout:20000});
         assert.equal(readFileSync(doc,'utf8'),source,'navigation must never rewrite CMD document');
         assert.deepEqual(errors,[]);
         console.log('PDF_RENUMBER_SOURCE_FOCUS_BROWSER_PASS',name,'after/reparent/promote/original/canvas');

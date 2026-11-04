@@ -14,8 +14,9 @@ export function seededRenumberedSource(){
   let text=original;
   text=apply(text,planCMDInsertPBSParentAfter(text,'p1b5','p1b6'));
   text=apply(text,planCMDAbsorbReviewedParent(text,'p6b7','p6b6'));
-  text=apply(text,planCMDAbsorbReviewedParent(text,'p9b1','p9b0'));
-  const promotion=planCMDPromotePBSChild(text,'p9b0s1');
+  // Use a genuine native OCR child; promoting a previously absorbed
+  // independent parent exercises a separate structural operation.
+  const promotion=planCMDPromotePBSChild(text,'p3b0s1');
   text=apply(text,promotion);
   return {source:text,promotedId:promotion.newId};
 }

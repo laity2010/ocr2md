@@ -662,8 +662,10 @@ export class PdfPreview {
     // gutter chips carry the reviewed visible PBS id. Both selection paths
     // must produce the SAME logical identity for toolbar actions. Otherwise
     // a correct status `p1b3s1` can coexist with a disabled action button.
-    const logicalId=chosen.logicalId||
-      this.resolvePDFClickedId(pageIndex,chosen.blockIndex,chosenPath);
+    const physicalId=chosenPath?subblockId(pageIndex,chosen.blockIndex,chosenPath):
+      `p${pageIndex}b${chosen.blockIndex}`;
+    const mappedId=this.resolvePDFClickedId(pageIndex,chosen.blockIndex,chosenPath);
+    const logicalId=chosen.logicalId||(mappedId!==physicalId?mappedId:null);
     this.selected={pageIndex,blockIndex:chosen.blockIndex,
       partIndex:chosen.partIndex,partPath:chosenPath?[...chosenPath]:null,
       logicalId};
@@ -671,10 +673,11 @@ export class PdfPreview {
     this.drawBBoxEditor();
     void this.prepareSelectedPDFText();this.drawOverlay();
     const sequence=++this.childFocusSequence;
-    // A displayed logical PBS ID must ALWAYS take precedence over stale
-    // physical page/block/path anchors, which refer to old OCR positions.
-    if(this.focusVisiblePDFLabel(logicalId))return;
-    if(chosen.logicalId){
+    // Route the RENAMED label by its current CMD ID, never its old OCR
+    // location. Unchanged native tags retain the existing parent/child
+    // marker workflow (including automatic child marker annotation).
+    if(logicalId&&logicalId!==physicalId){
+      if(this.focusVisiblePDFLabel(logicalId))return;
       this.setStatus(`${logicalId} · 当前 CMD 源码缺少同名标签，未跳至其他 OCR 块`);
       return;
     }
