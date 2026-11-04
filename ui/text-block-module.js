@@ -4,7 +4,7 @@ import {publishFocus,viewStore} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
-import {filterTextBlockPageRows} from './text-block-page-scope.js';
+import {textBlockPageFilterModel} from './text-block-page-scope.js';
 import './text-block-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#e9ab52',backgroundColor:'#2f383e',
@@ -214,7 +214,8 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     return handle;
   };
   const columns=[
-    {field:'pdfPage',headerName:'页码',width:68,minWidth:60,pinned:'left',lockPinned:true},
+    {field:'pdfPage',headerName:'页码',width:82,minWidth:70,pinned:'left',lockPinned:true,
+      filter:EnumCheckboxFilter,suppressHeaderMenuButton:true,cellDataType:false},
     {field:'sourceLine',headerName:'源码行',width:82,minWidth:75,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'id',headerName:'PBS / BC',width:155,minWidth:128,cellRenderer:p=>{
       if(!p.data?.isChainHeader){
@@ -300,7 +301,10 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       bounds?set.filter(r=>r.from!==null&&r.from>=bounds.from&&r.from<bounds.to):[];
     // PDF navigation affects ONLY the text-block AG view. Every original
     // parent/child CMD atom remains in tableRows for PDF overlay and Undo.
-    return mode==='blocks'?filterTextBlockPageRows(inChapter,currentPDFPage,showAllPages):inChapter;
+    // The grid must own EVERY page's row data. A pre-filtered rowData only
+    // exposed the current page to the header popup and made manual selection
+    // of another page impossible. The page column filter owns visibility.
+    return inChapter;
   };
   const projectedRows=()=>{
     // Structural correction is a logical view over immutable original OCR.
@@ -335,13 +339,22 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       const first=sortedMembers[0];
       result.push({id:`group:${key}`,isChainHeader:true,kind:'chain',chainId:key,
         chainLabel:first.chainLabel,chainSize:first.chainSize,chainType:first.chainType,
-        sourceLine:null,from:members[0].from,chainMembers:[...first.chainMembers],
+        sourceLine:null,from:members[0].from,
+        pageIndex:first.pageIndex,pdfPage:first.pdfPage,
+        chainMembers:[...first.chainMembers],
         text:`${first.chainSize} 个成员 · 当前视图 ${members.length} 个 · ${first.chainType||'未设对象类型'}`});
       if(!collapsedChains.has(key))result.push(...sortedMembers);
     }
     return result;
   };
   const updateBlockRows=()=>{if(mode==='blocks')grid.setGridOption('rowData',projectedRows());};
+  // Only explicit PDF navigation or the top-level 全部 toggle resets this
+  // column's selection. Choosing a different page in the popup remains in
+  // effect until the PDF page actually changes again.
+  const applyPageFilter=()=>{
+    if(mode!=='blocks')return;
+    grid.setFilterModel(textBlockPageFilterModel(grid.getFilterModel(),currentPDFPage,showAllPages));
+  };
   const selectedAtom=()=>tableRows.find(r=>r.id===selectedId&&r.format==='cmd-v1')||null;
   const syncBBoxFields=()=>{
     const atom=selectedAtom();
@@ -411,6 +424,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     grid.setGridOption('rowData',mode==='candidates'?candidates:projectedRows());
     // Mode-specific filters cannot leak between unrelated AG schemas.
     grid.setFilterModel(null);
+    if(mode==='blocks')applyPageFilter();
     refresh();
   };
   blocksButton.addEventListener('click',()=>{if(mode!=='blocks'){mode='blocks';updateGrid();}});
@@ -422,6 +436,13 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     overviewButton.disabled=!selected||selectedCandidate().fromPage!==selectedCandidate().toPage;
     const list=scoped();
     if(scope)virtual.setVirtualQuery({...scope,keys:scope.operationScope?.mode==='chapter'?new Set(list.map(r=>r.from)):null});
+    const pageModel=grid.getFilterModel()?.pdfPage;
+    const chosenPages=Array.isArray(pageModel?.values)?pageModel.values:[];
+    const pageDescription=showAllPages?'全部页':
+      chosenPages.length===1&&chosenPages[0]===String(currentPDFPage)?`第 ${currentPDFPage} 页`:
+      chosenPages.length?`页码 ${chosenPages.join('、')}`:'全部页';
+    const pageRowCount=mode==='blocks'&&chosenPages.length?
+      list.filter(row=>chosenPages.includes(String(row.pdfPage))).length:list.length;
     const summary=error?'文本块检查失败：'+error:!report?'正在读取 CMD 内嵌的原始 JSON…':
       mode==='candidates'?(candidateSummary?
         `候选 ${candidateSummary.candidates} 组 · 跨栏 ${candidateSummary.acrossColumn} · 跨页 ${candidateSummary.acrossPage} · 已确认 ${candidates.filter(x=>x.status==='已确认').length} · 已否决 ${candidates.filter(x=>x.status==='已否决').length} · 待审阅 ${candidates.filter(x=>x.status==='待审阅').length} · ${candidateSummary.blockedTransitions} 处结构阻断 · 不合并原文` :
@@ -429,7 +450,7 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
       `原始 ${report.blocks} 块 / ${report.pages} 页 · PBS ${tableRows.length}（子块 ${tableRows.filter(r=>r.kind==='child').length}） · BC ${report.bcChains??0} 链 · 源码已匹配 ${report.matched} · 缺失 ${report.missing} · 重复 ${report.duplicates} · PDF bbox ${report.withGeometry} · 无效 ${report.withoutGeometry}`+
       ` · 可见正文 ${report.readable} · 空块/仅元数据 ${report.metadataOnly} · 已接续 ${report.joined??0} · 逻辑块 ${report.logicalBlocks??report.blocks}`+
       (previewMapped?` · 当前 MD 定位 ${list.filter(x=>x.kind==='parent'&&x.expectsPreview&&previewMapped.has(x.id)).length}/${list.filter(x=>x.kind==='parent'&&x.expectsPreview).length}`:' · MD 定位检查中')+
-      ` · AG ${showAllPages?'全部页':`第 ${currentPDFPage} 页`} ${list.length} 块`+
+      ` · AG ${pageDescription} ${pageRowCount} 块`+
       ` · 未知锚点 ${report.unknown}`+(report.invalidBCMarks?` · 无效 BC 标签 ${report.invalidBCMarks}`:'')+
       (scope?.operationScope?.mode==='chapter'?` · 当前章节 ${list.length} 块（缺失块仍计入全文）`:'');
     if(active)onStatus('文本块：父块跨页「之前」「作为子块」「之后」可用，其他结构操作只读 · '+(mode==='candidates'&&selectedCandidate()?`A ${selectedCandidate().fromId} ↔ B ${selectedCandidate().toId} · `:'')+summary,error||report?.invalidBCMarks?'error':'ok');
@@ -517,11 +538,13 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
     setVirtualQuery(intent){scope=intent;updateBlockRows();refresh();},
     setCurrentPDFPage(pageNumber){
       if(!Number.isInteger(pageNumber)||pageNumber<1||pageNumber===currentPDFPage)return;
-      currentPDFPage=pageNumber;updateBlockRows();if(active)refresh();
+      currentPDFPage=pageNumber;
+      if(!showAllPages)applyPageFilter();
+      if(active)refresh();
     },
     setShowAllPages(enabled){
       const next=Boolean(enabled);if(next===showAllPages)return;
-      showAllPages=next;updateBlockRows();if(active)refresh();
+      showAllPages=next;applyPageFilter();if(active)refresh();
     },
     count(chapter){if(chapter==='all')return rows.length;const c=getChapter(chapter);
       return c?rows.filter(r=>r.from!==null&&r.from>=c.from&&r.from<c.to).length:0;},

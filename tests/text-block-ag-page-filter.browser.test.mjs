@@ -66,12 +66,36 @@ try{
         const header=page.locator('.ocr-text-block-grid .ag-header-cell[col-id="pdfPage"]');
         assert.equal(await header.locator('.ag-header-cell-text').innerText(),'页码');
         assert.equal(await page.locator('.ocr-text-block-grid .ag-header-cell[col-id="pdfPage"]').count(),1);
+        const openFilter=header.locator('.ag-header-cell-filter-button');
+        await openFilter.waitFor({state:'visible',timeout:20000});
         await waitPageCells(page,1);
+        // Real header interaction: all 22 page values must be offered, even
+        // though the grid is currently showing page 1 only. No extra picker.
+        await openFilter.click();
+        const filter=page.locator('.ocr-enum-filter[aria-label="页码 筛选"]:visible');
+        await filter.waitFor({state:'visible',timeout:12000});
+        assert.equal(await filter.locator('[data-filter-value="1"] input').isChecked(),true);
+        assert.equal(await filter.locator('[data-filter-value="2"] input').isChecked(),false);
+        assert.equal(await filter.locator('[data-filter-value="22"] input').count(),1,
+          'filter choices must include the last PDF page, not only current-page rowData');
+        // Manual page 3, while PDF itself is still displaying page 1.
+        await filter.locator('[data-filter-value="3"] input').check();
+        await filter.locator('[data-filter-value="1"] input').uncheck();
+        await waitPageCells(page,3);
+        assert.equal(await toggle.isChecked(),false,'manually changing the column must not tick 全部');
+        assert.equal(await page.locator('.ocr-pdf-page').inputValue(),'1',
+          'AG page filter must not navigate the PDF');
         await selectPreview(page,'pdf');
         const pager=page.locator('.ocr-pdf-page');
         await page.locator('.ocr-pdf-scroller .page[data-page-number="2"]').scrollIntoViewIfNeeded({timeout:35000});
         await waitView(page,'AG 第 2 页');
         await waitPageCells(page,2);
+        // PDF page navigation wins over the previous manual page-3 selection.
+        await openFilter.click();
+        await filter.waitFor({state:'visible'});
+        assert.equal(await filter.locator('[data-filter-value="2"] input').isChecked(),true);
+        assert.equal(await filter.locator('[data-filter-value="3"] input').isChecked(),false);
+        await openFilter.click();
         await toggle.check();
         await waitView(page,'AG 全部页');
         assert((await current(page)).some(x=>x.trim()==='1'),'all mode restores page 1 rows');
@@ -88,7 +112,7 @@ try{
         assert.equal(await toggle.isDisabled(),true,'mother chapter index remains unchanged');
         assert.equal(readFileSync(doc,'utf8'),source,'AG page lens must never write CMD source');
         assert.deepEqual(errors,[]);
-        console.log('TEXT_BLOCK_AG_PAGE_FILTER_BROWSER_PASS',name,'1→2→all→3→local');
+        console.log('TEXT_BLOCK_AG_PAGE_FILTER_BROWSER_PASS',name,'auto1→manual3→PDF2→all→PDF3→local3');
       }finally{await page.close();}
     }finally{await browser.close();}
   }

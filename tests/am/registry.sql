@@ -1543,10 +1543,20 @@ INSERT INTO apis VALUES
  ('P23','P','PdfPreview.onCurrentPageChange','ui/pdf-preview.js','callback','PDF.js pagechanging one-based page number','scalar navigation notice to Workspace text-block owner','PDF does not access AG Grid or module internals',1),
  ('L81','L','returned.setTextBlockShowAll','ui/workspace.js','returned','Shell-owned toolbar checkbox Boolean','semantic all-pages toggle to text-block AG owner','does not alter chapter or CMD query for unrelated modules',1);
 INSERT INTO access_edges VALUES
- ('X-AG-PAGE-G30','G','G','ui/text-block-module.js','filterTextBlockPageRows(inChapter,currentPDFPage,showAllPages)','G30','registered','AG owner filters its own source-independent view rows'),
  ('X-AG-PAGE-P23','P','P','ui/workspace.js','new PdfPreview(...,pageNumber=>currentOutline?.textBlock?.setCurrentPDFPage(pageNumber))','P23','registered','only page number crosses PDF to AG via workspace callback'),
  ('X-AG-PAGE-L81','L','L','ui/main.js','workspace.setTextBlockShowAll(enabled)','L81','registered','Shell toolbar user intent forwarded only through Workspace port');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-AG-PAGE-G30','G30','tests/text-block-page-scope.test.mjs','tests/text-block-page-scope.test.mjs','same page parent/child rows; all returns full unchanged inventory','direct'),
  ('TC-AG-PAGE-P23','P23','tests/text-block-ag-page-filter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit pagechanging switches AG page with no data edit','integration'),
  ('TC-AG-PAGE-L81','L81','tests/text-block-ag-page-filter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','checkbox defaults unchecked, check displays all, uncheck returns current PDF page, non-block chapter control unchanged','integration');
+
+-- Text-block page-column filtering supersedes the former prefiltered AG rowData.
+-- AG now retains the inventory, enabling the existing EnumCheckboxFilter to
+-- enumerate other PDF pages while preserving the default PDF page-follow mode.
+INSERT INTO apis VALUES
+ ('G31','G','textBlockPageFilterModel','ui/text-block-page-scope.js','export','AG column filter model, current one-based PDF page, show-all state','model with only pdfPage set or cleared, retaining all unrelated field filters','never pre-truncate AG row data; preserves manual page choice until PDF navigation',1);
+INSERT INTO access_edges VALUES
+ ('X-AG-PAGE-G31','G','G','ui/text-block-module.js','textBlockPageFilterModel(grid.getFilterModel(),currentPDFPage,showAllPages)','G31','registered','AG owner composes only its page column filter, leaving other filters alone');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-AG-PAGE-G31','G31','tests/text-block-page-scope.test.mjs','tests/text-block-page-scope.test.mjs','page model overrides manual page on PDF navigation, clears on all, retains other filters and never mutates prior model','direct'),
+ ('TC-AG-PAGE-MANUAL-G31','G31','tests/text-block-ag-page-filter.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad WebKit header filter exposes all 22 pages; manual selection of another page, PDF page update and All toggle work','integration');

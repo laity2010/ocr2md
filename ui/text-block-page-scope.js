@@ -7,3 +7,16 @@ export function filterTextBlockPageRows(rows,pageNumber,showAll=false){
   return rows.filter(row=>row.pageIndex===pageNumber-1||
     (!Number.isInteger(row.pageIndex)&&row.pdfPage===pageNumber));
 }
+
+/** Compose the page-column filter without erasing unrelated AG filters.
+ * AG owns the full inventory; unlike row pre-filtering this lets the native
+ * column popup enumerate and select every page, even the nonvisible ones.
+ */
+export function textBlockPageFilterModel(model,pageNumber,showAll=false){
+  const result={...(model||{})};
+  if(showAll)delete result.pdfPage;
+  else if(Number.isInteger(pageNumber)&&pageNumber>0)
+    result.pdfPage={values:[String(pageNumber)]};
+  else throw Error('PDF page must be a positive integer');
+  return result;
+}
