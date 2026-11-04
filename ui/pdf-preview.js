@@ -887,6 +887,15 @@ export class PdfPreview {
         return {node:item.target,id:item.targetId,kind:item.targetKind,
           placement:pdfDropGuideZone(x,rail,item.targetKind==='child',this.readOnly)};
     }
+    // Once a parent bbox is caught, the short handoff towards its action
+    // rail owns the pointer. Otherwise a native child rectangle nested in
+    // this same PDF bbox will steal the target mid-gesture, turning an
+    // intended "之后" into "作为子块". Outside the corridor, every new real
+    // coverage bbox may still be acquired immediately.
+    if(item.target&&item.guide&&pdfDropGuideCorridor(x,y,
+      item.target.getBoundingClientRect(),item.guide.getBoundingClientRect()))
+      return {node:item.target,id:item.targetId,kind:item.targetKind,
+        placement:item.placement||'child'};
     const candidates=[];
     for(const node of this.blockCoverageNodes.values()){
       if(!node.isConnected)continue;
@@ -905,15 +914,7 @@ export class PdfPreview {
       }
     }
     const hit=pickPDFCoverDropTarget(candidates,{x,y,sourceId:item.id,pageId:null,clip});
-    if(hit)return hit;
-    // Between the captured PDF bbox and its outboard landing rail is a small
-    // gutter. Preserve only that narrow transit path so a real continuous
-    // finger movement can reach '之后' without losing the selected box.
-    if(item.target&&item.guide&&pdfDropGuideCorridor(x,y,
-      item.target.getBoundingClientRect(),item.guide.getBoundingClientRect()))
-      return {node:item.target,id:item.targetId,kind:item.targetKind,
-        placement:item.placement||'child'};
-    return null;
+    return hit;
   }
   /** Three semantic positions live beside the fixed PDF label, never inside
    * OCR text. This transient guide and arrow disappear after pointerup. */
