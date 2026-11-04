@@ -66,8 +66,21 @@ try{
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       try{
         await page.goto(url,{waitUntil:'domcontentloaded',timeout:75000});
-        await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',
-          null,{timeout:90000});
+        try{
+          await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',
+            null,{timeout:120000});
+        }catch(error){
+          const diagnostic=await page.evaluate(()=>({
+            pdf:document.querySelector('.ocr-pdf-status')?.textContent,
+            status:document.querySelector('#status')?.textContent?.slice(0,500),
+            pages:document.querySelectorAll('.ocr-pdf-scroller .page').length,
+            canvas:[...document.querySelectorAll('.ocr-pdf-scroller canvas')].slice(0,2).map(x=>[x.width,x.height]),
+            module:document.querySelector('#module-select')?.value,
+            labels:document.querySelectorAll('.ocr-pdf-block-cover').length,
+          }));
+          console.error('THREE_PANE_STARTUP_DIAGNOSTIC',name,JSON.stringify({diagnostic,errors}));
+          throw error;
+        }
         await page.locator('#module-select').evaluate(el=>{el.value='text-block';
           el.dispatchEvent(new Event('change',{bubbles:true}));});
         await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p1b12"][data-origin-id="p1b10"]'),
