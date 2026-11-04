@@ -27,7 +27,10 @@ writeFileSync(doc,source);
 const port=await new Promise((ok,fail)=>{const s=createServer();s.once('error',fail);
   s.listen(0,'127.0.0.1',()=>{const n=s.address().port;s.close(e=>e?fail(e):ok(n));});});
 const base=`http://127.0.0.1:${port}`;
-const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...process.env,
+const useDev=process.env.FOCUS_DEV==='1';
+const server=spawn(useDev?process.execPath:'python3',useDev?
+  ['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort']:
+  ['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...process.env,
   V6_PORT:String(port),V6_BIND:'127.0.0.1',V6_LAB_ID:'',V6_LAN_TLS_HOST:'',
   V6_DOCUMENT_PATH:doc,V6_PDF_PATH:pdf,V6_STATIC_ROOT:resolve('dist'),
   V6_SETTINGS_PATH:join(dir,'settings.json'),V6_TOKEN_PATH:join(dir,'token')},stdio:'ignore'});
@@ -41,7 +44,7 @@ async function overlay(page,blockIndex){
  },blockIndex,{timeout:22000});
 }
 try{
- let live=false;for(let i=0;i<300;i++){try{if((await fetch(base+'/healthz')).ok){live=true;break;}}catch{}await sleep(120);}
+ let live=false;for(let i=0;i<300;i++){try{if((await fetch(base+(useDev?'/':'/healthz'))).ok){live=true;break;}}catch{}await sleep(120);}
  assert(live,'isolated source-focused test server not ready');
  for(const [browserName,engine,binary] of [['Chrome',chromium,chromeExecutable()],['iPad-WebKit',webkit,webkit.executablePath()]]){
   if(process.env.ONE_BROWSER&&process.env.ONE_BROWSER!==browserName)continue;
@@ -51,6 +54,14 @@ try{
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    try{
     await page.goto(base,{waitUntil:'domcontentloaded',timeout:75000});
+    if(useDev)await page.evaluate(async()=>{
+      const {viewStore}=await import('/view-store.js');
+      window.__focusAudit=()=>viewStore.getState().focusTarget;
+      window.__focusTrace=[];
+      viewStore.subscribe((next,prev)=>{
+        if(next.focusTarget!==prev.focusTarget)window.__focusTrace.push(next.focusTarget);
+      });
+    });
     await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',null,{timeout:90000});
     await page.locator('#module-select').evaluate(el=>{el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));});
     await selectPreview(page,'pdf');
@@ -82,7 +93,9 @@ try{
         selected:document.querySelector('.ocr-text-block-grid .ag-row-selected')?.getAttribute('row-id'),
         pane:document.querySelector('.ocr-preview-pane')?.dataset.previewMode,
         pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
-        global:document.querySelector('#status')?.textContent?.slice(0,240)
+        global:document.querySelector('#status')?.textContent?.slice(0,240),
+        focus:window.__focusAudit?.(),
+        trace:window.__focusTrace?.slice(-6)
       }));console.error('SOURCE_PDF_FOCUS_DIAGNOSTIC',browserName,JSON.stringify(debug));
       if(process.env.FOCUS_SCREENSHOT_DIR){
         mkdirSync(process.env.FOCUS_SCREENSHOT_DIR,{recursive:true});
@@ -107,6 +120,8 @@ try{
     assert.equal(actual.selected,id);
     assert.equal(actual.overlay,String(physicalIndex));
     assert.equal(actual.physical,atom.origin);
+    assert(actual.status.includes(`定位 ${id} → PDF 原框 ${atom.origin}`),
+      'the global status must show the CURRENT source/PDF identity, not the previous PDF click');
     assert(actual.overlap>10,'yellow highlighted PDF bbox must intersect same-named logical chip');
     assert.equal(readFileSync(doc,'utf8'),source,'focus never saves user/source document');
     assert.deepEqual(errors,[]);

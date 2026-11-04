@@ -1693,6 +1693,10 @@ export class PdfPreview {
     const samePage=this.selected?.pageIndex===source.pageIndex;
     this.selected={pageIndex:source.pageIndex,blockIndex:source.blockIndex,
       partIndex:partIndex<0?null:partIndex,logicalId:source.id};
+    // A source/AG initiated focus is a new user location: replace the previous
+    // PDF-click message instead of leaving a stale neighbouring PBS ID in the
+    // global status while the physical highlight has already moved.
+    if(explicit&&source.id)this.setStatus(`定位 ${source.id} → PDF 原框 ${source.origin} · 第 ${source.pageIndex+1} 页`);
     void this.prepareSelectedPDFText();
     // PDF.js page navigation resets the scroll position. Never invoke it for
     // another OCR block on the same page; the overlay will scroll only if the
