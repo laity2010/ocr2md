@@ -20,3 +20,7 @@ export function textBlockPageFilterModel(model,pageNumber,showAll=false){
   else throw Error('PDF page must be a positive integer');
   return result;
 }
+
+/** AG's view-only page projection delegates numeric PBS path ordering to
+ * the CMD PBS identity comparator. Neither source nor OCR bbox is mutated. */
+export {sortCMDPBSRows as sortTextBlockPBSRows} from './cmd-pbs-row-order.js';

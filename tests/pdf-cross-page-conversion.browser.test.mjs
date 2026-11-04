@@ -45,6 +45,10 @@ try{
     await page.locator('#module-select').evaluate(el=>{el.value='text-block';
       el.dispatchEvent(new Event('change',{bubbles:true}));});
     await selectPreview(page,'pdf');
+    const orderedIDs=['p4b0','p4b0s0','p4b0s1','p4b0s2','p4b1','p4b1s0','p4b1s1','p4b1s2'];
+    const positions=orderedIDs.map(id=>labelLocations.get(id)?.sourceLine);
+    assert(positions.every(Number.isInteger)&&positions.every((value,i)=>i===0||positions[i-1]<value),
+      'CMD source lines must be monotonic in native numeric PBS order');
     for(const [id,expectedRowCount,expectedPhysicalPage,distinctRow] of [
       ['p3b1s0',9,4,'Information ratio of equity mutual funds'],
       ['p4b0s1',9,5,'Information ratio of common stocks']]){
@@ -62,6 +66,14 @@ try{
         return focus===value;
       },text.trim(),{timeout:30000});
       assert.equal(await page.locator('.ocr-pdf-page').inputValue(),String(expectedPhysicalPage));
+      if(id==='p4b0s1'){
+        await page.waitForFunction(()=>document.querySelector('.ocr-pdf-page')?.value==='5');
+        const agIDs=await page.locator('.ocr-text-block-grid .ag-center-cols-container .ag-row')
+          .evaluateAll(rows=>rows.map(row=>row.getAttribute('row-id')));
+        const visible=agIDs.filter(x=>orderedIDs.includes(x));
+        assert.deepEqual(visible,orderedIDs.filter(x=>visible.includes(x)),
+          'AG must show visible parent/child rows in numeric PBS order');
+      }
       assert.equal(await page.locator('.ocr-pdf-block-fragment[data-subblock-id="'+id+'"]')
         .count(),1);
       console.log('CROSS_PAGE_B_TABLE_PDF_SOURCE_OK',name,id,'PDF',expectedPhysicalPage,

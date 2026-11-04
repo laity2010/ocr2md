@@ -4,7 +4,7 @@ import {publishFocus,viewStore} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {TEXT_BLOCKS_READ_ONLY} from './text-block-readonly.js';
-import {textBlockPageFilterModel} from './text-block-page-scope.js';
+import {textBlockPageFilterModel,sortTextBlockPBSRows} from './text-block-page-scope.js';
 import {resolveCMDBlockFocusRow} from './cmd-block-chains.js';
 import './text-block-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -318,9 +318,11 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   };
   const projectedRows=()=>{
     // Structural correction is a logical view over immutable original OCR.
-    // Keep CM6 source order and origin= evidence untouched; show the newly
-    // assigned child immediately after its previous sibling in AG.
-    const atoms=[...scoped()];
+    // AG always shows current PBS numeric order, not historical OCR/CM6
+    // source-line order. A new source may be canonical, but an older reviewed
+    // document might still contain legacy semantic-order children.
+    // Sorting is view-only: never mutate source, origin=, or PDF bbox.
+    const atoms=sortTextBlockPBSRows(scoped());
     const aliased=atoms.filter(a=>a.kind==='child'&&a.origin&&a.origin!==a.id)
       .sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}));
     for(const alias of aliased){

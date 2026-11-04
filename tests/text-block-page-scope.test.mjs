@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {filterTextBlockPageRows,textBlockPageFilterModel} from '../ui/text-block-page-scope.js';
+import {filterTextBlockPageRows,textBlockPageFilterModel,sortTextBlockPBSRows} from '../ui/text-block-page-scope.js';
 const rows=[
   {id:'p0b0',pageIndex:0,pdfPage:1},
   {id:'p0b0s0',pageIndex:0,pdfPage:1},
@@ -21,4 +21,12 @@ assert.deepEqual(textBlockPageFilterModel(page1,1,true),initial,'checked 全部 
 assert.deepEqual(initial,{type:{values:['text']},anchorStatus:{values:['已匹配']}},
   'other field filters and original filter model must remain immutable');
 assert.throws(()=>textBlockPageFilterModel(null,0),/positive integer/);
+const mixed=[{id:'p4b1s2'},{id:'p4b0s2'},{id:'p4b0s0'},
+ {id:'p4b1s1'},{id:'p4b0s1'},{id:'p4b0'},{id:'p4b1s0'},
+ {id:'p4b1'},{id:'p4b10'},{id:'p4b2'},{id:'p4b1s10'}];
+const before=mixed.map(r=>r.id);
+assert.deepEqual(sortTextBlockPBSRows(mixed).map(r=>r.id),
+ ['p4b0','p4b0s0','p4b0s1','p4b0s2',
+  'p4b1','p4b1s0','p4b1s1','p4b1s2','p4b1s10','p4b2','p4b10']);
+assert.deepEqual(mixed.map(r=>r.id),before,'AG ordering must not mutate source inventory');
 console.log('TEXT_BLOCK_AG_PAGE_SCOPE_PASS',rows.length);

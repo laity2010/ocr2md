@@ -43,6 +43,35 @@ test('real Buffett Alpha fixture: no loss of even JSON whitespace',()=>{
   assert.equal(toMineruJSON(saved),raw,'single-start unaudited fixture must roundtrip');
 });
 
+test('CMD native child tags are serialized in numeric PBS order with their own content',()=>{
+  const md=toMarkdown(raw);
+  const all=[...md.matchAll(/<!-- cmd:block:v1 id="(p\d+b\d+(?:s[0-9.]+)?)" -->/g)];
+  const violations=[];
+  for(let i=0;i<all.length;i++){
+    const root=/^p\d+b\d+$/.test(all[i][1]);
+    if(!root)continue;
+    const nextRoot=all.find((m,j)=>j>i&&/^p\d+b\d+$/.test(m[1]));
+    const children=all.filter(m=>m.index>all[i].index&&m.index<(nextRoot?.index??Infinity));
+    const ids=children.map(m=>m[1]);
+    const sorted=[...ids].sort((a,b)=>a.localeCompare(b,'en',{numeric:true}));
+    if(ids.join()!==sorted.join())violations.push({parent:all[i][1],actual:ids,expected:sorted});
+  }
+  assert.deepEqual(violations,[],'every CMD child must follow its native PBS numeric index');
+  const assertSubblock=(id,fragment)=>{
+    const match=new RegExp('<!-- cmd:block:v1 id="'+id+'" -->\\s*([\\s\\S]*?)(?=<!-- cmd:block:v1|<!-- minerujson:page:v1|<!-- minerujson:source:v1)','g').exec(md);
+    assert(match,`missing source subblock ${id}`);
+    assert(match[1].includes(fragment),`${id} must retain its own ${fragment.slice(0,30)} content`);
+  };
+  // The original p4b0s0 caption has no mapped para text: it retains its
+  // navigation anchor without inventing OCR content.
+  assertSubblock('p4b0s1','Information ratio of common stocks');
+  // The original p4b0s2 footnote is likewise unpopulated in para_blocks.
+  assertSubblock('p4b1s0','Figure 1.');
+  assertSubblock('p4b1s1','![chart]');
+  assertSubblock('p4b1s2','Notes:');
+  assert.equal(toMineruJSON(md),raw,'number-ordered source remains strictly reversible');
+});
+
 test('cross-page table HTML is split back into its real PDF pages, with sealed and legacy round trips',()=>{
   const md=toMarkdown(raw);
   const pre=original.pdf_info[3].preproc_blocks[1].blocks[0].lines[0].spans[0].html;
@@ -76,6 +105,61 @@ test('cross-page table HTML is split back into its real PDF pages, with sealed a
   assert(!fromAltered.includes('<!-- cmd:block:v1 id="p4b0s1" -->\n\n'+continuation),
     'unsupported cross-page ownership is never inferred from headings alone');
   assert.deepEqual(JSON.parse(toMineruJSON(fromAltered)),altered);
+});
+
+test('CMD native subblocks are emitted in numeric OCR index order, not media category order',()=>{
+  const fresh=toMarkdown(raw);
+  const tags=[...fresh.matchAll(/^<!-- cmd:block:v1 id="(p(\d+)b(\d+)(?:s(\d+(?:\.\d+)*))?)" -->$/gm)]
+    .map(([_,id,page,block,child])=>({id,page:Number(page),block:Number(block),
+      path:child?child.split('.').map(Number):null}));
+  for(let i=0;i<tags.length;i++){
+    const tag=tags[i];if(!tag.path)continue;
+    const previous=tags[i-1];
+    assert(previous&&previous.page===tag.page&&previous.block===tag.block,
+      `native child ${tag.id} cannot leave its own parent`);
+    if(previous.path){
+      const prior=previous.path;
+      const next=tag.path;
+      let index=0;while(index<prior.length&&index<next.length&&prior[index]===next[index])index++;
+      assert(index===prior.length||index<next.length&&prior[index]<next[index],
+        `${previous.id} must precede ${tag.id} in numeric path order`);
+    }
+  }
+  for(const [parent,expected] of [
+    ['p4b0',['p4b0','p4b0s0','p4b0s1','p4b0s2']],
+    ['p4b1',['p4b1','p4b1s0','p4b1s1','p4b1s2']]]){
+    const children=tags.filter(t=>t.page===4&&t.block===Number(parent.slice(3)))
+      .map(t=>t.id);
+    assert.deepEqual(children,expected);
+  }
+  const scopes=(parent)=>{
+    const start=fresh.indexOf(`<!-- cmd:block:v1 id="${parent}" -->`);
+    assert(start>=0);
+    const end=fresh.indexOf('<!-- cmd:block:v1 id="p4b2" -->',start+1);
+    const body=fresh.slice(start,end>=0?end:fresh.indexOf('<!-- minerujson:page:v1:5',start+1));
+    const sections=[...body.matchAll(/<!-- cmd:block:v1 id="(p4b[01]s\d+)" -->/g)];
+    return Object.fromEntries(sections.map((match,i)=>[match[1],
+      body.slice(match.index+match[0].length,sections[i+1]?.index??body.length).trim()]));
+  };
+  const table=scopes('p4b0'),image=scopes('p4b1');
+  assert(table.p4b0s0.startsWith('Table 1.'),'table caption must stay under s0');
+  assert(table.p4b0s1.startsWith('<table>'),'continued HTML must stay under s1');
+  assert(table.p4b0s2.startsWith('Notes:'),'table footnote must stay under s2');
+  assert(image.p4b1s0.startsWith('Figure 1.'),'image caption must stay under s0');
+  assert(image.p4b1s1.startsWith('![chart]'),'image body must stay under s1');
+  assert(image.p4b1s2.startsWith('Notes:'),'image footnote must stay under s2');
+  assert.equal(toMineruJSON(fresh),raw,'native-order CMD must still be reversible byte-for-byte');
+  const changed=fresh.replace('Figure 1. How Berkshire Stacks Up',
+    'Figure 1. How Berkshire Now Stacks Up');
+  assert.notEqual(changed,fresh);
+  const restored=JSON.parse(toMineruJSON(changed));
+  const caption=restored.pdf_info[4].para_blocks[1].blocks[0].lines
+    .flatMap(line=>line.spans).map(span=>span.content||'').join(' ');
+  assert(caption.includes('How Berkshire Now Stacks Up'),
+    'caption edit must patch the caption text across its native OCR spans');
+  assert.equal(restored.pdf_info[4].para_blocks[1].blocks[1].lines[0].spans[0].image_path,
+    original.pdf_info[4].para_blocks[1].blocks[1].lines[0].spans[0].image_path,
+    'editing the caption must not modify the adjacent image body');
 });
 
 test('valid GFM / HTML comments / images / math code / tables',()=>{

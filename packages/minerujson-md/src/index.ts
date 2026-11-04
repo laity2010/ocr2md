@@ -114,8 +114,11 @@ function tableBodySpan(block:Block):{index:number;span:Span}|null{
   return null;
 }
 type CrossPageTablePair={head:Span;tail:Span;merged:Span;originalHead:string;originalTail:string;overlap:number};
-function crossPageTableProjection(data:Mineru):{slots:Map<string,Span>;pairs:CrossPageTablePair[]}{
-  const slots=new Map<string,Span>(),pairs:CrossPageTablePair[]=[];
+function crossPageTableProjection(data:Mineru):{
+  slots:Map<string,Span>;textBlocks:Map<string,Block>;pairs:CrossPageTablePair[]
+}{
+  const slots=new Map<string,Span>(),textBlocks=new Map<string,Block>();
+  const pairs:CrossPageTablePair[]=[];
   const pages=data.pdf_info;
   for(let page=0;page<pages.length-1;page++){
     const current=pages[page],following=pages[page+1];
@@ -143,13 +146,23 @@ function crossPageTableProjection(data:Mineru):{slots:Map<string,Span>;pairs:Cro
         const lastKey=`${page+1}:${nextIndex}:${tail.index}`;
         assert(!slots.has(firstKey)&&!slots.has(lastKey),'duplicate cross-page table ownership');
         slots.set(firstKey,before.span);slots.set(lastKey,tail.span);
+        // A verified cross-page merge can empty the later caption and notes
+        // in para_blocks. Recover their intact per-page preproc spans without
+        // duplicating any text already present in the authoritative para.
+        for(const [childIndex,preChild] of (nextPre.blocks||[]).entries()){
+          const paraChild=nextPara.blocks?.[childIndex];
+          if(!paraChild||preChild.type!==paraChild.type||
+             !['table_caption','table_footnote'].includes(preChild.type||'')||
+             !spanString(preChild)||spanString(paraChild))continue;
+          textBlocks.set(`${page+1}:${nextIndex}:${childIndex}`,preChild);
+        }
         pairs.push({head:before.span,tail:tail.span,merged:merged.span,
           originalHead:before.span.html!,originalTail:tail.span.html!,overlap});
         break;
       }
     }
   }
-  return {slots,pairs};
+  return {slots,textBlocks,pairs};
 }
 function synchronizeEditedCrossPageTables(pairs:CrossPageTablePair[]):void{
   for(const pair of pairs){
@@ -168,7 +181,7 @@ function synchronizeEditedCrossPageTables(pairs:CrossPageTablePair[]):void{
     assert(index===result.length,'cross-page merged HTML row reconstruction failed');
   }
 }
-function contentSlot(block: Block, kind: 'image'|'chart'|'table',override?:Map<string,Span>,page=0,blockIndex=0): Slot[] {
+function contentSlot(block: Block, kind: 'image'|'chart'|'table',override?:Map<string,Span>,page=0,blockIndex=0,textBlocks?:Map<string,Block>): Slot[] {
   const sub = block.blocks || [];
   const slots: Slot[] = [];
   const ordered = kind === 'image'
@@ -188,19 +201,22 @@ function contentSlot(block: Block, kind: 'image'|'chart'|'table',override?:Map<s
           type:'image',url:main.image_path,alt:kind}]} });
       } else if (spanString(item)) {
         slots.push({...textSlot(item),path});
+      } else if (kind==='table') {
+        const recovered=textBlocks?.get(`${page}:${blockIndex}:${index}`);
+        if(recovered)slots.push({...textSlot(recovered),path});
       }
     }
   }
   if (!slots.length) slots.push({kind:'literal',spans:[],node:childrenOfText(`[MinerU ${kind}: source metadata only]`)});
   return slots;
 }
-function project(block: Block,pageIndex=0,index=0,audited=false,overrides?:Map<string,Span>): Slot[] {
+function project(block: Block,pageIndex=0,index=0,audited=false,overrides?:Map<string,Span>,textBlocks?:Map<string,Block>): Slot[] {
   switch (block.type) {
     case 'title': return [textSlot(block,true)];
     case 'text': case 'ref_text': case 'list': case 'index': return [textSlot(block)];
     case 'interline_equation': return [{kind:'code',spans:spansFrom(block),node:{type:'code',lang:'math',value:spanString(block)}}];
     case 'image': case 'table': case 'chart': {
-      const slots=contentSlot(block,block.type,overrides,pageIndex,index);
+      const slots=contentSlot(block,block.type,overrides,pageIndex,index,textBlocks);
       return audited&&slots.every(s=>s.kind==='literal')
         ? [{kind:'literal',spans:[],node:{type:'html',value:auditBlock('unmapped',pageIndex,index,block)}}]
         : slots;
@@ -354,6 +370,33 @@ function childMarkers(block: Block,pageIndex: number,blockIndex: number):
   visit(block,[]);
   return output;
 }
+/** Sort projected content by its *native OCR child index*, not by content
+ * category (image_body/caption/footnote) and not by output discovery order.
+ * An absent child has a marker but no invented Markdown body. */
+function slotsByNativeChild(slots: Slot[]): Slot[] {
+  return [...slots].sort((left,right)=>{
+    if(!left.path)return right.path?1:0;
+    if(!right.path)return -1;
+    for(let n=0;n<Math.max(left.path.length,right.path.length);n++){
+      if(n>=left.path.length)return -1;
+      if(n>=right.path.length)return 1;
+      if(left.path[n]!==right.path[n])return left.path[n]-right.path[n];
+    }
+    return 0;
+  });
+}
+/** An old, already edited V6 file may use category-first child order.
+ * Inspect the original native child markers before stripping them; this
+ * selects which semantic slot order to validate without rewriting that file.
+ */
+function nativeChildMarkersOrdered(fragment:string,block:Block,page:number,index:number):boolean{
+  // The reversible validator has normalized id= syntax to p= b= s=.
+  const actual=[...fragment.matchAll(cmdChildStart)].map(match=>match[3]);
+  if(!actual.length)return false; // legacy non-native marker form
+  const expected=childMarkers(block,page,index).map(item=>item.path);
+  return actual.length===expected.length&&actual.every((path,i)=>path===expected[i]);
+}
+
 function stripChildMarkers(fragment: string,block: Block,pageIndex: number,blockIndex: number): string {
   const marker=/^<!-- minerujson:subblock:v1:(\d+):(\d+):(\d+(?:\.\d+)*)(?: type="([a-zA-Z_][a-zA-Z0-9_-]*)")?(?: id="(p\d+b\d+s\d+(?:\.\d+)*)")? -->[ \t]*(?:\r?\n){0,2}/gm;
   const legacy=[...fragment.matchAll(marker)].map(m=>({page:Number(m[1]),block:Number(m[2]),
@@ -400,19 +443,26 @@ export function toMarkdown(input: string | Mineru): string {
   for (const [pageIndex,page] of data.pdf_info.entries()) {
     pieces.push(pageAudit(page,pageIndex));
     for (const [index,block] of page.para_blocks.entries()) {
-      const slots = project(block,pageIndex,index,true,restoration.slots);
+      const slots = project(block,pageIndex,index,true,restoration.slots,restoration.textBlocks);
       const children=childMarkers(block,pageIndex,index);
-      const byPath=new Map(children.map(c=>[c.path,c.tag]));
-      const projectedPaths=new Set(slots.filter(s=>s.path).map(s=>s.path!.join('.')));
-      // For mapped OCR content, locate the child marker immediately BEFORE
-      // that Markdown node, not in an unrelated group at the parent header.
-      // Empty OCR children still get visible source comments (and no invented
-      // heading/prose). Top-level parent identity and original bytes remain.
-      const missing=children.filter(c=>!projectedPaths.has(c.path)).map(c=>c.tag);
-      const sections=slots.map(slot=>[
-        ...(slot.path?[byPath.get(slot.path.join('.'))!]:[]),
-        serialize([slot.node])].join('\n\n'));
-      pieces.push([`<!-- cmd:block:v1 id="p${pageIndex}b${index}" -->`,...missing,
+      // Place each native child ID in numerical order, then its own content.
+      // Empty OCR children keep their anchor without a fabricated body.
+      const sections:string[]=[];
+      const slotGroups=new Map<string,Slot[]>();
+      for(const slot of slotsByNativeChild(slots)){
+        const key=slot.path?.join('.');
+        if(!key)continue;
+        const group=slotGroups.get(key)||[];
+        group.push(slot);slotGroups.set(key,group);
+      }
+      for(const child of children){
+        sections.push(child.tag);
+        for(const slot of slotGroups.get(child.path)||[])
+          sections.push(serialize([slot.node]));
+      }
+      // A literal/metadata-only fallback has no native child path.
+      for(const slot of slots.filter(slot=>!slot.path))sections.push(serialize([slot.node]));
+      pieces.push([`<!-- cmd:block:v1 id="p${pageIndex}b${index}" -->`,
         ...sections].join('\n\n'));
     }
   }
@@ -805,6 +855,7 @@ export function toMineruJSON(markdown: string): string {
     }
     // Strip the independently navigable native child paths before checking
     // chapter tags and Markdown body syntax; the markers are not OCR text.
+    const canonicalChildOrder=nativeChildMarkersOrdered(fragment,block,pageNo,blockNo);
     fragment=stripChildMarkers(fragment,block,pageNo,blockNo);
     // A chapter marker is an editor annotation on its own heading, not
     // text to be projected back into the original MinerU OCR span.
@@ -816,7 +867,12 @@ export function toMineruJSON(markdown: string): string {
         fragment=fragment.slice(prefix[0].length).trim();
       }
     }
-    const oldSlots=project(block,pageNo,blockNo,audited,restoration.slots);
+    const legacySlots=project(block,pageNo,blockNo,audited,restoration.slots);
+    const restoredSlots=project(block,pageNo,blockNo,audited,restoration.slots,restoration.textBlocks);
+    // Historical category-order HTML and edited documents remain readable.
+    // New CMD uses source-order child paths for both source and AG, so an
+    // edited paragraph is patched against its OWN original child span.
+    const oldSlots=canonicalChildOrder?slotsByNativeChild(restoredSlots):legacySlots;
     const oldFragment=serialize(oldSlots.map(x=>x.node));
     if(fragment===oldFragment)continue;
     // Older V6 documents retain the original merged para table and a

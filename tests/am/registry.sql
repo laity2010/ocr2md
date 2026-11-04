@@ -1594,6 +1594,17 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-STATUS-L84','L84','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit AG scan summary appended to Shell status while latest PDF action stays primary','integration');
 
+-- Native CMD parent/child identifiers have a numeric tree order that is
+-- distinct from their physical OCR discovery order or current source line.
+-- AG sorts its own read-only row view; CMD source edits stay in CM6 only.
+INSERT INTO apis VALUES
+ ('G32','G','sortTextBlockPBSRows','ui/text-block-page-scope.js','re-export','text-block AG rows with current visible PBS IDs','new array in page/parent/child numeric order, preserving original row references','no data write, OCR origin or sourceLine mutation',1);
+INSERT INTO access_edges VALUES
+ ('X-AG-PBS-NUMERIC-G32','G','G','ui/text-block-module.js','sortTextBlockPBSRows(scoped())','G32','registered','AG view projection sorts current PBS identity, not original OCR or CM6 source order');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-AG-PBS-NUMERIC-G32','G32','tests/cmd-pbs-row-order.test.mjs','tests/cmd-pbs-row-order.test.mjs','numeric page/parent/native child path sort, source row metadata unchanged','direct'),
+ ('TC-AG-PBS-PAGE-G32','G32','tests/text-block-page-scope.test.mjs','tests/text-block-page-scope.test.mjs','sorting is independent of page filter and never changes source row order','direct');
+
 -- WCP30 three-pane reconciliation: current CMD id, source tag range, original
 -- OCR physical bbox are ONE canonical locator, never equal-by-number guesses.
 INSERT INTO apis VALUES
