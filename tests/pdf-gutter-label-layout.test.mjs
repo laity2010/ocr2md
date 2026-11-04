@@ -35,4 +35,26 @@ for(let i=0;i<crowded.length;i++)for(let j=i+1;j<crowded.length;j++){
   assert(a.top+a.height+1<=b.top||b.top+b.height+1<=a.top);
 }
 assert.equal(layoutPDFGutterLabels([],500).length,0);
+// The exact Editor's Note failure: parent p16b10 was displaced BELOW both
+// native s0 and the next paragraph when s0 claimed the 10px caption first.
+// Give the parent its original row; place s0 in another free gutter row.
+const editor=[
+  {id:'p16b9',from:667,to:694,height:18},
+  {id:'p16b10',from:698,to:708,height:18},
+  {id:'p16b10s0',from:698,to:708,height:16},
+  {id:'p16b10s1',from:712,to:731,height:18},
+  {id:'p16b11',from:807,to:825,height:18},
+];
+const editorLayout=layoutPDFGutterLabels(editor,1100);
+const spot=id=>editorLayout.find(item=>item.id===id);
+assert(Math.abs(spot('p16b10').top-spot('p16b10s0').top)>=16,
+  'parent and s0 labels must occupy separate visible rows');
+assert(Math.abs(spot('p16b10').top-698)<12,
+  'parent label may not drift under the next content block');
+for(const a of editorLayout)for(const b of editorLayout){
+  if(a.id===b.id)continue;
+  assert(a.top+a.height+1<=b.top||b.top+b.height+1<=a.top,
+    'gutter chips must never overlap: '+a.id+' '+b.id);
+}
+console.log('PDF_EDITOR_PARENT_LABEL_PRIORITY_PASS',editorLayout);
 console.log('PDF_GUTTER_LABEL_LAYOUT_PASS',layout);

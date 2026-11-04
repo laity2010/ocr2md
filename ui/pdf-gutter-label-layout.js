@@ -15,10 +15,20 @@ export function layoutPDFGutterLabels(items,pageHeight,{gap=2}={}){
     return {...item,h,lo,hi,preferred:within(item.preferred??center-h/2,lo,hi),
       flexibility:Math.max(0,hi-lo)};
   });
-  // Tight caption/footnote rectangles have first claim on their own range;
-  // long parent/body rectangles can occupy remaining free height.
-  const ordering=[...prepared].sort((a,b)=>a.flexibility-b.flexibility||
-    a.from-b.from||a.id.localeCompare(b.id,undefined,{numeric:true}));
+  // A reviewed parent with a virtual s0 body shares the EXACT physical
+  // OCR rectangle with that child. The s0 chip is normally slightly shorter,
+  // so sorting solely by flexibility puts s0 first and displaces the parent
+  // label far below its tiny original bbox (sometimes under the next block).
+  // Reserve the original position for that parent; all its child chips must
+  // avoid it. Other ordinary tight caption labels retain their old priority.
+  const protectedParents=new Set(items.filter(item=>/^p\d+b\d+$/.test(item.id)&&
+    items.some(child=>child.id===item.id+'s0'&&
+      Math.abs(child.from-item.from)<2&&Math.abs(child.to-item.to)<2))
+    .map(item=>item.id));
+  const ordering=[...prepared].sort((a,b)=>
+    Number(!protectedParents.has(a.id))-Number(!protectedParents.has(b.id))||
+    a.flexibility-b.flexibility||a.from-b.from||
+    a.id.localeCompare(b.id,undefined,{numeric:true}));
   const placed=[];
   for(const item of ordering){
     const upper=Math.max(2,bottom-item.h);
