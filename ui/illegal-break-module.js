@@ -3,6 +3,7 @@ import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-
 import {publishFocus} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
+import {projectIllegalBreakPair} from './illegal-break-pair.js';
 import './illegal-break-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#d8a657',backgroundColor:'#2f383e',
@@ -12,7 +13,7 @@ const theme=themeQuartz.withParams({accentColor:'#d8a657',backgroundColor:'#2f38
 export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
   host.classList.add('ocr-illegal-break-pane');
   const guide=document.createElement('div');guide.className='ocr-illegal-break-guide';
-  guide.textContent='非大写开头的正文子块列为跨栏／跨页续接待复核；换行断词可 CMD 标定 · 不自动合并';
+  guide.textContent='每行标明前块 A → 后块 B；点击即定位源码并在预览高亮两块；块内疑点为 A=B · 不自动合并';
   const state=document.createElement('div');state.className='ocr-illegal-break-state';state.setAttribute('role','status');
   const gridHost=document.createElement('div');gridHost.className='ocr-illegal-break-grid';
   host.append(guide,state,gridHost);
@@ -20,10 +21,17 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
   const rebuild=()=>{
     const occupied=new Set(markedRows.map(row=>row.from));
     rows=[...markedRows,...reviewRows.filter(row=>!occupied.has(row.from))]
+      .map(row=>({...row,...projectIllegalBreakPair(row)}))
       .sort((a,b)=>a.from-b.from);
     grid.setGridOption('rowData',rows);
   };
-  const navigate=row=>{if(row?.line)publishFocus({sourceLine:row.line,origin:'illegal-break',intent:'click'});};
+  const navigate=row=>{
+    if(!row?.line)return;
+    // One transient focus event drives CM6, Markdown and PDF together. AG
+    // never owns a source copy or guesses physical OCR coordinates.
+    publishFocus({sourceLine:row.afterLine||row.line,origin:'illegal-break',
+      intent:'click',beforeBlockId:row.beforeBlockId,afterBlockId:row.afterBlockId});
+  };
   const jump=p=>{
     if(!p.data)return '';
     const button=document.createElement('button');button.type='button';button.className='ocr-illegal-break-jump';
@@ -34,6 +42,9 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
   const columns=[
     {field:'line',headerName:'源码行',width:96,minWidth:90,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'markState',headerName:'复核状态',width:95,minWidth:85},
+    {field:'beforeBlockId',headerName:'前块 A',width:130,minWidth:105,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
+    {field:'afterBlockId',headerName:'后块 B',width:130,minWidth:105,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
+    {field:'pairKind',headerName:'关系',width:80,minWidth:68,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'blockId',headerName:'当前块',width:132,minWidth:110,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'pdfPage',headerName:'原PDF页',width:99,minWidth:85,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'previousBlockId',headerName:'上一块',width:132,minWidth:110,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},

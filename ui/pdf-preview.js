@@ -201,7 +201,12 @@ export class PdfPreview {
       // editor cursor movement by keyboard, or an Undo/Redo side effect.
       if(next.focusTarget!==prev.focusTarget && next.focusTarget){
         const target=next.focusTarget;
-        if(target.origin!=='pdf' &&
+        if(target.origin==='illegal-break'&&target.beforeBlockId&&target.afterBlockId){
+          // The CMD-derived PBS identities resolve to physical source OCR
+          // page/block/child paths in labelSources. Never infer PDF b indices
+          // from the reordered label or replace the current CM6 document.
+          void this.focusCMDPair(target.beforeBlockId,target.afterBlockId);
+        }else if(target.origin!=='pdf' &&
            (target.intent==='click' ||
             ((target.origin==='outline'||target.origin==='preview') &&
              target.intent!=='command')))
@@ -1581,16 +1586,36 @@ export class PdfPreview {
       }
     }
   }
+  /** A/B view of two CURRENT CMD PBS atoms, with immutable physical
+   * geometry from the CMD-owned label-source projection. Both points can
+   * be on different pages or native subblocks of the same original OCR b.
+   */
+  async focusCMDPair(beforeId,afterId){
+    const from=this.labelSources?.get(beforeId),to=this.labelSources?.get(afterId);
+    if(!from||!to||[from,to].some(p=>!Number.isInteger(p.pageIndex)||
+      !Number.isInteger(p.blockIndex)))return false;
+    const point=loc=>({pageIndex:loc.pageIndex,blockIndex:loc.blockIndex,
+      partPath:[...(loc.path||[])],logicalId:loc.id});
+    if(beforeId===afterId){
+      this.clearComparison();
+      return this.focusBlock(to.pageIndex,to.blockIndex);
+    }
+    return this.compareBlocks(point(from),point(to),{reveal:'to'});
+  }
   /** WP4: two independently drawn, labelled original CMD bboxes. Layout
    * keeps semantic IDs; PDF remains the sole owner of canvas geometry.
    * Across pages both DOM overlays exist, but only one page fits the viewport.
    */
   async compareBlocks(from,to,{reveal='from'}={}){
     const points=[from,to];
-    if(!points.every(point=>Number.isInteger(point?.pageIndex)&&Number.isInteger(point?.blockIndex)&&
-      this.map[point.pageIndex]?.regions?.some(region=>region.blockIndex===point.blockIndex)))
-      return false;
-    this.comparison={points:points.map(point=>({pageIndex:point.pageIndex,blockIndex:point.blockIndex})),
+    if(!points.every(point=>{
+      if(!Number.isInteger(point?.pageIndex)||!Number.isInteger(point?.blockIndex))return false;
+      const block=this.map[point.pageIndex]?.regions?.find(r=>r.blockIndex===point.blockIndex);
+      return Boolean(block)&&(!point.partPath?.length||block.subRegions?.some(r=>
+        r.path.join('.')===point.partPath.join('.')));
+    }))return false;
+    this.comparison={points:points.map(point=>({pageIndex:point.pageIndex,
+      blockIndex:point.blockIndex,partPath:[...(point.partPath||[])],logicalId:point.logicalId||null})),
       token:++this.comparisonDrawId};
     // Only the comparison's own labelled overlays represent this selection;
     // the former single-block box would imply three selected regions.
@@ -1665,7 +1690,10 @@ export class PdfPreview {
           viewportPromise.catch(()=>this.pageViewportCache.delete(point.pageIndex));
         }
         const viewport=await viewportPromise;
-        return {point,page,rect:pdfOverlayRect({...block,pageSize:region.pageSize},viewport)};
+        const child=point.partPath?.length?block.subRegions?.find(r=>
+          r.path.join('.')===point.partPath.join('.')):null;
+        if(point.partPath?.length&&!child)throw Error('PDF 原生子块几何不可定位');
+        return {point,page,rect:pdfOverlayRect({...(child||block),pageSize:region.pageSize},viewport)};
       }));
       if(this.disposed||!this.comparison||token!==this.comparisonDrawId)return;
       const scroll=this.scroller.getBoundingClientRect();
@@ -1676,13 +1704,14 @@ export class PdfPreview {
         overlay.dataset.pdfPage=String(point.pageIndex+1);
         overlay.dataset.blockIndex=String(point.blockIndex);
         overlay.dataset.label=i===0?'A':'B';
-        overlay.setAttribute('aria-label',`${i===0?'A 来源':'B 接续'}文本块 PDF 区域`);
+        overlay.dataset.pbsId=point.logicalId||'';
+        overlay.setAttribute('aria-label',`${i===0?'A 来源':'B 接续'}文本块 ${point.logicalId||''} PDF 区域`);
         const paper=page.div.getBoundingClientRect();
         overlay.style.left=(paper.left-scroll.left+this.scroller.scrollLeft+paper.width*rect.left/100)+'px';
         overlay.style.top=(paper.top-scroll.top+this.scroller.scrollTop+paper.height*rect.top/100)+'px';
         overlay.style.width=paper.width*rect.width/100+'px';
         overlay.style.height=paper.height*rect.height/100+'px';
-        overlay.title=`${i===0?'A 来源':'B 接续'} · 第 ${point.pageIndex+1} 页 Block ${point.blockIndex}`;
+        overlay.title=`${i===0?'A 前块':'B 后块'} · ${point.logicalId||''} · 原始 PDF 第 ${point.pageIndex+1} 页 Block ${point.blockIndex}`;
         if(!overlay.isConnected)this.scroller.append(overlay);
         this.comparisonNodes[i]=overlay;
       });

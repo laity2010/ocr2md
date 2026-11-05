@@ -1685,3 +1685,15 @@ INSERT INTO apis VALUES
  ('L86','L','createCM6SourceVisibilityGuard','ui/cm6-source-visibility.js','export','sole EditorView, bounded status reporter','schedule/inspect/dispose','viewStore focus/revision, resize and Safari visibility trigger only CM6 measure or scroll effect; no text writes',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CM6-ONE-L86','L86','tests/illegal-break-source-edit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit: one persistent CM6 DOM instance across AG module switch and one-character edit, AG rescan and PDF/source navigation; source text remains visibly painted without autosave','integration');
+
+-- WCP Illegal Breaks: one AG row is a transient A->B CMD PBS pair. CM6
+-- remains the sole source, preview/PDF are read-only, and physical OCR
+-- provenance (including original child subregion) never changes with labels.
+INSERT INTO apis VALUES
+ ('G33','G','projectIllegalBreakPair','ui/illegal-break-pair.js','export','CMD-backed illegal-break candidate row','beforeBlockId,afterBlockId,pairKind','pure current PBS relation; within-child scar explicitly A=B, never invents second block',1),
+ ('P41','P','PdfPreview.focusCMDPair','ui/pdf-preview.js','export','before and after current CMD PBS ids','physical A/B highlight overlays','original source label location page/block/path, including native subregions or absorbed original parents',1),
+ ('M14','M','paintIllegalBreakMDPair','ui/illegal-break-md-pair.js','export','Markdown mapped DOM,CMD atom locations,2 current PBS ids','two colored read-only source-range lenses','never edits Markdown or creates a shadow source',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-PAIR-G33','G33','tests/illegal-break-pair.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','One review candidate maps to before/after current PBS identities and remains tied to immutable physical OCR provenance','direct'),
+ ('TC-BREAK-PAIR-P41','P41','tests/illegal-break-p6b6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit AG click p6b6s0->p6b6s1 paints two differently labeled PDF A/B overlays at original p6b6 and p6b7 physical boxes','integration'),
+ ('TC-BREAK-PAIR-M14','M14','tests/illegal-break-p6b6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit same AG click paints distinct Markdown A/B blocks with CM6 source focus and no editing','integration');

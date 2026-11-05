@@ -10,6 +10,7 @@ import {createServer} from 'node:net';
 import {spawn} from 'node:child_process';
 import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable} from './platform.test-helper.mjs';
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {planCMDReparentPBS} from '../ui/cmd-block-chains.js';
 const original=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
@@ -32,6 +33,7 @@ const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
 const rowsFromDOM=page=>page.locator('.ocr-illegal-break-grid .ag-row').evaluateAll(nodes=>nodes.map(node=>{
   const cell=id=>node.querySelector(`.ag-cell[col-id="${id}"]`)?.textContent.trim()||'';
   return {block:cell('blockId'),next:cell('nextBlockId'),joined:cell('joined'),
+    before:cell('beforeBlockId'),after:cell('afterBlockId'),pairKind:cell('pairKind'),
     status:cell('markState'),reason:cell('reason'),line:cell('line')};
 }));
 async function filterP6B6(page){
@@ -83,6 +85,44 @@ try{
         ]);
         assert.equal(rows[1].line,rows[2].line,'two OCR scars belong to same original source line');
         assert.equal(new Set(rows.map(x=>x.reason)).size,2);
+        assert.deepEqual(rows.map(x=>[x.before,x.after,x.pairKind]),[
+          ['p6b6s0','p6b6s1','跨块'],
+          ['p6b6s1','p6b6s1','块内'],
+          ['p6b6s1','p6b6s1','块内']]);
+        // This is the SAME row-click event consumed by CM6, MD and PDF.
+        // The recovered p6b6s1 came from former physical p6b7, not b6.
+        await page.waitForFunction(()=>!document.querySelector('.ocr-preview-mode option[value="pdf"]')?.disabled,
+          null,{timeout:55000});
+        await selectPreview(page,'pdf');
+        const aboutRow=page.locator('.ocr-illegal-break-grid .ag-row').filter({
+          has:page.locator('.ag-cell[col-id="joined"]:text-is("about 3")')});
+        await aboutRow.locator('.ocr-illegal-break-jump').click();
+        await page.waitForFunction(()=>{
+          const nodes=[...document.querySelectorAll('.ocr-pdf-pair-overlay')];
+          return nodes.length===2&&nodes[0].dataset.pbsId==='p6b6s0'&&
+            nodes[1].dataset.pbsId==='p6b6s1';
+        },null,{timeout:28000});
+        assert.deepEqual(await page.locator('.ocr-pdf-pair-overlay').evaluateAll(nodes=>nodes.map(node=>({
+          pbsId:node.dataset.pbsId,physical:node.dataset.blockIndex,
+          page:node.dataset.pdfPage
+        }))),[
+          {pbsId:'p6b6s0',physical:'6',page:'7'},
+          {pbsId:'p6b6s1',physical:'7',page:'7'}],
+          'two pair overlays must reference different physical OCR bboxes');
+        await selectPreview(page,'md');
+        await aboutRow.locator('.ocr-illegal-break-jump').click();
+        await page.waitForFunction(()=>
+          document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-before').length>0&&
+          document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-after').length>0,
+          null,{timeout:23000});
+        const pairMD=await page.evaluate(()=>({
+          before:[...document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-before')]
+            .map(x=>x.textContent).join(' ').slice(-170),
+          after:[...document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-after')]
+            .map(x=>x.textContent).join(' ').slice(0,170),
+        }));
+        assert(pairMD.before.includes('about'),pairMD.before);
+        assert(pairMD.after.includes('3 percentage points'),pairMD.after);
         assert.equal(readFileSync(doc,'utf8'),seeded,'candidate scan must not autosave');
         const global=await page.locator('#status').textContent();
         assert(global.includes('待复核'),global);

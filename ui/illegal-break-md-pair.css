@@ -1,0 +1,14 @@
+/* Independent read-only A/B lens: never change source, selection or the
+ * ordinary text-block checkbox coverage. Visible in regular and split MD. */
+.ocr-markdown .ocr-illegal-break-md-before{
+  outline:2px solid #f1b548;outline-offset:2px;
+  background:rgba(241,181,72,.17);border-radius:2px;
+}
+.ocr-markdown .ocr-illegal-break-md-after{
+  outline:2px solid #ea824b;outline-offset:2px;
+  background:rgba(234,130,75,.20);border-radius:2px;
+}
+.ocr-markdown .ocr-illegal-break-md-before.ocr-illegal-break-md-after{
+  outline:2px solid #f1b548;
+  box-shadow:0 0 0 4px rgba(234,130,75,.36);
+}

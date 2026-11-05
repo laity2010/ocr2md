@@ -263,6 +263,7 @@ function siblingBreakCandidates(source,spell,scopes,maxIssues){
     rows.push({from,to:from+1,line:source.slice(0,from).split('\n').length,
       left:aWord,right:bWord,joined,reason,
       blockId:a.id,parentId:a.parentId,nextBlockId:b.id,
+      afterLine:source.slice(0,b.scopeStart+rightLine.from).split('\n').length,
       pdfPage:physicalPDFPage(a),nextPdfPage:physicalPDFPage(b),
       scopeLabel:'子块交界',reviewOnly:true,
       context:`${a.id} (PDF ${physicalPDFPage(a)??'?'}页) ${leftText.slice(-85)} ↵ `+

@@ -24,6 +24,7 @@ import {paintSentencePreviewHighlight,clearSentencePreviewHighlight,
 import {createSourceLineCalloutMenu} from './source-line-callout-menu.js';
 import {PdfPreview} from './pdf-preview.js';
 import {paintCMDTextBlockCoverage,clearCMDTextBlockCoverage} from './text-block-preview-coverage.js';
+import {paintIllegalBreakMDPair,clearIllegalBreakMDPair} from './illegal-break-md-pair.js';
 import './workspace.css';
 
 const sourceHost = document.createElement('div');
@@ -589,7 +590,15 @@ class PreviewPanel {
     clearSentencePreviewHighlight();
     this.lastFocusElement?.classList.remove('ocr-outline-focused-element');
     this.lastFocusElement=null;
+    clearIllegalBreakMDPair(this.body);
     if(!focus)return;
+    if(focus.origin==='illegal-break'&&currentOutline?.workModule==='illegal-break'&&
+       focus.beforeBlockId&&focus.afterBlockId&&
+       focus.revision===viewStore.getState().documentRevision){
+      const atoms=getCMD()?.queryBlockChains?.().atoms||[];
+      paintIllegalBreakMDPair(this.body,atoms,focus.beforeBlockId,focus.afterBlockId);
+      return;
+    }
     if((focus.origin==='sentence'||focus.origin==='preview')&&focus.elementId&&currentOutline?.workModule==='sentence'&&
        focus.revision===viewStore.getState().documentRevision){
       const row=getCMD()?.querySentences?.().rows.find(x=>x.id===focus.elementId);
@@ -616,6 +625,7 @@ class PreviewPanel {
   dispose(){
     this.disposed=true;
     this.clearSentenceSelection();
+    clearIllegalBreakMDPair(this.body);
     clearCMDTextBlockCoverage(this.body);
     this.footnoteReader?.dispose();
     clearTimeout(this.timer);
@@ -788,6 +798,12 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
       if(module==='text-block'&&activateTextBlocks)currentPreview?.setCoverageEnabled(true);
       if(module!=='sentence')currentPreview?.clearSentenceSelection();
       currentOutline?.setModule(module);
+      // A/B selection belongs to the Illegal Breaks AG lens, not to the
+      // underlying PDF/Markdown documents or another review module.
+      if(module!=='illegal-break'&&viewStore.getState().focusTarget?.origin==='illegal-break'){
+        currentPreview?.pdf?.clearComparison();
+      }
+      currentPreview?.highlight(viewStore.getState().focusTarget);
       currentPreview?.setBlockCoverage();
       currentPreview?.redrawSentenceCoverage();
     },
