@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: block mode retains WP4/WP5 controls plus PDF bbox actions
+
+3 !== 13
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/text-block-review.browser.test.mjs:39:11 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 3,
+  expected: 13,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0

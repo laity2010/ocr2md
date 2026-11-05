@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The input did not match the regular expression /源码作用域为空/. Input:
+
+'单击定位 p4b0；长按选择作为子块／之后 · 虚线标签＝该块尚无独立源码正文，需要核对；父块含有效子块则显示实线'
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/pdf-child-region-select.browser.test.mjs:48:14 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: '单击定位 p4b0；长按选择作为子块／之后 · 虚线标签＝该块尚无独立源码正文，需要核对；父块含有效子块则显示实线',
+  expected: /源码作用域为空/,
+  operator: 'match'
+}
+
+Node.js v23.11.0

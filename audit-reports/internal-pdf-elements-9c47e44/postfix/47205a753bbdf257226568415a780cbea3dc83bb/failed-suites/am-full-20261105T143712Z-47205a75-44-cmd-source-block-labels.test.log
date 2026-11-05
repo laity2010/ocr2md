@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: joined original label displays parent logical ID
+
+'p2b8' !== 'p2b7'
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/cmd-source-block-labels.test.mjs:36:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'p2b8',
+  expected: 'p2b7',
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0

@@ -1,0 +1,13 @@
+PDF_COVER_TEST_ENGINE_START Chrome
+PDF_COVER_INITIAL_JOIN_DIAGNOSTIC Chrome {"details":{"mode":"chapter-boundary","status":"PDF · p6b7 → 源码正文第 922 行（标签第 920 行） · CMD · 全部章节 · 21 项 · 4,931行 / 383,657字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","pdfStatus":"p6b7 → 源码正文第 922 行（标签第 920 行）","total":224,"joinInput":true,"joinDisabled":true,"pdfReady":true,"sourceJoinCount":0,"navType":["navigate"]},"errors":[]}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 20000ms exceeded.
+    at /Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/pdf-coverage-zoom-browser.test.mjs:75:20 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

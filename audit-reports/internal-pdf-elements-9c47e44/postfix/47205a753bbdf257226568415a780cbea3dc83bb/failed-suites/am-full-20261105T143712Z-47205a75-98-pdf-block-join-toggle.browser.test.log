@@ -1,0 +1,14 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: page first p9b0 must merge into previous page last p8b8
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/pdf-block-join-toggle.browser.test.mjs:38:4 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '=='
+}
+
+Node.js v23.11.0

@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: {"visible":true,"sourceLines":2,"focusText":"To evaluate Bufet’s pure stock-selection ability, we used Berkshire Hathaway’s 13F filings to collect the port","scrollTop":17606,"paneHeight":316,"global":"✓ 非法断行：子块内标定候选 0 · 待复核 6 · CMD · 全部章节 · 0 项 · 4,933行 / 383,734字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · doc.md","pdfId":null}
+
+null !== 'p8b3s0'
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/illegal-break-source-edit.browser.test.mjs:176:16 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: null,
+  expected: 'p8b3s0',
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0

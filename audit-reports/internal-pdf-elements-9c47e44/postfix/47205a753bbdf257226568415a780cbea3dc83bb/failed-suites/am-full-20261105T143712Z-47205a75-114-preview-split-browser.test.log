@@ -1,0 +1,16 @@
+PREVIEW_SPLIT_MEASURE Chrome {"groups":4,"pdfSame":true,"viewerSame":true,"mdSame":true,"checked":true,"selectDisabled":true,"source":{"left":516,"right":1032,"top":40,"bottom":341,"width":516,"height":301},"md":{"left":516,"right":774,"top":341,"bottom":642,"width":258,"height":301},"pdf":{"left":774,"right":1032,"top":341,"bottom":642,"width":258,"height":301},"pdfPort":{"left":774,"right":1032,"top":375,"bottom":642,"width":258,"height":267},"pdfStatus":"就绪","mdVisible":"visible","pdfVisible":"visible","pdfToolbar":true,"docSize":306869}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.evaluate: TypeError: Cannot read properties of null (reading 'getBoundingClientRect')
+    at eval (eval at evaluate (:370:30), <anonymous>:5:43)
+    at Array.map (<anonymous>)
+    at eval (eval at evaluate (:370:30), <anonymous>:4:58)
+    at UtilityScript.evaluate (<anonymous>:372:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at /Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/preview-split-browser.test.mjs:77:30 {
+  log: []
+}
+
+Node.js v23.11.0

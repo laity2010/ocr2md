@@ -1,0 +1,12 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 12000ms exceeded.
+    at expectChosen (/Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/sentence.browser.test.mjs:194:17)
+    at /Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/sentence.browser.test.mjs:232:10 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

@@ -1,0 +1,13 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.evaluate: Error: MinerU converter returned an invalid Markdown document
+    at CMDocument.loadMineruJson (http://127.0.0.1:5296/cm-document.js:187:13)
+    at async eval (eval at evaluate (:370:30), <anonymous>:27:9)
+    at async <anonymous>:396:30
+    at /Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/am/contracts-browser.test.mjs:32:31 {
+  log: []
+}
+
+Node.js v23.11.0

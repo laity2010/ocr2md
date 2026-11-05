@@ -1,0 +1,17 @@
+CMD_PDF_PARENT_GROUP_SORT_PASS native parent after p1b5 1
+CMD_PDF_PARENT_GROUP_SORT_PASS native parent before p1b4 1
+CMD_PDF_PARENT_GROUP_SORT_PASS absorbed group after p1b6 2
+CMD_PDF_PARENT_GROUP_SORT_PASS absorbed group before p1b5 2
+file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/packages/minerujson-md/dist/index.js:63
+        throw new Error('MINERUJSON_MD_INVALID: ' + message);
+              ^
+
+Error: MINERUJSON_MD_INVALID: absorbed parent lost one or more original OCR children
+    at assert (file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/packages/minerujson-md/dist/index.js:63:15)
+    at toMineruJSON (file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/packages/minerujson-md/dist/index.js:611:9)
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/cmd-pbs-parent-group-order.test.mjs:49:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:274:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:644:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.11.0

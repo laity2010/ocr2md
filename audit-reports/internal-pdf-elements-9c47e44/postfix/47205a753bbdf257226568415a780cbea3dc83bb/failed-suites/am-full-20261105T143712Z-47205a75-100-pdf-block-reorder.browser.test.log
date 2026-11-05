@@ -1,0 +1,16 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+locator.waitFor: Timeout 1500ms exceeded.
+Call log:
+  - waiting for locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')
+
+    at /Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/pdf-block-reorder.browser.test.mjs:75:10 {
+  log: [
+    `  - waiting for locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')`
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

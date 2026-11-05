@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+216 !== 215
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-pdf-elements-postfix-test-47205a7/tests/cmd-text-blocks.test.mjs:16:8 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 216,
+  expected: 215,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0
