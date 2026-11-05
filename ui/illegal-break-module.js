@@ -12,7 +12,7 @@ const theme=themeQuartz.withParams({accentColor:'#d8a657',backgroundColor:'#2f38
 export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
   host.classList.add('ocr-illegal-break-pane');
   const guide=document.createElement('div');guide.className='ocr-illegal-break-guide';
-  guide.textContent='子块内换行断词可 CMD 标定；子块交界、连字符空格疑似断词仅待复核，不自动合并 · 点击行号定位';
+  guide.textContent='非大写开头的正文子块列为跨栏／跨页续接待复核；换行断词可 CMD 标定 · 不自动合并';
   const state=document.createElement('div');state.className='ocr-illegal-break-state';state.setAttribute('role','status');
   const gridHost=document.createElement('div');gridHost.className='ocr-illegal-break-grid';
   host.append(guide,state,gridHost);
@@ -35,6 +35,8 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
     {field:'line',headerName:'源码行',width:96,minWidth:90,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'markState',headerName:'复核状态',width:95,minWidth:85},
     {field:'blockId',headerName:'当前块',width:132,minWidth:110,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
+    {field:'pdfPage',headerName:'原PDF页',width:99,minWidth:85,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
+    {field:'previousBlockId',headerName:'上一块',width:132,minWidth:110,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'nextBlockId',headerName:'下一子块',width:132,minWidth:112,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'scopeLabel',headerName:'检查范围',width:108,minWidth:96,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'joined',headerName:'疑似续接',width:155,minWidth:120,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},

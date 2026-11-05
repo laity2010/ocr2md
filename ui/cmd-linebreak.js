@@ -146,6 +146,75 @@ function hyphenSpaceCandidates(source,spell,scopes,maxIssues){
   }
   return results;
 }
+// A lower-case, numeric or punctuation-led prose CHILD may be the continuation
+// of another PDF column or page, even when no hyphen or same-parent sibling
+// explains the break. This is a high-recall REVIEW, never an automatic edit.
+const NON_PROSE_OPEN=/^(?:!\[|<\/?(?:table|tr|td|th|div|img|svg|figure|script|style|pre)\b|\|[^|]|\$\$|`{3,}|~{3,}|\{\s*"(?:page_size|page_idx)"|(?:<!--\s*(?:cmd:|minerujson:)))/i;
+function firstProseGlyph(source,scope){
+  const text=source.slice(scope.scopeStart,scope.scopeEnd);
+  for(const line of textLines(text)){
+    const raw=line.raw.replace(MARKER_SUFFIX,'');
+    if(!raw.trim())continue;
+    // Skip CMD comments and their metadata, not the actual child prose.
+    if(/^\s*<!--/.test(raw))continue;
+    let start=raw.search(/\S/);
+    let content=raw.slice(start);
+    if(NON_PROSE_OPEN.test(content)||/^\$[^$]*\$\s*$/.test(content))return null;
+    // Extract the visible first character rather than mistaking Markdown
+    // emphasis, quotation marks or a superscript footnote for prose.
+    const front=/^(?:#{1,6}\s+|(?:[-*+]\s+)|(?:\d+[.)]\s+))/.exec(content);
+    if(front){start+=front[0].length;content=content.slice(front[0].length);}
+    const footnote=/^(?:\\?<sup>[^<]*\\?<\/sup>)+/.exec(content);
+    if(footnote){start+=footnote[0].length;content=content.slice(footnote[0].length);}
+    const wrappers=/^[\s“”‘’"'([{*_~]+/.exec(content);
+    if(wrappers){start+=wrappers[0].length;content=content.slice(wrappers[0].length);}
+    if(!content||/^(?:!\[|\$|\\\(|\\\[|<|\|)/.test(content))return null;
+    return {from:scope.scopeStart+line.from+start,first:content[0],
+      snippet:content.slice(0,100)};
+  }
+  return null;
+}
+function physicalPDFPage(scope){
+  const physical=parseCMDPBSId(scope.origin||scope.id);
+  return physical?.p===undefined?null:physical.p+1;
+}
+/** Every textual child with a non-ASCII-capital initial is a possible
+ * cross-column/page fragment. The previous atom need not share its parent;
+ * a manual regrouping cannot erase the suspicion. */
+function childOpeningCandidates(source,scopes,excludedNext,maxIssues){
+  const result=[];
+  for(let i=0;i<scopes.length;i++){
+    if(result.length>=maxIssues)break;
+    const child=scopes[i];
+    if(!child.identity.s.length||excludedNext.has(child.id))continue;
+    const opening=firstProseGlyph(source,child);
+    if(!opening||/^[A-Z]$/.test(opening.first))continue;
+    let previous=null,previousOpening=null;
+    for(let j=i-1;j>=0;j--){
+      const candidate=firstProseGlyph(source,scopes[j]);
+      if(candidate){previous=scopes[j];previousOpening=candidate;break;}
+    }
+    const prevPage=previous?physicalPDFPage(previous):null;
+    const pdfPage=physicalPDFPage(child);
+    const changedPage=prevPage!==null&&pdfPage!==null&&prevPage!==pdfPage;
+      const first=opening.snippet.replace(/<!--[^>]*-->/g,'')
+      .split(/\s+/).slice(0,5).join(' ').slice(0,75);
+    const previousText=previous?source.slice(previous.scopeStart,previous.scopeEnd)
+      .trim().replace(/\s+/g,' ').slice(-88):'';
+    result.push({from:opening.from,to:opening.from+opening.first.length,
+      line:source.slice(0,opening.from).split('\n').length,
+      left:previousText.slice(-35),right:opening.snippet.slice(0,38),
+      joined:first,blockId:child.id,parentId:child.parentId,
+      previousBlockId:previous?.id||null,nextBlockId:null,
+      pdfPage,previousPdfPage:prevPage,
+      scopeLabel:'子块起始',reviewKind:'child-start',reviewOnly:true,
+      reason:changedPage?'子块非大写开头：疑似跨页续接':
+        '子块非大写开头：疑似跨栏/断行续接',
+      context:`${previous?.id||'起始'}（PDF ${prevPage??'?'}页） ${previousText} ↵ `+
+        `[${child.id} / PDF ${pdfPage??'?'}页] ${opening.snippet}`});
+  }
+  return result;
+}
 /** Read-only review candidates BETWEEN adjacent logical children.
  * A caption/body or cross-page pair may be legitimately separate: never
  * auto-insert an annotation or join these two source scopes. */
@@ -193,9 +262,11 @@ function siblingBreakCandidates(source,spell,scopes,maxIssues){
     if(source[from]!=='\n')continue;
     rows.push({from,to:from+1,line:source.slice(0,from).split('\n').length,
       left:aWord,right:bWord,joined,reason,
-      blockId:a.id,parentId:a.parentId,nextBlockId:b.id,scopeLabel:'子块交界',
-      reviewOnly:true,
-      context:`${a.id} ${leftText.slice(-85)} ↵ [${b.id}] ${rightText.slice(0,85)}`});
+      blockId:a.id,parentId:a.parentId,nextBlockId:b.id,
+      pdfPage:physicalPDFPage(a),nextPdfPage:physicalPDFPage(b),
+      scopeLabel:'子块交界',reviewOnly:true,
+      context:`${a.id} (PDF ${physicalPDFPage(a)??'?'}页) ${leftText.slice(-85)} ↵ `+
+        `[${b.id} / PDF ${physicalPDFPage(b)??'?'}页] ${rightText.slice(0,85)}`});
   }
   return rows;
 }
@@ -309,7 +380,11 @@ export function detectIllegalBreaks(source,spell,{maxIssues=400,bodyEnd=source.l
     const paragraph=childParagraphBreakCandidates(source,scopes,remaining+1);
     const sibling=siblingBreakCandidates(source,spell,scopes,remaining+1);
     const hyphenSpace=hyphenSpaceCandidates(source,spell,scopes,remaining+1);
-    const candidates=[...paragraph,...sibling,...hyphenSpace]
+    // When a precise sibling seam already explains the child opening,
+    // retain that stronger evidence rather than a duplicate generic row.
+    const childOpening=childOpeningCandidates(source,scopes,
+      new Set(sibling.map(row=>row.nextBlockId)),remaining+1);
+    const candidates=[...paragraph,...sibling,...hyphenSpace,...childOpening]
       .sort((a,b)=>a.from-b.from);
     if(candidates.length>remaining)truncated=true;
     results.push(...candidates.slice(0,remaining));

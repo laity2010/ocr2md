@@ -1658,3 +1658,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-P6B6-C42','C42','tests/cmd-linebreak-p6b6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Detect p6b6s0 body to p6b6s1 about/3 and two same-line OCR hyphen-space scars leverage/insurance; preserve distinct offsets and no auto-edit','direct'),
  ('TC-BREAK-P6B6-G20','G20','tests/illegal-break-p6b6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Actual Chrome/iPad-WebKit AG filter to p6b6 children shows all 3 review-only, source line focus works, reload restores and no CMD annotation written','integration');
+
+-- Child-opening continuity review: all text-bearing CMD children whose first
+-- substantive glyph is not uppercase are high-recall review candidates. They
+-- may be across columns/pages, with original PDF-page provenance; no CMD edit.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-START-C42','C42','tests/cmd-linebreak-child-opening.test.mjs','tests/cmd-linebreak-child-opening.test.mjs','Enumerate lowercase/numeric/punctuation child starts independent of hyphens and parent sibling, classify physical PDF page, exclude media/table/formula/uppercase and never auto-mark','direct'),
+ ('TC-BREAK-START-G20','G20','tests/illegal-break-child-opening.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit actual p13b3s1 initially: AG review, physical PDF page, source visibly navigates, refresh recomputes and no autosave','integration');
