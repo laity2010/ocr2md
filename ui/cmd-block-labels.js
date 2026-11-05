@@ -84,11 +84,18 @@ export function projectCMDSourceBlockLabels(source){
     const isParent=scope.kind==='parent';
     const originalId=isParent?`p${scope.pageIndex}b${scope.blockIndex}`:
       subblockId(scope.pageIndex,scope.blockIndex,scope.path);
-    const label=visibleBySourceLine.get(scope.sourceLine)||
+    const atom=atomBySourceLine.get(scope.sourceLine);
+    // A fresh CMD tag is already the authoritative *current* PBS identity;
+    // never overwrite it with a derived legacy ordinal. Conversely a legacy
+    // MinerU tag is a physical source identity. Existing join annotations
+    // still need the CMD logical projection to determine the visible label,
+    // otherwise the joined child and all its successors display stale IDs.
+    const label=(isParent&&atom?.format==='legacy'?
+      projection.assignments.get(originalId):null)||
+      visibleBySourceLine.get(scope.sourceLine)||
       (scope.bodyAlias?bodyByOrigin.get('p'+scope.pageIndex+'b'+scope.blockIndex):null)||
       visibleByOrigin.get(originalId)||
       (isParent?projection.assignments.get(originalId)||originalId:originalId);
-    const atom=atomBySourceLine.get(scope.sourceLine);
     return {...scope,id:originalId,label,
       // The current visible PBS identity and its original MinerU PDF bbox
       // are distinct after insert-before/after or absorption. Only CMD's

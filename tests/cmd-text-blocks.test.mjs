@@ -13,8 +13,14 @@ const baseline=await inspectCMDTextBlocks(initial);
 assert.equal(baseline.summary.pages,22);assert.equal(baseline.summary.blocks,224);
 assert.equal(baseline.summary.matched,224);assert.equal(baseline.summary.missing,0);
 assert.equal(baseline.summary.duplicates,0);assert.equal(baseline.summary.unknown,0);
-assert.equal(baseline.summary.readable,215);
-assert.equal(baseline.summary.metadataOnly,9);
+// Current sealed MinerU splits the second physical table's Notes into p3b1,
+// preserving OCR text that the earlier placeholder-based projection omitted.
+assert.equal(baseline.summary.readable,216);
+assert.equal(baseline.summary.metadataOnly,8);
+assert.equal(baseline.rows.find(row=>row.id==='p3b1')?.expectsPreview,true);
+assert.match(baseline.rows.find(row=>row.id==='p3b1')?.text||'',
+  /^Notes: The information ratio is defined/,
+  'native p3b1 OCR Notes must remain readable at their original physical bbox');
 assert.deepEqual(baseline.rows.find(row=>row.id==='p6b2').bbox,[51,215,273,272]);
 const layout=await queryCMDLayout(initial);
 assert.equal(layout.source,'CMD-sealed-minerujson');

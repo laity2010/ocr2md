@@ -10,8 +10,17 @@ const id=/^p(?:0|[1-9]\d*)b(?:0|[1-9]\d*)(?:s(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*
 const parent=/^p(?:0|[1-9]\d*)b(?:0|[1-9]\d*)$/;
 export function readCMDPBSLocations(source){
   const tail=source.indexOf('<!-- minerujson:source:v1:');
-  if(tail<0)throw Error('Missing sealed MinerU source');
   const matches=[...source.matchAll(regex)];
+  // Reading a legacy MinerU Markdown or an in-memory CMD chain is a pure
+  // projection, not a PDF placement edit. Both existed before the sealed
+  // source footer was introduced and legitimately have no placement sidecar.
+  // A sidecar without its immutable sealed source remains invalid, however:
+  // never accept unverifiable physical-origin bindings from such a document.
+  if(tail<0){
+    if(source.includes(prefix)||matches.length)
+      throw Error('CMD PBS locations require sealed MinerU source');
+    return {bindings:{},bodies:[],removed:[],range:null};
+  }
   if(matches.length>1||source.slice(0,tail).split(prefix).length-1!==matches.length||
      matches.some(m=>m.index>=tail))throw Error('Duplicate or malformed CMD PBS locations');
   if(!matches.length)return {bindings:{},bodies:[],removed:[],range:null};
@@ -35,6 +44,8 @@ export function readCMDPBSLocations(source){
     range:{from:m.index,to:m.index+m[0].length,expected:m[0]}};
 }
 export function planCMDPBSLocationsEdit(source,{bindings,bodies,removed}){
+  if(!source.includes('<!-- minerujson:source:v1:'))
+    throw Error('Cannot write physical PBS locations without sealed MinerU source');
   const current=readCMDPBSLocations(source);
   const stable=Object.fromEntries(Object.entries(bindings).sort(([a],[b])=>a.localeCompare(b)));
   const value=prefix+JSON.stringify({schema:1,bindings:stable,

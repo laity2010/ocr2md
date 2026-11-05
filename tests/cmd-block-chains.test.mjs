@@ -4,6 +4,7 @@ import {blockAnchor,subblockAnchor} from '../ui/mineru-anchors.js';
 import {sourceBlockScopes} from '../ui/cmd-block-labels.js';
 import {parseCMDPBSId,parseCMDBlockTag,serializeCMDBlockTag,
   readCMDBlockChains,planCMDBlockChainArrangement} from '../ui/cmd-block-chains.js';
+import {readCMDPBSLocations,planCMDPBSLocationsEdit} from '../ui/cmd-pbs-locations.js';
 const legacy=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const legacyBlocks=readCMDBlockChains(legacy);
 assert.equal(legacyBlocks.invalid.length,0);
@@ -18,6 +19,14 @@ assert.equal(parseCMDPBSId('p4b02'),null,'noncanonical PBS rejected');
 const atomIds=['p3b0','p3b0s0','p4b0','p9b0','p12b1'];
 const body=atomIds.map((id,i)=>`${serializeCMDBlockTag({id})}\n${i===0?'Table title':i===1?'Table body':i===2?'Note':i===3?'Across page':''}`).join('\n\n');
 const first=readCMDBlockChains(body);
+assert.deepEqual(readCMDPBSLocations(body),{bindings:{},bodies:[],removed:[],range:null},
+  'unsealed synthetic CMD may be projected read-only with no PDF provenance');
+assert.throws(()=>planCMDPBSLocationsEdit(body,{bindings:{},bodies:[],removed:[]}),
+  /without sealed MinerU source/,
+  'unsealed synthetic CMD must never persist physical PDF mappings');
+assert.throws(()=>readCMDPBSLocations(body+'\n<!-- cmd:pbs-locations:v1 {"schema":1} -->\n'),
+  /require sealed MinerU source/,
+  'an unsealed input with a forged location footer must fail closed');
 assert.deepEqual(first.summary,{atoms:5,chains:5,singleton:5,multiple:0});
 assert.equal(first.invalid.length,0);
 assert.deepEqual(first.atoms.map(x=>x.id),atomIds);

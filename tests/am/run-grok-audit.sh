@@ -100,6 +100,14 @@ if [[ ! -e .v6/settings.json ]]; then
   printf '{"settings":{}}\n' > .v6/settings.json
 fi
 npm run build
+# The engineering-initialize regression intentionally hashes the currently
+# served V6 release before/after its disposable reset. A fresh detached audit
+# worktree has *no* .v6/release until we install the just-built assets.
+# Publish ONLY inside TARGET (already checked to be an isolated Git worktree),
+# never against the developer's Main or any live user document.
+python3 scripts/v6_publish.py
+[[ "$(python3 -c 'import json;print(json.load(open(".v6/release/release.json"))["commit"])')" == "$EXPECTED_SHA" ]] ||
+  blocked 'isolated release SHA mismatches audit target'
 python3 tests/am/am.py build
 python3 -m unittest discover -s tests/am -p 'test_*.py'
 python3 tests/am/am.py check

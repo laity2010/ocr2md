@@ -541,6 +541,21 @@ export function toMineruJSON(markdown: string): string {
   for(const match of markdown.matchAll(cmdLine)){
     const id=/^p(\d+)b(\d+)$/.exec(match[2]);
     if(!id)continue;
+    // A native child that has been promoted to an independent CMD parent
+    // still accounts for one of its former OCR parent's sealed native paths.
+    // In particular, a reviewed/absorbed parent may have NO child badges
+    // left under its target after a legitimate promotion. Verify that exact
+    // original path here, before the inverse projection removes the alias.
+    const promoted=/ origin="(p(\d+)b(\d+))s(\d+)"/.exec(match[3]);
+    if(promoted&&absorbedParents.has(promoted[1])){
+      const page=Number(promoted[2]),block=Number(promoted[3]),index=Number(promoted[4]);
+      const seen=absorbedChildren.get(promoted[1])!;
+      assert(page===Number(id[1])&&
+        data.pdf_info[page]?.para_blocks[block]?.blocks?.[index]&&
+        !seen.has(index),
+        'promoted absorbed child has invalid original OCR identity');
+      seen.add(index);
+    }
     const origin=/ origin="(p\d+b\d+)"/.exec(match[3]);
     const original=origin?.[1]||match[2];
     logicalParent.set(match[2],original);
@@ -678,13 +693,22 @@ export function toMineruJSON(markdown: string): string {
   for(const promoted of promotions){
     const page=data.pdf_info[promoted.page];
     const block=page?.para_blocks[promoted.parent];
+    const extra=[...promotions,...restoredRoots].filter(other=>other.page===promoted.page);
     assert(block?.blocks?.[promoted.child]&&
-      promoted.newParent>=page.para_blocks.length&&
+      promoted.newParent>=0&&promoted.newParent<page.para_blocks.length+extra.length&&
+      extra.filter(other=>other.newParent===promoted.newParent).length===1&&
       !promotions.some(other=>other!==promoted&&other.origin===promoted.origin),
       'promoted child has invalid original OCR source or new page index');
-    const expected=page.para_blocks.length+[...promotions,...restoredRoots].filter(other=>
-      other.page===promoted.page&&other.newParent<promoted.newParent).length;
-    assert(promoted.newParent===expected,'promoted parents must use consecutive page-end PBS IDs');
+    // Newly promoted nodes start at the page end, but subsequent PDF drag
+    // operations may place them anywhere among independent parents. The
+    // physical path above must stay unique, and the inverse projection below
+    // still checks *all* native parents/children against sealed MinerU bytes.
+    if(promoted.newParent>=page.para_blocks.length){
+      const expected=page.para_blocks.length+extra.filter(other=>
+        other.newParent<promoted.newParent&&
+        other.newParent>=page.para_blocks.length).length;
+      assert(promoted.newParent===expected,'page-end promoted IDs must be consecutive');
+    }
   }
   // Reviewed child sourced from a whole original OCR parent can be
   // independently restored as a page-end logical parent. Its immutable root

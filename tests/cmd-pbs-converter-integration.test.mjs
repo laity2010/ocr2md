@@ -29,7 +29,16 @@ assert.equal(labels.filter(x=>x.kind==='parent').length,224);
 assert.equal(labels.filter(x=>x.kind==='child').length,43);
 assert.equal(sourceBlocks(next).length,224);
 assert.equal(sourceSubblocks(next).length,43);
-assert(labels.some(x=>x.id==='p4b0s0'&&x.sourceKind==='structure'));
+// The native p4b0s0 caption is actual OCR text in this sealed fixture.
+// Requiring "structure" here hid a valid child body and contradicted the
+// source-order p4b0s0/p4b0s1/p4b0s2 converter contract.
+const caption=labels.find(x=>x.id==='p4b0s0');
+assert.equal(caption?.sourceKind,'content','original p4b0s0 caption must not be lost');
+assert(next.split('\n').slice(caption.sourceLine,caption.scopeEndLine)
+  .some(line=>line.includes('Table 1.')&&line.includes('continued')),
+  'caption body must remain in the exact original source-tag scope');
+assert.equal(labels.find(x=>x.id==='p4b0')?.sourceKind,'structure',
+  'parent has no independent body before its first native child');
 const annotations=await planCMDSubblockAnnotations(next);
 assert.equal(annotations.existing,43);
 assert.equal(annotations.inserted,0);
