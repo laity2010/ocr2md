@@ -9,6 +9,7 @@ import {createServer} from 'node:net';
 import {spawn} from 'node:child_process';
 import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable} from './platform.test-helper.mjs';
+import {selectPreview} from './navigation-ui.test-helper.mjs';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {readCMDBlockChains} from '../ui/cmd-block-chains.js';
 const original=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
@@ -112,7 +113,34 @@ try{
             `illegal-break-pbs-${name}.png`),animations:'disabled'});
         }
         const candidate=grid.locator('.ag-row').filter({has:page.locator('.ag-cell[col-id="markState"]:text("待复核")')});
+        await page.waitForFunction(()=>!document.querySelector('.ocr-preview-mode option[value="pdf"]')?.disabled,
+          null,{timeout:55000});
+        await selectPreview(page,'pdf');
         await candidate.locator('.ocr-illegal-break-jump').click();
+        await page.waitForFunction(()=>{
+          const nodes=[...document.querySelectorAll('.ocr-pdf-pair-overlay')];
+          return nodes.length===2&&nodes[0].dataset.pbsId==='p4b0s1'&&
+            nodes[1].dataset.pbsId==='p4b0s2';
+        },null,{timeout:25000});
+        const overlays=await page.locator('.ocr-pdf-pair-overlay').evaluateAll(nodes=>nodes.map(node=>({
+          pbs:node.dataset.pbsId,b:node.dataset.blockIndex,
+          box:[node.style.left,node.style.top,node.style.width,node.style.height].join('|')
+        })));
+        assert.deepEqual(overlays.map(x=>[x.pbs,x.b]),[['p4b0s1','0'],['p4b0s2','0']]);
+        assert.notEqual(overlays[0].box,overlays[1].box,
+          'native children must highlight their own subregion bboxes, not the full shared parent bbox');
+        await selectPreview(page,'md');
+        await candidate.locator('.ocr-illegal-break-jump').click();
+        await page.waitForFunction(()=>
+          document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-before').length>0&&
+          document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-after').length>0,
+          null,{timeout:20000});
+        const pair=await page.evaluate(()=>({
+          before:[...document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-before')].map(x=>x.textContent).join(' '),
+          after:[...document.querySelectorAll('.ocr-markdown .ocr-illegal-break-md-after')].map(x=>x.textContent).join(' ')
+        }));
+        assert(pair.before.includes('We examined the latest'),pair.before);
+        assert(pair.after.includes('13F filing in detail'),pair.after);
         assert.equal(await grid.locator('.ag-row').count(),2);
         // Only the confirmed intra-child tag persists. On reload, the current
         // PBS document recomputes the sibling seam as review-only, without a

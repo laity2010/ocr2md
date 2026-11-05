@@ -109,6 +109,11 @@ try{
           {pbsId:'p6b6s0',physical:'6',page:'7'},
           {pbsId:'p6b6s1',physical:'7',page:'7'}],
           'two pair overlays must reference different physical OCR bboxes');
+        if(process.env.OCR_P6B6_SCREENSHOTS){
+          mkdirSync(process.env.OCR_P6B6_SCREENSHOTS,{recursive:true});
+          await page.screenshot({path:resolve(process.env.OCR_P6B6_SCREENSHOTS,
+            `p6b6-AB-PDF-${name}.png`),animations:'disabled'});
+        }
         await selectPreview(page,'md');
         await aboutRow.locator('.ocr-illegal-break-jump').click();
         await page.waitForFunction(()=>
@@ -124,8 +129,8 @@ try{
         assert(pairMD.before.includes('about'),pairMD.before);
         assert(pairMD.after.includes('3 percentage points'),pairMD.after);
         assert.equal(readFileSync(doc,'utf8'),seeded,'candidate scan must not autosave');
-        const global=await page.locator('#status').textContent();
-        assert(global.includes('待复核'),global);
+        assert.equal((await rowsFromDOM(page)).filter(row=>row.status==='待复核').length,3,
+          'AG review relationship rows must persist through PDF/MD mode changes');
         if(process.env.OCR_P6B6_SCREENSHOTS){
           mkdirSync(process.env.OCR_P6B6_SCREENSHOTS,{recursive:true});
           await page.screenshot({path:resolve(process.env.OCR_P6B6_SCREENSHOTS,
