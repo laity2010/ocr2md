@@ -679,7 +679,15 @@ async function main() {
     },350);
   };
   enterIllegalBreak=()=>{
-    if(showSavedBreakRows())return;
+    const restored=showSavedBreakRows();
+    // Legacy MinerU documents with saved annotations remain read-only on
+    // tab entry, as before. Current PBS documents must RECOMPUTE unpersisted
+    // sibling review candidates after reload; never persist hypothetical
+    // cross-child joins into CMD. Existing tags are deduplicated on rescan.
+    if(restored&&breakScanDoc===null&&view.state.doc.toString().includes('<!-- cmd:block:v1 ')){
+      scanIllegalBreak();return;
+    }
+    if(restored)return;
     if(breakScanDoc===null)scanIllegalBreak();
     else if(view.state.doc.eq(breakScanDoc)){
       clearBreakMarks();workspace.getIllegalBreakElements();
