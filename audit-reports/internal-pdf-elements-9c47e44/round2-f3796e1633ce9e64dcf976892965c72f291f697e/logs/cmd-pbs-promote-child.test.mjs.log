@@ -1,0 +1,7 @@
+PBS_CHILD_PROMOTION_PASS {
+  source: 'p1b3s0',
+  newId: 'p1b14',
+  atomCount: 267,
+  originalJsonExact: true,
+  sourceMoved: true
+}

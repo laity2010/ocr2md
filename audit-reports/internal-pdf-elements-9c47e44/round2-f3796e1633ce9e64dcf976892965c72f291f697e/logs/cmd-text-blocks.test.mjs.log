@@ -1,0 +1,13 @@
+CMD_TEXT_BLOCKS_PASS {
+  sourceSha: 'e7371434b168a68c77e8b26370327670abb150aed63f2989c9f5e7e4336ee4a5',
+  pages: 22,
+  blocks: 224,
+  matched: 224,
+  missing: 0,
+  duplicates: 0,
+  withGeometry: 224,
+  withoutGeometry: 0,
+  readable: 216,
+  metadataOnly: 8,
+  unknown: 0
+} isolatedSample .v6/tests/text-blocks/buffett-reinitialized.minerujson.md
