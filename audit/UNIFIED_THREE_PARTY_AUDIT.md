@@ -45,7 +45,7 @@ bash audit.sh
 
 **B · 独立修复**：从固定源码 SHA 创建自己的 **`fix/<AI_ID>-pdf-elements-9c47e44`** 分支/隔离 worktree，先保存原失败证据，然后针对真实问题自行修复（允许结论不同、方案不同）。不访问其他审计者的 `fix/*` 作为解决方案，不直接改 Main、源快照、原始 PDF/JSON 或生产数据。不可删除测试、放宽断言、改 Schema 洗白或直接为真实越界添加许可登记。若不能安全修复，保持 FAIL 并说明。
 
-**C · 修复后验证**：实际运行受影响专项测试、模块 API/消息/边界检查、Chrome/WebKit、AM `check/coverage/edges/run-all/certify` 及统一脚本；按最终修复 SHA 重新给出真实退出码，不得将修复后的 PASS 追记到旧 `9c47e44`。跨平台环境不具备则标 BLOCKED，并列明差距。保留原始及修复后两套日志。
+**C · 修复后验证**：实际运行受影响专项测试、模块 API/消息/边界检查、Chrome/WebKit、AM `check/coverage/edges/run-all/certify`；在自己的修复提交上运行 `bash tests/am/run-standard-audit.sh <本人的完整 FIX_SHA>`，不把审计包内固定原始 SHA 的 `bash audit.sh` 当作修复后验收。原始 `9c47e44` 的 `bash audit.sh` 必须保留其原始 FAIL 与日志。按最终修复 SHA 重新给出真实退出码，不得将修复后的 PASS 追记到旧 `9c47e44`。跨平台环境不具备则标 BLOCKED，并列明差距。保留原始及修复后两套日志。
 
 **D · 独立交付**：各自在 `audit/<AI_ID>-pdf-elements-9c47e44-report` 报告分支保留原始和修复后结果，`fix/<AI_ID>-pdf-elements-9c47e44` 分支保留实际源码/测试修复。普通 push，禁止 force/rebase/reset-hard/clean。向集成者交付报告 HEAD、修复 HEAD、固定原始 SHA。**修复者不对自己的修复签发独立认证**。
 
@@ -85,3 +85,13 @@ bash audit.sh
 ## 6. 三方共同使用的唯一 Prompt
 
 > 将**这一整份任务书**原样交给内部 AI、Grok 和 Muse；仅各自设置 `AI_ID=internal`、`AI_ID=grok` 或 `AI_ID=muse`。其余内容、固定 SHA、执行入口、缺陷等级、可交付标准完全一致。内部 AI 应按自己的 fix 分支独立修复，而非只作为外部调度者。收到文件或 GitHub 链接不等于 ACK：需要三人各自核验 GitHub 获取材料并确认接受任务；未确认时只记录 `PENDING`，不能声称已经开始或通过。
+
+## 7. 本轮执行状态（非审计结论）
+
+| 审计者 | 原始材料/ACK | 独立修复 | 报告状态 |
+| --- | --- | --- | --- |
+| Internal | 已执行先期基线检查；固定 SHA 的 AM 登记表构建 **FAIL** | 本地隔离候选 `fix/internal-am-pdf-elements-9c47e44`，提交 `c618d68`，**仅是未认证的初步修复** | 先期原始证据见 `audit/internal-pdf-layout-9c47e44-report`；仍须按此统一任务书独立复测 |
+| Grok | **PENDING ACK**；公开 GitHub 审计包已就绪，不等于接单 | 未确认 | 未收到独立报告 |
+| Muse | **PENDING ACK**；公开 GitHub 审计包已就绪，不等于接单 | 未确认 | 未收到独立报告 |
+
+本表只记录已经核实的事实；某个审计者提交新证据后应通过独立审计报告更新状态，不悄悄改变冻结源码或原始 FAIL 记录。
