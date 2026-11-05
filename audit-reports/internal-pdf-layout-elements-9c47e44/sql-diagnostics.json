@@ -1,0 +1,192 @@
+{
+  "frozen_source_sha": "9c47e44f1fc6b44b4f126030d68008854aced6ca",
+  "sql_rejected_statements": 15,
+  "sql_accepted_statements": 253,
+  "rejected": [
+    {
+      "line": 1538,
+      "error": "CHECK constraint failed: visibility IN ('export','returned','internal','raw')",
+      "api_ids": [
+        "G30",
+        "P23",
+        "L81"
+      ],
+      "test_ids": [],
+      "edge_ids": []
+    },
+    {
+      "line": 1545,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "P23",
+        "L81"
+      ],
+      "test_ids": [],
+      "edge_ids": [
+        "X-AG-PAGE-P23",
+        "X-AG-PAGE-L81"
+      ]
+    },
+    {
+      "line": 1548,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "G30",
+        "P23",
+        "L81"
+      ],
+      "test_ids": [
+        "TC-AG-PAGE-G30",
+        "TC-AG-PAGE-P23",
+        "TC-AG-PAGE-L81"
+      ],
+      "edge_ids": []
+    },
+    {
+      "line": 1575,
+      "error": "CHECK constraint failed: visibility IN ('export','returned','internal','raw')",
+      "api_ids": [
+        "P25",
+        "L83"
+      ],
+      "test_ids": [],
+      "edge_ids": []
+    },
+    {
+      "line": 1581,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "P25",
+        "L83"
+      ],
+      "test_ids": [],
+      "edge_ids": [
+        "X-PDF-TEXT-STATUS-P25",
+        "X-AG-GLOBAL-L83"
+      ]
+    },
+    {
+      "line": 1584,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "P25",
+        "L83"
+      ],
+      "test_ids": [
+        "TC-PDF-TEXT-RESTORE-P25",
+        "TC-AG-GLOBAL-L83"
+      ],
+      "edge_ids": []
+    },
+    {
+      "line": 1587,
+      "error": "CHECK constraint failed: visibility IN ('export','returned','internal','raw')",
+      "api_ids": [
+        "L84"
+      ],
+      "test_ids": [],
+      "edge_ids": []
+    },
+    {
+      "line": 1592,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "L84"
+      ],
+      "test_ids": [],
+      "edge_ids": [
+        "X-TEXTBLOCK-GLOBAL-L84"
+      ]
+    },
+    {
+      "line": 1594,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "L84"
+      ],
+      "test_ids": [
+        "TC-TEXTBLOCK-STATUS-L84"
+      ],
+      "edge_ids": []
+    },
+    {
+      "line": 1596,
+      "error": "CHECK constraint failed: visibility IN ('export','returned','internal','raw')",
+      "api_ids": [
+        "G32"
+      ],
+      "test_ids": [],
+      "edge_ids": []
+    },
+    {
+      "line": 1602,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "G32"
+      ],
+      "test_ids": [],
+      "edge_ids": [
+        "X-AG-PBS-NUMERIC-G32"
+      ]
+    },
+    {
+      "line": 1604,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "G32",
+        "G32"
+      ],
+      "test_ids": [
+        "TC-AG-PBS-NUMERIC-G32",
+        "TC-AG-PBS-PAGE-G32"
+      ],
+      "edge_ids": []
+    },
+    {
+      "line": 1607,
+      "error": "UNIQUE constraint failed: apis.id",
+      "api_ids": [
+        "C63",
+        "C64",
+        "C65",
+        "P26"
+      ],
+      "test_ids": [],
+      "edge_ids": []
+    },
+    {
+      "line": 1615,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "P26",
+        "C63",
+        "C64",
+        "C65"
+      ],
+      "test_ids": [],
+      "edge_ids": [
+        "X-FOCUS-P26",
+        "X-FOCUS-C63",
+        "X-FOCUS-C64",
+        "X-FOCUS-C65"
+      ]
+    },
+    {
+      "line": 1620,
+      "error": "FOREIGN KEY constraint failed",
+      "api_ids": [
+        "C63",
+        "C64",
+        "C65",
+        "P26"
+      ],
+      "test_ids": [
+        "TC-FOCUS-C63",
+        "TC-FOCUS-C64",
+        "TC-FOCUS-C65",
+        "TC-FOCUS-P26"
+      ],
+      "edge_ids": []
+    }
+  ]
+}
