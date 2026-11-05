@@ -65,7 +65,12 @@ function terminalLine(slice,first){
     if(line.trim()){
       // Metadata and Markdown structures cannot be silently skipped to
       // fabricate a prose connection between semantically unrelated nodes.
-      if(!isSafeLine(textWithoutMarker(line)))return first?null:
+      // A long OCR paragraph can contain legitimate inline footnotes or
+      // LaTeX far from the seam (p6b6s1 ends with \<sup>7\</sup>).
+      // Inspect the prose boundary, not the ENTIRE block line; still reject
+      // a structural Markdown/table/HTML line by its actual line prefix.
+      const boundary=first?line.slice(0,110):textWithoutMarker(line).slice(-110);
+      if(BAD_STRUCTURE.test(line)||!isSafeLine(boundary))return first?null:
         {raw:line,from:pos,to:pos+line.length,unsafe:true};
       found={raw:line,from:pos,to:pos+line.length};
       if(first)return found;
@@ -107,6 +112,40 @@ function childParagraphBreakCandidates(source,scopes,maxIssues){
   }
   return issues;
 }
+/** OCR often flattens a line-break hyphen into "lever- age" or
+ * "insur- ance" inside ONE logical child. This is not a source newline,
+ * so it must not use the CMD newline annotation API. Review-only.
+ */
+function hyphenSpaceCandidates(source,spell,scopes,maxIssues){
+  const results=[];
+  for(const scope of scopes){
+    if(results.length>=maxIssues)break;
+    if(!scope.identity.s.length||scope.scopeEnd<=scope.scopeStart)continue;
+    const prose=source.slice(scope.scopeStart,scope.scopeEnd);
+    for(const line of textLines(prose)){
+      if(results.length>=maxIssues)break;
+      // A table, URL, fenced code or block HTML cannot be treated as prose;
+      // allow an unrelated inline footnote after a valid text match.
+      if(!line.raw||BAD_STRUCTURE.test(line.raw)||/^\s{4,}/.test(line.raw)||
+         /(?:https?:\/\/|www\.|`|\$\$|\|)/.test(line.raw))continue;
+      for(const match of line.raw.matchAll(/\b([A-Za-z]{2,45})-([ \t]+)([A-Za-z]{2,45})\b/g)){
+        if(results.length>=maxIssues)break;
+        const left=match[1],right=match[3],joined=left+right;
+        if(!spell.correct(joined))continue;
+        const position=scope.scopeStart+line.from+match.index+left.length;
+        if(source.slice(position,position+1+match[2].length)!=='-'+match[2])continue;
+        results.push({from:position,to:position+1+match[2].length,
+          line:source.slice(0,position).split('\n').length,
+          left,right,joined,reason:'子块内 OCR 连字符空格疑似断词',
+          blockId:scope.id,parentId:scope.parentId,nextBlockId:null,
+          scopeLabel:'子块内',reviewOnly:true,reviewKind:'hyphen-space',
+          context:`${scope.id} …${line.raw.slice(Math.max(0,match.index-65),
+            match.index+match[0].length+65)}…`});
+      }
+    }
+  }
+  return results;
+}
 /** Read-only review candidates BETWEEN adjacent logical children.
  * A caption/body or cross-page pair may be legitimately separate: never
  * auto-insert an annotation or join these two source scopes. */
@@ -115,8 +154,12 @@ function siblingBreakCandidates(source,spell,scopes,maxIssues){
   for(let i=0;i<scopes.length-1;i++){
     if(rows.length>=maxIssues)break;
     const a=scopes[i],b=scopes[i+1];
+    // `role=body` can be a synthetic prose continuation of a parent, not
+    // necessarily a table cell. p6b6s0 (body) -> p6b6s1 (origin=p6b7)
+    // is a real "about / 3 percentage points" sentence seam. Validate the
+    // actual two prose boundaries instead of excluding all body roles.
     if(a.identity.s.length!==1||b.identity.s.length!==1||
-      a.parentId!==b.parentId||a.role==='body'||b.role==='body')continue;
+      a.parentId!==b.parentId)continue;
     const previousText=source.slice(a.scopeStart,a.scopeEnd);
     const followingText=source.slice(b.scopeStart,b.scopeEnd);
     // Last visible line matters; do not leap over a closing HTML element,
@@ -265,7 +308,9 @@ export function detectIllegalBreaks(source,spell,{maxIssues=400,bodyEnd=source.l
     const remaining=Math.max(0,maxIssues-results.length);
     const paragraph=childParagraphBreakCandidates(source,scopes,remaining+1);
     const sibling=siblingBreakCandidates(source,spell,scopes,remaining+1);
-    const candidates=[...paragraph,...sibling].sort((a,b)=>a.from-b.from);
+    const hyphenSpace=hyphenSpaceCandidates(source,spell,scopes,remaining+1);
+    const candidates=[...paragraph,...sibling,...hyphenSpace]
+      .sort((a,b)=>a.from-b.from);
     if(candidates.length>remaining)truncated=true;
     results.push(...candidates.slice(0,remaining));
     results.sort((a,b)=>a.from-b.from);

@@ -660,6 +660,18 @@ async function main() {
             const updated=view.state.doc;
             const candidates=reviews.map(row=>{
               const line=updated.line(row.line);
+              if(row.reviewKind==='hyphen-space'){
+                // A child can contain MULTIPLE scars on the same line. Keep
+                // each dash at its own column rather than rebasing every
+                // candidate to a shared line ending / duplicate AG key.
+                const originalLineStart=source.lastIndexOf('\n',row.from-1)+1;
+                const column=row.from-originalLineStart;
+                const from=line.from+column;
+                const to=from+(row.to-row.from);
+                if(updated.sliceString(from,to)!=='-'+source.slice(row.from+1,row.to))
+                  throw Error('断词审阅候选位置已改变，请重新扫描');
+                return {...row,from,to};
+              }
               return {...row,from:line.to,to:line.to+1};
             });
             if(!showSavedBreakRows()){

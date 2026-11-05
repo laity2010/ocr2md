@@ -1651,3 +1651,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-PBS-C42','C42','tests/cmd-linebreak-pbs-scope.test.mjs','tests/cmd-linebreak-pbs-scope.test.mjs','Current child scoped word splits, sibling boundary and intra-child hard paragraph review, invalid provenance fail-closed, structure and unrelated parent exclusion','direct'),
  ('TC-BREAK-PBS-G20','G20','tests/illegal-break-pbs.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Real Chrome/WebKit: one intra-child CMD auto-tag plus one sibling seam AG review row with current PBS IDs, global Shell status and no autosave','integration');
+
+-- p6b6 real OCR regression. Synthetic body child s0 plus absorbed former
+-- parent p6b7 -> s1: "about"/"3 percentage" was excluded by blanket body
+-- role check; "lever- age" and "insur- ance" share one raw source line.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-P6B6-C42','C42','tests/cmd-linebreak-p6b6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Detect p6b6s0 body to p6b6s1 about/3 and two same-line OCR hyphen-space scars leverage/insurance; preserve distinct offsets and no auto-edit','direct'),
+ ('TC-BREAK-P6B6-G20','G20','tests/illegal-break-p6b6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Actual Chrome/iPad-WebKit AG filter to p6b6 children shows all 3 review-only, source line focus works, reload restores and no CMD annotation written','integration');
