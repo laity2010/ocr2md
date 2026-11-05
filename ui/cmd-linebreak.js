@@ -62,6 +62,11 @@ function withinScopeRows(rows,scopes){
 function terminalLine(slice,first){
   let pos=0,found=null;
   for(const line of slice.split('\n')){
+    // Review decisions are stand-alone CMD annotations, not prose or a
+    // structural boundary. Preserve the previous real text tail across them.
+    if(/^\s*<!--ocr2md:illegal-break-review\b[^\n]*-->\s*$/.test(line)){
+      pos+=line.length+1;continue;
+    }
     if(line.trim()){
       // Metadata and Markdown structures cannot be silently skipped to
       // fabricate a prose connection between semantically unrelated nodes.

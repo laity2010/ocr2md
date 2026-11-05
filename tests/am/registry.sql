@@ -1704,3 +1704,15 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-LATEX-C42','C42','tests/cmd-linebreak-latex-boundary.test.mjs','tests/fixtures/illegal-break-latex-sequence.mjs','Text/LaTeX and LaTeX/text reviewed separately, no A->C bridge, inline formulas excluded from standalone classification, exact source position, no automatic CMD mutation','direct'),
  ('TC-BREAK-LATEX-G20','G20','tests/illegal-break-latex-boundary.browser.test.mjs','tests/fixtures/illegal-break-latex-sequence.mjs','Chrome/iPad-WebKit AG displays two A/B pairs; clicking each focuses distinct original PDF child geometry and highlights the text/formula Markdown blocks; reload preserves candidate review without source writes','integration');
+
+-- Manual Illegal Break review is user intent, NOT automatic text merging.
+-- One CMD HTML-comment annotation per A/B candidate is the durable source;
+-- AG dropdown is a derived colored view, clean Markdown export acts later.
+INSERT INTO apis VALUES
+ ('C122','C','planIllegalBreakReviewDecision','ui/cmd-illegal-break-review.js','export','current CMD source, candidate A/B row, review choice, current annotations','zero or one CMD annotation operation','Only merge/ignore comments, pending removes; no text mutation, with source/atom guards',1),
+ ('C123','C','returned.reviewIllegalBreak','ui/wcp-cmd-element-transactions.js','returned','one candidate row and choice','single CM6 undoable CMD transaction','all actions through readSource and editAnnotations; sealed MinerU evidence preserved',1),
+ ('G34','G','reviewDropdown','ui/illegal-break-module.js','internal','AG candidate A/B row and three choices','colored dropdown and review-intent callback','no direct CM6 source or storage; pending/merge/ignore from CMD projections',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-REVIEW-C122','C122','tests/cmd-illegal-break-review.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Explicit review merge/ignore/pending toggles durable annotation, independently disambiguates same-child scars, restores exactly prior source on pending, no structural edits','direct'),
+ ('TC-BREAK-REVIEW-C123','C123','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit three-state AG select writes one CMD annotation transaction, Undo/Redo, manual save and reload preserve status without actual content joining','integration'),
+ ('TC-BREAK-REVIEW-G34','G34','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG review dropdown has merge/ignore/pending colored states; original A/B pair and source remain linked; no autosave','integration');

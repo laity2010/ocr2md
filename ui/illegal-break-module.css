@@ -7,3 +7,14 @@
 .ocr-illegal-break-jump{border:0;background:transparent;color:#dbbc7f;text-decoration:underline;cursor:pointer;padding:2px 7px}
 .ocr-illegal-break-jump:hover{color:#ebce9d}
 .cm-editor .ocr-illegal-break-lint{text-decoration-line:underline!important;text-decoration-style:wavy!important;text-decoration-color:#dbbc7f!important;text-decoration-thickness:1.5px!important;text-underline-offset:3px!important}
+
+/* User decisions are review-only annotations, never an immediate merge. */
+.ocr-illegal-break-review-select{
+  width:100%;max-width:100%;border:1px solid #697781;border-radius:5px;
+  padding:3px 5px;font:inherit;color:#d3c6aa;background:#333c43;
+  cursor:pointer;touch-action:manipulation;
+}
+.ocr-illegal-break-review-select.is-merge{color:#b8e6b6;border-color:#5b9c70;background:#304b3e}
+.ocr-illegal-break-review-select.is-ignore{color:#b9b6ae;border-color:#667079;background:#3c4247}
+.ocr-illegal-break-review-select.is-pending{color:#f0c77c;border-color:#c39b5d;background:#4a4135}
+.ocr-illegal-break-review-select option{color:#d3c6aa;background:#2d363b}

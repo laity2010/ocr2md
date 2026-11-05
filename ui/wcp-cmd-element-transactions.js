@@ -21,6 +21,8 @@ import {planCMDSubblockAnnotations,queryCMDLayout} from './cmd-text-blocks.js';
 import {agAllDocumentTransaction,currentVirtualChapter} from './wcp-cm-virtual-view.js';
 import {SPELL_TAG,readSpellcheckMarks,planSpellcheckMarks} from './cmd-spellcheck.js';
 import {LINEBREAK_TAG,readIllegalBreaks,planIllegalBreakMarks} from './cmd-linebreak.js';
+import {ILLEGAL_BREAK_REVIEW_TAG,readIllegalBreakReviewDecisions,
+  planIllegalBreakReviewDecision} from './cmd-illegal-break-review.js';
 import {SENTENCE_TAG,extractTextBlocks,segmentSentences,planSentenceMarks,readSentenceMarks,reconstructSource} from './cmd-sentences.js';
 
 function coordinates(from,to,length){
@@ -465,7 +467,11 @@ export function createCMDTransactionPort(cmd){
     queryIllegalBreakElements:()=>{
       const index=projector.get();
       const result=readIllegalBreaks(cmd.readSource(),cmd.readAnnotations({tag:LINEBREAK_TAG}));
-      return {...result,rows:result.rows.filter(row=>row.to<=index.bodyEnd)};
+      const reviewed=readIllegalBreakReviewDecisions(cmd.readSource(),
+        cmd.readAnnotations({tag:ILLEGAL_BREAK_REVIEW_TAG}));
+      return {...result,rows:result.rows.filter(row=>row.to<=index.bodyEnd),
+        reviewChoices:[...reviewed.decisions].map(([key,value])=>({key,decision:value.decision})),
+        reviewStale:reviewed.stale};
     },
     getLinebreakScanLimit:()=>projector.get().bodyEnd,
     extractTextBlocks:()=>extractTextBlocks(cmd.readSource(),{bodyEnd:projector.get().bodyEnd}),
@@ -522,6 +528,20 @@ export function createCMDTransactionPort(cmd){
       if(!ops.length)return {changed:0,skipped:candidates.length};
       port.editAnnotations(ops,{expectedSource,agScope});
       return {changed:ops.length,skipped:candidates.length-ops.length};
+    },
+    /** Explicit AG decision: one pure CMD annotation transaction, one Undo.
+     * No text merge here; clean-MD export will consume these instructions.
+     */
+    reviewIllegalBreak:(row,choice)=>{
+      const source=cmd.readSource();
+      const operations=planIllegalBreakReviewDecision(source,row,choice,
+        cmd.readAnnotations({tag:ILLEGAL_BREAK_REVIEW_TAG}));
+      if(!operations.length)return {changed:0,choice};
+      // The comment is anchored next to a CMD block; allow the current AG
+      // chapter query to review a pair across chapter boundaries only when
+      // already in All, respecting the existing transaction gate.
+      port.editAnnotations(operations,{expectedSource:source,agScope:{mode:'all'}});
+      return {changed:operations.length,choice};
     },
     markIllegalBreakCandidates:(candidates,{expectedSource,agScope}={})=>{
       if(typeof expectedSource!=='string'||cmd.readSource()!==expectedSource)

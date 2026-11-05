@@ -680,9 +680,10 @@ async function main() {
                 const to=from+(row.to-row.from);
                 if(updated.sliceString(from,to)!==source.slice(row.from,row.to))
                   throw Error('断行审阅候选位置已改变，请重新扫描');
-                return {...row,from,to};
+                return {...row,from,to,witness:updated.sliceString(from,to)};
               }
-              return {...row,from:line.to,to:line.to+1};
+              return {...row,from:line.to,to:line.to+1,
+                witness:updated.sliceString(line.to,line.to+1)};
             });
             if(!showSavedBreakRows()){
               clearBreakMarks();workspace.getIllegalBreakElements();

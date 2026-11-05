@@ -4,25 +4,26 @@ import {publishFocus} from './view-store.js';
 import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {projectIllegalBreakPair} from './illegal-break-pair.js';
+import {keyIllegalBreakReviewRows,REVIEW_DECISIONS} from './cmd-illegal-break-review.js';
 import './illegal-break-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#d8a657',backgroundColor:'#2f383e',
  foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
  borderColor:'#525c62',rowHoverColor:'#37464b',fontSize:13,
  selectedRowBackgroundColor:'rgba(216,166,87,.18)',fontFamily:'"OCR2MD Sarasa",monospace',spacing:3});
-export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
+export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onReviewChoice=()=>{}){
   host.classList.add('ocr-illegal-break-pane');
   const guide=document.createElement('div');guide.className='ocr-illegal-break-guide';
-  guide.textContent='每行标明前块 A → 后块 B；点击即定位源码并在预览高亮两块；块内疑点为 A=B · 不自动合并';
+  guide.textContent='前块 A → 后块 B · 审阅选择断行合并／忽略／待定；仅写 CMD 审阅注释，导出干净 MD 时再处理';
   const state=document.createElement('div');state.className='ocr-illegal-break-state';state.setAttribute('role','status');
   const gridHost=document.createElement('div');gridHost.className='ocr-illegal-break-grid';
   host.append(guide,state,gridHost);
   let rows=[],markedRows=[],reviewRows=[],scope=null,active=false,disposed=false,loading=false,error=null,stale=0,truncated=false;
+  let reviewChoices=new Map(),reviewStale=0;
   const rebuild=()=>{
     const occupied=new Set(markedRows.map(row=>row.from));
-    rows=[...markedRows,...reviewRows.filter(row=>!occupied.has(row.from))]
-      .map(row=>({...row,...projectIllegalBreakPair(row)}))
-      .sort((a,b)=>a.from-b.from);
+    rows=keyIllegalBreakReviewRows([...markedRows,...reviewRows.filter(row=>!occupied.has(row.from))])
+      .map(row=>({...row,reviewDecision:reviewChoices.get(row.reviewKey)||'待定'}));
     grid.setGridOption('rowData',rows);
   };
   const navigate=row=>{
@@ -31,6 +32,42 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
     // never owns a source copy or guesses physical OCR coordinates.
     publishFocus({sourceLine:row.afterLine||row.line,origin:'illegal-break',
       intent:'click',beforeBlockId:row.beforeBlockId,afterBlockId:row.afterBlockId});
+  };
+  const reviewDropdown=p=>{
+    if(!p.data?.reviewKey)return '';
+    const select=document.createElement('select');
+    select.className='ocr-illegal-break-review-select';
+    select.setAttribute('aria-label',`审阅 ${p.data.beforeBlockId} → ${p.data.afterBlockId}`);
+    select.dataset.reviewKey=p.data.reviewKey;
+    for(const label of REVIEW_DECISIONS){
+      const option=document.createElement('option');option.value=label;option.textContent=label;
+      select.append(option);
+    }
+    const paint=choice=>{
+      select.value=choice;
+      select.dataset.reviewDecision=choice;
+      select.classList.toggle('is-merge',choice==='断行合并');
+      select.classList.toggle('is-ignore',choice==='忽略');
+      select.classList.toggle('is-pending',choice==='待定');
+    };
+    paint(p.data.reviewDecision||'待定');
+    for(const event of ['pointerdown','mousedown','touchstart','click','dblclick'])
+      select.addEventListener(event,e=>e.stopPropagation());
+    select.addEventListener('change',event=>{
+      event.stopPropagation();
+      const choice=select.value,previous=p.data.reviewDecision||'待定';
+      if(choice===previous)return;
+      try{
+        const result=onReviewChoice(p.data,choice);
+        p.data.reviewDecision=choice;
+        paint(choice);
+        if(result?.changed)onStatus(`✓ 断行审阅：${choice} · CMD 注释已更新 · 请全局保存`);
+      }catch(error){
+        paint(previous);
+        onStatus(`断行审阅失败：${error.message}`);
+      }
+    });
+    return select;
   };
   const jump=p=>{
     if(!p.data)return '';
@@ -41,7 +78,8 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
   };
   const columns=[
     {field:'line',headerName:'源码行',width:96,minWidth:90,pinned:'left',lockPinned:true,cellRenderer:jump},
-    {field:'markState',headerName:'复核状态',width:95,minWidth:85},
+    {field:'reviewDecision',headerName:'审阅',width:116,minWidth:110,
+      cellRenderer:reviewDropdown,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'beforeBlockId',headerName:'前块 A',width:130,minWidth:105,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'afterBlockId',headerName:'后块 B',width:130,minWidth:105,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'pairKind',headerName:'关系',width:80,minWidth:68,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
@@ -69,21 +107,28 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
     const visible=scopedRows();
     if(scope)virtual.setVirtualQuery({...scope,keys:scope.operationScope?.mode==='chapter'
       ?new Set(visible.map(r=>r.from)):null});
-    const marked=visible.filter(r=>r.markState==='已标定').length;
-    const review=visible.filter(r=>r.reviewOnly).length;
+    const marked=visible.filter(r=>r.reviewDecision==='断行合并').length;
+    const ignored=visible.filter(r=>r.reviewDecision==='忽略').length;
+    const pending=visible.filter(r=>r.reviewDecision==='待定').length;
     state.textContent=error?'扫描失败：'+error:loading?'正在离线检查断行…':
-      `子块断行 ${visible.length} 项 · 已标定 ${marked} · 待复核 ${review}`+
-      `${stale?' · '+stale+' 项历史标定已失效':''}${truncated?' · 仅列前 400 项':''}`;
+      `断行审阅 ${visible.length} 项 · 断行合并 ${marked} · 忽略 ${ignored} · 待定 ${pending}`+
+      `${stale?' · '+stale+' 项旧断行标记待核对':''}`+
+      `${reviewStale?' · '+reviewStale+' 项审阅注释失效':''}`+
+      `${truncated?' · 仅列前 400 项':''}`;
     if(active){
       if(error)onStatus('非法断行扫描失败：'+error);
       else if(loading)onStatus('正在按 CMD 文本块／子块检查非法断行…');
-      else onStatus(`疑似非法断行 ${visible.length} 项 · 已标定 ${marked} · 待复核 ${review}`);
+      else onStatus(`非法断行审阅 ${visible.length} 项 · 合并 ${marked} · 忽略 ${ignored} · 待定 ${pending}`);
     }
   }
   return Object.freeze({
     setPending(){loading=true;error=null;rows=[];markedRows=[];reviewRows=[];
       grid.setGridOption('rowData',[]);refresh();},
     setError(reason){loading=false;error=String(reason);refresh();},
+    setReviewDecisions(choices=[],bad=0){
+      reviewChoices=new Map(choices.map(x=>[x.key,x.decision]));
+      reviewStale=bad;rebuild();refresh();
+    },
     setMarkedRows(result){
       markedRows=(result?.rows||[]).map(r=>({...r,markState:'已标定'}));
       loading=false;error=null;stale=result?.stale||0;

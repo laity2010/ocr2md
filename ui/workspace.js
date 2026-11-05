@@ -122,7 +122,8 @@ class OutlinePanel {
     this.note=createNotePairModule(this.noteHost,readElementSource,()=>getCMD(),reportMediaStatus);
     this.html=createHtmlElementsModule(this.htmlHost,readElementSource,()=>getCMD(),reportMediaStatus);
     this.spellcheck=createSpellcheckModule(this.spellcheckHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
-    this.illegalBreak=createIllegalBreakModule(this.illegalBreakHost,id=>getCMD()?.getChapter(id),reportMediaStatus);
+    this.illegalBreak=createIllegalBreakModule(this.illegalBreakHost,id=>getCMD()?.getChapter(id),
+      reportMediaStatus,(row,decision)=>getCMD().reviewIllegalBreak(row,decision));
     this.sentence=createSentenceModule(this.sentenceHost,id=>getCMD()?.getChapter(id),
       reportMediaStatus,()=>currentPreview?.redrawSentenceCoverage());
     this.textBlock=createTextBlockModule(this.textBlockHost,id=>getCMD()?.getChapter(id),
@@ -850,6 +851,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setIllegalBreakReviewCandidates:candidates=>currentOutline?.illegalBreak?.setReviewCandidates(candidates),
     getIllegalBreakElements:()=>{
       const result=getCMD().queryIllegalBreakElements();
+      currentOutline?.illegalBreak?.setReviewDecisions(result.reviewChoices||[],result.reviewStale||0);
       currentOutline?.illegalBreak?.setMarkedRows(result);
       return result;
     },
