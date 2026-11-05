@@ -96,10 +96,32 @@ try{
         // Genuine mouse/touch edit WITHIN the visible CM6 scroller. Clicking
         // .cm-content instead would scroll to its giant 47k-pixel DOM origin,
         // not the on-screen text (and would be an invalid reproduction).
+        const countFromStatus=async()=>{
+          const status=await page.locator('#status').textContent();
+          const match=/([\d,]+)行\s*\/\s*([\d,]+)字/.exec(status);
+          assert(match,status);
+          return {lines:Number(match[1].replaceAll(',','')),
+            len:Number(match[2].replaceAll(',',''))};
+        };
+        const initialDoc=await countFromStatus();
         await page.locator('#editor .cm-scroller').click({position:{x:210,y:125}});
+        // A previous AG jump can leave a multi-line selection. Collapse it
+        // before typing so the test changes exactly ONE character of prose.
+        await page.keyboard.press('ArrowRight');
         await page.keyboard.insertText('X');
-        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('未保存'),
-          null,{timeout:12000});
+        await page.waitForFunction(prev=>{
+          const text=document.querySelector('#status')?.textContent||'';
+          const m=/([\d,]+)行\s*\/\s*([\d,]+)字/.exec(text);
+          return m&&Number(m[2].replaceAll(',',''))===prev+1;
+        },initialDoc.len,{timeout:12000});
+        const changedDoc=await countFromStatus();
+        assert.equal(changedDoc.len,initialDoc.len+1,'edit must insert one character, not replace selection');
+        assert.equal(changedDoc.lines,initialDoc.lines,'edit must retain CMD paragraph scopes');
+        const afterTyping=await visibleSource(page);
+        assert(afterTyping.sourceLines>0,'editing must not turn the CM6 source pane blank');
+        // The global status is shared: a scan result can replace the
+        // transient '未保存' message. Dirty document is checked via unchanged
+        // disk fixture below, not via the status message contents.
         try{
           await page.waitForFunction(()=>{
             const rows=[...document.querySelectorAll('.ocr-illegal-break-grid .ag-row')];
