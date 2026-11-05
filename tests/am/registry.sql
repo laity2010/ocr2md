@@ -1676,3 +1676,12 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- temporarily supplies zero rowData before its new Worker result arrives.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-ENUM-EMPTY-G20','G20','tests/enum-checkbox-filter-transient-empty.test.mjs','ui/enum-checkbox-filter.js','Preserve selected text block IDs through a transient empty AG result and reconcile only against non-empty replacement rows','direct');
+
+-- Layout/Shell CM6 viewport integrity: the sole EditorView remains the
+-- writable source. AG and PDF are derived; blank virtual line rendering may
+-- request CM6 measure but can never replace Markdown, history or editor DOM.
+INSERT INTO apis VALUES
+ ('L85','L','inspectCM6SourceVisibility','ui/cm6-source-visibility.js','export','read-only EditorView','visible|blank|hidden|detached + docLength','DOM viewport geometry inspection only; never reads a second Markdown copy',1),
+ ('L86','L','createCM6SourceVisibilityGuard','ui/cm6-source-visibility.js','export','sole EditorView, bounded status reporter','schedule/inspect/dispose','viewStore focus/revision, resize and Safari visibility trigger only CM6 measure or scroll effect; no text writes',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-CM6-ONE-L86','L86','tests/illegal-break-source-edit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit: one persistent CM6 DOM instance across AG module switch and one-character edit, AG rescan and PDF/source navigation; source text remains visibly painted without autosave','integration');

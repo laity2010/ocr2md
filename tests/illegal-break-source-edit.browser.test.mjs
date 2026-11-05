@@ -62,6 +62,18 @@ try{
       try{
         assert.equal((await page.goto(base,{waitUntil:'domcontentloaded',timeout:95000})).status(),200);
         await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:85000});
+        // The persistent SourcePanel and its CM6 EditorView must outlive AG
+        // module switches and Worker re-scans; no second editable source.
+        await page.evaluate(()=>{
+          window.__singleSourceEditor=document.querySelector('#editor .cm-editor');
+          if(!window.__singleSourceEditor)throw Error('Missing CM6 editor');
+        });
+        const assertSingleEditor=async()=>{
+          assert(await page.evaluate(()=>
+            document.querySelectorAll('#editor .cm-editor').length===1&&
+            document.querySelector('#editor .cm-editor')===window.__singleSourceEditor),
+          'AG changes must never detach or recreate the unique CM6 EditorView');
+        };
         await page.locator('#module-select').evaluate(el=>{
           el.value='illegal-break';el.dispatchEvent(new Event('change',{bubbles:true}));
         });
@@ -151,6 +163,16 @@ try{
         },null,{timeout:18000});
         const afterEdit=await visibleSource(page);
         assert(afterEdit.visible&&afterEdit.sourceLines>0,JSON.stringify(afterEdit));
+        await assertSingleEditor();
+        // Switching AG modules must not tear down or replace CM6, or lose
+        // the unsaved one-character edit. AGs are derived-only projections.
+        await page.locator('#module-select').evaluate(el=>{
+          el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
+          el.value='illegal-break';el.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+        await assertSingleEditor();
+        assert.equal((await countFromStatus()).len,changedDoc.len,
+          'AG module changes must not modify source document length');
         assert.equal(observed.pdfId,'p8b3s0',JSON.stringify(observed));
         assert.equal(readFileSync(doc,'utf8'),seeded,'focus must not auto-save');
         if(process.env.OCR_BREAK_SOURCE_SCREENSHOTS){

@@ -29,6 +29,7 @@ import {isIOSWebKit,nativeIOSBasicSetup} from './ios-native-selection.js';
 import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './wcp-chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
+import {createCM6SourceVisibilityGuard} from './cm6-source-visibility.js';
 import {rejectTextBlockEdit} from './text-block-readonly.js';
 
 const $ = (id) => document.getElementById(id);
@@ -82,11 +83,12 @@ let statusMessage='正在加载';
 let agStatusSummary='';
 let textBlockSummary='';
 let statusKind='ok';
+let sourceVisibilityWarning='';
 let documentLines=null,documentChars=null;
 
 function renderGlobalStatus() {
   const store=viewStore.getState();
-  const segments=[statusMessage];
+  const segments=[...(sourceVisibilityWarning?[sourceVisibilityWarning]:[]),statusMessage];
   // Ambient module counts belong in the SAME status line but never replace
   // the most recent user operation (e.g. PDF selection or text extraction).
   if($('module-select')?.value==='text-block'&&textBlockSummary)
@@ -519,6 +521,13 @@ async function main() {
     ]
   });
   view=cm.view;
+  // A persistent CM6 source document cannot become an AG-owned shadow copy.
+  // Visibility guard measures only painted virtual lines, and requests CM6
+  // layout if its source pane looks blank; no source edits or state resets.
+  const sourceVisibilityGuard=createCM6SourceVisibilityGuard(view,message=>{
+    sourceVisibilityWarning=message;
+    renderGlobalStatus();
+  });
   // A CMD marker is durable; the Worker scans only on first entry or
   // explicit user request. No reread of the dictionary on every tab switch.
   let worker=null,requestId=0,scanTimer=null,scanResultDoc=null;
