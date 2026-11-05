@@ -134,8 +134,12 @@ for(const [index,[name,engine,options]] of engines.filter(x=>!process.env.OCR_WE
     inlineLine,{timeout:12000});
   // Inspect live source by selecting the CMS-visible source, not a parallel model.
   assert.equal(await inline.inputValue(),'忽略');
-  const chosen=await page.locator('#status').textContent();
-  assert(chosen.includes('latex 1')&&chosen.includes('忽略 1'));
+  // The shared global status may be replaced by a source-focus message.
+  // Review correctness is the actual AG select state and DOM identity.
+  assert.equal(await display.inputValue(),'latex');
+  assert.equal(await page.evaluate(()=>window.__latexUnchangedReview===document.querySelector(
+    '.ocr-latex-grid .ag-row:not(.ag-opacity-zero)[row-index="1"] .ocr-latex-review-select')),
+    true,'LaTeX review dropdown must remain the same native select after edits');
   await page.screenshot({path:`.v6/evidence/latex-cm-review-${name.toLowerCase()}.png`});
   // Only global CMD Save persists the inline/standalone audit markers.
   await page.locator('#save').click();
