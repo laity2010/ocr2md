@@ -692,28 +692,29 @@ async function main() {
   };
   enterIllegalBreak=()=>{
     const restored=showSavedBreakRows();
-    // Legacy MinerU documents with saved annotations remain read-only on
-    // tab entry, as before. Current PBS documents must RECOMPUTE unpersisted
-    // sibling review candidates after reload; never persist hypothetical
-    // cross-child joins into CMD. Existing tags are deduplicated on rescan.
-    if(restored&&breakScanDoc===null&&view.state.doc.toString().includes('<!-- cmd:block:v1 ')){
-      scanIllegalBreak();return;
+    // On every entry, recompute review-only PBS candidates when the actual
+    // CM6 document changed while the module was inactive. Persisted markers
+    // are deduplicated; unconfirmed child seams never become CMD writes.
+    if(view.state.doc.toString().includes('<!-- cmd:block:v1 ')){
+      if(!breakScanDoc||!view.state.doc.eq(breakScanDoc))scanIllegalBreak();
+      else if(!restored)clearBreakMarks();
+      return;
     }
-    if(restored)return;
-    if(breakScanDoc===null)scanIllegalBreak();
-    else if(view.state.doc.eq(breakScanDoc)){
-      clearBreakMarks();workspace.getIllegalBreakElements();
-    }else{clearBreakMarks();workspace.setIllegalBreakError('源码已有变更，请使用「重新扫描并标定」');}
+    if(restored)return; // retain legacy MinerU annotation behavior
+    if(!breakScanDoc||!view.state.doc.eq(breakScanDoc))scanIllegalBreak();
+    else clearBreakMarks();
   };
   illegalBreakDocChanged=()=>{
     if(applyingBreakMarks)return;
-    ++breakRequestId;clearTimeout(breakTimer);
-    workspace.setIllegalBreakReviewCandidates([]); // stale source offsets cannot survive edits
+    // A manual CM6 edit invalidates the last Worker request and AG offsets.
+    // Do not strand the pane in a permanent 0-row/"please rescan" state:
+    // schedule a fresh debounced review after the CM6 update has completed.
+    const changeRequest=++breakRequestId;
+    clearTimeout(breakTimer);
+    workspace.setIllegalBreakReviewCandidates([]);
     queueMicrotask(()=>{
-      if(!illegalBreakEnabled)return;
-      if(!showSavedBreakRows()){
-        clearBreakMarks();workspace.setIllegalBreakError('源码有变更，请使用「重新扫描并标定」');
-      }
+      if(!illegalBreakEnabled||changeRequest!==breakRequestId)return;
+      scanIllegalBreak();
     });
   };
   stopIllegalBreak=()=>{

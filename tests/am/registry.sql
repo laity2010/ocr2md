@@ -1665,3 +1665,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-START-C42','C42','tests/cmd-linebreak-child-opening.test.mjs','tests/cmd-linebreak-child-opening.test.mjs','Enumerate lowercase/numeric/punctuation child starts independent of hyphens and parent sibling, classify physical PDF page, exclude media/table/formula/uppercase and never auto-mark','direct'),
  ('TC-BREAK-START-G20','G20','tests/illegal-break-child-opening.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit actual p13b3s1 initially: AG review, physical PDF page, source visibly navigates, refresh recomputes and no autosave','integration');
+
+-- A live CM6 edit while Illegal Breaks is active must invalidate old Worker
+-- requests and re-scan the updated document. Never leave AG permanently
+-- empty or strand an explicit source focus on a blank virtualized CM6 pane.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-EDIT-C42','C42','tests/illegal-break-source-edit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit typing in visible CM6 after AG focus automatically refreshes candidate AG rows, location paints actual target text after second click and original source file stays unchanged','integration');
