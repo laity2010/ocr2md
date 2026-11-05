@@ -811,7 +811,7 @@ async function main() {
   // The CMD p/b/s parser and renderer remain live; block structure edits do
   // not. Guard every public Shell-to-CMD mutation port, independently of
   // hiding controls, so long-press, triple tap, or stale UI cannot write.
-  workspace.setBlockJoinAction(rejectTextBlockEdit);
+  workspace.setBlockJoinAction((targetId,join)=>cmdPort.setBlockJoin(targetId,join));
   workspace.setBlockChainAction(async(action,request={})=>{
     if(action!=='reparent')return rejectTextBlockEdit();
     const sourceId=request.memberId;
@@ -843,7 +843,7 @@ async function main() {
     if(result.changed){blockIndexedSource=null;scanTextBlocks();}
     return result;
   });
-  workspace.setSubblockMarkAction(rejectTextBlockEdit);
+  workspace.setSubblockMarkAction(()=>cmdPort.markOriginalSubblocks());
   // This text-only, undoable CMD insertion is independent of the reviewed
   // PBS structural read-only gate. It never auto-saves or replaces OCR text.
   workspace.setPDFTextInsertAction(async(pageIndex,blockIndex,text)=>

@@ -204,7 +204,9 @@ try{
      const {viewStore}=await import('/view-store.js');
      return viewStore.getState().focusTarget;
    });
-   assert.equal(focus?.elementId,'mineru:6:7:parent');
+   // Canonical CMD PBS labels are the real source identity. The legacy
+   // physical fallback `mineru:p:b:parent` is only for unlabelled OCR.
+   assert.equal(focus?.elementId,'p6b7');
    assert(await target.isChecked(),'single parent tag click cannot toggle its checkbox');
    await tapOnce(targetTag);
    assert(await target.isChecked(),'double tap must not toggle checkbox');

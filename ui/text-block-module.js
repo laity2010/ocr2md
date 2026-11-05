@@ -510,11 +510,12 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
         // current CMD atom's validated anchor/source line for the overlay;
         // otherwise a successful After insertion silently loses A's chip.
         return {id:corrected?.id||id,origin:id,pageIndex,blockIndex,
+          displayId:corrected?.id||logicalId||id,joinPrev:corrected?.joinPrev??joinPrev,
           sourceLine:corrected?.sourceLine??sourceLine,
           expectsPreview:corrected?.expectsPreview??expectsPreview,
-          geometry:corrected?.geometry??geometry,
+          geometry:corrected?.geometry??geometry,bbox:corrected?.bbox||null,
           anchorCount:corrected?1:anchorCount,
-          joinPrev:corrected?null:joinPrev,joinable:corrected?false:joinable,
+          joinable:corrected?false:joinable,
           logicalId:corrected?.id||logicalId,nativeChildren,bodyChildId:bodyAlias.get(id)||null};
       });
       // A dissolved OCR parent no longer owns a parent label. Its original

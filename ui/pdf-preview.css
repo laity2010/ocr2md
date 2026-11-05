@@ -73,7 +73,6 @@
 }
 /* 06b2901 CMD identification baseline: labels remain clickable for focus,
  * but they are no longer checkbox inputs or draggable edit handles. */
-.ocr-pdf-readonly .ocr-pdf-block-ctrl input{display:none}
 .ocr-pdf-readonly .ocr-pdf-block-ctrl{cursor:pointer}
 .ocr-pdf-tools .ocr-pdf-extract-text[hidden],
 .ocr-pdf-tools .ocr-pdf-promote-child[hidden]{display:none}

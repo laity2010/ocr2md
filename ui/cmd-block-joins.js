@@ -179,8 +179,21 @@ export function planCMDBlockJoin(source,rows,targetId,join){
   return {changed:1,previous:previous.id,target:targetId,
     edits:[{from:prevLineStart,to:target.from,expected:text+'\n',insert:''}]};
 }
-export function projectCMDLogicalTextBlocks(source,rows){
-  const {joined,invalid}=readCMDBlockJoins(source,rows);
+export function projectCMDLogicalTextBlocks(source,rows,{chains=null}={}){
+  const legacy=readCMDBlockJoins(source,rows);
+  const invalid=[...legacy.invalid],joined=new Map(legacy.joined);
+  // Canonical PBS uses BC membership for the SAME logical-parent projection
+  // that legacy join comments used. It is a read-only view, not a second
+  // join store; native child membership never creates another parent block.
+  if(Array.isArray(chains)){
+    joined.clear();
+    const parents=new Set(rows.map(row=>row.id));
+    for(const chain of chains){
+      const members=(chain.members||[]).filter(id=>parents.has(id));
+      for(let i=1;i<members.length;i++)joined.set(members[i],members[i-1]);
+    }
+  }
+
   const ordered=rows.filter(r=>r.anchorCount===1).sort((a,b)=>a.from-b.from);
   const roots=new Map();const result=[],pageCounters=new Map(),assignments=new Map();
   for(let i=0;i<ordered.length;i++){

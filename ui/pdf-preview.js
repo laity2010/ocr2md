@@ -408,8 +408,18 @@ export class PdfPreview {
       if(this.disposed||revision!==this.geometryRevision)return;
       if(this.pdf&&result.pages.length!==this.pdf.numPages)
         throw Error('PDF 页数与 CMD 原始页面数不一致');
+      const geometryUnchanged=JSON.stringify(this.map)===JSON.stringify(result.pages);
       this.map=result.pages;
-      this.paintBlockCoverage();
+      // BC/legacy join edits can change labels without changing one OCR
+      // rectangle. Preserve the page controls in that case; a real native
+      // repair/bbox/layout change still performs the complete repaint.
+      if(geometryUnchanged&&this.blockCoverageNodes.size){
+        for(const [id,node] of this.blockCoverageNodes){
+          const row=this.blockCoverageRows.find(item=>item.id===id);
+          const page=row&&this.viewer?.getPageView(row.pageIndex);
+          if(page?.div&&node.parentElement!==page.div)page.div.append(node);
+        }
+      }else this.paintBlockCoverage();
       this.drawBBoxEditor();
       this.scheduleOverlay();
     }catch(error){
@@ -777,15 +787,16 @@ export class PdfPreview {
   setBlockCoverage(rows){
     const next=Array.isArray(rows)?rows.filter(row=>row.anchorCount===1&&
       row.geometry&&Number.isInteger(row.pageIndex)&&Number.isInteger(row.blockIndex))
-      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId,isChildCover})=>
-        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,bbox,promoted,nativeChildren,bodyChildId,isChildCover})):[];
+      .map(({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,displayId,bbox,promoted,nativeChildren,bodyChildId,isChildCover})=>
+        ({id,origin,pageIndex,blockIndex,sourceLine,joinPrev,joinable,logicalId,displayId,bbox,promoted,nativeChildren,bodyChildId,isChildCover})):[];
     const prior=this.blockCoverageRows;
     this.blockCoverageRows=next;
     // Editing one CMD join annotates only the target Block. The geometry and
     // immutable OCR identities do not change: do not repaint 224 checkboxes,
     // reset their checked values, or relayout other pages on every click.
     const sameGeometry=prior.length===next.length&&prior.every((old,i)=>
-      old.id===next[i].id&&old.pageIndex===next[i].pageIndex&&
+      old.id===next[i].id&&old.origin===next[i].origin&&old.pageIndex===next[i].pageIndex&&
+      JSON.stringify(old.bbox)===JSON.stringify(next[i].bbox)&&
       old.blockIndex===next[i].blockIndex&&old.promoted===next[i].promoted&&
       old.isChildCover===next[i].isChildCover&&
       old.bodyChildId===next[i].bodyChildId&&
@@ -795,7 +806,7 @@ export class PdfPreview {
     for(let i=0;i<next.length;i++){
       const old=prior[i],row=next[i];
       if(old.joinPrev===row.joinPrev&&old.joinable===row.joinable&&
-        old.logicalId===row.logicalId)continue;
+        old.logicalId===row.logicalId&&old.displayId===row.displayId)continue;
       if(this.updateBlockChip(this.blockCoverageNodes.get(row.id),row))
         pages.add(row.pageIndex);
     }
@@ -833,7 +844,7 @@ export class PdfPreview {
     // its group logicalId. The latter is a relation used for navigation and
     // highlighting: after p1b3->p1b4 it may still contain the former OCR
     // group's label and would make p1b4s1 LOOK like a duplicate p1b4.
-    const displayId=row.id;
+    const displayId=row.displayId||row.logicalId||row.id;
     if(badge.textContent!==displayId){badge.textContent=displayId;changed=true;}
     const title=this.readOnly?
       `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'三击接续；长按移动':'单击定位'}`:
@@ -1009,7 +1020,7 @@ export class PdfPreview {
             pointedNode.classList.contains('ocr-pdf-block-is-child')?'child':'parent';
           const rect=label.getBoundingClientRect(),cy=(rect.top+rect.bottom)/2;
           return {node:root,id,rootId:root.dataset.blockId,kind,
-            placement:kind==='child'?'child':y<cy-9?'before':y>cy+9?'after':'child'};
+            placement:kind==='child'?'child':pdfDropGuideZone(x,rect,false,this.readOnly)};
         }
       }
       // The original PDF bbox, including its full interior, is the fallback

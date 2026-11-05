@@ -6,6 +6,8 @@ import {planCMDSubblockAnnotations} from '../ui/cmd-text-blocks.js';
 import {readCMDBlockChains,planCMDMigrateLegacyBlockChains,
   planCMDMergeBlockChains,planCMDSplitBlockChain,planCMDMoveBlockChainMember,
   planCMDBlockChainArrangement} from '../ui/cmd-block-chains.js';
+import {inspectCMDTextBlocks} from '../ui/cmd-text-blocks.js';
+import {projectCMDLogicalTextBlocks} from '../ui/cmd-block-joins.js';
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const legacy=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
 const source=toMarkdown(raw);
@@ -99,3 +101,21 @@ assert.throws(()=>planCMDMoveBlockChainMember(legacy,'p6b6','p6b7'),/Legacy PBS/
 assert.equal(planCMDMergeBlockChains(source,'p4b0','p4b0').changed,0);
 console.log('CMD_BLOCK_CHAINS_WP2_PASS',{newAtoms:267,legacyAtoms:224,
   migrated:224,legacyJoins:2,crossPage:'p4b0s0→p6b7'});
+
+// A canonical BC merge is the sole parent continuation relation. No legacy
+// block-join comment is needed, and child-only BCs cannot add logical parents.
+const joined=apply(source,planCMDMergeBlockChains(source,'p6b6','p6b7'));
+const joinedRows=(await inspectCMDTextBlocks(joined)).rows;
+const joinedLogical=projectCMDLogicalTextBlocks(joined,joinedRows,
+  {chains:readCMDBlockChains(joined).chains});
+assert.equal(joinedLogical.blocks.length,223);
+assert.equal(joinedLogical.joined.get('p6b7'),'p6b6');
+assert.equal(joinedLogical.assignments.get('p6b7'),'p6b6');
+assert.equal(joinedLogical.assignments.get('p6b8'),'p6b7');
+const splitJoined=apply(joined,planCMDSplitBlockChain(joined,'p6b7'));
+const splitLogical=projectCMDLogicalTextBlocks(splitJoined,
+  (await inspectCMDTextBlocks(splitJoined)).rows,
+  {chains:readCMDBlockChains(splitJoined).chains});
+assert.equal(splitLogical.blocks.length,224);
+assert.equal(splitLogical.assignments.get('p6b8'),'p6b8');
+console.log('CMD_BC_LOGICAL_PROJECTION_PASS',{joined:223,restored:224});

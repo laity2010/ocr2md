@@ -58,10 +58,12 @@ export class CMDocument {
       row.bbox=[...corrected];row.bboxText=corrected.join(', ');
       row.geometry=true;row.bboxSource='人工修正';
     }
-    const logical=projectCMDLogicalTextBlocks(source,inventory.rows);
     const bc=readCMDBlockChains(source);
-    const membership=new Map();
     const canonical=bc.atoms.length>0&&bc.atoms.every(a=>a.format==='cmd-v1');
+    const legacyLogical=projectCMDLogicalTextBlocks(source,inventory.rows);
+    const logical=canonical?projectCMDLogicalTextBlocks(source,inventory.rows,
+      {chains:bc.chains}):legacyLogical;
+    const membership=new Map();
     for(const chain of bc.chains)for(const [seq,id] of chain.members.entries())
       membership.set(id,{chainId:chain.id,chainType:chain.type,chainSize:chain.size,
         chainPosition:seq+1,chainPrev:seq?chain.members[seq-1]:null,
