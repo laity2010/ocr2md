@@ -30,6 +30,7 @@ import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './wcp-chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
 import {createCM6SourceVisibilityGuard} from './cm6-source-visibility.js';
+import {isIllegalBreakReviewOnlyChange} from './illegal-break-review-annotation-update.js';
 import {rejectTextBlockEdit} from './text-block-readonly.js';
 
 const $ = (id) => document.getElementById(id);
@@ -502,7 +503,7 @@ async function main() {
           revision++;
           documentChanged();
           if(spellcheckEnabled)spellcheckDocChanged();
-          if(illegalBreakEnabled)illegalBreakDocChanged();
+          if(illegalBreakEnabled)illegalBreakDocChanged(update);
           if(sentenceEnabled)sentenceDocChanged();
           textBlockDocChanged();
         }
@@ -715,8 +716,17 @@ async function main() {
     if(!breakScanDoc||!view.state.doc.eq(breakScanDoc))scanIllegalBreak();
     else clearBreakMarks();
   };
-  illegalBreakDocChanged=()=>{
+  illegalBreakDocChanged=update=>{
     if(applyingBreakMarks)return;
+    if(isIllegalBreakReviewOnlyChange(update)){
+      // Unlike actual text edits, review annotation edits (including Undo)
+      // cannot alter the candidate relationships. Keep all AG rows, filters,
+      // native selects and scroll mounted and only rebase source locations.
+      breakScanDoc=update.state.doc;
+      workspace.syncIllegalBreakReviewAnnotation(update.changes,
+        update.startState.doc,update.state.doc);
+      return;
+    }
     // A manual CM6 edit invalidates the last Worker request and AG offsets.
     // Do not strand the pane in a permanent 0-row/"please rescan" state:
     // schedule a fresh debounced review after the CM6 update has completed.

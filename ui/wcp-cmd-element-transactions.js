@@ -464,6 +464,12 @@ export function createCMDTransactionPort(cmd){
       const rows=result.rows.filter(row=>row.from<index.bodyEnd&&row.to<=index.bodyEnd);
       return {rows,stale:result.stale,recordCount:result.recordCount};
     },
+    queryIllegalBreakReviewDecisions:()=>{
+      const reviewed=readIllegalBreakReviewDecisions(cmd.readSource(),
+        cmd.readAnnotations({tag:ILLEGAL_BREAK_REVIEW_TAG}));
+      return {choices:[...reviewed.decisions].map(([key,value])=>({key,decision:value.decision})),
+        stale:reviewed.stale};
+    },
     queryIllegalBreakElements:()=>{
       const index=projector.get();
       const result=readIllegalBreaks(cmd.readSource(),cmd.readAnnotations({tag:LINEBREAK_TAG}));

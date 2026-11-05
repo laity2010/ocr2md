@@ -66,6 +66,18 @@ try{
         viewport:{width:1280,height:950}});
       page.setDefaultTimeout(34000);
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
+      // Count real dictionary rescans; choosing an annotation-only review
+      // value must not enqueue any Worker task.
+      await page.addInitScript(()=>{
+        window.__reviewScanPosts=0;
+        const NativeWorker=window.Worker;
+        window.Worker=class extends NativeWorker{
+          postMessage(data,...args){
+            if(data?.kind==='linebreak')window.__reviewScanPosts++;
+            return super.postMessage(data,...args);
+          }
+        };
+      });
       try{
         await page.context().addCookies([{name:'v6edit',value:'review-test-token',domain:'127.0.0.1',path:'/'}]);
         assert.equal((await page.goto(base,{waitUntil:'domcontentloaded',timeout:85000})).status(),200);
@@ -82,22 +94,58 @@ try{
         assert.equal(await selectFor(page,'insurance').inputValue(),'待定');
         assert.equal(await page.locator('.ocr-illegal-break-grid .ag-header-cell[col-id="reviewDecision"]')
           .getAttribute('aria-colindex')!==null,true);
+        // Preserve the exact native select and the AG row node through each
+        // review edit, not merely the eventual value after a full rerender.
+        const baseline=await page.evaluate(()=>{
+          const items=[...document.querySelectorAll('.ocr-illegal-break-grid .ag-row')];
+          const lookup=label=>items.find(r=>r.querySelector('.ag-cell[col-id="joined"]')
+            ?.textContent.trim()===label);
+          window.__reviewStable={
+            selects:new Map(['about 3','leverage','insurance'].map(k=>[k,lookup(k)?.querySelector('select')])),
+            rows:new Map(['about 3','leverage','insurance'].map(k=>[k,lookup(k)])),
+            scans:window.__reviewScanPosts,
+            top:document.querySelector('.ocr-illegal-break-grid .ag-body-viewport')?.scrollTop||0,
+          };
+          return {scans:window.__reviewScanPosts,rowCount:items.length};
+        });
+        assert.equal(baseline.rowCount,3);
+        const assertStable=async()=>{
+          const state=await page.evaluate(()=>{
+            const grid=document.querySelector('.ocr-illegal-break-grid');
+            return {stable:[...window.__reviewStable.rows].every(([key,row])=>{
+              const select=window.__reviewStable.selects.get(key);
+              return row?.isConnected&&select?.isConnected&&row.querySelector('select')===select;
+            }),scans:window.__reviewScanPosts,
+              rowCount:grid.querySelectorAll('.ag-row').length,
+              top:grid.querySelector('.ag-body-viewport')?.scrollTop||0};
+          });
+          assert.equal(state.stable,true,'review values must preserve all select DOM and AG row identities');
+          assert.equal(state.scans,baseline.scans,'review annotation cannot trigger dictionary Worker rescan');
+          assert.equal(state.rowCount,3,'review must not clear/recreate AG rows');
+          assert.equal(state.top,0,'review must not alter AG vertical scroll');
+        };
         await selectFor(page,'about 3').selectOption({label:'断行合并'});
         await waitDecision(page,'about 3','断行合并');
+        await assertStable();
         await selectFor(page,'leverage').selectOption({label:'忽略'});
         await waitDecision(page,'leverage','忽略');
+        await assertStable();
         assert.equal(readFileSync(doc,'utf8'),seeded,'decisions modify CM6 only until manual save');
         // The last transaction is 'ignore', it should be one independent Undo.
         await page.locator('#undo').click();
         await waitDecision(page,'leverage','待定');
+        await assertStable();
         await waitDecision(page,'about 3','断行合并');
         await page.locator('#redo').click();
         await waitDecision(page,'leverage','忽略');
+        await assertStable();
         // '待定' removes the merge comment without touching any actual text.
         await selectFor(page,'about 3').selectOption({label:'待定'});
         await waitDecision(page,'about 3','待定');
+        await assertStable();
         await selectFor(page,'about 3').selectOption({label:'断行合并'});
         await waitDecision(page,'about 3','断行合并');
+        await assertStable();
         assert.equal(await selectFor(page,'insurance').inputValue(),'待定');
         if(process.env.OCR_BREAK_REVIEW_SCREENSHOTS){
           mkdirSync(process.env.OCR_BREAK_REVIEW_SCREENSHOTS,{recursive:true});

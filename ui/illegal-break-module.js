@@ -5,6 +5,8 @@ import {createVirtualAGQuery} from './virtual-ag-query.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import {projectIllegalBreakPair} from './illegal-break-pair.js';
 import {keyIllegalBreakReviewRows,REVIEW_DECISIONS} from './cmd-illegal-break-review.js';
+import {createStableAGSelectRenderer} from './ag-stable-select-renderer.js';
+import {rebaseIllegalBreakRowsInPlace} from './illegal-break-review-annotation-update.js';
 import './illegal-break-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#d8a657',backgroundColor:'#2f383e',
@@ -33,42 +35,34 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onRevie
     publishFocus({sourceLine:row.afterLine||row.line,origin:'illegal-break',
       intent:'click',beforeBlockId:row.beforeBlockId,afterBlockId:row.afterBlockId});
   };
-  const reviewDropdown=p=>{
-    if(!p.data?.reviewKey)return '';
-    const select=document.createElement('select');
-    select.className='ocr-illegal-break-review-select';
-    select.setAttribute('aria-label',`审阅 ${p.data.beforeBlockId} → ${p.data.afterBlockId}`);
-    select.dataset.reviewKey=p.data.reviewKey;
-    for(const label of REVIEW_DECISIONS){
-      const option=document.createElement('option');option.value=label;option.textContent=label;
-      select.append(option);
-    }
-    const paint=choice=>{
-      select.value=choice;
+  const ReviewSelectRenderer=createStableAGSelectRenderer({
+    choices:REVIEW_DECISIONS,className:'ocr-illegal-break-review-select',
+    ariaLabel:row=>`审阅 ${row.beforeBlockId} → ${row.afterBlockId}`,
+    getValue:row=>row.reviewDecision||'待定',
+    isDisabled:row=>!row.reviewKey,
+    decorate:(select,choice,row)=>{
+      select.dataset.reviewKey=row.reviewKey||'';
       select.dataset.reviewDecision=choice;
       select.classList.toggle('is-merge',choice==='断行合并');
       select.classList.toggle('is-ignore',choice==='忽略');
       select.classList.toggle('is-pending',choice==='待定');
-    };
-    paint(p.data.reviewDecision||'待定');
-    for(const event of ['pointerdown','mousedown','touchstart','click','dblclick'])
-      select.addEventListener(event,e=>e.stopPropagation());
-    select.addEventListener('change',event=>{
-      event.stopPropagation();
-      const choice=select.value,previous=p.data.reviewDecision||'待定';
+    },
+    onChange:(row,choice)=>{
+      const previous=row.reviewDecision||'待定';
       if(choice===previous)return;
       try{
-        const result=onReviewChoice(p.data,choice);
-        p.data.reviewDecision=choice;
-        paint(choice);
+        const result=onReviewChoice(row,choice);
+        // On a successful CMD write its synchronous CM6 update listener
+        // synchronizes ALL AG review metadata in place. No setRowData.
         if(result?.changed)onStatus(`✓ 断行审阅：${choice} · CMD 注释已更新 · 请全局保存`);
       }catch(error){
-        paint(previous);
+        row.reviewDecision=previous;
+        const node=grid.getRowNode(row.reviewKey||String(row.from));
+        if(node)grid.refreshCells({rowNodes:[node],columns:['reviewDecision'],force:true});
         onStatus(`断行审阅失败：${error.message}`);
       }
-    });
-    return select;
-  };
+    },
+  });
   const jump=p=>{
     if(!p.data)return '';
     const button=document.createElement('button');button.type='button';button.className='ocr-illegal-break-jump';
@@ -79,7 +73,7 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onRevie
   const columns=[
     {field:'line',headerName:'源码行',width:96,minWidth:90,pinned:'left',lockPinned:true,cellRenderer:jump},
     {field:'reviewDecision',headerName:'审阅',width:116,minWidth:110,
-      cellRenderer:reviewDropdown,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
+      cellRenderer:ReviewSelectRenderer,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'beforeBlockId',headerName:'前块 A',width:130,minWidth:105,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'afterBlockId',headerName:'后块 B',width:130,minWidth:105,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'pairKind',headerName:'关系',width:80,minWidth:68,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
@@ -94,7 +88,7 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onRevie
   ].map(column=>({sortable:false,resizable:true,suppressMovable:true,...column}));
   const grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:32,
     suppressColumnVirtualisation:true,
-    getRowId:p=>String(p.data.from),rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
+    getRowId:p=>p.data.reviewKey||String(p.data.from),rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
     onRowClicked:p=>navigate(p.data)});
   const virtual=createVirtualAGQuery(grid,'illegal-break');
   function scopedRows(){
@@ -102,10 +96,10 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onRevie
     const chapter=getChapter(scope.operationScope.chapterId);
     return chapter?rows.filter(r=>r.from>=chapter.from&&r.from<chapter.to):[];
   }
-  function refresh(){
+  function refresh({preserveGrid=false}={}){
     if(disposed)return;
     const visible=scopedRows();
-    if(scope)virtual.setVirtualQuery({...scope,keys:scope.operationScope?.mode==='chapter'
+    if(!preserveGrid&&scope)virtual.setVirtualQuery({...scope,keys:scope.operationScope?.mode==='chapter'
       ?new Set(visible.map(r=>r.from)):null});
     const marked=visible.filter(r=>r.reviewDecision==='断行合并').length;
     const ignored=visible.filter(r=>r.reviewDecision==='忽略').length;
@@ -125,6 +119,39 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onRevie
     setPending(){loading=true;error=null;rows=[];markedRows=[];reviewRows=[];
       grid.setGridOption('rowData',[]);refresh();},
     setError(reason){loading=false;error=String(reason);refresh();},
+    /** An annotation-only CM6 transaction keeps ALL AG rows and native
+     * select DOM mounted (including other rows, filters and vertical scroll).
+     * Offset rebasing is necessary because a comment inserts one source line.
+     */
+    syncReviewAnnotationChange(changes,beforeDoc,afterDoc,choices=[],bad=0){
+      if(disposed)return;
+      const oldLines=new Map(rows.map(row=>[row,row.line]));
+      rebaseIllegalBreakRowsInPlace(rows,changes,beforeDoc,afterDoc);
+      rebaseIllegalBreakRowsInPlace(markedRows,changes,beforeDoc,afterDoc);
+      rebaseIllegalBreakRowsInPlace(reviewRows,changes,beforeDoc,afterDoc);
+      reviewChoices=new Map(choices.map(x=>[x.key,x.decision]));
+      reviewStale=bad;
+      const reviewNodes=[],lineNodes=[];
+      for(const row of rows){
+        const next=reviewChoices.get(row.reviewKey)||'待定';
+        if(row.reviewDecision!==next){
+          row.reviewDecision=next;
+          const node=grid.getRowNode(row.reviewKey||String(row.from));
+          if(node)reviewNodes.push(node);
+        }
+        if(oldLines.get(row)!==row.line){
+          const node=grid.getRowNode(row.reviewKey||String(row.from));
+          if(node)lineNodes.push(node);
+        }
+      }
+      if(reviewNodes.length)grid.refreshCells({rowNodes:reviewNodes,
+        columns:['reviewDecision'],force:true});
+      if(lineNodes.length)grid.refreshCells({rowNodes:lineNodes,columns:['line'],force:true});
+      // Re-evaluate only an actual human-selected review-value filter.
+      // Virtual chapter filters are maintained by their own WCP owner.
+      if(reviewNodes.length&&grid.getFilterModel()?.reviewDecision)grid.onFilterChanged();
+      refresh({preserveGrid:true});
+    },
     setReviewDecisions(choices=[],bad=0){
       reviewChoices=new Map(choices.map(x=>[x.key,x.decision]));
       reviewStale=bad;rebuild();refresh();

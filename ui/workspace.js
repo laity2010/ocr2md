@@ -849,6 +849,10 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setIllegalBreakPending:()=>currentOutline?.illegalBreak?.setPending(),
     setIllegalBreakError:message=>currentOutline?.illegalBreak?.setError(message),
     setIllegalBreakReviewCandidates:candidates=>currentOutline?.illegalBreak?.setReviewCandidates(candidates),
+    syncIllegalBreakReviewAnnotation:(changes,beforeDoc,afterDoc)=>{
+      const {choices,stale}=getCMD().queryIllegalBreakReviewDecisions();
+      currentOutline?.illegalBreak?.syncReviewAnnotationChange(changes,beforeDoc,afterDoc,choices,stale);
+    },
     getIllegalBreakElements:()=>{
       const result=getCMD().queryIllegalBreakElements();
       currentOutline?.illegalBreak?.setReviewDecisions(result.reviewChoices||[],result.reviewStale||0);

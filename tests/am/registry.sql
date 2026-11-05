@@ -1716,3 +1716,14 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-REVIEW-C122','C122','tests/cmd-illegal-break-review.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Explicit review merge/ignore/pending toggles durable annotation, independently disambiguates same-child scars, restores exactly prior source on pending, no structural edits','direct'),
  ('TC-BREAK-REVIEW-C123','C123','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit three-state AG select writes one CMD annotation transaction, Undo/Redo, manual save and reload preserve status without actual content joining','integration'),
  ('TC-BREAK-REVIEW-G34','G34','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG review dropdown has merge/ignore/pending colored states; original A/B pair and source remain linked; no autosave','integration');
+
+-- AG native select standard: comment-only CMD reviews must never destroy
+-- mounted AG rows or WebKit selects, or schedule a dictionary Worker scan.
+INSERT INTO apis VALUES
+ ('G35','G','createStableAGSelectRenderer','ui/ag-stable-select-renderer.js','export','choices / value / change callback','DOM-retaining AG class renderer','shared by LaTeX and Illegal Breaks; refresh returns true and never remounts select',1),
+ ('G36','G','syncReviewAnnotationChange','ui/illegal-break-module.js','internal','CM6 ChangeSet,old/new docs,CMD-derived review choices','mutates existing AG rows in place and refreshes only changed cells','preserves filtered rows, native selects, scroll and source line remap',1),
+ ('L87','L','isIllegalBreakReviewOnlyChange','ui/illegal-break-review-annotation-update.js','export','CM6 update with ChangeSet','true only if all changes consist of CMD review annotations','metadata-only edits including undo/redo bypass Worker; prose edit still rescans',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-AG-STABLE-SELECT-G35','G35','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit same native select and same AG row DOM after multiple decisions and undo/redo','integration'),
+ ('TC-AG-STABLE-ROWS-G36','G36','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Review-only CMD edits do not replace rowData, change scroll or trigger dictionary Worker; review choices update in place','integration'),
+ ('TC-AG-REVIEW-METADATA-L87','L87','tests/illegal-break-review-annotation-update.test.mjs','tests/illegal-break-review-annotation-update.test.mjs','Comment-only insert/update/remove and undo are recognized; source offsets remapped in place; any prose edit rejected','direct');

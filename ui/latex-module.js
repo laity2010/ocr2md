@@ -7,6 +7,7 @@ import {findLatex} from './latex-scan.js';
 import {REVIEW_CHOICES,findReviewMarkers,planReviewAnnotations,planNormalizeReviewedInline} from './latex-review-markers.js';
 import {viewStore,publishFocus} from './view-store.js';
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
+import {createStableAGSelectRenderer} from './ag-stable-select-renderer.js';
 import './latex-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f383e',
@@ -62,42 +63,16 @@ export function createLatexModule(host,getMarkdown,getCMD,onStatus){
       grid.refreshCells({force:true,columns:['status']});
     }
   }
-  // AG Grid's function cellRenderer returns a DOM node but has no refresh()
-  // contract. On every review status change AG destroys the native <select>
-  // (even during a WebKit picker change), losing focus and flickering. Keep
-  // the same control mounted and update only its value/metadata.
-  class ReviewSelectRenderer {
-    init(params){
-      this.params=params;
-      const dropdown=document.createElement('select');
-      dropdown.className='ocr-latex-review-select';
-      for(const choice of REVIEW_CHOICES){
-        const option=document.createElement('option');
-        option.value=choice;option.textContent=choice;
-        dropdown.append(option);
-      }
-      for(const event of ['pointerdown','mousedown','click','touchstart'])
-        dropdown.addEventListener(event,evt=>evt.stopPropagation());
-      dropdown.addEventListener('change',()=>{
-        // Review may shift CMD offsets. Resolve live row through AG each time.
-        const row=this.params.node?.data;
-        if(row)markReview(row,dropdown.value);
-      });
-      this.dropdown=dropdown;
-      this.refresh(params);
-    }
-    getGui(){return this.dropdown;}
-    refresh(params){
-      this.params=params;
-      if(!params.data)return false;
-      const dropdown=this.dropdown;
-      dropdown.setAttribute('aria-label',`第 ${params.data.line} 行公式审阅`);
-      dropdown.value=params.data.status;
-      dropdown.dataset.review=params.data.status;
-      dropdown.disabled=!getCMD()?.editAnnotations;
-      return true; // preserve the real DOM select, even when review changes
-    }
-  }
+  // All AG review columns share the native DOM-preserving renderer.
+  // refresh() returns true and never re-mounts a touch-open WebKit select.
+  const ReviewSelectRenderer=createStableAGSelectRenderer({
+    choices:REVIEW_CHOICES,className:'ocr-latex-review-select',
+    ariaLabel:row=>`第 ${row.line} 行公式审阅`,
+    getValue:row=>row.status,
+    isDisabled:()=>!getCMD()?.editAnnotations,
+    decorate:(dropdown,value)=>{dropdown.dataset.review=value;},
+    onChange:(row,value)=>markReview(row,value),
+  });
   const formulaPreview=params=>{
     const item=params.data;
     if(!item)return '';
