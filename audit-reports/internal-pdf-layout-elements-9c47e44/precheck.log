@@ -1,0 +1,11 @@
+=== FROZEN SOURCE ===
+9c47e44f1fc6b44b4f126030d68008854aced6ca
+=== AM BUILD EXACT BASELINE ===
+AM_ERROR: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+AM_BUILD_EXIT=1
+=== GIT FSCK ===
+dangling blob 6cd01b1cdac1cf959ddf10b461c08422ca0c957d
+dangling blob 51932bcb736e260497c3e512b7c19a751a863b92
+dangling blob ca2e14ac3c35ac15bb15dc97eec27c7887ae7404
+dangling blob 2af7d68f3f9ccbafc0c8c68f3293a7ce4bdc6e60
+GIT_FSCK_EXIT=0

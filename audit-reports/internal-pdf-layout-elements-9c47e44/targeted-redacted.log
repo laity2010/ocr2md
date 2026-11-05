@@ -1,0 +1,501 @@
+SOURCE_SHA=9c47e44f1fc6b44b4f126030d68008854aced6ca
+=== tests/note-pairs.test.mjs ===
+NOTE_PAIR_READONLY_PASS {
+  realBodies: 10,
+  realPairs: 10,
+  escapedSup: true,
+  htmlSup: true,
+  markdownFootnote: true,
+  ocrFalsePositiveExcluded: true,
+  paired: 3,
+  orphan: 1,
+  conflict: true,
+  annotationPlanning: true
+}
+TEST_EXIT[tests/note-pairs.test.mjs]=0
+=== tests/cmd-illegal-break-review.test.mjs ===
+CMD_CROSS_BLOCK_LEGACY_MIGRATION_PASS atomic text+remove, backward readable
+CMD_LATEX_TWO_REVIEW_CHOICES_PASS A→formula merge, formula→C ignore independently
+CMD_ILLEGAL_BREAK_REVIEW_PASS merge/ignore/pending, independent scars, no join, no change sealed OCR
+TEST_EXIT[tests/cmd-illegal-break-review.test.mjs]=0
+=== tests/cmd-native-subblock-repair.test.mjs ===
+NATIVE_CHILD_REPAIR_PASS pure idempotent, 19 preserved parent scopes / 42 restored native subblocks, split HTML table pair guarded, image/table PDF badges matched, user absorption preserved, sealed JSON unchanged
+TEST_EXIT[tests/cmd-native-subblock-repair.test.mjs]=0
+=== tests/cmd-pbs-row-order.test.mjs ===
+CMD_PBS_AG_NUMBER_ORDER_PASS
+TEST_EXIT[tests/cmd-pbs-row-order.test.mjs]=0
+=== tests/text-block-page-scope.test.mjs ===
+TEXT_BLOCK_AG_PAGE_SCOPE_PASS 5
+TEST_EXIT[tests/text-block-page-scope.test.mjs]=0
+=== tests/cmd-linebreak-latex-boundary.test.mjs ===
+CMD_LATEX_TWO_BOUNDARIES_PASS p4b0s0→s1 and s1→s2, no skip, source offsets, no write
+TEST_EXIT[tests/cmd-linebreak-latex-boundary.test.mjs]=0
+=== PYTHON AM NEGATIVE BOUNDARY TESTS ===
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE.E....EE.s
+======================================================================
+ERROR: test_all_contracts_have_test_rows (test_am.AMCatalogTests.test_all_contracts_have_test_rows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_cross_module_cannot_reference_internal_api (test_am.AMCatalogTests.test_cross_module_cannot_reference_internal_api)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_focus_includes_all_ten_observed_receivers (test_am.AMCatalogTests.test_focus_includes_all_ten_observed_receivers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_no_dangling_relations (test_am.AMCatalogTests.test_no_dangling_relations)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_observed_production_boundary_debts_cleared (test_am.AMCatalogTests.test_observed_production_boundary_debts_cleared)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_registered_access_edges_still_match_source (test_am.AMCatalogTests.test_registered_access_edges_still_match_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_registry_change_must_invalidate_bound_test_evidence (test_am.AMCatalogTests.test_registry_change_must_invalidate_bound_test_evidence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_registry_links_and_file_references (test_am.AMCatalogTests.test_registry_links_and_file_references)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_unregistered_cross_module_call_cannot_be_whitelisted (test_am.AMCatalogTests.test_unregistered_cross_module_call_cannot_be_whitelisted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_wcp_shared_store_subscribers_are_explicit (test_am.AMCatalogTests.test_wcp_shared_store_subscribers_are_explicit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_am.py", line 14, in setUp
+    self.db.executescript((am.HERE / 'registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_ag_review_is_not_a_phantom_external_api (test_binding_registry.BindingRegistryTest.test_ag_review_is_not_a_phantom_external_api)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_binding_registry.py", line 34, in test_ag_review_is_not_a_phantom_external_api
+    own, db = self.load()
+              ~~~~~~~~~^^
+  File "<AUDIT_WORKTREE>/tests/am/test_binding_registry.py", line 25, in load
+    db.executescript((ROOT/'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_new_pdf_cmd_bindings_are_registered (test_binding_registry.BindingRegistryTest.test_new_pdf_cmd_bindings_are_registered)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_binding_registry.py", line 28, in test_new_pdf_cmd_bindings_are_registered
+    own, db = self.load()
+              ~~~~~~~~~^^
+  File "<AUDIT_WORKTREE>/tests/am/test_binding_registry.py", line 25, in load
+    db.executescript((ROOT/'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_unregistered_symbol_is_rejected (test_binding_registry.BindingRegistryTest.test_unregistered_symbol_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_binding_registry.py", line 45, in test_unregistered_symbol_is_rejected
+    own, db = self.load()
+              ~~~~~~~~~^^
+  File "<AUDIT_WORKTREE>/tests/am/test_binding_registry.py", line 25, in load
+    db.executescript((ROOT/'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_absolute_path_import (test_boundaries.GateTests.test_absolute_path_import)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 112, in test_absolute_path_import
+    issues=self.modified('outline-grid.js','import {createLatexModule} from "/ui/latex-module.js";')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_bad_owner (test_boundaries.GateTests.test_bad_owner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 104, in test_bad_owner
+    _,issues=mod.scan_files(ROOT,cat)
+             ~~~~~~~~~~~~~~^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_baseline (test_boundaries.GateTests.test_baseline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 22, in test_baseline
+    stats,issues=mod.scan_files(ROOT,CAT)
+                 ~~~~~~~~~~~~~~^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_computed_import (test_boundaries.GateTests.test_computed_import)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 78, in test_computed_import
+    issues=self.modified('workspace.js','void import(variablePath);')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_functional_store_write (test_boundaries.GateTests.test_functional_store_write)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 120, in test_functional_store_write
+    issues=self.modified('media-module.js','viewStore.setState(s=>({activePanel: "new"}));')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_functional_store_write_variable (test_boundaries.GateTests.test_functional_store_write_variable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 124, in test_functional_store_write_variable
+    issues=self.modified('media-module.js','viewStore.setState(updater);')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_missing_edge_registration (test_boundaries.GateTests.test_missing_edge_registration)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 92, in test_missing_edge_registration
+    _,issues=mod.scan_files(ROOT,CAT)
+             ~~~~~~~~~~~~~~^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 89, in altered
+    modules,edges=original(root)
+                  ~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_missing_literal_target (test_boundaries.GateTests.test_missing_literal_target)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 108, in test_missing_literal_target
+    issues=self.modified('main.js',"void import('./unlisted-file.js');")
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_navigation_font_subscription_module (test_boundaries.GateTests.test_navigation_font_subscription_module)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 54, in test_navigation_font_subscription_module
+    _,issues=mod.scan_files(ROOT,CAT,{'wcp-navigation-select.js':body})
+             ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_new_cross_module_import (test_boundaries.GateTests.test_new_cross_module_import)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 70, in test_new_cross_module_import
+    issues=self.modified('outline-grid.js','import {createLatexModule} from "./latex-module.js";')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_new_raw_store_write (test_boundaries.GateTests.test_new_raw_store_write)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 82, in test_new_raw_store_write
+    issues=self.modified('media-module.js','viewStore.setState({activePanel: "new"});')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_new_symbol_hidden_behind_known_module_pair (test_boundaries.GateTests.test_new_symbol_hidden_behind_known_module_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 98, in test_new_symbol_hidden_behind_known_module_pair
+    issues=self.modified('workspace.js','import {unsafePanel} from "./pdf-preview.js";')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_retired_semantic_event_subscription (test_boundaries.GateTests.test_retired_semantic_event_subscription)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 65, in test_retired_semantic_event_subscription
+    issues=self.modified('wcp-ag-module-toolbar.js',
+        "document.addEventListener('ocr2md:lab-file-activated',()=>{});")
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_settings_subscribe_wrong_owner (test_boundaries.GateTests.test_settings_subscribe_wrong_owner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 61, in test_settings_subscribe_wrong_owner
+    _,issues=mod.scan_files(ROOT,CAT,{'outline-grid.js':body})
+             ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_shared_consumer_review (test_boundaries.GateTests.test_shared_consumer_review)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 74, in test_shared_consumer_review
+    issues=self.modified('markdown-preview.js','import {viewStore} from "./view-store.js";')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_undeclared_semantic_event_publisher (test_boundaries.GateTests.test_undeclared_semantic_event_publisher)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 40, in test_undeclared_semantic_event_publisher
+    issues=self.modified('outline-grid.js',
+        "document.dispatchEvent(new CustomEvent('ocr2md:undeclared-topic',{detail:{}}));")
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_unregistered_settings_subscription (test_boundaries.GateTests.test_unregistered_settings_subscription)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 45, in test_unregistered_settings_subscription
+    issues=self.modified('cm-font-setting.js',"settings.subscribe({module:'C',key:'x.y'},()=>{});")
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_url_import (test_boundaries.GateTests.test_url_import)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 116, in test_url_import
+    issues=self.modified('outline-grid.js','import "http://127.0.0.1:4710/ui/latex-module.js";')
+  File "<AUDIT_WORKTREE>/tests/am/test_boundaries.py", line 19, in modified
+    return mod.scan_files(ROOT,CAT,{file:body})[1]
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: setUpClass (test_live_view_store_subscriptions.LiveViewStoreSubscriptionInventory)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_live_view_store_subscriptions.py", line 23, in setUpClass
+    cls.db.executescript((ROOT / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_blocked_report_retains_source_and_manual_review (test_standard_audit.StandardAuditTests.test_blocked_report_retains_source_and_manual_review)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_standard_audit.py", line 50, in test_blocked_report_retains_source_and_manual_review
+    status=mod.make_report(sha,2,out,None)
+  File "<AUDIT_WORKTREE>/tests/am/standard_audit.py", line 100, in make_report
+    metrics, static_issues = audit_boundaries.scan_files(ROOT,cfg)
+                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 54, in scan_files
+    modules, edges = load_registry(root)
+                     ~~~~~~~~~~~~~^^^^^^
+  File "<AUDIT_WORKTREE>/tests/am/audit_boundaries.py", line 35, in load_registry
+    con.executescript((root / 'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+======================================================================
+ERROR: test_evidence_does_not_mislabel_integration_as_direct (test_standard_audit.StandardAuditTests.test_evidence_does_not_mislabel_integration_as_direct)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<AUDIT_WORKTREE>/tests/am/test_standard_audit.py", line 38, in test_evidence_does_not_mislabel_integration_as_direct
+    con.executescript((ROOT/'tests/am/registry.sql').read_text())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('export','returned','internal','raw')
+
+----------------------------------------------------------------------
+Ran 40 tests in 3.496s
+
+FAILED (errors=34, skipped=1)
+AM_NEGATIVE_EXIT=1
