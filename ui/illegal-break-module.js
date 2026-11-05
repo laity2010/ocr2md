@@ -12,7 +12,7 @@ const theme=themeQuartz.withParams({accentColor:'#d8a657',backgroundColor:'#2f38
 export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
   host.classList.add('ocr-illegal-break-pane');
   const guide=document.createElement('div');guide.className='ocr-illegal-break-guide';
-  guide.textContent='同一子块内断词可 CMD 标定；同父子块交界仅列待复核，不自动合并 · 点击行号定位';
+  guide.textContent='子块内换行断词可 CMD 标定；子块交界、连字符空格疑似断词仅待复核，不自动合并 · 点击行号定位';
   const state=document.createElement('div');state.className='ocr-illegal-break-state';state.setAttribute('role','status');
   const gridHost=document.createElement('div');gridHost.className='ocr-illegal-break-grid';
   host.append(guide,state,gridHost);

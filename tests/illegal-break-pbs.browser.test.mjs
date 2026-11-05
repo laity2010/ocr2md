@@ -38,6 +38,18 @@ const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),env:{...
   V6_STATIC_ROOT:resolve('dist'),V6_SETTINGS_PATH:join(dir,'settings.json'),
   V6_TOKEN_PATH:tokenPath},stdio:'ignore'});
 const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
+async function filterCurrentP4(page){
+  await page.locator('.ocr-illegal-break-grid .ag-header-cell[col-id="blockId"] .ag-header-cell-filter-button').click();
+  const filter=page.locator('.ocr-enum-filter[aria-label="当前块 筛选"]:visible');
+  await filter.waitFor();
+  await filter.locator('[data-filter-value="all"] input').uncheck();
+  await filter.locator('[data-filter-value="p4b0s0"] input').check();
+  await filter.locator('[data-filter-value="p4b0s1"] input').check();
+  await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===2,
+    null,{timeout:20000});
+  await page.locator('.ocr-illegal-break-grid .ag-header-cell[col-id="line"]').click();
+}
+
 try{
   let ready=false;for(let i=0;i<200;i++){
     try{if((await fetch(base+'healthz')).ok){ready=true;break;}}catch{}
@@ -63,8 +75,9 @@ try{
         });
         const grid=page.locator('.ocr-illegal-break-grid');
         try{
-          await page.waitForFunction(()=>document.querySelectorAll('.ocr-illegal-break-grid .ag-row').length===2,
+          await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('待复核'),
             null,{timeout:95000});
+          await filterCurrentP4(page);
         }catch(error){
           console.error('PBS_LINEBREAK_BROWSER_DIAG',name,await page.evaluate(()=>({
             status:document.querySelector('#status')?.textContent,
@@ -85,7 +98,7 @@ try{
           {block:'p4b0s1',next:'p4b0s2',joined:'latest 13F',status:'待复核',scope:'子块交界'}
         ]);
         const global=await page.locator('#status').textContent();
-        assert(global.includes('待复核 1'),name+' global Shell review summary missing');
+        assert(global.includes('待复核'),name+' global Shell review summary missing');
         // CM6 virtualizes distant source lines. An AG "已标定" row is
         // projected from real CMD annotations, then clicking its line must
         // bring the actual marked source into the rendered CM6 viewport.
@@ -113,11 +126,11 @@ try{
         await page.locator('#module-select').evaluate(el=>{
           el.value='illegal-break';el.dispatchEvent(new Event('change',{bubbles:true}));
         });
-        await page.waitForFunction(()=>{
-          const rows=[...document.querySelectorAll('.ocr-illegal-break-grid .ag-row')];
-          return rows.length===2&&rows.some(row=>row.textContent.includes('latest 13F')&&
-            row.textContent.includes('待复核'));
-        },null,{timeout:90000});
+        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('待复核'),
+          null,{timeout:90000});
+        await filterCurrentP4(page);
+        assert((await grid.locator('.ag-row').allTextContents()).some(row=>
+          row.includes('latest 13F')&&row.includes('待复核')));
         assert.equal(readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1,1,
           'review-only sibling seam must not be auto-marked on reload');
         assert.deepEqual(errors,[]);

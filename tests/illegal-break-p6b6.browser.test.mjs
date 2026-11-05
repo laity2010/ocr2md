@@ -92,7 +92,8 @@ try{
             `p6b6-illegal-break-${name}.png`),animations:'disabled'});
         }
         await page.locator('.ocr-illegal-break-grid .ag-row')
-          .filter({hasText:'leverage'}).locator('.ocr-illegal-break-jump').click();
+          .filter({has:page.locator('.ag-cell[col-id="joined"]:text-is("leverage")')})
+          .locator('.ocr-illegal-break-jump').click();
         await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent.includes('lever- age'),
           null,{timeout:18000});
         assert.equal(readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1,0,

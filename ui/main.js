@@ -679,7 +679,7 @@ async function main() {
             }
             workspace.setIllegalBreakReviewCandidates(candidates);
             status(issues.length?
-              `✓ 非法断行：子块内标定候选 ${marking.length} · 子块交界待复核 ${reviews.length}${truncated?' · 结果不完整':''}${marking.length?' · 请全局保存':''}`:
+              `✓ 非法断行：子块内标定候选 ${marking.length} · 待复核 ${reviews.length}${truncated?' · 结果不完整':''}${marking.length?' · 请全局保存':''}`:
               '✓ 子块断行检查完成 · 暂无符合保守规则的候选');
           }catch(markError){workspace.setIllegalBreakError('CMD 标定失败：'+markError.message);
             status('非法断行标定失败：'+markError.message,'error');}
