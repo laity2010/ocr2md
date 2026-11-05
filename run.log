@@ -1,0 +1,12 @@
+Grok OCR2MD audit orchestration log (Asia/Shanghai).
+
+Original audit and post-AM-fix gate2 preserved under evidence/original and evidence/post-fix-gate2.
+Final FIX_SHA: a58efa90e2f2ed0a785d6220c1a7d56a8cc7cd8c.
+First attempt from dirty fix worktree: BLOCKED before tests (source worktree must be clean); evidence retained as final-gate-1/source-dirty-blocked.log.
+Then launched a clean detached launcher and a fresh detached target; the two complete standard audits run serially to avoid fixed-port browser interference.
+Full standard runner logs and generated reports are copied to evidence/final-gate-1 and evidence/final-gate-2 after completion. This root orchestration log does not replace those run.log files.
+
+Final gate1 completed (full 144 suites): FAIL 364/448, 25 failed suites, direct_api=101/309, static=0, unregistered_events=0, runtime_review=66. Full logs at evidence/final-gate-1/run.log. Final gate2 in progress at time of this log; final report.json is generated only after it exits.
+Final gate2 completed (full 144 suites): FAIL 364/448, 25 failed suites, direct_api=101/309, static=0, unregistered_events=0, runtime_review=66.
+Both final runs used clean detached worktrees at a58efa90e2f2ed0a785d6220c1a7d56a8cc7cd8c and have identical failing suite lists.
+Compared with gate2 (2ee86572): 9 suites recovered, 2 new stable failures: pdf-block-label-setting and shared-preview-browser. Overall remains FAIL / REVIEW_REQUIRED; SOURCE_MERGE HOLD and PRODUCTION_CUTOVER BLOCKED / HOLD.

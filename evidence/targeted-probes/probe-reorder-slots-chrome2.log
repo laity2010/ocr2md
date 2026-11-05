@@ -1,0 +1,13 @@
+AUDIT_LINUX_WAIT_DIAG {"suite":"pdf-block-reorder.browser.test.mjs","state":{"documentState":"complete","title":"OCR2MD V6 · 章节定界","agRows":21,"pdfReady":true,"pdfLoading":true,"canvasWidth":570,"status":"● 未保存 · PDF · ✓ p6b8 不变 · p6b7 → p6b9 · 后续编号顺延 · 未保存，可 Undo · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 原始 224 块 / 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 223 · 缺失 1 · 重复 0 · PDF bbox 224 · 无效 0 · 可见正文 215 · 空块/仅元数据 9 · 已接续 0 · 逻辑块 223 · 当前 MD 定位 195/215 · AG 第 7 页 12 块 · 未知锚点 1 · 4,920行 / 382,","docLength":382652,"selectedModule":"text-block","latexRows":11,"latexGridPresent":true,"unlockOpen":false,"unlockError":"","url":"http://127.0.0.1:5997/"},"errors":[]}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 25000ms exceeded.
+    at page.waitForFunction (/workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated/.v6/audit-reports/audit-linux-diagnostics.mjs:76:32)
+    at /workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated/tests/pdf-block-reorder.browser.test.mjs:79:18 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

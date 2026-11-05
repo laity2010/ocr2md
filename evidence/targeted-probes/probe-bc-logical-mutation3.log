@@ -1,0 +1,25 @@
+CMD_BLOCK_CHAINS_WP2_PASS {
+  newAtoms: 267,
+  legacyAtoms: 224,
+  migrated: 224,
+  legacyJoins: 2,
+  crossPage: 'p4b0s0→p6b7'
+}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+224 !== 223
+
+    at file:///workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated/tests/cmd-block-chains-wp2.test.mjs:111:8 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 224,
+  expected: 223,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.4

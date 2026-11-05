@@ -1,0 +1,772 @@
+{
+  "schema": "ocr2md.am-git.standard-audit.v1",
+  "time_utc": "2026-11-05T19:00:54.237987+00:00",
+  "status": "BLOCKED",
+  "source_sha": "a58efa90e2f2ed0a785d6220c1a7d56a8cc7cd8c",
+  "checkout_sha": "a58efa90e2f2ed0a785d6220c1a7d56a8cc7cd8c",
+  "source_clean": false,
+  "environment": {
+    "os": "linux",
+    "python": "3.13.5"
+  },
+  "source_manifest_sha256": "68e86ef0a65c6f1bbd56ab13d7849539711ef2e0b8b85330fb8be0f4d7ab782b",
+  "source_hashes": {
+    "AGENTS.md": "cc6857df7767fb019793809b1acae15a5b16950e77341a50166216d0e410e498",
+    "AUDIT.md": "56a5146bff9c60e33ee6cb6924638b9c1566cc953ecaa70ee3ca466ada47de53",
+    "tests/am/schema.sql": "5f528339645d59116c06cfc9d561848c865f85693b1762d5c0af59acf564cbb1",
+    "tests/am/registry.sql": "945ff707b45b77ad75cd274eeb6ee6807d5e254d58bba19097c2e7a9eb7d1e09",
+    "tests/am/ownership.json": "ebf75d699b4ac433cf07707ed43e1bed755a24f621402d4acb330fa6f24dc132",
+    "tests/am/audit_boundaries.py": "07156990ec02e1b0e50c9efff66c69a4e1b8e5e822aadf89ce06cfdf46821f2b",
+    "tests/am/run-standard-audit.sh": "fbe968831c53b7d87d81e3d47efbbc0d2049040ec5d1acaecd73dcd1fe7cc2da",
+    "tests/am/run-grok-audit.sh": "d34ab975150226e3525124566dfabc06c74f5a10e450a44c39a83c83007593fd",
+    "tests/am/standard_audit.py": "afcebef7d247744f1e2dbd721184cfd556e85f8aaa1a949fe263fe163065fcf5",
+    "packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md": "d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764"
+  },
+  "runner_exit_code": 2,
+  "runner_log": "run.log",
+  "isolated_worktree": "/workspace/ocr2md-audit/final-a58efa90-gate1",
+  "am": {
+    "status": "MISSING",
+    "note": "isolated AM DB not created; no test results may be claimed"
+  },
+  "boundary": {
+    "ownership": {
+      "ui_js": 103,
+      "modules": 12,
+      "module_helpers": 66,
+      "shared_libraries": 15,
+      "shell_files": 10,
+      "js_imports": 200,
+      "cross_module_imports": 62,
+      "shared_imports": 73,
+      "known_state_writes": 0,
+      "cross_edges": [
+        [
+          "chapter-markers.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "cm-document.js",
+          "cmd-text-blocks.js"
+        ],
+        [
+          "cm-document.js",
+          "cmd-block-continuations.js"
+        ],
+        [
+          "cm-document.js",
+          "cmd-block-joins.js"
+        ],
+        [
+          "cm-document.js",
+          "cmd-block-chains.js"
+        ],
+        [
+          "cm-document.js",
+          "cmd-pdf-bbox.js"
+        ],
+        [
+          "cmd-illegal-break-review.js",
+          "cmd-block-chains.js"
+        ],
+        [
+          "cmd-illegal-break-review.js",
+          "illegal-break-pair.js"
+        ],
+        [
+          "cmd-linebreak.js",
+          "cmd-block-chains.js"
+        ],
+        [
+          "cmd-native-subblock-repair.js",
+          "cmd-block-chains.js"
+        ],
+        [
+          "illegal-break-module.js",
+          "cmd-illegal-break-review.js"
+        ],
+        [
+          "illegal-break-module.js",
+          "illegal-break-review-annotation-update.js"
+        ],
+        [
+          "illegal-break-review-annotation-update.js",
+          "cmd-block-chains.js"
+        ],
+        [
+          "latex-inline-preview.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "latex-review-markers.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "main.js",
+          "wcp-wcp-virtual-chapters.js"
+        ],
+        [
+          "main.js",
+          "workspace.js"
+        ],
+        [
+          "main.js",
+          "wcp-cm-document.js"
+        ],
+        [
+          "main.js",
+          "wcp-settings-module.js"
+        ],
+        [
+          "main.js",
+          "wcp-workspace-directory-port.js"
+        ],
+        [
+          "main.js",
+          "wcp-source-file-navigation.js"
+        ],
+        [
+          "main.js",
+          "wcp-ag-module-toolbar.js"
+        ],
+        [
+          "main.js",
+          "cm-font-setting.js"
+        ],
+        [
+          "main.js",
+          "wcp-chapter-outline.js"
+        ],
+        [
+          "main.js",
+          "media-module.js"
+        ],
+        [
+          "main.js",
+          "chapter-markers.js"
+        ],
+        [
+          "main.js",
+          "wcp-chapter-files.js"
+        ],
+        [
+          "main.js",
+          "illegal-break-review-annotation-update.js"
+        ],
+        [
+          "markdown-preview.js",
+          "latex-inline-preview.js"
+        ],
+        [
+          "note-pair-scan.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "obsidian-source-syntax.js",
+          "latex-scan.js"
+        ],
+        [
+          "pdf-source-locations.js",
+          "cmd-block-labels.js"
+        ],
+        [
+          "settings-module.js",
+          "cmd-json-source.js"
+        ],
+        [
+          "settings-module.js",
+          "wcp-workspace-directory-module.js"
+        ],
+        [
+          "spellcheck-worker.js",
+          "cmd-linebreak.js"
+        ],
+        [
+          "text-block-module.js",
+          "cmd-block-chains.js"
+        ],
+        [
+          "wcp-cmd-element-transactions.js",
+          "wcp-document-index.js"
+        ],
+        [
+          "wcp-cmd-element-transactions.js",
+          "cmd-block-joins.js"
+        ],
+        [
+          "wcp-cmd-element-transactions.js",
+          "cmd-block-chains.js"
+        ],
+        [
+          "wcp-cmd-element-transactions.js",
+          "cmd-pdf-bbox.js"
+        ],
+        [
+          "wcp-cmd-element-transactions.js",
+          "cmd-text-blocks.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "cmd-annotations.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "latex-scan.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "latex-review-markers.js"
+        ],
+        [
+          "wcp-document-index.js",
+          "media-module.js"
+        ],
+        [
+          "wcp-source-file-navigation.js",
+          "wcp-chapter-files.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-layout-persistence.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-cmd-element-transactions.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-cm-virtual-view.js"
+        ],
+        [
+          "wcp-wcp-virtual-chapters.js",
+          "wcp-md-virtual-preview.js"
+        ],
+        [
+          "workspace.js",
+          "markdown-preview.js"
+        ],
+        [
+          "workspace.js",
+          "footnote-popover.js"
+        ],
+        [
+          "workspace.js",
+          "wcp-chapter-outline.js"
+        ],
+        [
+          "workspace.js",
+          "media-module.js"
+        ],
+        [
+          "workspace.js",
+          "latex-module.js"
+        ],
+        [
+          "workspace.js",
+          "note-pair-module.js"
+        ],
+        [
+          "workspace.js",
+          "html-elements-module.js"
+        ],
+        [
+          "workspace.js",
+          "spellcheck-module.js"
+        ],
+        [
+          "workspace.js",
+          "illegal-break-module.js"
+        ],
+        [
+          "workspace.js",
+          "sentence-module.js"
+        ],
+        [
+          "workspace.js",
+          "text-block-module.js"
+        ],
+        [
+          "workspace.js",
+          "pdf-preview.js"
+        ]
+      ]
+    },
+    "static_findings": [],
+    "literal_dom_events": [
+      {
+        "file": "ui/main.js",
+        "line": 1100,
+        "kind": "subscribe",
+        "topic": "ocr2md:chapter-error",
+        "registered": true
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 229,
+        "kind": "publish",
+        "topic": "ocr2md:chapter-boundary-changed",
+        "registered": true
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 234,
+        "kind": "publish",
+        "topic": "ocr2md:chapter-error",
+        "registered": true
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 292,
+        "kind": "subscribe",
+        "topic": "ocr2md:lab-virtual-select",
+        "registered": true
+      },
+      {
+        "file": "ui/settings-module.js",
+        "line": 54,
+        "kind": "subscribe",
+        "topic": "settings.changed",
+        "registered": true
+      },
+      {
+        "file": "ui/settings-module.js",
+        "line": 231,
+        "kind": "publish",
+        "topic": "settings.changed",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-module-toolbar.js",
+        "line": 194,
+        "kind": "subscribe",
+        "topic": "ocr2md:lab-virtual-select",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 87,
+        "kind": "publish",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 142,
+        "kind": "publish",
+        "topic": "ocr2md:lab-virtual-open",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 167,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp3-ag-ready",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 51,
+        "kind": "publish",
+        "topic": "ocr2md:lab-virtual-select",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 128,
+        "kind": "subscribe",
+        "topic": "ocr2md:lab-virtual-open",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 135,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp3-ag-ready",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 154,
+        "kind": "subscribe",
+        "topic": "ocr2md:chapter-boundary-changed",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 16,
+        "kind": "publish",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 32,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 38,
+        "kind": "publish",
+        "topic": "ocr2md:wp3-ag-ready",
+        "registered": true
+      },
+      {
+        "file": "ui/wcp-wcp-virtual-chapters.js",
+        "line": 58,
+        "kind": "subscribe",
+        "topic": "ocr2md:wp4-virtual-scope",
+        "registered": true
+      }
+    ],
+    "unregistered_event_sites": [],
+    "runtime_callsite_review_inventory": [
+      {
+        "file": "ui/cm6-source-visibility.js",
+        "line": 77,
+        "expression": "const unsubscribe=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/fontcheck.js",
+        "line": 21,
+        "expression": "const editor = document.querySelector('.cm-content');"
+      },
+      {
+        "file": "ui/html-elements-module.js",
+        "line": 71,
+        "expression": "const revision=viewStore.getState().documentRevision;"
+      },
+      {
+        "file": "ui/html-elements-module.js",
+        "line": 108,
+        "expression": "const unsubscribe=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/html-elements-module.js",
+        "line": 125,
+        "expression": "if(lastRevision!==viewStore.getState().documentRevision)refresh();"
+      },
+      {
+        "file": "ui/latex-module.js",
+        "line": 211,
+        "expression": "const unsubscribe=viewStore.subscribe((current,prior)=>{"
+      },
+      {
+        "file": "ui/latex-module.js",
+        "line": 250,
+        "expression": "const state=viewStore.getState();"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 36,
+        "expression": "const $ = (id) => document.getElementById(id);"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 91,
+        "expression": "const store=viewStore.getState();"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 129,
+        "expression": "if (document.querySelector('dialog[open]')) {"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 387,
+        "expression": "const unsubscribeGlobalStatus=viewStore.subscribe((next,previous)=>{"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 938,
+        "expression": "const unsubscribeOutlineFocus=viewStore.subscribe((next,previous)=>{"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 1168,
+        "expression": "if (import.meta.env.DEV) window.__v6cm6 = {"
+      },
+      {
+        "file": "ui/main.js",
+        "line": 1175,
+        "expression": "get scrollState(){return viewStore.getState();},"
+      },
+      {
+        "file": "ui/media-module.js",
+        "line": 433,
+        "expression": "const unsubscribe=viewStore.subscribe((next,previous)=>{"
+      },
+      {
+        "file": "ui/media-module.js",
+        "line": 467,
+        "expression": "const state=viewStore.getState();"
+      },
+      {
+        "file": "ui/note-pair-module.js",
+        "line": 249,
+        "expression": "const unsubscribe=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/note-pair-module.js",
+        "line": 278,
+        "expression": "if(active){refresh();followFocus(viewStore.getState().focusTarget,viewStore.getState());}"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 109,
+        "expression": "indexedRevision=viewStore.getState().documentRevision;"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 133,
+        "expression": "const state=viewStore.getState();"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 152,
+        "expression": "if(indexedRevision!==viewStore.getState().documentRevision)refresh();"
+      },
+      {
+        "file": "ui/outline-grid.js",
+        "line": 293,
+        "expression": "const unsub=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/pdf-preview.js",
+        "line": 181,
+        "expression": "this.unsubscribe=viewStore.subscribe((next,prev)=>{"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 59,
+        "expression": "measuredRevision=viewStore.getState().documentRevision;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 69,
+        "expression": "if(viewStore.getState().scrollSyncEnabled && anchors.length) {"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 143,
+        "expression": "(!independent && !viewStore.getState().scrollSyncEnabled)) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 144,
+        "expression": "if(measuredRevision!==viewStore.getState().documentRevision) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 158,
+        "expression": "(!viewStore.getState().scrollSyncEnabled && !explicitNavigation)) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 175,
+        "expression": "(!viewStore.getState().scrollSyncEnabled && !explicitNavigation) ||"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 187,
+        "expression": "(!viewStore.getState().scrollSyncEnabled && !force)) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 214,
+        "expression": "if(disposed || !viewStore.getState().scrollSyncEnabled) return;"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 224,
+        "expression": "if(!scroller || disposed || !viewStore.getState().scrollSyncEnabled ||"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 236,
+        "expression": "if(disposed || !viewStore.getState().scrollSyncEnabled ||"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 266,
+        "expression": "if(viewStore.getState().scrollSyncEnabled) lastDriver='cm6';"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 274,
+        "expression": "if(viewStore.getState().scrollSyncEnabled) lastDriver='preview';"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 293,
+        "expression": "const unsubscribe=viewStore.subscribe((state,previous)=>{"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 308,
+        "expression": "const unsubscribeFocus=viewStore.subscribe((state,previous)=>{"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 341,
+        "expression": "if(measuredRevision!==viewStore.getState().documentRevision &&"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 345,
+        "expression": "if(!viewStore.getState().scrollSyncEnabled) return readPreview();"
+      },
+      {
+        "file": "ui/scroll-sync.js",
+        "line": 351,
+        "expression": "if(!viewStore.getState().scrollSyncEnabled) {"
+      },
+      {
+        "file": "ui/sentence-module.js",
+        "line": 71,
+        "expression": "const unsubscribeFocus=viewStore.subscribe((next,prior)=>{"
+      },
+      {
+        "file": "ui/sentence-module.js",
+        "line": 131,
+        "expression": "followFocus(viewStore.getState().focusTarget);"
+      },
+      {
+        "file": "ui/sentence-module.js",
+        "line": 150,
+        "expression": "setActive(next){active=Boolean(next);host.hidden=!active;if(active){refresh();followFocus(viewStore.getState().focusTarget);}emitCoverage();},"
+      },
+      {
+        "file": "ui/text-block-module.js",
+        "line": 290,
+        "expression": "const unsubscribe=viewStore.subscribe((next,previous)=>{"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 19,
+        "expression": "viewStore.setState(s => ({documentRevision:s.documentRevision + 1}));"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 23,
+        "expression": "if (viewStore.getState().sourceOffset !== offset)"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 24,
+        "expression": "viewStore.setState({sourceOffset:offset});"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 31,
+        "expression": "viewStore.setState(state => ({"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 40,
+        "expression": "viewStore.setState({scrollSyncEnabled:Boolean(enabled)});"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 47,
+        "expression": "viewStore.setState(state=>({"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 56,
+        "expression": "if(viewStore.getState().outlineCount!==count)viewStore.setState({outlineCount:count});"
+      },
+      {
+        "file": "ui/view-store.js",
+        "line": 60,
+        "expression": "if(viewStore.getState().activePanel!==panelId)viewStore.setState({activePanel:panelId});"
+      },
+      {
+        "file": "ui/wcp-ag-query.js",
+        "line": 129,
+        "expression": "unsubscribe=viewStore.subscribe((current,prior)=>{"
+      },
+      {
+        "file": "ui/wcp-source-file-navigation.js",
+        "line": 148,
+        "expression": "viewStore.subscribe((now,before)=>{"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 363,
+        "expression": "this.unsubscribe=viewStore.subscribe((next,prior)=>{"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 392,
+        "expression": "revision:viewStore.getState().documentRevision};"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 407,
+        "expression": "if(!saved || saved.revision!==viewStore.getState().documentRevision)return;"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 468,
+        "expression": "this.highlight(viewStore.getState().focusTarget);"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 494,
+        "expression": "this.highlight(viewStore.getState().focusTarget);"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 501,
+        "expression": "const focus=viewStore.getState().focusTarget;"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 549,
+        "expression": "this.highlight(viewStore.getState().focusTarget);"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 581,
+        "expression": "this.highlight(viewStore.getState().focusTarget);"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 598,
+        "expression": "focus.revision===viewStore.getState().documentRevision){"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 604,
+        "expression": "focus.revision===viewStore.getState().documentRevision){"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 804,
+        "expression": "if(module!=='illegal-break'&&viewStore.getState().focusTarget?.origin==='illegal-break'){"
+      },
+      {
+        "file": "ui/workspace.js",
+        "line": 807,
+        "expression": "currentPreview?.highlight(viewStore.getState().focusTarget);"
+      }
+    ],
+    "runtime_exhaustive_proof": false
+  },
+  "failures": [
+    "DIRTY_SOURCE_CHECKOUT",
+    "AUDIT_RUNNER_NONZERO",
+    "AM_RESULTS_INCOMPLETE"
+  ],
+  "manual_review_required": [
+    "Manually examine dynamic/DOM/shared-store callsites and trace caller -> registered API/message -> receiver; static ownership PASS alone does not prove all runtime boundaries."
+  ],
+  "git_remediation": "For a confirmed bypass: preserve evidence; git blame/log origin; git revert offending commit or reconstruct last compliant revision in separate worktree; rerun same audit. Do not whitelist bypasses.",
+  "auditor_signoff": {
+    "auditor": null,
+    "runtime_review": "PENDING",
+    "decision": "NOT_SIGNED"
+  }
+}

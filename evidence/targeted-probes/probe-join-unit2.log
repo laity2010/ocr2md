@@ -1,0 +1,37 @@
+TAP version 13
+# CMD_BLOCK_CHAINS_PASS {
+#   legacyAtoms: 224,
+#   legacyJoinChains: 223,
+#   explicitChains: 2,
+#   splitChains: 3
+# }
+# Subtest: tests/cmd-block-chains.test.mjs
+ok 1 - tests/cmd-block-chains.test.mjs
+  ---
+  duration_ms: 362.611626
+  type: 'test'
+  ...
+# CMD_BLOCK_JOIN_PASS {
+#   blocks: 224,
+#   logicalBlocks: 223,
+#   originalRestored: true,
+#   pageLocalLabels: true,
+#   crossPage: 'p8b8→p9b0',
+#   allTypes: true,
+#   crossColumn: 'p6b6→p6b7'
+# }
+# Subtest: tests/cmd-block-joins.test.mjs
+ok 2 - tests/cmd-block-joins.test.mjs
+  ---
+  duration_ms: 1512.787268
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1522.234662

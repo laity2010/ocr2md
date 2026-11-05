@@ -1,0 +1,148 @@
+TAP version 13
+# Subtest: only three public APIs, version
+ok 1 - only three public APIs, version
+  ---
+  duration_ms: 1.245216
+  type: 'test'
+  ...
+# Subtest: real Buffett Alpha fixture: no loss of even JSON whitespace
+ok 2 - real Buffett Alpha fixture: no loss of even JSON whitespace
+  ---
+  duration_ms: 157.781557
+  type: 'test'
+  ...
+# Subtest: CMD native child tags are serialized in numeric PBS order with their own content
+ok 3 - CMD native child tags are serialized in numeric PBS order with their own content
+  ---
+  duration_ms: 71.928629
+  type: 'test'
+  ...
+# Subtest: cross-page table HTML is split back into its real PDF pages, with sealed and legacy round trips
+ok 4 - cross-page table HTML is split back into its real PDF pages, with sealed and legacy round trips
+  ---
+  duration_ms: 235.604097
+  type: 'test'
+  ...
+# Subtest: CMD native subblocks are emitted in numeric OCR index order, not media category order
+ok 5 - CMD native subblocks are emitted in numeric OCR index order, not media category order
+  ---
+  duration_ms: 109.690599
+  type: 'test'
+  ...
+# Subtest: valid GFM / HTML comments / images / math code / tables
+ok 6 - valid GFM / HTML comments / images / math code / tables
+  ---
+  duration_ms: 130.469596
+  type: 'test'
+  ...
+# Subtest: original source metadata is preserved after a single-span heading edit
+ok 7 - original source metadata is preserved after a single-span heading edit
+  ---
+  duration_ms: 37.398942
+  type: 'test'
+  ...
+# Subtest: heading level edits restore original MinerU level field
+ok 8 - heading level edits restore original MinerU level field
+  ---
+  duration_ms: 35.553054
+  type: 'test'
+  ...
+# Subtest: multi-span paragraph edit inside one span preserves remaining OCR spans
+ok 9 - multi-span paragraph edit inside one span preserves remaining OCR spans
+  ---
+  duration_ms: 34.392221
+  type: 'test'
+  ...
+# Subtest: image URL edit changes its matching MinerU span
+ok 10 - image URL edit changes its matching MinerU span
+  ---
+  duration_ms: 35.208815
+  type: 'test'
+  ...
+# Subtest: HTML table edit changes only its HTML representation
+ok 11 - HTML table edit changes only its HTML representation
+  ---
+  duration_ms: 39.004937
+  type: 'test'
+  ...
+# Subtest: math code edit updates the original equation span
+ok 12 - math code edit updates the original equation span
+  ---
+  duration_ms: 34.00516
+  type: 'test'
+  ...
+# Subtest: missing anchors, metadata corruption and added free text are rejected
+ok 13 - missing anchors, metadata corruption and added free text are rejected
+  ---
+  duration_ms: 56.78198
+  type: 'test'
+  ...
+# Subtest: audited comments remain part of valid Markdown and are tamper-evident
+ok 14 - audited comments remain part of valid Markdown and are tamper-evident
+  ---
+  duration_ms: 191.270573
+  type: 'test'
+  ...
+# Subtest: audited conversion preserves editable OCR spans without touching discarded metadata
+ok 15 - audited conversion preserves editable OCR spans without touching discarded metadata
+  ---
+  duration_ms: 71.081595
+  type: 'test'
+  ...
+# Subtest: source strings that look like HTML cannot break an evidence comment
+ok 16 - source strings that look like HTML cannot break an evidence comment
+  ---
+  duration_ms: 45.852393
+  type: 'test'
+  ...
+# Subtest: unknown/unrepresentable blocks are commented instead of fabricated markdown
+ok 17 - unknown/unrepresentable blocks are commented instead of fabricated markdown
+  ---
+  duration_ms: 1.169641
+  type: 'test'
+  ...
+# Subtest: input can also be parsed JSON object; corrupted JSON rejected
+ok 18 - input can also be parsed JSON object; corrupted JSON rejected
+  ---
+  duration_ms: 0.623971
+  type: 'test'
+  ...
+# Subtest: page evidence and start-only boundaries reject injected or changed records
+ok 19 - page evidence and start-only boundaries reject injected or changed records
+  ---
+  duration_ms: 193.938
+  type: 'test'
+  ...
+# Subtest: zero-block pages and chapter annotations preserve strict source data
+ok 20 - zero-block pages and chapter annotations preserve strict source data
+  ---
+  duration_ms: 137.617711
+  type: 'test'
+  ...
+# Subtest: quoted MinerU anchors and their contents still reverse to the same original JSON
+ok 21 - quoted MinerU anchors and their contents still reverse to the same original JSON
+  ---
+  duration_ms: 82.711884
+  type: 'test'
+  ...
+# Subtest: new canonical PBS parent/child paths remain distinct, tamper-evident and reversible
+ok 22 - new canonical PBS parent/child paths remain distinct, tamper-evident and reversible
+  ---
+  duration_ms: 191.816727
+  type: 'test'
+  ...
+# Subtest: new BC metadata is reversible, unique, dense and tamper-evident
+ok 23 - new BC metadata is reversible, unique, dense and tamper-evident
+  ---
+  duration_ms: 228.815813
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2554.432141

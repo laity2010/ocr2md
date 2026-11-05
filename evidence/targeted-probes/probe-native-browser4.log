@@ -1,0 +1,19 @@
+NATIVE_PDF_CHILD_BADGE_ALIGNED Chrome page 1 block p0b5s0
+NATIVE_PDF_CHILD_BADGE_ALIGNED Chrome page 4 block p3b1s0
+NATIVE_PDF_CHILD_BADGE_ALIGNED Chrome page 5 block p4b0s1
+NATIVE_SUBBLOCK_BROWSER_PASS Chrome image s0 & both HTML table halves, PDF chip content, AG live, source immutable
+AUDIT_LINUX_WAIT_DIAG {"suite":"native-subblock-alignment.browser.test.mjs","state":{"documentState":"complete","title":"OCR2MD V6 · 章节定界","pdfLoading":false,"canvasWidth":532,"status":"🔒 保存需授权 · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 原始 224 块 / 22 页 · PBS 267（子块 44） · BC 267 链 · 源码已匹配 224 · 缺失 0 · 重复 0 · PDF bbox 224 · 无效 0 · 可见正文 215 · 空块/仅元数据 9 · 已接续 0 · 逻辑块 223 · 当前 MD 定位 195/215 · AG 第 1 页 23 块 · 未知锚点 0 · 3,203行 / 308,947字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · document.md","selectedModule":"text-block","latexRows":11,"latexGridPresent":true,"unlockOpen":false,"unlockError":"","url":"http://127.0.0.1:42605/"},"errors":[]}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 95000ms exceeded.
+    at page.waitForFunction (/workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated/.v6/audit-reports/audit-linux-diagnostics.mjs:76:32)
+    at choose (/workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated/tests/navigation-ui.test-helper.mjs:15:14)
+    at async selectPreview (/workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated/tests/navigation-ui.test-helper.mjs:45:3)
+    at async file:///workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated/tests/native-subblock-alignment.browser.test.mjs:54:7 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.4

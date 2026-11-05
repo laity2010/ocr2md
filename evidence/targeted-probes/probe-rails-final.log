@@ -1,0 +1,9 @@
+PDF_EDGE_RAILS_NO_OVERLAP_PASS [
+  { id: 'p16b8', left: 5, top: 591, scale: 1 },
+  { id: 'p16b11', left: 5, top: 711, scale: 1 },
+  { id: 'p16b9', left: 935, top: 541, scale: 1 },
+  { id: 'p16b10', left: 925, top: 649, scale: 1 },
+  { id: 'p16b10s0', left: 910, top: 671, scale: 1 },
+  { id: 'p16b10s1', left: 910, top: 703, scale: 1 }
+]
+PDF_22_PAGE_GLOBAL_RAILS_NO_COLLISION_PASS { pages: 22, labels: 266 }

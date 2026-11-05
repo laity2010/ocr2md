@@ -1,0 +1,51 @@
+===tests/cmd-pbs-parent-group-order.test.mjs
+CMD_PDF_PARENT_GROUP_SORT_PASS native parent after p1b5 1
+CMD_PDF_PARENT_GROUP_SORT_PASS native parent before p1b4 1
+CMD_PDF_PARENT_GROUP_SORT_PASS absorbed group after p1b6 2
+CMD_PDF_PARENT_GROUP_SORT_PASS absorbed group before p1b5 2
+CMD_PDF_PARENT_GROUP_SORT_PASS promoted parent before p1b4 0
+CMD_PDF_PARENT_GROUP_SORT_PASS promoted parent after p1b5 0
+CMD_PDF_PARENT_GROUP_SORT_PASS nested group before p1b5 1
+CMD_PARENT_GROUP_SORT_ALL_PASS
+===tests/cmd-pbs-split-reattach-cycle.test.mjs
+CMD_PBS_SPLIT_REATTACH_CYCLE_PASS {
+  sequence: [
+    'p1b3->p1b5s1',
+    'p1b5s1->p1b14',
+    'p1b14->p1b5s1',
+    'p1b5s1->p1b14',
+    'p1b14->p1b7s1'
+  ],
+  originalJSONByteExact: true,
+  originalBBox: true,
+  origin: 'p1b3s0',
+  steps: 5
+}
+===tests/cmd-pbs-promote-child.test.mjs
+PBS_CHILD_PROMOTION_PASS {
+  source: 'p1b3s0',
+  newId: 'p1b14',
+  atomCount: 267,
+  originalJsonExact: true,
+  sourceMoved: true
+}
+===tests/cmd-pbs-promote-reviewed-child.test.mjs
+REVIEWED_PBS_CHILD_PROMOTION_PASS {
+  from: 'p1b3s1',
+  to: 'p1b14',
+  origin: 'p1b5',
+  parents: 225,
+  children: 42,
+  originalJSONByteExact: true
+}
+===tests/cmd-pbs-reparent-repeat.test.mjs
+PBS_REPEATABLE_REPARENT_PASS {
+  steps: 3,
+  origin: 'p1b5',
+  finalId: 'p1b3s1',
+  atoms: 267,
+  sourceJSONByteExact: true
+}
+===tests/cmd-pbs-child-reorder.test.mjs
+CMD_SAME_PARENT_CHILD_INSERT_BEFORE_AFTER_PASS
+CMD_ABSORBED_PARENT_CHILD_INSERT_PASS

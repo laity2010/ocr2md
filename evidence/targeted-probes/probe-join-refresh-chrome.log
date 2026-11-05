@@ -1,0 +1,149 @@
+PDF_INLINE_LABEL_GEOMETRY Chrome {
+  sameRow: 224,
+  minHeight: 17,
+  maxHeight: 18,
+  colliding: [],
+  collisionCount: 0
+}
+PDF_GUTTER_GEOMETRY Chrome {
+  total: 224,
+  left: 134,
+  right: 90,
+  overlap: 0,
+  offPage: [],
+  page7: [
+    {
+      id: 'p6b6',
+      side: 'left',
+      region: [Object],
+      chip: [Object],
+      page: [Object],
+      gap: 5,
+      inside: true
+    },
+    {
+      id: 'p6b7',
+      side: 'right',
+      region: [Object],
+      chip: [Object],
+      page: [Object],
+      gap: 16.484375,
+      inside: true
+    }
+  ]
+}
+PROBE_BEFORE_CLICK Chrome { connected: 212, preClickMutations: 0, pageNodes: 224 }
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":922,"sourceEnd":923,"origin":"pdf","elementId":"p6b7","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":1,"sequence":3}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":922,"sourceEnd":923,"origin":"pdf","elementId":"p6b7","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":1,"sequence":4}
+GROK_JOIN_CLICKS [
+  {
+    type: 'pointerdown',
+    id: 'p6b7',
+    at: 7318,
+    detail: 0,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'pointerup',
+    id: 'p6b7',
+    at: 7380,
+    detail: 0,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'click',
+    id: 'p6b7',
+    at: 7384,
+    detail: 1,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'pointerdown',
+    id: 'p6b7',
+    at: 7473,
+    detail: 0,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'pointerup',
+    id: 'p6b7',
+    at: 7535,
+    detail: 0,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'click',
+    id: 'p6b7',
+    at: 7539,
+    detail: 2,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'pointerdown',
+    id: 'p6b7',
+    at: 7615,
+    detail: 0,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'pointerup',
+    id: 'p6b7',
+    at: 7724,
+    detail: 0,
+    checked: true,
+    connected: true
+  },
+  {
+    type: 'click',
+    id: 'p6b7',
+    at: 7730,
+    detail: 3,
+    checked: true,
+    connected: true
+  }
+]
+BLOCK_JOIN_REFRESH_PROBE Chrome {
+  count: 0,
+  survivors: 212,
+  total: 212,
+  disconnected: 0,
+  changedLabels: 0,
+  changedChecked: 0,
+  mutations: []
+}
+BLOCK_JOIN_LOCAL_REFRESH_PASS Chrome {
+  count: 0,
+  survivors: 212,
+  total: 212,
+  disconnected: 0,
+  changedLabels: 0,
+  changedChecked: 0,
+  mutations: []
+}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":922,"sourceEnd":923,"origin":"pdf","elementId":"p6b7","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":1,"sequence":5}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":922,"sourceEnd":923,"origin":"pdf","elementId":"p6b7","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":1,"sequence":6}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":444,"sourceEnd":445,"origin":"pdf","elementId":"p2b8","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":2,"sequence":7}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":444,"sourceEnd":445,"origin":"pdf","elementId":"p2b8","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":2,"sequence":8}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":444,"sourceEnd":445,"origin":"pdf","elementId":"p2b8","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":3,"sequence":9}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":444,"sourceEnd":445,"origin":"pdf","elementId":"p2b8","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":3,"sequence":10}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":1198,"sourceEnd":1199,"origin":"pdf","elementId":"p9b0","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":4,"sequence":11}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":1198,"sourceEnd":1199,"origin":"pdf","elementId":"p9b0","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":4,"sequence":12}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":1198,"sourceEnd":1199,"origin":"pdf","elementId":"p9b0","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":5,"sequence":13}
+BROWSER_CONSOLE JOIN_FOCUS {"sourceLine":1198,"sourceEnd":1199,"origin":"pdf","elementId":"p9b0","intent":null,"sourceOffset":null,"beforeBlockId":null,"afterBlockId":null,"revision":5,"sequence":14}
+PDF_BLOCK_JOIN_TOGGLE_PASS Chrome {
+  originalBlocks: 224,
+  joinedLogicalBlocks: 223,
+  restoredBlocks: 224,
+  emptySelectable: true,
+  crossPage: 'p8b8→p9b0',
+  enabled: 223,
+  requests: 0,
+  errors: 0
+}

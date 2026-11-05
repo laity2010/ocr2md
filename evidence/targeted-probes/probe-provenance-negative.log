@@ -1,0 +1,4 @@
+NEGATIVE_REJECT missing-child MINERUJSON_MD_INVALID: absorbed parent lost one or more original OCR children
+NEGATIVE_REJECT wrong-origin MINERUJSON_MD_INVALID: promoted child has invalid absorbed original OCR identity
+NEGATIVE_REJECT duplicate-origin MINERUJSON_MD_INVALID: promoted child has invalid absorbed original OCR identity
+PBS_PROVENANCE_NEGATIVE_PASS

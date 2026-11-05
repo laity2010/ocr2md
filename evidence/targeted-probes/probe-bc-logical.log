@@ -1,0 +1,8 @@
+CMD_BLOCK_CHAINS_WP2_PASS {
+  newAtoms: 267,
+  legacyAtoms: 224,
+  migrated: 224,
+  legacyJoins: 2,
+  crossPage: 'p4b0s0→p6b7'
+}
+CMD_BC_LOGICAL_PROJECTION_PASS { joined: 223, restored: 224 }

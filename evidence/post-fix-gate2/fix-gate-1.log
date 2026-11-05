@@ -1,0 +1,30 @@
+AM_STANDARD_START sha=2ee865729b716e613a64f104a702c778ca3889b1 report=/workspace/ocr2md-audit/fix-9c47e44/.v6/audit-reports/standard-2ee86572-20261105T170313Z
+Preparing worktree (detached HEAD 2ee8657)
+HEAD is now at 2ee8657 fix(am): restore registry integrity and module boundaries
+AM_AUDIT_SOURCE=2ee865729b716e613a64f104a702c778ca3889b1
+AM_AUDIT_TARGET=/workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated
+AM_AUDIT_OS=Linux
+AUDIT_PORT_PREFLIGHT_SELFTEST_PASS live_listener=blocked closed_server=reusable
+AUDIT_TEST_PORT_PREFLIGHT_PASS ports=80
+
+added 79 packages in 2s
+npm warn install-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn install-scripts   esbuild@0.28.2 (postinstall: node install.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+npm notice
+npm notice New major version of npm available! 11.21.1 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+added 72 packages in 759ms
+
+> @ocr2md/minerujson-md@0.1.0 build
+> tsc -p tsconfig.json
+
+AM_AUDIT_BLOCKED: browser executable missing: /home/box/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome
+AM_STANDARD_REPORT_SOURCE=/workspace/ocr2md-audit/ocr2md-am-2ee86572-isolated
+AM_STANDARD_REPORT status=BLOCKED sha=2ee865729b716e613a64f104a702c778ca3889b1 output=/workspace/ocr2md-audit/fix-9c47e44/.v6/audit-reports/standard-2ee86572-20261105T170313Z
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=66
+AM_STANDARD_EXIT runner=2 report=2 report_dir=/workspace/ocr2md-audit/fix-9c47e44/.v6/audit-reports/standard-2ee86572-20261105T170313Z
