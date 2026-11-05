@@ -628,13 +628,12 @@ export function planCMDReparentPBS(source,sourceId,targetId){
     return {...planCMDAbsorbPBSParent(source,model,sourceId,destination),
       pointedId:targetId};
   }
-  // A reviewed leaf may be made independent, then reparented again.
-  // This is only legal when its immutable provenance is an original OCR
-  // *parent* on the same page. A promoted native child (origin=...sN) is
-  // not silently converted into a foreign child path.
+  // A reviewed leaf may be made independent, then reparented again. Original
+  // native children retain their exact physical path; they are not converted
+  // into a foreign OCR parent or assigned a different native child index.
   const origin=parseCMDPBSId(atom.origin);
-  if(!origin||origin.p!==from.p||origin.s.length)
-    throw Error('Source must be a leaf with original parent OCR provenance');
+  if(!origin||origin.p!==from.p)
+    throw Error('Source must be a leaf with original OCR provenance');
   const ownChain=model.chains.find(c=>c.members.includes(sourceId));
   if(ownChain?.size!==1||ownChain.explicit)
     throw Error('Extract source to a singleton BC before reparenting');

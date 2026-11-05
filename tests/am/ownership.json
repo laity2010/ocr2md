@@ -105,7 +105,8 @@
     "pdf-pbs-fragment-id.js": "P",
     "pdf-pbs-group-highlight.js": "P",
     "text-block-page-scope.js": "G",
-    "text-block-readonly.js": "shared"
+    "text-block-readonly.js": "shared",
+    "cmd-sealed-json.js": "shared"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -182,6 +183,10 @@
       "G"
     ],
     "illegal-break-md-pair.js": [
+      "L"
+    ],
+    "cmd-sealed-json.js": [
+      "C",
       "L"
     ]
   },

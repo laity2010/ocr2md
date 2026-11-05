@@ -556,20 +556,42 @@ export function toMineruJSON(markdown: string): string {
     assert(physical[1]===match[1]&&physicalBlock,'invalid renumbered PBS provenance');
     const logicalRoot=`p${page}b${logicalB}`;
     const parentPhysical=logicalParent.get(logicalRoot)||logicalRoot;
-    const nativeChild=match[3]!==undefined&&physical[3]!==undefined;
+    const nativeChild=physical[3]!==undefined;
     if(nativeChild){
       const originalRoot=`p${physical[1]}b${physical[2]}`;
       const absorbedTarget=absorbedParents.get(originalRoot);
+      // A child promoted before its original parent was absorbed is still
+      // the same immutable OCR child. Its independent root may no longer be
+      // a direct child of the absorption destination, but the absorbed audit
+      // marker reconstructs the original parent for this one provenance slot.
+      // Never count a second copy of it or accept a forged child index.
+      if(absorbedTarget&&match[3]===undefined){
+        const index=Number(physical[3]),seen=absorbedChildren.get(originalRoot)!;
+        assert(!physical[3].includes('.')&&!seen.has(index)&&
+          data.pdf_info[page].para_blocks[physicalB].blocks?.[index],
+          'promoted child has invalid absorbed original OCR identity');
+        seen.add(index);
+        // Keep this one origin for the following promotion collector. The
+        // original native path is already validated and counted exactly once.
+        return `${prefix}id="${id}"${rest}`;
+      }
       if(absorbedTarget){
         const index=Number(physical[3]);
         const original=data.pdf_info[page].para_blocks[physicalB];
         const seen=absorbedChildren.get(originalRoot)!;
-        assert(parentPhysical===absorbedTarget&&physical[3]&&!physical[3].includes('.')&&
+        // Reattachment may choose a different logical parent. The immutable
+        // original parent/path, a real OCR child and global uniqueness are
+        // the identity contract; the first absorption target is not.
+        assert(parentPhysical&&physical[3]&&!physical[3].includes('.')&&
           original.blocks?.[index]&&!seen.has(index),
           'absorbed child has invalid original OCR identity or target');
         seen.add(index);
-      }else assert(origin[1].startsWith(parentPhysical+'s')&&
-        physical[3]===match[3], 'renumbered native child changed physical lineage');
+      }else{
+        assert((match[3]===undefined?parentPhysical===logicalRoot:
+          origin[1].startsWith(parentPhysical+'s')&&physical[3]===match[3]),
+          'renumbered native child changed physical lineage');
+        if(match[3]===undefined)return `${prefix}id="${id}"${rest}`;
+      }
       return `${prefix}id="${origin[1]}"${rest.replace(origin[0],'')}`;
     }
     if(match[3]!==undefined&&physical[3]===undefined&&parentPhysical!==logicalRoot)
@@ -679,12 +701,18 @@ export function toMineruJSON(markdown: string): string {
     const page=data.pdf_info[promoted.page];
     const block=page?.para_blocks[promoted.parent];
     assert(block?.blocks?.[promoted.child]&&
-      promoted.newParent>=page.para_blocks.length&&
       !promotions.some(other=>other!==promoted&&other.origin===promoted.origin),
       'promoted child has invalid original OCR source or new page index');
-    const expected=page.para_blocks.length+[...promotions,...restoredRoots].filter(other=>
-      other.page===promoted.page&&other.newParent<promoted.newParent).length;
-    assert(promoted.newParent===expected,'promoted parents must use consecutive page-end PBS IDs');
+    // A parent-group reorder can move an already promoted child inside the
+    // original page numbering. The explicit native origin and the complete
+    // inverse audit below prove its identity; only page-end allocations need
+    // consecutive numbering.
+    if(promoted.newParent>=page.para_blocks.length){
+      const expected=page.para_blocks.length+[...promotions,...restoredRoots].filter(other=>
+        other.page===promoted.page&&other.newParent>=page.para_blocks.length&&
+        other.newParent<promoted.newParent).length;
+      assert(promoted.newParent===expected,'promoted parents must use consecutive page-end PBS IDs');
+    }
   }
   // Reviewed child sourced from a whole original OCR parent can be
   // independently restored as a page-end logical parent. Its immutable root
@@ -695,9 +723,11 @@ export function toMineruJSON(markdown: string): string {
       root.newParent>=blocks.length&&
       !restoredRoots.some(other=>other!==root&&other.origin===root.origin),
       'restored root must refer to one original leaf OCR parent');
-    const expected=blocks.length+[...promotions,...restoredRoots].filter(other=>
-      other.page===root.page&&other.newParent<root.newParent).length;
-    assert(root.newParent===expected,'restored page-end parent identity must be consecutive');
+    if(root.newParent>=blocks.length){
+      const expected=blocks.length+[...promotions,...restoredRoots].filter(other=>
+        other.page===root.page&&other.newParent>=blocks.length&&other.newParent<root.newParent).length;
+      assert(root.newParent===expected,'restored page-end parent identity must be consecutive');
+    }
   }
   for(const alias of origins){
     const blocks=data.pdf_info[alias.page]?.para_blocks||[];
@@ -771,6 +801,36 @@ export function toMineruJSON(markdown: string): string {
         Number(m[2]??m[4])===promoted.page&&Number(m[3]??m[5])>promoted.parent)));
     assert(succeeding,'promoted original source successor missing');
     visible=remaining.slice(0,succeeding.index!)+segment+remaining.slice(succeeding.index!);
+  }
+  // Restore each dissolved parent's original native-child scopes before the
+  // strict OCR projection. The marker has already proven every native path
+  // exactly once; this moves ONLY the temporary audit copy and cannot edit
+  // CMD text or the sealed archive. Reverse insertion preserves child order.
+  for(const [originalRoot] of absorbedParents){
+    const original=/^p(\d+)b(\d+)$/.exec(originalRoot)!;
+    const nativeCount=data.pdf_info[Number(original[1])].para_blocks[Number(original[2])].blocks?.length||0;
+    for(let childNo=nativeCount-1;childNo>=0;childNo--){
+      const anchorName=`p="${original[1]}" b="${original[2]}" s="${childNo}"`;
+      const markers=()=>[...visible.matchAll(blockStart),...visible.matchAll(cmdChildAudit)]
+        .sort((a,b)=>a.index!-b.index!);
+      const originalChild=markers().filter(m=>m[0].includes(anchorName));
+      assert(originalChild.length===1,'absorbed original child scope is not unique');
+      const from=originalChild[0].index!;
+      const next=markers().find(m=>m.index!>from);
+      let to=next?.index??visible.length;
+      const evidence=visible.slice(from,to).search(/<!-- minerujson:(?:page|source):v1:/);
+      if(evidence>=0)to=from+evidence;
+      assert(to>from,'absorbed native child has empty scope');
+      const segment=visible.slice(from,to),remaining=visible.slice(0,from)+visible.slice(to);
+      const root=[...remaining.matchAll(blockStart)].filter(m=>
+        Number(m[2]??m[4])===Number(original[1])&&
+        Number(m[3]??m[5])===Number(original[2]));
+      assert(root.length===1,'absorbed original root must be unique');
+      const following=[...remaining.matchAll(blockStart),...remaining.matchAll(cmdChildAudit)]
+        .sort((a,b)=>a.index!-b.index!).find(m=>m.index!>root[0].index!);
+      assert(following,'absorbed original child has no following audit anchor');
+      visible=remaining.slice(0,following.index!)+segment+remaining.slice(following.index!);
+    }
   }
   // WCP PDF label sorting moves COMPLETE parent scopes in the editable CMD
   // source, not their immutable OCR identities. Before validating against the

@@ -20,7 +20,7 @@ const first=planCMDMigrateLegacyBlockChains(legacy);
 const migrated=[...first.edits].sort((a,b)=>b.from-a.from).reduce((s,e)=>s.slice(0,e.from)+e.insert+s.slice(e.to),legacy);
 const absorbed=planCMDAbsorbReviewedParent(migrated,'p1b3','p1b5');
 const edited=[...absorbed.edits].sort((a,b)=>b.from-a.from).reduce((s,e)=>s.slice(0,e.from)+e.insert+s.slice(e.to),migrated);
-const recovered=planCMDRecoverNativeSubblocks(edited,legacy,native).result;
+const recovered=(await planCMDRecoverNativeSubblocks(edited,legacy,native)).result;
 const dir=mkdtempSync(join(tmpdir(),'ocr2md-subblock-alignment-'));
 const doc=join(dir,'document.md');writeFileSync(doc,recovered);
 const port=await new Promise((resolve,reject)=>{const s=createServer();s.once('error',reject);

@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync}from'node:fs';
 import{createHash}from'node:crypto';
+import{gzipSync}from'node:zlib';
 import{toMarkdown,toMineruJSON}from'../packages/minerujson-md/dist/index.js';
 import{readCMDBlockChains,planCMDMigrateLegacyBlockChains,
   planCMDAbsorbReviewedParent}from'../ui/cmd-block-chains.js';
@@ -13,7 +14,7 @@ const native=toMarkdown(original);
 const migration=planCMDMigrateLegacyBlockChains(old);
 const initial=[...migration.edits].sort((a,b)=>b.from-a.from).reduce((src,e)=>
   src.slice(0,e.from)+e.insert+src.slice(e.to),old);
-const baseline=planCMDRecoverNativeSubblocks(initial,old,native);
+const baseline=await planCMDRecoverNativeSubblocks(initial,old,native);
 assert.equal(baseline.edits.length,20);
 assert.equal(baseline.addedChildren,43);
 assert.equal(baseline.finalAtoms,267);
@@ -30,7 +31,7 @@ const edited=[...absorb.edits].sort((a,b)=>b.from-a.from).reduce((src,e)=>{
 },initial);
 const model=readCMDBlockChains(edited);
 assert(!model.invalid.length);
-const repair=planCMDRecoverNativeSubblocks(edited,old,native);
+const repair=await planCMDRecoverNativeSubblocks(edited,old,native);
 assert.equal(repair.edits.length,19);
 assert.equal(repair.addedChildren,42);
 assert.deepEqual(repair.skipped,[{parent:'p1b3',reason:'parent-removed'}]);
@@ -50,7 +51,7 @@ const sha=src=>createHash('sha256').update(src).digest('hex');
 assert.equal(sha(repair.result.slice(repair.result.indexOf('<!-- minerujson:source:v1:'))),
   sha(edited.slice(edited.indexOf('<!-- minerujson:source:v1:'))));
 assert.equal(repair.edits.length,19);
-assert.equal(planCMDRecoverNativeSubblocks(repair.result,old,native).edits.length,0,
+assert.equal((await planCMDRecoverNativeSubblocks(repair.result,old,native)).edits.length,0,
   'One-time patch must be idempotent');
 // The cross-page HTML table is a PAIR: if either side's source is edited,
 // the whole repair must refuse rather than silently duplicate/erase rows.
@@ -59,6 +60,11 @@ assert(t>0);
 const word=edited.indexOf('Stock/Fund Measure',t);
 assert(word>t);
 const tampered=edited.slice(0,word)+edited.slice(word).replace('Stock/Fund Measure','Stock/Fund MeasurE');
-assert.throws(()=>planCMDRecoverNativeSubblocks(tampered,old,native),
+await assert.rejects(planCMDRecoverNativeSubblocks(tampered,old,native),
   /Cannot restore a split HTML table/);
+const differentArchive=JSON.stringify({...JSON.parse(original),_cmd_test:'different sealed archive'});
+const differentFooter='<!-- minerujson:source:v1:'+createHash('sha256').update(differentArchive).digest('hex')+'\n'+gzipSync(differentArchive).toString('base64url')+'\n-->';
+const differentNative=native.replace(/<!-- minerujson:source:v1:[\s\S]*$/,differentFooter);
+await assert.rejects(planCMDRecoverNativeSubblocks(edited,old,differentNative),
+  /identical original MinerU JSON/,'different decoded archives cannot be used as repair witnesses');
 console.log('NATIVE_CHILD_REPAIR_PASS pure idempotent, 19 preserved parent scopes / 42 restored native subblocks, split HTML table pair guarded, image/table PDF badges matched, user absorption preserved, sealed JSON unchanged');

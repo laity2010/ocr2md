@@ -1,42 +1,14 @@
+import {CMD_SEALED_SOURCE,readCMDSealedJSON} from './cmd-sealed-json.js';
 /** CMD read-only MinerU block inventory. The sealed JSON inside THIS CMD
  * document is authoritative; never fetch a second, drifting original JSON.
  * This owner returns detached values and never mutates CM6 source. */
 import {blockAnchor,subblockAnchor,subblockTag,quotePrefix} from './mineru-anchors.js';
-const sealed=/<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\n]+)\n-->\s*$/;
-const decode=encoded=>{
-  const base64=encoded.replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/');
-  const binary=atob(base64);const bytes=new Uint8Array(binary.length);
-  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-  return bytes;
-};
-const hex=bytes=>Array.from(bytes,x=>x.toString(16).padStart(2,'0')).join('');
-async function inflate(bytes){
-  if(typeof DecompressionStream!=='function')throw Error('浏览器不支持解压 CMD 内嵌 JSON');
-  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-// Cache only the small geometry projection. The full decompressed OCR tree
-// is deliberately short-lived: WebKit PDF.js needs its memory for page
-// canvases and can crash on zoom if we retain every OCR span in parallel.
-let cached=null;
-async function sealedJSON(source){
-  if(typeof source!=='string')throw Error('CMD 源码无效');
-  const match=sealed.exec(source);
-  if(!match)throw Error('CMD 缺少无损 MinerU JSON 封存区');
-  const key=match[0];
-  const bytes=await inflate(decode(match[2]));
-  const sha=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
-  if(sha!==match[1])throw Error('CMD 封存 JSON SHA-256 校验失败');
-  const data=JSON.parse(new TextDecoder().decode(bytes));
-  if(!Array.isArray(data.pdf_info))throw Error('CMD 封存 JSON 无 PDF 页面');
-  return {data,end:match.index,key};
-}
 /** Annotate native `blocks[]` paths inside existing edited CMD without
  * regenerating any text. One optimistic CM6 transaction and one Undo.
  * This is an explicit operation: opening an old document never auto-edits.
  */
 export async function planCMDSubblockAnnotations(source){
-  const {data}=await sealedJSON(source);
+  const {data}=await readCMDSealedJSON(source);
   const lines=source.split('\n');
   const rootAnchors=[];
   for(let i=0;i<lines.length;i++){
@@ -137,12 +109,14 @@ export function enclosingChildBBox(children,original){
  * coordinates are provided on demand by queryCMDBlockGeometry().
  * PDF widgets must not independently fetch the workspace OCR JSON.
  */
+// Cache only the small geometry projection, not the full decompressed OCR tree.
+let cached=null;
 export async function queryCMDLayout(source){
   if(typeof source!=='string')throw Error('CMD 源码无效');
-  const sourceMatch=sealed.exec(source);
+  const sourceMatch=CMD_SEALED_SOURCE.exec(source);
   if(!sourceMatch)throw Error('CMD 缺少无损 MinerU JSON 封存区');
   if(cached?.key===sourceMatch[0])return cached.layout;
-  const {data,key}=await sealedJSON(source);
+  const {data,key}=await readCMDSealedJSON(source);
   const pages=data.pdf_info.map((page,pageIndex)=>{
     if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
     const pageSize=page.page_size;
@@ -214,7 +188,7 @@ export async function queryCMDBlockGeometry(source,pageIndex,blockIndex){
   const page=layout.pages[pageIndex];
   const block=page?.regions.find(r=>r.blockIndex===blockIndex);
   if(!block)return null;
-  const {data}=await sealedJSON(source);
+  const {data}=await readCMDSealedJSON(source);
   const original=data.pdf_info[pageIndex].para_blocks[blockIndex];
   const lines=(original.lines||[]).map(line=>({
     bbox:Array.isArray(line.bbox)?[...line.bbox]:null,
@@ -248,7 +222,7 @@ const summary=block=>{
   return block.type==='image'?'[图片]':block.type==='table'?'[表格]':block.type==='chart'?'[图表]':'';
 };
 export async function inspectCMDTextBlocks(source){
-  const {data,end}=await sealedJSON(source);
+  const {data,end}=await readCMDSealedJSON(source);
   const anchors=anchorLines(source),expected=new Set(),rows=[],children=[];
   for(const [pageIndex,page] of data.pdf_info.entries()){
     if(!Array.isArray(page.para_blocks))throw Error('CMD 原始页面缺少 para_blocks');
@@ -294,7 +268,7 @@ export async function inspectCMDTextBlocks(source){
   for(const row of rows)if(row.from===null)row.expectsPreview=false;
   const unknown=[...anchors].filter(([id])=>!expected.has(id)).map(([id,positions])=>({id,positions}));
   const duplicate=rows.filter(row=>row.anchorCount>1);
-  return {rows,children,summary:{sourceSha:sealed.exec(source)[1],pages:data.pdf_info.length,blocks:rows.length,
+  return {rows,children,summary:{sourceSha:CMD_SEALED_SOURCE.exec(source)[1],pages:data.pdf_info.length,blocks:rows.length,
     matched:rows.filter(row=>row.anchorCount===1).length,
     missing:rows.filter(row=>row.anchorCount===0).length,duplicates:duplicate.length,
     withGeometry:rows.filter(row=>row.geometry).length,
