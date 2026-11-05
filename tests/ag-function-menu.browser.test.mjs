@@ -100,8 +100,17 @@ try{
         null,{timeout:15000});
       assert.equal(await popup.isVisible(),false);
       await page.locator('input[aria-label="章节所有"]').check();
-      assert(await info.isVisible(),'scope status should appear in global status row');
-      assert.match(await info.textContent(),/CMD · 全部章节 · \d+ 项/);
+      // Global messages now have a SINGLE visible Shell status lane (#status).
+      // The legacy toolbar summary remains mounted as a read-only AG port,
+      // but CSS intentionally hides it so users do not see a duplicate line.
+      assert.equal(await info.isVisible(),false,
+        'legacy AG summary must not duplicate the Shell global status');
+      assert(await page.locator('#status').isVisible(),
+        'scope summary must be visible in the single Shell global status lane');
+      assert.match(await info.textContent(),/CMD · 全部章节 · \d+ 项/,
+        'AG query still publishes its own exact scope summary');
+      assert.match(await page.locator('#status').textContent(),/CMD · 全部章节 · \d+ 项/,
+        'Shell must display the actual query scope in the global status lane');
       assert(!await button.isEnabled(),'Title virtual chapter has no menu: dropdown must be disabled');
       await choose(page,'media');
       assert.equal(await button.isDisabled(),false,'Media functions re-enabled after virtual change');

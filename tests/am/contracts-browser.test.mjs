@@ -7,7 +7,9 @@ import {readFileSync,writeFileSync,unlinkSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {chromium,webkit,devices} from 'playwright';
+import {toMarkdown} from '../../packages/minerujson-md/dist/index.js';
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
+const convertedFixture=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
 mkdirSync('.v6/tests',{recursive:true});
 const path=resolve(`.v6/tests/am-contracts-${process.pid}.md`);
 writeFileSync(path,fixture);
@@ -29,7 +31,7 @@ try{
       await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
       await page.waitForFunction(()=>window.__v6cm6?.outline?.rows?.length===21&&window.__v6cm6?.pdf?.ready,
         null,{timeout:80000});
-      const result=await page.evaluate(async()=>{
+      const result=await page.evaluate(async convertedFixture=>{
         const {CMDocument}=await import('/cm-document.js');
         const {createOutlineGrid}=await import('/outline-grid.js');
         const {PdfPreview}=await import('/pdf-preview.js');
@@ -46,17 +48,25 @@ try{
           !primaryCM.matchesSnapshot(null);
         primaryCM.requestMeasure();
         const sourceStillIdentical=primaryCM.matchesSnapshot(snapshot);
-        const tiny='<!-- minerujson:block:v1:0:0 -->\n# Demo';
+        const invalid='<!-- minerujson:block:v1:0:0 -->\n# Demo';
         const host=document.createElement('div');host.style.width='500px';host.style.height='200px';
         document.body.append(host);
         const tmp=new CMDocument({parent:host,markdown:'before',convertMineruJson:async value=>
-          value==='bad'?Promise.reject(Error('converter failure')):tiny});
+          value==='bad'?Promise.reject(Error('converter failure')):
+          value==='invalid'?invalid:convertedFixture});
         const history=[];
         let failed=false;
         try{await tmp.loadMineruJson('bad')}catch(e){failed=e.message==='converter failure'}
         history.push({failed,unchanged:tmp.getMarkdown()==='before'});
+        let rejectedMalformed=false;
+        try{await tmp.loadMineruJson('invalid')}catch(e){
+          rejectedMalformed=e.message==='MinerU converter returned an invalid Markdown document';
+        }
+        history.push({rejectedMalformed,unchanged:tmp.getMarkdown()==='before'});
         await tmp.loadMineruJson('good');
-        history.push({converted:tmp.getMarkdown()===tiny,doc:tmp.doc.length===tiny.length});
+        history.push({converted:tmp.getMarkdown()===convertedFixture,
+          doc:tmp.doc.length===convertedFixture.length,
+          nativePBS:(tmp.getMarkdown().match(/<!-- cmd:block:v1 id=/g)||[]).length===267});
         const oldView=tmp.view;
         tmp.destroy();
         history.push({destroyed:Boolean(oldView.destroyed),hostEmpty:host.children.length===0});
@@ -120,10 +130,13 @@ try{
           secondaryDisposed,lineApiValid,sourceStillIdentical,stateBefore,activeAfter,activeSet:activeAfter==='outline',
           errorStatus:errorStatus.includes(errorMessage),realAgError,syncOff,syncOn,
           sourcePreserved:window.__v6cm6.cm.markdown===original,revisionStable};
-      });
+      },convertedFixture);
       assert(result.history[0].failed&&result.history[0].unchanged,`${name} invalid conversion modified source`);
-      assert(result.history[1].converted&&result.history[1].doc,`${name} conversion not committed`);
-      assert(result.history[2].destroyed,`${name} CMD did not mark view destroyed`);
+      assert(result.history[1].rejectedMalformed&&result.history[1].unchanged,
+        `${name} malformed or unsealed output must not replace live CMD`);
+      assert(result.history[2].converted&&result.history[2].doc&&result.history[2].nativePBS,
+        `${name} real 267-block CMD conversion not committed`);
+      assert(result.history[3].destroyed,`${name} CMD did not mark view destroyed`);
       assert(result.agMounted&&result.agRows===21&&result.agDestroyed,`${name} AG dispose failed`);
       assert(result.hadSelection&&result.cleared,`${name} PDF highlight clear failed`);
       assert(result.secondaryWasReady&&result.secondaryDisposed,`${name} PDF dispose failed`);
