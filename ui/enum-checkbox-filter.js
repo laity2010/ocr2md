@@ -64,6 +64,11 @@ export class EnumCheckboxFilter {
   normaliseSelection() {
     if(this.selected===null)return;
     const available=new Set(this.values);
+    // During a debounced CMD re-scan the AG Grid receives an interim empty
+    // rowData update. That is NOT a user request to clear the checkbox filter.
+    // Preserve selected values across the loading gap, then reconcile only
+    // after the replacement candidate rows have actually been populated.
+    if(!available.size)return;
     this.selected=new Set([...this.selected].filter(value=>available.has(value)));
     if(this.values.length && this.selected.size===this.values.length)this.selected=null;
   }

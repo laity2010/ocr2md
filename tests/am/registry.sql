@@ -1671,3 +1671,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- empty or strand an explicit source focus on a blank virtualized CM6 pane.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-EDIT-C42','C42','tests/illegal-break-source-edit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit typing in visible CM6 after AG focus automatically refreshes candidate AG rows, location paints actual target text after second click and original source file stays unchanged','integration');
+
+-- AG categorical filter must retain selected PBS ids while a live CMD scan
+-- temporarily supplies zero rowData before its new Worker result arrives.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-ENUM-EMPTY-G20','G20','tests/enum-checkbox-filter-transient-empty.test.mjs','ui/enum-checkbox-filter.js','Preserve selected text block IDs through a transient empty AG result and reconcile only against non-empty replacement rows','direct');
