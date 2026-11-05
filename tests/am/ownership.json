@@ -89,7 +89,23 @@
     "pdf-gutter-label-layout.js": "P",
     "pdf-source-locations.js": "P",
     "text-block-module.js": "G",
-    "text-block-preview-coverage.js": "L"
+    "text-block-preview-coverage.js": "L",
+    "ag-stable-select-renderer.js": "shared",
+    "cm6-source-visibility.js": "shell",
+    "cmd-illegal-break-review.js": "C",
+    "cmd-native-subblock-repair.js": "C",
+    "cmd-pbs-locations.js": "shared",
+    "cmd-pbs-row-order.js": "shared",
+    "illegal-break-md-pair.js": "shared",
+    "illegal-break-pair.js": "G",
+    "illegal-break-review-annotation-update.js": "C",
+    "pdf-block-gesture-preview.js": "P",
+    "pdf-block-label-setting.js": "shared",
+    "pdf-pbs-drop-hit.js": "P",
+    "pdf-pbs-fragment-id.js": "P",
+    "pdf-pbs-group-highlight.js": "P",
+    "text-block-page-scope.js": "G",
+    "text-block-readonly.js": "shared"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -113,14 +129,15 @@
     ],
     "view-store.js": [
       "A",
+      "C",
       "G",
-      "N",
+      "H",
       "L",
+      "N",
       "P",
       "S",
       "T",
-      "shell",
-      "H"
+      "shell"
     ],
     "pane-layout-ratios.js": [
       "L",
@@ -144,6 +161,28 @@
     "wcp-navigation-select.js": [
       "G",
       "S"
+    ],
+    "cmd-pbs-locations.js": [
+      "C",
+      "L"
+    ],
+    "ag-stable-select-renderer.js": [
+      "G",
+      "T"
+    ],
+    "pdf-block-label-setting.js": [
+      "shell"
+    ],
+    "text-block-readonly.js": [
+      "shell",
+      "P",
+      "G"
+    ],
+    "cmd-pbs-row-order.js": [
+      "G"
+    ],
+    "illegal-break-md-pair.js": [
+      "L"
     ]
   },
   "observedDirectStoreWrites": {},
@@ -302,7 +341,8 @@
       "queryCMDLayout"
     ],
     "pdf-source-locations.js->cmd-block-labels.js": [
-      "sourceBlockScopes"
+      "sourceBlockScopes",
+      "mapCMDVisibleLabelSources"
     ],
     "workspace.js->text-block-module.js": [
       "createTextBlockModule"
@@ -320,11 +360,52 @@
     "wcp-cmd-element-transactions.js->cmd-block-chains.js": [
       "planCMDBlockChainArrangement",
       "readCMDBlockChains",
-      "planCMDMigrateLegacyBlockChains",
+      "parseCMDPBSId",
+      "projectCMDAtomLocations",
+      "planCMDReparentPBS",
+      "planCMDJoinP1B3IntoP1B4",
+      "planCMDPromotePBSChild",
       "planCMDMergeBlockChains",
       "planCMDSplitBlockChain",
       "planCMDMoveBlockChainMember",
-      "planCMDExtractBlockChainMember"
+      "planCMDExtractBlockChainMember",
+      "planCMDReorderPBSParents",
+      "planCMDReorderPBSChildren",
+      "planCMDAbsorbReviewedParent",
+      "planCMDInsertPBSParentAt",
+      "planCMDMigrateLegacyBlockChains"
+    ],
+    "cmd-linebreak.js->cmd-block-chains.js": [
+      "readCMDBlockChains",
+      "parseCMDPBSId"
+    ],
+    "text-block-module.js->cmd-block-chains.js": [
+      "resolveCMDBlockFocusRow"
+    ],
+    "cmd-illegal-break-review.js->cmd-block-chains.js": [
+      "readCMDBlockChains",
+      "parseCMDBlockTag",
+      "serializeCMDBlockTag"
+    ],
+    "cmd-illegal-break-review.js->illegal-break-pair.js": [
+      "projectIllegalBreakPair"
+    ],
+    "illegal-break-review-annotation-update.js->cmd-block-chains.js": [
+      "parseCMDBlockTag"
+    ],
+    "illegal-break-module.js->cmd-illegal-break-review.js": [
+      "keyIllegalBreakReviewRows",
+      "REVIEW_DECISIONS"
+    ],
+    "cmd-native-subblock-repair.js->cmd-block-chains.js": [
+      "readCMDBlockChains",
+      "parseCMDPBSId"
+    ],
+    "illegal-break-module.js->illegal-break-review-annotation-update.js": [
+      "rebaseIllegalBreakRowsInPlace"
+    ],
+    "main.js->illegal-break-review-annotation-update.js": [
+      "isIllegalBreakReviewOnlyChange"
     ]
   }
 }
