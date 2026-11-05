@@ -61,7 +61,7 @@
   </dialog>
   <dialog id="initialize-dialog" aria-labelledby="initialize-heading">
     <h2 id="initialize-heading">初始化数据文档</h2>
-    <p>将当前 Markdown 母文档恢复到标准 MinerU 原文内容，同时将旧文本块标签转换为当前可编辑的 CMD PBS 标签。当前已保存文档会先备份；未保存的修改无法备份。此前导出的章节文件不会删除，但可能不再对应恢复后的正文。</p>
+    <p>根据当前书籍的原始 MinerU JSON 重新生成包含图片、表格和原生子块的完整 CMD PBS 母文档。当前已保存文档会先备份；未保存的修改无法备份。此前导出的章节文件不会删除，但可能不再对应恢复后的正文。</p>
     <p>初始化完成后重新加载编辑器，并重新开始撤销历史。请输入 <strong>初始化</strong> 以确认。</p>
     <form id="initialize-form" method="dialog">
       <label for="initialize-phrase">确认操作</label>

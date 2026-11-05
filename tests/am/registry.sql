@@ -1731,5 +1731,14 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Initializer must never reset working WCP to non-editable legacy MinerU b
 -- anchors. The raw fixture stays immutable; CMD JS owns migration grammar.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-INIT-CMD-C68','C68','tests/v6-initialize-cmd.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Pinned CMD-reset hash with 224 CMD PBS tags and no legacy/invalid records, PDF parent reparent planned, original OCR tail byte-identical, backed-up CAS idempotent','direct'),
- ('TC-INIT-CMD-BROWSER-C68','C68','tests/engineering-initialize-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit explicit initialize writes backed-up CMD-ready document with no legacy PBS tags, no original JSON mutation and no unauthorised writes','integration');
+ ('TC-INIT-CMD-C68','C68','tests/v6-initialize-cmd.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Pinned native JSON CMD-reset hash with 224 parents, 43 children, 9 HTML table parts, image child source scopes, original JSON reversible, backed-up CAS idempotent','direct'),
+ ('TC-INIT-CMD-BROWSER-C68','C68','tests/engineering-initialize-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit explicit initialize writes native JSON CMD 267-tag document incl 43 child image/table anchors, backup, no original JSON mutation or unauthorized writes','integration');
+
+-- Explicit recovery from the legacy parent-only engineering initializer:
+-- both the native source and the old source must share sealed original JSON;
+-- exact-scope witness guards user edits and cross-page table repair.
+INSERT INTO apis VALUES
+ ('C124','C','planCMDRecoverNativeSubblocks','ui/cmd-native-subblock-repair.js','export','live CMD source, unedited old MinerU fixture, native JSON conversion','validated non-overlapping source-range repair plan','only exact old untouched parent scopes; preserve new absorbed parents and all existing CMD members; split table sides atomic; OCR sealed tail immutable',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-NATIVE-RECOVERY-C124','C124','tests/cmd-native-subblock-repair.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','20 untouched native scopes, all 43 child anchors added on clean old CMD, 19 scopes/42 children when original p1b3 already absorbed, idempotent and cross-page table fail-closed; preserve original JSON','direct'),
+ ('TC-NATIVE-PDF-C124','C124','tests/native-subblock-alignment.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit PDF real image p0b5s0 and cross-page table p3b1s0/p4b0s1 chips have real source content, not dashed, with AG and CMD one source, no writes','integration');

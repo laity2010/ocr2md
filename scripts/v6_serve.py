@@ -504,7 +504,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.response(400, 'Initialization confirmation and source checksum required')
                 return
             with DOC_WRITE_LOCK:
-                result = initialize_document(active_doc(), FIXTURE, expected)
+                result = initialize_document(active_doc(), active_json(), expected,
+                    convert=WORKSPACE.convert)
         except (ValueError, AttributeError, TypeError, UnicodeDecodeError) as error:
             if 'Document changed' in str(error):
                 self.response(409, 'Document changed; reload before initialization')

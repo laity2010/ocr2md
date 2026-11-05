@@ -11,7 +11,7 @@ const root=process.cwd();
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
 // Frozen, independently reviewed canonical CMD baseline digest. This is NOT
 // calculated from the implementation under test at assertion time.
-const canonicalCMD_SHA='a0d93c2030c3a32f2287b4222c3940bb0ac84c61ff1b380cedaa37a9452da016';
+const canonicalCMD_SHA='c79c1004f346c194de22910108401a58265bfe5924c9553feea75c0e08863357';
 mkdirSync('.v6/evidence',{recursive:true});
 const protectedPaths=['packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   '.v6/workspace/buffetts-alpha.minerujson.md','.v6/release/index.html'];
@@ -107,8 +107,15 @@ for(const [i,[name,engine,options]] of engines.entries()){
     const initialized=readFileSync(doc);
     assert.equal(sha(initialized),canonicalCMD_SHA,
       'Reset must publish the pinned CMD-ready baseline, never raw legacy anchors');
+    assert.equal(initialized.toString('utf8').split('<!-- cmd:block:v1 ').length-1,267,
+      'The native JSON reset must generate 224 parents plus 43 PDF children');
     assert(!initialized.includes(Buffer.from('<!-- minerujson:block:v1:')),
       'Initialization must not leave unusable legacy PBS tags');
+    assert(initialized.includes(Buffer.from('<!-- cmd:block:v1 id="p0b5s0" -->')),
+      'Image child original OCR anchor must be retained');
+    assert(initialized.includes(Buffer.from('<!-- cmd:block:v1 id="p4b0s1" -->')),
+      'Continued HTML table must be split into two native CMD source scopes');
+    assert.equal(initialized.toString('utf8').split('<table>').length-1,9);
     assert(initialized.includes(Buffer.from('<!-- cmd:block:v1 id="p1b3" -->')),
       'CMD PBS p1b3 must be available for PDF parent reparent operation');
     assert.deepEqual(initialized.subarray(initialized.indexOf(Buffer.from('<!-- minerujson:source:v1:'))),
