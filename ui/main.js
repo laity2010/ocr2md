@@ -1150,8 +1150,8 @@ async function main() {
   const initialized=new URLSearchParams(location.search).get('initialized');
   if(initialized==='unchanged'||initialized==='restored'){
     status(initialized==='restored'
-      ?'✓ 数据文档已初始化 · 旧存盘文档已备份'
-      :'✓ 数据文档已是原始状态，无须更改');
+      ?'✓ 数据文档已初始化为 CMD PBS · 旧存盘文档已备份'
+      :'✓ 数据文档已是标准 CMD PBS 状态，无须更改');
     const cleanUrl=new URL(location.href);
     cleanUrl.searchParams.delete('initialized');
     window.history.replaceState(null,'',cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);

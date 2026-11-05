@@ -511,8 +511,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.response(400, 'Invalid initialization: '+str(error))
             return
-        except OSError:
-            self.response(500, 'Initialization failed; previous document retained')
+        except (OSError, RuntimeError):
+            self.response(500, 'CMD initialization failed; previous document retained')
             return
         self.response(200, json.dumps(result, ensure_ascii=False), 'application/json')
 

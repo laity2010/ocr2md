@@ -1727,3 +1727,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-AG-STABLE-SELECT-G35','G35','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit same native select and same AG row DOM after multiple decisions and undo/redo','integration'),
  ('TC-AG-STABLE-ROWS-G36','G36','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Review-only CMD edits do not replace rowData, change scroll or trigger dictionary Worker; review choices update in place','integration'),
  ('TC-AG-REVIEW-METADATA-L87','L87','tests/illegal-break-review-annotation-update.test.mjs','tests/illegal-break-review-annotation-update.test.mjs','Review comment insert/update/remove OR CMD block lb attribute edit/undo recognized; source offsets remapped in place, prose edits rejected','direct');
+
+-- Initializer must never reset working WCP to non-editable legacy MinerU b
+-- anchors. The raw fixture stays immutable; CMD JS owns migration grammar.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-INIT-CMD-C68','C68','tests/v6-initialize-cmd.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Pinned CMD-reset hash with 224 CMD PBS tags and no legacy/invalid records, PDF parent reparent planned, original OCR tail byte-identical, backed-up CAS idempotent','direct'),
+ ('TC-INIT-CMD-BROWSER-C68','C68','tests/engineering-initialize-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit explicit initialize writes backed-up CMD-ready document with no legacy PBS tags, no original JSON mutation and no unauthorised writes','integration');

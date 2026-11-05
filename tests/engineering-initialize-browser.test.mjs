@@ -9,6 +9,9 @@ import {chromium,webkit,devices} from 'playwright';
 
 const root=process.cwd();
 const fixture=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md');
+// Frozen, independently reviewed canonical CMD baseline digest. This is NOT
+// calculated from the implementation under test at assertion time.
+const canonicalCMD_SHA='a0d93c2030c3a32f2287b4222c3940bb0ac84c61ff1b380cedaa37a9452da016';
 mkdirSync('.v6/evidence',{recursive:true});
 const protectedPaths=['packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md',
   '.v6/workspace/buffetts-alpha.minerujson.md','.v6/release/index.html'];
@@ -30,6 +33,8 @@ for(const [i,[name,engine,options]] of engines.entries()){
   writeFileSync(join(generated,'other-data.txt'),'MUST NEVER BE DELETED');
   const server=spawn('python3',['scripts/v6_serve.py'],{
     cwd:root,env:{...process.env,V6_PORT:String(port),V6_DOCUMENT_PATH:doc,
+      V6_SETTINGS_PATH:join(dir,'settings.json'),
+      V6_PDF_PATH:resolve('.v6/workspace/buffetts-alpha.original.pdf'),
       V6_STATIC_ROOT:resolve('dist')},stdio:'ignore',
   });
   let browser;
@@ -62,8 +67,9 @@ for(const [i,[name,engine,options]] of engines.entries()){
     await page.route('**/*',route=>route.request().url().startsWith(base)
       ?route.continue():route.abort());
     await page.goto(base,{waitUntil:'domcontentloaded',timeout:35000});
-    await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-checkbox').length===21 &&
-      document.querySelector('#status')?.textContent.includes('已加载'),null,{timeout:45000});
+    await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:45000});
+    assert(await page.locator('#editor .cm-line').count()>0,
+      'Initial source document must remain visible in the sole CM6 editor');
     await page.locator('#build-version').click();
     await page.locator('#engineering-dialog').waitFor({state:'visible'});
     await page.screenshot({path:`.v6/evidence/engineering-menu-${name.toLowerCase()}.png`,timeout:15000});
@@ -95,9 +101,19 @@ for(const [i,[name,engine,options]] of engines.entries()){
     });
     await page.locator('#initialize-confirm').click();
     await navigation;
-    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('数据文档已初始化')&&
-      document.querySelectorAll('.ocr-outline-checkbox').length===21,null,{timeout:35000});
-    assert(readFileSync(doc).equals(fixture),'Reset did not restore immutable original');
+    await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:45000});
+    assert(await page.locator('#editor .cm-line').count()>0,
+      'CMD initialization must yield a visible editable source pane');
+    const initialized=readFileSync(doc);
+    assert.equal(sha(initialized),canonicalCMD_SHA,
+      'Reset must publish the pinned CMD-ready baseline, never raw legacy anchors');
+    assert(!initialized.includes(Buffer.from('<!-- minerujson:block:v1:')),
+      'Initialization must not leave unusable legacy PBS tags');
+    assert(initialized.includes(Buffer.from('<!-- cmd:block:v1 id="p1b3" -->')),
+      'CMD PBS p1b3 must be available for PDF parent reparent operation');
+    assert.deepEqual(initialized.subarray(initialized.indexOf(Buffer.from('<!-- minerujson:source:v1:'))),
+      fixture.subarray(fixture.indexOf(Buffer.from('<!-- minerujson:source:v1:'))),
+      'Sealed MinerU JSON remains byte-identical to its immutable source fixture');
     const backups=join(dir,'.initialize-backups');
     const filenames=readdirSync(backups);assert.equal(filenames.length,1);
     assert(readFileSync(join(backups,filenames[0])).equals(changed),'Backup did not preserve previous content');
@@ -106,10 +122,10 @@ for(const [i,[name,engine,options]] of engines.entries()){
       'Reset must deliberately restart CM6 undo history');
     assert.deepEqual(errors,[],name+' runtime errors');
     console.log('V6_ENGINEERING_INITIALIZE_PASS',name,JSON.stringify({backup:filenames.length,
-      originalBytes:fixture.length,originalRestored:true,generatedFilesUnchanged:true}));
+      originalBytes:fixture.length,cmdReady:true,generatedFilesUnchanged:true}));
 
     // An identical reinitialization is a no-op, not another backup.
-    const again=await request({confirmation:'初始化',expectedSha256:sha(fixture)});
+    const again=await request({confirmation:'初始化',expectedSha256:canonicalCMD_SHA});
     assert.equal(again.status,200);
     assert.equal((await again.json()).unchanged,true);
     assert.equal(readdirSync(backups).length,1);

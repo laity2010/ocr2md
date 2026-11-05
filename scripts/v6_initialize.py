@@ -1,13 +1,15 @@
-"""V6 explicit engineering reset of the active Markdown mother document.
+"""V6 explicit engineering reset of the active CMD-ready Markdown mother document.
 
-The immutable original is the checked-in MinerU-to-Markdown fixture. Reset is
-conditional on the browser's last saved revision, creates a durable backup and
-atomically publishes the original. It never changes exported chapter files.
+The immutable fixture is never touched. The sole CMD planner converts its
+legacy OCR block labels to current PBS labels before an optimistic, backed-up,
+atomic publication. Exported chapters and original JSON/PDF never change.
 """
 import hashlib
 import os
 from pathlib import Path
 import secrets
+import shutil
+import subprocess
 from datetime import datetime, timezone
 
 
@@ -15,12 +17,34 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def cmd_ready_baseline(original):
+    """Convert a read-only fixture through the ONE CMD JS parser/planner.
+
+    No Python-owned regex copy of the PBS format. A converter failure cannot
+    touch the current document, its backup directory, or the original file.
+    """
+    node = os.environ.get('V6_NODE_BIN') or shutil.which('node')
+    if not node:
+        raise RuntimeError('CMD initializer Node runtime unavailable; document untouched')
+    command = [node, str(Path(__file__).with_name('v6_initialize_cmd.mjs')),
+               str(original)]
+    try:
+        completed = subprocess.run(command, check=True, capture_output=True,
+                                   timeout=30)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError('CMD initializer conversion failed; document untouched') from error
+    if not completed.stdout:
+        raise RuntimeError('CMD initializer returned an empty document')
+    return completed.stdout
+
+
 def initialize_document(document, original, expected_sha):
     document, original = Path(document), Path(original)
-    baseline = original.read_bytes()
-    current = document.read_bytes() if document.is_file() else baseline
+    raw = original.read_bytes()
+    current = document.read_bytes() if document.is_file() else raw
     if digest(current) != expected_sha:
         raise ValueError('Document changed since it was opened')
+    baseline = cmd_ready_baseline(original)
     if current == baseline:
         return {'initialized': True, 'unchanged': True, 'backup': None,
                 'sourceSha256': digest(baseline)}
