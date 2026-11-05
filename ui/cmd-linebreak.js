@@ -239,7 +239,11 @@ function scopeOpening(source,scope){
   if((display||displayHint&&/^\$/.test(text))&&text.trim()){
     const at=scope.scopeStart+relative;
     return {kind:'latex',from:at,line:source.slice(0,at).split('\n').length,
-      snippet:text.replace(/\s+/g,' ').slice(0,125)};
+      // Review comments are durable metadata after the displayed formula,
+      // not LaTeX content. Excluding them keeps the candidate's semantic
+      // review identity stable after either A/B edge is annotated.
+      snippet:text.replace(/<!--ocr2md:illegal-break-review\b[^\n]*-->/g,'')
+        .replace(/\s+/g,' ').trim().slice(0,125)};
   }
   const prose=firstProseGlyph(source,scope);
   return prose?{kind:'text',from:prose.from,

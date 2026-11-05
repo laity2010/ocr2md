@@ -91,19 +91,19 @@ try{
         const rows=await grid.locator('.ag-row').evaluateAll(nodes=>nodes.map(node=>{
           const cell=id=>node.querySelector(`.ag-cell[col-id="${id}"]`)?.textContent.trim();
           return {block:cell('blockId'),next:cell('nextBlockId'),joined:cell('joined'),
-            status:cell('markState'),scope:cell('scopeLabel')};
+            status:node.querySelector('.ocr-illegal-break-review-select')?.value||'',scope:cell('scopeLabel')};
         }));
         rows.sort((a,b)=>a.joined.localeCompare(b.joined));
         assert.deepEqual(rows,[
-          {block:'p4b0s0',next:'',joined:'government',status:'已标定',scope:'子块内'},
-          {block:'p4b0s1',next:'p4b0s2',joined:'latest 13F',status:'待复核',scope:'子块交界'}
+          {block:'p4b0s0',next:'',joined:'government',status:'待定',scope:'子块内'},
+          {block:'p4b0s1',next:'p4b0s2',joined:'latest 13F',status:'待定',scope:'子块交界'}
         ]);
-        const global=await page.locator('#status').textContent();
-        assert(global.includes('待复核'),name+' global Shell review summary missing');
+        const reviewSummary=await page.locator('.ocr-illegal-break-state').textContent();
+        assert(reviewSummary.includes('待定'),name+' AG review summary missing');
         // CM6 virtualizes distant source lines. An AG "已标定" row is
         // projected from real CMD annotations, then clicking its line must
         // bring the actual marked source into the rendered CM6 viewport.
-        await grid.locator('.ag-row').filter({hasText:'已标定'})
+        await grid.locator('.ag-row').filter({has:page.locator('.ag-cell[col-id="joined"]:text-is("government")')})
           .locator('.ocr-illegal-break-jump').click();
         await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:illegal-break'),null,{timeout:16000});
         assert.equal(readFileSync(doc,'utf8'),seeded,'review did not autosave document');
@@ -112,7 +112,7 @@ try{
           await page.screenshot({path:resolve(process.env.OCR_PBS_BREAK_SCREENSHOTS,
             `illegal-break-pbs-${name}.png`),animations:'disabled'});
         }
-        const candidate=grid.locator('.ag-row').filter({has:page.locator('.ag-cell[col-id="markState"]:text("待复核")')});
+        const candidate=grid.locator('.ag-row').filter({has:page.locator('.ag-cell[col-id="joined"]:text-is("latest 13F")')});
         await page.waitForFunction(()=>!document.querySelector('.ocr-preview-mode option[value="pdf"]')?.disabled,
           null,{timeout:55000});
         await selectPreview(page,'pdf');
@@ -158,7 +158,7 @@ try{
           null,{timeout:90000});
         await filterCurrentP4(page);
         assert((await grid.locator('.ag-row').allTextContents()).some(row=>
-          row.includes('latest 13F')&&row.includes('待复核')));
+          row.includes('latest 13F')&&row.includes('待定')));
         assert.equal(readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1,1,
           'review-only sibling seam must not be auto-marked on reload');
         assert.deepEqual(errors,[]);

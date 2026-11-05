@@ -34,7 +34,7 @@ const rowsFromDOM=page=>page.locator('.ocr-illegal-break-grid .ag-row').evaluate
   const cell=id=>node.querySelector(`.ag-cell[col-id="${id}"]`)?.textContent.trim()||'';
   return {block:cell('blockId'),next:cell('nextBlockId'),joined:cell('joined'),
     before:cell('beforeBlockId'),after:cell('afterBlockId'),pairKind:cell('pairKind'),
-    status:cell('markState'),reason:cell('reason'),line:cell('line')};
+    status:node.querySelector('.ocr-illegal-break-review-select')?.value||'',reason:cell('reason'),line:cell('line')};
 }));
 async function filterP6B6(page){
   const button=page.locator('.ocr-illegal-break-grid .ag-header-cell[col-id="blockId"] .ag-header-cell-filter-button');
@@ -79,9 +79,9 @@ try{
         await filterP6B6(page);
         const rows=await rowsFromDOM(page);
         assert.deepEqual(rows.map(x=>[x.block,x.next,x.joined,x.status]),[
-          ['p6b6s0','p6b6s1','about 3','待复核'],
-          ['p6b6s1','','leverage','待复核'],
-          ['p6b6s1','','insurance','待复核'],
+          ['p6b6s0','p6b6s1','about 3','待定'],
+          ['p6b6s1','','leverage','待定'],
+          ['p6b6s1','','insurance','待定'],
         ]);
         assert.equal(rows[1].line,rows[2].line,'two OCR scars belong to same original source line');
         assert.equal(new Set(rows.map(x=>x.reason)).size,2);
@@ -129,7 +129,7 @@ try{
         assert(pairMD.before.includes('about'),pairMD.before);
         assert(pairMD.after.includes('3 percentage points'),pairMD.after);
         assert.equal(readFileSync(doc,'utf8'),seeded,'candidate scan must not autosave');
-        assert.equal((await rowsFromDOM(page)).filter(row=>row.status==='待复核').length,3,
+        assert.equal((await rowsFromDOM(page)).filter(row=>row.status==='待定').length,3,
           'AG review relationship rows must persist through PDF/MD mode changes');
         if(process.env.OCR_P6B6_SCREENSHOTS){
           mkdirSync(process.env.OCR_P6B6_SCREENSHOTS,{recursive:true});

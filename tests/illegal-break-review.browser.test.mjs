@@ -74,7 +74,7 @@ try{
           el.value='illegal-break';el.dispatchEvent(new Event('change',{bubbles:true}));
         });
         await activate();
-        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('待定'),
+        await page.waitForFunction(()=>document.querySelector('.ocr-illegal-break-state')?.textContent.includes('待定'),
           null,{timeout:90000});
         await filterP6B6(page);
         assert.equal(await selectFor(page,'about 3').inputValue(),'待定');
@@ -114,7 +114,7 @@ try{
         await page.reload({waitUntil:'domcontentloaded'});
         await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:80000});
         await activate();
-        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('待定'),
+        await page.waitForFunction(()=>document.querySelector('.ocr-illegal-break-state')?.textContent.includes('待定'),
           null,{timeout:85000});
         await filterP6B6(page);
         await waitDecision(page,'about 3','断行合并');

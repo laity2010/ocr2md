@@ -27,7 +27,7 @@ const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
 const inspectAG=page=>page.locator('.ocr-illegal-break-grid .ag-row').evaluateAll(nodes=>nodes.map(node=>{
   const cell=id=>node.querySelector(`.ag-cell[col-id="${id}"]`)?.textContent.trim()||'';
   return {a:cell('beforeBlockId'),b:cell('afterBlockId'),type:cell('joined'),
-    reason:cell('reason'),status:cell('markState'),scope:cell('scopeLabel')};
+    reason:cell('reason'),status:node.querySelector('.ocr-illegal-break-review-select')?.value||'',scope:cell('scopeLabel')};
 }));
 async function filterCurrentP4(page){
   await page.locator('.ocr-illegal-break-grid .ag-header-cell[col-id="blockId"] .ag-header-cell-filter-button').click();
@@ -71,9 +71,9 @@ try{
         await filterCurrentP4(page);
         assert.deepEqual(await inspectAG(page),[
           {a:'p4b0s0',b:'p4b0s1',type:'文本 → LaTeX',
-            reason:'公式交界疑似断行：文本 → LaTeX',status:'待复核',scope:'LaTeX交界'},
+            reason:'公式交界疑似断行：文本 → LaTeX',status:'待定',scope:'LaTeX交界'},
           {a:'p4b0s1',b:'p4b0s2',type:'LaTeX → 文本',
-            reason:'公式交界疑似断行：LaTeX → 文本',status:'待复核',scope:'LaTeX交界'},
+            reason:'公式交界疑似断行：LaTeX → 文本',status:'待定',scope:'LaTeX交界'},
         ]);
         await page.waitForFunction(()=>!document.querySelector('.ocr-preview-mode option[value="pdf"]')?.disabled,
           null,{timeout:55000});
@@ -122,6 +122,26 @@ try{
         }
         assert.equal((await inspectAG(page)).length,2);
         assert.equal(readFileSync(doc,'utf8'),seeded,'AG selection must not save or edit sole CMD source');
+        // Independent manual decisions on two edges of the SAME formula B.
+        // The additional comments must not become part of its LaTeX evidence
+        // or change the stable review identity after Worker re-scanning.
+        const choose=async(value,decision)=>{
+          await rowFor(page,value).locator('.ocr-illegal-break-review-select')
+            .selectOption({label:decision});
+          await page.waitForFunction(([value,decision])=>[...document.querySelectorAll('.ocr-illegal-break-grid .ag-row')]
+            .some(r=>r.querySelector('.ag-cell[col-id="joined"]')?.textContent.trim()===value&&
+              r.querySelector('.ocr-illegal-break-review-select')?.value===decision),
+            [value,decision],{timeout:75000});
+        };
+        await choose('文本 → LaTeX','断行合并');
+        await choose('LaTeX → 文本','忽略');
+        await page.locator('#save').click();
+        for(let k=0;k<90&&readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break-review').length-1!==2;k++)
+          await sleep(120);
+        const saved=readFileSync(doc,'utf8');
+        assert.equal(saved.split('<!--ocr2md:illegal-break-review').length-1,2);
+        assert.equal(saved.replace(/<!--ocr2md:illegal-break-review[^\n]*-->\n/g,''),seeded,
+          'two review decisions must not edit text or formula');
         await page.reload({waitUntil:'domcontentloaded'});
         await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:80000});
         await activate();
@@ -130,6 +150,8 @@ try{
         await filterCurrentP4(page);
         assert.deepEqual((await inspectAG(page)).map(row=>[row.a,row.b]),[
           ['p4b0s0','p4b0s1'],['p4b0s1','p4b0s2']]);
+        assert.equal(await rowFor(page,'文本 → LaTeX').locator('.ocr-illegal-break-review-select').inputValue(),'断行合并');
+        assert.equal(await rowFor(page,'LaTeX → 文本').locator('.ocr-illegal-break-review-select').inputValue(),'忽略');
         assert.deepEqual(errors,[]);
         console.log('LATEX_TWO_BOUNDARIES_BROWSER_PASS',name,'two distinct A/B rows, PDF and MD, reload, read-only');
       }finally{await page.close();}

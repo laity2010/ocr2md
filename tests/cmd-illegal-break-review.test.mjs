@@ -6,6 +6,7 @@ import {readFileSync} from 'node:fs';
 import nspell from 'nspell';
 import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
 import {planCMDReparentPBS,readCMDBlockChains} from '../ui/cmd-block-chains.js';
+import {buildIllegalBreakLatexSequence} from './fixtures/illegal-break-latex-sequence.mjs';
 import {formatAnnotation,scanAnnotations} from '../ui/cmd-annotations.js';
 import {detectIllegalBreaks,planIllegalBreakMarks} from '../ui/cmd-linebreak.js';
 import {ILLEGAL_BREAK_REVIEW_TAG,keyIllegalBreakReviewRows,
@@ -55,4 +56,18 @@ assert.equal(saved(source).decisions.size,2);
 assert.equal(saved(source).decisions.get(lever.reviewKey)?.decision,'断行合并');
 assert.equal(saved(source).decisions.get(insurance.reviewKey)?.decision,'忽略');
 assert.equal(planIllegalBreakMarks(source,reviewRows(source).filter(x=>x.reviewOnly),[]).length,0);
+// The same standalone LaTeX B participates independently in A→B and B→C.
+let mathSource=buildIllegalBreakLatexSequence();
+const mathRows=()=>keyIllegalBreakReviewRows(detectIllegalBreaks(mathSource,spell,
+  {bodyEnd:mathSource.indexOf('<!-- minerujson:source:v1:')}).issues)
+  .filter(x=>x.reviewKind==='latex-boundary'&&x.blockId?.startsWith('p4b0s'));
+assert.deepEqual(mathRows().map(x=>[x.beforeBlockId,x.afterBlockId]),[
+  ['p4b0s0','p4b0s1'],['p4b0s1','p4b0s2']]);
+mathSource=apply(mathSource,planIllegalBreakReviewDecision(mathSource,mathRows()[0],
+  '断行合并',scanAnnotations(mathSource)));
+mathSource=apply(mathSource,planIllegalBreakReviewDecision(mathSource,mathRows()[1],
+  '忽略',scanAnnotations(mathSource)));
+assert.deepEqual(mathRows().map(x=>saved(mathSource).decisions.get(x.reviewKey)?.decision),
+  ['断行合并','忽略'],'Formula edges must remain independent after source annotations');
+console.log('CMD_LATEX_TWO_REVIEW_CHOICES_PASS A→formula merge, formula→C ignore independently');
 console.log('CMD_ILLEGAL_BREAK_REVIEW_PASS merge/ignore/pending, independent scars, no join, no change sealed OCR');

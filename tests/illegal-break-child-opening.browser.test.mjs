@@ -42,7 +42,7 @@ async function filterCurrentChild(page){
 const getRows=page=>page.locator('.ocr-illegal-break-grid .ag-row').evaluateAll(els=>els.map(node=>{
  const cell=id=>node.querySelector(`.ag-cell[col-id="${id}"]`)?.textContent.trim()||'';
  return {block:cell('blockId'),page:cell('pdfPage'),previous:cell('previousBlockId'),
-   joined:cell('joined'),scope:cell('scopeLabel'),status:cell('markState'),reason:cell('reason')};
+   joined:cell('joined'),scope:cell('scopeLabel'),status:node.querySelector('.ocr-illegal-break-review-select')?.value||'',reason:cell('reason')};
 }));
 try{
  let ready=false;
@@ -74,7 +74,7 @@ try{
        assert.equal(opening.page,'14');
        assert.equal(opening.previous,'p13b3s0');
        assert.equal(opening.scope,'子块起始');
-       assert.equal(opening.status,'待复核');
+       assert.equal(opening.status,'待定');
        assert.match(opening.reason,/跨栏/);
        assert.equal(rows.length,2);
        const row=page.locator('.ocr-illegal-break-grid .ag-row').filter({
@@ -100,7 +100,7 @@ try{
        await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('待复核'),
          null,{timeout:70000});
        await filterCurrentChild(page);
-       assert((await getRows(page)).some(x=>x.joined.startsWith('initially')&&x.status==='待复核'));
+       assert((await getRows(page)).some(x=>x.joined.startsWith('initially')&&x.status==='待定'));
        assert.deepEqual(errors,[]);
        console.log('CHILD_OPENING_AG_VISIBLE_PASS',name,'p13b3s1 initially, PDF14, CM6 visible, no source change, reload restored');
      }finally{await page.close();}
