@@ -669,7 +669,8 @@ async function main() {
             const updated=view.state.doc;
             const candidates=reviews.map(row=>{
               const line=updated.line(row.line);
-              if(row.reviewKind==='hyphen-space'||row.reviewKind==='child-start'){
+              if(row.reviewKind==='hyphen-space'||row.reviewKind==='child-start'||
+                 row.reviewKind==='latex-boundary'){
                 // Same-line OCR scars AND text-block initial characters must
                 // keep their exact CM6 column (possibly shared by several
                 // candidates). Existing CMD marks do not insert newlines.

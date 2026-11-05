@@ -1697,3 +1697,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-PAIR-G33','G33','tests/illegal-break-pair.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','One review candidate maps to before/after current PBS identities and remains tied to immutable physical OCR provenance','direct'),
  ('TC-BREAK-PAIR-P41','P41','tests/illegal-break-p6b6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit AG click p6b6s0->p6b6s1 paints two differently labeled PDF A/B overlays at original p6b6 and p6b7 physical boxes','integration'),
  ('TC-BREAK-PAIR-M14','M14','tests/illegal-break-p6b6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit same AG click paints distinct Markdown A/B blocks with CM6 source focus and no editing','integration');
+
+-- WCP illegal-break review keeps standalone display LaTeX in the CMD child
+-- sequence: text A -> LaTeX B -> text C is two independent AG A/B reviews,
+-- never a fabricated A->C bridge. No annotation is auto-inserted.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-LATEX-C42','C42','tests/cmd-linebreak-latex-boundary.test.mjs','tests/fixtures/illegal-break-latex-sequence.mjs','Text/LaTeX and LaTeX/text reviewed separately, no A->C bridge, inline formulas excluded from standalone classification, exact source position, no automatic CMD mutation','direct'),
+ ('TC-BREAK-LATEX-G20','G20','tests/illegal-break-latex-boundary.browser.test.mjs','tests/fixtures/illegal-break-latex-sequence.mjs','Chrome/iPad-WebKit AG displays two A/B pairs; clicking each focuses distinct original PDF child geometry and highlights the text/formula Markdown blocks; reload preserves candidate review without source writes','integration');

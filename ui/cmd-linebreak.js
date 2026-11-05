@@ -215,6 +215,60 @@ function childOpeningCandidates(source,scopes,excludedNext,maxIssues){
   }
   return result;
 }
+/** A standalone display-LaTeX CMD child is a real atom in the reading
+ * sequence, not punctuation to skip. An inline formula inside a prose child
+ * is NOT a standalone LaTeX child. The CMD source remains the only document.
+ */
+function scopeOpening(source,scope){
+  let text=source.slice(scope.scopeStart,scope.scopeEnd);
+  const leading=text.length-text.trimStart().length;
+  let relative=leading;
+  text=text.slice(leading);
+  const annotation=/^<!--ocr2md:latex\b[^\n]*?-->/.exec(text);
+  const displayHint=Boolean(annotation&&/\b(?:delimited="auto-display"|fenceOpen=)/.test(annotation[0]));
+  if(annotation){relative+=annotation[0].length;text=text.slice(annotation[0].length);
+    const skipped=text.length-text.trimStart().length;
+    relative+=skipped;text=text.slice(skipped);
+  }
+  const display=/^(?:\$\$|\\\[|`{3,}math\b|\\begin\{(?:equation\*?|align\*?|array|gather\*?|multline\*?|displaymath)\})/.exec(text);
+  if((display||displayHint&&/^\$/.test(text))&&text.trim()){
+    const at=scope.scopeStart+relative;
+    return {kind:'latex',from:at,line:source.slice(0,at).split('\n').length,
+      snippet:text.replace(/\s+/g,' ').slice(0,125)};
+  }
+  const prose=firstProseGlyph(source,scope);
+  return prose?{kind:'text',from:prose.from,
+    line:source.slice(0,prose.from).split('\n').length,
+    snippet:prose.snippet}:{kind:'other'};
+}
+/** Every adjacent text/display-LaTeX boundary is reviewed independently.
+ * With text A, equation B, text C this produces A->B AND B->C, never A->C.
+ * Unlike word-join heuristics, punctuation and capitalization do not veto
+ * these relationships; only the human reviewer decides continuity.
+ */
+function latexBoundaryCandidates(source,scopes,maxIssues){
+  const results=[];
+  const types=scopes.map(scope=>scopeOpening(source,scope));
+  for(let i=0;i<scopes.length-1;i++){
+    if(results.length>=maxIssues)break;
+    const a=scopes[i],b=scopes[i+1],left=types[i],right=types[i+1];
+    if(a.identity.s.length!==1||b.identity.s.length!==1||
+      a.parentId!==b.parentId)continue;
+    if(!((left.kind==='text'&&right.kind==='latex')||
+         (left.kind==='latex'&&right.kind==='text')))continue;
+    const beforePDF=physicalPDFPage(a),afterPDF=physicalPDFPage(b);
+    const relation=`${left.kind==='text'?'文本':'LaTeX'} → ${right.kind==='text'?'文本':'LaTeX'}`;
+    results.push({from:right.from,to:right.from+1,line:right.line,
+      afterLine:right.line,left:left.snippet.slice(-62),right:right.snippet.slice(0,62),
+      joined:relation,reason:`公式交界疑似断行：${relation}`,
+      blockId:a.id,parentId:a.parentId,nextBlockId:b.id,
+      pdfPage:beforePDF,nextPdfPage:afterPDF,
+      scopeLabel:'LaTeX交界',reviewKind:'latex-boundary',reviewOnly:true,
+      context:`[${a.id} / PDF ${beforePDF??'?'}页] ${left.snippet.slice(-100)} ↵ `+
+        `[${b.id} / PDF ${afterPDF??'?'}页] ${right.snippet.slice(0,100)}`});
+  }
+  return results;
+}
 /** Read-only review candidates BETWEEN adjacent logical children.
  * A caption/body or cross-page pair may be legitimately separate: never
  * auto-insert an annotation or join these two source scopes. */
@@ -381,11 +435,13 @@ export function detectIllegalBreaks(source,spell,{maxIssues=400,bodyEnd=source.l
     const paragraph=childParagraphBreakCandidates(source,scopes,remaining+1);
     const sibling=siblingBreakCandidates(source,spell,scopes,remaining+1);
     const hyphenSpace=hyphenSpaceCandidates(source,spell,scopes,remaining+1);
-    // When a precise sibling seam already explains the child opening,
-    // retain that stronger evidence rather than a duplicate generic row.
+    const latexEdges=latexBoundaryCandidates(source,scopes,remaining+1);
+    // A formula is a first-class node: a text following it must be B->C,
+    // never a fabricated A->C that skips the LaTeX block. Also deduplicate
+    // ordinary child-start rows when the precise A/B formula edge exists.
     const childOpening=childOpeningCandidates(source,scopes,
-      new Set(sibling.map(row=>row.nextBlockId)),remaining+1);
-    const candidates=[...paragraph,...sibling,...hyphenSpace,...childOpening]
+      new Set([...sibling,...latexEdges].map(row=>row.nextBlockId)),remaining+1);
+    const candidates=[...paragraph,...sibling,...hyphenSpace,...latexEdges,...childOpening]
       .sort((a,b)=>a.from-b.from);
     if(candidates.length>remaining)truncated=true;
     results.push(...candidates.slice(0,remaining));
