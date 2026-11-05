@@ -7,6 +7,7 @@
  * parent absorption/reorder edits are never replayed, reverted or fabricated.
  */
 import {readCMDBlockChains,parseCMDPBSId} from './cmd-block-chains.js';
+import {gunzipSync} from 'node:zlib';import {createHash} from 'node:crypto';
 
 const BODY_END=['<!-- minerujson:page:v1:','<!-- minerujson:source:v1:',
   '<!-- cmd:pbs-locations:v1 ','<!-- cmd:pdf-bbox:v1 '];
@@ -43,8 +44,21 @@ export function planCMDRecoverNativeSubblocks(current,oldFixture,native){
   if(m.invalid.length||f.invalid.length||n.invalid.length||
     m.atoms.some(a=>a.format!=='cmd-v1')||n.atoms.some(a=>a.format!=='cmd-v1'))
     throw Error('Repair source CMD inventories are not validated');
-  const tail=text=>text.slice(text.indexOf('<!-- minerujson:source:v1:'));
-  if(tail(current)!==tail(oldFixture)||tail(current)!==tail(native))
+  // gzip output is not a byte-level archive contract (Node/zlib versions may
+  // produce different streams). Validate each sealed digest AND the decoded
+  // original bytes before considering three sources equivalent. Never replace
+  // or rewrite the current document's immutable footer to satisfy this check.
+  const sealed=text=>{
+    const match=/<!-- minerujson:source:v1:([a-f0-9]{64})\n([a-zA-Z0-9_\-\n]+)\n-->\s*$/.exec(text);
+    if(!match)throw Error('Repair requires sealed MinerU source footer');
+    let raw;try{raw=gunzipSync(Buffer.from(match[2].replace(/\s+/g,''),'base64url'));}
+    catch{throw Error('Repair sealed MinerU source is corrupt');}
+    if(createHash('sha256').update(raw).digest('hex')!==match[1])
+      throw Error('Repair sealed MinerU source digest mismatch');
+    return raw;
+  };
+  const sourceBytes=sealed(current);
+  if(!sourceBytes.equals(sealed(oldFixture))||!sourceBytes.equals(sealed(native)))
     throw Error('Repair sources do not refer to identical original MinerU JSON');
   const curr=parentGroups(current,m),old=parentGroups(oldFixture,f),upgraded=parentGroups(native,n);
   const children=new Map();
@@ -91,7 +105,7 @@ export function planCMDRecoverNativeSubblocks(current,oldFixture,native){
     edits.reduce((sum,e)=>sum+e.childIds.length,0)||
     m.atoms.some(atom=>!after.atoms.some(x=>x.id===atom.id&&x.origin===atom.origin))||
     after.absorbedParents.length!==m.absorbedParents.length||
-    tail(current)!==tail(result))
+    !sourceBytes.equals(sealed(result)))
     throw Error('Repair would alter existing structural relations or original OCR evidence');
   return {edits,skipped,repaired,result,addedChildren:after.atoms.length-m.atoms.length,
     initialAtoms:m.atoms.length,finalAtoms:after.atoms.length};

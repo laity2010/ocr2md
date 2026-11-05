@@ -10,10 +10,14 @@ const id=/^p(?:0|[1-9]\d*)b(?:0|[1-9]\d*)(?:s(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*
 const parent=/^p(?:0|[1-9]\d*)b(?:0|[1-9]\d*)$/;
 export function readCMDPBSLocations(source){
   const tail=source.indexOf('<!-- minerujson:source:v1:');
-  if(tail<0)throw Error('Missing sealed MinerU source');
+  const end=tail<0?source.length:tail;
   const matches=[...source.matchAll(regex)];
-  if(matches.length>1||source.slice(0,tail).split(prefix).length-1!==matches.length||
-     matches.some(m=>m.index>=tail))throw Error('Duplicate or malformed CMD PBS locations');
+  // A synthetic or legacy document can be inspected before its sealed source
+  // is attached. A sidecar is footer-only data and must never be parsed from
+  // a body that has no footer boundary.
+  if(matches.length>1||source.slice(0,end).split(prefix).length-1!==matches.length||
+     (tail<0&&matches.length)||matches.some(m=>m.index>=end))
+    throw Error('Duplicate or malformed CMD PBS locations');
   if(!matches.length)return {bindings:{},bodies:[],removed:[],range:null};
   const m=matches[0];
   let object;try{object=JSON.parse(m[1]);}catch{throw Error('Malformed PBS locations JSON');}
@@ -36,6 +40,10 @@ export function readCMDPBSLocations(source){
 }
 export function planCMDPBSLocationsEdit(source,{bindings,bodies,removed}){
   const current=readCMDPBSLocations(source);
+  // Read-only inventory above is intentionally more permissive than writes:
+  // every real structural change still requires sealed MinerU provenance.
+  if(!source.includes('<!-- minerujson:source:v1:'))
+    throw Error('Missing sealed MinerU source');
   const stable=Object.fromEntries(Object.entries(bindings).sort(([a],[b])=>a.localeCompare(b)));
   const value=prefix+JSON.stringify({schema:1,bindings:stable,
     bodies:[...new Set(bodies)].sort(),removed:[...new Set(removed)].sort()})+' -->\n';
