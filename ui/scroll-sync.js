@@ -194,11 +194,19 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     // Only explicit AG/PDF/preview clicks need CM6's jump-to-line effect.
     // For continuous preview scrolling, scrollIntoView plus scrollTop creates
     // two competing scroll commands as CM6 measures its folded/virtual rows.
-    if(force) view.dispatch({effects:EditorView.scrollIntoView(view.state.doc.line(line).from,
-      {y:'start',yMargin:leadingOffset})});
-    // Continuous sync uses one pixel-space driver with bounded follow-up
-    // correction while CM6 settles its height map. No selection is changed.
-    adjustSource(position);
+    if(force){
+      // Explicit AG/PDF navigation in a large, folded CMD document must
+      // have ONE initial scroll owner. Dispatching CM6's scrollIntoView AND
+      // directly setting scrollTop in the same turn races the virtual line
+      // height map on iPad Safari (a temporarily blank source viewport).
+      // Let CM6 render/measure its target before bounded pixel correction.
+      view.dispatch({effects:EditorView.scrollIntoView(view.state.doc.line(line).from,
+        {y:'start',yMargin:leadingOffset})});
+      view.requestMeasure();
+    }else{
+      // Continuous preview sync uses only the pixel-space driver.
+      adjustSource(position);
+    }
     sourceCorrectionFrame=requestAnimationFrame(correctSource);
   }
 
