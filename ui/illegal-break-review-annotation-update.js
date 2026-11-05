@@ -1,6 +1,7 @@
-/** CMD review-only edits cannot invalidate the AG inventory. This predicate
+/** CMD review-only edits (inline marker or incoming block lb) cannot invalidate the AG inventory. This predicate
  * is intentionally strict: substantive source edits still require a Worker
  * rescan. It also covers undo/redo of a single comment annotation. */
+import {parseCMDBlockTag} from './cmd-block-chains.js';
 const REVIEW=/<!--ocr2md:illegal-break-review\b[^\n]*-->\n?/g;
 const MARKER='<!--ocr2md:illegal-break-review';
 export function isIllegalBreakReviewOnlyChange(update){
@@ -10,8 +11,14 @@ export function isIllegalBreakReviewOnlyChange(update){
     const before=update.startState.doc.sliceString(fromA,toA);
     const after=inserted.toString();
     const marker=before.includes(MARKER)||after.includes(MARKER);
-    if(!marker||before.replace(REVIEW,'')!==after.replace(REVIEW,''))valid=false;
-    if(marker)sawReview=true;
+    const former=parseCMDBlockTag(before),latter=parseCMDBlockTag(after);
+    const incomingEdge=former&&latter&&former.id===latter.id&&
+      former.lb!==latter.lb&&
+      Object.keys({...former,...latter}).filter(k=>k!=='lb')
+        .every(k=>JSON.stringify(former[k])===JSON.stringify(latter[k]));
+    const inlineMarker=marker&&before.replace(REVIEW,'')===after.replace(REVIEW,'');
+    if(!incomingEdge&&!inlineMarker)valid=false;
+    if(incomingEdge||inlineMarker)sawReview=true;
   });
   return valid&&sawReview;
 }

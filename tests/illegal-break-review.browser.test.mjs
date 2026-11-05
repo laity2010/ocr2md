@@ -153,12 +153,16 @@ try{
             `illegal-break-review-${name}.png`),animations:'disabled'});
         }
         await page.locator('#save').click();
-        for(let i=0;i<100&&commentCount()!==2;i++)await sleep(130);
+        for(let i=0;i<100&&!(readFileSync(doc,'utf8').includes(' lb="m"')&&commentCount()===1);i++)
+          await sleep(130);
         const saved=readFileSync(doc,'utf8');
-        assert.equal(commentCount(),2);
-        assert(saved.includes('decision="merge"')&&saved.includes('decision="ignore"'));
-        assert.equal(saved.replace(/<!--ocr2md:illegal-break-review[^\n]*-->\n/g,''),seeded,
-          'review markers are the ONLY source edits; true block merging deferred');
+        assert.equal(commentCount(),1,'only the within-block scar retains a standalone marker');
+        assert(saved.includes('id="p6b6s1" lb="m"')&&saved.includes('decision="ignore"'));
+        assert(!saved.includes('decision="merge"'),
+          'cross-block merge is B.lb, not an extra long annotation');
+        assert.equal(saved.replace(/ lb="[mi]"/g,'')
+          .replace(/<!--ocr2md:illegal-break-review[^\n]*-->\n/g,''),seeded,
+          'block property and within-block review comment are the ONLY source edits');
         await page.reload({waitUntil:'domcontentloaded'});
         await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:80000});
         await activate();
@@ -168,7 +172,7 @@ try{
         await waitDecision(page,'about 3','断行合并');
         await waitDecision(page,'leverage','忽略');
         await waitDecision(page,'insurance','待定');
-        assert.equal(commentCount(),2);
+        assert.equal(commentCount(),1);
         assert.deepEqual(errors,[]);
         console.log('ILLEGAL_BREAK_REVIEW_BROWSER_PASS',name,
           'merge / ignore / pending dropdown, one-step Undo/Redo, save/reload, no block merge');

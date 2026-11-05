@@ -33,4 +33,16 @@ assert.equal(isIllegalBreakReviewOnlyChange(update),true,'changing review value 
 assert.equal(isIllegalBreakReviewOnlyChange(change(source,0,1,'Z')),false,'prose edit forces scan');
 assert.equal(isIllegalBreakReviewOnlyChange(change(source,at,at,note+'oops')),false,
  'mixed review text edit forces scan');
+// Incoming A→B review lives on the *same* CMD block identity line. Value
+// changes and Undo must bypass Worker and keep native AG selects mounted.
+const block='<!-- cmd:block:v1 id="p4b0s1" -->';
+const plus='<!-- cmd:block:v1 id="p4b0s1" lb="m" -->';
+const another='<!-- cmd:block:v1 id="p4b0s1" lb="i" -->';
+for(const [oldTag,newTag] of [[block,plus],[plus,another],[another,block]]){
+  const edit=change(`A\n${oldTag}\nB\n`,2,2+oldTag.length,newTag);
+  assert.equal(isIllegalBreakReviewOnlyChange(edit),true);
+}
+assert.equal(isIllegalBreakReviewOnlyChange(change(`A\n${block}\nB\n`,2,2+block.length,
+  '<!-- cmd:block:v1 id="p4b0s2" lb="m" -->')),false,
+  'renumbering a CMD block must trigger normal document invalidation');
 console.log('ILLEGAL_BREAK_REVIEW_METADATA_ONLY_PASS classification and in-place source map, Undo/redo, mixed edit rejected');

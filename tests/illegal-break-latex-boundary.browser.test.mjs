@@ -136,12 +136,14 @@ try{
         await choose('文本 → LaTeX','断行合并');
         await choose('LaTeX → 文本','忽略');
         await page.locator('#save').click();
-        for(let k=0;k<90&&readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break-review').length-1!==2;k++)
+        for(let k=0;k<90&&!readFileSync(doc,'utf8').includes('id="p4b0s2" lb="i"');k++)
           await sleep(120);
         const saved=readFileSync(doc,'utf8');
-        assert.equal(saved.split('<!--ocr2md:illegal-break-review').length-1,2);
-        assert.equal(saved.replace(/<!--ocr2md:illegal-break-review[^\n]*-->\n/g,''),seeded,
-          'two review decisions must not edit text or formula');
+        assert(saved.includes('id="p4b0s1" lb="m"')&&saved.includes('id="p4b0s2" lb="i"'));
+        assert(!saved.includes('<!--ocr2md:illegal-break-review'),
+          'both cross-block decisions use CMD block properties only');
+        assert.equal(saved.replace(/ lb="[mi]"/g,''),seeded,
+          'two block properties must not edit text or formula');
         await page.reload({waitUntil:'domcontentloaded'});
         await page.locator('#editor .cm-content').waitFor({state:'visible',timeout:80000});
         await activate();

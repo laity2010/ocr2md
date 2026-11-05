@@ -1,8 +1,9 @@
-/** Review decisions on ONE CMD source, not a second AG store or an edit to
- * text-block membership. A decision is a durable HTML comment; clean MD
- * export will later resolve 'merge'. Until then all characters stay intact.
+/** Review decisions on ONE CMD source, not a second AG store or a change to
+ * text-block membership. A cross-block A→B edge uses B's 'lb' attribute.
+ * Within-block position-specific issues still use durable HTML comments.
+ * Clean-MD export may later resolve 'merge'; no joining happens here.
  */
-import {readCMDBlockChains} from './cmd-block-chains.js';
+import {readCMDBlockChains,parseCMDBlockTag,serializeCMDBlockTag} from './cmd-block-chains.js';
 import {projectIllegalBreakPair} from './illegal-break-pair.js';
 export const ILLEGAL_BREAK_REVIEW_TAG='ocr2md:illegal-break-review';
 export const REVIEW_DECISIONS=Object.freeze(['待定','断行合并','忽略']);
@@ -43,6 +44,13 @@ export function readIllegalBreakReviewDecisions(source,annotations){
     }catch{stale++;continue;}
     decisions.set(key,{decision:FROM_CODE[decision],target:tag,before,after});
   }
+  // Short incoming-edge attributes are read directly from their owning CMD
+  // block. Legacy long comments remain readable until a user re-reviews.
+  for(const atom of readCMDBlockChains(source).atoms){
+    if(atom.lb==='m'||atom.lb==='i')
+      decisions.set(`block:${atom.id}`,{decision:atom.lb==='m'?'断行合并':'忽略',
+        before:null,after:atom.id,attribute:true});
+  }
   return {decisions,stale};
 }
 
@@ -71,6 +79,28 @@ export function planIllegalBreakReviewDecision(source,row,choice,annotations){
   const {decisions,stale}=readIllegalBreakReviewDecisions(source,annotations);
   if(stale)throw Error('存在无效的断行审阅标记，请先检查源码');
   const old=decisions.get(key);
+  if(before!==after){
+    // A -> B stores ONLY B's incoming-edge decision. This never applies to
+    // a within-block scar (where A = B and multiple positions may exist).
+    if(target.format!=='cmd-v1')throw Error('跨块审阅需要有效的 CMD block 标签');
+    const parsedTag=parseCMDBlockTag(target.rawLine);
+    if(!parsedTag||parsedTag.id!==after)throw Error('目标 CMD block 已变化');
+    const current=parsedTag.lb==='m'?'断行合并':
+      parsedTag.lb==='i'?'忽略':'待定';
+    // A legacy long cross-block marker is migrated in the SAME single Undo
+    // transaction on first re-review, even if the choice did not change.
+    const edits=[];
+    if(current!==choice){
+      const prefix=target.rawLine.slice(0,target.rawLine.indexOf('<!--'));
+      const {lb:_oldLb,...fields}=parsedTag;
+      const insert=prefix+serializeCMDBlockTag({...fields,
+        ...(choice==='待定'?{}:{lb:choice==='断行合并'?'m':'i'})});
+      edits.push({action:'text',from:target.from,to:target.from+target.rawLine.length,
+        expected:target.rawLine,insert});
+    }
+    if(old?.target)edits.push({action:'remove',target:old.target,removeAfter:true});
+    return edits;
+  }
   if(old?.decision===choice||(!old&&choice==='待定'))return [];
   if(choice==='待定')return [{action:'remove',target:old.target,removeAfter:true}];
   const attrs={v:'1',key,before,after,decision:TO_CODE[choice]};

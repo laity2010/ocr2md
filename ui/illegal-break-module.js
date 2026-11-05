@@ -25,7 +25,8 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onRevie
   const rebuild=()=>{
     const occupied=new Set(markedRows.map(row=>row.from));
     rows=keyIllegalBreakReviewRows([...markedRows,...reviewRows.filter(row=>!occupied.has(row.from))])
-      .map(row=>({...row,reviewDecision:reviewChoices.get(row.reviewKey)||'待定'}));
+      .map(row=>({...row,reviewDecision:(row.pairKind==='跨块'?reviewChoices.get(`block:${row.afterBlockId}`):null)||
+        reviewChoices.get(row.reviewKey)||'待定'}));
     grid.setGridOption('rowData',rows);
   };
   const navigate=row=>{
@@ -133,7 +134,8 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{},onRevie
       reviewStale=bad;
       const reviewNodes=[],lineNodes=[];
       for(const row of rows){
-        const next=reviewChoices.get(row.reviewKey)||'待定';
+        const next=(row.pairKind==='跨块'?reviewChoices.get(`block:${row.afterBlockId}`):null)||
+          reviewChoices.get(row.reviewKey)||'待定';
         if(row.reviewDecision!==next){
           row.reviewDecision=next;
           const node=grid.getRowNode(row.reviewKey||String(row.from));

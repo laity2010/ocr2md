@@ -10,7 +10,7 @@ import {readCMDPBSLocations,planCMDPBSLocationsEdit} from './cmd-pbs-locations.j
 const pbsPattern=/^p(0|[1-9]\d*)b(0|[1-9]\d*)(?:s((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*))?$/;
 const tagPattern=/^<!-- cmd:block:v1((?: [a-z]+="[^"]*")*) -->$/;
 const attributePattern=/ ([a-z]+)="([^"]*)"/g;
-const permitted=new Set(['id','origin','p','b','s','bc','seq','type','role','review','note']);
+const permitted=new Set(['id','origin','p','b','s','bc','seq','type','role','review','note','lb']);
 const namePattern=/^[a-z][a-z0-9_-]{0,63}$/;
 const bcPattern=/^bc-[a-z0-9][a-z0-9-]{0,63}$/;
 const decode=x=>x.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
@@ -58,11 +58,12 @@ export function parseCMDBlockTag(line){
     fields.type!==undefined&&!namePattern.test(fields.type)||
     fields.role!==undefined&&!namePattern.test(fields.role)||
     fields.review!==undefined&&!namePattern.test(fields.review)||
+    fields.lb!==undefined&&(!fields.id||!['m','i'].includes(fields.lb))||
     fields.note!==undefined&&fields.note.length>240)return null;
   const id=pbs?.id||`p${fields.p}b${fields.b}${fields.s===undefined?'':`s${fields.s}`}`;
   return {...fields,id,...parseCMDPBSId(id)};
 }
-export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note}){
+export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note,lb}){
   const pbs=parseCMDPBSId(id);
   if(!pbs)throw Error('Invalid PBS identity');
   if(origin!==undefined&&(!parseCMDPBSId(origin)||parseCMDPBSId(origin).p!==pbs.p||
@@ -74,8 +75,9 @@ export function serializeCMDBlockTag({id,origin,bc,seq,type,role,review,note}){
     seq!==undefined&&(!Number.isSafeInteger(seq)||seq<0))throw Error('Invalid BC membership');
   for(const value of [type,role,review])if(value!==undefined&&!namePattern.test(value))
     throw Error('Invalid CMD block metadata');
+  if(lb!==undefined&&!['m','i'].includes(lb))throw Error('Invalid CMD incoming-break decision');
   if(note!==undefined&&(typeof note!=='string'||note.length>240))throw Error('Invalid CMD review note');
-  const props=[['id',pbs.id],...(origin?[['origin',origin]]:[]),
+  const props=[['id',pbs.id],...(lb?[['lb',lb]]:[]),...(origin?[['origin',origin]]:[]),
     ...(bc===undefined?[]:[['bc',bc],['seq',String(seq)]]),
     ...(['type','role','review','note'].filter(k=>({type,role,review,note})[k]!==undefined)
       .map(k=>[k,({type,role,review,note})[k]]))];
@@ -120,7 +122,7 @@ export function readCMDBlockChains(source){
         format:parsed?'cmd-v1':'legacy',origin:parsed?.origin||id,kind:(parsed?.s.length||legacyChild)?'child':'parent',
         bc:parsed?.bc??null,seq:parsed?.seq===undefined?null:Number(parsed.seq),
         type:parsed?.type??null,role:parsed?.role??null,
-        review:parsed?.review??null,note:parsed?.note??null});
+        review:parsed?.review??null,note:parsed?.note??null,lb:parsed?.lb??null});
     }
     offset+=line.length+1;
   }
@@ -257,7 +259,8 @@ export function planCMDBlockChainArrangement(source,chains){
         ...(seq===0&&chain.type?{type:chain.type}:{}),
         ...((chain.roles===undefined?atom.role:chain.roles?.[id])?
           {role:chain.roles===undefined?atom.role:chain.roles[id]}:{}),
-        ...(atom.review?{review:atom.review}:{}),...(atom.note?{note:atom.note}:{})});
+        ...(atom.review?{review:atom.review}:{}),...(atom.note?{note:atom.note}:{}),
+        ...(atom.lb?{lb:atom.lb}:{})});
     }
   }
   if(seen.size!==known.size)throw Error('Incomplete PBS partition');

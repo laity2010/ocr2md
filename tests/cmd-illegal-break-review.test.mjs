@@ -22,7 +22,8 @@ const reviewRows=s=>keyIllegalBreakReviewRows(detectIllegalBreaks(s,spell,
   {bodyEnd:s.indexOf('<!-- minerujson:source:v1:')}).issues);
 const find=(s,joined)=>reviewRows(s).find(r=>r.joined===joined&&r.blockId.startsWith('p6b6'));
 const saved=s=>readIllegalBreakReviewDecisions(s,scanAnnotations(s).filter(x=>x.tag===ILLEGAL_BREAK_REVIEW_TAG));
-function apply(s,ops){return [...ops].sort((a,b)=>(b.at??b.target.from)-(a.at??a.target.from)).reduce((text,op)=>{
+function apply(s,ops){return [...ops].sort((a,b)=>(b.at??b.from??b.target?.from)-(a.at??a.from??a.target?.from)).reduce((text,op)=>{
+  if(op.action==='text')return text.slice(0,op.from)+op.insert+text.slice(op.to);
   if(op.action==='insert')return text.slice(0,op.at)+formatAnnotation(op.tag,op.attributes)+op.suffix+text.slice(op.at);
   if(op.action==='update')return text.slice(0,op.target.from)+formatAnnotation(op.tag,op.attributes)+text.slice(op.target.to);
   if(op.action==='remove')return text.slice(0,op.target.from)+text.slice(op.target.to+(op.removeAfter?1:0));
@@ -36,7 +37,7 @@ for(const [choice,expected] of [['断行合并','断行合并'],['忽略','忽�
     scanAnnotations(source).filter(x=>x.tag===ILLEGAL_BREAK_REVIEW_TAG));
   assert.equal(ops.length,1);
   source=apply(source,ops);
-  assert.equal(saved(source).decisions.get(row.reviewKey)?.decision,expected);
+  assert.equal(saved(source).decisions.get(`block:${row.afterBlockId}`)?.decision,expected);
   assert.equal(immutable(source),evidence,'sealed OCR evidence untouched');
   assert.deepEqual(readCMDBlockChains(source).invalid,[]);
   assert.deepEqual(reviewRows(source).filter(x=>x.blockId==='p6b6s0')
@@ -46,6 +47,7 @@ for(const [choice,expected] of [['断行合并','断行合并'],['忽略','忽�
     expected||'待定',scanAnnotations(source)).length,0,'setting same value is no-op');
 }
 assert.equal(source,beginning,'pending restores the exact original CMD text');
+assert(!source.includes(' lb='),'pending must not leave a block property');
 // Distinct same-child OCR scars must be independent even though they share
 // one PBS source block and physical PDF bbox.
 const lever=find(source,'leverage'),insurance=find(source,'insurance');
@@ -67,7 +69,29 @@ mathSource=apply(mathSource,planIllegalBreakReviewDecision(mathSource,mathRows()
   '断行合并',scanAnnotations(mathSource)));
 mathSource=apply(mathSource,planIllegalBreakReviewDecision(mathSource,mathRows()[1],
   '忽略',scanAnnotations(mathSource)));
-assert.deepEqual(mathRows().map(x=>saved(mathSource).decisions.get(x.reviewKey)?.decision),
-  ['断行合并','忽略'],'Formula edges must remain independent after source annotations');
+assert.deepEqual(mathRows().map(x=>saved(mathSource).decisions.get(`block:${x.afterBlockId}`)?.decision),
+  ['断行合并','忽略'],'Formula edges must remain independent after source attributes');
+assert(mathSource.includes('id="p4b0s1" lb="m"'));
+assert(mathSource.includes('id="p4b0s2" lb="i"'));
+assert(!mathSource.includes('<!--ocr2md:illegal-break-review'));
+// Existing long cross-block comments remain readable, then migrate on the
+// next explicit review in ONE atomic source transaction.
+let legacySource=beginning;
+const legacyRow=find(legacySource,'about 3');
+const legacyNote=formatAnnotation(ILLEGAL_BREAK_REVIEW_TAG,{
+  v:'1',key:legacyRow.reviewKey,before:legacyRow.beforeBlockId,
+  after:legacyRow.afterBlockId,decision:'merge'})+'\n';
+const legacyTarget=readCMDBlockChains(legacySource).atoms.find(a=>a.id==='p6b6s1');
+legacySource=legacySource.slice(0,legacyTarget.from)+legacyNote+
+  legacySource.slice(legacyTarget.from);
+assert.equal(saved(legacySource).decisions.get(legacyRow.reviewKey)?.decision,'断行合并');
+const migrated=planIllegalBreakReviewDecision(legacySource,find(legacySource,'about 3'),
+  '断行合并',scanAnnotations(legacySource));
+assert.deepEqual(migrated.map(e=>e.action),['text','remove']);
+legacySource=apply(legacySource,migrated);
+assert(!legacySource.includes(ILLEGAL_BREAK_REVIEW_TAG));
+assert.equal(saved(legacySource).decisions.get('block:p6b6s1')?.decision,'断行合并');
+assert.equal(legacySource.replace(' lb="m"',''),beginning);
+console.log('CMD_CROSS_BLOCK_LEGACY_MIGRATION_PASS atomic text+remove, backward readable');
 console.log('CMD_LATEX_TWO_REVIEW_CHOICES_PASS A→formula merge, formula→C ignore independently');
 console.log('CMD_ILLEGAL_BREAK_REVIEW_PASS merge/ignore/pending, independent scars, no join, no change sealed OCR');
