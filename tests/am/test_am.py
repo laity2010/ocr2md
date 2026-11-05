@@ -35,15 +35,17 @@ class AMCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'non-public cross-module API'):
             am.assert_references(self.db)
 
-    def test_focus_includes_all_ten_observed_receivers(self):
+    def test_focus_includes_all_eleven_observed_receivers(self):
         owners = {row[0] for row in self.db.execute("SELECT module_id FROM publishers WHERE message_id='E03'")}
         self.assertEqual(owners, {'C','G','M','P','A'})
-        # Exact, not a relaxed lower bound: the four formerly missing focus
-        # consumers must remain registered alongside the six original ones.
+        # Exact, not a relaxed lower bound: the newly observed CM6 source
+        # viewport observer also listens to focusTarget via one shared store
+        # callback. Retain all ten previously registered receivers.
         receiver_ids = {row[0] for row in self.db.execute(
             "SELECT id FROM subscriptions WHERE message_id='E03'")}
         self.assertEqual(receiver_ids, {'SUB05','SUB06','SUB07','SUB08','SUB09',
-                                        'SUB-W16','SUB19','SUB21','SUB22','SUB23'})
+                                        'SUB-W16','SUB19','SUB21','SUB22','SUB23',
+                                        'SUB-GPT6-L85-FOCUS'})
 
     def test_wcp_shared_store_subscribers_are_explicit(self):
         expected={'SUB-W15':('E13','W'),'SUB-W16':('E03','G'),'SUB-W17':('E01','S')}

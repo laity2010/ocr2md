@@ -1027,7 +1027,7 @@ INSERT INTO access_edges VALUES
  ('X-BREAK-C46','L','C','ui/workspace.js','getCMD().markIllegalBreakCandidates(candidates,{expectedSource,agScope:scope})','C46','registered','AG scope forwards to CMD guarded single transaction'),
  ('X-BREAK-G20','L','G','ui/workspace.js','createIllegalBreakModule(this.illegalBreakHost','G20','registered','Layout mounts independent read-only AG module'),
  ('X-BREAK-L37',NULL,'L','ui/main.js','workspace.getIllegalBreakElements()','L37','registered','Shell restores marked Lint without rescanning'),
- ('X-BREAK-L38',NULL,'L','ui/main.js','workspace.markIllegalBreakCandidates(issues,source)','L38','registered','Shell passes only candidates to Layout semantic port');
+ ('X-BREAK-L38',NULL,'L','ui/main.js','workspace.markIllegalBreakCandidates(marking,source)','L38','registered','Shell passes only candidates to Layout semantic port');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-C42','C42','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Detect dictionary word splits plus real Buffett about/3 adjacent MinerU block, exclude ordinary paragraph breaks','direct'),
  ('TC-BREAK-C43','C43','tests/cmd-linebreak.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Comments before newline preserve Markdown rendering; no double insert','direct'),
@@ -1226,7 +1226,6 @@ INSERT INTO apis VALUES
 INSERT INTO access_edges VALUES
  ('X-JOIN-L55','C','L','ui/wcp-cmd-element-transactions.js','planCMDBlockJoin(source,rows,targetId,join)','L55','registered','CMD plans minimal change from current verified source'),
  ('X-JOIN-L56','C','L','ui/cm-document.js','projectCMDLogicalTextBlocks(source,inventory.rows)','L56','registered','CMD returns joined logical text without deleting OCR markers'),
- ('X-JOIN-C57','L','C','ui/main.js','cmdPort.setBlockJoin(targetId,join)','C57','registered','Shell forwards PDF semantic action through bounded WCP CMD transaction'),
  ('X-JOIN-G29','L','G','ui/workspace.js','this.pdf?.setBlockCoverage','G29','registered','PDF-only bbox inputs, no direct AG code or raw-source editing');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-JOIN-L55','L55','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','reversible joins for all types including page-first p9b0 into previous page last p8b8; document-first blocked; quoted anchor and exact byte restoration','integration'),
@@ -1265,8 +1264,6 @@ INSERT INTO apis VALUES
  ('L60','L','returned.isTextBlockCoverageEnabled','ui/workspace.js','returned','none','boolean PDF Block lens preference','Shell uses this preference to refresh CMD Block projection across module switches',1);
 INSERT INTO access_edges VALUES
  ('X-MOVE-L57','C','L','ui/wcp-cmd-element-transactions.js','planCMDBlockMove(source,rows,sourceId,targetId,placement)','L57','registered','CMD validates single Block move before or after a target'),
- ('X-MOVE-C58','L','C','ui/main.js','cmdPort.moveBlockAfter(sourceId,targetId)','C58','registered','Shell preserves exposed move-after API for internal CMD callers; PDF pointer gesture uses move-before only'),
- ('X-MOVE-C59','L','C','ui/main.js','cmdPort.moveBlockBefore(sourceId,targetId)','C59','registered','Shell forwards move-before operation with pointed logical root as source and drag origin as insertion target'),
  ('X-MOVE-L58','C','L','ui/main.js','workspace.setBlockMoveAction(async(sourceId,targetId,placement)','L58','registered','Shell injects source/target/placement operation through layout'),
  ('X-PDF-BLOCK-L59',NULL,'L','ui/main.js','workspace.setTextBlockInventoryRefreshAction(scanTextBlocks)','L59','registered','Shell supplies CMD inventory refresh callback while PDF checkbox is independent of AG selected module'),
  ('X-PDF-BLOCK-L60',NULL,'L','ui/main.js','workspace.isTextBlockCoverageEnabled()','L60','registered','Shell reindexes CMD Blocks when PDF lens is on even if AG is showing media/title/etc');
@@ -1310,7 +1307,6 @@ INSERT INTO apis VALUES
  ('P18','P','sourceSubblocks','ui/pdf-preview.js','export','live source Markdown','read-only original child path / source-line map','child PDF caption/body/note navigates exact CMD subblock line when marked',1);
 INSERT INTO access_edges VALUES
  ('X-SUBBLOCK-C63','C','L','ui/wcp-cmd-element-transactions.js','planCMDSubblockAnnotations(source)','C63','registered','CMD plans marker edits from sealed source with exact path validation'),
- ('X-SUBBLOCK-C64','L','C','ui/main.js','cmdPort.markOriginalSubblocks()','C64','registered','Shell requests a single CMD subblock annotation operation'),
  ('X-SUBBLOCK-L62','L','L','ui/main.js','workspace.setSubblockMarkAction(','L62','registered','Shell injects semantic annotation callback to AG via Layout');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SUBBLOCK-C63','C63','tests/cmd-subblock-annotations.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','43 native child markers in 20 parent Blocks; idempotent with byte-identical original Markdown after marker removal, tampering blocked, original MinerU JSON SHA unchanged','direct'),
@@ -1354,8 +1350,6 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 
 INSERT INTO apis VALUES
  ('P19','P','layoutPDFGutterLabels','ui/pdf-gutter-label-layout.js','export','native per-page parent/child label Y spans and scaled chip heights','pure deterministic nonoverlap per gutter with flexible bbox height and nearest free-row fallback','read-only geometry; exactly one placement per original OCR label',1);
-INSERT INTO access_edges VALUES
- ('X-PDF-GUTTER-P19','P','P','ui/pdf-preview.js','layoutPDFGutterLabels(items,page.clientHeight)','P19','registered','page-wide parent and child gutter collision avoidance');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-GUTTER-P19','P19','tests/pdf-gutter-label-layout.test.mjs','tests/pdf-gutter-label-layout.test.mjs','inline synthetic page 5 caption/body/note geometry; all labels fit own bbox range when possible, no collisions, deterministic, preserve IDs for crowded inputs','direct');
 
@@ -1516,10 +1510,9 @@ INSERT INTO apis VALUES
  ('L80','L','returned.setPDFBBoxAction','ui/workspace.js','returned','semantic PDF bbox correction callback','forward PDF or AG user action to Shell CMD transaction port','no direct renderer data persistence or CM6 bypass',1);
 INSERT INTO access_edges VALUES
  ('X-WP6-C-L77','L','L','ui/cmd-pdf-bbox.js','readCMDPDFBBoxOverrides(source,layout)','L77','registered','footer validation by one CMD read owner'),
- ('X-WP6-C-L78','C','L','ui/wcp-cmd-element-transactions.js','planCMDPDFBBoxEdit(source,layout,memberId,bbox)','L78','registered','CMD planned edit before sealed archive'),
+ ('X-WP6-C-L78','C','L','ui/wcp-cmd-element-transactions.js','planCMDPDFBBoxEdit(source,layout,identity.origin,bbox)','L78','registered','CMD planned edit before sealed archive'),
  ('X-WP6-C-L79','C','L','ui/cm-document.js','applyCMDPDFBBoxOverrides(base,source)','L79','registered','shared AG and PDF effective geometry projection'),
- ('X-WP6-C-C73','L','C','ui/main.js','cmdPort.setPDFBBox(memberId,bbox','C73','registered','Shell owns source-guarded CMD bbox transaction'),
- ('X-WP6-C-L80',NULL,'L','ui/main.js','workspace.setPDFBBoxAction(async(memberId,bbox,snapshot)','L80','registered','registered Shell -> PDF callback');
+ ('X-WP6-C-L80',NULL,'L','ui/main.js','workspace.setPDFBBoxAction(rejectTextBlockEdit)','L80','registered','registered Shell -> PDF callback');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP6-L77','L77','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','read footer, exact restore, duplicate and invalid footer fail-closed','direct'),
  ('TC-WP6-L78','L78','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','correct parent and original child bbox within page, reject invalid and unknown IDs, no-op idempotence','direct'),
@@ -1540,10 +1533,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- The toolbar's existing 「全部」 is a PDF-page lens ONLY in text-block mode.
 INSERT INTO apis VALUES
  ('G30','G','filterTextBlockPageRows','ui/text-block-page-scope.js','export','CMD text-block atoms, one-based current PDF page and show-all boolean','read-only same-page atoms or the entire inventory','no source, CMD labels, bbox or PDF geometry mutation',1),
- ('P23','P','PdfPreview.onCurrentPageChange','ui/pdf-preview.js','callback','PDF.js pagechanging one-based page number','scalar navigation notice to Workspace text-block owner','PDF does not access AG Grid or module internals',1),
+ ('P23','P','PdfPreview.onCurrentPageChange','ui/pdf-preview.js','export','PDF.js pagechanging one-based page number','scalar navigation notice to Workspace text-block owner','exported PdfPreview constructor accepts this bounded scalar callback; PDF does not access AG Grid or module internals',1),
  ('L81','L','returned.setTextBlockShowAll','ui/workspace.js','returned','Shell-owned toolbar checkbox Boolean','semantic all-pages toggle to text-block AG owner','does not alter chapter or CMD query for unrelated modules',1);
 INSERT INTO access_edges VALUES
- ('X-AG-PAGE-P23','P','P','ui/workspace.js','new PdfPreview(...,pageNumber=>currentOutline?.textBlock?.setCurrentPDFPage(pageNumber))','P23','registered','only page number crosses PDF to AG via workspace callback'),
+ ('X-AG-PAGE-P23','L','P','ui/workspace.js','pageNumber=>currentOutline?.textBlock?.setCurrentPDFPage(pageNumber)','P23','registered','Workspace composes the exported PDF constructor scalar callback; PDF never calls AG directly'),
  ('X-AG-PAGE-L81','L','L','ui/main.js','workspace.setTextBlockShowAll(enabled)','L81','registered','Shell toolbar user intent forwarded only through Workspace port');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-AG-PAGE-G30','G30','tests/text-block-page-scope.test.mjs','tests/text-block-page-scope.test.mjs','same page parent/child rows; all returns full unchanged inventory','direct'),
@@ -1576,10 +1569,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- PDF extraction remains a text-only CMD capability while PBS structural
 -- editing is locked. All user-facing module feedback converges at Shell status.
 INSERT INTO apis VALUES
- ('P25','P','PdfPreview.onStatus','ui/pdf-preview.js','constructor-callback','PDF operation message and severity','reports through Workspace-owned status callback','no second visible PDF status bar; does not mutate CMD or bypass read-only PBS structure',1),
- ('L83','L','modulePort.setAgStatusSummary','ui/main.js','module-port','module CMD scope and count summary string','append summary inside Shell global #status','AG toolbar does not mount visible duplicate status line',1);
+ ('P25','P','PdfPreview.onStatus','ui/pdf-preview.js','export','PDF operation message and severity','exported PdfPreview constructor accepts bounded status callback to Workspace','no second visible PDF status bar; does not mutate CMD or bypass read-only PBS structure',1),
+ ('L83','L','modulePort.setAgStatusSummary','ui/main.js','returned','module CMD scope and count summary string','append summary inside Shell global #status','bounded modulePort supplied by Shell, not AG direct DOM mutation',1);
 INSERT INTO access_edges VALUES
- ('X-PDF-TEXT-STATUS-P25','P','L','ui/workspace.js','new PdfPreview(...,onStatus=>reportMediaStatus)','P25','registered','PDF reports display-only event via Workspace status port'),
+ ('X-PDF-TEXT-STATUS-P25','L','P','ui/workspace.js','(message,kind)=>reportMediaStatus(message,kind)','P25','registered','Workspace injects Shell-bound status callback into public PDF constructor'),
  ('X-AG-GLOBAL-L83','L','L','ui/wcp-ag-module-toolbar.js','modulePort.setAgStatusSummary(summary)','L83','registered','AG summary uses semantic Shell module port, not DOM status write');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TEXT-RESTORE-P25','P25','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit: PDF text button restored, enable-on-select, single undoable insertion, Shell-only status, no auto-save','integration'),
@@ -1588,9 +1581,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Ambient text-block AG inventory counts must not overwrite the user's
 -- latest PDF/CM6 operation message within the unified Shell status line.
 INSERT INTO apis VALUES
- ('L84','L','createWorkspace.onTextBlockSummary','ui/workspace.js','constructor-callback','text-block AG inventory and active page diagnostic summary','append a read-only Shell global-status segment without replacing operation message','no DOM status writes from AG and no duplicate visible status row',1);
+ ('L84','L','createWorkspace.onTextBlockSummary','ui/workspace.js','export','text-block AG inventory and active page diagnostic summary','exported createWorkspace accepts this bounded Shell callback','no DOM status writes from AG and no duplicate visible status row',1);
 INSERT INTO access_edges VALUES
- ('X-TEXTBLOCK-GLOBAL-L84','L','L','ui/main.js','createWorkspace(...,onTextBlockSummary)','L84','registered','Shell owns final status text, Workspace forwards only module summary string');
+ ('X-TEXTBLOCK-GLOBAL-L84','L','L','ui/main.js','workspace = createWorkspace(','L84','registered','Shell owns final status text, Workspace forwards only module summary string');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-STATUS-L84','L84','tests/pdf-extract-global-status.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit AG scan summary appended to Shell status while latest PDF action stays primary','integration');
 
@@ -1598,7 +1591,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- distinct from their physical OCR discovery order or current source line.
 -- AG sorts its own read-only row view; CMD source edits stay in CM6 only.
 INSERT INTO apis VALUES
- ('G32','G','sortTextBlockPBSRows','ui/text-block-page-scope.js','re-export','text-block AG rows with current visible PBS IDs','new array in page/parent/child numeric order, preserving original row references','no data write, OCR origin or sourceLine mutation',1);
+ ('G32','G','sortTextBlockPBSRows','ui/text-block-page-scope.js','export','text-block AG rows with current visible PBS IDs','new array in page/parent/child numeric order, preserving original row references','no data write, OCR origin or sourceLine mutation',1);
 INSERT INTO access_edges VALUES
  ('X-AG-PBS-NUMERIC-G32','G','G','ui/text-block-module.js','sortTextBlockPBSRows(scoped())','G32','registered','AG view projection sorts current PBS identity, not original OCR or CM6 source order');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
@@ -1608,32 +1601,32 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- WCP30 three-pane reconciliation: current CMD id, source tag range, original
 -- OCR physical bbox are ONE canonical locator, never equal-by-number guesses.
 INSERT INTO apis VALUES
- ('C63','C','projectCMDAtomLocations','ui/cmd-block-chains.js','export','live CM6 source, optional CMD chain model','lexical tag and content scopes keyed by current PBS id with immutable OCR origin, physical page/block/path','source id never substituted for OCR bbox; no user data writes',1),
- ('C64','C','resolveCMDBlockFocusRow','ui/cmd-block-chains.js','export','CMD table rows plus semantic focus event','one exact current PBS row by id, physical MinerU origin or numeric source-line scope','must refuse stale explicit ID rather than silently select different AG row',1),
- ('C65','C','returned.blockIdAtSourceLine','ui/wcp-cmd-element-transactions.js','returned','CM6 absolute source line number','current CMD PBS id or null','CMD owns mapping; Shell receives only scalar ID, no cross-module source parsing',1),
+ ('C125','L','projectCMDAtomLocations','ui/cmd-block-chains.js','export','live CM6 source, optional CMD chain model','lexical tag and content scopes keyed by current PBS id with immutable OCR origin, physical page/block/path','source id never substituted for OCR bbox; no user data writes',1),
+ ('C126','L','resolveCMDBlockFocusRow','ui/cmd-block-chains.js','export','CMD table rows plus semantic focus event','one exact current PBS row by id, physical MinerU origin or numeric source-line scope','must refuse stale explicit ID rather than silently select different AG row',1),
+ ('C127','C','returned.blockIdAtSourceLine','ui/wcp-cmd-element-transactions.js','returned','CM6 absolute source line number','current CMD PBS id or null','CMD owns mapping; Shell receives only scalar ID, no cross-module source parsing',1),
  ('P26','P','sourcePDFLocationAtLine','ui/pdf-source-locations.js','export','CMD-labelled physical source projection and source line','exact current PBS id, original physical page/block/child and text scope','PDF does not parse current p/b as physical coordinates',1);
 INSERT INTO access_edges VALUES
  ('X-FOCUS-P26','P','P','ui/pdf-preview.js','sourcePDFLocationAtLine(this.labelSources,line)','P26','registered','PDF source-click focus resolves source range through CMD-origin adapter'),
- ('X-FOCUS-C63','P','C','ui/cmd-block-labels.js','projectCMDAtomLocations(source)','C63','registered','CMD canonical source-to-original-geometry projections'),
- ('X-FOCUS-C64','G','C','ui/text-block-module.js','resolveCMDBlockFocusRow(tableRows,focus)','C64','registered','AG selects by identity or actual CMD tag range, not displayed array order'),
- ('X-FOCUS-C65','L','C','ui/main.js','cmdPort.blockIdAtSourceLine(sourceLine)','C65','registered','CM6 explicit text click publishes current PBS ID across WCP event bus');
+ ('X-FOCUS-C63','L','L','ui/cmd-block-labels.js','projectCMDAtomLocations(source)','C125','registered','CMD canonical source-to-original-geometry projections'),
+ ('X-FOCUS-C64','G','L','ui/text-block-module.js','resolveCMDBlockFocusRow(tableRows,focus)','C126','registered','AG selects by identity or actual CMD tag range, not displayed array order'),
+ ('X-FOCUS-C65','L','C','ui/main.js','cmdPort?.blockIdAtSourceLine(sourceLine)','C127','registered','CM6 explicit text click publishes current PBS ID across WCP event bus');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-FOCUS-C63','C63','tests/cmd-three-pane-focus.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','after move p1b10→p1b12, source tag and body map to physical p1b10, with one-to-one current IDs','direct'),
- ('TC-FOCUS-C64','C64','tests/cmd-three-pane-focus.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG selection correct under reverse/shuffled display order, stale explicit ids fail closed','direct'),
- ('TC-FOCUS-C65','C65','tests/cmd-three-pane-focus.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit actual CM6 click source p1b12→PDF physical p1b10→AG current p1b12','integration'),
+ ('TC-FOCUS-C63','C125','tests/cmd-three-pane-focus.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','after move p1b10→p1b12, source tag and body map to physical p1b10, with one-to-one current IDs','direct'),
+ ('TC-FOCUS-C64','C126','tests/cmd-three-pane-focus.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG selection correct under reverse/shuffled display order, stale explicit ids fail closed','direct'),
+ ('TC-FOCUS-C65','C127','tests/cmd-three-pane-focus.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit actual CM6 click source p1b12→PDF physical p1b10→AG current p1b12','integration'),
  ('TC-FOCUS-P26','P26','tests/cmd-three-pane-focus.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit PDF chip/canvas and AG clicks select identical current CMD p1b12','integration');
 
 -- WCP31 same-parent direct-child drag insertion is CMD-owned. PDF conveys
 -- semantic A/B/placement only; AG and PDF render the current logical IDs with
 -- unchanged original OCR bounding boxes from the CMD location sidecar.
 INSERT INTO apis VALUES
- ('C120','C','planCMDReorderPBSChildren','ui/cmd-block-chains.js','export','same-parent direct child IDs, before/after, live CMD source','full-scoped reordered child Markdown plus original-origin footer edits','no direct PDF/AG writes, sealed original MinerU JSON unchanged',1),
+ ('C120','L','planCMDReorderPBSChildren','ui/cmd-block-chains.js','export','same-parent direct child IDs, before/after, live CMD source','full-scoped reordered child Markdown plus original-origin footer edits','no direct PDF/AG writes, sealed original MinerU JSON unchanged',1),
  ('C121','C','returned.reorderPBSChildren','ui/wcp-cmd-element-transactions.js','returned','direct child IDs, before/after, expected source snapshot','one optimistic CM6 Undo/Redo transaction containing scope and footer','reject stale source, foreign parent and duplicate/mutated OCR origin',1),
  ('P40','P','pdfDropGuideZone','ui/pdf-pbs-drop-hit.js','export','pointer coordinate, temporary guide rectangle and same-parent child intent','semantic before or after drop selection','no pixel-based source mutation, no persistent PDF geometry change',1);
 INSERT INTO access_edges VALUES
- ('X-CHILD-REORDER-C120','C','C','ui/wcp-cmd-element-transactions.js','planCMDReorderPBSChildren(source,sourceId,targetId,placement)','C120','registered','CMD pure transaction planner owns child identity and source-scope relocation'),
- ('X-CHILD-REORDER-C121','L','C','ui/main.js','cmdPort.reorderPBSChildren(sourceId,targetId,placement,options)','C121','registered','Shell forwards only semantic child IDs; CM6 is the sole source writer'),
- ('X-CHILD-REORDER-P40','P','P','ui/pdf-preview.js','pdfDropGuideZone(x,rail,child,this.readOnly,childDrag)','P40','registered','PDF maps transient rail pointer to semantic before/after without CMD internals');
+ ('X-CHILD-REORDER-C120','C','L','ui/wcp-cmd-element-transactions.js','planCMDReorderPBSChildren(source,sourceId,targetId,placement)','C120','registered','CMD pure transaction planner owns child identity and source-scope relocation'),
+ ('X-CHILD-REORDER-C121','L','C','ui/main.js','cmdPort.reorderPBSChildren(sourceId,targetId,placement,{expectedSource:source})','C121','registered','Shell forwards only semantic child IDs; CM6 is the sole source writer'),
+ ('X-CHILD-REORDER-P40','P','P','ui/pdf-preview.js','pdfDropGuideZone(x,rail,item.targetKind','P40','registered','PDF maps transient rail pointer to semantic before/after without CMD internals');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CHILD-REORDER-C120','C120','tests/cmd-pbs-child-reorder.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','before/after insertion stable native physical origins, full scopes, PDF geometry, 0 sealed evidence edits','direct'),
  ('TC-CHILD-REORDER-C121','C121','tests/cmd-pbs-child-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','actual Chrome/WebKit child drag commits one undoable source plus footer edit with consistent AG/PDF label','integration'),
@@ -1711,7 +1704,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO apis VALUES
  ('C122','C','planIllegalBreakReviewDecision','ui/cmd-illegal-break-review.js','export','current CMD source, candidate A/B row, review choice, current annotations','bounded CMD source/annotation edits','cross-block B.lb=m/i attribute, within-block independent comment, pending removes; no prose joining',1),
  ('C123','C','returned.reviewIllegalBreak','ui/wcp-cmd-element-transactions.js','returned','one candidate row and choice','single CM6 undoable CMD transaction','all actions through readSource and editAnnotations; sealed MinerU evidence preserved',1),
- ('G34','G','reviewDropdown','ui/illegal-break-module.js','internal','AG candidate A/B row and three choices','colored dropdown and review-intent callback','no direct CM6 source or storage; pending/merge/ignore from CMD projections',1);
+ ('G34','G','ReviewSelectRenderer','ui/illegal-break-module.js','internal','AG candidate A/B row and three choices','colored dropdown and review-intent callback','no direct CM6 source or storage; pending/merge/ignore from CMD projections',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-BREAK-REVIEW-C122','C122','tests/cmd-illegal-break-review.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Incoming cross-block edge writes compact B.lb m/i, within-block distinct scars keep independent comments, legacy long cross-block comments migrate atomically, pending restores source','direct'),
  ('TC-BREAK-REVIEW-C123','C123','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit three-state AG select writes one CMD annotation transaction, Undo/Redo, manual save and reload preserve status without actual content joining','integration'),
@@ -1742,3 +1735,70 @@ INSERT INTO apis VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-NATIVE-RECOVERY-C124','C124','tests/cmd-native-subblock-repair.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','20 untouched native scopes, all 43 child anchors added on clean old CMD, 19 scopes/42 children when original p1b3 already absorbed, idempotent and cross-page table fail-closed; preserve original JSON','direct'),
  ('TC-NATIVE-PDF-C124','C124','tests/native-subblock-alignment.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit PDF real image p0b5s0 and cross-page table p3b1s0/p4b0s1 chips have real source content, not dashed, with AG and CMD one source, no writes','integration');
+
+
+-- Independent PDF-elements audit: previously undeclared, actually exported
+-- immutable read/planning ports used by existing CMD, AG and PDF modules.
+-- The preexisting legacy L-prefixed numeric APIs retain their stable IDs;
+-- the owning module is always the explicit module_id column, not the prefix.
+INSERT INTO apis VALUES
+ ('L88','L','parseCMDPBSId','ui/cmd-block-chains.js','export','candidate physical PBS string','parsed page/block/child path or null','read-only canonical identifier parser',1),
+ ('L89','L','rebaseIllegalBreakRowsInPlace','ui/illegal-break-review-annotation-update.js','export','AG review rows, CM6 change map, old and new doc','updated review projection offsets','adjusts only AG row metadata, never changes CM6',1),
+ ('P42','P','registerPDFBlockLabelScaleSetting','ui/pdf-block-label-setting.js','export','Settings port, PDF label scale callback','unsubscribe function','register only PDF-owned key and receive Settings semantic event',1),
+ ('C128','C','keyIllegalBreakReviewRows','ui/cmd-illegal-break-review.js','export','candidate rows','stable review keys tied to semantic pair and evidence','pure CMD preview; no AG DOM/CM6 writes',1),
+ ('C129','C','REVIEW_DECISIONS','ui/cmd-illegal-break-review.js','export','none','frozen review decision values','CMD-owned decision enum imported read-only by AG',1),
+ ('L90','L','planCMDReparentPBS','ui/cmd-block-chains.js','export','CMD source, source and target PBS IDs','validated guarded edit plan','no direct CM6 or persistent PDF writes',1),
+ ('L91','L','planCMDJoinP1B3IntoP1B4','ui/cmd-block-chains.js','export','CMD source','specific legacy physical-block join plan','pure legacy migration plan, no source write',1),
+ ('L92','L','planCMDPromotePBSChild','ui/cmd-block-chains.js','export','CMD source and child ID','validated promotion edit plan','pure planner, no CM6 bypass',1),
+ ('L93','L','planCMDReorderPBSParents','ui/cmd-block-chains.js','export','CMD source, two parent IDs and placement','validated sibling reorder plan','pure planner, preserves original OCR provenance',1),
+ ('L94','L','planCMDAbsorbReviewedParent','ui/cmd-block-chains.js','export','CMD source and reviewed parent IDs','guarded absorption plan','pure planner, no PDF geometry writes',1),
+ ('L95','L','planCMDInsertPBSParentAt','ui/cmd-block-chains.js','export','CMD source, two parent IDs, before/after','guarded insertion plan','pure planner, no persistent source write',1);
+INSERT INTO subscriptions VALUES
+ ('SUB-P01','E09','P','ui/pdf-block-label-setting.js','settings.subscribe','registered PDF text-block labelScale changes','dispatch PDF scale only through Shell/Workspace port');
+INSERT INTO access_edges VALUES
+ ('X-GPT6-LABEL-SCALE',NULL,'P','ui/main.js','registerPDFBlockLabelScaleSetting(settings','P42','registered','Shell calls exported PDF-owned Settings registration port'),
+ ('X-GPT6-CMD-REVIEW-READ','G','C','ui/illegal-break-module.js','keyIllegalBreakReviewRows(','C128','registered','AG reads stable keys from CMD pure public projector'),
+ ('X-GPT6-CMD-REVIEW-VALUES','G','C','ui/illegal-break-module.js','REVIEW_DECISIONS','C129','registered','AG imports CMD-owned immutable review enum'),
+ ('X-GPT6-REBASE-REVIEW','G','L','ui/illegal-break-module.js','rebaseIllegalBreakRowsInPlace(','L89','registered','AG confines CM6 change map rebase to own row metadata'),
+ ('X-GPT6-REVIEW-CHAIN-READ','C','L','ui/cmd-illegal-break-review.js','readCMDBlockChains','L66','registered','CMD review planner imports pure public chain projection'),
+ ('X-GPT6-REVIEW-CHAIN-PARSE','C','L','ui/cmd-illegal-break-review.js','parseCMDBlockTag','L69','registered','CMD review planner imports pure public syntax parser'),
+ ('X-GPT6-REVIEW-CHAIN-WRITE','C','L','ui/cmd-illegal-break-review.js','serializeCMDBlockTag','L68','registered','CMD review planner uses pure formatter, not external storage'),
+ ('X-GPT6-LINEBREAK-CHAIN-READ','C','L','ui/cmd-linebreak.js','readCMDBlockChains','L66','registered','CMD linebreak analyzer reads chain projection'),
+ ('X-GPT6-LINEBREAK-CHAIN-PARSE','C','L','ui/cmd-linebreak.js','parseCMDPBSId','L88','registered','CMD linebreak analyzer uses canonical id parser'),
+ ('X-GPT6-NATIVE-CHAIN-READ','C','L','ui/cmd-native-subblock-repair.js','readCMDBlockChains','L66','registered','Repair planning uses pure chain projection'),
+ ('X-GPT6-NATIVE-CHAIN-PARSE','C','L','ui/cmd-native-subblock-repair.js','parseCMDPBSId','L88','registered','Native child repair uses canonical PBS parser');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-GPT6-L88','L88','tests/cmd-block-chains.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','strict canonical PBS path parsing, reject p4b02 alias','direct'),
+ ('TC-GPT6-L89','L89','tests/illegal-break-review-annotation-update.test.mjs','tests/illegal-break-review-annotation-update.test.mjs','review-only offsets rebased; prose mutation not suppressed','direct'),
+ ('TC-GPT6-P42','P42','tests/pdf-block-label-setting.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit scale updates via registered PDF Settings callback without CMD write','integration'),
+ ('TC-GPT6-C128','C128','tests/cmd-illegal-break-review.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','semantic pair candidate stable review key from actual CMD source','direct'),
+ ('TC-GPT6-C129','C129','tests/illegal-break-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG uses three fixed CMD review values','integration'),
+ ('TC-GPT6-L90','L90','tests/cmd-pbs-reparent-source.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','physical reparent planner returns undoable exact-scope edits','direct'),
+ ('TC-GPT6-L91','L91','tests/cmd-p1b3-b4-source.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','legacy physical pair parser/plan without persistent writes','direct'),
+ ('TC-GPT6-L92','L92','tests/cmd-pbs-promote-child.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','promotion preserves child origin and exact scopes','direct'),
+ ('TC-GPT6-L93','L93','tests/cmd-pbs-parent-group-order.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','parent reorder preserves sibling source order','direct'),
+ ('TC-GPT6-L94','L94','tests/cmd-pbs-absorb-generic.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','absorbed reviewed parent retains physical provenance','direct'),
+ ('TC-GPT6-L95','L95','tests/cmd-pbs-insert-after.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','before/after parent placement delegates to guarded insertion planner','integration');
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
+ ('TC-GPT6-SUB-P01','SUB-P01','tests/pdf-block-label-setting.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','real registered PDF labelScale Settings changes across both browser engines','integration');
+
+-- Fix-boundary review: direct registry/test links for existing (unremoved)
+-- public Workspace and CM6 visibility ports; no PASS is inferred from links.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-GPT6-L80','L80','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','test PDF BBox action port; milestone may reject structural edits until enabled','integration'),
+ ('TC-GPT6-L85','L85','tests/illegal-break-source-edit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','CM6 source viewport visibility under dynamic AG review and PDF focus','integration');
+INSERT INTO subscriptions VALUES
+ ('SUB-GPT6-L85','E01','L','ui/cm6-source-visibility.js','viewStore.subscribe','CMD revision schedules read-only CM6 viewport inspection','only CM6 view measurement/scroll; no text modification'),
+ ('SUB-GPT6-L85-FOCUS','E03','L','ui/cm6-source-visibility.js','viewStore.subscribe','focusTarget change schedules the same read-only CM6 viewport inspection','the one underlying callback observes both E01 and E03 without a second subscription');
+INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
+ ('TC-GPT6-SUB-L85','SUB-GPT6-L85','tests/illegal-break-source-edit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','CM6 source visibility observer on documentRevision','integration'),
+ ('TC-GPT6-SUB-L85-FOCUS','SUB-GPT6-L85-FOCUS','tests/illegal-break-source-edit.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','CM6 source visibility observer on focusTarget','integration');
+INSERT INTO access_edges VALUES
+ ('X-GPT6-CMD-PBS-PROJECTION','C','L','ui/wcp-cmd-element-transactions.js','projectCMDAtomLocations','C125','registered','CMD public source-to-physical pure projection'),
+ ('X-GPT6-CMD-PBS-PARSE','C','L','ui/wcp-cmd-element-transactions.js','parseCMDPBSId','L88','registered','CMD uses canonical PBS parser'),
+ ('X-GPT6-CMD-PBS-REPARENT','C','L','ui/wcp-cmd-element-transactions.js','planCMDReparentPBS','L90','registered','CMD calls pure structural reparent planner'),
+ ('X-GPT6-CMD-PBS-JOIN','C','L','ui/wcp-cmd-element-transactions.js','planCMDJoinP1B3IntoP1B4','L91','registered','CMD calls pure original-physical-pair planner'),
+ ('X-GPT6-CMD-PBS-PROMOTE','C','L','ui/wcp-cmd-element-transactions.js','planCMDPromotePBSChild','L92','registered','CMD calls pure promotion planner'),
+ ('X-GPT6-CMD-PBS-REORDER','C','L','ui/wcp-cmd-element-transactions.js','planCMDReorderPBSParents','L93','registered','CMD calls pure parent reorder planner'),
+ ('X-GPT6-CMD-PBS-ABSORB','C','L','ui/wcp-cmd-element-transactions.js','planCMDAbsorbReviewedParent','L94','registered','CMD calls pure absorb planner'),
+ ('X-GPT6-CMD-PBS-INSERT','C','L','ui/wcp-cmd-element-transactions.js','planCMDInsertPBSParentAt','L95','registered','CMD calls pure parent insertion planner');
