@@ -13,6 +13,11 @@ const items=[
  {id:'p16b11',side:'left',kind:'parent',width:60,height:18,anchorY:720,target:covers[0]}
 ];
 const output=layoutPDFEdgeRails(items,{pageWidth:1000,pageHeight:850,covers});
+for(const slot of output.slots){
+  const target=slot.target;
+  assert(slot.side==='left'?target.left-slot.left-slot.width>=2:slot.left-target.right>=2,
+    'fractional-page rail must retain at least 2 CSS pixels before rasterization');
+}
 assert.equal(output.slots.length,items.length);
 assert.equal(output.leaders.length,items.length);
 const intersect=(a,b)=>a.left<b.left+b.width&&b.left<a.left+a.width&&

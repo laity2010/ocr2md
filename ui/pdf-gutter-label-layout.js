@@ -64,7 +64,7 @@ export function layoutPDFGutterLabels(items,pageHeight,{gap=2}={}){
  * Input: {id,side,anchorY,target:{left,top,right,bottom},width,height};
  * geometry is expressed in PDF page CSS pixels, AFTER PDF.js zoom.
  */
-export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,padding=3}={}){
+export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=4,padding=5}={}){
   if(!Number.isFinite(pageWidth)||!Number.isFinite(pageHeight)||pageWidth<=0||pageHeight<=0)
     return {slots:[],leaders:[],safe:{left:0,right:0}};
   const bounds=covers.length?covers:[{left:pageWidth/2,right:pageWidth/2}];
@@ -74,8 +74,14 @@ export function layoutPDFEdgeRails(items,{pageWidth,pageHeight,covers=[],gap=2,p
   // An arbitrarily wide surrounding Dockview/scroller MUST NOT become
   // available label space: that caused p6b6s1/p6b8 to escape to the far
   // right of the iPad workspace at 100% page zoom.
-  const safe={left:Math.max(0,leftLimit-padding),
-    right:Math.max(0,pageWidth-rightLimit-padding)};
+  // Browser fractional PDF coordinates and transform rasterization can
+  // consume nearly a pixel. Reserve two whole pixels between each rail
+  // label and the immutable OCR edge, rather than relying on hairline gaps.
+  // `padding` is BOTH the physical page inset and the clearance from OCR.
+  // A left label occupies [padding, leftLimit-padding]; a right label starts
+  // at rightLimit+padding. Subtracting only once leaves zero OCR clearance.
+  const safe={left:Math.max(0,leftLimit-padding*2),
+    right:Math.max(0,pageWidth-rightLimit-padding*2)};
   const sideItems={left:[],right:[]};
   for(const item of items){
     if(!item?.target||!Number.isFinite(item.anchorY)||

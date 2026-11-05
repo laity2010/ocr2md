@@ -85,6 +85,7 @@ export class PdfPreview {
       <button class="ocr-pdf-fit" type="button" title="按宽度缩放">适宽</button>
       <button class="ocr-pdf-plus" type="button" title="放大">+</button>
       <span class="ocr-pdf-zoom" aria-live="polite">—</span>
+      <button class="ocr-pdf-mark-subblocks" type="button" title="从封存 MinerU JSON 补标缺失子块；不改原 PDF 或 JSON，Undo 可撤销">补标子块</button>
       <button class="ocr-pdf-extract-text" type="button" disabled title="先定位有可提取文字的 PDF 文本块；插入源码窗当前光标位置，不替换原文；Undo 可撤销">提取文本</button>
       <button class="ocr-pdf-promote-child" type="button" disabled title="请先点击 PDF 的原生子块标签，再将该子块独立为当前页末尾的新父块">独立子块</button>
       <label>页 <input class="ocr-pdf-page" type="number" min="1" step="1" value="1" aria-label="PDF 页码" /></label>
@@ -100,6 +101,8 @@ export class PdfPreview {
     this.pageInput=this.host.querySelector('.ocr-pdf-page');
     this.zoomNode=this.host.querySelector('.ocr-pdf-zoom');
     this.extractButton=this.toolbar.querySelector('.ocr-pdf-extract-text');
+    this.markSubblocksButton=this.toolbar.querySelector('.ocr-pdf-mark-subblocks');
+    this.markSubblocksButton.addEventListener('click',()=>void this.markOriginalSubblocks());
     this.extractButton.addEventListener('click',()=>void this.insertSelectedPDFText());
     this.promoteButton=this.toolbar.querySelector('.ocr-pdf-promote-child');
     this.promoteButton.addEventListener('click',()=>void this.promoteSelectedChild());
@@ -285,15 +288,15 @@ export class PdfPreview {
     }
   }
   async markOriginalSubblocks(){
-    if(this.readOnly)return;
-    if(this.disposed)return;
+    if(this.disposed||this.markSubblocksButton?.disabled)return;
+    if(this.markSubblocksButton)this.markSubblocksButton.disabled=true;
     try{
       const result=await this.onMarkSubblocks();
       this.setStatus(result?.changed
         ?`已补标 ${result.inserted} 个原始子块 · 未保存，可一次 Undo`
         :`子块标签已完整（${result?.existing??0} 个）`);
     }catch(error){this.setStatus('子块补标失败：'+error.message);}
-    finally{/* PDF toolbar no longer exposes the legacy mark action. */}
+    finally{if(this.markSubblocksButton)this.markSubblocksButton.disabled=false;}
   }
   selectedNativeChildId(){
     const chosen=this.selected;
@@ -833,21 +836,21 @@ export class PdfPreview {
     const displayId=row.id;
     if(badge.textContent!==displayId){badge.textContent=displayId;changed=true;}
     const title=this.readOnly?
-      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'长按选择作为子块／之后':'单击定位（只读）'}`:
+      `原始 ${row.origin||row.id} · 显示 ${displayId} · ${/^p\d+b\d+$/.test(row.id)?'三击接续；长按移动':'单击定位'}`:
       `原始 ${row.origin||row.id} · 显示 ${displayId} · 单击定位，三击切换 checkbox`;
     if(badge.title!==title)badge.title=title;
     const checked=!row.joinPrev;
     if(input.checked!==checked){input.checked=checked;changed=true;}
-    const disabled=this.readOnly||!row.joinable;
+    const disabled=!row.joinable;
     if(input.disabled!==disabled){input.disabled=disabled;changed=true;}
-    const help=this.readOnly?`单击定位 ${row.id}；${/^p\d+b\d+$/.test(row.id)?'长按选择作为子块／之后':'当前子块只读'}`:
+    const help=this.readOnly?`单击定位 ${row.id}；${/^p\d+b\d+$/.test(row.id)?'三击接续；长按移动':'单击定位'}`:
       row.joinable?`单击定位 ${row.id}；三击切换 checkbox（取消：并入上一 Block；勾选：恢复独立）`:
       `单击定位 ${row.id}；没有有效前驱 Block，不能取消勾选`;
     if(input.title!==help)input.title=help;
     const chipTitle=help+sourceKindHint(chip.dataset.sourceKind);
     if(chip.title!==chipTitle)chip.title=chipTitle;
     const aria=this.readOnly?
-      `来源 ${row.origin||row.id} · 显示 ${row.id} · 单击定位（只读）`:
+      `来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 三击${row.joinable?'切换接续':'不可切换'}`:
       `来源 ${row.origin||row.id} · 显示 ${row.id} · ${checked?'独立':'已接续'} · 单击定位，三击${row.joinable?'切换接续':'不可切换'}`;
     if(chip.getAttribute('aria-label')!==aria)chip.setAttribute('aria-label',aria);
     const isCorrectedChild=Boolean(row.origin&&row.origin!==row.id&&!row.promoted&&/^p\d+b\d+s\d+$/.test(row.id));
@@ -870,7 +873,7 @@ export class PdfPreview {
         const region=this.map[row.pageIndex];
         const block=region?.regions?.find(b=>b.blockIndex===row.blockIndex);
         const side=node.dataset.gutter;
-        if(block){
+        if(block&&!chip.classList.contains('ocr-pdf-rail-label')){
           const [x0,,x1]=row.promoted?row.bbox:block.bbox;
           const margin=side==='left'?x0:region.pageSize[0]-x1;
           const gutterPixels=page.clientWidth*margin/region.pageSize[0];
@@ -973,7 +976,12 @@ export class PdfPreview {
     // this same PDF bbox will steal the target mid-gesture, turning an
     // intended "之后" into "作为子块". Outside the corridor, every new real
     // coverage bbox may still be acquired immediately.
-    if(item.target&&item.guide&&pdfDropGuideCorridor(x,y,
+    // A direct hit on a visible operation label outranks the earlier
+    // cover-to-rail corridor; otherwise that corridor can turn a precise
+    // target-label gesture back into the old child placement.
+    const pointed=document.elementFromPoint(x,y);
+    const pointedLabel=pointed?.closest?.('.ocr-pdf-block-ctrl,.ocr-pdf-subblock-chip');
+    if(item.target&&item.guide&&!pointedLabel&&pdfDropGuideCorridor(x,y,
       item.target.getBoundingClientRect(),item.guide.getBoundingClientRect()))
       return {node:item.target,id:item.targetId,kind:item.targetKind,
         placement:item.placement||'child'};
@@ -983,8 +991,29 @@ export class PdfPreview {
     for(const node of this.blockCoverageNodes.values()){
       if(!node.isConnected)continue;
       const pageId=node.dataset.pdfPage,rootId=node.dataset.blockId;
-      // The original PDF bbox, including its full interior, is the hit area.
-      // Gutter chips are not part of the bbox and never steal a drag target.
+      // A held finger is delivered to the captured label even after leaving
+      // the tiny gutter. Prefer an explicitly pointed sibling label; once
+      // that label has been left, continue to use its immutable PDF bbox.
+      // Never prefer the source's own enclosing bbox over a pointed label.
+      const pointedCtrl=pointed?.closest?.('.ocr-pdf-block-ctrl,.ocr-pdf-subblock-chip');
+      const pointedNode=pointedCtrl?.closest?.('.ocr-pdf-block-cover,.ocr-pdf-block-fragment');
+      if(pointedNode&&pointedNode!==item.ctrl.closest('.ocr-pdf-block-cover')&&
+        pointedNode.dataset.blockId!==item.id&&pointedNode.dataset.subblockId!==item.id){
+        const label=pointedNode.classList.contains('ocr-pdf-block-fragment')?pointedCtrl:
+          pointedNode.querySelector(':scope > .ocr-pdf-block-ctrl');
+        const root=pointedNode.classList.contains('ocr-pdf-block-fragment')?
+          pointedNode.closest('.ocr-pdf-block-cover'):pointedNode;
+        const id=pointedNode.dataset.subblockId||pointedNode.dataset.blockId;
+        if(label&&root&&id){
+          const kind=pointedNode.classList.contains('ocr-pdf-block-fragment')?'child':
+            pointedNode.classList.contains('ocr-pdf-block-is-child')?'child':'parent';
+          const rect=label.getBoundingClientRect(),cy=(rect.top+rect.bottom)/2;
+          return {node:root,id,rootId:root.dataset.blockId,kind,
+            placement:kind==='child'?'child':y<cy-9?'before':y>cy+9?'after':'child'};
+        }
+      }
+      // The original PDF bbox, including its full interior, is the fallback
+      // hit area after the pointer leaves all visible operation labels.
       // Absorbing a whole OCR parent creates a logical direct child backed by
       // its OWN full parent bbox (e.g. p13b1s3 from physical p13b0). It has
       // no native .ocr-pdf-block-fragment, so it must participate as a child
@@ -1027,11 +1056,17 @@ export class PdfPreview {
         '<span data-placement="after">之后</span>';
       document.body.append(guide);item.guide=guide;
     }
-    // The highlighted target is the physical bbox. Keep the operation rail
+    // The pointed label and its immutable physical bbox share one target.
+    // Keep both highlighted: the small label is the visible confirmation,
+    // while a pointer already inside the PDF rectangle sees the full region.
+    const fragment=item.targetKind==='child'?
+      [...(item.target.querySelectorAll?.(':scope > .ocr-pdf-block-fragment')||[])]
+        .find(node=>node.dataset.subblockId===item.targetId):null;
+    if(fragment)fragment.classList.add('ocr-pdf-block-drop-target');
+    // The operation rail is anchored beside the visible label. It never
     // beside its label, outside OCR text; it never changes the hit rectangle.
-    const chip=item.targetKind==='child'?
-      (item.target.querySelector(':scope > .ocr-pdf-subblock-chip')||
-        item.target.querySelector(':scope > .ocr-pdf-block-ctrl')):
+    const chip=fragment?fragment.querySelector(':scope > .ocr-pdf-subblock-chip'):
+      item.targetKind==='child'?item.target.querySelector(':scope > .ocr-pdf-subblock-chip'):
       item.target.querySelector(':scope > .ocr-pdf-block-ctrl');
     if(!chip?.isConnected)return;
     const rect=chip.getBoundingClientRect(),clip=this.visibleClip();
@@ -1311,7 +1346,7 @@ export class PdfPreview {
             tapCount=1;firstTap=now;
           }else tapCount++;
           lastTap=now;
-          if(!this.readOnly&&tapCount===3){tapCount=0;lastTap=0;firstTap=0;void toggle();return;}
+          if(tapCount===3){tapCount=0;lastTap=0;firstTap=0;void toggle();return;}
           // Single/double tap both select the parent, never the child, and
           // never modify a checkbox. The triple action is the ONLY toggle.
           const currentRow=this.blockCoverageRows.find(r=>r.id===node.dataset.blockId)||row;
@@ -1465,7 +1500,7 @@ export class PdfPreview {
       // outer page gutter controls only the chip's *visual scale*; it does
       // not alter the original PDF/Block geometry or click semantics.
       const chip=node.querySelector('.ocr-pdf-block-ctrl');
-      if(chip){
+      if(chip&&!chip.classList.contains('ocr-pdf-rail-label')){
         const pagePixels=page.div.clientWidth;
         const gutterPixels=pagePixels*(side==='left'?rect.left:
           100-rect.left-rect.width)/100;
@@ -1506,9 +1541,13 @@ export class PdfPreview {
       if(!page||!page.classList.contains('page'))continue;
       if(!pages.has(page))pages.set(page,{items:[],covers:[]});
       const group=pages.get(page);
-      const rect={left:node.offsetLeft,top:node.offsetTop,
-        right:node.offsetLeft+node.offsetWidth,
-        bottom:node.offsetTop+node.offsetHeight};
+      // Absolute overlays use the page content/padding origin, excluding
+      // PDF.js's 1px page border. Bounding rectangles retain fractional CSS
+      // coordinates; offsetLeft/Width would round away the safe gutter.
+      const paper=page.getBoundingClientRect(),bounds=node.getBoundingClientRect();
+      const originX=paper.left+page.clientLeft,originY=paper.top+page.clientTop;
+      const rect={left:bounds.left-originX,top:bounds.top-originY,
+        right:bounds.right-originX,bottom:bounds.bottom-originY};
       group.covers.push(rect);
       const chip=node.querySelector(':scope > .ocr-pdf-block-ctrl');
       if(chip)group.items.push({id,chip,owner:node,rect,
@@ -1519,10 +1558,9 @@ export class PdfPreview {
         if(fragment.hidden)continue;
         const child=fragment.querySelector(':scope > .ocr-pdf-subblock-chip');
         if(!child)continue;
-        const part={left:node.offsetLeft+fragment.offsetLeft,
-          top:node.offsetTop+fragment.offsetTop,
-          right:node.offsetLeft+fragment.offsetLeft+fragment.offsetWidth,
-          bottom:node.offsetTop+fragment.offsetTop+fragment.offsetHeight};
+        const childBounds=fragment.getBoundingClientRect();
+        const part={left:childBounds.left-originX,top:childBounds.top-originY,
+          right:childBounds.right-originX,bottom:childBounds.bottom-originY};
         group.covers.push(part);
         group.items.push({id:fragment.dataset.subblockId,chip:child,
           owner:fragment,rect:part,target:part,
@@ -1533,10 +1571,7 @@ export class PdfPreview {
     }
     for(const [page,group] of pages){
       const width=page.clientWidth,height=page.clientHeight;
-      if(!width||!height)continue; // hidden Settings pane: relayout on reveal
-      // The baseline is the currently accepted, auto-fitted 1.0× appearance.
-      // Multiplying raw label width before auto-fit would be canceled by
-      // the same gutter cap, making e.g. 0.6× look IDENTICAL to 1.0×.
+      if(!width||!height)continue;
       const baseline=layoutPDFEdgeRails(group.items,{pageWidth:width,
         pageHeight:height,covers:group.covers});
       const nativeFit=new Map(baseline.slots.map(slot=>[slot.id,slot.scale]));
@@ -1544,38 +1579,46 @@ export class PdfPreview {
         const mult=(nativeFit.get(item.id)??1)*this.blockLabelScale;
         return {...item,width:item.width*mult,height:item.height*mult};
       });
-      // Fit only within the two ORIGINAL PDF page-edge rails. Magnification
-      // is bounded by the real paper margin; it may saturate when a PDF has
-      // narrow gutters, but never throw tags out into the workspace void.
       const geometry=layoutPDFEdgeRails(desired,{pageWidth:width,
         pageHeight:height,covers:group.covers});
       const all=new Map(group.items.map(item=>[item.id,item]));
+      const paper=page.getBoundingClientRect();
+      const originX=paper.left+page.clientLeft,originY=paper.top+page.clientTop;
+      const location=owner=>{
+        const rect=owner.getBoundingClientRect();
+        return {x:rect.left-originX,y:rect.top-originY};
+      };
       for(const slot of geometry.slots){
         const item=all.get(slot.id);if(!item)continue;
         const {chip,owner}=item;
-        const ownerRect=item.kind==='child'&&owner.classList.contains('ocr-pdf-block-fragment')?
-          {x:owner.parentElement.offsetLeft+owner.offsetLeft,
-            y:owner.parentElement.offsetTop+owner.offsetTop}:
-          {x:owner.offsetLeft,y:owner.offsetTop};
+        const ownerRect=location(item.kind==='child'&&owner.classList.contains('ocr-pdf-block-fragment')?
+          owner.parentElement:owner);
         const x=`${(slot.left-ownerRect.x).toFixed(2)}px`;
         const y=`${(slot.top-ownerRect.y).toFixed(2)}px`;
         if(chip.style.left!==x)chip.style.left=x;
         if(chip.style.top!==y)chip.style.top=y;
+        // Clear BOTH legacy edge anchors. A right:calc(100% + 3px) plus
+        // a solver width otherwise wins over left and pins the chip to OCR.
         if(chip.style.right!=='auto')chip.style.right='auto';
-        const scale=`scale(${((nativeFit.get(slot.id)??1)*this.blockLabelScale*slot.scale).toFixed(4)})`;
-        if(chip.style.transform!==scale)chip.style.transform=scale;
+        if(chip.style.bottom!=='auto')chip.style.bottom='auto';
+        chip.style.setProperty('flex-shrink','1');
+        // A solver slot is final page geometry, not another transform to
+        // multiply against the raw chip dimensions.
+        const finalWidth=`${slot.width.toFixed(2)}px`;
+        const finalHeight=`${slot.height.toFixed(2)}px`;
+        if(chip.style.width!==finalWidth)chip.style.width=finalWidth;
+        if(chip.style.height!==finalHeight)chip.style.height=finalHeight;
+        if(chip.style.transform!=='none')chip.style.transform='none';
         chip.style.transformOrigin='top left';
         chip.classList.add('ocr-pdf-rail-label');
         chip.dataset.gutter=slot.side;
-        // The original CSS pseudo-line uses the child fragment's own local
-        // coordinates; a single SVG leader below replaces it entirely.
       }
       const ns='http://www.w3.org/2000/svg';
       let svg=page.querySelector(':scope > svg.ocr-pdf-label-leaders');
       if(!svg){svg=document.createElementNS(ns,'svg');
         svg.setAttribute('class','ocr-pdf-label-leaders');
         svg.setAttribute('aria-hidden','true');page.append(svg);}
-      svg.setAttribute('viewBox',`0 0 ${page.clientWidth} ${page.clientHeight}`);
+      svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
       svg.replaceChildren();
       for(const line of geometry.leaders){
         const path=document.createElementNS(ns,'path');
