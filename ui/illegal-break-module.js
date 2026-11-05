@@ -33,15 +33,16 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
   };
   const columns=[
     {field:'line',headerName:'源码行',width:96,minWidth:90,pinned:'left',lockPinned:true,cellRenderer:jump},
+    {field:'markState',headerName:'复核状态',width:95,minWidth:85},
     {field:'blockId',headerName:'当前块',width:132,minWidth:110,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'nextBlockId',headerName:'下一子块',width:132,minWidth:112,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'scopeLabel',headerName:'检查范围',width:108,minWidth:96,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'joined',headerName:'疑似续接',width:155,minWidth:120,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'reason',headerName:'识别依据',width:180,minWidth:140,filter:EnumCheckboxFilter,suppressHeaderMenuButton:true},
     {field:'context',headerName:'断行前后',minWidth:250,flex:1,tooltipField:'context'},
-    {field:'markState',headerName:'复核状态',width:95,minWidth:85},
   ].map(column=>({sortable:false,resizable:true,suppressMovable:true,...column}));
   const grid=createGrid(gridHost,{theme,columnDefs:columns,rowData:[],rowHeight:32,
+    suppressColumnVirtualisation:true,
     getRowId:p=>String(p.data.from),rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},
     onRowClicked:p=>navigate(p.data)});
   const virtual=createVirtualAGQuery(grid,'illegal-break');
@@ -58,7 +59,7 @@ export function createIllegalBreakModule(host,getChapter,onStatus=()=>{}){
     const marked=visible.filter(r=>r.markState==='已标定').length;
     const review=visible.filter(r=>r.reviewOnly).length;
     state.textContent=error?'扫描失败：'+error:loading?'正在离线检查断行…':
-      `子块断行 ${visible.length} 项 · 已标定 ${marked} · 子块交界待复核 ${review}`+
+      `子块断行 ${visible.length} 项 · 已标定 ${marked} · 待复核 ${review}`+
       `${stale?' · '+stale+' 项历史标定已失效':''}${truncated?' · 仅列前 400 项':''}`;
     if(active){
       if(error)onStatus('非法断行扫描失败：'+error);
