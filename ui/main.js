@@ -608,6 +608,7 @@ async function main() {
   // Illegal-break audit uses the same offline Hunspell Worker and the same
   // CMD annotation transaction port. CM6 still owns the only editable doc.
   let breakWorker=null,breakRequestId=0,breakTimer=null,breakScanDoc=null;
+  let applyingBreakMarks=false;
   const clearBreakMarks=()=>view.dispatch(setDiagnostics(view.state,[]));
   const showBreakRows=rows=>{
     const doc=view.state.doc;
@@ -644,13 +645,30 @@ async function main() {
           if(error){workspace.setIllegalBreakError(error);clearBreakMarks();return;}
           const source=view.state.doc.toString();
           try{
-            workspace.markIllegalBreakCandidates(issues,source);
+            const marking=issues.filter(row=>!row.reviewOnly);
+            const reviews=issues.filter(row=>row.reviewOnly);
+            // Our own guarded CMD tag transaction dispatches docChanged;
+            // don't invalidate this very scan or erase its review-only rows.
+            applyingBreakMarks=true;
+            try{workspace.markIllegalBreakCandidates(marking,source);}
+            finally{applyingBreakMarks=false;}
             breakScanDoc=view.state.doc;
+            // CMD markers are inserted on existing prose lines and do not
+            // add line breaks. Rebase review-only offsets onto the live CM6
+            // document AFTER the annotation transaction, not the old Worker
+            // snapshot. Cross-child review never writes or joins text.
+            const updated=view.state.doc;
+            const candidates=reviews.map(row=>{
+              const line=updated.line(row.line);
+              return {...row,from:line.to,to:line.to+1};
+            });
             if(!showSavedBreakRows()){
               clearBreakMarks();workspace.getIllegalBreakElements();
             }
-            status(issues.length?`✓ CMD 已标定 ${issues.length} 处疑似断行 · 请全局保存${truncated?'（结果不完整）':''}`:
-              '✓ 非法断行检查完成 · 没有符合保守规则的非法断行候选');
+            workspace.setIllegalBreakReviewCandidates(candidates);
+            status(issues.length?
+              `✓ 非法断行：子块内标定候选 ${marking.length} · 子块交界待复核 ${reviews.length}${truncated?' · 结果不完整':''}${marking.length?' · 请全局保存':''}`:
+              '✓ 子块断行检查完成 · 暂无符合保守规则的候选');
           }catch(markError){workspace.setIllegalBreakError('CMD 标定失败：'+markError.message);
             status('非法断行标定失败：'+markError.message,'error');}
         };
@@ -668,7 +686,9 @@ async function main() {
     }else{clearBreakMarks();workspace.setIllegalBreakError('源码已有变更，请使用「重新扫描并标定」');}
   };
   illegalBreakDocChanged=()=>{
+    if(applyingBreakMarks)return;
     ++breakRequestId;clearTimeout(breakTimer);
+    workspace.setIllegalBreakReviewCandidates([]); // stale source offsets cannot survive edits
     queueMicrotask(()=>{
       if(!illegalBreakEnabled)return;
       if(!showSavedBreakRows()){

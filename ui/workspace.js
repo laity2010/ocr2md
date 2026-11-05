@@ -831,6 +831,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     setIllegalBreakPending:()=>currentOutline?.illegalBreak?.setPending(),
     setIllegalBreakError:message=>currentOutline?.illegalBreak?.setError(message),
+    setIllegalBreakReviewCandidates:candidates=>currentOutline?.illegalBreak?.setReviewCandidates(candidates),
     getIllegalBreakElements:()=>{
       const result=getCMD().queryIllegalBreakElements();
       currentOutline?.illegalBreak?.setMarkedRows(result);

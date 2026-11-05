@@ -4,6 +4,7 @@
  * does not split the paragraph or turn the next line into an HTML block.
  */
 import {blockAnchor} from './mineru-anchors.js';
+import {readCMDBlockChains,parseCMDPBSId} from './cmd-block-chains.js';
 export const LINEBREAK_TAG='ocr2md:illegal-break';
 const WORD=/^[A-Za-z]{2,60}$/;
 const BAD_STRUCTURE=/^\s*(?:#{1,6}\s|[-*+]\s|\d{1,4}[.)]\s|>|\||!\[|\[\^|`{3,}|~{3,}|<!--|<\/?[a-z]|\$\$)/i;
@@ -26,6 +27,135 @@ const MARKER_SUFFIX=/<!--ocr2md:illegal-break[^\n]*?-->$/;
 const BLOCK_RIGHT=/^(?:[a-z]{2,60}|[0-9]{1,5}[A-Za-z]{1,6}|[0-9]{1,5}(?:[.,][0-9]+)?)$/;
 const OPENING_TOKEN=/^([a-z]{2,60}|[0-9]{1,5}[A-Za-z]{1,6}|[0-9]{1,5}(?:[.,][0-9]+)?)(?=\b|\s|[,.;:!?])/;
 function textWithoutMarker(line){return line.replace(MARKER_SUFFIX,'');}
+// Current CMD p/b/s tags, not physical OCR discovery order, define the
+// editable review scope. A moved p13b1s3 (origin=p13b0) still belongs to
+// logical p13b1, while its original PDF bbox remains untouched.
+function currentPBSScope(source,bodyEnd){
+  if(!source.includes('<!-- cmd:block:v1 '))return null; // legacy input
+  const model=readCMDBlockChains(source);
+  if(model.invalid.length)throw Error('CMD 文本块标签无效，停止断行扫描');
+  const atoms=model.atoms.filter(a=>a.format==='cmd-v1'&&a.from<bodyEnd);
+  return atoms.map((atom,index)=>{
+    const identity=parseCMDPBSId(atom.id),scopeStart=atom.from+atom.rawLine.length;
+    const next=Math.min(bodyEnd,atoms[index+1]?.from??bodyEnd);
+    // The final text block of a PDF page is followed by MANY lines of
+    // sealed page/discarded JSON evidence. Those must not inherit the last
+    // child ID, or a phantom OCR sentence will appear in AG.
+    const meta=/^<!-- (?:minerujson:(?:page|discarded|source)|cmd:(?:pbs-locations|pdf-bbox|absorbed-parent)):v1/gm;
+    const match=meta.exec(source.slice(scopeStart,next));
+    const scopeEnd=match?scopeStart+match.index:next;
+    return {...atom,identity,scopeStart,scopeEnd,
+      parentId:`p${identity.p}b${identity.b}`};
+  });
+}
+function withinScopeRows(rows,scopes){
+  if(!scopes)return null;
+  const result=[];let i=0;
+  for(const row of rows){
+    while(i+1<scopes.length&&scopes[i+1].from<=row.from)i++;
+    const current=scopes[i];
+    result.push(current&&row.from>=current.scopeStart&&row.to<=current.scopeEnd?
+      current:null);
+  }
+  return result;
+}
+function terminalLine(slice,first){
+  let pos=0,found=null;
+  for(const line of slice.split('\n')){
+    if(line.trim()){
+      // Metadata and Markdown structures cannot be silently skipped to
+      // fabricate a prose connection between semantically unrelated nodes.
+      if(!isSafeLine(textWithoutMarker(line)))return first?null:
+        {raw:line,from:pos,to:pos+line.length,unsafe:true};
+      found={raw:line,from:pos,to:pos+line.length};
+      if(first)return found;
+    }
+    pos+=line.length+1;
+  }
+  return found;
+}
+/** A blank Markdown line INSIDE one current CMD child creates a hard
+ * paragraph boundary, unlike an ordinary soft line wrap. Only an unfinished
+ * preceding sentence followed by lowercase prose is suspicious; report for
+ * human review, not a source edit. */
+function childParagraphBreakCandidates(source,scopes,maxIssues){
+  const issues=[];
+  for(const scope of scopes){
+    if(!scope.identity.s.length||scope.scopeEnd<=scope.scopeStart)continue;
+    const lines=textLines(source.slice(scope.scopeStart,scope.scopeEnd));
+    for(let i=0;i<lines.length-2;i++){
+      if(issues.length>=maxIssues)return issues;
+      const a=lines[i],blank=lines[i+1];
+      if(blank.raw.trim()||!a.raw.trim())continue;
+      let n=i+2;
+      while(n<lines.length&&!lines[n].raw.trim())n++;
+      if(n>=lines.length)continue;
+      const b=lines[n],before=textWithoutMarker(a.raw),next=b.raw;
+      if(!isSafeLine(before)||!isSafeLine(next)||/^\s/.test(next)||
+         /[.!?;:。！？；：,，]\s*$/.test(before)||/\s{2,}$/.test(before))continue;
+      const left=/([A-Za-z]{2,45})$/.exec(before);
+      const right=/^([a-z]{2,60})\b/.exec(next);
+      if(!left||!right)continue;
+      const from=scope.scopeStart+a.to;
+      if(source[from]!=='\n')continue;
+      issues.push({from,to:from+1,line:source.slice(0,from).split('\n').length,
+        left:left[1],right:right[1],joined:left[1]+' '+right[1],
+        reason:'子块内疑似硬段落断行',blockId:scope.id,parentId:scope.parentId,
+        nextBlockId:null,scopeLabel:'子块内',reviewOnly:true,
+        context:`${scope.id} ${before.slice(-90)} ↵ [空行] ↵ ${next.slice(0,90)}`});
+    }
+  }
+  return issues;
+}
+/** Read-only review candidates BETWEEN adjacent logical children.
+ * A caption/body or cross-page pair may be legitimately separate: never
+ * auto-insert an annotation or join these two source scopes. */
+function siblingBreakCandidates(source,spell,scopes,maxIssues){
+  const rows=[];
+  for(let i=0;i<scopes.length-1;i++){
+    if(rows.length>=maxIssues)break;
+    const a=scopes[i],b=scopes[i+1];
+    if(a.identity.s.length!==1||b.identity.s.length!==1||
+      a.parentId!==b.parentId||a.role==='body'||b.role==='body')continue;
+    const previousText=source.slice(a.scopeStart,a.scopeEnd);
+    const followingText=source.slice(b.scopeStart,b.scopeEnd);
+    // Last visible line matters; do not leap over a closing HTML element,
+    // embedded media, table, LaTeX fence or other structural boundary.
+    const leftLine=terminalLine(previousText,false),rightLine=terminalLine(followingText,true);
+    if(!leftLine||leftLine.unsafe||!rightLine)continue;
+    const leftText=textWithoutMarker(leftLine.raw),rightText=rightLine.raw;
+    if(/[.!?;:。！？；：,，]\s*$/.test(leftText)||/\s{2,}$/.test(leftText)||
+       /^\s/.test(rightText))continue;
+    const left=/([A-Za-z]{2,60})(-?)$/.exec(leftText);
+    const right=OPENING_TOKEN.exec(rightText);
+    if(!left||!right)continue;
+    const aWord=left[1],bWord=right[1];
+    let reason=null,joined=null;
+    if(/^[a-z]{2,60}$/.test(bWord)){
+      const combined=aWord+bWord;
+      // For a review-only sibling boundary, even two independently valid
+      // fragments ("inter" + "national") may be one split dictionary word.
+      // This is a CANDIDATE, never an automatic CMD correction.
+      if(spell.correct(combined)&&(Boolean(left[2])||
+        aWord.length>=3&&bWord.length>=3)){
+        reason='同父子块交界疑似断词';joined=combined;
+      }
+    }
+    if(!reason&&!left[2]&&CONTINUATION_TAILS.has(aWord.toLowerCase())){
+      reason='同父子块交界疑似句子续接';joined=aWord+' '+bWord;
+    }
+    if(!reason)continue;
+    const from=a.scopeStart+leftLine.to;
+    // Underlying source always contains a newline between two CMD children.
+    if(source[from]!=='\n')continue;
+    rows.push({from,to:from+1,line:source.slice(0,from).split('\n').length,
+      left:aWord,right:bWord,joined,reason,
+      blockId:a.id,parentId:a.parentId,nextBlockId:b.id,scopeLabel:'子块交界',
+      reviewOnly:true,
+      context:`${a.id} ${leftText.slice(-85)} ↵ [${b.id}] ${rightText.slice(0,85)}`});
+  }
+  return rows;
+}
 function blockContinuation(rows,i,previousAnchor,bodyEnd){
   const current=rows[i];
   if(!previousAnchor||current.to>=bodyEnd)return null;
@@ -90,6 +220,7 @@ function isSafeLine(text){
  */
 export function detectIllegalBreaks(source,spell,{maxIssues=400,bodyEnd=source.length}={}){
   const rows=textLines(source),results=[];let fenced=null,truncated=false,inComment=false;
+  const scopes=currentPBSScope(source,bodyEnd),owner=withinScopeRows(rows,scopes);
   let previousAnchor=null;
   for(let i=0;i<rows.length-1;i++){
     const line=rows[i],next=rows[i+1],text=line.raw,following=next.raw;
@@ -105,13 +236,14 @@ export function detectIllegalBreaks(source,spell,{maxIssues=400,bodyEnd=source.l
     if(currentAnchor){previousAnchor=currentAnchor;continue;}
     // Record explicit OCR block continuation even when the next text starts
     // with a number and blank/provenance lines separate the two fragments.
-    const bridge=blockContinuation(rows,i,previousAnchor,bodyEnd);
+    const bridge=scopes?null:blockContinuation(rows,i,previousAnchor,bodyEnd);
     if(bridge){
       if(results.length>=maxIssues){truncated=true;break;}
       results.push(bridge);
     }
     if(text.includes('<!--'))inComment=true;
     if(inComment){if(text.includes('-->'))inComment=false;continue;}
+    if(scopes&&(!owner[i]||owner[i]!==owner[i+1]))continue;
     if(!isSafeLine(text)||!isSafeLine(following)||/[.!?:;。？！：；,，]\s*$/.test(text))continue;
     if(/\s{2,}$/.test(text)||/^\s/.test(following)||/^\s*\d/.test(following))continue;
     const left=/([A-Za-z]{2,60})(-?)$/.exec(text);
@@ -123,8 +255,20 @@ export function detectIllegalBreaks(source,spell,{maxIssues=400,bodyEnd=source.l
     if(!spell.correct(joined)||(!left[2]&&spell.correct(a)&&spell.correct(b)))continue;
     const reason=left[2]?'行末连字符疑似断词':'英文单词被换行拆开';
     if(results.length>=maxIssues){truncated=true;break;}
+    const block=owner?.[i];
     results.push({from:line.to,to:line.to+1,line:i+1,left:a,right:b,joined,
-      reason,context:`${text.slice(-90)} ↵ ${following.slice(0,90)}`});
+      reason,blockId:block?.id||null,parentId:block?.parentId||null,
+      scopeLabel:block?(block.identity.s.length?'子块内':'父块内'):'原文',
+      context:`${text.slice(-90)} ↵ ${following.slice(0,90)}`});
+  }
+  if(scopes){
+    const remaining=Math.max(0,maxIssues-results.length);
+    const paragraph=childParagraphBreakCandidates(source,scopes,remaining+1);
+    const sibling=siblingBreakCandidates(source,spell,scopes,remaining+1);
+    const candidates=[...paragraph,...sibling].sort((a,b)=>a.from-b.from);
+    if(candidates.length>remaining)truncated=true;
+    results.push(...candidates.slice(0,remaining));
+    results.sort((a,b)=>a.from-b.from);
   }
   return {issues:results,truncated};
 }
@@ -138,6 +282,9 @@ function isValidAt(source,at,left,right){
 }
 export function readIllegalBreaks(source,annotations){
   const rows=[];let stale=0;
+  const index=source.indexOf('<!-- minerujson:source:v1:');
+  const scopes=currentPBSScope(source,index>=0?index:source.length);
+  const findScope=from=>scopes?.findLast(scope=>scope.scopeStart<=from&&from<scope.scopeEnd)||null;
   for(const tag of annotations){
     if(tag.tag!==LINEBREAK_TAG)continue;
     const {left='',right='',joined='',reason=''}=tag.attributes||{};
@@ -148,7 +295,10 @@ export function readIllegalBreaks(source,annotations){
     const from=tag.to,line=source.slice(0,from).split('\n').length;
     const start=source.lastIndexOf('\n',tag.from-1)+1;
     const end=source.indexOf('\n',from+1);
+    const scope=findScope(from);
     rows.push({from,to:from+1,line,left,right,joined,
+      blockId:scope?.id||null,parentId:scope?.parentId||null,
+      scopeLabel:scope?(scope.identity.s.length?'子块内':'父块内'):'原文',
       reason:isBlock?'相邻 MinerU 文本块疑似句子断行':reason==='hyphen'?'行末连字符疑似断词':'英文单词被换行拆开',
       context:isBlock?readBlockContinuation(source,tag.to,left,right).context:
         source.slice(start,end<0?source.length:end)
@@ -160,6 +310,7 @@ export function planIllegalBreakMarks(source,candidates,annotations){
   const existing=new Set(annotations.filter(x=>x.tag===LINEBREAK_TAG).map(x=>x.to));
   const seen=new Set(),operations=[];
   for(const row of candidates){
+    if(row?.reviewOnly)continue; // sibling boundaries never auto-write CMD
     const isBlock=row?.reason==='相邻 MinerU 文本块疑似句子断行';
     if(!row||!WORD.test(row.left)||
        !(isBlock?BLOCK_RIGHT.test(row.right):WORD.test(row.right))||

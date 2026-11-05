@@ -1,7 +1,8 @@
 .ocr-illegal-break-pane{display:flex;flex-direction:column;min-height:0;height:100%;color:#d3c6aa}
 .ocr-illegal-break-pane[hidden]{display:none!important}
 .ocr-illegal-break-guide{padding:7px 9px 3px;font-size:12px;line-height:1.5}
-.ocr-illegal-break-state{padding:2px 9px 7px;color:#dbbc7f;font-size:12px}
+/* All operation/status messages are owned by the global Shell status. */
+.ocr-illegal-break-state{display:none}
 .ocr-illegal-break-grid{flex:1;min-height:0;width:100%}
 .ocr-illegal-break-jump{border:0;background:transparent;color:#dbbc7f;text-decoration:underline;cursor:pointer;padding:2px 7px}
 .ocr-illegal-break-jump:hover{color:#ebce9d}

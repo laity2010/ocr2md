@@ -1644,3 +1644,10 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-CHILD-ABSORBED-C121','C121','tests/cmd-pbs-absorbed-child-cover.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','absorbed child cover can be drag source and target; current sN and physical source origin stay consistent through one Undo','integration'),
  ('TC-CHILD-ABSORBED-P40','P40','tests/cmd-pbs-absorbed-child-cover.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and iPad-WebKit same-parent before/after rail for physical parent-backed child cover','integration');
+
+-- CMD PBS-scoped illegal-break review: canonical logical child IDs define
+-- scan ownership; adjacent sibling seams are review-only and never mutate
+-- source. Legacy MinerU auto-mark behavior remains separately covered.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-BREAK-PBS-C42','C42','tests/cmd-linebreak-pbs-scope.test.mjs','tests/cmd-linebreak-pbs-scope.test.mjs','Current child scoped word splits, sibling boundary and intra-child hard paragraph review, invalid provenance fail-closed, structure and unrelated parent exclusion','direct'),
+ ('TC-BREAK-PBS-G20','G20','tests/illegal-break-pbs.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Real Chrome/WebKit: one intra-child CMD auto-tag plus one sibling seam AG review row with current PBS IDs, global Shell status and no autosave','integration');
