@@ -92,6 +92,12 @@ INSERT INTO apis VALUES
  ('L18','L','returned.scanMedia','ui/workspace.js','returned','none','Promise<void>','requests Media scan through API',1),
  ('L19','L','returned.downloadMedia','ui/workspace.js','returned','none','Promise<void>','requests Media download through API',1),
  ('L20','L','returned.normalizeLatex','ui/workspace.js','returned','none','void','routes explicit LaTeX normalization request to module facade; no direct source writes',1),
+-- Media's THREE public JavaScript module entry points are A01/A02/A11.
+-- A03/A04/A05/A13 are methods of the A01 returned UI facade (part of its
+-- contract, not four extra module exports). A06..A10/A12 are Python Media
+-- service implementation operations, not cross-business-module API promises.
+-- The visibility column records actual code shape; it is not public approval.
+-- Keep all historic AM rows and links; do not drop evidence or weaken tests.
  ('A01','A','createMediaModule','ui/media-module.js','export','host,readDocument,CMD port,status','module facade','mounts independent Media AG with lazy thumbnail preview and download workflow',1),
  ('A02','A','findMedia','ui/media-module.js','export','Markdown string','list with source ranges','reads normal/sized/wikilink image URL ranges outside evidence',1),
  ('A03','A','returned.scan','ui/media-module.js','returned','none','Promise<void>','refreshes Media origin (remote/local), adopted references, unreferenced local files and transfer status independently',1),
@@ -1742,3 +1748,12 @@ INSERT INTO apis VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-NATIVE-RECOVERY-C124','C124','tests/cmd-native-subblock-repair.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','20 untouched native scopes, all 43 child anchors added on clean old CMD, 19 scopes/42 children when original p1b3 already absorbed, idempotent and cross-page table fail-closed; preserve original JSON','direct'),
  ('TC-NATIVE-PDF-C124','C124','tests/native-subblock-alignment.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit PDF real image p0b5s0 and cross-page table p3b1s0/p4b0s1 chips have real source content, not dashed, with AG and CMD one source, no writes','integration');
+
+-- WP1/WP2 Media compact PUBLIC-JS-ENTRY contract checks. Existing A03..A13
+-- records stay intact as implementation/facade audit history. These 3 tests
+-- directly import and invoke the actual exported module entry points;
+-- mocked network transport never reads or writes a real user document.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-A01-PUBLIC-DIRECT','A01','tests/media-public-contract.browser.test.mjs','tests/media-public-contract.fixture.html','Chromium/WebKit direct createMediaModule facade, resumable partial+complete, one CMD transaction only for successful repeated remote links, and no auto-save','direct'),
+ ('TC-A02-PUBLIC-DIRECT','A02','tests/media-public-contract.browser.test.mjs','tests/media-public-contract.fixture.html','Chromium/WebKit direct findMedia handles sized Markdown, local links, duplicates, exact offsets and immutable MinerU evidence exclusion','direct'),
+ ('TC-A11-PUBLIC-DIRECT','A11','tests/media-public-contract.browser.test.mjs','tests/media-public-contract.fixture.html','Chromium/WebKit direct uploadPastedImage rejects invalid MIME, empty body, unauthorized 403 and unsafe path; accepts validated local path','direct');
