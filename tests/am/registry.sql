@@ -1201,12 +1201,12 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L53','L53','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit show simultaneous labelled A/B original PDF boxes for same page and different pages, without OCR fetch','integration'),
  ('TC-WP4-L54','L54','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome and WebKit overview renders both p6b6 and p6b7 boxes inside physical PDF viewport','integration'),
- ('TC-WP4-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Confirm, reject, reset, reload restore and downloadable JSON; five candidate IDs and source unchanged','integration');
+ ('TC-WP4-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit read-only review: five candidate IDs including cross-page pair, A/B original PDF overlays and reload preserve source; retired confirm/reject/export writers intentionally absent and NOT runtime tested','integration');
 
 -- Text-block menu/status consolidation: keep the module's existing handlers,
 -- but mount all seven controls in the shared Shell AG function dropdown.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit text-block Function menu owns 3 base actions including original-child annotation and 5 candidate-review actions; global status owns inventory/review summary; no local toolbar/status row','integration');
+ ('TC-TEXTBLOCK-AG-FUNCTIONS-G28','G25','tests/text-block-review.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/WebKit exactly four safe Shell text-block controls, five read-only continuation candidates and dual PDF geometry; global status unique, no retired AG review writers or local toolbar','integration');
 
 -- Text-block coverage lens is a presentation-only CMD source-anchor overlay:
 -- independent of both individual MD/PDF focus and PDF paired comparison.
@@ -1495,9 +1495,9 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP5-L73','L73','tests/cmd-block-chains-wp5.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','move p0b1 after p0b3 without swap, put p0b4 first, move native child across page and chains, preserve unrelated member order','direct'),
  ('TC-WP5-L76','L76','tests/cmd-block-chains-wp5.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','extract one middle atom without moving its tail, preserve member role and OCR byte identity, reject legacy or damaged BC','direct'),
- ('TC-WP5-C72','C72','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and simulated iPad WebKit AG drag handle and single PBS move/extract through CMD with one Undo/Redo and no auto-save','integration'),
- ('TC-WP5-G25','G25','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG drag A onto B appends only A after B, row order projects BC logical seq, first and extract actions work in same AG view','integration'),
- ('TC-WP5-L75','L75','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Shell source-revision checks all AG move/extract action intents before registered CMD mutation','integration');
+ ('TC-WP5-C72','C72','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad-WebKit pure CMD move-after, move-first, cross-chain move, extract, no-op and sealed MinerU JSON reversibility; real AG writer disabled and NOT integration exercised','integration'),
+ ('TC-WP5-G25','G25','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG read-only mode hides all disabled member-drag handles and writer menu commands; grouping/collapse valid for initial 263 chains, CM6 source and disk never changed','integration'),
+ ('TC-WP5-L75','L75','tests/cmd-block-chains-wp5.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Shell source-revision writer intentionally not callable in frozen AG view; no AG write-API integration is claimed by this browser test','integration');
 
 
 -- WCP27 WP6: CMD footer holds bounded PBS -> user-corrected PDF bbox data.
