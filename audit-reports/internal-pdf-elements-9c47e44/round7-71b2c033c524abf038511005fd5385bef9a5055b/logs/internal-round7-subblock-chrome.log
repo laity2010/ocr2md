@@ -1,0 +1,14 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Chrome PDF caption did not locate child 0 tag or its first source line; got 650, anchor 648
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/pdf-subblock-annotation.browser.test.mjs:81:9 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '=='
+}
+
+Node.js v23.11.0

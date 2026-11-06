@@ -1,0 +1,16 @@
+PDF_SUBBLOCK_ANNOTATION_PASS Chrome {
+  children: 43,
+  parents: 224,
+  exactContentLines: true,
+  originalUnchanged: true,
+  autoSave: false,
+  readOnly: true
+}
+PDF_SUBBLOCK_ANNOTATION_PASS iPad-WebKit {
+  children: 43,
+  parents: 224,
+  exactContentLines: true,
+  originalUnchanged: true,
+  autoSave: false,
+  readOnly: true
+}

@@ -1,0 +1,47 @@
+ILLEGAL_BREAK_AG_PASS Chrome { rows: 4, scansAfterReload: 0, marked: true }
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('#redo')
+    - locator resolved to <button id="redo" type="button" title="重做 ⇧⌘Z" aria-label="重做">↷</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not enabled
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not enabled
+    - retrying click action
+      - waiting 100ms
+    22 × waiting for element to be visible, enabled and stable
+       - element is not enabled
+     - retrying click action
+       - waiting 500ms
+    - waiting for element to be visible, enabled and stable
+
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/illegal-break.browser.test.mjs:84:32 {
+  log: [
+    "  - waiting for locator('#redo')",
+    '    - locator resolved to <button id="redo" type="button" title="重做 ⇧⌘Z" aria-label="重做">↷</button>',
+    '  - attempting click action',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is not enabled',
+    '    - retrying click action',
+    '    - waiting 20ms',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is not enabled',
+    '    - retrying click action',
+    '      - waiting 100ms',
+    '    22 × waiting for element to be visible, enabled and stable',
+    '       - element is not enabled',
+    '     - retrying click action',
+    '       - waiting 500ms',
+    '    - waiting for element to be visible, enabled and stable'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

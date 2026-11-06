@@ -1,0 +1,19 @@
+ILLEGAL_ROWS_DIAG Chrome {"status":"PDF · CMD 版面数据失效：CMD 缺少无损 MinerU JSON 封存区 · CMD · 全部章节 · 0 项 · 34行 / 1,171字 · 大纲1项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","grid":["4待定断行合并忽略未映射原文government英文单词被换行拆开The govern ↵ ment announced a policy.000 · Chapter One","7待定断行合并忽略未映射原文international行末连字符疑似断词The inter- ↵ national organization agreed.000 · Chapter One","16待定断行合并忽略未映射原文about 3相邻 MinerU 文本块疑似句子断行The estimated insurance float cost was only 1.72%, about ↵ [MinerU 6:7] ↵ 3 percentage points below the average rate.000 · Chapter One","25待定断行合并忽略未映射原文latest 13F相邻 MinerU 文本块疑似句子断行ire’s public stocks. The stocks in the portfolio were refreshed quarterly on the basis of the latest ↵ [MinerU 8:4] ↵ 13F, and the portfolio was rebalanced monthly."],"sourceHasOldMarker":true,"sourceHasReviewMarker":false}
+BREAK_SOURCE_DIAG Chrome {"scans":1,"status":"PDF · CMD 版面数据失效：CMD 缺少无损 MinerU JSON 封存区 · CMD · 全部章节 · 0 项 · 34行 / 1,171字 · 大纲1项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","review":"断行审阅 4 项 · 断行合并 0 · 忽略 0 · 待定 4","markers":4,"reviewMarkers":0,"rows":[{"joined":"government","decision":"待定","block":"","scope":"原文"},{"joined":"international","decision":"待定","block":"","scope":"原文"},{"joined":"about 3","decision":"待定","block":"","scope":"原文"},{"joined":"latest 13F","decision":"待定","block":"","scope":"原文"}],"lint":4}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+0 !== 4
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/illegal-break.gpt6-debug.mjs:66:11 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 4,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0

@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+0 !== 4
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/illegal-break.browser.test.mjs:64:11 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 4,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0
