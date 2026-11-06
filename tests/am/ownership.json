@@ -383,7 +383,8 @@
       "createCM6SourceVisibilityGuard"
     ],
     "main.js->illegal-break-review-annotation-update.js": [
-      "isIllegalBreakReviewOnlyChange"
+      "isIllegalBreakReviewOnlyChange",
+      "isIllegalBreakAutoMarkOnlyChange"
     ],
     "text-block-module.js->cmd-block-chains.js": [
       "resolveCMDBlockFocusRow"
