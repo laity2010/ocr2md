@@ -1,0 +1,24 @@
+WP3_BROWSER_PASS Chrome {
+  rows: 5,
+  state: '✓ 已加载 · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 候选 5 组 · 跨栏 4 · 跨页 1 · 已确认 0 · 已否决 0 · 待审阅 5 · 11 处结构阻断 · 不合并原文 · 4,931行 / 383,657字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md',
+  orange: 'p6b6→p6b7',
+  forbiddenRequests: 0,
+  errors: 0
+}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+'' !== 'p0b0'
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/text-block-continuations.browser.test.mjs:59:11 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: '',
+  expected: 'p0b0',
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0
