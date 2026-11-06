@@ -889,7 +889,17 @@ async function main() {
        performance.now()-tap.time>1300||
        Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>11)return;
     lastSourceTap={line:tap.line,time:performance.now()};
-    const offset=view.state.doc.line(tap.line).from;
+    // A text line may contain several CMD sentences. Publishing only its
+    // first character here makes reverse AG navigation select the first
+    // sentence even when the user tapped the second one. The later click
+    // event is deliberately suppressed as a duplicate, so pointerup must
+    // carry the actual caret offset for both mouse and touch gestures.
+    const sourceLine=view.state.doc.line(tap.line);
+    let offset=null;
+    try{offset=view.posAtCoords({x:event.clientX,y:event.clientY});}
+    catch{/* A recycled CM6 line may have been unmounted by PDF navigation. */}
+    if(!Number.isInteger(offset)||offset<sourceLine.from||offset>sourceLine.to)
+      offset=sourceLine.from;
     const elementId=moduleSelector.value==='text-block'?
       cmdPort?.blockIdAtSourceLine(tap.line)??null:null;
     publishFocus({sourceLine:tap.line,sourceOffset:offset,origin:'cm6',
