@@ -1,6 +1,6 @@
 /** CM6-native inline source-line action, owned by the source Layout pane.
  * Only the caret line replaces its gutter number with an actual <button>.
- * Four menu items appear next to that button; CMD owns every edit.
+ * CMD owns all source edits; Media selection arrives only as a local-path scalar.
  */
 import {Compartment,RangeSet,StateEffect} from '@codemirror/state';
 import {EditorView,GutterMarker,lineNumberMarkers} from '@codemirror/view';
@@ -54,7 +54,8 @@ class CaretLineButton extends GutterMarker {
   }
 }
 
-export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,onBeforeSourceEdit=()=>{}}){
+export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,
+  getLocalMedia=()=>null,onBeforeSourceEdit=()=>{}}){
   if(!(host instanceof HTMLElement)||!view||typeof onInsert!=='function'||
      typeof onQuoteIndent!=='function')
     throw TypeError('Source line menu requires source pane, CM6 and insertion action');
@@ -76,6 +77,12 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   fence.type='button';fence.setAttribute('role','menuitem');
   fence.textContent='插入围栏块';
   fence.setAttribute('aria-expanded','false');
+  const insertMedia=document.createElement('button');
+  insertMedia.type='button';insertMedia.setAttribute('role','menuitem');
+  insertMedia.textContent='插入本地媒体';insertMedia.disabled=true;
+  const deleteLine=document.createElement('button');
+  deleteLine.type='button';deleteLine.setAttribute('role','menuitem');
+  deleteLine.textContent='删除当前行';
   const fenceForm=document.createElement('form');
   fenceForm.className='ocr-source-fence-editor';
   fenceForm.setAttribute('role','group');
@@ -107,7 +114,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
   const decrease=document.createElement('button');
   decrease.type='button';decrease.setAttribute('role','menuitem');
   decrease.textContent='>− 减少引用层级';decrease.dataset.direction='-1';
-  menu.append(summary,insert,fence,fenceForm,increase,decrease);host.append(menu);
+  menu.append(summary,insert,fence,fenceForm,insertMedia,deleteLine,increase,decrease);host.append(menu);
   function close(){
     viewportAnchorToken++;
     for(const timer of viewportTimers)clearTimeout(timer);
@@ -202,6 +209,7 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
     if(button.dataset.line!==String(number))return;
     activeButton=button;target={snapshot:state.doc,offset,selection:state.selection};
     refreshSummary();
+    insertMedia.disabled=!getLocalMedia();
     button.setAttribute('aria-expanded','true');
     menu.hidden=false;
     positionMenu();
@@ -225,6 +233,33 @@ export function createSourceLineCalloutMenu({host,view,onInsert,onQuoteIndent,on
     if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
     onBeforeSourceEdit();
     onInsert(planCalloutAtCursor(view.state.doc.toString(),captured.offset));
+  });
+  insertMedia.addEventListener('click',event=>{
+    event.preventDefault();event.stopPropagation();
+    const captured=target,path=getLocalMedia();
+    close();
+    if(!captured||!/^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(path||'')||
+       !restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
+    const source=view.state.doc.toString(),before=source.slice(0,captured.offset),
+      after=source.slice(captured.offset);
+    const prefix=!before?'':before.endsWith('\n\n')?'':before.endsWith('\n')?'\n':'\n\n';
+    const suffix=!after?'\n':after.startsWith('\n\n')?'':after.startsWith('\n')?'\n':'\n\n';
+    const image=`![](${path})`;
+    onBeforeSourceEdit();
+    onInsert({from:captured.offset,to:captured.offset,expected:'',
+      insert:prefix+image+suffix,cursorAfter:captured.offset+prefix.length+image.length},'local-media');
+  });
+  deleteLine.addEventListener('click',event=>{
+    event.preventDefault();event.stopPropagation();
+    const captured=target;
+    close();
+    if(!captured||!restoreSelection({doc:captured.snapshot,selection:captured.selection}))return;
+    const doc=view.state.doc,line=doc.lineAt(captured.offset);
+    const from=line.to<doc.length?line.from:line.number===1?0:doc.line(line.number-1).to;
+    const to=line.to<doc.length?doc.line(line.number+1).from:line.to;
+    onBeforeSourceEdit();
+    onInsert({from,to,expected:doc.sliceString(from,to),insert:'',
+      cursorAfter:from},'delete-line');
   });
   fence.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();

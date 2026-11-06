@@ -452,6 +452,12 @@ export function createMediaModule(host,getMarkdown,cmd,onStatus){
     },
     api:grid,
     refresh,scan,downloadAll,
+    // Only a semantic local path crosses the Media/Workspace boundary.
+    getSelectedLocalMedia(){
+      const selected=grid.getSelectedRows()[0];
+      const row=selected&&rows.find(item=>item.id===selected.id&&item.url===selected.url);
+      return row?.local&&/^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(row.url)?row.url:null;
+    },
     setActive(enabled){
       if(active===enabled)return;
       active=enabled;host.hidden=!enabled;

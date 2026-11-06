@@ -3,10 +3,12 @@
  */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,mkdirSync,rmSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {chromium,webkit} from 'playwright';
+import {createHash} from 'node:crypto';
+import {selectModule} from './navigation-ui.test-helper.mjs';
 const original=[
   '<!-- minerujson:block:v1:0:0 -->','# Chapter One','','Paragraph alpha has a cursor here. '+('Long line wraps in Markdown view. '.repeat(7)),'',
   '<!-- minerujson:block:v1:1:0 -->','# Chapter Two','','Paragraph beta remains intact.','',
@@ -17,6 +19,9 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
   const dir=mkdtempSync(join(tmpdir(),'ocr2md-callout-source-'));
   const doc=join(dir,'document.md'),settings=join(dir,'settings.json'),auth=join(dir,'token');
   writeFileSync(doc,original);writeFileSync(settings,'{}');writeFileSync(auth,'source-callout-test-key');
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9hCeEEsAAAAASUVORK5CYII=','base64');
+  const localMedia='media/'+createHash('sha256').update(png).digest('hex').slice(0,24)+'.png';
+  mkdirSync(join(dir,'media'));writeFileSync(join(dir,localMedia),png);
   const port=5985+idx,base='http://127.0.0.1:'+port;
   const server=spawn('python3',['scripts/v6_serve.py'],{
     cwd:process.cwd(),stdio:'ignore',env:{...process.env,V6_PORT:String(port),V6_BIND:'127.0.0.1',
@@ -51,7 +56,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       'inactive line number should remain plain text');
     await button.click();
     assert(await menu.isVisible());
-    assert.equal(await menu.getByRole('menuitem').count(),4,'menu must include fence, Callout and quote +/-');
+    assert.equal(await menu.getByRole('menuitem').count(),6,'menu must include delete line, local media, fence, Callout and quote +/-');
     assert.equal((await menu.getByRole('menuitem').first().textContent()).trim(),'插入 Callout');
     assert.equal((await menu.locator('.ocr-source-line-menu-summary').textContent()).trim(),
       '未选区 · 光标第 4 行');
@@ -90,6 +95,62 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     }
     await page.keyboard.press('Escape');
     assert.equal(await menu.isVisible(),false);
+    // Delete targets exactly the caret line, not an unrelated text selection.
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact'}).click();
+    await page.keyboard.press('End');
+    await button.click();
+    assert(await menu.getByRole('menuitem',{name:'插入本地媒体'}).isDisabled(),
+      'local media insertion must not be available outside Media');
+    await menu.getByRole('menuitem',{name:'删除当前行'}).click();
+    await page.waitForFunction(()=>!document.querySelector('#editor .cm-content')?.textContent
+      .includes('Paragraph beta remains intact.'),null,{timeout:12000});
+    assert.equal(readFileSync(doc,'utf8'),original,'delete line must not auto-save');
+    await page.locator('#undo').click();
+    await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
+      .includes('Paragraph beta remains intact.'),null,{timeout:12000});
+    await page.locator('#redo').click();
+    await page.waitForFunction(()=>!document.querySelector('#editor .cm-content')?.textContent
+      .includes('Paragraph beta remains intact.'),null,{timeout:12000});
+    await page.locator('#undo').click();
+    await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
+      .includes('Paragraph beta remains intact.'),null,{timeout:12000});
+    // Media owns AG selection, Layout exposes only a local path. Selecting an
+    // unreferenced local file must enable the gutter item in Media mode only.
+    await selectModule(page,'media');
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact'}).click();
+    await page.keyboard.press('End');
+    await button.click();
+    assert(await menu.getByRole('menuitem',{name:'插入本地媒体'}).isDisabled(),
+      'Media module without selected local file must not enable insertion');
+    await page.keyboard.press('Escape');
+    const mediaRow=page.locator('.ocr-media-grid .ag-row').filter({hasText:localMedia});
+    await mediaRow.waitFor({timeout:18000});
+    await mediaRow.click();
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact'}).click();
+    await page.keyboard.press('End');
+    await button.click();
+    assert(await menu.getByRole('menuitem',{name:'插入本地媒体'}).isEnabled(),
+      'selected local media must enable insertion in Media mode');
+    await menu.getByRole('menuitem',{name:'插入本地媒体'}).click();
+    await page.waitForFunction(path=>document.querySelector('#editor .cm-content')?.textContent
+      .includes('![]('+path+')'),localMedia,{timeout:12000});
+    assert.equal(readFileSync(doc,'utf8'),original,'local media insert must not auto-save');
+    await page.locator('#undo').click();
+    await page.waitForFunction(path=>!document.querySelector('#editor .cm-content')?.textContent
+      .includes('![]('+path+')'),localMedia,{timeout:12000});
+    await page.locator('#redo').click();
+    await page.waitForFunction(path=>document.querySelector('#editor .cm-content')?.textContent
+      .includes('![]('+path+')'),localMedia,{timeout:12000});
+    await page.locator('#undo').click();
+    await page.waitForFunction(path=>!document.querySelector('#editor .cm-content')?.textContent
+      .includes('![]('+path+')'),localMedia,{timeout:12000});
+    await selectModule(page,'chapter-boundary');
+    await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact'}).click();
+    await page.keyboard.press('End');
+    await button.click();
+    assert(await menu.getByRole('menuitem',{name:'插入本地媒体'}).isDisabled(),
+      'selected local media must be unavailable once leaving Media mode');
+    await page.keyboard.press('Escape');
     await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact'}).click();
     await page.keyboard.press('End');
     assert.equal(await button.count(),1);
@@ -117,7 +178,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:12000});
     // One command only, repeated invocation inserts another folded callout.
     await button.click();
-    assert.equal(await menu.getByRole('menuitem').count(),4);
+    assert.equal(await menu.getByRole('menuitem').count(),6);
     await menu.getByRole('menuitem',{name:'插入 Callout'}).click();
     await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent
       .split('[!note]- 标题').length===3,null,{timeout:12000});
@@ -126,7 +187,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
     await page.locator('#editor .cm-line').filter({hasText:'Paragraph beta remains intact.'}).click();
     await page.keyboard.press('End');
     await button.click();
-    assert.equal(await menu.getByRole('menuitem').count(),4);
+    assert.equal(await menu.getByRole('menuitem').count(),6);
     await menu.getByRole('menuitem',{name:'插入围栏块'}).click();
     assert(await menu.getByRole('textbox',{name:'围栏语言'}).isVisible());
     await menu.getByRole('button',{name:'插入',exact:true}).click();
@@ -166,7 +227,7 @@ for(const [idx,[name,engine]] of [['Chrome',chromium],['iPad WebKit',webkit]].en
       .includes('[!note]- 标题'),null,{timeout:17000});
     assert.deepEqual(errors,[],name+' browser errors');
     console.log('SOURCE_LINE_CALLOUT_BROWSER_PASS',name,
-      JSON.stringify({singleActiveGutterButton:true,fourMenuItems:true,languageInput:true,emptyFence:true,selectedFence:true,nonOverlappingWrappedLine:true,anchoredPopup:true,undoRedo:true,
+      JSON.stringify({singleActiveGutterButton:true,sixMenuItems:true,deleteLineUndoRedo:true,mediaInsertionModeGate:true,languageInput:true,emptyFence:true,selectedFence:true,nonOverlappingWrappedLine:true,anchoredPopup:true,undoRedo:true,
         explicitSave:true,reload:true,evidenceUnchanged:true}));
   }finally{await browser?.close();server.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}
 }

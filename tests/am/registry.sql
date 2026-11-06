@@ -926,7 +926,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Shell hands the typed action to the registered CMD transaction port.
 INSERT INTO apis VALUES
  ('L30','L','planCalloutAtCursor','ui/source-callout-plan.js','export','source snapshot,caret offset,mode','safe atomic insertion plan with cursor target','pure Markdown block plan; old bytes preserved, no source write',1),
- ('L31','L','createSourceLineCalloutMenu','ui/source-line-callout-menu.js','export','source pane, CM6 view, bounded action callback','four-item caret-line gutter popup with selected-line summary','caret-line popup avoids wrapped source line, offers fenced block insertion and retains selection and scroll leadership',1),
+ ('L31','L','createSourceLineCalloutMenu','ui/source-line-callout-menu.js','export','source pane, CM6 view, bounded action callback','six-item caret-line gutter popup with selected-line summary','caret-line popup avoids wrapped source line, offers fenced block insertion and retains selection and scroll leadership',1),
  ('L32','L','returned.mountSourceLineMenu','ui/workspace.js','returned','CM6 view,bounded CMD insertion callback','void','source Layout mounts a CM6 line-number action; no editor edits',1);
 INSERT INTO access_edges VALUES
  ('X-SRC-L31','L','L','ui/workspace.js','createSourceLineCalloutMenu({host:','L31','registered','Layout mounts source line action owned by its own view'),
@@ -1757,3 +1757,13 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-A01-PUBLIC-DIRECT','A01','tests/media-public-contract.browser.test.mjs','tests/media-public-contract.fixture.html','Chromium/WebKit direct createMediaModule facade, resumable partial+complete, one CMD transaction only for successful repeated remote links, and no auto-save','direct'),
  ('TC-A02-PUBLIC-DIRECT','A02','tests/media-public-contract.browser.test.mjs','tests/media-public-contract.fixture.html','Chromium/WebKit direct findMedia handles sized Markdown, local links, duplicates, exact offsets and immutable MinerU evidence exclusion','direct'),
  ('TC-A11-PUBLIC-DIRECT','A11','tests/media-public-contract.browser.test.mjs','tests/media-public-contract.fixture.html','Chromium/WebKit direct uploadPastedImage rejects invalid MIME, empty body, unauthorized 403 and unsafe path; accepts validated local path','direct');
+
+-- The Media AG exposes one read-only, validated local path for the existing
+-- Layout-owned source line menu. No AG API, selected RowNode, or editor state
+-- crosses the module boundary. Source writes remain CMD-only.
+INSERT INTO apis VALUES
+ ('A14','A','returned.getSelectedLocalMedia','ui/media-module.js','returned','none','local media/<hash>.<ext> path or null','read-only semantic selected local media; no Grid row leaks',1);
+INSERT INTO access_edges VALUES
+ ('X-SRC-MEDIA-SELECT','L','A','ui/workspace.js','currentOutline.media?.getSelectedLocalMedia()','A14','registered','Layout reads scalar selected local path only, never AG internals');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-A14-SRC-SELECT','A14','tests/source-line-callout.browser.test.mjs','tests/source-line-callout.browser.test.mjs','Chrome/WebKit selected local AG file enables line insertion only in Media mode; CMD Undo/Redo, no auto-save','integration');

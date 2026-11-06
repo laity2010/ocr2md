@@ -866,6 +866,8 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     },
     scanMedia:()=>currentOutline?.media?.scan(),
     downloadMedia:()=>currentOutline?.media?.downloadAll(),
+    getSelectedLocalMedia:()=>currentOutline?.workModule==='media'
+      ?currentOutline.media?.getSelectedLocalMedia()??null:null,
     scanLatex:()=>currentOutline?.latex?.refresh(),
     normalizeLatex:()=>currentOutline?.latex?.normalizeReviewed(),
     openNoteTemplates:()=>currentOutline?.note?.openTemplates(),

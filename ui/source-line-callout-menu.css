@@ -35,8 +35,12 @@
   padding:7px 10px;background:transparent;color:inherit;text-align:left;
   font:inherit;font-size:13px;cursor:pointer;
 }
-.ocr-source-line-menu button:hover,.ocr-source-line-menu button:focus-visible {
+.ocr-source-line-menu button:not(:disabled):hover,
+.ocr-source-line-menu button:not(:disabled):focus-visible {
   background:#425450;color:#e0efd9;outline:none;
+}
+.ocr-source-line-menu button:disabled {
+  opacity:.42;cursor:not-allowed;
 }
 
 /* Compact progressive disclosure; form does not touch CM6 selection/state. */

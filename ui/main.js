@@ -855,9 +855,11 @@ async function main() {
         expected:plan.expected,insert:plan.insert}],plan.cursorAfter);
       view.focus();
       status(kind==='fence'?'✓ 已插入 Markdown 围栏块 · 请全局保存':
+        kind==='local-media'?'✓ 已插入本地媒体引用 · 请全局保存':
+        kind==='delete-line'?'✓ 已删除当前行 · 可撤销':
         '✓ 已在光标处插入 Callout · 请全局保存');
-    }catch(error){status('源码插入失败：'+error.message,'error');}
-  },onQuoteIndent:direction=>{
+    }catch(error){status('源码编辑失败：'+error.message,'error');}
+  },getLocalMedia:()=>workspace.getSelectedLocalMedia(),onQuoteIndent:direction=>{
     try{
       const result=cm.adjustQuoteIndent(direction);
       if(result.changed)status(`✓ 已${direction>0?'增加':'减少'} ${result.changed} 行引用缩进`);
