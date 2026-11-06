@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: read-only candidate action missing 同页 PDF 双框概览
+
+0 !== 1
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r9-isolated/tests/text-block-review.browser.test.mjs:45:13 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 1,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0

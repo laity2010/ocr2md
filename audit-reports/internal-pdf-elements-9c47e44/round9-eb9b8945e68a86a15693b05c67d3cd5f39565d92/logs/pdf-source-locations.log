@@ -1,0 +1,15 @@
+PDF_SOURCE_CONTENT_MAPPING_PASS {
+  rootBlocks: 224,
+  childBlocks: 43,
+  structuralOnly: [ 'p4b0s0', 'p4b0s1', 'p4b0s2' ],
+  sample: {
+    pageIndex: 3,
+    blockIndex: 0,
+    path: [ 0 ],
+    kind: 'child',
+    sourceLine: 190,
+    scopeEndLine: 192,
+    contentLine: 191,
+    contentEndLine: 191
+  }
+}

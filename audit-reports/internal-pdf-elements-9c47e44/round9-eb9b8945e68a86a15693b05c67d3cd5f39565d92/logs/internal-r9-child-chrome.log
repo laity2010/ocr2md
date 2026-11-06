@@ -1,0 +1,32 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]')
+    - locator resolved to <div role="option" class="option" data-value="pdf" aria-disabled="true" id="tomselect-1-opt-2">PDF 原文（预热中）</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not enabled
+    - retrying click action
+    - waiting 20ms
+    - waiting for element to be visible, enabled and stable
+  - element was detached from the DOM, retrying
+
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r9-isolated/tests/pdf-child-region-select.browser.test.mjs:57:86 {
+  log: [
+    `  - waiting for locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]')`,
+    '    - locator resolved to <div role="option" class="option" data-value="pdf" aria-disabled="true" id="tomselect-1-opt-2">PDF 原文（预热中）</div>',
+    '  - attempting click action',
+    '    2 × waiting for element to be visible, enabled and stable',
+    '      - element is not enabled',
+    '    - retrying click action',
+    '    - waiting 20ms',
+    '    - waiting for element to be visible, enabled and stable',
+    '  - element was detached from the DOM, retrying'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

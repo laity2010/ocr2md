@@ -1,0 +1,18 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+locator.evaluate: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('#ag-functions-toggle')
+    - locator resolved to visible <button type="button" aria-label="AG 功能菜单" aria-haspopup="true" aria-expanded="false" id="ag-functions-toggle">功能 ▾</button>
+
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r9-isolated/tests/text-block-review.browser.test.mjs:49:47 {
+  log: [
+    "  - waiting for locator('#ag-functions-toggle')",
+    '    - locator resolved to visible <button type="button" aria-label="AG 功能菜单" aria-haspopup="true" aria-expanded="false" id="ag-functions-toggle">功能 ▾</button>'
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

@@ -1,0 +1,14 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.reload: net::ERR_CONNECTION_REFUSED
+Call log:
+  - waiting for navigation until "domcontentloaded"
+
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r9-isolated/tests/text-block-review.browser.test.mjs:128:15 {
+  log: [ '  - waiting for navigation until "domcontentloaded"' ],
+  name: 'Error'
+}
+
+Node.js v23.11.0

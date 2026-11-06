@@ -1,0 +1,13 @@
+PDF_CHILD_REGION_SELECT_PASS iPad-WebKit {
+  parents: 224,
+  children: 43,
+  tested: [
+    { id: 'p3b0s0', content: 551, role: 'caption', pdfPage: 4 },
+    { id: 'p3b0s1', content: 555, role: 'body', pdfPage: 4 },
+    { id: 'p4b0s0', content: 650, role: 'caption', pdfPage: 5 },
+    { id: 'p4b0s1', content: 654, role: 'body', pdfPage: 5 },
+    { id: 'p4b0s2', content: 658, role: 'note', pdfPage: 5 }
+  ],
+  sourceUnchanged: true,
+  reverseChildExact: true
+}
