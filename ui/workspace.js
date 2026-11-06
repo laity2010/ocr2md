@@ -568,9 +568,24 @@ class PreviewPanel {
       .map(el=>({from:Number(el.dataset.sourceStart),to:Number(el.dataset.sourceEnd)}));
     this.paintBlockCoverage();
     this.pdf?.setBlockCoverage(this.coverageEnabled('pdf')?rows:[]);
-    owner.setPreviewCoverage(rows.filter(row=>row.expectsPreview&&row.sourceLine!==null&&
-      mapped.some(region=>region.from<=row.sourceLine+2&&row.sourceLine+2<region.to))
-      .map(row=>row.id));
+    // A CMD parent owns its whole source scope until the next parent marker.
+    // For tables, figures and images the parent marker may be immediately
+    // followed by one or more native `p*b*s*` tags, with the actual caption,
+    // HTML table or image several lines later. Checking exactly `+2` falsely
+    // reports them as *unmapped* even when the renderer has mapped content.
+    // Sort by source position (not reviewed PBS numeric order), and accept a
+    // genuinely rendered node wholly inside each original parent's scope.
+    const ordered=rows.filter(row=>Number.isInteger(row.sourceLine))
+      .sort((a,b)=>a.sourceLine-b.sourceLine);
+    owner.setPreviewCoverage(ordered.filter((row,index)=>{
+      if(!row.expectsPreview)return false;
+      const start=row.sourceLine+1;
+      // An absent next parent must be handled BEFORE arithmetic: optional
+      // `undefined + 1` produces NaN, not null, so `?? Infinity` would lose
+      // the final visible reference block on the last PDF page.
+      const end=ordered[index+1]?ordered[index+1].sourceLine+1:Infinity;
+      return mapped.some(region=>region.from>start&&region.from<end&&region.to<=end);
+    }).map(row=>row.id));
   }
   clearSentenceSelection(){clearSentencePreviewHighlight();clearSentenceCoverageHighlight();}
   redrawSentenceCoverage(){

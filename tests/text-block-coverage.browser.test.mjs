@@ -47,14 +47,28 @@ try{
    await page.waitForFunction(()=>/原始 224 块 \/ 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 224 · 缺失 0/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    const currentState=await page.locator('#status').innerText();
+   await page.waitForFunction(()=>/当前 MD 定位 216\/216/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:12000});
+   assert.match(await page.locator('#status').innerText(),/可见正文 216 · 空块\/仅元数据 8.*当前 MD 定位 216\/216/,
+     'every original readable CMD parent (including native image/table children and final reference) must map into MD');
    await page.screenshot({path:`${dir}/${name}-inventory.png`,fullPage:false,animations:'disabled'});
    const mapped=await page.evaluate(rows=>{
      const elements=[...document.querySelectorAll('.ocr-markdown [data-source-start][data-source-end]')]
        .map(el=>({start:Number(el.dataset.sourceStart),end:Number(el.dataset.sourceEnd),text:el.textContent.trim()}));
-     const missing=rows.filter(row=>row.sourceLine!==null&&!elements.some(x=>x.start<=row.sourceLine+2&&row.sourceLine+2<x.end));
-     return {source:rows.filter(row=>row.sourceLine!==null).length,preview:rows.length-missing.length,
+     const ordered=rows.filter(row=>Number.isInteger(row.sourceLine))
+       .sort((a,b)=>a.sourceLine-b.sourceLine);
+     const readable=ordered.filter(row=>row.expectsPreview);
+     const missing=ordered.filter((row,index)=>{
+       if(!row.expectsPreview)return false;
+       const end=ordered[index+1]?ordered[index+1].sourceLine+1:Infinity;
+       return !elements.some(x=>x.start>row.sourceLine+1&&x.start<end&&x.end<=end);
+     });
+     return {source:readable.length,preview:readable.length-missing.length,
        missing:missing.map(x=>({id:x.id,type:x.type,sourceLine:x.sourceLine,text:x.text.slice(0,90)}))};
    },inventory.rows);
+   assert.equal(mapped.source,216,'original readable parent count must be exact');
+   assert.equal(mapped.preview,216,`CMD child-aware MD source mapping lost ${JSON.stringify(mapped.missing)}`);
+   assert.deepEqual(mapped.missing,[],'no readable parent may be counted as unmapped');
    const target=page.locator('.ocr-text-block-grid .ag-row').filter({hasText:'p6b2'}).first();
    // AG Grid virtualizes rows. Using its filter is not necessary: scroll the
    // grid via the page-source text row, then verify the reverse focus.
