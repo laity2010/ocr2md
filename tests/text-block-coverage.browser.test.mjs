@@ -41,7 +41,10 @@ try{
    const options=await page.locator('.ocr-navigation-popup-elements:visible [data-value]').evaluateAll(els=>els.map(el=>el.getAttribute('data-value')));
    assert.equal(options[0],'text-block','text block option must be first');
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
-   await page.waitForFunction(()=>/原始 224 块 \/ 22 页 · 源码已匹配 224 · 缺失 0/.test(
+   // The current CMD-owned inventory inserts PBS/BC counters between the
+   // original block/page total and the source-match proof. Keep both exact
+   // assertions without requiring those two fields to be adjacent.
+   await page.waitForFunction(()=>/原始 224 块 \/ 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 224 · 缺失 0/.test(
      document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    const currentState=await page.locator('#status').innerText();
    await page.screenshot({path:`${dir}/${name}-inventory.png`,fullPage:false,animations:'disabled'});

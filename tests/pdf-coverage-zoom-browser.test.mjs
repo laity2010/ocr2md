@@ -58,42 +58,26 @@ try{
       assert.equal(await page.locator('.ocr-preview-block-toggle').innerText(),'文本块');
       assert.equal(await cover.isChecked(),false,'Markdown defaults to no text blocks');
       assert.equal(await page.locator('.ocr-md-block-covered').count(),0);
-      // New requirement: the checkbox works BEFORE the AG text-block module
-      // has ever been selected, and an edit is possible in the Title module.
+      // The shared overlay checkbox is independent of AG module selection.
+      // PDF evidence is visible before Text Block AG is first opened, but
+      // its original independent-block checkbox remains non-editable.
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:30000});
       assert(['text-block','chapter-boundary'].includes(
         await page.locator('.ocr-lab-element-select').inputValue()),
-        'the first PDF edit must not depend on which AG view the browser initializes');
-      // 9a375d9 contract: the checkbox is a read-only visual; three
-      // clicks/taps on the parent control toggle the join.
+        'PDF evidence must not depend on which AG view initializes');
+      // Under the sealed CMD read-only milestone the PDF checkbox is only an
+      // evidence indicator. Three clicks must NOT silently write a join,
+      // even before the AG Text Block module has ever been activated.
       const joinTag=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
-      // The PDF pane is not shown yet here (the old code also used a DOM
-      // click), so deliver the same three DOM clicks the ctrl counts.
+      const beforeJoinClick=await page.evaluate(()=>window.__v6cm6.cm.readSource());
       await joinTag.evaluate(el=>{for(let i=0;i<3;i++)el.click();});
-      try{
-        await page.waitForFunction(()=>document.querySelector(
-          '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===false,
-          null,{timeout:20000});
-      }catch(error){
-        const details=await page.evaluate(()=>({
-          mode:document.querySelector('.ocr-lab-element-select')?.value,
-          status:document.querySelector('#status')?.textContent,
-          pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
-          total:document.querySelectorAll('.ocr-pdf-block-cover').length,
-          joinInput:document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked,
-          joinDisabled:document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.disabled,
-          pdfReady:window.__v6cm6?.pdf?.ready,
-          sourceJoinCount:(window.__v6cm6?.view?.state?.doc?.toString()?.match(/ocr2md:block-join/g)||[]).length,
-          navType:performance.getEntriesByType('navigation').map(e=>e.type)
-        })).catch(e=>({probeError:String(e)}));
-        console.error('PDF_COVER_INITIAL_JOIN_DIAGNOSTIC',name,JSON.stringify({details,errors}));
-        throw error;
-      }
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===true,
-        null,{timeout:20000});
+      assert.equal(await joinTag.locator('input').isDisabled(),true,
+        'read-only PDF evidence must not enable the old direct join checkbox');
+      assert.equal(await joinTag.locator('input').isChecked(),true,
+        'read-only PDF evidence must retain original independent block state');
+      assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),beforeJoinClick,
+        'PDF triple-click must not mutate CMD before AG activation');
       // In single Markdown, this control changes ONLY Markdown coverage.
       await cover.evaluate(input=>input.click());
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-md-block-covered').length>=150,
