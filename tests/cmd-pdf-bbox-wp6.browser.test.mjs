@@ -34,44 +34,54 @@ try{
    const bbox=await page.evaluate(async()=>{
      const layout=await window.__v6cm6.cm.queryLayout();return layout.pages[0].regions[0].bbox;
    });
-   const row=page.locator('.ocr-text-block-grid .ag-row[row-id="p0b0"]');await row.click();
+   // Current 06b2901 read-only milestone: the PDF overlay is evidence,
+   // and the legacy 4-coordinate editing toolbar is intentionally absent.
+   // Verify the real Shell AG inventory and the absence of any hidden writer.
+   const row=page.locator('.ocr-text-block-grid .ag-row[row-id="p0b0"]');
+   await row.click();
    await page.locator('#ag-functions-toggle').click();
    const menu=page.locator('#ag-functions-menu [data-module="text-block"]');
-   const inputs=menu.locator('.ocr-pbs-bbox-editor input');
-   assert.equal(await inputs.count(),4);
-   await page.waitForFunction(expected=>{
-     const nodes=[...document.querySelectorAll('#ag-functions-menu .ocr-pbs-bbox-editor input')];
-     return nodes.length===4&&nodes.every((n,i)=>n.value!==''&&Number(n.value)===expected[i]);
-   },bbox,{timeout:20000});
-   assert.deepEqual((await inputs.evaluateAll(nodes=>nodes.map(n=>Number(n.value)))),bbox);
-   assert.equal(await menu.getByRole('button',{name:'清除所选 PBS 的人工 PDF 框修正'}).isDisabled(),true);
-   const proposed=[bbox[0]+.5,bbox[1]+.5,bbox[2],bbox[3]];
-   await inputs.nth(0).fill(String(proposed[0]));await inputs.nth(1).fill(String(proposed[1]));
-   await menu.getByRole('button',{name:'应用选中 PBS 的 PDF 覆盖框四坐标'}).click();
-   await page.waitForFunction(()=>window.__v6cm6.cm.readSource().includes('<!-- cmd:pdf-bbox:v1 '),null,{timeout:30000});
-   const changed=await get();
-   assert.equal(changed.slice(changed.indexOf('<!-- minerujson:source:v1:')),source.slice(source.indexOf('<!-- minerujson:source:v1:')));
-   assert.equal(toMineruJSON(changed),raw);
-   await page.waitForFunction(async()=>{
-     const b=(await window.__v6cm6.cm.queryLayout()).pages[0].regions[0].bbox;
-     return b[0]!==undefined&&b[0]!==null&&b[0]>0;
-   },null,{timeout:30000});
-   const effective=await page.evaluate(async()=> (await window.__v6cm6.cm.queryLayout()).pages[0].regions[0].bbox);
-   assert.deepEqual(effective,proposed);
-   assert.equal(readFileSync(doc,'utf8'),source,'CMD footer must not auto-save');
-   await page.locator('#undo').click();
-   await page.waitForFunction(()=>!window.__v6cm6.cm.readSource().includes('cmd:pdf-bbox:v1'),null,{timeout:20000});
-   assert.equal(await get(),baseline);
-   await page.locator('#redo').click();
-   await page.waitForFunction(()=>window.__v6cm6.cm.readSource().includes('cmd:pdf-bbox:v1'),null,{timeout:20000});
-   assert.equal(await get(),changed);
-   await page.waitForFunction(()=>/PDF bbox/.test(document.querySelector('.ocr-text-block-grid .ag-header')?.textContent||'')||
-     document.querySelector('.ocr-text-block-grid .ag-row[row-id="p0b0"]'),null,{timeout:30000});
-   await row.click();await page.locator('#ag-functions-toggle').click();
-   await menu.getByRole('button',{name:'清除所选 PBS 的人工 PDF 框修正'}).click();
-   await page.waitForFunction(()=>!window.__v6cm6.cm.readSource().includes('cmd:pdf-bbox:v1'),null,{timeout:30000});
-   assert.equal(await get(),baseline,'last override removal restores byte-exact CMD');
-   assert.equal(readFileSync(doc,'utf8'),source);
+   assert.equal(await menu.locator(':scope > button').count(),4,
+     'read-only text blocks mount only inventory, grouping, continuation review and PDF comparison');
+   assert.equal(await menu.locator('.ocr-pbs-bbox-editor input').count(),0,
+     'PDF coordinate editing must not be mounted in the read-only AG menu');
+   assert.equal(await menu.getByRole('button',{name:'应用选中 PBS 的 PDF 覆盖框四坐标'}).count(),0);
+   assert.equal(await menu.getByRole('button',{name:'清除所选 PBS 的人工 PDF 框修正'}).count(),0);
+   assert.deepEqual(await page.evaluate(async()=>
+     (await window.__v6cm6.cm.queryLayout()).pages[0].regions[0].bbox),bbox,
+   'PDF original bbox must stay exact after AG focus');
+   assert.equal(await get(),baseline,'AG review cannot mutate the original sealed CMD');
+   assert.equal(readFileSync(doc,'utf8'),source,'AG review cannot auto-save');
+   // CMD still owns a strict, reversible pure bbox planner, even when the
+   // editor is disabled. Invalid coordinate plans fail closed and the raw
+   // immutable MinerU JSON must still round-trip byte-for-byte.
+   const edits=await page.evaluate(async()=>{
+     const {planCMDPDFBBoxEdit,readCMDPDFBBoxOverrides,applyCMDPDFBBoxOverrides}=
+       await import('/cmd-pdf-bbox.js');
+     const cm=window.__v6cm6.cm,original=cm.readSource();
+     const layout=await cm.queryLayout();
+     const first=layout.pages[0].regions[0].bbox;
+     const proposed=[first[0]+.5,first[1]+.5,first[2],first[3]];
+     const apply=(s,plan)=>[...plan.edits].sort((a,b)=>b.from-a.from).reduce((text,e)=>{
+       if(text.slice(e.from,e.to)!==e.expected)throw Error('unmatched source witness');
+       return text.slice(0,e.from)+e.insert+text.slice(e.to);
+     },s);
+     const marked=apply(original,planCMDPDFBBoxEdit(original,layout,'p0b0',proposed));
+     const effective=applyCMDPDFBBoxOverrides(layout,marked).pages[0].regions[0].bbox;
+     const restored=apply(marked,planCMDPDFBBoxEdit(marked,layout,'p0b0',null));
+     let rejectsInvalid=false;
+     try{planCMDPDFBBoxEdit(original,layout,'p0b0',[NaN,0,10,11]);}
+     catch{rejectsInvalid=true;}
+     return {marked,effective,restoresOriginal:restored===original,rejectsInvalid,
+       boxCount:Object.keys(readCMDPDFBBoxOverrides(marked,layout).boxes).length,
+       sourceUnchanged:cm.readSource()===original};
+   });
+   assert.deepEqual(edits.effective,[bbox[0]+.5,bbox[1]+.5,bbox[2],bbox[3]]);
+   assert.equal(edits.boxCount,1);
+   assert.equal(edits.restoresOriginal,true,'pure planner removal must restore byte-exact CMD');
+   assert.equal(edits.rejectsInvalid,true,'bbox planner must reject invalid numbers');
+   assert.equal(edits.sourceUnchanged,true,'pure bbox planner must not mutate CM6');
+   assert.equal(toMineruJSON(edits.marked),raw,'sealed original MinerU JSON must remain reversible');
    // Synthetic PDF page DOM checks the actual PDF-owned pointer editor logic.
    // No claim that the original user PDF or hardware iPad was exercised.
    const gesture=await page.evaluate(async()=>{
@@ -102,7 +112,7 @@ try{
    assert.deepEqual(gesture.move,['p0b0',[25,36,55,86],'expected CMD source']);
    assert.equal(gesture.handles,5);
    assert.deepEqual(errors,[]);
-   console.log('CMD_PDF_BBOX_WP6_UI_PASS',name,{footer:true,undoRedo:true,originalJSON:true,noAutoSave:true,reset:true,syntheticPDFPointer:true});
+   console.log('CMD_PDF_BBOX_WP6_UI_PASS',name,{bboxWriterHidden:true,originalJSON:true,noAutoSave:true,plannerReversible:true,invalidRejected:true,syntheticPDFPointer:true});
   }finally{await browser.close();}
  }
 }finally{host.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}

@@ -9,7 +9,8 @@ import {createServer} from 'node:net';
 import {spawn} from 'node:child_process';
 import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable,webkitExecutable} from './platform.test-helper.mjs';
-import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
+import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
+import {readCMDBlockChains,planCMDMergeBlockChains,planCMDSplitBlockChain} from '../ui/cmd-block-chains.js';
 const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
 const source=toMarkdown(raw);
 const temp=mkdtempSync(join(tmpdir(),'ocr2md-wp4-ui-'));
@@ -61,42 +62,56 @@ try{
    const row=id=>page.locator(`.ocr-text-block-grid .ag-row[row-id="${id}"]`).first();
    await row('p0b0').waitFor({timeout:16000});
    await row('p0b0').click();
-   const button=label=>page.locator('#ag-functions-menu [data-module="text-block"]').getByRole('button',{name:label});
-   const doAction=async label=>{await page.locator('#ag-functions-toggle').click();await button(label).click();};
-   await doAction('将当前 PBS 设为目标链');
-   await row('p0b1').click();
-   await doAction('把当前 PBS 所在块链并入目标链');
-   await page.waitForFunction(()=>/BC 266 链/.test(document.querySelector('#status')?.textContent||''),null,{timeout:60000});
-   let state=await page.evaluate(()=>window.__v6cm6.cm.queryBlockChains());
-   let merged=state.chains.find(c=>c.members.includes('p0b0'));
-   assert.deepEqual(merged.members,['p0b0','p0b1']);
-   assert.equal(state.invalid.length,0);
-   await doAction('切换文本块链分组展示');
-   await page.evaluate(async()=>{const scroll=document.querySelector('.ocr-text-block-grid .ag-body-horizontal-scroll-viewport');
-     if(scroll)scroll.scrollLeft=0;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));});
-   await page.locator('.ocr-text-block-grid .ocr-text-block-group').first().waitFor({timeout:9000});
-   const groupButton=page.locator('.ocr-text-block-grid .ocr-text-block-group').first();
-   assert.match(await groupButton.innerText(),/bc-0001/);
-   await groupButton.click();
-   await page.waitForFunction(()=>!document.querySelector('.ocr-text-block-grid .ag-row[row-id="p0b0"]'),null,{timeout:12000});
-   await groupButton.click();
-   await row('p0b1').waitFor({timeout:12000});
-   await row('p0b1').click();
-   await doAction('在当前 PBS 之前拆分块链');
-   await page.waitForFunction(()=>window.__v6cm6.cm.queryBlockChains().summary.chains===267,null,{timeout:30000});
-   await page.waitForFunction(()=>/BC 267 链/.test(document.querySelector('#status')?.textContent||''),null,{timeout:30000});
-   state=await page.evaluate(()=>window.__v6cm6.cm.queryBlockChains());
-   assert.equal(state.chains.find(c=>c.members.includes('p0b0')).members.length,1);
-   assert.equal(state.chains.find(c=>c.members.includes('p0b1')).members.length,1);
-   const afterSplit=await page.evaluate(()=>window.__v6cm6.cm.readSource());
-   await page.locator('#undo').click();
-   await page.waitForFunction(()=>window.__v6cm6.cm.queryBlockChains().summary.chains===266,null,{timeout:25000});
-   await page.locator('#redo').click();
-   await page.waitForFunction(()=>window.__v6cm6.cm.queryBlockChains().summary.chains===267,null,{timeout:25000});
-   assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),afterSplit,'native CM6 Undo/Redo must be byte exact');
+   await page.locator('#ag-functions-toggle').click();
+   const menu=page.locator('#ag-functions-menu [data-module="text-block"]');
+   assert.equal(await menu.locator(':scope > button').count(),4,
+     'current read-only milestone mounts precisely four safe functions');
+   for(const label of ['将当前 PBS 设为目标链','把当前 PBS 所在块链并入目标链',
+     '在当前 PBS 之前拆分块链','仅将所选 PBS 移至目标块后',
+     '清除所选 PBS 的人工 PDF 框修正'])
+     assert.equal(await menu.getByRole('button',{name:label}).count(),0,
+       `retired structural writer must not be mounted: ${label}`);
+   // The Shell automatically hides the action menu after a click. A
+   // role-locator excludes the *hidden* button from the post-click check;
+   // keep the same original DOM button and inspect aria-pressed directly.
+   const grouping=menu.locator('button[aria-label="切换文本块链分组展示"]');
+   await grouping.click();
+   assert.equal(await grouping.getAttribute('aria-pressed'),'true',
+     'read-only grouping still changes AG presentation');
+   assert.equal(await page.evaluate(()=>window.__v6cm6.cm.queryBlockChains().summary.chains),267,
+     'grouping must not synthesize or delete chains');
+   assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),source,
+     'AG grouping must not edit CMD');
+   await page.locator('#ag-functions-toggle').click();
+   await menu.getByRole('button',{name:'查看跨页跨栏接续候选'}).click();
+   await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:30000});
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-text-block-grid .ag-row').length===5,
+     null,{timeout:16000});
+   const candidateIds=await page.locator('.ocr-text-block-grid .ag-row[row-id]')
+     .evaluateAll(nodes=>nodes.map(n=>n.getAttribute('row-id')));
+   assert.equal(new Set(candidateIds).size,5,'all five review-only continuations must be present');
+   assert(candidateIds.includes('p6b6--p6b7'),'cross-column candidate must survive read-only transition');
+   assert(candidateIds.includes('p15b11--p16b0'),'cross-page candidate must survive read-only transition');
+   assert.equal(await menu.getByRole('button',{name:'确认所选文本块续接'}).count(),0,
+     'old mutable review command must not be reintroduced by the test');
+   // Core CMD chain planning is still validated independently of the
+   // currently disabled AG write buttons, with original sealed OCR intact.
+   const apply=(text,plan)=>[...plan.edits].sort((a,b)=>b.from-a.from).reduce((cur,e)=>{
+     assert.equal(cur.slice(e.from,e.to),e.expected);return cur.slice(0,e.from)+e.insert+cur.slice(e.to);
+   },text);
+   const merged=apply(source,planCMDMergeBlockChains(source,'p0b0','p0b1'));
+   assert.deepEqual(readCMDBlockChains(merged).chains.find(chain=>
+     chain.members.includes('p0b0'))?.members,['p0b0','p0b1']);
+   assert.equal(readCMDBlockChains(merged).summary.chains,266);
+   const split=apply(merged,planCMDSplitBlockChain(merged,'p0b1'));
+   assert.equal(readCMDBlockChains(split).summary.chains,267);
+   assert.equal(toMineruJSON(split),raw,'pure merge/split must not damage sealed MinerU JSON');
+   assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),source,
+     'pure planners must never bypass the unique CM6 source');
    assert.deepEqual(errors,[]);
    assert.equal(readFileSync(doc,'utf8'),source,'WP4 UI actions must remain unsaved until global Save');
-   console.log('CMD_PBS_BC_WP4_UI_PASS',name,{pbs:267,children:43,merge:true,groupCollapse:true,split:true,unsaved:true});
+   console.log('CMD_PBS_BC_WP4_UI_PASS',name,{pbs:267,children:43,readOnly:true,groupToggle:true,candidates:5,pureMergeSplit:true,sourcePreserved:true});
   }finally{await browser.close();}
  }
 }finally{processHost.kill('SIGTERM');rmSync(temp,{recursive:true,force:true});}
