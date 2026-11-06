@@ -1,0 +1,18 @@
+PDF_BLOCK_EDGE_SCROLL_PASS iPad-WebKit down-to-p16b8 {
+  target: 'p16b8',
+  newId: 'p16b9',
+  landing: 'after',
+  scroll: true,
+  realCoverageHit: true,
+  undo: true,
+  noAutosave: true
+}
+PDF_BLOCK_EDGE_SCROLL_PASS iPad-WebKit up-to-p16b0 {
+  target: 'p16b0',
+  newId: 'p16b0',
+  landing: 'before',
+  scroll: true,
+  realCoverageHit: true,
+  undo: true,
+  noAutosave: true
+}

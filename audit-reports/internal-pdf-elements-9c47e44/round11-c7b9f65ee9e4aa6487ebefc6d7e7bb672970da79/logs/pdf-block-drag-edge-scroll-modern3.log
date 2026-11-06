@@ -1,0 +1,10 @@
+file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/packages/minerujson-md/dist/index.js:63
+        throw new Error('MINERUJSON_MD_INVALID: ' + message);
+              ^
+
+Error: MINERUJSON_MD_INVALID: page-local reordered PBS must preserve every original OCR block
+    at assert (file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/packages/minerujson-md/dist/index.js:63:15)
+    at toMineruJSON (file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/packages/minerujson-md/dist/index.js:828:9)
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/pdf-block-drag-edge-scroll.browser.test.mjs:133:24
+
+Node.js v23.11.0

@@ -1,0 +1,13 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.evaluate: TypeError: Cannot read properties of undefined (reading 'pdf')
+    at eval (eval at evaluate (:370:30), <anonymous>:2:38)
+    at UtilityScript.evaluate (<anonymous>:372:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/pdf-block-reorder.browser.test.mjs:93:32 {
+  log: []
+}
+
+Node.js v23.11.0

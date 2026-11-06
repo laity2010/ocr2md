@@ -1,0 +1,12 @@
+EDGE_DROP_DIAGNOSTIC Chrome down-to-p16b8 {"globalStatus":"● 未保存 · PDF · ✓ p16b8 不变 · p16b0 → p16b9 · 后续编号顺延 · 未保存，可 Undo · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 原始 224 块 / 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 223 · 缺失 1 · 重复 0 · PDF bbox 224 · 无效 0 · 可见正文 215 · 空块/仅元数据 9 · 已接续 0 · 逻辑块 223 · 当前 MD 定位 214/215 · AG 第 17 页 16 块 · 未知锚点 1 · 4,932行 / 383,880字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","pdfStatus":"✓ p16b8 不变 · p16b0 → p16b9 · 后续编号顺延 · 未保存，可 Undo","original":"p16b9","expected":"p16b8","arrow":false}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 35000ms exceeded.
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/pdf-block-drag-edge-scroll.browser.test.mjs:116:24 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

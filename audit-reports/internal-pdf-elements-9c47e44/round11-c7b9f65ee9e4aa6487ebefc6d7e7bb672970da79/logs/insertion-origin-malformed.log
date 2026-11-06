@@ -1,0 +1,16 @@
+PBS_INSERT_AFTER_PASS p1b9 after p1b0 => p1b1 shifted 8
+PBS_INSERT_AFTER_PASS p1b2 after p1b4 => p1b5 shifted 9
+PBS_INSERT_AFTER_PASS p1b3 after p1b4 => p1b5 shifted 9
+PBS_INSERT_AFTER_PASS p1b5 after p1b6 => p1b7 shifted 7
+PBS_INSERT_AFTER_PASS p0b16 after p1b0 => p1b1 shifted 13
+PBS_INSERT_AFTER_PASS p1b4 after p0b3 => p0b4 shifted 13
+PBS_INSERT_AFTER_PASS p21b20 after p20b0 => p20b1 shifted 0
+PBS_INSERT_AFTER_PASS p1b5 after p21b20 => p21b21 shifted 0
+PBS_INSERT_AFTER_PASS p1b9 after p1b0 => p1b1 shifted 8
+PBS_INSERT_AFTER_PASS p1b3 after p1b0 => p1b1 shifted 2
+PBS_INSERT_AFTER_PASS p1b2 after p1b4 => p1b5 shifted 9
+PBS_INSERT_AFTER_PASS p16b0 after p16b8 => p16b9 shifted 7
+PBS_INSERT_AFTER_PASS p1b5 after p2b0 => p2b1 shifted 13
+PBS_INSERT_AFTER_PASS p1b5 after p1b6 => p1b7 shifted 7
+PBS_INSERT_AFTER_PASS p1b4 after p1b0 => p1b1 shifted 2
+PBS_INSERT_AFTER_ALL_PASS

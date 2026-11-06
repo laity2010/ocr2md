@@ -1,0 +1,48 @@
+PDF_CHILD_NAVIGATED Chrome http://127.0.0.1:54484/
+PDF_CHILD_CHECK Chrome p3b0s0 caption 551
+PDF_CHILD_FORWARD_PASS Chrome p3b0s0
+PDF_CHILD_REVERSE_PASS Chrome p3b0s0
+PDF_CHILD_CHECK Chrome p3b0s1 body 555
+PDF_CHILD_FORWARD_PASS Chrome p3b0s1
+PDF_CHILD_REVERSE_PASS Chrome p3b0s1
+PDF_CHILD_CHECK Chrome p4b0s0 caption 650
+PDF_CHILD_FORWARD_PASS Chrome p4b0s0
+PDF_CHILD_REVERSE_PASS Chrome p4b0s0
+PDF_CHILD_CHECK Chrome p4b0s1 body 654
+PDF_CHILD_FORWARD_PASS Chrome p4b0s1
+PDF_CHILD_REVERSE_PASS Chrome p4b0s1
+PDF_CHILD_CHECK Chrome p4b0s2 note 658
+PDF_CHILD_FORWARD_PASS Chrome p4b0s2
+PDF_CHILD_REVERSE_PASS Chrome p4b0s2
+PDF_CHILD_REGION_SELECT_PASS Chrome {
+  realChildClicks: 5,
+  parents: 224,
+  nativeChildren: 43,
+  readonly: true,
+  originalOCRReversible: true,
+  sourceUnchanged: true
+}
+PDF_CHILD_NAVIGATED iPad-WebKit http://127.0.0.1:54484/
+PDF_CHILD_CHECK iPad-WebKit p3b0s0 caption 551
+PDF_CHILD_FORWARD_PASS iPad-WebKit p3b0s0
+PDF_CHILD_REVERSE_PASS iPad-WebKit p3b0s0
+PDF_CHILD_CHECK iPad-WebKit p3b0s1 body 555
+PDF_CHILD_FORWARD_PASS iPad-WebKit p3b0s1
+PDF_CHILD_REVERSE_PASS iPad-WebKit p3b0s1
+PDF_CHILD_CHECK iPad-WebKit p4b0s0 caption 650
+PDF_CHILD_FORWARD_PASS iPad-WebKit p4b0s0
+PDF_CHILD_REVERSE_PASS iPad-WebKit p4b0s0
+PDF_CHILD_CHECK iPad-WebKit p4b0s1 body 654
+PDF_CHILD_FORWARD_PASS iPad-WebKit p4b0s1
+PDF_CHILD_REVERSE_PASS iPad-WebKit p4b0s1
+PDF_CHILD_CHECK iPad-WebKit p4b0s2 note 658
+PDF_CHILD_FORWARD_PASS iPad-WebKit p4b0s2
+PDF_CHILD_REVERSE_PASS iPad-WebKit p4b0s2
+PDF_CHILD_REGION_SELECT_PASS iPad-WebKit {
+  realChildClicks: 5,
+  parents: 224,
+  nativeChildren: 43,
+  readonly: true,
+  originalOCRReversible: true,
+  sourceUnchanged: true
+}

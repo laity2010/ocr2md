@@ -1,0 +1,139 @@
+......................................../Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d23e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d24d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2110>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d26b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d27a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2980>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2a70>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2890>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2b60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2c50>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2d40>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2e30>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d2f20>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3010>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3100>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d31f0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d32e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d33d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d34c0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d35b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d36a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3790>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3880>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3970>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3a60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3b50>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d08b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3c40>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d09a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3d30>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3e20>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1056d3f10>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc040>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc130>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc220>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc310>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc400>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc4f0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc5e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc6d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc7c0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fc8b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fcc70>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1058fcd60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..s
+----------------------------------------------------------------------
+Ran 43 tests in 14.166s
+
+OK (skipped=1)
+AM_STANDARD_REPORT status=BLOCKED sha=407c720b5a4c167c219ec1338c6996ec91fea2e0 output=/Users/daisor/.agentdock/tmp/tmpp_9umusr
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=66

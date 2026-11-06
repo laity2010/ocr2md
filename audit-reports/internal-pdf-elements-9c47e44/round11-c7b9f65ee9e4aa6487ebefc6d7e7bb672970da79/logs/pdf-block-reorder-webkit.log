@@ -1,0 +1,20 @@
+PDF_BLOCK_REORDER_BROWSER_PASS iPad-WebKit page-2-parent-after {
+  from: 'p1b3',
+  to: 'p1b5',
+  landing: 'after',
+  newId: 'p1b6',
+  pickerWidths: [ 155, 155, 155, 155, 155 ],
+  childrenPreserved: true,
+  undo: true,
+  noAutosave: true
+}
+PDF_BLOCK_REORDER_BROWSER_PASS iPad-WebKit page-2-parent-before {
+  from: 'p1b5',
+  to: 'p1b3',
+  landing: 'before',
+  newId: 'p1b3',
+  pickerWidths: [ 155, 155, 155, 155, 155 ],
+  childrenPreserved: true,
+  undo: true,
+  noAutosave: true
+}

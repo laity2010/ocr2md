@@ -1,0 +1,11 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 65000ms exceeded.
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/pdf-block-reorder.browser.test.mjs:122:22 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

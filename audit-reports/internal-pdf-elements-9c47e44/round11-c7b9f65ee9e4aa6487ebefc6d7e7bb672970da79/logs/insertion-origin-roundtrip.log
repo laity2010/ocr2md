@@ -1,0 +1,25 @@
+PBS_INSERT_AFTER_PASS p1b9 after p1b0 => p1b1 shifted 8
+PBS_INSERT_AFTER_PASS p1b2 after p1b4 => p1b5 shifted 9
+PBS_INSERT_AFTER_PASS p1b3 after p1b4 => p1b5 shifted 9
+PBS_INSERT_AFTER_PASS p1b5 after p1b6 => p1b7 shifted 7
+PBS_INSERT_AFTER_PASS p0b16 after p1b0 => p1b1 shifted 13
+PBS_INSERT_AFTER_PASS p1b4 after p0b3 => p0b4 shifted 13
+PBS_INSERT_AFTER_PASS p21b20 after p20b0 => p20b1 shifted 0
+PBS_INSERT_AFTER_PASS p1b5 after p21b20 => p21b21 shifted 0
+PBS_INSERT_AFTER_PASS p1b9 after p1b0 => p1b1 shifted 8
+PBS_INSERT_AFTER_PASS p1b3 after p1b0 => p1b1 shifted 2
+PBS_INSERT_AFTER_PASS p1b2 after p1b4 => p1b5 shifted 9
+PBS_INSERT_AFTER_PASS p16b0 after p16b8 => p16b9 shifted 7
+file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/packages/minerujson-md/dist/index.js:63
+        throw new Error('MINERUJSON_MD_INVALID: ' + message);
+              ^
+
+Error: MINERUJSON_MD_INVALID: page-local reordered PBS must preserve every original OCR block
+    at assert (file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/packages/minerujson-md/dist/index.js:63:15)
+    at toMineruJSON (file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/packages/minerujson-md/dist/index.js:831:9)
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/cmd-pbs-insert-after.test.mjs:69:14
+    at ModuleJob.run (node:internal/modules/esm/module_job:274:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:644:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.11.0

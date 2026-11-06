@@ -1,0 +1,39 @@
+
+> @ocr2md/minerujson-md@0.1.0 test
+> npm run build && node --test tests/*.test.mjs
+
+
+> @ocr2md/minerujson-md@0.1.0 build
+> tsc -p tsconfig.json
+
+✔ only three public APIs, version (9.355125ms)
+✔ real Buffett Alpha fixture: no loss of even JSON whitespace (3208.995ms)
+✔ CMD native child tags are serialized in numeric PBS order with their own content (1039.012625ms)
+✔ cross-page table HTML is split back into its real PDF pages, with sealed and legacy round trips (2522.590875ms)
+✔ CMD native subblocks are emitted in numeric OCR index order, not media category order (692.302334ms)
+✔ valid GFM / HTML comments / images / math code / tables (1667.106542ms)
+✔ original source metadata is preserved after a single-span heading edit (441.968667ms)
+✔ heading level edits restore original MinerU level field (310.649542ms)
+✔ multi-span paragraph edit inside one span preserves remaining OCR spans (447.539375ms)
+✔ image URL edit changes its matching MinerU span (401.928459ms)
+✔ HTML table edit changes only its HTML representation (461.180834ms)
+✔ math code edit updates the original equation span (231.399459ms)
+✔ missing anchors, metadata corruption and added free text are rejected (655.42575ms)
+✔ audited comments remain part of valid Markdown and are tamper-evident (1634.374958ms)
+✔ audited conversion preserves editable OCR spans without touching discarded metadata (426.923042ms)
+✔ source strings that look like HTML cannot break an evidence comment (259.563ms)
+✔ unknown/unrepresentable blocks are commented instead of fabricated markdown (6.966708ms)
+✔ input can also be parsed JSON object; corrupted JSON rejected (1.162042ms)
+✔ page evidence and start-only boundaries reject injected or changed records (1421.33075ms)
+✔ zero-block pages and chapter annotations preserve strict source data (967.082334ms)
+✔ quoted MinerU anchors and their contents still reverse to the same original JSON (684.532375ms)
+✔ new canonical PBS parent/child paths remain distinct, tamper-evident and reversible (1318.531167ms)
+✔ new BC metadata is reversible, unique, dense and tamper-evident (1342.727ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22830.8205

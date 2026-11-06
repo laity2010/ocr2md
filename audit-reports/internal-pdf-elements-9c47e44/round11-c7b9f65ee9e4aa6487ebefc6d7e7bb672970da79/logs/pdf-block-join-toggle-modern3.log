@@ -1,0 +1,88 @@
+PDF_INLINE_LABEL_GEOMETRY Chrome {
+  sameRow: 224,
+  minHeight: 18,
+  maxHeight: 18,
+  colliding: [],
+  collisionCount: 0
+}
+PDF_GUTTER_GEOMETRY Chrome {
+  total: 224,
+  left: 134,
+  right: 90,
+  overlap: 0,
+  offPage: [],
+  page7: [
+    {
+      id: 'p6b6',
+      side: 'left',
+      region: [Object],
+      chip: [Object],
+      page: [Object],
+      gap: 14.390625,
+      inside: true
+    },
+    {
+      id: 'p6b7',
+      side: 'right',
+      region: [Object],
+      chip: [Object],
+      page: [Object],
+      gap: 32.40625,
+      inside: true
+    }
+  ]
+}
+PDF_BLOCK_JOIN_TOGGLE_READONLY_PASS Chrome {
+  originalBlocks: 224,
+  unchangedIds: 7,
+  checked: 224,
+  disabled: 224,
+  noImplicitCrossPageJoin: true,
+  unchangedSource: true,
+  noLegacyApiRequests: true,
+  errors: 0
+}
+PDF_INLINE_LABEL_GEOMETRY iPad-WebKit {
+  sameRow: 224,
+  minHeight: 18,
+  maxHeight: 18,
+  colliding: [],
+  collisionCount: 0
+}
+PDF_GUTTER_GEOMETRY iPad-WebKit {
+  total: 224,
+  left: 134,
+  right: 90,
+  overlap: 0,
+  offPage: [],
+  page7: [
+    {
+      id: 'p6b6',
+      side: 'left',
+      region: [Object],
+      chip: [Object],
+      page: [Object],
+      gap: 14.3125,
+      inside: true
+    },
+    {
+      id: 'p6b7',
+      side: 'right',
+      region: [Object],
+      chip: [Object],
+      page: [Object],
+      gap: 32.40625,
+      inside: true
+    }
+  ]
+}
+PDF_BLOCK_JOIN_TOGGLE_READONLY_PASS iPad-WebKit {
+  originalBlocks: 224,
+  unchangedIds: 7,
+  checked: 224,
+  disabled: 224,
+  noImplicitCrossPageJoin: true,
+  unchangedSource: true,
+  noLegacyApiRequests: true,
+  errors: 0
+}

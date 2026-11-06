@@ -1,0 +1,20 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: checkbox and Block ID must render on same baseline for every Block
+
+224 !== 0
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r11-gates/tests/pdf-block-join-toggle.browser.test.mjs:119:11
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processImmediate (node:internal/timers:473:9)
+    at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 224,
+  expected: 0,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0
