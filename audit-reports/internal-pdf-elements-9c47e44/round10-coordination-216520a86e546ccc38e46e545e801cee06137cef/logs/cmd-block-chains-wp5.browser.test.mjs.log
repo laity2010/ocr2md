@@ -1,0 +1,22 @@
+CMD_PBS_BC_WP5_UI_PASS Chrome {
+  readOnlyAG: true,
+  noDragHandle: true,
+  groupCollapse: true,
+  chains: 263,
+  pureMove: true,
+  pureFirst: true,
+  pureCrossChain: true,
+  pureExtract: true,
+  sourcePreserved: true
+}
+CMD_PBS_BC_WP5_UI_PASS iPad-WebKit {
+  readOnlyAG: true,
+  noDragHandle: true,
+  groupCollapse: true,
+  chains: 263,
+  pureMove: true,
+  pureFirst: true,
+  pureCrossChain: true,
+  pureExtract: true,
+  sourcePreserved: true
+}
