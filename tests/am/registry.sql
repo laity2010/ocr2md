@@ -1480,8 +1480,8 @@ INSERT INTO access_edges VALUES
  ('X-WP4-MAIN-L75',NULL,'L','ui/main.js','workspace.setBlockChainAction(async(action,request={})','L75','registered','Shell supplies semantic callback to AG without exposing CMD internals');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP4-L74','L74','tests/cmd-block-chains-wp4.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','267 unique PBS rows including 224 parents and 43 native children, validated geometry, source scope, member order and original OCR unchanged','direct'),
- ('TC-WP4-G25','G25','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit AG full PBS/BC columns and grouping; selecting target, merging and splitting only through guarded CMD; no disk writes','integration'),
- ('TC-WP4-L75','L75','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','AG delegated merge/split through Shell to guarded CMD, changed source rescanned; child-inclusive AG projection remains consistent','integration');
+ ('TC-WP4-G25','G25','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit exact PBS/BC columns, 267 atoms/43 children, grouping and five read-only continuation candidates; CM6 source/disk unchanged; pure CMD merge/split original JSON reversible','integration'),
+ ('TC-WP4-L75','L75','tests/cmd-block-chains-wp4.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Read-only milestone deliberately unmounts AG structural commands; pure guarded CMD merge/split planners verified, but Shell write port is NOT exercised by this browser test and remains unverified here','integration');
 
 
 -- WCP27 WP5: the AG grid's pointer drag is a semantic request to the same
@@ -1517,7 +1517,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-WP6-L77','L77','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','read footer, exact restore, duplicate and invalid footer fail-closed','direct'),
  ('TC-WP6-L78','L78','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','correct parent and original child bbox within page, reject invalid and unknown IDs, no-op idempotence','direct'),
  ('TC-WP6-L79','L79','tests/cmd-pdf-bbox-wp6.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','reloaded effective geometry reflects source footer, cached OCR data unchanged, byte-exact sealed original','direct'),
- ('TC-WP6-C73','C73','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit AG coordinate controls persist one undoable CMD footer transaction, reload semantics, no workspace auto-save','integration');
+ ('TC-WP6-C73','C73','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit frozen AG bbox writer absent, source/disk unchanged; pure CMD footer edit/removal round-trips exact original OCR and rejects invalid bbox; actual CM6 write port NOT exercised','integration');
 INSERT INTO access_edges VALUES
  ('X-WP6-C-L50','C','L','ui/wcp-cmd-element-transactions.js','queryCMDLayout(source)','L50','registered','CMD bbox port obtains original immutable OCR layout before planning edits');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
@@ -1527,7 +1527,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO apis VALUES
  ('P22','P','createPDFBBoxGesture','ui/pdf-bbox-gesture.js','export','PDF page DOM, verified PBS ID, effective bbox and page dimensions, semantic commit callback','five pointer handles for moving/resizing a transient PDF rectangle','no direct CMD/PDF archive mutation, cancel/no-op safe, one semantic callback on release',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-WP6-P22','P22','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome and WebKit center drag writes one coordinate correction; no direct source or PDF evidence access','integration');
+ ('TC-WP6-P22','P22','tests/cmd-pdf-bbox-wp6.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit isolated synthetic PDF pointer callback tests coordinate math and one draft callback only; frozen real PDF bbox editing remains disabled and is NOT asserted live','integration');
 
 -- WCP30: PDF current page is a scalar view event, AG alone owns its filter.
 -- The toolbar's existing 「全部」 is a PDF-page lens ONLY in text-block mode.
