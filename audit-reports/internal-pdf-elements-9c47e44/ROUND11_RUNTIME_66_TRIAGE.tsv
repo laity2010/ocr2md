@@ -1,0 +1,67 @@
+file	line	owner	kind	classification	expression
+ui/cm6-source-visibility.js	77	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribe=viewStore.subscribe((next,prev)=>{
+ui/fontcheck.js	21	shell	shell-dom	SHELL_DOM	const editor = document.querySelector('.cm-content');
+ui/html-elements-module.js	71	H	shared-store	APPROVED_READ_OR_SUBSCRIBE	const revision=viewStore.getState().documentRevision;
+ui/html-elements-module.js	108	H	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribe=viewStore.subscribe((next,prev)=>{
+ui/html-elements-module.js	125	H	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(lastRevision!==viewStore.getState().documentRevision)refresh();
+ui/latex-module.js	211	T	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribe=viewStore.subscribe((current,prior)=>{
+ui/latex-module.js	250	T	shared-store	APPROVED_READ_OR_SUBSCRIBE	const state=viewStore.getState();
+ui/main.js	36	shell	shell-dom	SHELL_DOM	const $ = (id) => document.getElementById(id);
+ui/main.js	91	shell	shared-store	APPROVED_READ_OR_SUBSCRIBE	const store=viewStore.getState();
+ui/main.js	129	shell	shell-dom	SHELL_DOM	if (document.querySelector('dialog[open]')) {
+ui/main.js	387	shell	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribeGlobalStatus=viewStore.subscribe((next,previous)=>{
+ui/main.js	960	shell	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribeOutlineFocus=viewStore.subscribe((next,previous)=>{
+ui/main.js	1190	shell	dev-global	DEV_GUARDED	if (import.meta.env.DEV) window.__v6cm6 = {
+ui/main.js	1197	shell	shared-store	APPROVED_READ_OR_SUBSCRIBE	get scrollState(){return viewStore.getState();},
+ui/media-module.js	433	A	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribe=viewStore.subscribe((next,previous)=>{
+ui/media-module.js	467	A	shared-store	APPROVED_READ_OR_SUBSCRIBE	const state=viewStore.getState();
+ui/note-pair-module.js	249	N	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribe=viewStore.subscribe((next,prev)=>{
+ui/note-pair-module.js	278	N	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(active){refresh();followFocus(viewStore.getState().focusTarget,viewStore.getState());}
+ui/outline-grid.js	109	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	indexedRevision=viewStore.getState().documentRevision;
+ui/outline-grid.js	133	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	const state=viewStore.getState();
+ui/outline-grid.js	152	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(indexedRevision!==viewStore.getState().documentRevision)refresh();
+ui/outline-grid.js	293	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsub=viewStore.subscribe((next,prev)=>{
+ui/pdf-preview.js	178	P	shared-store	APPROVED_READ_OR_SUBSCRIBE	this.unsubscribe=viewStore.subscribe((next,prev)=>{
+ui/scroll-sync.js	59	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	measuredRevision=viewStore.getState().documentRevision;
+ui/scroll-sync.js	69	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(viewStore.getState().scrollSyncEnabled && anchors.length) {
+ui/scroll-sync.js	143	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	(!independent && !viewStore.getState().scrollSyncEnabled)) return;
+ui/scroll-sync.js	144	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(measuredRevision!==viewStore.getState().documentRevision) return;
+ui/scroll-sync.js	158	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	(!viewStore.getState().scrollSyncEnabled && !explicitNavigation)) return;
+ui/scroll-sync.js	175	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	(!viewStore.getState().scrollSyncEnabled && !explicitNavigation) ||
+ui/scroll-sync.js	187	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	(!viewStore.getState().scrollSyncEnabled && !force)) return;
+ui/scroll-sync.js	214	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(disposed || !viewStore.getState().scrollSyncEnabled) return;
+ui/scroll-sync.js	224	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(!scroller || disposed || !viewStore.getState().scrollSyncEnabled ||
+ui/scroll-sync.js	236	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(disposed || !viewStore.getState().scrollSyncEnabled ||
+ui/scroll-sync.js	266	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(viewStore.getState().scrollSyncEnabled) lastDriver='cm6';
+ui/scroll-sync.js	274	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(viewStore.getState().scrollSyncEnabled) lastDriver='preview';
+ui/scroll-sync.js	293	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribe=viewStore.subscribe((state,previous)=>{
+ui/scroll-sync.js	308	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribeFocus=viewStore.subscribe((state,previous)=>{
+ui/scroll-sync.js	341	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(measuredRevision!==viewStore.getState().documentRevision &&
+ui/scroll-sync.js	345	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(!viewStore.getState().scrollSyncEnabled) return readPreview();
+ui/scroll-sync.js	351	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(!viewStore.getState().scrollSyncEnabled) {
+ui/sentence-module.js	71	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribeFocus=viewStore.subscribe((next,prior)=>{
+ui/sentence-module.js	131	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	followFocus(viewStore.getState().focusTarget);
+ui/sentence-module.js	150	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	setActive(next){active=Boolean(next);host.hidden=!active;if(active){refresh();followFocus(viewStore.getState().focusTarget);}emitCoverage();},
+ui/text-block-module.js	293	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	const unsubscribe=viewStore.subscribe((next,previous)=>{
+ui/view-store.js	19	shared	shared-store	OWNER_INTERNAL	viewStore.setState(s => ({documentRevision:s.documentRevision + 1}));
+ui/view-store.js	23	shared	shared-store	OWNER_INTERNAL	if (viewStore.getState().sourceOffset !== offset)
+ui/view-store.js	24	shared	shared-store	OWNER_INTERNAL	viewStore.setState({sourceOffset:offset});
+ui/view-store.js	31	shared	shared-store	OWNER_INTERNAL	viewStore.setState(state => ({
+ui/view-store.js	40	shared	shared-store	OWNER_INTERNAL	viewStore.setState({scrollSyncEnabled:Boolean(enabled)});
+ui/view-store.js	47	shared	shared-store	OWNER_INTERNAL	viewStore.setState(state=>({
+ui/view-store.js	56	shared	shared-store	OWNER_INTERNAL	if(viewStore.getState().outlineCount!==count)viewStore.setState({outlineCount:count});
+ui/view-store.js	60	shared	shared-store	OWNER_INTERNAL	if(viewStore.getState().activePanel!==panelId)viewStore.setState({activePanel:panelId});
+ui/wcp-ag-query.js	129	G	shared-store	APPROVED_READ_OR_SUBSCRIBE	unsubscribe=viewStore.subscribe((current,prior)=>{
+ui/wcp-source-file-navigation.js	148	S	shared-store	APPROVED_READ_OR_SUBSCRIBE	viewStore.subscribe((now,before)=>{
+ui/workspace.js	363	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	this.unsubscribe=viewStore.subscribe((next,prior)=>{
+ui/workspace.js	392	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	revision:viewStore.getState().documentRevision};
+ui/workspace.js	407	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(!saved || saved.revision!==viewStore.getState().documentRevision)return;
+ui/workspace.js	468	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	this.highlight(viewStore.getState().focusTarget);
+ui/workspace.js	494	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	this.highlight(viewStore.getState().focusTarget);
+ui/workspace.js	501	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	const focus=viewStore.getState().focusTarget;
+ui/workspace.js	549	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	this.highlight(viewStore.getState().focusTarget);
+ui/workspace.js	596	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	this.highlight(viewStore.getState().focusTarget);
+ui/workspace.js	613	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	focus.revision===viewStore.getState().documentRevision){
+ui/workspace.js	619	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	focus.revision===viewStore.getState().documentRevision){
+ui/workspace.js	819	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	if(module!=='illegal-break'&&viewStore.getState().focusTarget?.origin==='illegal-break'){
+ui/workspace.js	822	L	shared-store	APPROVED_READ_OR_SUBSCRIBE	currentPreview?.highlight(viewStore.getState().focusTarget);
