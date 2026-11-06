@@ -399,13 +399,187 @@ def certify():
           '(integrated tests are not separate per-API oracles)')
 
 
+
+# WP3: Git-only incremental planning. This is deliberately independent of the
+# historical all-project AM SQLite, which may remain BLOCKED. It cannot certify
+# a full audit or silently create PASS evidence for unbaselined modules.
+def _git_at(ref, path):
+    r = git('show', f'{ref}:{path}')
+    return r.stdout if r.returncode == 0 else None
+
+
+def _media_contract_rows(registry):
+    """Read only Media's three actual JS public-entry records from the ONE SQL registry."""
+    import re
+    selected = []
+    ids = ('A01', 'A02', 'A11', 'TC-A01-PUBLIC-DIRECT',
+           'TC-A02-PUBLIC-DIRECT', 'TC-A11-PUBLIC-DIRECT')
+    for row in registry.splitlines():
+        match = re.match(r"\s*\('([^']+)'\s*,", row)
+        if not match or match.group(1) not in ids:
+            continue
+        fields = row.strip().split("','", 2)
+        if match.group(1).startswith('TC-') or (len(fields)>1 and fields[1]=='A'):
+            selected.append(row.strip())
+    return sorted(selected)
+
+
+def _owned_paths(ownership, registry, ref):
+    """Use existing ownership and API SQL tables, not another module registry."""
+    import re
+    owners = {}
+    for name, module in ownership.get('files', {}).items():
+        if module not in ('shell', 'shared'):
+            owners[f'ui/{name}'] = module
+    # Python service module ownership is already present in api.source_file.
+    # Extract only the first four SQL columns of API tuples, never run relaxed
+    # SQL or alter the official schema to avoid its pre-existing errors.
+    for module, path in re.findall(
+            r"(?m)^\s*\('[A-Z]\d+','([A-Z])','[^']+','(scripts/[^']+)'", registry):
+        owners[path] = module
+    # A style change changes a module's visual implementation, not a new API.
+    tracked = set(git('ls-tree', '-r', '--name-only', ref, '--', 'ui').stdout.splitlines())
+    for path, module in list(owners.items()):
+        if path.startswith('ui/') and path.endswith('.js'):
+            css = path[:-3] + '.css'
+            if css in tracked:
+                owners[css] = module
+    return owners
+
+
+def incremental_plan(baseline, head=None):
+    """Plan against two real Git commits. No tests run, no database writes."""
+    base = git('rev-parse', '--verify', baseline + '^{commit}')
+    target = git('rev-parse', '--verify', (head or 'HEAD') + '^{commit}')
+    if base.returncode or target.returncode:
+        raise ValueError('AM_INCREMENTAL_BLOCKED: baseline/head must be Git commits')
+    base_sha, head_sha = base.stdout.strip(), target.stdout.strip()
+    if git('merge-base', '--is-ancestor', base_sha, head_sha).returncode:
+        raise ValueError('AM_INCREMENTAL_BLOCKED: baseline is not an ancestor')
+    diff = git('diff', '--name-only', '--no-renames', base_sha, head_sha, '--')
+    if diff.returncode:
+        raise ValueError('AM_INCREMENTAL_BLOCKED: cannot compare Git trees')
+    changed = set(diff.stdout.splitlines())
+    owner_src = _git_at(head_sha, 'tests/am/ownership.json')
+    registry = _git_at(head_sha, 'tests/am/registry.sql')
+    old_owner_src = _git_at(base_sha, 'tests/am/ownership.json')
+    old_registry = _git_at(base_sha, 'tests/am/registry.sql')
+    if not all(x is not None for x in (owner_src, registry, old_owner_src, old_registry)):
+        raise ValueError('AM_INCREMENTAL_BLOCKED: missing registered module ownership or API SQL')
+    owner = json.loads(owner_src)
+    old_owner = json.loads(old_owner_src)
+    owned = _owned_paths(owner, registry, head_sha)
+    old_owned = _owned_paths(old_owner, old_registry, base_sha)
+    modules = sorted({module for path in changed for module in
+                      (owned.get(path), old_owned.get(path)) if module})
+    # Unknown shared/shell files do not rewrite previously validated Media
+    # internals. A separate interaction risk may still need verification.
+    media_sources = {path for path, module in owned.items() if module == 'A'} | \
+                    {path for path, module in old_owned.items() if module == 'A'}
+    media_change = bool(changed & media_sources)
+    media_tests = {'tests/media-public-contract.browser.test.mjs',
+                   'tests/media-public-contract.fixture.html'}
+    contract_change = _media_contract_rows(registry) != _media_contract_rows(old_registry)
+    ownership_change = {p for p in media_sources if owned.get(p) != old_owned.get(p)}
+    test_change = bool(changed & media_tests)
+    evidence = _git_at(base_sha, 'tests/am/MEDIA_PUBLIC_CONTRACT.md') or ''
+    # Confirm that the recorded PASS actually describes the baseline's
+    # Media source bytes; an old report copied into a changed branch is not
+    # a valid carry-forward receipt.
+    source_attested = all(
+        (source := _git_at(base_sha, path)) is not None and
+        hashlib.sha256(source.encode('utf-8')).hexdigest() in evidence
+        for path in ('ui/media-module.js', 'scripts/v6_media.py'))
+    baseline_valid = (all(f'MEDIA_PUBLIC_CONTRACT_PASS {engine}' in evidence
+                          for engine in ('Chromium', 'WebKit')) and
+                      source_attested and
+                      _git_at(base_sha, 'tests/media-public-contract.browser.test.mjs') is not None and
+                      len(_media_contract_rows(old_registry)) == 6)
+    if not baseline_valid:
+        media_status = 'NO_VERIFIED_BASELINE'
+    elif ownership_change:
+        media_status = 'OWNERSHIP_REVIEW_REQUIRED'
+    elif media_change or test_change or contract_change:
+        media_status = 'RETEST_REQUIRED'
+    else:
+        media_status = 'INHERITED_PASS'
+    # Existing cross-module entry points: callers are tracked in the existing
+    # ownership crossModuleBindings; CMD's actual media edit port is C33.
+    media_callers = {'ui/' + edge.split('->')[0] for edge in
+                     owner.get('crossModuleBindings', {})
+                     if edge.endswith('->media-module.js')}
+    cmd_port = [path for path, module in owned.items()
+                if module == 'C' and 'wcp-cmd-element-transactions.js' in path]
+    interaction_files = media_callers | set(cmd_port) | {'scripts/v6_serve.py'}
+    interaction = 'REVIEW_REQUIRED' if changed & interaction_files else 'UNCHANGED'
+    shared = {f'ui/{name}' for name, consumers in owner.get('sharedConsumers', {}).items()
+              if 'A' in consumers}
+    if changed & shared:
+        interaction = 'REVIEW_REQUIRED'
+    return {'baseline':base_sha,'head':head_sha,'changed':sorted(changed),
+            'changed_modules':modules,'media_sources':sorted(media_sources),
+            'media':media_status,'media_interaction':interaction,
+            'interaction_paths':sorted(changed & (interaction_files | shared)),
+            'baseline_valid':baseline_valid}
+
+
+def incremental(baseline, head=None, run_changed=False):
+    result = incremental_plan(baseline, head)
+    print('AM_INCREMENTAL_GIT base=' + result['baseline'][:12] +
+          ' head=' + result['head'][:12])
+    print('AM_INCREMENTAL_CHANGED_MODULES ' + (','.join(result['changed_modules']) or 'NONE'))
+    print('AM_INCREMENTAL_CHANGED_FILES ' + (','.join(result['changed']) or 'NONE'))
+    print('AM_INCREMENTAL_MEDIA ' + result['media'])
+    print('AM_INCREMENTAL_MEDIA_INTERACTION ' + result['media_interaction'] +
+          ' paths=' + ','.join(result['interaction_paths']))
+    print('AM_INCREMENTAL_UNBASELINED_MODULES ' +
+          (','.join(x for x in result['changed_modules'] if x != 'A') or 'NONE'))
+    print('AM_INCREMENTAL_NOTE no claim of global AM/PDF certification; '
+          'old AM registry may still be BLOCKED')
+    if run_changed:
+        if result['head'] != current_commit():
+            raise ValueError('AM_INCREMENTAL_BLOCKED: --run-changed requires checked-out HEAD')
+        dirty = git('status', '--porcelain', '--untracked-files=all')
+        if dirty.returncode or dirty.stdout.strip():
+            raise ValueError('AM_INCREMENTAL_BLOCKED: commit all changed files before executing tests')
+        if result['media'] == 'RETEST_REQUIRED':
+            scripts = ['tests/media-public-contract.browser.test.mjs']
+            # A changed Python service needs actual server/Range/paste checks;
+            # the isolated JS mock alone is not a backend oracle.
+            if 'scripts/v6_media.py' in result['changed']:
+                scripts += ['tests/media-browser.test.mjs', 'tests/media-paste-browser.test.mjs']
+            stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+            for i, script in enumerate(scripts, 1):
+                status, output = run_test_script(script)
+                logfile = ROOT / (f'.v6/tests/am-media-incremental-{stamp}-'
+                                  f'{result["head"][:12]}-{i}.log')
+                logfile.parent.mkdir(parents=True, exist_ok=True)
+                logfile.write_text(output)
+                print(output[-1200:])
+                print('AM_INCREMENTAL_MEDIA_TEST_' + status +
+                      ' script=' + script + ' checked_git=' + result['head'] +
+                      ' log=' + str(logfile.relative_to(ROOT)))
+                if status != 'PASS':
+                    raise ValueError('AM_INCREMENTAL_MEDIA_FAIL: ' + script + ' failed')
+        elif result['media'] == 'INHERITED_PASS':
+            print('AM_INCREMENTAL_MEDIA_TEST_SKIPPED unchanged_verified_baseline=True')
+        else:
+            print('AM_INCREMENTAL_MEDIA_NOT_CERTIFIED ' + result['media'])
+    return result
+
 def main():
     p = argparse.ArgumentParser(description='OCR2MD V6 AM SQLite queries')
-    p.add_argument('action', choices=['build','check','modules','apis','route','untested','impact','coverage','cases','run','run-all','certify','edges'])
+    p.add_argument('action', choices=['build','check','modules','apis','route','untested','impact','coverage','cases','run','run-all','certify','edges','incremental'])
     p.add_argument('key', nargs='?', help='API module ID, message topic, or impacted module ID')
+    p.add_argument('--head', help='Git commit to inspect; alternate head is plan-only')
+    p.add_argument('--run-changed', action='store_true', help='run changed Media direct test at checked-out HEAD')
     args = p.parse_args()
     if args.action == 'build':
         build()
+        return
+    if args.action == 'incremental':
+        if not args.key: p.error('incremental requires verified baseline commit')
+        incremental(args.key, args.head, args.run_changed)
         return
     if not DB.is_file():
         p.error('AM SQLite missing; first run: python3 tests/am/am.py build')

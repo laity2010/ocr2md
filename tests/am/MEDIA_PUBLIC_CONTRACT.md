@@ -53,3 +53,26 @@ AM_ERROR: CHECK constraint failed: visibility IN ('export','returned','internal'
 ```
 
 以上 PASS 仅指三个实际导出入口的**直接契约测试**和 Vite 构建，不指全 AM、全部 Media 服务端测试或正式生产验收。源码无变动；不执行 WP3/4，不部署、不合并 Main。
+
+## WP3 · 不修改旧标准的 Git 增量入口
+
+**入口**：`python3 tests/am/am.py incremental <已真实验收的基线 Git SHA> [--head <Git 提交>] [--run-changed]`。
+
+- 仅分析 **Git 提交对象**：模块归属取现有 `ownership.json`，服务端源码路径取现有 `registry.sql`，CSS 视为所属模块的实现文件。**不新建第二份接口登记库**。
+- **Media 没改、3 个入口契约测试与归属没改、已有基线 PASS 记录对应原始源码哈希**：`INHERITED_PASS`，`--run-changed` 明确打印 `TEST_SKIPPED`，不重复执行 Media 测试。
+- **Media 自身改动**：`RETEST_REQUIRED`。在对应提交的干净工作树中执行 `--run-changed`，运行三个公开入口的直接测试。若修改了 Media Python 服务，额外运行现有真实服务器分块下载与粘贴集成测试，不能仅靠浏览器 mock 证明服务端正确。
+- **CMD 的媒体替换端口 / Media 调用方 / Media 使用的共享 UI 文件改变**：保留原 Media 直接测试 PASS，同时返回 `MEDIA_INTERACTION REVIEW_REQUIRED`，由变更模块负责验证联动。不自动把 CMD 变动解释为 Media 自身失败。
+- **未有经过确认的 PASS 基线**：输出 `NO_VERIFIED_BASELINE`；其他尚未建立独立基线的模块只列 `UNBASELINED_MODULES`，不虚报已合格。
+- **本轮已知限制**：正式全量 AM 数据库仍被原 Main 的登记不一致阻断；本入口只处理 Media 的公开入口样板，不是 12 模块全量认证或正式生产发布门禁。`--head` 指向别的提交时只做判定，不能在当前错误源码上执行测试；执行器要求 HEAD 对齐且工作区干净。
+
+## WP4 · 真实 Git 增量场景
+
+`python3 -m unittest discover -s tests/am -p 'test_incremental_git.py' -v`
+
+用 **真实 Git commit-tree 对象**做三个互不干扰的改动（不移动工作区的 HEAD，不创建新的永久业务分支）：
+
+1. 只修改 `ui/latex-module.js`：LaTeX 标记变更，Media 继承 PASS、不重测。
+2. 只修改 `ui/media-module.js`：Media 标记为必须执行它的契约测试。
+3. 只修改 `ui/wcp-cmd-element-transactions.js`：CMD 标记变更，Media 自身继承 PASS，CMD→Media 联动单独要求核查。
+
+附加断言：修改公开契约测试自身必须重测；未通过基线不得继承；没有业务变动必须跳过测试。测试选择的 PASS 不等于改动模块获得了独立 PASS（例如 LaTeX、CMD 尚未建立本套新增基线）。
