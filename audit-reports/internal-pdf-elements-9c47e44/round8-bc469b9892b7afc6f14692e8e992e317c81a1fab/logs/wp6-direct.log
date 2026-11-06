@@ -1,0 +1,7 @@
+CMD_PDF_BBOX_WP6_PURE_PASS {
+  parent: 'p0b0',
+  child: 'p4b0s1',
+  originalJSONUntouched: true,
+  effectiveOverrides: 2,
+  fullRoundtrip: true
+}

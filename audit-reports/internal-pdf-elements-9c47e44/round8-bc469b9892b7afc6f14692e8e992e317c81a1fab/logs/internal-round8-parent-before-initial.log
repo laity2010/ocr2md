@@ -1,0 +1,20 @@
+BEFORE_DROP_AIM Chrome same-page 将 p1b2 移至 p1b4 之前 · 松手应用，单次 Undo before
+BEFORE_DROP_STATUS Chrome same-page {
+  pdf: '✓ p1b2 → p1b4 · p1b4 及后续编号顺延 · 未保存，可 Undo',
+  global: '● 未保存 · PDF · ✓ p1b2 → p1b4 · p1b4 及后续编号顺延 · 未保存，可 Undo · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 原始 224 块 / 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 223 · 缺失 1 · 重复 0 · PDF bbox 224 · 无效 0 · 可见正文 215 · 空块/仅元数据 9 · 已接续 0 · 逻辑块 223 · 当前 MD 定位 215/215 · AG 第 2 页 15 块 · 未知锚点 1 · 4,932行 / 383,902字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · document.md',
+  ids: 14,
+  new: 1,
+  original: 0,
+  shifted: 1
+}
+BEFORE_PDF_LABELS Chrome same-page { A: 'p1b4', B: 'p1b5', shifted: 'p1b6', origin: 'p1b2', page: '2' }
+PBS_PARENT_BEFORE_BROWSER_PASS Chrome same-page {
+  newId: 'p1b4',
+  BShifted: 'p1b5',
+  shifted: 'p1b6',
+  bboxUnchanged: true,
+  undo: true,
+  redo: true,
+  saveExact: true,
+  reload: true
+}

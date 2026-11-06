@@ -1,0 +1,8 @@
+CMD_PDF_BBOX_WP6_UI_PASS iPad-WebKit {
+  bboxWriterHidden: true,
+  originalJSON: true,
+  noAutoSave: true,
+  plannerReversible: true,
+  invalidRejected: true,
+  syntheticPDFPointer: true
+}

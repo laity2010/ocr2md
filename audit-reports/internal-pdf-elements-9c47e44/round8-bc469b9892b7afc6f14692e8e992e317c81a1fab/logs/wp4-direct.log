@@ -1,0 +1,7 @@
+CMD_PBS_BC_WP4_PROJECTION_PASS {
+  parents: 224,
+  children: 43,
+  chains: 267,
+  mergedChains: 266,
+  childWithoutValidBBox: 1
+}

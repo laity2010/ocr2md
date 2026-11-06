@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('#ag-functions-menu [data-module="text-block"]').getByRole('button', { name: '将当前 PBS 设为目标链' })
+
+    at doAction (/Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/cmd-block-chains-wp4.browser.test.mjs:65:104)
+    at async file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/cmd-block-chains-wp4.browser.test.mjs:66:4 {
+  log: [
+    `  - waiting for locator('#ag-functions-menu [data-module="text-block"]').getByRole('button', { name: '将当前 PBS 设为目标链' })`
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

@@ -1,0 +1,16 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+locator.getAttribute: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('#ag-functions-menu [data-module="text-block"]').getByRole('button', { name: '切换文本块链分组展示' })
+
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/cmd-block-chains-wp4.browser.test.mjs:76:32 {
+  log: [
+    `  - waiting for locator('#ag-functions-menu [data-module="text-block"]').getByRole('button', { name: '切换文本块链分组展示' })`
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

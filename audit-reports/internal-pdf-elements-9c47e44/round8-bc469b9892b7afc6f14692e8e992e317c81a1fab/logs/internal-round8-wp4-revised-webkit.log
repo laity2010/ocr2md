@@ -1,0 +1,9 @@
+CMD_PBS_BC_WP4_UI_PASS iPad-WebKit {
+  pbs: 267,
+  children: 43,
+  readOnly: true,
+  groupToggle: true,
+  candidates: 5,
+  pureMergeSplit: true,
+  sourcePreserved: true
+}

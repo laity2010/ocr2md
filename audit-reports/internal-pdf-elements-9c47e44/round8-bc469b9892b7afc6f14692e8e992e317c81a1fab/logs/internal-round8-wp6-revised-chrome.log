@@ -1,0 +1,17 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: read-only text blocks expose only inventory, grouping, continuation review and PDF comparison
+
+3 !== 4
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/cmd-pdf-bbox-wp6.browser.test.mjs:44:11 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 3,
+  expected: 4,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0
