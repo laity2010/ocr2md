@@ -55,7 +55,12 @@ try{
    await page.screenshot({path:`.v6/evidence/wp3/${name}-target-orange.png`,animations:'disabled'});
    await action(page,'查看原始文本块清单');
    assert.match(await page.locator('#status').innerText(),/原始 224 块/);
-   await page.waitForFunction(()=>document.querySelector('.ocr-text-block-grid .ag-row[row-id="p0b0"]')!==null, null,{timeout:16000});
+   // AG Grid mounts the virtual row before its cell renderer is populated,
+   // especially on touch WebKit after switching candidate → inventory views.
+   // Wait for the actual rendered logical CMD ID, not just the empty row shell.
+   await page.waitForFunction(()=>document.querySelector(
+     '.ocr-text-block-grid .ag-row[row-id="p0b0"] .ag-cell[col-id="id"]')
+     ?.textContent?.trim()==='p0b0',null,{timeout:16000});
    assert.equal(await page.locator('.ocr-text-block-grid .ag-row[row-id="p0b0"] .ag-cell[col-id="id"]').innerText(),'p0b0');
    assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[]);
    assert.equal(readFileSync(file,'utf8'),original);
