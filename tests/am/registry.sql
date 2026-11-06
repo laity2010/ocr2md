@@ -1292,7 +1292,7 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-TEXT-P15','P15','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','original PDF text-layer order retains initial oversized drop-cap M attached to uch in p1b9 while excluding neighboring columns','direct'),
  ('TC-PDF-TEXT-P17','P17','tests/pdf-region-hit.test.mjs','tests/pdf-region-hit.test.mjs','inline page 5 p4b0 OCR body, caption, footnote rectangles; exact child vs parent hit, real child precedence, no accidental whitespace selection','direct'),
- ('TC-PDF-TEXT-PARTS','P17','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit page 5 p4b0 caption, body and note can be clicked and highlighted separately with individually extracted native text, one original Block and checkbox','integration'),
+ ('TC-PDF-TEXT-PARTS','P17','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit real original PDF p3b0 caption/body and p4b0 caption/body/note each click its own original bbox and publish exact distinct CMD content line; native text extraction NOT exercised by this suite','integration'),
  ('TC-PDF-TEXT-C60','C60','tests/pdf-text-insert.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','pure planner inserts at arbitrary source cursor without deleting OCR and rejects invalid text and coordinates','direct'),
  ('TC-PDF-TEXT-C62','C62','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p16b0 and p1b9 extracted text inserts at deliberately different source caret, no auto-save; one Undo restores all original bytes','integration'),
  ('TC-PDF-TEXT-P16-INTEGRATION','P16','tests/pdf-text-extract-insert.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','grok 75e05598: PDF text button disabled without selection, enabled and inserts after real PDF.js selection (integration only; no direct P16 test exists)','integration'),
@@ -1332,13 +1332,14 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PARENTUNION-L64','L64','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p3b0=[68,89,538,458]; p4b0=[50,89,521,339]; chart p13b1=[206,82,539,490], originalBBox unchanged, exclude foreign conflicting note','direct');
 
--- A legacy document has no child CMD anchors. Clicking a real PDF child
--- auto-adds one undoable/unsaved annotation transaction before navigation.
+-- Frozen sealed-CMD milestone: all native child anchors are already present
+-- before PDF navigation. PDF click resolves an existing exact source scope;
+-- the retired automatic child writer is deliberately not mounted.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-LEGACY-CHILD-FOCUS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p3b0s0/s1 and p4b0s0/s1/s2 navigate distinct exact CMD lines from an unannotated legacy doc; parent child picker choice triggers one unsaved annotation with Undo, no disk mutation','integration');
+ ('TC-PDF-LEGACY-CHILD-FOCUS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit 43 sealed CMD native children / 224 parents, five child-chip and physical PDF canvas clicks and reverse CM6-to-PDF focus exact source/content line, no retired automatic child writing, CMD/disk unchanged','integration');
 
--- Parent PDF badge is an explicit navigation control; checkbox is an
--- indicator until a three-click sequence (including iPad touch clicks).
+-- Parent PDF badge is an explicit navigation control. In read-only review,
+-- its checkbox is an evidence indicator and no triple-tap writes CMD.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-PARENT-TRIPLE-TAP','P18','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','one parent badge click emits exact parent CM6 focus, leaves checkbox unchanged; three rapid clicks alone toggle CMD join and Undo; 224 original Block chip IDs retained, no unrelated page relabeling','integration');
 
@@ -1346,7 +1347,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- two exterior gutters, placed at noncolliding Y positions inside each bbox
 -- whenever physically feasible, with connector lines for provenance.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-FULL-GUTTER-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit 224 parent and all valid child tags always visible in page gutter; no child picker; p3b0 parent/caption/body in disjoint Y rows within original bboxes; original CMD child navigation remains exact','integration');
+ ('TC-PDF-FULL-GUTTER-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit original p3b0/p4b0 physical bbox and parent/child chip geometry with no overlapping Y ranges; 224 original physical covers globally counted, but global all-page chip collision NOT asserted by this suite','integration');
 
 INSERT INTO apis VALUES
  ('P19','P','layoutPDFGutterLabels','ui/pdf-gutter-label-layout.js','export','native per-page parent/child label Y spans and scaled chip heights','pure deterministic nonoverlap per gutter with flexible bbox height and nearest free-row fallback','read-only geometry; exactly one placement per original OCR label',1);
@@ -1375,7 +1376,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- PDF label border is the live *own-scope* content indicator for BOTH
 -- parent and child tags. Empty is a visual fact, never an OCR error verdict.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-PDF-EMPTY-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit empty parent p4b0 and p2b8 dashed while nonempty p13b0 solid; after child-tag annotation p3b0 empty parent becomes dashed while s0 retains solid text badge; empty p4b0 subblocks dashed; no OCR/CM mutation','integration');
+ ('TC-PDF-EMPTY-LABELS','P18','tests/pdf-child-region-select.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit union parents p3b0/p4b0 and normal p13b0 have readable child/own content (solid); metadata-only p2b8 dashed; five native child scopes retain distinct evidence without annotation or OCR/CM6 mutation','integration');
 
 -- Existing PDF-facing compatibility export is now a registered port from
 -- PDF to the CMD/Layout owner's exact source scope implementation.

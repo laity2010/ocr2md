@@ -1,258 +1,205 @@
-/** Exact screenshot regression: page 5 p4b0 has three real PDF rectangles,
- * but only ONE original MinerU block and checkbox. Never write user's data. */
+/** Real two-way PDF ↔ CM6 native child-region contract on the sealed MinerU fixture.
+ * No PDF click is allowed to insert a legacy child marker or write the disk.
+ * Every original PDF rectangle and every CMD source position is checked.
+ */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdtempSync,rmSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createServer} from 'node:net';
 import {chromium,webkit} from 'playwright';
-import {planCMDSubblockAnnotations} from '../ui/cmd-text-blocks.js';
-const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
-const childPlan=await planCMDSubblockAnnotations(original);
-const annotated=[...childPlan.edits].sort((a,b)=>b.from-a.from)
-  .reduce((src,e)=>src.slice(0,e.from)+e.insert+src.slice(e.to),original).split('\n');
-const markerLine=id=>annotated.findIndex(line=>line.includes(`id="${id}"`))+1;
-const temp=mkdtempSync(join(tmpdir(),'ocr2md-pdf-parts-'));
+import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
+
+const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
+const original=toMarkdown(raw);
+const sourceLines=original.split('\n');
+const anchorLine=id=>sourceLines.findIndex(line=>line.includes(`<!-- cmd:block:v1 id="${id}" -->`))+1;
+const bodyLine=id=>{
+  const anchor=anchorLine(id);
+  assert(anchor>0,`original native CMD marker missing for ${id}`);
+  const next=sourceLines.findIndex((line,index)=>index>=anchor&&/^<!-- cmd:block:v1 id="p\d+b\d+/.test(line));
+  const first=sourceLines.findIndex((line,index)=>index>=anchor&&(next<0||index<next)&&
+    line.trim()&&!line.trim().startsWith('<!--'));
+  assert(first>=anchor,`native child must have its own readable text: ${id}`);
+  return first+1;
+};
+const expected=[
+  {parent:'p3b0',physicalPage:4,rect:[68,89,538,458],
+    ids:['p3b0s0','p3b0s1'],roles:['caption','body']},
+  {parent:'p4b0',physicalPage:5,rect:[50,89,521,339],
+    ids:['p4b0s0','p4b0s1','p4b0s2'],roles:['caption','body','note']},
+];
+const temp=mkdtempSync(join(tmpdir(),'ocr2md-pdf-native-parts-'));
 const doc=join(temp,'document.md');writeFileSync(doc,original);
-const port=5971,url=`http://127.0.0.1:${port}/`;
+// Independent audits may run other PDF regressions at the same time. A
+// fixed Vite port can silently connect to another test's document instead
+// of this sealed fixture, making PDF preheat and source evidence dishonest.
+const port=await new Promise((resolve,reject)=>{
+  const socket=createServer();socket.once('error',reject);
+  socket.listen(0,'127.0.0.1',()=>{
+    const value=socket.address().port;
+    socket.close(error=>error?reject(error):resolve(value));
+  });
+});
+const url=`http://127.0.0.1:${port}/`;
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
   '--port',String(port),'--strictPort'],{cwd:process.cwd(),stdio:'ignore',
   env:{...process.env,V6_DOCUMENT_PATH:doc,V6_SETTINGS_PATH:join(temp,'settings.json')}});
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 try{
-  let ready=false;for(let i=0;i<240;i++){
+  let ready=false;
+  for(let i=0;i<250;i++){
     try{if((await fetch(url)).ok){ready=true;break;}}catch{}
-    await new Promise(resolve=>setTimeout(resolve,140));
+    await sleep(130);
   }
-  assert(ready,'Isolated Vite server unavailable');
+  assert(ready,'isolated Vite server unavailable');
   for(const [name,engine,mobile] of [['Chrome',chromium,false],['iPad-WebKit',webkit,true]]){
     if(process.env.ONE_BROWSER&&process.env.ONE_BROWSER!==name)continue;
     const browser=await engine.launch({headless:true});
     try{
-      const page=await browser.newPage({viewport:{width:1220,height:840},isMobile:mobile,hasTouch:mobile});
-      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      const page=await browser.newPage({viewport:{width:1220,height:840},
+        isMobile:mobile,hasTouch:mobile});
+      const errors=[],forbidden=[];
+      page.on('pageerror',error=>errors.push(error.message));
+      await page.route('**/api/pdf-map',route=>{
+        forbidden.push(route.request().url());return route.abort();
+      });
       await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
-      await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(el=>el.click());
-      await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')
+        ?.textContent==='就绪',null,{timeout:105000});
+      await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').click();
+      await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
-        null,{timeout:40000});
-      // OCR has PDF coverage even when CMD currently has no text. Show
-      // dashed labels for both parent and child; never infer the cause.
-      const readBadge=async selector=>page.locator(selector).first().evaluate(el=>({
-        kind:el.dataset.sourceKind,
-        style:getComputedStyle(el).borderTopStyle,
-        title:el.title,
-      }));
-      const emptyParent=await readBadge('.ocr-pdf-block-cover[data-block-id="p4b0"] > .ocr-pdf-block-ctrl');
-      assert.equal(emptyParent.kind,'structure');
-      assert.equal(emptyParent.style,'dashed');
-      assert.match(emptyParent.title,/源码作用域为空/);
-      const normalParent=await readBadge('.ocr-pdf-block-cover[data-block-id="p13b0"] > .ocr-pdf-block-ctrl');
-      assert.equal(normalParent.kind,'content',
-        'p13b0 has real Figure 3 caption text in this fixture; only truly empty scopes are dashed');
-      assert.equal(normalParent.style,'solid');
-      const noText=await readBadge('.ocr-pdf-block-cover[data-block-id="p2b8"] > .ocr-pdf-block-ctrl');
-      assert.equal(noText.kind,'structure');
-      assert.equal(noText.style,'dashed');
-      // p3b0 is the reported page-3 table: MinerU has two native children.
-      // Both MUST have separate VISIBLE IDs at their own original bboxes.
-      const table3=page.locator('.ocr-pdf-block-cover[data-block-id="p3b0"]');
-      await table3.scrollIntoViewIfNeeded({timeout:24000});
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p3b0"]')?.closest('.page')
-        ?.querySelector('canvas')?.width>0,null,{timeout:25000});
-      assert.deepEqual(await table3.locator(':scope > .ocr-pdf-block-fragment')
-        .evaluateAll(parts=>parts.map(part=>({id:part.dataset.subblockId,
-          role:part.dataset.partRole,chip:part.querySelector('.ocr-pdf-subblock-chip')?.textContent}))),[
-        {id:'p3b0s0',role:'caption',chip:'p3b0s0'},
-        {id:'p3b0s1',role:'body',chip:'p3b0s1'},
-      ]);
-      const assertParentRect=async(locator,expected,name)=>{
-        const coords=await locator.evaluate(node=>{
+        null,{timeout:42000});
+      assert.equal(await page.locator('.ocr-pdf-mark-subblocks').count(),0,
+        'PDF evidence must not expose the retired automatic child writer');
+      assert.equal((original.match(/<!-- cmd:block:v1 id="p\d+b\d+"/g)||[]).length,224);
+      assert.equal((original.match(/<!-- cmd:block:v1 id="p\d+b\d+s\d+"/g)||[]).length,43);
+      assert.equal(toMineruJSON(original),raw,'sealed MinerU archive must roundtrip byte-for-byte');
+      assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),original,
+        'PDF bootstrap must not insert automatic old child tags');
+      // Parent provenance is a CMD scope classification, not inferred from
+      // whether native child labels happen to exist. In the canonical sealed
+      // source both p3b0 and p4b0 include valid native-child text: their
+      // union parent is solid. The truly metadata-only p2b8 stays dashed.
+      // No OCR failure reason is inferred from a dashed PDF outline.
+      for(const [id,kind,stroke] of [
+        ['p3b0','content','solid'],['p4b0','content','solid'],
+        ['p2b8','structure','dashed'],['p13b0','content','solid']]){
+        const info=await page.locator(
+          `.ocr-pdf-block-cover[data-block-id="${id}"] > .ocr-pdf-block-ctrl`)
+          .evaluate(node=>({kind:node.dataset.sourceKind,
+            stroke:getComputedStyle(node).borderTopStyle}));
+        assert.deepEqual(info,{kind,stroke},`${name} parent ${id} provenance mismatch`);
+      }
+      const observations=[];
+      for(const group of expected){
+        const parent=page.locator(`.ocr-pdf-block-cover[data-block-id="${group.parent}"]`);
+        await parent.scrollIntoViewIfNeeded({timeout:24000});
+        await page.waitForFunction(id=>document.querySelector(
+          `.ocr-pdf-block-cover[data-block-id="${id}"]`)?.closest('.page')?.querySelector('canvas')?.width>0,
+        group.parent,{timeout:29000});
+        assert.equal(await parent.getAttribute('data-pdf-page'),String(group.physicalPage));
+        assert.equal(await parent.locator(':scope > .ocr-pdf-block-ctrl input').count(),1,
+          'native children must NOT mint independent original parent checkboxes');
+        const rect=await parent.evaluate(node=>{
           const b=node.getBoundingClientRect(),p=node.closest('.page').getBoundingClientRect();
           return [(b.left-p.left)/p.width*594,(b.top-p.top)/p.height*783,
             (b.right-p.left)/p.width*594,(b.bottom-p.top)/p.height*783];
         });
-        coords.forEach((value,i)=>assert(Math.abs(value-expected[i])<3,
-          `${name} parent must be the enclosing rectangle of child OCR boxes: ${coords}`));
-      };
-      await assertParentRect(table3,[68,89,538,458],'p3b0');
-      // ALL native parent/child chips are visible without interaction.
-      // Each label is laid out at a free Y anywhere along its own OCR bbox,
-      // not forcibly adjacent to the top edge. Parent and child chip share
-      // the SAME page-side collision solver and remain spatially distinct.
-      assert.deepEqual(await table3.locator('.ocr-pdf-subblock-chip')
-        .evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).display)),['block','block']);
-      assert.equal(await page.locator('.ocr-pdf-children-menu').count(),0);
-      const positioned=await table3.evaluate(node=>{
-        const nodes=[node.querySelector(':scope > .ocr-pdf-block-ctrl'),
-          ...node.querySelectorAll('.ocr-pdf-subblock-chip')];
-        return nodes.map(el=>{
-          const r=el.getBoundingClientRect();
-          const box=el.classList.contains('ocr-pdf-block-ctrl')?node:
-            el.closest('.ocr-pdf-block-fragment');
-          const b=box.getBoundingClientRect();
-          return {id:el.textContent,top:r.top,bottom:r.bottom,
-            from:b.top,to:b.bottom,side:el.dataset.gutter,
-            visible:r.width>2&&r.height>3,link:Boolean(getComputedStyle(el,'::after').content!== 'none')};
+        rect.forEach((actual,index)=>assert(Math.abs(actual-group.rect[index])<3,
+          `${name} ${group.parent} physical PDF bbox coordinate ${index}: ${actual}`));
+        const children=await parent.locator(':scope > .ocr-pdf-block-fragment').evaluateAll(nodes=>
+          nodes.map(node=>({id:node.dataset.subblockId,role:node.dataset.partRole,
+            label:node.querySelector('.ocr-pdf-subblock-chip')?.textContent,
+            kind:node.querySelector('.ocr-pdf-subblock-chip')?.dataset.sourceKind})));
+        assert.deepEqual(children.map(row=>row.id),group.ids,
+          'all native child IDs must stay bound to their original PDF parent');
+        assert.deepEqual(children.map(row=>row.role),group.roles);
+        assert.deepEqual(children.map(row=>row.label),group.ids,
+          'all native child chips must be simultaneously visible');
+        assert.deepEqual(children.map(row=>row.kind),group.ids.map(()=>'content'),
+          'native OCR children have their own exact CMD content scope');
+        // The complete parent/child chip set must be legible simultaneously.
+        // The original PDF bbox owns the labels' vertical ranges; child
+        // labels may be staggered down a tall body, but never overlap.
+        const chips=await parent.evaluate(node=>{
+          const nodes=[node.querySelector(':scope > .ocr-pdf-block-ctrl'),
+            ...node.querySelectorAll('.ocr-pdf-subblock-chip')];
+          return nodes.map(el=>{
+            const rect=el.getBoundingClientRect();
+            const owner=el.classList.contains('ocr-pdf-block-ctrl')?node:
+              el.closest('.ocr-pdf-block-fragment');
+            const box=owner.getBoundingClientRect();
+            return {id:el.textContent,top:rect.top,bottom:rect.bottom,
+              min:box.top,max:box.bottom,width:rect.width,height:rect.height};
+          });
         });
-      });
-      assert(positioned.every(x=>x.visible),`${name} every parent and child label visible`);
-      assert(positioned.some(x=>x.id==='p3b0s1'&&x.top-x.from>20),
-        `${name} body label must be free to move down INSIDE its tall bbox`);
-      assert(positioned.every(x=>x.top>=x.from-2&&x.bottom<=x.to+2),
-        `${name} all p3b0 labels should fit inside their own Y ranges`);
-      for(let i=0;i<positioned.length;i++)for(let j=i+1;j<positioned.length;j++){
-        const a=positioned[i],b=positioned[j];
-        assert(a.bottom<=b.top-1||b.bottom<=a.top-1,
-          `${name} parent/child label collision ${a.id} vs ${b.id}`);
+        assert.equal(chips.length,group.ids.length+1,
+          `${name} one original parent chip and all native child chips`);
+        assert(chips.every(row=>row.width>2&&row.height>3&&
+          row.top>=row.min-2&&row.bottom<=row.max+2),
+          `${name} labels must stay visible inside their own physical OCR Y extents`);
+        for(let i=0;i<chips.length;i++)for(let j=i+1;j<chips.length;j++){
+          const a=chips[i],b=chips[j];
+          assert(a.bottom<=b.top-1||b.bottom<=a.top-1,
+            `${name} ${group.parent} parent/child label collision ${a.id} vs ${b.id}`);
+        }
+        // PDF child label and independent PDF canvas clicks must both locate
+        // the same actual content line, not a parent or historical tag line.
+        for(const [index,id] of group.ids.entries()){
+          const chip=parent.locator('.ocr-pdf-subblock-chip').nth(index);
+          await chip.evaluate(node=>node.click());
+          const line=bodyLine(id);
+          await page.waitForFunction(async expected=>{
+            const {viewStore}=await import('/view-store.js');
+            return viewStore.getState().focusTarget?.sourceLine===expected;
+          },line,{timeout:19000});
+          const center=await parent.evaluate((node,index)=>{
+            const fragment=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
+            const b=fragment.getBoundingClientRect();
+            return {x:(b.left+b.right)/2,y:(b.top+b.bottom)/2};
+          },index);
+          await parent.evaluate((node,point)=>{
+            node.closest('.page').querySelector('canvas').dispatchEvent(
+              new MouseEvent('click',{bubbles:true,clientX:point.x,clientY:point.y}));
+          },center);
+          await page.waitForFunction(({role,index,line,physicalPage})=>{
+            const overlay=document.querySelector('.ocr-pdf-region-overlay');
+            return overlay?.dataset.partRole===role&&overlay.dataset.partIndex===String(index)&&
+              overlay.dataset.pdfPage===String(physicalPage)&&
+              document.querySelector('.ocr-pdf-status')?.textContent?.includes(`源码正文第 ${line} 行`);
+          },{role:group.roles[index],index,line,physicalPage:group.physicalPage},{timeout:17000});
+          // Reverse source→PDF: route through the real shared Focus store.
+          await page.evaluate(async sourceLine=>{
+            const {publishFocus}=await import('/view-store.js');
+            publishFocus({sourceLine,origin:'source',intent:'click'});
+          },line);
+          await page.waitForFunction(({index,physicalPage})=>{
+            const overlay=document.querySelector('.ocr-pdf-region-overlay');
+            return overlay?.dataset.partIndex===String(index)&&
+              overlay.dataset.pdfPage===String(physicalPage);
+          },{index,physicalPage:group.physicalPage},{timeout:18000});
+          observations.push({id,line,role:group.roles[index],pdfPage:group.physicalPage});
+        }
+        // A parent tag remains an independent click target, not an alias for
+        // the first OCR child or a synthesized child-writing transaction.
+        await page.evaluate(async line=>{
+          const {publishFocus}=await import('/view-store.js');
+          publishFocus({sourceLine:line,origin:'source',intent:'click'});
+        },anchorLine(group.parent));
+        await page.waitForFunction(pageNumber=>document.querySelector('.ocr-pdf-region-overlay')
+          ?.dataset.partIndex==='-1'&&document.querySelector('.ocr-pdf-region-overlay')
+          ?.dataset.pdfPage===String(pageNumber),group.physicalPage,{timeout:18000});
       }
-      const childChip=table3.locator('.ocr-pdf-subblock-chip').first();
-      await childChip.evaluate(el=>el.click());
-      await page.waitForFunction(async expected=>{
-        const {viewStore}=await import('/view-store.js');
-        return viewStore.getState().focusTarget?.sourceLine===expected&&
-          document.querySelector('.ocr-pdf-status')?.textContent?.includes('已自动补标');
-      },markerLine('p3b0s0')+1,{timeout:28000});
-      assert.equal(readFileSync(doc,'utf8'),original,'PDF child click must not save edits');
-      assert.equal(await table3.locator('.ocr-pdf-subblock-chip').first()
-        .getAttribute('data-source-kind'),'content',
-        'a real OCR caption must indicate a real matching CMD text line');
-      // After CMD inserts the original child tags, the parent owns only
-      // the empty gap before s0: its chip must switch from solid to dashed.
-      const formerlyFilled=await readBadge('.ocr-pdf-block-cover[data-block-id="p3b0"] > .ocr-pdf-block-ctrl');
-      assert.equal(formerlyFilled.kind,'structure');
-      assert.equal(formerlyFilled.style,'dashed');
-      assert.equal((await readBadge('.ocr-pdf-block-cover[data-block-id="p3b0"] .ocr-pdf-subblock-chip')).kind,'content');
-      for(const [index,id] of [[0,'p3b0s0'],[1,'p3b0s1']]){
-        const rects=await table3.evaluate((node,index)=>{
-          const frag=node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
-          const b=frag.getBoundingClientRect();
-          return {x:b.left+b.width/2,y:b.top+b.height/2};
-        },index);
-
-        await table3.evaluate((node,xy)=>{
-          node.closest('.page').querySelector('canvas').dispatchEvent(new MouseEvent('click',
-            {bubbles:true,clientX:xy.x,clientY:xy.y}));
-        },rects);
-        await page.waitForFunction(async expected=>{
-          const {viewStore}=await import('/view-store.js');
-          return viewStore.getState().focusTarget?.sourceLine===expected.line&&
-            document.querySelector('.ocr-pdf-status')?.textContent?.includes(`源码正文第 ${expected.line} 行`);
-        },{line:markerLine(id)+1},{timeout:16000});
-      }
-      // Reverse navigation must match the CHILD content line as well as its
-      // HTML-comment marker. Previously it selected only the enclosing parent.
-      await page.evaluate(async line=>{
-        const {publishFocus}=await import('/view-store.js');
-        publishFocus({sourceLine:line,origin:'source',intent:'click'});
-      },markerLine('p3b0s0')+1);
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
-        ?.dataset.partRole==='caption',null,{timeout:16000});
-      await page.evaluate(async line=>{
-        const {publishFocus}=await import('/view-store.js');
-        publishFocus({sourceLine:line,origin:'source',intent:'click'});
-      },markerLine('p3b0s1')+1);
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
-        ?.dataset.partRole==='body'&&
-        document.querySelector('.ocr-pdf-region-overlay')?.dataset.partIndex==='1',
-        null,{timeout:16000});
-      const block=page.locator('.ocr-pdf-block-cover[data-block-id="p4b0"]');
-      await block.scrollIntoViewIfNeeded({timeout:25000});
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p4b0"]')?.closest('.page')
-        ?.querySelector('canvas')?.width>0,null,{timeout:30000});
-      await assertParentRect(block,[50,89,521,339],'p4b0');
-      assert.equal(await block.locator('.ocr-pdf-block-ctrl input').count(),1);
-      assert.deepEqual(await block.locator(':scope > .ocr-pdf-block-fragment')
-        .evaluateAll(nodes=>nodes.map(el=>el.dataset.partRole)),['caption','body','note']);
-      assert.deepEqual(await block.locator('.ocr-pdf-subblock-chip')
-        .evaluateAll(nodes=>nodes.map(el=>el.dataset.sourceKind)),
-        ['structure','structure','structure'],
-        'p4b0 caption/body/note have spatial bbox but no matching CMD OCR prose');
-      assert.deepEqual(await block.locator('.ocr-pdf-subblock-chip')
-        .evaluateAll(nodes=>nodes.map(el=>getComputedStyle(el).borderTopStyle)),
-        ['dashed','dashed','dashed'],
-        'all empty child labels are dashed even when their PDF bboxes exist');
-      assert.equal((await readBadge('.ocr-pdf-block-cover[data-block-id="p4b0"] > .ocr-pdf-block-ctrl')).style,'dashed');
-      const observations=[];
-      const bboxFor=async(partIndex)=>block.evaluate((node,partIndex)=>{
-        const region=partIndex<0?node:node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[partIndex];
-        const b=region.getBoundingClientRect();
-        return {x:(b.left+b.right)/2,y:(b.top+b.bottom)/2,
-          width:b.width,height:b.height};
-      },partIndex);
-      for(const [partIndex,role] of [[0,'caption'],[1,'body'],[2,'note']]){
-        const pt=await bboxFor(partIndex);
-        await block.evaluate((node,{x,y})=>{
-          node.closest('.page').querySelector('canvas').dispatchEvent(
-            new MouseEvent('click',{bubbles:true,clientX:x,clientY:y}));
-        },pt);
-        await page.waitForFunction(expected=>document.querySelector('.ocr-pdf-region-overlay')
-          ?.dataset.partRole===expected,role,{timeout:18000});
-        await page.waitForFunction(async expected=>{
-          const {viewStore}=await import('/view-store.js');
-          return viewStore.getState().focusTarget?.sourceLine===expected;
-        },markerLine(`p4b0s${partIndex}`),{timeout:16000});
-        const expectedId=`p4b0s${partIndex}`;
-        const displayed=await page.locator('.ocr-pdf-status').textContent();
-        assert(displayed.includes(`${expectedId} · 源码缺正文`),
-          `${name} ${expectedId} PDF bbox has ZERO MinerU OCR spans; do not claim content match`);
-        assert(displayed.includes(`第 ${markerLine(expectedId)} 行仅标签`),
-          `${name} ${expectedId} source focus must report structural-only marker accurately`);
-        const overlay=page.locator('.ocr-pdf-region-overlay');
-        assert.equal(await overlay.getAttribute('data-block-index'),'0');
-        assert.equal(await overlay.getAttribute('data-pdf-page'),'5');
-        const rect=await overlay.boundingBox();
-        assert(rect,`${name} ${role} overlay missing`);
-        const expected=await bboxFor(partIndex);
-        assert(Math.abs(rect.width-expected.width)<3&&Math.abs(rect.height-expected.height)<3,
-          `${name} ${role} highlight must match its own rectangle`);
-        const button=page.locator('.ocr-pdf-extract-text');
-        // PDF text layers may be empty for rasterized table body; the action
-        // must describe current region and never borrow neighboring text.
-        await page.waitForTimeout(450);
-        observations.push({role,enabled:await button.isEnabled(),title:await button.getAttribute('title')});
-      }
-      assert.deepEqual(observations.map(x=>x.enabled),[true,true,true],
-        'screenshot regions caption, body and notes each have independently extractable PDF text');
-      // Lexical CMD source scopes include every line from a tag up to (but
-      // not including) the next native tag. Empty lines are owned too, even
-      // if the child has no recognized OCR prose yet.
-      await page.evaluate(async line=>{
-        const {publishFocus}=await import('/view-store.js');
-        publishFocus({sourceLine:line,origin:'source',intent:'click'});
-      },markerLine('p4b0s2')+1);
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
-        ?.dataset.partIndex==='2',null,{timeout:15000});
-      const parentSourceLine=annotated.findIndex(text=>
-        text.includes('<!-- minerujson:block:v1:4:0 -->'))+1;
-      await page.evaluate(async line=>{
-        const {publishFocus}=await import('/view-store.js');
-        publishFocus({sourceLine:line,origin:'source',intent:'click'});
-      },parentSourceLine);
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
-        ?.dataset.partIndex==='-1',null,{timeout:15000});
-      await page.evaluate(async line=>{
-        const {publishFocus}=await import('/view-store.js');
-        publishFocus({sourceLine:line,origin:'source',intent:'click'});
-      },markerLine('p4b0s0'));
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-region-overlay')
-        ?.dataset.partIndex==='0',null,{timeout:15000});
-      // The source editor must actually render the target child tag, not
-      // merely publish a correct but unconsumed focus event.
-      await page.waitForFunction(id=>[...document.querySelectorAll('.cm-line')]
-        .some(line=>line.textContent?.includes(`id="${id}"`)),
-        'p4b0s2',{timeout:15000});
-      assert.deepEqual(errors,[]);
-      assert.equal(readFileSync(doc,'utf8'),original,
-        'automatic legacy child annotation is unsaved until the user saves');
-      await page.locator('#undo').evaluate(e=>e.click());
-      await page.locator('#save').evaluate(e=>e.click());
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
-        null,{timeout:23000});
-      assert.equal(readFileSync(doc,'utf8'),original,
-        'one Undo must reverse all automatically added CMD child tags');
-      console.log('PDF_CHILD_REGION_SELECT_PASS',name,observations);
+      assert.equal(observations.length,5,'all five physically independent native children must be tested');
+      assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),original,
+        'PDF child and reverse CM6 navigation must never write CMD');
+      assert.equal(readFileSync(doc,'utf8'),original,'source disk must remain byte-identical');
+      assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[]);
+      console.log('PDF_CHILD_REGION_SELECT_PASS',name,{childrenChecked:observations,
+        sealedChildren:43,parents:224,reverse:true,sourceUnchanged:true});
     }finally{await browser.close();writeFileSync(doc,original);}
   }
 }finally{server.kill('SIGTERM');rmSync(temp,{recursive:true,force:true});}
