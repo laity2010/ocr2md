@@ -33,22 +33,28 @@ try{
    await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').click();
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
-   // All three base text-block actions, including native subblock annotation, live in Shell dropdown.
+   // Frozen text-block review mode mounts only inventory/grouping,
+   // evidence comparison and the five cross-column/cross-page candidates.
+   // Retired confirmation/export writers must NOT appear in Shell or AG.
    const functionMenu=page.locator('#ag-functions-menu .module-actions[data-module="text-block"]');
    await page.locator('#ag-functions-toggle').click();
-   assert.equal(await functionMenu.getByRole('button').count(),13,'block mode retains WP4/WP5 controls plus PDF bbox actions');
-   for(const name of ['切换文本块链分组展示','将当前 PBS 设为目标链','把当前 PBS 所在块链并入目标链','在当前 PBS 之前拆分块链','显式迁移旧版 MinerU 块链标签','仅将所选 PBS 移至目标块后','仅将所选 PBS 移至当前块链最前','将所选 PBS 独立成单块链'])
-     assert.equal(await functionMenu.getByRole('button',{name}).count(),1,`missing WP4 block action ${name}`);
+   assert.equal(await functionMenu.locator(':scope > button').count(),4);
+   for(const label of ['查看原始文本块清单','切换文本块链分组展示',
+     '查看跨页跨栏接续候选','同页 PDF 双框概览'])
+     assert.equal(await functionMenu.locator(`button[aria-label="${label}"]`).count(),1,
+       `current read-only review action not mounted: ${label}`);
+   for(const label of ['确认所选文本块续接','否决所选文本块续接',
+     '将所选文本块恢复待审阅','导出文本块续接审阅 JSON',
+     '把当前 PBS 所在块链并入目标链'])
+     assert.equal(await functionMenu.getByRole('button',{name:label}).count(),0,
+       `retired review writer must not be visible: ${label}`);
    await page.keyboard.press('Escape');
    await action(page,'查看跨页跨栏接续候选');
-   await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(document.querySelector('#status')?.textContent||''),null,{timeout:20000});
-   await page.locator('#ag-functions-toggle').click();
-   assert.equal(await functionMenu.getByRole('button').count(),8,'all eight text block operations belong in Function menu');
-   assert.equal(await functionMenu.getByRole('button',{name:'确认所选文本块续接'}).isDisabled(),true);
+   await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:22000});
    assert.equal(await page.locator('.ocr-text-block-control,.ocr-block-review-bar,.ocr-text-block-state').count(),0);
    assert.equal(await page.locator('.toolbar #status').count(),1);
-   await page.screenshot({path:`.v6/evidence/wp4/${name}-unified-function-menu.png`,animations:'disabled'});
-   await page.keyboard.press('Escape');
+   await page.screenshot({path:`.v6/evidence/wp4/${name}-unified-readonly-review.png`,animations:'disabled'});
    await page.locator('.ocr-text-block-grid .ag-cell[col-id="toId"]').first().waitFor({timeout:16000});
    await page.waitForFunction(()=>{const nodes=[...document.querySelectorAll('.ocr-text-block-grid .ag-row[row-id]')];
      return nodes.length===5&&nodes.every(node=>node.getAttribute('row-id')?.includes('--'));},null,{timeout:18000});
@@ -72,24 +78,32 @@ try{
    assert(boxA.x!==boxB.x,'cross-column frames must be spatially separated');
    await page.screenshot({path:`.v6/evidence/wp4/${name}-dual-orange.png`,animations:'disabled'});
    await action(page,'同页 PDF 双框概览');
-   await page.waitForFunction(()=>{
+   try{await page.waitForFunction(()=>{
      const boxes=[...document.querySelectorAll('.ocr-pdf-pair-overlay')].map(x=>x.getBoundingClientRect());
      const clip=document.querySelector('.ocr-pdf-scroller')?.getBoundingClientRect();
      return boxes.length===2&&clip&&boxes.every(b=>b.top>=clip.top-9&&b.bottom<=clip.bottom+9);
-   },null,{timeout:17000});
+   },null,{timeout:17000});}catch(error){
+     console.log('PAIR_OVERVIEW_DIAGNOSTIC',name,JSON.stringify(await page.evaluate(()=>{
+       const scroller=document.querySelector('.ocr-pdf-scroller');
+       const rect=b=>b?{x:b.x,y:b.y,width:b.width,height:b.height,top:b.top,bottom:b.bottom}:null;
+       return {viewport:rect(scroller?.getBoundingClientRect()),scrollTop:scroller?.scrollTop,
+         scrollHeight:scroller?.scrollHeight,boxes:[...document.querySelectorAll('.ocr-pdf-pair-overlay')]
+           .map(e=>({role:e.dataset.role,bounds:rect(e.getBoundingClientRect())})),
+         zoom:document.querySelector('.ocr-pdf-zoom')?.textContent,
+         pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
+         global:document.querySelector('#status')?.textContent};
+     })));
+     throw error;
+   }
    await page.screenshot({path:`.v6/evidence/wp4/${name}-both-visible.png`,animations:'disabled'});
    // Each end's source navigation preserves the other orange rectangle.
    await first.locator('.ag-cell[col-id="toId"] button').click();
    assert.equal(await page.locator('.ocr-pdf-pair-overlay').count(),2);
-   await action(page,'确认所选文本块续接');
-   await page.waitForFunction(()=>/已确认 1 · 已否决 0 · 待审阅 4/.test(
-     document.querySelector('#status')?.textContent||''),null,{timeout:9000});
-   await action(page,'否决所选文本块续接');
-   assert.match(await page.locator('#status').textContent(),/已确认 0 · 已否决 1/);
-   await action(page,'将所选文本块恢复待审阅');
-   assert.match(await page.locator('#status').textContent(),/已确认 0 · 已否决 0 · 待审阅 5/);
-   await action(page,'确认所选文本块续接');
-   assert.match(await page.locator('#status').textContent(),/已确认 1/);
+   // Browsing both endpoints may not persist a continuation decision, or
+   // write any structural CMD tag. Selection is view-only in this milestone.
+   assert.match(await page.locator('#status').innerText(),/候选 5 组 · 跨栏 4 · 跨页 1/);
+   assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),original);
+   assert.equal(readFileSync(file,'utf8'),original);
    // Cross-page pair: both independent DOM boxes exist although on separate
    // pages. PDF scroller may show only one page in the physical viewport.
    const cross=page.locator('.ocr-text-block-grid .ag-row[row-id="p15b11--p16b0"]');
@@ -104,29 +118,29 @@ try{
    await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').click();
    await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),null,{timeout:25000});
    await action(page,'查看跨页跨栏接续候选');
-   await page.waitForFunction(()=>/已确认 1 · 已否决 0 · 待审阅 4/.test(
-     document.querySelector('#status')?.textContent||''),null,{timeout:20000});
-   const downloadPromise=page.waitForEvent('download');
-   await action(page,'导出文本块续接审阅 JSON');
-   const download=await downloadPromise;
-   assert.match(download.suggestedFilename(),/^ocr2md-continuation-review-[a-f0-9]{12}\.json$/);
-   const destination=`.v6/evidence/wp4/${name}-review.json`;
-   await download.saveAs(destination);
-   const exported=JSON.parse(readFileSync(destination,'utf8'));
-   assert.equal(exported.records.length,5);
-   assert.equal(exported.records.find(x=>x.id==='p6b6--p6b7').status,'已确认');
-   assert.equal(exported.records.filter(x=>x.status==='待审阅').length,4);
-   assert.equal(exported.summary.confirmed,1);
-   assert.equal(exported.summary.rejected,0);
+   await page.waitForFunction(()=>/候选 5 组 · 跨栏 4 · 跨页 1/.test(
+     document.querySelector('#status')?.textContent||''),null,{timeout:22000});
+   // Summary updates before AG Grid commits the candidate rowData; the
+   // immediately observed 39 rows were the prior virtualized parent view.
+   // Require the five actual candidate row IDs after the grid settles.
+   await page.waitForFunction(()=>{
+     const rows=[...document.querySelectorAll('.ocr-text-block-grid .ag-row[row-id]')];
+     return rows.length===5&&rows.every(node=>node.getAttribute('row-id')?.includes('--'));
+   },null,{timeout:25000});
+   assert.equal(await functionMenu.locator(':scope > button').count(),4);
+   assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),original,
+     'review-only candidate inventory and reload may not alter CMD');
    await action(page,'查看原始文本块清单');
    assert.equal(await page.locator('.ocr-pdf-pair-overlay').count(),0);
 
    assert.match(await page.locator('#status').innerText(),/原始 224 块/);
    await page.waitForFunction(()=>document.querySelector('.ocr-text-block-grid .ag-row[row-id="p0b0"]')!==null, null,{timeout:16000});
-   assert.equal(await page.locator('.ocr-text-block-grid .ag-row[row-id="p0b0"] .ag-cell[col-id="id"]').innerText(),'p0b0');
+   await page.waitForFunction(()=>document.querySelector(
+     '.ocr-text-block-grid .ag-row[row-id="p0b0"] .ag-cell[col-id="id"]')
+     ?.textContent?.trim()==='p0b0',null,{timeout:17000});
    assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[]);
    assert.equal(readFileSync(file,'utf8'),original);
-   console.log('WP4_BROWSER_PASS',name,{rows,state,orange:'p6b6→p6b7',forbiddenRequests:forbidden.length,errors:errors.length});
+   console.log('WP4_BROWSER_PASS',name,{rows,state,orange:'p6b6→p6b7',crossPage:true,readOnly:true,reload:true,noDiskWrites:true,forbiddenRequests:forbidden.length,errors:errors.length});
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}

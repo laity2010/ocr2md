@@ -543,16 +543,30 @@ export class PdfPreview {
       this.zoomRestoreBehavior=null;this.zoomRestoreTimer=0;
     },140);
   }
-  setZoom(mode){
+  setZoom(mode,{preserveLocation=true}={}){
     if(!this.ready)return;
     this.zoomMode=mode;
-    this.preserveZoomLocation(()=>{
+    const applyScale=()=>{
       this.viewer.currentScaleValue=mode;this.viewer.update();
       // Never depend on an eventual canvas-render event to remount original
       // CMD Block coverage. PDF.js may replace a page tree on zoom without
       // repainting a canvas that was already cached.
       if(this.blockCoverageRows.length)this.paintBlockCoverage();
-    });
+    };
+    if(preserveLocation)this.preserveZoomLocation(applyScale);
+    else{
+      // Same-page A/B overview intentionally chooses a NEW scroll center.
+      // Ordinary zoom restores the old reading anchor over two frames and a
+      // 140 ms callback. Leaving that timer active would undo the overview's
+      // explicit centering, even after both physical rectangles are drawn.
+      ++this.zoomAnchorToken;
+      clearTimeout(this.zoomRestoreTimer);this.zoomRestoreTimer=0;
+      if(this.zoomRestoreBehavior!==null)
+        this.scroller.style.scrollBehavior=this.zoomRestoreBehavior;
+      this.zoomRestoreBehavior=null;
+      this.revealPending=false;
+      applyScale();
+    }
     this.updateZoom();this.scheduleOverlay();
   }
   zoomStep(direction){
@@ -1660,7 +1674,7 @@ export class PdfPreview {
     if(span<=0)return false;
     const scale=Math.max(.15,Math.min(current,(this.scroller.clientHeight-52)/span));
     if(!Number.isFinite(scale))return false;
-    if(scale<current-.005)this.setZoom(String(scale));
+    if(scale<current-.005)this.setZoom(String(scale),{preserveLocation:false});
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     await this.drawPairOverlays();
     const [overlayA,overlayB]=this.comparisonNodes;

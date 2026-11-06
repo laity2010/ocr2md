@@ -173,7 +173,10 @@ export function createTextBlockModule(host,getChapter,onStatus=()=>{},onLocateMi
   };
   const handleDrag=p=>{
     const atom=p.data;
-    if(!atom||atom.isChainHeader||atom.format!=='cmd-v1'||mode!=='blocks'||report?.invalidBCMarks)return '';
+    // Do not display an AG drag affordance when its semantic writer is
+    // deliberately gated off. The PDF parent/child drop gestures have their
+    // own approved path; this legacy AG member-writer cannot execute.
+    if(TEXT_BLOCKS_READ_ONLY||!atom||atom.isChainHeader||atom.format!=='cmd-v1'||mode!=='blocks'||report?.invalidBCMarks)return '';
     const handle=document.createElement('button');handle.type='button';
     handle.className='ocr-pbs-drag-handle';handle.dataset.pbsDragHandle=atom.id;
     handle.setAttribute('aria-label',`拖动 ${atom.id} 调整块链成员`);
