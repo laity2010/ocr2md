@@ -1,0 +1,11 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.evaluate: Execution context was destroyed, most likely because of a navigation
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44-r9/tests/pdf-child-region-select.browser.test.mjs:119:22 {
+  log: [],
+  name: 'Error'
+}
+
+Node.js v23.11.0

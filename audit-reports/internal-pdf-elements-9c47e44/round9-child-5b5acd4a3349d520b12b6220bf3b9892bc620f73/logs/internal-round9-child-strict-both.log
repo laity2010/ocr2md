@@ -1,0 +1,18 @@
+PDF_CHILD_NAVIGATED Chrome http://127.0.0.1:53791/
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: all 43 native child labels must exist before any PDF click
+
+42 !== 43
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44-r9/tests/pdf-child-region-select.browser.test.mjs:73:14 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 42,
+  expected: 43,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0

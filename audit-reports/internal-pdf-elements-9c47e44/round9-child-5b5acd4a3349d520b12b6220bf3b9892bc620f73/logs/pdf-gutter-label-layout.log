@@ -1,0 +1,15 @@
+PDF_EDITOR_PARENT_LABEL_PRIORITY_PASS [
+  { id: 'p16b9', top: 656, height: 18, from: 667, to: 694 },
+  { id: 'p16b10', top: 694, height: 18, from: 698, to: 708 },
+  { id: 'p16b10s0', top: 676, height: 16, from: 698, to: 708 },
+  { id: 'p16b10s1', top: 714, height: 18, from: 712, to: 731 },
+  { id: 'p16b11', top: 807, height: 18, from: 807, to: 825 }
+]
+PDF_GUTTER_LABEL_LAYOUT_PASS [
+  { id: 'p4b0', top: 188.5, height: 18, from: 89, to: 339 },
+  { id: 'p4b0s0', top: 96.5, height: 15, from: 89, to: 119 },
+  { id: 'p4b0s1', top: 208.5, height: 15, from: 122, to: 310 },
+  { id: 'p4b0s2', top: 320.5, height: 15, from: 317, to: 339 },
+  { id: 'p4b1', top: 373.5, height: 18, from: 351, to: 400 },
+  { id: 'p4b1s0', top: 356.5, height: 15, from: 351, to: 377 }
+]

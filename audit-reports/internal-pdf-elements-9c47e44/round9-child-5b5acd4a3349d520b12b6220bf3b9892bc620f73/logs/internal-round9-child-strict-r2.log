@@ -1,0 +1,20 @@
+PDF_CHILD_NAVIGATED Chrome http://127.0.0.1:55173/
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: p3b0: parent owns only its empty scope before first native child
++ actual - expected
+
++ 'content'
+- 'structure'
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44-r9/tests/pdf-child-region-select.browser.test.mjs:142:16 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'content',
+  expected: 'structure',
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0
