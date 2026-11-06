@@ -1,0 +1,33 @@
+PDF_MAP_EQUALS_CMD_PASS 224 / 224
+TEXT_BLOCK_COVERAGE_PASS Chrome {
+  "currentState": "✓ 已加载 · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 原始 224 块 / 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 224 · 缺失 0 · 重复 0 · PDF bbox 224 · 无效 0 · 可见正文 216 · 空块/仅元数据 8 · 已接续 0 · 逻辑块 224 · 当前 MD 定位 216/216 · AG 第 1 页 23 块 · 未知锚点 0 · 4,931行 / 383,657字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md",
+  "firstId": "p0b0",
+  "overlay": {
+    "page": "1",
+    "block": "0",
+    "width": 120.875,
+    "height": 19.359375
+  },
+  "mapped": {
+    "source": 216,
+    "preview": 216,
+    "missing": []
+  },
+  "legacyMapRequests": 0
+}
+TEXT_BLOCK_COVERAGE_PASS iPad-WebKit {
+  "currentState": "✓ 已加载 · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 原始 224 块 / 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 224 · 缺失 0 · 重复 0 · PDF bbox 224 · 无效 0 · 可见正文 216 · 空块/仅元数据 8 · 已接续 0 · 逻辑块 224 · 当前 MD 定位 216/216 · AG 第 1 页 23 块 · 未知锚点 0 · 4,931行 / 383,657字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md",
+  "firstId": "p0b0",
+  "overlay": {
+    "page": "1",
+    "block": "0",
+    "width": 120.875,
+    "height": 19.359375
+  },
+  "mapped": {
+    "source": 216,
+    "preview": 216,
+    "missing": []
+  },
+  "legacyMapRequests": 0
+}

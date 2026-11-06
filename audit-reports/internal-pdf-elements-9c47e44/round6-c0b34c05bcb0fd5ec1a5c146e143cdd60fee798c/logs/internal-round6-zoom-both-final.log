@@ -1,0 +1,44 @@
+PDF_COVER_TEST_ENGINE_START Chrome
+PDF_COVERAGE_ZOOM_PASS Chrome {
+  start: {
+    page: '17',
+    y: 0.17496443812233287,
+    x: 0.5,
+    distance: 0,
+    scrollTop: 11061,
+    zoom: '67%'
+  },
+  after: {
+    page: '1',
+    y: 0.47192513368983957,
+    x: 0.5,
+    distance: 0,
+    scrollTop: 178,
+    zoom: '67%'
+  },
+  zoomClicks: 4,
+  checkboxes: 224,
+  errors: 0
+}
+PDF_COVER_TEST_ENGINE_START iPad-WebKit
+PDF_COVERAGE_ZOOM_PASS iPad-WebKit {
+  start: {
+    page: '17',
+    y: 0.17496443812233287,
+    x: 0.5,
+    distance: 0,
+    scrollTop: 11061,
+    zoom: '67%'
+  },
+  after: {
+    page: '1',
+    y: 0.47058823529411764,
+    x: 0.5,
+    distance: 0,
+    scrollTop: 177,
+    zoom: '67%'
+  },
+  zoomClicks: 4,
+  checkboxes: 224,
+  errors: 0
+}

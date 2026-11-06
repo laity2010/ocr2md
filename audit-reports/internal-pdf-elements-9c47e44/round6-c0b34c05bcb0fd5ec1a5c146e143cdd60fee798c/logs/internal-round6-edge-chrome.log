@@ -1,0 +1,11 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 25000ms exceeded.
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/pdf-block-drag-edge-scroll.browser.test.mjs:108:18 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

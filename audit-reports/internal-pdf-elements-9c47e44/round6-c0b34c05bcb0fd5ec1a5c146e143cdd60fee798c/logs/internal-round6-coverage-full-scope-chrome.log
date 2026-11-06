@@ -1,0 +1,186 @@
+PDF_MAP_EQUALS_CMD_PASS 224 / 224
+TEXT_BLOCK_COVERAGE_PASS Chrome {
+  "currentState": "✓ 已加载 · 文本块：父块「之前／作为子块／之后」，同父子块「之前／之后」可用 · 其他结构操作只读 · 原始 224 块 / 22 页 · PBS 267（子块 43） · BC 267 链 · 源码已匹配 224 · 缺失 0 · 重复 0 · PDF bbox 224 · 无效 0 · 可见正文 216 · 空块/仅元数据 8 · 已接续 0 · 逻辑块 224 · 当前 MD 定位 216/216 · AG 第 1 页 23 块 · 未知锚点 0 · 4,931行 / 383,657字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md",
+  "firstId": "p0b0",
+  "overlay": {
+    "page": "1",
+    "block": "0",
+    "width": 120.875,
+    "height": 19.359375
+  },
+  "mapped": {
+    "source": 224,
+    "preview": 196,
+    "missing": [
+      {
+        "id": "p0b5",
+        "type": "image",
+        "sourceLine": 106,
+        "text": "[图片]"
+      },
+      {
+        "id": "p0b7",
+        "type": "image",
+        "sourceLine": 116,
+        "text": "[图片]"
+      },
+      {
+        "id": "p0b9",
+        "type": "image",
+        "sourceLine": 126,
+        "text": "[图片]"
+      },
+      {
+        "id": "p0b11",
+        "type": "image",
+        "sourceLine": 136,
+        "text": "[图片]"
+      },
+      {
+        "id": "p0b13",
+        "type": "image",
+        "sourceLine": 146,
+        "text": "[图片]"
+      },
+      {
+        "id": "p0b15",
+        "type": "image",
+        "sourceLine": 156,
+        "text": "[图片]"
+      },
+      {
+        "id": "p1b3",
+        "type": "image",
+        "sourceLine": 272,
+        "text": "[图片]"
+      },
+      {
+        "id": "p2b8",
+        "type": "text",
+        "sourceLine": 444,
+        "text": ""
+      },
+      {
+        "id": "p3b0",
+        "type": "table",
+        "sourceLine": 547,
+        "text": "Table 1. Bufet’s Performance Relative to All Other Stocks and Mutual Funds, 1976–2017"
+      },
+      {
+        "id": "p3b1",
+        "type": "table",
+        "sourceLine": 557,
+        "text": "Notes: The information ratio is defined as the intercept in a regression of monthly excess"
+      },
+      {
+        "id": "p4b0",
+        "type": "table",
+        "sourceLine": 646,
+        "text": "[表格]"
+      },
+      {
+        "id": "p4b1",
+        "type": "chart",
+        "sourceLine": 660,
+        "text": "Figure 1. How Berkshire Stacks Up in the Mutual Fund Universe"
+      },
+      {
+        "id": "p5b0",
+        "type": "chart",
+        "sourceLine": 768,
+        "text": "Figure 2. How Berkshire Stacks Up in the Common Stocks Universe"
+      },
+      {
+        "id": "p5b7",
+        "type": "text",
+        "sourceLine": 808,
+        "text": ""
+      },
+      {
+        "id": "p5b9",
+        "type": "table",
+        "sourceLine": 818,
+        "text": "Exhibit 1. Stylized Balance Sheet of Berkshire Hathaway"
+      },
+      {
+        "id": "p7b0",
+        "type": "table",
+        "sourceLine": 1004,
+        "text": "Ta ble 2<sub>.</sub> Berkshire Hathawa<sub>y</sub> Retu rn Decom <sub>p</sub>osed into Lev"
+      },
+      {
+        "id": "p8b0",
+        "type": "table",
+        "sourceLine": 1082,
+        "text": "Table 3. Bufet’s Cost of Leverage: The Case of His Insurance Float"
+      },
+      {
+        "id": "p10b0",
+        "type": "table",
+        "sourceLine": 1328,
+        "text": "Ta ble 4<sub>.</sub> What Ki nds of Com pa nies Does Berkshi re Hathaway Own? (t-statistic"
+      },
+      {
+        "id": "p11b6",
+        "type": "text",
+        "sourceLine": 1460,
+        "text": ""
+      },
+      {
+        "id": "p12b5",
+        "type": "text",
+        "sourceLine": 1618,
+        "text": ""
+      },
+      {
+        "id": "p12b8",
+        "type": "chart",
+        "sourceLine": 1630,
+        "text": "Figure 3. Performance of the Equity Market, Berkshire Hathaway, and a Systematic Bufet-Sty"
+      },
+      {
+        "id": "p13b1",
+        "type": "chart",
+        "sourceLine": 1731,
+        "text": "B. Berkshire Hathaway Stock and Bufe -Style Por\u0006olio October 1976 = $1"
+      },
+      {
+        "id": "p14b0",
+        "type": "table",
+        "sourceLine": 1885,
+        "text": "Table 5. Bufet’s Returns vs. a Systematic Bufet Strategy (t-statistics in parentheses)"
+      },
+      {
+        "id": "p14b1",
+        "type": "text",
+        "sourceLine": 1899,
+        "text": ""
+      },
+      {
+        "id": "p14b4",
+        "type": "text",
+        "sourceLine": 1911,
+        "text": ""
+      },
+      {
+        "id": "p15b0",
+        "type": "text",
+        "sourceLine": 2006,
+        "text": ""
+      },
+      {
+        "id": "p16b9",
+        "type": "text",
+        "sourceLine": 2184,
+        "text": ""
+      },
+      {
+        "id": "p20b0",
+        "type": "table",
+        "sourceLine": 2636,
+        "text": "Table C1. Implementable Bufet-Style Strategies"
+      }
+    ]
+  },
+  "legacyMapRequests": 0
+}
