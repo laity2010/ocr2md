@@ -49,7 +49,12 @@ try {
        [267,267,0,224,224]);
      assert(details.headings>=19);
      assert.equal(details.changed,false);assert.equal(details.dirty,false);
-     await page.waitForFunction(()=>[...document.querySelectorAll('.ag-header-cell-text')].some(x=>x.textContent.includes('块链 BC')),null,{timeout:60000});
+     // AG Grid horizontally virtualizes distant columns: "块链 BC" may not
+     // exist in the DOM until the horizontal viewport reaches it. Wait for a
+     // rendered pinned PBS header before the scan below, which deliberately
+     // scrolls the full header track and still requires "成员角色".
+     await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-text-block-grid .ag-header-cell-text')]
+       .some(x=>x.textContent.trim()==='PBS / BC'),null,{timeout:60000});
      const visible=await page.evaluate(async()=>{
        const viewport=document.querySelector('.ocr-text-block-grid .ag-body-horizontal-scroll-viewport');
        const headers=new Set();
@@ -60,9 +65,10 @@ try {
        }
        if(viewport)viewport.scrollLeft=0;
        return {column:[...headers].some(x=>x.includes('成员角色')),
+         chain:[...headers].some(x=>x.includes('块链 BC')),
          extraSourceGutter:document.querySelectorAll('.ocr-cmd-block-id-gutter').length};
      });
-     assert(visible.column,JSON.stringify(visible));
+     assert(visible.column&&visible.chain,JSON.stringify(visible));
      assert.equal(visible.extraSourceGutter,0,'do not repeat PBS as a separate line-number gutter');
      assert.deepEqual(errors,[]);
      console.log('CMD_PBS_BROWSER_PASS',name,JSON.stringify({...details,noDuplicateGutter:true}));
