@@ -1230,13 +1230,13 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-JOIN-L55','L55','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','reversible joins for all types including page-first p9b0 into previous page last p8b8; document-first blocked; quoted anchor and exact byte restoration','integration'),
  ('TC-JOIN-L56','L56','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 original OCR blocks remain; after p9b0 cross-page join 223 logical blocks with per-page labels, page 8 unchanged, undo restores 224','integration'),
- ('TC-JOIN-C57','C57','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit PDF checkbox merges/unmerges page-first p9b0 across boundary; page 9 other labels reindex, previous page untouched; CM6 Undo and unsaved draft','integration'),
- ('TC-JOIN-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','all 224 PDF Block checkboxes checked by default; 223 selectable, only document-first disabled; page-only renumber after merging blank/text/image and cross-page, original IDs stable','integration');
+ ('TC-JOIN-C57','C57','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit PDF original-parent single/triple clicks cannot auto-join p9b0 or mutate source; legacy C57 checkbox writer is retired and NOT EXERCISED, explicit CMD join semantics are independently verified by cmd-block-joins.test.mjs','integration'),
+ ('TC-JOIN-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','224 original OCR parent checkboxes are checked, disabled and hidden under read-only; p6b7 p2b8 p9b0 single and triple gesture retain labels, CM6 and disk byte exact; no implicit writes','integration');
 
 -- PDF margin labels must remain outside the corresponding OCR text and inside
 -- their physical page at every supported column, without changing CMD edits.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-JOIN-GUTTER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit all 224 checkbox+full Block-ID chips render side-by-side in one row in outer paper gutters; left 133, right 91; 0 text-bbox overlaps, 0 chip-to-chip collisions, 0 off-page chips; reversible CMD join still works','integration');
+ ('TC-JOIN-GUTTER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit all 224 visible ID chips are single-line with hidden readonly checkboxes in outer paper gutters; no text bbox collision, no chip-to-chip collision, no off-page labels; no automatic join','integration');
 
 -- Page-local logical renumbering never overwrites stable original Block anchors.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
@@ -1245,13 +1245,13 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- Block join checkbox must not clear, reinsert, or restyle unrelated PDF
 -- page overlays. Inline join metadata is not a geometry change.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-JOIN-PDF-LOCAL-REFRESH-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit monitored all 212 other-page checkbox DOM nodes during p6b7 join: zero mutations, zero detachments, zero label or checked changes; current page renumbers and CMD Undo works','integration');
+ ('TC-JOIN-PDF-LOCAL-REFRESH-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit p6b7/p2b8/p9b0 single/triple tag clicks leave 224 original PDF cover labels, checkboxes and CMD bytes identical; legacy join-triggered other-page mutation probe is NOT EXERCISED under readonly','integration');
 
 -- Figure/table caption and notes are MinerU children of one OCR Block.
 -- Their rectangles can extend outside the parent chart/table body bbox.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-CHILD-RECT-L50','L50','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','p13b1 chart title/Notes and p14b0 table caption/footnote retained; false p3b1 Notes bbox overlaps p3b0 96% and is excluded from PDF layout without rewriting sealed OCR data; 224 parent Blocks unchanged','integration'),
- ('TC-TEXTBLOCK-CHILD-COVER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit genuine chart/table child overlays remain, phantom p3b1 Notes horizontal rectangle absent from p3b0 table; no extra checkbox and 224 controls remain locally updated','integration');
+ ('TC-TEXTBLOCK-CHILD-COVER-G29','G29','tests/pdf-block-join-toggle.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/iPad WebKit actual chart/table caption, body and notes physical child overlays present at original coordinates, absent phantom p3b1 Notes fragment, exactly 224 readonly parent controls and no autosaves','integration');
 
 -- Page-local PDF label drag changes real CMD source order, not a shadow
 -- ordering model. Original OCR identity and geometry remain immutable.
@@ -1272,9 +1272,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-PDF-BLOCK-L60','L60','tests/pdf-coverage-zoom-browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit single preview mode remembers independent MD/PDF lens preferences and split mode uses one common toggle; AG text-block selection turns on active lens without changing original Block evidence','integration');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-MOVE-L57','L57','tests/cmd-block-joins.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','p16b8 before p16b0: b8 becomes b0, b0..b7 +1, b9+ unchanged; already joined physical b11 travels with logical root b10, predecessor join marks stay byte-equivalent, before/after reversible, immutable OCR evidence untouched','integration'),
- ('TC-MOVE-C58','C58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long-press CMD move both independent and already joined Blocks; checkbox merges to new predecessor, Undo restores state, 224 controls and unsaved document preserved','integration'),
- ('TC-MOVE-C59','C59','tests/pdf-block-drag-edge-scroll.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long press b0 and point to b8 pulls b8 before b0; b0..b7 shift +1, b9+ unchanged; reverse pointer gesture and Undo restore all 224 checkbox states','integration'),
- ('TC-MOVE-L58','L58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit long press starts arrow at insertion point and pointing to another original Block pulls its logical group before origin; 17px cross-column hit tolerance, 224 checkbox identities, Undo retained','integration');
+ ('TC-MOVE-C58','C58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit two positive same-page PDF parent before/after gestures through actual coverage and explicit guide slots; 155px picker stable, correct physical-origin relabel, one Undo, immutable OCR bbox and no autosave; old checkbox auto-merge NOT EXERCISED','integration'),
+ ('TC-MOVE-C59','C59','tests/pdf-block-drag-edge-scroll.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit parent drag from p16b0 downward after p16b8 and p16b8 upward before p16b0 triggers actual PDF viewport edge auto-scroll, original bbox target hit, explicit guide slot, reversible source via sidecar, Undo and no autosave; old passive pull-to-first and triple joins retired','integration'),
+ ('TC-MOVE-L58','L58','tests/pdf-block-reorder.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Chrome/iPad WebKit original parent cover is the only legal landing target, explicit before/after guide commits the CMD parent and child group insertion, original bbox/provenance and Undo remain intact; deprecated outboard label-tolerance drop NOT EXERCISED','integration');
 
 -- PDF original text layer is review material only. Inserting at the live
 -- source caret never overwrites OCR; CMD enforces immutable evidence boundaries.
@@ -1780,7 +1780,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-GPT6-L92','L92','tests/cmd-pbs-promote-child.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','promotion preserves child origin and exact scopes','direct'),
  ('TC-GPT6-L93','L93','tests/cmd-pbs-parent-group-order.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','parent reorder preserves sibling source order','direct'),
  ('TC-GPT6-L94','L94','tests/cmd-pbs-absorb-generic.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','absorbed reviewed parent retains physical provenance','direct'),
- ('TC-GPT6-L95','L95','tests/cmd-pbs-insert-after.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','before/after parent placement delegates to guarded insertion planner','integration');
+ ('TC-GPT6-L95','L95','tests/cmd-pbs-insert-after.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','before/after parent insertion preserves original immutable OCR provenance including moved logical p16b16 outside page physical b-count; sidecar inverse byte-exact and forged/missing/duplicated origin bindings rejected','integration');
 INSERT INTO test_cases(id,subscription_id,script,fixture,expected,evidence) VALUES
  ('TC-GPT6-SUB-P01','SUB-P01','tests/pdf-block-label-setting.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','real registered PDF labelScale Settings changes across both browser engines','integration');
 

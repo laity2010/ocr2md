@@ -74,6 +74,27 @@ try{
       await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').click();
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:45000});
+      await page.evaluate(async()=>{
+        const {viewStore}=await import('/view-store.js');
+        const trace=window.__pdfFocusDiagnostic=[];
+        const record=(kind,info)=>{trace.push({at:Math.round(performance.now()),kind,...info});
+          if(trace.length>120)trace.shift();};
+        viewStore.subscribe((next,prev)=>{
+          if(next.focusTarget!==prev.focusTarget)
+            record('focus',{origin:next.focusTarget?.origin,
+              line:next.focusTarget?.sourceLine,sequence:next.focusTarget?.sequence,
+              intent:next.focusTarget?.intent});
+        });
+        const pdf=window.__v6cm6?.pdf;
+        if(pdf){
+          const set=pdf.setStatus.bind(pdf);
+          pdf.setStatus=s=>{
+            record('status',{value:s,selected:pdf.selected?.logicalId,
+              focused:viewStore.getState().focusTarget?.sourceLine});
+            return set(s);
+          };
+        }
+      });
       assert.equal(await page.locator('.ocr-pdf-mark-subblocks').count(),0,
         'PDF evidence cannot expose the deprecated child-tag source writer');
       assert.equal(await page.locator('.ocr-pdf-block-cover').count(),224);
@@ -170,9 +191,15 @@ try{
               (document.querySelector('.ocr-pdf-status')?.textContent||'')
                 .includes(`源码正文第 ${line} 行`);
           },{role,line:expectedLine,pageNumber:region.page,index},{timeout:19000});
-          assert.match(await page.locator('.ocr-pdf-status').textContent(),
-            new RegExp(`源码正文第 ${expectedLine} 行`),
-            `PDF ${id} must identify the real source body line`);
+          try{
+            assert.match(await page.locator('.ocr-pdf-status').textContent(),
+              new RegExp(`源码正文第 ${expectedLine} 行`),
+              `PDF ${id} must identify the real source body line`);
+          }catch(error){
+            console.error('PDF_CHILD_RACE_DIAGNOSTIC',name,id,JSON.stringify(
+              await page.evaluate(()=>window.__pdfFocusDiagnostic?.slice(-35))));
+            throw error;
+          }
           console.log('PDF_CHILD_FORWARD_PASS',name,id);
           // CM6-to-PDF reverse mapping must return to the very same child,
           // not the enclosing parent or another nearby native rectangle.

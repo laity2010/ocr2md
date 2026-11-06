@@ -486,6 +486,64 @@ export function toMineruJSON(markdown: string): string {
   catch {throw new Error('MINERUJSON_MD_INVALID: corrupt source metadata');}
   assert(sha(Buffer.from(restored,'utf8'))===sealed[1], 'original JSON SHA-256 mismatch');
   const data=parseMineru(restored);
+  // CMD's placement sidecar is the single current-PBS -> immutable OCR origin
+  // map. PDF "before/after" insertion deliberately keeps the target ID,
+  // which can give the displaced last parent a logical bN beyond the original
+  // physical block count. Project sidecar bindings into temporary inline
+  // origin attributes for the strict inverse validator below, never into the
+  // saved editor document or sealed MinerU JSON.
+  const locationsPrefix='<!-- cmd:pbs-locations:v1 ';
+  const locationsPattern=/^<!-- cmd:pbs-locations:v1 (\{[^\n]*\}) -->\n/gm;
+  const locations=[...markdown.matchAll(locationsPattern)];
+  assert(locations.length<=1&&
+    markdown.split(locationsPrefix).length-1===locations.length,
+    'duplicate or malformed CMD PBS locations');
+  if(locations.length){
+    const loc=locations[0];
+    assert(loc.index!==undefined&&loc.index<markdown.indexOf('<!-- minerujson:source:v1:'),
+      'CMD PBS locations must precede sealed OCR archive');
+    let parsed:unknown;
+    try{parsed=JSON.parse(loc[1]);}
+    catch{throw Error('MINERUJSON_MD_INVALID: malformed CMD PBS locations JSON');}
+    const record=parsed as {schema?:unknown;bindings?:unknown;bodies?:unknown;removed?:unknown};
+    const identity=/^p(?:0|[1-9]\d*)b(?:0|[1-9]\d*)(?:s(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)?$/;
+    assert(record&&typeof record==='object'&&!Array.isArray(record)&&
+      record.schema===1&&record.bindings&&typeof record.bindings==='object'&&
+      !Array.isArray(record.bindings)&&Array.isArray(record.bodies)&&
+      Array.isArray(record.removed)&&
+      Object.keys(record).join(',')==='schema,bindings,bodies,removed',
+      'invalid CMD PBS locations schema');
+    const bindings=record.bindings as Record<string,unknown>;
+    const entries=Object.entries(bindings);
+    assert(entries.length<=20000&&entries.every(([id,origin])=>
+      identity.test(id)&&typeof origin==='string'&&identity.test(origin)),
+      'invalid CMD PBS physical identity binding');
+    const bodyIds=record.bodies as unknown[],removedIds=record.removed as unknown[];
+    assert(bodyIds.length<=20000&&removedIds.length<=20000&&
+      bodyIds.every(id=>typeof id==='string'&&identity.test(id)&&Object.hasOwn(bindings,id))&&
+      removedIds.every(id=>typeof id==='string'&&/^p\d+b\d+$/.test(id))&&
+      new Set(bodyIds).size===bodyIds.length&&
+      new Set(removedIds).size===removedIds.length,
+      'invalid CMD PBS locations body/removed identities');
+    const matched=new Set<string>();
+    markdown=markdown.replace(
+      /^(\s*(?:>\s*)*<!-- cmd:block:v1 )id="(p\d+b\d+(?:s\d+(?:\.\d+)*)?)"((?: [a-z]+="[^"]*")* -->)[ \t]*$/gm,
+      (whole,prefix,id,rest)=>{
+        if(!Object.hasOwn(bindings,id))return whole;
+        assert(!matched.has(id),'duplicate PBS identity in sidecar projection');
+        matched.add(id);
+        const origin=bindings[id] as string;
+        const old=/ origin="([^"]*)"/.exec(rest);
+        if(old){
+          assert(old[1]===origin,'conflicting inline and sidecar physical provenance');
+          return whole;
+        }
+        return `${prefix}id="${id}"${rest.replace(/ -->$/, ` origin="${origin}" -->`)}`;
+      });
+    assert(matched.size===entries.length,
+      'CMD PBS locations refer to a missing or duplicate source atom');
+    markdown=markdown.replace(loc[0],'');
+  }
   const restoration=crossPageTableProjection(data);
   // Preserve immutable original evidence while editable spans are being
   // patched, particularly preproc-diff HTML on cross-page table fragments.
@@ -566,7 +624,6 @@ export function toMineruJSON(markdown: string): string {
     if(!origin)return `${prefix}id="${id}"${rest}`;
     const physical=/^p(\d+)b(\d+)(?:s(\d+(?:\.\d+)*))?$/.exec(origin[1])!;
     const page=Number(match[1]),logicalB=Number(match[2]),physicalB=Number(physical[2]);
-    const originalCount=data.pdf_info[page]?.para_blocks.length||0;
     const physicalBlock=data.pdf_info[page]?.para_blocks[physicalB];
     assert(physical[1]===match[1]&&physicalBlock,'invalid renumbered PBS provenance');
     const logicalRoot=`p${page}b${logicalB}`;
@@ -589,8 +646,12 @@ export function toMineruJSON(markdown: string): string {
     }
     if(match[3]!==undefined&&physical[3]===undefined&&parentPhysical!==logicalRoot)
       return `${prefix}id="${parentPhysical}s${match[3]}"${rest}`;
-    if(match[3]===undefined&&physical[3]===undefined&&
-      (logicalB<originalCount||(physicalBlock.blocks||[]).length>0))
+    // A valid origin= is an IMMUTABLE OCR identity even if its current,
+    // reviewed PBS label falls beyond the physical page's original b-count
+    // (e.g. insert p16b0 after p16b8 shifts old p16b15 to visible p16b16).
+    // Leaving p16b16 unprojected here would fail the dense sealed OCR order
+    // check, even though all physical blocks are present exactly once.
+    if(match[3]===undefined&&physical[3]===undefined)
       return `${prefix}id="${origin[1]}"${rest.replace(origin[0],'')}`;
     return `${prefix}id="${id}"${rest}`;
   });

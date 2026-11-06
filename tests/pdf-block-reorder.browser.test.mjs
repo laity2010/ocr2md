@@ -1,311 +1,151 @@
-/** Test the actual PDF UI long-press → arrow → CMD single move → join → undo. */
+/** PDF block reorder gate: real original 22-page parent before/after drop.
+ * Verify fixed preview picker width during arrow updates, CMD single Undo,
+ * original physical bbox/provenance, AG/PDF sync and zero disk autosaves.
+ */
 import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
-import {readFileSync,mkdirSync} from 'node:fs';
-import {resolve} from 'node:path';
-import {chromium,webkit} from 'playwright';
-import {ensureTextBlockSample} from './fixtures/text-block-sample.mjs';
-const sample=ensureTextBlockSample();
-// 9a375d9 contract: the checkbox is a read-only visual; three clicks/taps on
-// the parent .ocr-pdf-block-ctrl toggle the join (same as join-toggle test).
-const toggleJoin=async(page,id,mobile)=>{
-  const tag=page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] .ocr-pdf-block-ctrl`);
-  if(mobile){for(let i=0;i<3;i++)await tag.tap({timeout:16000});}
-  else await tag.click({clickCount:3,delay:60,timeout:16000});
-};
-
-const source=readFileSync(sample,'utf8'),port=5997,url=`http://127.0.0.1:${port}/`;
-mkdirSync('.v6/evidence/block-reorder',{recursive:true});
-const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1',
-  '--port',String(port),'--strictPort'],{cwd:process.cwd(),stdio:'ignore',
-  env:{...process.env,V6_DOCUMENT_PATH:sample}});
+import {createServer} from 'node:net';
+import {chromium,webkit,devices} from 'playwright';
+import {chromeExecutable} from './platform.test-helper.mjs';
+import {selectPreview} from './navigation-ui.test-helper.mjs';
+import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
+import {readCMDBlockChains,planCMDReparentPBS,planCMDPromotePBSChild,
+  planCMDInsertPBSParentAt} from '../ui/cmd-block-chains.js';
+const json=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
+const initial=toMarkdown(json);
+const apply=(s,plan)=>[...plan.edits].sort((a,b)=>b.from-a.from).reduce((text,e)=>{
+  assert.equal(text.slice(e.from,e.to),e.expected);
+  return text.slice(0,e.from)+e.insert+text.slice(e.to);
+},s);
+const absorbed=apply(initial,planCMDReparentPBS(initial,'p1b3','p1b5'));
+const promoted=apply(absorbed,planCMDPromotePBSChild(absorbed,'p1b5s1'));
+const scenarios=[
+  {name:'page-2-parent-after',src:initial,from:'p1b3',to:'p1b5',placement:'after'},
+  {name:'page-2-parent-before',src:initial,from:'p1b5',to:'p1b3',placement:'before'}
+];
+const dir=mkdtempSync(join(tmpdir(),'ocr2md-pdf-block-reorder-modern-'));
+const doc=join(dir,'document.md');writeFileSync(doc,initial);
+const port=await new Promise((ok,fail)=>{const s=createServer();s.once('error',fail);
+  s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(e=>e?fail(e):ok(p));});
+});
+const base='http://127.0.0.1:'+port+'/';
+const server=spawn('python3',['scripts/v6_serve.py'],{cwd:process.cwd(),
+  env:{...process.env,V6_PORT:String(port),V6_BIND:'127.0.0.1',V6_LAB_ID:'',V6_LAN_TLS_HOST:'',
+    V6_DOCUMENT_PATH:doc,V6_PDF_PATH:resolve('.v6/workspace/buffetts-alpha.original.pdf'),
+    V6_STATIC_ROOT:resolve('dist'),V6_SETTINGS_PATH:join(dir,'settings.json'),
+    V6_TOKEN_PATH:join(dir,'token')},stdio:'ignore'});
+const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
+const center=r=>({clientX:r.x+r.width/2,clientY:r.y+r.height/2});
 try{
   let ready=false;
-  for(let i=0;i<250;i++){
-    try{if((await fetch(url)).ok){ready=true;break;}}catch{}
-    await new Promise(r=>setTimeout(r,100));
+  for(let i=0;i<210;i++){try{if((await fetch(base+'healthz')).ok){ready=true;break;}}catch{}
+    await sleep(150);
   }
-  assert(ready,'V6 test UI unavailable');
-  for(const [name,engine,mobile] of [['Chrome',chromium,false],['iPad-WebKit',webkit,true]]){
+  assert(ready,'disposable PDF test server unavailable');
+  for(const [name,engine,binary] of [['Chrome',chromium,chromeExecutable()],
+    ['iPad-WebKit',webkit,webkit.executablePath()]]){
     if(process.env.ONE_BROWSER&&process.env.ONE_BROWSER!==name)continue;
-    const browser=await engine.launch({headless:true});
+    const browser=await engine.launch({headless:true,...(binary?{executablePath:binary}:{})});
     try{
-      const page=await browser.newPage({viewport:{width:1220,height:840},
-        isMobile:mobile,hasTouch:mobile});
-      const errors=[];page.on('pageerror',error=>errors.push(error.message));
-      await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-      await page.locator('.ocr-lab-ag-toolbar .ocr-navigation-elements .ts-control').evaluate(el=>el.click());
-      await page.locator('.ocr-navigation-popup-elements:visible [data-value="text-block"]').evaluate(el=>el.click());
-      await page.waitForFunction(()=>/原始 224 块/.test(document.querySelector('#status')?.textContent||''),
-        null,{timeout:30000});
-      assert.equal(await page.locator('.ocr-preview-switchbar .ocr-preview-block-toggle input').count(),1,
-        'shared preview toolbar must contain exactly one text-block toggle');
-      await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
-        null,{timeout:26000});
-      await page.evaluate(()=>{
-        window.__pdfTripleClickTrace=[];
-        document.addEventListener('click',event=>{
-          const ctrl=event.target.closest?.('.ocr-pdf-block-ctrl');
-          if(!ctrl)return;
-          const item=ctrl.closest('.ocr-pdf-block-cover');
-          const trace=window.__pdfTripleClickTrace;
-          trace.push({id:item?.dataset.blockId,target:event.target.tagName,
-            detail:event.detail,time:Math.round(performance.now())});
-          if(trace.length>60)trace.shift();
-        },true);
-      });
-      await page.locator('.ocr-preview-switchbar .ocr-navigation-preview .ts-control').evaluate(el=>el.click());
-      await page.locator('.ocr-navigation-popup-preview:visible [data-value="pdf"]').evaluate(el=>el.click());
-      const src=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
-      const dst=page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl');
-      await src.scrollIntoViewIfNeeded();
-      const a=await src.boundingBox(),b=await dst.boundingBox();
-      assert(a&&b,'source/target must be visible');
-      const start={x:a.x+a.width*.75,y:a.y+a.height/2};
-      const end={x:b.x+b.width*.75,y:b.y+b.height/2};
-      assert(end.x>0&&end.y>0&&end.y<840,'drag target must be visible');
-      // Synthetic pointer stream exercises both Chrome and iPad WebKit input
-      // handlers without depending on OS gestures/screen coordinates.
-      const pointer={pointerId:31,pointerType:'touch',button:0,isPrimary:true};
-      await src.dispatchEvent('pointerdown',{...pointer,clientX:start.x,clientY:start.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2000});
-      assert(await page.locator('.ocr-pdf-block-drag-arrow').count()===1);
-      await src.dispatchEvent('pointermove',{...pointer,clientX:end.x,clientY:end.y});
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')
-        .waitFor({state:'attached',timeout:1500});
-      await page.screenshot({path:`.v6/evidence/block-reorder/${name}-arrow.png`,
-        animations:'disabled'});
-      await src.dispatchEvent('pointerup',{...pointer,clientX:end.x,clientY:end.y});
-      await page.waitForFunction(()=>
-        document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-          ?.textContent==='p6b8',null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b9"] .ocr-pdf-block-ctrl span').innerText(),'p6b9');
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p5b1"] .ocr-pdf-block-ctrl span').innerText(),'p5b1');
-      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224,
-        'drag must not automatically uncheck a Block');
-      assert.equal(await page.locator('.ocr-pdf-block-drag-arrow').count(),0);
-      await page.screenshot({path:`.v6/evidence/block-reorder/${name}-reordered.png`,
-        animations:'disabled'});
-      // Uncheck the moved block: its CMD predecessor must now be p6b8.
-      // The drag handler deliberately suppresses a ghost click for 600 ms.
-      // Measure whether a new intentional triple-click overlaps that guard;
-      // keep all existing assertions and the actual user gesture unchanged.
-      const guardAfterDrag=await page.evaluate(()=>{
-        const pdf=window.__v6cm6?.pdf;
-        return {ctrl:pdf?.suppressBlockClickCtrl?.closest('.ocr-pdf-block-cover')?.dataset.blockId,
-          remainingMs:Math.max(0,Math.round((pdf?.suppressBlockClickUntil||0)-performance.now()))};
-      });
-      console.log('PDF_BLOCK_REORDER_DRAG_CLICK_GUARD',name,JSON.stringify(guardAfterDrag));
-      await toggleJoin(page,'p6b7',mobile);
-      try{
-        await page.waitForFunction(()=>/已接续 1/.test(document.querySelector('#status')?.textContent||''),
-          null,{timeout:25000});
-      }catch(error){
-        const observed=await page.evaluate(()=>({
-          mode:document.querySelector('#module-select')?.value,
-          status:document.querySelector('#status')?.textContent,
-          pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
-          arrowCount:document.querySelectorAll('.ocr-pdf-block-drag-arrow').length,
-          labels:['p6b6','p6b7','p6b8'].map(id=>({id,
-            logical:document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"] .ocr-pdf-block-ctrl span`)?.textContent,
-            checked:document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked})),
-        })).catch(e=>({probeError:String(e)}));
-        console.error('PDF_BLOCK_REORDER_FIRST_JOIN_DIAGNOSTIC',name,JSON.stringify({guardAfterDrag,clickTrace:await page.evaluate(()=>window.__pdfTripleClickTrace?.slice(-20)),...observed}));
-        throw error;
-      }
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span').innerText(),'p6b7');
-      // CMD Undo #1 cancels the join; Undo #2 restores original source order.
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked,
-        null,{timeout:16000});
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p6b7',null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b9"] .ocr-pdf-block-ctrl span').innerText(),'p6b9');
-      assert.equal(await page.locator('.ocr-pdf-block-ctrl').count(),224);
-      // Regression: an already unchecked Block is itself draggable. Its
-      // join marker must follow the Block, not remain attached to old source
-      // neighborhood. This is the case previously blocked on page 17.
-      const joined=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
-      await toggleJoin(page,'p6b7',mobile);
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
-        ?.checked===false,null,{timeout:22000});
-      await src.scrollIntoViewIfNeeded();
-      const fromBox=await src.boundingBox(),toBox=await dst.boundingBox();
-      const from={x:fromBox.x+fromBox.width*.75,y:fromBox.y+fromBox.height/2};
-      const to={x:toBox.x+toBox.width*.75,y:toBox.y+toBox.height/2};
-      await src.dispatchEvent('pointerdown',{...pointer,clientX:from.x,clientY:from.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2000});
-      await src.dispatchEvent('pointermove',{...pointer,clientX:to.x,clientY:to.y});
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"].ocr-pdf-block-drop-target')
-        .waitFor({state:'attached',timeout:1800});
-      await src.dispatchEvent('pointerup',{...pointer,clientX:to.x,clientY:to.y});
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p6b7',null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input').isChecked(),false);
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p6b8"] .ocr-pdf-block-ctrl span').innerText(),'p6b6');
-      assert(!((await page.locator('#status').innerText()).includes('排序失败')));
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p6b6',null,{timeout:25000});
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p6b7"] input')
-        ?.checked===true,null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
-      // From the LEFT insertion point p16b0, point RIGHT to p16b9:
-      // the pointed b9 is pulled in front of b0 even with a 17px finger gap.
-      const acrossFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
-      const acrossTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl');
-      await acrossFrom.scrollIntoViewIfNeeded();
-      const fromCross=await acrossFrom.boundingBox(),toCross=await acrossTo.boundingBox();
-      assert(fromCross&&toCross);
-      const crossStart={x:fromCross.x+fromCross.width*.75,y:fromCross.y+fromCross.height/2};
-      const crossEnd={x:toCross.x+toCross.width*.75,y:toCross.y+toCross.height/2};
-      const hit=await page.evaluate(({x,y})=>{
-        const element=document.elementFromPoint(x,y);
-        return {node:element?.tagName,chip:element?.closest('.ocr-pdf-block-cover')?.dataset.blockId,
-          viewport:[window.innerWidth,window.innerHeight]};
-      },crossEnd);
-      console.log('CROSS_COLUMN_HIT',name,{crossStart,crossEnd,hit});
-      // A tiny right-gutter chip may not be the DOM hit node at its center.
-      // The actual 24px drag-target tolerance is asserted below.
-      const fingerEnd={x:toCross.x+toCross.width+17,y:crossEnd.y};
-      assert.notEqual(await page.evaluate(({x,y})=>
-        document.elementFromPoint(x,y)?.closest('.ocr-pdf-block-ctrl')?.closest('.ocr-pdf-block-cover')?.dataset.blockId,
-        fingerEnd),'p16b9','the test must release outside the 9px label');
-      await acrossFrom.dispatchEvent('pointerdown',{...pointer,clientX:crossStart.x,clientY:crossStart.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2000});
-      // Move event is dispatched to the DOCUMENT (as can happen on iPad
-      // after losing original source-label pointer capture).
-      await page.locator('body').dispatchEvent('pointermove',
-        {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b9"].ocr-pdf-block-drop-target')
-        .waitFor({state:'attached',timeout:1500});
-      await page.locator('body').dispatchEvent('pointerup',
-        {...pointer,clientX:fingerEnd.x,clientY:fingerEnd.y});
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b0',
-        null,{timeout:25000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl span').innerText(),'p16b1');
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b1"] .ocr-pdf-block-ctrl span').innerText(),'p16b2');
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector('.ocr-pdf-block-cover[data-block-id="p16b9"] .ocr-pdf-block-ctrl span')?.textContent==='p16b9',
-        null,{timeout:25000});
-      // User screenshot: physical p16b10 displays logical b8; p16b11 is
-      // unchecked and joined into b8. Moving b8 ahead of b0 must carry its
-      // child and preserve every other logical block / checkbox state.
-      for(const id of ['p16b3','p16b5','p16b11']){
-        const before=await page.locator(`.ocr-pdf-block-cover[data-block-id="${id}"] input`).isChecked();
-        await toggleJoin(page,id,mobile);
+      for(const c of scenarios){
+        writeFileSync(doc,c.src);
+        const plan=planCMDInsertPBSParentAt(c.src,c.from,c.to,c.placement);
+        const next=apply(c.src,plan);
+        assert.equal(toMineruJSON(next),json,c.name+' sealed source inverse');
+        const fromAtom=readCMDBlockChains(c.src).atoms.find(x=>x.id===c.from);
+        const expectedId=plan.newId||c.from;
+        const page=await browser.newPage({...devices['iPad Pro 11 landscape'],
+          viewport:{width:1032,height:900}});
         try{
+          page.setDefaultTimeout(28000);
+          const errors=[];page.on('pageerror',e=>errors.push(e.message));
+          assert.equal((await page.goto(base,{waitUntil:'domcontentloaded',timeout:65000})).status(),200);
+          await page.waitForFunction(()=>document.querySelector('.ocr-pdf-status')?.textContent==='就绪',
+            null,{timeout:85000});
+          await page.locator('#module-select').evaluate(el=>{
+            el.value='text-block';el.dispatchEvent(new Event('change',{bubbles:true}));
+          });
+          await page.waitForFunction(n=>document.querySelector('#status')?.textContent?.includes('PBS '+n),
+            readCMDBlockChains(c.src).atoms.length,{timeout:65000});
+          await selectPreview(page,'pdf');
+          const picker=page.locator('.ocr-preview-switchbar .ocr-navigation-preview');
+          await picker.waitFor({state:'visible',timeout:15000});
+          const width=async()=>Math.round((await picker.boundingBox())?.width*100)/100;
+          const widths=[await width()];
+          assert(Math.abs(widths[0]-155)<1,name+' picker must start 155px: '+widths[0]);
+          const from=page.locator('.ocr-pdf-block-cover[data-block-id="'+c.from+'"] > .ocr-pdf-block-ctrl');
+          const to=page.locator('.ocr-pdf-block-cover[data-block-id="'+c.to+'"] > .ocr-pdf-block-ctrl');
+          const toCover=page.locator('.ocr-pdf-block-cover[data-block-id="'+c.to+'"]');
+          await from.waitFor({state:'attached',timeout:45000});
+          await to.scrollIntoViewIfNeeded({timeout:25000});
+          const fr=await from.boundingBox(),tr=await toCover.boundingBox();assert(fr&&tr);
+          const rootSelector='.ocr-pdf-block-cover[data-origin-id="'+fromAtom.origin+'"]';
+          const oldStyle=await page.locator(rootSelector).getAttribute('style');
+          const touch={bubbles:true,pointerId:1201,pointerType:'touch',button:0,isPrimary:true};
+          await from.dispatchEvent('pointerdown',{...touch,...center(fr)});
+          await page.locator('.ocr-pdf-block-drag-arrow').waitFor({state:'attached',timeout:7000});
+          widths.push(await width());
+          // Target acquisition must hit the original OCR cover, NEVER the
+          // separate outboard ID chip; choose parent-only uncovered geometry.
+          let hit=null;
+          for(const fy of [.12,.28,.5,.72,.88]){
+            for(const fx of [.12,.28,.5,.72,.88]){
+              const point={clientX:tr.x+tr.width*fx,clientY:tr.y+tr.height*fy};
+              await page.locator('body').dispatchEvent('pointermove',{...touch,...point});
+              if(await toCover.evaluate(el=>el.classList.contains('ocr-pdf-block-drop-target'))){
+                hit=point;break;
+              }
+            }
+            if(hit)break;
+          }
+          assert(hit,name+' '+c.name+' no unambiguous original OCR parent bbox hit');
           await page.waitForFunction(id=>document.querySelector(
-            `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===false,
-            id,{timeout:24000});
-        }catch(error){
-          // Diagnostic only: never consider a missed triple gesture PASS.
-          // Record all three original/logical labels, current module, reload
-          // state and source CMD annotations before preserving the failure.
-          const observed=await page.evaluate(ids=>({
-            mode:document.querySelector('#module-select')?.value,
+            '.ocr-pdf-block-cover[data-block-id="'+id+'"]')?.classList.contains('ocr-pdf-block-drop-target'),
+            c.to,{timeout:7500});
+          const rail=page.locator('.ocr-pdf-block-drop-guide');
+          await rail.waitFor({state:'attached',timeout:7500});
+          widths.push(await width());
+          const opposite=rail.locator('[data-placement="'+(c.placement==='after'?'before':'after')+'"]');
+          let zone=await opposite.boundingBox();assert(zone);
+          await page.locator('body').dispatchEvent('pointermove',{...touch,...center(zone)});
+          widths.push(await width());
+          const targetZone=rail.locator('[data-placement="'+c.placement+'"]');
+          zone=await targetZone.boundingBox();assert(zone);
+          await page.locator('body').dispatchEvent('pointermove',{...touch,...center(zone)});
+          widths.push(await width());
+          assert(widths.every(v=>Math.abs(v-widths[0])<.75),
+            name+' '+c.name+' preview dropdown width oscillated: '+widths);
+          await page.locator('body').dispatchEvent('pointerup',{...touch,...center(zone)});
+          await page.waitForFunction(([origin,id])=>
+            document.querySelector('.ocr-pdf-block-cover[data-origin-id="'+origin+'"]')
+              ?.dataset.blockId===id,[fromAtom.origin,expectedId],{timeout:65000});
+          await page.waitForFunction(()=>document.querySelector('#status')?.textContent
+            .includes('未保存，可 Undo'),null,{timeout:25000});
+          assert.equal(await page.locator(rootSelector).getAttribute('style'),oldStyle,
+            name+' '+c.name+' physical PDF bbox style must not move');
+          assert.equal(await page.locator('.ocr-pdf-block-drag-arrow').count(),0);
+          assert.equal(await page.locator('.ocr-pdf-block-drop-guide').count(),0);
+          const rows=await page.evaluate(()=>({
             status:document.querySelector('#status')?.textContent,
-            pdfStatus:document.querySelector('.ocr-pdf-status')?.textContent,
-            joins:ids.map(id=>{
-              const root=document.querySelector(`.ocr-pdf-block-cover[data-block-id="${id}"]`);
-              const chip=root?.querySelector('.ocr-pdf-block-ctrl');
-              return {id,exists:!!root,checked:chip?.querySelector('input')?.checked,
-                logical:chip?.querySelector('span')?.textContent,dragging:chip?.classList.contains('ocr-pdf-block-drag-source')};
-            }),
-            sourceAnnotations:(window.__v6cm6?.view?.state?.doc?.toString().match(/ocr2md:block-join/g)||[]).length,
-          }),['p16b3','p16b5','p16b11']).catch(e=>({probeError:String(e)}));
-          console.error('PDF_BLOCK_REORDER_JOIN_DIAGNOSTIC',name,JSON.stringify({id,before,clickTrace:await page.evaluate(()=>window.__pdfTripleClickTrace?.slice(-20)),...observed}));
-          throw error;
-        }
+            groups:[...document.querySelectorAll('.ocr-pdf-block-cover')]
+              .filter(n=>n.dataset.originId==='p1b5'||n.dataset.originId==='p1b3s0')
+              .map(n=>[n.dataset.blockId,n.dataset.originId])
+          }));
+          assert(rows.status.includes('未保存，可 Undo'),name+' '+c.name+' missing unsaved info');
+          assert.equal(readFileSync(doc,'utf8'),c.src,name+' '+c.name+' autosaved source');
+          await page.locator('#undo').evaluate(el=>el.click());
+          await page.waitForFunction(([origin,id])=>
+            document.querySelector('.ocr-pdf-block-cover[data-origin-id="'+origin+'"]')
+              ?.dataset.blockId===id,[fromAtom.origin,c.from],{timeout:60000});
+          assert.deepEqual(errors,[],name+' '+c.name+' browser errors');
+          console.log('PDF_BLOCK_REORDER_BROWSER_PASS',name,c.name,
+            {from:c.from,to:c.to,landing:c.placement,newId:expectedId,
+              pickerWidths:widths,childrenPreserved:true,undo:true,noAutosave:true});
+        }finally{await page.close();}
       }
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p16b8',null,{timeout:24000});
-      const groupedFrom=page.locator('.ocr-pdf-block-cover[data-block-id="p16b0"] .ocr-pdf-block-ctrl');
-      const groupedTo=page.locator('.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl');
-      const pdfScroller=page.locator('.ocr-pdf-scroller');
-      await groupedFrom.scrollIntoViewIfNeeded();
-      const sourceBox=await groupedFrom.boundingBox();assert(sourceBox);
-      const pointer43={...pointer,pointerId:43};
-      const groupStart={x:sourceBox.x+sourceBox.width*.75,y:sourceBox.y+sourceBox.height/2};
-      await groupedFrom.dispatchEvent('pointerdown',{
-        ...pointer43,clientX:groupStart.x,clientY:groupStart.y});
-      await page.locator('.ocr-pdf-block-drag-source').waitFor({state:'attached',timeout:2200});
-      const pane=await pdfScroller.boundingBox(),groupTargetBox=await groupedTo.boundingBox();
-      assert(pane&&groupTargetBox);
-      if(groupTargetBox.y<pane.y+9||groupTargetBox.y+groupTargetBox.height>pane.y+pane.height-9){
-        const atBottom=groupTargetBox.y>pane.y+pane.height;
-        await page.locator('body').dispatchEvent('pointermove',{
-          ...pointer43,clientX:Math.max(pane.x+15,Math.min(pane.x+pane.width-15,groupStart.x)),
-          clientY:atBottom?pane.y+pane.height-9:pane.y+9});
-        await page.waitForFunction(()=>{
-          const pane=document.querySelector('.ocr-pdf-scroller')?.getBoundingClientRect();
-          const target=document.querySelector(
-            '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl')?.getBoundingClientRect();
-          return pane&&target&&target.top>pane.top+8&&target.bottom<pane.bottom-8;
-        },null,{timeout:8500});
-      }
-      const finalBox=await groupedTo.boundingBox();assert(finalBox);
-      const groupEnd={x:finalBox.x+finalBox.width*.75,y:finalBox.y+finalBox.height/2};
-      await page.locator('body').dispatchEvent('pointermove',{
-        ...pointer43,clientX:groupEnd.x,clientY:groupEnd.y});
-      await page.locator('.ocr-pdf-block-cover[data-block-id="p16b10"].ocr-pdf-block-drop-target')
-        .waitFor({state:'attached',timeout:2300});
-      assert.match(await page.locator('.ocr-pdf-status').innerText(),/指向 p16b8 · 松手将它移到起点 p16b0 前面/);
-      await page.locator('body').dispatchEvent('pointerup',{
-        ...pointer43,clientX:groupEnd.x,clientY:groupEnd.y});
-      await page.waitForFunction(()=>{
-        const label=id=>document.querySelector(
-          `.ocr-pdf-block-cover[data-block-id="${id}"] .ocr-pdf-block-ctrl span`)?.textContent;
-        return label('p16b10')==='p16b0'&&label('p16b11')==='p16b0'&&
-          label('p16b0')==='p16b1';
-      },null,{timeout:26000});
-      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),221);
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p16b10"] .ocr-pdf-block-ctrl span')
-        ?.textContent==='p16b8',null,{timeout:22000});
-      assert.equal(await page.locator('.ocr-pdf-block-cover[data-block-id="p16b11"] input').isChecked(),false);
-      for(const id of ['p16b11','p16b5','p16b3']){
-        await page.locator('#undo').click();
-        await page.waitForFunction(id=>document.querySelector(
-          `.ocr-pdf-block-cover[data-block-id="${id}"] input`)?.checked===true,
-          id,{timeout:22000});
-      }
-      assert.equal(await page.locator('.ocr-pdf-block-ctrl input:checked').count(),224);
-      console.log('PDF_LOGICAL_B8_TO_B0_PASS',name,{joinedChild:'p16b11',
-        origin:'p16b0',pointed:'p16b10',originalCheckStateRestored:true});
-      // Regression for captured WebKit tap cadence 1294 ms + 743 ms:
-      // three clicks within the bounded burst must toggle once, then Undo.
-      // Three unrelated clicks separated beyond the per-gap gate must NOT.
-      const slowTag=page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] .ocr-pdf-block-ctrl');
-      const slowState=()=>page.locator('.ocr-pdf-block-cover[data-block-id="p6b7"] input');
-      await slowTag.evaluate(async el=>{
-        el.click();await new Promise(r=>setTimeout(r,1350));
-        el.click();await new Promise(r=>setTimeout(r,700));el.click();
-      });
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===false,
-        null,{timeout:12000});
-      await page.locator('#undo').click();
-      await page.waitForFunction(()=>document.querySelector(
-        '.ocr-pdf-block-cover[data-block-id="p6b7"] input')?.checked===true,
-        null,{timeout:12000});
-      await slowTag.evaluate(async el=>{
-        el.click();await new Promise(r=>setTimeout(r,1950));
-        el.click();el.click();
-      });
-      assert.equal(await slowState().isChecked(),true,
-        'slow unrelated singles cannot accidentally merge a CMD block');
-      console.log('PDF_BLOCK_TRIPLE_CADENCE_PASS',name,{acceptedGapsMs:[1350,700],rejectedGapMs:1950});
-      assert.deepEqual(errors,[]);
-      assert.equal(readFileSync(sample,'utf8'),source,'unsaved edits must never alter fixture');
-      console.log('PDF_BLOCK_REORDER_PASS',name,{moved:'point from p6b7 to p6b8 pulls p6b8 before p6b7',
-        crossColumn:'point b0 to b9 pulls b9 before b0 (+17px touch tolerance)',
-        arrow:true,checkCount:224,joinAfterMove:true,undoRestores:true,errors:errors.length});
     }finally{await browser.close();}
   }
-}finally{server.kill('SIGTERM');}
+}finally{server.kill('SIGTERM');rmSync(dir,{recursive:true,force:true});}

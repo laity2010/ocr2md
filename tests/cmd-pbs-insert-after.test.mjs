@@ -1,13 +1,14 @@
 /** Exact A-after-B insertion: fixed B ID, numeric shift (not swap), bbox. */
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {toMarkdown} from '../packages/minerujson-md/dist/index.js';
+import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
 import {planCMDInsertPBSParentAfter,planCMDAbsorbReviewedParent,readCMDBlockChains,
   projectCMDBlockTable} from '../ui/cmd-block-chains.js';
 import {readCMDPBSLocations} from '../ui/cmd-pbs-locations.js';
 import {inspectCMDTextBlocks,queryCMDLayout} from '../ui/cmd-text-blocks.js';
 import {planCMDPDFBBoxEdit,readCMDPDFBBoxOverrides,applyCMDPDFBBoxOverrides} from '../ui/cmd-pdf-bbox.js';
-const original=toMarkdown(readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8'));
+const originalJSON=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
+const original=toMarkdown(originalJSON);
 const archived=s=>s.slice(s.indexOf('<!-- minerujson:source:v1:'));
 function apply(source,plan){
   return [...plan.edits].sort((a,b)=>b.from-a.from).reduce((s,e)=>{
@@ -59,6 +60,34 @@ const earlier=checked(original,'p1b2','p1b4');
 assert.equal(earlier.after.atoms.find(x=>x.id==='p1b4').origin,'p1b4');
 assert.equal(earlier.after.atoms.find(x=>x.id==='p1b5').origin,'p1b2');
 assert.equal(earlier.after.atoms.find(x=>x.id==='p1b6').origin,'p1b5');
+// Parent insertion is a logical PBS relabel, NOT a change to the sealed OCR.
+// A physical page with 16 blocks may temporarily expose logical b16 after
+// A-after-B moves an earlier parent; origin= must reverse that high label.
+const tailShift=checked(original,'p16b0','p16b8');
+assert.equal(tailShift.plan.newId,'p16b9');
+assert(tailShift.after.atoms.some(x=>x.id==='p16b16'&&x.origin==='p16b15'));
+assert.equal(toMineruJSON(tailShift.text),originalJSON,
+  'insert-after with logical label outside original b-count must remain byte-exact reversible');
+const footer=/^<!-- cmd:pbs-locations:v1 (\{[^\n]*\}) -->\n/m;
+const found=footer.exec(tailShift.text);
+assert(found,'reordered source must carry its explicit physical PDF sidecar');
+const mutateFooter=modify=>{
+  const next=JSON.parse(found[1]);
+  modify(next);
+  return tailShift.text.replace(found[0],
+    '<!-- cmd:pbs-locations:v1 '+JSON.stringify(next)+' -->\n');
+};
+assert.throws(()=>toMineruJSON(mutateFooter(record=>{
+  record.bindings.p16b16='p16b999';
+})),/invalid renumbered PBS provenance/,
+  'nonexistent physical OCR parent must be rejected, not accepted as a logical ID');
+assert.throws(()=>toMineruJSON(mutateFooter(record=>{
+  record.bindings.p16b16='p16b14';
+})),/page-local reordered PBS must preserve every original OCR block/,
+  'duplicate physical OCR origin must not satisfy strict inverse');
+assert.throws(()=>toMineruJSON(tailShift.text.replace(found[0],found[0]+found[0])),
+  /duplicate or malformed CMD PBS locations/,
+  'two mapping footers may not bypass provenance uniqueness');
 const cross=checked(original,'p1b5','p2b0');
 assert.equal(cross.after.atoms.find(x=>x.id==='p2b1').origin,'p1b5');
 assert.equal(cross.after.atoms.find(x=>x.id==='p2b2').origin,'p2b1');
