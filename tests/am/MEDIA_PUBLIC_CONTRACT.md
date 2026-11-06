@@ -76,3 +76,32 @@ AM_ERROR: CHECK constraint failed: visibility IN ('export','returned','internal'
 3. 只修改 `ui/wcp-cmd-element-transactions.js`：CMD 标记变更，Media 自身继承 PASS，CMD→Media 联动单独要求核查。
 
 附加断言：修改公开契约测试自身必须重测；未通过基线不得继承；没有业务变动必须跳过测试。测试选择的 PASS 不等于改动模块获得了独立 PASS（例如 LaTeX、CMD 尚未建立本套新增基线）。
+
+### WP3/WP4 实测结果（2026-11-06）
+
+使用 WP2 独立基线 `81091330da5fa17a607652115cd1052cd60a9955`，WP3 初始实现提交 `f2c6f1fc678b220192cfd8fc12c90a3b922d3550`：
+
+```text
+$ python3 tests/am/am.py incremental 8109133 --run-changed
+AM_INCREMENTAL_CHANGED_MODULES NONE
+AM_INCREMENTAL_MEDIA INHERITED_PASS
+AM_INCREMENTAL_MEDIA_TEST_SKIPPED unchanged_verified_baseline=True
+
+$ python3 tests/am/am.py incremental 9c47e44
+AM_INCREMENTAL_MEDIA NO_VERIFIED_BASELINE
+```
+
+真实 Git commit-tree 变更实验：`tests/am/test_incremental_git.py` **7/7 PASS**。分别验证 LaTeX-only → Media 继承，Media-only → 重测，CMD 媒体端口 → Media 继承且联调待审；修改契约测试触发重测；没有合格基线不继承；复制旧 PASS 文档而未更新源码哈希不被接受。
+
+**真实改动并执行测试**：在隔离、临时检出的 Git 子提交 `75fe841f21de26027a19c8976e99986cbe546f7c` 中，仅对 `ui/media-module.js` 增加一行不改变行为的注释；`--run-changed` 检测到 `A` 变更，执行而非跳过直接测试：
+
+```text
+AM_INCREMENTAL_MEDIA RETEST_REQUIRED
+MEDIA_PUBLIC_CONTRACT_PASS Chromium
+MEDIA_PUBLIC_CONTRACT_PASS WebKit
+AM_INCREMENTAL_MEDIA_TEST_PASS script=tests/media-public-contract.browser.test.mjs checked_git=75fe841f21de26027a19c8976e99986cbe546f7c
+```
+
+该次真实运行原始日志保存在隔离工程的忽略目录 `.v6/tests/am-media-wp4-75fe841f21de.log`；SHA256：`00b646950fc1d70c84fdb60478c87629185d2bac13e7c726db6cec61718d2833`。**临时 Git 实验工作树已移除**，主实验分支及 Main 的 Media 业务源码均未变。
+
+本结果只确认 Media 样板的 **Git 增量判断、跳过、重测、负向拒绝** 行为。**CMD/Media 实际协作测试仍按变更范围另行执行**；其状态是 `REVIEW_REQUIRED` 而非 PASS。其他模块未完成自身基线建设，仍不具备独立 PASS 继承资格。既存全量 AM registry BLOCKED 不属于本轮修复范围。

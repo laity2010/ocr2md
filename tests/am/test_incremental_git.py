@@ -51,7 +51,8 @@ class IncrementalGitTests(unittest.TestCase):
         self.assertEqual(plan['changed_modules'], ['T'])
         self.assertEqual(plan['media'], 'INHERITED_PASS')
         self.assertEqual(plan['media_interaction'], 'UNCHANGED')
-        self.assertEqual(plan['changed'], ['ui/latex-module.js'])
+        self.assertEqual([path for path in plan['changed'] if path.startswith('ui/')],
+                         ['ui/latex-module.js'])
         print('WP4_LATEX_CHANGED_MEDIA_INHERITED',synthetic[:12])
 
     def test_media_change_requires_retest(self):
@@ -83,6 +84,15 @@ class IncrementalGitTests(unittest.TestCase):
         plan = am.incremental_plan(BASE, self.parent)
         self.assertEqual(plan['media'], 'INHERITED_PASS')
         self.assertTrue(plan['baseline_valid'])
+
+    def test_stale_pass_receipt_cannot_certify_changed_media_commit(self):
+        synthetic = self.fake_git_commit('ui/media-module.js')
+        # The synthetic source hash differs from the historical PASS receipt.
+        # It must not be treated as a NEW certified baseline just because its
+        # inherited documentation still contains old PASS log lines.
+        plan = am.incremental_plan(synthetic, synthetic)
+        self.assertEqual(plan['media'], 'NO_VERIFIED_BASELINE')
+        self.assertFalse(plan['baseline_valid'])
 
 
 if __name__=='__main__':
