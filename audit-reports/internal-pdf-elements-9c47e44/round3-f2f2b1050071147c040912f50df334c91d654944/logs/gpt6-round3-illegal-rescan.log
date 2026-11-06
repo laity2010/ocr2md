@@ -1,0 +1,16 @@
+ILLEGAL_BREAK_PAGE_NAVIGATED Chrome {"url":"http://127.0.0.1:5978/","at":1793926351723}
+ILLEGAL_BREAK_HMR_FRAME Chrome {"type":"full-reload","path":"*","at":1793926371898}
+ILLEGAL_BREAK_HMR_FRAME Chrome {"type":"full-reload","path":"*","at":1793926371903}
+ILLEGAL_BREAK_PAGE_NAVIGATED Chrome {"url":"http://127.0.0.1:5978/","at":1793926372070}
+ILLEGAL_BREAK_RESCAN_TIMEOUT_EVIDENCE Chrome {"mode":"chapter-boundary","status":"✓ 已加载 · CMD · 全部章节 · 21 项 · 3,112行 / 306,957字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · Buffett’s Alpha.minerujson.md","agStatus":"断行审阅 0 项 · 断行合并 0 · 忽略 0 · 待定 0","agRows":0,"cmdTags":1,"dispatchedWorkerScans":0,"elementValue":"chapter-boundary","pageLoads":2,"navigationType":["reload"],"href":"http://127.0.0.1:5978/","navigations":[{"url":"http://127.0.0.1:5978/","at":1793926351723},{"url":"http://127.0.0.1:5978/","at":1793926372070}],"hmrEvents":[{"type":"full-reload","path":"*","at":1793926371898},{"type":"full-reload","path":"*","at":1793926371903}]}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 55000ms exceeded.
+    at /Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/illegal-break-rescan-real.browser.test.mjs:100:19 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v23.11.0

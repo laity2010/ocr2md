@@ -1,0 +1,18 @@
+PDF_PAIR_DIAG Chrome {"pdfStatus":"定位 p8b3s0 → PDF 原框 p8b3 · 第 9 页","inputIds":[],"matches":["1108待定断行合并忽略p8b3s0p8b3s0块内p8b3s0子块内portfolio子块内 OCR 连字符空格疑似断词p8b3s0 …urns, weighted by Berkshire’s dollar holdings. The stocks in the portfo- lio were refreshed quarterly on the basis of the latest…007 · Decomposing Bufet: Public Stocks vs. Private C","1108待定断行合并忽略p8b3s0p8b3s1跨块p8b3s09p8b3s1子块交界latest 13F同父子块交界疑似句子续接p8b3s0 (PDF 9页) gs. The stocks in the portfo- lio were refreshed quarterly on the basis of the latest ↵ [p8b3s1 / PDF 9页] 13F, and the portfolio was rebalanced monthly to keep the weigh"],"global":"● 未保存 · 非法断行审阅 6 项 · 合并 0 · 忽略 0 · 待定 6 · CMD · 全部章节 · 6 项 · 4,933行 / 383,735字 · 大纲21项 · 章节标定 注释0/标签0 · ⇅滚动同步 · doc.md"}
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: illegal-break AG focus must render two PDF evidence regions
+
+0 !== 2
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-pdf-9c47e44/tests/illegal-break-source-edit.browser.test.mjs:188:16 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 2,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0

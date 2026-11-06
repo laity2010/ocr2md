@@ -1,0 +1,6 @@
+ILLEGAL_BREAK_PAGE_NAVIGATED Chrome {"url":"http://127.0.0.1:5978/","at":1793926483459}
+ILLEGAL_BREAK_PAGE_NAVIGATED Chrome {"url":"http://127.0.0.1:5978/","at":1793926504986}
+REAL_BUFFETT_BREAK_RESCAN_PASS Chrome { savedMarks: 2, scansAfterReload: 0 }
+ILLEGAL_BREAK_PAGE_NAVIGATED iPad-WebKit {"url":"http://127.0.0.1:5978/","at":1793926520989}
+ILLEGAL_BREAK_PAGE_NAVIGATED iPad-WebKit {"url":"http://127.0.0.1:5978/","at":1793926528255}
+REAL_BUFFETT_BREAK_RESCAN_PASS iPad-WebKit { savedMarks: 2, scansAfterReload: 0 }

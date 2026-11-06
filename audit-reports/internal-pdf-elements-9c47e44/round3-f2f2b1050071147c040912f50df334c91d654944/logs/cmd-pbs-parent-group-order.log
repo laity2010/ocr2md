@@ -1,0 +1,8 @@
+CMD_PDF_PARENT_GROUP_SORT_PASS native parent after p1b5 1
+CMD_PDF_PARENT_GROUP_SORT_PASS native parent before p1b4 1
+CMD_PDF_PARENT_GROUP_SORT_PASS absorbed group after p1b6 2
+CMD_PDF_PARENT_GROUP_SORT_PASS absorbed group before p1b5 2
+CMD_PDF_PARENT_GROUP_SORT_PASS promoted parent before p1b4 0
+CMD_PDF_PARENT_GROUP_SORT_PASS promoted parent after p1b5 0
+CMD_PDF_PARENT_GROUP_SORT_PASS nested group before p1b5 1
+CMD_PARENT_GROUP_SORT_ALL_PASS

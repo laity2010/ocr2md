@@ -1,0 +1,6 @@
+CMD_BLOCK_CHAINS_PASS {
+  legacyAtoms: 224,
+  legacyJoinChains: 223,
+  explicitChains: 2,
+  splitChains: 3
+}
