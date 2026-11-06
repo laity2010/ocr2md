@@ -19,6 +19,8 @@
 
 字面量 CustomEvent 的 `ocr2md:...`、`settings.changed` 由标准脚本分别收集；本轮执行的 AM 静态检查报告 **0 个未登记事件位置**，不代表运行时所有动态派发事件均已经验证。
 
+**本轮增加的真实测试证据**：固定 SHA 的标准执行第 3/143 套 `tests/am/contracts-browser.test.mjs` 已显示 Chrome 与 iPad-WebKit 双平台 `AM_MISSING_CONTRACTS_PASS`，原始控制台日志另存于 `round11-canonical-c7b9f65e-PARTIAL/suite-03-contracts-browser.log`，SHA256 为 `92df8faa87a80f09449c2f45be23a514dc823b938f45305a55d6566bf06e299b`。其中确证 CM6 原文不变、revision 稳定、滚动同步开关以及 AG 装配和销毁等实际消息交互。Python `tests/am/test_live_view_store_subscriptions.py` 通过真实源码/登记比较，测试订阅者文件完全匹配、所有共享 Store 写入只位于 `ui/view-store.js`，每条 Zustand 订阅都有测试引用；它位于 AM Python 43 项已通过的 42 项之中。**仍不能将这一套合同浏览器测试及静态 Python 断言冒充 54 个具体读/订阅调用点全部独立运行。**
+
 ## 暂时不能判定 PASS 的边界
 
 1. **本报告是 66 处词法清单的所有权分类及代码审阅，不是全部 66 路真实事件已实际触发**。未检查经别名/对象属性计算/间接引用/动态 DOM 访问的全部可能调用点。需独立 Grok/Muse 或隔离浏览器事件轨迹验证每条关键消息的生产调用链，尤其焦点竞态。
