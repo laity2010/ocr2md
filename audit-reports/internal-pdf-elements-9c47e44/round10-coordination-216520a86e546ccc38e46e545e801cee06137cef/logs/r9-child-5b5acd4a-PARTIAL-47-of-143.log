@@ -1,0 +1,357 @@
+Preparing worktree (detached HEAD 5b5acd4)
+Updating files:   9% (58/593)Updating files:  10% (60/593)Updating files:  11% (66/593)Updating files:  12% (72/593)Updating files:  13% (78/593)Updating files:  14% (84/593)Updating files:  14% (85/593)Updating files:  15% (89/593)Updating files:  16% (95/593)Updating files:  17% (101/593)Updating files:  18% (107/593)Updating files:  19% (113/593)Updating files:  20% (119/593)Updating files:  21% (125/593)Updating files:  22% (131/593)Updating files:  23% (137/593)Updating files:  24% (143/593)Updating files:  25% (149/593)Updating files:  26% (155/593)Updating files:  27% (161/593)Updating files:  28% (167/593)Updating files:  29% (172/593)Updating files:  30% (178/593)Updating files:  31% (184/593)Updating files:  32% (190/593)Updating files:  33% (196/593)Updating files:  34% (202/593)Updating files:  35% (208/593)Updating files:  36% (214/593)Updating files:  37% (220/593)Updating files:  37% (223/593)Updating files:  38% (226/593)Updating files:  39% (232/593)Updating files:  40% (238/593)Updating files:  41% (244/593)Updating files:  42% (250/593)Updating files:  43% (255/593)Updating files:  44% (261/593)Updating files:  45% (267/593)Updating files:  45% (271/593)Updating files:  46% (273/593)Updating files:  47% (279/593)Updating files:  48% (285/593)Updating files:  49% (291/593)Updating files:  50% (297/593)Updating files:  51% (303/593)Updating files:  52% (309/593)Updating files:  53% (315/593)Updating files:  54% (321/593)Updating files:  55% (327/593)Updating files:  56% (333/593)Updating files:  57% (339/593)Updating files:  58% (344/593)Updating files:  58% (346/593)Updating files:  59% (350/593)Updating files:  60% (356/593)Updating files:  61% (362/593)Updating files:  62% (368/593)Updating files:  63% (374/593)Updating files:  64% (380/593)Updating files:  65% (386/593)Updating files:  66% (392/593)Updating files:  67% (398/593)Updating files:  68% (404/593)Updating files:  69% (410/593)Updating files:  70% (416/593)Updating files:  71% (422/593)Updating files:  72% (427/593)Updating files:  73% (433/593)Updating files:  74% (439/593)Updating files:  75% (445/593)Updating files:  76% (451/593)Updating files:  77% (457/593)Updating files:  77% (462/593)Updating files:  78% (463/593)Updating files:  79% (469/593)Updating files:  80% (475/593)Updating files:  81% (481/593)Updating files:  82% (487/593)Updating files:  83% (493/593)Updating files:  84% (499/593)Updating files:  85% (505/593)Updating files:  86% (510/593)Updating files:  87% (516/593)Updating files:  88% (522/593)Updating files:  88% (527/593)Updating files:  89% (528/593)Updating files:  90% (534/593)Updating files:  91% (540/593)Updating files:  92% (546/593)Updating files:  93% (552/593)Updating files:  94% (558/593)Updating files:  95% (564/593)Updating files:  96% (570/593)Updating files:  97% (576/593)Updating files:  98% (582/593)Updating files:  98% (586/593)Updating files:  99% (588/593)Updating files: 100% (593/593)Updating files: 100% (593/593), done.
+HEAD is now at 5b5acd4 test(pdf): prove 42 physical native child labels and bidirectional sealed CMD navigation
+AM_AUDIT_SOURCE=5b5acd4a3349d520b12b6220bf3b9892bc620f73
+AM_AUDIT_TARGET=/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated
+AM_AUDIT_OS=Darwin
+AUDIT_PORT_PREFLIGHT_SELFTEST_PASS live_listener=blocked closed_server=reusable
+AUDIT_TEST_PORT_PREFLIGHT_PASS ports=79
+
+added 77 packages in 2m
+
+added 72 packages in 26s
+
+> @ocr2md/minerujson-md@0.1.0 build
+> tsc -p tsconfig.json
+
+AUDIT_BROWSER_PREFLIGHT_PASS Chromium
+AUDIT_BROWSER_PREFLIGHT_PASS WebKit
+AM_AUDIT_ENV node=v23.11.0 python=Python 3.13.3 playwright=1.64.1
+
+> ocr2md-v6-editor-lab@0.1.0 build
+> vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 243 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/release-version.json                                 0.03 kB │ gzip:     0.05 kB
+../dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff             4.42 kB
+../dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2            4.93 kB
+../dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2            5.21 kB
+../dist/assets/cursor-editorTextHighlight-kG3uUOwL.svg       5.40 kB │ gzip:     2.20 kB
+../dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2            5.47 kB
+../dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff             5.98 kB
+../dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff             6.19 kB
+../dist/assets/KaTeX_Size1-Regular-C195tn64.woff             6.50 kB
+../dist/index.html                                           6.75 kB │ gzip:     2.51 kB
+../dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2      6.91 kB
+../dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2         6.91 kB
+../dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf              7.59 kB
+../dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff       7.66 kB
+../dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff          7.72 kB
+../dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2           9.64 kB
+../dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2       10.34 kB
+../dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf             10.36 kB
+../dist/assets/KaTeX_Script-Regular-D5yQViql.woff           10.59 kB
+../dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2         11.32 kB
+../dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2            11.35 kB
+../dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf             11.51 kB
+../dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2        12.03 kB
+../dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2          12.22 kB
+../dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf             12.23 kB
+../dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff        12.32 kB
+../dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf       12.34 kB
+../dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf          12.37 kB
+../dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff          13.21 kB
+../dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff             13.30 kB
+../dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2      13.57 kB
+../dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff         14.11 kB
+../dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff           14.41 kB
+../dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff       16.03 kB
+../dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2         16.40 kB
+../dist/assets/KaTeX_Math-Italic-t53AETM-.woff2             16.44 kB
+../dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf            16.65 kB
+../dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2         16.78 kB
+../dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2             16.99 kB
+../dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff          18.67 kB
+../dist/assets/KaTeX_Math-Italic-DA0__PXp.woff              18.75 kB
+../dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff          19.41 kB
+../dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf         19.44 kB
+../dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB
+../dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB
+../dist/assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB
+../dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB
+../dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB
+../dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB
+../dist/module-graph.json                                   25.63 kB │ gzip:    11.92 kB
+../dist/assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB
+../dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB
+../dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB
+../dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB
+../dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB
+../dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB
+../dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB
+../dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB
+../dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB
+../dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB
+../dist/assets/spellcheck-worker-B5uCCdQI.js                37.41 kB
+../dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB
+../dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB
+../dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB
+../dist/assets/index-CmfKht-g.dic                          551.76 kB
+../dist/assets/pdf.worker.min-CjEcRF4W.mjs               1,264.34 kB
+../dist/assets/index-BGH8yB9w.css                          473.68 kB │ gzip:    76.66 kB
+../dist/assets/fontcheck-CDzPn_qu.js                         1.41 kB │ gzip:     0.96 kB
+../dist/assets/index-FZynaWua.js                         3,734.90 kB │ gzip: 1,132.15 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 35.70s
+V6_PUBLISHED_ONE_RELEASE v6-20261106-115612 5b5acd4a3349d520b12b6220bf3b9892bc620f73
+AM_BUILD_PASS modules/apis/messages/publishers/subscriptions/tests=[12, 311, 14, 20, 39, 452] database=.v6/tests/am.sqlite
+AM_REFERENCES_PASS checked 311 API registry rows and all source/test paths; previous-run records kept=0/0
+......................................../Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653e3e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653e4d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653e110>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653e6b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653e7a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653e980>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653ea70>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653e890>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653eb60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653ec50>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653ed40>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653ee30>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653ef20>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f010>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f100>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f1f0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f2e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f3d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f4c0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f5b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f6a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f790>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f880>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653f970>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653fa60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653fb50>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653c8b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653fc40>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653c9a0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653fd30>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653fe20>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10653ff10>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b4040>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b4130>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b4220>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b4310>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b4400>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b44f0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b45e0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b46d0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b47c0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b48b0>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b4c70>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/am/standard_audit.py:63: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1067b4d60>
+  def all_rows(query, args=()): return [dict(row) for row in con.execute(query,args)]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..s
+----------------------------------------------------------------------
+Ran 43 tests in 15.467s
+
+OK (skipped=1)
+AM_STANDARD_REPORT status=BLOCKED sha=5b5acd4a3349d520b12b6220bf3b9892bc620f73 output=/Users/daisor/.agentdock/tmp/tmpf0zrorfi
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=66
+AM_UI_BOUNDARY_PASS files=102 shared=12 cross_imports=62 (runtime message/callsite auditing is separate)
+AM_CHECK_PASS apis=311 FK=OK source-and-test-files=OK ui-ownership=OK
+total=311 | linked=311 | core_total=283 | core_linked=283
+total_messages=14 | with_publishers=14 | with_subscribers=13 | test_links=452 | actual_runs=0
+publishers=20 | publishers_linked=20 | subscriptions=39 | subscriptions_linked=39 | messages_linked=14
+NOTE: script links are references, NOT certified PASS results or isolated API tests
+(no results)
+AM_UI_BOUNDARY_PASS files=102 shared=12 cross_imports=62 (runtime message/callsite auditing is separate)
+AM_FULL_START git=5b5acd4a suites=143 contracts=452
+AM_SUITE_START 1/143 tests/ag-function-menu.browser.test.mjs cases=1
+AM_SUITE_PASS 1/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-01-ag-function-menu.browser.test.log
+AM_SUITE_START 2/143 tests/ag-header-browser.test.mjs cases=2
+AM_SUITE_PASS 2/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-02-ag-header-browser.test.log
+AM_SUITE_START 3/143 tests/am/contracts-browser.test.mjs cases=16
+AM_SUITE_PASS 3/143 cases=16 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-03-contracts-browser.test.log
+AM_SUITE_START 4/143 tests/chapter-live-navigation.browser.test.mjs cases=3
+AM_SUITE_PASS 4/143 cases=3 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-04-chapter-live-navigation.browser.test.log
+AM_SUITE_START 5/143 tests/chapter-numbering.test.mjs cases=1
+AM_SUITE_PASS 5/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-05-chapter-numbering.test.log
+AM_SUITE_START 6/143 tests/cm6-browser.test.mjs cases=3
+AM_SUITE_PASS 6/143 cases=3 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-06-cm6-browser.test.log
+AM_SUITE_START 7/143 tests/cmd-annotations-browser.test.mjs cases=7
+AM_SUITE_PASS 7/143 cases=7 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-07-cmd-annotations-browser.test.log
+AM_SUITE_START 8/143 tests/cmd-bc-save-reload.test.mjs cases=2
+AM_SUITE_PASS 8/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-08-cmd-bc-save-reload.test.log
+AM_SUITE_START 9/143 tests/cmd-block-chains-wp2.browser.test.mjs cases=4
+AM_SUITE_PASS 9/143 cases=4 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-09-cmd-block-chains-wp2.browser.test.log
+AM_SUITE_START 10/143 tests/cmd-block-chains-wp2.test.mjs cases=4
+AM_SUITE_PASS 10/143 cases=4 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-10-cmd-block-chains-wp2.test.log
+AM_SUITE_START 11/143 tests/cmd-block-chains-wp3.browser.test.mjs cases=2
+AM_SUITE_PASS 11/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-11-cmd-block-chains-wp3.browser.test.log
+AM_SUITE_START 12/143 tests/cmd-block-chains-wp4.browser.test.mjs cases=2
+AM_SUITE_PASS 12/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-12-cmd-block-chains-wp4.browser.test.log
+AM_SUITE_START 13/143 tests/cmd-block-chains-wp4.test.mjs cases=1
+AM_SUITE_PASS 13/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-13-cmd-block-chains-wp4.test.log
+AM_SUITE_START 14/143 tests/cmd-block-chains-wp5.browser.test.mjs cases=3
+AM_SUITE_FAIL 14/143 cases=3 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-14-cmd-block-chains-wp5.browser.test.log
+
+    at file:///Users/daisor/AgentDock/ocr2md-am-5b5acd4a-continue-isolated/tests/cmd-block-chains-wp5.browser.test.mjs:58:11 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 1,
+  operator: 'strictEqual'
+}
+
+Node.js v23.11.0
+AM_SUITE_START 15/143 tests/cmd-block-chains-wp5.test.mjs cases=2
+AM_SUITE_PASS 15/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-15-cmd-block-chains-wp5.test.log
+AM_SUITE_START 16/143 tests/cmd-block-chains.test.mjs cases=8
+AM_SUITE_PASS 16/143 cases=8 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-16-cmd-block-chains.test.log
+AM_SUITE_START 17/143 tests/cmd-block-continuations.test.mjs cases=1
+AM_SUITE_PASS 17/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-17-cmd-block-continuations.test.log
+AM_SUITE_START 18/143 tests/cmd-block-joins.test.mjs cases=4
+AM_SUITE_PASS 18/143 cases=4 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-18-cmd-block-joins.test.log
+AM_SUITE_START 19/143 tests/cmd-html-unified-browser.test.mjs cases=5
+AM_SUITE_PASS 19/143 cases=5 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-19-cmd-html-unified-browser.test.log
+AM_SUITE_START 20/143 tests/cmd-illegal-break-review.test.mjs cases=2
+AM_SUITE_PASS 20/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-20-cmd-illegal-break-review.test.log
+AM_SUITE_START 21/143 tests/cmd-linebreak-child-opening.test.mjs cases=1
+AM_SUITE_PASS 21/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-21-cmd-linebreak-child-opening.test.log
+AM_SUITE_START 22/143 tests/cmd-linebreak-latex-boundary.test.mjs cases=1
+AM_SUITE_PASS 22/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-22-cmd-linebreak-latex-boundary.test.log
+AM_SUITE_START 23/143 tests/cmd-linebreak-p6b6.test.mjs cases=1
+AM_SUITE_PASS 23/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-23-cmd-linebreak-p6b6.test.log
+AM_SUITE_START 24/143 tests/cmd-linebreak-pbs-scope.test.mjs cases=1
+AM_SUITE_PASS 24/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-24-cmd-linebreak-pbs-scope.test.log
+AM_SUITE_START 25/143 tests/cmd-linebreak.test.mjs cases=3
+AM_SUITE_PASS 25/143 cases=3 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-25-cmd-linebreak.test.log
+AM_SUITE_START 26/143 tests/cmd-native-subblock-repair.test.mjs cases=1
+AM_SUITE_PASS 26/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-26-cmd-native-subblock-repair.test.log
+AM_SUITE_START 27/143 tests/cmd-p1b3-b4-source.test.mjs cases=1
+AM_SUITE_PASS 27/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-27-cmd-p1b3-b4-source.test.log
+AM_SUITE_START 28/143 tests/cmd-pbs-absorb-generic.test.mjs cases=1
+AM_SUITE_PASS 28/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-28-cmd-pbs-absorb-generic.test.log
+AM_SUITE_START 29/143 tests/cmd-pbs-absorbed-child-cover.browser.test.mjs cases=2
+AM_SUITE_PASS 29/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-29-cmd-pbs-absorbed-child-cover.browser.test.log
+AM_SUITE_START 30/143 tests/cmd-pbs-browser.test.mjs cases=1
+AM_SUITE_PASS 30/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-30-cmd-pbs-browser.test.log
+AM_SUITE_START 31/143 tests/cmd-pbs-child-reorder.browser.test.mjs cases=2
+AM_SUITE_PASS 31/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-31-cmd-pbs-child-reorder.browser.test.log
+AM_SUITE_START 32/143 tests/cmd-pbs-child-reorder.test.mjs cases=1
+AM_SUITE_PASS 32/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-32-cmd-pbs-child-reorder.test.log
+AM_SUITE_START 33/143 tests/cmd-pbs-converter-integration.test.mjs cases=2
+AM_SUITE_PASS 33/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-33-cmd-pbs-converter-integration.test.log
+AM_SUITE_START 34/143 tests/cmd-pbs-insert-after.test.mjs cases=1
+AM_SUITE_PASS 34/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-34-cmd-pbs-insert-after.test.log
+AM_SUITE_START 35/143 tests/cmd-pbs-parent-group-order.test.mjs cases=1
+AM_SUITE_PASS 35/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-35-cmd-pbs-parent-group-order.test.log
+AM_SUITE_START 36/143 tests/cmd-pbs-promote-child.test.mjs cases=1
+AM_SUITE_PASS 36/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-36-cmd-pbs-promote-child.test.log
+AM_SUITE_START 37/143 tests/cmd-pbs-reparent-source.test.mjs cases=1
+AM_SUITE_PASS 37/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-37-cmd-pbs-reparent-source.test.log
+AM_SUITE_START 38/143 tests/cmd-pbs-row-order.test.mjs cases=1
+AM_SUITE_PASS 38/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-38-cmd-pbs-row-order.test.log
+AM_SUITE_START 39/143 tests/cmd-pdf-bbox-wp6-save-reload.test.mjs cases=1
+AM_SUITE_PASS 39/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-39-cmd-pdf-bbox-wp6-save-reload.test.log
+AM_SUITE_START 40/143 tests/cmd-pdf-bbox-wp6.browser.test.mjs cases=3
+AM_SUITE_PASS 40/143 cases=3 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-40-cmd-pdf-bbox-wp6.browser.test.log
+AM_SUITE_START 41/143 tests/cmd-pdf-bbox-wp6.test.mjs cases=3
+AM_SUITE_PASS 41/143 cases=3 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-41-cmd-pdf-bbox-wp6.test.log
+AM_SUITE_START 42/143 tests/cmd-sentences.test.mjs cases=5
+AM_SUITE_PASS 42/143 cases=5 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-42-cmd-sentences.test.log
+AM_SUITE_START 43/143 tests/cmd-source-block-gutter.browser.test.mjs cases=1
+AM_SUITE_PASS 43/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-43-cmd-source-block-gutter.browser.test.log
+AM_SUITE_START 44/143 tests/cmd-source-block-labels.test.mjs cases=1
+AM_SUITE_PASS 44/143 cases=1 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-44-cmd-source-block-labels.test.log
+AM_SUITE_START 45/143 tests/cmd-subblock-annotations.test.mjs cases=2
+AM_SUITE_PASS 45/143 cases=2 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-45-cmd-subblock-annotations.test.log
+AM_SUITE_START 46/143 tests/cmd-text-blocks.test.mjs cases=5
+AM_SUITE_PASS 46/143 cases=5 log=.v6/tests/am-full-20261106T035711Z-5b5acd4a-46-cmd-text-blocks.test.log
+AM_SUITE_START 47/143 tests/cmd-three-pane-focus.browser.test.mjs cases=2

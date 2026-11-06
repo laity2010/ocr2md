@@ -25,7 +25,7 @@
 
 ## 审计边界与交付规则
 
-- 本次 R10 **尚未完成其自身固定 SHA 的全部 143 套标准审计**。独立启动的较早 R9-child `5b5acd4` 标准审计不构成 R10 的认证；不能沿用别的 SHA 的 PASS。
+- 本次 R10 **尚未完成其自身固定 SHA 的全部 143 套标准审计**。独立启动的较早 R9-child `5b5acd4` 标准审计不构成 R10 的认证；不能沿用别的 SHA 的 PASS。该旧 SHA 隔离标准执行到第 47/143 套起始处，**45 套 PASS、1 套 FAIL**（第 14 套 WP5 旧 AG 写入断言），尚未启动的套件不能算通过。由于 R10 已替代该 SHA 且已确认旧失败，主动停止旧执行，**无完整 143 套结论**。其 PARTIAL 原始 run.log 一并归档，不能冒称完整运行。
 - 仍待：66 个动态运行时调用点的 ownership 审计、Linux 实机整套复测、真实 iPad Safari 人工触控验收、最终 GitHub 远端 Main SHA 再确认。
 - 修复仅位于独立协调工作树；`SOURCE_MERGE=NO`，`PRODUCTION_CUTOVER=NO`，`AUDIT_VERDICT=NOT_CERTIFIED`。
 - 原始 FAIL 历史由 R2–R9 不可变日志与报告分支保存。R10 三个专项复测的原始控制台日志（包含 child-region **WebKit FAIL**）及 SHA256 放在 `round10-coordination-216520a86e546ccc38e46e545e801cee06137cef/logs/`，详见 manifest。不可将 PDF 子块归档复测失败标记为 PASS。
