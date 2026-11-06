@@ -1,0 +1,23 @@
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Chrome parent p3b0 provenance mismatch
++ actual - expected
+
+  {
++   kind: 'content',
++   stroke: 'solid'
+-   kind: 'structure',
+-   stroke: 'dashed'
+  }
+
+    at file:///Users/daisor/AgentDock/ocr2md-gpt6-internal-fix-r9-child-region-only/tests/pdf-child-region-select.browser.test.mjs:94:16 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: { kind: 'content', stroke: 'solid' },
+  expected: { kind: 'structure', stroke: 'dashed' },
+  operator: 'deepStrictEqual'
+}
+
+Node.js v23.11.0

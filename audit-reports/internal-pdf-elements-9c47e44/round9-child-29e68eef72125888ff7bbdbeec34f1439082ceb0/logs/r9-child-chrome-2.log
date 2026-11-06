@@ -1,0 +1,13 @@
+PDF_CHILD_REGION_SELECT_PASS Chrome {
+  childrenChecked: [
+    { id: 'p3b0s0', line: 551, role: 'caption', pdfPage: 4 },
+    { id: 'p3b0s1', line: 555, role: 'body', pdfPage: 4 },
+    { id: 'p4b0s0', line: 650, role: 'caption', pdfPage: 5 },
+    { id: 'p4b0s1', line: 654, role: 'body', pdfPage: 5 },
+    { id: 'p4b0s2', line: 658, role: 'note', pdfPage: 5 }
+  ],
+  sealedChildren: 43,
+  parents: 224,
+  reverse: true,
+  sourceUnchanged: true
+}
