@@ -76,14 +76,22 @@ try{
    assert(split.docSize===initial.docSize,'split must not touch document data');
    const controls=await page.evaluate(()=>{
      const bar=document.querySelector('.ocr-detached-pdf-toolbar').getBoundingClientRect();
+     // This milestone has no direct PDF auto-annotate action. The independent
+     // child button is present but CSS-hidden by the current read-only gate;
+     // test the active, user-visible controls rather than an obsolete action.
      return ['.ocr-pdf-minus','.ocr-pdf-fit','.ocr-pdf-plus','.ocr-pdf-page',
-      '.ocr-pdf-extract-text','.ocr-pdf-mark-subblocks'].map(sel=>{
-       const r=document.querySelector(sel).getBoundingClientRect();
-       return {name:sel,visible:r.width>10&&r.left>=bar.left-2&&r.right<=bar.right+2,
-         right:r.right,barRight:bar.right};
+      '.ocr-pdf-extract-text'].map(sel=>{
+       const el=document.querySelector('.ocr-detached-pdf-pane '+sel);
+       const r=el?.getBoundingClientRect();
+       return {name:sel,visible:Boolean(r&&r.width>10&&r.left>=bar.left-2&&r.right<=bar.right+2),
+         right:r?.right,barRight:bar.right};
      });
    });
    assert(controls.every(v=>v.visible),`${name} PDF controls clipped: ${JSON.stringify(controls)}`);
+   assert.equal(await page.locator('.ocr-pdf-mark-subblocks').count(),0,
+     `${name} retired PDF auto-annotation must not be exposed`);
+   assert.equal(await page.locator('.ocr-pdf-promote-child').isVisible(),false,
+     `${name} read-only milestone must not expose structural promotion`);
    await page.setViewportSize({width:834,height:642});
    await page.waitForTimeout(380);
    const portrait=await page.evaluate(()=>{

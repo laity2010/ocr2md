@@ -1598,7 +1598,14 @@ export class PdfPreview {
       partPath:[...(loc.path||[])],logicalId:loc.id});
     if(beforeId===afterId){
       this.clearComparison();
-      return this.focusBlock(to.pageIndex,to.blockIndex);
+      // A single-atom illegal-break candidate is a *current CMD child* when
+      // its ID has an s path, not necessarily its enclosing physical block.
+      // focusBlock() erases that child path and produces a parent-only PDF
+      // overlay with no pbsId, breaking AG -> CM6 -> PDF identity alignment.
+      // Focus the exact CM6 source scope instead; focusLine() resolves the
+      // immutable OCR bbox from the current CMD origin, including child paths
+      // after a reparent/renumber, without guessing the physical parent ID.
+      return this.focusLine(to.contentLine??to.sourceLine,true).then(()=>true);
     }
     return this.compareBlocks(point(from),point(to),{reveal:'to'});
   }

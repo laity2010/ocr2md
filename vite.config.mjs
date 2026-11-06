@@ -45,6 +45,12 @@ function exclusiveDocWrite(fn){
 export default defineConfig({
   define: {'__V6_BUILD_VERSION__': JSON.stringify(buildVersion)},
   root: 'ui',
+  // The spellcheck/illegal-break Worker imports nspell only after the user
+  // opens the module. Late dependency discovery otherwise invalidates Vite's
+  // optimizer and sends `full-reload *` in the middle of a running CMD scan,
+  // silently returning AG to the default module. Prebundle it at dev startup
+  // instead; this does not alter the production Worker or its scan results.
+  optimizeDeps: {include:['nspell']},
   base:lab?.base||'/',
   build: {outDir: lab?`../labs/${lab.name}/dist`:'../dist', emptyOutDir: true},
   plugins: [
