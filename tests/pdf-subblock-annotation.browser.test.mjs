@@ -6,7 +6,9 @@ import {mkdtempSync,rmSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {chromium,webkit} from 'playwright';
-const original=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+import {toMarkdown,toMineruJSON} from '../packages/minerujson-md/dist/index.js';
+const raw=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','utf8');
+const original=toMarkdown(raw);
 const temp=mkdtempSync(join(tmpdir(),'ocr2md-subblock-browser-'));
 const doc=join(temp,'document.md');writeFileSync(doc,original);
 const port=5978,url=`http://127.0.0.1:${port}/`;
@@ -34,23 +36,21 @@ try{
       if(!await coverToggle.isChecked())await coverToggle.evaluate(e=>e.click());
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-pdf-block-cover').length===224,
         null,{timeout:40000});
-      const annotate=page.locator('.ocr-pdf-mark-subblocks');
-      assert.equal(await annotate.count(),1,'PDF panel exposes child annotation directly');
-      await annotate.evaluate(e=>e.click());
-      await page.waitForFunction(()=>!document.querySelector('.ocr-pdf-mark-subblocks')?.disabled,
-        null,{timeout:30000});
-      assert.equal(readFileSync(doc,'utf8'),original,'marking CMD is unsaved and cannot edit disk');
-      await page.locator('#save').evaluate(e=>e.click());
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已保存'),
-        null,{timeout:23000});
-      const after=readFileSync(doc,'utf8');
-      for(const path of ['0','1','2']){
-        assert(after.includes(`<!-- minerujson:subblock:v1:4:0:${path} type=\"${['table_caption','table_body','table_footnote'][Number(path)]}\" id=\"p4b0s${path}\" -->`));
-      }
-      assert.equal((after.match(/<!-- minerujson:subblock:v1:/g)||[]).length,43);
-      assert.equal((after.match(/<!-- minerujson:block:v1:/g)||[]).length,224);
-      // Actual PDF click must navigate to each distinct child marker in CMD,
-      // with its own highlight, while retaining exactly one parent checkbox.
+      // Current sealed CMD conversion already contains native child anchors.
+      // The retired PDF '自动补标' action must NOT be resurrected: all 43
+      // child IDs exist before any gesture, with their sealed OCR source
+      // unchanged. Child-region navigation is still live and independently
+      // testable in PDF.js on both browser engines.
+      assert.equal(await page.locator('.ocr-pdf-mark-subblocks').count(),0,
+        'read-only milestone must not expose legacy automatic child writing');
+      const after=await page.evaluate(()=>window.__v6cm6.cm.readSource());
+      assert.equal(after,original,'opening PDF must not mutate sealed CMD');
+      assert.equal(toMineruJSON(after),raw,'native child annotation must preserve original MinerU JSON');
+      assert.equal((after.match(/<!-- cmd:block:v1 id="p\d+b\d+s\d+"/g)||[]).length,43);
+      assert.equal((after.match(/<!-- cmd:block:v1 id="p\d+b\d+"/g)||[]).length,224);
+      assert.equal(readFileSync(doc,'utf8'),original,'PDF navigation must not auto-save');
+      // Real PDF clicks still navigate to three independent child source
+      // scopes and each highlights its own original subregion rectangle.
       const region=page.locator('.ocr-pdf-block-cover[data-block-id="p4b0"]');
       await region.scrollIntoViewIfNeeded({timeout:24000});
       await page.waitForFunction(()=>document.querySelector(
@@ -60,9 +60,14 @@ try{
       const lines=after.split('\n');
       for(const [role,partIndex,pathIndex] of [
         ['caption',0,0],['body',1,1],['note',2,2]]){
-        const expected=lines.findIndex(line=>line.includes(
-          `<!-- minerujson:subblock:v1:4:0:${pathIndex} type=\"${['table_caption','table_body','table_footnote'][pathIndex]}\" id=\"p4b0s${pathIndex}\" -->`))+1;
-        assert(expected>0);
+        const anchor=lines.findIndex(line=>line.includes(
+          `<!-- cmd:block:v1 id="p4b0s${pathIndex}" -->`));
+        assert(anchor>=0);
+        const next=lines.findIndex((line,i)=>i>anchor&&/^<!-- cmd:block:v1 id="p\d+b\d+/.test(line));
+        const first=lines.findIndex((line,i)=>i>anchor&&(next<0||i<next)&&
+          line.trim()&&!line.trim().startsWith('<!--'));
+        assert(first>anchor,`${name} ${role} must own real OCR-visible child content`);
+        const expected=first+1;
         const coords=await region.evaluate((node,index)=>{
           const element=index<0?node:node.querySelectorAll(':scope > .ocr-pdf-block-fragment')[index];
           const r=element.getBoundingClientRect();
@@ -78,27 +83,15 @@ try{
           const {viewStore}=await import('/view-store.js');
           return viewStore.getState().focusTarget;
         });
-        assert.equal(location?.sourceLine,expected,`${name} PDF ${role} did not locate exact subblock tag`);
+        assert.equal(location?.sourceLine,expected,
+          `${name} PDF ${role} did not locate exact first child content line`);
       }
-      // Undo exactly one CMD transaction; no hidden edits or OCR changes.
-      console.log('BEFORE_UNDO',name,{disabled:await page.locator('#undo').isDisabled(),
-        status:await page.locator('#status').textContent(),
-        sourceMarkers:await page.locator('.cm-content').evaluate(node=>
-          (node.textContent.match(/minerujson:subblock:v1:/g)||[]).length)});
-      await page.locator('#undo').evaluate(e=>e.click());
-      await page.waitForTimeout(300);
-      console.log('UNDO_STATE',name,{undoDisabled:await page.locator('#undo').isDisabled(),
-        status:await page.locator('#status').textContent(),
-        visibleMarkers:await page.locator('.cm-content').evaluate(node=>
-          (node.textContent.match(/minerujson:subblock:v1:/g)||[]).length)});
-      await page.locator('#save').evaluate(e=>e.click());
-      await page.waitForTimeout(1100);
-      console.log('SAVED_AFTER_UNDO',name,{status:await page.locator('#status').textContent(),
-        markerCount:(readFileSync(doc,'utf8').match(/minerujson:subblock:v1:/g)||[]).length});
-      assert.equal(readFileSync(doc,'utf8'),original,'one Undo restores byte-identical CMD source');
+      assert.equal(await page.evaluate(()=>window.__v6cm6.cm.readSource()),original,
+        'none of the PDF native child clicks may write to CMD');
+      assert.equal(readFileSync(doc,'utf8'),original,'source must remain byte-identical on disk');
       assert.deepEqual(errors,[]);
-      console.log('PDF_SUBBLOCK_ANNOTATION_PASS',name,{children:43,parents:20,undo:true,
-        originalUnchanged:true,autoSave:false});
+      console.log('PDF_SUBBLOCK_ANNOTATION_PASS',name,{children:43,parents:224,exactContentLines:true,
+        originalUnchanged:true,autoSave:false,readOnly:true});
     }finally{await browser.close();writeFileSync(doc,original);}
   }
 }finally{server.kill('SIGTERM');rmSync(temp,{recursive:true,force:true});}

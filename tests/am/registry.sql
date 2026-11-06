@@ -1802,3 +1802,14 @@ INSERT INTO access_edges VALUES
  ('X-GPT6-CMD-PBS-REORDER','C','L','ui/wcp-cmd-element-transactions.js','planCMDReorderPBSParents','L93','registered','CMD calls pure parent reorder planner'),
  ('X-GPT6-CMD-PBS-ABSORB','C','L','ui/wcp-cmd-element-transactions.js','planCMDAbsorbReviewedParent','L94','registered','CMD calls pure absorb planner'),
  ('X-GPT6-CMD-PBS-INSERT','C','L','ui/wcp-cmd-element-transactions.js','planCMDInsertPBSParentAt','L95','registered','CMD calls pure parent insertion planner');
+
+-- Round 7: identify marker-only CMD Undo/Redo before scheduling the offline
+-- illegal-break Worker. The read-only exported predicate is an actual Layout
+-- public call: register it explicitly rather than bypassing the AM contract.
+INSERT INTO apis VALUES
+ ('L96','L','isIllegalBreakAutoMarkOnlyChange','ui/illegal-break-review-annotation-update.js','export','CM6 transaction with source ChangeSet','true only for complete CMD automatic inline marker additions/removals','excludes review markers and all mixed prose changes; prevents Worker from destroying Redo',1);
+INSERT INTO access_edges VALUES
+ ('X-GPT6-L96',NULL,'L','ui/main.js','isIllegalBreakAutoMarkOnlyChange(update)','L96','registered','Shell classifies exact CM6 marker-only Undo/Redo via Layout pure helper; text changes still trigger Worker');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-GPT6-L96','L96','tests/illegal-break-review-annotation-update.test.mjs','tests/illegal-break-review-annotation-update.test.mjs','Strict tag insertion/Undo accepted; mixed prose and review comments excluded','direct'),
+ ('TC-GPT6-L96-BROWSER','L96','tests/illegal-break.browser.test.mjs','tests/illegal-break.browser.test.mjs','Chrome/iPad-WebKit legacy auto mark Undo/Redo keeps real four CMD tags and enabled Redo, manual Save/Reload, no extra tab-only Worker scan','integration');

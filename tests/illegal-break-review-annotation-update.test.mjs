@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {EditorState} from '@codemirror/state';
-import {isIllegalBreakReviewOnlyChange,rebaseIllegalBreakRowsInPlace}
+import {isIllegalBreakReviewOnlyChange,isIllegalBreakAutoMarkOnlyChange,rebaseIllegalBreakRowsInPlace}
   from '../ui/illegal-break-review-annotation-update.js';
 const note='<!--ocr2md:illegal-break-review v="1" before="p4b0s0" after="p4b0s1" decision="merge"-->\n';
 const source='A first line\n<!-- cmd:block:v1 id="p4b0s1" -->\nB second line\n';
@@ -33,6 +33,22 @@ assert.equal(isIllegalBreakReviewOnlyChange(update),true,'changing review value 
 assert.equal(isIllegalBreakReviewOnlyChange(change(source,0,1,'Z')),false,'prose edit forces scan');
 assert.equal(isIllegalBreakReviewOnlyChange(change(source,at,at,note+'oops')),false,
  'mixed review text edit forces scan');
+// Automatic legacy CMD markers are annotations, NOT a source edit that
+// warrants immediately repeating the scan on Undo/Redo and erasing Redo.
+const auto='<!--ocr2md:illegal-break v="1" left="govern" right="ment" joined="government" reason="split"-->';
+const legacy='The govern\nment announced a policy.\n';
+const markerAt=legacy.indexOf('\n');
+const withMark=legacy.slice(0,markerAt)+auto+legacy.slice(markerAt);
+assert.equal(isIllegalBreakAutoMarkOnlyChange(change(legacy,markerAt,markerAt,auto)),true,
+  'automatic tag insertion is metadata-only');
+assert.equal(isIllegalBreakAutoMarkOnlyChange(change(withMark,markerAt,markerAt+auto.length,'')),true,
+  'Undo of automatic mark must preserve Redo');
+assert.equal(isIllegalBreakAutoMarkOnlyChange(change(legacy,0,1,'Q')),false,
+  'prose changes still rescan');
+assert.equal(isIllegalBreakAutoMarkOnlyChange(change(legacy,markerAt,markerAt,auto+'oops')),false,
+  'mixed changes cannot masquerade as automatic tags');
+assert.equal(isIllegalBreakAutoMarkOnlyChange(change(legacy,markerAt,markerAt,note)),false,
+  'review decision annotation must use its own predicate');
 // Incoming A→B review lives on the *same* CMD block identity line. Value
 // changes and Undo must bypass Worker and keep native AG selects mounted.
 const block='<!-- cmd:block:v1 id="p4b0s1" -->';

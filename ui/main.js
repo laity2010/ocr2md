@@ -30,7 +30,7 @@ import {countMarkers} from './chapter-markers.js';
 import {buildChapterFiles} from './wcp-chapter-files.js';
 import {documentChanged, selectionChanged, publishFocus, viewStore, setScrollSyncEnabled} from './view-store.js';
 import {createCM6SourceVisibilityGuard} from './cm6-source-visibility.js';
-import {isIllegalBreakReviewOnlyChange} from './illegal-break-review-annotation-update.js';
+import {isIllegalBreakReviewOnlyChange,isIllegalBreakAutoMarkOnlyChange} from './illegal-break-review-annotation-update.js';
 import {rejectTextBlockEdit} from './text-block-readonly.js';
 
 const $ = (id) => document.getElementById(id);
@@ -718,6 +718,18 @@ async function main() {
   };
   illegalBreakDocChanged=update=>{
     if(applyingBreakMarks)return;
+    if(isIllegalBreakAutoMarkOnlyChange(update)){
+      // Reproject the actual CMD tags without a new mark transaction. This
+      // is essential for one-step Undo/Redo: automatic scanning after Undo
+      // would silently reinsert the removed marker and clear Redo history.
+      ++breakRequestId;clearTimeout(breakTimer);
+      breakScanDoc=update.state.doc;
+      queueMicrotask(()=>{
+        if(!illegalBreakEnabled)return;
+        if(!showSavedBreakRows())clearBreakMarks();
+      });
+      return;
+    }
     if(isIllegalBreakReviewOnlyChange(update)){
       // Unlike actual text edits, review annotation edits (including Undo)
       // cannot alter the candidate relationships. Keep all AG rows, filters,

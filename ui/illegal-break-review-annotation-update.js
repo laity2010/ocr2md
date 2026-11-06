@@ -4,6 +4,24 @@
 import {parseCMDBlockTag} from './cmd-block-chains.js';
 const REVIEW=/<!--ocr2md:illegal-break-review\b[^\n]*-->\n?/g;
 const MARKER='<!--ocr2md:illegal-break-review';
+// Legacy automatic OCR break markers are inline metadata on the preceding
+// prose line. Undo/Redo of this marker-only CM6 transaction must not submit
+// another Worker job: that job would insert a *new* transaction and destroy
+// the original redo history. Exclude the distinct `-review` tag explicitly.
+const AUTO_MARK=/<!--ocr2md:illegal-break(?=\s)[^\n]*?-->/g;
+export function isIllegalBreakAutoMarkOnlyChange(update){
+  if(!update?.docChanged||!update.changes||!update.startState?.doc)return false;
+  let sawMarker=false,valid=true;
+  update.changes.iterChanges((fromA,toA,_fromB,_toB,inserted)=>{
+    const before=update.startState.doc.sliceString(fromA,toA);
+    const after=inserted.toString();
+    const marker=before.match(AUTO_MARK)?.length||after.match(AUTO_MARK)?.length;
+    if(marker&&before.replace(AUTO_MARK,'')===after.replace(AUTO_MARK,''))
+      sawMarker=true;
+    else valid=false;
+  });
+  return valid&&sawMarker;
+}
 export function isIllegalBreakReviewOnlyChange(update){
   if(!update?.docChanged||!update.changes||!update.startState?.doc)return false;
   let sawReview=false,valid=true;

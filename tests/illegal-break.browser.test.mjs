@@ -61,7 +61,18 @@ try{
    assert.equal(await page.evaluate(()=>window.__illegalBreakScans),1,'expected one automatic scan');
    const grid=page.locator('.ocr-illegal-break-grid');
    assert.deepEqual((await grid.locator('.ag-cell[col-id="joined"]').allTextContents()).sort(),['about 3','government','international','latest 13F']);
-   assert.equal(await grid.locator('.ag-cell[col-id="markState"]').filter({hasText:'已标定'}).count(),4);
+   // The AG "标定" column was replaced by the native 审阅 select; durable
+   // annotations still live only in CMD/CM6. Do not infer marking from a
+   // removed presentation column: prove all four exact CMD markers and
+   // four selectable pending reviews against the same single source.
+   assert.equal(await grid.locator('.ocr-illegal-break-review-select').count(),4);
+   assert.deepEqual(await grid.locator('.ocr-illegal-break-review-select').evaluateAll(
+     nodes=>nodes.map(node=>node.value)),Array(4).fill('待定'));
+   assert.equal(await page.evaluate(()=>
+     (window.__v6cm6?.cm?.readSource()?.match(/<!--ocr2md:illegal-break /g)||[]).length),4,
+   'all four scans must yield actual unsaved CMD marker annotations');
+   assert.equal(await page.locator('#editor .cm-editor').count(),1,
+     'review must not create a second source editor');
    assert((await page.locator('.ocr-illegal-break-lint').count())>=1,'CM6 must show visible flagged word');
    assert.equal((await page.locator('#editor .cm-content').textContent()).includes('ocr2md:illegal-break'),true);
    assert.equal(readFileSync(doc,'utf8'),original,'scan silently saved source');
@@ -72,10 +83,15 @@ try{
    await page.waitForFunction(()=>!document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:illegal-break'),null,{timeout:12000});
    await page.locator('#redo').click();
    await page.waitForFunction(()=>document.querySelector('#editor .cm-content')?.textContent.includes('ocr2md:illegal-break'),null,{timeout:12000});
+   // Undo/Redo changes CM6 source and may legitimately request a new scan;
+   // switching AG tabs without any further edit must not submit yet another
+   // dictionary job. Compare the count around the tab switch itself.
+   const scansBeforeTab=await page.evaluate(()=>window.__illegalBreakScans);
    await select(page,'media');
    assert.equal(await page.locator('.ocr-illegal-break-lint').count(),0,'lint leaked into media');
    await select(page,'illegal-break');
-   assert.equal(await page.evaluate(()=>window.__illegalBreakScans),1,'tab return needlessly re-scanned');
+   assert.equal(await page.evaluate(()=>window.__illegalBreakScans),scansBeforeTab,
+     'tab return without text edits needlessly re-scanned');
    await page.locator('#save').click();
    for(let n=0;n<90&&readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1!==4;n++)await sleep(100);
    assert.equal(readFileSync(doc,'utf8').split('<!--ocr2md:illegal-break').length-1,4,'CMD marks were not persisted');
