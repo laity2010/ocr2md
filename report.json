@@ -1,0 +1,103 @@
+{
+  "schema": "muse-independent-audit/1",
+  "ai_id": "muse",
+  "taskbook": "audit/three-party-pdf-elements-9c47e44",
+  "source_sha": "9c47e44f1fc6b44b4f126030d68008854aced6ca",
+  "package": {
+    "branch": "audit-public-pdf-elements-9c47e44",
+    "head": "a1c9c57f887523084b8eafe5b2f5568902826bc2",
+    "parent_is_source": true,
+    "diff_files": 4,
+    "fsck": "rc=0"
+  },
+  "fixtures": {
+    "pdf_sha256": "be12aa259e6c6c43f05c41436c4938b7ed115b54e87cadc6770912dece2e41ab",
+    "minerujson_md_sha256": "d86508f69b941a5ee2e00446ed5ac852458b354f2593618454f5dddf84e3b764"
+  },
+  "environment": {
+    "os": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64",
+    "git": "2.43.0",
+    "node": "v24.22.1",
+    "npm": "10.9.4",
+    "python": "3.12.3",
+    "playwright": "1.64.1",
+    "chrome": "156 (Chrome for Testing)",
+    "webkit": "27.2 (webkit-2370)"
+  },
+  "frozen_verdict": "FAIL",
+  "frozen_entry": {
+    "command": "bash audit.sh",
+    "exit": 1,
+    "stopped_at": "am.py build registry load: CHECK constraint failed: visibility IN ('export','returned','internal','raw'); standard report generator crashed on the same error (only run.log produced)"
+  },
+  "frozen_registry_as_loaded_after_repair": {
+    "modules": 12,
+    "apis": 299,
+    "messages": 14,
+    "publishers": 20,
+    "subscriptions": 36,
+    "test_cases": 434,
+    "access_edges": 202,
+    "note": "contains the defects (3 duplicated API ids); official count never existed because the DB could not be built"
+  },
+  "findings_fixed": [
+    "F-A1 visibility enum x5",
+    "F-A2 duplicated API ids C63/C64/C65",
+    "F-A3 phantom API G34",
+    "F-A4 17 stale references (15 needles, 1 owner swap, 1 phantom symbol)",
+    "F-A5 16 unowned UI files",
+    "F-A6 binding-registry gaps (12 symbols), missing APIs (12), missing subscriptions (SUB-P01, SUB-VIS-01), zero-TC APIs L80/L85",
+    "F-A7 module letter conflict C120/C125/C126 vs L-owned file"
+  ],
+  "behavior": {
+    "suites_total": 142,
+    "suites_pass": 110,
+    "suites_fail": 32,
+    "unstable": [
+      "tests/illegal-break-rescan-real.browser.test.mjs (FAIL official, PASS x2 healthy reruns; counted PASS)"
+    ],
+    "fail_groups": {
+      "F-B1 baseline/fixture drift": 11,
+      "F-B2 read-only baseline vs suites": 7,
+      "F-B3 status model": 1,
+      "F-B4 prior-round residuals": 6,
+      "F-B5 target env gap": 1,
+      "F-B7 other deterministic": 6
+    },
+    "method": "fix tree == frozen product code; official standard run truncated at 93/142 by sandbox write fault (73 PASS/19 FAIL recorded, no contamination signatures); remainder completed in two healthy-environment reruns replicating the runner environment; one library-loss batch (VM replacement removed WebKit system libs) discarded and rerun after reinstall"
+  },
+  "fix": {
+    "sha": "cad121e76e1f4e0ad613b3c1954d68c0fceed20c",
+    "branch_local": "fix/muse-pdf-elements-9c47e44",
+    "parent": "9c47e44f1fc6b44b4f126030d68008854aced6ca",
+    "frozen_tree": "5a718cc41a2a45b787b0f366e255a6520cf9788b",
+    "fix_tree": "cad44a99ae37974e52f80ef0eb124f040e20926c",
+    "files": [
+      "tests/am/registry.sql",
+      "tests/am/ownership.json"
+    ],
+    "delivery": "format-patch in report branch (connector cannot create a branch at a chosen SHA; verified again this round)"
+  },
+  "fix_verification": {
+    "python_gate": "43/43 OK",
+    "am_references": "PASS (311 APIs)",
+    "boundary_scan": "0 issues (102 files, 12 modules, 65 cross imports)",
+    "edges_debt": "none",
+    "certified": false
+  },
+  "bypass_review": {
+    "cross_module_viewstore_setstate": 0,
+    "v6cm6": "DEV-gated only",
+    "unregistered_dom_event_sites": 0,
+    "section6_revert_case": "none found"
+  },
+  "source_merge": "建议合并 (registry patch cad121e only)",
+  "production_cutover": "NO",
+  "untested": [
+    "macOS real machine",
+    "iPad real device"
+  ],
+  "auditor": "Meta Muse",
+  "date": "2026-11-06"
+}

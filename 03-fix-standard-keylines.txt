@@ -1,0 +1,4 @@
+Ran 43 tests in 8.226s
+AM_STANDARD_COUNTS direct_api_pass=NA/NA static_findings=0 unregistered_event_sites=0 runtime_review=66
+AM_CHECK_PASS apis=311 FK=OK source-and-test-files=OK ui-ownership=OK
+AM_FULL_START git=cad121e7 suites=142 contracts=451

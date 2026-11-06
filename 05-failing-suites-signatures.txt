@@ -1,0 +1,35 @@
+32 failing suites — first error line (frozen product code; fix tree changes no product code)
+- tests/ag-function-menu.browser.test.mjs [run1] :: AssertionError [ERR_ASSERTION]: scope status should appear in global status row
+- tests/am/contracts-browser.test.mjs [run1] :: page.evaluate: Error: MinerU converter returned an invalid Markdown document
+- tests/cmd-block-chains-wp4.browser.test.mjs [run1] :: (timeout / no assertion line)
+- tests/cmd-block-chains-wp5.browser.test.mjs [run1] :: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- tests/cmd-block-chains.test.mjs [run1] :: Error: Missing sealed MinerU source
+- tests/cmd-native-subblock-repair.test.mjs [run1] :: Error: Repair sources do not refer to identical original MinerU JSON
+- tests/cmd-pbs-absorbed-child-cover.browser.test.mjs [run1] :: (timeout / no assertion line)
+- tests/cmd-pbs-browser.test.mjs [run1] :: (timeout / no assertion line)
+- tests/cmd-pbs-child-reorder.browser.test.mjs [run1] :: (timeout / no assertion line)
+- tests/cmd-pbs-converter-integration.test.mjs [run1] :: AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+- tests/cmd-pbs-parent-group-order.test.mjs [run1] :: Error: MINERUJSON_MD_INVALID: absorbed parent lost one or more original OCR children
+- tests/cmd-pdf-bbox-wp6.browser.test.mjs [run1] :: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- tests/cmd-source-block-labels.test.mjs [run1] :: AssertionError [ERR_ASSERTION]: joined original label displays parent logical ID
+- tests/cmd-text-blocks.test.mjs [run1] :: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- tests/engineering-initialize-browser.test.mjs [run1] :: Error: ENOENT: no such file or directory, open '.v6/release/index.html'
+- tests/illegal-break-source-edit.browser.test.mjs [run1] :: locator.waitFor: Error: strict mode violation: locator('.ocr-illegal-break-grid .ag-row').filter({ has: locator('.ag-cell[col-id="joined"]:text-is("po
+- tests/illegal-break.browser.test.mjs [run1] :: (timeout / no assertion line)
+- tests/native-subblock-alignment.browser.test.mjs [run1] :: Error: Repair sources do not refer to identical original MinerU JSON
+- tests/pdf-block-drag-edge-scroll.browser.test.mjs [rerun3] :: (timeout / no assertion line)
+- tests/pdf-block-join-toggle.browser.test.mjs [rerun3] :: AssertionError [ERR_ASSERTION]: page first p9b0 must merge into previous page last p8b8
+- tests/pdf-block-reorder.browser.test.mjs [rerun3] :: (timeout / no assertion line)
+- tests/pdf-child-region-select.browser.test.mjs [rerun3] :: AssertionError [ERR_ASSERTION]: The input did not match the regular expression /源码作用域为空/. Input:
+- tests/pdf-coverage-zoom-browser.test.mjs [rerun3] :: (timeout / no assertion line)
+- tests/pdf-normal-webkit.browser.test.mjs [rerun3] :: (timeout / no assertion line)
+- tests/pdf-subblock-annotation.browser.test.mjs [rerun3] :: AssertionError [ERR_ASSERTION]: PDF panel exposes child annotation directly
+- tests/preview-split-browser.test.mjs [rerun3] :: page.evaluate: TypeError: Cannot read properties of null (reading 'getBoundingClientRect')
+- tests/quote-indent-browser.test.mjs [rerun3] :: AssertionError [ERR_ASSERTION]: caret gutter floated: before={"start":659,"end":661,"count":3,"summary":"已选 3 行 · 第 659–661 行","markerY":212.3125,"scr
+- tests/sentence.browser.test.mjs [rerun3] :: (timeout / no assertion line)
+- tests/text-block-coverage.browser.test.mjs [rerun3] :: (timeout / no assertion line)
+- tests/text-block-review.browser.test.mjs [rerun3] :: AssertionError [ERR_ASSERTION]: block mode retains WP4/WP5 controls plus PDF bbox actions
+- tests/v6-initialize-cmd.test.mjs [rerun3] :: AssertionError [ERR_ASSERTION]: native CMD baseline drift
+- tests/workspace-root-browser.test.mjs [rerun3] :: (timeout / no assertion line)
+
+Unstable: tests/illegal-break-rescan-real.browser.test.mjs — FAIL in run1, PASS in rerun1 and rerun3 (healthy boots); counted PASS, flagged unstable.
