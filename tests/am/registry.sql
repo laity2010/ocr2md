@@ -1148,12 +1148,12 @@ INSERT INTO apis VALUES
 INSERT INTO access_edges VALUES
  ('X-TEXTBLOCK-L48','C','L','ui/cm-document.js','inspectCMDTextBlocks(source)','L48','registered','CMD document inventories its own active source through L48; CMD transaction helpers call cmd.inspectTextBlocks (grok fix: call moved from main.js in f7c5fbc)'),
  ('X-TEXTBLOCK-G25','L','G','ui/workspace.js','createTextBlockModule(this.textBlockHost','G25','registered','Layout mounts AG business owner using bounded ports'),
- ('X-TEXTBLOCK-G26','L','G','ui/workspace.js','owner.setPreviewCoverage(rows.filter','G26','registered','Renderer supplies mapped IDs only, no direct Grid mutation'),
+ ('X-TEXTBLOCK-G26','L','G','ui/workspace.js','owner.setPreviewCoverage(ordered.filter','G26','registered','Reader resolves native child-aware parent source scopes into detached MD-rendered IDs; AG never directly accesses reader DOM'),
  ('X-TEXTBLOCK-L49','L','L','ui/workspace.js','this.pdf?.focusBlock(pageIndex,blockIndex)','L49','registered','Missing anchor can locate original PDF without fabricated source line');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-TEXTBLOCK-CMD-L48','L48','tests/cmd-text-blocks.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Reinitialized 224 anchors and bbox values; SHA corruption rejected; missing/duplicate source marker visible; no writes','integration'),
  ('TC-TEXTBLOCK-G25','G25','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit text block first dropdown choice, all 224 CMD original blocks visible in AG, orange PDF box follows click','integration'),
- ('TC-TEXTBLOCK-G26','G26','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit 215 real MD source mappings; eight empty text + one metadata-only table excluded; no source writes','integration'),
+ ('TC-TEXTBLOCK-G26','G26','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Chrome/WebKit exactly 216/216 real readable MD source mappings including child-backed images/tables and final reference; 8 metadata-only/empty blocks excluded; no source writes','integration'),
  ('TC-TEXTBLOCK-L49','L49','tests/text-block-coverage.browser.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.mineru.json','Read-only PDF.js orange geometry matches CMD sealed JSON for 224 of 224 blocks','integration');
 
 -- WP2: CMD sealed geometry is the sole runtime PDF overlay source; the
