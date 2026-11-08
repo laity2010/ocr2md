@@ -207,7 +207,7 @@ try{
           '.ocr-sb-pane[data-engine="original"] .cm-scroller').boundingBox();
         await page.mouse.move(sourceScroller.x+sourceScroller.width/2,
           sourceScroller.y+sourceScroller.height/2);
-        await page.mouse.wheel(0,2500);
+        await page.mouse.wheel(0,12000);
         await page.waitForFunction(()=>
           Number(document.querySelector('#pdf-page-select')?.value)>6,
           null,{timeout:6000});
