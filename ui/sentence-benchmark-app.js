@@ -12,11 +12,11 @@ import {split,rebuild} from './sentence-benchmark-core.js';
 import {engineCatalog} from './sentence-benchmark-engines.js';
 const $=id=>document.getElementById(id);
 const KEY='ocr2md-sentence-benchmark-v1';
-const defaults=()=>({custom:[],selected:'demo',engines:engineCatalog.map(e=>e.id),gold:{}});
+const defaults=()=>({custom:[],selected:'reviewed',engines:engineCatalog.map(e=>e.id),gold:{}});
 const samples=[
   {id:'demo',name:'演示 · 缩写 / 小数 / Markdown',
    md:'# Sentence test\n\nDr. Smith arrived at 3 p.m. He was late. The report contained $3.5 billion. Mr. Jones asked, "Is that final?" Yes!\n\n<!-- cmd:block:v1 id="p2b3" -->\nA $x+y$ formula stays untouched. The next sentence continues.\n'},
-  {id:'buffett',name:'Buffett · MinerU/CMD 全文',md:buffett},
+  {id:'buffett',name:'原始 MinerU 测试夹具 · 未审阅',md:buffett},
   {id:'zh',name:'演示 · 中文 / 公式 / 注释',
    md:'# 标题\n\n这是一句话。第二句话！第三句话？\n\n计算 $x+y=3$ 后，结果仍然正确。\n\n这是一个带注释[^1]的句子。下一句。\n\n[^1]: 注释原文。\n'}
 ];
@@ -50,7 +50,9 @@ function selectSample(id){
   for(const entry of allSamples())selector.add(new Option(entry.name,entry.id));
   selector.value=sample.id;
   $('delete-sample').disabled=samples.some(s=>s.id===sample.id);
-  $('sample-meta').textContent=sample.md.length.toLocaleString()+' 字符 · '+checksum(sample.md);
+  $('sample-meta').textContent=sample.md.length.toLocaleString()+' 字符 · '+
+    (sample.sha256?'SHA-256 '+sample.sha256.slice(0,16):checksum(sample.md));
+  $('sample-meta').title=sample.sha256||'非封存测试样本';
   focused=null;lastRevealed=null;manual=false;persist();compute();
 }
 function updateEngineOptions(){
@@ -318,4 +320,32 @@ $('export-gold').onclick=exportGold;
 $('gold-file').onchange=importGold;
 $('export-report').onclick=exportReport;
 updateEngineOptions();
-selectSample(state.selected);
+// The server exposes its OWN persisted CMD document. In the Lab that file is
+// an isolated, frozen copy of Main's SAVED PDF-reviewed CMD. This page never
+// fetches Main origin, mutates the server document or stores a shadow MD in
+// localStorage. Sample switching affects only this read-only reviewer.
+async function initializeReviewedSample(){
+  try {
+    const response=await fetch('./api/document',{cache:'no-store'});
+    if(!response.ok)throw Error('Lab snapshot HTTP '+response.status);
+    const md=await response.text();
+    if(!md.includes('<!-- cmd:block:v1'))throw Error('服务器文档缺少已审阅 CMD 块标记');
+    const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(md)));
+    const sha256=[...hash].map(x=>x.toString(16).padStart(2,'0')).join('');
+    samples.unshift({id:'reviewed',name:'Main 已审阅 CMD · 独立快照',md,sha256});
+    // One-time migration from the previous unreviewed-fixture default.
+    // Subsequent user-selected samples remain sticky across reloads.
+    if(!state.reviewedDefaultApplied){
+      state.reviewedDefaultApplied=true;
+      state.selected='reviewed';
+    }
+    selectSample(state.selected);
+    if(sample.id==='reviewed')status('已加载 Main 审阅 CMD 隔离快照 · SHA-256 '+sha256.slice(0,16));
+  } catch (error) {
+    // Failure is visible: never silently present the MinerU fixture as
+    // though it were the reviewed Main document.
+    selectSample(state.selected==='reviewed'?'demo':state.selected);
+    status('已审阅 CMD 快照不可用：'+error.message+'。当前仅有旧测试样本。',true);
+  }
+}
+await initializeReviewedSample();

@@ -12,7 +12,8 @@ import {chromeExecutable} from './platform.test-helper.mjs';
 const temp=mkdtempSync(join(tmpdir(),'ocr2md-sentence-web-'));
 const runtime=join(temp,'labs','sentence-benchmark','.runtime');
 mkdirSync(runtime,{recursive:true});
-writeFileSync(join(runtime,'document.md'),'A scratch document. Never the Main document.\n');
+writeFileSync(join(runtime,'document.md'),
+  '<!-- cmd:block:v1 id="p1b0" -->\nDr. Brown visits. This is an isolated reviewed CMD snapshot. He left. Another sentence!\n');
 writeFileSync(join(runtime,'unlock-token'),'isolated-test-unlock-token-123456');
 const port=await new Promise((done,fail)=>{
   const server=createServer();server.once('error',fail);
@@ -84,7 +85,12 @@ try{
       await page.locator('#toggle-review').click();
       assert.equal(await page.locator('#review-drawer').isVisible(),true);
       assert.equal(await page.locator('#engine-options input:checked').count(),3);
-      assert.equal(await page.locator('#sample-select option').count(),3);
+      assert.equal(await page.locator('#sample-select option').count(),4);
+      assert.equal(await page.locator('#sample-select').inputValue(),'reviewed',
+        name+' must default to its isolated saved CMD snapshot, not the raw MinerU fixture');
+      assert((await page.locator('#sample-select option:checked').textContent()).includes('已审阅 CMD'));
+      assert((await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content').textContent())
+        .includes('Dr. Brown visits.'),'Lab CMD document is the visible source');
       assert.equal(await page.locator('#score-table tbody tr').count(),3);
       await page.locator('#review-filter').selectOption('all');
       assert(await page.locator('#issue-list button').count()>0);
@@ -114,7 +120,7 @@ try{
       });
       await page.waitForFunction(()=>document.querySelector('#sample-meta')?.textContent.includes('65 字符')||
         document.querySelector('#sample-select')?.value.startsWith('import-'),null,{timeout:15000});
-      assert.equal(await page.locator('#sample-select option').count(),4);
+      assert.equal(await page.locator('#sample-select option').count(),5);
       assert.equal(await page.locator('#kpi-roundtrip').textContent(),'100% PASS');
       await page.locator('#review-filter').selectOption('all');
       await page.locator('#manual-issue').click();

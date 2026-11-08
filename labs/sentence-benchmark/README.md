@@ -29,8 +29,21 @@ as V6 Main. It no longer owns a parallel light-theme layout.
   source is never saved or edited through these CM6 views.
 - Review/Gold is a collapsible secondary panel, not a replacement layout.
 
-The built-in Buffett source is used to test actual CMD PBS parent/child
-boundaries; unsealed standalone Markdown samples fall back to paragraph blocks.
+The Lab's **default** comparison sample is the saved and PDF-reviewed CMD
+Markdown document returned by Main's `GET /api/document`, copied once into
+the Lab's isolated `.runtime/document.md`. Its exact origin SHA-256, ETag,
+document name and copy timestamp are held in the private Lab runtime file
+`.runtime/main-reviewed-snapshot.json` (not in Git). At startup the viewer
+loads this local Lab document via its own `./api/document`, verifies it has
+CMD v1 block tags and displays its SHA-256 prefix. It never requests Main's
+origin or writes Main's persistent document.
+
+The bundled Buffett MinerU fixture is retained *only as an explicit
+unreviewed comparison sample*, not the default. No reviewed text is embedded
+in the bundle, versioned in the repository, or persisted in localStorage.
+Subsequent changes to Main do **not** silently alter the Lab snapshot;
+a new snapshot requires an explicit controlled copy and fingerprint check.
+Unsealed standalone Markdown samples fall back to paragraph blocks.
 An ordinary imported MD sample must not be mistaken for sealed CMD evidence.
 
 The reviewer is a second **page of the same V6 build**, not a different Lab module
