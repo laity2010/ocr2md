@@ -261,6 +261,10 @@ try{
         await page.waitForFunction(()=>document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS'&&
           document.querySelector('#sample-select')?.value.startsWith('import-'),null,{timeout:15000});
         await page.locator('#view-mode').selectOption('no-sentence');
+        await page.waitForFunction(()=>
+          Math.abs(document.querySelector('#pbs-page-select').getBoundingClientRect().left-
+            document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-block-gutter')
+              .getBoundingClientRect().left)<2,null,{timeout:8000});
         await page.waitForFunction(()=>document.querySelector(
           '.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('无分句块 1'),
           null,{timeout:15000});

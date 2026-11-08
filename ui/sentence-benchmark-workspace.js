@@ -92,9 +92,13 @@ function sectionsFor(md){
     // Imported non-CMD Markdown may contain ordinary example anchors but
     // does not carry sealed MinerU provenance: read them only as locations.
     // This never writes a replacement document or claims a valid CMD tree.
-    const anchor=/^<!-- cmd:block:v1 id="(p\d+b\d+(?:s\d+)?)" -->/gm;
-    for(const match of md.matchAll(anchor))
-      atoms.push({id:match[1],from:match.index});
+    // Use the CMD tag parser rather than a strict full-line regex: labels
+    // carrying a reviewed lb="m" / lb="i" decision are still PBS blocks.
+    const anchor=/^<!-- cmd:block:v1[^\n]* -->$/gm;
+    for(const match of md.matchAll(anchor)){
+      const tag=parseCMDBlockTag(match[0]);
+      if(tag)atoms.push({id:tag.id,from:match.index});
+    }
   }
   atoms.sort((a,b)=>a.from-b.from);
   if(atoms.length){
@@ -334,7 +338,10 @@ class ComparePane {
     this.view=new EditorView({parent:this.editorHost,doc:'',
       extensions:this.id==='original'?[...RO,...ORIGINAL_GUTTERS,obsidianHeadingMarkers,...sentenceSourceFolding]:RO});
     const scroller=this.view.scrollDOM;
-    const gesture=()=>{this.lastGesture=performance.now();};
+    // A fresh user gesture always takes precedence over a previous pane-sync
+    // animation. Otherwise a swipe immediately after unfolding a block could
+    // move only one engine pane until the 700ms suppression expires.
+    const gesture=()=>{this.lastGesture=performance.now();this.suppressUntil=0;};
     for(const event of ['wheel','touchstart','pointerdown','keydown'])
       scroller.addEventListener(event,gesture,{passive:true});
     scroller.addEventListener('scroll',()=>{
@@ -347,11 +354,25 @@ class ComparePane {
     });
     if(this.id==='original'){
       const gutter=this.view.dom.querySelector('.ocr-sb-block-gutter');
-      this.gutterObserver=new ResizeObserver(()=>this.alignPagePicker());
+      this.gutterObserver=new ResizeObserver(()=>this.schedulePickerAlign());
       this.gutterObserver.observe(this.element);
       if(gutter)this.gutterObserver.observe(gutter);
-      this.alignPagePicker();
+      const lineNumbers=this.view.dom.querySelector('.cm-lineNumbers');
+      if(lineNumbers)this.gutterObserver.observe(lineNumbers);
+      this.schedulePickerAlign();
     }
+  }
+  schedulePickerAlign(){
+    if(this.id!=='original')return;
+    if(this.pickerFrame)cancelAnimationFrame(this.pickerFrame);
+    this.pickerFrame=requestAnimationFrame(()=>{
+      this.pickerFrame=null;
+      this.alignPagePicker();
+      // CM6 may shrink its line-number gutter one paint after a filter change.
+      this.pickerFrame=requestAnimationFrame(()=>{
+        this.pickerFrame=null;this.alignPagePicker();
+      });
+    });
   }
   alignPagePicker(){
     if(this.id!=='original'||!this.view)return;
@@ -359,8 +380,11 @@ class ComparePane {
     const toolbar=this.element.querySelector('.ocr-sb-pane-toolbar');
     if(!gutter||!toolbar)return;
     const left=gutter.getBoundingClientRect().left-toolbar.getBoundingClientRect().left;
-    if(Number.isFinite(left)&&left>=0)
-      toolbar.style.setProperty('--ocr-sb-block-left',left.toFixed(1)+'px');
+    if(Number.isFinite(left)&&left>=0){
+      const next=left.toFixed(1)+'px';
+      if(toolbar.style.getPropertyValue('--ocr-sb-block-left')!==next)
+        toolbar.style.setProperty('--ocr-sb-block-left',next);
+    }
   }
   setBlockGutterWidth(md){
     if(this.id!=='original')return;
@@ -368,10 +392,13 @@ class ComparePane {
       .map(match=>match[1].length);
     const width=Math.max(56,Math.ceil(Math.max(4,...lengths)*7.2+17));
     this.element.style.setProperty('--ocr-sb-block-width',width+'px');
-    this.alignPagePicker();
+    this.schedulePickerAlign();
   }
-  layout(){this.view?.requestMeasure();this.alignPagePicker();}
-  dispose(){this.gutterObserver?.disconnect();this.view?.destroy();this.view=null;}
+  layout(){this.view?.requestMeasure();this.schedulePickerAlign();}
+  dispose(){
+    if(this.pickerFrame)cancelAnimationFrame(this.pickerFrame);
+    this.gutterObserver?.disconnect();this.view?.destroy();this.view=null;
+  }
   updateDoc(next){
     if(!this.view)return;
     if(this.view.state.doc.toString()!==next){
@@ -540,6 +567,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
       showDecorations();
       if(focus!==null)updatePageSelection(focus);
       if(changed&&focus!==null)scrollToSource(focus);
+      if(changed)panes.get('original')?.schedulePickerAlign();
     },
     reveal(source){
       if(!Number.isInteger(source))return;
