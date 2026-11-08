@@ -31,10 +31,18 @@ const changesField=StateField.define({
     return tr.docChanged?value.map(tr.changes):value;
   },provide:field=>EditorView.decorations.from(field)
 });
+const unitLinesEffect=StateEffect.define();
+const unitLinesField=StateField.define({
+  create:()=>Decoration.none,
+  update(value,tr){
+    for(const effect of tr.effects)if(effect.is(unitLinesEffect))return effect.value;
+    return tr.docChanged?value.map(tr.changes):value;
+  },provide:field=>EditorView.decorations.from(field)
+});
 const RO=[EditorState.readOnly.of(true),EditorView.editable.of(false),
   EditorView.lineWrapping,markdown({base:markdownLanguage}),
   obsidianMarkdown,obsidianSourceSyntax,
-  syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),markField,changesField];
+  syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),markField,changesField,unitLinesField];
 const ORIGINAL=[lineNumbers(),obsidianHeadingMarkers];
 function recordAt(anchors,position){
   if(!anchors.length)return null;
@@ -64,7 +72,7 @@ class TranslationPane {
     this.status.textContent=id==='original'?'原始 CMD':'待载入';
     toolbar.append(title,this.status);
     this.element.append(toolbar,this.editorHost);
-    this.content='';this.anchors=[];this.edits=[];this.view=null;this.suppressUntil=0;
+    this.content='';this.anchors=[];this.edits=[];this.lines=[];this.view=null;this.suppressUntil=0;
     this.lastGesture=0;
   }
   init(){
@@ -82,36 +90,35 @@ class TranslationPane {
     },{passive:true});
     let clickStart=null;
     this.view.dom.addEventListener('pointerdown',event=>{
-      clickStart=event.isPrimary&&event.button===0&&
-        event.target instanceof Element&&event.target.closest('.cm-content')?
-        {id:event.pointerId,x:event.clientX,y:event.clientY}:null;
+      const line=event.target instanceof Element?
+        event.target.closest('.cm-line[data-tr-unit-id]'):null;
+      clickStart=event.isPrimary&&event.button===0&&line?
+        {pointerId:event.pointerId,x:event.clientX,y:event.clientY,
+          unitId:line.getAttribute('data-tr-unit-id')}:null;
     });
     this.view.dom.addEventListener('pointercancel',()=>{clickStart=null;});
     this.view.dom.addEventListener('pointerup',event=>{
       const start=clickStart;clickStart=null;
       // Touch scrolling, text selection, scrollbar drags and clicks outside
       // the text must NEVER be mistaken for explicit sentence selection.
-      if(!start||start.id!==event.pointerId||
-          Math.hypot(event.clientX-start.x,event.clientY-start.y)>9||
-          !(event.target instanceof Element)||
-          !event.target.closest('.cm-content'))return;
-      // The clicked CM6 line is a stronger source of truth than
-      // posAtCoords on iPad Safari: after a pane gains focus, the browser can
-      // reflow the scroller before pointerup and resolve XY to an *older*
-      // document position. Use the actual targeted DOM line instead.
-      const line=event.target.closest('.cm-line');
-      const pos=line?this.view.posAtDOM(line):null;
-      if(Number.isInteger(pos))this.owner.receivePosition(this.id,pos);
+      if(!start||start.pointerId!==event.pointerId||
+          Math.hypot(event.clientX-start.x,event.clientY-start.y)>9)return;
+      // Commit the original line's EXPLICIT unit ID from pointerDOWN.
+      // After WebKit shifts focus, pointerup can hit a different CM6 line;
+      // posAtDOM(line) / posAtCoords must not silently select p5b2.
+      this.owner.receiveUnit(this.id,start.unitId);
     });
   }
-  updateDoc(text,anchors,edits=[]){
-    this.content=text;this.anchors=anchors;this.edits=edits;
+  updateDoc(text,anchors,edits=[],lines=[]){
+    this.content=text;this.anchors=anchors;this.edits=edits;this.lines=lines;
     if(!this.view)return;
     if(this.view.state.doc.toString()!==text){
       this.view.dispatch({changes:{from:0,to:this.view.state.doc.length,insert:text}});
     }
-    this.view.dispatch({effects:changesEffect.of(Decoration.set(
-      edits.map(({from,to})=>Decoration.mark({class:'ocr-tr-english-change'}).range(from,to)),true))});
+    this.view.dispatch({effects:[changesEffect.of(Decoration.set(
+      edits.map(({from,to})=>Decoration.mark({class:'ocr-tr-english-change'}).range(from,to)),true)),
+      unitLinesEffect.of(Decoration.set(lines.map(({id,part,from})=>
+        Decoration.line({attributes:{'data-tr-unit-id':id,'data-tr-unit-part':part}}).range(from)),true))]});
   }
   mark(id){
     if(!this.view)return;
@@ -152,6 +159,10 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
   const owner={receivePosition:(id,pos)=>{
     const target=panes.get(id)?.atPosition(pos);
     if(target)select(target,id,true);
+  },receiveUnit:(paneId,unitId)=>{
+    // Unlike generic source offsets, a bilingual English/Chinese line
+    // already carries its own canonical sentence ID.
+    if(typeof unitId==='string'&&unitId)select(unitId,paneId,true);
   },receiveScroll:()=>{
     // A scroll gesture is NOT selection. Previous code changed activeId on
     // every vertical movement and the highlighted "focus row" wandered even
@@ -194,9 +205,9 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
     panes.get('original').updateDoc(model.reading.doc,
       model.reading.anchors.filter(a=>included.has(a.id)));
     for(const name of model.names){
-      const {doc,anchors,edits}=buildTranslationPairs(rows,model.translations[name].rows);
+      const {doc,anchors,edits,lines}=buildTranslationPairs(rows,model.translations[name].rows);
       const pane=panes.get(name);
-      pane.updateDoc(doc,anchors,edits);
+      pane.updateDoc(doc,anchors,edits,lines);
       pane.status.textContent=rows.length+' 组 · 中英逐句';
     }
     panes.get('original').status.textContent=model.rows.length+' 条 · 无损 PASS · SHA '+model.sourceSha256.slice(0,12);

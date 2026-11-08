@@ -58,6 +58,7 @@ WP05 incremental updates and PDF-driven block mutation are explicitly out of sco
 - **点击幂等与必要定位**：在左窗和 AI 右窗点击同一已选句，不再反复令其他窗居中；新句在其他窗已可见则只改变高亮，离开视口时才滚动定位。CM6 的拖动、滚动条与触屏滑动不作为句子点击。与滚动/注释合并由真实 Chrome/iPad WebKit 回归保护。
 - **iPad Safari 固定旧锚点修复**：针对点击反复跳回 `225 | p5b2`，禁用 Dockview 对只读面板不带 `preventScroll` 的抢焦点，右窗按 CM6 实际 DOM 行定位。左窗在 pointerdown 锁定目标句 ID 和滚动位置，pointerup 完成选择，忽略之后可能因错误滚动而重新命中的 click 事件。浏览器回归故意触发旧标题跳转，同时检查焦点 ID 与阅读位置均不偏移。
 - **文本块与双语版式（TR10）**：Main Markdown 左窗只调整呈现样式：一个原文文本块内的各句连续排版，相邻文本块之间恢复空行。AI 比对右窗取消每条 `### ID`、`校正英文`、`中文译文` 字样，直接校正英文 + 中文译文 + 空行；以 CodeMirror 独立增量装饰高亮英文实际修改处，未改的英文和所有中文保持正常颜色。所有句 ID 仍在内部锚点，AI JSON、清洁 MD 和原审阅 MD 原样保留。直接测试 `node --test tests/translation-review-bilingual.test.mjs tests/translation-review-reading.test.mjs`。
+- **右窗点译文不跳 225 行（TR11）**：每条中英句对的英文行和中文行都带有同一稳定句 ID（CM6 行装饰），点击按下时捕获该 ID、抬起时确认，绝不再借浏览器获焦后的行 DOM 或坐标反推来源。专门增加 GPT/Grok 中文行跨页点选及 `pointerup` 重定向回归，独立运行 `node tests/translation-review-chinese-tap.browser.test.mjs`。
 
 ## One AI-ready sentence/block table (Lab, on-demand)
 

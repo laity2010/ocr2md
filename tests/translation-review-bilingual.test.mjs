@@ -27,6 +27,12 @@ test('English/Chinese output is pair by pair with a blank line and independent I
   assert.equal(result.doc.includes('###'),false);
   assert.deepEqual(result.anchors,[{id:rows[0].id,from:0},
     {id:rows[1].id,from:'Buffett is smart.\n巴菲特很聪明。\n\n'.length}]);
+  assert.deepEqual(result.lines,[
+    {id:'p0b1-s001',part:'en',from:0},
+    {id:'p0b1-s001',part:'zh',from:'Buffett is smart.\n'.length},
+    {id:'p0b1-s002',part:'en',from:'Buffett is smart.\n巴菲特很聪明。\n\n'.length},
+    {id:'p0b1-s002',part:'zh',from:'Buffett is smart.\n巴菲特很聪明。\n\nApples are red.\n'.length},
+  ]);
   assert.deepEqual(marked(result.doc,result.edits),['f']);
   assert.throws(()=>buildTranslationPairs(rows,translated.slice(1)),/缺少译文/);
 });
@@ -37,4 +43,12 @@ test('multiline AI projection is a single English line and Chinese line without 
   const result=buildTranslationPairs([row],[ai]);
   assert.equal(result.doc,'Hello world.\n你好， 世界。\n\n');
   assert.equal(ai.corrected,'Hello\nworld.');
+});
+
+test('both English and Chinese lines carry the same canonical ID even for filtered rows',()=>{
+  const a={id:'p5b2-s001',original:'A.'},b={id:'p17b10-s004',original:'B.'};
+  const out=buildTranslationPairs([b],[{id:b.id,corrected:'Better.',translation:'更好。'}]);
+  assert.deepEqual(out.lines.map(x=>[x.id,x.part]),[[b.id,'en'],[b.id,'zh']]);
+  assert(!out.doc.includes(a.id));
+  assert.equal(out.lines[1].from,out.doc.indexOf('更好。'));
 });

@@ -66,7 +66,7 @@ export function buildTranslationPairs(rows,resultRows){
     throw Error('句对缺少原文或翻译结果');
   const byId=new Map(resultRows.map(row=>[row.id,row]));
   let doc='';
-  const anchors=[],edits=[];
+  const anchors=[],edits=[],lines=[];
   for(const row of rows){
     const translated=byId.get(row.id);
     if(!translated||typeof row.original!=='string'||
@@ -76,9 +76,13 @@ export function buildTranslationPairs(rows,resultRows){
     const chinese=asSingleLine(translated.translation);
     const start=doc.length;
     anchors.push({id:row.id,from:start});
+    // Stable identity of BOTH display lines. Never infer a translation's
+    // sentence from CodeMirror pointer coordinates or DOM offset afterwards.
+    lines.push({id:row.id,part:'en',from:start});
+    lines.push({id:row.id,part:'zh',from:start+english.length+1});
     for(const change of correctedChangeRanges(asSingleLine(row.original),english))
       edits.push({from:start+change.from,to:start+change.to});
     doc+=english+'\n'+chinese+'\n\n';
   }
-  return {doc,anchors,edits};
+  return {doc,anchors,edits,lines};
 }
