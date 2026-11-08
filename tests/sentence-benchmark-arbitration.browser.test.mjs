@@ -15,7 +15,10 @@ const md=[
   '<!-- cmd:block:v1 id="p0b0" -->',
   'First sentence. Another sentence.',
   '<!-- cmd:block:v1 id="p1b0" -->',
+  '<!-- cmd:block:v1 id="p1b0s0" -->',
   'Dr. Brown visits. He left. Another sentence!',
+  '<!-- cmd:block:v1 id="p1b0s1" -->',
+  'Mr. Smith arrives. He leaves. Another ending!',
   '<!-- cmd:block:v1 id="p2b0" -->',
   'This line is deliberately not segmented because it ends in a hard break.  '
 ].join('\n');
@@ -58,41 +61,87 @@ try {
    let recorded=fetchStore();
    assert.equal(recorded.sourceSha256,sha);
    assert.equal(recorded.blocks.p0b0.status,'auto');
-   assert(!recorded.blocks.p1b0,'disputed blocks must NOT land as automatic');
+   assert(!recorded.blocks.p1b0s0&&!recorded.blocks.p1b0s1,
+     'neither disputed child may land as automatic');
    assert(!recorded.blocks.p2b0,'zero-sentence blocks must remain pending');
+   await page.locator('#view-mode').selectOption('disagree');
    await page.locator('#pbs-page-select').selectOption('p1');
-   await page.waitForFunction(()=>document.querySelector(
-     '.ocr-sb-pane[data-engine="intl"] .ocr-sb-engine-adopt-check')?.disabled===false,
+   await page.waitForFunction(()=>
+     document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('分歧块 2'),
      null,{timeout:8000});
-   await page.locator('.ocr-sb-pane[data-engine="intl"] .ocr-sb-engine-adopt-check').check();
-   await page.waitForFunction(()=>document.querySelector('#kpi-saved')?.textContent.includes('1 仲裁'));
-   for(let i=0;i<100;i++){if(fetchStore().blocks.p1b0?.engine==='intl')break;await pause(100);}
+   // Adoption immediately hides the selected block; check() would look
+   // for the old checkbox to remain checked after the block changed.
+   await page.locator('.ocr-sb-pane[data-engine="intl"] .ocr-sb-engine-adopt-check').click();
+   await page.waitForFunction(()=>
+     document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('分歧块 1'),
+     null,{timeout:8000});
+   assert.equal(await page.locator('#view-mode').inputValue(),'disagree',
+     'adoption must retain the disagreement filter');
+   assert.deepEqual(await page.locator('#pbs-page-select option').evaluateAll(
+     list=>list.map(o=>o.value)),['p1'],
+     'p1 remains because a different child in p1 is still disputed');
+   let visible=await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content').textContent();
+   assert(visible.includes('Mr.')&&visible.includes('Smith arrives.')&&!visible.includes('Dr. Brown'),
+     'adopted child p1b0s0 must disappear without hiding disputed sibling p1b0s1');
+   assert((await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status').textContent()).includes('当前 p1b0s1'));
+   for(let i=0;i<100;i++){if(fetchStore().blocks.p1b0s0?.engine==='intl')break;await pause(100);}
    recorded=fetchStore();
-   assert.equal(recorded.blocks.p1b0.status,'arbitrated');
-   assert.equal(recorded.blocks.p1b0.engine,'intl');
-   assert(recorded.blocks.p1b0.boundaries.length>=2);
+   assert.equal(recorded.blocks.p1b0s0.status,'arbitrated');
+   assert.equal(recorded.blocks.p1b0s0.engine,'intl');
+   assert(!recorded.blocks.p1b0s1);
+
+   // Adoption immediately hides the selected block; check() would look
+   // for the old checkbox to remain checked after the block changed.
+   await page.locator('.ocr-sb-pane[data-engine="sentence-splitter"] .ocr-sb-engine-adopt-check').click();
+   await page.waitForFunction(()=>
+     document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('分歧块 0'),
+     null,{timeout:8000});
+   assert.equal(await page.locator('#pbs-page-select').isDisabled(),true,
+     'after both disputed children are arbitrated, the page disappears from 分歧块');
+   for(let i=0;i<100;i++){if(fetchStore().blocks.p1b0s1?.engine==='sentence-splitter')break;await pause(100);}
+   recorded=fetchStore();
+   assert.equal(recorded.blocks.p1b0s1.engine,'sentence-splitter');
    await page.locator('#view-mode').selectOption('arbitrated');
    assert.deepEqual(await page.locator('#pbs-page-select option').evaluateAll(
      list=>list.map(o=>o.value)),['p1']);
    await page.reload({waitUntil:'domcontentloaded'});
-   await page.waitForFunction(()=>document.querySelector('#kpi-saved')?.textContent.includes('1 仲裁'),
+   await page.waitForFunction(()=>document.querySelector('#kpi-saved')?.textContent.includes('2 仲裁'),
      null,{timeout:60000});
    await page.locator('#view-mode').selectOption('arbitrated');
    await page.locator('#pbs-page-select').selectOption('p1');
-   assert.equal(await page.locator('.ocr-sb-pane[data-engine="intl"] .ocr-sb-engine-adopt-check').isChecked(),true);
+   assert.equal(await page.locator('.ocr-sb-pane[data-engine="intl"] .ocr-sb-engine-adopt-check').isChecked(),true,
+     'first child adoption restores after reload');
    await page.locator('.ocr-sb-pane[data-engine="wink-nlp"] .ocr-sb-engine-adopt-check').check();
-   for(let i=0;i<100;i++){if(fetchStore().blocks.p1b0?.engine==='wink-nlp')break;await pause(100);}
-   assert.equal(fetchStore().blocks.p1b0.engine,'wink-nlp');
+   for(let i=0;i<100;i++){if(fetchStore().blocks.p1b0s0?.engine==='wink-nlp')break;await pause(100);}
+   assert.equal(fetchStore().blocks.p1b0s0.engine,'wink-nlp');
    assert.equal(await page.locator('.ocr-sb-pane[data-engine="intl"] .ocr-sb-engine-adopt-check').isChecked(),false,
-     'exactly one engine can be adopted per text block');
+     'adoption choices must be mutually exclusive for the selected PBS child');
+
    await page.locator('.ocr-sb-pane[data-engine="wink-nlp"] .ocr-sb-engine-adopt-check').uncheck();
-   for(let i=0;i<100;i++){if(!fetchStore().blocks.p1b0)break;await pause(100);}
+   for(let i=0;i<100;i++){if(!fetchStore().blocks.p1b0s0)break;await pause(100);}
    recorded=fetchStore();
-   assert(!recorded.blocks.p1b0,'unchecked arbitration returns disputed block to pending');
-   await page.waitForFunction(()=>document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('已仲裁 0'),null,{timeout:8000});
-   assert.equal(await page.locator('#pbs-page-select').isDisabled(),true,
-     '已仲裁 filter must become empty immediately when arbitration is revoked');
-   assert(recorded.blocks.p0b0?.status==='auto','automatic blocks survive changes');
+   assert(!recorded.blocks.p1b0s0);
+   assert.equal(recorded.blocks.p1b0s1.engine,'sentence-splitter');
+   await page.locator('#view-mode').selectOption('disagree');
+   visible=await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content').textContent();
+   assert(visible.includes('Dr.')&&visible.includes('Brown visits.')&&!visible.includes('Mr. Smith'),
+     'revoking p1b0s0 must restore only that child to 分歧块');
+
+   await page.locator('#view-mode').selectOption('arbitrated');
+   await page.locator('#pbs-page-select').selectOption('p1');
+   assert.equal(await page.locator('.ocr-sb-pane[data-engine="sentence-splitter"] .ocr-sb-engine-adopt-check').isChecked(),true);
+   await page.locator('.ocr-sb-pane[data-engine="sentence-splitter"] .ocr-sb-engine-adopt-check').uncheck();
+   for(let i=0;i<100;i++){if(!fetchStore().blocks.p1b0s1)break;await pause(100);}
+   recorded=fetchStore();
+   assert(!recorded.blocks.p1b0s0&&!recorded.blocks.p1b0s1,
+     'revoking both returns them to the disagreement filter');
+   await page.waitForFunction(()=>
+     document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('已仲裁 0'),
+     null,{timeout:8000});
+   assert.equal(await page.locator('#pbs-page-select').isDisabled(),true);
+   await page.locator('#view-mode').selectOption('disagree');
+   assert((await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status').textContent()).includes('分歧块 2'));
+   assert(recorded.blocks.p0b0?.status==='auto','automatic blocks survive adoption changes');
    await page.locator('#toggle-review').click();
    await page.locator('#review-filter').selectOption('all');
    await page.locator('#approve-issue').click();

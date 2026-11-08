@@ -19,9 +19,16 @@ Stage constraints approved 2026-11-08:
   in exactly one engine header. This adopts the full per-block set of sentence
   boundaries from that engine. Ticking another replaces the selection;
   unticking returns the block to pending.
-- \`已仲裁\` filters for *manually adopted* PBS parent groups; it does not
-  label the automatic blocks as human-reviewed. The selector shows only
-  PBS p prefixes visible in the filtered view.
+- \`已仲裁\` filters for *manually adopted* exact PBS atoms (including
+  child blocks); it does not label the automatic blocks as human-reviewed.
+  The selector shows only PBS p prefixes visible in the filtered view.
+- \`分歧块\` is a **pending arbitration queue** at exact PBS atom level.
+  Checking \`采用\` removes that one PBS block from \`分歧块\` immediately
+  and shows it under \`已仲裁\`. A second disputed child of the same parent
+  remains pending and visible; a p-prefix disappears from its dropdown only
+  when no unresolved subblock remains on that p. Unchecking in \`已仲裁\`
+  returns just that child to \`分歧块\`. The three engines' original
+  divergence statistics remain unchanged, and no CMD source is rewritten.
 - The Lab-only server persists auto and arbitrated blocks to
   \`labs/sentence-benchmark/.runtime/document.sentences.review.json\` and
   mirrors manually reviewed Gold boundaries there. Stored data: saved CMD

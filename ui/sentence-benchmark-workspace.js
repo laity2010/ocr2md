@@ -125,6 +125,21 @@ function sectionsFor(md){
   if(start<md.length)spans.push({id:'paragraph-'+(++index),from:start,to:md.length});
   return spans;
 }
+// For arbitration views a "block" means the exact PBS atom (including sN
+// children), not its parent group. Two disputed children may share a parent;
+// adopting one must not leave that child visible beside its pending sibling.
+// These are read-only slices of the original CMD, never rewritten segments.
+function pbsAtomSections(md){
+  const atoms=[];
+  let from=0;
+  for(const line of md.split('\n')){
+    const tag=parseCMDBlockTag(line);
+    if(tag)atoms.push({id:tag.id,from,to:md.length});
+    from+=line.length+1;
+  }
+  for(let i=0;i<atoms.length-1;i++)atoms[i].to=atoms[i+1].from;
+  return atoms;
+}
 function breakPositions(run){
   return run?.positions instanceof Set?run.positions:new Set();
 }
@@ -159,18 +174,24 @@ function sectionsWithoutSentences(md,sections,runs){
   return sections.filter(section=>containsReviewableText(md,section)&&
     !covered.some(part=>part.from<section.to&&part.to>section.from));
 }
-export function createSourceProjection(md,runs,mode,reviewedBlocks={}){
+export function createSourceProjection(md,runs,mode,reviewedBlocks={},disputedIds=null){
   const sections=sectionsFor(md);
   if(mode==='full')return {doc:md,
     ranges:[{sourceFrom:0,sourceTo:md.length,viewFrom:0,viewTo:md.length}],
     blocks:sections.map(s=>s.id),disagreements:getDifferences(runs)};
   const diffs=getDifferences(runs);
+  const atoms=(mode==='disagree'||mode==='arbitrated')?pbsAtomSections(md):[];
+  const reviewable=Array.isArray(disputedIds)&&atoms.length>0;
+  const pending=new Set(disputedIds??[]);
   const selected=mode==='disagree'?
-    sections.filter(s=>diffs.some(p=>p>s.from&&p<=s.to)):
+    (reviewable?atoms.filter(s=>pending.has(s.id)&&
+      reviewedBlocks[s.id]?.status!=='arbitrated'):
+      sections.filter(s=>diffs.some(p=>p>s.from&&p<=s.to))):
     mode==='no-sentence'?sectionsWithoutSentences(md,sections,runs):
-    mode==='arbitrated'?sections.filter(s=>
-      Object.entries(reviewedBlocks).some(([id,item])=>
-        item.status==='arbitrated'&&parentOf(id)===s.id)):[];
+    mode==='arbitrated'?(atoms.length?atoms:sections).filter(s=>
+      reviewedBlocks[s.id]?.status==='arbitrated'||
+      (!atoms.length&&Object.entries(reviewedBlocks).some(([id,item])=>
+        item.status==='arbitrated'&&parentOf(id)===s.id))):[];
   let doc='',ranges=[];
   for(const section of selected){
     // Separator is view-only. It never changes the original CMD document.
@@ -578,7 +599,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{},onAd
       if(typeof source!=='string')throw TypeError('CMD source required');
       const sourceChanged=source!==md;
       const reviewChanged=JSON.stringify(accepted)!==JSON.stringify(reviewedBlocks);
-      const changed=sourceChanged||filter!==mode||(reviewChanged&&filter==='arbitrated')||
+      const changed=sourceChanged||filter!==mode||
+        (reviewChanged&&(filter==='arbitrated'||filter==='disagree'))||
         (results!==runs && filter!=='full');
       md=source;mode=filter;runs=results;gold=decisions;
       reviewedBlocks=structuredClone(accepted);disputedIds=new Set(disputed);
@@ -589,7 +611,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{},onAd
         pbsPages=pages.pages;pbsLocations=pages.locations;
       }
       if(changed){
-        projection=createSourceProjection(md,runs,mode,reviewedBlocks);
+        projection=createSourceProjection(md,runs,mode,reviewedBlocks,disputed);
         availablePages=filterPageOptions();
         refreshPageOptions();
         eachPane(pane=>pane.updateDoc(projection.doc));

@@ -120,8 +120,21 @@ function adoptEngine(engine,checked){
   }else{
     delete review.blocks[row.id];
   }
+  // The adopted atom leaves 分歧块 immediately; the revoked atom leaves
+  // 已仲裁 immediately. Move the visible selection to the next eligible
+  // subblock, rather than leaving a checked control bound to hidden source.
+  const mode=$('view-mode').value;
+  if((checked&&mode==='disagree')||(!checked&&mode==='arbitrated')){
+    const remaining=[...inventory.values()].filter(item=>mode==='disagree'?
+      item.disagreed&&review.blocks[item.id]?.status!=='arbitrated':
+      review.blocks[item.id]?.status==='arbitrated');
+    const next=remaining.find(item=>item.from>row.from)??remaining[0]??null;
+    activeBlockId=next?.id??null;
+    focused=next?.textFrom??null;
+    lastRevealed=null;
+  }
   enqueueReviewSave();render();
-  status(row.id+(checked?' 已采用 '+engine+' 的完整句界':' 已撤销仲裁')+' · 正在落盘');
+  status(row.id+(checked?' 已采用 '+engine+' 的完整句界；已移出分歧块':' 已撤销仲裁；已返回分歧块')+' · 正在落盘');
 }
 const compare=createSentenceCompareWorkspace($('workspace'),{
   onPosition(source){
