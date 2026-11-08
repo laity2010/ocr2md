@@ -50,6 +50,33 @@ export class TranslationReaderPane {
     this.footnoteReader=createFootnotePopover({root:this.body,
       onLocate:target=>this.navigateToNote(target)});
     this.returnNoteButton.addEventListener('click',()=>this.returnToNoteReference());
+    // A tap on read-only source text (or its sentence ID) is a selection,
+    // NEVER a request to reposition this scrollport. Mobile Safari may
+    // scroll a nested pane when Dockview shifts keyboard focus, even though
+    // no explicit reveal() was called. Record the pre-tap position and pin
+    // it for the two paint frames immediately after a genuine tap.
+    let tapStart=null;
+    this.scroller.addEventListener('pointerdown',event=>{
+      const element=event.target instanceof Element?event.target:null;
+      if(!event.isPrimary||!element||
+          !element.closest('[data-unit-id],[data-gutter-unit]')||
+          element.closest('a[href],summary.ocr-callout-title'))return;
+      tapStart={pointerId:event.pointerId,x:event.clientX,y:event.clientY,
+        top:this.scroller.scrollTop};
+    },{passive:true});
+    this.scroller.addEventListener('pointercancel',()=>{tapStart=null;});
+    this.scroller.addEventListener('pointerup',event=>{
+      const start=tapStart;tapStart=null;
+      if(!start||start.pointerId!==event.pointerId||
+          Math.hypot(event.clientX-start.x,event.clientY-start.y)>9)return;
+      const preserve=()=>{
+        if(Math.abs(this.scroller.scrollTop-start.top)>2)
+          this.scroller.scrollTop=start.top;
+      };
+      requestAnimationFrame(()=>{
+        preserve();requestAnimationFrame(preserve);
+      });
+    },{passive:true});
     for(const event of ['wheel','touchstart','pointerdown','keydown'])
       this.scroller.addEventListener(event,()=>{
         this.lastGesture=performance.now();this.suppressUntil=0;

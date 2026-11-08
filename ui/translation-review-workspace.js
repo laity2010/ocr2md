@@ -86,7 +86,12 @@ class TranslationPane {
           Math.hypot(event.clientX-start.x,event.clientY-start.y)>9||
           !(event.target instanceof Element)||
           !event.target.closest('.cm-content'))return;
-      const pos=this.view.posAtCoords({x:event.clientX,y:event.clientY});
+      // The clicked CM6 line is a stronger source of truth than
+      // posAtCoords on iPad Safari: after a pane gains focus, the browser can
+      // reflow the scroller before pointerup and resolve XY to an *older*
+      // document position. Use the actual targeted DOM line instead.
+      const line=event.target.closest('.cm-line');
+      const pos=line?this.view.posAtDOM(line):null;
       if(Number.isInteger(pos))this.owner.receivePosition(this.id,pos);
     });
   }
@@ -174,6 +179,15 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
       position:{referencePanel:previous,direction:previous==='original'?'right':'below'}}));
     previous=name;
   }
+  // This Lab is strictly read-only. Dockview's BasePanelView.focus() calls
+  // HTMLElement.focus() WITHOUT preventScroll. On physical iPad Safari that
+  // can reset the nested article's scroll anchor to an earlier heading
+  // (reported as source line 225, p5b2) on EACH tap/active-panel change.
+  // Panel activation must not steal DOM focus from the user's reading scroll.
+  // Explicit navigation is handled solely by select() / reveal() below.
+  const focusGuards=panels.map(panel=>panel.api.onWillFocus(event=>{
+    event.preventDefault();
+  }));
   for(const panel of panels){panel.group.header.hidden=true;panel.group.relayout();}
   panes.get('original').updateDoc(model.reading.doc,model.reading.anchors);
   function refresh(rows){
@@ -209,5 +223,5 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
   }
   refresh(visible);
   return {filter:refresh,select,selected:()=>activeId,
-    destroy:()=>dockview.dispose()};
+    destroy:()=>{for(const guard of focusGuards)guard.dispose();dockview.dispose()}};
 }

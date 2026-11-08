@@ -80,6 +80,33 @@ for(const [name,engine,binary] of [
     assert.equal(await page.locator('.ocr-tr-reader-marker-current').count(),1);
     assert.equal(await page.locator('.ocr-tr-reader-current').count(),1);
 
+    // iPad Safari regression: 225 | p5b2 is an early document heading. A
+    // later real touch on another visible sentence must never jump to that
+    // fixed old heading, even if the native panel focus tries to scroll the
+    // nested reader during the pointerup phase.
+    const p5=page.locator('.ocr-tr-reader-scroll [data-unit-id="p5b2-b001"]');
+    const p5Anchor=await p5.evaluate(el=>el.getBoundingClientRect().top);
+    assert(p5Anchor<0,'regression needs the p5b2 heading far above the viewport');
+    const sameViewport=await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop);
+    const visibleTap=page.locator(`[data-gutter-unit="${chosen}"]`);
+    await page.evaluate(id=>{
+      const button=document.querySelector(`[data-gutter-unit="${id}"]`);
+      button.addEventListener('pointerup',()=>{
+        const scroller=document.querySelector('.ocr-tr-reader-scroll');
+        const heading=scroller.querySelector('[data-unit-id="p5b2-b001"]');
+        const headingTop=heading.getBoundingClientRect().top-
+          scroller.getBoundingClientRect().top+scroller.scrollTop;
+        // Deliberately reproduce the native WebKit focus-anchor jump.
+        scroller.scrollTop=headingTop;
+      },{once:true});
+    },chosen);
+    await visibleTap.tap();
+    await page.waitForTimeout(300);
+    const preserved=await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop);
+    assert(Math.abs(preserved-sameViewport)<3,
+      `iPad tap jumped to stale heading 225|p5b2: ${sameViewport} -> ${preserved}`);
+    assert.equal(await page.locator('#record-picker').inputValue(),chosen);
+
     // Regression: tapping a visible sentence is a *selection* operation, not
     // an instruction to re-center the article or to repeatedly move AI panes.
     const inView=await page.evaluate(()=>{
