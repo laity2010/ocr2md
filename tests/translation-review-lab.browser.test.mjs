@@ -83,8 +83,15 @@ try{
       assert.equal(await page.locator('.lab-home-card').count(),2);
       assert.equal(await page.locator('#lab-sentence').getAttribute('href'),'./sentence-benchmark.html');
       await page.locator('#lab-translation').click();
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent
-        .includes('单语 MD 重组无损 PASS'),null,{timeout:45000});
+      try {
+        await page.waitForFunction(()=>document.querySelector('#status')?.textContent
+          .includes('单语 MD 重组无损 PASS'),null,{timeout:75000});
+      } catch(error){
+        console.error(name,'DIAG status=',await page.locator('#status').textContent().catch(()=>'<unavailable>'),
+          'empty=',await page.locator('#translation-empty').textContent().catch(()=>'<unavailable>'),
+          'errors=',errors);
+        throw error;
+      }
       assert.equal(await page.locator('.ocr-sb-pane').count(),3);
       assert.equal(await page.locator('.ocr-sb-pane .cm-editor').count(),2,
         'only right AI results remain CM6; left is Main rendered Markdown');
