@@ -165,8 +165,10 @@ export class TranslationReaderPane {
       saved.reference.focus({preventScroll:true});
   }
   assignAnchors(){
-    for(const node of this.body.querySelectorAll('[data-unit-id]'))
+    for(const node of this.body.querySelectorAll('[data-unit-id]')){
       node.removeAttribute('data-unit-id');
+      node.classList.remove('ocr-tr-reader-sentence','ocr-tr-reader-block-start');
+    }
     this.nodes.clear();
     const blocks=[...this.body.querySelectorAll('[data-source-start]')]
       .map(node=>({node,start:Number(node.dataset.sourceStart),
@@ -181,6 +183,8 @@ export class TranslationReaderPane {
       if(best){
         const node=best.node;
         node.dataset.unitId=anchor.id;
+        node.classList.add('ocr-tr-reader-sentence');
+        if(anchor.blockStart)node.classList.add('ocr-tr-reader-block-start');
         this.nodes.set(anchor.id,node);
       }
     }

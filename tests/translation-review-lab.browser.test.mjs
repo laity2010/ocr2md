@@ -97,6 +97,19 @@ try{
         'only right AI results remain CM6; left is Main rendered Markdown');
       assert.equal(await page.locator('#record-picker option').count(),2);
       assert.equal(await page.locator('#record-count').textContent(),'1 / 2');
+      for(const [i,pane] of (await page.locator('.ocr-sb-pane[data-engine="translation"]').all()).entries()){
+        const lines=await pane.locator('.cm-line').allTextContents();
+        assert.deepEqual(lines.slice(0,6),[
+          'Hello world.',i===0?'你好，世界。':'你好，世界！','',
+          i===0?'Apples are red.':'Apples have red skin.',
+          i===0?'苹果是红色的。':'苹果的表皮是红色的。','',
+        ]);
+        assert(!lines.join(' ').includes('校正英文')&&!lines.join(' ').includes('中文译文'),
+          'AI window must show only sentence pairs, not field labels');
+        const colored=await pane.locator('.ocr-tr-english-change').allTextContents();
+        assert(colored.length>0,'corrected English has visible inline change colors');
+        assert(colored.join('').length<50,'do not color the entire corrected paragraph');
+      }
       assert(await page.locator('.ocr-sb-pane[data-engine="original"] article.ocr-markdown')
         .textContent().then(x=>x.includes('Hello world.')));
       assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] article.ocr-markdown')

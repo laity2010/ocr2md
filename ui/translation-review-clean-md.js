@@ -135,7 +135,8 @@ export function buildCleanReviewedMD(source,rows){
   const map=mapper(clean.patches);
   const anchors=rows.map(row=>{
     const patch=clean.patches.find(p=>p.kind==='sentence'&&p.id===row.id);
-    return {id:row.id,from:patch?patch.outputTo:map(row.from),to:map(row.to)};
+    return {id:row.id,blockId:row.blockId,
+      from:patch?patch.outputTo:map(row.from),to:map(row.to)};
   });
   if(anchors.some(a=>a.from>a.to||a.to>clean.doc.length)||
       anchors.some((a,i)=>i>0&&a.from<anchors[i-1].from))

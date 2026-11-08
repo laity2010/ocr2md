@@ -17,6 +17,11 @@
 .ocr-sb-pane[data-engine="original"] .ocr-sb-block-gutter{width:var(--ocr-sb-block-width,90px);
   min-width:var(--ocr-sb-block-width,90px)}
 .ocr-sb-pane .cm-editor .ocr-tr-current{background:rgba(233,172,101,.18)}
+.ocr-tr-pane[data-engine="translation"] .cm-content .ocr-tr-english-change{
+  color:#f3b965;font-weight:650;background:rgba(233,172,101,.18);
+  text-decoration:underline;text-decoration-color:#e9ac65;text-underline-offset:3px;
+  border-radius:2px;
+}
 .ocr-tr-pane .cm-editor .cm-content{padding-top:7px}
 .ocr-sb-pane.ocr-tr-pane[data-engine="original"] .ocr-sb-pane-toolbar{padding-left:9px}
 @media(max-width:700px){.ocr-tr-controls #record-picker{flex:0 0 130px}.ocr-tr-controls #filter-mode{flex:0 0 95px}}
@@ -34,7 +39,15 @@
 .ocr-tr-note-return{padding:3px 8px;border:1px solid #587065;border-radius:5px;background:#344a40;color:#a7c080;font:11px "OCR2MD Sarasa",monospace;white-space:nowrap;cursor:pointer}
 .ocr-tr-note-return[hidden]{display:none!important}
 .ocr-tr-note-return:hover{background:#476451}
-.ocr-tr-reader-scroll .ocr-markdown p{margin:.18em 0 .35em;line-height:1.55}
+.ocr-tr-reader-scroll .ocr-markdown p.ocr-tr-reader-sentence{
+  margin-top:0;margin-bottom:0;line-height:1.55;
+}
+/* A source text block is a paragraph. Its sentences occupy consecutive
+   lines, while the FIRST sentence of the next block recovers the original
+   Markdown's visible blank-line spacing. This never changes clean MD bytes. */
+.ocr-tr-reader-scroll .ocr-markdown p.ocr-tr-reader-block-start{
+  margin-top:1.55em;
+}
 .ocr-tr-reader-scroll .ocr-markdown .ocr-tr-reader-current{background:rgba(233,172,101,.16);border-radius:3px}
 .ocr-tr-reader-scroll .ocr-markdown .ocr-callout-content .ocr-tr-reader-current{background:rgba(233,172,101,.12)}
 @media(max-width:700px){.ocr-tr-reader-canvas{--ocr-tr-gutter-line:34px;--ocr-tr-gutter-id:96px}.ocr-tr-reader-scroll .ocr-markdown{padding-right:10px}}

@@ -22,7 +22,27 @@ test('Main rendering adapter uses transient paragraphs/math but does not modify 
   assert.equal(reading.stats.reviewedInlineMath,1);
   assert.equal(reading.anchors.length,2);
   assert(reading.anchors[1].line>reading.anchors[0].line);
+  assert.equal(reading.anchors[0].blockId,'p0b0');
+  assert.equal(reading.anchors[0].blockStart,true);
+  assert.equal(reading.anchors[1].blockStart,false,
+    'second sentence of same source text block has no paragraph blank line');
   assert.equal(clean.doc,snapshot);
+  assert.equal(restoreReviewedMD(clean),source);
+});
+
+test('reading projection preserves blank lines BETWEEN distinct source text blocks',()=>{
+  const source='<!-- cmd:block:v1 id="p0b0" -->\n\nFirst. Second.\n\n'+
+    '<!-- cmd:block:v1 id="p0b1" -->\n\nThird.\n';
+  const from=source.indexOf('First.'),third=source.indexOf('Third.');
+  const rows=[
+    {id:'p0b0-s001',blockId:'p0b0',type:'sentence',from,to:from+6,sourceRanges:[{from,to:from+6}]},
+    {id:'p0b0-s002',blockId:'p0b0',type:'sentence',from:from+6,to:from+14,sourceRanges:[{from:from+6,to:from+14}]},
+    {id:'p0b1-s001',blockId:'p0b1',type:'sentence',from:third,to:third+6,sourceRanges:[{from:third,to:third+6}]},
+  ];
+  const clean=buildCleanReviewedMD(source,rows),reading=buildTranslationReadingProjection(clean);
+  assert.deepEqual(reading.anchors.map(a=>a.blockStart),[true,false,true]);
+  assert.deepEqual(reading.anchors.map(a=>a.blockId),['p0b0','p0b0','p0b1']);
+  assert.match(reading.doc,/First\.\n\nSecond\.\n\nThird\./);
   assert.equal(restoreReviewedMD(clean),source);
 });
 

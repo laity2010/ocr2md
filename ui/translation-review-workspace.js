@@ -13,6 +13,7 @@ import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {TranslationReaderPane} from './translation-review-reader-pane.js';
+import {buildTranslationPairs} from './translation-review-bilingual.js';
 
 const markEffect=StateEffect.define();
 const markField=StateField.define({
@@ -22,10 +23,18 @@ const markField=StateField.define({
     return tr.docChanged?value.map(tr.changes):value;
   },provide:field=>EditorView.decorations.from(field)
 });
+const changesEffect=StateEffect.define();
+const changesField=StateField.define({
+  create:()=>Decoration.none,
+  update(value,tr){
+    for(const e of tr.effects)if(e.is(changesEffect))return e.value;
+    return tr.docChanged?value.map(tr.changes):value;
+  },provide:field=>EditorView.decorations.from(field)
+});
 const RO=[EditorState.readOnly.of(true),EditorView.editable.of(false),
   EditorView.lineWrapping,markdown({base:markdownLanguage}),
   obsidianMarkdown,obsidianSourceSyntax,
-  syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),markField];
+  syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),markField,changesField];
 const ORIGINAL=[lineNumbers(),obsidianHeadingMarkers];
 function recordAt(anchors,position){
   if(!anchors.length)return null;
@@ -55,7 +64,7 @@ class TranslationPane {
     this.status.textContent=id==='original'?'原始 CMD':'待载入';
     toolbar.append(title,this.status);
     this.element.append(toolbar,this.editorHost);
-    this.content='';this.anchors=[];this.view=null;this.suppressUntil=0;
+    this.content='';this.anchors=[];this.edits=[];this.view=null;this.suppressUntil=0;
     this.lastGesture=0;
   }
   init(){
@@ -95,12 +104,14 @@ class TranslationPane {
       if(Number.isInteger(pos))this.owner.receivePosition(this.id,pos);
     });
   }
-  updateDoc(text,anchors){
-    this.content=text;this.anchors=anchors;
+  updateDoc(text,anchors,edits=[]){
+    this.content=text;this.anchors=anchors;this.edits=edits;
     if(!this.view)return;
     if(this.view.state.doc.toString()!==text){
       this.view.dispatch({changes:{from:0,to:this.view.state.doc.length,insert:text}});
     }
+    this.view.dispatch({effects:changesEffect.of(Decoration.set(
+      edits.map(({from,to})=>Decoration.mark({class:'ocr-tr-english-change'}).range(from,to)),true))});
   }
   mark(id){
     if(!this.view)return;
@@ -133,21 +144,6 @@ class TranslationPane {
   }
   layout(){this.view?.requestMeasure();}
   dispose(){this.view?.destroy();this.view=null;}
-}
-
-function translatedDocument(rows,resultRows){
-  let doc='';
-  const anchors=[];
-  const index=new Map(resultRows.map(row=>[row.id,row]));
-  for(const row of rows){
-    const translated=index.get(row.id);
-    if(!translated)throw Error('缺少译文 '+row.id);
-    anchors.push({id:row.id,from:doc.length});
-    doc+='### '+row.id+' · '+row.blockId+'\n';
-    doc+='校正英文\n'+translated.corrected+'\n\n';
-    doc+='中文译文\n'+translated.translation+'\n\n';
-  }
-  return {doc,anchors};
 }
 
 export function createTranslationCompareWorkspace(container,model,{onSelect=()=>{}}={}){
@@ -198,10 +194,10 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
     panes.get('original').updateDoc(model.reading.doc,
       model.reading.anchors.filter(a=>included.has(a.id)));
     for(const name of model.names){
-      const {doc,anchors}=translatedDocument(rows,model.translations[name].rows);
+      const {doc,anchors,edits}=buildTranslationPairs(rows,model.translations[name].rows);
       const pane=panes.get(name);
-      pane.updateDoc(doc,anchors);
-      pane.status.textContent=rows.length+' 条 · 校正英文 / 中文译文';
+      pane.updateDoc(doc,anchors,edits);
+      pane.status.textContent=rows.length+' 组 · 中英逐句';
     }
     panes.get('original').status.textContent=model.rows.length+' 条 · 无损 PASS · SHA '+model.sourceSha256.slice(0,12);
     const next=rows.some(r=>r.id===activeId)?activeId:rows[0]?.id??null;

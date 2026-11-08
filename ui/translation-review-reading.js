@@ -69,9 +69,10 @@ export function buildTranslationReadingProjection(clean){
   };
   const newlines=[];
   for(let i=0;i<doc.length;i++)if(doc[i]==='\n')newlines.push(i);
-  const anchors=clean.anchors.map(anchor=>{
+  const anchors=clean.anchors.map((anchor,i)=>{
     const from=map(anchor.from);
-    return {id:anchor.id,from,to:map(anchor.to),line:lineAt(newlines,from)};
+    return {...anchor,from,to:map(anchor.to),line:lineAt(newlines,from),
+      blockStart:i===0||anchor.blockId!==clean.anchors[i-1].blockId};
   });
   if(new Set(anchors.map(x=>x.id)).size!==anchors.length||
       anchors.some((x,i)=>x.to>doc.length||(i&&x.from<anchors[i-1].from)))

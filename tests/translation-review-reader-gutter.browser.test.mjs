@@ -40,6 +40,31 @@ for(const [name,engine,binary] of [
     assert.equal(initial.callouts,7);
     assert(initial.table>=9);
 
+    // Rendered Markdown reintroduces the empty line only at source block
+    // boundaries. Five sentences in p1b7 stay tightly stacked, but p1b8
+    // begins with a full paragraph break. The underlying clean MD is inert.
+    const spacing=await page.evaluate(()=>{
+      const byId=id=>document.querySelector(`.ocr-tr-reader-scroll [data-unit-id="${id}"]`);
+      const same=byId('p1b7-s002'),fresh=byId('p1b8-s001');
+      return {same:parseFloat(getComputedStyle(same).marginTop),
+        next:parseFloat(getComputedStyle(fresh).marginTop),
+        sameIsNew:same.classList.contains('ocr-tr-reader-block-start'),
+        nextIsNew:fresh.classList.contains('ocr-tr-reader-block-start')};
+    });
+    assert.equal(spacing.same,0,'same text block must not introduce a blank line');
+    assert.equal(spacing.sameIsNew,false);
+    assert(spacing.next>=12,'next source text block needs visible blank line');
+    assert.equal(spacing.nextIsNew,true);
+    for(const [i,pane] of (await page.locator('.ocr-sb-pane[data-engine="translation"]').all()).entries()){
+      const first=await pane.locator('.cm-line').first().textContent();
+      assert.equal(first,'Buffett’s Alpha','right pane begins directly with corrected English');
+      const englishChange=await pane.locator('.ocr-tr-english-change').first().textContent();
+      assert.equal(englishChange,'f','only the inserted character in Buffett is colored');
+      const visible=await pane.locator('.cm-content').textContent();
+      assert(!visible.includes('校正英文')&&!visible.includes('中文译文'),
+        'remove labeled fields from English/Chinese reading view');
+    }
+
     // Explicit navigation is permitted to center the clicked sentence.
     const id=await page.locator('#record-picker option').nth(350).getAttribute('value');
     await page.locator('#record-picker').selectOption(id);
