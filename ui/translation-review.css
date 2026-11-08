@@ -31,6 +31,9 @@
 .ocr-tr-reader-unit-id:hover,.ocr-tr-reader-unit-id:focus-visible{color:#e2efc9;background:#43584b;outline:none}
 .ocr-tr-reader-marker-current{background:rgba(233,172,101,.16)}
 .ocr-tr-reader-marker-current .ocr-tr-reader-unit-id{color:#e9ac65;font-weight:bold}
+.ocr-tr-note-return{padding:3px 8px;border:1px solid #587065;border-radius:5px;background:#344a40;color:#a7c080;font:11px "OCR2MD Sarasa",monospace;white-space:nowrap;cursor:pointer}
+.ocr-tr-note-return[hidden]{display:none!important}
+.ocr-tr-note-return:hover{background:#476451}
 .ocr-tr-reader-scroll .ocr-markdown p{margin:.18em 0 .35em;line-height:1.55}
 .ocr-tr-reader-scroll .ocr-markdown .ocr-tr-reader-current{background:rgba(233,172,101,.16);border-radius:3px}
 .ocr-tr-reader-scroll .ocr-markdown .ocr-callout-content .ocr-tr-reader-current{background:rgba(233,172,101,.12)}

@@ -57,6 +57,7 @@ for(const [name,engine,binary] of [
     assert(geometry.title.includes(id));
     assert.equal(await page.locator('.ocr-tr-reader-current').count(),1);
     assert.equal(await page.locator('.ocr-tr-current').count(),2);
+    const chosen=await page.locator('#record-picker').inputValue();
 
     // User gesture + scroll observation must not invoke another pane reveal.
     const before=await page.locator('.ocr-tr-reader-scroll').evaluate(el=>{
@@ -71,8 +72,48 @@ for(const [name,engine,binary] of [
     const settled=await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop);
     assert(Math.abs(after-before)<12,`user scroll jumped on first sync: ${before} -> ${after}`);
     assert(Math.abs(settled-after)<12,`feedback scroll loop: ${after} -> ${settled}`);
+    assert.equal(await page.locator('#record-picker').inputValue(),chosen,
+      'scroll must not change the selected sentence ID');
+    assert.equal(await page.locator('.ocr-tr-reader-marker-current [data-gutter-unit]')
+      .getAttribute('data-gutter-unit'),chosen,
+      'reader highlight must remain on the explicitly selected sentence');
     assert.equal(await page.locator('.ocr-tr-reader-marker-current').count(),1);
     assert.equal(await page.locator('.ocr-tr-reader-current').count(),1);
+
+    // Main's shared Floating UI footnote component: no hash jump on a
+    // citation click, note content in one popup, explicit locate and return.
+    const ref=page.locator('.ocr-tr-reader-scroll sup.footnote-ref a[href^="#fn"]').first();
+    assert(await ref.count()>0,'real document must include a visible note reference');
+    await ref.scrollIntoViewIfNeeded();
+    const beforeNote=await page.evaluate(()=>({
+      hash:location.hash,
+      top:document.querySelector('.ocr-tr-reader-scroll').scrollTop,
+      selected:document.querySelector('#record-picker').value,
+    }));
+    await ref.click();
+    const card=page.locator('.ocr-footnote-popover');
+    await card.waitFor({state:'visible'});
+    assert((await card.locator('.ocr-footnote-card-content').textContent()).trim().length>10,
+      'Main popover must contain the real note body');
+    assert.equal(await card.count(),1);
+    assert.equal(await page.evaluate(()=>location.hash),beforeNote.hash,'footnote clicked hash');
+    assert(Math.abs((await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop))-
+      beforeNote.top)<3,'footnote clicked scrolled the preview');
+    assert.equal(await page.locator('#record-picker').inputValue(),beforeNote.selected);
+    const locate=card.getByRole('button',{name:'定位注文'});
+    assert(await locate.isVisible(),'real note must expose Main note-locate action');
+    await locate.click();
+    assert.equal(await card.isVisible(),false);
+    const back=page.getByRole('button',{name:'↩ 返回注引'});
+    assert(await back.isVisible());
+    await back.click();
+    assert.equal(await back.isVisible(),false);
+    assert(Math.abs((await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop))-
+      beforeNote.top)<3,'return to citation must restore exact reading scroll');
+    assert.equal(await page.locator('#record-picker').inputValue(),chosen);
+    await ref.click();
+    await card.getByRole('button',{name:'关闭注释'}).click();
+    assert.equal(await card.isVisible(),false);
 
     // Changing a collapsed table only remeasures markers, not sentence IDs.
     const details=page.locator('details.ocr-callout').first();
@@ -81,6 +122,7 @@ for(const [name,engine,binary] of [
     assert.equal(await details.evaluate(node=>node.open),true);
     assert.equal(await page.locator('.ocr-tr-reader-unit-id').count(),402);
     assert.deepEqual(pageErrors,[]);
-    console.log(name,'GUTTER_SCROLL_PASS',JSON.stringify({initial,id,geometry,before,after,settled}));
+    console.log(name,'GUTTER_SCROLL_FOOTNOTE_PASS',JSON.stringify({initial,id,geometry,before,after,settled,
+      selectionPinned:true,mainFootnotePopup:true,hashPreserved:true,locateReturn:true}));
   }finally{await browser.close();}
 }

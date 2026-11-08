@@ -3,6 +3,7 @@
  * All image requests are SAME-ORIGIN GETs to Main's existing /media/ reader.
  */
 import {renderMarkdown} from './markdown-preview.js';
+import {createFootnotePopover} from './footnote-popover.js';
 import {mainMediaURL} from './translation-review-reading.js';
 
 export class TranslationReaderPane {
@@ -15,11 +16,19 @@ export class TranslationReaderPane {
     toolbar.className='ocr-sb-pane-toolbar';
     const title=document.createElement('strong');
     title.textContent='单语 Markdown · 成品预览';
+    this.returnNoteButton=document.createElement('button');
+    this.returnNoteButton.type='button';
+    this.returnNoteButton.className='ocr-tr-note-return';
+    this.returnNoteButton.textContent='↩ 返回注引';
+    this.returnNoteButton.title='返回注释引用前的阅读位置';
+    this.returnNoteButton.hidden=true;
     this.status=document.createElement('span');
     this.status.className='ocr-sb-pane-status';
-    toolbar.append(title,this.status);
+    toolbar.append(title,this.returnNoteButton,this.status);
     this.scroller=document.createElement('div');
-    this.scroller.className='ocr-tr-reader-scroll';
+    // Main's shared footnote reader uses this scroll port to remember the
+    // exact citation position for its optional locate/return action.
+    this.scroller.className='ocr-tr-reader-scroll ocr-preview-md-scroll';
     this.scroller.setAttribute('aria-label','单语 Markdown 成品阅读预览');
     this.canvas=document.createElement('div');
     this.canvas.className='ocr-tr-reader-canvas';
@@ -35,8 +44,12 @@ export class TranslationReaderPane {
     this.suppressUntil=0;this.lastGesture=0;this.current=null;
     this.markers=new Map();this.markerEntries=[];this.measureHandle=0;
     this.resizeObserver=null;
+    this.footnoteReader=null;this.noteReturn=null;
   }
   init(){
+    this.footnoteReader=createFootnotePopover({root:this.body,
+      onLocate:target=>this.navigateToNote(target)});
+    this.returnNoteButton.addEventListener('click',()=>this.returnToNoteReference());
     for(const event of ['wheel','touchstart','pointerdown','keydown'])
       this.scroller.addEventListener(event,()=>{
         this.lastGesture=performance.now();this.suppressUntil=0;
@@ -47,9 +60,10 @@ export class TranslationReaderPane {
       this.owner.receiveScroll(this.id);
     },{passive:true});
     this.body.addEventListener('click',event=>{
+      if(this.footnoteReader?.handleClick(event))return;
       // Let details/summary own folding. Clicks on hyperlinks and images do
       // not navigate or mutate review state; only explicit sentence hits do.
-      if(event.target.closest('summary.ocr-callout-title'))return;
+      if(event.target.closest('a[href],summary.ocr-callout-title'))return;
       const target=event.target.closest('[data-unit-id]');
       if(!target)return;
       const selected=this.anchors.find(x=>x.id===target.dataset.unitId);
@@ -72,6 +86,8 @@ export class TranslationReaderPane {
   updateDoc(text,anchors){
     this.anchors=anchors;
     if(text!==this.content){
+      this.footnoteReader?.close();
+      this.clearNoteReturn();
       this.content=text;
       this.body.innerHTML=renderMarkdown(text);
       // Markdown-it uses document-relative paths; Lab URL has its own prefix.
@@ -84,6 +100,28 @@ export class TranslationReaderPane {
     this.assignAnchors();
     if(this.current)this.mark(this.current);
     this.scheduleMeasure();
+  }
+  clearNoteReturn(){
+    this.noteReturn=null;
+    this.returnNoteButton.hidden=true;
+  }
+  navigateToNote({sourceLine,noteId,referenceScrollTop,reference}){
+    const note=this.body.querySelector('li.footnote-item[id="'+noteId+'"]');
+    if(!note||!Number.isInteger(sourceLine)||sourceLine<1)return;
+    this.noteReturn={referenceScrollTop,reference};
+    this.returnNoteButton.hidden=false;
+    this.suppressUntil=performance.now()+650;
+    this.scroller.scrollTop+=note.getBoundingClientRect().top-
+      this.scroller.getBoundingClientRect().top-18;
+  }
+  returnToNoteReference(){
+    const saved=this.noteReturn;
+    this.clearNoteReturn();
+    if(!saved)return;
+    this.suppressUntil=performance.now()+650;
+    this.scroller.scrollTop=saved.referenceScrollTop;
+    if(saved.reference?.isConnected)
+      saved.reference.focus({preventScroll:true});
   }
   assignAnchors(){
     for(const node of this.body.querySelectorAll('[data-unit-id]'))
@@ -196,6 +234,8 @@ export class TranslationReaderPane {
   }
   layout(){this.scheduleMeasure();}
   dispose(){
+    this.footnoteReader?.dispose();
+    this.clearNoteReturn();
     this.resizeObserver?.disconnect();
     if(this.measureHandle)cancelAnimationFrame(this.measureHandle);
     this.nodes.clear();this.markers.clear();this.element.replaceChildren();

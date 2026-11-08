@@ -127,20 +127,15 @@ function translatedDocument(rows,resultRows){
 
 export function createTranslationCompareWorkspace(container,model,{onSelect=()=>{}}={}){
   const panes=new Map();
-  let visible=model.rows,activeId=null,lastScroll=0;
+  let visible=model.rows,activeId=null;
   const owner={receivePosition:(id,pos)=>{
     const target=panes.get(id)?.atPosition(pos);
     if(target)select(target,id,true);
-  },receiveScroll:(id)=>{
-    const now=performance.now();
-    if(now-lastScroll<95)return;
-    lastScroll=now;
-    const pane=panes.get(id),pos=pane?.visiblePosition();
-    if(pos===null||pos===undefined)return;
-    const target=pane.atPosition(pos);
-    // Scrolling is observation, not a request to reveal() another pane.
-    // Programmatic scroll feedback previously bounced among the three panes.
-    if(target&&target!==activeId)select(target,id,false);
+  },receiveScroll:()=>{
+    // A scroll gesture is NOT selection. Previous code changed activeId on
+    // every vertical movement and the highlighted "focus row" wandered even
+    // when the reader's scrollTop was stable. Only explicit hits/selectors
+    // may change the shared sentence ID.
   }};
   const dockview=createDockview(container,{
     theme:themeAbyss,
