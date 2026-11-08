@@ -11,7 +11,7 @@ import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
-import {readCMDBlockChains, parseCMDBlockTag, projectCMDAtomLocations} from './cmd-block-chains.js';
+import {readCMDBlockChains, parseCMDBlockTag} from './cmd-block-chains.js';
 
 const markEffect=StateEffect.define();
 const markField=StateField.define({
@@ -157,40 +157,36 @@ function toSource(projection,pos){
   return after?.sourceFrom??projection.ranges.at(-1)?.sourceTo??0;
 }
 
-/** PDF page numbers use the immutable OCR origin, NOT the mutable logical
- * 'pNbM' label. C63 already projects each CMD atom to its physical page and
- * content line. No PDF frame, user file or alternate source is opened here.
+/** The picker uses the literal PBS p-prefix already present in CMD tags.
+ * No origin lookup, pageIndex conversion, or generated PDF page numbers.
  */
-function physicalPDFPageTargets(md){
-  if(!md.includes('<!-- minerujson:source:v1:') &&
-    !md.includes('<!-- cmd:pdf-bbox:v1 '))return {pages:[],locations:[]};
-  let model;
-  try {model=readCMDBlockChains(md);}
-  catch {return {pages:[],locations:[]};}
-  if(model.invalid?.length)return {pages:[],locations:[]};
-  const starts=sourceLineStarts(md);
-  const rows=projectCMDAtomLocations(md,model);
-  const pages=new Map();
-  for(const row of rows){
-    if(!Number.isInteger(row.pageIndex)||row.pageIndex<0)continue;
-    const n=row.pageIndex+1;
-    const line=row.contentLine??row.sourceLine;
-    const at=starts[line-1];
-    if(!Number.isInteger(at))continue;
-    const candidate={number:n,sourceOffset:at,sourceLine:line,blockId:row.id};
-    const current=pages.get(n);
-    // Prefer the first valid content on each physical page, not an empty
-    // parent tag. Sorting is by physical OCR page, not by edited PBS ID.
-    if(!current || (!current.hasContent && row.contentLine!==null))
-      pages.set(n,{...candidate,hasContent:row.contentLine!==null});
+function pbsPageTargets(md){
+  const lines=md.split('\n'),starts=sourceLineStarts(md),tags=[];
+  for(let i=0;i<lines.length;i++){
+    const tag=parseCMDBlockTag(lines[i]);
+    const match=/^p(\d+)b\d+(?:s\d+)*$/.exec(tag?.id||'');
+    if(match)tags.push({key:'p'+match[1],index:Number(match[1]),id:tag.id,
+      sourceLine:i+1,sourceOffset:starts[i]});
   }
-  const locations=rows.filter(row=>Number.isInteger(row.pageIndex)&&row.pageIndex>=0)
-    .map(row=>({number:row.pageIndex+1,
-      sourceOffset:starts[row.sourceLine-1]}))
-    .filter(row=>Number.isInteger(row.sourceOffset))
-    .sort((a,b)=>a.sourceOffset-b.sourceOffset);
-  return {pages:[...pages.values()].sort((a,b)=>a.number-b.number)
-    .map(({hasContent,...rest})=>rest),locations};
+  const pages=new Map(),locations=[];
+  for(let i=0;i<tags.length;i++){
+    const tag=tags[i];
+    locations.push({key:tag.key,sourceOffset:tag.sourceOffset});
+    const end=i+1<tags.length?tags[i+1].sourceLine-1:lines.length;
+    let contentLine=null;
+    for(let j=tag.sourceLine;j<end;j++){
+      const text=lines[j].trim();
+      if(!text||text.startsWith('<!--')||text.startsWith('[MinerU '))continue;
+      contentLine=j+1;break;
+    }
+    const line=contentLine??tag.sourceLine;
+    const candidate={key:tag.key,index:tag.index,sourceLine:line,
+      sourceOffset:starts[line-1],blockId:tag.id,hasContent:contentLine!==null};
+    if(!pages.has(tag.key)||(!pages.get(tag.key).hasContent&&candidate.hasContent))
+      pages.set(tag.key,candidate);
+  }
+  return {pages:[...pages.values()].sort((a,b)=>a.index-b.index)
+    .map(({hasContent,index,...page})=>page),locations};
 }
 function sourceLineStarts(md){
   const starts=[0];
@@ -290,10 +286,10 @@ class ComparePane {
       select.add(new Option('分歧块','disagree'));
       toolbar.append(select);
       const pdfSelect=document.createElement('select');
-      pdfSelect.id='pdf-page-select';
-      pdfSelect.setAttribute('aria-label','PDF 页码快速定位');
-      pdfSelect.title='按原始 PDF 物理页码跳转；若处于分歧块模式会切回全文';
-      pdfSelect.add(new Option('无 PDF 页码',''));
+      pdfSelect.id='pbs-page-select';
+      pdfSelect.setAttribute('aria-label','PBS p 编码定位');
+      pdfSelect.title='按 CMD 已有 p 编码跳转；分歧块模式切回全文';
+      pdfSelect.add(new Option('无 PBS p',''));
       pdfSelect.disabled=true;
       toolbar.append(pdfSelect);
     }
@@ -331,7 +327,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
   const panes=new Map();
   let projection={doc:'',ranges:[],blocks:[],disagreements:[]};
   let runs=new Map(),gold={},md='',mode='full',focus=null;
-  let pdfPages=[],pageLocations=[];
+  let pbsPages=[],pbsLocations=[];
   let lastSync=0,api=null;
   const owner={receivePosition:(...args)=>api?.receivePosition(...args),
     receiveScroll:(...args)=>api?.receiveScroll(...args)};
@@ -353,35 +349,33 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
   }
   const eachPane=callback=>{for(const [id,pane] of panes)if(pane.view)callback(pane,id);};
   function refreshPageOptions(){
-    const select=panes.get('original')?.element.querySelector('#pdf-page-select');
+    const select=panes.get('original')?.element.querySelector('#pbs-page-select');
     if(!select)return;
     select.replaceChildren();
-    if(!pdfPages.length){
-      select.add(new Option('无 PDF 页码',''));
+    if(!pbsPages.length){
+      select.add(new Option('无 PBS p',''));
       select.disabled=true;
       return;
     }
     select.disabled=false;
-    for(const page of pdfPages){
-      const item=new Option('PDF '+page.number,String(page.number));
-      item.title='PDF 第 '+page.number+' 页 · CMD 原文第 '+page.sourceLine+
+    for(const page of pbsPages){
+      const item=new Option(page.key,page.key);
+      item.title=page.key+' · CMD 原文第 '+page.sourceLine+
         ' 行 · '+page.blockId;
       select.add(item);
     }
   }
   function updatePageSelection(source){
-    const select=panes.get('original')?.element.querySelector('#pdf-page-select');
+    const select=panes.get('original')?.element.querySelector('#pbs-page-select');
     if(!select||select.disabled||!Number.isInteger(source))return;
-    // Derive the displayed PDF page from the nearest preceding original CMD
-    // atom: logical PBS IDs may have been renumbered or moved.
+    // The nearest preceding PBS tag determines the current p prefix.
     let row=null;
-    for(const item of pageLocations){
+    for(const item of pbsLocations){
       if(item.sourceOffset>source)break;
       row=item;
     }
-    if(!row)row=pageLocations[0];
-    if(row?.number&&select.value!==String(row.number))
-      select.value=String(row.number);
+    if(!row)row=pbsLocations[0];
+    if(row?.key&&select.value!==row.key)select.value=row.key;
   }
   function showDecorations(){
     eachPane((pane,id)=>{
@@ -446,8 +440,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
         (results!==runs && filter==='disagree');
       md=source;mode=filter;runs=results;gold=decisions;
       if(sourceChanged){
-        const pageIndex=physicalPDFPageTargets(md);
-        pdfPages=pageIndex.pages;pageLocations=pageIndex.locations;
+        const pages=pbsPageTargets(md);
+        pbsPages=pages.pages;pbsLocations=pages.locations;
         refreshPageOptions();
       }
       if(changed){
@@ -467,8 +461,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
       if(!Number.isInteger(source))return;
       focus=source;showDecorations();scrollToSource(source);
     },
-    pdfPageTarget(pageNumber){
-      return pdfPages.find(page=>page.number===Number(pageNumber))||null;
+    pbsPageTarget(key){
+      return pbsPages.find(page=>page.key===key)||null;
     },
     receivePosition(id,viewPos){
       const source=toSource(projection,viewPos);
@@ -488,8 +482,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
     },
     snapshot(){
       return {mode,projectionLength:projection.doc.length,sourceLength:md.length,
-        pdfPages:pdfPages.map(page=>({...page})),
-        currentPdfPage:Number(panes.get('original')?.element.querySelector('#pdf-page-select')?.value)||null,
+        pbsPages:pbsPages.map(page=>({...page})),
+        currentPbsPage:panes.get('original')?.element.querySelector('#pbs-page-select')?.value||null,
         blocks:projection.blocks,disagreements:projection.disagreements,
         paneCount:[...panes.values()].filter(p=>p.view).length,
         positions:[...panes.values()].map(p=>({id:p.id,scroll:p.view?.scrollDOM.scrollTop??0,

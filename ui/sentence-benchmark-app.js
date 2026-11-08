@@ -298,17 +298,16 @@ $('sample-file').onchange=importSample;
 $('delete-sample').onclick=()=>{if(samples.some(s=>s.id===sample.id))return;
   state.custom=state.custom.filter(s=>s.id!==sample.id);selectSample('demo');};
 $('view-mode').onchange=()=>{lastRevealed=null;renderSource();};
-$('pdf-page-select').onchange=()=>{
-  const select=$('pdf-page-select');
-  const target=compare.pdfPageTarget(select.value);
-  if(!target){status('当前样本没有可核验的 PDF 物理页码。',true);return;}
+$('pbs-page-select').onchange=()=>{
+  const select=$('pbs-page-select');
+  const target=compare.pbsPageTarget(select.value);
+  if(!target){status('当前样本没有 PBS p 编码。',true);return;}
   const hadFilter=$('view-mode').value==='disagree';
-  // Filtering may entirely hide a requested PDF page. Navigation always
-  // reveals the original source line in 全文, never invents a filtered span.
+  // Filtering may hide the requested PBS block. Switch to 全文 to reveal it.
   if(hadFilter)$('view-mode').value='full';
   focused=target.sourceOffset;lastRevealed=null;manual=false;
   renderSource();
-  status('PDF 第 '+target.number+' 页 → CMD 第 '+target.sourceLine+
+  status(target.key+' → CMD 第 '+target.sourceLine+
     ' 行 · '+target.blockId+(hadFilter?'（已切换全文）':''));
 };
 $('toggle-review').onclick=()=>{
