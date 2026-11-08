@@ -1,18 +1,17 @@
 /** Independent translation Lab view: Dockview + read-only CM6 panes.
- * Only record IDs and immutable CMD source offsets are shared. Neither
+ * Only record IDs and mapped clean-source offsets are shared. Neither
  * the sentence engine nor its Gold/sidecar state is imported here.
  */
 import {createDockview,themeAbyss} from 'dockview';
 import 'dockview/dist/styles/dockview.css';
-import {EditorView,Decoration,GutterMarker,gutter,lineNumbers} from '@codemirror/view';
-import {EditorState,StateEffect,StateField,RangeSet} from '@codemirror/state';
+import {EditorView,Decoration,lineNumbers} from '@codemirror/view';
+import {EditorState,StateEffect,StateField} from '@codemirror/state';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {parseCMDBlockTag} from './cmd-block-chains.js';
 
 const markEffect=StateEffect.define();
 const markField=StateField.define({
@@ -22,44 +21,11 @@ const markField=StateField.define({
     return tr.docChanged?value.map(tr.changes):value;
   },provide:field=>EditorView.decorations.from(field)
 });
-const labelEffect=StateEffect.define();
-const labelField=StateField.define({
-  create:()=>RangeSet.empty,
-  update(value,tr){
-    for(const e of tr.effects)if(e.is(labelEffect))return e.value;
-    return tr.docChanged?value.map(tr.changes):value;
-  }
-});
-class BlockLabel extends GutterMarker {
-  constructor(id){super();this.id=id;}
-  eq(other){return other instanceof BlockLabel&&other.id===this.id;}
-  toDOM(){
-    const label=document.createElement('span');
-    label.className='ocr-sb-block-id';
-    label.textContent=this.id;
-    label.title='PBS '+this.id;
-    return label;
-  }
-}
 const RO=[EditorState.readOnly.of(true),EditorView.editable.of(false),
   EditorView.lineWrapping,markdown({base:markdownLanguage}),
   obsidianMarkdown,obsidianSourceSyntax,
   syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),markField];
-const ORIGINAL=[lineNumbers(),labelField,gutter({
-  class:'ocr-sb-block-gutter',markers:view=>view.state.field(labelField),
-  initialSpacer:()=>new BlockLabel('p00b000s0')
-}),obsidianHeadingMarkers];
-
-function blockMarkers(source){
-  let from=0;
-  const labels=[];
-  for(const line of source.split('\n')){
-    const block=parseCMDBlockTag(line);
-    if(block)labels.push(new BlockLabel(block.id).range(from));
-    from+=line.length+1;
-  }
-  return RangeSet.of(labels,true);
-}
+const ORIGINAL=[lineNumbers(),obsidianHeadingMarkers];
 function recordAt(anchors,position){
   if(!anchors.length)return null;
   let low=0,high=anchors.length;
@@ -82,7 +48,7 @@ class TranslationPane {
     const toolbar=document.createElement('div');
     toolbar.className='ocr-sb-pane-toolbar';
     const title=document.createElement('strong');
-    title.textContent=id==='original'?'CMD 原文 · 只读':id.toUpperCase()+' · 校译';
+    title.textContent=id==='original'?'干净原文 · 单语 MD':id.toUpperCase()+' · 校译';
     this.status=document.createElement('span');
     this.status.className='ocr-sb-pane-status ocr-tr-pane-status';
     this.status.textContent=id==='original'?'原始 CMD':'待载入';
@@ -115,7 +81,6 @@ class TranslationPane {
     if(this.view.state.doc.toString()!==text){
       this.view.dispatch({changes:{from:0,to:this.view.state.doc.length,insert:text}});
     }
-    if(this.id==='original')this.view.dispatch({effects:labelEffect.of(blockMarkers(text))});
   }
   mark(id){
     if(!this.view)return;
@@ -183,7 +148,7 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
     }
   });
   const panels=[];
-  panels.push(dockview.addPanel({id:'original',component:'original',title:'CMD 原文 · 只读'}));
+  panels.push(dockview.addPanel({id:'original',component:'original',title:'干净原文 · 单语 MD'}));
   let previous='original';
   for(const name of model.names){
     panels.push(dockview.addPanel({id:name,component:name,title:name.toUpperCase(),
@@ -191,17 +156,21 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
     previous=name;
   }
   for(const panel of panels){panel.group.header.hidden=true;panel.group.relayout();}
-  panes.get('original').updateDoc(model.source,
-    model.rows.map(r=>({id:r.id,from:r.from})));
+  panes.get('original').updateDoc(model.clean.doc,model.clean.anchors);
   function refresh(rows){
     visible=rows;
+    // Keep the full clean document regardless of the active discrepancy
+    // filter, but navigate only among the currently visible AI records.
+    const included=new Set(rows.map(row=>row.id));
+    panes.get('original').updateDoc(model.clean.doc,
+      model.clean.anchors.filter(a=>included.has(a.id)));
     for(const name of model.names){
       const {doc,anchors}=translatedDocument(rows,model.translations[name].rows);
       const pane=panes.get(name);
       pane.updateDoc(doc,anchors);
       pane.status.textContent=rows.length+' 条 · 校正英文 / 中文译文';
     }
-    panes.get('original').status.textContent=model.rows.length+' 条原文 · SHA '+model.sourceSha256.slice(0,12);
+    panes.get('original').status.textContent=model.rows.length+' 条 · 无损 PASS · SHA '+model.sourceSha256.slice(0,12);
     const next=rows.some(r=>r.id===activeId)?activeId:rows[0]?.id??null;
     if(next)select(next,null,true);
     else {activeId=null;onSelect(null);}

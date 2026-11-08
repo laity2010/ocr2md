@@ -48,9 +48,10 @@ WP05 incremental updates and PDF-driven block mutation are explicitly out of sco
 
 - Lab 根路径 `/labs/sentence-benchmark/` 打开独立模块首页。
 - `sentence-benchmark.html` 仍是原有分句模块，保留此前的 Gold、采用、导出流程；`index.html` 仍能直接打开 V6 工作台。
-- `translation-review.html` 是独立校译模块，左侧 CMD，右侧按导入 AI 数量增加 CM6 校正英文／中文译文面板，所有窗体共享当前记录 ID，而不是共用滚动像素。
+- `translation-review.html` 是独立校译模块，左侧为去工作标签的单语 Markdown，右侧按导入 AI 数量增加 CM6 校正英文／中文译文面板，所有窗体共享当前记录 ID，而不是共用滚动像素。
 - 校译数据有独立的 `.runtime/translation-review/input/`、`output/`，不是分句的审阅或临时导出文件。输入 `document.md`、`translation-units.json`、`translated-gpt.json`、`translated-grok.json`；后续 AI 可增 `translated-muse.json` 后重新载入。
 - 校译阶段目前只读比较；人工英文与中文采用、结果保存及双语重组尚未开发。测试和接口边界见 `tests/am/TRANSLATION_REVIEW_PUBLIC_CONTRACT.md`。
+- **WP1 单语原文已接入**：校译左窗使用独立、可逆的清洁 Markdown 投影，隐藏所有工作标签并按句表每句一行；内部保存来源坐标的变更记录以恢复完整审阅 MD。右侧仍是只读的各家校译对照；中英交替排版留待 WP2。可通过 `node tests/translation-review-clean-real.test.mjs` 验证完整 402 条及媒体/注释不变。
 
 ## One AI-ready sentence/block table (Lab, on-demand)
 

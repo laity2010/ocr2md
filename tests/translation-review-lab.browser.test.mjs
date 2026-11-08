@@ -79,13 +79,18 @@ try{
       assert.equal(await page.locator('#lab-sentence').getAttribute('href'),'./sentence-benchmark.html');
       await page.locator('#lab-translation').click();
       await page.waitForFunction(()=>document.querySelector('#status')?.textContent
-        .includes('已读取独立校译文件'),null,{timeout:45000});
+        .includes('单语 MD 重组无损 PASS'),null,{timeout:45000});
       assert.equal(await page.locator('.ocr-sb-pane').count(),3);
       assert.equal(await page.locator('.ocr-sb-pane .cm-editor').count(),3);
       assert.equal(await page.locator('#record-picker option').count(),2);
       assert.equal(await page.locator('#record-count').textContent(),'1 / 2');
       assert(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content')
         .textContent().then(x=>x.includes('Hello world.')));
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content')
+        .textContent().then(x=>x.includes('<!-- cmd:block:v1')),false,
+        'visible monolingual Markdown must not expose CMD workflow labels');
+      assert(await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-toolbar')
+        .textContent().then(x=>x.includes('干净原文')));
       assert(await page.locator('.ocr-sb-pane').nth(1).textContent().then(x=>x.includes('苹果是红色的。')));
       assert(await page.locator('.ocr-sb-pane').nth(2).textContent().then(x=>x.includes('苹果的表皮是红色的。')));
       await page.locator('#record-picker').selectOption('p0b1-s001');

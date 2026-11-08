@@ -4,7 +4,10 @@
 
 1. **TR01** `load_dataset(inputDirectory)`：从 `translation-review/input/` 独立读取 CMD、统一句块表与多 AI 译文；检查原始 SHA、记录 ID、字段和顺序完全一致；仅以只读响应供校译页使用。直接测试：`python3 -m unittest tests/test_v6_translation_review.py`。
 2. **TR02** `prepareTranslationReview(dataset)` / `filterTranslationRows(rows,mode)`：基于每条的 `original/corrected/translation` 构成只读比较表与差异筛选。直接测试：`node --test tests/translation-review-core.test.mjs`。
-3. **TR03** `createTranslationCompareWorkspace(container,model,{onSelect})`：独立 CM6/Dockview 多窗，左窗完整 CMD、右窗按 AI 数量纵向堆叠；窗口仅通过不可变 `id` 和源文 `from` 锚点同步。真实浏览器测试：`node tests/translation-review-lab.browser.test.mjs`（Chromium + iPad WebKit）。
+3. **TR03** `createTranslationCompareWorkspace(container,model,{onSelect})`：独立 CM6/Dockview 多窗，左窗显示 WP1 的干净单语 MD、右窗按 AI 数量纵向堆叠；窗口仅通过不可变 `id` 和原文→干净文档的坐标锚点同步。真实浏览器测试：`node tests/translation-review-lab.browser.test.mjs`（Chromium + iPad WebKit）。
+4. **TR04 (WP1)** `buildCleanReviewedMD(source,rows)` / `restoreReviewedMD(clean)`：在校译模块内部构建单语只读 Markdown。仅删除工作元数据注释、将同一块连续句子的分隔符变为换行；所有其余源字符、标题、媒体、公式、HTML、注释都保留，并记录可逆补丁和 source→clean 的 ID 位置。逆向结果必须逐字符等于审阅 MD，任何坐标重叠/不可安全分句直接报错，不允许悄悄跳过。直接测试：`node --test tests/translation-review-clean-md.test.mjs`；锁定 402 条的真实数据测试：`node tests/translation-review-clean-real.test.mjs`。两条测试不可互相替代。
+
+**WP1 左窗状态**：现在呈现不带 CMD/MinerU/OCR2MD 工作标签的全篇单语 Markdown，正文按原有句表划界逐句换行；右侧 AI 译文比较暂不改变，统一 ID 通过 `clean.anchors` 联动。下游双语排版和英文纠错高亮不在 WP1 范围。
 
 ## 路由
 

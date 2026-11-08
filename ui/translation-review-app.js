@@ -4,6 +4,7 @@ import './workspace.css';
 import './sentence-benchmark.css';
 import './translation-review.css';
 import {prepareTranslationReview,filterTranslationRows} from './translation-review-core.js';
+import {buildCleanReviewedMD} from './translation-review-clean-md.js';
 import {createTranslationCompareWorkspace} from './translation-review-workspace.js';
 
 const $=id=>document.getElementById(id);
@@ -55,6 +56,7 @@ async function load(){
     const response=await fetch('./api/translation-review-data',{cache:'no-store'});
     if(!response.ok)throw Error('HTTP '+response.status+' · 校译输入不可用');
     const candidate=prepareTranslationReview(await response.json());
+    candidate.clean=buildCleanReviewedMD(candidate.source,candidate.rows);
     workspace?.destroy();workspace=null;
     model=candidate;
     visible=model.rows;
@@ -62,8 +64,8 @@ async function load(){
       onSelect:renderSelection
     });
     renderFilter();
-    status('已读取独立校译文件 · '+model.rows.length+' 条 · '+
-      model.names.length+' 家 AI · CMD 与翻译只读');
+    status('单语 MD 重组无损 PASS · '+model.rows.length+' 条 · '+
+      model.clean.stats.sentenceBreaks+' 处句界换行 · '+model.names.length+' 家 AI');
   }catch(error){
     status('校译 Lab 载入失败：'+error.message,true);
     $('translation-empty').hidden=false;
