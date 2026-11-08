@@ -161,7 +161,7 @@ for(const [name,engine,binary] of [
     assert.equal(await back.isVisible(),false);
     assert(Math.abs((await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop))-
       beforeNote.top)<3,'return to citation must restore exact reading scroll');
-    assert.equal(await page.locator('#record-picker').inputValue(),chosen);
+    assert.equal(await page.locator('#record-picker').inputValue(),beforeNote.selected);
     await ref.click();
     await card.getByRole('button',{name:'关闭注释'}).click();
     assert.equal(await card.isVisible(),false);
