@@ -505,6 +505,8 @@ async function main() {
           if(spellcheckEnabled)spellcheckDocChanged();
           if(illegalBreakEnabled)illegalBreakDocChanged(update);
           if(sentenceEnabled)sentenceDocChanged();
+          if($('module-select')?.value==='sentence-translation')
+            queueMicrotask(()=>workspace.refreshSentenceTranslation());
           textBlockDocChanged();
         }
         if (update.selectionSet) {

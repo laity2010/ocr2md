@@ -18,6 +18,7 @@ import {createHtmlElementsModule} from './html-elements-module.js';
 import {createSpellcheckModule} from './spellcheck-module.js';
 import {createIllegalBreakModule} from './illegal-break-module.js';
 import {createSentenceModule} from './sentence-module.js';
+import {createSentenceTranslationModule} from './sentence-translation-module.js';
 import {createTextBlockModule} from './text-block-module.js';
 import {paintSentencePreviewHighlight,clearSentencePreviewHighlight,
   paintSentenceCoverageHighlight,clearSentenceCoverageHighlight,hitSentencePreview} from './sentence-preview-highlight.js';
@@ -94,6 +95,7 @@ class OutlinePanel {
     this.spellcheck=null;
     this.illegalBreak=null;
     this.sentence=null;
+    this.sentenceTranslation=null;
     this.textBlock=null;
     this.mediaHost=document.createElement('div');
     this.mediaHost.hidden=true;
@@ -109,6 +111,8 @@ class OutlinePanel {
     this.illegalBreakHost.hidden=true;
     this.sentenceHost=document.createElement('div');
     this.sentenceHost.hidden=true;
+    this.sentenceTranslationHost=document.createElement('div');
+    this.sentenceTranslationHost.hidden=true;
     this.textBlockHost=document.createElement('div');
     this.textBlockHost.hidden=true;
     currentOutline=this;
@@ -116,7 +120,7 @@ class OutlinePanel {
   init(){
     this.grid=createOutlineGrid(this.element,readElementSource,()=>getCMD()?chapterCMD:null);
     this.grid.setTitleFontScale(outlineTitleFontScale);
-    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost,this.illegalBreakHost,this.sentenceHost,this.textBlockHost);
+    this.element.append(this.mediaHost,this.latexHost,this.noteHost,this.htmlHost,this.spellcheckHost,this.illegalBreakHost,this.sentenceHost,this.sentenceTranslationHost,this.textBlockHost);
     this.media=createMediaModule(this.mediaHost,readElementSource,()=>mediaCMD,reportMediaStatus);
     this.latex=createLatexModule(this.latexHost,readElementSource,()=>latexCMD,reportMediaStatus);
     this.note=createNotePairModule(this.noteHost,readElementSource,()=>getCMD(),reportMediaStatus);
@@ -126,6 +130,11 @@ class OutlinePanel {
       reportMediaStatus,(row,decision)=>getCMD().reviewIllegalBreak(row,decision));
     this.sentence=createSentenceModule(this.sentenceHost,id=>getCMD()?.getChapter(id),
       reportMediaStatus,()=>currentPreview?.redrawSentenceCoverage());
+    this.sentenceTranslation=createSentenceTranslationModule(this.sentenceTranslationHost,{
+      readSource:readElementSource,
+      readSentences:()=>getCMD()?.querySentences()?.rows??[],
+      getChapter:id=>getCMD()?.getChapter(id),onStatus:reportMediaStatus,
+    });
     this.textBlock=createTextBlockModule(this.textBlockHost,id=>getCMD()?.getChapter(id),
       reportMediaStatus,point=>{if(currentPreview?.pdfUsable){
         currentPreview.setMode('pdf');void currentPreview.focusOriginalBlock(point.pageIndex,point.blockIndex);
@@ -144,7 +153,7 @@ class OutlinePanel {
       getStartNumber:()=>this.grid?.startText||'000',
       // Only semantic query intents enter business-owned AGs.
       applyChapterQuery:(module,intent)=>{
-        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html,spellcheck:this.spellcheck,'illegal-break':this.illegalBreak,sentence:this.sentence,'text-block':this.textBlock}[module];
+        const owner={outline:this.grid,media:this.media,latex:this.latex,note:this.note,html:this.html,spellcheck:this.spellcheck,'illegal-break':this.illegalBreak,sentence:this.sentence,'sentence-translation':this.sentenceTranslation,'text-block':this.textBlock}[module];
         if(!owner?.setVirtualQuery)throw Error('Unknown AG chapter query owner');
         owner.setVirtualQuery(intent);
       },
@@ -153,6 +162,7 @@ class OutlinePanel {
       countSpellcheck:chapter=>this.spellcheck?.count(chapter)??0,
       countIllegalBreak:chapter=>this.illegalBreak?.count(chapter)??0,
       countSentences:chapter=>this.sentence?.count(chapter)??0,
+      countSentenceTranslations:chapter=>this.sentenceTranslation?.count(chapter)??0,
       countTextBlocks:chapter=>this.textBlock?.count(chapter)??0,
     });
     queueMicrotask(()=>wcpRuntime?.onAGReady(bridge));
@@ -165,7 +175,8 @@ class OutlinePanel {
       module==='html'?'AG Grid HTML 元素':
       module==='spellcheck'?'AG Grid 英文拼写审阅':
       module==='illegal-break'?'AG Grid 非法断行审阅':
-      module==='sentence'?'AG Grid 分句审阅':module==='text-block'?'AG Grid 文本块覆盖审阅':'AG Grid 章节大纲');
+      module==='sentence'?'AG Grid 分句审阅':
+      module==='sentence-translation'?'AG Grid 分句翻译审阅':module==='text-block'?'AG Grid 文本块覆盖审阅':'AG Grid 章节大纲');
     this.element.querySelector('.ocr-outline-grid').hidden=module!=='chapter-boundary';
     this.media?.setActive(module==='media');
     this.latex?.setActive(module==='latex');
@@ -174,6 +185,7 @@ class OutlinePanel {
     this.spellcheck?.setActive(module==='spellcheck');
     this.illegalBreak?.setActive(module==='illegal-break');
     this.sentence?.setActive(module==='sentence');
+    this.sentenceTranslation?.setActive(module==='sentence-translation');
     this.textBlock?.setActive(module==='text-block');
   }
   layout() {}
@@ -185,6 +197,7 @@ class OutlinePanel {
     this.spellcheck?.dispose();
     this.illegalBreak?.dispose();
     this.sentence?.dispose();
+    this.sentenceTranslation?.dispose();
     this.textBlock?.dispose();
     this.grid?.dispose();
     if(currentOutline===this)currentOutline=null;
@@ -834,6 +847,7 @@ export function createWorkspace(container, getDocument, getCurrentEditor, getCom
     setSentenceCoverage:enabled=>currentOutline?.sentence?.setCoverage(enabled),
     setTextBlockCoverage:enabled=>currentPreview?.setCoverageEnabled(enabled),
     isTextBlockCoverageEnabled:()=>mdTextBlockCoverageEnabled||pdfTextBlockCoverageEnabled,
+    refreshSentenceTranslation:()=>currentOutline?.sentenceTranslation?.refresh(),
     setSentenceLoading:()=>currentOutline?.sentence?.setLoading(),
     setSentenceError:message=>currentOutline?.sentence?.setError(message),
     getSentences:()=>{

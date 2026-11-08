@@ -9,7 +9,8 @@ INSERT INTO modules VALUES
  ('A','Media','AG Grid + resumable download','ui/media-module.js'),
  ('T','LaTeX','AG Grid + KaTeX review plugin','ui/latex-module.js'),
  ('N','Note Pair','AG Grid + regex citation/body matching','ui/note-pair-module.js'),
- ('W','WCP Runtime','bounded extension contract','ui/wcp-runtime.js');
+ ('W','WCP Runtime','bounded extension contract','ui/wcp-runtime.js'),
+ ('U','Sentence Translation','pure language exchange and AG reviewer','ui/sentence-translation-module.js');
 
 INSERT INTO apis VALUES
  ('C01','C','CMDocument.getMarkdown','ui/cm-document.js','export','none','Markdown string','read only',1),
@@ -1767,3 +1768,17 @@ INSERT INTO access_edges VALUES
  ('X-SRC-MEDIA-SELECT','L','A','ui/workspace.js','currentOutline.media?.getSelectedLocalMedia()','A14','registered','Layout reads scalar selected local path only, never AG internals');
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-A14-SRC-SELECT','A14','tests/source-line-callout.browser.test.mjs','tests/source-line-callout.browser.test.mjs','Chrome/WebKit selected local AG file enables line insertion only in Media mode; CMD Undo/Redo, no auto-save','integration');
+
+-- Independent sentence-translation module (Media compact API example).
+-- ST01/02 only operate on detached CM6/CMD sentence rows and pure AI data;
+-- ST03 owns its AG and can only export/import review JSON, never source writes.
+INSERT INTO apis VALUES
+ ('U01','U','prepareSentenceTranslationTask','ui/sentence-translation-core.js','export','CMD Markdown source, detached sentence rows','pure-text JSON task and private source mapping/fingerprint','does not mutate source or leak protected CMD/LaTeX/media/HTML into AI payload',1),
+ ('U02','U','validateSentenceTranslationReply','ui/sentence-translation-core.js','export','prepared task, AI JSON reply, exact current CMD source','detached per-sentence review rows or fail-closed error','strict id/source revision and structural syntax guards; never auto-adopt corrected text',1),
+ ('U03','U','createSentenceTranslationModule','ui/sentence-translation-module.js','export','AG host and narrow read-only CMD sentence and chapter functions, global status callback','AG review facade with scoped export/import/refresh/count/dispose','does not access CM6 EditorView or write/sync/save CMD Markdown',1);
+INSERT INTO access_edges VALUES
+ ('X-ST-L-U03','L','U','ui/workspace.js','createSentenceTranslationModule(this.sentenceTranslationHost','U03','registered','Layout mounts independent translation AG with read-only CMD semantic getter callbacks');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-ST-U01-DIRECT','U01','tests/sentence-translation-core.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','468 pure sentence AI task rows with OCR control and math syntax omitted, original document source unchanged, private physical source maps preserved','direct'),
+ ('TC-ST-U02-DIRECT','U02','tests/sentence-translation-core.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','strict unknown or duplicate IDs, stale source, mismatched version, unsafe markup rejection and protected math manual placement flag; checked+translation accepted as review-only','direct'),
+ ('TC-ST-U03-DIRECT','U03','tests/sentence-translation-public.browser.test.mjs','tests/sentence-translation-public.fixture.html','Chromium/WebKit directly mount own AG, semantic scoped rows, downloadable pure JSON and file import, stale invalidation, no CM6 editor or storage mutation','direct');

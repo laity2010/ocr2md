@@ -1,0 +1,7 @@
+.ocr-sentence-translation{display:flex;flex-direction:column;min-height:0;height:100%;color:#d3c6aa}
+.ocr-sentence-translation[hidden]{display:none!important}
+.ocr-sentence-translation-toolbar{display:flex;gap:8px;align-items:center;padding:7px;flex-wrap:wrap}
+.ocr-sentence-translation-toolbar button{background:#344b47;border:1px solid #62877a;border-radius:5px;color:#e0e9df;padding:6px 9px;cursor:pointer}
+.ocr-sentence-translation-toolbar button:hover{background:#45695d}
+.ocr-sentence-translation-toolbar span{font-size:12px;color:#a9b9b6}
+.ocr-sentence-translation-grid{flex:1;min-height:0;width:100%}

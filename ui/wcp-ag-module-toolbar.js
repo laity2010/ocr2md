@@ -98,7 +98,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
   const elementSelect=document.createElement('select');
   elementSelect.className='ocr-lab-element-select';
   elementSelect.setAttribute('aria-label','文档元素');
-  for(const [value,label] of [['text-block','文本块'],['chapter-boundary','标题'],['media','媒体'],['latex','LaTeX'],['note','注释对'],['html','HTML 元素'],['spellcheck','拼写检查'],['illegal-break','非法断行'],['sentence','分句']]){
+  for(const [value,label] of [['text-block','文本块'],['chapter-boundary','标题'],['media','媒体'],['latex','LaTeX'],['note','注释对'],['html','HTML 元素'],['spellcheck','拼写检查'],['illegal-break','非法断行'],['sentence','分句'],['sentence-translation','分句翻译']]){
     const option=document.createElement('option');
     option.value=value;option.textContent=label;elementSelect.append(option);
   }
@@ -180,7 +180,7 @@ export function mountAgModuleToolbar({modulePort,workspace}={}){
     if(transitioning)return;
     const selected=modulePort.getModule();
     if(selected==='settings'){refresh();return;}
-    if(selected==='text-block'||selected==='chapter-boundary'||selected==='media'||selected==='latex'||selected==='note'||selected==='html'||selected==='spellcheck'||selected==='illegal-break'||selected==='sentence')
+    if(selected==='text-block'||selected==='chapter-boundary'||selected==='media'||selected==='latex'||selected==='note'||selected==='html'||selected==='spellcheck'||selected==='illegal-break'||selected==='sentence'||selected==='sentence-translation')
       selectedElementModule=selected;
     else{syncModule();return;}
     refresh();

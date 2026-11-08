@@ -4,8 +4,8 @@
  */
 import {viewStore,publishFocus} from './view-store.js';
 
-const TYPE=Object.freeze({'text-block':'text-block','chapter-boundary':'heading',media:'media',latex:'latex',note:'note',html:'html',spellcheck:'spellcheck','illegal-break':'illegal-break',sentence:'sentence'});
-const gridType=Object.freeze({'text-block':'text-block',outline:'heading',media:'media',latex:'latex',note:'note',html:'html',spellcheck:'spellcheck','illegal-break':'illegal-break',sentence:'sentence'});
+const TYPE=Object.freeze({'text-block':'text-block','chapter-boundary':'heading',media:'media',latex:'latex',note:'note',html:'html',spellcheck:'spellcheck','illegal-break':'illegal-break',sentence:'sentence','sentence-translation':'sentence-translation'});
+const gridType=Object.freeze({'text-block':'text-block',outline:'heading',media:'media',latex:'latex',note:'note',html:'html',spellcheck:'spellcheck','illegal-break':'illegal-break',sentence:'sentence','sentence-translation':'sentence-translation'});
 export function mountVirtualAgQuery({checkbox,chapterSelect,status,onSummary=()=>{},getModule,isPhysicalChapter,isIndexMode}){
   let bridge=null,sourcePort=null,unsubscribe=null,disposed=false,index=null;
   let priorScope=null,updateTimer=null;
@@ -30,7 +30,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,onSummary=()=
     }
   };
   function scopedKeys(type){
-    if(type==='note'||type==='html'||type==='spellcheck'||type==='illegal-break'||type==='sentence'||type==='text-block')return null; // Each owner's scanner owns row membership.
+    if(type==='note'||type==='html'||type==='spellcheck'||type==='illegal-break'||type==='sentence'||type==='sentence-translation'||type==='text-block')return null; // Each owner's scanner owns row membership.
     const state=index;
     if(!queryEnabled()||!state)return null;
     const chapter=currentChapter();
@@ -75,7 +75,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,onSummary=()=
         const found=type==='heading'?
           current.elements.find(x=>x.type==='heading'&&x.id==='heading:'+data.id):
           current.elements.find(x=>x.type===type&&x.from===data.from);
-        const chapter=(type==='note'||type==='html'||type==='spellcheck'||type==='illegal-break'||type==='sentence'||type==='text-block')?current.chapterAt(data.from):
+        const chapter=(type==='note'||type==='html'||type==='spellcheck'||type==='illegal-break'||type==='sentence'||type==='sentence-translation'||type==='text-block')?current.chapterAt(data.from):
           found&&current.getChapter(found.chapterId);
         return chapter?chapter.number+' · '+chapter.title:'';
       }});
@@ -99,6 +99,7 @@ export function mountVirtualAgQuery({checkbox,chapterSelect,status,onSummary=()=
         type==='spellcheck'?bridge.countSpellcheck(chapter):
         type==='illegal-break'?bridge.countIllegalBreak(chapter):
         type==='sentence'?bridge.countSentences(chapter):
+        type==='sentence-translation'?bridge.countSentenceTranslations(chapter):
         type==='text-block'?bridge.countTextBlocks(chapter):
         state.queryElements({chapter,type}).length;
       status.textContent='CMD · '+(chapter==='all'?'全部章节':state.getChapter(chapter)?.number||'—')+' · '+count+' 项';

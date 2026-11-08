@@ -89,7 +89,9 @@
     "pdf-gutter-label-layout.js": "P",
     "pdf-source-locations.js": "P",
     "text-block-module.js": "G",
-    "text-block-preview-coverage.js": "L"
+    "text-block-preview-coverage.js": "L",
+    "sentence-translation-core.js": "U",
+    "sentence-translation-module.js": "U"
   },
   "sharedConsumers": {
     "enum-checkbox-filter.js": [
@@ -120,7 +122,8 @@
       "S",
       "T",
       "shell",
-      "H"
+      "H",
+      "U"
     ],
     "pane-layout-ratios.js": [
       "L",
@@ -325,6 +328,9 @@
       "planCMDSplitBlockChain",
       "planCMDMoveBlockChainMember",
       "planCMDExtractBlockChainMember"
+    ],
+    "workspace.js->sentence-translation-module.js": [
+      "createSentenceTranslationModule"
     ]
   }
 }

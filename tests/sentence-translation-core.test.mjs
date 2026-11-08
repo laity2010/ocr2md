@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import{readFileSync}from'node:fs';
+import{prepareSentenceTranslationTask,validateSentenceTranslationReply}from'../ui/sentence-translation-core.js';
+import{extractTextBlocks,segmentSentences,reconstructSource}from'../ui/cmd-sentences.js';
+const source=readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8');
+const pre=extractTextBlocks(source,{bodyEnd:source.indexOf('<!-- minerujson:source:v1')});
+assert.equal(reconstructSource(pre),source);
+const candidates=segmentSentences(pre);
+const task=prepareSentenceTranslationTask(source,candidates);
+assert(task.task.sentences.length>300);
+assert(!JSON.stringify(task.task).includes('cmd:block:v1'));
+assert(!JSON.stringify(task.task).includes('minerujson:source:v1'));
+assert(task.task.sentences.every(item=>item.sid.startsWith('s-')&&!item.source.includes('<!--')));
+assert.equal(task.mapping.length,task.task.sentences.length);
+assert.equal(source,readFileSync('packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','utf8'));
+const response={schema:task.task.schema,sourceVersion:task.task.sourceVersion,
+  sentences:task.task.sentences.map(x=>({sid:x.sid,source:x.source,checked:x.source,
+    translation:'翻译：'+x.source}))};
+const result=validateSentenceTranslationReply(task,response,source);
+assert.equal(result.rows.length,candidates.length);
+assert.equal(result.accepted,0,'Never auto-adopt AI changes');
+assert(result.rows.every(row=>row.status==='待审阅'));
+const edits=structuredClone(response);edits.sentences[0].checked+=' corrected';
+assert.equal(validateSentenceTranslationReply(task,edits,source).rows[0].edited,true);
+const invalid=structuredClone(response);invalid.sentences[0].translation='<script>bad</script>';
+assert.throws(()=>validateSentenceTranslationReply(task,invalid,source),/结构语法/);
+const duplicate=structuredClone(response);duplicate.sentences[1].sid=duplicate.sentences[0].sid;
+assert.throws(()=>validateSentenceTranslationReply(task,duplicate,source),/未知或重复/);
+const missing=structuredClone(response);missing.sentences.pop();
+assert.throws(()=>validateSentenceTranslationReply(task,missing,source),/句数/);
+const stale=source.replace('Buffett','Buffet!');
+assert.throws(()=>validateSentenceTranslationReply(task,response,stale),/原文已变化/);
+const unknown=structuredClone(response);unknown.sentences[0].source='wrong';
+assert.throws(()=>validateSentenceTranslationReply(task,unknown,source),/原文回显/);
+const inlineText='The return was $R=12\\%$ in 2025.';
+const inline=inlineText+'<!--ocr2md:sentence v="1"-->';
+const row={id:'s-inline',text:inlineText,fragments:[{from:0,to:inline.length,text:inlineText,blockId:'p0b0'}]};
+const m=prepareSentenceTranslationTask(inline,[row]);
+assert.equal(m.task.sentences[0].source,'The return was in 2025.');
+assert.equal(m.mapping[0].protectedCount,1);
+const reply={schema:m.task.schema,sourceVersion:m.task.sourceVersion,
+  sentences:[{sid:'s-inline',checked:'The return was in 2025.',translation:'2025 年的回报率。'}]};
+assert.equal(validateSentenceTranslationReply(m,reply,inline).rows[0].placementReview,true);
+assert.throws(()=>prepareSentenceTranslationTask(inline,[{...row,fragments:[{...row.fragments[0],text:'forged'}]}]),/源文已变化/);
+console.log('SENTENCE_TRANSLATION_CORE_PASS',task.task.sentences.length,'pure sentences, no Markdown mutation, strict ID/revision, protected math, manual correction review');
