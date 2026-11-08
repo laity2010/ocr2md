@@ -56,7 +56,7 @@ WP05 incremental updates and PDF-driven block mutation are explicitly out of sco
 - **预览行号与句 ID**：左阅读预览新增双栏（映射源行号、句块 ID）；绝对定位标签不改变 Markdown 布局，图片、表格展开后会随同正文重新测量位置。手动滚动只更新当前句高亮，不反复触发其他窗定位。实测 `node tests/translation-review-reader-gutter.browser.test.mjs`。
 - **选中焦点与注释阅读**：滚动只是浏览，不能修改主动选中的句 ID 和高亮；明确点击句子或句 ID、选择工具栏记录才更新焦点。注释引用复用 Main `createFootnotePopover` 弹窗，点击不跳哈希；可在弹窗显式定位注文，通过左窗 `↩ 返回注引` 回到原来的阅读滚动位置。真实测试 `node tests/translation-review-reader-gutter.browser.test.mjs`。
 - **点击幂等与必要定位**：在左窗和 AI 右窗点击同一已选句，不再反复令其他窗居中；新句在其他窗已可见则只改变高亮，离开视口时才滚动定位。CM6 的拖动、滚动条与触屏滑动不作为句子点击。与滚动/注释合并由真实 Chrome/iPad WebKit 回归保护。
-- **iPad Safari 固定旧锚点修复**：针对点击反复跳回 `225 | p5b2`，禁用 Dockview 对只读面板不带 `preventScroll` 的抢焦点，右窗按 CM6 实际 DOM 行定位，左窗轻触保持原阅读滚动位置。浏览器回归包含故意触发旧标题跳转后的恢复测试。
+- **iPad Safari 固定旧锚点修复**：针对点击反复跳回 `225 | p5b2`，禁用 Dockview 对只读面板不带 `preventScroll` 的抢焦点，右窗按 CM6 实际 DOM 行定位。左窗在 pointerdown 锁定目标句 ID 和滚动位置，pointerup 完成选择，忽略之后可能因错误滚动而重新命中的 click 事件。浏览器回归故意触发旧标题跳转，同时检查焦点 ID 与阅读位置均不偏移。
 
 ## One AI-ready sentence/block table (Lab, on-demand)
 

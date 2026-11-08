@@ -58,17 +58,26 @@ export class TranslationReaderPane {
     let tapStart=null;
     this.scroller.addEventListener('pointerdown',event=>{
       const element=event.target instanceof Element?event.target:null;
-      if(!event.isPrimary||!element||
-          !element.closest('[data-unit-id],[data-gutter-unit]')||
+      const hit=element?.closest('[data-unit-id],[data-gutter-unit]');
+      if(!event.isPrimary||!hit||
           element.closest('a[href],summary.ocr-callout-title'))return;
+      const id=hit.dataset.gutterUnit||hit.dataset.unitId;
+      if(!this.anchors.some(x=>x.id===id))return;
       tapStart={pointerId:event.pointerId,x:event.clientX,y:event.clientY,
-        top:this.scroller.scrollTop};
+        top:this.scroller.scrollTop,id};
     },{passive:true});
     this.scroller.addEventListener('pointercancel',()=>{tapStart=null;});
     this.scroller.addEventListener('pointerup',event=>{
       const start=tapStart;tapStart=null;
       if(!start||start.pointerId!==event.pointerId||
           Math.hypot(event.clientX-start.x,event.clientY-start.y)>9)return;
+      // Commit the identity captured at pointerDOWN, BEFORE a click can be
+      // retargeted to p5b2/p5b3 after a Safari focus-induced scroll jump.
+      // This is essential: scroll restoration ALONE does not prevent a
+      // subsequent click from accidentally selecting the old heading.
+      this.scroller.scrollTop=start.top;
+      const anchor=this.anchors.find(x=>x.id===start.id);
+      if(anchor)this.owner.receivePosition(this.id,anchor.from);
       const preserve=()=>{
         if(Math.abs(this.scroller.scrollTop-start.top)>2)
           this.scroller.scrollTop=start.top;
@@ -88,6 +97,10 @@ export class TranslationReaderPane {
     },{passive:true});
     this.body.addEventListener('click',event=>{
       if(this.footnoteReader?.handleClick(event))return;
+      // Pointer/touch selection is committed from the captured pointerdown
+      // identity. The browser may retarget this later click if Safari moves
+      // the scrollport during pointerup. Keyboard activation has detail=0.
+      if(event.detail>0)return;
       // Let details/summary own folding. Clicks on hyperlinks and images do
       // not navigate or mutate review state; only explicit sentence hits do.
       if(event.target.closest('a[href],summary.ocr-callout-title'))return;
@@ -97,6 +110,7 @@ export class TranslationReaderPane {
       if(selected)this.owner.receivePosition(this.id,selected.from);
     });
     this.gutter.addEventListener('click',event=>{
+      if(event.detail>0)return;
       const item=event.target.closest('[data-gutter-unit]');
       if(!item)return;
       const selected=this.anchors.find(x=>x.id===item.dataset.gutterUnit);

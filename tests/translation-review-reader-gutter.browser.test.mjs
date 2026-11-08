@@ -87,8 +87,17 @@ for(const [name,engine,binary] of [
     const p5=page.locator('.ocr-tr-reader-scroll [data-unit-id="p5b2-b001"]');
     const p5Anchor=await p5.evaluate(el=>el.getBoundingClientRect().top);
     assert(p5Anchor<0,'regression needs the p5b2 heading far above the viewport');
+    const tapId=await page.evaluate(()=>{
+      const port=document.querySelector('.ocr-tr-reader-scroll').getBoundingClientRect();
+      return [...document.querySelectorAll('.ocr-tr-reader-unit-id')]
+        .find(button=>{
+          const rect=button.getBoundingClientRect();
+          return rect.top>port.top+80&&rect.bottom<port.bottom-100;
+        })?.dataset.gutterUnit;
+    });
+    assert(tapId,'the synthetic Safari jump must tap a VISIBLE sentence ID');
     const sameViewport=await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop);
-    const visibleTap=page.locator(`[data-gutter-unit="${chosen}"]`);
+    const visibleTap=page.locator(`[data-gutter-unit="${tapId}"]`);
     await page.evaluate(id=>{
       const button=document.querySelector(`[data-gutter-unit="${id}"]`);
       button.addEventListener('pointerup',()=>{
@@ -99,13 +108,13 @@ for(const [name,engine,binary] of [
         // Deliberately reproduce the native WebKit focus-anchor jump.
         scroller.scrollTop=headingTop;
       },{once:true});
-    },chosen);
+    },tapId);
     await visibleTap.tap();
     await page.waitForTimeout(300);
     const preserved=await page.locator('.ocr-tr-reader-scroll').evaluate(el=>el.scrollTop);
     assert(Math.abs(preserved-sameViewport)<3,
       `iPad tap jumped to stale heading 225|p5b2: ${sameViewport} -> ${preserved}`);
-    assert.equal(await page.locator('#record-picker').inputValue(),chosen);
+    assert.equal(await page.locator('#record-picker').inputValue(),tapId);
 
     // Regression: tapping a visible sentence is a *selection* operation, not
     // an instruction to re-center the article or to repeatedly move AI panes.
