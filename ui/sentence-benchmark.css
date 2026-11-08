@@ -29,6 +29,15 @@
 .ocr-sb-pane-editor .cm-scroller{overflow:auto;overscroll-behavior:contain;
   font-family:"OCR2MD Sarasa","Sarasa Fixed SC",monospace}
 .ocr-sb-pane-editor .cm-gutters {background:#283238;border-right:1px solid #4b5751;color:#85978c}
+/* Only the left original CMD CM6 has source line numbers and block IDs.
+   Both are native CodeMirror gutters; no content overlay or source edits. */
+.ocr-sb-pane[data-engine="original"] .cm-lineNumbers {color:#91a39a;font-variant-numeric:tabular-nums}
+.ocr-sb-pane[data-engine="original"] .cm-lineNumbers .cm-gutterElement {padding-left:5px;padding-right:7px}
+.ocr-sb-pane .ocr-sb-block-gutter {border-left:1px solid #45534b;background:#293831;min-width:90px}
+.ocr-sb-pane .ocr-sb-block-gutter .cm-gutterElement {padding:0 6px;white-space:nowrap;text-align:left}
+.ocr-sb-block-id {font:11px/1.5 "OCR2MD Sarasa","Sarasa Fixed SC",monospace;color:#a7c080;white-space:nowrap}
+.ocr-sb-child-block .ocr-sb-block-id {color:#d1b781}
+.ocr-sb-parent-block .ocr-sb-block-id {font-weight:600}
 .ocr-sb-pane-editor .cm-content {caret-color:#a7c080;min-height:100%}
 .ocr-sb-pane-editor .ocr-sb-active-line {background:rgba(233,172,101,.16)}
 .ocr-sb-boundary{display:inline-block;color:#e9ac65;padding:0 1px;font-weight:800;

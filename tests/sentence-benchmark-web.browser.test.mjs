@@ -78,6 +78,16 @@ try{
         panes.map(p=>p.querySelectorAll('.ocr-sb-active-line').length));
       assert(focusSync.every(n=>n===1),name+' clicking any engine synchronizes all four selection highlights');
       assert(geometry.some(p=>p.markers>0),name+' CM6 sentence boundaries must be visible');
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-lineNumbers').count(),1,
+        name+' original CMD must display a native line-number gutter');
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-block-gutter').count(),1,
+        name+' original CMD must display an independent block-ID gutter');
+      assert((await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-block-id').allTextContents())
+        .includes('p1b0'),name+' CMD block gutter must use the actual p1b0 ID from its source');
+      assert((await page.locator('.ocr-sb-pane[data-engine="original"] .cm-lineNumbers .cm-gutterElement').allTextContents())
+        .some(text=>text.trim()==='1'),name+' source line gutter must show line one');
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="intl"] .cm-lineNumbers').count(),0);
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="wink-nlp"] .ocr-sb-block-gutter').count(),0);
       await page.locator('#view-mode').selectOption('disagree');
       await page.waitForFunction(()=>document.querySelector('#view-mode')?.value==='disagree');
       await page.locator('#view-mode').selectOption('full');

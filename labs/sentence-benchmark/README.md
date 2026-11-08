@@ -17,6 +17,13 @@ Everforest theme, Sarasa font, global strip and source-coordinate conventions**
 as V6 Main. It no longer owns a parallel light-theme layout.
 
 - Left: one read-only CMD original CM6 with `全文 / 分歧块` in its own title bar.
+- The left CM6 has two independent native gutters: source line numbers and
+  exact CMD parent/child block IDs. In disagreement-only mode, line numbers
+  remain the original CMD's line numbers; view-only separators are shown
+  with a middle dot, not assigned fabricated source line numbers. CMD block
+  labels use the public read-only PBS/BC projection, with a syntax-validated
+  tag-only fallback for unsealed scratch samples. No labels are inserted in
+  the Markdown and the three engine panes have no additional gutters.
 - Right: three **vertically stacked** read-only CM6 engine panes
   (Intl.Segmenter, sentence-splitter, winkNLP), split by two horizontally
   draggable Dockview dividers; the whole right side is separated from the

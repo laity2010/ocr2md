@@ -4,14 +4,14 @@
  */
 import {createDockview, themeAbyss} from 'dockview';
 import 'dockview/dist/styles/dockview.css';
-import {EditorView, Decoration, WidgetType} from '@codemirror/view';
-import {EditorState, StateEffect, StateField} from '@codemirror/state';
+import {EditorView, Decoration, WidgetType, GutterMarker, gutter, lineNumbers} from '@codemirror/view';
+import {EditorState, StateEffect, StateField, RangeSet} from '@codemirror/state';
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
-import {readCMDBlockChains} from './cmd-block-chains.js';
+import {readCMDBlockChains, parseCMDBlockTag} from './cmd-block-chains.js';
 
 const markEffect=StateEffect.define();
 const markField=StateField.define({
@@ -22,6 +22,50 @@ const markField=StateField.define({
   },
   provide:field=>EditorView.decorations.from(field)
 });
+// Source gutter data follows the CURRENT visible CMD projection. The labels
+// always describe positions in the immutable original source, even when
+// "分歧块" hides unrelated blocks and inserts display-only separators.
+const sourceLinesEffect=StateEffect.define();
+const sourceLinesField=StateField.define({
+  create:()=>[],
+  update(value,tr){
+    for(const effect of tr.effects)if(effect.is(sourceLinesEffect))return effect.value;
+    return value;
+  }
+});
+const blockMarkersEffect=StateEffect.define();
+const blockMarkersField=StateField.define({
+  create:()=>RangeSet.empty,
+  update(value,tr){
+    for(const effect of tr.effects)if(effect.is(blockMarkersEffect))return effect.value;
+    return tr.docChanged?value.map(tr.changes):value;
+  }
+});
+class BlockGutterMarker extends GutterMarker {
+  constructor(id){super();this.id=id;
+    this.elementClass=id.includes('s')?'ocr-sb-child-block':'ocr-sb-parent-block';}
+  eq(other){return other instanceof BlockGutterMarker&&other.id===this.id;}
+  toDOM(){
+    const span=document.createElement('span');
+    span.className='ocr-sb-block-id';
+    span.textContent=this.id;
+    span.title='CMD 文本块 '+this.id;
+    span.setAttribute('aria-label','文本块 '+this.id);
+    return span;
+  }
+}
+const ORIGINAL_GUTTERS=[
+  sourceLinesField,blockMarkersField,
+  lineNumbers({formatNumber:(n,state)=>{
+    const original=state.field(sourceLinesField)[n-1];
+    return original===null?'·':String(original??n);
+  }}),
+  gutter({
+    class:'ocr-sb-block-gutter',
+    markers:view=>view.state.field(blockMarkersField),
+    initialSpacer:()=>new BlockGutterMarker('p000b000s000')
+  })
+];
 const RO=Object.freeze([
   EditorState.readOnly.of(true), EditorView.editable.of(false),
   EditorView.lineWrapping,
@@ -113,6 +157,72 @@ function toSource(projection,pos){
   return after?.sourceFrom??projection.ranges.at(-1)?.sourceTo??0;
 }
 
+function sourceLineStarts(md){
+  const starts=[0];
+  for(let i=0;i<md.length;i++)if(md.charCodeAt(i)===10)starts.push(i+1);
+  return starts;
+}
+function originalLineNumber(starts,offset){
+  let lo=0,hi=starts.length;
+  while(lo<hi){
+    const mid=(lo+hi)>>>1;
+    if(starts[mid]<=offset)lo=mid+1;else hi=mid;
+  }
+  return lo; // 1-based, including the newline boundary.
+}
+function visibleSourceOffset(projection,viewOffset){
+  for(const range of projection.ranges){
+    if(viewOffset>=range.viewFrom&&viewOffset<range.viewTo)
+      return range.sourceFrom+(viewOffset-range.viewFrom);
+  }
+  return null; // Synthetic separator between two visible disagreement blocks.
+}
+function visibleBlockOffset(projection,sourceOffset){
+  for(const range of projection.ranges){
+    if(sourceOffset>=range.sourceFrom&&sourceOffset<range.sourceTo)
+      return range.viewFrom+(sourceOffset-range.sourceFrom);
+  }
+  return null;
+}
+/** Build gutter display data solely from CMD source. No text or annotations
+ * are changed, and no off-screen/filtered block gains a fabricated label.
+ */
+function updateOriginalGutters(view,md,projection){
+  const starts=sourceLineStarts(md),displayed=[];
+  for(let n=1;n<=view.state.doc.lines;n++){
+    const line=view.state.doc.line(n);
+    const source=visibleSourceOffset(projection,line.from);
+    displayed.push(source===null?null:originalLineNumber(starts,source));
+  }
+  let atoms=[];
+  try{atoms=readCMDBlockChains(md).atoms;}
+  catch{
+    // Unsealed test snippets have no MinerU source envelope; only display
+    // IDs of syntactically valid CMD tags already present in the input.
+    // This is a read-only display fallback, not a CMD structure mutation.
+    let from=0;
+    for(const line of md.split('\n')){
+      const parsed=parseCMDBlockTag(line);
+      if(parsed)atoms.push({id:parsed.id,from});
+      from+=line.length+1;
+    }
+  }
+  const markers=[];
+  const occupied=new Set();
+  for(const atom of atoms){
+    const at=visibleBlockOffset(projection,atom.from);
+    if(at===null)continue;
+    const line=view.state.doc.lineAt(at);
+    if(at!==line.from||occupied.has(line.from))continue;
+    occupied.add(line.from);
+    markers.push(new BlockGutterMarker(atom.id).range(line.from));
+  }
+  view.dispatch({effects:[
+    sourceLinesEffect.of(displayed),
+    blockMarkersEffect.of(RangeSet.of(markers.sort((a,b)=>a.from-b.from),true))
+  ]});
+}
+
 class BreakWidget extends WidgetType {
   constructor(label,style,title){super();this.label=label;this.style=style;this.title=title;}
   eq(other){return other instanceof BreakWidget &&
@@ -151,7 +261,8 @@ class ComparePane {
     this.view=null;this.suppressUntil=0;this.lastGesture=0;
   }
   init(){
-    this.view=new EditorView({parent:this.editorHost,doc:'',extensions:RO});
+    this.view=new EditorView({parent:this.editorHost,doc:'',
+      extensions:this.id==='original'?[...RO,...ORIGINAL_GUTTERS]:RO});
     const scroller=this.view.scrollDOM;
     const gesture=()=>{this.lastGesture=performance.now();};
     for(const event of ['wheel','touchstart','pointerdown','keydown'])
@@ -261,6 +372,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
       if(changed){
         projection=createSourceProjection(md,runs,mode);
         eachPane(pane=>pane.updateDoc(projection.doc));
+        const sourcePane=panes.get('original');
+        if(sourcePane?.view)updateOriginalGutters(sourcePane.view,md,projection);
         const selected=selectedPos!==null&&toView(projection,selectedPos)!==null?
           selectedPos:projection.ranges[0]?.sourceFrom??null;
         focus=selected;
