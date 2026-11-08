@@ -89,8 +89,13 @@ try{
       assert.equal(await page.locator('#sample-select').inputValue(),'reviewed',
         name+' must default to its isolated saved CMD snapshot, not the raw MinerU fixture');
       assert((await page.locator('#sample-select option:checked').textContent()).includes('已审阅 CMD'));
-      assert((await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content').textContent())
-        .includes('Dr. Brown visits.'),'Lab CMD document is the visible source');
+      const observedSha=await page.evaluate(async()=>{
+        const r=await fetch('./api/document',{cache:'no-store'});
+        const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(await r.text()));
+        return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+      });
+      assert((await page.locator('#sample-meta').textContent()).includes(observedSha.slice(0,16)),
+        name+' displayed reviewed sample fingerprint must match its own Lab document API');
       assert.equal(await page.locator('#score-table tbody tr').count(),3);
       await page.locator('#review-filter').selectOption('all');
       assert(await page.locator('#issue-list button').count()>0);
