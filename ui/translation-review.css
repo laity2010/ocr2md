@@ -1,0 +1,21 @@
+/* Shared surface with Sentence Lab. Business styles are independent. */
+.ocr-tr-main{position:relative}
+.ocr-tr-main #translation-workspace{flex:1;min-width:0;min-height:0;overflow:hidden}
+.ocr-tr-controls select,.ocr-tr-controls button{height:28px;background:#35463e;
+  border:1px solid #60766b;color:#d3c6aa;border-radius:4px;
+  padding:3px 7px;font:12px "OCR2MD Sarasa",monospace}
+.ocr-tr-controls #record-picker{flex:0 1 215px;max-width:215px;min-width:100px}
+.ocr-tr-controls #filter-mode{flex:0 0 112px}
+.ocr-tr-controls button:disabled{opacity:.4;cursor:not-allowed}
+.ocr-tr-controls button:hover:enabled{background:#48614e}
+.ocr-tr-empty{position:absolute;z-index:5;inset:0;display:grid;place-items:center;
+  color:#e9ac65;background:#293238;padding:22px;text-align:center}
+.ocr-tr-empty[hidden]{display:none}
+.ocr-tr-ai-header{display:inline-flex;gap:7px;align-items:center;white-space:nowrap}
+.ocr-tr-ai-status{color:#91b8a5;font-size:11px;white-space:nowrap}
+.ocr-tr-pane-status{font-variant-numeric:tabular-nums}
+.ocr-sb-pane[data-engine="original"] .ocr-sb-block-gutter{width:var(--ocr-sb-block-width,90px);
+  min-width:var(--ocr-sb-block-width,90px)}
+.ocr-sb-pane .cm-editor .ocr-tr-current{background:rgba(233,172,101,.18)}
+.ocr-tr-pane .cm-editor .cm-content{padding-top:7px}
+@media(max-width:700px){.ocr-tr-controls #record-picker{flex:0 0 130px}.ocr-tr-controls #filter-mode{flex:0 0 95px}}

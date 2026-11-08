@@ -1,0 +1,18 @@
+.lab-top-link{color:#d3c6aa;text-decoration:none;border:1px solid #62776a;border-radius:5px;padding:5px 10px;font-size:12px}
+.lab-top-link:hover{background:#384b40}
+.lab-home-main{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:clamp(24px,5vw,70px);background:#272f34;color:#d3c6aa}
+.lab-home-intro{max-width:790px;margin:0 auto 32px}
+.lab-eyebrow{color:#a7c080;font-size:11px;font-weight:700;letter-spacing:.2em;margin:0 0 11px}
+.lab-home-intro h1{font-size:clamp(25px,3vw,35px);margin:0 0 12px;letter-spacing:.015em}
+.lab-home-intro>p:last-child{color:#adbcaf;line-height:1.75;font-size:13px;margin:0}
+.lab-home-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;max-width:790px;margin:auto}
+.lab-home-card{text-decoration:none;color:inherit;display:flex;flex-direction:column;min-height:205px;background:#303d3c;border:1px solid #53665a;border-radius:11px;padding:23px;transition:border-color .15s,background .15s}
+.lab-home-card:hover,.lab-home-card:focus-visible{border-color:#a7c080;background:#34473d;outline:none}
+.lab-card-head{display:flex;justify-content:space-between;align-items:center;color:#a7c080;font:11px "OCR2MD Sarasa",monospace}
+.lab-card-index{font-size:13px;font-weight:700}
+.lab-card-state{border:1px solid #607769;padding:3px 7px;border-radius:100px;color:#adc2ae}
+.lab-home-card h2{font-size:20px;margin:18px 0 8px;color:#f0eee2}
+.lab-home-card p{color:#adbcaf;font-size:12px;line-height:1.75;margin:0;flex:1}
+.lab-open{display:flex;justify-content:space-between;margin-top:22px;color:#a7c080;font-size:12px;font-weight:650}
+.lab-home-note{font-size:11px;color:#90a89c;max-width:790px;margin:24px auto}
+@media(max-width:680px){.lab-home-cards{grid-template-columns:1fr}.lab-home-main{padding:20px 14px}.lab-home-card{min-height:176px}}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>OCR2MD V6 · Translation Review Lab</title>
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="identity">
+        <div class="brand">OCR2MD V6 · 校译 Lab</div>
+        <span id="build-version" class="build-badge">lab-载入中</span>
+        <span id="status" class="status" role="status" aria-live="polite">正在读取独立校译输入…</span>
+      </div>
+      <div class="source-actions">
+        <a class="ocr-sb-main-link" href="./lab-home.html">Lab 首页</a>
+        <button id="reload-input" type="button">重新读取</button>
+      </div>
+    </header>
+    <nav class="module-controls ocr-sb-controls ocr-tr-controls" aria-label="校译工作台工具栏">
+      <span class="ocr-sb-field-name">校译范围</span>
+      <select id="filter-mode" aria-label="校译范围">
+        <option value="all">全部</option>
+        <option value="corrected">英文修改</option>
+        <option value="english-diff">英文分歧</option>
+        <option value="translation-diff">译文分歧</option>
+      </select>
+      <button id="prev-record" type="button" title="上一条">上一个</button>
+      <select id="record-picker" aria-label="当前句块"></select>
+      <button id="next-record" type="button" title="下一条">下一个</button>
+      <span id="record-count" class="ocr-sb-counter">—</span>
+      <span id="ai-summary" class="ocr-sb-meta"></span>
+    </nav>
+    <main class="ocr-sb-main ocr-tr-main">
+      <div id="translation-workspace" aria-label="CMD 原文和各 AI 校正英文及中文译文独立对照"></div>
+      <div id="translation-empty" class="ocr-tr-empty" hidden>未读取到校译数据。请检查独立校译 Lab 输入目录。</div>
+    </main>
+  </div>
+  <script type="module" src="./translation-review-app.js"></script>
+</body>
+</html>

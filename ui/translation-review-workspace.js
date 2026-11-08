@@ -1,0 +1,222 @@
+/** Independent translation Lab view: Dockview + read-only CM6 panes.
+ * Only record IDs and immutable CMD source offsets are shared. Neither
+ * the sentence engine nor its Gold/sidecar state is imported here.
+ */
+import {createDockview,themeAbyss} from 'dockview';
+import 'dockview/dist/styles/dockview.css';
+import {EditorView,Decoration,GutterMarker,gutter,lineNumbers} from '@codemirror/view';
+import {EditorState,StateEffect,StateField,RangeSet} from '@codemirror/state';
+import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
+import {syntaxHighlighting} from '@codemirror/language';
+import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
+import {obsidianMarkdown} from './obsidian-markdown.js';
+import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
+import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
+import {parseCMDBlockTag} from './cmd-block-chains.js';
+
+const markEffect=StateEffect.define();
+const markField=StateField.define({
+  create:()=>Decoration.none,
+  update(value,tr){
+    for(const e of tr.effects)if(e.is(markEffect))return e.value;
+    return tr.docChanged?value.map(tr.changes):value;
+  },provide:field=>EditorView.decorations.from(field)
+});
+const labelEffect=StateEffect.define();
+const labelField=StateField.define({
+  create:()=>RangeSet.empty,
+  update(value,tr){
+    for(const e of tr.effects)if(e.is(labelEffect))return e.value;
+    return tr.docChanged?value.map(tr.changes):value;
+  }
+});
+class BlockLabel extends GutterMarker {
+  constructor(id){super();this.id=id;}
+  eq(other){return other instanceof BlockLabel&&other.id===this.id;}
+  toDOM(){
+    const label=document.createElement('span');
+    label.className='ocr-sb-block-id';
+    label.textContent=this.id;
+    label.title='PBS '+this.id;
+    return label;
+  }
+}
+const RO=[EditorState.readOnly.of(true),EditorView.editable.of(false),
+  EditorView.lineWrapping,markdown({base:markdownLanguage}),
+  obsidianMarkdown,obsidianSourceSyntax,
+  syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),markField];
+const ORIGINAL=[lineNumbers(),labelField,gutter({
+  class:'ocr-sb-block-gutter',markers:view=>view.state.field(labelField),
+  initialSpacer:()=>new BlockLabel('p00b000s0')
+}),obsidianHeadingMarkers];
+
+function blockMarkers(source){
+  let from=0;
+  const labels=[];
+  for(const line of source.split('\n')){
+    const block=parseCMDBlockTag(line);
+    if(block)labels.push(new BlockLabel(block.id).range(from));
+    from+=line.length+1;
+  }
+  return RangeSet.of(labels,true);
+}
+function recordAt(anchors,position){
+  if(!anchors.length)return null;
+  let low=0,high=anchors.length;
+  while(low<high){
+    const mid=(low+high)>>>1;
+    if(anchors[mid].from<=position)low=mid+1;
+    else high=mid;
+  }
+  return anchors[Math.max(0,low-1)].id;
+}
+
+class TranslationPane {
+  constructor(id,owner){
+    this.id=id;this.owner=owner;
+    this.element=document.createElement('div');
+    this.element.className='ocr-sb-pane ocr-cm-source ocr-tr-pane';
+    this.element.dataset.engine=id==='original'?'original':'translation';
+    this.editorHost=document.createElement('div');
+    this.editorHost.className='ocr-sb-pane-editor';
+    const toolbar=document.createElement('div');
+    toolbar.className='ocr-sb-pane-toolbar';
+    const title=document.createElement('strong');
+    title.textContent=id==='original'?'CMD 原文 · 只读':id.toUpperCase()+' · 校译';
+    this.status=document.createElement('span');
+    this.status.className='ocr-sb-pane-status ocr-tr-pane-status';
+    this.status.textContent=id==='original'?'原始 CMD':'待载入';
+    toolbar.append(title,this.status);
+    this.element.append(toolbar,this.editorHost);
+    this.content='';this.anchors=[];this.view=null;this.suppressUntil=0;
+    this.lastGesture=0;
+  }
+  init(){
+    this.view=new EditorView({parent:this.editorHost,doc:this.content,
+      extensions:this.id==='original'?[...RO,...ORIGINAL]:RO});
+    const scroller=this.view.scrollDOM;
+    for(const name of ['wheel','touchstart','pointerdown','keydown'])
+      scroller.addEventListener(name,()=>{
+        this.lastGesture=performance.now();this.suppressUntil=0;
+      },{passive:true});
+    scroller.addEventListener('scroll',()=>{
+      if(performance.now()<this.suppressUntil||
+          performance.now()-this.lastGesture>2200)return;
+      this.owner.receiveScroll(this.id);
+    },{passive:true});
+    this.view.dom.addEventListener('pointerup',event=>{
+      const pos=this.view.posAtCoords({x:event.clientX,y:event.clientY});
+      if(Number.isInteger(pos))this.owner.receivePosition(this.id,pos);
+    });
+  }
+  updateDoc(text,anchors){
+    this.content=text;this.anchors=anchors;
+    if(!this.view)return;
+    if(this.view.state.doc.toString()!==text){
+      this.view.dispatch({changes:{from:0,to:this.view.state.doc.length,insert:text}});
+    }
+    if(this.id==='original')this.view.dispatch({effects:labelEffect.of(blockMarkers(text))});
+  }
+  mark(id){
+    if(!this.view)return;
+    const item=this.anchors.find(a=>a.id===id);
+    const marks=[];
+    if(item){
+      const line=this.view.state.doc.lineAt(Math.min(item.from,this.view.state.doc.length));
+      marks.push(Decoration.line({class:'ocr-tr-current'}).range(line.from));
+    }
+    this.view.dispatch({effects:markEffect.of(Decoration.set(marks,true))});
+  }
+  reveal(id){
+    const item=this.anchors.find(a=>a.id===id);
+    if(!item||!this.view)return;
+    this.suppressUntil=performance.now()+650;
+    this.view.dispatch({effects:EditorView.scrollIntoView(item.from,{y:'center'})});
+  }
+  atPosition(pos){return recordAt(this.anchors,pos);}
+  visiblePosition(){
+    if(!this.view)return null;
+    const rect=this.view.scrollDOM.getBoundingClientRect();
+    return this.view.posAtCoords({x:rect.left+Math.min(110,rect.width/2),
+      y:rect.top+Math.min(48,rect.height/2)});
+  }
+  layout(){this.view?.requestMeasure();}
+  dispose(){this.view?.destroy();this.view=null;}
+}
+
+function translatedDocument(rows,resultRows){
+  let doc='';
+  const anchors=[];
+  const index=new Map(resultRows.map(row=>[row.id,row]));
+  for(const row of rows){
+    const translated=index.get(row.id);
+    if(!translated)throw Error('缺少译文 '+row.id);
+    anchors.push({id:row.id,from:doc.length});
+    doc+='### '+row.id+' · '+row.blockId+'\n';
+    doc+='校正英文\n'+translated.corrected+'\n\n';
+    doc+='中文译文\n'+translated.translation+'\n\n';
+  }
+  return {doc,anchors};
+}
+
+export function createTranslationCompareWorkspace(container,model,{onSelect=()=>{}}={}){
+  const panes=new Map();
+  let visible=model.rows,activeId=null,lastScroll=0;
+  const owner={receivePosition:(id,pos)=>{
+    const target=panes.get(id)?.atPosition(pos);
+    if(target)select(target,id,true);
+  },receiveScroll:(id)=>{
+    const now=performance.now();
+    if(now-lastScroll<95)return;
+    lastScroll=now;
+    const pane=panes.get(id),pos=pane?.visiblePosition();
+    if(pos===null||pos===undefined)return;
+    const target=pane.atPosition(pos);
+    if(target&&target!==activeId)select(target,id,true);
+  }};
+  const dockview=createDockview(container,{
+    theme:themeAbyss,
+    createComponent:({name})=>{
+      const pane=new TranslationPane(name,owner);
+      panes.set(name,pane);
+      return pane;
+    }
+  });
+  const panels=[];
+  panels.push(dockview.addPanel({id:'original',component:'original',title:'CMD 原文 · 只读'}));
+  let previous='original';
+  for(const name of model.names){
+    panels.push(dockview.addPanel({id:name,component:name,title:name.toUpperCase(),
+      position:{referencePanel:previous,direction:previous==='original'?'right':'below'}}));
+    previous=name;
+  }
+  for(const panel of panels){panel.group.header.hidden=true;panel.group.relayout();}
+  panes.get('original').updateDoc(model.source,
+    model.rows.map(r=>({id:r.id,from:r.from})));
+  function refresh(rows){
+    visible=rows;
+    for(const name of model.names){
+      const {doc,anchors}=translatedDocument(rows,model.translations[name].rows);
+      const pane=panes.get(name);
+      pane.updateDoc(doc,anchors);
+      pane.status.textContent=rows.length+' 条 · 校正英文 / 中文译文';
+    }
+    panes.get('original').status.textContent=model.rows.length+' 条原文 · SHA '+model.sourceSha256.slice(0,12);
+    const next=rows.some(r=>r.id===activeId)?activeId:rows[0]?.id??null;
+    if(next)select(next,null,true);
+    else {activeId=null;onSelect(null);}
+  }
+  function select(id,origin=null,scroll=true){
+    if(!visible.some(row=>row.id===id))return;
+    const changed=id!==activeId;
+    activeId=id;
+    for(const [name,pane] of panes){
+      pane.mark(id);
+      if(scroll&&name!==origin)pane.reveal(id);
+    }
+    if(changed)onSelect(id);
+  }
+  refresh(visible);
+  return {filter:refresh,select,selected:()=>activeId,
+    destroy:()=>dockview.dispose()};
+}

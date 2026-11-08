@@ -5,6 +5,7 @@ import hashlib
 import subprocess
 from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_sentence_review import read as read_sentence_review, save as save_sentence_review, etag as sentence_review_etag, MAX_BYTES as SENTENCE_REVIEW_LIMIT
+from v6_translation_review import load_dataset as load_translation_review_dataset
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
@@ -172,6 +173,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
+        if path == '/api/translation-review-data':
+            if LAB_ID != 'sentence-benchmark':
+                self.response(404, 'Not found')
+                return
+            try:
+                # Independent Lab input, not a live read of sentence review,
+                # shared exports, Main, or the editor's active document.
+                dataset = load_translation_review_dataset(
+                    RUNTIME / 'translation-review' / 'input')
+            except (OSError, ValueError, TypeError, KeyError, UnicodeError):
+                self.response(503, 'Independent translation input unavailable or invalid')
+                return
+            self.response(200, json.dumps(dataset, ensure_ascii=False),
+                          'application/json; charset=utf-8')
+            return
         if path == '/api/sentence-review':
             if LAB_ID != 'sentence-benchmark':
                 self.response(404, 'Not found')
@@ -342,7 +358,9 @@ class Handler(BaseHTTPRequestHandler):
             self.response(503, 'No V6 release')
             return
         if path == '/':
-            path = '/index.html'
+            # Lab home is a navigation surface, not an alternative business
+            # module graph; the existing workbench remains at /index.html.
+            path = '/lab-home.html' if LAB_ID else '/index.html'
         asset = (static_root / path.lstrip('/')).resolve()
         if not asset.is_relative_to(static_root) or not asset.is_file():
             self.response(404, 'Not found')

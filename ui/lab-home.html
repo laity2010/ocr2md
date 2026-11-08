@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>OCR2MD V6 · Lab 首页</title>
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="identity">
+        <div class="brand">OCR2MD V6 · Lab</div>
+        <span id="build-version" class="build-badge">lab-载入中</span>
+        <span id="status" class="status" role="status" aria-live="polite">独立模块实验入口</span>
+      </div>
+      <div class="source-actions">
+        <a class="lab-top-link" href="./index.html">V6 工作台</a>
+      </div>
+    </header>
+    <main class="lab-home-main">
+      <section class="lab-home-intro">
+        <p class="lab-eyebrow">LAB MODULES</p>
+        <h1>实验工作台</h1>
+        <p>选择独立模块。分句负责句界审阅；校译只负责多 AI 英文纠错与中文译文比较。两个模块的数据、操作和审阅状态互不混用。</p>
+      </section>
+      <div class="lab-home-cards">
+        <a id="lab-sentence" class="lab-home-card" href="./sentence-benchmark.html">
+          <div class="lab-card-head"><span class="lab-card-index">01</span><span class="lab-card-state">独立模块</span></div>
+          <h2>Lab 分句</h2>
+          <p>CMD 原文与多个分句引擎对照，句界分歧、人工采用、Gold 仲裁及统一待翻译句块表。</p>
+          <span class="lab-open">进入分句实验 <span aria-hidden="true">→</span></span>
+        </a>
+        <a id="lab-translation" class="lab-home-card" href="./translation-review.html">
+          <div class="lab-card-head"><span class="lab-card-index">02</span><span class="lab-card-state">独立模块</span></div>
+          <h2>Lab 校译</h2>
+          <p>独立原文与 GPT、Grok 等 AI 译文。按同一记录 ID 联动定位、对照英文纠错与中文翻译。</p>
+          <span class="lab-open">进入校译实验 <span aria-hidden="true">→</span></span>
+        </a>
+      </div>
+      <p class="lab-home-note">Lab 模块共享相同的视觉系统，不共享原始工作数据。返回本页不会改变任一模块的审阅记录。</p>
+    </main>
+  </div>
+  <script type="module" src="./lab-home.js"></script>
+</body>
+</html>

@@ -51,7 +51,9 @@ export default defineConfig({
     // Always build the same V6 extra review page for Main and Lab.
     rollupOptions: {input: {
       main: resolve('ui/index.html'),
-      sentenceBenchmark: resolve('ui/sentence-benchmark.html')
+      sentenceBenchmark: resolve('ui/sentence-benchmark.html'),
+      labHome: resolve('ui/lab-home.html'),
+      translationReview: resolve('ui/translation-review.html')
     }}
   },
   plugins: [
