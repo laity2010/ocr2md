@@ -85,11 +85,13 @@ export function nonSentenceFolds(view,source,projection){
 /** Called only after the source sample or visible block filter changes.
  * Manual unfolds persist during click, scrolling and Gold review.
  */
-export function foldSourceInitially(view,source,projection){
+export function foldSourceInitially(view,source,projection,{showUnsentenced=false}={}){
   const previous=foldedRanges(view.state),effects=[];
   previous.between(0,view.state.doc.length,(from,to)=>
     effects.push(unfoldEffect.of({from,to})));
-  const ignored=nonSentenceFolds(view,source,projection);
+  // The no-sentence filter is an inspection mode: its actual unsegmented
+  // prose must remain readable, not collapsed by the normal source policy.
+  const ignored=showUnsentenced?[]:nonSentenceFolds(view,source,projection);
   effects.push(changeFoldRanges.of(ignored));
   view.dispatch({effects});
   const comments=foldInitialMineruComments(view);

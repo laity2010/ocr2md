@@ -91,13 +91,14 @@ function updateEngineOptions(){
 function compute(){
   runs=new Map();
   for(const id of state.engines){
+    const started=performance.now();
     try{
-      const t=performance.now(),value=split(sample.md,id);
-      const elapsed=performance.now()-t;
+      const value=split(sample.md,id),elapsed=performance.now()-started;
       if(rebuild(value)!==sample.md)throw Error('无损重组失败');
       runs.set(id,{value,elapsed,positions:new Set(value.sentences
         .map(s=>s.fragments.at(-1)?.to).filter(x=>Number.isInteger(x))),lossless:true});
-    }catch(e){runs.set(id,{error:String(e.message||e),lossless:false});}
+    }catch(e){runs.set(id,{error:String(e.message||e),
+      elapsed:performance.now()-started,lossless:false});}
   }
   computeIssues();render();
   const failures=[...runs.values()].filter(v=>!v.lossless);
@@ -322,13 +323,12 @@ $('pbs-page-select').onchange=()=>{
   const select=$('pbs-page-select');
   const target=compare.pbsPageTarget(select.value);
   if(!target){status('当前样本没有 PBS p 编码。',true);return;}
-  const hadFilter=$('view-mode').value==='disagree';
-  // Filtering may hide the requested PBS block. Switch to 全文 to reveal it.
-  if(hadFilter)$('view-mode').value='full';
+  // This p is already present in the selected block type's visible range.
+  // Keep 分歧块 / 无分句块 active when navigating within that filtered set.
   focused=target.sourceOffset;lastRevealed=null;manual=false;
   renderSource();
   status(target.key+' → CMD 第 '+target.sourceLine+
-    ' 行 · '+target.blockId+(hadFilter?'（已切换全文）':''));
+    ' 行 · '+target.blockId);
 };
 $('toggle-review').onclick=()=>{
   const drawer=$('review-drawer'),open=drawer.hidden;

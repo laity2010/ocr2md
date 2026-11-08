@@ -89,6 +89,22 @@ try{
         .some(text=>text.trim()==='1'),name+' source line gutter must show line one');
       assert.equal(await page.locator('.ocr-sb-pane[data-engine="intl"] .cm-lineNumbers').count(),0);
       assert.equal(await page.locator('.ocr-sb-pane[data-engine="wink-nlp"] .ocr-sb-block-gutter').count(),0);
+      const pickerGeometry=await page.evaluate(()=>{
+        const pane=document.querySelector('.ocr-sb-pane[data-engine="original"]');
+        const picker=pane.querySelector('#pbs-page-select').getBoundingClientRect();
+        const gutter=pane.querySelector('.ocr-sb-block-gutter').getBoundingClientRect();
+        return {dx:picker.left-gutter.left,dw:picker.width-gutter.width,
+          pickerTop:picker.top,gutterTop:gutter.top};
+      });
+      assert(Math.abs(pickerGeometry.dx)<2&&Math.abs(pickerGeometry.dw)<2,
+        name+' PBS selector must align directly above the block-ID gutter with equal width');
+      assert(pickerGeometry.pickerTop<pickerGeometry.gutterTop,
+        name+' PBS selector belongs above the block gutter, not beside type selector');
+      for(const engine of ['intl','sentence-splitter','wink-nlp']){
+        const status=await page.locator('.ocr-sb-pane[data-engine="'+engine+'"] .ocr-sb-pane-status').textContent();
+        assert(/\d+ 句 · \d+\.\d ms/.test(status),
+          name+' '+engine+' must show last segmentation elapsed milliseconds in its header');
+      }
       await page.locator('#view-mode').selectOption('disagree');
       await page.waitForFunction(()=>document.querySelector('#view-mode')?.value==='disagree');
       await page.locator('#view-mode').selectOption('full');
@@ -220,10 +236,9 @@ try{
         assert.equal(await page.locator('#pbs-page-select').isDisabled(),true,
           'legacy MinerU fixture without CMD PBS tags must not invent p values');
         await page.locator('#sample-select').selectOption('demo');
-        await page.locator('#view-mode').selectOption('disagree');
+        await page.locator('#view-mode').selectOption('full');
         await page.locator('#pbs-page-select').selectOption('p2');
-        assert.equal(await page.locator('#view-mode').inputValue(),'full',
-          'PBS p navigation reveals a source group hidden by disagreement filtering');
+        assert.equal(await page.locator('#view-mode').inputValue(),'full');
         await page.waitForFunction(()=>
           document.querySelector('#status')?.textContent.includes('p2 → CMD 第 '),
           null,{timeout:10000});
@@ -232,6 +247,36 @@ try{
           panes.map(p=>p.querySelectorAll('.ocr-sb-active-line').length));
         assert(highlighted.every(n=>n===1),
           'PBS p selection must highlight the corresponding source line in all four views');
+        const absentSample=[
+          '<!-- cmd:block:v1 id="p0b0" -->',
+          'A normally segmented sentence. This one is also processed.',
+          '<!-- cmd:block:v1 id="p1b0" -->',
+          'This block contains prose that is skipped by extraction because of a literal Markdown hard break.  ',
+          '<!-- cmd:block:v1 id="p2b0" -->',
+          'Another ordinary sentence. It is correctly processed.'
+        ].join('\n\n');
+        await page.locator('#sample-file').setInputFiles({
+          name:'zero-sentences-pbs.md',mimeType:'text/markdown',buffer:Buffer.from(absentSample)
+        });
+        await page.waitForFunction(()=>document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS'&&
+          document.querySelector('#sample-select')?.value.startsWith('import-'),null,{timeout:15000});
+        await page.locator('#view-mode').selectOption('no-sentence');
+        await page.waitForFunction(()=>document.querySelector(
+          '.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('无分句块 1'),
+          null,{timeout:15000});
+        assert.deepEqual(await page.locator('#pbs-page-select option').evaluateAll(
+          options=>options.map(x=>x.value)),['p1'],
+        'Only the p prefix of unsegmented prose blocks may appear in no-sentence mode');
+        assert.equal(await page.locator('#pbs-page-select').inputValue(),'p1');
+        assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-foldPlaceholder').count(),0,
+          'Unsegmented prose must remain expanded and inspectable in no-sentence mode');
+        assert(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content').textContent()
+          .then(text=>text.includes('literal Markdown hard break')),
+          'The unsegmented block must be visible in the original source window');
+        await page.locator('#pbs-page-select').selectOption('p1');
+        assert.equal(await page.locator('#view-mode').inputValue(),'no-sentence',
+          'Navigating a filtered PBS page must not exit the current block-type filter');
+        assert.equal(await page.locator('#kpi-roundtrip').textContent(),'100% PASS');
       }
       assert.deepEqual(errors,[],name+' console exceptions');
       console.log('SENTENCE_LAB_WEB_PASS',JSON.stringify({

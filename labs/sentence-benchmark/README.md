@@ -17,6 +17,21 @@ Everforest theme, Sarasa font, global strip and source-coordinate conventions**
 as V6 Main. It no longer owns a parallel light-theme layout.
 
 - Left: one read-only CMD original CM6 with `全文 / 分歧块` in its own title bar.
+- Block-type filter now supports `全文 / 分歧块 / 无分句块`.
+  `无分句块` includes a text-bearing PBS parent block only when **none**
+  of the successfully run engines produced any sentence fragment within
+  it. Empty structural-only CMD labels and preamble metadata are omitted.
+  The underlying sentences and Gold stay unchanged; unsegmented prose is
+  deliberately *not* folded in this inspection mode.
+- The literal PBS `p` selector sits **directly above** the native block-ID
+  gutter, and its width equals that gutter's width; the width is derived from
+  the longest existing block ID. In filtered modes the selector lists only
+  `p` values represented by visible blocks, and choosing a value keeps the
+  filter active. Four-pane source-coordinate navigation remains read-only.
+- Each of the three engine pane headers displays the sentence count plus
+  milliseconds spent by that engine's **latest split() invocation**. The
+  value is refreshed when a sample is segmented, not when the reviewer
+  scrolls or switches filters.
 - The global release badge uses the same abbreviated format as Main,
   `lab-YYMMDD-HHMM`, derived from the active Lab service `./healthz`
   version. No fixed "Sentence Lab" badge is displayed.

@@ -65,7 +65,7 @@ const ORIGINAL_GUTTERS=[
   gutter({
     class:'ocr-sb-block-gutter',
     markers:view=>view.state.field(blockMarkersField),
-    initialSpacer:()=>new BlockGutterMarker('p000b000s000')
+    initialSpacer:()=>new BlockGutterMarker('p0b0')
   })
 ];
 const RO=Object.freeze([
@@ -129,13 +129,41 @@ function getDifferences(runs){
   const candidates=new Set(valid.flatMap(r=>[...r.positions]));
   return [...candidates].filter(p=>valid.some(v=>v.positions.has(p)!==valid[0].positions.has(p)));
 }
+function containsReviewableText(md,section){
+  // Candidate blocks must contain prose, not just CMD metadata, LaTeX,
+  // HTML tables, code, footnote definitions or an empty parent anchor.
+  if(section.id==='preamble')return false;
+  const body=md.slice(section.from,section.to)
+    .replace(/<!--[\s\S]*?-->/g,'')
+    .replace(/(?:^|\n)\s*(?:\x60{3,}|~{3,})[\s\S]*?(?:\n\s*(?:\x60{3,}|~{3,})|$)/g,'');
+  return body.split('\n').some(raw=>{
+    const line=raw.trim();
+    if(!line||/^(?:#\s|>\s|!\[|\[\^|\||<|\$\$|\\\[|\\\]|\\begin|[-*]\s)/.test(line))return false;
+    if(/^\d+\.\s+/.test(line))return false;
+    const cleaned=line.replace(/\$[^$]+\$/g,'')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g,'').trim();
+    // Never impose a minimum prose length here: even a short omitted text
+    // block (such as "Oops.") is a legitimate zero-sentence finding.
+    return /[\p{L}\p{N}]/u.test(cleaned);
+  });
+}
+function sectionsWithoutSentences(md,sections,runs){
+  const usable=[...runs.values()].filter(run=>run?.lossless&&Array.isArray(run.value?.sentences));
+  if(!usable.length)return [];
+  const covered=usable.flatMap(run=>run.value.sentences.flatMap(s=>s.fragments||[]))
+    .sort((a,b)=>a.from-b.from);
+  return sections.filter(section=>containsReviewableText(md,section)&&
+    !covered.some(part=>part.from<section.to&&part.to>section.from));
+}
 export function createSourceProjection(md,runs,mode){
   const sections=sectionsFor(md);
-  if(mode!=='disagree')return {doc:md,
+  if(mode==='full')return {doc:md,
     ranges:[{sourceFrom:0,sourceTo:md.length,viewFrom:0,viewTo:md.length}],
     blocks:sections.map(s=>s.id),disagreements:getDifferences(runs)};
   const diffs=getDifferences(runs);
-  const selected=sections.filter(s=>diffs.some(p=>p>s.from&&p<=s.to));
+  const selected=mode==='disagree'?
+    sections.filter(s=>diffs.some(p=>p>s.from&&p<=s.to)):
+    mode==='no-sentence'?sectionsWithoutSentences(md,sections,runs):[];
   let doc='',ranges=[];
   for(const section of selected){
     // Separator is view-only. It never changes the original CMD document.
@@ -173,7 +201,6 @@ function pbsPageTargets(md){
   const pages=new Map(),locations=[];
   for(let i=0;i<tags.length;i++){
     const tag=tags[i];
-    locations.push({key:tag.key,sourceOffset:tag.sourceOffset});
     const end=i+1<tags.length?tags[i+1].sourceLine-1:lines.length;
     let contentLine=null;
     for(let j=tag.sourceLine;j<end;j++){
@@ -184,6 +211,8 @@ function pbsPageTargets(md){
     const line=contentLine??tag.sourceLine;
     const candidate={key:tag.key,index:tag.index,sourceLine:line,
       sourceOffset:starts[line-1],blockId:tag.id,hasContent:contentLine!==null};
+    locations.push({key:tag.key,sourceOffset:tag.sourceOffset,
+      contentOffset:candidate.sourceOffset,contentLine:line,blockId:tag.id});
     if(!pages.has(tag.key)||(!pages.get(tag.key).hasContent&&candidate.hasContent))
       pages.set(tag.key,candidate);
   }
@@ -286,11 +315,12 @@ class ComparePane {
       select.setAttribute('aria-label','原文显示范围');
       select.add(new Option('全文','full'));
       select.add(new Option('分歧块','disagree'));
+      select.add(new Option('无分句块','no-sentence'));
       toolbar.append(select);
       const pdfSelect=document.createElement('select');
       pdfSelect.id='pbs-page-select';
       pdfSelect.setAttribute('aria-label','PBS p 编码定位');
-      pdfSelect.title='按 CMD 已有 p 编码跳转；分歧块模式切回全文';
+      pdfSelect.title='按当前块类型筛选中已有的 PBS p 编码定位';
       pdfSelect.add(new Option('无 PBS p',''));
       pdfSelect.disabled=true;
       toolbar.append(pdfSelect);
@@ -315,9 +345,33 @@ class ComparePane {
       const pos=this.view.posAtCoords({x:event.clientX,y:event.clientY});
       if(Number.isInteger(pos))this.owner.receivePosition(this.id,pos);
     });
+    if(this.id==='original'){
+      const gutter=this.view.dom.querySelector('.ocr-sb-block-gutter');
+      this.gutterObserver=new ResizeObserver(()=>this.alignPagePicker());
+      this.gutterObserver.observe(this.element);
+      if(gutter)this.gutterObserver.observe(gutter);
+      this.alignPagePicker();
+    }
   }
-  layout(){this.view?.requestMeasure();}
-  dispose(){this.view?.destroy();this.view=null;}
+  alignPagePicker(){
+    if(this.id!=='original'||!this.view)return;
+    const gutter=this.view.dom.querySelector('.ocr-sb-block-gutter');
+    const toolbar=this.element.querySelector('.ocr-sb-pane-toolbar');
+    if(!gutter||!toolbar)return;
+    const left=gutter.getBoundingClientRect().left-toolbar.getBoundingClientRect().left;
+    if(Number.isFinite(left)&&left>=0)
+      toolbar.style.setProperty('--ocr-sb-block-left',left.toFixed(1)+'px');
+  }
+  setBlockGutterWidth(md){
+    if(this.id!=='original')return;
+    const lengths=[...md.matchAll(/<!-- cmd:block:v1 id="(p\d+b\d+(?:s\d+)?)"/g)]
+      .map(match=>match[1].length);
+    const width=Math.max(56,Math.ceil(Math.max(4,...lengths)*7.2+17));
+    this.element.style.setProperty('--ocr-sb-block-width',width+'px');
+    this.alignPagePicker();
+  }
+  layout(){this.view?.requestMeasure();this.alignPagePicker();}
+  dispose(){this.gutterObserver?.disconnect();this.view?.destroy();this.view=null;}
   updateDoc(next){
     if(!this.view)return;
     if(this.view.state.doc.toString()!==next){
@@ -330,6 +384,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
   let projection={doc:'',ranges:[],blocks:[],disagreements:[]};
   let runs=new Map(),gold={},md='',mode='full',focus=null;
   let pbsPages=[],pbsLocations=[];
+  let availablePages=[];
   let lastSync=0,api=null;
   const owner={receivePosition:(...args)=>api?.receivePosition(...args),
     receiveScroll:(...args)=>api?.receiveScroll(...args)};
@@ -354,29 +409,43 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
     const select=panes.get('original')?.element.querySelector('#pbs-page-select');
     if(!select)return;
     select.replaceChildren();
-    if(!pbsPages.length){
+    if(!availablePages.length){
       select.add(new Option('无 PBS p',''));
       select.disabled=true;
       return;
     }
     select.disabled=false;
-    for(const page of pbsPages){
+    for(const page of availablePages){
       const item=new Option(page.key,page.key);
       item.title=page.key+' · CMD 原文第 '+page.sourceLine+
         ' 行 · '+page.blockId;
       select.add(item);
     }
   }
+  function filterPageOptions(){
+    if(mode==='full')return pbsPages;
+    const selected=new Map();
+    for(const row of pbsLocations){
+      if(!projection.ranges.some(r=>
+        row.sourceOffset>=r.sourceFrom&&row.sourceOffset<r.sourceTo))continue;
+      if(!selected.has(row.key))selected.set(row.key,{
+        key:row.key,sourceOffset:row.contentOffset,
+        sourceLine:row.contentLine,blockId:row.blockId
+      });
+    }
+    return [...selected.values()].sort((a,b)=>
+      Number(a.key.slice(1))-Number(b.key.slice(1)));
+  }
   function updatePageSelection(source){
     const select=panes.get('original')?.element.querySelector('#pbs-page-select');
     if(!select||select.disabled||!Number.isInteger(source))return;
-    // The nearest preceding PBS tag determines the current p prefix.
+    // Do not select a p that the active filter excludes.
     let row=null;
     for(const item of pbsLocations){
       if(item.sourceOffset>source)break;
-      row=item;
+      if(availablePages.some(page=>page.key===item.key))row=item;
     }
-    if(!row)row=pbsLocations[0];
+    if(!row)row=availablePages[0];
     if(row?.key&&select.value!==row.key)select.value=row.key;
   }
   function showDecorations(){
@@ -417,9 +486,16 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
       }
       pane.view.dispatch({effects:markEffect.of(Decoration.set(marks,true))});
       if(id==='original')pane.status.textContent=
-        (mode==='disagree'?'分歧块 '+projection.blocks.length+' · ':'全文 · ')+
+        (mode==='disagree'?'分歧块 '+projection.blocks.length+' · ':
+          mode==='no-sentence'?'无分句块 '+projection.blocks.length+' · ':'全文 · ')+
         projection.disagreements.length+' 处分歧';
-      else pane.status.textContent=runSentenceCount(runs.get(id))+' 句';
+      else{
+        const run=runs.get(id);
+        const elapsed=Number.isFinite(run?.elapsed)?run.elapsed.toFixed(1)+' ms':'— ms';
+        pane.status.textContent=run?.error?'失败 · '+elapsed:
+          runSentenceCount(run)+' 句 · '+elapsed;
+        pane.status.title=id+' 最近一次分句操作耗时 '+elapsed;
+      }
     });
   }
   function runSentenceCount(run){return run?.value?.sentences?.length??0;}
@@ -439,20 +515,23 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
       if(typeof source!=='string')throw TypeError('CMD source required');
       const sourceChanged=source!==md;
       const changed=sourceChanged||filter!==mode||
-        (results!==runs && filter==='disagree');
+        (results!==runs && filter!=='full');
       md=source;mode=filter;runs=results;gold=decisions;
       if(sourceChanged){
         const pages=pbsPageTargets(md);
         pbsPages=pages.pages;pbsLocations=pages.locations;
-        refreshPageOptions();
       }
       if(changed){
         projection=createSourceProjection(md,runs,mode);
+        availablePages=filterPageOptions();
+        refreshPageOptions();
         eachPane(pane=>pane.updateDoc(projection.doc));
         const sourcePane=panes.get('original');
         if(sourcePane?.view){
+          sourcePane.setBlockGutterWidth(md);
           updateOriginalGutters(sourcePane.view,md,projection);
-          foldSourceInitially(sourcePane.view,md,projection);
+          if(mode!=='no-sentence')foldSourceInitially(sourcePane.view,md,projection);
+          else foldSourceInitially(sourcePane.view,md,projection,{showUnsentenced:true});
         }
         const selected=selectedPos!==null&&toView(projection,selectedPos)!==null?
           selectedPos:projection.ranges[0]?.sourceFrom??null;
@@ -471,7 +550,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
       showDecorations();scrollToSource(source);
     },
     pbsPageTarget(key){
-      return pbsPages.find(page=>page.key===key)||null;
+      return availablePages.find(page=>page.key===key)||null;
     },
     receivePosition(id,viewPos){
       const source=toSource(projection,viewPos);
@@ -497,6 +576,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
     snapshot(){
       return {mode,projectionLength:projection.doc.length,sourceLength:md.length,
         pbsPages:pbsPages.map(page=>({...page})),
+        availablePages:availablePages.map(page=>({...page})),
         currentPbsPage:panes.get('original')?.element.querySelector('#pbs-page-select')?.value||null,
         blocks:projection.blocks,disagreements:projection.disagreements,
         paneCount:[...panes.values()].filter(p=>p.view).length,
