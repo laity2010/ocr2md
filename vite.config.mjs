@@ -46,7 +46,14 @@ export default defineConfig({
   define: {'__V6_BUILD_VERSION__': JSON.stringify(buildVersion)},
   root: 'ui',
   base:lab?.base||'/',
-  build: {outDir: lab?`../labs/${lab.name}/dist`:'../dist', emptyOutDir: true},
+  build: {
+    outDir: lab?`../labs/${lab.name}/dist`:'../dist', emptyOutDir: true,
+    // Always build the same V6 extra review page for Main and Lab.
+    rollupOptions: {input: {
+      main: resolve('ui/index.html'),
+      sentenceBenchmark: resolve('ui/sentence-benchmark.html')
+    }}
+  },
   plugins: [
     moduleParityPlugin(root,lab),
     {name:'release-identity',generateBundle() {

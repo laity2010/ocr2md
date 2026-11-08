@@ -1786,3 +1786,18 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- End-to-end shell semantics are separate from the isolated U03 direct test.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-ST-U03-SHELL','U03','tests/sentence-translation-shell.browser.test.mjs','tests/sentence-translation-shell.browser.test.mjs','Built Main Chromium/iPad WebKit TomSelect to independent translation AG, JSON download/import, source remains untouched','integration');
+
+-- Experimental reusable Sentence Segmentation abstraction (WP0-WP4).
+-- The *only* public business exports are split and rebuild. Engine adapters,
+-- projection, view and human-Gold storage are same-owner private implementation.
+INSERT INTO modules VALUES
+ ('S','Sentence Segmentation','reversible CMD projection and swappable NLP engines','ui/sentence-benchmark-core.js');
+INSERT INTO apis VALUES
+ ('S01','S','split','ui/sentence-benchmark-core.js','export','Markdown string and engine ID','ordered lossless sentence/source pieces, source-origin fragments, engine ID','must not edit CMD Markdown or change its UTF-16 content',1),
+ ('S02','S','rebuild','ui/sentence-benchmark-core.js','export','full split result','exact original Markdown as string','rejects missing/overlapping source pieces, mismatched sentence fragments and changed source checksum',1);
+INSERT INTO access_edges VALUES
+ ('X-SENT-BENCH-L-S01','L','S','ui/sentence-benchmark-app.js','split(sample.md,id)','S01','registered','Web reviewer uses public sentence API only'),
+ ('X-SENT-BENCH-L-S02','L','S','ui/sentence-benchmark-app.js','rebuild(value)','S02','registered','Web reviewer checks lossless result before comparison');
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-SENT-BENCH-S01','S01','tests/sentence-benchmark-public.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Three engine adapters, identical CMD projection, source-exact and UTF-16 mapped fragments across Buffett and MD corner cases','direct'),
+ ('TC-SENT-BENCH-S02','S02','tests/sentence-benchmark-public.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Byte-identical Markdown including metadata, formula, media and code; source fragment tampering and missing pieces are rejected','direct');
