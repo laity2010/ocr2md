@@ -11,6 +11,8 @@ import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
+import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
+import {sentenceSourceFolding,foldSourceInitially,revealFoldedSource} from './sentence-benchmark-source-folding.js';
 import {readCMDBlockChains, parseCMDBlockTag} from './cmd-block-chains.js';
 
 const markEffect=StateEffect.define();
@@ -300,7 +302,7 @@ class ComparePane {
   }
   init(){
     this.view=new EditorView({parent:this.editorHost,doc:'',
-      extensions:this.id==='original'?[...RO,...ORIGINAL_GUTTERS]:RO});
+      extensions:this.id==='original'?[...RO,...ORIGINAL_GUTTERS,obsidianHeadingMarkers,...sentenceSourceFolding]:RO});
     const scroller=this.view.scrollDOM;
     const gesture=()=>{this.lastGesture=performance.now();};
     for(const event of ['wheel','touchstart','pointerdown','keydown'])
@@ -448,7 +450,10 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
         projection=createSourceProjection(md,runs,mode);
         eachPane(pane=>pane.updateDoc(projection.doc));
         const sourcePane=panes.get('original');
-        if(sourcePane?.view)updateOriginalGutters(sourcePane.view,md,projection);
+        if(sourcePane?.view){
+          updateOriginalGutters(sourcePane.view,md,projection);
+          foldSourceInitially(sourcePane.view,md,projection);
+        }
         const selected=selectedPos!==null&&toView(projection,selectedPos)!==null?
           selectedPos:projection.ranges[0]?.sourceFrom??null;
         focus=selected;
@@ -459,7 +464,11 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
     },
     reveal(source){
       if(!Number.isInteger(source))return;
-      focus=source;showDecorations();scrollToSource(source);
+      focus=source;
+      const original=panes.get('original')?.view;
+      const at=toView(projection,source);
+      if(original&&at!==null)revealFoldedSource(original,at);
+      showDecorations();scrollToSource(source);
     },
     pbsPageTarget(key){
       return pbsPages.find(page=>page.key===key)||null;
@@ -467,6 +476,11 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
     receivePosition(id,viewPos){
       const source=toSource(projection,viewPos);
       focus=source;
+      if(id!=='original'){
+        const original=panes.get('original')?.view;
+        const at=toView(projection,source);
+        if(original&&at!==null)revealFoldedSource(original,at);
+      }
       showDecorations();scrollToSource(source,id);
       onPosition(source,id);
     },

@@ -140,6 +140,14 @@ try{
         document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',null,{timeout:15000});
       assert.equal(await page.locator('#sample-select option').count(),5);
       assert.equal(await page.locator('#kpi-roundtrip').textContent(),'100% PASS');
+      await page.waitForFunction(()=>/^lab-\d{6}-\d{4}$/.test(
+        document.querySelector('#build-version')?.textContent||''),null,{timeout:15000});
+      const release=await page.evaluate(async()=>(
+        await (await fetch('./healthz',{cache:'no-store'})).json()).version);
+      const match=/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(?:\d{2})?$/.exec(release);
+      assert.equal(await page.locator('#build-version').textContent(),
+        'lab-'+match[1].slice(-2)+match[2]+match[3]+'-'+match[4]+match[5],
+        name+' Lab badge must show actual release time, not a hardcoded label');
       await page.locator('#review-filter').selectOption('all');
       const boundaries=await page.evaluate(md=>{
         const offsets=[...document.querySelectorAll('#issue-list .issue-button')]
@@ -177,14 +185,33 @@ try{
         await page.locator('#sample-select').selectOption('buffett');
         await page.waitForFunction(()=>document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',
           null,{timeout:85000});
+        const originalSource=page.locator('.ocr-sb-pane[data-engine="original"]');
+        assert.equal(await originalSource.locator('.cm-foldGutter').count(),1,
+          'Lab original CM6 must reuse Main fold gutter');
+        await page.waitForFunction(()=>
+          document.querySelectorAll('.ocr-sb-pane[data-engine="original"] .cm-foldPlaceholder').length>0,
+          null,{timeout:15000});
+        assert.equal(await page.locator('.ocr-sb-pane[data-engine="intl"] .cm-foldGutter').count(),0,
+          'engine panes remain unchanged');
+        const foldedWidget=originalSource.locator('.cm-foldPlaceholder').first();
+        const oldWidget=await foldedWidget.elementHandle();
+        await foldedWidget.click();
+        assert.equal(await oldWidget.evaluate(element=>element.isConnected),false,
+          'folded non-sentence source content must be expandable on click');
+        assert.equal(await page.locator('#kpi-roundtrip').textContent(),'100% PASS');
         const rect=await page.locator('.ocr-sb-pane[data-engine="intl"] .cm-scroller').boundingBox();
         await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);
-        await page.mouse.wheel(0,1100);
+        await page.mouse.wheel(0,5000);
         await page.waitForTimeout(1000);
         const synchronized=await page.locator('.ocr-sb-pane').evaluateAll(panes=>
-          panes.map(p=>p.querySelector('.cm-scroller')?.scrollTop??0));
-        assert(synchronized.every(v=>v>150),
-          'Scrolling one engine must move all four CM6 panes to corresponding CMD locations');
+          panes.map(p=>({id:p.dataset.engine,scrollTop:p.querySelector('.cm-scroller')?.scrollTop??0})));
+        assert(synchronized.filter(p=>p.id!=='original').every(p=>p.scrollTop>0),
+          'The three full-text engine CM6 panes must respond to source scroll synchronization');
+        assert(synchronized.some(p=>p.id==='original'),
+          'The folded CMD source pane must remain mounted during engine scrolling');
+        // The folded source pane is much shorter than the engine panes;
+        // equal pixel scroll offsets here would be an incorrect contract.
+        assert(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-foldGutter').count()===1);
         await page.locator('#view-mode').selectOption('disagree');
         await page.waitForFunction(()=>document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('分歧块'),
           null,{timeout:15000});

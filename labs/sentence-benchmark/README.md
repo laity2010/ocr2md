@@ -17,6 +17,17 @@ Everforest theme, Sarasa font, global strip and source-coordinate conventions**
 as V6 Main. It no longer owns a parallel light-theme layout.
 
 - Left: one read-only CMD original CM6 with `全文 / 分歧块` in its own title bar.
+- The global release badge uses the same abbreviated format as Main,
+  `lab-YYMMDD-HHMM`, derived from the active Lab service `./healthz`
+  version. No fixed "Sentence Lab" badge is displayed.
+- The left source CM6 reuses Main's Everforest/Sarasa source styling,
+  `obsidianHeadingMarkers`, `mineruCommentFolding` and the native CM6 fold
+  gutter. Non-sentence lines are also folded by the exact read-only
+  `extractTextBlocks` projection; PBS anchor rows stay visible. Click the
+  fold placeholder/gutter to inspect any omitted structure. Manual expansion
+  stays until the sample or the 全文/分歧块 projection changes. Folding alters
+  neither the stored CMD Markdown nor the splitter's source offsets, Gold,
+  or 100% lossless reconstruction.
 - The left CM6 has two independent native gutters: source line numbers and
   exact CMD parent/child block IDs. In disagreement-only mode, line numbers
   remain the original CMD's line numbers; view-only separators are shown

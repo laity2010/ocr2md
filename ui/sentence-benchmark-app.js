@@ -11,6 +11,26 @@ import buffett from '../packages/minerujson-md/fixtures/buffetts-alpha.minerujso
 import {split,rebuild} from './sentence-benchmark-core.js';
 import {engineCatalog} from './sentence-benchmark-engines.js';
 const $=id=>document.getElementById(id);
+function compactLabBuild(version){
+  const match=/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(?:\d{2})?$/.exec(version||'');
+  return match?'lab-'+match[1].slice(-2)+match[2]+match[3]+'-'+match[4]+match[5]:null;
+}
+async function loadBuildBadge(){
+  const badge=$('build-version');
+  try{
+    const res=await fetch('./healthz',{cache:'no-store'});
+    if(!res.ok)throw Error('HTTP '+res.status);
+    const info=await res.json();
+    const label=compactLabBuild(info.version);
+    if(!label)throw Error('未知 Lab 版本');
+    badge.textContent=label;
+    badge.title=info.version;
+  }catch(error){
+    badge.textContent='lab-版本未知';
+    badge.title='无法读取 Lab healthz: '+error.message;
+  }
+}
+void loadBuildBadge();
 const KEY='ocr2md-sentence-benchmark-v1';
 const defaults=()=>({custom:[],selected:'reviewed',engines:engineCatalog.map(e=>e.id),gold:{}});
 const samples=[
