@@ -210,7 +210,8 @@ function visibleIssues(){
 function move(n){
   const list=visibleIssues(),index=list.findIndex(i=>i.pos===focused);
   if(!list.length)return;
-  focused=list[Math.min(list.length-1,Math.max(0,index+n))].pos;manual=false;render();
+  focused=list[Math.min(list.length-1,Math.max(0,index+n))].pos;
+  selectBlockAt(focused);manual=false;render();
 }
 function decide(pos,value,isManual=false){
   if(!Number.isInteger(pos)||pos<0||pos>sample.md.length)return;

@@ -40,6 +40,13 @@ test('one chosen engine arbitrates exactly one disputed PBS block; Gold stays au
  initial.manualGold[String(selected.boundaries[0])]={break:false,manual:true};
  const roundtrip=synchronizeReview(initial,inventory);
  assert.deepEqual(roundtrip.blocks[row.id],initial.blocks[row.id]);
+ // The chosen snapshot is a human decision; future engine updates must not
+ // retroactively replace the stored offsets just because its ID is selected.
+ const changedEngine=new Map(inventory);
+ changedEngine.set(row.id,{...row,engines:row.engines.map(e=>({...e,
+   boundaries:e.engine==='intl'?[12345]:e.boundaries}))});
+ assert.deepEqual(synchronizeReview(initial,changedEngine).blocks[row.id],
+   initial.blocks[row.id],'source-hash-bound adoption survives engine upgrades');
  assert.equal(roundtrip.blocks[row.id].engine,'intl');
  assert(reviewChanged(synchronizeReview(freshReview('b'.repeat(64)),inventory),roundtrip));
  assert(!acceptedBoundaries(roundtrip,inventory).includes(selected.boundaries[0]),

@@ -56,9 +56,11 @@ export function synchronizeReview(review,inventory){
   for(const row of inventory.values()){
     const previous=review.blocks?.[row.id];
     if(previous?.status==='arbitrated'){
-      const chosen=row.engines.find(e=>e.engine===previous.engine&&e.valid&&e.covered);
-      if(chosen)next.blocks[row.id]={status:'arbitrated',engine:chosen.engine,
-        boundaries:[...chosen.boundaries]};
+      // Human adoption is a frozen review decision for this *exact* CMD SHA.
+      // Re-running or upgrading an engine must never silently overwrite its
+      // accepted boundary coordinates. The engine field is provenance only.
+      next.blocks[row.id]={status:'arbitrated',engine:previous.engine,
+        boundaries:[...previous.boundaries]};
       continue;
     }
     if(row.agreed)next.blocks[row.id]={status:'auto',boundaries:[...row.boundaries]};

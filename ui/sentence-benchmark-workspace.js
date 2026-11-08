@@ -540,7 +540,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{},onAd
         (mode==='disagree'?'分歧块 '+projection.blocks.length+' · ':
           mode==='no-sentence'?'无分句块 '+projection.blocks.length+' · ':
           mode==='arbitrated'?'已仲裁 '+projection.blocks.length+' · ':'全文 · ')+
-        projection.disagreements.length+' 处分歧';
+        projection.disagreements.length+' 处分歧'+
+        (selectedBlockId?' · 当前 '+selectedBlockId:'');
       else{
         const run=runs.get(id);
         const elapsed=Number.isFinite(run?.elapsed)?run.elapsed.toFixed(1)+' ms':'— ms';
@@ -580,7 +581,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{},onAd
       const changed=sourceChanged||filter!==mode||(reviewChanged&&filter==='arbitrated')||
         (results!==runs && filter!=='full');
       md=source;mode=filter;runs=results;gold=decisions;
-      reviewedBlocks=accepted;disputedIds=new Set(disputed);
+      reviewedBlocks=structuredClone(accepted);disputedIds=new Set(disputed);
       selectedBlockId=activeBlockId;acceptedPositions=finalBoundaries;
       adoptionEnabled=canAdopt;
       if(sourceChanged){

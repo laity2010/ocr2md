@@ -140,9 +140,11 @@ An ordinary imported MD sample must not be mistaken for sealed CMD evidence.
 
 The reviewer is a second **page of the same V6 build**, not a different Lab module
 configuration. Main/Lab builds at the same Git SHA must have identical source
-module graphs. Reviewer samples and decisions are kept in the browser's local
-storage and can be exported/imported as JSON. Neither Main's CMD document nor
-Lab's PDF/CMD document is altered by benchmark review.
+module graphs. Imported reviewer samples remain in localStorage; explicit Gold retains
+JSON export/import and is also mirrored to the Lab-only review sidecar for the
+saved reviewed CMD. The three engines' temporary full split results are not
+persisted. Neither Main's CMD document nor Lab's PDF/CMD document is altered
+by benchmark review.
 
 Initial fixture: Buffett Markdown. Other MD files can be imported from disk.
 
