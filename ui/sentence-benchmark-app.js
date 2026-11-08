@@ -239,7 +239,22 @@ function decide(pos,value,isManual=false){
     '。换设备请导出、导入 Gold JSON。');
 }
 function renderSource(){
-  compare.update({source:sample.md,results:runs,filter:$('view-mode').value,
+  const mode=$('view-mode').value;
+  if((mode==='disagree'||mode==='arbitrated')&&inventory.size){
+    const eligible=[...inventory.values()].filter(row=>mode==='disagree'?
+      row.disagreed&&review.blocks[row.id]?.status!=='arbitrated':
+      review.blocks[row.id]?.status==='arbitrated');
+    const current=blockAt(inventory,focused)?.id;
+    if(!eligible.some(row=>row.id===activeBlockId&&
+      (focused===null||row.id===current))){
+      const next=eligible.find(row=>row.id===current)??
+        eligible.find(row=>focused!==null&&row.from>focused)??eligible[0]??null;
+      activeBlockId=next?.id??null;
+      focused=next?.textFrom??null;
+      lastRevealed=null;
+    }
+  }
+  compare.update({source:sample.md,results:runs,filter:mode,
     decisions:gold(),selectedPos:focused,accepted:review.blocks,
     disputed:[...inventory.values()].filter(x=>x.disagreed).map(x=>x.id),
     activeBlockId,finalBoundaries:acceptedBoundaries(review,inventory),
@@ -436,7 +451,8 @@ $('pbs-page-select').onchange=()=>{
   const match=[...inventory.values()].find(row=>
     row.id.startsWith(select.value+'b')&&
     ($('view-mode').value==='arbitrated'?review.blocks[row.id]?.status==='arbitrated':
-      $('view-mode').value==='disagree'?row.disagreed:false));
+      $('view-mode').value==='disagree'?
+        row.disagreed&&review.blocks[row.id]?.status!=='arbitrated':false));
   focused=match?.textFrom??target.sourceOffset;
   selectBlockAt(focused);lastRevealed=null;manual=false;
   renderSource();

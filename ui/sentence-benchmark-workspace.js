@@ -561,7 +561,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{},onAd
         (mode==='disagree'?'分歧块 '+projection.blocks.length+' · ':
           mode==='no-sentence'?'无分句块 '+projection.blocks.length+' · ':
           mode==='arbitrated'?'已仲裁 '+projection.blocks.length+' · ':'全文 · ')+
-        projection.disagreements.length+' 处分歧'+
+        (mode==='disagree'||mode==='arbitrated'?'原始句界分歧 ':'句界分歧 ')+
+        projection.disagreements.length+' 处'+
         (selectedBlockId?' · 当前 '+selectedBlockId:'');
       else{
         const run=runs.get(id);

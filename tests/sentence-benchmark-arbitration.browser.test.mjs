@@ -84,6 +84,11 @@ try {
    assert(visible.includes('Mr.')&&visible.includes('Smith arrives.')&&!visible.includes('Dr. Brown'),
      'adopted child p1b0s0 must disappear without hiding disputed sibling p1b0s1');
    assert((await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status').textContent()).includes('当前 p1b0s1'));
+   await page.locator('#view-mode').selectOption('full');
+   await page.locator('#view-mode').selectOption('disagree');
+   await page.locator('#pbs-page-select').selectOption('p1');
+   assert((await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status').textContent()).includes('当前 p1b0s1'),
+     'reopening the remaining disputed p must not reselect its adopted child');
    for(let i=0;i<100;i++){if(fetchStore().blocks.p1b0s0?.engine==='intl')break;await pause(100);}
    recorded=fetchStore();
    assert.equal(recorded.blocks.p1b0s0.status,'arbitrated');
