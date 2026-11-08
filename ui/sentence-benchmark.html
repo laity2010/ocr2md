@@ -3,107 +3,84 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>OCR2MD · Sentence Benchmark Lab</title>
-  <link rel="stylesheet" href="./sentence-benchmark.css">
+  <title>OCR2MD V6 · Sentence Benchmark Lab</title>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbrand">
-      <span class="monogram">O</span>
-      <div><strong>OCR2MD <span class="middot">/</span> Sentence Benchmark Lab</strong>
-        <small>分句引擎对照 · 可扩展实验工作台</small></div>
-    </div>
-    <div class="toplinks">
-      <a href="./" target="_self">V6 工作台</a>
-      <span class="pill">隔离实验</span>
-    </div>
-  </header>
-  <main>
-    <section class="panel control-panel" aria-label="样本与引擎选择">
-      <div class="control-row">
-        <div class="field sample-field">
-          <label for="sample-select">文本样本</label>
-          <select id="sample-select" aria-label="文本样本"></select>
-        </div>
-        <label class="button subtle file-button">导入 Markdown
-          <input id="sample-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
-        </label>
-        <button id="delete-sample" class="button subtle" type="button">移除当前样本</button>
-        <span id="sample-meta" class="secondary"></span>
+  <div class="app">
+    <header class="toolbar">
+      <div class="identity">
+        <div class="brand">OCR2MD V6</div>
+        <span class="build-badge">Sentence Lab</span>
+        <span id="status" class="status" role="status" aria-live="polite">分句实验初始化中</span>
       </div>
-      <div class="control-row engine-row">
-        <div><span class="label">参与比较的引擎</span><small>勾选任意两个或多个进行对比</small></div>
-        <div id="engine-options" class="engine-options" aria-label="可选引擎"></div>
-        <span class="secondary mini">新增适配器将自动出现</span>
+      <div class="source-actions">
+        <a class="ocr-sb-main-link" href="./">V6 工作台</a>
+        <button id="toggle-review" type="button" aria-expanded="false" aria-controls="review-drawer">人工裁决 / Gold</button>
       </div>
-    </section>
-    <section class="metric-row" aria-label="实验结果概览">
-      <div class="metric"><small>已运行引擎</small><strong id="kpi-engines">—</strong></div>
-      <div class="metric"><small>分歧句界</small><strong id="kpi-diffs">—</strong></div>
-      <div class="metric"><small>人工裁决</small><strong id="kpi-reviewed">—</strong></div>
-      <div class="metric"><small>无损重组</small><strong id="kpi-roundtrip">—</strong></div>
-    </section>
-    <section class="workspace">
-      <article class="panel document-panel">
-        <div class="panel-heading">
-          <div><h2>原始 Markdown</h2><small>只读 · 与 CMD 来源位置一致 · UTF-16 坐标</small></div>
-          <div class="inline-control">
-            <label for="view-mode">查看</label>
-            <select id="view-mode"><option value="context">分歧上下文</option><option value="full">全文覆盖</option></select>
-            <select id="display-engine" aria-label="全文显示引擎"></select>
+    </header>
+    <nav class="module-controls ocr-sb-controls" aria-label="分句工作台工具栏">
+      <span class="ocr-sb-field-name">样本</span>
+      <select id="sample-select" aria-label="文本样本"></select>
+      <label class="ocr-sb-upload">导入 MD
+        <input id="sample-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
+      </label>
+      <button id="delete-sample" type="button">移除</button>
+      <span id="sample-meta" class="ocr-sb-meta"></span>
+      <span class="ocr-sb-counter">分歧 <strong id="kpi-diffs">—</strong></span>
+      <span class="ocr-sb-counter">审阅 <strong id="kpi-reviewed">—</strong></span>
+      <span class="ocr-sb-counter">引擎 <strong id="kpi-engines">—</strong></span>
+      <span class="ocr-sb-counter">重组 <strong id="kpi-roundtrip">—</strong></span>
+    </nav>
+    <main class="ocr-sb-main">
+      <div id="workspace" aria-label="原始 CMD 与三个分句引擎四窗对照"></div>
+      <section id="review-drawer" class="ocr-sb-review" aria-label="人工句界审阅与评分" hidden>
+        <div class="ocr-sb-review-left">
+          <div class="ocr-sb-review-toolbar">
+            <strong>人工句界审阅</strong>
+            <select id="review-filter" aria-label="审阅范围">
+              <option value="disagree">只看分歧</option>
+              <option value="all">全部句界</option>
+              <option value="pending">仅未审阅</option>
+            </select>
+            <button id="prev-issue" type="button">上一处</button>
+            <span id="issue-number">—</span>
+            <button id="next-issue" type="button">下一处</button>
+          </div>
+          <p id="issue-summary" class="ocr-sb-issue-summary"></p>
+          <div id="engine-judgments" class="engine-judgments"></div>
+          <div class="judge-buttons">
+            <button id="approve-issue" type="button">✓ 应当断句</button>
+            <button id="reject-issue" type="button">× 不应断句</button>
+            <button id="clear-issue" type="button">撤销裁决</button>
+            <button id="manual-issue" type="button">手工补句界</button>
+          </div>
+          <div id="manual-picker" class="manual-picker" hidden>
+            <h3>点击字符，在该字符后新增 Gold 句界</h3>
+            <div id="manual-chars" class="manual-chars"></div>
+            <button id="cancel-manual" type="button">取消</button>
           </div>
         </div>
-        <div class="document-legend"><span class="line-indicator"></span> 引擎句界 <span class="focus-indicator"></span> 当前审阅位置</div>
-        <div id="source-view" class="source-view" aria-label="原文与分句位置"></div>
-        <div id="manual-picker" class="manual-picker" hidden>
-          <h3>人工指定新句界</h3>
-          <p>点击下面字符，表示在该字符之后分句。旧的错误句界可另外标记为“不应断句”。</p>
-          <div id="manual-chars" class="manual-chars"></div>
-          <button id="cancel-manual" class="button subtle">取消</button>
-        </div>
-        <div class="source-note">工作台仅在浏览器中读取测试样本，不会修改 CMD、原始 PDF 或 Main 文档。</div>
-      </article>
-      <aside class="panel review-panel">
-        <div class="panel-heading">
-          <div><h2>逐句边界审阅</h2><small>引擎判断与人工 Gold 对照</small></div>
-          <select id="review-filter" aria-label="审阅范围">
-            <option value="disagree">只看分歧</option>
-            <option value="all">全部候选句界</option>
-            <option value="pending">仅未审阅</option>
-          </select>
-        </div>
-        <div class="navigation">
-          <button class="button subtle" id="prev-issue" type="button">上一处</button>
-          <strong id="issue-number">—</strong>
-          <button class="button subtle" id="next-issue" type="button">下一处</button>
-        </div>
-        <div id="issue-summary" class="issue-summary"></div>
-        <div id="engine-judgments" class="engine-judgments"></div>
-        <div class="judge-buttons">
-          <button class="button positive" id="approve-issue" type="button">✓ 应当断句</button>
-          <button class="button negative" id="reject-issue" type="button">× 不应断句</button>
-          <button class="button subtle" id="clear-issue" type="button">撤销裁决</button>
-          <button class="button subtle" id="manual-issue" type="button">手工调整句界</button>
-        </div>
-        <div class="issue-list-wrap"><div class="list-head"><h3>位置索引</h3><small id="issue-list-count"></small></div>
+        <div class="ocr-sb-review-right">
+          <div class="ocr-sb-review-toolbar">
+            <strong>分歧索引</strong><span id="issue-list-count"></span>
+            <button id="export-gold" type="button">导出 Gold</button>
+            <label class="ocr-sb-upload">导入 Gold <input id="gold-file" type="file" accept=".json,application/json" hidden></label>
+            <button id="export-report" type="button">导出评分</button>
+          </div>
           <div id="issue-list" class="issue-list"></div>
+          <table id="score-table">
+            <thead><tr><th>引擎</th><th>句数</th><th>耗时</th><th>精确率</th><th>召回率</th><th>F1</th><th>无损</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p id="gold-note" class="ocr-sb-note"></p>
         </div>
-      </aside>
-    </section>
-    <section class="panel report-panel">
-      <div class="panel-heading">
-        <div><h2>引擎成绩与 Gold 标准</h2><small>只统计已人工裁决的候选句界；未审阅的一致意见不算标准答案</small></div>
-        <div class="report-actions">
-          <button class="button subtle" id="export-gold">导出 human-gold.json</button>
-          <label class="button subtle file-button">导入 Gold <input type="file" id="gold-file" accept=".json,application/json" hidden></label>
-          <button class="button primary" id="export-report">导出评分报告</button>
+        <div class="ocr-sb-advanced" hidden>
+          <div id="engine-options"></div>
+          <select id="display-engine" aria-label="原文句界显示引擎"></select>
         </div>
-      </div>
-      <div class="table-scroll"><table id="score-table"><thead><tr><th>引擎</th><th>句数</th><th>耗时</th><th>精确率</th><th>召回率</th><th>F1</th><th>无损</th></tr></thead><tbody></tbody></table></div>
-      <p id="gold-note" class="footnote"></p>
-    </section>
-    <p id="status" class="status" role="status">准备就绪。</p>
-  </main>
+      </section>
+    </main>
+  </div>
   <script type="module" src="./sentence-benchmark-app.js"></script>
 </body>
 </html>

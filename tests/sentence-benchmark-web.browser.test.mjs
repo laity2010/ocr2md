@@ -51,8 +51,38 @@ try{
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
       const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
       assert.equal(response.status(),200,name+' page HTTP 200');
-      await page.waitForFunction(()=>document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',
+      await page.waitForFunction(()=>document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS' &&
+        document.querySelectorAll('.ocr-sb-pane .cm-editor').length===4,
         null,{timeout:65000});
+      const geometry=await page.locator('.ocr-sb-pane').evaluateAll(panes=>panes.map(node=>{
+        const r=node.getBoundingClientRect();
+        return {id:node.dataset.engine,x:r.x,y:r.y,w:r.width,h:r.height,
+          contentEditable:node.querySelector('.cm-content')?.contentEditable,
+          markers:node.querySelectorAll('.ocr-sb-boundary').length};
+      }));
+      assert.deepEqual(geometry.map(p=>p.id).sort(),['intl','original','sentence-splitter','wink-nlp']);
+      assert(geometry.every(p=>p.contentEditable==='false' && p.w>100 && p.h>80),
+        name+' all four CM6 views must be visible and read-only');
+      const byId=Object.fromEntries(geometry.map(p=>[p.id,p]));
+      assert(byId.original.x+byId.original.w <= byId.intl.x+2);
+      assert(byId.intl.y+byId.intl.h <= byId['sentence-splitter'].y+2);
+      assert(byId['sentence-splitter'].y+byId['sentence-splitter'].h <= byId['wink-nlp'].y+2);
+      assert(Math.abs(byId.intl.x-byId['sentence-splitter'].x)<2 &&
+        Math.abs(byId.intl.x-byId['wink-nlp'].x)<2);
+      assert(Math.abs(byId.intl.h-byId['sentence-splitter'].h)<6 &&
+        Math.abs(byId.intl.h-byId['wink-nlp'].h)<6,
+        name+' right engine panes must share equal vertical height');
+      await page.locator('.ocr-sb-pane[data-engine="wink-nlp"] .cm-line').first().click();
+      const focusSync=await page.locator('.ocr-sb-pane').evaluateAll(panes=>
+        panes.map(p=>p.querySelectorAll('.ocr-sb-active-line').length));
+      assert(focusSync.every(n=>n===1),name+' clicking any engine synchronizes all four selection highlights');
+      assert(geometry.some(p=>p.markers>0),name+' CM6 sentence boundaries must be visible');
+      await page.locator('#view-mode').selectOption('disagree');
+      await page.waitForFunction(()=>document.querySelector('#view-mode')?.value==='disagree');
+      await page.locator('#view-mode').selectOption('full');
+      assert.equal(await page.locator('#review-drawer').isHidden(),true);
+      await page.locator('#toggle-review').click();
+      assert.equal(await page.locator('#review-drawer').isVisible(),true);
       assert.equal(await page.locator('#engine-options input:checked').count(),3);
       assert.equal(await page.locator('#sample-select option').count(),3);
       assert.equal(await page.locator('#score-table tbody tr').count(),3);
@@ -71,6 +101,7 @@ try{
       await page.reload({waitUntil:'domcontentloaded'});
       await page.waitForFunction(()=>document.querySelector('#kpi-reviewed')?.textContent.startsWith('1 /'),
         null,{timeout:65000});
+      await page.locator('#toggle-review').click();
       await page.locator('#review-filter').selectOption('all');
       await page.locator('#clear-issue').click();
       await page.locator('#gold-file').setInputFiles({
@@ -94,11 +125,25 @@ try{
       ]);
       assert.equal(JSON.parse(readFileSync(await report.path(),'utf8')).schema,'ocr2md-sentence-score/v1');
       await page.locator('#view-mode').selectOption('full');
-      assert(await page.locator('#source-view .breakline').count()>0);
+      assert(await page.locator('.ocr-sb-pane[data-engine="intl"] .ocr-sb-boundary').count()>0);
       if(name==='Chrome'){
+        await page.locator('#toggle-review').click();
         await page.locator('#sample-select').selectOption('buffett');
         await page.waitForFunction(()=>document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',
           null,{timeout:85000});
+        const rect=await page.locator('.ocr-sb-pane[data-engine="intl"] .cm-scroller').boundingBox();
+        await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);
+        await page.mouse.wheel(0,1100);
+        await page.waitForTimeout(1000);
+        const synchronized=await page.locator('.ocr-sb-pane').evaluateAll(panes=>
+          panes.map(p=>p.querySelector('.cm-scroller')?.scrollTop??0));
+        assert(synchronized.every(v=>v>150),
+          'Scrolling one engine must move all four CM6 panes to corresponding CMD locations');
+        await page.locator('#view-mode').selectOption('disagree');
+        await page.waitForFunction(()=>document.querySelector('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status')?.textContent.includes('分歧块'),
+          null,{timeout:15000});
+        const diffStatus=await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status').textContent();
+        assert(/分歧块 [1-9]\d*/.test(diffStatus), 'Buffett disagreement block filter must show actual CMD blocks');
       }
       assert.deepEqual(errors,[],name+' console exceptions');
       console.log('SENTENCE_LAB_WEB_PASS',JSON.stringify({

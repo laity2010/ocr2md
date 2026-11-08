@@ -1,0 +1,301 @@
+/** Sentence Lab presentation only. Four independent, read-only CM6 views of
+ * ONE immutable CMD Markdown snapshot. Never edit/save through these views.
+ * Layout owner is the same Dockview library/theme as Main workspace.js.
+ */
+import {createDockview, themeAbyss} from 'dockview';
+import 'dockview/dist/styles/dockview.css';
+import {EditorView, Decoration, WidgetType} from '@codemirror/view';
+import {EditorState, StateEffect, StateField} from '@codemirror/state';
+import {markdown, markdownLanguage} from '@codemirror/lang-markdown';
+import {syntaxHighlighting} from '@codemirror/language';
+import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
+import {obsidianMarkdown} from './obsidian-markdown.js';
+import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
+import {readCMDBlockChains} from './cmd-block-chains.js';
+
+const markEffect=StateEffect.define();
+const markField=StateField.define({
+  create:()=>Decoration.none,
+  update(value,transaction){
+    for(const effect of transaction.effects)if(effect.is(markEffect))return effect.value;
+    return transaction.docChanged?value.map(transaction.changes):value;
+  },
+  provide:field=>EditorView.decorations.from(field)
+});
+const RO=Object.freeze([
+  EditorState.readOnly.of(true), EditorView.editable.of(false),
+  EditorView.lineWrapping,
+  markdown({base:markdownLanguage}),
+  obsidianMarkdown,obsidianSourceSyntax,
+  syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
+  markField
+]);
+const titles={original:'CMD 原文 · 只读',intl:'Intl.Segmenter',
+  'sentence-splitter':'sentence-splitter','wink-nlp':'winkNLP'};
+const ids=Object.keys(titles);
+const parentOf=id=>/^p\d+b\d+/.exec(id)?.[0]??id;
+
+function sectionsFor(md){
+  // CMD's authoritative PBS/BC atoms are read-only. All child atoms inherit
+  // their parent block identity for the disagreement block filter.
+  let atoms=[];
+  try {
+    // A sealed CMD document follows the official PBS/BC reader.
+    atoms=readCMDBlockChains(md).atoms.slice();
+  } catch {
+    // Imported non-CMD Markdown may contain ordinary example anchors but
+    // does not carry sealed MinerU provenance: read them only as locations.
+    // This never writes a replacement document or claims a valid CMD tree.
+    const anchor=/^<!-- cmd:block:v1 id="(p\d+b\d+(?:s\d+)?)" -->/gm;
+    for(const match of md.matchAll(anchor))
+      atoms.push({id:match[1],from:match.index});
+  }
+  atoms.sort((a,b)=>a.from-b.from);
+  if(atoms.length){
+    const spans=[];
+    if(atoms[0].from>0)spans.push({id:'preamble',from:0,to:atoms[0].from});
+    let last=null;
+    for(const atom of atoms){
+      const id=parentOf(atom.id);
+      if(!last||last.id!==id){
+        if(last)last.to=atom.from;
+        last={id,from:atom.from,to:md.length};spans.push(last);
+      }
+    }
+    return spans;
+  }
+  // Plain Markdown samples without PBS labels: paragraph-as-block fallback.
+  const spans=[];
+  const blank=/(?:\r?\n)[ \t]*(?:\r?\n)+/g;
+  let start=0,index=0,m;
+  while((m=blank.exec(md))){
+    if(m.index>start)spans.push({id:'paragraph-'+(++index),from:start,to:m.index});
+    start=blank.lastIndex;
+  }
+  if(start<md.length)spans.push({id:'paragraph-'+(++index),from:start,to:md.length});
+  return spans;
+}
+function breakPositions(run){
+  return run?.positions instanceof Set?run.positions:new Set();
+}
+function getDifferences(runs){
+  const valid=[...runs.values()].filter(run=>run?.positions instanceof Set);
+  const candidates=new Set(valid.flatMap(r=>[...r.positions]));
+  return [...candidates].filter(p=>valid.some(v=>v.positions.has(p)!==valid[0].positions.has(p)));
+}
+export function createSourceProjection(md,runs,mode){
+  const sections=sectionsFor(md);
+  if(mode!=='disagree')return {doc:md,
+    ranges:[{sourceFrom:0,sourceTo:md.length,viewFrom:0,viewTo:md.length}],
+    blocks:sections.map(s=>s.id),disagreements:getDifferences(runs)};
+  const diffs=getDifferences(runs);
+  const selected=sections.filter(s=>diffs.some(p=>p>s.from&&p<=s.to));
+  let doc='',ranges=[];
+  for(const section of selected){
+    // Separator is view-only. It never changes the original CMD document.
+    if(doc)doc+='\n\n';
+    const start=doc.length;
+    doc+=md.slice(section.from,section.to);
+    ranges.push({sourceFrom:section.from,sourceTo:section.to,
+      viewFrom:start,viewTo:doc.length});
+  }
+  return {doc,ranges,blocks:selected.map(s=>s.id),disagreements:diffs};
+}
+function toView(projection,pos){
+  for(const r of projection.ranges)if(pos>=r.sourceFrom&&pos<=r.sourceTo)
+    return Math.min(r.viewTo,r.viewFrom+pos-r.sourceFrom);
+  return null;
+}
+function toSource(projection,pos){
+  for(const r of projection.ranges)if(pos>=r.viewFrom&&pos<=r.viewTo)
+    return Math.min(r.sourceTo,r.sourceFrom+pos-r.viewFrom);
+  const after=projection.ranges.find(r=>pos<r.viewFrom);
+  return after?.sourceFrom??projection.ranges.at(-1)?.sourceTo??0;
+}
+
+class BreakWidget extends WidgetType {
+  constructor(label,style,title){super();this.label=label;this.style=style;this.title=title;}
+  eq(other){return other instanceof BreakWidget &&
+    this.label===other.label&&this.style===other.style&&this.title===other.title;}
+  toDOM(){
+    const marker=document.createElement('span');
+    marker.className='ocr-sb-boundary '+this.style;
+    marker.textContent=this.label;marker.title=this.title;
+    marker.setAttribute('aria-label',this.title);
+    return marker;
+  }
+  ignoreEvent(){return false;}
+}
+
+class ComparePane {
+  constructor(id,owner){
+    this.id=id;this.owner=owner;
+    this.element=document.createElement('div');
+    this.element.className='ocr-sb-pane ocr-cm-source';
+    this.element.dataset.engine=id;
+    const toolbar=document.createElement('div');toolbar.className='ocr-sb-pane-toolbar';
+    const label=document.createElement('strong');label.textContent=titles[id];
+    const state=document.createElement('span');state.className='ocr-sb-pane-status';
+    state.textContent='只读';
+    toolbar.append(label);
+    if(id==='original'){
+      const select=document.createElement('select');select.id='view-mode';
+      select.setAttribute('aria-label','原文显示范围');
+      select.add(new Option('全文','full'));
+      select.add(new Option('分歧块','disagree'));
+      toolbar.append(select);
+    }
+    toolbar.append(state);this.status=state;
+    this.editorHost=document.createElement('div');this.editorHost.className='ocr-sb-pane-editor';
+    this.element.append(toolbar,this.editorHost);
+    this.view=null;this.suppressUntil=0;this.lastGesture=0;
+  }
+  init(){
+    this.view=new EditorView({parent:this.editorHost,doc:'',extensions:RO});
+    const scroller=this.view.scrollDOM;
+    const gesture=()=>{this.lastGesture=performance.now();};
+    for(const event of ['wheel','touchstart','pointerdown','keydown'])
+      scroller.addEventListener(event,gesture,{passive:true});
+    scroller.addEventListener('scroll',()=>{
+      if(performance.now()<this.suppressUntil||performance.now()-this.lastGesture>2500)return;
+      this.owner.receiveScroll(this.id);
+    },{passive:true});
+    this.view.dom.addEventListener('pointerup',event=>{
+      const pos=this.view.posAtCoords({x:event.clientX,y:event.clientY});
+      if(Number.isInteger(pos))this.owner.receivePosition(this.id,pos);
+    });
+  }
+  layout(){this.view?.requestMeasure();}
+  dispose(){this.view?.destroy();this.view=null;}
+  updateDoc(next){
+    if(!this.view)return;
+    if(this.view.state.doc.toString()!==next){
+      this.view.dispatch({changes:{from:0,to:this.view.state.doc.length,insert:next}});
+    }
+  }
+}
+export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={}){
+  const panes=new Map();
+  let projection={doc:'',ranges:[],blocks:[],disagreements:[]};
+  let runs=new Map(),gold={},md='',mode='full',focus=null;
+  let lastSync=0,api=null;
+  const owner={receivePosition:(...args)=>api?.receivePosition(...args),
+    receiveScroll:(...args)=>api?.receiveScroll(...args)};
+  const dockview=createDockview(container,{
+    theme:themeAbyss,
+    createComponent:({name})=>{
+      const pane=new ComparePane(name,owner);panes.set(name,pane);return pane;
+    }
+  });
+  const original=dockview.addPanel({id:'original',component:'original',title:titles.original});
+  const intl=dockview.addPanel({id:'intl',component:'intl',title:titles.intl,
+    position:{referencePanel:'original',direction:'right'}});
+  const splitter=dockview.addPanel({id:'sentence-splitter',component:'sentence-splitter',
+    title:titles['sentence-splitter'],position:{referencePanel:'intl',direction:'below'}});
+  const wink=dockview.addPanel({id:'wink-nlp',component:'wink-nlp',title:titles['wink-nlp'],
+    position:{referencePanel:'sentence-splitter',direction:'below'}});
+  for(const panel of [original,intl,splitter,wink]){
+    panel.group.header.hidden=true;panel.group.relayout();
+  }
+  const eachPane=callback=>{for(const [id,pane] of panes)if(pane.view)callback(pane,id);};
+  function showDecorations(){
+    eachPane((pane,id)=>{
+      const marks=[];
+      const entries=id==='original'?[...runs.entries()]:[[id,runs.get(id)]];
+      const byPos=new Map();
+      for(const [engine,run] of entries){
+        for(const pos of breakPositions(run)){
+          const offset=toView(projection,pos);
+          if(offset===null)continue;
+          if(!byPos.has(offset))byPos.set(offset,[]);
+          byPos.get(offset).push(engine);
+        }
+      }
+      for(const [offset,engines] of byPos){
+        const names=engines.map(n=>titles[n]||n).join(' / ');
+        const sourcePos=toSource(projection,offset);
+        const activeRuns=[...runs.values()].filter(r=>r?.positions instanceof Set);
+        const agreed=activeRuns.length>1 && activeRuns.every(r=>r.positions.has(sourcePos));
+        const style=agreed?'ocr-sb-agreed':'ocr-sb-split';
+        const label=id==='original'?(agreed?'│':'┆'):'│';
+        marks.push(Decoration.widget({widget:new BreakWidget(label,style,
+          '句界 · '+names+' · CMD '+(toSource(projection,offset))),side:1}).range(offset));
+      }
+      for(const [pos,choice] of Object.entries(gold)){
+        if(!choice?.break)continue;
+        const offset=toView(projection,Number(pos));
+        if(offset!==null)marks.push(Decoration.widget({widget:
+          new BreakWidget('◆','ocr-sb-gold','人工 Gold 句界 · CMD '+pos),side:3}).range(offset));
+      }
+      if(focus!==null){
+        const offset=toView(projection,focus);
+        if(offset!==null){
+          const line=pane.view.state.doc.lineAt(offset);
+          marks.push(Decoration.line({class:'ocr-sb-active-line'}).range(line.from));
+        }
+      }
+      pane.view.dispatch({effects:markEffect.of(Decoration.set(marks,true))});
+      if(id==='original')pane.status.textContent=
+        (mode==='disagree'?'分歧块 '+projection.blocks.length+' · ':'全文 · ')+
+        projection.disagreements.length+' 处分歧';
+      else pane.status.textContent=runSentenceCount(runs.get(id))+' 句';
+    });
+  }
+  function runSentenceCount(run){return run?.value?.sentences?.length??0;}
+  function scrollToSource(source,origin=null,anchor='center'){
+    const now=performance.now();
+    eachPane((pane,id)=>{
+      if(id===origin)return;
+      const offset=toView(projection,source);
+      if(offset===null)return;
+      pane.suppressUntil=now+700;
+      pane.view.dispatch({effects:EditorView.scrollIntoView(offset,{y:anchor})});
+    });
+  }
+  api={
+    update({source,results,filter='full',decisions={},selectedPos=null}){
+      if(typeof source!=='string')throw TypeError('CMD source required');
+      const changed=source!==md||filter!==mode||
+        (results!==runs && filter==='disagree');
+      md=source;mode=filter;runs=results;gold=decisions;
+      if(changed){
+        projection=createSourceProjection(md,runs,mode);
+        eachPane(pane=>pane.updateDoc(projection.doc));
+        const selected=selectedPos!==null&&toView(projection,selectedPos)!==null?
+          selectedPos:projection.ranges[0]?.sourceFrom??null;
+        focus=selected;
+      }else if(selectedPos!==null)focus=selectedPos;
+      showDecorations();
+      if(changed&&focus!==null)scrollToSource(focus);
+    },
+    reveal(source){
+      if(!Number.isInteger(source))return;
+      focus=source;showDecorations();scrollToSource(source);
+    },
+    receivePosition(id,viewPos){
+      const source=toSource(projection,viewPos);
+      focus=source;
+      showDecorations();scrollToSource(source,id);
+      onPosition(source,id);
+    },
+    receiveScroll(id){
+      if(performance.now()-lastSync<35)return;
+      const pane=panes.get(id);
+      if(!pane?.view)return;
+      const rect=pane.view.scrollDOM.getBoundingClientRect();
+      const viewPos=pane.view.posAtCoords({x:rect.left+25,y:rect.top+24});
+      if(viewPos==null)return;
+      lastSync=performance.now();
+      scrollToSource(toSource(projection,viewPos),id,'start');
+    },
+    snapshot(){
+      return {mode,projectionLength:projection.doc.length,sourceLength:md.length,
+        blocks:projection.blocks,disagreements:projection.disagreements,
+        paneCount:[...panes.values()].filter(p=>p.view).length,
+        positions:[...panes.values()].map(p=>({id:p.id,scroll:p.view?.scrollDOM.scrollTop??0,
+          readOnly:p.view?.state.readOnly??false,editable:p.view?.contentDOM.isContentEditable??true}))};
+    },
+    dispose(){dockview.dispose();}
+  };
+  return api;
+}

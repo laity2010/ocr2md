@@ -2,6 +2,11 @@
  * All samples, Gold decisions, source hashes and calculations are isolated
  * from CMD, Main and PDF. Browser storage is per-device; JSON is portable.
  */
+import './styles.css';
+import './obsidian-everforest.css';
+import './workspace.css';
+import './sentence-benchmark.css';
+import {createSentenceCompareWorkspace} from './sentence-benchmark-workspace.js';
 import buffett from '../packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md?raw';
 import {split,rebuild} from './sentence-benchmark-core.js';
 import {engineCatalog} from './sentence-benchmark-engines.js';
@@ -17,8 +22,22 @@ const samples=[
 ];
 function getSaved(){try{return {...defaults(),...JSON.parse(localStorage.getItem(KEY)||'{}')};}catch{return defaults();}}
 const state=getSaved();
+// The comparison surface has exactly three fixed vertically stacked engines.
+state.engines=engineCatalog.map(e=>e.id);
 const allSamples=()=>[...samples,...state.custom];
 let sample=samples[0],runs=new Map(),issues=[],focused=null,manual=false;
+let lastRevealed=null;
+const compare=createSentenceCompareWorkspace($('workspace'),{
+  onPosition(source){
+    if(!issues.length)return;
+    const closest=issues.reduce((best,item)=>
+      Math.abs(item.pos-source)<Math.abs(best.pos-source)?item:best,issues[0]);
+    if(Math.abs(closest.pos-source)>220)return;
+    focused=closest.pos;lastRevealed=focused;manual=false;
+    renderJudgments();renderIndex();renderManual();renderReport();
+  }
+});
+// The review layer reads only source coordinates and never CM6 EditorView.
 const esc=text=>String(text).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function checksum(s){let v=2166136261;for(let i=0;i<s.length;i++)v=Math.imul(v^s.charCodeAt(i),16777619);return(v>>>0).toString(16);}
 const sourceKey=()=>sample.md.length+':'+checksum(sample.md);
@@ -32,7 +51,7 @@ function selectSample(id){
   selector.value=sample.id;
   $('delete-sample').disabled=samples.some(s=>s.id===sample.id);
   $('sample-meta').textContent=sample.md.length.toLocaleString()+' 字符 · '+checksum(sample.md);
-  focused=null;manual=false;persist();compute();
+  focused=null;lastRevealed=null;manual=false;persist();compute();
 }
 function updateEngineOptions(){
   const node=$('engine-options');node.replaceChildren();
@@ -97,27 +116,12 @@ function decide(pos,value,isManual=false){
     '。换设备请导出、导入 Gold JSON。');
 }
 function renderSource(){
-  const node=$('source-view'),id=$('display-engine').value,run=runs.get(id);
-  if(!run?.positions){node.textContent='请至少选择一个运行成功的引擎。';return;}
-  if($('view-mode').value==='context'){
-    if(focused===null){node.textContent='当前样本没有候选句界。';return;}
-    const from=Math.max(0,focused-310),to=Math.min(sample.md.length,focused+310);
-    node.innerHTML='<pre>'+esc(sample.md.slice(from,focused))+
-      '<span class="breakline selected" data-pos="'+focused+'">│</span>'+
-      esc(sample.md.slice(focused,to))+'</pre>';
-  }else{
-    let previous=0,html='';
-    for(const pos of [...run.positions].sort((a,b)=>a-b)){
-      if(pos<previous||pos>sample.md.length)continue;
-      html+=esc(sample.md.slice(previous,pos))+'<span data-pos="'+pos+
-        '" class="breakline'+(pos===focused?' selected':'')+'">│</span>';
-      previous=pos;
-    }
-    node.innerHTML='<pre>'+html+esc(sample.md.slice(previous))+'</pre>';
-    node.querySelector('.selected')?.scrollIntoView({block:'center'});
+  compare.update({source:sample.md,results:runs,filter:$('view-mode').value,
+    decisions:gold(),selectedPos:focused});
+  if(focused!==null&&focused!==lastRevealed){
+    compare.reveal(focused);
+    lastRevealed=focused;
   }
-  for(const el of node.querySelectorAll('[data-pos]'))
-    el.onclick=()=>{focused=Number(el.dataset.pos);manual=false;render();};
 }
 function renderJudgments(){
   const active=issues.find(i=>i.pos===focused),list=visibleIssues();
@@ -291,7 +295,15 @@ $('sample-select').onchange=e=>selectSample(e.target.value);
 $('sample-file').onchange=importSample;
 $('delete-sample').onclick=()=>{if(samples.some(s=>s.id===sample.id))return;
   state.custom=state.custom.filter(s=>s.id!==sample.id);selectSample('demo');};
-$('view-mode').onchange=renderSource;
+$('view-mode').onchange=()=>{lastRevealed=null;renderSource();};
+$('toggle-review').onclick=()=>{
+  const drawer=$('review-drawer'),open=drawer.hidden;
+  drawer.hidden=!open;
+  $('toggle-review').setAttribute('aria-expanded',String(open));
+  $('toggle-review').textContent=open?'收起人工裁决':'人工裁决 / Gold';
+  // Dockview observes the resizable root. Do not recreate CM6 states.
+  window.dispatchEvent(new Event('resize'));
+};
 $('display-engine').onchange=renderSource;
 $('review-filter').onchange=()=>{const list=visibleIssues();
   focused=list.find(i=>i.pos===focused)?.pos??list[0]?.pos??null;render();};
