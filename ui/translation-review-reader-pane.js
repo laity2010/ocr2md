@@ -206,11 +206,17 @@ export class TranslationReaderPane {
   reveal(id){
     const node=this.nodes.get(id);
     if(!node)return;
+    let opened=false;
     for(let current=node.parentElement;current&&current!==this.body;current=current.parentElement){
-      if(current.tagName==='DETAILS'&&!current.open)current.open=true;
+      if(current.tagName==='DETAILS'&&!current.open){current.open=true;opened=true;}
     }
     const parentRect=this.scroller.getBoundingClientRect();
     const rect=node.getBoundingClientRect();
+    // Preserve the reader's visual position when the target sentence is
+    // already visible. A click in an AI pane must not unnecessarily drag the
+    // entire article back to a fixed 28%-from-top position.
+    if(!opened&&rect.top>=parentRect.top+12&&
+        rect.bottom<=parentRect.bottom-12)return;
     this.suppressUntil=performance.now()+650;
     this.scroller.scrollTop+=rect.top-parentRect.top-parentRect.height*.28;
   }

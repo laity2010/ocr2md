@@ -80,6 +80,57 @@ for(const [name,engine,binary] of [
     assert.equal(await page.locator('.ocr-tr-reader-marker-current').count(),1);
     assert.equal(await page.locator('.ocr-tr-reader-current').count(),1);
 
+    // Regression: tapping a visible sentence is a *selection* operation, not
+    // an instruction to re-center the article or to repeatedly move AI panes.
+    const inView=await page.evaluate(()=>{
+      const box=document.querySelector('.ocr-tr-reader-scroll').getBoundingClientRect();
+      return [...document.querySelectorAll('.ocr-tr-reader-unit-id')]
+        .filter(button=>{
+          const r=button.getBoundingClientRect();
+          return r.top>box.top+45&&r.bottom<box.bottom-75;
+        }).slice(0,4).map(button=>button.dataset.gutterUnit);
+    });
+    assert(inView.length>=2,'at least two visible units required for click-sync test');
+    const clickId=inView.find(id=>id!==chosen);
+    assert(clickId,'visible sentence distinct from active sentence missing');
+    const scroller=page.locator('.ocr-tr-reader-scroll');
+    const paneScroll=()=>page.locator('.ocr-sb-pane[data-engine="translation"] .cm-scroller')
+      .evaluateAll(list=>list.map(x=>x.scrollTop));
+    const leftBefore=await scroller.evaluate(el=>el.scrollTop);
+    await page.locator(`[data-gutter-unit="${clickId}"]`).click();
+    await page.waitForTimeout(700);
+    assert.equal(await page.locator('#record-picker').inputValue(),clickId);
+    assert(Math.abs(await scroller.evaluate(el=>el.scrollTop)-leftBefore)<4,
+      'clicking a visible sentence ID should not move the reader');
+    const aiAfterFirst=await paneScroll();
+    await page.locator(`[data-gutter-unit="${clickId}"]`).click();
+    await page.waitForTimeout(600);
+    assert.deepEqual(await paneScroll(),aiAfterFirst,
+      'repeated click on same ID must not move either AI pane');
+    assert(Math.abs(await scroller.evaluate(el=>el.scrollTop)-leftBefore)<4,
+      'repeated ID click must not re-center the reader');
+    const nextVisible=inView.find(id=>id!==clickId&&id!==chosen);
+    if(nextVisible){
+      const beforeBody=await scroller.evaluate(el=>el.scrollTop);
+      await page.locator(`.ocr-tr-reader-scroll [data-unit-id="${nextVisible}"]`)
+        .click({position:{x:28,y:8}});
+      await page.waitForTimeout(450);
+      assert.equal(await page.locator('#record-picker').inputValue(),nextVisible);
+      assert(Math.abs(await scroller.evaluate(el=>el.scrollTop)-beforeBody)<4,
+        'clicking visible paragraph should not scroll its source view');
+    }
+
+    // Repeating a click on a currently highlighted CM6 line is also a no-op.
+    const aiLine=page.locator('.ocr-sb-pane[data-engine="translation"] .ocr-tr-current').first();
+    const beforeAI=await paneScroll(),beforeReader=await scroller.evaluate(el=>el.scrollTop);
+    await aiLine.click({position:{x:28,y:8}});
+    await page.waitForTimeout(550);
+    assert.equal(await page.locator('#record-picker').inputValue(),nextVisible||clickId);
+    assert(Math.abs(await scroller.evaluate(el=>el.scrollTop)-beforeReader)<4,
+      'clicking the selected AI sentence must not jump the original preview');
+    assert.deepEqual(await paneScroll(),beforeAI,
+      'clicking selected AI sentence must not cause cross-pane re-centering');
+
     // Main's shared Floating UI footnote component: no hash jump on a
     // citation click, note content in one popup, explicit locate and return.
     const ref=page.locator('.ocr-tr-reader-scroll sup.footnote-ref a[href^="#fn"]').first();

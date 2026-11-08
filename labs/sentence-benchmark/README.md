@@ -55,6 +55,7 @@ WP05 incremental updates and PDF-driven block mutation are explicitly out of sco
 - **WP1 成品预览**：左窗不再显示 CM6 Markdown 源码，而是复用 Main 的 `renderMarkdown()` 阅读器，显示图片、KaTeX 数学公式、HTML 表格和原生折叠 Obsidian callout；句子 ID 继续同步定位。图片从与 Main 相同站点的 `/media/<文件名>` 只读读取，Lab 不建立第二套媒体目录。直接测试 `node --test tests/translation-review-reading.test.mjs`，浏览器测试 `node tests/translation-review-lab.browser.test.mjs`。
 - **预览行号与句 ID**：左阅读预览新增双栏（映射源行号、句块 ID）；绝对定位标签不改变 Markdown 布局，图片、表格展开后会随同正文重新测量位置。手动滚动只更新当前句高亮，不反复触发其他窗定位。实测 `node tests/translation-review-reader-gutter.browser.test.mjs`。
 - **选中焦点与注释阅读**：滚动只是浏览，不能修改主动选中的句 ID 和高亮；明确点击句子或句 ID、选择工具栏记录才更新焦点。注释引用复用 Main `createFootnotePopover` 弹窗，点击不跳哈希；可在弹窗显式定位注文，通过左窗 `↩ 返回注引` 回到原来的阅读滚动位置。真实测试 `node tests/translation-review-reader-gutter.browser.test.mjs`。
+- **点击幂等与必要定位**：在左窗和 AI 右窗点击同一已选句，不再反复令其他窗居中；新句在其他窗已可见则只改变高亮，离开视口时才滚动定位。CM6 的拖动、滚动条与触屏滑动不作为句子点击。与滚动/注释合并由真实 Chrome/iPad WebKit 回归保护。
 
 ## One AI-ready sentence/block table (Lab, on-demand)
 

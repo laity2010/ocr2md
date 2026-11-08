@@ -71,7 +71,21 @@ class TranslationPane {
           performance.now()-this.lastGesture>2200)return;
       this.owner.receiveScroll(this.id);
     },{passive:true});
+    let clickStart=null;
+    this.view.dom.addEventListener('pointerdown',event=>{
+      clickStart=event.isPrimary&&event.button===0&&
+        event.target instanceof Element&&event.target.closest('.cm-content')?
+        {id:event.pointerId,x:event.clientX,y:event.clientY}:null;
+    });
+    this.view.dom.addEventListener('pointercancel',()=>{clickStart=null;});
     this.view.dom.addEventListener('pointerup',event=>{
+      const start=clickStart;clickStart=null;
+      // Touch scrolling, text selection, scrollbar drags and clicks outside
+      // the text must NEVER be mistaken for explicit sentence selection.
+      if(!start||start.id!==event.pointerId||
+          Math.hypot(event.clientX-start.x,event.clientY-start.y)>9||
+          !(event.target instanceof Element)||
+          !event.target.closest('.cm-content'))return;
       const pos=this.view.posAtCoords({x:event.clientX,y:event.clientY});
       if(Number.isInteger(pos))this.owner.receivePosition(this.id,pos);
     });
@@ -96,6 +110,12 @@ class TranslationPane {
   reveal(id){
     const item=this.anchors.find(a=>a.id===id);
     if(!item||!this.view)return;
+    const viewport=this.view.scrollDOM.getBoundingClientRect();
+    const coords=this.view.coordsAtPos(item.from);
+    // Do not re-center a sentence that is already readable. Repeated
+    // scrollIntoView across Dockview panes made clicks feel like jumping.
+    if(coords&&coords.top>=viewport.top+12&&
+        coords.bottom<=viewport.bottom-12)return;
     this.suppressUntil=performance.now()+650;
     this.view.dispatch({effects:EditorView.scrollIntoView(item.from,{y:'center'})});
   }
@@ -177,6 +197,9 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
   function select(id,origin=null,scroll=true){
     if(!visible.some(row=>row.id===id))return;
     const changed=id!==activeId;
+    // A second click on the *same* sentence must be side-effect free. An
+    // explicit toolbar selection may still locate it when off-screen.
+    if(!changed&&origin!==null)return;
     activeId=id;
     for(const [name,pane] of panes){
       pane.mark(id);
