@@ -14,7 +14,7 @@ async function choose(page, trigger, popup, value) {
 }
 
 export async function selectModule(page, value) {
-  assert(['settings','chapter-boundary','media','latex'].includes(value), 'Unrecognized WCP module');
+  assert(['settings','chapter-boundary','media','latex','sentence-translation'].includes(value), 'Unrecognized WCP module');
   const current=await page.locator('#module-select').inputValue();
   if(current===value)return;
   if(value==='settings') {

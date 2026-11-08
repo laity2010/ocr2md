@@ -8,6 +8,6 @@
 
 **U03** `createSentenceTranslationModule(host,{readSource,readSentences,getChapter,onStatus})`：独立 AG 视图、中文「分句翻译」模块及 JSON 文件交换；所有输入均是 CMD 的窄只读 getter，Grid 不持有 CM6/EditorView、CMD port 或其他模块的内部实例；全局状态通过注入 callback；不自行持久化翻译。
 
-直接测试：`node tests/sentence-translation-core.test.mjs`（U01/U02）；`node tests/sentence-translation-public.browser.test.mjs`（Chromium/WebKit 直接 mount U03、文件导出/导入和过期拒绝）。更大范围的分句/Media/Web 主界面联动另测，不因这三个 PASS 而自动获得全 AM 认证。
+直接测试：`node tests/sentence-translation-core.test.mjs`（U01/U02）；`node tests/sentence-translation-public.browser.test.mjs`（Chromium/WebKit 直接 mount U03、文件导出/导入和过期拒绝）。新增 `tests/sentence-translation-shell.browser.test.mjs` 使用构建后 Main 的独立只读服务器执行 Chromium/iPad WebKit 元素下拉、句表、导出/导入和源文不变验证；既有分句/Media 联动仍按 Git 影响范围复核，不因这三个 PASS 而自动获得全 AM 认证。
 
 **本次范围**：只实现 AI 语言交换与 AG 待审阅入口。非法断行仍应首先在既有模块人工审阅并修正；分句锚点继续由既有 CMD 模块生成。本次**没有**直接调用外部 AI、把检查结果覆盖 CM6、实现行内公式在译文中的自动重插、生成完整双语 Obsidian MD。这些需要独立的后续真实 API、审阅/无损导出验收，不能把预留映射误报为回填完成。

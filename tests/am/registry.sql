@@ -1782,3 +1782,7 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-ST-U01-DIRECT','U01','tests/sentence-translation-core.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','468 pure sentence AI task rows with OCR control and math syntax omitted, original document source unchanged, private physical source maps preserved','direct'),
  ('TC-ST-U02-DIRECT','U02','tests/sentence-translation-core.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','strict unknown or duplicate IDs, stale source, mismatched version, unsafe markup rejection and protected math manual placement flag; checked+translation accepted as review-only','direct'),
  ('TC-ST-U03-DIRECT','U03','tests/sentence-translation-public.browser.test.mjs','tests/sentence-translation-public.fixture.html','Chromium/WebKit directly mount own AG, semantic scoped rows, downloadable pure JSON and file import, stale invalidation, no CM6 editor or storage mutation','direct');
+
+-- End-to-end shell semantics are separate from the isolated U03 direct test.
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-ST-U03-SHELL','U03','tests/sentence-translation-shell.browser.test.mjs','tests/sentence-translation-shell.browser.test.mjs','Built Main Chromium/iPad WebKit TomSelect to independent translation AG, JSON download/import, source remains untouched','integration');
