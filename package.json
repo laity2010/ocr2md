@@ -40,7 +40,10 @@
     "morphdom": "2.7.8",
     "nspell": "2.1.5",
     "pdfjs-dist": "6.4.299",
+    "sentence-splitter": "5.0.1",
     "tom-select": "2.6.2",
+    "wink-eng-lite-web-model": "1.8.1",
+    "wink-nlp": "2.4.0",
     "zustand": "5.0.15"
   },
   "devDependencies": {
