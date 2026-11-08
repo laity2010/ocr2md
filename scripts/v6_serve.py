@@ -709,7 +709,12 @@ class LabHandler(Handler):
         getattr(Handler, method)(self)
 
     def do_GET(self): self.dispatch_scoped('do_GET')
-    def do_HEAD(self): self.dispatch_scoped('do_HEAD')
+    # Handler.do_HEAD delegates to self.do_GET(). If we scope do_HEAD here,
+    # dynamic dispatch would enter LabHandler.do_GET and strip PREFIX twice,
+    # making valid Lab URLs return 404 to link checkers and HEAD clients.
+    # Route through Handler.do_GET directly; it already observes HEAD and
+    # suppresses response bodies for static assets / normal responses.
+    def do_HEAD(self): self.dispatch_scoped('do_GET')
     def do_POST(self): self.dispatch_scoped('do_POST')
     def do_PUT(self): self.dispatch_scoped('do_PUT')
 

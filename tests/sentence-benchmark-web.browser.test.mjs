@@ -34,6 +34,11 @@ try{
     await pause(180);
   }
   assert(ready,'V6 isolated Lab service did not start');
+  const scopedHead=await fetch(url,{method:'HEAD'});
+  assert.equal(scopedHead.status,200,'Lab HTML HEAD should match GET, not double-strip the prefix');
+  const scopedHealthHead=await fetch(
+    'http://127.0.0.1:'+port+'/labs/sentence-benchmark/healthz',{method:'HEAD'});
+  assert.equal(scopedHealthHead.status,200,'Lab health HEAD should match GET');
   for(const [name,engine,binary] of [
     ['Chrome',chromium,chromeExecutable()],
     ['iPad-WebKit',webkit,process.env.OCR2MD_WEBKIT_PATH||webkit.executablePath()]
