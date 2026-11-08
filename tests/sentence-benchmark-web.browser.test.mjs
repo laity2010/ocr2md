@@ -97,8 +97,8 @@ try{
       assert.equal(await page.locator('#review-drawer').isVisible(),true);
       assert.equal(await page.locator('#engine-options input:checked').count(),3);
       assert.equal(await page.locator('#sample-select option').count(),4);
-      assert.deepEqual(await page.locator('#pbs-page-select option').evaluateAll(a=>a.map(x=>x.value)),['p2'],
-        name+' must read the literal p2 from the unsealed sample PBS tag');
+      assert.deepEqual(await page.locator('#pbs-page-select option').evaluateAll(a=>a.map(x=>x.value)),['p1'],
+        name+' must use the literal p1 from the isolated CMD snapshot, not invent PDF pages');
       assert.equal(await page.locator('#sample-select').inputValue(),'reviewed',
         name+' must default to its isolated saved CMD snapshot, not the raw MinerU fixture');
       assert((await page.locator('#sample-select option:checked').textContent()).includes('已审阅 CMD'));
@@ -168,6 +168,12 @@ try{
       assert(await page.locator('.ocr-sb-pane[data-engine="intl"] .ocr-sb-boundary').count()>0);
       if(name==='Chrome'){
         await page.locator('#toggle-review').click();
+        await page.locator('#sample-select').selectOption('demo');
+        assert.deepEqual(await page.locator('#pbs-page-select option').evaluateAll(a=>a.map(x=>x.value)),['p2'],
+          'an unsealed standalone CMD still supplies its own existing p2 value');
+        await page.locator('#sample-select').selectOption('zh');
+        assert.equal(await page.locator('#pbs-page-select').isDisabled(),true,
+          'plain Markdown with no PBS tag must not invent page values');
         await page.locator('#sample-select').selectOption('buffett');
         await page.waitForFunction(()=>document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',
           null,{timeout:85000});
@@ -184,38 +190,21 @@ try{
           null,{timeout:15000});
         const diffStatus=await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status').textContent();
         assert(/分歧块 [1-9]\d*/.test(diffStatus), 'Buffett disagreement block filter must show actual CMD blocks');
-        const pages=await page.locator('#pbs-page-select option').evaluateAll(
-          options=>options.map(option=>option.value));
-        assert.equal(pages.length,22,'Buffett fixture has 22 PBS p values');
-        assert.deepEqual(pages.slice(0,2),['p0','p1']);
-        assert.equal(pages.at(-1),'p21');
-        await page.locator('#pbs-page-select').selectOption('p5');
+        assert.equal(await page.locator('#pbs-page-select').isDisabled(),true,
+          'legacy MinerU fixture without CMD PBS tags must not invent p values');
+        await page.locator('#sample-select').selectOption('demo');
+        await page.locator('#view-mode').selectOption('disagree');
+        await page.locator('#pbs-page-select').selectOption('p2');
         assert.equal(await page.locator('#view-mode').inputValue(),'full',
-          'page navigation reveals a page hidden by disagreement filtering');
+          'PBS p navigation reveals a source group hidden by disagreement filtering');
         await page.waitForFunction(()=>
-          document.querySelector('#status')?.textContent.includes('p5 → CMD 第 207 行'),
+          document.querySelector('#status')?.textContent.includes('p2 → CMD 第 '),
           null,{timeout:10000});
-        assert.equal(await page.locator('#pbs-page-select').inputValue(),'p5');
+        assert.equal(await page.locator('#pbs-page-select').inputValue(),'p2');
         const highlighted=await page.locator('.ocr-sb-pane').evaluateAll(panes=>
           panes.map(p=>p.querySelectorAll('.ocr-sb-active-line').length));
         assert(highlighted.every(n=>n===1),
-          'PDF page selection must highlight the correct source line in all four views');
-        // The PBS p picker must also follow the focused source block
-        // during ordinary wheel navigation, without feeding back a new jump.
-        await page.waitForTimeout(950);
-        const sourceScroller=await page.locator(
-          '.ocr-sb-pane[data-engine="original"] .cm-scroller').boundingBox();
-        await page.mouse.move(sourceScroller.x+sourceScroller.width/2,
-          sourceScroller.y+sourceScroller.height/2);
-        await page.mouse.wheel(0,12000);
-        await page.waitForFunction(()=>
-          Number(document.querySelector('#pbs-page-select')?.value.slice(1))>5,
-          null,{timeout:6000});
-        await page.locator('#pbs-page-select').selectOption('p21');
-        await page.waitForFunction(()=>
-          document.querySelector('#status')?.textContent.includes('p21 → CMD 第 '),
-          null,{timeout:10000});
-        assert.equal(await page.locator('#pbs-page-select').inputValue(),'p21');
+          'PBS p selection must highlight the corresponding source line in all four views');
       }
       assert.deepEqual(errors,[],name+' console exceptions');
       console.log('SENTENCE_LAB_WEB_PASS',JSON.stringify({
