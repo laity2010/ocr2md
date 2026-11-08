@@ -12,6 +12,7 @@ import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
+import {TranslationReaderPane} from './translation-review-reader-pane.js';
 
 const markEffect=StateEffect.define();
 const markField=StateField.define({
@@ -142,13 +143,14 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
   const dockview=createDockview(container,{
     theme:themeAbyss,
     createComponent:({name})=>{
-      const pane=new TranslationPane(name,owner);
+      const pane=name==='original'?new TranslationReaderPane(name,owner):
+        new TranslationPane(name,owner);
       panes.set(name,pane);
       return pane;
     }
   });
   const panels=[];
-  panels.push(dockview.addPanel({id:'original',component:'original',title:'干净原文 · 单语 MD'}));
+  panels.push(dockview.addPanel({id:'original',component:'original',title:'单语 Markdown · 成品预览'}));
   let previous='original';
   for(const name of model.names){
     panels.push(dockview.addPanel({id:name,component:name,title:name.toUpperCase(),
@@ -156,14 +158,14 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
     previous=name;
   }
   for(const panel of panels){panel.group.header.hidden=true;panel.group.relayout();}
-  panes.get('original').updateDoc(model.clean.doc,model.clean.anchors);
+  panes.get('original').updateDoc(model.reading.doc,model.reading.anchors);
   function refresh(rows){
     visible=rows;
     // Keep the full clean document regardless of the active discrepancy
     // filter, but navigate only among the currently visible AI records.
     const included=new Set(rows.map(row=>row.id));
-    panes.get('original').updateDoc(model.clean.doc,
-      model.clean.anchors.filter(a=>included.has(a.id)));
+    panes.get('original').updateDoc(model.reading.doc,
+      model.reading.anchors.filter(a=>included.has(a.id)));
     for(const name of model.names){
       const {doc,anchors}=translatedDocument(rows,model.translations[name].rows);
       const pane=panes.get(name);

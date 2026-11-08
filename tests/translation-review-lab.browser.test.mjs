@@ -14,7 +14,12 @@ const runtime=join(root,'labs','sentence-benchmark','.runtime');
 const input=join(runtime,'translation-review','input');
 mkdirSync(input,{recursive:true});
 const md=['<!-- cmd:block:v1 id="p0b0" -->','Hello world.',
-  '<!-- cmd:block:v1 id="p0b1" -->','Apples is red.'].join('\n');
+  '<!-- cmd:block:v1 id="p0b1" -->','Apples is red.','',
+  '# Test heading','',
+  '![figure](media/example.jpg)','',
+  '$$','x^2+y^2=z^2','$$','',
+  '> [!note]- Hidden Table',
+  '> <table><tr><td>Folded value</td></tr></table>'].join('\n');
 const sha=createHash('sha256').update(md).digest('hex');
 const prose=(id,phrase)=>{
   const from=md.indexOf(phrase);
@@ -81,16 +86,26 @@ try{
       await page.waitForFunction(()=>document.querySelector('#status')?.textContent
         .includes('单语 MD 重组无损 PASS'),null,{timeout:45000});
       assert.equal(await page.locator('.ocr-sb-pane').count(),3);
-      assert.equal(await page.locator('.ocr-sb-pane .cm-editor').count(),3);
+      assert.equal(await page.locator('.ocr-sb-pane .cm-editor').count(),2,
+        'only right AI results remain CM6; left is Main rendered Markdown');
       assert.equal(await page.locator('#record-picker option').count(),2);
       assert.equal(await page.locator('#record-count').textContent(),'1 / 2');
-      assert(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content')
+      assert(await page.locator('.ocr-sb-pane[data-engine="original"] article.ocr-markdown')
         .textContent().then(x=>x.includes('Hello world.')));
-      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] .cm-content')
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] article.ocr-markdown')
         .textContent().then(x=>x.includes('<!-- cmd:block:v1')),false,
         'visible monolingual Markdown must not expose CMD workflow labels');
       assert(await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-toolbar')
-        .textContent().then(x=>x.includes('干净原文')));
+        .textContent().then(x=>x.includes('成品预览')));
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] article h1').count(),1);
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] article img[src="/media/example.jpg"]').count(),1);
+      assert(await page.locator('.ocr-sb-pane[data-engine="original"] article .katex').count()>0);
+      const folded=page.locator('.ocr-sb-pane[data-engine="original"] details.ocr-callout');
+      assert.equal(await folded.count(),1,'Obsidian foldable callout must use Main renderer');
+      assert.equal(await folded.evaluate(x=>x.open),false);
+      await folded.locator('summary').click();
+      assert.equal(await folded.evaluate(x=>x.open),true);
+      assert.equal(await folded.locator('table tr td').textContent(),'Folded value');
       assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-toolbar')
         .evaluate(el=>getComputedStyle(el).paddingLeft),'9px',
         'clean source pane must not retain the Sentence Lab label gutter inset');
@@ -98,7 +113,9 @@ try{
       assert(await page.locator('.ocr-sb-pane').nth(2).textContent().then(x=>x.includes('苹果的表皮是红色的。')));
       await page.locator('#record-picker').selectOption('p0b1-s001');
       assert.equal(await page.locator('#record-count').textContent(),'2 / 2');
-      assert.equal(await page.locator('.ocr-tr-current').count(),3,
+      assert.equal(await page.locator('.ocr-tr-current').count(),2,
+        'AI CM6 panes retain selected sentence highlights');
+      assert.equal(await page.locator('.ocr-tr-reader-current').count(),1,
         'all three panes highlight one shared record');
       await page.locator('#filter-mode').selectOption('english-diff');
       assert.equal(await page.locator('#record-picker option').count(),1);

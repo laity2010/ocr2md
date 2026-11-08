@@ -5,6 +5,7 @@ import './sentence-benchmark.css';
 import './translation-review.css';
 import {prepareTranslationReview,filterTranslationRows} from './translation-review-core.js';
 import {buildCleanReviewedMD} from './translation-review-clean-md.js';
+import {buildTranslationReadingProjection} from './translation-review-reading.js';
 import {createTranslationCompareWorkspace} from './translation-review-workspace.js';
 
 const $=id=>document.getElementById(id);
@@ -57,6 +58,7 @@ async function load(){
     if(!response.ok)throw Error('HTTP '+response.status+' · 校译输入不可用');
     const candidate=prepareTranslationReview(await response.json());
     candidate.clean=buildCleanReviewedMD(candidate.source,candidate.rows);
+    candidate.reading=buildTranslationReadingProjection(candidate.clean);
     workspace?.destroy();workspace=null;
     model=candidate;
     visible=model.rows;

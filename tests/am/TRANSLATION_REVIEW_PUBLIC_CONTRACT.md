@@ -6,8 +6,9 @@
 2. **TR02** `prepareTranslationReview(dataset)` / `filterTranslationRows(rows,mode)`：基于每条的 `original/corrected/translation` 构成只读比较表与差异筛选。直接测试：`node --test tests/translation-review-core.test.mjs`。
 3. **TR03** `createTranslationCompareWorkspace(container,model,{onSelect})`：独立 CM6/Dockview 多窗，左窗显示 WP1 的干净单语 MD、右窗按 AI 数量纵向堆叠；窗口仅通过不可变 `id` 和原文→干净文档的坐标锚点同步。真实浏览器测试：`node tests/translation-review-lab.browser.test.mjs`（Chromium + iPad WebKit）。
 4. **TR04 (WP1)** `buildCleanReviewedMD(source,rows)` / `restoreReviewedMD(clean)`：在校译模块内部构建单语只读 Markdown。仅删除工作元数据注释、将同一块连续句子的分隔符变为换行；所有其余源字符、标题、媒体、公式、HTML、注释都保留，并记录可逆补丁和 source→clean 的 ID 位置。逆向结果必须逐字符等于审阅 MD，任何坐标重叠/不可安全分句直接报错，不允许悄悄跳过。直接测试：`node --test tests/translation-review-clean-md.test.mjs`；锁定 402 条的真实数据测试：`node tests/translation-review-clean-real.test.mjs`。两条测试不可互相替代。
+5. **TR05 (WP1 阅读版)** `buildTranslationReadingProjection(clean)` / `mainMediaURL(src)`：把 TR04 的干净 MD 投影成给 Main 的 `renderMarkdown()` 读取的临时版面。句间增加阅读段落间隔；仅在临时投影里恢复已审阅行内公式的隐藏审阅标记以调用 Main 的 KaTeX。源文件和干净 MD 不变。主线路由 `/media/<文件名>` 只读提供工作空间的统一媒体，不创建 Lab 媒体文件，也不通过本地路径读取 Main 数据。直接测试：`node --test tests/translation-review-reading.test.mjs`；真实浏览器测试同 TR03。
 
-**WP1 左窗状态**：现在呈现不带 CMD/MinerU/OCR2MD 工作标签的全篇单语 Markdown，正文按原有句表划界逐句换行；右侧 AI 译文比较暂不改变，统一 ID 通过 `clean.anchors` 联动。下游双语排版和英文纠错高亮不在 WP1 范围。
+**WP1 左窗状态**：现在呈现 Main `renderMarkdown()` 渲染的全篇单语 Markdown 阅读版（标题、图片、LaTeX、HTML 表格、Obsidian 折叠 callout），正文按句划界；右侧 AI 译文比较暂不改变，统一 ID 通过临时阅读投影的锚点联动。下游双语排版和英文纠错高亮不在 WP1 范围。
 
 ## 路由
 

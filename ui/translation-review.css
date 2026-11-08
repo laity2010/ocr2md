@@ -20,3 +20,8 @@
 .ocr-tr-pane .cm-editor .cm-content{padding-top:7px}
 .ocr-sb-pane.ocr-tr-pane[data-engine="original"] .ocr-sb-pane-toolbar{padding-left:9px}
 @media(max-width:700px){.ocr-tr-controls #record-picker{flex:0 0 130px}.ocr-tr-controls #filter-mode{flex:0 0 95px}}
+.ocr-tr-reader-scroll{height:100%;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain}
+.ocr-tr-reader-scroll .ocr-markdown{min-height:100%;padding:12px 18px 38px}
+.ocr-tr-reader-scroll .ocr-markdown p{margin:.18em 0 .35em;line-height:1.55}
+.ocr-tr-reader-scroll .ocr-markdown .ocr-tr-reader-current{background:rgba(233,172,101,.16);border-radius:3px}
+.ocr-tr-reader-scroll .ocr-markdown .ocr-callout-content .ocr-tr-reader-current{background:rgba(233,172,101,.12)}
