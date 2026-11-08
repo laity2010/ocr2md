@@ -4,6 +4,7 @@ import hmac
 import hashlib
 import subprocess
 from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
+from v6_sentence_review import read as read_sentence_review, save as save_sentence_review, etag as sentence_review_etag, MAX_BYTES as SENTENCE_REVIEW_LIMIT
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
@@ -171,6 +172,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
+        if path == '/api/sentence-review':
+            if LAB_ID != 'sentence-benchmark':
+                self.response(404, 'Not found')
+                return
+            try:
+                with DOC_WRITE_LOCK:
+                    source = active_doc().read_bytes()
+                    review = read_sentence_review(RUNTIME / 'document.sentences.review.json', source)
+                    revision = sentence_review_etag(review)
+            except (OSError, ValueError, UnicodeDecodeError):
+                self.response(503, 'Sentence review storage/source mismatch')
+                return
+            self.response(200, json.dumps({**review, 'revision': revision}, ensure_ascii=False),
+                          'application/json; charset=utf-8')
+            return
         if path == '/healthz':
             slot = Path(STATIC_OVERRIDE).resolve() if STATIC_OVERRIDE else (RUNTIME / 'release').resolve()
             version_file = slot / 'release-version.json'
@@ -565,7 +581,47 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.response(200, converted, 'text/markdown; charset=utf-8')
 
+    def put_sentence_review(self):
+        # Lab-only sidecar. Main's document and API permissions are untouched.
+        if LAB_ID != 'sentence-benchmark':
+            self.response(404, 'Not found')
+            return
+        if (not self.same_origin() or
+                self.headers.get('X-OCR2MD-Sentence-Review') != '1'):
+            self.response(403, 'Sentence review same-origin writer required')
+            return
+        try:
+            size = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            size = -1
+        if size < 2 or size > SENTENCE_REVIEW_LIMIT:
+            self.response(413, 'Invalid sentence review size')
+            return
+        payload = self.rfile.read(size)
+        if len(payload) != size:
+            self.response(400, 'Incomplete sentence review')
+            return
+        try:
+            with DOC_WRITE_LOCK:
+                source = active_doc().read_bytes()
+                written = save_sentence_review(RUNTIME / 'document.sentences.review.json',
+                                                payload, source, self.headers.get('If-Match', ''))
+        except (ValueError, UnicodeDecodeError, TypeError, KeyError) as error:
+            self.response(422, 'Invalid sentence review: ' + str(error))
+            return
+        except OSError:
+            self.response(503, 'Sentence review storage unavailable')
+            return
+        if written is None:
+            self.response(412, 'Sentence review revision changed; refresh to merge')
+            return
+        self.response(200, json.dumps({**written, 'revision': sentence_review_etag(written)},
+                    ensure_ascii=False), 'application/json; charset=utf-8')
+
     def do_PUT(self):
+        if urlsplit(self.path).path == '/api/sentence-review':
+            self.put_sentence_review()
+            return
         if urlsplit(self.path).path == '/api/settings':
             if not self.authorized() or not self.same_origin():
                 self.response(403, 'Editor authorization required')

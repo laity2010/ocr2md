@@ -7,6 +7,33 @@ Stage constraints approved 2026-11-08:
 4. Exact lossless reconstruction is mandatory for every sample/engine.
 5. Test in a Main-derived isolated Git worktree and independent Web environment.
 
+## Block-level consensus, arbitration and sidecar persistence (WP04 Lab)
+
+- Three engines still rerun \`split(md,engine)\` on each load. Their full
+  sentence outputs are not stored.
+- A PBS text block is **automatic** only when all three successful engines
+  cover that block with sentence fragments and propose the same ending
+  coordinates. A fully missed/empty block is **not** automatically approved.
+- For a disputed PBS block, click its text in the left or right CM6 pane (or
+  navigate to its p prefix in 分歧块 mode), then tick the \`采用\` checkbox
+  in exactly one engine header. This adopts the full per-block set of sentence
+  boundaries from that engine. Ticking another replaces the selection;
+  unticking returns the block to pending.
+- \`已仲裁\` filters for *manually adopted* PBS parent groups; it does not
+  label the automatic blocks as human-reviewed. The selector shows only
+  PBS p prefixes visible in the filtered view.
+- The Lab-only server persists auto and arbitrated blocks to
+  \`labs/sentence-benchmark/.runtime/document.sentences.review.json\` and
+  mirrors manually reviewed Gold boundaries there. Stored data: saved CMD
+  SHA-256, status, chosen engine (when human), accepted UTF-16 offsets,
+  Gold overrides. No sentence text or CMD content is duplicated.
+- Saves use a version compare-and-swap under a lock, atomically replacing
+  the sidecar file; stale clients or changed source hashes fail visibly.
+  PUT requires the Lab's own HTTPS/localhost origin and non-simple custom
+  header. Main returns 404 for the Lab-only review route. Existing local
+  Gold/JSON export remains available and manual Gold overrides any chosen
+  engine boundary. The review file is never placed into Main's document.
+
 Engine adapters and internal validation helpers are not public business APIs.
 WP05 incremental updates and PDF-driven block mutation are explicitly out of scope.
 

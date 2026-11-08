@@ -159,7 +159,7 @@ function sectionsWithoutSentences(md,sections,runs){
   return sections.filter(section=>containsReviewableText(md,section)&&
     !covered.some(part=>part.from<section.to&&part.to>section.from));
 }
-export function createSourceProjection(md,runs,mode){
+export function createSourceProjection(md,runs,mode,reviewedBlocks={}){
   const sections=sectionsFor(md);
   if(mode==='full')return {doc:md,
     ranges:[{sourceFrom:0,sourceTo:md.length,viewFrom:0,viewTo:md.length}],
@@ -167,7 +167,10 @@ export function createSourceProjection(md,runs,mode){
   const diffs=getDifferences(runs);
   const selected=mode==='disagree'?
     sections.filter(s=>diffs.some(p=>p>s.from&&p<=s.to)):
-    mode==='no-sentence'?sectionsWithoutSentences(md,sections,runs):[];
+    mode==='no-sentence'?sectionsWithoutSentences(md,sections,runs):
+    mode==='arbitrated'?sections.filter(s=>
+      Object.entries(reviewedBlocks).some(([id,item])=>
+        item.status==='arbitrated'&&parentOf(id)===s.id)):[];
   let doc='',ranges=[];
   for(const section of selected){
     // Separator is view-only. It never changes the original CMD document.
@@ -320,6 +323,7 @@ class ComparePane {
       select.add(new Option('全文','full'));
       select.add(new Option('分歧块','disagree'));
       select.add(new Option('无分句块','no-sentence'));
+      select.add(new Option('已仲裁','arbitrated'));
       toolbar.append(select);
       const pdfSelect=document.createElement('select');
       pdfSelect.id='pbs-page-select';
@@ -328,6 +332,18 @@ class ComparePane {
       pdfSelect.add(new Option('无 PBS p',''));
       pdfSelect.disabled=true;
       toolbar.append(pdfSelect);
+    }else{
+      const adoption=document.createElement('label');
+      adoption.className='ocr-sb-engine-adopt';
+      adoption.title='在左窗点击有分歧的 PBS 子块后，采用此引擎的整块句界';
+      const box=document.createElement('input');
+      box.type='checkbox';box.className='ocr-sb-engine-adopt-check';
+      box.setAttribute('aria-label','采用 '+titles[id]+' 当前文本块的句界');
+      box.disabled=true;
+      box.onchange=()=>this.owner.adoptEngine(this.id,box.checked);
+      adoption.append(box,document.createTextNode('采用'));
+      toolbar.append(adoption);
+      this.adoptCheck=box;
     }
     toolbar.append(state);this.status=state;
     this.editorHost=document.createElement('div');this.editorHost.className='ocr-sb-pane-editor';
@@ -406,15 +422,18 @@ class ComparePane {
     }
   }
 }
-export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={}){
+export function createSentenceCompareWorkspace(container,{onPosition=()=>{},onAdopt=()=>{}}={}){
   const panes=new Map();
   let projection={doc:'',ranges:[],blocks:[],disagreements:[]};
-  let runs=new Map(),gold={},md='',mode='full',focus=null;
+  let runs=new Map(),gold={},md='',mode='full',focus=null,reviewedBlocks={};
+  let selectedBlockId=null,disputedIds=new Set();
+  let acceptedPositions=[],adoptionEnabled=false;
   let pbsPages=[],pbsLocations=[];
   let availablePages=[];
   let lastSync=0,api=null;
   const owner={receivePosition:(...args)=>api?.receivePosition(...args),
-    receiveScroll:(...args)=>api?.receiveScroll(...args)};
+    receiveScroll:(...args)=>api?.receiveScroll(...args),
+    adoptEngine:(...args)=>onAdopt(...args)};
   const dockview=createDockview(container,{
     theme:themeAbyss,
     createComponent:({name})=>{
@@ -504,6 +523,11 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
         if(offset!==null)marks.push(Decoration.widget({widget:
           new BreakWidget('◆','ocr-sb-gold','人工 Gold 句界 · CMD '+pos),side:3}).range(offset));
       }
+      if(id==='original')for(const pos of acceptedPositions){
+        const offset=toView(projection,pos);
+        if(offset!==null)marks.push(Decoration.widget({widget:
+          new BreakWidget('✓','ocr-sb-accepted','已采纳句界 · CMD '+pos),side:2}).range(offset));
+      }
       if(focus!==null){
         const offset=toView(projection,focus);
         if(offset!==null){
@@ -514,7 +538,8 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
       pane.view.dispatch({effects:markEffect.of(Decoration.set(marks,true))});
       if(id==='original')pane.status.textContent=
         (mode==='disagree'?'分歧块 '+projection.blocks.length+' · ':
-          mode==='no-sentence'?'无分句块 '+projection.blocks.length+' · ':'全文 · ')+
+          mode==='no-sentence'?'无分句块 '+projection.blocks.length+' · ':
+          mode==='arbitrated'?'已仲裁 '+projection.blocks.length+' · ':'全文 · ')+
         projection.disagreements.length+' 处分歧';
       else{
         const run=runs.get(id);
@@ -522,6 +547,15 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
         pane.status.textContent=run?.error?'失败 · '+elapsed:
           runSentenceCount(run)+' 句 · '+elapsed;
         pane.status.title=id+' 最近一次分句操作耗时 '+elapsed;
+        if(pane.adoptCheck){
+          const item=reviewedBlocks[selectedBlockId];
+          pane.adoptCheck.checked=item?.status==='arbitrated'&&item.engine===id;
+          pane.adoptCheck.disabled=!adoptionEnabled||!selectedBlockId||!disputedIds.has(selectedBlockId)||
+            !runs.get(id)?.lossless;
+          pane.adoptCheck.parentElement.title=selectedBlockId?
+            '当前 '+selectedBlockId+(disputedIds.has(selectedBlockId)?' · 勾选采用本引擎整块分句':' · 此块无分歧'):
+            '先在左窗选择一个有分歧的文本块';
+        }
       }
     });
   }
@@ -538,18 +572,23 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
     });
   }
   api={
-    update({source,results,filter='full',decisions={},selectedPos=null}){
+    update({source,results,filter='full',decisions={},selectedPos=null,
+            accepted={},disputed=[],activeBlockId=null,finalBoundaries=[],canAdopt=false}){
       if(typeof source!=='string')throw TypeError('CMD source required');
       const sourceChanged=source!==md;
-      const changed=sourceChanged||filter!==mode||
+      const reviewChanged=JSON.stringify(accepted)!==JSON.stringify(reviewedBlocks);
+      const changed=sourceChanged||filter!==mode||(reviewChanged&&filter==='arbitrated')||
         (results!==runs && filter!=='full');
       md=source;mode=filter;runs=results;gold=decisions;
+      reviewedBlocks=accepted;disputedIds=new Set(disputed);
+      selectedBlockId=activeBlockId;acceptedPositions=finalBoundaries;
+      adoptionEnabled=canAdopt;
       if(sourceChanged){
         const pages=pbsPageTargets(md);
         pbsPages=pages.pages;pbsLocations=pages.locations;
       }
       if(changed){
-        projection=createSourceProjection(md,runs,mode);
+        projection=createSourceProjection(md,runs,mode,reviewedBlocks);
         availablePages=filterPageOptions();
         refreshPageOptions();
         eachPane(pane=>pane.updateDoc(projection.doc));
@@ -580,6 +619,7 @@ export function createSentenceCompareWorkspace(container,{onPosition=()=>{}}={})
     pbsPageTarget(key){
       return availablePages.find(page=>page.key===key)||null;
     },
+    selectedBlockId(){return selectedBlockId;},
     receivePosition(id,viewPos){
       const source=toSource(projection,viewPos);
       focus=source;

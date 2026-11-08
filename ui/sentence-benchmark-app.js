@@ -10,6 +10,7 @@ import {createSentenceCompareWorkspace} from './sentence-benchmark-workspace.js'
 import buffett from '../packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md?raw';
 import {split,rebuild} from './sentence-benchmark-core.js';
 import {engineCatalog} from './sentence-benchmark-engines.js';
+import {reviewInventory,blockAt,freshReview,synchronizeReview,reviewChanged,acceptedBoundaries,REVIEW_SCHEMA} from './sentence-benchmark-review.js';
 const $=id=>document.getElementById(id);
 function compactLabBuild(version){
   const match=/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(?:\d{2})?$/.exec(version||'');
@@ -47,15 +48,92 @@ state.engines=engineCatalog.map(e=>e.id);
 const allSamples=()=>[...samples,...state.custom];
 let sample=samples[0],runs=new Map(),issues=[],focused=null,manual=false;
 let lastRevealed=null;
+let inventory=new Map(),activeBlockId=null;
+let review=freshReview(''),reviewRevision=null,reviewReady=false;
+let saveTail=Promise.resolve(),reviewSavingError=false;
+function selectBlockAt(offset){
+  activeBlockId=blockAt(inventory,offset)?.id??null;
+}
+function refreshReview(){
+  const next=synchronizeReview(review,inventory);
+  const changed=reviewChanged(review,next);
+  review=next;
+  if(changed&&reviewReady)enqueueReviewSave();
+}
+function enqueueReviewSave(){
+  if(!reviewReady||sample.id!=='reviewed'||reviewSavingError)return;
+  const snapshot=structuredClone(review);
+  saveTail=saveTail.then(async()=>{
+    if(reviewSavingError)return;
+    const response=await fetch('./api/sentence-review',{
+      method:'PUT',headers:{'Content-Type':'application/json',
+        'X-OCR2MD-Sentence-Review':'1','If-Match':reviewRevision},
+      body:JSON.stringify(snapshot),cache:'no-store'});
+    if(!response.ok)throw Error('HTTP '+response.status+
+      (response.status===412?'：其他窗口已修改审阅文件，请刷新':''));
+    const result=await response.json();
+    reviewRevision=result.revision;
+    status('已持久化 '+Object.keys(snapshot.blocks).length+
+      ' 个块的分句审阅 · CMD 原文未修改');
+  }).catch(error=>{
+    reviewSavingError=true;reviewReady=false;
+    status('分句审阅保存失败：'+error.message+'。已停止写入，刷新后重新读取。',true);
+    renderSource();
+  });
+}
+async function loadReview(){
+  const loaded=sample;
+  await saveTail;
+  if(loaded!==sample||loaded.id!=='reviewed')return;
+  try{
+    const response=await fetch('./api/sentence-review',{cache:'no-store'});
+    if(!response.ok)throw Error('审阅文件 HTTP '+response.status);
+    const value=await response.json();
+    if(value.schema!==REVIEW_SCHEMA||value.sourceSha256!==loaded.sha256)
+      throw Error('审阅文件的 CMD SHA-256 不匹配');
+    if(loaded!==sample)return;
+    reviewRevision=value.revision;
+    review={schema:REVIEW_SCHEMA,sourceSha256:value.sourceSha256,
+      blocks:value.blocks||{},manualGold:{...gold(),...value.manualGold}};
+    state.gold[sourceKey()]=review.manualGold;
+    persist();reviewReady=true;reviewSavingError=false;
+    refreshReview();computeIssues();render();
+    const auto=Object.values(review.blocks).filter(x=>x.status==='auto').length;
+    status('已加载独立审阅文件 · 自动一致 '+auto+
+      ' 块 · 已仲裁 '+Object.values(review.blocks).filter(x=>x.status==='arbitrated').length+' 块');
+  }catch(error){
+    reviewReady=false;reviewSavingError=true;
+    status('审阅文件不可用：'+error.message+'；已停用采用操作，Gold 仍在浏览器。',true);
+    renderSource();
+  }
+}
+function adoptEngine(engine,checked){
+  const row=inventory.get(activeBlockId);
+  if(!reviewReady||sample.id!=='reviewed'||!row?.disagreed){
+    status('请先在已审阅 CMD 中点击一个存在句界分歧的 PBS 文本块。',true);
+    renderSource();return;
+  }
+  if(checked){
+    const chosen=row.engines.find(e=>e.engine===engine&&e.valid&&e.covered);
+    if(!chosen){renderSource();return;}
+    review.blocks[row.id]={status:'arbitrated',engine,boundaries:[...chosen.boundaries]};
+  }else{
+    delete review.blocks[row.id];
+  }
+  enqueueReviewSave();render();
+  status(row.id+(checked?' 已采用 '+engine+' 的完整句界':' 已撤销仲裁')+' · 正在落盘');
+}
 const compare=createSentenceCompareWorkspace($('workspace'),{
   onPosition(source){
-    if(!issues.length)return;
+    selectBlockAt(source);
+    if(!issues.length){renderSource();return;}
     const closest=issues.reduce((best,item)=>
       Math.abs(item.pos-source)<Math.abs(best.pos-source)?item:best,issues[0]);
-    if(Math.abs(closest.pos-source)>220)return;
-    focused=closest.pos;lastRevealed=focused;manual=false;
-    renderJudgments();renderIndex();renderManual();renderReport();
-  }
+    focused=Math.abs(closest.pos-source)>220?source:closest.pos;
+    lastRevealed=focused;manual=false;
+    renderSource();renderJudgments();renderIndex();renderManual();renderReport();
+  },
+  onAdopt:adoptEngine
 });
 // The review layer reads only source coordinates and never CM6 EditorView.
 const esc=text=>String(text).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -73,7 +151,11 @@ function selectSample(id){
   $('sample-meta').textContent=sample.md.length.toLocaleString()+' 字符 · '+
     (sample.sha256?'SHA-256 '+sample.sha256.slice(0,16):checksum(sample.md));
   $('sample-meta').title=sample.sha256||'非封存测试样本';
-  focused=null;lastRevealed=null;manual=false;persist();compute();
+  focused=null;lastRevealed=null;manual=false;
+  reviewReady=false;reviewSavingError=false;reviewRevision=null;
+  review=freshReview(sample.sha256||'');activeBlockId=null;
+  persist();compute();
+  if(sample.id==='reviewed')void loadReview();
 }
 function updateEngineOptions(){
   const node=$('engine-options');node.replaceChildren();
@@ -100,10 +182,12 @@ function compute(){
     }catch(e){runs.set(id,{error:String(e.message||e),
       elapsed:performance.now()-started,lossless:false});}
   }
-  computeIssues();render();
+  inventory=reviewInventory(sample.md,runs);
+  computeIssues();selectBlockAt(focused);
+  refreshReview();render();
   const failures=[...runs.values()].filter(v=>!v.lossless);
   status(failures.length?'引擎运行失败 '+failures.length+' 个，已排除其评分。':
-    '分句完成。点击引擎卡片即可采纳判断；人工裁决保存在本设备浏览器。',!!failures.length);
+    '分句完成。先选择有分歧的 PBS 子块，再勾选对应引擎顶栏「采用」。',!!failures.length);
 }
 function computeIssues(){
   const union=new Set();
@@ -134,13 +218,18 @@ function decide(pos,value,isManual=false){
   if(value===null)delete state.gold[key][pos];
   else state.gold[key][pos]={break:!!value,manual:!!isManual};
   focused=pos;manual=false;
-  const saved=persist();computeIssues();render();
+  const saved=persist();
+  if(sample.id==='reviewed'&&reviewReady){review.manualGold={...gold()};enqueueReviewSave();}
+  computeIssues();render();
   if(saved)status('已自动保存：'+pos+' → '+(value===null?'未裁决':value?'应断句':'不应断句')+
     '。换设备请导出、导入 Gold JSON。');
 }
 function renderSource(){
   compare.update({source:sample.md,results:runs,filter:$('view-mode').value,
-    decisions:gold(),selectedPos:focused});
+    decisions:gold(),selectedPos:focused,accepted:review.blocks,
+    disputed:[...inventory.values()].filter(x=>x.disagreed).map(x=>x.id),
+    activeBlockId,finalBoundaries:acceptedBoundaries(review,inventory),
+    canAdopt:reviewReady&&sample.id==='reviewed'});
   if(focused!==null&&focused!==lastRevealed){
     compare.reveal(focused);
     lastRevealed=focused;
@@ -225,6 +314,9 @@ function renderReport(){
   $('kpi-engines').textContent=[...runs.values()].filter(r=>r.lossless).length+' / '+runs.size;
   $('kpi-diffs').textContent=issues.filter(i=>i.disagree).length;
   $('kpi-reviewed').textContent=reviewed+' / '+issues.length;
+  const entries=Object.values(review.blocks);
+  $('kpi-saved').textContent=entries.filter(x=>x.status==='auto').length+' 自动 / '+
+    entries.filter(x=>x.status==='arbitrated').length+' 仲裁';
   const okay=[...runs.values()].every(v=>v.lossless);
   $('kpi-roundtrip').textContent=okay?'100% PASS':'FAIL';
   $('kpi-roundtrip').style.color=okay?'#2a7752':'#ae3b33';
@@ -296,7 +388,9 @@ async function importGold(event){
       decisions[d.offset]={break:d.break,manual:!!d.manual};
     }
     state.gold[sourceKey()]=decisions;
-    if(!persist())return;computeIssues();render();
+    if(!persist())return;
+    if(sample.id==='reviewed'&&reviewReady){review.manualGold={...gold()};enqueueReviewSave();}
+    computeIssues();render();
     status('已验证样本指纹并导入 '+Object.keys(decisions).length+' 条裁决。');
   }catch(error){status('Gold 导入失败：'+error.message,true);}
   finally{event.target.value='';}
@@ -325,7 +419,12 @@ $('pbs-page-select').onchange=()=>{
   if(!target){status('当前样本没有 PBS p 编码。',true);return;}
   // This p is already present in the selected block type's visible range.
   // Keep 分歧块 / 无分句块 active when navigating within that filtered set.
-  focused=target.sourceOffset;lastRevealed=null;manual=false;
+  const match=[...inventory.values()].find(row=>
+    row.id.startsWith(select.value+'b')&&
+    ($('view-mode').value==='arbitrated'?review.blocks[row.id]?.status==='arbitrated':
+      $('view-mode').value==='disagree'?row.disagreed:false));
+  focused=match?.textFrom??target.sourceOffset;
+  selectBlockAt(focused);lastRevealed=null;manual=false;
   renderSource();
   status(target.key+' → CMD 第 '+target.sourceLine+
     ' 行 · '+target.blockId);
