@@ -138,7 +138,9 @@ export function createTranslationCompareWorkspace(container,model,{onSelect=()=>
     const pane=panes.get(id),pos=pane?.visiblePosition();
     if(pos===null||pos===undefined)return;
     const target=pane.atPosition(pos);
-    if(target&&target!==activeId)select(target,id,true);
+    // Scrolling is observation, not a request to reveal() another pane.
+    // Programmatic scroll feedback previously bounced among the three panes.
+    if(target&&target!==activeId)select(target,id,false);
   }};
   const dockview=createDockview(container,{
     theme:themeAbyss,

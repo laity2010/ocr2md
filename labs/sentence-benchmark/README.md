@@ -53,6 +53,7 @@ WP05 incremental updates and PDF-driven block mutation are explicitly out of sco
 - 校译阶段目前只读比较；人工英文与中文采用、结果保存及双语重组尚未开发。测试和接口边界见 `tests/am/TRANSLATION_REVIEW_PUBLIC_CONTRACT.md`。
 - **WP1 单语原文已接入**：校译左窗使用独立、可逆的清洁 Markdown 投影，隐藏所有工作标签并按句表每句一行；内部保存来源坐标的变更记录以恢复完整审阅 MD。右侧仍是只读的各家校译对照；中英交替排版留待 WP2。可通过 `node tests/translation-review-clean-real.test.mjs` 验证完整 402 条及媒体/注释不变。
 - **WP1 成品预览**：左窗不再显示 CM6 Markdown 源码，而是复用 Main 的 `renderMarkdown()` 阅读器，显示图片、KaTeX 数学公式、HTML 表格和原生折叠 Obsidian callout；句子 ID 继续同步定位。图片从与 Main 相同站点的 `/media/<文件名>` 只读读取，Lab 不建立第二套媒体目录。直接测试 `node --test tests/translation-review-reading.test.mjs`，浏览器测试 `node tests/translation-review-lab.browser.test.mjs`。
+- **预览行号与句 ID**：左阅读预览新增双栏（映射源行号、句块 ID）；绝对定位标签不改变 Markdown 布局，图片、表格展开后会随同正文重新测量位置。手动滚动只更新当前句高亮，不反复触发其他窗定位。实测 `node tests/translation-review-reader-gutter.browser.test.mjs`。
 
 ## One AI-ready sentence/block table (Lab, on-demand)
 

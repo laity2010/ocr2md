@@ -21,7 +21,17 @@
 .ocr-sb-pane.ocr-tr-pane[data-engine="original"] .ocr-sb-pane-toolbar{padding-left:9px}
 @media(max-width:700px){.ocr-tr-controls #record-picker{flex:0 0 130px}.ocr-tr-controls #filter-mode{flex:0 0 95px}}
 .ocr-tr-reader-scroll{height:100%;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain}
-.ocr-tr-reader-scroll .ocr-markdown{min-height:100%;padding:12px 18px 38px}
+.ocr-tr-reader-canvas{position:relative;min-height:100%;--ocr-tr-gutter-line:42px;--ocr-tr-gutter-id:104px}
+.ocr-tr-reader-scroll .ocr-markdown{box-sizing:border-box;min-height:100%;padding:12px 18px 38px calc(var(--ocr-tr-gutter-line) + var(--ocr-tr-gutter-id) + 12px)}
+.ocr-tr-reader-gutter{position:absolute;z-index:2;inset:0 auto 0 0;width:calc(var(--ocr-tr-gutter-line) + var(--ocr-tr-gutter-id));pointer-events:none;background:#293238;border-right:1px solid #48575b}
+.ocr-tr-reader-marker{position:absolute;left:0;width:100%;display:flex;align-items:start;height:21px;font:11px/19px "OCR2MD Sarasa",monospace;white-space:nowrap}
+.ocr-tr-reader-marker[hidden]{display:none}
+.ocr-tr-reader-line-number{box-sizing:border-box;width:var(--ocr-tr-gutter-line);flex:none;text-align:right;padding-right:8px;color:#899d94;font-variant-numeric:tabular-nums}
+.ocr-tr-reader-unit-id{box-sizing:border-box;width:var(--ocr-tr-gutter-id);flex:none;overflow:hidden;text-overflow:ellipsis;text-align:left;padding:0 2px 0 7px;border:0;border-left:1px solid #495b55;border-radius:0;background:transparent;color:#a7c080;font:inherit;cursor:pointer;pointer-events:auto}
+.ocr-tr-reader-unit-id:hover,.ocr-tr-reader-unit-id:focus-visible{color:#e2efc9;background:#43584b;outline:none}
+.ocr-tr-reader-marker-current{background:rgba(233,172,101,.16)}
+.ocr-tr-reader-marker-current .ocr-tr-reader-unit-id{color:#e9ac65;font-weight:bold}
 .ocr-tr-reader-scroll .ocr-markdown p{margin:.18em 0 .35em;line-height:1.55}
 .ocr-tr-reader-scroll .ocr-markdown .ocr-tr-reader-current{background:rgba(233,172,101,.16);border-radius:3px}
 .ocr-tr-reader-scroll .ocr-markdown .ocr-callout-content .ocr-tr-reader-current{background:rgba(233,172,101,.12)}
+@media(max-width:700px){.ocr-tr-reader-canvas{--ocr-tr-gutter-line:34px;--ocr-tr-gutter-id:96px}.ocr-tr-reader-scroll .ocr-markdown{padding-right:10px}}

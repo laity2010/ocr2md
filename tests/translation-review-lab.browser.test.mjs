@@ -104,6 +104,11 @@ try{
         'visible monolingual Markdown must not expose CMD workflow labels');
       assert(await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-toolbar')
         .textContent().then(x=>x.includes('成品预览')));
+      const gutter=page.locator('.ocr-tr-reader-gutter');
+      assert(await gutter.locator('.ocr-tr-reader-line-number').count()>=2,
+        'preview displays rendered-source line number gutter');
+      assert.equal(await gutter.locator('[data-gutter-unit]').count(),2,
+        'preview displays one clickable sentence-ID label per unit');
       assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] article h1').count(),1);
       assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] article img[src="/media/example.jpg"]').count(),1);
       assert(await page.locator('.ocr-sb-pane[data-engine="original"] article .katex').count()>0);
@@ -124,6 +129,9 @@ try{
         'AI CM6 panes retain selected sentence highlights');
       assert.equal(await page.locator('.ocr-tr-reader-current').count(),1,
         'all three panes highlight one shared record');
+      assert.equal(await gutter.locator('.ocr-tr-reader-marker-current').count(),1,
+        'sentence-ID gutter follows selected row');
+      assert.equal(await gutter.locator('[data-gutter-unit="p0b1-s001"]').count(),1);
       await page.locator('#filter-mode').selectOption('english-diff');
       assert.equal(await page.locator('#record-picker option').count(),1);
       assert.equal(await page.locator('#record-count').textContent(),'1 / 1');
