@@ -24,6 +24,18 @@ as V6 Main. It no longer owns a parallel light-theme layout.
   labels use the public read-only PBS/BC projection, with a syntax-validated
   tag-only fallback for unsealed scratch samples. No labels are inserted in
   the Markdown and the three engine panes have no additional gutters.
+- A **PDF page** dropdown sits next to \`全文 / 分歧块\` in the original
+  CM6 title bar. It enumerates only verifiable physical OCR pages using CMD's
+  existing C63 \`projectCMDAtomLocations\` API (\`origin\` + \`pageIndex+1\`),
+  never the renumberable logical PBS ID. The page target is the earliest
+  valid content line on that original PDF page (or its tag line if empty).
+  Selecting a page focuses the corresponding original CMD source offset in
+  all four CM6 panes. If disagreement filtering hides that page, the action
+  switches to \`全文\` before navigating. As users scroll/click the four
+  synchronized panes, the dropdown tracks the physical page containing the
+  focused original source offset. Unsealed standalone Markdown shows a
+  disabled \`无 PDF 页码\`, not fabricated page numbers. This is read-only and
+  never seeks into or writes a physical PDF document.
 - Right: three **vertically stacked** read-only CM6 engine panes
   (Intl.Segmenter, sentence-splitter, winkNLP), split by two horizontally
   draggable Dockview dividers; the whole right side is separated from the

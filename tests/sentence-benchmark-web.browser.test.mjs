@@ -97,6 +97,8 @@ try{
       assert.equal(await page.locator('#review-drawer').isVisible(),true);
       assert.equal(await page.locator('#engine-options input:checked').count(),3);
       assert.equal(await page.locator('#sample-select option').count(),4);
+      assert.equal(await page.locator('#pdf-page-select').isDisabled(),true,
+        name+' unsealed standalone CMD must not fabricate PDF page numbers');
       assert.equal(await page.locator('#sample-select').inputValue(),'reviewed',
         name+' must default to its isolated saved CMD snapshot, not the raw MinerU fixture');
       assert((await page.locator('#sample-select option:checked').textContent()).includes('已审阅 CMD'));
@@ -182,6 +184,38 @@ try{
           null,{timeout:15000});
         const diffStatus=await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status').textContent();
         assert(/分歧块 [1-9]\d*/.test(diffStatus), 'Buffett disagreement block filter must show actual CMD blocks');
+        const pages=await page.locator('#pdf-page-select option').evaluateAll(
+          options=>options.map(option=>option.value));
+        assert.equal(pages.length,22,'Buffett fixture has 22 verified original PDF pages');
+        assert.deepEqual(pages.slice(0,2),['1','2']);
+        assert.equal(pages.at(-1),'22');
+        await page.locator('#pdf-page-select').selectOption('6');
+        assert.equal(await page.locator('#view-mode').inputValue(),'full',
+          'page navigation reveals a page hidden by disagreement filtering');
+        await page.waitForFunction(()=>
+          document.querySelector('#status')?.textContent.includes('PDF 第 6 页 → CMD 第 207 行'),
+          null,{timeout:10000});
+        assert.equal(await page.locator('#pdf-page-select').inputValue(),'6');
+        const highlighted=await page.locator('.ocr-sb-pane').evaluateAll(panes=>
+          panes.map(p=>p.querySelectorAll('.ocr-sb-active-line').length));
+        assert(highlighted.every(n=>n===1),
+          'PDF page selection must highlight the correct source line in all four views');
+        // The physical page picker must also follow the focused source page
+        // during ordinary wheel navigation, without feeding back a new jump.
+        await page.waitForTimeout(950);
+        const sourceScroller=await page.locator(
+          '.ocr-sb-pane[data-engine="original"] .cm-scroller').boundingBox();
+        await page.mouse.move(sourceScroller.x+sourceScroller.width/2,
+          sourceScroller.y+sourceScroller.height/2);
+        await page.mouse.wheel(0,2500);
+        await page.waitForFunction(()=>
+          Number(document.querySelector('#pdf-page-select')?.value)>6,
+          null,{timeout:6000});
+        await page.locator('#pdf-page-select').selectOption('22');
+        await page.waitForFunction(()=>
+          document.querySelector('#status')?.textContent.includes('PDF 第 22 页 → CMD 第 '),
+          null,{timeout:10000});
+        assert.equal(await page.locator('#pdf-page-select').inputValue(),'22');
       }
       assert.deepEqual(errors,[],name+' console exceptions');
       console.log('SENTENCE_LAB_WEB_PASS',JSON.stringify({

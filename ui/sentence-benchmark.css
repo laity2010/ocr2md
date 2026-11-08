@@ -45,9 +45,15 @@
 .ocr-sb-boundary.ocr-sb-agreed{color:#83aa8b}
 .ocr-sb-boundary.ocr-sb-split{color:#e9ac65;background:#5e4837;border-radius:2px}
 .ocr-sb-boundary.ocr-sb-gold{color:#a7c080;background:#335448;font-size:10px}
-.ocr-sb-pane-toolbar #view-mode {height:25px;min-height:25px;width:104px;max-width:116px;
+.ocr-sb-pane-toolbar #view-mode,.ocr-sb-pane-toolbar #pdf-page-select {
+  height:25px;min-height:25px;flex:0 0 auto;
   color:#d3c6aa;background:#35463e;border:1px solid #60766b;border-radius:4px;
-  font:12px "OCR2MD Sarasa",monospace;padding:2px 5px}
+  font:12px "OCR2MD Sarasa",monospace;padding:2px 5px;
+}
+.ocr-sb-pane-toolbar #view-mode {width:96px}
+.ocr-sb-pane-toolbar #pdf-page-select {width:91px}
+.ocr-sb-pane-toolbar #pdf-page-select:disabled {color:#889c91;opacity:.7}
+.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-status {min-width:0;flex:1 1 0}
 .ocr-sb-review[hidden],.ocr-sb-advanced[hidden],.manual-picker[hidden]{display:none!important}
 .ocr-sb-review {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);
   height:34vh;min-height:175px;max-height:410px;overflow:hidden;flex:0 0 auto;
