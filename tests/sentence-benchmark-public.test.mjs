@@ -102,3 +102,52 @@ test('reviewed CMD seam never joins without lb=m; ignore and pending stay distin
       'ignored/pending seam must preserve distinct child blocks');
   }
 });
+
+// Actual reviewed table callouts are nested Obsidian blocks. Their table
+// markup and [! ds] headers must remain structural, while their separate
+// p...s2 prose annotations must be sent through every sentence engine.
+const tableCalloutNotes = [
+  '<!-- cmd:block:v1 id="p4b0" -->',
+  '>> [! ds]- HTML Table',
+  '>><!-- cmd:block:v1 id="p4b0s1" -->',
+  '>><table><tr><td>Exclude this table. Never segment table cells.</td></tr></table>',
+  '>><!-- cmd:block:v1 id="p4b0s2" -->',
+  '>>',
+  '>>Notes: The information ratio is defined by the intercept. Ratios are annualized.',
+  '<!-- cmd:block:v1 id="p8b0" -->',
+  '>> [! ds]- HTML Table',
+  '>><!-- cmd:block:v1 id="p8b0s1" -->',
+  '>><table><tr><td>Table text should be kept raw.</td></tr></table>',
+  '>><!-- cmd:block:v1 id="p8b0s2" -->',
+  '>>\\<sup>a\\</sup>In years without a reported value, we use zero. Notes: The rates are annualized.',
+  '<!-- cmd:block:v1 id="p20b0" -->',
+  '>> [! ds]- HTML Table',
+  '>><!-- cmd:block:v1 id="p20b0s1" -->',
+  '>><table><tr><td>Do not translate numeric table content.</td></tr></table>',
+  '>><!-- cmd:block:v1 id="p20b0s2" -->',
+  '>>Note: See the notes to Table 2.'
+].join('\n');
+
+for (const {id: engine} of engineCatalog) {
+  test(engine+': nested Obsidian table notes are sentences but HTML and callout headers stay raw', () => {
+    const result=split(tableCalloutNotes,engine);
+    assert.equal(rebuild(result),tableCalloutNotes);
+    for (const [blockId,expected] of [
+      ['p4b0s2',2],['p8b0s2',2],['p20b0s2',1]]) {
+      const sentences=result.sentences.filter(s=>s.blocks.includes(blockId));
+      assert.equal(sentences.length,expected,blockId+' must be extracted');
+      assert(sentences.every(s=>s.fragments.every(f=>
+        f.blockId===blockId&&tableCalloutNotes.slice(f.from,f.to)===f.text)),
+        'PBS IDs and exact CMD UTF-16 coordinates must survive quote masking');
+      assert(sentences.every(s=>!s.text.includes('>>')&&!s.text.includes('<sup>')),
+        'nested quote and footnote wrappers must be excluded from the NLP text');
+    }
+    assert(result.sentences.every(s=>!s.blocks.some(b=>/s1$/.test(b))),
+      'HTML table children must never become sentences');
+    assert(result.sentences.every(s=>!s.text.includes('HTML Table') &&
+      !s.text.includes('Do not translate numeric')),
+      'callout header and HTML table text must not be sent to NLP');
+    assert(result.pieces.some(p=>p.kind==='raw'&&p.text.includes('<table>')),
+      'HTML table markup must be retained as exact raw source');
+  });
+}

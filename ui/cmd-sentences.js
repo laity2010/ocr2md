@@ -12,6 +12,11 @@ const inlineMath=/\$[^$\n]+\$|\\\([^\n]+?\\\)/g;
 const noteReference=/\[\^[^\]\n]+\](?!:)/g;
 const leadingCmd=/^\s*(?:<!--\s*ocr2md:[^\n]*?-->\s*)+/u;
 const leadingLatex=/^\s*<!--\s*ocr2md:latex\b[^\n]*?-->/u;
+// Nested Obsidian quote/callout wrappers are presentation syntax. A table
+// note's actual prose is after ">>", while [!...] denotes a callout header.
+const nestedQuote=/^[ \t]*(?:>[ \t]?){2,}/u;
+const calloutHeader=/^[ \t]*(?:>[ \t]?)+\[![^\]\n]+\]/u;
+const quotedSuperscript=/\\<sup>[^<\n]*\\<\/sup>/gu;
 const structural=/^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||!\[|\[\^|`{3,}|~{3,}|<!--|<\/?[a-z]|\$\$|\\\[)/i;
 const endsSentence=/[.!?。！？]["'”’)]?\s*$/;
 const hash=text=>{let v=2166136261;for(let i=0;i<text.length;i++)v=Math.imul(v^text.charCodeAt(i),16777619);return (v>>>0).toString(36);};
@@ -20,7 +25,11 @@ function safeLine(line,raw=line){return Boolean(line.trim())&&!structural.test(l
 // only *literal original-source* trailing spaces denote Markdown hard breaks.
 function lineProjection(line,from){
   const clean=line.split('');
-  for(const regex of [tagPattern,inlineMath,noteReference]){
+  // The two quote chevrons are not sentence text. Mask rather than trim so
+  // every resulting sentence still points to the exact original CMD offsets.
+  const prefix=nestedQuote.exec(line)?.[0];
+  if(prefix)for(let k=0;k<prefix.length;k++)clean[k]=' ';
+  for(const regex of [tagPattern,inlineMath,noteReference,quotedSuperscript]){
     regex.lastIndex=0;
     for(const m of line.matchAll(regex))for(let k=m.index;k<m.index+m[0].length;k++)clean[k]=' ';
   }
@@ -82,6 +91,9 @@ export function extractTextBlocks(source,{bodyEnd=source.length}={}){
     const anchor=blockAnchor(raw);
     if(anchor){lastAnchor=anchor;currentCMDId=`p${anchor.pageIndex}b${anchor.blockIndex}`;
       pendingReviewedMerge=null;continue;}
+    // A quoted callout header is a UI directive, not a textual sentence.
+    // Keep following >>Notes: / >>\\<sup>... annotations eligible.
+    if(calloutHeader.test(raw)){run=null;lastProse=null;continue;}
     const seg=lineProjection(raw,row.from);
     // Structural checks see visible prose, not the spaces that replaced
     // metadata/math. Keep the source's actual indentation rule intact.

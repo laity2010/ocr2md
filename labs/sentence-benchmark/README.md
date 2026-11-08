@@ -97,6 +97,14 @@ Unsealed standalone Markdown samples fall back to paragraph blocks.
   \`lb="i"\` and pending have no such effect.
 - The original Markdown and all CMD tags are preserved exactly; no
   physical PDF block relationship or Main saved document is edited.
+- Nested Obsidian table callouts may contain ordinary prose annotations:
+  `>><!-- cmd:block:v1 id="p4b0s2" -->` followed by
+  `>>Notes: ...`. The quote chevrons are masked **only in the NLP
+  projection**, so the s2 note is segmented while `>> [! ds]` callout
+  headings, `>><table>...` HTML and blank quote rows remain raw. Escaped
+  superscript note markers (`\\<sup>a\\</sup>`) are masked at their
+  original offsets too. Regression covers the same pattern in
+  p4b0s2/p7b0s2/p8b0s2/p10b0s2/p14b0s2/p20b0s2.
 - Direct tests: \`node --test tests/sentence-benchmark-public.test.mjs\`.
   UI regression uses the same small reviewed-seam fixture in
   \`tests/fixtures/sentence-benchmark-reviewed-seams.mjs\` for Chrome/WebKit,
