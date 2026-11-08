@@ -70,6 +70,12 @@ as V6 Main. It no longer owns a parallel light-theme layout.
   stays until the sample or the 全文/分歧块 projection changes. Folding alters
   neither the stored CMD Markdown nor the splitter's source offsets, Gold,
   or 100% lossless reconstruction.
+- Markdown document headings are **never** auto-folded merely because they
+  are excluded from NLP segmentation: ATX H1–H6 and both lines of Setext
+  headings remain readable in the original source, in Main's heading style.
+  Ordinary non-sentence media, tables and MinerU evidence keep their existing
+  folding behavior. The regression checks all 19 headings of the saved
+  reviewed CMD, including the first article title and final References.
 - The left CM6 has two independent native gutters: source line numbers and
   exact CMD parent/child block IDs. In disagreement-only mode, line numbers
   remain the original CMD's line numbers; view-only separators are shown

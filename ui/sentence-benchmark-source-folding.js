@@ -25,6 +25,22 @@ const foldableIgnoredRanges=StateField.define({
 const ignoredFoldService=foldService.of((state,lineStart)=>
   state.field(foldableIgnoredRanges).find(range=>range.from===lineStart)??null);
 
+// Titles belong to the readable CMD source even though the sentence splitter
+// deliberately excludes them. Their display must not depend on NLP coverage.
+const atxHeading=/^ {0,3}#{1,6}(?:[ \t]|$)/u;
+const setextUnderline=/^ {0,3}(?:=+|-+)[ \t]*$/u;
+function isSourceHeading(doc,n){
+  const current=doc.line(n).text;
+  if(atxHeading.test(current))return true;
+  // Also preserve both lines of a Markdown Setext title.
+  const prior=n>1?doc.line(n-1).text:'';
+  const next=n<doc.lines?doc.line(n+1).text:'';
+  if(setextUnderline.test(current))
+    return !!prior.trim()&&!setextUnderline.test(prior);
+  return !!current.trim()&&setextUnderline.test(next)&&
+    !/^\s*(?:<!--|>|<|\x60{3}|~{3})/u.test(current);
+}
+
 export const sentenceSourceFolding=[
   foldableIgnoredRanges,
   codeFolding(),
@@ -54,6 +70,9 @@ export function nonSentenceFolds(view,source,projection){
   for(let n=1;n<=doc.lines;n++){
     const line=doc.line(n);
     if(parseCMDBlockTag(line.text))continue;
+    // Never auto-fold source titles. Without this exception, their absence
+    // from sentence pieces causes the generic fold to swallow chapter names.
+    if(isSourceHeading(doc,n))continue;
     // Preserve the whole comment: Main's own mineruCommentFolding handles it.
     const comment=mineruCommentRange(doc,n);
     if(comment){

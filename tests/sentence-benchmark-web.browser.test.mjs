@@ -285,6 +285,43 @@ try{
           'Navigating a filtered PBS page must not exit the current block-type filter');
         assert.equal(await page.locator('#kpi-roundtrip').textContent(),'100% PASS');
       }
+      // A title is excluded from NLP segmentation but is part of the document
+      // hierarchy. The Main-style source folding must not hide any heading.
+      const titleSample=[
+        '<!-- cmd:block:v1 id="p0b0" -->',
+        '# Visible Document Title',
+        '',
+        '<!-- cmd:block:v1 id="p0b1" -->',
+        '## Visible Section Title',
+        '',
+        '<!-- cmd:block:v1 id="p0b2" -->',
+        'This prose should be segmented. Another sentence follows.',
+        '',
+        '<!-- cmd:block:v1 id="p0b3" -->',
+        '![image](media/example.png)',
+        '',
+        '<!-- cmd:block:v1 id="p0b4" -->',
+        '### Visible Appendix Title'
+      ].join('\n');
+      await page.locator('#sample-file').setInputFiles({
+        name:'source-headings-visible.md',mimeType:'text/markdown',
+        buffer:Buffer.from(titleSample)
+      });
+      await page.locator('#view-mode').selectOption('full');
+      await page.waitForFunction(()=>
+        document.querySelector('#sample-select')?.value.startsWith('import-') &&
+        document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',
+        null,{timeout:15000});
+      const sourceLines=await page.locator(
+        '.ocr-sb-pane[data-engine="original"] .cm-line').allTextContents();
+      for(const title of [
+        '# Visible Document Title','## Visible Section Title',
+        '### Visible Appendix Title'
+      ])assert(sourceLines.some(line=>line.includes(title)),
+        name+' must keep Markdown heading visible in folded original CMD: '+title);
+      assert(await page.locator(
+        '.ocr-sb-pane[data-engine="original"] .cm-foldPlaceholder').count()>0,
+        name+' still folds the non-sentence image while keeping titles');
       assert.deepEqual(errors,[],name+' console exceptions');
       console.log('SENTENCE_LAB_WEB_PASS',JSON.stringify({
         name,engineCount:3,samples:4,persistentGold:true,
