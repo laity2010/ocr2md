@@ -218,7 +218,10 @@ try{
         const rect=await page.locator('.ocr-sb-pane[data-engine="intl"] .cm-scroller').boundingBox();
         await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);
         await page.mouse.wheel(0,5000);
-        await page.waitForTimeout(1000);
+        await page.waitForFunction(()=>
+          [...document.querySelectorAll('.ocr-sb-pane[data-engine]:not([data-engine="original"])')]
+            .every(p=>(p.querySelector('.cm-scroller')?.scrollTop??0)>0),
+          null,{timeout:6500});
         const synchronized=await page.locator('.ocr-sb-pane').evaluateAll(panes=>
           panes.map(p=>({id:p.dataset.engine,scrollTop:p.querySelector('.cm-scroller')?.scrollTop??0})));
         assert(synchronized.filter(p=>p.id!=='original').every(p=>p.scrollTop>0),
