@@ -18,5 +18,5 @@
   min-width:var(--ocr-sb-block-width,90px)}
 .ocr-sb-pane .cm-editor .ocr-tr-current{background:rgba(233,172,101,.18)}
 .ocr-tr-pane .cm-editor .cm-content{padding-top:7px}
-.ocr-tr-pane[data-engine="original"] .ocr-sb-pane-toolbar{padding-left:9px}
+.ocr-sb-pane.ocr-tr-pane[data-engine="original"] .ocr-sb-pane-toolbar{padding-left:9px}
 @media(max-width:700px){.ocr-tr-controls #record-picker{flex:0 0 130px}.ocr-tr-controls #filter-mode{flex:0 0 95px}}

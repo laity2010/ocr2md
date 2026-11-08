@@ -91,6 +91,9 @@ try{
         'visible monolingual Markdown must not expose CMD workflow labels');
       assert(await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-toolbar')
         .textContent().then(x=>x.includes('干净原文')));
+      assert.equal(await page.locator('.ocr-sb-pane[data-engine="original"] .ocr-sb-pane-toolbar')
+        .evaluate(el=>getComputedStyle(el).paddingLeft),'9px',
+        'clean source pane must not retain the Sentence Lab label gutter inset');
       assert(await page.locator('.ocr-sb-pane').nth(1).textContent().then(x=>x.includes('苹果是红色的。')));
       assert(await page.locator('.ocr-sb-pane').nth(2).textContent().then(x=>x.includes('苹果的表皮是红色的。')));
       await page.locator('#record-picker').selectOption('p0b1-s001');
