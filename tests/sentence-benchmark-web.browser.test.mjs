@@ -8,6 +8,7 @@ import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
 import {chromium,webkit,devices} from 'playwright';
 import {chromeExecutable} from './platform.test-helper.mjs';
+import {reviewedSeams} from './fixtures/sentence-benchmark-reviewed-seams.mjs';
 
 const temp=mkdtempSync(join(tmpdir(),'ocr2md-sentence-web-'));
 const runtime=join(temp,'labs','sentence-benchmark','.runtime');
@@ -130,14 +131,30 @@ try{
       });
       await page.waitForFunction(()=>document.querySelector('#kpi-reviewed')?.textContent.startsWith('1 /'));
       await page.locator('#sample-file').setInputFiles({
-        name:'second-document.md',mimeType:'text/markdown',
-        buffer:Buffer.from('Dr. Brown visits. The value is 3.14. Another sentence! Done.')
+        name:'p5b1-p6b6-regression.md',mimeType:'text/markdown',
+        buffer:Buffer.from(reviewedSeams)
       });
-      await page.waitForFunction(()=>document.querySelector('#sample-meta')?.textContent.includes('65 字符')||
-        document.querySelector('#sample-select')?.value.startsWith('import-'),null,{timeout:15000});
+      await page.waitForFunction(()=>document.querySelector('#sample-select')?.value.startsWith('import-') &&
+        document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',null,{timeout:15000});
       assert.equal(await page.locator('#sample-select option').count(),5);
       assert.equal(await page.locator('#kpi-roundtrip').textContent(),'100% PASS');
       await page.locator('#review-filter').selectOption('all');
+      const boundaries=await page.evaluate(md=>{
+        const offsets=[...document.querySelectorAll('#issue-list .issue-button')]
+          .map(node=>Number(node.lastElementChild?.textContent))
+          .filter(Number.isInteger);
+        const p5=md.indexOf('id="p5b1"');
+        const p6=md.indexOf('id="p6b6s0"');
+        return {
+          p5first:offsets.includes(md.indexOf('0.81. Hence',p5)+5),
+          p5second:offsets.includes(md.indexOf('ratio.<!--ocr2md:note-ref id="5"-->',p5)+6),
+          brokenAbout:offsets.includes(md.indexOf('about\n\n<!-- cmd:block:v1 id="p6b6s1"',p6)+5),
+          joinedRate:offsets.includes(md.indexOf('rate. Hence',p6)+5)
+        };
+      },reviewedSeams);
+      assert.deepEqual(boundaries,{
+        p5first:true,p5second:true,brokenAbout:false,joinedRate:true
+      },name+' must use reviewed CMD text and lb=m semantics in all three real UI engines');
       await page.locator('#manual-issue').click();
       await page.locator('#manual-chars button').first().click();
       assert((await page.locator('#kpi-reviewed').textContent()).startsWith('1 /'));

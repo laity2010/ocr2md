@@ -2,6 +2,7 @@
  * The original source is retained byte-for-byte in sourcePieces; NLP sees only
  * safe prose runs, with source offsets for every character. */
 import {blockAnchor} from './mineru-anchors.js';
+import {parseCMDBlockTag} from './cmd-block-chains.js';
 import {formatAnnotation} from './cmd-annotations.js';
 export const SENTENCE_TAG='ocr2md:sentence';
 const tagPattern=/<!--(?:\s*ocr2md:[^\n]*?|\s*minerujson:[^\n]*?)-->/g;
@@ -14,7 +15,9 @@ const leadingLatex=/^\s*<!--\s*ocr2md:latex\b[^\n]*?-->/u;
 const structural=/^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||!\[|\[\^|`{3,}|~{3,}|<!--|<\/?[a-z]|\$\$|\\\[)/i;
 const endsSentence=/[.!?。！？]["'”’)]?\s*$/;
 const hash=text=>{let v=2166136261;for(let i=0;i<text.length;i++)v=Math.imul(v^text.charCodeAt(i),16777619);return (v>>>0).toString(36);};
-function safeLine(line){return Boolean(line.trim())&&!structural.test(line)&&!/\s{2}$/.test(line)&&!/^\s{4,}/.test(line);}
+function safeLine(line,raw=line){return Boolean(line.trim())&&!structural.test(line)&&!/\s{2}$/.test(raw)&&!/^\s{4,}/.test(line);}
+// Protected inline note/footnote markup is blanked out in the NLP projection;
+// only *literal original-source* trailing spaces denote Markdown hard breaks.
 function lineProjection(line,from){
   const clean=line.split('');
   for(const regex of [tagPattern,inlineMath,noteReference]){
@@ -39,18 +42,33 @@ export function extractTextBlocks(source,{bodyEnd=source.length}={}){
   const anchoredDocument=source.includes('<!-- minerujson:block:v1:')||source.includes('<!-- cmd:block:v1 id=')||source.includes('<!-- cmd:block:v1 p=');
   for(const line of source.split('\n')){lines.push({text:line,from,to:from+line.length});from+=line.length+1;}
   const runs=[];let run=null,lastProse=null,lastAnchor=null,fence=null,mathBlock=false,comment=false;
+  let currentCMDId=null,pendingReviewedMerge=null;
   for(let i=0;i<lines.length;i++){
     const row=lines[i];if(row.from>=bodyEnd)break;
     const raw=row.text;
     if(comment){if(raw.includes('-->'))comment=false;continue;}
-    if(/^\s*<!--/.test(raw)&&!raw.includes('-->')){comment=true;run=null;lastProse=null;continue;}
+    if(/^\s*<!--/.test(raw)&&!raw.includes('-->')){comment=true;run=null;lastProse=null;pendingReviewedMerge=null;continue;}
+    const cmdTag=parseCMDBlockTag(raw);
+    if(cmdTag){
+      const previousCMDId=currentCMDId;
+      currentCMDId=cmdTag.id;
+      const physical=blockAnchor(raw);
+      if(physical)lastAnchor=physical;
+      // The incoming B.lb=m is an explicit human decision that the A->B
+      // seam is an illegal line break. Project as one NLP run, retaining
+      // both separate source ranges and their true child IDs.
+      pendingReviewedMerge=cmdTag.lb==='m'&&lastProse?.blockId===previousCMDId&&
+        Boolean(run)?{before:previousCMDId,after:cmdTag.id}:null;
+      if(cmdTag.lb==='i'){run=null;lastProse=null;}
+      continue;
+    }
     if(/^\s*<!--/.test(raw)&&!blockAnchor(raw)){
       // Ignore genuine annotation-only lines, but not the human-readable
       // sentence following an inline CMD annotation at column zero.
       const prefix=leadingCmd.exec(raw)?.[0];
       if(!prefix||!raw.slice(prefix.length).trim())continue;
     }
-    if(anchoredDocument&&!lastAnchor&&!blockAnchor(raw))continue;
+    if(anchoredDocument&&!lastAnchor&&!currentCMDId&&!blockAnchor(raw))continue;
     if(/^\s*(`{3,}|~{3,})/.test(raw)){
       const m=/^\s*(`{3,}|~{3,})/.exec(raw)[1];
       if(!fence)fence=m[0];else if(fence===m[0])fence=null;
@@ -62,11 +80,12 @@ export function extractTextBlocks(source,{bodyEnd=source.length}={}){
     }
     if(mathBlock)continue;
     const anchor=blockAnchor(raw);
-    if(anchor){lastAnchor=anchor;continue;}
+    if(anchor){lastAnchor=anchor;currentCMDId=`p${anchor.pageIndex}b${anchor.blockIndex}`;
+      pendingReviewedMerge=null;continue;}
     const seg=lineProjection(raw,row.from);
     // Structural checks see visible prose, not the spaces that replaced
     // metadata/math. Keep the source's actual indentation rule intact.
-    if(/^[ \t]{4,}/.test(raw)||!safeLine(seg.text.trimStart())){
+    if(/^[ \t]{4,}/.test(raw)||!safeLine(seg.text.trimStart(),raw)){
       if(seg.text.trim()){run=null;lastProse=null;}
       continue;
     }
@@ -83,13 +102,17 @@ export function extractTextBlocks(source,{bodyEnd=source.length}={}){
       lastAnchor.pageIndex===lastProse.anchor.pageIndex&&
       lastAnchor.blockIndex===lastProse.anchor.blockIndex+1&&
       (!blank||blank.length<=2)&&!endsSentence.test(lastProse.text.trim());
-    const join=Boolean(run&&lastProse&&(contiguous||adjacent));
+    const reviewedMerge=Boolean(pendingReviewedMerge&&lastProse&&run&&
+      lastProse.blockId===pendingReviewedMerge.before&&currentCMDId===pendingReviewedMerge.after);
+    const join=Boolean(run&&lastProse&&(contiguous||adjacent||reviewedMerge));
+    pendingReviewedMerge=null;
     if(!join){run={clean:'',segments:[]};runs.push(run);}
     if(run.clean)run.clean+=' ';
     const start=run.clean.length;run.clean+=seg.text;
+    const blockId=currentCMDId||(lastAnchor?`p${lastAnchor.pageIndex}b${lastAnchor.blockIndex}`:`line${i+1}`);
     run.segments.push({start,end:run.clean.length,sourceFrom:seg.from,sourceTo:seg.to,
-      blockId:lastAnchor?`p${lastAnchor.pageIndex}b${lastAnchor.blockIndex}`:`line${i+1}`,raw:seg.raw});
-    lastProse={line:i,text:seg.text,anchor:lastAnchor};
+      blockId,raw:seg.raw});
+    lastProse={line:i,text:seg.text,anchor:lastAnchor,blockId};
   }
   // Disjoint partition of the EXACT original Markdown, including every blank,
   // CMD tag, line break and untouched MinerU evidence byte.

@@ -51,6 +51,22 @@ in the bundle, versioned in the repository, or persisted in localStorage.
 Subsequent changes to Main do **not** silently alter the Lab snapshot;
 a new snapshot requires an explicit controlled copy and fingerprint check.
 Unsealed standalone Markdown samples fall back to paragraph blocks.
+
+## Reviewed CMD text-block seam regression (p5b1 / p6b6)
+
+- Masking an inline note reference and Obsidian footnote must not make a
+  complete prose line appear to end with a Markdown hard break. Detect real
+  trailing hard-break spaces on the original text, not the masked NLP view.
+- The incoming CMD \`lb="m"\` is the already-reviewed illegal-line-break
+  **merge decision**. Consecutive child prose segments can form a single
+  NLP sentence while remaining distinct CMD source ranges and child IDs;
+  \`lb="i"\` and pending have no such effect.
+- The original Markdown and all CMD tags are preserved exactly; no
+  physical PDF block relationship or Main saved document is edited.
+- Direct tests: \`node --test tests/sentence-benchmark-public.test.mjs\`.
+  UI regression uses the same small reviewed-seam fixture in
+  \`tests/fixtures/sentence-benchmark-reviewed-seams.mjs\` for Chrome/WebKit,
+  rather than committing any private full-length reviewed document.
 An ordinary imported MD sample must not be mistaken for sealed CMD evidence.
 
 The reviewer is a second **page of the same V6 build**, not a different Lab module
