@@ -10,6 +10,7 @@ import {createSentenceCompareWorkspace} from './sentence-benchmark-workspace.js'
 import buffett from '../packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md?raw';
 import {split,rebuild} from './sentence-benchmark-core.js';
 import {engineCatalog} from './sentence-benchmark-engines.js';
+import {buildTranslationTable} from './sentence-benchmark-translation-table.js';
 import {reviewInventory,blockAt,freshReview,synchronizeReview,reviewChanged,acceptedBoundaries,REVIEW_SCHEMA} from './sentence-benchmark-review.js';
 const $=id=>document.getElementById(id);
 function compactLabBuild(version){
@@ -51,6 +52,7 @@ let lastRevealed=null;
 let inventory=new Map(),activeBlockId=null;
 let review=freshReview(''),reviewRevision=null,reviewReady=false;
 let saveTail=Promise.resolve(),reviewSavingError=false;
+let translationTable=null;
 function selectBlockAt(offset){
   activeBlockId=blockAt(inventory,offset)?.id??null;
 }
@@ -167,6 +169,9 @@ function selectSample(id){
   focused=null;lastRevealed=null;manual=false;
   reviewReady=false;reviewSavingError=false;reviewRevision=null;
   review=freshReview(sample.sha256||'');activeBlockId=null;
+  $('translation-drawer').hidden=true;translationTable=null;
+  $('toggle-translation').textContent='待翻译句块表';
+  $('toggle-translation').setAttribute('aria-expanded','false');
   persist();compute();
   if(sample.id==='reviewed')void loadReview();
 }
@@ -373,10 +378,70 @@ function render(){
   const visible=visibleIssues();
   if(!visible.some(i=>i.pos===focused)&&visible.length)focused=visible[0].pos;
   renderSource();renderJudgments();renderIndex();renderManual();renderReport();
+  renderTranslationTable();
   const n=visible.findIndex(i=>i.pos===focused);
   $('prev-issue').disabled=n<=0;$('next-issue').disabled=n<0||n>=visible.length-1;
   for(const id of ['approve-issue','reject-issue','clear-issue','manual-issue'])
     $(id).disabled=focused===null;
+}
+function currentTranslationTable(){
+  if(sample.id!=='reviewed'||!reviewReady||reviewSavingError||
+    !sample.sha256||review.sourceSha256!==sample.sha256)
+    throw Error('请先载入已审阅 CMD 与匹配的句界审阅文件');
+  return buildTranslationTable(sample.md,review,inventory);
+}
+function renderTranslationTable(){
+  if($('translation-drawer').hidden)return;
+  try{
+    const table=currentTranslationTable();
+    translationTable=table;
+    const rows=table.rows;
+    const sentences=rows.filter(row=>row.type==='sentence').length;
+    const blocks=rows.length-sentences;
+    $('translation-summary').textContent=rows.length+' 行 · 句子 '+sentences+
+      ' · 整块 '+blocks+' · 全部可交 AI';
+    const tbody=$('translation-table').querySelector('tbody');
+    const fragment=document.createDocumentFragment();
+    const sources={auto:'引擎一致',arbitrated:'人工采用',whole_block:'整块默认'};
+    for(const row of rows){
+      const tr=document.createElement('tr');
+      for(const value of [row.id,row.blockId,
+        row.type==='sentence'?'句子':'整块',
+        sources[row.decision]||'整块默认',
+        row.original,'待 AI 回填','待 AI 回填']){
+        const cell=document.createElement('td');
+        cell.textContent=value;
+        if(value==='待 AI 回填')cell.classList.add('ocr-sb-unfilled');
+        tr.append(cell);
+      }
+      tr.title='CMD UTF-16 '+row.from+'–'+row.to+' · 点击定位原文';
+      tr.onclick=()=>{
+        $('view-mode').value='full';
+        focused=row.from;selectBlockAt(focused);lastRevealed=null;manual=false;
+        renderSource();
+      };
+      fragment.append(tr);
+    }
+    tbody.replaceChildren(fragment);
+    $('export-translation').disabled=false;
+  }catch(error){
+    translationTable=null;
+    $('translation-summary').textContent='句块表不可用：'+error.message;
+    $('translation-table').querySelector('tbody').replaceChildren();
+    $('export-translation').disabled=true;
+  }
+}
+async function exportTranslationTable(){
+  try{
+    await saveTail;
+    const table=currentTranslationTable();
+    const sourceName='translation-units-'+table.sourceSha256.slice(0,12)+'.json';
+    download(sourceName,table);
+    status('已导出唯一待翻译句块表 · '+table.rows.length+
+      ' 行（均为有效 AI 翻译单位），不修改 CMD 或审阅文件');
+  }catch(error){
+    status('句块表导出失败：'+error.message,true);
+  }
 }
 function download(name,data){
   const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'});
@@ -459,7 +524,27 @@ $('pbs-page-select').onchange=()=>{
   status(target.key+' → CMD 第 '+target.sourceLine+
     ' 行 · '+target.blockId);
 };
+$('toggle-translation').onclick=()=>{
+  const panel=$('translation-drawer'),open=panel.hidden;
+  if(open&&!$('review-drawer').hidden){
+    $('review-drawer').hidden=true;
+    $('toggle-review').setAttribute('aria-expanded','false');
+    $('toggle-review').textContent='人工裁决 / Gold';
+  }
+  panel.hidden=!open;
+  $('toggle-translation').setAttribute('aria-expanded',String(open));
+  $('toggle-translation').textContent=open?'收起句块表':'待翻译句块表';
+  renderTranslationTable();
+  window.dispatchEvent(new Event('resize'));
+};
+$('close-translation').onclick=()=>$('toggle-translation').click();
+$('export-translation').onclick=exportTranslationTable;
 $('toggle-review').onclick=()=>{
+  if($('review-drawer').hidden&&!$('translation-drawer').hidden){
+    $('translation-drawer').hidden=true;
+    $('toggle-translation').setAttribute('aria-expanded','false');
+    $('toggle-translation').textContent='待翻译句块表';
+  }
   const drawer=$('review-drawer'),open=drawer.hidden;
   drawer.hidden=!open;
   $('toggle-review').setAttribute('aria-expanded',String(open));

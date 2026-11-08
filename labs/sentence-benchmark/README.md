@@ -44,6 +44,28 @@ Stage constraints approved 2026-11-08:
 Engine adapters and internal validation helpers are not public business APIs.
 WP05 incremental updates and PDF-driven block mutation are explicitly out of scope.
 
+## One AI-ready sentence/block table (Lab, on-demand)
+
+- **待翻译句块表** opens one combined table; **导出 AI JSON** downloads the
+  same single `rows[]` table (`ocr2md-translation-units/v1` schema),
+  bound to the unchanged CMD SHA-256.
+- Each row contains its own ID, its literal PBS `blockId`, `type`
+  (`sentence` or `text_block`), `elementType`, decision provenance,
+  exact original UTF-16 source offset ranges, source `original`,
+  and null `corrected` and `translation` fields to fill via AI.
+- Consensus/arbitrated blocks are divided using saved accepted sentence
+  boundaries. Any unarbitrated block is **one valid whole text block**;
+  even if no engine segments it, it is ready for error correction and
+  translation without forcing an engine selection.
+- Headings, note-body prose and captions omitted from segmentation are
+  included as whole blocks in this same table. HTML tables, media, LaTeX
+  and MinerU evidence remain only in the original CMD.
+- This is an on-demand AI exchange projection, not a second persisted
+  copy of the article or a replacement for the review sidecar.
+  Import of AI translations and bilingual Obsidian reconstruction are
+  subsequent operations, not implied by exporting the table.
+
+
 ## Four-pane reviewer (Main-style UI revision)
 
 The reviewer uses the **same Dockview engine, CodeMirror 6 editor extensions,

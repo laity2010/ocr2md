@@ -15,6 +15,8 @@
       </div>
       <div class="source-actions">
         <a class="ocr-sb-main-link" href="./">V6 工作台</a>
+        <button id="toggle-translation" type="button"
+          aria-expanded="false" aria-controls="translation-drawer">待翻译句块表</button>
         <button id="toggle-review" type="button" aria-expanded="false" aria-controls="review-drawer">人工裁决 / Gold</button>
       </div>
     </header>
@@ -34,6 +36,22 @@
     </nav>
     <main class="ocr-sb-main">
       <div id="workspace" aria-label="原始 CMD 与三个分句引擎四窗对照"></div>
+      <section id="translation-drawer" class="ocr-sb-translation"
+        aria-label="统一待翻译句块表" hidden>
+        <div class="ocr-sb-translation-toolbar">
+          <strong>待翻译句块表</strong>
+          <span id="translation-summary">—</span>
+          <button id="export-translation" type="button">导出 AI JSON</button>
+          <button id="close-translation" type="button">收起</button>
+        </div>
+        <div class="ocr-sb-translation-scroll">
+          <table id="translation-table">
+            <thead><tr><th>记录 ID</th><th>所属 PBS 块</th><th>类型</th>
+              <th>句界依据</th><th>待校对翻译原文</th><th>校对原句</th><th>译文</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
       <section id="review-drawer" class="ocr-sb-review" aria-label="人工句界审阅与评分" hidden>
         <div class="ocr-sb-review-left">
           <div class="ocr-sb-review-toolbar">

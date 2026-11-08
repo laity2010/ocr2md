@@ -68,7 +68,39 @@
 .ocr-sb-engine-adopt input:disabled{opacity:.38;cursor:not-allowed}
 .ocr-sb-engine-adopt:has(input:checked){color:#a7c080;font-weight:700}
 .ocr-sb-boundary.ocr-sb-accepted{color:#a7c080;font-weight:bold}
-.ocr-sb-review[hidden],.ocr-sb-advanced[hidden],.manual-picker[hidden]{display:none!important}
+.ocr-sb-review[hidden],.ocr-sb-translation[hidden],
+.ocr-sb-advanced[hidden],.manual-picker[hidden]{display:none!important}
+.ocr-sb-translation{flex:0 0 auto;display:flex;flex-direction:column;
+  height:39vh;min-height:180px;max-height:500px;min-width:0;overflow:hidden;
+  background:#283238;border-top:3px solid #536558}
+.ocr-sb-translation-toolbar{display:flex;align-items:center;flex-wrap:wrap;
+  gap:10px;padding:5px 10px;border-bottom:1px solid #4b5852;
+  font:12px "OCR2MD Sarasa",monospace;color:#d3c6aa}
+.ocr-sb-translation-toolbar strong{white-space:nowrap}
+.ocr-sb-translation-toolbar #translation-summary{font-size:11px;color:#a7c080}
+.ocr-sb-translation-toolbar #export-translation{margin-left:auto}
+.ocr-sb-translation-toolbar button{font:12px "OCR2MD Sarasa",monospace;
+  background:#35453e;color:#d3c6aa;border:1px solid #657568;
+  border-radius:4px;padding:4px 9px;cursor:pointer}
+.ocr-sb-translation-scroll{flex:1 1 auto;overflow:auto;min-height:0;min-width:0;
+  overscroll-behavior:contain}
+#translation-table{width:100%;border-collapse:collapse;table-layout:fixed;
+  font:12px/1.45 "OCR2MD Sarasa",monospace;color:#d3c6aa}
+#translation-table th{position:sticky;top:0;background:#34433d;color:#a7c080;
+  z-index:1;text-align:left;white-space:nowrap;font-weight:650}
+#translation-table th,#translation-table td{padding:6px 8px;
+  border-bottom:1px solid #46544d;vertical-align:top}
+#translation-table tbody tr:hover{background:#35453e}
+#translation-table th:nth-child(1){width:132px}
+#translation-table th:nth-child(2){width:94px}
+#translation-table th:nth-child(3){width:66px}
+#translation-table th:nth-child(4){width:74px}
+#translation-table th:nth-child(5){width:45%}
+#translation-table th:nth-child(6),#translation-table th:nth-child(7){width:18%}
+#translation-table td:nth-child(1),#translation-table td:nth-child(2){
+  white-space:nowrap;color:#91bba1}
+#translation-table td:nth-child(5){white-space:pre-wrap;overflow-wrap:anywhere}
+#translation-table td.ocr-sb-unfilled{color:#7f8e83;font-style:italic}
 .ocr-sb-review {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);
   height:34vh;min-height:175px;max-height:410px;overflow:hidden;flex:0 0 auto;
   background:#283238;border-top:3px solid #536558}

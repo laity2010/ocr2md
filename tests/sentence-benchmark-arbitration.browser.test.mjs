@@ -64,6 +64,30 @@ try {
    assert(!recorded.blocks.p1b0s0&&!recorded.blocks.p1b0s1,
      'neither disputed child may land as automatic');
    assert(!recorded.blocks.p2b0,'zero-sentence blocks must remain pending');
+   // One unified AI table contains both adopted sentences and unadopted
+   // whole blocks, plus prose that the sentence engines never segmented.
+   await page.locator('#toggle-translation').click();
+   await page.waitForFunction(()=>document.querySelector('#translation-summary')?.textContent
+     .includes('整块 3'),null,{timeout:18000});
+   assert.equal(await page.locator('#translation-table tbody tr').count(),5,
+     'auto two sentence rows + both disputed children + hard-break prose');
+   const [unitDownload]=await Promise.all([
+     page.waitForEvent('download',{timeout:20000}),
+     page.locator('#export-translation').click()
+   ]);
+   const exported=JSON.parse(readFileSync(await unitDownload.path(),'utf8'));
+   assert.equal(exported.schema,'ocr2md-translation-units/v1');
+   assert.equal(exported.sourceSha256,sha);
+   assert.equal(exported.rows.length,5);
+   assert.deepEqual(new Set(exported.rows.map(x=>x.blockId)),
+     new Set(['p0b0','p1b0s0','p1b0s1','p2b0']));
+   const skipped=exported.rows.find(x=>x.blockId==='p2b0');
+   assert.equal(skipped.type,'text_block');
+   assert.equal(skipped.decision,'whole_block');
+   assert(skipped.original.includes('literal Markdown hard break')===false);
+   assert(skipped.original.includes('deliberately not segmented'));
+   assert(exported.rows.every(x=>x.corrected===null&&x.translation===null));
+   await page.locator('#close-translation').click();
    await page.locator('#view-mode').selectOption('disagree');
    await page.locator('#pbs-page-select').selectOption('p1');
    await page.waitForFunction(()=>
@@ -94,6 +118,10 @@ try {
    assert.equal(recorded.blocks.p1b0s0.status,'arbitrated');
    assert.equal(recorded.blocks.p1b0s0.engine,'intl');
    assert(!recorded.blocks.p1b0s1);
+   await page.locator('#toggle-translation').click();
+   assert(await page.locator('#translation-summary').textContent().then(t=>
+     t.includes('整块 2')),'one adopted disputed child becomes sentence units; one sibling and hard-break remain whole');
+   await page.locator('#close-translation').click();
 
    // Adoption immediately hides the selected block; check() would look
    // for the old checkbox to remain checked after the block changed.
