@@ -1,5 +1,5 @@
 /** OCR2MD · isolated React Flow demonstration.
- * Exactly three initial nodes, two edges. No storage, fetch, API or Lab imports.
+ * Five initial nodes, four edges (including the translation output). No storage, fetch, API or Lab imports.
  * The nodes are only visual labels: no real file or module is opened.
  */
 import React, {useCallback, useMemo, useRef, useState} from 'react';
@@ -16,10 +16,14 @@ const NODES = [
   {id:'reviewed-md',type:'file',position:{x:45,y:135},data:{title:'审阅 MD',kind:'MD',description:'文件节点',sample:true}},
   {id:'sentence-module',type:'module',position:{x:385,y:135},data:{title:'分句',kind:'MODULE',description:'模块节点',sample:true}},
   {id:'sentence-table',type:'file',position:{x:725,y:135},data:{title:'句表',kind:'JSON',description:'文件节点',sample:true}},
+  {id:'translation-module',type:'module',position:{x:1065,y:135},data:{title:'翻译',kind:'MODULE',description:'模块节点',sample:true}},
+  {id:'translation-output',type:'file',position:{x:1405,y:135},data:{title:'译表 JSON',kind:'JSON',description:'文件节点',sample:true}},
 ];
 const EDGES = [
   {id:'edge-reviewed-to-sentence',source:'reviewed-md',target:'sentence-module',type:'smoothstep'},
   {id:'edge-sentence-to-table',source:'sentence-module',target:'sentence-table',type:'smoothstep'},
+  {id:'edge-table-to-translation',source:'sentence-table',target:'translation-module',type:'smoothstep'},
+  {id:'edge-translation-to-output',source:'translation-module',target:'translation-output',type:'smoothstep'},
 ];
 const edgeOptions={type:'smoothstep',markerEnd:{type:MarkerType.ArrowClosed,color:'#a7c080'},style:{stroke:'#a7c080',strokeWidth:2.1}};
 
@@ -151,7 +155,7 @@ function Workspace() {
         <button type="button" id="delete-selected" disabled={!selectedCount} onClick={deleteSelected}>
           <span>⌫</span> 删除选中{selectedCount?` (${selectedCount})`:''}
         </button>
-        <button type="button" id="reset-workflow" onClick={reset} title="恢复初始三个节点">恢复初始</button>
+        <button type="button" id="reset-workflow" onClick={reset} title="恢复初始五个节点">恢复初始</button>
       </div>
       <div className="workflow-info" aria-live="polite">
         <strong data-testid="node-count">{nodes.length}</strong> 个节点
