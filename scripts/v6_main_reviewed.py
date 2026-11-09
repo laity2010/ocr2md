@@ -133,6 +133,8 @@ def project(source_bytes, document_name=''):
         block_anchors.append({'id':m[1],
                               'sourceFrom':u16(source[:m.start()]),
                               'reviewedFrom':u16(reviewed[:mapped(m.start())])})
+    if not block_anchors:
+        raise ValueError('Main document has no sealed CMD block tags; not a reviewed MD')
     # Inverse every edit in reverse order: strict equality guarantees lossless
     # text, including inline comments, protected Markdown and Unicode.
     restored=reviewed

@@ -20,6 +20,8 @@ Main `ocr2md-main-reviewed/v1`：`sourceCmdSha256`、`documentVersion`、`source
 - `R01/R02/Q01/Q02`：`python3 -m unittest discover -s tests -p test_v6_main_reviewed.py -v`
 - `Q03`：`node --test tests/sentence-benchmark-unit-version.test.mjs`（与 Python Q04 哈希一致）。
 - `Q04/Q05` + 真实服务路由：`python3 -m unittest discover -s tests -p test_v6_main_reviewed_http.py -v`（两台随机端口隔离服务；不触碰 Mac Main）。
+- Main→Lab 实际按钮与独立发布（Chromium/iPad WebKit）：`node tests/sentence-benchmark-main-import.browser.test.mjs`。
+- 旧分句页面异步持久化竞态：`node tests/sentence-benchmark-arbitration.browser.test.mjs` 在核查同一个 sidecar 文件前等待异步真实落盘，不放宽数据断言。
 - 句表/断行/CM6 原测试：`node --test tests/sentence-benchmark-public.test.mjs tests/sentence-benchmark-translation-table.test.mjs tests/translation-review-clean-md.test.mjs tests/translation-review-reading.test.mjs`。
 - 已知全量 AM 既有阻断：旧 `tests/am/registry.sql` 的 `visibility=callback/constructor-callback/module-port` 仍无法通过 Schema CHECK。不得把本轮新增条目通过直接测试等同于全量 AM PASS；不得为跑通 WP1 私自放宽旧规则。
 

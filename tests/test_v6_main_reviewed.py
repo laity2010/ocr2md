@@ -39,6 +39,10 @@ class MainReviewedTest(unittest.TestCase):
         self.assertEqual(publish(dest,data).read_text(),data['reviewedMd'])
         self.assertTrue((dest/'reviewed.manifest.json').is_file())
 
+    def test_unreviewed_document_must_not_publish(self):
+        with self.assertRaisesRegex(ValueError,'no sealed CMD block tags'):
+            project(b'# Unreviewed Markdown\n\nWithout CMD anchors.\n')
+
     def test_unsafe_seam_rejected(self):
         unsafe=self.source.replace(b'3 percent below.',b'<!-- cmd:block:v1 id="p8b0" -->\n3 percent below.')
         with self.assertRaises(ValueError):

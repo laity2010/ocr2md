@@ -57,6 +57,9 @@ try {
    await page.waitForFunction(()=>document.querySelector('#kpi-saved')?.textContent.includes('1 自动')&&
      document.querySelector('#kpi-roundtrip')?.textContent==='100% PASS',null,{timeout:65000});
    const fetchStore=()=>JSON.parse(readFileSync(sidecar,'utf8'));
+   // CM6 KPI updates immediately; server-side persistence is async.
+   // Wait for the SAME on-disk contract, never relax its assertion.
+   for(let retry=0;retry<45&&!existsSync(sidecar);retry++)await pause(100);
    assert(existsSync(sidecar),'auto-agreed block must already be on disk');
    let recorded=fetchStore();
    assert.equal(recorded.sourceSha256,sha);
