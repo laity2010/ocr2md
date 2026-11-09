@@ -45,6 +45,27 @@ try{
       for(const name of ['审阅 MD','分句','句表']){
         assert.equal(await page.locator('.workflow-node-title',{hasText:name}).count(),1);
       }
+      // Both a double click on the module and a toolbar action edit labels
+      // in-place, without changing any node or edge identities.
+      const module=page.locator('.react-flow__node[data-id="sentence-module"]');
+      await module.locator('.workflow-node-title').dblclick();
+      const nameInput=module.locator('input[aria-label="节点名称"]');
+      await nameInput.waitFor({timeout:6000});
+      await nameInput.fill('句子切分');
+      await nameInput.press('Enter');
+      await page.waitForFunction(()=>document.querySelector('[data-id="sentence-module"] .workflow-node-title')?.textContent==='句子切分',null,{timeout:7000});
+      assert.equal(await page.locator('.react-flow__edge').count(),2);
+      await module.click();
+      await page.locator('#rename-selected').click();
+      await nameInput.waitFor({timeout:6000});
+      await nameInput.fill('这次不改');
+      await nameInput.press('Escape');
+      await page.waitForFunction(()=>document.querySelector('[data-id="sentence-module"] .workflow-node-title')?.textContent==='句子切分',null,{timeout:7000});
+      await page.locator('#rename-selected').click();
+      await nameInput.fill('分句 · 演示模块');
+      await nameInput.press('Enter');
+      await page.waitForFunction(()=>document.querySelector('[data-id="sentence-module"] .workflow-node-title')?.textContent==='分句 · 演示模块',null,{timeout:7000});
+
       const first=page.locator('.react-flow__node[data-id="reviewed-md"]');
       const before=await first.boundingBox();assert(before);
       await page.mouse.move(before.x+before.width*.45,before.y+before.height*.52);
@@ -59,6 +80,11 @@ try{
       await page.locator('#add-file-node').click();
       assert.equal(await page.locator('.react-flow__node').count(),4);
       assert.equal(await page.locator('.react-flow__node').filter({hasText:'新文件 1'}).count(),1);
+      await page.locator('#rename-selected').click();
+      const newFileInput=page.locator('.react-flow__node[data-id="demo-1"] input[aria-label="节点名称"]');
+      await newFileInput.fill('自定义输入文件');
+      await newFileInput.press('Enter');
+      assert.equal(await page.locator('.react-flow__node[data-id="demo-1"]').filter({hasText:'自定义输入文件'}).count(),1);
       await page.locator('#delete-selected').click();
       assert.equal(await page.locator('.react-flow__node').count(),3);
       assert.equal(await page.locator('.react-flow__edge').count(),2);
@@ -71,6 +97,7 @@ try{
           && document.querySelectorAll('.react-flow__edge').length===2,
         null,{timeout:10000});
       assert.equal(await page.locator('[data-testid="edge-count"]').textContent(),'2');
+      assert.equal(await page.locator('.react-flow__node[data-id="sentence-module"] .workflow-node-title').textContent(),'分句');
 
       // Deleting a pre-existing node removes both attached React Flow edges.
       await page.locator('.react-flow__node[data-id="sentence-module"]').click();
@@ -85,7 +112,7 @@ try{
       assert.deepEqual(apiCalls,[], 'workflow page should not call file or module APIs');
       assert.deepEqual(runtimeErrors,[], 'React Flow should have no runtime errors');
       console.log('WORKFLOW_BROWSER_PASS',name,
-        'three initial nodes, two edges, drag, add file+module, delete, reset, reload, no API');
+        'rename via double-click and toolbar, Enter/Escape, drag, add/delete, reset, reload, no API');
       await page.close();
     } finally{await browser.close();}
   }

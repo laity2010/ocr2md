@@ -2,7 +2,7 @@
  * Exactly three initial nodes, two edges. No storage, fetch, API or Lab imports.
  * The nodes are only visual labels: no real file or module is opened.
  */
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant,
@@ -31,7 +31,16 @@ function NodeCard({data,selected,type}) {
       <span className="workflow-node-symbol" aria-hidden="true">{isModule?'◇':data.kind==='JSON'?'{}':'▤'}</span>
       <span className="workflow-node-kind">{isModule?'MODULE':data.kind==='JSON'?'JSON FILE':'MD FILE'}</span>
     </div>
-    <div className="workflow-node-title">{data.title}</div>
+    {data.rename ? <input aria-label="节点名称" className="workflow-node-rename nodrag nopan nowheel"
+      value={data.rename.value} maxLength={80} autoFocus
+      onFocus={event=>event.target.select()}
+      onChange={event=>data.rename.onChange(event.target.value)}
+      onKeyDown={event=>{
+        if(event.key==='Enter'){event.preventDefault();event.stopPropagation();data.rename.onCommit();}
+        if(event.key==='Escape'){event.preventDefault();event.stopPropagation();data.rename.onCancel();}
+      }}
+      onBlur={data.rename.onCommit} />
+      : <div className="workflow-node-title">{data.title}</div>}
     <div className="workflow-node-description">{data.description}</div>
     <Handle type="source" position={Position.Right} className="workflow-handle" />
   </div>;
@@ -44,12 +53,32 @@ function Workspace() {
   const [nodes,setNodes,onNodesChange]=useNodesState(NODES);
   const [edges,setEdges,onEdgesChange]=useEdgesState(EDGES);
   const [selected,setSelected]=useState({nodes:[],edges:[]});
+  const [rename,setRename]=useState(null);
+  const serial=useRef(0);
+  const startRename=useCallback(id=>{
+    const node=nodes.find(item=>item.id===id);
+    if(node)setRename({id,value:node.data.title});
+  },[nodes]);
+  const commitRename=useCallback(()=>{
+    if(!rename)return;
+    const title=rename.value.trim();
+    if(title)setNodes(previous=>previous.map(node=>node.id===rename.id
+      ? {...node,data:{...node.data,title}} : node));
+    setRename(null);
+  },[rename,setNodes]);
+  const cancelRename=useCallback(()=>setRename(null),[]);
+  const renderedNodes=useMemo(()=>nodes.map(node=>node.id===rename?.id
+    ? {...node,data:{...node.data,rename:{value:rename.value,
+       onChange:value=>setRename(previous=>previous?.id===node.id?{...previous,value}:previous),
+       onCommit:commitRename,onCancel:cancelRename}}}
+    : node),[nodes,rename,commitRename,cancelRename]);
   const serial=useRef(0);
   const {screenToFlowPosition,fitView}=useReactFlow();
   const onConnect=useCallback(connection=>setEdges(existing=>addEdge({...connection,
     type:'smoothstep',markerEnd:edgeOptions.markerEnd,style:edgeOptions.style},existing)),[setEdges]);
 
   const addNode=useCallback(kind=>{
+    setRename(null);
     const count=++serial.current;
     const point=screenToFlowPosition({x:window.innerWidth*0.52,y:window.innerHeight*0.49});
     const id=`demo-${count}`;
@@ -65,6 +94,7 @@ function Workspace() {
   },[screenToFlowPosition,setEdges,setNodes]);
 
   const deleteSelected=useCallback(()=>{
+    setRename(null);
     const nodesToDelete=new Set(selected.nodes);
     const edgesToDelete=new Set(selected.edges);
     if(nodesToDelete.size===0&&edgesToDelete.size===0)return;
@@ -75,6 +105,7 @@ function Workspace() {
   },[selected,setNodes,setEdges]);
 
   const reset=useCallback(()=>{
+    setRename(null);
     setNodes(NODES.map(n=>({...n,position:{...n.position},data:{...n.data}})));
     setEdges(EDGES.map(e=>({...e})));
     setSelected({nodes:[],edges:[]});
@@ -86,6 +117,7 @@ function Workspace() {
     setSelected({nodes:newNodes.map(n=>n.id),edges:newEdges.map(e=>e.id)});
   },[]);
   const selectedCount=selected.nodes.length+selected.edges.length;
+  const canRename=selected.nodes.length===1 && !rename;
   return <div className="workflow-page">
     <header className="workflow-header">
       <div className="workflow-identity">
@@ -96,11 +128,12 @@ function Workspace() {
       <span className="workflow-demo-label">仅节点演示 · 不连接文件或模块</span>
     </header>
     <section className="workflow-stage" aria-label="可交互的工作流节点图">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+      <ReactFlow nodes={renderedNodes} edges={edges} nodeTypes={nodeTypes}
         defaultEdgeOptions={edgeOptions} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
         onConnect={onConnect} onSelectionChange={onSelectionChange}
+        onNodeDoubleClick={(_event,node)=>startRename(node.id)}
         fitView fitViewOptions={{padding:0.2}}
-        nodesDraggable nodesConnectable elementsSelectable
+        nodesDraggable nodesConnectable elementsSelectable zoomOnDoubleClick={false}
         deleteKeyCode={['Backspace','Delete']}
         minZoom={0.25} maxZoom={2.5}
         attributionPosition="bottom-left" proOptions={{hideAttribution:false}}>
@@ -114,6 +147,8 @@ function Workspace() {
         <button type="button" id="add-file-node" onClick={()=>addNode('file')}><span>＋</span> 文件节点</button>
         <button type="button" id="add-module-node" onClick={()=>addNode('module')}><span>＋</span> 模块节点</button>
         <span className="workflow-toolbar-divider" />
+        <button type="button" id="rename-selected" disabled={!canRename}
+          onClick={()=>startRename(selected.nodes[0])}><span>✎</span> 重命名</button>
         <button type="button" id="delete-selected" disabled={!selectedCount} onClick={deleteSelected}>
           <span>⌫</span> 删除选中{selectedCount?` (${selectedCount})`:''}
         </button>
@@ -124,7 +159,7 @@ function Workspace() {
         <span className="workflow-info-separator">·</span>
         <strong data-testid="edge-count">{edges.length}</strong> 条连线
         <span className="workflow-info-separator">·</span>
-        <span>拖动节点，点击选中，再删除</span>
+        <span>双击节点改名，或选中后点「重命名」</span>
       </div>
     </section>
   </div>;
