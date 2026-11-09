@@ -21,6 +21,62 @@ function chunk(segments,from,to){
   const original=texts.join(' ').replace(/\s+/gu,' ').trim();
   return {original,sourceRanges:ranges};
 }
+/** Human-approved CMD B.lb=m is a logical *sentence* continuation, not
+ * a request to renumber or physically concatenate two PBS source blocks.
+ * The block-scoped sentence arbitrator cannot own this boundary: it has a
+ * separate inventory row for each child. Rejoin ONLY explicitly reviewed
+ * seams after preserving each atom's accepted interior boundaries. */
+function mergeReviewedLinebreakRows(md,rows,review){
+  const tags=[];let offset=0;
+  for(const line of md.split('\n')){
+    const tag=parseCMDBlockTag(line);
+    if(tag)tags.push({id:tag.id,lb:tag.lb,at:offset});
+    offset+=line.length+1;
+  }
+  let merged=0;
+  for(let i=1;i<tags.length;i++){
+    const next=tags[i],prior=tags[i-1];
+    if(next.lb!=='m')continue;
+    // The final row of A and first row of B are the only units touching
+    // the reviewed seam; all other accepted sentence cuts stay untouched.
+    const leftCandidates=rows.map((row,index)=>({row,index})).filter(({row})=>
+      (row.blockIds||[row.blockId]).includes(prior.id)&&row.to<=next.at);
+    const rightCandidates=rows.map((row,index)=>({row,index})).filter(({row})=>
+      row.blockId===next.id&&row.from>next.at);
+    const left=leftCandidates.at(-1),right=rightCandidates[0];
+    if(!left||!right||right.index!==left.index+1||
+        left.row.to>=right.row.from)
+      throw Error('Reviewed CMD merge cannot map adjacent AI units: '+
+        prior.id+' → '+next.id);
+    if(review.manualGold?.[String(left.row.to)]?.break===true||
+        review.manualGold?.[String(right.row.from)]?.break===true)
+      throw Error('Reviewed CMD merge conflicts with explicit Gold break: '+next.id);
+    const allBlockIds=[...new Set([...(left.row.blockIds||[left.row.blockId]),
+      ...(right.row.blockIds||[right.row.blockId])])];
+    const sentence=left.row.type==='sentence'&&right.row.type==='sentence';
+    const joined={...left.row,
+      type:sentence?'sentence':'text_block',
+      decision:sentence?(left.row.decision==='arbitrated'||
+        right.row.decision==='arbitrated'?'arbitrated':'auto'):'whole_block',
+      to:right.row.to,
+      sourceRanges:[...left.row.sourceRanges,...right.row.sourceRanges],
+      blockIds:allBlockIds,
+      original:(left.row.original+' '+right.row.original).replace(/\s+/gu,' ').trim()};
+    rows.splice(left.index,2,joined);
+    merged++;
+  }
+  // Keep all positions in the unmodified CMD, never silently create a gap
+  // or overlap in the AI row sequence after joining reviewed seams.
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i],parts=row.sourceRanges;
+    if(parts[0]?.from!==row.from||parts.at(-1)?.to!==row.to||
+      parts.some((part,j)=>part.from>=part.to||
+        (j>0&&parts[j-1].to>part.from))||
+      (i>0&&rows[i-1].to>row.from))
+      throw Error('Reviewed merge damaged CMD source coordinates: '+row.id);
+  }
+  return merged;
+}
 /** Source-only fallback for translatable blocks omitted by the NLP splitter.
  * Headings, note bodies and hard-break prose are still valid whole-block AI
  * units. HTML/media/equations/fenced code/MinerU evidence never travel.
@@ -165,6 +221,7 @@ export function buildTranslationTable(md,review,inventory){
     });
   }
   rows.sort((a,b)=>a.from-b.from||a.to-b.to);
+  mergeReviewedLinebreakRows(md,rows,review);
   return {
     schema:TRANSLATION_TABLE_SCHEMA,
     sourceSha256:review.sourceSha256,

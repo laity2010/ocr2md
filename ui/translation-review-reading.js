@@ -72,7 +72,8 @@ export function buildTranslationReadingProjection(clean){
   const anchors=clean.anchors.map((anchor,i)=>{
     const from=map(anchor.from);
     return {...anchor,from,to:map(anchor.to),line:lineAt(newlines,from),
-      blockStart:i===0||anchor.blockId!==clean.anchors[i-1].blockId};
+      blockStart:i===0||!(anchor.blockId===clean.anchors[i-1].blockId||
+        clean.anchors[i-1].blockIds?.includes(anchor.blockId))};
   });
   if(new Set(anchors.map(x=>x.id)).size!==anchors.length||
       anchors.some((x,i)=>x.to>doc.length||(i&&x.from<anchors[i-1].from)))

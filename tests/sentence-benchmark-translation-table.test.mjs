@@ -26,10 +26,34 @@ test('a single table covers every text PBS block with either sentences or one va
   const table=buildTranslationTable(md,sidecar,inventory);
   assert.equal(table.schema,TRANSLATION_TABLE_SCHEMA);
   assert.equal(table.sourceSha256,sha(md));
+  const reviewedSeams=[...md.matchAll(/<!-- cmd:block:v1 id="([^"\n]+)" lb="m" -->/g)]
+    .map(m=>m[1]);
+  const joined=table.rows.filter(row=>row.blockIds?.length>1);
+  const legacy=JSON.parse(readFileSync(
+    'labs/sentence-benchmark/.runtime/translation-review/input/translation-units.json','utf8'));
+  assert.equal(reviewedSeams.length,8);
+  assert.equal(joined.length,8,'all eight human-reviewed CMD seams must become full AI units');
+  assert.equal(table.rows.length,legacy.rows.length-reviewedSeams.length);
+  for(const id of reviewedSeams){
+    const row=joined.find(row=>row.blockIds.at(-1)===id);
+    assert(row,'missing reviewed merge for '+id);
+    assert(row.sourceRanges.length>=2,'joined source must retain original disjoint UTF-16 ranges');
+    assert(row.sourceRanges.every(range=>!md.slice(range.from,range.to).includes('<!-- cmd:block:')));
+  }
+  const about=joined.find(row=>row.blockIds.at(-1)==='p6b6s1');
+  assert.equal(about.id,'p6b6s0-s003');
+  assert.equal(about.original,'Table 3 shows that the estimated average annual cost of Berkshire’s insurance float is only 1.72%, about 3 percentage points below the average T-bill rate.');
+  assert(!table.rows.some(row=>row.original==='3 percentage points below the average T-bill rate.'),
+    'an approved OCR continuation must never reach AI as a dangling sentence');
+  const footnote=joined.find(row=>row.blockIds.at(-1)==='p16b9s1');
+  assert.equal(footnote.type,'text_block',
+    'a whole-block predecessor must not invent new sentence boundaries');
   assert.deepEqual(Object.keys(table).sort(),[
     'coordinate','rows','schema','sourceSha256']);
   assert(new Set(table.rows.map(x=>x.blockId)).size>=inventory.size);
-  for(const id of inventory.keys())assert(table.rows.some(row=>row.blockId===id));
+  for(const id of inventory.keys())assert(table.rows.some(row=>
+    (row.blockIds||[row.blockId]).includes(id)),
+    'each PBS atom must still be represented, including reviewed joined units: '+id);
   assert.equal(new Set(table.rows.map(x=>x.id)).size,table.rows.length);
   const whole=table.rows.filter(row=>row.type==='text_block');
   const expectedWhole=[...inventory.keys()].filter(id=>
@@ -125,6 +149,27 @@ test('unadopted disagreement remains one AI-ready whole text block, never a miss
   assert(!rows.some(r=>r.blockId==='p0b7'||r.blockId==='p0b8'),
     'Media and structural HTML should never be sent to AI');
 });
+test('only lb=m joins adjacent PBS blocks; pending and ignored seams remain separate',()=>{
+  for(const marker of [' lb="m"',' lb="i"','']){
+    const md=['<!-- cmd:block:v1 id="p1b1s0" -->',
+      'The rate was about',
+      '<!-- cmd:block:v1 id="p1b1s1"'+marker+' -->',
+      '3 points below the benchmark. Another sentence.'].join('\n\n');
+    const inv=prepare(md),review={sourceSha256:sha(md),blocks:{},manualGold:{}};
+    const rows=buildTranslationTable(md,review,inv).rows;
+    const joined=rows.filter(row=>row.blockIds?.length>1);
+    assert.equal(joined.length,marker===' lb="m"'?1:0,marker||'pending');
+    if(joined.length){
+      assert.equal(joined[0].original,'The rate was about 3 points below the benchmark. Another sentence.');
+      assert.equal(joined[0].type,'text_block');
+      assert.deepEqual(joined[0].blockIds,['p1b1s0','p1b1s1']);
+    }else{
+      assert.equal(rows.length,2);
+      assert.equal(rows[0].original,'The rate was about');
+    }
+  }
+});
+
 test('explicit manual Gold overrides chosen sentence boundaries without losing text',()=>{
   const md=['<!-- cmd:block:v1 id="p0b0" -->',
     'One statement. Another statement. More content.'].join('\n');

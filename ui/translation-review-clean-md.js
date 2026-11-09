@@ -35,6 +35,32 @@ function provenanceEdits(source){
   return edits;
 }
 
+/** The translated unit crosses a human-reviewed OCR continuation. The CMD
+ * block tags stay untouched in `source`; only the reversible reading projection
+ * replaces that metadata/blank-line seam by one text space. */
+function reviewedBreakEdits(source,rows){
+  const joins=[];
+  for(const row of rows){
+    if(!row.blockIds?.length)continue;
+    if(row.blockIds.length<2)fail(row.id+' 无效的跨块关系');
+    let seen=0;
+    for(let i=1;i<row.sourceRanges.length;i++){
+      const start=row.sourceRanges[i-1].to,end=row.sourceRanges[i].from;
+      const gap=source.slice(start,end);
+      if(!gap.includes('lb="m"'))continue;
+      const markers=[...gap.matchAll(/<!--\s*cmd:block:v1[^\n]*-->/gu)];
+      if(markers.length!==1||!/\blb="m"/.test(markers[0][0])||
+        gap.replace(markers[0][0],'').trim())
+        fail(row.id+' 跨块断行包含其他正文，拒绝在预览中合并');
+      joins.push({from:start,to:end,insert:' ',kind:'reviewed-break',id:row.id});
+      seen++;
+    }
+    if(seen!==row.blockIds.length-1)
+      fail(row.id+' 缺失已审核的 CMD 断行连接');
+  }
+  return joins;
+}
+
 function sentenceBreakEdit(source,row){
   const head=source.slice(row.from,row.to);
   if(!head)fail(row.id+' 句界为空');
@@ -121,12 +147,22 @@ function mapper(patches){
 
 export function buildCleanReviewedMD(source,rows){
   checkedRows(source,rows);
-  const edits=provenanceEdits(source);
+  let edits=provenanceEdits(source);
+  const reviewedJoins=reviewedBreakEdits(source,rows);
+  for(const join of reviewedJoins){
+    edits=edits.filter(edit=>{
+      if(edit.to<=join.from||edit.from>=join.to)return true;
+      if(edit.from>=join.from&&edit.to<=join.to)return false;
+      fail('断行合并与原有工作注释清理重叠：'+join.id);
+    });
+  }
+  edits.push(...reviewedJoins);
   let boundaries=0;
   for(let i=1;i<rows.length;i++){
     const row=rows[i],prev=rows[i-1];
-    if(row.type!=='sentence'||prev.type!=='sentence'||
-        row.blockId!==prev.blockId)continue;
+    if(row.type!=='sentence'||
+        !(prev.type==='sentence'&&row.blockId===prev.blockId||
+          prev.blockIds?.includes(row.blockId)))continue;
     if(prev.to!==row.from)fail(row.id+' 的句界不是连续来源区间');
     edits.push(sentenceBreakEdit(source,row));boundaries++;
   }
@@ -136,6 +172,7 @@ export function buildCleanReviewedMD(source,rows){
   const anchors=rows.map(row=>{
     const patch=clean.patches.find(p=>p.kind==='sentence'&&p.id===row.id);
     return {id:row.id,blockId:row.blockId,
+      ...(row.blockIds?{blockIds:row.blockIds}:{}),
       from:patch?patch.outputTo:map(row.from),to:map(row.to)};
   });
   if(anchors.some(a=>a.from>a.to||a.to>clean.doc.length)||
@@ -143,6 +180,7 @@ export function buildCleanReviewedMD(source,rows){
     fail('校译显示坐标出现错位');
   if(restoreReviewedMD(clean)!==source)fail('无法字节级还原原始审阅 MD');
   return {...clean,anchors,stats:{units:rows.length,sentenceBreaks:boundaries,
+    reviewedJoins:reviewedJoins.length,
     provenanceRemoved:clean.patches.filter(p=>p.kind==='provenance').length,
     restored:true}};
 }

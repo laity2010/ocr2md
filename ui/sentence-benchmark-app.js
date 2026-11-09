@@ -398,14 +398,15 @@ function renderTranslationTable(){
     const rows=table.rows;
     const sentences=rows.filter(row=>row.type==='sentence').length;
     const blocks=rows.length-sentences;
+    const merged=rows.filter(row=>row.blockIds?.length>1).length;
     $('translation-summary').textContent=rows.length+' 行 · 句子 '+sentences+
-      ' · 整块 '+blocks+' · 全部可交 AI';
+      ' · 整块 '+blocks+' · 已合并断行 '+merged+' 处 · 全部可交 AI';
     const tbody=$('translation-table').querySelector('tbody');
     const fragment=document.createDocumentFragment();
     const sources={auto:'引擎一致',arbitrated:'人工采用',whole_block:'整块默认'};
     for(const row of rows){
       const tr=document.createElement('tr');
-      for(const value of [row.id,row.blockId,
+      for(const value of [row.id,row.blockIds?.join(' → ')||row.blockId,
         row.type==='sentence'?'句子':'整块',
         sources[row.decision]||'整块默认',
         row.original,'待 AI 回填','待 AI 回填']){
@@ -435,7 +436,9 @@ async function exportTranslationTable(){
   try{
     await saveTail;
     const table=currentTranslationTable();
-    const sourceName='translation-units-'+table.sourceSha256.slice(0,12)+'.json';
+    // Distinguish corrected reviewed-seam units from the historical broken
+    // export: the CMD SHA is unchanged, but the AI unit identity has changed.
+    const sourceName='translation-units-'+table.sourceSha256.slice(0,12)+'-reviewed-seams.json';
     download(sourceName,table);
     status('已导出唯一待翻译句块表 · '+table.rows.length+
       ' 行（均为有效 AI 翻译单位），不修改 CMD 或审阅文件');

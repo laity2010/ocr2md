@@ -207,3 +207,11 @@ for adjudicated candidate boundaries, with reviewed coverage displayed.
 ## CM6 Markdown 成品预览 Spike（独立实验，非正式左窗）
 
 从校译 Lab 顶栏的「CM6 预览实验」进入 `./cm-preview-spike.html`。可在完整 CMD 原文（388,265 字符）和清洁阅读投影（81,418 字符）之间切换，分别验证 CM6 `EditorState.doc` 原始字符恒等、19 个原生标题折叠和 402 条来源句 ID；Markdown 成品仍调用 Main `renderMarkdown()` 通过 CM6 Widgets 呈现。**当前还不能替代原校译左窗**：整块渲染后的 CM6 句 ID Gutter 丢失，MarkdownIt 生成的脚注定义没有精确 Widget 源位置。实验数据、证据与晋升门槛详见 `tests/am/CM6_MARKDOWN_PREVIEW_SPIKE.md`；不会修改 Main 或独立校译 JSON。
+
+## WCP34 · 已审定非法断行进入翻译单元（2026-11-09）
+
+- 翻译表必须读取 **CMD 子块入边的 `lb="m"`**：只合并相邻两个来源块的末句和首句；`lb="i"`（忽略）和没有审阅标记的边界不合并。严格保留 `sourceRanges` 和 `blockIds`，不修改 CMD、分句仲裁 sidecar 或 PDF 标定。
+- 当前实际 CMD 有 8 处已确认的跨子块断行；新版 AI 单元由历史 **402 → 394**。典型 `p6b6s0-s003` 应完整包含 `about 3 percentage points below ...`，而不是把后半句单独发给 AI。另有 1 处首块仍为整块审阅，合并后继续保持整块类型。
+- 清洁 Markdown 阅读投影将这些仅供预览的 CMD 标记与间隔替换为一个空格，保留可逆补丁，`restoreReviewedMD` 必须字节级还原 CMD。仍从 Main 的 Markdown 渲染器绘制，而不是另造 CM6 预览。
+- 历史 `translation-review/input` GPT/Grok 402 行文件不覆盖、不自动重写；旧校译页给出过期断行警示。新表导出文件名追加 `-reviewed-seams.json`，便于区别同一来源 SHA 但 **不同单元结构** 的旧版。新结构必须补译 8 个合并单元，其余记录可经 ID、原文、坐标严格核对后复用。只有 394 行匹配完整才可晋升正式比较输入。
+- 测试：`node --test --test-concurrency=1 tests/sentence-benchmark-translation-table.test.mjs tests/translation-review-reading.test.mjs tests/translation-review-clean-md.test.mjs tests/sentence-benchmark-public.test.mjs`。

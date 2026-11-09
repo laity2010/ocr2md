@@ -7,6 +7,7 @@ import {prepareTranslationReview,filterTranslationRows} from './translation-revi
 import {buildCleanReviewedMD} from './translation-review-clean-md.js';
 import {buildTranslationReadingProjection} from './translation-review-reading.js';
 import {createTranslationCompareWorkspace} from './translation-review-workspace.js';
+import {parseCMDBlockTag} from './cmd-block-chains.js';
 
 const $=id=>document.getElementById(id);
 let workspace=null,model=null,visible=[];
@@ -66,8 +67,16 @@ async function load(){
       onSelect:renderSelection
     });
     renderFilter();
+    // A CMD SHA does not authenticate the AI segmentation decisions.
+    // Retain historical 402-row translations but warn when lb=m joins are missing.
+    const joined=new Set(model.rows.flatMap(row=>row.blockIds?.slice(1)||[]));
+    const missing=model.source.split('\n').map(line=>parseCMDBlockTag(line))
+      .filter(tag=>tag?.lb==='m'&&!joined.has(tag.id));
     status('单语 MD 重组无损 PASS · '+model.rows.length+' 条 · '+
-      model.clean.stats.sentenceBreaks+' 处句界换行 · '+model.names.length+' 家 AI');
+      model.clean.stats.sentenceBreaks+' 处句界换行 · '+model.names.length+
+      ' 家 AI'+(missing.length?' · ⚠ 旧译文缺少 '+missing.length+
+        ' 处断行合并，需按新版句块补译；当前仅供历史对照':''),
+      missing.length>0);
   }catch(error){
     status('校译 Lab 载入失败：'+error.message,true);
     $('translation-empty').hidden=false;
