@@ -44,7 +44,7 @@ try{
        viewport:{width:1194,height:834},acceptDownloads:true});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(base+'translation-lab.html',{waitUntil:'domcontentloaded',timeout:60000});
-    await page.waitForFunction(()=>document.querySelector('#global-status')?.textContent.includes('SQLite 已就绪'),null,{timeout:60000});
+    await page.waitForFunction(()=>/SQLite 已就绪|已连接 SQLite/.test(document.querySelector('#global-status')?.textContent||''),null,{timeout:60000});
     if(ai==='gpt'){
       await page.locator('#import-sentences').click();await upload(page,old);
       await page.waitForFunction(()=>document.querySelector('#table-meta')?.textContent.includes('2 条'),null,{timeout:20000});

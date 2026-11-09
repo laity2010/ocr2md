@@ -87,6 +87,24 @@ class TranslationLabTest(unittest.TestCase):
         self.assertEqual(self.store.table('grok')['rows'][0]['from'],200)
         self.assertEqual([r['id'] for r in self.store.create_task('grok')['rows']],['s2'])
 
+    def test_unique_renumbering_inherits_but_duplicate_text_remains_pending(self):
+        earlier=baseline([unit('old-a','Unique sentence.',0),
+                          unit('old-b','Repeated.',30),unit('old-c','Repeated.',50)])
+        self.store.import_units(earlier)
+        table={**earlier,'rows':[
+            {**r,'corrected':r['original'],'translation':'译 '+r['id']}
+            for r in earlier['rows']]}
+        self.store.import_historical('muse',table)
+        updated=baseline([unit('new-a','Unique sentence.',100),
+                          unit('new-b','Repeated.',130),unit('new-c','Repeated.',150)])
+        report=self.store.import_units(updated)
+        self.assertEqual(report['inherited']['muse'],1)
+        rows={r['id']:r for r in self.store.state('muse')['rows']}
+        self.assertEqual(rows['new-a']['changeType'],'renumbered')
+        self.assertEqual(rows['new-b']['changeType'],'new')
+        self.assertEqual(self.store.table('muse')['rows'][0]['translation'],'译 old-a')
+        self.assertEqual(self.store.table('muse')['missing'],2)
+
     def test_bad_ai_reply_transaction_rolls_back(self):
         self.store.import_units(self.old)
         task=self.store.create_task('gpt')

@@ -25,7 +25,7 @@ const grid=createGrid($('translation-grid'),{
  theme,columnDefs:[
   {field:'id',headerName:'句 ID',width:155,pinned:'left',checkboxSelection:true},
   {field:'original',headerName:'原句',flex:2,minWidth:220,tooltipField:'original'},
-  {field:'changeType',headerName:'变更',width:96,valueFormatter:p=>({initial:'初次',unchanged:'未变',new:'新增',source_changed:'原句修改',structure_changed:'结构修改'}[p.value]||p.value)},
+  {field:'changeType',headerName:'变更',width:96,valueFormatter:p=>({initial:'初次',unchanged:'未变',new:'新增',source_changed:'原句修改',structure_changed:'结构修改',renumbered:'仅编号变化'}[p.value]||p.value)},
   ...['gpt','grok','muse'].map(ai=>({colId:ai,headerName:NAMES[ai],width:88,
     valueGetter:p=>p.data?.state?.[ai]==='completed'?'✓ 已译':'— 缺译',
     cellStyle:p=>({color:p.data?.state?.[ai]==='completed'?'#a7c080':'#e4ad6c'})}))

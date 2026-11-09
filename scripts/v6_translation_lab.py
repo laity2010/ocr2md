@@ -153,28 +153,45 @@ class TranslationStore:
                     'inherited':{ai:0 for ai in AI}}
         # Compare the exact old source identity, not sentence ID alone or offsets.
         reused={ai:0 for ai in AI}
-        prior_ids={i:identity for i,_,identity in self._units(previous)} if previous else {}
+        prior_rows={i:row for i,row,_ in self._units(previous)} if previous else {}
+        old_text={}
+        for old_id,old_row in prior_rows.items():
+            old_text.setdefault(old_row['original'],[]).append(old_id)
+        new_text_counts={}
+        new_ids={row['id'] for row in table['rows']}
+        for row in table['rows']:
+            new_text_counts[row['original']]=new_text_counts.get(row['original'],0)+1
         with self.db:
             self.db.execute('INSERT OR IGNORE INTO versions VALUES(?,?,?,?,?,?)',(
                 version,table['sourceSha256'],table.get('documentVersion'),
                 table.get('reviewRevision'),table.get('coordinate','UTF-16'),now()))
             for position,row in enumerate(table['rows']):
                 identity=_source_identity(row)
-                if previous is None:change='initial'
-                elif row['id'] not in prior_ids:change='new'
-                elif prior_ids[row['id']]==identity:change='unchanged'
+                predecessor=prior_rows.get(row['id'])
+                candidate=None
+                if previous is None:
+                    change='initial'
+                elif predecessor is not None:
+                    # Original unchanged: even renumbered source coordinates
+                    # or a different segmentation status do not require AI.
+                    candidate=row['id'] if predecessor['original']==row['original'] else None
+                    change='unchanged' if candidate else 'source_changed'
                 else:
-                    older=self.db.execute('SELECT row_json FROM units WHERE version=? AND id=?',
-                                          (previous,row['id'])).fetchone()
-                    change='source_changed' if older and json.loads(older['row_json'])['original']!=row['original'] else 'structure_changed'
+                    # Only a globally UNIQUE exact sentence can safely follow
+                    # a changed ID. Duplicated boilerplate is never guessed.
+                    previous_matches=old_text.get(row['original'],[])
+                    candidate=(previous_matches[0] if len(previous_matches)==1 and
+                        new_text_counts[row['original']]==1 and
+                        previous_matches[0] not in new_ids else None)
+                    change='renumbered' if candidate else 'new'
                 self.db.execute('INSERT OR IGNORE INTO units(version,id,seq,identity,row_json,change_type) VALUES(?,?,?,?,?,?)',(
                     version,row['id'],position,identity,canonical(row),change))
-                if previous and prior_ids.get(row['id'])==identity:
+                if previous and candidate:
                     for ai in AI:
                         old_effective=self.db.execute(
                             'SELECT r.* FROM effective e JOIN results r ON r.id=e.result_id '
                             'WHERE e.version=? AND e.unit_id=? AND e.ai=?',
-                            (previous,row['id'],ai)).fetchone()
+                            (previous,candidate,ai)).fetchone()
                         if old_effective:
                             # New version gets its own immutable provenance row.
                             cursor=self.db.execute(
