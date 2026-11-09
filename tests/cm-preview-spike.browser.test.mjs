@@ -39,12 +39,16 @@ for(const [name,engine,binary] of [
     assert(projection.metrics.mainRenderer.tables>=9);
     assert(projection.metrics.mainRenderer.callouts>=7);
     assert(projection.visible>0,'CM6 widget DOM must render inside editor');
+    assert(projection.metrics.inlineBlocks>250,
+      'most sentence paragraphs must keep their source lines, not use multiline block widgets');
+    assert.equal(projection.metrics.styledHeadings,19,
+      'all 19 Markdown headings must keep native CM6 lines and typography');
     const mediaChecks=[];
     for(const [kind,query,selector] of [
-      ['image','media/','.ocr-cm-preview-rendered img'],
-      ['formula','$$','.ocr-cm-preview-rendered .katex'],
-      ['table','<table','.ocr-cm-preview-rendered table'],
-      ['callout','[!','.ocr-cm-preview-rendered .ocr-callout'],
+      ['image','media/','.ocr-cm-preview-rendered img,.ocr-cm-preview-inline img'],
+      ['formula','$$','.ocr-cm-preview-rendered .katex,.ocr-cm-preview-inline .katex'],
+      ['table','<table','.ocr-cm-preview-rendered table,.ocr-cm-preview-inline table'],
+      ['callout','[!','.ocr-cm-preview-rendered .ocr-callout,.ocr-cm-preview-inline .ocr-callout'],
     ]){
       const offset=await page.evaluate(q=>window.__cmPreviewSpike.reading.doc.indexOf(q),query);
       if(offset<0)continue;
@@ -57,7 +61,44 @@ for(const [name,engine,binary] of [
     }
 
     await page.getByRole('checkbox',{name:'句子编号栏'}).check();
+    await page.evaluate(()=>{
+      const {view,cm,source}=window.__cmPreviewSpike;
+      cm.reveal(view,source.anchors[200].from);
+    });
+    await page.waitForTimeout(180);
     const previewIDCount=await page.locator('.ocr-cm-preview-unit-id').count();
+    assert(previewIDCount>0,
+      'sentence IDs must remain in native CM6 gutter in fully rendered sentence view');
+    const renderedLineNumbers=await page.locator('.cm-lineNumbers .cm-gutterElement').count();
+    assert(renderedLineNumbers>0,'rendered mode must preserve native CM6 line numbers');
+    // Headings remain actual CM6 lines, with the Main Obsidian H1/H2 style.
+    const headingPresentation=await page.evaluate(()=>{
+      const {view,cm}=window.__cmPreviewSpike;
+      const headings=[...view.state.doc.toString().matchAll(/^#{1,2} .+$/gm)];
+      let h1=null,h2=null;
+      for(const h of headings){
+        if(!h1&&h[0].startsWith('# '))h1=h.index;
+        if(!h2&&h[0].startsWith('## '))h2=h.index;
+      }
+      return {h1,h2};
+    });
+    assert(headingPresentation.h1!=null&&headingPresentation.h2!=null,
+      'real document must contain H1 and H2 source headings');
+    const titleMetrics=[];
+    for(const [level,pos] of [['h1',headingPresentation.h1],['h2',headingPresentation.h2]]){
+      await page.evaluate(p=>window.__cmPreviewSpike.cm.reveal(window.__cmPreviewSpike.view,p),pos);
+      await page.waitForTimeout(160);
+      titleMetrics.push(await page.evaluate(level=>{
+        const node=document.querySelector(`.cm-ob-heading-line-${level==='h1'?1:2}`);
+        return {level,visible:!!node&&node.getClientRects().length>0,
+          font:node?parseFloat(getComputedStyle(node).fontSize):0,
+          source:node?.textContent?.trim().slice(0,65)};
+      },level));
+    }
+    assert(titleMetrics.every(x=>x.visible),
+      'H1 and H2 must remain visible CM6 source lines, not HTML block replacements');
+    assert(titleMetrics[0].font>titleMetrics[1].font,
+      'Obsidian heading typography must preserve H1 > H2 size');
     await page.getByRole('checkbox',{name:'CM6 块级渲染'}).uncheck();
     const sourceIDCount=await page.locator('.ocr-cm-preview-unit-id').count();
     assert(sourceIDCount>0,'native CM6 gutter shows sentence IDs in source mode');
@@ -101,7 +142,7 @@ for(const [name,engine,binary] of [
     console.log(name,'CM6_MARKDOWN_SPIKE_PASS',JSON.stringify({
       cleanBlocks:projection.metrics.renderedBlocks,
       cleanMissing:projection.metrics.skippedBlocks,
-      sourceIDCount,previewIDCount,
+      sourceIDCount,previewIDCount,renderedLineNumbers,titleMetrics,
       folded:folded.folded,
       cmPositionCorrect:navigated.samePosition,
       rawCMDBytes:raw.metrics.sourceBytes,

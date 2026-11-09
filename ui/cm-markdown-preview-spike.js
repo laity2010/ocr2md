@@ -11,6 +11,7 @@ import {Decoration,EditorView,WidgetType,GutterMarker,gutter,lineNumbers} from '
 import {codeFolding,foldGutter,foldService,foldEffect,unfoldEffect,foldedRanges} from '@codemirror/language';
 import {renderMarkdown} from './markdown-preview.js';
 import {mainMediaURL} from './translation-review-reading.js';
+import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 
 class MarkdownBlockWidget extends WidgetType {
   constructor(item){super();this.item=item;}
@@ -32,6 +33,26 @@ class MarkdownBlockWidget extends WidgetType {
     }
     div.append(html);
     return div;
+  }
+  ignoreEvent(){return false;}
+}
+
+/** Render one Main-parsed Markdown block *inside its CM6 source line*.
+ * Unlike a multiline block replacement, this preserves native gutters. */
+class MarkdownLineWidget extends WidgetType {
+  constructor(item){super();this.item=item;}
+  eq(other){return other.item===this.item;}
+  toDOM(){
+    const span=document.createElement('span');
+    span.className='ocr-cm-preview-inline ocr-markdown';
+    span.dataset.sourceStart=String(this.item.start);
+    const html=this.item.element.cloneNode(true);
+    for(const img of html.querySelectorAll('img[src]')){
+      const target=mainMediaURL(img.getAttribute('src'));
+      if(target)img.setAttribute('src',target);
+    }
+    span.append(html);
+    return span;
   }
   ignoreEvent(){return false;}
 }
@@ -85,7 +106,8 @@ export function createCMMarkdownPreviewSpike(text,anchors=[]){
   // This source document is authoritative for CM6; all links are relative
   // to its UTF-16 positions, not an independent Markdown HTML scrollport.
   const doc=Text.of(text.split('\n'));
-  const blocks=[],skipped=[];
+  const blocks=[],skipped=[],decorations=[];
+  let inlineBlocks=0,blockWidgets=0,styledHeadings=0;
   let priorEnd=0;
   for(const element of content.children){
     const token=element.hasAttribute('data-source-start')?element:
@@ -100,10 +122,30 @@ export function createCMMarkdownPreviewSpike(text,anchors=[]){
     const item={tag:element.tagName,start,end,range,element};
     blocks.push(item);
     priorEnd=range.to;
+    if(/^H[1-6]$/.test(item.tag)&&doc.lineAt(range.from).number===
+        doc.lineAt(range.to).number){
+      // Main's CM6 heading extension styles the live source line H1–H6;
+      // hide only the Markdown prefix, not the entire heading line.
+      const line=doc.lineAt(range.from);
+      const prefix=/^ {0,3}#{1,6}[ \t]+/.exec(line.text);
+      if(prefix){
+        decorations.push(Decoration.replace({})
+          .range(line.from,line.from+prefix[0].length));
+        styledHeadings++;
+        continue;
+      }
+    }
+    if(doc.lineAt(range.from).number===doc.lineAt(range.to).number){
+      decorations.push(Decoration.replace({widget:new MarkdownLineWidget(item)})
+        .range(range.from,range.to));
+      inlineBlocks++;
+    }else{
+      decorations.push(Decoration.replace({block:true,widget:new MarkdownBlockWidget(item)})
+        .range(range.from,range.to));
+      blockWidgets++;
+    }
   }
-  const rendered=Decoration.set(blocks.map(item=>
-    Decoration.replace({block:true,widget:new MarkdownBlockWidget(item)}).
-      range(item.range.from,item.range.to)),true);
+  const rendered=Decoration.set(decorations,true);
   const headings=sourceHeadingRanges(doc);
   const headingMap=new Map(headings.map(h=>[h.from,h.fold]));
   const markers=new RangeSetBuilder();
@@ -128,12 +170,15 @@ export function createCMMarkdownPreviewSpike(text,anchors=[]){
   });
   const extensions=[
     previewField,lineNumbers(),idCompartment.of([]),
+    EditorView.editorAttributes.of({class:'ocr-cm-source'}),
+    obsidianHeadingMarkers,
     codeFolding(),foldGutter(),
     foldService.of((_state,lineStart)=>headingMap.get(lineStart)??null),
     EditorView.lineWrapping,
   ];
   const metrics={sourceBytes:text.length,sourceLines:doc.lines,
     renderedBlocks:blocks.length,skippedBlocks:skipped.length,
+    inlineBlocks,blockWidgets,styledHeadings,
     htmlNodes:content.children.length,
     mainRenderer:{
       images:content.querySelectorAll('img').length,

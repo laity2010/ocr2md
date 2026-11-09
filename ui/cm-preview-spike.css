@@ -19,6 +19,17 @@
 #cm-spike-editor .ocr-cm-preview-ids-gutter{min-width:105px}
 .ocr-cm-preview-unit-id{font:11px ui-monospace,monospace;color:#a7c080;white-space:nowrap}
 #cm-spike-editor .ocr-cm-preview-rendered{display:block;max-width:100%;padding:2px 8px;box-sizing:border-box;line-height:1.6;white-space:normal;overflow-wrap:anywhere}
+#cm-spike-editor .ocr-cm-preview-inline{white-space:normal;overflow-wrap:anywhere;vertical-align:baseline}
+#cm-spike-editor .ocr-cm-preview-inline > :is(p,div){display:inline;margin:0;padding:0;line-height:inherit}
+#cm-spike-editor .ocr-cm-preview-inline .katex-display{display:inline-block;vertical-align:middle;max-width:100%;overflow-x:auto}
+#cm-spike-editor .ocr-cm-preview-inline img{max-width:100%;height:auto;vertical-align:middle}
+#cm-spike-editor .ocr-cm-source .cm-ob-hard-return{display:none}
+#cm-spike-editor .ocr-cm-source .cm-ob-heading-line-1{font-weight:700;line-height:1.65}
+#cm-spike-editor .ocr-cm-source .cm-ob-heading-line-2{font-weight:700;line-height:1.6}
+#cm-spike-editor .ocr-cm-source .cm-ob-heading-line-3{font-weight:600;line-height:1.55}
+#cm-spike-editor .ocr-cm-source .cm-ob-heading-line-4,
+#cm-spike-editor .ocr-cm-source .cm-ob-heading-line-5,
+#cm-spike-editor .ocr-cm-source .cm-ob-heading-line-6{font-weight:600}
 #cm-spike-editor .ocr-cm-preview-rendered > :first-child{margin-top:0}
 #cm-spike-editor .ocr-cm-preview-rendered > :last-child{margin-bottom:0}
 #cm-spike-editor .ocr-cm-preview-rendered img{max-width:100%;height:auto}
