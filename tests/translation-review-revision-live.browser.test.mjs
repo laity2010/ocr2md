@@ -8,6 +8,7 @@ for(const [name,engine,binary] of [
   ['Chrome',chromium,chromeExecutable()],
   ['iPad-WebKit',webkit,process.env.OCR2MD_WEBKIT_PATH||webkit.executablePath()]
 ]){
+  if(process.env.OCR2MD_REVIEW_BROWSER && !name.toLowerCase().includes(process.env.OCR2MD_REVIEW_BROWSER.toLowerCase()))continue;
   const browser=await engine.launch({headless:true,...(binary?{executablePath:binary}:{})});
   try{
     const page=await browser.newPage({...devices['iPad Pro 11 landscape'],viewport:{width:1130,height:820}});
