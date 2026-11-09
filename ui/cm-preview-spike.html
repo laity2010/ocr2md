@@ -16,7 +16,7 @@
         <option value="reading">校译清洁预览投影</option>
         <option value="cmd">完整 CMD 原文</option>
       </select></label>
-      <label><input id="cm-spike-render" type="checkbox" checked> CM6 块级渲染</label>
+      <label><input id="cm-spike-render" type="checkbox" checked> CM6 成品预览</label>
       <label><input id="cm-spike-ids" type="checkbox"> 句子编号栏</label>
       <label><input id="cm-spike-fold" type="checkbox"> CM6 标题折叠</label>
       <label>定位句子 <select id="cm-spike-record" aria-label="定位句子"></select></label>
@@ -30,7 +30,8 @@
         <h2>能力与边界</h2>
         <p>此窗由同一个 CodeMirror 6 <code>EditorState.doc</code> 管理 Markdown、定位、行号及标题折叠。切换渲染只改变 Widget 视图，不修改原文。</p>
         <pre id="cm-spike-metrics" aria-label="真实文档验证指标">准备中…</pre>
-        <p>渲染：Main 的 <code>renderMarkdown()</code>；折叠：CM6 <code>foldService</code> + <code>foldGutter</code>；句子编号：CM6 Gutter Marker。</p>
+        <p>成品预览：复用 Main <code>renderMarkdown()</code>，普通单行文本通过 CM6 行内 Widget 保留原生行号、句 ID；标题复用 Main <code>obsidianHeadingMarkers</code> 的 H1～H6 样式；折叠通过 CM6 <code>foldService</code> + <code>foldGutter</code>。</p>
+        <p>实验边界：复杂多行块仍采用块级 Widget；脚注定义和 Main 注释弹窗尚未接入统一 CM6 位置管理，不代表正式预览完成。</p>
         <p>这不是代码可直接晋升 Main 的证明。完整覆盖率、表格、脚注、滚动稳定性和触屏表现以测试结果为准。</p>
       </aside>
     </div>

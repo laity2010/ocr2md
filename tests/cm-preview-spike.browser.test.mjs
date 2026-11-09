@@ -27,7 +27,7 @@ for(const [name,engine,binary] of [
       const {view,metrics,reading,clean}=window.__cmPreviewSpike;
       return {metrics,exact:view.state.doc.toString()===reading.doc,
         originalRestored:clean.stats.restored,
-        visible:document.querySelectorAll('.ocr-cm-preview-rendered').length};
+        visible:document.querySelectorAll('.ocr-cm-preview-rendered,.ocr-cm-preview-inline').length};
     });
     assert.equal(projection.exact,true);
     assert.equal(projection.originalRestored,true);
@@ -99,10 +99,10 @@ for(const [name,engine,binary] of [
       'H1 and H2 must remain visible CM6 source lines, not HTML block replacements');
     assert(titleMetrics[0].font>titleMetrics[1].font,
       'Obsidian heading typography must preserve H1 > H2 size');
-    await page.getByRole('checkbox',{name:'CM6 块级渲染'}).uncheck();
+    await page.getByRole('checkbox',{name:'CM6 成品预览'}).uncheck();
     const sourceIDCount=await page.locator('.ocr-cm-preview-unit-id').count();
     assert(sourceIDCount>0,'native CM6 gutter shows sentence IDs in source mode');
-    await page.getByRole('checkbox',{name:'CM6 块级渲染'}).check();
+    await page.getByRole('checkbox',{name:'CM6 成品预览'}).check();
 
     await page.getByRole('checkbox',{name:'CM6 标题折叠'}).check();
     const folded=await page.evaluate(()=>{
@@ -113,6 +113,21 @@ for(const [name,engine,binary] of [
         lines:document.querySelectorAll('.cm-line').length};
     });
     assert.equal(folded.folded,19,'CM6 fold state must cover all 19 headings');
+    await page.evaluate(pos=>{
+      const {view}=window.__cmPreviewSpike;
+      view.dispatch({selection:{anchor:pos},scrollIntoView:true});
+    },headingPresentation.h1);
+    await page.waitForTimeout(180);
+    const foldedHeading=await page.evaluate(()=>{
+      const node=document.querySelector('.cm-ob-heading-line-1');
+      return {visible:!!node&&node.getClientRects().length>0,
+        font:node?parseFloat(getComputedStyle(node).fontSize):0,
+        text:node?.textContent?.trim()};
+    });
+    assert(foldedHeading.visible&&foldedHeading.font===titleMetrics[0].font,
+      'a collapsed section must still display its H1 with the SAME title typography');
+    assert(!foldedHeading.text.startsWith('#'),
+      'folded title must not expose Markdown heading markers');
     const remote=await page.locator('#cm-spike-record option').nth(390).getAttribute('value');
     await page.locator('#cm-spike-record').selectOption(remote);
     await page.waitForTimeout(200);
