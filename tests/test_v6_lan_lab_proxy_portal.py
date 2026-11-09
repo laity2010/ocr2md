@@ -51,12 +51,28 @@ class LanPortalTests(unittest.TestCase):
     def test_other_paths_stay_isolated(self):
         req=FakeRequest('/api/document')
         self.assertFalse(dispatch_lan_lab(req,self.routes))
+        # The canonical gateway owns the Lab allowlist. This fake upstream
+        # echoes unknown paths; a separate gateway test proves HTTP 404 there.
         req=FakeRequest('/labs/unknown/')
         self.assertTrue(dispatch_lan_lab(req,self.routes))
-        self.assertEqual(req.status,404)
+        self.assertEqual(req.status,200)
+        self.assertEqual(req.wfile.getvalue(),b'served /labs/unknown/')
         req=FakeRequest('/labs/sentence-benchmark/other')
         self.assertTrue(dispatch_lan_lab(req,self.routes))
         self.assertEqual(req.status,200)
+    def test_only_portal_route_serves_all_module_paths(self):
+        mapping={'portal':self.origin.server_port}
+        for path in ('/labs/','/labs/cm-html/',
+                     '/labs/sentence-benchmark/sentence-benchmark.html',
+                     '/labs/translation-lab/translation-lab.html',
+                     '/labs/sentence-benchmark/lab-home.html'):
+            with self.subTest(path=path):
+                req=FakeRequest(path)
+                self.assertTrue(dispatch_lan_lab(req,mapping))
+                self.assertIn(req.status,(200,302))
+        req=FakeRequest('/api/document')
+        self.assertFalse(dispatch_lan_lab(req,mapping))
+
     def test_duplicate_route_rejected(self):
         with self.assertRaises(ValueError):parse_lan_labs('portal=4414,portal=4415')
 
