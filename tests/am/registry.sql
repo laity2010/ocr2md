@@ -1823,3 +1823,25 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-Q03-WP1','Q03','tests/sentence-benchmark-unit-version.test.mjs','tests/sentence-benchmark-unit-version.test.mjs','JS/Python independent unit version parity & change detection','direct'),
  ('TC-Q04-WP1','Q04','tests/test_v6_main_reviewed_http.py','labs/sentence-benchmark/.runtime/document.md','394 unit publication with CAS and wrong-version rejection','integration'),
  ('TC-Q05-WP1','Q05','tests/test_v6_main_reviewed_http.py','labs/sentence-benchmark/.runtime/document.md','only valid current 394 units published downstream','integration');
+
+-- Translation Lab WP2: one isolated SQLite owner; no direct CMD/AI peer writes.
+INSERT INTO modules VALUES
+ ('Y','AI Translation Lab','AG Grid + CM6 Prompt + versioned SQLite JSON service','scripts/v6_translation_lab.py');
+INSERT INTO apis VALUES
+ ('Y01','Y','TranslationStore.import_units','scripts/v6_translation_lab.py','export','versioned source-only sentence JSON','current unit version and per-AI reuse counts','only own SQLite; immutable historical versions',1),
+ ('Y02','Y','TranslationStore.import_historical','scripts/v6_translation_lab.py','export','aiId, exact historical translation JSON','historical import summary','validates historical identity/offset before new effective result',1),
+ ('Y03','Y','TranslationStore.state','scripts/v6_translation_lab.py','export','aiId, filter','AG row and per-provider coverage snapshot','read-only current SQLite state',1),
+ ('Y04','Y','TranslationStore.save_prompt','scripts/v6_translation_lab.py','export','aiId, prompt text','versioned prompt identity','separate prompt history per provider, no implicit retranslation',1),
+ ('Y05','Y','TranslationStore.create_task','scripts/v6_translation_lab.py','export','aiId, optional selected ids, force','AI task JSON','only missing/explicitly forced original units; no CMD edits',1),
+ ('Y06','Y','TranslationStore.receive','scripts/v6_translation_lab.py','export','partial versioned AI reply JSON','accepted count/coverage','transactional ID/original/version guard and full receipt evidence',1),
+ ('Y07','Y','TranslationStore.table','scripts/v6_translation_lab.py','export','aiId','full current AI translation JSON including missing markers','no full coverage gate',1),
+ ('Y08','Y','TranslationStore.publish','scripts/v6_translation_lab.py','export','aiId, own export directory','published provider coverage summary','only own translation Lab exports; other Labs read JSON',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-Y01','Y01','tests/test_v6_translation_lab.py','tests/test_v6_translation_lab.py','386 inherited 8 retranslation on 402→394 per AI; valid source identity','direct'),
+ ('TC-Y02','Y02','tests/test_v6_translation_lab.py','tests/test_v6_translation_lab.py','strict historical source match and per-AI import','direct'),
+ ('TC-Y03','Y03','tests/test_v6_translation_lab.py','tests/test_v6_translation_lab.py','coverage real counts; missing and completed filters','direct'),
+ ('TC-Y04','Y04','tests/test_v6_translation_lab.py','tests/test_v6_translation_lab.py','Prompt SHA changes without automatic full retranslation','direct'),
+ ('TC-Y05','Y05','tests/test_v6_translation_lab.py','tests/test_v6_translation_lab.py','only missing/explicitly force-selected rows in task','direct'),
+ ('TC-Y06','Y06','tests/test_v6_translation_lab.py','tests/test_v6_translation_lab.py','partial AI reply accepts; wrong version,source rejected; retains old versions','direct'),
+ ('TC-Y07','Y07','tests/test_v6_translation_lab.py','tests/test_v6_translation_lab.py','394-row full export has 8 explicit missing entries, never fakes coverage','direct'),
+ ('TC-Y08','Y08','tests/test_v6_translation_lab_http.py','tests/test_v6_translation_lab_http.py','real HTTP JSON published while missing entries remain','integration');

@@ -10,6 +10,7 @@ from v6_reviewed_source import read as read_reviewed_source, save as save_review
 from v6_main_reviewed import project as project_main_reviewed, publish as publish_main_reviewed
 from v6_reviewed_import import import_snapshot as import_main_snapshot, current_snapshot as imported_main_snapshot
 from v6_sentence_units import publish as publish_sentence_units, read as read_sentence_units, MAX_BYTES as SENTENCE_UNITS_LIMIT
+from v6_translation_lab import TranslationStore, AI as TRANSLATION_AI, LIMIT as TRANSLATION_LIMIT
 from urllib.request import urlopen, Request
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
@@ -20,6 +21,7 @@ import json
 import os
 import re
 import secrets
+import sqlite3
 import ssl
 import threading
 from http.cookies import SimpleCookie
@@ -178,6 +180,29 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
+        if path.startswith('/api/translation-lab/'):
+            if LAB_ID!='translation-lab':
+                self.response(404,'Not found');return
+            try:
+                with TranslationStore(RUNTIME/'translation.db') as store:
+                    params=parse_qs(urlsplit(self.path).query)
+                    ai=params.get('ai',['gpt'])[0]
+                    if path=='/api/translation-lab/state':
+                        result=store.state(ai,params.get('filter',['all'])[0])
+                    elif path=='/api/translation-lab/table':
+                        result=store.table(ai)
+                    elif path=='/api/translation-lab/published':
+                        if ai not in TRANSLATION_AI:raise ValueError('Unknown AI identity')
+                        target=RUNTIME/'exports'/f'translated-{ai}.json'
+                        if not target.is_file() or target.is_symlink():
+                            raise ValueError('Translation table not yet published')
+                        result=json.loads(target.read_text(encoding='utf-8'))
+                    else:
+                        self.response(404,'Not found');return
+            except (OSError,ValueError,TypeError,KeyError) as error:
+                self.response(422,str(error));return
+            self.response(200,json.dumps(result,ensure_ascii=False),
+                          'application/json; charset=utf-8');return
         if path == '/api/main-reviewed':
             if LAB_ID:
                 self.response(404, 'Main reviewed document only')
@@ -521,7 +546,75 @@ class Handler(BaseHTTPRequestHandler):
             self.response(503,'Main reviewed API not available');return
         self.response(200,json.dumps(result,ensure_ascii=False),'application/json; charset=utf-8')
 
+    def post_translation_lab(self):
+        if LAB_ID!='translation-lab':
+            self.response(404,'Not found');return
+        if not self.same_origin() or self.headers.get('X-OCR2MD-Translation-Lab')!='1':
+            self.response(403,'Same-origin Translation Lab writer required');return
+        route=urlsplit(self.path).path
+        try:
+            length=int(self.headers.get('Content-Length','-1'))
+        except ValueError:
+            length=-1
+        if length<2 or length>TRANSLATION_LIMIT:
+            self.response(413,'Invalid JSON size');return
+        try:
+            payload=json.loads(self.rfile.read(length).decode('utf-8'))
+            with DOC_WRITE_LOCK:
+                with TranslationStore(RUNTIME/'translation.db') as store:
+                    if route=='/api/translation-lab/units':
+                        result=store.import_units(payload)
+                    elif route=='/api/translation-lab/historical':
+                        result=store.import_historical(payload['aiId'],payload['table'])
+                    elif route=='/api/translation-lab/prompt':
+                        result=store.save_prompt(payload['aiId'],payload['body'])
+                    elif route=='/api/translation-lab/task':
+                        result=store.create_task(payload['aiId'],payload.get('ids'),
+                                                 payload.get('force',False))
+                    elif route=='/api/translation-lab/reply':
+                        result=store.receive(payload)
+                    elif route=='/api/translation-lab/publish':
+                        result=store.publish(payload['aiId'],RUNTIME/'exports')
+                    else:
+                        self.response(404,'Not found');return
+        except (ValueError,TypeError,KeyError,UnicodeError,sqlite3.Error) as error:
+            self.response(422,'Translation Lab rejected: '+str(error));return
+        except OSError:
+            self.response(503,'Translation Lab storage unavailable');return
+        self.response(200,json.dumps(result,ensure_ascii=False),
+                      'application/json; charset=utf-8')
+
+    def post_translation_lab_import_upstream(self):
+        if LAB_ID!='translation-lab':
+            self.response(404,'Not found');return
+        if not self.same_origin() or self.headers.get('X-OCR2MD-Translation-Lab')!='1':
+            self.response(403,'Same-origin import required');return
+        url=os.environ.get('V6_SENTENCE_UNITS_URL',
+                'http://127.0.0.1:4412/labs/sentence-benchmark/api/sentence-units')
+        parsed=urlsplit(url)
+        if parsed.scheme!='http' or parsed.hostname not in ('127.0.0.1','localhost') or \
+           parsed.path!='/labs/sentence-benchmark/api/sentence-units' or \
+           parsed.query or parsed.fragment or parsed.username or parsed.password:
+            self.response(503,'Only exact loopback Sentence Lab API is allowed');return
+        try:
+            with urlopen(Request(url,headers={'Accept':'application/json'}),timeout=12) as source:
+                if source.status!=200:raise ValueError('Sentence Lab source unavailable')
+                raw=source.read(TRANSLATION_LIMIT+1)
+                if len(raw)>TRANSLATION_LIMIT:raise ValueError('Sentence input too large')
+            packet=json.loads(raw.decode('utf-8'))
+            with DOC_WRITE_LOCK:
+                with TranslationStore(RUNTIME/'translation.db') as store:
+                    result=store.import_units(packet)
+        except (OSError,ValueError,TypeError,KeyError,sqlite3.Error) as error:
+            self.response(503,'Upstream sentence Lab unavailable or incompatible');return
+        self.response(200,json.dumps(result,ensure_ascii=False),
+                      'application/json; charset=utf-8')
+
     def do_POST(self):
+        if urlsplit(self.path).path=='/api/translation-lab/import-upstream':
+            self.post_translation_lab_import_upstream();return
+        if urlsplit(self.path).path.startswith('/api/translation-lab/'):
+            self.post_translation_lab();return
         if urlsplit(self.path).path == '/api/import-main-reviewed':
             self.post_import_main_reviewed()
             return

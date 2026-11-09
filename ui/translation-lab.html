@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>OCR2MD V6 · Lab 翻译</title>
+</head>
+<body>
+<div class="trn-shell">
+  <header class="trn-header">
+    <div class="trn-heading"><strong>OCR2MD · Lab 翻译</strong><span id="build-version">lab-版本检测中</span><span id="unit-revision">未载入句表</span></div>
+    <div class="trn-head-actions">
+      <a href="./lab-home.html" aria-label="Lab 首页">Lab 首页</a>
+      <button id="reload" type="button">刷新</button>
+      <button id="import-upstream" type="button">从分句 Lab 读取</button>
+      <button id="import-sentences" type="button">导入句表 JSON</button>
+    </div>
+  </header>
+  <nav class="trn-ai-nav" id="provider-cards" aria-label="切换 AI 与覆盖状态"></nav>
+  <main class="trn-workspace">
+    <section class="trn-grid-section" aria-label="AG 翻译句表">
+      <div class="trn-panel-head"><strong>AG · 翻译句表</strong><span id="table-meta">0 条</span></div>
+      <div class="trn-filterbar">
+        <label for="filter-mode">覆盖</label>
+        <select id="filter-mode"><option value="all">全部</option><option value="missing">缺译</option><option value="completed">已完成</option></select>
+        <input id="search-units" type="search" placeholder="搜索 ID / 原句" aria-label="搜索句表" />
+        <span id="selected-count">已选 0</span>
+      </div>
+      <div id="translation-grid" aria-label="独立句子与 AI 覆盖状态的 AG Grid 表"></div>
+    </section>
+    <section class="trn-work-section" aria-label="AI 任务工作台">
+      <div class="trn-panel-head"><strong id="work-ai-name">GPT · 工作台</strong><span id="work-version">—</span></div>
+      <nav id="work-tabs" class="trn-tabs" aria-label="工作台页面">
+        <button data-tab="tasks" class="active" aria-selected="true">任务</button>
+        <button data-tab="prompt" aria-selected="false">Prompt</button>
+        <button data-tab="replies" aria-selected="false">回件</button>
+      </nav>
+      <div class="trn-panel-body">
+        <section id="panel-tasks" class="trn-tab-panel" aria-label="增量翻译任务">
+          <p class="trn-hint">未变原句继承历史译文；原句改变、缺译或选定强制重译才进入 AI JSON 任务。</p>
+          <div class="trn-stats"><span id="pending-count">待补译 —</span><span id="task-version">Prompt —</span></div>
+          <label class="trn-check"><input id="force-selected" type="checkbox">选中句子强制重译（含已有译文）</label>
+          <div class="trn-actions"><button id="export-task" type="button">生成并导出任务 JSON</button><button id="copy-task" type="button" disabled>复制任务 JSON</button></div>
+          <label class="trn-mini-label" for="task-preview">上一次生成的任务</label>
+          <pre id="task-preview" tabindex="0">尚未生成任务</pre>
+        </section>
+        <section id="panel-prompt" class="trn-tab-panel" aria-label="Prompt 版本编辑" hidden>
+          <p class="trn-hint">每家 AI 单独维护版本。修改 Prompt 不自动重译历史句子；需在任务页选择重译范围。</p>
+          <div id="prompt-editor" aria-label="CM6 Prompt 编辑器"></div>
+          <div class="trn-actions"><button id="save-prompt" type="button">保存 Prompt 版本</button></div>
+          <p class="trn-hint" id="prompt-version">—</p>
+        </section>
+        <section id="panel-replies" class="trn-tab-panel" aria-label="AI 回件与译表发布" hidden>
+          <p class="trn-hint">接受部分 JSON 回件，逐句核验 ID、原文、Prompt 和句表版本。缺译不阻断译表发布。</p>
+          <div class="trn-actions"><button id="import-reply" type="button">导入 AI 回件 JSON</button><button id="import-history" type="button">导入历史 AI 译表</button></div>
+          <div id="reply-info" class="trn-message">没有新回件</div>
+          <div class="trn-actions"><button id="publish-table" type="button">发布当前 AI 译表</button><button id="download-table" type="button">导出当前译表 JSON</button></div>
+          <p class="trn-hint">校译 Lab 将在 WP3 接入此处发布的独立 JSON。发布后仍允许补译。</p>
+        </section>
+      </div>
+    </section>
+  </main>
+  <footer id="global-status" class="trn-status" role="status" aria-live="polite">翻译 Lab 正在检查 SQLite…</footer>
+  <input id="json-file" type="file" accept=".json,application/json" hidden aria-label="JSON 文件">
+</div>
+<script type="module" src="./translation-lab-app.js"></script>
+</body></html>
