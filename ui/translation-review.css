@@ -6,6 +6,8 @@
   padding:3px 7px;font:12px "OCR2MD Sarasa",monospace}
 .ocr-tr-controls #record-picker{flex:0 1 215px;max-width:215px;min-width:100px}
 .ocr-tr-controls #filter-mode{flex:0 0 112px}
+.ocr-tr-controls #revision-mode{flex:0 0 160px;max-width:160px}
+.ocr-tr-controls #revision-mode:has(option[value="reviewed"]:checked){border-color:#a7c080}
 .ocr-tr-controls button:disabled{opacity:.4;cursor:not-allowed}
 .ocr-tr-controls button:hover:enabled{background:#48614e}
 .ocr-tr-empty{position:absolute;z-index:5;inset:0;display:grid;place-items:center;

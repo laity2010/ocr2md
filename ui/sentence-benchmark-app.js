@@ -11,6 +11,7 @@ import buffett from '../packages/minerujson-md/fixtures/buffetts-alpha.minerujso
 import {split,rebuild} from './sentence-benchmark-core.js';
 import {engineCatalog} from './sentence-benchmark-engines.js';
 import {buildTranslationTable} from './sentence-benchmark-translation-table.js';
+import {createReviewedSourcePackage} from './sentence-benchmark-reviewed-package.js';
 import {reviewInventory,blockAt,freshReview,synchronizeReview,reviewChanged,acceptedBoundaries,REVIEW_SCHEMA} from './sentence-benchmark-review.js';
 const $=id=>document.getElementById(id);
 function compactLabBuild(version){
@@ -425,11 +426,15 @@ function renderTranslationTable(){
     }
     tbody.replaceChildren(fragment);
     $('export-translation').disabled=false;
+    $('export-reviewed-md').disabled=false;
+    $('publish-reviewed').disabled=false;
   }catch(error){
     translationTable=null;
     $('translation-summary').textContent='句块表不可用：'+error.message;
     $('translation-table').querySelector('tbody').replaceChildren();
     $('export-translation').disabled=true;
+    $('export-reviewed-md').disabled=true;
+    $('publish-reviewed').disabled=true;
   }
 }
 async function exportTranslationTable(){
@@ -446,11 +451,44 @@ async function exportTranslationTable(){
     status('句块表导出失败：'+error.message,true);
   }
 }
-function download(name,data){
-  const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'});
+async function exportReviewedMD(){
+  try{
+    await saveTail;
+    const packageData=createReviewedSourcePackage(sample.md,currentTranslationTable(),reviewRevision);
+    downloadText('reviewed-'+packageData.sourceSha256.slice(0,12)+'.md',
+      packageData.clean.doc,'text/markdown; charset=utf-8');
+    status('已导出审阅 MD · '+packageData.baseline.rows.length+' 条 · 已接合 '+
+      packageData.clean.stats.reviewedJoins+' 处 · CMD 无改动');
+  }catch(error){status('审阅 MD 导出失败：'+error.message,true);}
+}
+async function publishReviewedSource(){
+  $('publish-reviewed').disabled=true;
+  try{
+    await saveTail;
+    const pkg=createReviewedSourcePackage(sample.md,currentTranslationTable(),reviewRevision);
+    const response=await fetch('./api/reviewed-source',{
+      method:'PUT',headers:{'Content-Type':'application/json',
+        'X-OCR2MD-Reviewed-Source':'1','If-Match':reviewRevision},
+      body:JSON.stringify(pkg),cache:'no-store'});
+    if(!response.ok)throw Error('HTTP '+response.status+
+      (response.status===412?' · 仲裁已更新，请刷新':''));
+    const written=await response.json();
+    if(written.sourceSha256!==pkg.sourceSha256||
+        written.units!==pkg.baseline.rows.length)
+      throw Error('服务器审阅 MD 回执不一致');
+    status('已发布审阅 MD 至校译 Lab · '+written.units+
+      ' 条 · 已接合 '+pkg.clean.stats.reviewedJoins+' 处；GPT/Grok 新译文仍待导入');
+  }catch(error){status('审阅 MD 发布失败：'+error.message,true);}
+  finally{$('publish-reviewed').disabled=false;}
+}
+function downloadText(name,text,mime){
+  const blob=new Blob([text],{type:mime});
   const href=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=href;a.download=name;document.body.append(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(href),1500);
+}
+function download(name,data){
+  downloadText(name,JSON.stringify(data,null,2)+'\n','application/json');
 }
 const sampleMeta=()=>({name:sample.name,length:sample.md.length,checksum:checksum(sample.md)});
 function exportGold(){
@@ -542,6 +580,8 @@ $('toggle-translation').onclick=()=>{
 };
 $('close-translation').onclick=()=>$('toggle-translation').click();
 $('export-translation').onclick=exportTranslationTable;
+$('export-reviewed-md').onclick=exportReviewedMD;
+$('publish-reviewed').onclick=publishReviewedSource;
 $('toggle-review').onclick=()=>{
   if($('review-drawer').hidden&&!$('translation-drawer').hidden){
     $('translation-drawer').hidden=true;

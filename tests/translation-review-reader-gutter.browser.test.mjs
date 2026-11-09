@@ -19,6 +19,9 @@ for(const [name,engine,binary] of [
     const pageErrors=[];
     page.on('pageerror',error=>pageErrors.push(error.message));
     await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+    // This regression is intentionally against the archived 402-row AI view.
+    // The new published 394-row reviewed MD is the separate default view.
+    await page.locator('#revision-mode').selectOption('historical');
     await page.waitForFunction(()=>document.querySelector('#status')?.textContent
       .includes('单语 MD 重组无损 PASS'),null,{timeout:130000});
     const initial=await page.evaluate(()=>({

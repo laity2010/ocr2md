@@ -215,3 +215,20 @@ for adjudicated candidate boundaries, with reviewed coverage displayed.
 - 清洁 Markdown 阅读投影将这些仅供预览的 CMD 标记与间隔替换为一个空格，保留可逆补丁，`restoreReviewedMD` 必须字节级还原 CMD。仍从 Main 的 Markdown 渲染器绘制，而不是另造 CM6 预览。
 - 历史 `translation-review/input` GPT/Grok 402 行文件不覆盖、不自动重写；旧校译页给出过期断行警示。新表导出文件名追加 `-reviewed-seams.json`，便于区别同一来源 SHA 但 **不同单元结构** 的旧版。新结构必须补译 8 个合并单元，其余记录可经 ID、原文、坐标严格核对后复用。只有 394 行匹配完整才可晋升正式比较输入。
 - 测试：`node --test --test-concurrency=1 tests/sentence-benchmark-translation-table.test.mjs tests/translation-review-reading.test.mjs tests/translation-review-clean-md.test.mjs tests/sentence-benchmark-public.test.mjs`。
+
+## WCP34：审阅 MD 与校译 Lab 的版本交接
+
+分句 Lab 作为唯一生产者：在「待翻译句块表」中选择「发布到校译 Lab」后，
+使用当前已保存的 CMD + 分句 sidecar + `lb="m"` 生成一组**不可混配**的
+`reviewed-source/v1` 数据：394 行基准、可逆审阅 Markdown、HTML 阅读投影及
+原始 UTF-16 锚点。服务器在同一把写锁下比对 CMD SHA、仲裁 revision 与
+`If-Match`，只写到 Lab `.runtime/exports/`，并保留版本化 MD/JSON 快照。
+「导出审阅 MD」只下载可读 Markdown，不改 CMD。
+
+校译 Lab 默认通过独立只读 `/api/reviewed-source` 读取已发布的包，
+检验可逆补丁及坐标，复用 Main 的 `renderMarkdown()`，用**394 个句 ID**阅读；
+此模式尚无 GPT/Grok 新版译文，右窗不冒充已有翻译。
+「旧 GPT/Grok（402）」是单独历史模式，沿用原独立输入目录，不能与
+新版审阅 MD 混用。若仲裁 revision 改变，旧审阅包不再自动作为最新输入。
+
+浏览器端合同检查：`tests/translation-review-revision-live.browser.test.mjs`。

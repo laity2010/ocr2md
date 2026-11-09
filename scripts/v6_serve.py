@@ -6,6 +6,7 @@ import subprocess
 from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_sentence_review import read as read_sentence_review, save as save_sentence_review, etag as sentence_review_etag, MAX_BYTES as SENTENCE_REVIEW_LIMIT
 from v6_translation_review import load_dataset as load_translation_review_dataset
+from v6_reviewed_source import read as read_reviewed_source, save as save_reviewed_source, MAX_BYTES as REVIEWED_SOURCE_LIMIT
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
@@ -186,6 +187,24 @@ class Handler(BaseHTTPRequestHandler):
                 self.response(503, 'Independent translation input unavailable or invalid')
                 return
             self.response(200, json.dumps(dataset, ensure_ascii=False),
+                          'application/json; charset=utf-8')
+            return
+        if path == '/api/reviewed-source':
+            if LAB_ID != 'sentence-benchmark':
+                self.response(404, 'Not found')
+                return
+            try:
+                with DOC_WRITE_LOCK:
+                    source = active_doc().read_bytes()
+                    reviewed = read_sentence_review(
+                        RUNTIME / 'document.sentences.review.json', source)
+                    package = read_reviewed_source(RUNTIME / 'exports', source)
+                    if package['reviewRevision'] != sentence_review_etag(reviewed):
+                        raise ValueError('Published reviewed source is stale')
+            except (OSError, ValueError, TypeError, KeyError, UnicodeError):
+                self.response(503, 'Published reviewed source unavailable or stale')
+                return
+            self.response(200, json.dumps(package, ensure_ascii=False),
                           'application/json; charset=utf-8')
             return
         if path == '/api/sentence-review':
@@ -636,7 +655,51 @@ class Handler(BaseHTTPRequestHandler):
         self.response(200, json.dumps({**written, 'revision': sentence_review_etag(written)},
                     ensure_ascii=False), 'application/json; charset=utf-8')
 
+    def put_reviewed_source(self):
+        if LAB_ID != 'sentence-benchmark':
+            self.response(404, 'Not found')
+            return
+        if (not self.same_origin() or
+                self.headers.get('X-OCR2MD-Reviewed-Source') != '1'):
+            self.response(403, 'Sentence Lab review publisher required')
+            return
+        try:
+            size = int(self.headers.get('Content-Length', '-1'))
+        except ValueError:
+            size = -1
+        if size < 2 or size > REVIEWED_SOURCE_LIMIT:
+            self.response(413, 'Invalid reviewed source package size')
+            return
+        payload = self.rfile.read(size)
+        if len(payload) != size:
+            self.response(400, 'Incomplete reviewed source package')
+            return
+        try:
+            with DOC_WRITE_LOCK:
+                source = active_doc().read_bytes()
+                reviewed = read_sentence_review(
+                    RUNTIME / 'document.sentences.review.json', source)
+                revision = sentence_review_etag(reviewed)
+                if self.headers.get('If-Match') != revision:
+                    self.response(412, 'Sentence review updated; reload before publishing')
+                    return
+                package = save_reviewed_source(
+                    RUNTIME / 'exports', payload, source, revision)
+        except (ValueError, UnicodeDecodeError, TypeError, KeyError) as error:
+            self.response(422, 'Invalid reviewed source: ' + str(error))
+            return
+        except OSError:
+            self.response(503, 'Reviewed source storage unavailable')
+            return
+        self.response(200, json.dumps({'sourceSha256':package['sourceSha256'],
+            'reviewRevision':package['reviewRevision'],
+            'units':len(package['baseline']['rows'])},ensure_ascii=False),
+            'application/json; charset=utf-8')
+
     def do_PUT(self):
+        if urlsplit(self.path).path == '/api/reviewed-source':
+            self.put_reviewed_source()
+            return
         if urlsplit(self.path).path == '/api/sentence-review':
             self.put_sentence_review()
             return

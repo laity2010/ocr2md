@@ -20,6 +20,11 @@
       </div>
     </header>
     <nav class="module-controls ocr-sb-controls ocr-tr-controls" aria-label="校译工作台工具栏">
+      <label class="ocr-sb-field-name" for="revision-mode">审阅版本</label>
+      <select id="revision-mode" aria-label="审阅版本">
+        <option value="reviewed">新版审阅 MD</option>
+        <option value="historical">旧 GPT/Grok（402）</option>
+      </select>
       <span class="ocr-sb-field-name">校译范围</span>
       <select id="filter-mode" aria-label="校译范围">
         <option value="all">全部</option>
