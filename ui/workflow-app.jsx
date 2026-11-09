@@ -72,7 +72,6 @@ function Workspace() {
        onChange:value=>setRename(previous=>previous?.id===node.id?{...previous,value}:previous),
        onCommit:commitRename,onCancel:cancelRename}}}
     : node),[nodes,rename,commitRename,cancelRename]);
-  const serial=useRef(0);
   const {screenToFlowPosition,fitView}=useReactFlow();
   const onConnect=useCallback(connection=>setEdges(existing=>addEdge({...connection,
     type:'smoothstep',markerEnd:edgeOptions.markerEnd,style:edgeOptions.style},existing)),[setEdges]);
