@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>OCR2MD · Lab 实验工作台</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#d3c6aa;background:#272e33}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh}
+    header{padding:15px clamp(16px,4vw,44px);border-bottom:1px solid #475258;background:#2e383c;display:flex;align-items:center;justify-content:space-between;gap:15px}
+    .brand{font-weight:750;font-size:18px;letter-spacing:.05em;color:#a7c080}
+    nav a{font-size:13px;color:#a7c7be;text-decoration:none}nav a:hover{text-decoration:underline}
+    main{width:min(960px,100%);margin:0 auto;padding:55px 21px 70px}
+    .eyebrow{color:#a7c080;letter-spacing:.16em;font-size:12px;font-weight:750}
+    h1{font-size:clamp(26px,5vw,38px);line-height:1.2;margin:9px 0 13px;color:#f1e4c8}
+    .sub{font-size:15px;color:#aab5af;line-height:1.8;margin:0 0 34px}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(265px,100%),1fr));gap:16px}
+    article{border:1px solid #53605e;border-radius:14px;padding:23px;display:flex;flex-direction:column;gap:13px;min-height:226px;background:#323c40}
+    .kind{color:#a7c080;font-size:12px;font-weight:700}h2{font-size:21px;margin:0;color:#e6ddc8}
+    p{color:#b4bdb4;font-size:14px;line-height:1.75;margin:0;flex:1}
+    .open{align-self:flex-start;padding:10px 15px;border-radius:7px;color:#26362b!important;background:#a7c080;font-weight:750;text-decoration:none;font-size:14px}
+    .open:hover{background:#c5d69d}
+    footer{font-size:12px;color:#86978d;margin-top:30px;line-height:1.7}
+  </style>
+</head>
+<body>
+  <header><div class="brand">OCR2MD <span style="color:#e9ac65">/ Lab</span></div>
+    <nav><a href="/">返回 Main</a></nav></header>
+  <main>
+    <div class="eyebrow">EXPERIMENT WORKSPACE</div>
+    <h1>Lab 实验工作台</h1>
+    <p class="sub">从这里进入独立实验。所有 Lab 的静态文件统一从一个发布目录提供；运行服务与用户数据各自隔离，Main 不参与实验写入。</p>
+    <section class="cards" aria-label="OCR2MD 实验列表">
+      <article><div class="kind">01 · 独立实验</div><h2>CM / HTML</h2>
+        <p>原有 cm-html 工作台，保留旧网址及编辑流程。</p>
+        <a class="open" href="/labs/cm-html/">进入 CM / HTML</a></article>
+      <article><div class="kind">02 · Sentence Lab</div><h2>分句与仲裁</h2>
+        <p>文本块分句、分歧比较及句界仲裁，使用独立 Lab 数据。</p>
+        <a class="open" href="/labs/sentence-benchmark/sentence-benchmark.html">进入分句 Lab</a></article>
+      <article><div class="kind">03 · Translation Lab</div><h2>翻译管理</h2>
+        <p>GPT/Grok/Muse 增量重译、SQLite 覆盖管理、Prompt 与 JSON 回件。</p>
+        <a class="open" href="/labs/translation-lab/translation-lab.html">进入翻译 Lab</a></article>
+      <article><div class="kind">04 · Review Lab</div><h2>校译与对照</h2>
+        <p>原文成品预览、AI 校正英文和中文译文逐句比较。</p>
+        <a class="open" href="/labs/sentence-benchmark/translation-review.html">进入校译 Lab</a></article>
+    </section>
+    <footer>统一 Lab 入口：/labs/（内外网同源发布）。当前构建版本见 /labs/release-manifest.json。<br>
+    Lab 页面可能包含实验文档；公网链接可被持有者访问。</footer>
+  </main>
+</body>
+</html>
