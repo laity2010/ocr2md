@@ -49,6 +49,27 @@ class UnifiedPublisherTests(unittest.TestCase):
         self.assertEqual(first['releaseId'],second['releaseId'])
         self.assertEqual(len(list(self.base.glob('.published-lab.stage-*'))),0)
         self.assertEqual(len(list(self.base.glob('.published-lab.old-*'))),0)
+    def test_one_module_update_reuses_other_sha_verified_modules(self):
+        first,_=publish(self.dest,self.sources,self.home)
+        new_file=self.sources['translation-lab']/'assets/file.js'
+        new_file.write_bytes(b'changed translation-only module')
+        updated,_=publish(self.dest,{'translation-lab':self.sources['translation-lab']},
+                          self.home,reuse_unchanged=True)
+        self.assertNotEqual(updated['releaseId'],first['releaseId'])
+        self.assertEqual(updated['modules']['cm-html'],first['modules']['cm-html'])
+        self.assertEqual(updated['modules']['sentence-benchmark'],first['modules']['sentence-benchmark'])
+        self.assertEqual((self.dest/'translation-lab/assets/file.js').read_bytes(),
+                         b'changed translation-only module')
+        self.assertEqual((self.dest/'cm-html/assets/file.js').read_bytes(),b'abc123')
+        self.assertFalse(list(self.base.glob('.published-lab.old-*')))
+
+    def test_reuse_refuses_tampered_old_module(self):
+        publish(self.dest,self.sources,self.home)
+        (self.dest/'cm-html/assets/file.js').write_bytes(b'tampered')
+        with self.assertRaisesRegex(ValueError,'integrity mismatch'):
+            publish(self.dest,{'translation-lab':self.sources['translation-lab']},
+                    self.home,reuse_unchanged=True)
+
     def test_fails_closed_on_symlink(self):
         import os
         bad=self.sources['translation-lab']/'assets/secret.json'

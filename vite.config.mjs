@@ -55,6 +55,7 @@ export default defineConfig({
       labHome: resolve('ui/lab-home.html'),
       translationReview: resolve('ui/translation-review.html'),
       translationLab: resolve('ui/translation-lab.html'),
+      workflow: resolve('ui/workflow.html'),
       cmPreviewSpike: resolve('ui/cm-preview-spike.html')
     }}
   },

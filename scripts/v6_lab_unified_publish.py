@@ -61,15 +61,50 @@ def validate_source(name,path):
             'assetCount':len(files),'bytes':size,'files':files}
 
 
-def publish(output,sources,home,keep_backup=False):
+def verify_unchanged_release(output,sources):
+    """Reuse only byte-verified published modules when changing one Lab page.
+
+    Never rebuild untouched Lab worktrees or create new public dist roots.
+    The current manifest is authoritative; exact per-asset SHA is checked.
+    """
+    current=json.loads((output/'release-manifest.json').read_text(encoding='utf-8'))
+    if current.get('schema')!=SCHEMA or set(current.get('modules',{}))!=set(NAMES):
+        raise ValueError('Cannot reuse malformed current release')
+    reused={}
+    for name in NAMES:
+        if name in sources:continue
+        meta=current['modules'][name]
+        files=meta.get('files')
+        folder=output/name
+        if not isinstance(files,dict) or not files or folder.is_symlink() or not folder.is_dir():
+            raise ValueError('Cannot trust old release module '+name)
+        actual=set()
+        for path in folder.rglob('*'):
+            if path.is_symlink():raise ValueError('Symlinked old Lab release asset')
+            if path.is_file():
+                rel=str(path.relative_to(folder));actual.add(rel)
+                if files.get(rel)!=hash_file(path):
+                    raise ValueError('Old Lab release integrity mismatch '+name+'/'+rel)
+        if actual!=set(files):raise ValueError('Old Lab release file set mismatch: '+name)
+        reused[name]=meta
+    return reused
+
+
+def publish(output,sources,home,keep_backup=False,reuse_unchanged=False):
     output=Path(output).absolute()
-    if not output.is_absolute() or output.is_symlink() or len(sources)!=len(NAMES) or set(sources)!=set(NAMES):
-        raise ValueError('Exactly three known Lab modules required')
+    if (not output.is_absolute() or output.is_symlink() or not sources or
+        not set(sources).issubset(set(NAMES)) or (not reuse_unchanged and set(sources)!=set(NAMES))):
+        raise ValueError('Lab source set must be complete, or explicitly reuse verified release modules')
     if not home.is_file() or home.is_symlink() or home.suffix!='.html':
         raise ValueError('Missing trusted shared Lab homepage')
     if output.parent.is_symlink() or not output.parent.is_dir():
         raise ValueError('Release parent missing/unsafe')
     validated={name:validate_source(name,path) for name,path in sources.items()}
+    if reuse_unchanged:
+        if not output.is_dir() or not (output/'release-manifest.json').is_file():
+            raise ValueError('No existing unified release to reuse')
+        validated.update(verify_unchanged_release(output,sources))
+    if set(validated)!=set(NAMES):raise ValueError('Incomplete unified Lab modules')
     portal=home.read_bytes()
     common={'schema':SCHEMA,'modules':validated,'homeSha256':hashlib.sha256(portal).hexdigest()}
     release_id=hashlib.sha256(json.dumps(common,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf-8')).hexdigest()
@@ -81,8 +116,9 @@ def publish(output,sources,home,keep_backup=False):
     swapped=False
     try:
         (stage/'index.html').write_bytes(portal)
-        for name,path in sources.items():
-            shutil.copytree(path,stage/name,symlinks=False)
+        for name in NAMES:
+            source=sources[name] if name in sources else output/name
+            shutil.copytree(source,stage/name,symlinks=False)
         (stage/'release-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
         for name,meta in validated.items():
             for rel,digest in meta['files'].items():
@@ -108,13 +144,14 @@ def main():
     parser.add_argument('--module',action='append',required=True,help='name=/absolute/path/to/labs/name/dist')
     parser.add_argument('--home',required=True,type=Path)
     parser.add_argument('--keep-backup',action='store_true')
+    parser.add_argument('--reuse-unchanged',action='store_true',help='Keep SHA-verified modules from one existing Lab release when rebuilding only one module')
     args=parser.parse_args()
     sources={}
     for item in args.module:
         name,separator,path=item.partition('=')
         if not separator or name in sources:parser.error('Invalid duplicate --module')
         sources[name]=Path(path)
-    manifest,old=publish(args.output,sources,args.home,args.keep_backup)
+    manifest,old=publish(args.output,sources,args.home,args.keep_backup,args.reuse_unchanged)
     print(json.dumps({'releaseId':manifest['releaseId'],'root':str(args.output),
        'modules':{k:{x:v[x] for x in ('sourceCommit','version','assetCount','bytes')}
                   for k,v in manifest['modules'].items()},

@@ -32,3 +32,17 @@ python3 scripts/v6_lab_unified_publish.py \
 - Chrome 和模拟 iPad 的 WebKit 对四个 Lab 入口及首页回归；分句公网首次并发读取曾见两项静态 JS 的 HTTP 502，但随后的单资源请求均返回 200 并核对 SHA，公网 Chrome 分句页面再次连续 3 次无 502，属于需要持续观察的公网链路不稳定，不能当作完全根除。
 - 后端 `V6_STATIC_ROOT` 统一指向各自 `.runtime/.release-meta`（只含版本元数据），直接访问旧静态路径为 404；公网/内网静态均由 Agent Link 网关的唯一发布根提供。
 - 八个可再生、被 Git 忽略的旧 `dist/` 仅在上述功能、静态 SHA 和 API 验证后逐一清理。未来重新构建产生的 `dist/` 是**暂存输出**，不可视为新发布根；发布完成后再核验清理。正式 Main `.v6/release/` 始终保持原样。
+
+### 增量页面发布
+
+改动某一个 Lab 的静态页面时，在对应实验工作树提交 Git、构建 `V6_LAB_ID=translation-lab npm run build` 后，使用原发布器的 `--reuse-unchanged` 参数，只提供变动模块：
+
+```
+python3 scripts/v6_lab_unified_publish.py \
+  --output "$HOME/AgentDock/ocr2md-lab-release" \
+  --home ui/labs-unified-home.html \
+  --module "translation-lab=$HOME/AgentDock/ocr2md-v6-experiments/translation-lab/labs/translation-lab/dist" \
+  --reuse-unchanged
+```
+
+未改动模块严格以当前**唯一发布根**中带 SHA 校验的文件原样复用，不调用旧工作树的 `dist`；不保存第二套正式发布目录。完成后清理本次临时构建 `dist/`。新增工作流页是纯 React Flow 客户端画布，不访问 Lab API，也不管理任何持久化数据。
