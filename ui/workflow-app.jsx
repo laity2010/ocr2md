@@ -25,7 +25,7 @@ const EDGES = [
   {id:'edge-table-to-translation',source:'sentence-table',target:'translation-module',type:'smoothstep'},
   {id:'edge-translation-to-output',source:'translation-module',target:'translation-output',type:'smoothstep'},
 ];
-const edgeOptions={type:'smoothstep',markerEnd:{type:MarkerType.ArrowClosed,color:'#a7c080'},style:{stroke:'#a7c080',strokeWidth:2.1}};
+const edgeOptions={type:'smoothstep',markerEnd:{type:MarkerType.ArrowClosed,color:'#a7c080',width:32,height:32},style:{stroke:'#a7c080',strokeWidth:2.1}};
 
 function NodeCard({data,selected,type}) {
   const isModule=type==='module';
