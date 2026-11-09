@@ -37,16 +37,24 @@ def dispatch_lan_lab(handler, routes):
         return False
     parts = path.split('/')
     name = parts[2] if len(parts) >= 3 else ''
+    # Only the existing Agent Link gateway owns the Lab catalogue and the
+    # legacy lab-home redirects. Keep ordinary Lab operations on their own
+    # explicit loopback origin; this is not a new web app or business route.
+    if path in ('/labs', '/labs/') or path in (
+        '/labs/sentence-benchmark/lab-home.html',
+        '/labs/translation-lab/lab-home.html',
+    ):
+        name = 'portal'
     if name not in routes:
         handler.response(404, 'Unknown LAN experiment')
         return True
-    if path == f'/labs/{name}':
+    if name != 'portal' and path == f'/labs/{name}':
         handler.send_response(308)
         handler.send_header('Location', f'/labs/{name}/')
         handler.send_header('Content-Length', '0')
         handler.end_headers()
         return True
-    if path != f'/labs/{name}/' and not path.startswith(f'/labs/{name}/'):
+    if name != 'portal' and path != f'/labs/{name}/' and not path.startswith(f'/labs/{name}/'):
         handler.response(404, 'Invalid experiment path')
         return True
     if handler.headers.get('Transfer-Encoding'):
