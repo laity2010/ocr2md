@@ -25,8 +25,6 @@ export class TranslationReaderPane {
     };
     const sentenceToggle=makeToggle('句子编号','ocr-tr-reader-ids-control');
     this.sentenceIdInput=sentenceToggle.checkbox;
-    const outlineToggle=makeToggle('折叠到标题','ocr-tr-reader-outline-control');
-    this.outlineInput=outlineToggle.checkbox;
     const title=document.createElement('strong');
     title.textContent='单语 Markdown · 成品预览';
     this.returnNoteButton=document.createElement('button');
@@ -37,7 +35,7 @@ export class TranslationReaderPane {
     this.returnNoteButton.hidden=true;
     this.status=document.createElement('span');
     this.status.className='ocr-sb-pane-status';
-    toolbar.append(sentenceToggle.label,outlineToggle.label,title,
+    toolbar.append(sentenceToggle.label,title,
       this.returnNoteButton,this.status);
     this.scroller=document.createElement('div');
     // Main's shared footnote reader uses this scroll port to remember the
@@ -60,9 +58,6 @@ export class TranslationReaderPane {
     this.resizeObserver=null;
     this.footnoteReader=null;this.noteReturn=null;
     this.showSentenceIds=false;
-    this.foldToHeadings=false;
-    this.outlineHeadings=[];this.outlineOwners=new Map();
-    this.expandedHeadings=new Set();this.savedFullScroll=0;
   }
   init(){
     this.footnoteReader=createFootnotePopover({root:this.body,
@@ -76,8 +71,6 @@ export class TranslationReaderPane {
       this.scroller.scrollTop=top;
       this.scheduleMeasure();
     });
-    this.outlineInput.addEventListener('change',()=>
-      this.setHeadingOutline(this.outlineInput.checked));
     // A tap on read-only source text (or its sentence ID) is a selection,
     // NEVER a request to reposition this scrollport. Mobile Safari may
     // scroll a nested pane when Dockview shifts keyboard focus, even though
@@ -86,12 +79,6 @@ export class TranslationReaderPane {
     let tapStart=null;
     this.scroller.addEventListener('pointerdown',event=>{
       const element=event.target instanceof Element?event.target:null;
-      const heading=this.foldToHeadings?element?.closest('.ocr-tr-outline-heading'):null;
-      if(heading&&heading.parentElement===this.body&&event.isPrimary){
-        tapStart={pointerId:event.pointerId,x:event.clientX,y:event.clientY,
-          top:this.scroller.scrollTop,heading};
-        return;
-      }
       const hit=element?.closest('[data-unit-id],[data-gutter-unit]');
       if(!event.isPrimary||!hit||
           element.closest('a[href],summary.ocr-callout-title'))return;
@@ -105,10 +92,6 @@ export class TranslationReaderPane {
       const start=tapStart;tapStart=null;
       if(!start||start.pointerId!==event.pointerId||
           Math.hypot(event.clientX-start.x,event.clientY-start.y)>9)return;
-      if(start.heading){
-        this.toggleHeadingSection(start.heading);
-        return;
-      }
       // Commit the identity captured at pointerDOWN, BEFORE a click can be
       // retargeted to p5b2/p5b3 after a Safari focus-induced scroll jump.
       // This is essential: scroll restoration ALONE does not prevent a
@@ -135,14 +118,6 @@ export class TranslationReaderPane {
     },{passive:true});
     this.body.addEventListener('click',event=>{
       if(this.footnoteReader?.handleClick(event))return;
-      const heading=this.foldToHeadings&&event.target instanceof Element?
-        event.target.closest('.ocr-tr-outline-heading'):null;
-      if(heading&&heading.parentElement===this.body){
-        // Mouse/touch already toggles on pointerup. Only keyboard or
-        // assistive click (detail=0) should toggle from a click event.
-        if(event.detail===0)this.toggleHeadingSection(heading);
-        return;
-      }
       // Pointer/touch selection is committed from the captured pointerdown
       // identity. The browser may retarget this later click if Safari moves
       // the scrollport during pointerup. Keyboard activation has detail=0.
@@ -154,13 +129,6 @@ export class TranslationReaderPane {
       if(!target)return;
       const selected=this.anchors.find(x=>x.id===target.dataset.unitId);
       if(selected)this.owner.receivePosition(this.id,selected.from);
-    });
-    this.body.addEventListener('keydown',event=>{
-      const heading=event.target;
-      if(!this.foldToHeadings||!this.outlineHeadings.includes(heading)||
-          (event.key!=='Enter'&&event.key!==' '))return;
-      event.preventDefault();
-      this.toggleHeadingSection(heading);
     });
     this.gutter.addEventListener('click',event=>{
       if(event.detail>0)return;
@@ -190,7 +158,6 @@ export class TranslationReaderPane {
         const path=mainMediaURL(img.getAttribute('src'));
         if(path)img.setAttribute('src',path);
       }
-      this.buildHeadingOutline();
     }
     this.assignAnchors();
     if(this.current)this.mark(this.current);
@@ -203,7 +170,6 @@ export class TranslationReaderPane {
   navigateToNote({sourceLine,noteId,referenceScrollTop,reference}){
     const note=this.body.querySelector('li.footnote-item[id="'+noteId+'"]');
     if(!note||!Number.isInteger(sourceLine)||sourceLine<1)return;
-    this.expandForNode(note);
     this.noteReturn={referenceScrollTop,reference};
     this.returnNoteButton.hidden=false;
     this.suppressUntil=performance.now()+650;
@@ -218,89 +184,6 @@ export class TranslationReaderPane {
     this.scroller.scrollTop=saved.referenceScrollTop;
     if(saved.reference?.isConnected)
       saved.reference.focus({preventScroll:true});
-  }
-  buildHeadingOutline(){
-    this.outlineHeadings=[];
-    this.outlineOwners.clear();
-    this.expandedHeadings.clear();
-    let current=null;
-    for(const node of this.body.children){
-      if(/^H[1-6]$/.test(node.tagName)){
-        current=node;
-        this.outlineHeadings.push(node);
-      }else{
-        this.outlineOwners.set(node,current);
-      }
-    }
-    this.applyHeadingOutline();
-  }
-  applyHeadingOutline(){
-    this.body.classList.toggle('ocr-tr-heading-outline',this.foldToHeadings);
-    for(const heading of this.outlineHeadings){
-      heading.classList.toggle('ocr-tr-outline-heading',this.foldToHeadings);
-      if(this.foldToHeadings){
-        heading.setAttribute('role','button');
-        heading.setAttribute('tabindex','0');
-        heading.setAttribute('aria-expanded',String(this.expandedHeadings.has(heading)));
-        heading.title='点击展开或收起本节正文';
-      }else{
-        heading.removeAttribute('role');
-        heading.removeAttribute('tabindex');
-        heading.removeAttribute('aria-expanded');
-        heading.removeAttribute('title');
-      }
-    }
-    for(const [node,heading] of this.outlineOwners){
-      node.classList.toggle('ocr-tr-outline-expanded',
-        this.foldToHeadings&&this.expandedHeadings.has(heading));
-    }
-    this.scheduleMeasure();
-  }
-  setHeadingOutline(enabled){
-    if(this.foldToHeadings===enabled)return;
-    const before=this.scroller.scrollTop;
-    let nearest=this.outlineHeadings[0];
-    if(enabled){
-      this.savedFullScroll=before;
-      const top=this.scroller.getBoundingClientRect().top+40;
-      for(const heading of this.outlineHeadings){
-        if(heading.getBoundingClientRect().top>top)break;
-        nearest=heading;
-      }
-      this.expandedHeadings.clear();
-    }
-    this.foldToHeadings=enabled;
-    this.suppressUntil=performance.now()+650;
-    this.applyHeadingOutline();
-    if(enabled&&nearest){
-      this.scroller.scrollTop+=nearest.getBoundingClientRect().top-
-        this.scroller.getBoundingClientRect().top-22;
-    }else if(!enabled){
-      this.scroller.scrollTop=this.savedFullScroll;
-    }
-    this.scheduleMeasure();
-  }
-  toggleHeadingSection(heading){
-    if(!this.foldToHeadings||!this.outlineHeadings.includes(heading))return;
-    const top=heading.getBoundingClientRect().top-
-      this.scroller.getBoundingClientRect().top;
-    if(this.expandedHeadings.has(heading))this.expandedHeadings.delete(heading);
-    else this.expandedHeadings.add(heading);
-    this.suppressUntil=performance.now()+650;
-    this.applyHeadingOutline();
-    this.scroller.scrollTop+=heading.getBoundingClientRect().top-
-      this.scroller.getBoundingClientRect().top-top;
-  }
-  expandForNode(node){
-    if(!this.foldToHeadings)return false;
-    let direct=node;
-    while(direct&&direct.parentElement!==this.body)direct=direct.parentElement;
-    if(!direct||/^H[1-6]$/.test(direct.tagName))return false;
-    const owner=this.outlineOwners.get(direct);
-    if(!owner||this.expandedHeadings.has(owner))return false;
-    this.expandedHeadings.add(owner);
-    this.applyHeadingOutline();
-    return true;
   }
   assignAnchors(){
     for(const node of this.body.querySelectorAll('[data-unit-id]')){
@@ -389,7 +272,7 @@ export class TranslationReaderPane {
   reveal(id){
     const node=this.nodes.get(id);
     if(!node)return;
-    let opened=this.expandForNode(node);
+    let opened=false;
     for(let current=node.parentElement;current&&current!==this.body;current=current.parentElement){
       if(current.tagName==='DETAILS'&&!current.open){current.open=true;opened=true;}
     }
