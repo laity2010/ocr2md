@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CM6 Markdown 成品预览 · 可行性实验</title>
+</head>
+<body>
+  <div class="ocr-cm-spike-shell">
+    <header>
+      <div><strong>CM6 Markdown 成品预览</strong><span class="ocr-cm-spike-badge">独立可行性实验 · 非正式校译左窗</span></div>
+      <a href="./translation-review.html">返回现有校译</a>
+    </header>
+    <nav aria-label="CM6 预览实验控制">
+      <label><input id="cm-spike-render" type="checkbox" checked> CM6 块级渲染</label>
+      <label><input id="cm-spike-ids" type="checkbox"> 句子编号栏</label>
+      <label><input id="cm-spike-fold" type="checkbox"> CM6 标题折叠</label>
+      <label>定位句子 <select id="cm-spike-record" aria-label="定位句子"></select></label>
+      <span id="cm-spike-status" role="status">正在读取实验数据…</span>
+    </nav>
+    <div class="ocr-cm-spike-layout">
+      <section class="ocr-cm-spike-editor-wrap" aria-label="CM6 管理的 Markdown 文档">
+        <div id="cm-spike-editor"></div>
+      </section>
+      <aside>
+        <h2>能力与边界</h2>
+        <p>此窗由同一个 CodeMirror 6 <code>EditorState.doc</code> 管理 Markdown、定位、行号及标题折叠。切换渲染只改变 Widget 视图，不修改原文。</p>
+        <pre id="cm-spike-metrics" aria-label="真实文档验证指标">准备中…</pre>
+        <p>渲染：Main 的 <code>renderMarkdown()</code>；折叠：CM6 <code>foldService</code> + <code>foldGutter</code>；句子编号：CM6 Gutter Marker。</p>
+        <p>这不是代码可直接晋升 Main 的证明。完整覆盖率、表格、脚注、滚动稳定性和触屏表现以测试结果为准。</p>
+      </aside>
+    </div>
+  </div>
+  <script type="module" src="./cm-preview-spike-app.js"></script>
+</body>
+</html>

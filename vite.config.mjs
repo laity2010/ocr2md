@@ -53,7 +53,8 @@ export default defineConfig({
       main: resolve('ui/index.html'),
       sentenceBenchmark: resolve('ui/sentence-benchmark.html'),
       labHome: resolve('ui/lab-home.html'),
-      translationReview: resolve('ui/translation-review.html')
+      translationReview: resolve('ui/translation-review.html'),
+      cmPreviewSpike: resolve('ui/cm-preview-spike.html')
     }}
   },
   plugins: [
