@@ -39,6 +39,13 @@ for(const [name,engine,binary] of [
     assert(initial.math>=40);
     assert.equal(initial.callouts,7);
     assert(initial.table>=9);
+    const idsToggle=page.getByRole('checkbox',{name:'句子编号'});
+    assert.equal(await idsToggle.isChecked(),false,
+      'sentence ID column stays hidden until explicitly enabled');
+    assert.equal(await page.locator('.ocr-tr-reader-unit-id').first().isVisible(),false);
+    await idsToggle.check();
+    assert.equal(await page.locator('.ocr-tr-reader-unit-id').first().isVisible(),true,
+      'checkbox must expose existing 402 canonical sentence IDs');
 
     // Rendered Markdown reintroduces the empty line only at source block
     // boundaries. Five sentences in p1b7 stay tightly stacked, but p1b8
