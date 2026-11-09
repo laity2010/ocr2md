@@ -202,3 +202,8 @@ Initial fixture: Buffett Markdown. Other MD files can be imported from disk.
 
 Do not treat engine consensus as human gold; benchmark scores are reported only
 for adjudicated candidate boundaries, with reviewed coverage displayed.
+
+
+## CM6 Markdown 成品预览 Spike（独立实验，非正式左窗）
+
+从校译 Lab 顶栏的「CM6 预览实验」进入 `./cm-preview-spike.html`。可在完整 CMD 原文（388,265 字符）和清洁阅读投影（81,418 字符）之间切换，分别验证 CM6 `EditorState.doc` 原始字符恒等、19 个原生标题折叠和 402 条来源句 ID；Markdown 成品仍调用 Main `renderMarkdown()` 通过 CM6 Widgets 呈现。**当前还不能替代原校译左窗**：整块渲染后的 CM6 句 ID Gutter 丢失，MarkdownIt 生成的脚注定义没有精确 Widget 源位置。实验数据、证据与晋升门槛详见 `tests/am/CM6_MARKDOWN_PREVIEW_SPIKE.md`；不会修改 Main 或独立校译 JSON。

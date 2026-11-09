@@ -16,7 +16,11 @@ for(const [name,engine,binary] of [
   try{
     const page=await browser.newPage({...devices['iPad Pro 11 landscape'],
       viewport:{width:1150,height:800}});
-    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const errors=[],badMedia=[];page.on('pageerror',e=>errors.push(e.message));
+    page.on('response',response=>{
+      if(response.url().includes('/media/')&&response.status()!==200)
+        badMedia.push({status:response.status(),url:response.url()});
+    });
     await page.goto(url,{waitUntil:'domcontentloaded',timeout:110000});
     await page.waitForFunction(()=>Boolean(window.__cmPreviewSpike),null,{timeout:150000});
     const projection=await page.evaluate(()=>{
@@ -30,7 +34,27 @@ for(const [name,engine,binary] of [
     assert.equal(projection.metrics.unitCount,402);
     assert.equal(projection.metrics.headingRanges,19);
     assert(projection.metrics.renderedBlocks>=420);
+    assert.equal(projection.metrics.mainRenderer.images,18);
+    assert(projection.metrics.mainRenderer.katex>=40);
+    assert(projection.metrics.mainRenderer.tables>=9);
+    assert(projection.metrics.mainRenderer.callouts>=7);
     assert(projection.visible>0,'CM6 widget DOM must render inside editor');
+    const mediaChecks=[];
+    for(const [kind,query,selector] of [
+      ['image','media/','.ocr-cm-preview-rendered img'],
+      ['formula','$$','.ocr-cm-preview-rendered .katex'],
+      ['table','<table','.ocr-cm-preview-rendered table'],
+      ['callout','[!','.ocr-cm-preview-rendered .ocr-callout'],
+    ]){
+      const offset=await page.evaluate(q=>window.__cmPreviewSpike.reading.doc.indexOf(q),query);
+      if(offset<0)continue;
+      await page.evaluate(pos=>window.__cmPreviewSpike.cm.reveal(
+        window.__cmPreviewSpike.view,pos),offset);
+      await page.waitForTimeout(180);
+      const count=await page.locator(selector).count();
+      assert(count>0,`CM6 block widgets must visibly render ${kind} at source offset ${offset}`);
+      mediaChecks.push({kind,count});
+    }
 
     await page.getByRole('checkbox',{name:'句子编号栏'}).check();
     const previewIDCount=await page.locator('.ocr-cm-preview-unit-id').count();
@@ -72,6 +96,7 @@ for(const [name,engine,binary] of [
     assert.equal(raw.metrics.unitCount,402);
     assert(raw.metrics.renderedBlocks>50,'Main renderer must map some CMD blocks');
     assert.deepEqual(errors,[]);
+    assert.deepEqual(badMedia,[],'template must not trigger incorrect Lab-relative media URLs');
     console.log(name,'CM6_MARKDOWN_SPIKE_PASS',JSON.stringify({
       cleanBlocks:projection.metrics.renderedBlocks,
       cleanMissing:projection.metrics.skippedBlocks,
@@ -81,6 +106,6 @@ for(const [name,engine,binary] of [
       rawCMDBytes:raw.metrics.sourceBytes,
       rawBlocks:raw.metrics.renderedBlocks,
       rawUnmapped:raw.metrics.skippedBlocks,
-      rawExact:raw.exact}));
+      rawExact:raw.exact,mediaChecks}));
   }finally{await browser.close();}
 }

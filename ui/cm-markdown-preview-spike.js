@@ -76,14 +76,18 @@ function rangeFor(doc,start,end){
  * The parsing / HTML / KaTeX / Obsidian styles come from Main's renderer.
  */
 export function createCMMarkdownPreviewSpike(text,anchors=[]){
-  const sandbox=document.createElement('div');
+  // <template> keeps the Main renderer's images completely inert until CM6
+  // actually mounts a viewport widget; a detached <div> can still trigger
+  // premature relative /labs/.../media/* network requests in Chromium.
+  const sandbox=document.createElement('template');
   sandbox.innerHTML=renderMarkdown(text);
+  const content=sandbox.content;
   // This source document is authoritative for CM6; all links are relative
   // to its UTF-16 positions, not an independent Markdown HTML scrollport.
   const doc=Text.of(text.split('\n'));
   const blocks=[],skipped=[];
   let priorEnd=0;
-  for(const element of sandbox.children){
+  for(const element of content.children){
     const token=element.hasAttribute('data-source-start')?element:
       element.querySelector('[data-source-start]');
     const start=Number(token?.getAttribute('data-source-start'));
@@ -130,6 +134,15 @@ export function createCMMarkdownPreviewSpike(text,anchors=[]){
   ];
   const metrics={sourceBytes:text.length,sourceLines:doc.lines,
     renderedBlocks:blocks.length,skippedBlocks:skipped.length,
+    htmlNodes:content.children.length,
+    mainRenderer:{
+      images:content.querySelectorAll('img').length,
+      katex:content.querySelectorAll('.katex').length,
+      tables:content.querySelectorAll('table').length,
+      callouts:content.querySelectorAll('.ocr-callout').length,
+      footnoteRefs:content.querySelectorAll('sup.footnote-ref').length,
+      footnoteDefinitions:content.querySelectorAll('.footnotes-list li').length,
+    },
     skipped,headingRanges:headings.length,sentenceMarkers:byLine.size};
   const controls={
     extensions,metrics,
