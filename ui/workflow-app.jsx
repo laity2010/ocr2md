@@ -57,6 +57,7 @@ function Workspace() {
   const [nodes,setNodes,onNodesChange]=useNodesState(NODES);
   const [edges,setEdges,onEdgesChange]=useEdgesState(EDGES);
   const [selected,setSelected]=useState({nodes:[],edges:[]});
+  const [connectFrom,setConnectFrom]=useState(null);
   const [rename,setRename]=useState(null);
   const serial=useRef(0);
   const startRename=useCallback(id=>{
@@ -77,10 +78,22 @@ function Workspace() {
        onCommit:commitRename,onCancel:cancelRename}}}
     : node),[nodes,rename,commitRename,cancelRename]);
   const {screenToFlowPosition,fitView}=useReactFlow();
-  const onConnect=useCallback(connection=>setEdges(existing=>addEdge({...connection,
-    type:'smoothstep',markerEnd:edgeOptions.markerEnd,style:edgeOptions.style},existing)),[setEdges]);
+  const onConnect=useCallback(connection=>setEdges(existing=>{
+    if(connection.source===connection.target || existing.some(edge=>
+      edge.source===connection.source && edge.target===connection.target))return existing;
+    return addEdge({...connection,type:'smoothstep',markerEnd:edgeOptions.markerEnd,
+      style:edgeOptions.style},existing);
+  }),[setEdges]);
+  // iPad-friendly alternative to precision-dragging handles: select source,
+  // press Connect, then tap the body of the target node.
+  const onNodeClick=useCallback((_event,node)=>{
+    if(!connectFrom)return;
+    if(node.id!==connectFrom)onConnect({source:connectFrom,target:node.id});
+    setConnectFrom(null);
+  },[connectFrom,onConnect]);
 
   const addNode=useCallback(kind=>{
+    setConnectFrom(null);
     setRename(null);
     const count=++serial.current;
     const point=screenToFlowPosition({x:window.innerWidth*0.52,y:window.innerHeight*0.49});
@@ -97,6 +110,7 @@ function Workspace() {
   },[screenToFlowPosition,setEdges,setNodes]);
 
   const deleteSelected=useCallback(()=>{
+    setConnectFrom(null);
     setRename(null);
     const nodesToDelete=new Set(selected.nodes);
     const edgesToDelete=new Set(selected.edges);
@@ -108,6 +122,7 @@ function Workspace() {
   },[selected,setNodes,setEdges]);
 
   const reset=useCallback(()=>{
+    setConnectFrom(null);
     setRename(null);
     setNodes(NODES.map(n=>({...n,position:{...n.position},data:{...n.data}})));
     setEdges(EDGES.map(e=>({...e})));
@@ -121,6 +136,8 @@ function Workspace() {
   },[]);
   const selectedCount=selected.nodes.length+selected.edges.length;
   const canRename=selected.nodes.length===1 && !rename;
+  const canConnect=Boolean(connectFrom)||selected.nodes.length===1;
+  const connectSourceName=nodes.find(node=>node.id===connectFrom)?.data.title;
   return <div className="workflow-page">
     <header className="workflow-header">
       <div className="workflow-identity">
@@ -134,6 +151,8 @@ function Workspace() {
       <ReactFlow nodes={renderedNodes} edges={edges} nodeTypes={nodeTypes}
         defaultEdgeOptions={edgeOptions} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
         onConnect={onConnect} onSelectionChange={onSelectionChange}
+        onNodeClick={onNodeClick} onPaneClick={()=>setConnectFrom(null)}
+        connectOnClick connectionRadius={38}
         onNodeDoubleClick={(_event,node)=>startRename(node.id)}
         fitView fitViewOptions={{padding:0.2}}
         nodesDraggable nodesConnectable elementsSelectable zoomOnDoubleClick={false}
@@ -150,6 +169,10 @@ function Workspace() {
         <button type="button" id="add-file-node" onClick={()=>addNode('file')}><span>＋</span> 文件节点</button>
         <button type="button" id="add-module-node" onClick={()=>addNode('module')}><span>＋</span> 模块节点</button>
         <span className="workflow-toolbar-divider" />
+        <button type="button" id="connect-selected" disabled={!canConnect}
+          aria-pressed={Boolean(connectFrom)}
+          onClick={()=>setConnectFrom(source=>source?null:selected.nodes[0])}>
+          <span>↗</span> {connectFrom?'取消连接':'连接节点'}</button>
         <button type="button" id="rename-selected" disabled={!canRename}
           onClick={()=>startRename(selected.nodes[0])}><span>✎</span> 重命名</button>
         <button type="button" id="delete-selected" disabled={!selectedCount} onClick={deleteSelected}>
@@ -162,7 +185,9 @@ function Workspace() {
         <span className="workflow-info-separator">·</span>
         <strong data-testid="edge-count">{edges.length}</strong> 条连线
         <span className="workflow-info-separator">·</span>
-        <span>双击节点改名，或选中后点「重命名」</span>
+        <span id="connection-hint">{connectFrom
+          ? `从「${connectSourceName}」出发：点一下目标节点即可连线；再次点「取消连接」退出`
+          : 'iPad 连线：选中起点 → 连接节点 → 点击终点；也可拖动两侧大触点'}</span>
       </div>
     </section>
   </div>;

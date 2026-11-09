@@ -48,6 +48,27 @@ try{
       assert.equal(await page.locator('.react-flow__node[data-id="translation-module"]').count(),1);
       assert.equal(await page.locator('.react-flow__node[data-id="translation-output"]').count(),1);
       assert.equal(await page.locator('.react-flow__edge[data-id="edge-translation-to-output"]').count(),1);
+      // React Flow handles have a large hit area; iPad users can avoid
+      // handle dragging altogether with select → Connect → tap target.
+      const handleSize=await page.locator('.workflow-handle').first().evaluate(handle=>({
+        width:getComputedStyle(handle).width,height:getComputedStyle(handle).height,
+      }));
+      assert.deepEqual(handleSize,{width:'64px',height:'64px'});
+      await page.locator('.react-flow__node[data-id="reviewed-md"] .workflow-node-title').tap();
+      await page.locator('#connect-selected').tap();
+      assert.equal(await page.locator('#connect-selected').getAttribute('aria-pressed'),'true');
+      await page.locator('.react-flow__node[data-id="translation-output"] .workflow-node-title').tap();
+      await page.waitForFunction(()=>document.querySelectorAll('.react-flow__edge').length===5,
+        null,{timeout:10000});
+      assert.equal(await page.locator('#connect-selected').getAttribute('aria-pressed'),'false');
+      await page.locator('#reset-workflow').tap();
+      await page.waitForFunction(()=>document.querySelectorAll('.react-flow__node').length===5
+          && document.querySelectorAll('.react-flow__edge').length===4,null,{timeout:12000});
+      await page.locator('.react-flow__node[data-id="sentence-table"] .workflow-node-title').tap();
+      await page.locator('#connect-selected').tap();
+      await page.locator('#connect-selected').tap();
+      assert.equal(await page.locator('#connect-selected').getAttribute('aria-pressed'),'false');
+      assert.equal(await page.locator('.react-flow__edge').count(),4);
       // Both a double click on the module and a toolbar action edit labels
       // in-place, without changing any node or edge identities.
       const module=page.locator('.react-flow__node[data-id="sentence-module"]');
@@ -115,7 +136,7 @@ try{
       assert.deepEqual(apiCalls,[], 'workflow page should not call file or module APIs');
       assert.deepEqual(runtimeErrors,[], 'React Flow should have no runtime errors');
       console.log('WORKFLOW_BROWSER_PASS',name,
-        'rename via double-click and toolbar, Enter/Escape, drag, add/delete, reset, reload, no API');
+        'tap-to-connect, enlarged handles, rename, drag, add/delete, reset, reload, no API');
       await page.close();
     } finally{await browser.close();}
   }
