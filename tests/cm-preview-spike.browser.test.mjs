@@ -1,0 +1,86 @@
+/** Independent proof (not production) of CM6 Markdown widgets, folds, source.
+ * Run against the exact Lab experiment page. Nothing here changes CMD bytes.
+ */
+import assert from 'node:assert/strict';
+import {chromium,webkit,devices} from 'playwright';
+import {chromeExecutable} from './platform.test-helper.mjs';
+
+const url=process.env.OCR2MD_CM_SPIKE_URL||
+  'https://ocr2md.laity.bid/labs/sentence-benchmark/cm-preview-spike.html';
+
+for(const [name,engine,binary] of [
+  ['Chrome',chromium,chromeExecutable()],
+  ['iPad-WebKit',webkit,webkit.executablePath()],
+]){
+  const browser=await engine.launch({headless:true,executablePath:binary});
+  try{
+    const page=await browser.newPage({...devices['iPad Pro 11 landscape'],
+      viewport:{width:1150,height:800}});
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(url,{waitUntil:'domcontentloaded',timeout:110000});
+    await page.waitForFunction(()=>Boolean(window.__cmPreviewSpike),null,{timeout:150000});
+    const projection=await page.evaluate(()=>{
+      const {view,metrics,reading,clean}=window.__cmPreviewSpike;
+      return {metrics,exact:view.state.doc.toString()===reading.doc,
+        originalRestored:clean.stats.restored,
+        visible:document.querySelectorAll('.ocr-cm-preview-rendered').length};
+    });
+    assert.equal(projection.exact,true);
+    assert.equal(projection.originalRestored,true);
+    assert.equal(projection.metrics.unitCount,402);
+    assert.equal(projection.metrics.headingRanges,19);
+    assert(projection.metrics.renderedBlocks>=420);
+    assert(projection.visible>0,'CM6 widget DOM must render inside editor');
+
+    await page.getByRole('checkbox',{name:'句子编号栏'}).check();
+    const previewIDCount=await page.locator('.ocr-cm-preview-unit-id').count();
+    await page.getByRole('checkbox',{name:'CM6 块级渲染'}).uncheck();
+    const sourceIDCount=await page.locator('.ocr-cm-preview-unit-id').count();
+    assert(sourceIDCount>0,'native CM6 gutter shows sentence IDs in source mode');
+    await page.getByRole('checkbox',{name:'CM6 块级渲染'}).check();
+
+    await page.getByRole('checkbox',{name:'CM6 标题折叠'}).check();
+    const folded=await page.evaluate(()=>{
+      const {view}=window.__cmPreviewSpike;
+      return {doc:view.state.doc.length,
+        folded:document.querySelectorAll('.cm-foldPlaceholder').length,
+        lines:document.querySelectorAll('.cm-line').length};
+    });
+    assert(folded.folded>=12,'CM6 native heading folding must run');
+    const remote=await page.locator('#cm-spike-record option').nth(390).getAttribute('value');
+    await page.locator('#cm-spike-record').selectOption(remote);
+    await page.waitForTimeout(200);
+    const navigated=await page.evaluate(()=>{
+      const {view,source}=window.__cmPreviewSpike;
+      const row=source.anchors.find(x=>x.id===document.querySelector('#cm-spike-record').value);
+      return {samePosition:view.state.selection.main.head===row.from,
+        sourceUnchanged:view.state.doc.toString()===source.doc};
+    });
+    assert.equal(navigated.samePosition,true);
+    assert.equal(navigated.sourceUnchanged,true);
+    await page.getByRole('checkbox',{name:'CM6 标题折叠'}).uncheck();
+
+    await page.getByRole('combobox',{name:'文档来源'}).selectOption('cmd');
+    await page.waitForFunction(()=>window.__cmPreviewSpike?.metrics.mode==='完整 CMD 原文',
+      null,{timeout:120000});
+    const raw=await page.evaluate(()=>{
+      const {view,model,metrics}=window.__cmPreviewSpike;
+      return {exact:view.state.doc.toString()===model.source,metrics};
+    });
+    assert.equal(raw.exact,true,'CM6 can hold COMPLETE unmodified CMD source');
+    assert.equal(raw.metrics.cmdExact,true);
+    assert.equal(raw.metrics.unitCount,402);
+    assert(raw.metrics.renderedBlocks>50,'Main renderer must map some CMD blocks');
+    assert.deepEqual(errors,[]);
+    console.log(name,'CM6_MARKDOWN_SPIKE_PASS',JSON.stringify({
+      cleanBlocks:projection.metrics.renderedBlocks,
+      cleanMissing:projection.metrics.skippedBlocks,
+      sourceIDCount,previewIDCount,
+      folded:folded.folded,
+      cmPositionCorrect:navigated.samePosition,
+      rawCMDBytes:raw.metrics.sourceBytes,
+      rawBlocks:raw.metrics.renderedBlocks,
+      rawUnmapped:raw.metrics.skippedBlocks,
+      rawExact:raw.exact}));
+  }finally{await browser.close();}
+}
