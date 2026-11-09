@@ -1801,3 +1801,25 @@ INSERT INTO access_edges VALUES
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-SENT-BENCH-S01','S01','tests/sentence-benchmark-public.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Three engine adapters, identical CMD projection, source-exact and UTF-16 mapped fragments across Buffett and MD corner cases','direct'),
  ('TC-SENT-BENCH-S02','S02','tests/sentence-benchmark-public.test.mjs','packages/minerujson-md/fixtures/buffetts-alpha.minerujson.md','Byte-identical Markdown including metadata, formula, media and code; source fragment tampering and missing pieces are rejected','direct');
+
+-- WCP34 WP1 Main-reviewed → Sentence-Lab JSON handoff; source and runtime
+-- stay isolated, with direct Python/Node tests for each public entry.
+INSERT INTO modules VALUES
+ ('R','Main Reviewed Document','CMD-backed immutable reviewed Markdown projection','scripts/v6_main_reviewed.py'),
+ ('Q','Sentence Lab Published Units','Isolated Lab import and immutable unit-version API','scripts/v6_sentence_units.py');
+INSERT INTO apis VALUES
+ ('R01','R','project','scripts/v6_main_reviewed.py','export','saved CMD bytes,document name','Main reviewed Markdown+reversible UTF-16 source map','source-only, never reads sentence Gold or AI translation data',1),
+ ('R02','R','publish','scripts/v6_main_reviewed.py','export','Main export directory,reviewed packet','reviewed.md path','only Main writes its own reviewed.md and manifest',1),
+ ('Q01','Q','import_snapshot','scripts/v6_reviewed_import.py','export','Lab runtime,Lab CMD,Main HTTP packet,expected SHA','import receipt','archives prior isolated CMD/Gold before explicit switch, never reads Main files',1),
+ ('Q02','Q','current_snapshot','scripts/v6_reviewed_import.py','export','Lab runtime,Lab CMD','versioned Main source metadata','rejects stale or missing imported Main packet',1),
+ ('Q03','Q','versionSentenceUnits','ui/sentence-benchmark-unit-version.js','export','source-only unit table,Main documentVersion,sentence reviewRevision','versioned JSON table','SHA-256 over all ordered source units; no translation writes',1),
+ ('Q04','Q','publish','scripts/v6_sentence_units.py','export','Lab export directory,versioned JSON,source/document/review revisions','published immutable sentence table','rejects stale/mismatched table or edition',1),
+ ('Q05','Q','read','scripts/v6_sentence_units.py','export','Lab export directory,source/document/review revisions','current validated sentence table','read-only published JSON for downstream Translation Lab',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-R01-WP1','R01','tests/test_v6_main_reviewed.py','labs/sentence-benchmark/.runtime/document.md','Main source-only 8 reviewed joins,lossless original CMD+source map','direct'),
+ ('TC-R02-WP1','R02','tests/test_v6_main_reviewed.py','tests/test_v6_main_reviewed.py','Main only owns exported reviewed.md,validated packet','direct'),
+ ('TC-Q01-WP1','Q01','tests/test_v6_main_reviewed.py','tests/test_v6_main_reviewed.py','Isolated Lab versioned import,archives on source change','direct'),
+ ('TC-Q02-WP1','Q02','tests/test_v6_main_reviewed.py','tests/test_v6_main_reviewed.py','Stale/imported source checksum checked','direct'),
+ ('TC-Q03-WP1','Q03','tests/sentence-benchmark-unit-version.test.mjs','tests/sentence-benchmark-unit-version.test.mjs','JS/Python independent unit version parity & change detection','direct'),
+ ('TC-Q04-WP1','Q04','tests/test_v6_main_reviewed_http.py','labs/sentence-benchmark/.runtime/document.md','394 unit publication with CAS and wrong-version rejection','integration'),
+ ('TC-Q05-WP1','Q05','tests/test_v6_main_reviewed_http.py','labs/sentence-benchmark/.runtime/document.md','only valid current 394 units published downstream','integration');

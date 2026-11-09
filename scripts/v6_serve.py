@@ -7,6 +7,10 @@ from v6_lan_lab_proxy import parse_lan_labs,dispatch_lan_lab
 from v6_sentence_review import read as read_sentence_review, save as save_sentence_review, etag as sentence_review_etag, MAX_BYTES as SENTENCE_REVIEW_LIMIT
 from v6_translation_review import load_dataset as load_translation_review_dataset
 from v6_reviewed_source import read as read_reviewed_source, save as save_reviewed_source, MAX_BYTES as REVIEWED_SOURCE_LIMIT
+from v6_main_reviewed import project as project_main_reviewed, publish as publish_main_reviewed
+from v6_reviewed_import import import_snapshot as import_main_snapshot, current_snapshot as imported_main_snapshot
+from v6_sentence_units import publish as publish_sentence_units, read as read_sentence_units, MAX_BYTES as SENTENCE_UNITS_LIMIT
+from urllib.request import urlopen, Request
 from v6_chapters import read_manifest, read_chapter, export as export_chapters, MAX_EXPORT_BYTES
 from v6_initialize import initialize_document
 from v6_cmd_settings import read as cmd_settings_read, save as cmd_settings_save, fingerprint as cmd_settings_fingerprint, LIMIT as SETTINGS_LIMIT
@@ -174,6 +178,48 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
+        if path == '/api/main-reviewed':
+            if LAB_ID:
+                self.response(404, 'Main reviewed document only')
+                return
+            try:
+                with DOC_WRITE_LOCK:
+                    doc=active_doc()
+                    source=(doc if doc.is_file() else FIXTURE).read_bytes()
+                    packet=project_main_reviewed(source,doc.name)
+                    publish_main_reviewed(RUNTIME/'exports',packet)
+            except (OSError,ValueError,UnicodeError):
+                self.response(503, 'Main reviewed document unavailable or invalid')
+                return
+            self.response(200,json.dumps(packet,ensure_ascii=False),
+                          'application/json; charset=utf-8')
+            return
+        if path == '/api/imported-main-reviewed':
+            if LAB_ID!='sentence-benchmark':
+                self.response(404,'Not found');return
+            try:
+                with DOC_WRITE_LOCK:
+                    metadata=imported_main_snapshot(RUNTIME,active_doc())
+            except (OSError,ValueError,TypeError,KeyError):
+                self.response(503,'Main reviewed snapshot not imported');return
+            self.response(200,json.dumps(metadata,ensure_ascii=False),
+                          'application/json; charset=utf-8')
+            return
+        if path == '/api/sentence-units':
+            if LAB_ID!='sentence-benchmark':
+                self.response(404,'Not found');return
+            try:
+                with DOC_WRITE_LOCK:
+                    source=active_doc().read_bytes()
+                    imported=imported_main_snapshot(RUNTIME,active_doc())
+                    reviewed=read_sentence_review(RUNTIME/'document.sentences.review.json',source)
+                    payload=read_sentence_units(RUNTIME/'exports',imported['sourceCmdSha256'],
+                                                imported['documentVersion'],sentence_review_etag(reviewed))
+            except (OSError,ValueError,TypeError,KeyError):
+                self.response(503,'Standard sentence table unavailable or stale');return
+            self.response(200,json.dumps(payload,ensure_ascii=False),
+                          'application/json; charset=utf-8')
+            return
         if path == '/api/translation-review-data':
             if LAB_ID != 'sentence-benchmark':
                 self.response(404, 'Not found')
@@ -447,7 +493,38 @@ class Handler(BaseHTTPRequestHandler):
             allowed.add(LAB_LAN_ORIGIN)
         return self.headers.get('Origin', '') in allowed
 
+    def post_import_main_reviewed(self):
+        if LAB_ID!='sentence-benchmark':
+            self.response(404,'Not found');return
+        if not self.same_origin() or self.headers.get('X-OCR2MD-Main-Import')!='1':
+            self.response(403,'Explicit same-origin Main import required');return
+        expected=self.headers.get('If-Match','')
+        if not re.fullmatch(r'[a-f0-9]{64}',expected):
+            self.response(428,'Current Lab CMD SHA required');return
+        url=os.environ.get('V6_MAIN_REVIEWED_URL','http://127.0.0.1:4396/api/main-reviewed')
+        parsed=urlsplit(url)
+        if parsed.scheme!='http' or parsed.hostname not in ('127.0.0.1','localhost') or            parsed.path!='/api/main-reviewed' or parsed.query or parsed.fragment or parsed.username:
+            self.response(503,'Main API URL must be loopback and exact');return
+        try:
+            with urlopen(Request(url,headers={'Accept':'application/json'}),timeout=12) as response:
+                if response.status!=200 or int(response.headers.get('Content-Length','0') or 0)>REVIEWED_SOURCE_LIMIT:
+                    raise ValueError('Main reviewed API response invalid')
+                raw=response.read(REVIEWED_SOURCE_LIMIT+1)
+            if len(raw)>REVIEWED_SOURCE_LIMIT:
+                raise ValueError('Main reviewed package too large')
+            packet=json.loads(raw.decode('utf-8'))
+            with DOC_WRITE_LOCK:
+                result=import_main_snapshot(RUNTIME,active_doc(),packet,expected)
+        except ValueError as error:
+            self.response(409,'Main import rejected: '+str(error));return
+        except (OSError,UnicodeError,TypeError,KeyError) as error:
+            self.response(503,'Main reviewed API not available');return
+        self.response(200,json.dumps(result,ensure_ascii=False),'application/json; charset=utf-8')
+
     def do_POST(self):
+        if urlsplit(self.path).path == '/api/import-main-reviewed':
+            self.post_import_main_reviewed()
+            return
         if urlsplit(self.path).path == '/api/media/paste':
             self.post_media_paste()
             return
@@ -696,7 +773,41 @@ class Handler(BaseHTTPRequestHandler):
             'units':len(package['baseline']['rows'])},ensure_ascii=False),
             'application/json; charset=utf-8')
 
+    def put_sentence_units(self):
+        if LAB_ID!='sentence-benchmark':
+            self.response(404,'Not found');return
+        if not self.same_origin() or self.headers.get('X-OCR2MD-Sentence-Units')!='1':
+            self.response(403,'Sentence Lab publisher required');return
+        try:
+            length=int(self.headers.get('Content-Length','-1'))
+        except ValueError:
+            length=-1
+        if not 2<=length<=SENTENCE_UNITS_LIMIT:
+            self.response(413,'Invalid sentence table size');return
+        raw=self.rfile.read(length)
+        if len(raw)!=length:
+            self.response(400,'Incomplete sentence table');return
+        try:
+            with DOC_WRITE_LOCK:
+                imported=imported_main_snapshot(RUNTIME,active_doc())
+                source=active_doc().read_bytes()
+                review=read_sentence_review(RUNTIME/'document.sentences.review.json',source)
+                if self.headers.get('If-Match')!=sentence_review_etag(review):
+                    self.response(412,'Sentence arbitration revision changed');return
+                units=publish_sentence_units(RUNTIME/'exports',raw,imported['sourceCmdSha256'],
+                     imported['documentVersion'],sentence_review_etag(review))
+        except (ValueError,TypeError,KeyError,UnicodeError) as error:
+            self.response(422,'Invalid sentence package: '+str(error));return
+        except OSError:
+            self.response(503,'Sentence table storage unavailable');return
+        self.response(200,json.dumps({'unitVersion':units['unitVersion'],
+            'documentVersion':units['documentVersion'],'rows':len(units['rows'])},
+            ensure_ascii=False),'application/json; charset=utf-8')
+
     def do_PUT(self):
+        if urlsplit(self.path).path == '/api/sentence-units':
+            self.put_sentence_units()
+            return
         if urlsplit(self.path).path == '/api/reviewed-source':
             self.put_reviewed_source()
             return

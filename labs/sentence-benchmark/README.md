@@ -216,7 +216,25 @@ for adjudicated candidate boundaries, with reviewed coverage displayed.
 - 历史 `translation-review/input` GPT/Grok 402 行文件不覆盖、不自动重写；旧校译页给出过期断行警示。新表导出文件名追加 `-reviewed-seams.json`，便于区别同一来源 SHA 但 **不同单元结构** 的旧版。新结构必须补译 8 个合并单元，其余记录可经 ID、原文、坐标严格核对后复用。只有 394 行匹配完整才可晋升正式比较输入。
 - 测试：`node --test --test-concurrency=1 tests/sentence-benchmark-translation-table.test.mjs tests/translation-review-reading.test.mjs tests/translation-review-clean-md.test.mjs tests/sentence-benchmark-public.test.mjs`。
 
-## WCP34：审阅 MD 与校译 Lab 的版本交接
+## WP1/4（2026-11-09）：Main 审阅 MD 生产权与分句 Lab 句表出口
+
+- Main 从**已保存的 CMD**独立发布 `GET /api/main-reviewed`；Main 自有
+  `.v6/exports/reviewed.md`、`reviewed.manifest.json`，不调用分句侧车或 AI 译表。
+  投影仅移除工作注释、接合已审阅的 `lb="m"`，提供可恢复的 UTF-16 补丁和
+  `blockAnchors`；`documentVersion` 是审阅 MD 的 SHA-256。
+- 分句 Lab「导入 Main 审阅 MD」通过 Main 只读 HTTP API 取得快照，仅复制到
+  自己的 `.runtime/imports/`。来源未变时保留现有仲裁，来源更新则先归档旧
+  CMD 与仲裁文件，再显式切换隔离快照。不会直接读取 Main 磁盘目录。
+- 分句 Lab「发布标准句表」写入独立 `.runtime/exports/sentence-units.json`
+  （并保留不可变版本快照）。句表包含 `documentVersion`、`reviewRevision`、
+  独立的 `unitVersion`，与 CMD 原文 SHA 分别核验；下游通过只读
+  `GET /api/sentence-units` 导入。尚未取得 Main 版本时只能导出旧式、
+  **未绑定来源版本的演示句表**，不允许冒充正式标准句表。
+- **部署边界**：此时 Main API 只在隔离 Lab 开发分支实现，须经正常 Git
+  晋升才会出现在正式开发 Main。集成测试通过不意味着 Main 已上线。
+- 合同和验证见 `tests/am/WP1_MAIN_REVIEWED_SENTENCE_CONTRACT.md`。
+
+## WCP34：审阅 MD 与校译 Lab 的版本交接（旧兼容路径，待 WP3 淘汰）
 
 分句 Lab 作为唯一生产者：在「待翻译句块表」中选择「发布到校译 Lab」后，
 使用当前已保存的 CMD + 分句 sidecar + `lb="m"` 生成一组**不可混配**的

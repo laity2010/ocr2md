@@ -11,6 +11,7 @@ import buffett from '../packages/minerujson-md/fixtures/buffetts-alpha.minerujso
 import {split,rebuild} from './sentence-benchmark-core.js';
 import {engineCatalog} from './sentence-benchmark-engines.js';
 import {buildTranslationTable} from './sentence-benchmark-translation-table.js';
+import {versionSentenceUnits} from './sentence-benchmark-unit-version.js';
 import {createReviewedSourcePackage} from './sentence-benchmark-reviewed-package.js';
 import {reviewInventory,blockAt,freshReview,synchronizeReview,reviewChanged,acceptedBoundaries,REVIEW_SCHEMA} from './sentence-benchmark-review.js';
 const $=id=>document.getElementById(id);
@@ -53,7 +54,7 @@ let lastRevealed=null;
 let inventory=new Map(),activeBlockId=null;
 let review=freshReview(''),reviewRevision=null,reviewReady=false;
 let saveTail=Promise.resolve(),reviewSavingError=false;
-let translationTable=null;
+let translationTable=null,mainDocumentVersion=null;
 function selectBlockAt(offset){
   activeBlockId=blockAt(inventory,offset)?.id??null;
 }
@@ -426,6 +427,7 @@ function renderTranslationTable(){
     }
     tbody.replaceChildren(fragment);
     $('export-translation').disabled=false;
+    $('publish-units').disabled=!mainDocumentVersion;
     $('export-reviewed-md').disabled=false;
     $('publish-reviewed').disabled=false;
   }catch(error){
@@ -433,23 +435,62 @@ function renderTranslationTable(){
     $('translation-summary').textContent='句块表不可用：'+error.message;
     $('translation-table').querySelector('tbody').replaceChildren();
     $('export-translation').disabled=true;
+    $('publish-units').disabled=true;
     $('export-reviewed-md').disabled=true;
     $('publish-reviewed').disabled=true;
   }
 }
+async function currentVersionedUnits(){
+  await saveTail;
+  return versionSentenceUnits(currentTranslationTable(),mainDocumentVersion,reviewRevision);
+}
 async function exportTranslationTable(){
   try{
-    await saveTail;
-    const table=currentTranslationTable();
-    // Distinguish corrected reviewed-seam units from the historical broken
-    // export: the CMD SHA is unchanged, but the AI unit identity has changed.
-    const sourceName='translation-units-'+table.sourceSha256.slice(0,12)+'-reviewed-seams.json';
-    download(sourceName,table);
-    status('已导出唯一待翻译句块表 · '+table.rows.length+
-      ' 行（均为有效 AI 翻译单位），不修改 CMD 或审阅文件');
-  }catch(error){
-    status('句块表导出失败：'+error.message,true);
+    if(!mainDocumentVersion){
+      const table=currentTranslationTable();
+      download('translation-units-'+table.sourceSha256.slice(0,12)+'-unbound.json',table);
+      status('已导出演示/旧式句表 · 未绑定 Main 审阅 MD；不能发布为标准句表');
+      return;
+    }
+    const table=await currentVersionedUnits();
+    download('sentence-units-'+table.unitVersion.slice(0,12)+'.json',table);
+    status('已导出标准句表 · '+table.rows.length+' 条 · unitVersion '+table.unitVersion.slice(0,12));
+  }catch(error){status('句表导出失败：'+error.message,true);}
+}
+async function publishSentenceUnits(){
+  $('publish-units').disabled=true;
+  try{
+    const table=await currentVersionedUnits();
+    const response=await fetch('./api/sentence-units',{
+      method:'PUT',headers:{'Content-Type':'application/json',
+        'X-OCR2MD-Sentence-Units':'1','If-Match':reviewRevision},
+      body:JSON.stringify(table),cache:'no-store'});
+    if(!response.ok)throw Error('HTTP '+response.status+' · '+await response.text());
+    const result=await response.json();
+    if(result.unitVersion!==table.unitVersion||result.rows!==table.rows.length)
+      throw Error('服务器句表确认与本地不同');
+    status('已发布标准句表 · '+result.rows+' 条 · '+result.unitVersion.slice(0,12)+
+      ' · Lab 翻译可通过只读 JSON 接口导入');
+  }catch(error){status('句表发布失败：'+error.message,true);}
+  finally{$('publish-units').disabled=!mainDocumentVersion;}
+}
+async function importMainReviewed(){
+  if(sample.id!=='reviewed'||!sample.sha256){
+    status('请先打开 Main 的已审阅 CMD 隔离快照',true);return;
   }
+  $('import-main').disabled=true;
+  try{
+    await saveTail;
+    const response=await fetch('./api/import-main-reviewed',{
+      method:'POST',headers:{'X-OCR2MD-Main-Import':'1',
+        'If-Match':sample.sha256},cache:'no-store'});
+    if(!response.ok)throw Error('HTTP '+response.status+' · '+await response.text());
+    const result=await response.json();
+    status('已导入 Main 审阅 MD · '+result.documentVersion.slice(0,12)+
+      ' · 接合 '+result.reviewedJoins+' 处断行 · 即将加载隔离快照');
+    window.location.reload();
+  }catch(error){status('Main 审阅 MD 导入失败：'+error.message,true);}
+  finally{$('import-main').disabled=false;}
 }
 async function exportReviewedMD(){
   try{
@@ -605,6 +646,8 @@ $('reject-issue').onclick=()=>decide(focused,false);
 $('clear-issue').onclick=()=>decide(focused,null);
 $('manual-issue').onclick=()=>{manual=true;renderManual();};
 $('cancel-manual').onclick=()=>{manual=false;renderManual();};
+$('import-main').onclick=importMainReviewed;
+$('publish-units').onclick=publishSentenceUnits;
 $('export-gold').onclick=exportGold;
 $('gold-file').onchange=importGold;
 $('export-report').onclick=exportReport;
@@ -622,6 +665,17 @@ async function initializeReviewedSample(){
     const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(md)));
     const sha256=[...hash].map(x=>x.toString(16).padStart(2,'0')).join('');
     samples.unshift({id:'reviewed',name:'Main 已审阅 CMD · 独立快照',md,sha256});
+    // A legacy CMD copy without the Main-published reviewed.md is not a
+    // versioned unit source; never invent a documentVersion in Sentence Lab.
+    mainDocumentVersion=null;
+    try{
+      const imported=await fetch('./api/imported-main-reviewed',{cache:'no-store'});
+      if(imported.ok){
+        const packet=await imported.json();
+        if(packet.sourceCmdSha256===sha256)mainDocumentVersion=packet.documentVersion;
+      }
+    }catch{}
+
     // One-time migration from the previous unreviewed-fixture default.
     // Subsequent user-selected samples remain sticky across reloads.
     if(!state.reviewedDefaultApplied){
@@ -629,7 +683,10 @@ async function initializeReviewedSample(){
       state.selected='reviewed';
     }
     selectSample(state.selected);
-    if(sample.id==='reviewed')status('已加载 Main 审阅 CMD 隔离快照 · SHA-256 '+sha256.slice(0,16));
+    if(sample.id==='reviewed')status('已加载 Main CMD 隔离快照 · '+sha256.slice(0,12)+
+      (mainDocumentVersion?' · Main 审阅 MD '+mainDocumentVersion.slice(0,12):
+      ' · 尚未导入 Main 审阅 MD；新版句表暂不可发布'));
+
   } catch (error) {
     // Failure is visible: never silently present the MinerU fixture as
     // though it were the reviewed Main document.
