@@ -146,6 +146,11 @@ export function createCMMarkdownPreviewSpike(text,anchors=[]){
     skipped,headingRanges:headings.length,sentenceMarkers:byLine.size};
   const controls={
     extensions,metrics,
+    foldedCount(view){
+      let count=0;
+      foldedRanges(view.state).between(0,view.state.doc.length,()=>count++);
+      return count;
+    },
     setRendered(view,enabled){
       view.dispatch({effects:togglePreviewEffect.of(Boolean(enabled))});
     },

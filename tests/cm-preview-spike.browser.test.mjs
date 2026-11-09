@@ -65,12 +65,13 @@ for(const [name,engine,binary] of [
 
     await page.getByRole('checkbox',{name:'CM6 标题折叠'}).check();
     const folded=await page.evaluate(()=>{
-      const {view}=window.__cmPreviewSpike;
+      const {view,cm}=window.__cmPreviewSpike;
       return {doc:view.state.doc.length,
-        folded:document.querySelectorAll('.cm-foldPlaceholder').length,
+        folded:cm.foldedCount(view),
+        mountedPlaceholders:document.querySelectorAll('.cm-foldPlaceholder').length,
         lines:document.querySelectorAll('.cm-line').length};
     });
-    assert(folded.folded>=12,'CM6 native heading folding must run');
+    assert.equal(folded.folded,19,'CM6 fold state must cover all 19 headings');
     const remote=await page.locator('#cm-spike-record option').nth(390).getAttribute('value');
     await page.locator('#cm-spike-record').selectOption(remote);
     await page.waitForTimeout(200);
