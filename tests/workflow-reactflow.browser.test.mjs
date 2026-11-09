@@ -67,8 +67,10 @@ try{
       assert.equal(await page.locator('.react-flow__node').count(),4);
       assert.equal(await page.locator('.react-flow__node').filter({hasText:'新模块 2'}).count(),1);
       await page.locator('#reset-workflow').click();
-      assert.equal(await page.locator('.react-flow__node').count(),3);
-      assert.equal(await page.locator('.react-flow__edge').count(),2);
+      await page.waitForFunction(()=>document.querySelectorAll('.react-flow__node').length===3
+          && document.querySelectorAll('.react-flow__edge').length===2,
+        null,{timeout:10000});
+      assert.equal(await page.locator('[data-testid="edge-count"]').textContent(),'2');
 
       // Deleting a pre-existing node removes both attached React Flow edges.
       await page.locator('.react-flow__node[data-id="sentence-module"]').click();
@@ -76,7 +78,8 @@ try{
       assert.equal(await page.locator('.react-flow__node').count(),2);
       assert.equal(await page.locator('.react-flow__edge').count(),0);
       await page.reload({waitUntil:'domcontentloaded'});
-      await page.waitForFunction(()=>document.querySelectorAll('.react-flow__node').length===3,null,{timeout:25000});
+      await page.waitForFunction(()=>document.querySelectorAll('.react-flow__node').length===3
+         && document.querySelectorAll('.react-flow__edge').length===2,null,{timeout:25000});
       assert.equal(await page.locator('.react-flow__edge').count(),2,
         'refresh must restore initial static flow, not use storage');
       assert.deepEqual(apiCalls,[], 'workflow page should not call file or module APIs');
