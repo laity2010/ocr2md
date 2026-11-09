@@ -63,3 +63,18 @@
   .ocr-tr-reader-scroll .ocr-markdown{padding-right:10px}
   .ocr-tr-reader-pane .ocr-sb-pane-toolbar>strong{display:none}
 }
+
+/* Heading outline reuses Main's rendered H1-H6 and native details/summary.
+   The browser owns folding; all semantic heading typography stays intact. */
+.ocr-tr-reader-scroll .ocr-markdown details.ocr-tr-heading-section{margin:0;border-bottom:1px solid #49565a}
+.ocr-tr-reader-scroll .ocr-markdown summary.ocr-tr-heading-summary{
+  cursor:pointer;display:list-item;list-style:disclosure-closed inside;
+  min-height:36px;padding:5px 3px;user-select:none;-webkit-user-select:none;
+  touch-action:manipulation;
+}
+.ocr-tr-reader-scroll .ocr-markdown details.ocr-tr-heading-section[open]>summary.ocr-tr-heading-summary{list-style-type:disclosure-open}
+.ocr-tr-reader-scroll .ocr-markdown summary.ocr-tr-heading-summary:focus-visible{outline:2px solid #a7c080;outline-offset:-2px}
+.ocr-tr-reader-scroll .ocr-markdown summary.ocr-tr-heading-summary>:is(h1,h2,h3,h4,h5,h6){
+  display:inline;margin:0;line-height:1.32;vertical-align:middle;
+}
+.ocr-tr-reader-scroll .ocr-markdown details.ocr-tr-heading-section:not([open])>.ocr-tr-heading-content{display:none}

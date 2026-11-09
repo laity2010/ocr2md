@@ -5,6 +5,7 @@
 import {renderMarkdown} from './markdown-preview.js';
 import {createFootnotePopover} from './footnote-popover.js';
 import {mainMediaURL} from './translation-review-reading.js';
+import {foldRenderedHeadingSections,unfoldRenderedHeadingSections} from './translation-review-heading-sections.js';
 
 export class TranslationReaderPane {
   constructor(id,owner){
@@ -25,6 +26,8 @@ export class TranslationReaderPane {
     };
     const sentenceToggle=makeToggle('句子编号','ocr-tr-reader-ids-control');
     this.sentenceIdInput=sentenceToggle.checkbox;
+    const outlineToggle=makeToggle('折叠到标题','ocr-tr-reader-outline-control');
+    this.outlineInput=outlineToggle.checkbox;
     const title=document.createElement('strong');
     title.textContent='单语 Markdown · 成品预览';
     this.returnNoteButton=document.createElement('button');
@@ -35,7 +38,7 @@ export class TranslationReaderPane {
     this.returnNoteButton.hidden=true;
     this.status=document.createElement('span');
     this.status.className='ocr-sb-pane-status';
-    toolbar.append(sentenceToggle.label,title,
+    toolbar.append(sentenceToggle.label,outlineToggle.label,title,
       this.returnNoteButton,this.status);
     this.scroller=document.createElement('div');
     // Main's shared footnote reader uses this scroll port to remember the
@@ -58,11 +61,14 @@ export class TranslationReaderPane {
     this.resizeObserver=null;
     this.footnoteReader=null;this.noteReturn=null;
     this.showSentenceIds=false;
+    this.headingOutlineEnabled=false;this.beforeHeadingOutlineScroll=null;
   }
   init(){
     this.footnoteReader=createFootnotePopover({root:this.body,
       onLocate:target=>this.navigateToNote(target)});
     this.returnNoteButton.addEventListener('click',()=>this.returnToNoteReference());
+    this.outlineInput.addEventListener('change',()=>
+      this.setHeadingOutline(this.outlineInput.checked));
     this.sentenceIdInput.addEventListener('change',()=>{
       this.showSentenceIds=this.sentenceIdInput.checked;
       this.suppressUntil=performance.now()+650;
@@ -81,7 +87,7 @@ export class TranslationReaderPane {
       const element=event.target instanceof Element?event.target:null;
       const hit=element?.closest('[data-unit-id],[data-gutter-unit]');
       if(!event.isPrimary||!hit||
-          element.closest('a[href],summary.ocr-callout-title'))return;
+          element.closest('a[href],summary.ocr-callout-title,summary.ocr-tr-heading-summary'))return;
       const id=hit.dataset.gutterUnit||hit.dataset.unitId;
       if(!this.anchors.some(x=>x.id===id))return;
       tapStart={pointerId:event.pointerId,x:event.clientX,y:event.clientY,
@@ -124,7 +130,7 @@ export class TranslationReaderPane {
       if(event.detail>0)return;
       // Let details/summary own folding. Clicks on hyperlinks and images do
       // not navigate or mutate review state; only explicit sentence hits do.
-      if(event.target.closest('a[href],summary.ocr-callout-title'))return;
+      if(event.target.closest('a[href],summary.ocr-callout-title,summary.ocr-tr-heading-summary'))return;
       const target=event.target.closest('[data-unit-id]');
       if(!target)return;
       const selected=this.anchors.find(x=>x.id===target.dataset.unitId);
@@ -158,9 +164,29 @@ export class TranslationReaderPane {
         const path=mainMediaURL(img.getAttribute('src'));
         if(path)img.setAttribute('src',path);
       }
+      if(this.headingOutlineEnabled)foldRenderedHeadingSections(this.body);
     }
     this.assignAnchors();
     if(this.current)this.mark(this.current);
+    this.scheduleMeasure();
+  }
+  setHeadingOutline(enabled){
+    enabled=Boolean(enabled);
+    if(this.headingOutlineEnabled===enabled)return;
+    if(enabled){
+      this.beforeHeadingOutlineScroll=this.scroller.scrollTop;
+      foldRenderedHeadingSections(this.body);
+      this.headingOutlineEnabled=true;
+      this.body.classList.add('ocr-tr-heading-outline');
+      this.scroller.scrollTop=0;
+    }else{
+      unfoldRenderedHeadingSections(this.body);
+      this.headingOutlineEnabled=false;
+      this.body.classList.remove('ocr-tr-heading-outline');
+      const originalTop=this.beforeHeadingOutlineScroll;
+      this.beforeHeadingOutlineScroll=null;
+      if(originalTop!==null)this.scroller.scrollTop=originalTop;
+    }
     this.scheduleMeasure();
   }
   clearNoteReturn(){

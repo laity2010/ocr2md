@@ -53,34 +53,36 @@ for(const [name,engine,binary] of [
     const summary=await page.evaluate(()=>{
       const root=document.querySelector('.ocr-tr-reader-scroll');
       const body=root.querySelector('article');
-      const headings=[...body.children].filter(x=>/^H[1-6]$/.test(x.tagName));
-      const children=[...body.children].filter(x=>!/^H[1-6]$/.test(x.tagName));
+      const sections=[...body.querySelectorAll(':scope > details.ocr-tr-heading-section')];
+      const headings=sections.map(x=>x.querySelector(':scope > summary > :is(h1,h2,h3,h4,h5,h6)'));
       return {outline:body.classList.contains('ocr-tr-heading-outline'),
-        headings:headings.length,
-        visibleHeadings:headings.filter(x=>getComputedStyle(x).display!=='none').length,
-        visibleBody:children.filter(x=>getComputedStyle(x).display!=='none').length,
+        headings:headings.length,closed:sections.filter(x=>!x.open).length,
+        visibleHeadings:headings.filter(x=>x?.getClientRects().length>0).length,
+        visibleBody:sections.filter(x=>x.querySelector('.ocr-tr-heading-content')?.getClientRects().length>0).length,
+        fonts:headings.map(x=>x?parseFloat(getComputedStyle(x).fontSize):0),
         scroll:root.scrollTop};
     });
     assert.equal(summary.outline,true);
     assert.equal(summary.headings,19);
-    assert.equal(summary.visibleHeadings,19,'outline retains every heading');
-    assert.equal(summary.visibleBody,0,'all article body elements are folded');
+    assert.equal(summary.closed,19,'native details must own all initial fold states');
+    assert.equal(summary.visibleHeadings,19,'outline retains every H1-H6 heading');
+    assert.equal(summary.visibleBody,0,'all section bodies are natively folded');
+    assert(summary.fonts[0]>summary.fonts[1],
+      'rendered H1 must retain larger Markdown typography than H2');
     assert.equal(await page.locator('#record-picker').inputValue(),wanted,
       'folding must not switch the selected sentence');
 
-    // A heading is independently expandable/collapsible without changing
-    // canonical selection or rewriting the underlying Markdown.
-    const header=page.locator('.ocr-tr-outline-heading[data-unit-id="p11b7-b001"]');
+    // Browser-native details/summary, not custom aria/click/keyboard state.
+    const header=page.locator('.ocr-tr-heading-summary').nth(10);
+    const section=header.locator('xpath=..');
+    assert.equal(await section.evaluate(x=>x.open),false);
     await header.click();
-    assert.equal(await header.getAttribute('aria-expanded'),'true');
-    const expanded=await page.evaluate(()=>{
-      const root=document.querySelector('article.ocr-markdown');
-      return [...root.children].filter(x=>!/^H[1-6]$/.test(x.tagName)&&
-        getComputedStyle(x).display!=='none').length;
-    });
-    assert(expanded>0,'heading click expands its own text');
+    assert.equal(await section.evaluate(x=>x.open),true);
+    const expanded=await section.evaluate(x=>
+      x.querySelector('.ocr-tr-heading-content').getClientRects().length>0);
+    assert(expanded,'click expands only its own section through native details');
     await header.click();
-    assert.equal(await header.getAttribute('aria-expanded'),'false');
+    assert.equal(await section.evaluate(x=>x.open),false);
     assert.equal(await page.locator('#record-picker').inputValue(),wanted);
 
     // The right AI selection must reveal the *corresponding* hidden source
@@ -110,6 +112,8 @@ for(const [name,engine,binary] of [
       const root=document.querySelector('.ocr-tr-reader-scroll');
       const body=root.querySelector('article');
       return {allBodyVisible:[...body.children].every(x=>getComputedStyle(x).display!=='none'),
+        originalHeadings:body.querySelectorAll(':scope > h1,:scope > h2,:scope > h3,:scope > h4,:scope > h5,:scope > h6').length,
+        foldedSections:body.querySelectorAll('details.ocr-tr-heading-section').length,
         text:body.textContent,
         images:body.querySelectorAll('img').length,
         math:body.querySelectorAll('.katex').length,
@@ -117,6 +121,8 @@ for(const [name,engine,binary] of [
         scroll:root.scrollTop,ids:root.querySelectorAll('[data-unit-id]').length};
     });
     assert.equal(restored.allBodyVisible,true);
+    assert.equal(restored.originalHeadings,19);
+    assert.equal(restored.foldedSections,0);
     assert.equal(restored.text,initial.text,'folding never rewrites source text');
     assert.equal(restored.images,18);assert(restored.math>=40);
     assert.equal(restored.callouts,7);assert.equal(restored.ids,402);
