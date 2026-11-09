@@ -32,6 +32,8 @@ for(const [name,engine,binary] of [
         math:body.querySelectorAll('.katex').length,
         callouts:body.querySelectorAll('details.ocr-callout').length,
         allHeadings:body.querySelectorAll(':scope > h1,:scope > h2,:scope > h3,:scope > h4,:scope > h5,:scope > h6').length,
+        headingTags:[...body.querySelectorAll(':scope > h1,:scope > h2,:scope > h3,:scope > h4,:scope > h5,:scope > h6')].map(x=>x.tagName),
+        headingFonts:[...body.querySelectorAll(':scope > h1,:scope > h2,:scope > h3,:scope > h4,:scope > h5,:scope > h6')].map(x=>parseFloat(getComputedStyle(x).fontSize)),
         allSentenceIds:scroll.querySelectorAll('[data-unit-id]').length};
     });
     assert.equal(initial.allHeadings,19);
@@ -59,15 +61,22 @@ for(const [name,engine,binary] of [
         headings:headings.length,closed:sections.filter(x=>!x.open).length,
         visibleHeadings:headings.filter(x=>x?.getClientRects().length>0).length,
         visibleBody:sections.filter(x=>x.querySelector('.ocr-tr-heading-content')?.getClientRects().length>0).length,
+        text:body.textContent,
+        tags:headings.map(x=>x?.tagName),
         fonts:headings.map(x=>x?parseFloat(getComputedStyle(x).fontSize):0),
         scroll:root.scrollTop};
     });
     assert.equal(summary.outline,true);
+    assert.equal(summary.text===initial.text,true,'native folding must not lose whitespace text nodes');
     assert.equal(summary.headings,19);
     assert.equal(summary.closed,19,'native details must own all initial fold states');
     assert.equal(summary.visibleHeadings,19,'outline retains every H1-H6 heading');
     assert.equal(summary.visibleBody,0,'all section bodies are natively folded');
-    assert(summary.fonts[0]>summary.fonts[1],
+    assert.deepEqual(summary.tags,initial.headingTags,'all 19 heading levels must remain unchanged');
+    assert.deepEqual(summary.fonts,initial.headingFonts,
+      'native folding must preserve the exact Markdown font size of every H1-H6');
+    assert(Math.min(...summary.fonts.filter((_,i)=>summary.tags[i]==='H1'))>
+      Math.max(...summary.fonts.filter((_,i)=>summary.tags[i]==='H2')),
       'rendered H1 must retain larger Markdown typography than H2');
     assert.equal(await page.locator('#record-picker').inputValue(),wanted,
       'folding must not switch the selected sentence');
@@ -123,7 +132,7 @@ for(const [name,engine,binary] of [
     assert.equal(restored.allBodyVisible,true);
     assert.equal(restored.originalHeadings,19);
     assert.equal(restored.foldedSections,0);
-    assert.equal(restored.text,initial.text,'folding never rewrites source text');
+    assert.equal(restored.text===initial.text,true,'folding must preserve ALL HTML text nodes, including whitespace');
     assert.equal(restored.images,18);assert(restored.math>=40);
     assert.equal(restored.callouts,7);assert.equal(restored.ids,402);
     assert(Math.abs(restored.scroll-before)<15,

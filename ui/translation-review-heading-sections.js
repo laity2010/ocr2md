@@ -11,7 +11,7 @@ export function foldRenderedHeadingSections(article){
     throw Error('Heading sections are already folded');
   const fragment=document.createDocumentFragment();
   let content=null,count=0;
-  for(const node of [...article.children]){
+  for(const node of [...article.childNodes]){
     if(isHeading(node)){
       const section=document.createElement('details');
       section.className='ocr-tr-heading-section';
