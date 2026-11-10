@@ -17,7 +17,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-NAMES=('cm-html','sentence-benchmark','translation-lab')
+NAMES=('cm-html','sentence-benchmark','translation-lab','ocr-review')
 SCHEMA='ocr2md-lab-unified-release/v1'
 LIMIT=70*1024*1024
 

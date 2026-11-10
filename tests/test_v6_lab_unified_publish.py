@@ -63,6 +63,20 @@ class UnifiedPublisherTests(unittest.TestCase):
         self.assertEqual((self.dest/'cm-html/assets/file.js').read_bytes(),b'abc123')
         self.assertFalse(list(self.base.glob('.published-lab.old-*')))
 
+    def test_review_lab_update_reuses_all_other_modules(self):
+        first,_=publish(self.dest,self.sources,self.home)
+        new_file=self.sources['ocr-review']/'assets/file.js'
+        new_file.write_bytes(b'Q07 reviewed OCR release')
+        updated,_=publish(self.dest,{'ocr-review':self.sources['ocr-review']},
+                          self.home,reuse_unchanged=True)
+        self.assertNotEqual(updated['releaseId'],first['releaseId'])
+        for name in NAMES:
+            if name!='ocr-review':
+                self.assertEqual(updated['modules'][name],first['modules'][name])
+                self.assertEqual((self.dest/name/'assets/file.js').read_bytes(),b'abc123')
+        self.assertEqual((self.dest/'ocr-review/assets/file.js').read_bytes(),
+                         b'Q07 reviewed OCR release')
+
     def test_reuse_refuses_tampered_old_module(self):
         publish(self.dest,self.sources,self.home)
         (self.dest/'cm-html/assets/file.js').write_bytes(b'tampered')
