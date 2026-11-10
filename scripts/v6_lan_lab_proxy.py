@@ -69,8 +69,19 @@ def dispatch_lan_lab(handler, routes):
     else:
         amount = 0
     body = handler.rfile.read(amount) if amount else None
+    # The LAN TLS listener is the trust boundary for the browser-visible Host.
+    # The upstream gateway and per-Lab service must see that SAME authority so
+    # their Origin-vs-Host CSRF check works behind both loopback proxies.
+    # Never forward an arbitrary client-supplied Host: only the listener's
+    # exact bound IP:port is valid for this explicitly configured LAN route.
+    lan_host, lan_port = handler.server.server_address[:2]
+    public_host = f'{lan_host}:{lan_port}'
+    if handler.headers.get('Host', '').strip().lower() != public_host.lower():
+        handler.response(421, 'Unexpected LAN HTTPS Host')
+        return True
     headers = {key: value for key, value in handler.headers.items()
                if key.lower() not in HOP_HEADERS}
+    headers['Host'] = public_host
     if amount:
         headers['Content-Length'] = str(amount)
     connection = http.client.HTTPConnection('127.0.0.1', routes[name], timeout=25)
