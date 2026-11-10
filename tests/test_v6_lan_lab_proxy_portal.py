@@ -21,7 +21,9 @@ class FakeOrigin(BaseHTTPRequestHandler):
 class FakeRequest:
     command='GET'
     def __init__(self,path):
-        self.path=path;self.headers={};self.rfile=io.BytesIO();self.wfile=io.BytesIO()
+        # Same canonical external authority as the bound LAN TLS listener.
+        self.server=type('LANSocket',(),{'server_address':('192.168.1.10',4443)})()
+        self.path=path;self.headers={'Host':'192.168.1.10:4443'};self.rfile=io.BytesIO();self.wfile=io.BytesIO()
         self.status=None;self.outheaders={}
     def send_response(self,status):self.status=status
     def send_header(self,key,val):self.outheaders[key]=val
