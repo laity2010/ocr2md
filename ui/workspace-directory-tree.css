@@ -1,0 +1,36 @@
+/* Server folder chooser fills the existing Settings preview pane.
+ * Source editor and AG remain untouched; scroll only inside the tree. */
+.app .ocr-settings-control{position:relative}
+.ocr-settings-directory-picker{position:absolute;inset:0;z-index:5;box-sizing:border-box;
+  display:flex;flex-direction:column;gap:9px;min-width:0;min-height:0;
+  padding:12px 14px;background:#2f383e;color:#d3c6aa}
+.ocr-settings-directory-picker[hidden]{display:none!important}
+.ocr-settings-directory-picker-heading,.ocr-settings-directory-picker-footer{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none}
+.ocr-settings-directory-picker-heading strong{font-size:var(--ocr-frame-font-size,16px)}
+.ocr-settings-directory-picker-heading button,.ocr-settings-directory-picker-footer button{
+  min-height:42px;padding:7px 14px;border:1px solid #60766b;background:#293b3c;
+  color:#e6ddc8;border-radius:6px;font-family:inherit;font-size:var(--ocr-frame-font-size,16px)}
+.ocr-settings-directory-picker-footer button{flex:1;min-width:0}
+.ocr-settings-directory-picker-footer button:disabled{opacity:.5}
+.ocr-settings-directory-tree-host{box-sizing:border-box;flex:1 1 0;min-height:125px;
+  overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  border:1px solid #56655d;border-radius:6px;padding:8px;
+  background:#222d32;color:#d3c6aa}
+.ocr-workspace-directory-tree{display:block;min-width:0;font-size:var(--ocr-frame-font-size,16px);
+  --wa-color-text-normal:#d3c6aa;--wa-color-surface-default:#222d32;
+  --wa-color-brand-fill-normal:#527e68;--wa-color-brand-on-normal:#f5fff4;
+  --indent-size:22px;--show-duration:0ms;--hide-duration:0ms}
+.ocr-workspace-directory-tree wa-tree-item::part(item){min-height:44px;align-items:center;
+  box-sizing:border-box;width:100%;border-radius:5px;
+  touch-action:manipulation}
+/* Highlight exactly the selected directory's ROW, not its descendants.
+ * WebAwesome exposes the row via ::part(item), including indent and chevron. */
+.ocr-workspace-directory-tree wa-tree-item[selected]::part(item){
+  background:#396c5a;color:#f6fff7;
+  border-inline-start-color:#a5e1be;
+  box-shadow:inset 0 0 0 1px #729e88}
+.ocr-workspace-directory-tree wa-tree-item::part(label){
+  white-space:normal;overflow-wrap:anywhere;min-width:0;line-height:1.4}
+.ocr-workspace-directory-tree wa-tree-item::part(expand-button){min-width:40px;min-height:40px}
+.ocr-settings-control input[aria-label="当前资料目录"]{width:100%;font-size:13px}

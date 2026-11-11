@@ -15,6 +15,7 @@
     "test:shell": "node tests/compact-shell-browser.test.mjs"
   },
   "dependencies": {
+    "@awesome.me/webawesome": "3.14.0",
     "@codemirror/commands": "^6.8.1",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-json": "^6.0.2",

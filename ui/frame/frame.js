@@ -5,19 +5,21 @@ import './frame.css';
 import {createFrameWorkspace} from './layout.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
+import {frameDirectoryPort} from './directory-port.js';
+import {createFrameStatus} from './global-status.js';
 import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
-// Frame remains the reusable shell; each experiment supplies its own identity.
+// Shared Frame shell with independent Lab identity and a unified top status port.
 const labName=typeof __FRAME_APP_ID__==='string'?__FRAME_APP_ID__:'lab-frame';
-function topStatus(message,kind='ok'){
-  const node=$('status');node.textContent=String(message);node.dataset.kind=kind;
-}
+const globalStatus=createFrameStatus($('status'));
+const topStatus=(message,kind='info')=>globalStatus.publish(message,kind);
 const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.
 $('build-version').textContent=build.match(/(\d{8}-\d{4})\d{2}$/)?.[1]??build;
 let publishedDirectory='';
-const io=createFrameSettingsIO(localStorage,labName,()=>publishedDirectory);
+const io=createFrameSettingsIO(localStorage,labName,()=>publishedDirectory,
+  path=>frameDirectoryPort.browse(path));
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
@@ -55,7 +57,7 @@ async function getSettings(){
         publishedDirectory=metadata.publishDirectory;
     }catch{publishedDirectory='';}
     const {createSettingsModule}=await import('../settings-module.js');
-    const module=createSettingsModule($('settings-workspace'),settingsStatus,null,io);
+    const module=createSettingsModule($('settings-workspace'),settingsStatus,frameDirectoryPort,io);
     module.register({module:'F',key:'globalUi.font.family',category:['全局 UI','字体'],
       label:'字体 Sarasa（只读）',comment:'Sarasa Fixed SC；字体家族固定',
       type:'string',control:'readonly',defaultValue:'Sarasa',message:'settings.changed'});
@@ -67,6 +69,9 @@ async function getSettings(){
       label:'工作目录',comment:'当前发布入口对应的本机目录；只读，与业务模块无关',
       type:'string',control:'readonly',defaultValue:publishedDirectory||'未发布',
       message:'settings.changed'});
+    module.register({module:'F',key:'workspace.dataDirectory',category:['工作区','目录'],
+      label:'资料目录',comment:'通用资料目录绑定；不检查 OCR、MinerU 或 PDF',
+      type:'path',control:'directory-tree',defaultValue:'',message:'settings.changed'});
     module.subscribe({module:'F',key:'globalUi.font.size'},({value})=>setSize(value));
     await module.load();settings=module;mountSettingsNavigation();refreshSettingsHistory();return module;
   })().catch(error=>{loadingSettings=null;throw error;});

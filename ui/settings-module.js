@@ -32,7 +32,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
       Number.isFinite(defaultValue)&&defaultValue>=min&&defaultValue<=max&&
       Number.isFinite(step)&&step>0;
     const readonlySetting=type==='string'&&control==='readonly'&&typeof defaultValue==='string';
-    const directorySetting=type==='path'&&control==='directory'&&
+    const directorySetting=type==='path'&&['directory','directory-tree'].includes(control)&&
       typeof defaultValue==='string'&&directoryPort&&
       typeof directoryPort.roots==='function'&&typeof directoryPort.browse==='function';
     if(!module||typeof key!=='string'||!/\w+(?:\.\w+)+$/.test(key)||
@@ -41,7 +41,8 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
        !(numberSetting||directorySetting||readonlySetting)||(unit!==undefined&&typeof unit!=='string'))
       throw Error('Invalid settings registration');
     if(definitions.has(key))throw Error('Duplicate settings key: '+key);
-    if(directorySetting&&!workspaceDirectory)workspaceDirectory=createWorkspaceDirectoryModule(directoryPort);
+    if(directorySetting&&!workspaceDirectory)
+      workspaceDirectory=createWorkspaceDirectoryModule(directoryPort,onStatus);
     definitions.set(key,Object.freeze({...definition,category:Object.freeze([...category])}));
     // A new module may register after the settings editor is already open.
     // Add its initial record through CMD's undoable text transaction.
@@ -203,6 +204,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     }
     if(item.type==='path'){
       if(item.key==='workspace.files.bookName')workspaceDirectory.renderBookControl(pane,item,record,{get,set});
+      else if(item.control==='directory-tree')pathInput=workspaceDirectory.renderTreeControl(pane,item,record,{get,set});
       else pathInput=workspaceDirectory.renderDirectoryControl(pane,item,record,{get,set});
       previewHost.append(pane);return;
     }

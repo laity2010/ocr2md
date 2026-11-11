@@ -49,6 +49,11 @@
 .app .ocr-settings-control p{
   font-size:var(--ocr-frame-font-size);font-family:"OCR2MD Sarasa",monospace;
 }
+/* Global Shell alone owns severity colors, for every present/future module. */
+.app #status[data-kind="info"]{color:#bfc9cc}
+.app #status[data-kind="ok"]{color:#a7c080}
+.app #status[data-kind="warning"]{color:#efbf6b}
+.app #status[data-kind="error"]{color:#f49b95;font-weight:600}
 .app .ocr-ag-toolbar,.app .ocr-ag-module-select,
 .app .ocr-source-file-select,.app .ocr-source-undo-redo button,
 .app .ocr-preview-mode,.app .ocr-preview-split-toggle,
