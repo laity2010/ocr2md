@@ -6,6 +6,7 @@ import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
 import '../outline-grid.css';
+import '../ag-enum-filter-shared.css';
 import '../settings-module.css';
 import '../pdf-preview.css';
 ModuleRegistry.registerModules([AllCommunityModule]);

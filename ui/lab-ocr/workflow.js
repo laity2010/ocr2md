@@ -1,18 +1,19 @@
+import {EnumCheckboxFilter} from '../enum-checkbox-filter.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
  * UI never reads disk or SQLite; those belong to the isolated OCR API.
  */
 const ENDPOINT='/labs/lab-ocr/api/ocr/';
 const NAV_VALUE='sql:minerujson';
 const COLUMNS=Object.freeze([
-  {field:'global_page',headerName:'页（0起）',width:112,sortable:true,filter:'agNumberColumnFilter'},
-  {field:'source_name',headerName:'源 JSON',width:170,sortable:true,filter:true},
-  {field:'local_page',headerName:'分段页',width:95,sortable:true,filter:'agNumberColumnFilter'},
-  {field:'block_group',headerName:'原始数组',width:145,sortable:true,filter:true},
-  {field:'block_index',headerName:'块序号',width:102,sortable:true,filter:'agNumberColumnFilter'},
-  {field:'block_type',headerName:'块类型',width:120,sortable:true,filter:true},
-  {field:'bbox_json',headerName:'覆盖框',width:158,sortable:false,filter:false},
-  {field:'text_preview',headerName:'内容预览',flex:1,minWidth:250,sortable:false,filter:true},
-  {field:'block_json',headerName:'原始块 JSON',width:280,hide:true,sortable:false,filter:false},
+  {field:'global_page',headerName:'页（0起）',width:112,sortable:true},
+  {field:'source_name',headerName:'源 JSON',width:170,sortable:true},
+  {field:'local_page',headerName:'分段页',width:95,sortable:true},
+  {field:'block_group',headerName:'原始数组',width:145,sortable:true},
+  {field:'block_index',headerName:'块序号',width:102,sortable:true},
+  {field:'block_type',headerName:'块类型',width:120,sortable:true},
+  {field:'bbox_json',headerName:'覆盖框',width:158,sortable:false},
+  {field:'text_preview',headerName:'内容预览',flex:1,minWidth:250,sortable:false},
+  {field:'block_json',headerName:'原始块 JSON',width:280,hide:true,sortable:false},
 ]);
 async function request(op,params,post=false){
   const url=new URL(ENDPOINT+op,location.origin);
@@ -110,7 +111,16 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         if(!page.rows.length&&offset<total)throw Error('SQL 分页提前结束');
         entries.push(...page.rows);offset=entries.length;
       }while(offset<total);
-      frame.showSqlRows(entries,COLUMNS.map(column=>({...column})));
+      // Reuse Main's audited AG Community categorical filter, including the
+      // `all` checkbox and multi-select of distinct values in each column.
+      // Only the AG row model changes: no SQLite queries or SQL mutations.
+      frame.showSqlRows(entries,COLUMNS.map(column=>({
+        ...column,
+        filter:EnumCheckboxFilter,
+        filterValueGetter:params=>params.data?.[column.field]??'',
+        suppressHeaderMenuButton:true,
+        suppressHeaderFilterButton:false,
+      })));
       onStatus(`SQL · minerujson：已显示 ${entries.length} 行（全量原始数据保存在 SQLite）`,'ok');
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');}
   }

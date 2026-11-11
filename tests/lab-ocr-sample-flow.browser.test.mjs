@@ -78,6 +78,32 @@ try{
    assert.equal(await page.locator('#workspace .ag-row').count(),2);
    assert.match(await page.locator('#workspace .ag-row').first().innerText(),/source.json/);
    assert.match(await page.locator('#status').innerText(),/2 行/);
+   // SQL AG every column uses Main's checkbox enum popup, not text/number
+   // input filters. The 'all' checkbox and distinct values support multi-select.
+   const header=page.locator('#workspace .ag-header-cell[col-id="global_page"]');
+   await header.locator('.ag-header-cell-filter-button').click();
+   const pop=page.locator('.ocr-enum-filter:visible');
+   await pop.waitFor({state:'visible'});
+   const box=value=>pop.locator('.ocr-enum-filter-option[data-filter-value="'+value+'"] input');
+   assert.equal(await pop.getAttribute('aria-label'),'页（0起） 筛选');
+   assert.equal(await box('all').isChecked(),true);
+   assert.equal(await box('0').isChecked(),true);
+   assert.equal(await box('1').isChecked(),true);
+   await box('1').uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===1);
+   assert.equal(await box('all').isChecked(),false);
+   assert.equal(await box('0').isChecked(),true);
+   assert.equal(await box('1').isChecked(),false);
+   await box('0').uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===0);
+   await box('1').check();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===1);
+   assert.match(await page.locator('#workspace .ag-row').first().innerText(),/1/);
+   await box('0').check();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===2);
+   assert.equal(await box('all').isChecked(),true);
+   // Filtering is entirely client-side and never writes to the SQL backend.
+   assert.equal(rowsCount,1,'Checkbox filtering must not reread or mutate SQLite');
    await page.reload({waitUntil:'domcontentloaded'});
    await page.locator('#workspace .dv-content-container').first().waitFor({timeout:18000});
    await page.waitForFunction(()=>!!document.querySelector('select.ocr-source-file-select option[value="sql:minerujson"]'),null,{timeout:20000});
