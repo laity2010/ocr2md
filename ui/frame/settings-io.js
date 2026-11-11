@@ -4,7 +4,8 @@
 const VALID_SIZE=value=>Number.isInteger(value)&&value>=8&&value<=32;
 const checksum=async text=>Array.from(new Uint8Array(await crypto.subtle.digest(
   'SHA-256',new TextEncoder().encode(text))),byte=>byte.toString(16).padStart(2,'0')).join('');
-export function createFrameSettingsIO(storage=localStorage,labName='lab-frame',getPublishedDirectory=()=> ''){
+export function createFrameSettingsIO(storage=localStorage,labName='lab-frame',
+  getPublishedDirectory=()=> '',validateDirectory=async()=>{throw Error('未配置目录服务');}){
   if(!/^[a-z][a-z0-9-]{0,31}$/.test(labName))throw Error('Invalid Lab ID');
   const KEY='ocr2md.'+labName+'.settings.json.v1';
   const LEGACY_FONT_SIZE_KEY='ocr2md.'+labName+'.font-size.v1';
@@ -37,6 +38,9 @@ export function createFrameSettingsIO(storage=localStorage,labName='lab-frame',g
       'globalUi.font.size':{key:'size',category1:'全局 UI',category2:'字体',
         comment:'统一界面字号（8–32 px）',value:size,range:{min:8,max:32,step:1}},
       'runtime.workDirectory':workDirectoryRecord(),
+      'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',category2:'目录',
+        comment:'通用资料目录绑定；不检查 OCR、MinerU 或 PDF',
+        value:'',range:{kind:'server-directory'}},
     }},null,2)+'\n';
   };
   return Object.freeze({
@@ -50,8 +54,17 @@ export function createFrameSettingsIO(storage=localStorage,labName='lab-frame',g
         parsed.settings?.['globalUi.font.family']?.value!=='Sarasa' ||
         !VALID_SIZE(parsed.settings?.['globalUi.font.size']?.value) ||
         parsed.settings?.['runtime.workDirectory']?.value!==workDirectory()||
-        parsed.settings?.['runtime.workDirectory']?.range?.kind!=='readonly')
+        parsed.settings?.['runtime.workDirectory']?.range?.kind!=='readonly'||
+        typeof parsed.settings?.['workspace.dataDirectory']?.value!=='string'||
+        parsed.settings?.['workspace.dataDirectory']?.range?.kind!=='server-directory')
         throw Error('设置值无效：工作目录及字体只读，字号仅允许 8–32 px');
+      const selected=parsed.settings['workspace.dataDirectory'].value;
+      if(selected){
+        if(!selected.startsWith('/')||selected.length>1024||/[\0\r\n]/.test(selected))
+          throw Error('资料目录必须是合法的绝对路径');
+        const validated=await validateDirectory(selected);
+        if(validated?.path!==selected)throw Error('资料目录未经服务器授权');
+      }
       if(!storage)throw Error('本地设置存储不可用');
       storage.setItem(KEY,text);
     },

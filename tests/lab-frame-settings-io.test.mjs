@@ -65,3 +65,24 @@ test('F06 runtime work directory is supplied by publisher and cannot be edited',
   assert.equal(JSON.parse(store.entries.get(KEY)).settings['runtime.workDirectory'].value,
     '/srv/labs/lab-frame','reading the new published path must not write storage');
 });
+
+test('Frame data directory bind is separate, persisted only on Save, and server-validated',async()=>{
+  const store=memory(),checked=[];
+  const io=createFrameSettingsIO(store,'lab-frame',()=>'/srv/published/lab-frame',
+    async path=>{checked.push(path);if(path==='/approved/collection')return {path};
+      throw Error('Not in authorized roots');});
+  const first=await io.readSnapshot();
+  const draft=JSON.parse(first.text);
+  draft.settings['workspace.dataDirectory'].value='/approved/collection';
+  assert.equal(store.entries.size,0,'selecting a directory must not write before save');
+  await io.saveSnapshot({text:JSON.stringify(draft),etag:first.etag});
+  assert.deepEqual(checked,['/approved/collection']);
+  assert.equal(JSON.parse((await io.readSnapshot()).text).settings['workspace.dataDirectory'].value,
+    '/approved/collection');
+  const next=await io.readSnapshot();
+  draft.settings['workspace.dataDirectory'].value='/outside';
+  await assert.rejects(io.saveSnapshot({text:JSON.stringify(draft),etag:next.etag}),
+    /Not in authorized roots/);
+  assert.equal(JSON.parse((await io.readSnapshot()).text).settings['workspace.dataDirectory'].value,
+    '/approved/collection');
+});

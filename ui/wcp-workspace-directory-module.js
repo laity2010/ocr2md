@@ -5,8 +5,55 @@
 import './wcp-workspace-directory-module.css';
 
 export function createWorkspaceDirectoryModule(directoryPort){
-  if(!directoryPort || !['roots','browse','books'].every(key=>typeof directoryPort[key]==='function'))
-    throw Error('Workspace directory component requires three public discovery APIs');
+  if(!directoryPort || !['roots','browse'].every(key=>typeof directoryPort[key]==='function'))
+    throw Error('Workspace directory component requires roots/browse discovery APIs');
+  // Generic directory selection is not tied to OCR files or the book catalogue.
+  function renderTreeControl(pane,item,record,{set}){
+    const label=document.createElement('label');label.textContent='资料目录';
+    const field=document.createElement('input');field.type='text';field.readOnly=true;
+    field.value=String(record.value||'');field.placeholder='尚未绑定目录';
+    field.setAttribute('aria-label','当前资料目录');
+    const open=document.createElement('button');open.type='button';open.textContent='浏览目录';
+    open.setAttribute('aria-label','打开目录树');
+    const help=document.createElement('p');help.className='ocr-settings-description';
+    help.textContent='目录仅从服务器授权范围中选择；点击「采用选中目录」加入待保存设置，再使用顶栏保存。';
+    const holder=document.createElement('div');holder.className='ocr-settings-directory-tree-host';holder.hidden=true;
+    const message=document.createElement('p');message.className='ocr-settings-description';
+    const chooser=document.createElement('button');chooser.type='button';chooser.textContent='采用选中目录';chooser.disabled=true;
+    chooser.setAttribute('aria-label','采用选中目录');
+    let selection='',mounted=null;
+    open.addEventListener('click',async()=>{
+      if(!holder.hidden){holder.hidden=true;return;}
+      holder.hidden=false;message.textContent='正在读取服务器授权目录…';
+      chooser.disabled=true;selection='';
+      try{
+        if(!mounted){
+          const {createWorkspaceDirectoryTree}=await import('./workspace-directory-tree.js');
+          if(!pane.isConnected)return;
+          mounted=createWorkspaceDirectoryTree(holder,directoryPort,{
+            onSelect:path=>{selection=path;chooser.disabled=false;message.textContent='选中：'+path;},
+            onStatus:text=>{message.textContent=text;},
+          });
+        }
+        await mounted.loadRoots();
+        if(!selection)message.textContent='请选择一个目录';
+      }catch(error){message.textContent='无法浏览目录：'+error.message;}
+    });
+    chooser.addEventListener('click',async()=>{
+      if(!selection)return;
+      chooser.disabled=true;
+      try{
+        const result=await directoryPort.browse(selection);
+        if(result?.path!==selection)throw Error('目录验证失败');
+        set(item.key,selection);
+        field.value=selection;
+        holder.hidden=true;
+        message.textContent='目录已加入待保存设置，请点击顶栏保存';
+      }catch(error){message.textContent='目录无法绑定：'+error.message;}
+    });
+    pane.append(label,field,open,help,holder,chooser,message);
+    return field;
+  }
   function renderBookControl(pane,item,record,{get,set}){
     const label=document.createElement('label');label.textContent='当前书籍工作目录';
     const selected=document.createElement('p');selected.className='ocr-settings-description';
@@ -134,5 +181,5 @@ export function createWorkspaceDirectoryModule(directoryPort){
     }).catch(()=>{});
     return pathInput;
   }
-  return Object.freeze({renderBookControl,renderDirectoryControl});
+  return Object.freeze({renderBookControl,renderDirectoryControl,renderTreeControl});
 }
