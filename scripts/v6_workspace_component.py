@@ -38,16 +38,31 @@ class WorkspaceService:
         self.is_lab = bool(is_lab)
 
     def roots(self):
-        configured, book, _ = saved_selection(
-            self.settings_file, self.default_document, self.runtime, self.is_lab)
-        active = self.active()
-        return {
-            'activeRoot': str(active.root), 'configuredRoot': configured,
-            'activeBook': book,
-            'allowedRoots': [str(root) for root in allowed_roots(
-                self.default_document, self.runtime, self.is_lab)],
-            'documentName': active.document.name,
+        # Root discovery is an authorization catalogue, not a book validation.
+        # Compute the trusted allowlist first. An outdated saved selection must
+        # not prevent the user from browsing that allowlist to fix the choice.
+        roots = [str(root) for root in allowed_roots(
+            self.default_document, self.runtime, self.is_lab)]
+        result = {
+            'activeRoot': str(self.default_document.parent.resolve()),
+            'configuredRoot': '', 'activeBook': '',
+            'allowedRoots': roots, 'documentName': self.default_document.name,
         }
+        try:
+            configured, book, _ = saved_selection(
+                self.settings_file, self.default_document, self.runtime, self.is_lab)
+            active = self.active()
+        except (OSError, ValueError, TypeError) as error:
+            # Read-only recovery: do not change the saved settings or grant
+            # access outside allowed_roots. Other book-dependent APIs keep
+            # their existing strict validation behavior.
+            result['selectionError'] = str(error)
+            return result
+        result.update({
+            'activeRoot': str(active.root), 'configuredRoot': configured,
+            'activeBook': book, 'documentName': active.document.name,
+        })
+        return result
 
     def browse(self, path):
         return list_directories(path, self.default_document, self.runtime, self.is_lab)
