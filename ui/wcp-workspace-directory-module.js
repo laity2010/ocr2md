@@ -23,9 +23,11 @@ export function createWorkspaceDirectoryModule(directoryPort){
     picker.hidden=true;picker.setAttribute('aria-label','服务器目录选择器');
     const heading=document.createElement('div');heading.className='ocr-settings-directory-picker-heading';
     const title=document.createElement('strong');title.textContent='选择服务器资料目录';
+    const refreshButton=document.createElement('button');refreshButton.type='button';
+    refreshButton.textContent='刷新目录';refreshButton.setAttribute('aria-label','刷新 Mac 目录');
     const close=document.createElement('button');close.type='button';close.textContent='关闭';
     close.setAttribute('aria-label','关闭目录选择器');
-    heading.append(title,close);
+    heading.append(title,refreshButton,close);
     const message=document.createElement('p');message.className='ocr-settings-directory-picker-message';
     message.setAttribute('role','status');message.setAttribute('aria-live','polite');
     const holder=document.createElement('div');holder.className='ocr-settings-directory-tree-host';
@@ -35,8 +37,15 @@ export function createWorkspaceDirectoryModule(directoryPort){
     footer.append(chooser);
     picker.append(heading,message,holder,footer);
     let selection='',mounted=null;
-    function dismiss(){picker.hidden=true;}
+    function dismiss(){picker.hidden=true;mounted?.stopAutoRefresh();}
     close.addEventListener('click',dismiss);
+    refreshButton.addEventListener('click',async()=>{
+      if(!mounted||picker.hidden)return;
+      refreshButton.disabled=true;
+      try{await mounted.refresh({announce:true});}
+      catch(error){message.textContent='刷新失败：'+error.message;}
+      finally{refreshButton.disabled=false;}
+    });
     open.addEventListener('click',async()=>{
       if(!picker.hidden){dismiss();return;}
       picker.hidden=false;message.textContent='正在读取服务器授权目录…';
@@ -46,11 +55,15 @@ export function createWorkspaceDirectoryModule(directoryPort){
           const {createWorkspaceDirectoryTree}=await import('./workspace-directory-tree.js');
           if(!pane.isConnected)return;
           mounted=createWorkspaceDirectoryTree(holder,directoryPort,{
-            onSelect:path=>{selection=path;chooser.disabled=false;message.textContent='选中：'+path;},
+            onSelect:path=>{
+              selection=path;chooser.disabled=!path;
+              message.textContent=path?'选中：'+path:'原选中目录已失效，请重新选择';
+            },
             onStatus:text=>{message.textContent=text;},
           });
         }
         await mounted.loadRoots();
+        if(!picker.hidden)mounted.startAutoRefresh();
         if(!selection&&message.textContent==='正在读取服务器授权目录…')
           message.textContent='选择目录后点击「采用选中目录」';
       }catch(error){message.textContent='无法浏览目录：'+error.message;}
