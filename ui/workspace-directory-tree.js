@@ -45,7 +45,7 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
         child.path.slice(path.replace(/\/$/,'').length+1).includes('/'))continue;
       next.push(old.get(child.path)||itemFor(child.path,child.name));
     }
-    const changed=previous.length!==next.length||next.some((node,i)=>node!==previous[i]);
+    let changed=previous.length!==next.length||next.some((node,i)=>node!==previous[i]);
     if(changed)item.replaceChildren(...next);
     item.lazy=false;
     item.loading=false;
