@@ -17,7 +17,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1032,height:768},hasTouch:true});
    let inspectCount=0,importCount=0,rowsCount=0,hasDb=false;
-   const errors=[];page.on('pageerror',e=>{errors.push((e.stack||e.message).slice(0,2500));console.log('BROWSER_ERROR_STACK',name,(e.stack||e.message).slice(0,2500));});
+   const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/api/workspace/roots',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({allowedRoots:['/demo']})}));
    await page.route('**/api/workspace/browse?*',r=>{
     const path=new URL(r.request().url()).searchParams.get('path');
@@ -68,7 +68,12 @@ try{
    assert.equal(importCount,1,'First book should import just once');
    const nav=page.locator('#workspace select.ocr-source-file-select');
    assert.equal(await nav.locator('optgroup[label="SQL"] option').innerText(),'minerujson');
-   await nav.evaluate(select=>{select.value='sql:minerujson';select.dispatchEvent(new Event('change',{bubbles:true}));});
+   // Exercise the real visible Tom Select dropdown, not only the hidden
+   // HTMLSelectElement business port.
+   await page.locator('#workspace .ocr-navigation-files .ts-control').click();
+   const dropdown=page.locator('.ocr-navigation-popup-files:visible');
+   await dropdown.locator('.optgroup-header').filter({hasText:'SQL'}).waitFor({state:'visible'});
+   await dropdown.locator('.option').filter({hasText:'minerujson'}).click();
    await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length>=2);
    assert.equal(await page.locator('#workspace .ag-row').count(),2);
    assert.match(await page.locator('#workspace .ag-row').first().innerText(),/source.json/);

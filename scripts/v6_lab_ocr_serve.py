@@ -23,9 +23,9 @@ MAIN_PORT=int(os.environ.get('OCR2MD_MAIN_PORT','4396'))
 PREFIX='/labs/lab-ocr/api/ocr/'
 MAX_BODY=32768
 PUBLIC_ORIGIN='https://ocr2md.laity.bid'
-LAN_ORIGIN=os.environ.get('OCR2MD_LAN_ORIGIN','https://192.168.1.10:4443')
-ALLOWED_ORIGINS=frozenset((PUBLIC_ORIGIN,LAN_ORIGIN,'http://127.0.0.1:4414',
-                           'http://127.0.0.1:'+str(PORT)))
+LAN_ORIGIN=os.environ.get('OCR2MD_LAN_ORIGIN','')
+ALLOWED_ORIGINS=frozenset((PUBLIC_ORIGIN,'http://127.0.0.1:4414',
+                           'http://127.0.0.1:'+str(PORT),LAN_ORIGIN))
 
 class APIError(Exception):
     def __init__(self,code:int,message:str,*,extra:dict|None=None):
