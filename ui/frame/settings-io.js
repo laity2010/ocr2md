@@ -1,12 +1,13 @@
 /** Lab-only storage port for the EXISTING Main Settings + CMD JSON modules.
  * No UI, no setting registration, no duplicate state manager. Explicit Save.
  */
-const KEY='ocr2md.lab-frame.settings.json.v1';
-const LEGACY_FONT_SIZE_KEY='ocr2md.lab-frame.font-size.v1';
 const VALID_SIZE=value=>Number.isInteger(value)&&value>=8&&value<=32;
 const checksum=async text=>Array.from(new Uint8Array(await crypto.subtle.digest(
   'SHA-256',new TextEncoder().encode(text))),byte=>byte.toString(16).padStart(2,'0')).join('');
-export function createFrameSettingsIO(storage=localStorage){
+export function createFrameSettingsIO(storage=localStorage,labName='lab-frame'){
+  if(!/^[a-z][a-z0-9-]{0,31}$/.test(labName))throw Error('Invalid Lab ID');
+  const KEY='ocr2md.'+labName+'.settings.json.v1';
+  const LEGACY_FONT_SIZE_KEY='ocr2md.'+labName+'.font-size.v1';
   const read=()=>{
     let content;
     try{content=storage.getItem(KEY);}catch{}

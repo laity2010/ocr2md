@@ -32,7 +32,7 @@ function mountEmptyGrid(host){
     columnDefs,rowData:[]});
   return {dispose(){grid.destroy();},layout:()=>{}};
 }
-function blankPane(name,onSplit,onModuleChange){
+function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -43,7 +43,7 @@ function blankPane(name,onSplit,onModuleChange){
     const label=document.createElement('span');label.className='ocr-ag-toolbar-label';label.textContent='AG 表';
     const picker=document.createElement('select');picker.className='ocr-ag-module-select';
     picker.setAttribute('aria-label','选择模块');
-    picker.add(new Option('空白框架','frame'));
+    picker.add(new Option(moduleLabel,'frame'));
     picker.add(new Option('全局设置','settings'));
     const ownModule='frame';picker.value=ownModule;
     picker.addEventListener('change',()=>{
@@ -112,10 +112,11 @@ function addPanel(dockview,id,component,title,position){
   panel.group.header.hidden=true;panel.group.relayout();return panel;
 }
 /** Public F01: exactly Main's default three groups + detached PDF split. */
-export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
+export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
+  moduleLabel='空白框架'}={}){
   let split=false;
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,setSplit,onModuleChange)});
+    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});

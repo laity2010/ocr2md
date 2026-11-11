@@ -59,7 +59,7 @@ def publish(release):
           if files!=entry['files']:raise RuntimeError('Existing Lab module changed: '+name)
           otherHashes[name]=files
       html=currentHome.decode('utf-8')
-      if 'id="lab-frame"' not in html:
+      if f'id="{NAME}"' not in html:
           if '</section>' not in html:raise RuntimeError('Home cards closing tag missing')
           html=html.replace('    </section>',CARD+'    </section>',1)
       homeBytes=html.encode('utf-8')

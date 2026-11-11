@@ -7,6 +7,8 @@ import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
+// Frame remains the reusable shell; each experiment supplies its own identity.
+const labName=typeof __FRAME_APP_ID__==='string'?__FRAME_APP_ID__:'lab-frame';
 function topStatus(message,kind='ok'){
   const node=$('status');node.textContent=String(message);node.dataset.kind=kind;
 }
@@ -14,11 +16,12 @@ const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.
 $('build-version').textContent=build.match(/(\d{8}-\d{4})\d{2}$/)?.[1]??build;
-const io=createFrameSettingsIO();
+const io=createFrameSettingsIO(localStorage,labName);
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
-const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule});
+const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule,
+  moduleLabel:labName==='lab-ocr'?'OCR 审阅':'空白框架'});
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
@@ -100,7 +103,9 @@ async function showModule(name){
     // The native select is the Main NavigationSelect public business port.
     frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
     frame.activate();
-    topStatus('空白四窗框架已就绪 · 可由源码导航进入 settings.json');
+    topStatus(labName==='lab-ocr'
+      ?'lab-ocr 已就绪 · OCR 审阅模块待接入数据 · 可由源码导航进入 settings.json'
+      :'空白四窗框架已就绪 · 可由源码导航进入 settings.json');
   }
 }
 $('global-save').addEventListener('click',async()=>{
@@ -111,7 +116,7 @@ $('global-save').addEventListener('click',async()=>{
 });
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.
 // No engineering dialog or dirty-state confirmation intercepts navigation.
-startFrameAutoUpdate({version:build,report:topStatus});
+startFrameAutoUpdate({version:build,name:labName,report:topStatus});
 showModule('frame');
 // Reuse Main Settings / CM6 with frame-local IO. No beforeunload/dirty gate,
 // SQL, media or source-document writer. No implicit per-slider save.

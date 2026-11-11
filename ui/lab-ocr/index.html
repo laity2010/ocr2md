@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>OCR2MD V6 · lab-ocr</title></head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="identity">
+      <a id="lab-ocr-home" class="brand frame-brand" href="/labs/" title="返回 Lab 首页">lab-ocr</a>
+      <span id="build-version" class="build-badge frame-version" aria-label="构建版本">00000000-0000</span>
+      <span id="status" class="status" role="status" aria-live="polite">正在初始化 OCR 审阅工作台</span>
+    </div>
+    <div class="source-actions"><button id="global-save" class="primary" type="button">保存</button></div>
+  </header>
+  <main>
+    <div id="workspace" aria-label="OCR 审阅 AG、Markdown 源码、Markdown 预览和 PDF 四窗"></div>
+    <div id="settings-workspace" hidden aria-label="独立全局设置三窗"></div>
+  </main>
+</div>
+<script type="module" src="../frame/frame.js"></script>
+</body>
+</html>
