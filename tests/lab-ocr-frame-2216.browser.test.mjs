@@ -7,7 +7,8 @@ import {spawn} from 'node:child_process';
 import {setTimeout as pause} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
 const port=5324,url=`http://127.0.0.1:${port}/labs/lab-ocr/`;
-const dev=spawn('node',['node_modules/vite/bin/vite.js','preview','--config',
+const development=process.env.LAB_OCR_TEST_DEV==='1';
+const dev=spawn('node',['node_modules/vite/bin/vite.js',...(development?[]:['preview']),'--config',
   'labs/lab-ocr/vite.config.mjs','--host','127.0.0.1',
   '--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
 let output='';dev.stdout.on('data',chunk=>output+=chunk);dev.stderr.on('data',chunk=>output+=chunk);
