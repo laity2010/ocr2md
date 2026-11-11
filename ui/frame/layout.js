@@ -60,10 +60,13 @@ function blankPane(name,onSplit,onModuleChange){
     const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
     const select=document.createElement('select');select.className='ocr-source-file-select';
     select.setAttribute('aria-label','源码文件导航');
-    select.add(new Option('空白工作台（未绑定文档）','frame'));
-    select.add(new Option('全局设置 / settings.json','settings'));
-    select.value='frame';
-    select.addEventListener('change',()=>onModuleChange?.(select.value));
+    const placeholder=new Option('选择源码文件…','');placeholder.disabled=true;
+    select.add(placeholder);
+    const group=document.createElement('optgroup');group.label='全局设置';
+    group.append(new Option('settings.json','settings'));
+    select.append(group);
+    select.value='';
+    select.addEventListener('change',()=>{if(select.value==='settings')onModuleChange?.('settings');});
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
     const undo=document.createElement('button');undo.type='button';undo.id='undo';

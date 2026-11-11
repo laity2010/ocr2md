@@ -82,3 +82,12 @@
 .app #settings-workspace .ocr-settings-control,
 .app #settings-workspace .ocr-settings-control :is(input,label,p,output){
   font-family:"OCR2MD Sarasa",monospace;font-size:var(--ocr-frame-font-size)}
+
+/* Main's Tom Select owns both source-file controls. Settings source must
+   reserve exactly 34px for the bar rather than overlap its CodeMirror. */
+#settings-workspace .ocr-settings-source>.ocr-source-file-toolbar{
+  flex:none;min-height:34px;height:34px;align-items:center}
+#settings-workspace .ocr-settings-source>.cm-editor{flex:1 1 0;min-height:0;height:auto}
+.ocr-source-file-toolbar>.ocr-frame-back{flex:none;min-width:30px;width:30px;
+  height:27px;padding:0;font-size:18px;line-height:1}
+.ocr-source-file-toolbar>.ts-wrapper.ocr-navigation-files{flex:1 1 0;min-width:0}

@@ -40,12 +40,31 @@ try{
       assert.ok(positions.save.right<=positions.top.right+1);
       const nav=page.locator('#workspace .ocr-source-file-select');
       assert.equal(await nav.isEnabled(),true);
-      assert.match(await nav.innerText(),/settings.json/);
+      const structure=await nav.evaluate(node=>({
+        groups:[...node.querySelectorAll('optgroup')].map(g=>({
+          label:g.label,files:[...g.querySelectorAll('option')].map(o=>o.textContent)})),
+        live:node.value,
+      }));
+      assert.deepEqual(structure,{groups:[{label:'全局设置',files:['settings.json']}],live:''});
+      assert.equal(await page.locator('#workspace .ocr-navigation-files.ts-wrapper').isVisible(),true);
+      assert.equal(await page.locator('#workspace #undo').isDisabled(),true);
+      assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
       await page.locator('#global-save').click();
       assert.match(await page.locator('#status').innerText(),/无文档可保存/);
-      await nav.selectOption('settings');
+      // Click the *visible* Main Tom Select, not its hidden native business port.
+      await page.locator('#workspace .ocr-navigation-files .ts-control').click();
+      const dropdown=page.locator('.ocr-navigation-popup-files:visible');
+      await dropdown.locator('.optgroup-header').waitFor({state:'visible'});
+      assert.equal(await dropdown.locator('.optgroup-header').count(),1);
+      assert.match(await dropdown.locator('.optgroup-header').innerText(),/全局设置/);
+      assert.equal(await dropdown.locator('.option').count(),1);
+      assert.match(await dropdown.locator('.option').innerText(),/settings.json/);
+      await dropdown.locator('.option').click();
       await page.locator('#settings-workspace .dv-content-container').first().waitFor({timeout:16000});
       assert.equal(await page.locator('#settings-workspace .dv-content-container').count(),3);
+      assert.equal(await page.locator('#settings-workspace .ocr-navigation-files.ts-wrapper').isVisible(),true);
+      assert.equal(await page.locator('#settings-workspace #settings-undo').isVisible(),true);
+      assert.equal(await page.locator('#settings-workspace #settings-redo').isVisible(),true);
       assert.equal(await page.locator('#settings-workspace .ag-row').count(),2);
       assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/Sarasa/);
       const readonly=page.locator('#settings-workspace .ocr-settings-readonly-value');
@@ -57,15 +76,27 @@ try{
       const originalStorage=await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1'));
       assert.equal(originalStorage,null,'no implicit persistence');
       await slider.fill('20');
-      await slider.dispatchEvent('input'); // WebKit does not always synthesize range input for fill()
+      // Playwright may already fire the input event; never duplicate a CM6
+      // changeScalar transaction or Undo will first revert the no-op edit.
+      if(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize)!=='20px')
+        await slider.dispatchEvent('input');
       await page.waitForFunction(()=>getComputedStyle(document.querySelector('#status')).fontSize==='20px');
       assert.equal(await slider.inputValue(),'20');
       assert.equal(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize),'20px');
       assert.equal(await page.locator('#settings-workspace .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
       assert.match(await page.locator('#status').innerText(),/未保存/);
+      await page.waitForFunction(()=>!document.querySelector('#settings-undo').disabled);
+      assert.equal(await page.locator('#settings-redo').isDisabled(),true);
+      await page.locator('#settings-undo').click();
+      await page.waitForFunction(()=>getComputedStyle(document.querySelector('#status')).fontSize==='16px');
+      assert.equal(await page.locator('#settings-font-slider').inputValue(),'16');
+      assert.equal(await page.locator('#settings-redo').isDisabled(),false);
+      await page.locator('#settings-redo').click();
+      await page.waitForFunction(()=>getComputedStyle(document.querySelector('#status')).fontSize==='20px');
+      assert.equal(await page.locator('#settings-font-slider').inputValue(),'20');
       assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')),null);
       // Global Save applies to dirty Settings even after returning to Frame.
-      await page.locator('#settings-workspace .ocr-source-file-select').selectOption('frame');
+      await page.locator('#settings-workspace .ocr-frame-back').click();
       assert.equal(await page.locator('#workspace').isVisible(),true);
       await page.locator('#global-save').click();
       await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')?.includes('"value": 20'));
@@ -76,12 +107,15 @@ try{
       await page.reload({waitUntil:'domcontentloaded'});
       await page.locator('#workspace .dv-content-container').first().waitFor();
       assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--ocr-frame-font-size')),'20px');
-      await page.locator('#workspace .ocr-source-file-select').selectOption('settings');
+      await page.locator('#workspace .ocr-navigation-files .ts-control').click();
+      await page.locator('.ocr-navigation-popup-files:visible .option').click();
       await page.locator('#settings-workspace .ag-row').nth(1).click();
       assert.equal(await page.locator('#settings-font-slider').inputValue(),'20');
       const settingsNav=page.locator('#settings-workspace .ocr-source-file-select');
       assert.equal(await settingsNav.inputValue(),'settings');
-      await settingsNav.selectOption('frame');
+      assert.equal(await settingsNav.evaluate(node=>node.querySelectorAll('optgroup').length),1);
+      assert.equal(await settingsNav.evaluate(node=>node.querySelectorAll('optgroup option').length),1);
+      await page.locator('#settings-workspace .ocr-frame-back').click();
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
       assert.equal(await page.locator('#workspace').isVisible(),true);
       assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');

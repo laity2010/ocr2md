@@ -16,6 +16,6 @@
 
 直接调用 Main 的 `createSettingsModule`（AM S01）和 `openCMDJsonSource`（AM C24），不另建 AG、CM6 或参数控件。Lab 只注册 `globalUi.font.family = Sarasa`（只读）及 `globalUi.font.size = 16`（8–32，步长 1），并注入唯一环境适配 `ui/frame/settings-io.js`（F06）。设置编辑留在 Main 的 CM6 事务中，**点击顶栏「保存」时**才写入此 Lab 的独立浏览器 `localStorage` 设置文档；不接入 Main、MinerU、SQL 或媒体。旧版字号偏好只读迁移。
 
-源码导航为 Shell 所有，包含「空白工作台」和「全局设置 / settings.json」，并通过 Settings 组件切换；返回工作台不丢编辑。自动更新不触发未保存提示。
+源码导航始终位于源码窗顶栏，使用 Main 的 `enhanceNavigationSelect`（Tom Select 2.6）管理可见下拉，原生 `<select>` 仍为唯一业务接口；下拉严格只有一个「全局设置」optgroup，其中仅有 `settings.json` 一个文件。空白工作台显示占位项而非第二个文件；Settings 源码窗左侧有独立返回箭头，导航和 Undo/Redo 常驻；Undo/Redo 只调用 Main Settings 的公开历史接口。返回空白四窗不丢设置编辑；自动更新不触发未保存提示。自动更新不触发未保存提示。
 
 字体沿用 Agent Link 约定的不可变 Sarasa Fixed SC GB2312 公共字体（约 1 MB；优先 local()，其余使用固定 URL），不在 Lab 复制或下发 17 MB 完整字体。Settings 依 Main 组件按需加载，非首屏强制模块。

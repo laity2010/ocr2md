@@ -5,6 +5,7 @@ import './frame.css';
 import {createFrameWorkspace} from './layout.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
+import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
 function topStatus(message,kind='ok'){
   const node=$('status');node.textContent=String(message);node.dataset.kind=kind;
@@ -18,12 +19,28 @@ function setSize(size){document.documentElement.style.setProperty('--ocr-frame-f
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
 const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule});
+// Main's Tom Select adapter owns the visible control, never a parallel picker.
+const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
+enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
 let settings=null,loadingSettings=null,currentModule='frame';
+function refreshSettingsHistory(){
+  const root=$('settings-workspace');
+  const history=settings?.history||{undo:0,redo:0};
+  const undo=root.querySelector('#settings-undo');
+  const redo=root.querySelector('#settings-redo');
+  if(undo)undo.disabled=!history.undo;
+  if(redo)redo.disabled=!history.redo;
+}
+function settingsStatus(message,kind){
+  topStatus(message,kind);
+  queueMicrotask(refreshSettingsHistory);
+}
+
 async function getSettings(){
   if(settings)return settings;
   if(!loadingSettings)loadingSettings=(async()=>{
     const {createSettingsModule}=await import('../settings-module.js');
-    const module=createSettingsModule($('settings-workspace'),topStatus,null,io);
+    const module=createSettingsModule($('settings-workspace'),settingsStatus,null,io);
     module.register({module:'F',key:'globalUi.font.family',category:['全局 UI','字体'],
       label:'字体 Sarasa（只读）',comment:'Sarasa Fixed SC；字体家族固定',
       type:'string',control:'readonly',defaultValue:'Sarasa',message:'settings.changed'});
@@ -32,7 +49,7 @@ async function getSettings(){
       type:'number',control:'slider',defaultValue:16,min:8,max:32,step:1,
       unit:'px',message:'settings.changed'});
     module.subscribe({module:'F',key:'globalUi.font.size'},({value})=>setSize(value));
-    await module.load();settings=module;mountSettingsNavigation();return module;
+    await module.load();settings=module;mountSettingsNavigation();refreshSettingsHistory();return module;
   })().catch(error=>{loadingSettings=null;throw error;});
   return loadingSettings;
 }
@@ -40,13 +57,31 @@ function mountSettingsNavigation(){
   const source=$('settings-workspace').querySelector('.ocr-settings-source');
   if(!source||source.querySelector('.ocr-source-file-toolbar'))return;
   const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
+  // The single file is not a navigation-back choice. Return is a separate
+  // workspace action so the dropdown still contains exactly one file group.
+  const back=document.createElement('button');back.type='button';
+  back.className='ocr-frame-back';back.textContent='←';
+  back.title='返回空白框架';back.setAttribute('aria-label','返回空白框架');
+  back.addEventListener('click',()=>void showModule('frame'));
   const select=document.createElement('select');select.className='ocr-source-file-select';
   select.setAttribute('aria-label','源码文件导航');
-  select.add(new Option('空白工作台（未绑定文档）','frame'));
-  select.add(new Option('全局设置 / settings.json','settings'));
+  // Clone only the underlying authoritative select/optgroup, never Tom's DOM.
+  select.append(...[...frameFileSelect.children].map(child=>child.cloneNode(true)));
   select.value='settings';
-  select.addEventListener('change',()=>void showModule(select.value));
-  bar.append(select);source.prepend(bar);
+  select.addEventListener('change',()=>{if(select.value==='settings')void showModule('settings');});
+  const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
+  actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
+  for(const [name,action,label] of [['undo',()=>settings?.undo(),'撤销'],
+    ['redo',()=>settings?.redo(),'重做']]){
+    const button=document.createElement('button');button.type='button';
+    button.id='settings-'+name;button.textContent=name==='undo'?'↶':'↷';
+    button.setAttribute('aria-label',label);button.title=label;button.disabled=true;
+    button.addEventListener('click',()=>{action();queueMicrotask(refreshSettingsHistory);});
+    actions.append(button);
+  }
+  bar.append(back,select,actions);source.prepend(bar);
+  enhanceNavigationSelect(select,{search:true,kind:'files'});
+  refreshSettingsHistory();
 }
 async function showModule(name){
   currentModule=name==='settings'?'settings':'frame';
@@ -59,7 +94,14 @@ async function showModule(name){
     try{const module=await getSettings();
       if(currentModule==='settings'){module.activate();topStatus('全局设置已就绪 · 字体 Sarasa · 字号 '+module.get('globalUi.font.size')+' px');}}
     catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
-  }else{frame.activate();topStatus('空白四窗框架已就绪 · 可由源码导航进入 settings.json');}
+  }else{
+    // Leaving Settings does not add a second file to the single-file menu.
+    frameFileSelect.value='';
+    // The native select is the Main NavigationSelect public business port.
+    frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
+    frame.activate();
+    topStatus('空白四窗框架已就绪 · 可由源码导航进入 settings.json');
+  }
 }
 $('global-save').addEventListener('click',async()=>{
   if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}

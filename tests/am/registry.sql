@@ -1791,13 +1791,19 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- All cross-frame entry points have direct runnable tests, no business data ports.
 INSERT INTO modules VALUES ('F','Lab Frame','Dockview + CM6 + AG Grid shell','ui/frame/layout.js');
 INSERT INTO apis VALUES
+ ('L88','L','enhanceNavigationSelect','ui/wcp-navigation-select.js','export','native HTMLSelectElement, search and files kind','proxy-driven Tom Select adapter with refresh/show/dispose','Main navigation public wrapper preserves original select and grouped options; updates propagate as native change',1),
  ('F01','F','createFrameWorkspace','ui/frame/layout.js','export','host, optional onStatus and onModuleChange callbacks','setSplit/dispose facade','creates Main four-pane geometry, left AG module toolbar and source navigation controls without data',1),
  ('F03','F','startFrameAutoUpdate','ui/frame/refresh.js','export','version,optional injected fetch/timer/doc/reload/status','check/dispose facade','reloads on new frame version without a dirty-document gate',1),
  ('F06','F','createFrameSettingsIO','ui/frame/settings-io.js','export','optional isolated browser storage','getInitialSize/readSnapshot/saveSnapshot facade','bounded explicit-save settings persistence port for Main Settings and CMD JSON; no competing UI or SQL',1),
  ('F04','F','shouldReload','ui/frame/refresh.js','export','current version,remote release JSON','boolean','schema and name validated before reporting change',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-L88-NAV-DIRECT','L88','tests/lab-frame-layout.direct.browser.test.mjs','one settings optgroup/one file fixture','Chromium/WebKit direct public enhancer mirrors one optgroup, allows selection, triggers exactly one native change and disposes','direct'),
  ('TC-F01','F01','tests/lab-frame-layout.direct.browser.test.mjs','empty frame','split Dockview is correct; source and AG empty; no document requests','direct'),
  ('TC-F03','F03','tests/lab-frame-refresh.test.mjs','injected version result','update triggers reload once; no unsaved gate','direct'),
  ('TC-F04','F04','tests/lab-frame-refresh.test.mjs','injected release JSON','rejects wrong origin/schema; accepts distinct version','direct'),
  ('TC-F06','F06','tests/lab-frame-settings-io.test.mjs','isolated in-memory localStorage fixture','explicit snapshot save, CAS conflict protection, read-only Sarasa validation, 8-32px size and legacy preference migration','direct'),
- ('TC-FRAME-S01','S01','tests/lab-frame-api.browser.test.mjs','isolated production Frame browser','direct Main Settings AG+CM6+preview loaded via narrow IO, Sarasa immutable, one global save, no business API','direct');
+ ('TC-FRAME-S01','S01','tests/lab-frame-api.browser.test.mjs','isolated production Frame browser','Main Settings AG+CM6+preview via narrow IO; native Undo/Redo history, Sarasa immutable, global save, no business API','direct');
+
+-- Frame calls the existing Main Tom Select enhancement via its public native-select port.
+INSERT INTO access_edges VALUES
+ ('X-FRAME-NAV-L88','F','L','ui/frame/frame.js','enhanceNavigationSelect(nativeSelect,{search:true,kind:files})','L88','registered','Both source panes reuse Main one-file Tom Select; never manipulate provider DOM or create a new navigation renderer');
