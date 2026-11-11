@@ -16,7 +16,7 @@ try{
     await sleep(200);
   }
   browser=await chromium.launch({headless:true});
-  const page=await browser.newPage({viewport:{width:1032,height:642}});
+  const page=await browser.newPage({viewport:{width:1408,height:1056},hasTouch:true});
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/api/workspace/roots',route=>route.fulfill({
     status:200,contentType:'application/json',body:JSON.stringify({
@@ -35,7 +35,10 @@ try{
   await page.getByRole('button',{name:'打开目录树'}).click();
   const root=page.locator('wa-tree-item[data-path="/demo/docs"]');
   await root.waitFor({state:'visible',timeout:20000});
-  await root.click();
+  await page.locator('wa-tree-item[data-path="/demo/docs/paper"]').waitFor({state:'visible',timeout:12000});
+  const treeRect=await page.locator('.ocr-settings-directory-tree-host').boundingBox();
+  assert.ok(treeRect.height>=180,'directory pane must be large enough to browse on iPad');
+  await root.locator('[part="item"]').first().click();
   const choose=page.getByRole('button',{name:'采用选中目录'});
   await choose.waitFor();
   await page.waitForFunction(()=>!document.querySelector('[aria-label="采用选中目录"]')?.disabled);

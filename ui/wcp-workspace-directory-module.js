@@ -17,14 +17,29 @@ export function createWorkspaceDirectoryModule(directoryPort){
     open.setAttribute('aria-label','打开目录树');
     const help=document.createElement('p');help.className='ocr-settings-description';
     help.textContent='目录仅从服务器授权范围中选择；点击「采用选中目录」加入待保存设置，再使用顶栏保存。';
-    const holder=document.createElement('div');holder.className='ocr-settings-directory-tree-host';holder.hidden=true;
-    const message=document.createElement('p');message.className='ocr-settings-description';
+    // Use the full preview pane rather than an auto-shrinking list below
+    // the editor on touch devices.
+    const picker=document.createElement('section');picker.className='ocr-settings-directory-picker';
+    picker.hidden=true;picker.setAttribute('aria-label','服务器目录选择器');
+    const heading=document.createElement('div');heading.className='ocr-settings-directory-picker-heading';
+    const title=document.createElement('strong');title.textContent='选择服务器资料目录';
+    const close=document.createElement('button');close.type='button';close.textContent='关闭';
+    close.setAttribute('aria-label','关闭目录选择器');
+    heading.append(title,close);
+    const message=document.createElement('p');message.className='ocr-settings-directory-picker-message';
+    message.setAttribute('role','status');message.setAttribute('aria-live','polite');
+    const holder=document.createElement('div');holder.className='ocr-settings-directory-tree-host';
     const chooser=document.createElement('button');chooser.type='button';chooser.textContent='采用选中目录';chooser.disabled=true;
     chooser.setAttribute('aria-label','采用选中目录');
+    const footer=document.createElement('div');footer.className='ocr-settings-directory-picker-footer';
+    footer.append(chooser);
+    picker.append(heading,message,holder,footer);
     let selection='',mounted=null;
+    function dismiss(){picker.hidden=true;}
+    close.addEventListener('click',dismiss);
     open.addEventListener('click',async()=>{
-      if(!holder.hidden){holder.hidden=true;return;}
-      holder.hidden=false;message.textContent='正在读取服务器授权目录…';
+      if(!picker.hidden){dismiss();return;}
+      picker.hidden=false;message.textContent='正在读取服务器授权目录…';
       chooser.disabled=true;selection='';
       try{
         if(!mounted){
@@ -36,7 +51,8 @@ export function createWorkspaceDirectoryModule(directoryPort){
           });
         }
         await mounted.loadRoots();
-        if(!selection)message.textContent='请选择一个目录';
+        if(!selection&&message.textContent==='正在读取服务器授权目录…')
+          message.textContent='选择目录后点击「采用选中目录」';
       }catch(error){message.textContent='无法浏览目录：'+error.message;}
     });
     chooser.addEventListener('click',async()=>{
@@ -47,11 +63,11 @@ export function createWorkspaceDirectoryModule(directoryPort){
         if(result?.path!==selection)throw Error('目录验证失败');
         set(item.key,selection);
         field.value=selection;
-        holder.hidden=true;
+        dismiss();
         message.textContent='目录已加入待保存设置，请点击顶栏保存';
       }catch(error){message.textContent='目录无法绑定：'+error.message;}
     });
-    pane.append(label,field,open,help,holder,chooser,message);
+    pane.append(label,field,open,help,picker);
     return field;
   }
   function renderBookControl(pane,item,record,{get,set}){

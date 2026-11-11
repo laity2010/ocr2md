@@ -51,12 +51,20 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
     const response=await port.roots();
     if(!Array.isArray(response?.allowedRoots))throw Error('授权目录响应无效');
     tree.replaceChildren();
+    const roots=[];
     for(const path of response.allowedRoots){
       if(!safePath(path))continue;
-      tree.append(itemFor(path,path));
+      const root=itemFor(path,path);
+      tree.append(root);
+      roots.push(root);
     }
-    if(!tree.children.length)onStatus('服务器没有可浏览的授权目录');
-    return tree.children.length;
+    if(!roots.length)onStatus('服务器没有可浏览的授权目录');
+    // An initially collapsed single root resembles an empty chooser on iPad.
+    await Promise.all(roots.map(async root=>{
+      await root.updateComplete;
+      if(root.isConnected)root.expanded=true;
+    }));
+    return roots.length;
   }
   return Object.freeze({loadRoots,dispose(){tree.remove();}});
 }
