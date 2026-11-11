@@ -1,0 +1,13 @@
+/* Frame-only selectors; underlying typography and pane chrome come unchanged from Main. */
+@font-face{font-family:"OCR2MD Sarasa";src:url('/labs/lab-frame/fonts/sarasa-fixed-sc-regular-b10e9f5cb1015a3a.woff2') format('woff2');font-display:swap;font-weight:400}
+@font-face{font-family:"OCR2MD Sarasa";src:url('/labs/lab-frame/fonts/sarasa-fixed-sc-bold-2b6cfa487119e67b.woff2') format('woff2');font-display:swap;font-weight:700}
+.frame-editor{flex:1 1 0;min-height:0;width:100%;overflow:hidden}
+.frame-editor .cm-editor{height:100%;background:#111827}
+.frame-editor .cm-scroller{height:100%;overflow:auto}
+#settings-workspace{width:100%;height:100%}
+#settings-workspace[hidden]{display:none!important}
+#workspace[hidden]{display:none!important}
+#settings-workspace .ocr-settings-source{display:flex;flex-direction:column}
+#settings-workspace .ocr-settings-source .frame-editor{height:100%}
+#workspace .ocr-detached-pdf-host{background:#252d32}
+#workspace .ocr-detached-pdf-host .ocr-preview-pdf-host{background:#252d32}

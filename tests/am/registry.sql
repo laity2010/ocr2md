@@ -1786,3 +1786,17 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- End-to-end shell semantics are separate from the isolated U03 direct test.
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-ST-U03-SHELL','U03','tests/sentence-translation-shell.browser.test.mjs','tests/sentence-translation-shell.browser.test.mjs','Built Main Chromium/iPad WebKit TomSelect to independent translation AG, JSON download/import, source remains untouched','integration');
+
+-- Standalone dataless Frame scaffold; does NOT replace Main mirror Lab graph.
+-- All cross-frame entry points have direct runnable tests, no business data ports.
+INSERT INTO modules VALUES ('F','Lab Frame','Dockview + CM6 + AG Grid shell','ui/frame/layout.js');
+INSERT INTO apis VALUES
+ ('F01','F','createFrameWorkspace','ui/frame/layout.js','export','host,global status callback','setSplit/dispose facade','creates exactly Main four-pane geometry without business data',1),
+ ('F02','F','createEmptySettings','ui/frame/layout.js','export','host','activate/dispose facade','mounts blank Settings Dockview, no file or settings store',1),
+ ('F03','F','startFrameAutoUpdate','ui/frame/refresh.js','export','version,optional injected fetch/timer/doc/reload/status','check/dispose facade','reloads on new frame version without a dirty-document gate',1),
+ ('F04','F','shouldReload','ui/frame/refresh.js','export','current version,remote release JSON','boolean','schema and name validated before reporting change',1);
+INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
+ ('TC-F01','F01','tests/lab-frame-api.browser.test.mjs','empty frame','split Dockview is correct; source and AG empty; no document requests','direct'),
+ ('TC-F02','F02','tests/lab-frame-api.browser.test.mjs','empty frame','Settings AG/JSON/controls panels empty, no settings API','direct'),
+ ('TC-F03','F03','tests/lab-frame-refresh.test.mjs','injected version result','update triggers reload once; no unsaved gate','direct'),
+ ('TC-F04','F04','tests/lab-frame-refresh.test.mjs','injected release JSON','rejects wrong origin/schema; accepts distinct version','direct');
