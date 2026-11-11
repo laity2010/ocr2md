@@ -37,12 +37,12 @@ try{
        .map(name=>({name,path:path+'/'+name}));
      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
    });
+   await page.route('**/labs/lab-ocr/api/ocr/inspect?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',blocks:1,pages:22})}));
    const response=await page.goto(url,{waitUntil:'domcontentloaded'});
    assert.equal(response?.status(),200);
    assert.match(await page.locator('#build-version').innerText(),/^\d{8}-\d{4}$/);
    assert.match(await page.locator('body').innerText(),/lab-ocr/);
-   await page.locator('.ocr-ag-module-select').first().selectOption('settings');
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('全局设置已就绪'),null,{timeout:20000});
+   await page.locator('#settings-workspace').waitFor({state:'visible',timeout:20000});
    await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().waitFor({timeout:20000});
    await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().click();
    await page.getByRole('button',{name:'打开目录树'}).click();
@@ -76,7 +76,7 @@ try{
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-ocr.settings.json.v1')),null,
      'Adopting should still not automatically save');
    await page.locator('#global-save').click();
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('全局设置已保存'));
+   await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-ocr.settings.json.v1')?.includes('/demo/docs/alpha'));
    const saved=await page.evaluate(()=>({ocr:localStorage.getItem('ocr2md.lab-ocr.settings.json.v1'),
      frame:localStorage.getItem('ocr2md.lab-frame.settings.json.v1')}));
    assert.equal(JSON.parse(saved.ocr).settings['workspace.dataDirectory'].value,'/demo/docs/alpha');

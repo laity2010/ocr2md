@@ -28,7 +28,7 @@ const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChan
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
-let settings=null,loadingSettings=null,currentModule='frame';
+let settings=null,loadingSettings=null,currentModule='frame',ocrWorkflow=null;
 function refreshSettingsHistory(){
   const root=$('settings-workspace');
   const history=settings?.history||{undo:0,redo:0};
@@ -92,7 +92,10 @@ function mountSettingsNavigation(){
   // Clone only the underlying authoritative select/optgroup, never Tom's DOM.
   select.append(...[...frameFileSelect.children].map(child=>child.cloneNode(true)));
   select.value='settings';
-  select.addEventListener('change',()=>{if(select.value==='settings')void showModule('settings');});
+  select.addEventListener('change',()=>{
+    if(select.value==='settings')void showModule('settings');
+    else if(select.value==='sql:minerujson')void showModule('sql:minerujson');
+  });
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
   for(const [name,action,label] of [['undo',()=>settings?.undo(),'撤销'],
@@ -105,10 +108,11 @@ function mountSettingsNavigation(){
   }
   bar.append(back,select,actions);source.prepend(bar);
   enhanceNavigationSelect(select,{search:true,kind:'files'});
+  if(ocrWorkflow?.sqlReady())ocrWorkflow.refreshNavigation?.();
   refreshSettingsHistory();
 }
 async function showModule(name){
-  currentModule=name==='settings'?'settings':'frame';
+  currentModule=name==='settings'?'settings':name==='sql:minerujson'?'sql:minerujson':'frame';
   const inSettings=currentModule==='settings';
   $('workspace').hidden=inSettings;
   $('settings-workspace').hidden=!inSettings;
@@ -120,24 +124,43 @@ async function showModule(name){
     catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
   }else{
     // Leaving Settings does not add a second file to the single-file menu.
-    frameFileSelect.value='';
-    // The native select is the Main NavigationSelect public business port.
-    frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
+    frameFileSelect.value=currentModule==='sql:minerujson'?'sql:minerujson':'';
+    // Programmatic navigation must update the visible Tom Select without
+    // dispatching a new business change (which would recursively reopen SQL).
+    frameFileSelect.ocrNavigationSelect?.refresh();
     frame.activate();
-    topStatus(labName==='lab-ocr'
-      ?'lab-ocr 已就绪 · OCR 审阅模块待接入数据 · 可由源码导航进入 settings.json'
-      :'空白四窗框架已就绪 · 可由源码导航进入 settings.json');
+    if(currentModule==='sql:minerujson'&&ocrWorkflow){
+      await ocrWorkflow.openSql();
+    }else{
+      frame.clearSqlRows();
+      topStatus(labName==='lab-ocr'
+        ?'lab-ocr 已就绪 · 请从 SQL 导航查看已导入的 MinerU 数据'
+        :'空白四窗框架已就绪 · 可由源码导航进入 settings.json');
+    }
   }
 }
 $('global-save').addEventListener('click',async()=>{
   if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}
   if(!settings.hasUnsaved()){topStatus('当前没有待保存的全局设置');return;}
-  try{const saved=await settings.save();topStatus(saved?'✓ 全局设置已保存':'● 保存期间设置有新修改',saved?'ok':'warning');}
+  try{const saved=await settings.save();topStatus(saved?'✓ 全局设置已保存':'● 保存期间设置有新修改',saved?'ok':'warning');
+    if(saved&&ocrWorkflow)await ocrWorkflow.afterSave();}
   catch(error){topStatus('保存失败：'+error.message,'error');}
 });
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.
 // No engineering dialog or dirty-state confirmation intercepts navigation.
 startFrameAutoUpdate({version:build,name:labName,report:topStatus});
-showModule('frame');
-// Reuse Main Settings / CM6 with frame-local IO. No beforeunload/dirty gate,
-// SQL, media or source-document writer. No implicit per-slider save.
+if(labName==='lab-ocr'){
+  // The empty Frame stays independent. OCR activates only in its own Lab entry.
+  void (async()=>{
+    try{
+      const {createLabOcrWorkflow}=await import('../lab-ocr/workflow.js');
+      ocrWorkflow=createLabOcrWorkflow({io,frame,navigation:frameFileSelect,
+        settingsRoot:$('settings-workspace'),onStatus:topStatus,showModule});
+      const saved=await ocrWorkflow.savedWorkspace();
+      if(!saved){await showModule('settings');
+        topStatus('尚未绑定书籍工作目录，请在全局设置中选择 sample/ 并保存','warning');}
+      else{await showModule('frame');await ocrWorkflow.initialize();}
+    }catch(error){topStatus('Lab OCR 初始化失败：'+error.message,'error');}
+  })();
+}else void showModule('frame');
+// No implicit per-slider save, and neither JSON nor PDF sources are modified.

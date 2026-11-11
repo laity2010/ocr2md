@@ -30,7 +30,13 @@ function mountEmptyGrid(host){
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{resizable:true,sortable:false,suppressMovable:true},
     columnDefs,rowData:[]});
-  return {dispose(){grid.destroy();},layout:()=>{}};
+  // The AG pane owns the Grid API. Other modules may only update rows/columns
+  // through this explicit, narrow component boundary; no private AG DOM access.
+  host.ocrSqlGrid=Object.freeze({show({rows,columns}){
+    grid.setGridOption('columnDefs',columns);
+    grid.setGridOption('rowData',rows);
+  },clear(){grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
+  return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
 function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
   const element=document.createElement('div');
@@ -66,7 +72,10 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
     group.append(new Option('settings.json','settings'));
     select.append(group);
     select.value='';
-    select.addEventListener('change',()=>{if(select.value==='settings')onModuleChange?.('settings');});
+    select.addEventListener('change',()=>{
+      if(select.value==='settings')onModuleChange?.('settings');
+      else if(select.value==='sql:minerujson')onModuleChange?.('sql:minerujson');
+    });
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
     const undo=document.createElement('button');undo.type='button';undo.id='undo';
@@ -131,5 +140,11 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   setSplit(true);
   return Object.freeze({setSplit,activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
+    showSqlRows(rows,columns){
+      const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
+      if(!port)throw Error('AG 表尚未初始化');
+      port.show({rows,columns});
+    },
+    clearSqlRows(){container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clear();},
     dispose(){dockview.dispose();},get split(){return split;}});
 }

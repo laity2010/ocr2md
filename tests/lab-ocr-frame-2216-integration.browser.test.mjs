@@ -44,8 +44,11 @@ try{
         const children=path==='/demo/ocr-review'?[{name:'review-book',path:'/demo/ocr-review/review-book'}]:[];
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
       });
+      await page.route('**/labs/lab-ocr/api/ocr/inspect?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',blocks:1,pages:22})}));
       const response=await page.goto(url,{waitUntil:'domcontentloaded'});
       assert.equal(response.status(),200);
+      await page.locator('#settings-workspace').waitFor({state:'visible',timeout:16000});
+      await page.locator('#settings-workspace .ocr-frame-back').click();
       await page.locator('#workspace .dv-content-container').first().waitFor({timeout:16000});
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
       assert.match(await page.locator('#lab-ocr-home').innerText(),/lab-ocr/);
