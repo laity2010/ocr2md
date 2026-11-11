@@ -16,9 +16,9 @@ const theme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f38
   borderColor:'#525c62',selectedRowBackgroundColor:'rgba(86,157,121,.2)',
   fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
-export function createSettingsModule(container,onStatus=()=>{},directoryPort=null){
+export function createSettingsModule(container,onStatus=()=>{},directoryPort=null,io=null){
   const definitions=new Map(),applied=new Map();
-  const workspaceDirectory=createWorkspaceDirectoryModule(directoryPort);
+  let workspaceDirectory=null; // Instantiate directory plugin only when a path setting is registered.
   let records=new Map();
   let source=null,grid=null,dockview=null,loadPromise=null,initialPromise=null,slider=null,valueLabel=null,details=null;
   let agHost=null,sourceHost=null,previewHost=null;
@@ -31,15 +31,17 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
       Number.isFinite(min)&&Number.isFinite(max)&&max>min&&
       Number.isFinite(defaultValue)&&defaultValue>=min&&defaultValue<=max&&
       Number.isFinite(step)&&step>0;
+    const readonlySetting=type==='string'&&control==='readonly'&&typeof defaultValue==='string';
     const directorySetting=type==='path'&&control==='directory'&&
       typeof defaultValue==='string'&&directoryPort&&
       typeof directoryPort.roots==='function'&&typeof directoryPort.browse==='function';
     if(!module||typeof key!=='string'||!/\w+(?:\.\w+)+$/.test(key)||
        !Array.isArray(category)||category.length!==2||!category.every(v=>typeof v==='string'&&v)||
        !label||(comment!==undefined&&typeof comment!=='string')||message!=='settings.changed'||
-       !(numberSetting||directorySetting)||(unit!==undefined&&typeof unit!=='string'))
+       !(numberSetting||directorySetting||readonlySetting)||(unit!==undefined&&typeof unit!=='string'))
       throw Error('Invalid settings registration');
     if(definitions.has(key))throw Error('Duplicate settings key: '+key);
+    if(directorySetting&&!workspaceDirectory)workspaceDirectory=createWorkspaceDirectoryModule(directoryPort);
     definitions.set(key,Object.freeze({...definition,category:Object.freeze([...category])}));
     // A new module may register after the settings editor is already open.
     // Add its initial record through CMD's undoable text transaction.
@@ -60,7 +62,8 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
   function defaultRecord(item,value=item.defaultValue,comment=item.comment||item.label){
     return {key:item.key.split('.').at(-1),category1:item.category[0],
       category2:item.category[1],comment,value,
-      range:item.type==='path'?{kind:'server-directory'}:{min:item.min,max:item.max,step:item.step}};
+      range:item.type==='path'?{kind:'server-directory'}:
+        item.control==='readonly'?{kind:'readonly'}:{min:item.min,max:item.max,step:item.step}};
   }
   function recordFor(key){return records.get(key)||defaultRecord(entry(key));}
   function normaliseDocument(data){
@@ -123,6 +126,10 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
   function isValid(item,record){
     if(!record||typeof record!=='object'||Array.isArray(record))return false;
     const range=record.range;
+    if(item.control==='readonly')return record.key===item.key.split('.').at(-1)&&
+      typeof record.category1==='string'&&typeof record.category2==='string'&&
+      typeof record.comment==='string'&&record.range?.kind==='readonly'&&
+      record.value===item.defaultValue;
     if(item.type==='path')return record.key===item.key.split('.').at(-1)&&
       typeof record.category1==='string'&&typeof record.category2==='string'&&
       typeof record.comment==='string'&&range?.kind==='server-directory'&&
@@ -186,6 +193,14 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     const breadcrumb=document.createElement('div');breadcrumb.className='ocr-settings-breadcrumb';
     const rawName=record.key;
     breadcrumb.textContent=[record.category1,record.category2,rawName].join(' / ');
+    if(item.control==='readonly'){
+      const value=document.createElement('input');value.type='text';value.readOnly=true;value.disabled=true;
+      value.setAttribute('aria-label',item.label+'（只读）');
+      value.className='ocr-settings-readonly-value';value.value=String(record.value);
+      const caption=document.createElement('p');caption.className='ocr-settings-description';
+      caption.textContent=record.comment+' · 只读 · '+item.key;
+      pane.append(breadcrumb,value,caption);previewHost.append(pane);return;
+    }
     if(item.type==='path'){
       if(item.key==='workspace.files.bookName')workspaceDirectory.renderBookControl(pane,item,record,{get,set});
       else pathInput=workspaceDirectory.renderDirectoryControl(pane,item,record,{get,set});
@@ -212,6 +227,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
   }
   function syncPreview(){
     if(!activeKey)return;
+    if(entry(activeKey).control==='readonly')return;
     if(entry(activeKey).type==='path'){
       if(pathInput&&document.activeElement!==pathInput)
         pathInput.value=String(applied.get(activeKey)??'');
@@ -233,7 +249,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     })}));
   }
   function initialize(){
-    if(!initialPromise)initialPromise=readCMDJsonSnapshot().then(({text})=>{
+    if(!initialPromise)initialPromise=readCMDJsonSnapshot(io).then(({text})=>{
       const values=valuesFromDocument(JSON.parse(text));
       if(!values)throw Error('设置文件键值超出注册范围');
       for(const [key,value] of values)publish(key,value,'startup');
@@ -275,6 +291,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
   function get(key){entry(key);return applied.has(key)?applied.get(key):entry(key).defaultValue;}
   function set(key,value){
     const item=entry(key);
+    if(item.control==='readonly')throw Error('只读设置不可修改');
     if(!isValid(item,{...recordFor(key),value}))throw Error('Setting value outside allowed range');
     if(!source||invalid)throw Error('JSON 源码尚未就绪或存在错误');
     // Settings cannot read/write disk or operate CM6 internals. CMD alone
@@ -292,7 +309,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     // Fetch and verify the server snapshot before creating Dockview/AG/CM.
     // On a sustained network failure, no partial widget remains behind and
     // loadPromise can safely retry when the module is selected again.
-    const initialSnapshot=await readCMDJsonSnapshot();
+    const initialSnapshot=await readCMDJsonSnapshot(io);
     dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>createPanel(name)});
     const left=dockview.addPanel({id:'settings-outline',component:'outline',title:'设置 · AG'});
     const center=dockview.addPanel({id:'settings-source',component:'source',title:'settings.json',
@@ -325,7 +342,7 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
     const initialData=JSON.parse(initialSnapshot.text);
     savedRootValue=initialData.settings?.['workspace.files.rootPath']?.value??'';
     savedBookValue=initialData.settings?.['workspace.files.bookName']?.value??'';
-    source=await openCMDJsonSource(sourceHost,onSourceChange,initialSnapshot);
+    source=await openCMDJsonSource(sourceHost,onSourceChange,initialSnapshot,io);
     ensureRegisteredRecords();
     // Registered module values are applied after the first actual JSON read.
     onSourceChange({docChanged:false});

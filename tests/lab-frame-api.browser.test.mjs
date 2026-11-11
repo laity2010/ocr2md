@@ -2,122 +2,94 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
-const HOST='http://127.0.0.1:5295/labs/lab-frame/';
-const proc=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-frame/vite.config.mjs','--host','127.0.0.1','--port','5295','--strictPort'],{stdio:['ignore','pipe','pipe']});
+// Exercise the real production build to catch dynamic-import/Vite-optimizer differences.
+const HOST='http://127.0.0.1:5297/labs/lab-frame/';
+const proc=spawn('node',['node_modules/vite/bin/vite.js','preview','--config','labs/lab-frame/vite.config.mjs',
+  '--host','127.0.0.1','--port','5297','--strictPort'],{stdio:['ignore','pipe','pipe']});
 let output='';proc.stdout.on('data',b=>output+=b);proc.stderr.on('data',b=>output+=b);
-async function ready(){for(let i=0;i<40;i++){
-  if(proc.exitCode!==null)throw Error('Vite failed: '+output);
+async function ready(){for(let i=0;i<60;i++){
+  if(proc.exitCode!==null)throw Error('Vite preview failed: '+output);
   try{const r=await fetch(HOST);if(r.ok)return;}catch{}
-  await sleep(200);
-}throw Error('Vite startup timed out: '+output);}
+  await sleep(250);
+}throw Error('Vite preview startup timed out: '+output);}
 try{
   await ready();
-  for(const [label,browserType] of [['Chromium',chromium],['WebKit',webkit]]){
-    const browser=await browserType.launch({headless:true});
+  for(const [label,type] of [['Chromium',chromium],['WebKit',webkit]]){
+    const browser=await type.launch({headless:true});
     try{
       const page=await browser.newPage({viewport:{width:1032,height:642}});
-      const api=[];const exceptions=[];
-      page.on('request',req=>{if(req.url().includes('/api/'))api.push(req.url());});
-      page.on('pageerror',err=>exceptions.push(err.message));
-      await page.goto(HOST,{waitUntil:'networkidle'});
-      await page.waitForSelector('#workspace .dv-content-container');
-      assert.equal(await page.locator('#workspace .dv-content-container').count(),4, label+' four panes');
+      const errors=[],apis=[],fontRequests=[];
+      page.on('request',req=>{
+        if(req.url().includes('/api/'))apis.push(req.url());
+        if(req.url().endsWith('.woff2'))fontRequests.push(req.url());
+      });
+      page.on('pageerror',e=>errors.push(e.message));
+      page.on('response',r=>{if(r.status()>=400)errors.push(r.status()+' '+r.url());});
+      await page.goto(HOST,{waitUntil:'domcontentloaded'});
+      await page.locator('#workspace .dv-content-container').first().waitFor();
+      assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
       assert.equal((await page.locator('#editor .cm-content').innerText()).trim(),'');
       assert.equal(await page.locator('#workspace .ag-row').count(),0);
-      assert.equal(await page.locator('#workspace .ocr-detached-pdf-pane').count(),1);
-      assert.equal((await page.locator('#lab-frame-home').innerText()).trim(),'OCR2MD lab-frame');
-      assert.equal(await page.locator('#lab-frame-home').getAttribute('href'),'/labs/');
-      assert.match(await page.locator('#build-version').innerText(),/^\d{8}-\d{4}$/);
-      assert.match(await page.locator('#status').innerText(),/空白四窗/);
-      assert.equal(await page.locator('header .source-actions, body>.module-controls').count(),0);
-      const positions=await page.evaluate(()=>{
-        const rect=selector=>{const r=document.querySelector(selector)?.getBoundingClientRect();
-          return r?{left:r.left,right:r.right,top:r.top,bottom:r.bottom}:null;};
-        return {ag:rect('#workspace .ocr-ag-toolbar'),left:rect('#workspace .ocr-outline-pane'),
-          nav:rect('#workspace .ocr-source-file-select'),source:rect('#workspace .ocr-source-pane'),
-          undo:rect('#workspace #undo'),redo:rect('#workspace #redo'),
-          sourceBar:rect('#workspace .ocr-source-file-toolbar'),global:rect('header.toolbar')};
-      });
-      assert.ok(positions.ag&&positions.nav&&positions.undo&&positions.redo,label+' toolbar present');
-      assert.ok(Math.abs(positions.ag.top-positions.left.top)<=2,label+' AG toolbar at left pane top');
-      assert.ok(positions.ag.right<=positions.left.right+1,label+' AG toolbar only in left pane');
-      assert.ok(positions.nav.top>=positions.sourceBar.top && positions.nav.bottom<=positions.sourceBar.bottom+1,label+' navigation inside source top toolbar');
-      assert.ok(positions.undo.left>=positions.nav.right-1 &&
-        positions.redo.left>=positions.undo.right-1,label+' Undo/Redo immediately after navigation');
-      assert.ok(positions.sourceBar.top>=positions.source.top-1,label+' controls belong to source');
-      assert.equal(await page.locator('#workspace .ocr-ag-module-select').inputValue(),'frame');
-      assert.equal(await page.locator('#workspace #undo').isDisabled(),true);
-      assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
-      await page.locator('#workspace .ocr-ag-module-select').selectOption('settings');
+      assert.equal(await page.locator('#global-save').isVisible(),true);
+      const positions=await page.evaluate(()=>({
+        status:document.querySelector('#status').getBoundingClientRect().toJSON(),
+        save:document.querySelector('#global-save').getBoundingClientRect().toJSON(),
+        top:document.querySelector('header.toolbar').getBoundingClientRect().toJSON(),
+      }));
+      assert.ok(positions.save.x>=positions.status.right-1);
+      assert.ok(positions.save.right<=positions.top.right+1);
+      const nav=page.locator('#workspace .ocr-source-file-select');
+      assert.equal(await nav.isEnabled(),true);
+      assert.match(await nav.innerText(),/settings.json/);
+      await page.locator('#global-save').click();
+      assert.match(await page.locator('#status').innerText(),/无文档可保存/);
+      await nav.selectOption('settings');
+      await page.locator('#settings-workspace .dv-content-container').first().waitFor({timeout:16000});
       assert.equal(await page.locator('#settings-workspace .dv-content-container').count(),3);
       assert.equal(await page.locator('#settings-workspace .ag-row').count(),2);
       assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/Sarasa/);
-      assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/16/);
-      assert.equal(await page.locator('#frame-setting-size').inputValue(),'16');
-      assert.equal(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize),'16px');
-      assert.equal(await page.locator('#frame-setting-size-number').inputValue(),'16');
-      const sliderIdentity=await page.locator('#frame-setting-size').evaluate(el=>{
-        el.dataset.testIdentity='keep-physical-slider';return el.dataset.testIdentity;
-      });
-      assert.equal(sliderIdentity,'keep-physical-slider');
-      await page.locator('#frame-setting-size').fill('20');
-      assert.equal(await page.locator('#frame-setting-size').getAttribute('data-test-identity'),'keep-physical-slider');
-      assert.equal(await page.locator('#frame-setting-size-number').inputValue(),'20');
-      assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/20/);
-      assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--ocr-frame-font-size')),'20px');
+      const readonly=page.locator('#settings-workspace .ocr-settings-readonly-value');
+      assert.equal(await readonly.inputValue(),'Sarasa');
+      assert.equal(await readonly.isDisabled(),true);
+      await page.locator('#settings-workspace .ag-row').nth(1).click();
+      const slider=page.locator('#settings-font-slider');
+      assert.equal(await slider.inputValue(),'16');
+      const originalStorage=await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1'));
+      assert.equal(originalStorage,null,'no implicit persistence');
+      await slider.fill('20');
+      await slider.dispatchEvent('input'); // WebKit does not always synthesize range input for fill()
+      await page.waitForFunction(()=>getComputedStyle(document.querySelector('#status')).fontSize==='20px');
+      assert.equal(await slider.inputValue(),'20');
       assert.equal(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize),'20px');
-      assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
-      assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.font-size.v1')),'20');
-      assert.match(await page.locator('#status').innerText(),/20 px/);
-      // Select the immutable Sarasa row; the control is visible but disabled.
-      await page.locator('#settings-workspace .ag-row').first().click();
-      assert.equal(await page.locator('#frame-setting-family').inputValue(),'Sarasa');
-      assert.equal(await page.locator('#frame-setting-family').isDisabled(),true);
-      await page.reload({waitUntil:'networkidle'});
+      assert.equal(await page.locator('#settings-workspace .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
+      assert.match(await page.locator('#status').innerText(),/未保存/);
+      assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')),null);
+      // Global Save applies to dirty Settings even after returning to Frame.
+      await page.locator('#settings-workspace .ocr-source-file-select').selectOption('frame');
+      assert.equal(await page.locator('#workspace').isVisible(),true);
+      await page.locator('#global-save').click();
+      await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')?.includes('"value": 20'));
+      assert.match(await page.locator('#status').innerText(),/已保存/);
+      const saved=JSON.parse(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')));
+      assert.equal(saved.settings['globalUi.font.family'].value,'Sarasa');
+      assert.equal(saved.settings['globalUi.font.size'].value,20);
+      await page.reload({waitUntil:'domcontentloaded'});
       await page.locator('#workspace .dv-content-container').first().waitFor();
       assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--ocr-frame-font-size')),'20px');
-      assert.equal(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize),'20px');
-      assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
-      await page.locator('#workspace .ocr-ag-module-select').selectOption('settings');
-      assert.equal(await page.locator('#frame-setting-size').inputValue(),'20');
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),2);
-      assert.equal(await page.locator('#settings-workspace .ocr-ag-module-select').inputValue(),'settings');
-      assert.equal(await page.locator('#settings-workspace .ocr-source-file-select').count(),1);
-      assert.equal(await page.locator('#settings-workspace .ocr-source-undo-redo button').count(),2);
-      await page.locator('#settings-workspace .ocr-ag-module-select').selectOption('frame');
+      await page.locator('#workspace .ocr-source-file-select').selectOption('settings');
+      await page.locator('#settings-workspace .ag-row').nth(1).click();
+      assert.equal(await page.locator('#settings-font-slider').inputValue(),'20');
+      const settingsNav=page.locator('#settings-workspace .ocr-source-file-select');
+      assert.equal(await settingsNav.inputValue(),'settings');
+      await settingsNav.selectOption('frame');
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
-      assert.deepEqual(api,[],label+' no API fetch');
-      assert.deepEqual(exceptions,[],label+' browser errors');
-      // Direct F01/F02 module entry: construct/dispose an independent blank Dockview.
-      const direct=await page.evaluate(async()=>{
-        const {createFrameWorkspace,createEmptySettings}=await import('./layout.js');
-        const {createFrameSettings}=await import('./settings.js');
-        const host=document.createElement('div');host.style.cssText='width:700px;height:440px;position:absolute;top:-1000px';document.body.append(host);
-        const moduleEvents=[];
-        const f=createFrameWorkspace(host,{onModuleChange:name=>moduleEvents.push('frame:'+name)});
-        const first={split:f.split,panes:host.querySelectorAll('.dv-content-container').length};
-        const framePicker=host.querySelector('.ocr-ag-module-select');
-        framePicker.value='settings';framePicker.dispatchEvent(new Event('change',{bubbles:true}));
-        const frameRetained=framePicker.value;
-        f.setSplit(false);const second=host.querySelectorAll('.dv-content-container').length;
-        f.setSplit(true);const third=host.querySelectorAll('.dv-content-container').length;
-        f.dispose();host.remove();
-        const h=document.createElement('div');h.style.cssText='width:700px;height:440px;position:absolute;top:-1000px';document.body.append(h);
-        const settingsRegistry=createFrameSettings({root:h,storage:null});
-        const s=createEmptySettings(h,{onModuleChange:name=>moduleEvents.push('settings:'+name),settingsRegistry});
-        s.activate();const settingsPanes=h.querySelectorAll('.dv-content-container').length;
-        const settingsRows=h.querySelectorAll('.ag-row').length;
-        const settingsPicker=h.querySelector('.ocr-ag-module-select');
-        settingsPicker.value='frame';settingsPicker.dispatchEvent(new Event('change',{bubbles:true}));
-        const settingsRetained=settingsPicker.value;
-        s.dispose();settingsRegistry.dispose();h.remove();
-        return {first,second,third,settingsPanes,settingsRows,moduleEvents,frameRetained,settingsRetained};
-      });
-      assert.deepEqual(direct,{first:{split:true,panes:4},second:3,third:4,
-        settingsPanes:3,settingsRows:2,moduleEvents:['frame:settings','settings:frame'],
-        frameRetained:'frame',settingsRetained:'settings'},label+' direct APIs');
-      console.log('LAB_FRAME_BROWSER_PASS',label,JSON.stringify(direct));
-      await page.close();
+      assert.equal(await page.locator('#workspace').isVisible(),true);
+      assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
+      assert.deepEqual(apis,[]);
+      assert.equal(fontRequests.some(url=>/sarasa-fixed-sc-(regular|bold)-[a-f0-9]{12}/.test(url)),false,
+        'never request private 17MB Sarasa fonts');
+      assert.deepEqual(errors,[]);
+      console.log('LAB_FRAME_MAIN_SETTINGS_BROWSER_PASS',label,JSON.stringify({fontRequests}));
     }finally{await browser.close();}
   }
 }finally{proc.kill('SIGTERM');}

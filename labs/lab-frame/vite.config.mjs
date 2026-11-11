@@ -5,7 +5,8 @@ import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 const root=fileURLToPath(new URL('../../ui/frame/',import.meta.url));
-const publicDir=fileURLToPath(new URL('../../ui/public/',import.meta.url));
+// No private full Sarasa copies: Frame uses Agent Link's shared immutable face.
+const publicDir=false;
 const outDir=fileURLToPath(new URL('./dist/',import.meta.url));
 const sha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
 const now=new Date();

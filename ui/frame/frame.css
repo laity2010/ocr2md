@@ -1,6 +1,15 @@
 /* Frame-only selectors; underlying typography and pane chrome come unchanged from Main. */
-@font-face{font-family:"OCR2MD Sarasa";src:url('/labs/lab-frame/fonts/sarasa-fixed-sc-regular-b10e9f5cb1015a3a.woff2') format('woff2');font-display:swap;font-weight:400}
-@font-face{font-family:"OCR2MD Sarasa";src:url('/labs/lab-frame/fonts/sarasa-fixed-sc-bold-2b6cfa487119e67b.woff2') format('woff2');font-display:swap;font-weight:700}
+/* Reuse Agent Link's canonical immutable ~1 MB Sarasa face, not a private
+   17 MB full-font copy. Main's OCR2MD Sarasa family alias is preserved. */
+@font-face{font-family:"OCR2MD Sarasa";
+  src:local("Sarasa Fixed SC"),local("Sarasa-Fixed-SC-Regular"),
+    url("https://agent-link.laity.bid/shared-settings/v1/font/sarasa-fixed-sc-gb2312-regular-v1.0.36.woff2") format("woff2");
+  font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:"OCR2MD Sarasa";
+  src:local("Sarasa Fixed SC"),local("Sarasa-Fixed-SC-Regular"),
+    url("https://agent-link.laity.bid/shared-settings/v1/font/sarasa-fixed-sc-gb2312-regular-v1.0.36.woff2") format("woff2");
+  font-style:normal;font-weight:700;font-display:swap}
+:root{--laity-ui-font:"OCR2MD Sarasa","Sarasa Fixed SC",monospace}
 .frame-editor{flex:1 1 0;min-height:0;width:100%;overflow:hidden}
 .frame-editor .cm-editor{height:100%;background:#111827}
 .frame-editor .cm-scroller{height:100%;overflow:auto}
@@ -59,3 +68,17 @@
   background:#293b3c;color:#d3c6aa;border:1px solid #60766b;border-radius:4px}
 .app .ocr-settings-control input[readonly]{width:min(260px,100%);padding:7px 9px;
   background:#283238;color:#d3c6aa;border:1px solid #60766b;border-radius:4px}
+
+/* Global Save stays in the status row, to the far right. */
+.toolbar>.source-actions{display:flex;flex:none;align-items:center;justify-content:flex-end}
+.toolbar>.source-actions button{height:30px;min-width:66px;padding:3px 10px}
+.ocr-settings-readonly-value{width:min(320px,100%);padding:8px;
+  border:1px solid #52605a;border-radius:4px;background:#263038;color:#d3c6aa}
+
+/* Main Settings uses its own CM6 host, also governed by global font size. */
+.app #settings-workspace .ocr-settings-source .cm-editor,
+.app #settings-workspace .ocr-settings-source .cm-scroller{
+  font-family:"OCR2MD Sarasa",monospace;font-size:var(--ocr-frame-font-size)}
+.app #settings-workspace .ocr-settings-control,
+.app #settings-workspace .ocr-settings-control :is(input,label,p,output){
+  font-family:"OCR2MD Sarasa",monospace;font-size:var(--ocr-frame-font-size)}

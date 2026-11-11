@@ -547,9 +547,9 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- CMD owns JSON source + compare-and-save; Settings owns only schema/projections.
 INSERT INTO modules VALUES ('S','Global Settings','Dockview + AG + CodeMirror projections','ui/settings-module.js');
 INSERT INTO apis VALUES
- ('C24','C','openCMDJsonSource','ui/cmd-json-source.js','export','host,onUpdate','CMD JSON source, grammar-aware key navigation and record transaction port','source edit/history/save + AST exact record path + migration transaction + fingerprint',1),
+ ('C24','C','openCMDJsonSource','ui/cmd-json-source.js','export','host,onUpdate,initialSnapshot?,ioPort?','CMD JSON source, grammar-aware key navigation and record transaction port','source edit/history/save + AST exact record path + migration transaction + fingerprint',1),
  ('C25','C','registerCMSourceFontSetting','ui/cm-font-setting.js','export','settings port','unsubscribe','CM source registers its font value and receives changed message',1),
- ('S01','S','createSettingsModule','ui/settings-module.js','export','container,status','settings API facade','creates an independent three-pane Settings instance',1),
+ ('S01','S','createSettingsModule','ui/settings-module.js','export','container,status,directoryPort?,ioPort?','settings API facade','creates an independent three-pane Settings instance',1),
  ('S02','S','register','ui/settings-module.js','internal','module/key/schema','void','registers module key, default metadata and hard bounds, stores one JSON record per key',1),
  ('S03','S','subscribe','ui/settings-module.js','internal','module,key,handler','unsubscribe','routes settings.changed only to registered owner',1),
  ('S04','S','get','ui/settings-module.js','internal','key','current effective value','read-only projection of CMD JSON',1),
@@ -1792,13 +1792,12 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO modules VALUES ('F','Lab Frame','Dockview + CM6 + AG Grid shell','ui/frame/layout.js');
 INSERT INTO apis VALUES
  ('F01','F','createFrameWorkspace','ui/frame/layout.js','export','host, optional onStatus and onModuleChange callbacks','setSplit/dispose facade','creates Main four-pane geometry, left AG module toolbar and source navigation controls without data',1),
- ('F02','F','createEmptySettings','ui/frame/layout.js','export','host, optional onModuleChange and global settings registry','activate/dispose facade','mounts Settings Dockview with AG, CM6 JSON projection and native controls, no SQL or document IO',1),
  ('F03','F','startFrameAutoUpdate','ui/frame/refresh.js','export','version,optional injected fetch/timer/doc/reload/status','check/dispose facade','reloads on new frame version without a dirty-document gate',1),
- ('F05','F','createFrameSettings','ui/frame/settings.js','export','optional injected local preference storage/root/global status','register/get/set/list/snapshot/select/subscribe/dispose facade','registers immutable Sarasa and bounded 16px default font size, only isolated browser-local preference storage',1),
+ ('F06','F','createFrameSettingsIO','ui/frame/settings-io.js','export','optional isolated browser storage','getInitialSize/readSnapshot/saveSnapshot facade','bounded explicit-save settings persistence port for Main Settings and CMD JSON; no competing UI or SQL',1),
  ('F04','F','shouldReload','ui/frame/refresh.js','export','current version,remote release JSON','boolean','schema and name validated before reporting change',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
- ('TC-F01','F01','tests/lab-frame-api.browser.test.mjs','empty frame','split Dockview is correct; source and AG empty; no document requests','direct'),
- ('TC-F02','F02','tests/lab-frame-api.browser.test.mjs','font settings','Settings AG/CM6/controls reflect registry size and read-only Sarasa; no SQL/document API','direct'),
+ ('TC-F01','F01','tests/lab-frame-layout.direct.browser.test.mjs','empty frame','split Dockview is correct; source and AG empty; no document requests','direct'),
  ('TC-F03','F03','tests/lab-frame-refresh.test.mjs','injected version result','update triggers reload once; no unsaved gate','direct'),
  ('TC-F04','F04','tests/lab-frame-refresh.test.mjs','injected release JSON','rejects wrong origin/schema; accepts distinct version','direct'),
- ('TC-F05','F05','tests/lab-frame-settings.test.mjs','injected registry storage/root','Sarasa immutable; 8-32px size bounded; 16px default, subscribe, persistence and fail-closed recovery','direct');
+ ('TC-F06','F06','tests/lab-frame-settings-io.test.mjs','isolated in-memory localStorage fixture','explicit snapshot save, CAS conflict protection, read-only Sarasa validation, 8-32px size and legacy preference migration','direct'),
+ ('TC-FRAME-S01','S01','tests/lab-frame-api.browser.test.mjs','isolated production Frame browser','direct Main Settings AG+CM6+preview loaded via narrow IO, Sarasa immutable, one global save, no business API','direct');

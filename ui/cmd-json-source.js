@@ -19,7 +19,8 @@ const jsonEverforest=syntaxHighlighting(HighlightStyle.define([
   {tag:t.punctuation,color:'#9aa79d'},
 ]));
 
-export async function readCMDJsonSnapshot(){
+export async function readCMDJsonSnapshot(io=null){
+  if(io)return io.readSnapshot();
   // iPad Safari occasionally interrupts an in-flight GET ("Load failed").
   // Only retry read-only transport failures; never retry PUT or HTTP errors.
   // Fetch body is consumed inside the try: an interrupted response body also
@@ -44,8 +45,8 @@ export async function readCMDJsonSnapshot(){
   }
 }
 
-export async function openCMDJsonSource(host,onUpdate=()=>{},initialSnapshot=null){
-  const snapshot=initialSnapshot??await readCMDJsonSnapshot();
+export async function openCMDJsonSource(host,onUpdate=()=>{},initialSnapshot=null,io=null){
+  const snapshot=initialSnapshot??await readCMDJsonSnapshot(io);
   const text=snapshot.text;
   let etag=snapshot.etag;
   let savedDoc=null;
@@ -143,10 +144,13 @@ export async function openCMDJsonSource(host,onUpdate=()=>{},initialSnapshot=nul
     const body=getText();
     const parsed=JSON.parse(body);
     if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw Error('JSON 根节点必须是对象');
-    const result=await fetch(appPath('/api/settings'),{method:'PUT',headers:{
-      'Content-Type':'application/json; charset=utf-8','If-Match':etag,
-    },body});
-    if(!result.ok)throw Error('设置保存失败 HTTP '+result.status+': '+(await result.text()).slice(0,100));
+    if(io)await io.saveSnapshot({text:body,etag});
+    else{
+      const result=await fetch(appPath('/api/settings'),{method:'PUT',headers:{
+        'Content-Type':'application/json; charset=utf-8','If-Match':etag,
+      },body});
+      if(!result.ok)throw Error('设置保存失败 HTTP '+result.status+': '+(await result.text()).slice(0,100));
+    }
     // Server returns the full document hash in the GET, not a rewritten JSON.
     // Calculate it on the client for subsequent optimistic updates.
     const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body)));
