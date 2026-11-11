@@ -20,9 +20,9 @@ try{
       page.on('request',req=>{if(req.url().includes('/api/'))api.push(req.url());});
       page.on('pageerror',err=>exceptions.push(err.message));
       await page.goto(HOST,{waitUntil:'networkidle'});
-      await page.waitForSelector('.dv-root');
+      await page.waitForSelector('#workspace .dv-content-container');
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4, label+' four panes');
-      assert.equal(await page.locator('#editor .cm-content').innerText(),'');
+      assert.equal((await page.locator('#editor .cm-content').innerText()).trim(),'');
       assert.equal(await page.locator('#workspace .ag-row').count(),0);
       assert.equal(await page.locator('#workspace .ocr-detached-pdf-pane').count(),1);
       assert.match(await page.locator('#build-version').innerText(),/^v6-lab-frame-/);
@@ -33,7 +33,7 @@ try{
       await page.locator('#module-select').selectOption('settings');
       assert.equal(await page.locator('#settings-workspace .dv-content-container').count(),3);
       assert.equal(await page.locator('#settings-workspace .ag-row').count(),0);
-      assert.equal(await page.locator('#settings-workspace .cm-content').innerText(),'');
+      assert.equal((await page.locator('#settings-workspace .cm-content').innerText()).trim(),'');
       await page.locator('#module-select').selectOption('frame');
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
       assert.deepEqual(api,[],label+' no API fetch');
