@@ -41,7 +41,8 @@ export function createSettingsModule(container,onStatus=()=>{},directoryPort=nul
        !(numberSetting||directorySetting||readonlySetting)||(unit!==undefined&&typeof unit!=='string'))
       throw Error('Invalid settings registration');
     if(definitions.has(key))throw Error('Duplicate settings key: '+key);
-    if(directorySetting&&!workspaceDirectory)workspaceDirectory=createWorkspaceDirectoryModule(directoryPort);
+    if(directorySetting&&!workspaceDirectory)
+      workspaceDirectory=createWorkspaceDirectoryModule(directoryPort,onStatus);
     definitions.set(key,Object.freeze({...definition,category:Object.freeze([...category])}));
     // A new module may register after the settings editor is already open.
     // Add its initial record through CMD's undoable text transaction.

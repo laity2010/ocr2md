@@ -4,9 +4,12 @@
  */
 import './wcp-workspace-directory-module.css';
 
-export function createWorkspaceDirectoryModule(directoryPort){
+export function createWorkspaceDirectoryModule(directoryPort,onStatus=()=>{}){
   if(!directoryPort || !['roots','browse'].every(key=>typeof directoryPort[key]==='function'))
     throw Error('Workspace directory component requires roots/browse discovery APIs');
+  // The Shell owns all status messages and color semantics. Directory widgets
+  // must not draw private success/warning/error messages.
+  const status=(message,level='info')=>onStatus(message,level);
   // Generic directory selection is not tied to OCR files or the book catalogue.
   function renderTreeControl(pane,item,record,{set}){
     const label=document.createElement('label');label.textContent='资料目录';
@@ -28,14 +31,12 @@ export function createWorkspaceDirectoryModule(directoryPort){
     const close=document.createElement('button');close.type='button';close.textContent='关闭';
     close.setAttribute('aria-label','关闭目录选择器');
     heading.append(title,refreshButton,close);
-    const message=document.createElement('p');message.className='ocr-settings-directory-picker-message';
-    message.setAttribute('role','status');message.setAttribute('aria-live','polite');
     const holder=document.createElement('div');holder.className='ocr-settings-directory-tree-host';
     const chooser=document.createElement('button');chooser.type='button';chooser.textContent='采用选中目录';chooser.disabled=true;
     chooser.setAttribute('aria-label','采用选中目录');
     const footer=document.createElement('div');footer.className='ocr-settings-directory-picker-footer';
     footer.append(chooser);
-    picker.append(heading,message,holder,footer);
+    picker.append(heading,holder,footer);
     let selection='',mounted=null;
     function dismiss(){picker.hidden=true;mounted?.stopAutoRefresh();}
     close.addEventListener('click',dismiss);
@@ -43,12 +44,12 @@ export function createWorkspaceDirectoryModule(directoryPort){
       if(!mounted||picker.hidden)return;
       refreshButton.disabled=true;
       try{await mounted.refresh({announce:true});}
-      catch(error){message.textContent='刷新失败：'+error.message;}
+      catch(error){status('目录刷新失败：'+error.message,'error');}
       finally{refreshButton.disabled=false;}
     });
     open.addEventListener('click',async()=>{
       if(!picker.hidden){dismiss();return;}
-      picker.hidden=false;message.textContent='正在读取服务器授权目录…';
+      picker.hidden=false;status('正在读取服务器授权目录…','info');
       chooser.disabled=true;selection='';
       try{
         if(!mounted){
@@ -57,16 +58,16 @@ export function createWorkspaceDirectoryModule(directoryPort){
           mounted=createWorkspaceDirectoryTree(holder,directoryPort,{
             onSelect:path=>{
               selection=path;chooser.disabled=!path;
-              message.textContent=path?'选中：'+path:'原选中目录已失效，请重新选择';
+              status(path?'已选中目录：'+path:'原选中目录已失效，请重新选择',
+                path?'info':'warning');
             },
-            onStatus:text=>{message.textContent=text;},
+            onStatus:status,
           });
         }
         await mounted.loadRoots();
         if(!picker.hidden)mounted.startAutoRefresh();
-        if(!selection&&message.textContent==='正在读取服务器授权目录…')
-          message.textContent='选择目录后点击「采用选中目录」';
-      }catch(error){message.textContent='无法浏览目录：'+error.message;}
+        if(!selection)status('目录已加载 · 选择后点击「采用选中目录」','ok');
+      }catch(error){status('无法浏览目录：'+error.message,'error');}
     });
     chooser.addEventListener('click',async()=>{
       if(!selection)return;
@@ -77,8 +78,8 @@ export function createWorkspaceDirectoryModule(directoryPort){
         set(item.key,selection);
         field.value=selection;
         dismiss();
-        message.textContent='目录已加入待保存设置，请点击顶栏保存';
-      }catch(error){message.textContent='目录无法绑定：'+error.message;}
+        status('资料目录已加入待保存设置，请点击全局顶栏保存','warning');
+      }catch(error){status('目录无法绑定：'+error.message,'error');}
     });
     pane.append(label,field,open,help,picker);
     return field;

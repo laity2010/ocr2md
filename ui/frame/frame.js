@@ -6,11 +6,11 @@ import {createFrameWorkspace} from './layout.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
+import {createFrameStatus} from './global-status.js';
 import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
-function topStatus(message,kind='ok'){
-  const node=$('status');node.textContent=String(message);node.dataset.kind=kind;
-}
+const globalStatus=createFrameStatus($('status'));
+const topStatus=(message,kind='info')=>globalStatus.publish(message,kind);
 const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.

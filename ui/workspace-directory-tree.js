@@ -16,7 +16,7 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
   tree.className='ocr-workspace-directory-tree';
   tree.selection='single';
   host.replaceChildren(tree);
-  let disposed=false,refreshPending=null,refreshTimer=null;
+  let disposed=false,refreshPending=null,refreshTimer=null,allowedRoots=null;
 
   function childrenOf(parent){
     return [...parent.children].filter(node=>node.tagName==='WA-TREE-ITEM');
@@ -49,7 +49,7 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
     if(changed)item.replaceChildren(...next);
     item.lazy=false;
     item.loading=false;
-    if(response.children.length>120)onStatus('目录较多，仅显示前 120 个子目录');
+    if(response.children.length>120)onStatus('目录较多，仅显示前 120 个子目录','warning');
     // Only visible branches need rechecking. Collapsed branches refresh on expand.
     for(const child of next){
       if(child.expanded&&!child.lazy)changed=(await updateChildren(child))||changed;
@@ -70,12 +70,12 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
         await updateChildren(item);
       }catch(error){
         item.loading=false;
-        onStatus('无法展开目录：'+error.message);
+        onStatus('无法展开目录：'+error.message,'error');
       }
     });
     item.addEventListener('wa-expand',event=>{
       if(event.target!==item||item.lazy)return;
-      void updateChildren(item).catch(error=>onStatus('无法刷新目录：'+error.message));
+      void updateChildren(item).catch(error=>onStatus('无法刷新目录：'+error.message,'error'));
     });
     return item;
   }
@@ -83,17 +83,23 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
     const item=event.detail?.selection?.[0]||tree.querySelector('wa-tree-item[selected]');
     if(item&&safePath(item.dataset.path))onSelect(item.dataset.path);
   });
-  async function refresh({announce=false}={}){
+  async function refresh({announce=false,reloadRoots=false}={}){
     if(refreshPending)return refreshPending;
     const work=(async()=>{
-    const response=await port.roots();
-    if(!Array.isArray(response?.allowedRoots))throw Error('授权目录响应无效');
+    // The Main roots endpoint also resolves the active BOOK. Re-requesting
+    // it every five seconds can return 422 when that unrelated selection is
+    // moved or renamed. Refresh the actual directories with browse instead.
+    if(reloadRoots||allowedRoots===null){
+      const response=await port.roots();
+      if(!Array.isArray(response?.allowedRoots))throw Error('授权目录响应无效');
+      allowedRoots=response.allowedRoots.filter(safePath);
+    }
     if(disposed)return 0;
     const selectedBefore=selectedPath();
     const previous=childrenOf(tree);
     const existing=new Map(previous.map(node=>[node.dataset.path,node]));
     const roots=[];
-    for(const path of response.allowedRoots){
+    for(const path of allowedRoots){
       if(!safePath(path))continue;
       roots.push(existing.get(path)||itemFor(path,path));
     }
@@ -101,7 +107,7 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
       roots.some((node,index)=>node!==previous[index]);
     if(rootsChanged)tree.replaceChildren(...roots);
     let changed=rootsChanged;
-    if(!roots.length)onStatus('服务器没有可浏览的授权目录');
+    if(!roots.length)onStatus('服务器没有可浏览的授权目录','warning');
     // An initially collapsed single root resembles an empty chooser on iPad.
     for(const root of roots){
       await root.updateComplete;
@@ -110,8 +116,8 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
       else if(!root.lazy)changed=(await updateChildren(root))||changed;
     }
     if(!selectionStillExists(selectedBefore))onSelect('');
-    if(changed)onStatus('Mac 目录内容已更新');
-    else if(announce)onStatus('目录已是最新');
+    if(changed)onStatus('Mac 目录内容已更新','ok');
+    else if(announce)onStatus('目录已是最新','ok');
     return roots.length;
     })().catch(error=>{
       // Fail closed if authorization is revoked or the server is unreachable.
@@ -130,11 +136,11 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
     refreshTimer=setInterval(()=>{
       if(!host.isConnected){stopAutoRefresh();return;}
       if(!host.getClientRects().length||document.visibilityState==='hidden')return;
-      void refresh().catch(error=>onStatus('目录同步失败：'+error.message));
+      void refresh().catch(error=>onStatus('目录同步失败：'+error.message,'error'));
     },5000);
   }
   return Object.freeze({
-    loadRoots:refresh,refresh,startAutoRefresh,stopAutoRefresh,
+    loadRoots:()=>refresh({reloadRoots:true}),refresh,startAutoRefresh,stopAutoRefresh,
     dispose(){disposed=true;stopAutoRefresh();tree.remove();}
   });
 }

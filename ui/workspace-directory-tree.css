@@ -13,9 +13,6 @@
   color:#e6ddc8;border-radius:6px;font-family:inherit;font-size:var(--ocr-frame-font-size,16px)}
 .ocr-settings-directory-picker-footer button{flex:1;min-width:0}
 .ocr-settings-directory-picker-footer button:disabled{opacity:.5}
-.ocr-settings-directory-picker-message{flex:none;margin:0;line-height:1.5;
-  font-size:calc(13px * var(--ocr-frame-scale,1));color:#a7c080;
-  overflow-wrap:anywhere;max-height:3lh;overflow:auto}
 .ocr-settings-directory-tree-host{box-sizing:border-box;flex:1 1 0;min-height:125px;
   overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
   border:1px solid #56655d;border-radius:6px;padding:8px;

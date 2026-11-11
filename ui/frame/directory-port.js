@@ -5,7 +5,12 @@ async function request(path){
   const response=await fetch(path,{cache:'no-store',credentials:'same-origin'});
   if(response.status===403)throw Error('目录访问需要 Main 的编辑授权');
   if(response.status===404)throw Error('服务器目录服务尚未接通');
-  if(!response.ok)throw Error('服务器目录接口 HTTP '+response.status);
+  if(!response.ok){
+    // Main returns validation failures as plain text; preserve the reason.
+    const reason=(await response.text()).trim().replace(/[\r\n\t]+/g,' ').slice(0,240);
+    const operation=path.includes('/roots')?'授权根目录':'目录访问';
+    throw Error(operation+'失败（HTTP '+response.status+'）'+(reason?'：'+reason:''));
+  }
   return response.json();
 }
 export const frameDirectoryPort=Object.freeze({

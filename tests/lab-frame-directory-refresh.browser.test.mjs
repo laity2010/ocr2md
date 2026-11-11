@@ -70,11 +70,23 @@ try{
       await mkdir(join(root,'extra'));
       await page.getByRole('button',{name:'打开目录树'}).click();
       await item(join(root,'extra')).waitFor({state:'visible',timeout:6500});
+      // The refresh must no longer depend on Main's unrelated active book
+      // resolution, which can fail 422 when a book was renamed on the Mac.
+      // While already open, roots is not called on refresh; browse is.
+      denied=false;
+      const rootsBefore=await page.evaluate(()=>performance.getEntriesByType('resource')
+        .filter(entry=>entry.name.includes('/api/workspace/roots')).length);
+      await page.getByRole('button',{name:'刷新 Mac 目录'}).click();
+      const rootsAfter=await page.evaluate(()=>performance.getEntriesByType('resource')
+        .filter(entry=>entry.name.includes('/api/workspace/roots')).length);
+      assert.equal(rootsAfter,rootsBefore,
+        'Directory content refresh should not repeatedly query Main book roots');
       // Authorization revoked after loading: no stale paths remain in the UI.
       denied=true;
       await page.getByRole('button',{name:'刷新 Mac 目录'}).click();
       await page.waitForFunction(()=>document.querySelectorAll('wa-tree-item').length===0);
-      await page.getByText('目录访问需要 Main 的编辑授权',{exact:false}).waitFor();
+      await page.locator('#status').getByText('目录访问需要 Main 的编辑授权',{exact:false}).waitFor();
+      assert.equal(await page.locator('#status').getAttribute('data-kind'),'error');
       assert.equal(await accept.isEnabled(),false);
       assert.deepEqual(errors,[]);
       console.log(name+'_MAC_DIRECTORY_REFRESH_PASS',root);
