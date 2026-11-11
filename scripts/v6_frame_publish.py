@@ -63,12 +63,7 @@ def publish(release):
           if '</section>' not in html:raise RuntimeError('Home cards closing tag missing')
           html=html.replace('    </section>',CARD+'    </section>',1)
       homeBytes=html.encode('utf-8')
-      files,total=fingerprints(source)
-      manifest['modules'][NAME]={'name':NAME,'sourceCommit':commit,
-        'version':version['version'],'assetCount':len(files),'bytes':total,'files':files}
-      manifest['homeSha256']=sha(homeBytes)
-      manifest['publishedAt']=dt.datetime.now(dt.timezone.utc).isoformat()
-      manifest['releaseId']=sha(json.dumps({k:manifest[k] for k in ('schema','modules','homeSha256')},sort_keys=True,separators=(',',':'),ensure_ascii=False).encode())
+      sourceFiles,_=fingerprints(source)
       dest=release/NAME
       stage=release/(f'.{NAME}-stage-{os.getpid()}')
       retired=release/(f'.{NAME}-retired-{os.getpid()}')
@@ -80,7 +75,21 @@ def publish(release):
       swapped=False
       try:
           shutil.copytree(source,stage)
-          if fingerprints(stage)[0]!=files:raise RuntimeError('Staging verification failed')
+          if fingerprints(stage)[0]!=sourceFiles:raise RuntimeError('Staging verification failed')
+          # Only the publisher knows which LOCAL directory backs this public
+          # route. Stamp it at release time; never guess from the source tree.
+          releaseInfo=stage/'release-version.json'
+          info=json.loads(releaseInfo.read_text())
+          info['publishDirectory']=str(dest.absolute())
+          releaseInfo.write_text(json.dumps(info,ensure_ascii=False)+'\n')
+          files,total=fingerprints(stage)
+          manifest['modules'][NAME]={'name':NAME,'sourceCommit':commit,
+            'version':version['version'],'assetCount':len(files),'bytes':total,'files':files}
+          manifest['homeSha256']=sha(homeBytes)
+          manifest['publishedAt']=dt.datetime.now(dt.timezone.utc).isoformat()
+          manifest['releaseId']=sha(json.dumps(
+            {k:manifest[k] for k in ('schema','modules','homeSha256')},
+            sort_keys=True,separators=(',',':'),ensure_ascii=False).encode())
           tmpHome.write_bytes(homeBytes)
           tmpManifest.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
           if dest.exists():os.rename(dest,retired);swapped=True
