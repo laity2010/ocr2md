@@ -22,7 +22,14 @@
   --wa-color-brand-fill-normal:#527e68;--wa-color-brand-on-normal:#f5fff4;
   --indent-size:22px;--show-duration:0ms;--hide-duration:0ms}
 .ocr-workspace-directory-tree wa-tree-item::part(item){min-height:44px;align-items:center;
+  box-sizing:border-box;width:100%;border-radius:5px;
   touch-action:manipulation}
+/* Highlight exactly the selected directory's ROW, not its descendants.
+ * WebAwesome exposes the row via ::part(item), including indent and chevron. */
+.ocr-workspace-directory-tree wa-tree-item[selected]::part(item){
+  background:#396c5a;color:#f6fff7;
+  border-inline-start-color:#a5e1be;
+  box-shadow:inset 0 0 0 1px #729e88}
 .ocr-workspace-directory-tree wa-tree-item::part(label){
   white-space:normal;overflow-wrap:anywhere;min-width:0;line-height:1.4}
 .ocr-workspace-directory-tree wa-tree-item::part(expand-button){min-width:40px;min-height:40px}

@@ -46,6 +46,19 @@ try{
    await alpha.waitFor({state:'attached',timeout:15000});
    await alpha.evaluate(item=>{item.expanded=true;});
    await nested.waitFor({state:'attached',timeout:15000});
+   // Selection is a whole-row highlight (including indentation/chevron),
+   // never a highlight spanning the selected directory's descendants.
+   await alpha.locator('[part="item"]').first().click();
+   await page.waitForFunction(()=>document.querySelector('wa-tree-item[data-path="/demo/docs/alpha"]')?.selected===true);
+   const rowStyle=await alpha.locator('[part="item"]').first().evaluate(el=>{
+     const s=getComputedStyle(el),p=el.getBoundingClientRect(),h=el.getRootNode().host.getBoundingClientRect();
+     return {background:s.backgroundColor,color:s.color,width:p.width,hostWidth:h.width};
+   });
+   assert.equal(rowStyle.background,'rgb(57, 108, 90)','Selected directory should have strong whole-row green fill');
+   assert.equal(rowStyle.color,'rgb(246, 255, 247)','Selected row text must be readable');
+   assert(rowStyle.width>=rowStyle.hostWidth-2,'Highlight must cover the full row width');
+   assert.equal(await root.getAttribute('selected'),null,'Ancestor must not also be selected');
+   assert.equal(await nested.getAttribute('selected'),null,'Descendants must not also be selected');
    // Simulate the 5-second polling cycle explicitly. Previously this tried
    // assigning a recursive change result to `const changed`, then cleared tree.
    const callsBefore=rootsCalls;
@@ -54,6 +67,9 @@ try{
    assert.equal(await root.count(),1,'The authorized root must survive refresh');
    assert.equal(await alpha.count(),1,'The expanded first-level directory must survive refresh');
    assert.equal(await nested.count(),1,'The second-level directory must survive refresh');
+   assert.equal(await alpha.getAttribute('selected'),'','Refreshing must preserve the selected row');
+   assert.equal(await alpha.locator('[part="item"]').first().evaluate(el=>getComputedStyle(el).backgroundColor),
+     'rgb(57, 108, 90)','Refreshing must preserve whole-row highlight');
    // Each expanded parent must retain its OWN visible label, not just children.
    // The previous replaceChildren(...next) erased the parent's light-DOM text.
    const ownLabel=locator=>locator.evaluate(item=>[...item.childNodes]
