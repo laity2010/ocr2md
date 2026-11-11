@@ -1791,8 +1791,8 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 -- All cross-frame entry points have direct runnable tests, no business data ports.
 INSERT INTO modules VALUES ('F','Lab Frame','Dockview + CM6 + AG Grid shell','ui/frame/layout.js');
 INSERT INTO apis VALUES
- ('F01','F','createFrameWorkspace','ui/frame/layout.js','export','host,global status callback','setSplit/dispose facade','creates exactly Main four-pane geometry without business data',1),
- ('F02','F','createEmptySettings','ui/frame/layout.js','export','host','activate/dispose facade','mounts blank Settings Dockview, no file or settings store',1),
+ ('F01','F','createFrameWorkspace','ui/frame/layout.js','export','host, optional onStatus and onModuleChange callbacks','setSplit/dispose facade','creates Main four-pane geometry, left AG module toolbar and source navigation controls without data',1),
+ ('F02','F','createEmptySettings','ui/frame/layout.js','export','host, optional onModuleChange callback','activate/dispose facade','mounts blank Settings Dockview with matching per-pane tools, no file or settings store',1),
  ('F03','F','startFrameAutoUpdate','ui/frame/refresh.js','export','version,optional injected fetch/timer/doc/reload/status','check/dispose facade','reloads on new frame version without a dirty-document gate',1),
  ('F04','F','shouldReload','ui/frame/refresh.js','export','current version,remote release JSON','boolean','schema and name validated before reporting change',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES

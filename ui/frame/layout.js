@@ -37,23 +37,43 @@ function mountEmptyGrid(host,isSettings){
     columnDefs,rowData:[]});
   return {dispose:()=>grid.destroy(),layout:()=>{}};
 }
-function blankPane(name,isSettings,onSplit){
+function blankPane(name,isSettings,onSplit,onModuleChange){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
     element.className=isSettings?'ocr-settings-pane ocr-settings-ag-pane':'ocr-outline-pane';
+    // The AG-owned module strip belongs to the left pane, not the global status.
+    const bar=document.createElement('div');bar.className='ocr-ag-toolbar';
+    bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','AG 表工具栏');
+    const label=document.createElement('span');label.className='ocr-ag-toolbar-label';label.textContent='AG 表';
+    const picker=document.createElement('select');picker.className='ocr-ag-module-select';
+    picker.setAttribute('aria-label','选择模块');
+    picker.add(new Option('空白框架','frame'));
+    picker.add(new Option('全局设置','settings'));
+    const ownModule=isSettings?'settings':'frame';picker.value=ownModule;
+    picker.addEventListener('change',()=>{
+      const next=picker.value;
+      picker.value=ownModule; // Each pane retains its own correct module on return.
+      onModuleChange?.(next);
+    });
+    bar.append(label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
     owned=()=>mountEmptyGrid(grid,isSettings);
   }else if(name==='source'){
     element.className=isSettings?'ocr-settings-pane ocr-settings-source ocr-cm-source':'ocr-source-pane ocr-source-file-source';
-    if(!isSettings){
-      const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
-      const select=document.createElement('select');select.className='ocr-source-file-select';
-      select.setAttribute('aria-label','源码文件导航');select.disabled=true;
-      select.add(new Option('未选择文档','none'));
-      bar.append(select);element.append(bar);
-    }
+    const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
+    const select=document.createElement('select');select.className='ocr-source-file-select';
+    select.setAttribute('aria-label','源码文件导航');select.disabled=true;
+    select.add(new Option(isSettings?'settings.json（未绑定）':'未选择文档','none'));
+    const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
+    actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
+    const undo=document.createElement('button');undo.type='button';undo.id=isSettings?'settings-undo':'undo';
+    undo.textContent='↶';undo.setAttribute('aria-label','撤销');undo.title='没有绑定文档';undo.disabled=true;
+    const redo=document.createElement('button');redo.type='button';redo.id=isSettings?'settings-redo':'redo';
+    redo.textContent='↷';redo.setAttribute('aria-label','重做');redo.title='没有绑定文档';redo.disabled=true;
+    actions.append(undo,redo);
+    bar.append(select,actions);element.append(bar);
     const body=document.createElement('div');body.className='ocr-cm-source frame-editor';
     if(!isSettings)body.id='editor';
     element.append(body);owned=()=>mountEmptySource(body);
@@ -92,10 +112,10 @@ function addPanel(dockview,id,component,title,position){
   panel.group.header.hidden=true;panel.group.relayout();return panel;
 }
 /** Public F01: exactly Main's default three groups + detached PDF split. */
-export function createFrameWorkspace(container,{onStatus=()=>{}}={}){
+export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
   let split=false;
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,false,setSplit)});
+    createComponent:({name})=>blankPane(name,false,setSplit,onModuleChange)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
@@ -111,9 +131,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{}}={}){
   return Object.freeze({setSplit,dispose(){dockview.dispose();},get split(){return split;}});
 }
 /** Public F02: the same Settings Dockview layout; zero registered keys or data IO. */
-export function createEmptySettings(container){
+export function createEmptySettings(container,{onModuleChange=()=>{}}={}){
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,true)});
+    createComponent:({name})=>blankPane(name,true,null,onModuleChange)});
   const left=addPanel(dockview,'settings-outline','outline','设置 · AG');
   const center=addPanel(dockview,'settings-source','source','settings.json',{referencePanel:left,direction:'right'});
   addPanel(dockview,'settings-preview','settings-preview','设置控件',{referencePanel:center,direction:'below'});

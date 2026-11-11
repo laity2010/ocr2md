@@ -5,34 +5,17 @@
 <body>
 <div class="app">
   <header class="toolbar">
-    <div class="identity"><div class="brand">OCR2MD V6</div>
-      <button id="build-version" class="build-badge" type="button" aria-haspopup="dialog" aria-controls="engineering-dialog" title="查看当前构建版本">v6-载入中</button>
+    <div class="identity">
+      <a id="lab-frame-home" class="brand frame-brand" href="/labs/" title="返回 Lab 首页">OCR2MD lab-frame</a>
+      <span id="build-version" class="build-badge frame-version" aria-label="构建版本">00000000-0000</span>
       <span id="status" class="status" role="status" aria-live="polite">正在初始化空白框架</span>
     </div>
-    <div class="source-actions" role="group" aria-label="源码工具（无数据）">
-      <button id="undo" title="无文档绑定" type="button" disabled>↶</button>
-      <button id="redo" title="无文档绑定" type="button" disabled>↷</button>
-      <button id="save" class="primary" title="无持久化数据" type="button" disabled>保存</button>
-    </div>
   </header>
-  <nav class="module-controls" aria-label="工作台模块工具条">
-    <select id="module-select" aria-label="选择模块">
-      <option value="frame" selected>空白框架</option>
-      <option value="settings">全局设置</option>
-    </select>
-    <div id="module-actions" class="module-actions" data-module="frame"></div>
-  </nav>
   <main>
     <div id="workspace" aria-label="空白 AG、Markdown 源码、Markdown 预览和 PDF 四窗"></div>
     <div id="settings-workspace" hidden aria-label="空白全局设置三窗"></div>
   </main>
 </div>
-<dialog id="engineering-dialog" aria-labelledby="engineering-heading">
-  <h2 id="engineering-heading">Lab Frame 工程信息</h2>
-  <p id="engineering-version"></p>
-  <p>独立空白框架，不连接文档、MinerU JSON、SQLite、媒体或设置存储。</p>
-  <div class="dialog-actions"><button id="check-update" type="button">检查更新</button><button id="engineering-close" type="button">关闭</button></div>
-</dialog>
 <script type="module" src="./frame.js"></script>
 </body>
 </html>
