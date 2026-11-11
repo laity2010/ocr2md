@@ -46,3 +46,22 @@ test('F06 preserves legacy lab-frame font preference, never touches Main or Medi
   assert.equal((await io.readSnapshot()).text.includes('19'),true);
   assert.deepEqual([...store.entries.keys()],['ocr2md.lab-frame.font-size.v1']);
 });
+
+test('F06 runtime work directory is supplied by publisher and cannot be edited',async()=>{
+  const store=memory();
+  let published='/srv/labs/lab-frame';
+  const io=createFrameSettingsIO(store,'lab-frame',()=>published);
+  const initial=await io.readSnapshot();
+  assert.equal(JSON.parse(initial.text).settings['runtime.workDirectory'].value,published);
+  const invalid=JSON.parse(initial.text);
+  invalid.settings['runtime.workDirectory'].value='/different/directory';
+  await assert.rejects(io.saveSnapshot({text:JSON.stringify(invalid),etag:initial.etag}),
+    /工作目录及字体只读/);
+  assert.equal(store.entries.size,0);
+  await io.saveSnapshot({text:initial.text,etag:initial.etag});
+  published='/srv/next-release/lab-frame';
+  const next=await io.readSnapshot();
+  assert.equal(JSON.parse(next.text).settings['runtime.workDirectory'].value,published);
+  assert.equal(JSON.parse(store.entries.get(KEY)).settings['runtime.workDirectory'].value,
+    '/srv/labs/lab-frame','reading the new published path must not write storage');
+});

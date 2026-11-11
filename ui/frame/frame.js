@@ -14,7 +14,8 @@ const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.
 $('build-version').textContent=build.match(/(\d{8}-\d{4})\d{2}$/)?.[1]??build;
-const io=createFrameSettingsIO();
+let publishedDirectory='';
+const io=createFrameSettingsIO(localStorage,'lab-frame',()=>publishedDirectory);
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
@@ -39,6 +40,17 @@ function settingsStatus(message,kind){
 async function getSettings(){
   if(settings)return settings;
   if(!loadingSettings)loadingSettings=(async()=>{
+    // The publisher, not the browser, is the authority for the local directory
+    // serving the current /labs/<name>/ entry. A dev build has no such directory.
+    const expectedName=new URL('.',location.href).pathname.split('/').filter(Boolean).at(-1);
+    try{
+      const response=await fetch(new URL('release-version.json',location.href),{cache:'no-store'});
+      if(!response.ok)throw Error('HTTP '+response.status);
+      const metadata=await response.json();
+      if(metadata?.name===expectedName&&typeof metadata.publishDirectory==='string'&&
+        metadata.publishDirectory.startsWith('/')&&!/[\r\n\0]/.test(metadata.publishDirectory))
+        publishedDirectory=metadata.publishDirectory;
+    }catch{publishedDirectory='';}
     const {createSettingsModule}=await import('../settings-module.js');
     const module=createSettingsModule($('settings-workspace'),settingsStatus,null,io);
     module.register({module:'F',key:'globalUi.font.family',category:['全局 UI','字体'],
@@ -48,6 +60,10 @@ async function getSettings(){
       label:'字号',comment:'整个 Lab Frame 的字号，8–32 px',
       type:'number',control:'slider',defaultValue:16,min:8,max:32,step:1,
       unit:'px',message:'settings.changed'});
+    module.register({module:'F',key:'runtime.workDirectory',category:['运行环境','目录'],
+      label:'工作目录',comment:'当前发布入口对应的本机目录；只读，与业务模块无关',
+      type:'string',control:'readonly',defaultValue:publishedDirectory||'未发布',
+      message:'settings.changed'});
     module.subscribe({module:'F',key:'globalUi.font.size'},({value})=>setSize(value));
     await module.load();settings=module;mountSettingsNavigation();refreshSettingsHistory();return module;
   })().catch(error=>{loadingSettings=null;throw error;});
