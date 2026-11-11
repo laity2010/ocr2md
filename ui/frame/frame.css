@@ -29,3 +29,33 @@
 .ocr-source-undo-redo button{height:27px;width:31px;padding:0;font-size:20px;line-height:1;
   display:inline-flex;align-items:center;justify-content:center}
 .ocr-source-file-toolbar>.ocr-source-file-select{flex:1 1 auto;width:auto}
+
+/* Frame global font setting: Sarasa is fixed; 16px is the Main-compatible
+   reference scale. Other UI components keep their relative hierarchy. */
+:root {--ocr-frame-font-size:16px;--ocr-frame-scale:1}
+.app{font-family:"OCR2MD Sarasa", "Sarasa Fixed SC",monospace;font-size:var(--ocr-frame-font-size)}
+.app .brand,.app .build-badge,.app .status,
+.app .ocr-settings-control,.app .ocr-settings-control label,
+.app .ocr-settings-control input,.app .ocr-settings-control output,
+.app .ocr-settings-control p{
+  font-size:var(--ocr-frame-font-size);font-family:"OCR2MD Sarasa",monospace;
+}
+.app .ocr-ag-toolbar,.app .ocr-ag-module-select,
+.app .ocr-source-file-select,.app .ocr-source-undo-redo button,
+.app .ocr-preview-mode,.app .ocr-preview-split-toggle,
+.app .ocr-detached-pdf-toolbar,.app .ocr-pdf-tools,
+.app .ocr-pdf-tools button,.app .ocr-pdf-tools input{
+  font-size:calc(12px * var(--ocr-frame-scale));
+  font-family:"OCR2MD Sarasa",monospace;
+}
+.app .frame-editor .cm-editor,.app .frame-editor .cm-scroller{
+  font-size:var(--ocr-frame-font-size);font-family:"OCR2MD Sarasa",monospace;
+}
+.app .ag-root-wrapper,.app .ag-cell,.app .ag-header-cell-text{
+  font-size:calc(13px * var(--ocr-frame-scale));font-family:"OCR2MD Sarasa",monospace;
+}
+.app .ocr-settings-control{overflow:auto;height:100%;min-height:0}
+.app .ocr-settings-control input[type="number"]{width:90px;max-width:100%;padding:4px 8px;
+  background:#293b3c;color:#d3c6aa;border:1px solid #60766b;border-radius:4px}
+.app .ocr-settings-control input[readonly]{width:min(260px,100%);padding:7px 9px;
+  background:#283238;color:#d3c6aa;border:1px solid #60766b;border-radius:4px}

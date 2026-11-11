@@ -11,3 +11,7 @@
 ### 工具条位置
 
 全局顶栏只显示 `OCR2MD lab-frame` 返回 `/labs/` 的链接、固定到分钟的版本号和全局状态。模块选择器及 AG 表工具条属于左窗；源码导航、Undo/Redo 属于右上源码窗。没有保存或撤销的业务后端时，Undo/Redo 保留但禁用；设置三窗亦遵循同一工具条位置。
+
+### 全局字体设置
+
+`ui/frame/settings.js` 公开 `createFrameSettings`（F05），由 Frame 装配根注入全局设置三窗 F02。设置登记两项：`globalUi.font.family` = `Sarasa`（只读），`globalUi.font.size` = `16` px（8–32、步长 1）。AG、只读 CM6 JSON 投影与控件联动；字号变更通过 `--ocr-frame-font-size` 与 `--ocr-frame-scale` 即时控制四窗样式。唯一持久内容为此 Frame 独占的浏览器 `localStorage` 字号键 `ocr2md.lab-frame.font-size.v1`，不创建/操作任何文档、SQL 或媒体记录；自动更新重载后恢复该偏好。设置模块不直接写顶栏 DOM，统一通过 `onStatus` 回调。

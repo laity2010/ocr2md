@@ -13,13 +13,15 @@ const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
-function mountEmptySource(host){
-  const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
+function mountEmptySource(host,readSource=()=>'',subscribe=()=>()=>{}){
+  const editor=new EditorView({state:EditorState.create({doc:readSource(),extensions:[
     EditorState.readOnly.of(true),EditorView.editable.of(false),lineNumbers(),EditorView.lineWrapping,
   ]}),parent:host});
-  return {dispose:()=>editor.destroy(),layout:()=>editor.requestMeasure()};
+  const unsubscribe=subscribe(()=>{const next=readSource();const old=editor.state.doc.toString();
+    if(next!==old)editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:next}});});
+  return {dispose(){unsubscribe();editor.destroy();},layout:()=>editor.requestMeasure()};
 }
-function mountEmptyGrid(host,isSettings){
+function mountEmptyGrid(host,isSettings,registry){
   const columnDefs=isSettings?[
     {field:'primaryCategory',headerName:'一级分类',width:145},
     {field:'secondaryCategory',headerName:'二级分类',width:150},
@@ -33,11 +35,13 @@ function mountEmptyGrid(host,isSettings){
   ];
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
+    onRowClicked:event=>{if(isSettings&&event.data?.key)registry?.select(event.data.key);},
     defaultColDef:{resizable:true,sortable:false,suppressMovable:true},
-    columnDefs,rowData:[]});
-  return {dispose:()=>grid.destroy(),layout:()=>{}};
+    columnDefs,rowData:isSettings?registry?.list()||[]:[]});
+  const unsubscribe=isSettings&&registry?registry.subscribe(()=>grid.setGridOption('rowData',registry.list())):()=>{};
+  return {dispose(){unsubscribe();grid.destroy();},layout:()=>{}};
 }
-function blankPane(name,isSettings,onSplit,onModuleChange){
+function blankPane(name,isSettings,onSplit,onModuleChange,registry){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -59,13 +63,13 @@ function blankPane(name,isSettings,onSplit,onModuleChange){
     bar.append(label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
-    owned=()=>mountEmptyGrid(grid,isSettings);
+    owned=()=>mountEmptyGrid(grid,isSettings,registry);
   }else if(name==='source'){
     element.className=isSettings?'ocr-settings-pane ocr-settings-source ocr-cm-source':'ocr-source-pane ocr-source-file-source';
     const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
     const select=document.createElement('select');select.className='ocr-source-file-select';
     select.setAttribute('aria-label','源码文件导航');select.disabled=true;
-    select.add(new Option(isSettings?'settings.json（未绑定）':'未选择文档','none'));
+    select.add(new Option(isSettings?'settings.json（运行时）':'未选择文档','none'));
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
     const undo=document.createElement('button');undo.type='button';undo.id=isSettings?'settings-undo':'undo';
@@ -76,7 +80,9 @@ function blankPane(name,isSettings,onSplit,onModuleChange){
     bar.append(select,actions);element.append(bar);
     const body=document.createElement('div');body.className='ocr-cm-source frame-editor';
     if(!isSettings)body.id='editor';
-    element.append(body);owned=()=>mountEmptySource(body);
+    element.append(body);owned=()=>mountEmptySource(body,
+      isSettings&&registry?()=>JSON.stringify(registry.snapshot(),null,2):()=>'',
+      isSettings&&registry?fn=>registry.subscribe(fn):()=>()=>{});
   }else if(name==='preview'&&!isSettings){
     element.className='ocr-preview-pane';element.dataset.previewMode='md';
     const bar=document.createElement('div');bar.className='ocr-preview-switchbar';
@@ -103,10 +109,64 @@ function blankPane(name,isSettings,onSplit,onModuleChange){
     host.append(surface);element.append(host);
   }else{
     element.className='ocr-settings-pane';
+    if(isSettings&&name==='settings-preview'&&registry){
+      const control=document.createElement('div');control.className='ocr-settings-control';
+      element.append(control);owned=()=>mountSettingsControls(control,registry);
+    }
   }
   return {element,init(){if(owned)this.resource=owned();},layout(){this.resource?.layout();},
     dispose(){this.resource?.dispose();}};
 }
+
+function mountSettingsControls(host,registry){
+  let currentKey=null;
+  function render(){
+    const row=registry.list().find(x=>x.key===registry.selected);
+    if(!row){host.replaceChildren();currentKey=null;return;}
+    // Keep the same physical slider during pointer drags. Recreating its DOM
+    // node on every input event would swallow the remainder of the gesture.
+    if(currentKey===row.key){
+      const range=host.querySelector('#frame-setting-size');
+      if(range)range.value=String(row.value);
+      const output=host.querySelector('output');
+      if(output)output.textContent=row.value+' px';
+      const number=host.querySelector('#frame-setting-size-number');
+      if(number)number.value=String(row.value);
+      return;
+    }
+    currentKey=row.key;host.replaceChildren();
+    const breadcrumb=document.createElement('div');breadcrumb.className='ocr-settings-breadcrumb';
+    breadcrumb.textContent=row.primaryCategory+' / '+row.secondaryCategory;
+    const title=document.createElement('label');title.textContent=row.keyName;
+    const description=document.createElement('p');description.className='ocr-settings-description';
+    description.textContent=row.keyComment;
+    host.append(breadcrumb,title,description);
+    if(row.readonly){
+      const input=document.createElement('input');input.id='frame-setting-family';input.type='text';
+      input.value=String(row.value);input.readOnly=true;input.disabled=true;
+      input.setAttribute('aria-label','字体（只读）');host.append(input);
+    }else{
+      const group=document.createElement('div');group.className='ocr-settings-slider-row';
+      const range=document.createElement('input');range.id='frame-setting-size';range.type='range';
+      range.min=String(row.min);range.max=String(row.max);range.step=String(row.step);
+      range.value=String(row.value);range.setAttribute('aria-label','全局字号');
+      const output=document.createElement('output');output.htmlFor=range.id;
+      output.textContent=row.value+' px';
+      range.addEventListener('input',()=>registry.set(row.key,Number(range.value)));
+      group.append(range,output);host.append(group);
+      const number=document.createElement('input');number.type='number';
+      number.id='frame-setting-size-number';number.min=range.min;number.max=range.max;
+      number.step=range.step;number.value=range.value;number.setAttribute('aria-label','全局字号数值');
+      number.addEventListener('change',()=>{
+        try{registry.set(row.key,Number(number.value));}
+        catch{number.value=String(registry.get(row.key));}
+      });host.append(number);
+    }
+  }
+  const unsubscribe=registry.subscribe(render);render();
+  return {dispose:unsubscribe,layout:()=>{}};
+}
+
 function addPanel(dockview,id,component,title,position){
   const panel=dockview.addPanel({id,component,title,...(position?{position}:{})});
   panel.group.header.hidden=true;panel.group.relayout();return panel;
@@ -130,10 +190,10 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   setSplit(true);
   return Object.freeze({setSplit,dispose(){dockview.dispose();},get split(){return split;}});
 }
-/** Public F02: the same Settings Dockview layout; zero registered keys or data IO. */
-export function createEmptySettings(container,{onModuleChange=()=>{}}={}){
+/** Public F02: Settings Dockview with optional registered, bounded settings facade. */
+export function createEmptySettings(container,{onModuleChange=()=>{},settingsRegistry=null}={}){
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,true,null,onModuleChange)});
+    createComponent:({name})=>blankPane(name,true,null,onModuleChange,settingsRegistry)});
   const left=addPanel(dockview,'settings-outline','outline','设置 · AG');
   const center=addPanel(dockview,'settings-source','source','settings.json',{referencePanel:left,direction:'right'});
   addPanel(dockview,'settings-preview','settings-preview','设置控件',{referencePanel:center,direction:'below'});

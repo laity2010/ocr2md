@@ -50,8 +50,37 @@ try{
       assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
       await page.locator('#workspace .ocr-ag-module-select').selectOption('settings');
       assert.equal(await page.locator('#settings-workspace .dv-content-container').count(),3);
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),0);
-      assert.equal((await page.locator('#settings-workspace .cm-content').innerText()).trim(),'');
+      assert.equal(await page.locator('#settings-workspace .ag-row').count(),2);
+      assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/Sarasa/);
+      assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/16/);
+      assert.equal(await page.locator('#frame-setting-size').inputValue(),'16');
+      assert.equal(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize),'16px');
+      assert.equal(await page.locator('#frame-setting-size-number').inputValue(),'16');
+      const sliderIdentity=await page.locator('#frame-setting-size').evaluate(el=>{
+        el.dataset.testIdentity='keep-physical-slider';return el.dataset.testIdentity;
+      });
+      assert.equal(sliderIdentity,'keep-physical-slider');
+      await page.locator('#frame-setting-size').fill('20');
+      assert.equal(await page.locator('#frame-setting-size').getAttribute('data-test-identity'),'keep-physical-slider');
+      assert.equal(await page.locator('#frame-setting-size-number').inputValue(),'20');
+      assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/20/);
+      assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--ocr-frame-font-size')),'20px');
+      assert.equal(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize),'20px');
+      assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
+      assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.font-size.v1')),'20');
+      assert.match(await page.locator('#status').innerText(),/20 px/);
+      // Select the immutable Sarasa row; the control is visible but disabled.
+      await page.locator('#settings-workspace .ag-row').first().click();
+      assert.equal(await page.locator('#frame-setting-family').inputValue(),'Sarasa');
+      assert.equal(await page.locator('#frame-setting-family').isDisabled(),true);
+      await page.reload({waitUntil:'networkidle'});
+      await page.locator('#workspace .dv-content-container').first().waitFor();
+      assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--ocr-frame-font-size')),'20px');
+      assert.equal(await page.locator('#status').evaluate(el=>getComputedStyle(el).fontSize),'20px');
+      assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
+      await page.locator('#workspace .ocr-ag-module-select').selectOption('settings');
+      assert.equal(await page.locator('#frame-setting-size').inputValue(),'20');
+      assert.equal(await page.locator('#settings-workspace .ag-row').count(),2);
       assert.equal(await page.locator('#settings-workspace .ocr-ag-module-select').inputValue(),'settings');
       assert.equal(await page.locator('#settings-workspace .ocr-source-file-select').count(),1);
       assert.equal(await page.locator('#settings-workspace .ocr-source-undo-redo button').count(),2);
@@ -62,6 +91,7 @@ try{
       // Direct F01/F02 module entry: construct/dispose an independent blank Dockview.
       const direct=await page.evaluate(async()=>{
         const {createFrameWorkspace,createEmptySettings}=await import('./layout.js');
+        const {createFrameSettings}=await import('./settings.js');
         const host=document.createElement('div');host.style.cssText='width:700px;height:440px;position:absolute;top:-1000px';document.body.append(host);
         const moduleEvents=[];
         const f=createFrameWorkspace(host,{onModuleChange:name=>moduleEvents.push('frame:'+name)});
@@ -73,16 +103,18 @@ try{
         f.setSplit(true);const third=host.querySelectorAll('.dv-content-container').length;
         f.dispose();host.remove();
         const h=document.createElement('div');h.style.cssText='width:700px;height:440px;position:absolute;top:-1000px';document.body.append(h);
-        const s=createEmptySettings(h,{onModuleChange:name=>moduleEvents.push('settings:'+name)});
+        const settingsRegistry=createFrameSettings({root:h,storage:null});
+        const s=createEmptySettings(h,{onModuleChange:name=>moduleEvents.push('settings:'+name),settingsRegistry});
         s.activate();const settingsPanes=h.querySelectorAll('.dv-content-container').length;
+        const settingsRows=h.querySelectorAll('.ag-row').length;
         const settingsPicker=h.querySelector('.ocr-ag-module-select');
         settingsPicker.value='frame';settingsPicker.dispatchEvent(new Event('change',{bubbles:true}));
         const settingsRetained=settingsPicker.value;
-        s.dispose();h.remove();
-        return {first,second,third,settingsPanes,moduleEvents,frameRetained,settingsRetained};
+        s.dispose();settingsRegistry.dispose();h.remove();
+        return {first,second,third,settingsPanes,settingsRows,moduleEvents,frameRetained,settingsRetained};
       });
       assert.deepEqual(direct,{first:{split:true,panes:4},second:3,third:4,
-        settingsPanes:3,moduleEvents:['frame:settings','settings:frame'],
+        settingsPanes:3,settingsRows:2,moduleEvents:['frame:settings','settings:frame'],
         frameRetained:'frame',settingsRetained:'settings'},label+' direct APIs');
       console.log('LAB_FRAME_BROWSER_PASS',label,JSON.stringify(direct));
       await page.close();

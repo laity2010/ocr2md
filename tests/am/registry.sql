@@ -1792,11 +1792,13 @@ INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
 INSERT INTO modules VALUES ('F','Lab Frame','Dockview + CM6 + AG Grid shell','ui/frame/layout.js');
 INSERT INTO apis VALUES
  ('F01','F','createFrameWorkspace','ui/frame/layout.js','export','host, optional onStatus and onModuleChange callbacks','setSplit/dispose facade','creates Main four-pane geometry, left AG module toolbar and source navigation controls without data',1),
- ('F02','F','createEmptySettings','ui/frame/layout.js','export','host, optional onModuleChange callback','activate/dispose facade','mounts blank Settings Dockview with matching per-pane tools, no file or settings store',1),
+ ('F02','F','createEmptySettings','ui/frame/layout.js','export','host, optional onModuleChange and global settings registry','activate/dispose facade','mounts Settings Dockview with AG, CM6 JSON projection and native controls, no SQL or document IO',1),
  ('F03','F','startFrameAutoUpdate','ui/frame/refresh.js','export','version,optional injected fetch/timer/doc/reload/status','check/dispose facade','reloads on new frame version without a dirty-document gate',1),
+ ('F05','F','createFrameSettings','ui/frame/settings.js','export','optional injected local preference storage/root/global status','register/get/set/list/snapshot/select/subscribe/dispose facade','registers immutable Sarasa and bounded 16px default font size, only isolated browser-local preference storage',1),
  ('F04','F','shouldReload','ui/frame/refresh.js','export','current version,remote release JSON','boolean','schema and name validated before reporting change',1);
 INSERT INTO test_cases(id,api_id,script,fixture,expected,evidence) VALUES
  ('TC-F01','F01','tests/lab-frame-api.browser.test.mjs','empty frame','split Dockview is correct; source and AG empty; no document requests','direct'),
- ('TC-F02','F02','tests/lab-frame-api.browser.test.mjs','empty frame','Settings AG/JSON/controls panels empty, no settings API','direct'),
+ ('TC-F02','F02','tests/lab-frame-api.browser.test.mjs','font settings','Settings AG/CM6/controls reflect registry size and read-only Sarasa; no SQL/document API','direct'),
  ('TC-F03','F03','tests/lab-frame-refresh.test.mjs','injected version result','update triggers reload once; no unsaved gate','direct'),
- ('TC-F04','F04','tests/lab-frame-refresh.test.mjs','injected release JSON','rejects wrong origin/schema; accepts distinct version','direct');
+ ('TC-F04','F04','tests/lab-frame-refresh.test.mjs','injected release JSON','rejects wrong origin/schema; accepts distinct version','direct'),
+ ('TC-F05','F05','tests/lab-frame-settings.test.mjs','injected registry storage/root','Sarasa immutable; 8-32px size bounded; 16px default, subscribe, persistence and fail-closed recovery','direct');
