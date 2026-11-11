@@ -46,7 +46,14 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
       next.push(old.get(child.path)||itemFor(child.path,child.name));
     }
     let changed=previous.length!==next.length||next.some((node,i)=>node!==previous[i]);
-    if(changed)item.replaceChildren(...next);
+    if(changed){
+      // WebAwesome uses light-DOM text for the item's OWN label. Replacing all
+      // children removes that label, leaving only a chevron on expanded rows.
+      // Reconcile nested tree-items while retaining the parent's label nodes.
+      const ownLabelNodes=[...item.childNodes].filter(node=>
+        node.nodeType!==1||node.tagName!=='WA-TREE-ITEM');
+      item.replaceChildren(...ownLabelNodes,...next);
+    }
     item.lazy=false;
     item.loading=false;
     if(response.children.length>120)onStatus('目录较多，仅显示前 120 个子目录','warning');

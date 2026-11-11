@@ -54,6 +54,12 @@ try{
    assert.equal(await root.count(),1,'The authorized root must survive refresh');
    assert.equal(await alpha.count(),1,'The expanded first-level directory must survive refresh');
    assert.equal(await nested.count(),1,'The second-level directory must survive refresh');
+   // Each expanded parent must retain its OWN visible label, not just children.
+   // The previous replaceChildren(...next) erased the parent's light-DOM text.
+   const ownLabel=locator=>locator.evaluate(item=>[...item.childNodes]
+     .filter(node=>node.nodeType===Node.TEXT_NODE).map(node=>node.textContent).join(''));
+   assert.match(await ownLabel(root),/📁 \/demo\/docs/,'Authorized root label missing after expansion');
+   assert.match(await ownLabel(alpha),/📁 alpha/,'Expanded parent label missing after refresh');
    assert(!String(await page.locator('#status').innerText()).includes('目录同步失败'));
    assert(!String(await page.locator('#status').innerText()).includes('readonly'));
    assert.equal(rootsCalls,callsBefore,'Periodic content refresh must not recheck unrelated book selection');
