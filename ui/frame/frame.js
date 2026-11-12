@@ -9,6 +9,7 @@ import {frameDirectoryPort} from './directory-port.js';
 import {createFrameStatus} from './global-status.js';
 import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
+const labName=typeof __FRAME_APP_ID__==='string'?__FRAME_APP_ID__:'lab-frame';
 const globalStatus=createFrameStatus($('status'));
 const topStatus=(message,kind='info')=>globalStatus.publish(message,kind);
 const build=__FRAME_BUILD_VERSION__;
@@ -16,12 +17,13 @@ const build=__FRAME_BUILD_VERSION__;
 // release identity for auto-update checks, but show year/month/day-hour/minute.
 $('build-version').textContent=build.match(/(\d{8}-\d{4})\d{2}$/)?.[1]??build;
 let publishedDirectory='';
-const io=createFrameSettingsIO(localStorage,'lab-frame',()=>publishedDirectory,
+const io=createFrameSettingsIO(localStorage,labName,()=>publishedDirectory,
   path=>frameDirectoryPort.browse(path));
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
-const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule});
+const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule,
+  moduleLabel:labName==='lab-pdf'?'PDF 组件实验':'空白框架'});
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
@@ -59,7 +61,7 @@ async function getSettings(){
       label:'字体 Sarasa（只读）',comment:'Sarasa Fixed SC；字体家族固定',
       type:'string',control:'readonly',defaultValue:'Sarasa',message:'settings.changed'});
     module.register({module:'F',key:'globalUi.font.size',category:['全局 UI','字体'],
-      label:'字号',comment:'整个 Lab Frame 的字号，8–32 px',
+      label:'字号',comment:'Lab PDF 的统一字号，8–32 px',
       type:'number',control:'slider',defaultValue:16,min:8,max:32,step:1,
       unit:'px',message:'settings.changed'});
     module.register({module:'F',key:'runtime.workDirectory',category:['运行环境','目录'],
@@ -132,7 +134,7 @@ $('global-save').addEventListener('click',async()=>{
 });
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.
 // No engineering dialog or dirty-state confirmation intercepts navigation.
-startFrameAutoUpdate({version:build,report:topStatus});
+startFrameAutoUpdate({version:build,labName,report:topStatus});
 showModule('frame');
 // Reuse Main Settings / CM6 with frame-local IO. No beforeunload/dirty gate,
 // SQL, media or source-document writer. No implicit per-slider save.

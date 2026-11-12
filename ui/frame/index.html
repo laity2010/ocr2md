@@ -1,20 +1,20 @@
 <!doctype html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>OCR2MD V6 · Lab Frame</title></head>
+<title>OCR2MD V6 · Lab PDF（组件开发）</title></head>
 <body>
 <div class="app">
   <header class="toolbar">
     <div class="identity">
-      <a id="lab-frame-home" class="brand frame-brand" href="/labs/" title="返回 Lab 首页">OCR2MD lab-frame</a>
+      <a id="lab-pdf-home" class="brand frame-brand" href="/labs/" title="返回 Lab 首页">OCR2MD lab-pdf</a>
       <span id="build-version" class="build-badge frame-version" aria-label="构建版本">00000000-0000</span>
-      <span id="status" class="status" role="status" aria-live="polite">正在初始化空白框架</span>
+      <span id="status" class="status" role="status" aria-live="polite">正在初始化 PDF 开发框架</span>
     </div>
     <div class="source-actions"><button id="global-save" class="primary" type="button">保存</button></div>
   </header>
   <main>
-    <div id="workspace" aria-label="空白 AG、Markdown 源码、Markdown 预览和 PDF 四窗"></div>
-    <div id="settings-workspace" hidden aria-label="空白全局设置三窗"></div>
+    <div id="workspace" aria-label="PDF 组件开发四窗（原始 PDF 渲染待接入）"></div>
+    <div id="settings-workspace" hidden aria-label="全局设置三窗"></div>
   </main>
 </div>
 <script type="module" src="./frame.js"></script>
