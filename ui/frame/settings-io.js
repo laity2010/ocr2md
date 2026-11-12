@@ -2,6 +2,12 @@
  * No UI, no setting registration, no duplicate state manager. Explicit Save.
  */
 const VALID_SIZE=value=>Number.isInteger(value)&&value>=8&&value<=32;
+// Lab OCR-only visual settings (other Labs keep their existing schema).
+const VALID_OVERLAY_STROKE=value=>typeof value==='number'&&Number.isFinite(value)&&
+  value>=0.25&&value<=3&&Number.isInteger(value*4);
+const VALID_OVERLAY_TRANSPARENCY=value=>Number.isInteger(value)&&
+  value>=0&&value<=95&&value%5===0;
+
 const checksum=async text=>Array.from(new Uint8Array(await crypto.subtle.digest(
   'SHA-256',new TextEncoder().encode(text))),byte=>byte.toString(16).padStart(2,'0')).join('');
 export function createFrameSettingsIO(storage=localStorage,labName='lab-frame',
@@ -46,6 +52,16 @@ export function createFrameSettingsIO(storage=localStorage,labName='lab-frame',
   return Object.freeze({
     getInitialSize(){try{const data=JSON.parse(read());const size=data.settings?.['globalUi.font.size']?.value;
       return VALID_SIZE(size)?size:16;}catch{return 16;}},
+    getInitialOverlayStyle(){
+      let width,transparency;
+      try{
+        const values=JSON.parse(read()).settings;
+        width=values?.['pdf.overlay.borderWidth']?.value;
+        transparency=values?.['pdf.overlay.transparency']?.value;
+      }catch{}
+      return Object.freeze({borderWidth:VALID_OVERLAY_STROKE(width)?width:0.75,
+        transparency:VALID_OVERLAY_TRANSPARENCY(transparency)?transparency:65});
+    },
     async readSnapshot(){const text=read();return {text,etag:await checksum(text)};},
     async saveSnapshot({text,etag}){
       if(await checksum(read())!==etag)throw Error('设置文件版本已更新，请重新加载');
@@ -56,8 +72,11 @@ export function createFrameSettingsIO(storage=localStorage,labName='lab-frame',
         parsed.settings?.['runtime.workDirectory']?.value!==workDirectory()||
         parsed.settings?.['runtime.workDirectory']?.range?.kind!=='readonly'||
         typeof parsed.settings?.['workspace.dataDirectory']?.value!=='string'||
-        parsed.settings?.['workspace.dataDirectory']?.range?.kind!=='server-directory')
-        throw Error('设置值无效：工作目录及字体只读，字号仅允许 8–32 px');
+        parsed.settings?.['workspace.dataDirectory']?.range?.kind!=='server-directory'||
+        (labName==='lab-ocr'&&(
+          !VALID_OVERLAY_STROKE(parsed.settings?.['pdf.overlay.borderWidth']?.value)||
+          !VALID_OVERLAY_TRANSPARENCY(parsed.settings?.['pdf.overlay.transparency']?.value))))
+        throw Error('设置值无效：请检查字体、字号、资料目录及 PDF 覆盖框参数');
       const selected=parsed.settings['workspace.dataDirectory'].value;
       if(selected){
         if(!selected.startsWith('/')||selected.length>1024||/[\0\r\n]/.test(selected))

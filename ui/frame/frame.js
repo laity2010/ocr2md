@@ -23,6 +23,19 @@ const io=createFrameSettingsIO(localStorage,labName,()=>publishedDirectory,
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
+function setPdfOverlayBorderWidth(value){
+  if(typeof value==='number'&&Number.isFinite(value)&&value>=0.25&&value<=3)
+    $('workspace').style.setProperty('--lab-ocr-pdf-overlay-border-width',value+'px');
+}
+function setPdfOverlayTransparency(value){
+  if(Number.isInteger(value)&&value>=0&&value<=95)
+    $('workspace').style.setProperty('--lab-ocr-pdf-overlay-opacity',String((100-value)/100));
+}
+if(labName==='lab-ocr'){
+  const initial=io.getInitialOverlayStyle();
+  setPdfOverlayBorderWidth(initial.borderWidth);
+  setPdfOverlayTransparency(initial.transparency);
+}
 // User navigation must win over asynchronous initial book inspection on reload.
 let manualNavigationRevision=0;
 let currentModule='frame';
@@ -83,6 +96,20 @@ async function getSettings(){
     module.register({module:'F',key:'workspace.dataDirectory',category:['工作区','目录'],
       label:'资料目录',comment:'通用资料目录绑定；不检查 OCR、MinerU 或 PDF',
       type:'path',control:'directory-tree',defaultValue:'',message:'settings.changed'});
+    if(labName==='lab-ocr'){
+      module.register({module:'F',key:'pdf.overlay.borderWidth',category:['PDF 原文','覆盖框'],
+        label:'覆盖框边框粗细',comment:'Block 与 Span 共用；0.25–3 px，默认 0.75 px',
+        type:'number',control:'slider',defaultValue:0.75,min:0.25,max:3,step:0.25,
+        unit:'px',message:'settings.changed'});
+      module.register({module:'F',key:'pdf.overlay.transparency',category:['PDF 原文','覆盖框'],
+        label:'覆盖框透明度',comment:'Block 与 Span 共用；0% 不透明、95% 最透明，默认 65%',
+        type:'number',control:'slider',defaultValue:65,min:0,max:95,step:5,
+        unit:'%',message:'settings.changed'});
+      module.subscribe({module:'F',key:'pdf.overlay.borderWidth'},({value})=>
+        setPdfOverlayBorderWidth(value));
+      module.subscribe({module:'F',key:'pdf.overlay.transparency'},({value})=>
+        setPdfOverlayTransparency(value));
+    }
     module.subscribe({module:'F',key:'globalUi.font.size'},({value})=>setSize(value));
     await module.load();settings=module;mountSettingsNavigation();refreshSettingsHistory();return module;
   })().catch(error=>{loadingSettings=null;throw error;});

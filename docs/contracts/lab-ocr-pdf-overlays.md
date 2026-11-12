@@ -32,3 +32,7 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - `python3 tests/lab-ocr-overlays.test.py`：Block/Span/嵌套块/空框/跨页/原文无修改。
 - `python3 tests/lab-ocr-overlays-http.test.py`：授权、禁用写入、按页返回几何、排除正文。
 - `node tests/lab-ocr-pdf-viewer.browser.test.mjs`：Chromium + iPad WebKit 检查覆盖框 DOM 百分比位置、Block↔Span↔关闭、缩放、跨页、切分复用、不干扰触摸和文本层。其他 OCR / Frame 回归继续要求 PASS。
+
+## 统一全局设置（2026-11-12）
+
+已复用现有设置组件注册 `pdf.overlay.borderWidth`（0.25–3 px，步进 0.25，默认 **0.75 px**）和 `pdf.overlay.transparency`（0–95%，步进 5，默认 **65%**，数值越高越透明）。二者对 Block、Span 均生效；原文、覆盖框 bbox、坐标、比例均不改变。只修改 PDF 视窗容器的 CSS 变量，变更实时更新已显示覆盖框，不触发 PDF 或 SQLite 重新读取。由现有 CMD 设置模块的 `settings.changed` 通知应用，现有全局保存按钮负责持久化。Lab Frame 和 Main 不注册这两项。

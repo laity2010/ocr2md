@@ -25,11 +25,17 @@ try{
    page.on('pageerror',error=>errors.push(error.message));
    page.on('console',message=>{if(message.type()==='error')console.error('BROWSER_ERROR',message.text());});
    await page.addInitScript(({book})=>{
-    localStorage.setItem('ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
+    if(!localStorage.getItem('ocr2md.lab-ocr.settings.json.v1'))
+      localStorage.setItem('ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
       'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',category2:'目录',
+        comment:'通用资料目录绑定；不检查 OCR、MinerU 或 PDF',
         value:book,range:{kind:'server-directory'}},
     }}));
    },{book});
+   await page.route('**/api/workspace/browse?*',route=>{
+     const path=new URL(route.request().url()).searchParams.get('path');
+     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children:[]})});
+   });
    await page.route('**/labs/lab-ocr/api/ocr/**',route=>{
     const operation=new URL(route.request().url()).pathname.split('/').pop();
     if(operation==='pdf'){
@@ -107,6 +113,11 @@ try{
      'Overlay must use MinerU pageSize coordinates: '+JSON.stringify(geometry));
    assert(Math.abs(geometry.width-288/595)<.005&&Math.abs(geometry.height-95/842)<.005);
    assert.equal(geometry.pointer,'none','Coverage overlay cannot block PDF text selection');
+   const appearance=()=>page.locator('.lab-ocr-pdf-overlay-layer[data-page="1"] .lab-ocr-pdf-overlay-box').first()
+     .evaluate(box=>({stroke:getComputedStyle(box).boxShadow.match(/(\d+(?:\.\d+)?)px inset/)?.[1]||null,
+       opacity:getComputedStyle(box.closest('.lab-ocr-pdf-overlay-layer')).opacity}));
+   assert.deepEqual(await appearance(),{stroke:'0.75',opacity:'0.35'},
+     'Default settings apply without opening global settings');
    // Validate actual paper pixels rather than trusting the dark toolbar.
    const screenshot=await page.locator('.lab-ocr-pdf-scroller .page canvas').first().screenshot();
    const visual=await page.evaluate(async base64=>{
@@ -152,6 +163,9 @@ try{
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-layer[data-page="3"][data-level="span"] .lab-ocr-pdf-overlay-box'));
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-page="3"] .lab-ocr-pdf-overlay-box').count(),1);
    assert(overlayRequests.includes('span:3'));
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-page="3"][data-level="span"] .lab-ocr-pdf-overlay-box').first()
+     .evaluate(box=>getComputedStyle(box).boxShadow.includes('0.75px')),true,
+     'Span should share the Block border-width setting');
    await overlaySelect.selectOption('off');
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer').count(),0,'Off removes all coverage');
    await overlaySelect.selectOption('block');
@@ -191,6 +205,35 @@ try{
    assert.equal(await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-controls').count(),1);
    assert.equal(pdfRequests,1);
    assert(overlayRequests.length<=12,'Coverage fetches should be page-scoped, not full-document: '+overlayRequests);
+   // Exercise the EXISTING global Settings AG -> slider -> source transaction.
+   await page.locator('.ocr-ag-module-select').first().selectOption('settings');
+   await page.locator('#settings-workspace .ag-row').filter({hasText:'borderWidth'}).first().waitFor({state:'visible'});
+   const changeSetting=async(key,label,value)=>{
+     await page.locator('#settings-workspace .ag-row').filter({hasText:key}).first().click();
+     const slider=page.locator('#settings-workspace input[type="range"][aria-label="'+label+'"]');
+     await slider.waitFor({state:'visible'});
+     await slider.evaluate((el,next)=>{el.value=String(next);el.dispatchEvent(new Event('input',{bubbles:true}));},value);
+   };
+   await changeSetting('borderWidth','覆盖框边框粗细',0.5);
+   await page.waitForFunction(()=>document.querySelector('#workspace')?.style.getPropertyValue('--lab-ocr-pdf-overlay-border-width')==='0.5px');
+   await changeSetting('transparency','覆盖框透明度',80);
+   await page.waitForFunction(()=>document.querySelector('#workspace')?.style.getPropertyValue('--lab-ocr-pdf-overlay-opacity')==='0.2');
+   // PDF may be hidden and virtualized while the Settings workspace is open;
+   // the same CSS variables already apply to both types without reloading.
+   assert.equal(pdfRequests,1,'CSS appearance change cannot re-download PDF');
+   await page.locator('#global-save').click();
+   await page.waitForFunction(()=>{
+     const data=JSON.parse(localStorage.getItem('ocr2md.lab-ocr.settings.json.v1')||'{}');
+     return data.settings?.['pdf.overlay.borderWidth']?.value===0.5&&
+       data.settings?.['pdf.overlay.transparency']?.value===80;
+   });
+   await page.waitForFunction(()=>document.querySelector('#workspace')&&!document.querySelector('#workspace').hidden);
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-box'),null,{timeout:22000});
+   assert.deepEqual(await appearance(),{stroke:'0.5',opacity:'0.2'},'Live settings must affect visible PDF');
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-box')&&
+     document.querySelector('.lab-ocr-pdf-placeholder')?.hidden,null,{timeout:19000});
+   assert.deepEqual(await appearance(),{stroke:'0.5',opacity:'0.2'},'Style must survive reload');
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_PDF_API_PASS',name,JSON.stringify({pages:3,pdfRequests,overlayRequests,previewMode:'pdf',singleViewer:true}));
   }finally{await browser.close();}
