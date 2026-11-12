@@ -31,13 +31,13 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
                       (table,)).fetchone()[0] != 1:
             raise OCRImportError(f'尚未生成 {table} 表')
         records = db.execute(
-            f'SELECT {id_column},page_size_json,{bbox_column} FROM {table} '
+            f'SELECT {id_column},page_size_json,{bbox_column},block_type FROM {table} '
             'WHERE global_page=? ORDER BY rowid LIMIT ?', (page - 1, MAX_PAGE_BOXES + 1)).fetchall()
     if len(records) > MAX_PAGE_BOXES:
         raise OCRImportError('单页覆盖框超过允许上限')
     size = None
     result = []
-    for identity, raw_size, raw_bbox in records:
+    for identity, raw_size, raw_bbox, block_type in records:
         try:
             dimensions = json.loads(raw_size)
             rect = json.loads(raw_bbox)
@@ -57,5 +57,5 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
         x1, y1, x2, y2 = rect
         if x2 <= x1 or y2 <= y1:
             continue
-        result.append({'id': str(identity), 'bbox': rect})
+        result.append({'id': str(identity), 'blockType': str(block_type or ''), 'bbox': rect})
     return {'level': level, 'page': page, 'pageSize': size, 'boxes': result}

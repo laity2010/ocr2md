@@ -16,7 +16,7 @@ registerFramePdfPane(context=>{
       const mounted=await initialization;
       return mounted?.loadPdf(source)??false;
     },
-    setOverlays(config){overlayConfig=config;return viewer?.setOverlays(config)??false;},
+    setOverlays(config){overlayConfig={...overlayConfig,...config};return viewer?.setOverlays(config)??false;},
     relayout(){viewer?.relayout?.();},
     dispose(){disposed=true;viewer?.dispose();},
   });

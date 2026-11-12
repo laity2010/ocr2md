@@ -54,7 +54,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // New public API: setOverlays({level:'off'|'block'|'span',loadPage(page,level)}).
   // The caller owns SQL/JSON and returns only page geometry; PDF.js never
   // sees PBS, table schemas, raw MinerU records, or filesystem paths.
-  let overlayLevel='off',loadOverlayPage=null,overlayRevision=0;
+  let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockTypes=null;
   const overlayCache=new Map(),overlayPending=new Set();
   const clearOverlayNodes=()=>{
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer'))node.remove();
@@ -79,15 +79,26 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     layer.className='lab-ocr-pdf-overlay-layer';
     layer.dataset.level=overlayLevel;layer.dataset.page=String(page);
     const clamp=(value,max)=>Math.max(0,Math.min(value,max));
+    const seenIds=new Set(),seenRectangles=new Set();
     for(const item of data.boxes){
+      // The AG Block Type filter applies to Block AND Span geometries.
+      // Missing type metadata never bypasses an active selection.
+      if(blockTypes!==null&&!blockTypes.has(String(item?.blockType??'')))continue;
       const rect=item?.bbox;
       if(!Array.isArray(rect)||rect.length!==4||!rect.every(Number.isFinite))continue;
       const [x1,y1,x2,y2]=rect;
       const left=clamp(x1,size[0]),top=clamp(y1,size[1]);
       const right=clamp(x2,size[0]),bottom=clamp(y2,size[1]);
       if(right<=left||bottom<=top)continue;
+      const id=item.id==null?'':String(item.id);
+      const rectKey=[left,top,right,bottom].map(n=>n.toFixed(4)).join(':');
+      // A multi-selection is a set UNION, not a new overlay per type.
+      // Identical rectangles from nested/duplicate blocks are painted once.
+      if((id&&seenIds.has(id))||seenRectangles.has(rectKey))continue;
+      if(id)seenIds.add(id);
+      seenRectangles.add(rectKey);
       const box=document.createElement('div');box.className='lab-ocr-pdf-overlay-box';
-      box.dataset.id=String(item.id??'');
+      box.dataset.id=id;
       box.style.left=(left/size[0]*100)+'%';box.style.top=(top/size[1]*100)+'%';
       box.style.width=((right-left)/size[0]*100)+'%';
       box.style.height=((bottom-top)/size[1]*100)+'%';
@@ -143,15 +154,48 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     showOverlayPages();
   }
   overlaySelect.addEventListener('change',()=>chooseOverlayLevel(overlaySelect.value));
-  function setOverlays({level='off',loadPage=null}={}){
+  function setOverlays(config={}){
     if(disposed)throw Error('PDF Viewer 已销毁');
-    if(level!=='off'&&typeof loadPage!=='function')
+    // The same public method accepts a {blockTypes} patch from AG without
+    // resetting a user's Block/Span dropdown or the cached page geometry.
+    const nextLevel=Object.hasOwn(config,'level')?config.level:overlayLevel;
+    const nextLoader=Object.hasOwn(config,'loadPage')?config.loadPage:loadOverlayPage;
+    if(!['off','block','span'].includes(nextLevel))throw Error('覆盖框粒度无效');
+    if(nextLevel!=='off'&&typeof nextLoader!=='function')
       throw Error('Block/Span 覆盖框必须提供按页读取回调');
-    if(loadPage!==null&&typeof loadPage!=='function')
-      throw Error('覆盖框回调无效');
-    loadOverlayPage=loadPage;
-    overlaySelect.disabled=loadPage===null;
-    chooseOverlayLevel(level);
+    if(nextLoader!==null&&typeof nextLoader!=='function')throw Error('覆盖框回调无效');
+    const nextTypes=Object.hasOwn(config,'blockTypes')?config.blockTypes:
+      (blockTypes===null?null:[...blockTypes]);
+    if(nextTypes!==null&&(!Array.isArray(nextTypes)||
+      !nextTypes.every(type=>typeof type==='string')))
+      throw Error('Block Type 过滤必须是字符串数组或 null');
+    const normalized=nextTypes===null?null:new Set(nextTypes);
+    const oldTypes=blockTypes===null?null:[...blockTypes].sort();
+    const newTypes=normalized===null?null:[...normalized].sort();
+    const typesChanged=JSON.stringify(oldTypes)!==JSON.stringify(newTypes);
+    const loaderChanged=nextLoader!==loadOverlayPage;
+    const levelChanged=nextLevel!==overlayLevel;
+    loadOverlayPage=nextLoader;
+    overlaySelect.disabled=nextLoader===null;
+    blockTypes=normalized;
+    if(levelChanged){chooseOverlayLevel(nextLevel);return true;}
+    if(loaderChanged){
+      overlayRevision++;overlayCache.clear();overlayPending.clear();
+      clearOverlayNodes();showOverlayPages();
+    }else if(typesChanged){
+      // Paint from immutable cached geometry. No SQL query, PDF re-fetch,
+      // overlay append, zoom reset or page change for an AG checkbox click.
+      for(const [key,data] of overlayCache){
+        if(key.startsWith(overlayLevel+':'))paintPageBoxes(data.page,data);
+      }
+      // Existing pages were just repainted; only request pages not cached.
+      if(ready&&pdf&&overlayLevel!=='off'){
+        const current=viewer.currentPageNumber;
+        for(const page of [current,current-1,current+1]){
+          if(!overlayCache.has(overlayLevel+':'+page))requestOverlayPage(page);
+        }
+      }
+    }
     return true;
   }
   const emit=(message,kind='info')=>{if(!disposed)onStatus('PDF · '+message,kind);};
@@ -166,6 +210,10 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   });
   bus.on('pagechanging',()=>{updatePage();showOverlayPages();});
   bus.on('pagerendered',event=>{
+    // PDF.js may replace a page's content during zoom/re-render. Reattach
+    // its cached overlay once, without a database query or a PDF reload.
+    const cached=overlayCache.get(overlayLevel+':'+event.pageNumber);
+    if(cached)paintPageBoxes(event.pageNumber,cached);
     if(event.pageNumber!==1||!resolvePaint)return;
     const complete=resolvePaint;resolvePaint=null;complete(!event.error);
   });

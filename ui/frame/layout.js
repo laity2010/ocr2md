@@ -70,20 +70,25 @@ function mountEmptyGrid(host){
     {field:'type',headerName:'类型',width:95},
     {field:'content',headerName:'文本块',flex:1},
   ];
-  let selectedListener=()=>{};
+  let selectedListener=()=>{},filterListener=()=>{};
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     onRowClicked:event=>selectedListener(event.data),
+    onFilterChanged:event=>filterListener(event.api.getFilterModel()),
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{resizable:true,sortable:false,suppressMovable:true},
     columnDefs,rowData:[]});
   // The AG pane owns the Grid API. Other modules may only update rows/columns
   // through this explicit, narrow component boundary; no private AG DOM access.
-  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected}){
+  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected,onFilterChanged}){
     selectedListener=onRowSelected??(()=>{});
+    // Ignore transient filter-change events while replacing a whole SQL table.
+    filterListener=()=>{};
     // Different SQLite tables must not inherit one another's AG filters.
     grid.setFilterModel(null);
     grid.setGridOption('columnDefs',columns);
     grid.setGridOption('rowData',rows);
+    filterListener=onFilterChanged??(()=>{});
+    filterListener(grid.getFilterModel());
     // Avoid carrying horizontal scroll from the previous table into the new
     // schema (AG virtualizes columns left outside the visible range).
     if(columns[0]?.field){
@@ -91,7 +96,7 @@ function mountEmptyGrid(host){
       grid.ensureColumnVisible(first,'start');
       requestAnimationFrame(()=>grid.ensureColumnVisible(first,'start'));
     }
-  },clear(){selectedListener=()=>{};grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
+  },clear(){selectedListener=()=>{};filterListener=()=>{};grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
   return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
 function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlot=null,onStatus=()=>{}){
@@ -272,17 +277,18 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       return pdfSlot.current?.loadPdf(url)??Promise.resolve(false);
     },
     setPdfOverlays(config){
-      pdfSlot.overlays=config;
+      // Merge patches so the lazy-mounted viewer retains its original loader.
+      pdfSlot.overlays={...pdfSlot.overlays,...config};
       return pdfSlot.current?.setOverlays(config)??false;
     },
     activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
-    showSqlRows(rows,columns,{onSelect}={}){
+    showSqlRows(rows,columns,{onSelect,onFilterChanged}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
-      port.show({rows:cm.rows(),columns,onRowSelected:row=>{
+      port.show({rows:cm.rows(),columns,onFilterChanged,onRowSelected:row=>{
         cm.select(row);
         onSelect?.(row);
       }});

@@ -75,13 +75,20 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return url.pathname+url.search;
   };
   let lastPdfWorkspace='',lastOverlayWorkspace='';
+  let blockTypeSelection=null;
+  function applyBlockTypes(types){
+    const selected=types===null?null:[...new Set(types.map(String))].sort();
+    if(JSON.stringify(selected)===JSON.stringify(blockTypeSelection))return;
+    blockTypeSelection=selected;
+    frame.setPdfOverlays({blockTypes:selected});
+  }
   function prepareOverlays(directory){
     if(directory===lastOverlayWorkspace)return;
     lastOverlayWorkspace=directory;
     frame.setPdfOverlays(directory?{
-      level:'block',
+      level:'block',blockTypes:blockTypeSelection,
       loadPage:(page,level)=>request('overlays',{workspace:directory,page,level}),
-    }:{level:'off'});
+    }:{level:'off',loadPage:null,blockTypes:null});
   }
   function warmPdf(directory){
     if(directory===lastPdfWorkspace)return;
@@ -145,6 +152,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const epoch=++operation;
     workspace=nextWorkspace;
     tableReady=false;spanReady=false;blockReady=false;hideNavigation();frame.clearSqlRows();
+    applyBlockTypes(null);
     if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
     try{
@@ -212,7 +220,11 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         filterValueGetter:params=>params.data?.[column.field]??'',
         suppressHeaderMenuButton:true,
         suppressHeaderFilterButton:false,
-      })),{onSelect:row=>{
+      })),{onFilterChanged:model=>{
+        // The AG Block Type categorical checkbox filter is authoritative.
+        // Other column filters do not alter PDF visibility.
+        applyBlockTypes(table==='block'?(model?.block_type?.values??null):null);
+      },onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
         if(table==='block')onStatus(`Block 定位：${row.pbs} · BlockID ${row.block_id} · ParentID ${row.parent_block_id??'NULL'} · bbox ${row.block_bbox_json}`,'info');
       }});
