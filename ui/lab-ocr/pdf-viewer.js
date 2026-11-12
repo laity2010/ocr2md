@@ -59,7 +59,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
   let onBlockSelect=null,selectedBlockId=null,focusRequest=null;
   const overlayCache=new Map(),overlayPending=new Set();
-  const railDepthByPage=new Map();
+  const railDepthByPage=new Map(),pbsLabelObservers=new Map();
   const labelGap=7; // actual button widths come from browser layout, not a fixed 78px chip
   function updateRailSpace(){
     let left=0,right=0;
@@ -82,6 +82,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   }
   const resetRailSpace=()=>{railDepthByPage.clear();updateRailSpace();};
   const clearOverlayNodes=()=>{
+    for(const observer of pbsLabelObservers.values())observer.disconnect();
+    pbsLabelObservers.clear();
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer'))node.remove();
     resetRailSpace();
   };
@@ -105,6 +107,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const host=pageView?.div;
     if(!host)return;
     host.querySelector('.lab-ocr-pdf-overlay-layer')?.remove();
+    pbsLabelObservers.get(page)?.disconnect();pbsLabelObservers.delete(page);
     host.querySelector('.lab-ocr-pdf-pbs-layer')?.remove();
     if(overlayLevel!=='block'){railDepthByPage.delete(page);updateRailSpace();}
     const size=data?.pageSize;
@@ -210,40 +213,53 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         tagLayer.append(button);
       }
       host.append(tagLayer);
-      // Measure each rendered PBS string, including Sarasa glyph widths and
-      // border/padding. Every rail reserves only the widest string on that
-      // rail; shorter labels remain tight to their own text, not 78px wide.
-      const laneWidths={left:[],right:[]};
-      for(const {placement,button} of badges){
-        const rails=laneWidths[placement.side];
-        rails[placement.lane]=Math.max(rails[placement.lane]||0,button.offsetWidth);
-      }
-      const offsets={left:[],right:[]};
-      for(const side of ['left','right']){
-        let offset=labelGap;
-        for(let lane=0;lane<laneWidths[side].length;lane++){
-          offsets[side][lane]=offset;
-          offset+=(laneWidths[side][lane]||0)+labelGap;
+      // Place by ACTUAL browser rectangles rather than assumed glyph widths.
+      // The next tag moves outward only if its displayed vertical interval
+      // would intersect a prior tag. This also handles late font loading,
+      // different PBS lengths and dynamic iPad text metrics.
+      const positionBadges=()=>{
+        if(!tagLayer.isConnected)return;
+        const placed={left:[],right:[]},depth={left:0,right:0};
+        leaders.replaceChildren();
+        for(const {placement,button} of badges){
+          const side=placement.side;
+          const w=button.getBoundingClientRect().width;
+          const h=button.getBoundingClientRect().height;
+          const scale=host.getBoundingClientRect().width/Math.max(1,host.offsetWidth);
+          // Compare in layout pixels so page zoom / CSS transforms cannot
+          // cause a false clearance between otherwise touching labels.
+          const widthPx=w/Math.max(.01,scale),heightPx=h/Math.max(.01,scale);
+          const top=button.offsetTop;
+          let near=labelGap;
+          const vertical=placed[side].filter(p=>top<p.top+p.height+3&&top+heightPx+3>p.top)
+            .sort((x,y)=>x.near-y.near);
+          for(const existing of vertical){
+            if(near<existing.far+labelGap&&near+widthPx+labelGap>existing.near)
+              near=existing.far+labelGap;
+          }
+          const far=near+widthPx;
+          if(side==='left')button.style.left=-far+'px';
+          else button.style.right=-far+'px';
+          placed[side].push({near,far,top,height:heightPx});
+          depth[side]=Math.max(depth[side],far);
+          const startX=side==='left'?-near:width+near;
+          const edgeX=side==='left'?-2:width+2;
+          const fromY=top+heightPx/2;
+          const leader=document.createElementNS(ns,'polyline');
+          leader.setAttribute('points',`${startX},${fromY} ${edgeX},${fromY} ${edgeX},${placement.anchorY} ${placement.anchorX},${placement.anchorY}`);
+          leaders.append(leader);
         }
-      }
-      const depth={left:0,right:0};
-      for(const {placement,button} of badges){
-        const side=placement.side;
-        const innerEdge=offsets[side][placement.lane];
-        const outward=innerEdge+button.offsetWidth;
-        if(side==='left')button.style.left=-outward+'px';
-        else button.style.right=-outward+'px';
-        depth[side]=Math.max(depth[side],outward);
-        const nearX=side==='left'?-innerEdge:width+innerEdge;
-        const edgeX=side==='left'?-2:width+2;
-        const fromY=placement.top+11.5;
-        const leader=document.createElementNS(ns,'polyline');
-        leader.setAttribute('points',`${nearX},${fromY} ${edgeX},${fromY} ${edgeX},${placement.anchorY} ${placement.anchorX},${placement.anchorY}`);
-        leaders.append(leader);
-      }
+        railDepthByPage.set(page,depth);
+        updateRailSpace();
+      };
       tagLayer.prepend(leaders);
-      railDepthByPage.set(page,depth);
-      updateRailSpace();
+      positionBadges();
+      // Fonts and user display settings can resize text *after* initial
+      // placement. Refit every badge on size changes instead of leaving two
+      // PBS labels at stale, potentially intersecting x-positions.
+      const labelObserver=new ResizeObserver(()=>positionBadges());
+      for(const {button} of badges)labelObserver.observe(button);
+      pbsLabelObservers.set(page,labelObserver);
     }
     if(focusRequest?.page===page){
       const found=visibleRects.find(entry=>entry.blockIds.has(focusRequest.id));

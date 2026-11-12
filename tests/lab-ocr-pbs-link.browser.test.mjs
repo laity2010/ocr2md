@@ -3,6 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
+import {mkdir} from 'node:fs/promises';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
 import {makeLabOcrPdf} from './helpers/lab-ocr-pdf-fixture.mjs';
@@ -17,6 +18,16 @@ const blocks=[
  {id:'b-para',blockId:'2',pbs:'p1b0',group:'para_blocks',type:'text',bbox:[72,60,360,155]},
  {id:'b-child',blockId:'3',pbs:'p1b0s0',parentBlockId:'2',group:'para_blocks',type:'table_caption',bbox:[80,70,130,93]},
  {id:'b-right',blockId:'4',pbs:'p1b1',group:'para_blocks',type:'table',bbox:[420,310,540,382]},
+];
+// Page 11 regression: near-coincident parent and original block-01, same
+// source group (so the overlay dedup is not allowed to drop either ID).
+const page11=[
+ {id:'p11-a',blockId:'101',pbs:'p11b0',group:'para_blocks',type:'text',bbox:[72,60,300,128]},
+ {id:'p11-b',blockId:'102',pbs:'p11b01',group:'para_blocks',type:'text',bbox:[73,61,301,129]},
+ {id:'p11-c',blockId:'103',pbs:'p11b02',group:'para_blocks',type:'text',bbox:[77,62,240,131]},
+ {id:'p11-return',blockId:'104',pbs:'p11b3',group:'para_blocks',type:'title',bbox:[74,220,220,256]},
+ {id:'p11-right',blockId:'105',pbs:'p11b4',group:'para_blocks',type:'table',bbox:[410,60,560,127]},
+ {id:'p11-right2',blockId:'106',pbs:'p11b05',group:'para_blocks',type:'table',bbox:[411,61,561,129]},
 ];
 const dense=Array.from({length:62},(_,i)=>({
  id:'b-dense-'+i,blockId:String(i+5),pbs:i===25?'p2b25s123456789':'p2b'+i,group:'para_blocks',type:'text',
@@ -49,11 +60,11 @@ try{
    },{book});
    await page.route('**/labs/lab-ocr/api/ocr/**',route=>{
     const parsed=new URL(route.request().url()),op=parsed.pathname.split('/').at(-1);
-    if(op==='pdf'){pdfReads++;return route.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf()});}
+    if(op==='pdf'){pdfReads++;return route.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf(11)});}
     if(op==='overlays'){
       const level=parsed.searchParams.get('level'),number=Number(parsed.searchParams.get('page'));
       overlays.push(`${level}:${number}`);
-      const source=number===1?blocks:number===2?dense:[];
+      const source=number===1?blocks:number===2?dense:number===11?page11:[];
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
         level,page:number,pageSize:[595,842],
         boxes:source.map(row=>({id:level==='block'?row.id:'span-'+row.id,
@@ -62,13 +73,13 @@ try{
       })});
     }
     if(op==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      status:'unchanged',blocks:66,pages:3,pdf:'book.pdf',sources:[{name:'source.json',pages:3}]})});
-    if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":66}'});
-    if(op==='minerujson2span')return route.fulfill({status:200,contentType:'application/json',body:'{"spans":66}'});
+      status:'unchanged',blocks:72,pages:11,pdf:'book.pdf',sources:[{name:'source.json',pages:11}]})});
+    if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":72}'});
+    if(op==='minerujson2span')return route.fulfill({status:200,contentType:'application/json',body:'{"spans":72}'});
     if(op==='rows'){
       rowsReads++;
       assert.equal(parsed.searchParams.get('table'),'block');
-      const all=[...blocks.map(b=>rowOf(b,0)),...dense.map(b=>rowOf(b,1))];
+      const all=[...blocks.map(b=>rowOf(b,0)),...dense.map(b=>rowOf(b,1)),...page11.map(b=>rowOf(b,10))];
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
         table:'block',total:all.length,rows:all})});
     }
@@ -149,6 +160,7 @@ try{
    const denseTags=page.locator('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag');
    await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag').length===62);
    assert.equal(await denseTags.count(),62,'No PBS labels may be grouped or suppressed');
+   const denseCount=await denseTags.count();
    assert.equal(await page.locator('.lab-ocr-pdf-pbs-picker').count(),0,'No disclosure popup');
    assert.equal(await denseTags.filter({hasText:/\+/}).count(),0,'No +N collapsed labels');
    const layout=await denseTags.evaluateAll(nodes=>nodes.map(node=>{
@@ -213,9 +225,62 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='66');
    assert.match(await page.locator('#status').innerText(),/PDF → AG · p2b61 · BlockID 66/);
    assert.equal(pdfReads,1);
+   // Page 11 concrete regression: p11b0/p11b01/p11b02 have almost the
+   // same bbox, but each must remain a separate visible non-overlapping PBS.
+   await page.locator('.lab-ocr-pdf-page').fill('11');
+   await page.locator('.lab-ocr-pdf-page').press('Tab');
+   const p11=page.locator('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag');
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===6,
+     null,{timeout:19000});
+   const verifyNoOverlap=async(label)=>{
+     const rects=await p11.evaluateAll(nodes=>nodes.map(n=>{
+       const b=n.getBoundingClientRect();return {name:n.textContent,side:n.dataset.side,
+         left:b.left,top:b.top,right:b.right,bottom:b.bottom,width:b.width};
+     }));
+     for(let i=0;i<rects.length;i++)for(let j=i+1;j<rects.length;j++){
+       const a=rects[i],b=rects[j];
+       const ix=Math.min(a.right,b.right)-Math.max(a.left,b.left);
+       const iy=Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top);
+       assert(!(ix>0&&iy>0),`${label}: PBS labels overlap: ${JSON.stringify([a,b])}`);
+     }
+     return rects;
+   };
+   const p11Original=await verifyNoOverlap('page 11 initial');
+   assert.deepEqual(p11Original.map(x=>x.name).sort(),page11.map(x=>x.pbs).sort());
+   await mkdir('.runtime/pbs-overlap-evidence',{recursive:true});
+   await page.evaluate(()=>{
+     const button=document.querySelector('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag[data-block-id="102"]');
+     const scroller=document.querySelector('.lab-ocr-pdf-scroller');
+     if(button&&scroller)scroller.scrollLeft+=button.getBoundingClientRect().left-scroller.getBoundingClientRect().left-90;
+   });
+   await page.screenshot({path:`.runtime/pbs-overlap-evidence/page11-${name.replace(/[^a-z0-9-]/gi,'_')}-baseline.png`});
+   // Simulate a delayed font-metric update after the first layout. Previously
+   // the measured tag widths were never recomputed and could overlap.
+   await page.addStyleTag({content:'.lab-ocr-pdf-pbs-tag {font-size:19px !important}'});
+   await page.waitForFunction(oldWidth=>{
+     const a=document.querySelector('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag[data-block-id="101"]');
+     return a&&getComputedStyle(a).fontSize==='19px'&&a.getBoundingClientRect().width>oldWidth*1.15;
+   },p11Original.find(x=>x.name==='p11b0').width);
+   await page.waitForTimeout(250);
+   const p11Resized=await verifyNoOverlap('page 11 after font change');
+   await page.locator('.lab-ocr-pdf-scale').selectOption('150');
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===6);
+   await page.waitForTimeout(350);
+   await verifyNoOverlap('page 11 at 150% zoom');
+   await page.evaluate(()=>{
+     const button=document.querySelector('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag[data-block-id="102"]');
+     const scroller=document.querySelector('.lab-ocr-pdf-scroller');
+     if(button&&scroller)scroller.scrollLeft+=button.getBoundingClientRect().left-scroller.getBoundingClientRect().left-90;
+   });
+   await page.screenshot({path:`.runtime/pbs-overlap-evidence/page11-${name.replace(/[^a-z0-9-]/gi,'_')}-stress.png`});
+   await p11.filter({hasText:'p11b01'}).click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='102');
+   assert.match(await page.locator('#status').innerText(),/PDF → AG · p11b01 · BlockID 102/);
    assert.deepEqual(errors,[]);
+   console.log('LAB_OCR_PBS_PAGE11_NON_OVERLAP_PASS',name,JSON.stringify({initial:p11Original.length,
+     resized:p11Resized.length,secondLabelX:p11Resized.find(x=>x.name==='p11b01').left}));
    console.log('LAB_OCR_PBS_LINK_PASS',name,JSON.stringify({pdfReads,rowsReads,overlays:overlays.length,
-     page1Tags:3,denseTags:await denseTags.count(),aliases:true}));
+     page1Tags:3,denseTags:denseCount,aliases:true}));
   }finally{await browser.close();}
  }
 }finally{vite?.kill('SIGTERM');}
