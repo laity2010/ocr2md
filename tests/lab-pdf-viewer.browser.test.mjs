@@ -9,8 +9,11 @@ const worker=process.env.LAB_PDF_TEST_URL?null:spawn('node',[
  '--host','127.0.0.1','--port','5329','--strictPort'],{stdio:['ignore','pipe','pipe']});
 let serverLog='';worker?.stdout.on('data',b=>serverLog+=b);worker?.stderr.on('data',b=>serverLog+=b);
 try{
- let online=false;
- for(let i=0;i<110;i++){
+ // The local dev server needs a startup probe. For published HTTPS URLs,
+ // the browser context below owns certificate handling (the LAN uses a
+ // self-signed certificate); Node fetch must not preempt browser acceptance.
+ let online=Boolean(process.env.LAB_PDF_TEST_URL);
+ if(!online)for(let i=0;i<110;i++){
   try{if((await fetch(HOST)).ok){online=true;break}}catch{}
   await pause(200);
  }
