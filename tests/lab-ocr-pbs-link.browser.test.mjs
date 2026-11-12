@@ -181,6 +181,11 @@ try{
    assert.match(colors.familyFill,/231, 183, 83/);
    assert.equal(colors.parentLabel,'rgba(39, 63, 60, 0.94)','Main parent background survives selection');
    assert.equal(colors.childLabel,'rgba(34, 56, 70, 0.95)','Main child background survives selection');
+   const parentRing=await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').evaluate(el=>getComputedStyle(el).boxShadow);
+   const childRing=await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').evaluate(el=>getComputedStyle(el).boxShadow);
+   assert.equal(childRing,parentRing,'Selected parent and family-selected child PBS must have identical ring styles');
+   assert.match(parentRing,/rgb\(238, 196, 91\) 0px 0px 0px 2px/,
+     'Every selected or descendant PBS tag uses the same solid 2px golden ring');
    assert.equal(colors.parentLine,'rgb(140, 182, 163)','Main parent leader color');
    assert.equal(colors.childLine,'rgb(138, 181, 218)','Main child leader color');
    assert.equal(colors.childLineStyle,'none','Main child leader is solid');
@@ -355,6 +360,14 @@ try{
    }
    assert.equal(await badge(101).getAttribute('data-selected'),'true');
    assert.equal(await box11(101).getAttribute('data-selected'),'true');
+   const ring=async bid=>badge(bid).evaluate(el=>getComputedStyle(el).boxShadow);
+   const parentRing11=await ring(101);
+   for(const bid of [102,103,108,109]){
+     assert.equal(await ring(bid),parentRing11,
+       `Child/grandchild PBS ${bid} must have the identical border highlight as selected parent`);
+   }
+   assert.notEqual(await ring(104),parentRing11,
+     'Unrelated PBS labels must not inherit the selected family ring');
    const style=await page.evaluate(()=>{
      const parent=document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="101"]');
      const child=document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="102"]');
@@ -370,6 +383,8 @@ try{
    assert.equal(await badge(102).getAttribute('data-selected'),'true');
    assert.equal(await badge(103).getAttribute('data-family-selected'),'true','Child is parent of its grandchild');
    assert.equal(await badge(109).getAttribute('data-family-selected'),'true','Identical-box s1 grandchild inherits selection');
+   assert.equal(await ring(103),await ring(102),'Nested parent and child ring styles remain identical');
+   assert.equal(await ring(109),await ring(102),'Nested parent and grandchild ring styles remain identical');
    assert.equal(await badge(108).getAttribute('data-family-selected'),'false','Sibling s1 is not selected with its brother');
    assert.equal(await badge(106).getAttribute('data-family-selected'),'false');
    await badge(101).click();

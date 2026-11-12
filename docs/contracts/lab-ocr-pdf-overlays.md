@@ -80,7 +80,7 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 ## PBS 父子配色（依 Main）与整组高亮（2026-11-12）
 
 - PBS 父块标签直接采用 Main 的灰绿色标签（`rgba(39,63,60,.94)`、边框 `#76a497`）；PBS 子块标签采用 Main 的蓝灰色（`rgba(34,56,70,.95)`、边框 `#8ab5ca`）；父／子边框均始终为实线。引线分别采用 Main `#8cb6a3`（父）和 `#8ab5da`（子），也均为实线。23px 的标签点击高度与按文本宽度适配保持不变；PDF 覆盖框颜色由独立的橙色高亮规则负责。
-- 点击父块 PBS 标签或从 AG 定位一个父 Block 时，**被选中的父块直接高亮**，其递归后代（子块、孙块……）的**标签和 PDF bbox 一同高亮**，但 PBS 标签始终保留 Main 父／子原色，只以外侧高亮环区别直接选择和随动选择；PDF 框使用橙色。点击子块时只选中该子块并联动它自己的后代，不反向高亮父块或兄弟块，不改变 AG 唯一选中行。
+- 点击父块 PBS 标签或从 AG 定位一个父 Block 时，**被选中的父块直接高亮**，其递归后代（子块、孙块……）的**标签和 PDF bbox 一同高亮**。PBS 标签仍保留 Main 父／子原底色和实线边框，**全部选中家族标签（直接与随动）使用完全相同的金色 2px 实线外圈 `box-shadow:0 0 0 2px #eec45b`**，不再对子孙使用较细较淡的 1px 提示；PDF 框继续使用独立的橙色高亮。点击子块时只选中该子块并联动它自己的后代，不反向高亮父块或兄弟块，不改变 AG 唯一选中行。
 - 身份使用 `blockId`/`parentBlockId` 建立只读 `Map`，`pbs` 仅用于显示，编号变化不会破坏关系。每次按页返回覆盖框数据时合并关系（包括来源块组未选中的 ID）；显示仍严格遵守块组筛选。几何去重时保留代表框全部原始 Block ID 别名，选中父块或别名后都能找到正确的可见子孙。跨页后代在相关页面被加载/渲染后高亮，不要求预取整本 SQLite。缺失、循环或自引用的父关系必须安全结束。
 - 新模块内部纯函数 `indexBlockParents(parentMap,boxes)` 与 `blockHighlight(ids,selectedId,parents)` 放在 `ui/lab-ocr/pbs-family.js`，由直接单元测试 `tests/lab-ocr-pbs-family.test.mjs` 覆盖递归、反向/兄弟隔离、去重别名、重命名 PBS 以及坏链路安全。`tests/lab-ocr-pbs-link.browser.test.mjs` 在 Chromium/iPad WebKit 使用真 PDF.js/AG 和模拟多页父子结构，验证父/子配色、PDF 标签与覆盖框全部后代高亮、跨页、子块单选、AG 反向定位、去重来源、字体调整与缩放。
 - 高亮时**维持 1px 边框宽**，不改变标签盒子大小（用描边外阴影表现醒目程度）；轨道布局使用 `offsetWidth/offsetHeight/offsetTop` 一致的页面布局像素系，规避 iPad WebKit PDF 变换尺度与 DOM 矩形混用造成的密集标签二次重叠。
