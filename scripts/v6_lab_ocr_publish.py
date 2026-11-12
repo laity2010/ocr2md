@@ -17,7 +17,7 @@ import v6_frame_publish as publisher
 NAME='lab-ocr'
 LEGACY='ocr-review'
 CARD='''      <article id="lab-ocr"><div class="kind">07 · OCR Review Lab</div><h2>lab-ocr · OCR 审阅</h2>
-        <p>从干净空白框架独立派生。四窗、全局设置、导航及版本标牌已经就绪；OCR 数据与业务功能尚未接入。</p>
+        <p>从 MinerU JSON 生成原始块表与 Span 扁平表；SQLite 导航、CM6 状态、AG 分类定位及四窗框架已接入实验。</p>
         <a class="open" href="/labs/lab-ocr/">进入 lab-ocr</a></article>
 '''
 

@@ -1,6 +1,6 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
-import {EditorState} from '@codemirror/state';
+import {EditorState,StateField,StateEffect} from '@codemirror/state';
 import {EditorView,lineNumbers} from '@codemirror/view';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
@@ -14,11 +14,41 @@ const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
+// Structured SQL rows live in CM6 StateField. AG receives a projection of this
+// state, never becoming the mutable authority for Span content or selection.
+const loadTableRows=StateEffect.define();
+const selectTableRow=StateEffect.define();
+const tableStateField=StateField.define({
+  create:()=>({rows:[],selectedId:null}),
+  update(value,transaction){
+    for(const effect of transaction.effects){
+      if(effect.is(loadTableRows))value={rows:effect.value,selectedId:null};
+      if(effect.is(selectTableRow))value={...value,selectedId:effect.value};
+    }
+    return value;
+  },
+});
 function mountEmptySource(host){
   const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
-    EditorState.readOnly.of(true),EditorView.editable.of(false),lineNumbers(),EditorView.lineWrapping,
+    EditorState.readOnly.of(true),EditorView.editable.of(false),tableStateField,lineNumbers(),EditorView.lineWrapping,
   ]}),parent:host});
-  return {dispose:()=>editor.destroy(),layout:()=>editor.requestMeasure()};
+  host.ocrCmTable=Object.freeze({
+    load(rows){editor.dispatch({effects:loadTableRows.of(rows)});},
+    rows(){return editor.state.field(tableStateField).rows;},
+    select(row){
+      if(!row)return;
+      const raw=row.content ?? row.html ?? row.image_path ?? row.text_preview ?? '';
+      const value=typeof raw==='string'?raw:'';
+      editor.dispatch({
+        changes:{from:0,to:editor.state.doc.length,insert:value},
+        effects:selectTableRow.of(row.span_id??row.id??null),
+      });
+    },
+    clear(){editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:''},
+      effects:loadTableRows.of([])});},
+    selected(){return editor.state.field(tableStateField).selectedId;},
+  });
+  return {dispose(){delete host.ocrCmTable;editor.destroy();},layout:()=>editor.requestMeasure()};
 }
 function mountEmptyGrid(host){
   const columnDefs=[
@@ -27,16 +57,19 @@ function mountEmptyGrid(host){
     {field:'type',headerName:'类型',width:95},
     {field:'content',headerName:'文本块',flex:1},
   ];
+  let selectedListener=()=>{};
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
+    onRowClicked:event=>selectedListener(event.data),
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{resizable:true,sortable:false,suppressMovable:true},
     columnDefs,rowData:[]});
   // The AG pane owns the Grid API. Other modules may only update rows/columns
   // through this explicit, narrow component boundary; no private AG DOM access.
-  host.ocrSqlGrid=Object.freeze({show({rows,columns}){
+  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected}){
+    selectedListener=onRowSelected??(()=>{});
     grid.setGridOption('columnDefs',columns);
     grid.setGridOption('rowData',rows);
-  },clear(){grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
+  },clear(){selectedListener=()=>{};grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
   return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
 function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
@@ -75,7 +108,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
     select.value='';
     select.addEventListener('change',()=>{
       if(select.value==='settings')onModuleChange?.('settings');
-      else if(select.value==='sql:minerujson')onModuleChange?.('sql:minerujson');
+      else if(select.value==='sql:minerujson'||select.value==='sql:span')onModuleChange?.(select.value);
     });
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
@@ -141,11 +174,19 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   setSplit(true);
   return Object.freeze({setSplit,activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
-    showSqlRows(rows,columns){
+    showSqlRows(rows,columns,{onSelect}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
-      if(!port)throw Error('AG 表尚未初始化');
-      port.show({rows,columns});
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
+      cm.load(rows);
+      port.show({rows:cm.rows(),columns,onRowSelected:row=>{
+        cm.select(row);
+        onSelect?.(row);
+      }});
     },
-    clearSqlRows(){container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clear();},
+    clearSqlRows(){
+      container.querySelector('.ocr-cm-source')?.ocrCmTable?.clear();
+      container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clear();
+    },
     dispose(){dockview.dispose();},get split(){return split;}});
 }

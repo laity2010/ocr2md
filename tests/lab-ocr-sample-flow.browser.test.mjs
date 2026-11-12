@@ -1,13 +1,13 @@
-/** End-to-end sample scope: 1 MinerU JSON (<200 pages) + 1 PDF -> one SQL table. */
+/** End-to-end Lab: 1 MinerU JSON (<200 pages) + 1 PDF -> minerujson + span. */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as pause} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
-const port=5318,host=`http://127.0.0.1:${port}`,url=host+'/labs/lab-ocr/';
+const port=5318,host=`http://127.0.0.1:${port}`,url=process.env.LAB_OCR_TEST_URL||host+'/labs/lab-ocr/';
 const BOOK='/demo/sample';
-const vite=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr/vite.config.mjs',
+const vite=process.env.LAB_OCR_TEST_URL?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
-let log='';vite.stdout.on('data',b=>log+=b);vite.stderr.on('data',b=>log+=b);
+let log='';vite?.stdout.on('data',b=>log+=b);vite?.stderr.on('data',b=>log+=b);
 try{
  let online=false;
  for(let i=0;i<90;i++){try{if((await fetch(url)).ok){online=true;break}}catch{} await pause(200)}
@@ -15,8 +15,9 @@ try{
  for(const [name,engine] of [['Chrome',chromium],['iPad-WebKit',webkit]]){
   const browser=await engine.launch({headless:true});
   try{
-   const page=await browser.newPage({viewport:{width:1032,height:768},hasTouch:true});
-   let inspectCount=0,importCount=0,rowsCount=0,hasDb=false;
+   const page=await browser.newPage({viewport:{width:1032,height:768},hasTouch:true,ignoreHTTPSErrors:true});
+   page.setDefaultTimeout(6500);
+   let inspectCount=0,importCount=0,rowsCount=0,spanCreateCount=0,hasDb=false;
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/api/workspace/roots',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({allowedRoots:['/demo']})}));
    await page.route('**/api/workspace/browse?*',r=>{
@@ -36,7 +37,21 @@ try{
      importCount++;hasDb=true;
      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'imported',pages:22,blocks:539})});
     }
+    if(operation==='minerujson2span'){
+     spanCreateCount++;
+     return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'span',spans:3,status:spanCreateCount===1?'created':'unchanged'})});
+    }
     if(operation==='rows'){
+     const table=new URL(r.request().url()).searchParams.get('table');
+     if(table==='span'){
+      rowsCount++;
+      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'span',total:3,
+       rows:[
+         {span_id:'s0:p0:para_blocks:b0:l0:s0',source_name:'source.json',global_page:0,local_page:0,block_group:'para_blocks',block_id:'s0:p0:para_blocks:b0',parent_block_id:null,block_path:'0',block_type:'title',block_bbox_json:'[1,2,3,4]',line_index:0,span_index:0,span_type:'text',span_bbox_json:'[1,2,3,4]',content:'Span heading',content_preview:'Span heading'},
+         {span_id:'s0:p1:para_blocks:b1.0:l0:s0',source_name:'source.json',global_page:1,local_page:1,block_group:'para_blocks',block_id:'s0:p1:para_blocks:b1.0',parent_block_id:'s0:p1:para_blocks:b1',block_path:'1.0',block_type:'image_body',block_bbox_json:'[2,3,4,5]',line_index:0,span_index:0,span_type:'image',span_bbox_json:'[2,3,4,5]',image_path:'https://example.org/p.jpg',content_preview:'https://example.org/p.jpg'},
+         {span_id:'s0:p1:discarded_blocks:b0:l0:s0',source_name:'source.json',global_page:1,local_page:1,block_group:'discarded_blocks',block_id:'s0:p1:discarded_blocks:b0',parent_block_id:null,block_path:'0',block_type:'page_number',block_bbox_json:'[5,6,7,8]',line_index:0,span_index:0,span_type:'text',span_bbox_json:'[5,6,7,8]',content:'35',content_preview:'35'}]})});
+     }
+
      rowsCount++;
      const offset=Number(new URL(r.request().url()).searchParams.get('offset'));
      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'minerujson',total:2,
@@ -53,7 +68,7 @@ try{
    await page.locator('#settings-workspace').waitFor({state:'visible',timeout:23000});
    assert.equal(await page.locator('#workspace').isVisible(),false,'Unbound OCR must open Settings');
    await page.waitForFunction(()=>/绑定书籍工作目录|绑定工作区/.test(document.querySelector('#status')?.textContent||''),null,{timeout:23000});
-   assert.equal(await page.locator('optgroup[label="SQL"] option').count(),0);
+   assert.equal(await page.locator('optgroup[label="SQLite"] option').count(),0);
    await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().click();
    await page.getByRole('button',{name:'打开目录树'}).click();
    const item=page.locator('wa-tree-item[data-path="'+BOOK+'"]');
@@ -67,12 +82,12 @@ try{
    assert.equal(await page.locator('#workspace').isVisible(),true);
    assert.equal(importCount,1,'First book should import just once');
    const nav=page.locator('#workspace select.ocr-source-file-select');
-   assert.equal(await nav.locator('optgroup[label="SQL"] option').innerText(),'minerujson');
+   assert.deepEqual(await nav.locator('optgroup[label="SQLite"] option').allInnerTexts(),['minerujson','span']);
    // Exercise the real visible Tom Select dropdown, not only the hidden
    // HTMLSelectElement business port.
    await page.locator('#workspace .ocr-navigation-files .ts-control').click();
    const dropdown=page.locator('.ocr-navigation-popup-files:visible');
-   await dropdown.locator('.optgroup-header').filter({hasText:'SQL'}).waitFor({state:'visible'});
+   await dropdown.locator('.optgroup-header').filter({hasText:'SQLite'}).waitFor({state:'visible'});
    await dropdown.locator('.option').filter({hasText:'minerujson'}).click();
    await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length>=2);
    assert.equal(await page.locator('#workspace .ag-row').count(),2);
@@ -104,13 +119,31 @@ try{
    assert.equal(await box('all').isChecked(),true);
    // Filtering is entirely client-side and never writes to the SQL backend.
    assert.equal(rowsCount,1,'Checkbox filtering must not reread or mutate SQLite');
+   // New SQL → span uses CM6 as the row-state owner, AG only as its projection.
+   await page.locator('#workspace .ocr-navigation-files .ts-control').click();
+   const spanDropdown=page.locator('.ocr-navigation-popup-files:visible');
+   await spanDropdown.locator('.option').filter({hasText:'span'}).click();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===3);
+   assert.match(await page.locator('#status').innerText(),/span：CM6 已加载 3 行/);
+   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_group"]').count(),1);
+   const spanHeader=page.locator('#workspace .ag-header-cell[col-id="block_group"]');
+   await spanHeader.locator('.ag-header-cell-filter-button').click();
+   const spanFilter=page.locator('.ocr-enum-filter:visible');
+   await spanFilter.waitFor({state:'visible'});
+   await spanFilter.locator('.ocr-enum-filter-option[data-filter-value="discarded_blocks"] input').uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===2);
+   await page.locator('#workspace .ag-row').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-cm-source .cm-content')?.textContent?.includes('Span heading'));
+   assert.match(await page.locator('#status').innerText(),/Span 定位：P0/);
+   assert.equal(spanCreateCount,1,'span generation must be idempotent at initialization');
+
    await page.reload({waitUntil:'domcontentloaded'});
    await page.locator('#workspace .dv-content-container').first().waitFor({timeout:18000});
    await page.waitForFunction(()=>!!document.querySelector('select.ocr-source-file-select option[value="sql:minerujson"]'),null,{timeout:20000});
    assert.equal(importCount,1,'Reload must not re-import unchanged JSON');
-   assert(importCount>0&&inspectCount>=2&&rowsCount>0);
+   assert(importCount>0&&inspectCount>=2&&rowsCount>0&&spanCreateCount>=2);
    assert.deepEqual(errors,[]);
-   console.log('LAB_OCR_SAMPLE_FLOW_PASS',name,JSON.stringify({inspectCount,importCount,rowsCount,rows:2}));
+   console.log('LAB_OCR_SAMPLE_FLOW_PASS',name,JSON.stringify({inspectCount,importCount,spanCreateCount,rowsCount}));
   }finally{await browser.close()}
  }
-}finally{vite.kill('SIGTERM')}
+}finally{vite?.kill('SIGTERM')}

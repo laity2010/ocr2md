@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Lab OCR's isolated loopback API: delegates auth to Main, never owns Main data.
 
-Single Agent Link /labs/ gateway exposes only /labs/lab-ocr/api/ocr/{inspect,import,rows}.
+Single Agent Link /labs/ gateway exposes /labs/lab-ocr/api/ocr/
+{inspect,import,rows,minerujson2span}.
 No second tunnel and no changes to Main V6 business routes.
 """
 from __future__ import annotations
@@ -14,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from v6_lab_ocr_span import minerujson2span, span_rows
 from v6_lab_ocr_store import (inspect_workspace, import_workspace, existing_info,
                               rows, fingerprint, OCRImportError)
 
@@ -86,8 +88,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows'):raise APIError(404,'未知的 OCR API')
-        if (op=='import')!=(self.command=='POST') or self.command not in ('GET','POST'):
+        if op not in ('inspect','import','rows','minerujson2span'):raise APIError(404,'未知的 OCR API')
+        if (op in ('import','minerujson2span'))!=(self.command=='POST') or self.command not in ('GET','POST'):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
             raise APIError(403,'请求来源无效')
@@ -113,7 +115,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 offset=int(query.get('offset','0'));limit=int(query.get('limit','150'))
             except (ValueError,TypeError) as error:raise APIError(422,'分页参数必须是整数') from error
-            return self.respond(200,rows(book,offset,limit))
+            table=query.get('table','minerujson')
+            if table not in ('minerujson','span'):raise APIError(422,'未知的 SQLite 表')
+            return self.respond(200,rows(book,offset,limit) if table=='minerujson' else span_rows(book,offset,limit))
         sequence=query.get('order')
         if sequence is not None:
             raise APIError(422,'当前 Lab OCR 仅验收单 JSON，不接收多分段顺序')
@@ -121,7 +125,9 @@ class Handler(BaseHTTPRequestHandler):
             info=inspect_workspace(book)
             if len(info['parts'])!=1 or info['total_pages']>=200:
                 raise APIError(422,'当前阶段仅支持 1 个不足 200 页的 MinerU JSON + 1 个 PDF')
-            if op=='import':
+            if op=='minerujson2span':
+                result=minerujson2span(book)
+            elif op=='import':
                 if query.get('replace',False) not in (True,False):
                     raise APIError(422,'覆盖标志必须为布尔值')
                 result=import_workspace(book,sequence,replace=query.get('replace',False))

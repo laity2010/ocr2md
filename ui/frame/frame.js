@@ -94,7 +94,7 @@ function mountSettingsNavigation(){
   select.value='settings';
   select.addEventListener('change',()=>{
     if(select.value==='settings')void showModule('settings');
-    else if(select.value==='sql:minerujson')void showModule('sql:minerujson');
+    else if(select.value==='sql:minerujson'||select.value==='sql:span')void showModule(select.value);
   });
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
@@ -112,7 +112,7 @@ function mountSettingsNavigation(){
   refreshSettingsHistory();
 }
 async function showModule(name){
-  currentModule=name==='settings'?'settings':name==='sql:minerujson'?'sql:minerujson':'frame';
+  currentModule=name==='settings'?'settings':name==='sql:minerujson'||name==='sql:span'?name:'frame';
   const inSettings=currentModule==='settings';
   $('workspace').hidden=inSettings;
   $('settings-workspace').hidden=!inSettings;
@@ -124,17 +124,17 @@ async function showModule(name){
     catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
   }else{
     // Leaving Settings does not add a second file to the single-file menu.
-    frameFileSelect.value=currentModule==='sql:minerujson'?'sql:minerujson':'';
+    frameFileSelect.value=currentModule.startsWith('sql:')?currentModule:'';
     // Programmatic navigation must update the visible Tom Select without
     // dispatching a new business change (which would recursively reopen SQL).
     frameFileSelect.ocrNavigationSelect?.refresh();
     frame.activate();
-    if(currentModule==='sql:minerujson'&&ocrWorkflow){
-      await ocrWorkflow.openSql();
+    if(currentModule.startsWith('sql:')&&ocrWorkflow){
+      await ocrWorkflow.openSql(currentModule.slice(4));
     }else{
       frame.clearSqlRows();
       topStatus(labName==='lab-ocr'
-        ?'lab-ocr 已就绪 · 请从 SQL 导航查看已导入的 MinerU 数据'
+        ?'lab-ocr 已就绪 · 请从 SQLite 导航查看已导入的数据'
         :'空白四窗框架已就绪 · 可由源码导航进入 settings.json');
     }
   }

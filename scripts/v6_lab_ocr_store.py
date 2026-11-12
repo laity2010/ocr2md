@@ -1,4 +1,4 @@
-"""OCR Lab public storage boundary: one source-preserving SQLite table per book.
+"""OCR Lab source-preserving MinerU table in a per-book SQLite database.
 
 Input files are READ ONLY. Every JSON's exact bytes are stored once in a
 `source` row; every distinct occurrence of a source block is a `block` row.
@@ -159,7 +159,7 @@ def existing_info(book:Path)->dict | None:
     if not db.is_file():raise OCRImportError('SQLite 数据库路径不是文件')
     with closing(sqlite3.connect(f'file:{db}?mode=ro',uri=True,timeout=5)) as connection:
         tables={row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if tables!={TABLE}:raise OCRImportError('现有数据库不是预期的单表结构，拒绝覆盖')
+        if TABLE not in tables or tables-{TABLE,'span'}:raise OCRImportError('现有数据库不是预期的 MinerU/Span 表结构，拒绝覆盖')
         cols={row[1] for row in connection.execute(f'PRAGMA table_info({TABLE})')}
         if not {'row_kind','original_bytes','import_fingerprint','source_order'}.issubset(cols):
             raise OCRImportError('现有 MinerU 表结构不兼容，拒绝覆盖')
@@ -194,7 +194,8 @@ def import_workspace(book:Path, explicit:list[str] | None=None, replace:bool=Fal
         con.execute('PRAGMA journal_mode=DELETE')
         con.execute('BEGIN IMMEDIATE')
         tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if tables and tables!={TABLE}:raise OCRImportError('数据库中存在其他表，拒绝覆盖')
+        if tables and (TABLE not in tables or tables-{TABLE,'span'}):raise OCRImportError('数据库中存在其他表，拒绝覆盖')
+        con.execute('DROP TABLE IF EXISTS span')  # Derived rows are rebuilt explicitly
         con.execute(SCHEMA)
         con.execute(f'DELETE FROM {TABLE}')
         count=0;global_start=0
