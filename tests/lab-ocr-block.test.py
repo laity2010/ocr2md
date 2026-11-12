@@ -56,11 +56,11 @@ class BlockContract(unittest.TestCase):
    self.assertIsInstance(inner['block_id'],int)
    self.assertEqual(inner['source_block_key'],'s0:p0:para_blocks:b1.1')
    self.assertEqual(inner['pbs'],'p1b1s1')
-   self.assertEqual(inner['parent_pbs'],'p1b1')
+   self.assertNotIn('parent_pbs',inner)
    parent=next(r for r in rows if r['block_type']=='table')
    self.assertEqual(inner['parent_block_id'],parent['block_id'])
    self.assertEqual(parent['pbs'],'p1b1')
-   self.assertIsNone(parent['parent_pbs'])
+   self.assertNotIn('parent_pbs',parent)
    self.assertIsNone(parent['parent_block_id'])
    self.assertEqual(json.loads(inner['block_json'])['lines'][0]['spans'][0], nested['blocks'][1]['lines'][0]['spans'][0])
    self.assertNotIn('blocks',json.loads(parent['block_json']))
@@ -96,6 +96,15 @@ class BlockContract(unittest.TestCase):
     self.assertEqual(db.execute('SELECT COUNT(*) FROM block').fetchone()[0],10)
     self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
     self.assertEqual(db.execute('SELECT COUNT(*) FROM block WHERE parent_block_id IS NOT NULL').fetchone()[0],4)
+   # PBS may be re-numbered during OCR review; the parent FK must stay fixed.
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:
+    db.execute("UPDATE block SET pbs=? WHERE block_id=?",('p1b99',parent['block_id']))
+    self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+    self.assertEqual(db.execute('SELECT parent_block_id FROM block WHERE block_id=?',(inner['block_id'],)).fetchone()[0],parent['block_id'])
+   reread=next(r for r in block_rows(book,0,100)['rows'] if r['block_id']==inner['block_id'])
+   self.assertEqual(reread['parent_block_id'],parent['block_id'])
+   self.assertNotIn('parent_pbs',reread)
+   self.assertEqual(next(r for r in block_rows(book,0,100)['rows'] if r['block_id']==parent['block_id'])['pbs'],'p1b99')
 
  def test_upgrade_legacy_derived_table(self):
   with tempfile.TemporaryDirectory() as tmp:

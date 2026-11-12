@@ -173,13 +173,12 @@ def block_rows(book:Path,offset:int=0,limit:int=200)->dict:
         if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='block'").fetchone()[0]!=1:
             raise OCRImportError('尚未生成 block 表')
         total=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
-        data=conn.execute('''SELECT child.block_id,child.pbs,parent.pbs AS parent_pbs,
+        data=conn.execute('''SELECT child.block_id,child.pbs,
                   child.source_block_key,child.source_order,child.source_name,child.global_page,
                   child.local_page,child.page_size_json,child.block_group,child.block_path,
                   child.parent_block_id,child.sibling_order,child.block_index,
                   child.block_type,child.block_bbox_json,child.line_count,child.span_count,
                   child.span_types,child.content_preview,child.block_json,child.has_blocks_field
-                  FROM block AS child LEFT JOIN block AS parent
-                    ON child.parent_block_id=parent.block_id
+                  FROM block AS child
                   ORDER BY child.block_id LIMIT ? OFFSET ?''',(limit,offset)).fetchall()
     return {'table':TABLE,'total':total,'offset':offset,'limit':limit,'rows':[dict(row) for row in data]}

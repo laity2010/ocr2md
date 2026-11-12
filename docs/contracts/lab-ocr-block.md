@@ -9,6 +9,6 @@
 - `line_count`、`span_count` 仅统计当前 Block 自身内容；父块不复制子块数据。`content_preview`、`span_types` 只用于 AG 分类预览，不是权威内容。
 - 页面级其它字段与顶层文件元信息仍保存在 `minerujson` 来源 BLOB；因此本 `block` 表不独自承诺复原全部文件的全部顶层元数据，但其 Block 层级可无损还原。
 
-已有 GET `rows?table=block` 提供分页读取。导航 `SQLite → block` 点击后批量读入 CM6 `StateField`，AG 为分类筛选投影；点击 AG 行时 CM6 显示选中 Block 自身完整的 JSON（含 Line/Span），AG 展示 PBS、短 Block ID 与父 PBS，全局状态栏显示 PBS/短 ID/父 PBS/bbox。无 PDF 高亮和 MD 重组、无 CM6 修改回写（属于后续 API）。
+已有 GET `rows?table=block` 提供分页读取。导航 `SQLite → block` 点击后批量读入 CM6 `StateField`，AG 为分类筛选投影；点击 AG 行时 CM6 显示选中 Block 自身完整的 JSON（含 Line/Span），AG 展示 PBS、短 BlockID 与 ParentID（即 SQLite 的 `parent_block_id` 整数外键），全局状态栏显示 PBS/BlockID/ParentID/bbox。父子引用只根据 ID 建立，绝不通过可变的 PBS 连接。无 PDF 高亮和 MD 重组、无 CM6 修改回写（属于后续 API）。
 
 验收：合成源涵盖全部三个组、嵌套表格/图片/空块、span 多值、额外属性、幂等、逐块重组一致、原始文件哈希不变，且已有 `minerujson2span` 继续可用；真实 sample 校验所有 Block 数量、Span 总数与父路径有效性；Chromium/iPad-WebKit 复用现有 Frame 和导航浏览器测试。

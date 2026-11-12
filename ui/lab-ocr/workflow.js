@@ -39,8 +39,7 @@ const BLOCK_COLUMNS=Object.freeze([
   {field:'block_group',headerName:'原始数组',width:135,sortable:true},
   {field:'pbs',headerName:'PBS',width:125,sortable:true},
   {field:'block_id',headerName:'Block ID',width:105,sortable:true},
-  {field:'parent_pbs',headerName:'父 PBS',width:125,sortable:true},
-  {field:'parent_block_id',headerName:'父 Block ID',width:120,hide:true,sortable:true},
+  {field:'parent_block_id',headerName:'ParentID',width:125,sortable:true},
   {field:'block_type',headerName:'Block Type',width:145,sortable:true},
   {field:'block_bbox_json',headerName:'Block BBox',width:145,sortable:false},
   {field:'line_count',headerName:'Lines',width:85,sortable:true},
@@ -191,7 +190,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         suppressHeaderFilterButton:false,
       })),{onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
-        if(table==='block')onStatus(`Block 定位：${row.pbs} · ID ${row.block_id} · 父块 ${row.parent_pbs??'无'} · bbox ${row.block_bbox_json}`,'info');
+        if(table==='block')onStatus(`Block 定位：${row.pbs} · BlockID ${row.block_id} · ParentID ${row.parent_block_id??'NULL'} · bbox ${row.block_bbox_json}`,'info');
       }});
       onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行，AG 作为分类定位视图`,'ok');
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');}
