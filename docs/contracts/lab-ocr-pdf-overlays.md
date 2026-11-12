@@ -1,8 +1,8 @@
-# Lab OCR PDF 覆盖框 API · V1（Block / Span）
+# Lab OCR PDF 覆盖框与 PBS 标签 API · V2（Block / Span）
 
 ## 边界与唯一公开接口
 
-在已有 `mountLabOcrPdf` 返回对象上增加 **一个**公开业务 API：
+在已有 `mountLabOcrPdf` 返回对象上复用配置 API `setOverlays()`，新增独立定位 API `focusBlock()`：
 
 ```js
 viewer.setOverlays({
@@ -11,7 +11,8 @@ viewer.setOverlays({
   loadPage: async (page, level) => ({
     level, page,             // PDF 页码，从 1 开始
     pageSize: [595, 842],  // MinerU JSON 对应页原始宽、高，左上角为 (0, 0)
-    boxes: [{id: '...', blockGroup: 'para_blocks', blockType: 'text', bbox: [72, 60, 360, 155]}],
+    boxes: [{id:'125', blockId:'125', pbs:'p4b8s1', parentBlockId:'120',
+      blockGroup:'para_blocks', blockType:'text', bbox:[72, 60, 360, 155]}],
   }),
 });
 ```
@@ -23,7 +24,7 @@ viewer.setOverlays({
 
 ## 数据来源与坐标
 
-Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /labs/lab-ocr/api/ocr/overlays?workspace=...&level=block|span&page=1`。服务端只查询本书 SQLite `block` / `span` 的 `global_page`、`page_size_json`、`block_bbox_json` / `span_bbox_json`、`block_type`、`block_group` 与内部稳定 ID，返回上面的统一几何结构，不返回正文、原始块 JSON 或路径。继续使用 Main 的目录授权、同源 Cookie 和只读 SQLite 连接。
+Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /labs/lab-ocr/api/ocr/overlays?workspace=...&level=block|span&page=1`。服务端只查询本书 SQLite `block` / `span` 的 `global_page`、`page_size_json`、`block_bbox_json` / `span_bbox_json`、`block_type`、`block_group`、`block_id`、`pbs`、`parent_block_id`（Span 经 source key 关联 Block）与内部稳定 ID，返回上面的统一几何结构，不返回正文、原始块 JSON 或路径。继续使用 Main 的目录授权、同源 Cookie 和只读 SQLite 连接。
 
 页号在该外部接口为 **1-based**，SQL `global_page` 为 **0-based**；MinerU bbox 格式为 `[x_min, y_min, x_max, y_max]`，左上原点，页面尺寸来自 `page_size_json`。矩形按原始页面宽高换算为 0–100% 的 CSS 坐标，随 PDF.js `.page` 的缩放自然变化，不进行额外重渲染。页宽高比不吻合时拒绝绘制该页，以免显示错误标定。缺失、NaN、宽高非正、超出页面范围的框跳过或按页裁剪。每页最多 5000 个 SQL 覆盖框，超过直接报错，不悄悄丢弃。不存在的页返回空框。
 
@@ -47,3 +48,12 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - **all / 多选＝所选块组的集合并集，并非逐组叠画**。每页、每粒度始终只存在一个覆盖层，筛选时从缓存几何重建并替换，去除重复 ID、完全相同坐标、以及不同块组之间 IoU≥0.94 的近乎相同矩形（处理预处理与正文块略微错位）。跨块组重复时按 `para_blocks` → `discarded_blocks` → `preproc_blocks` 优先保留正文版本。真实的嵌套、包含和部分相交块仍显示，不以任意交叉误判为重复。
 - 块组选项变化只重画浏览器缓存，不重新取 SQL 几何或 PDF 字节、不重置页码／缩放／Block-Span 粒度；换页仍按页查询，缩放后从缓存恢复。
 - 定向验收：`tests/lab-ocr-overlays.test.py` 和 `tests/lab-ocr-overlays-http.test.py` 验证组字段、来源与访问权限；`tests/lab-ocr-overlay-filter.browser.test.mjs` 在 Chromium 和 iPad WebKit 用**真实 AG 块组复选菜单**测全选、空选、单选、多选、跨组精准／近似重合去重、嵌套保留、块类型筛选独立、Block/Span、缩放、翻页、无重查。
+
+## PBS 标签、去重身份与多窗定位（2026-11-12）
+
+- **仅 Block 粒度显示 PBS 标签**。Block 的只读页面投影增加 `blockId`（`block.block_id`，字符串）、`pbs`（人类可读）、`parentBlockId`（父块数字 ID 的字符串或 null）；Span 通过 `span.block_id → block.source_block_key` 只读关联同一组身份，不显示逐 Span 的重复 PBS 标签。`id` 仍是该粒度原始矩形身份，不能拿 `pbs` 当唯一 ID。数据库字段、MinerU JSON、CMD 原文均不修改，API 不返回正文。
+- PDF 继续使用单一 `setOverlays(config)` 配置注入：可附加 `onBlockSelect({blockId,pbs,page,blockGroup})` 回调，通知调用方**用户点击**的 Block，其他内部重绘绝不触发选择回调。公共 `focusBlock({id,page})` 在 AG 发起定位时设定 selected Block ID、必要时切回 Block 粒度、跳页、定位已缓存或待加载的对应 bbox，不修改数据或重复载入 PDF。懒装配的 PDF 适配器转发这两个能力。
+- Block 页级去重后每一个视觉代表框持有**完整别名 `blockId` 集合**，包括跨块组完全相同或 IoU≥0.94 的略错位源矩形。仅绘制优先级最高的一份框和 PBS 标签，但 AG 点击任一对应原 Block ID 均高亮这份代表。框与标签共用选中状态，选择不会改变块组过滤，也不会触发 SQL 重查。
+- PBS 是带引线的**独立不透明交互层**，覆盖框仍保持原有的透明度和 `pointer-events:none`；只读标签固定 23px 高，按离版面较近的左／右轨道放在纸页外的侧栏，页面适宽缩放会为侧栏预留空间。引线指向原框边缘。子块通过 `parentBlockId` 改用区别颜色。标签沿各侧轨道按原始纵向坐标排序、自动错位，绝不与同轨其他标签重叠；空间不足时按相邻顺序聚成 `PBS +N` 标签，点击展开可滚动的完整 PBS/Block ID 列表。
+- Frame 暴露两个**受控语义端口**：`focusPdfBlock({id,page})` 代理 PDF 公共 `focusBlock`；`selectSqlRowById({field:'block_id',id})` 通过 AG 组件端口定位、聚焦/选中行并送 CM6 展示同一 SQL 行，不操作 AG 私有 DOM。AG 如有不相关列过滤挡住了目标，保留 `block_group` 筛选而清除其他隐藏目标的条件。Lab OCR 在 AG Block 行点击时调用前者；PDF 点击 PBS 时调用后者，如果 Block 表尚未打开则复用 `openSql('block')` 打开并选中目标。
+- 验收：Python `lab-ocr-overlays.test.py` / `lab-ocr-overlays-http.test.py` 核实原生身份、父子、Span 归属与授权；Node `lab-ocr-pbs-layout.test.mjs` 直接测试排布和密集群组无丢失；`lab-ocr-pbs-link.browser.test.mjs` 在 Chromium 和 iPad WebKit 用真实 AG、PDF.js 测标签显示、纸页外定位、缩放、分栏、别名高亮、AG↔PDF 跨页和密集列表。原有 PDF/块组筛选/Frame/授权/OCR 回归保持通过。

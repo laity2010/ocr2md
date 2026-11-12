@@ -1,10 +1,12 @@
-/** Lab OCR PDF view: no CMD, PBS, MinerU or SQLite coupling.
+/** Lab OCR PDF view: no CMD, MinerU or SQLite coupling.
+ * Consumes opaque caller-provided block IDs, PBS display labels and geometry.
  * Public loader: loadPdf(authorized URL). The view owns PDF.js lifetime.
  */
 import {getDocument,GlobalWorkerOptions} from 'pdfjs-dist/build/pdf.mjs';
 import {EventBus,PDFViewer} from 'pdfjs-dist/web/pdf_viewer.mjs';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
+import {layoutPbsLabels} from './pbs-label-layout.js';
 import './pdf-viewer.css';
 GlobalWorkerOptions.workerSrc=workerUrl;
 
@@ -51,25 +53,40 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     textLayerMode:1,annotationMode:0});
   let disposed=false,ready=false,source=null,loading=null,task=null,pdf=null,revision=0;
   let resolvePaint=null;
-  // New public API: setOverlays({level:'off'|'block'|'span',loadPage(page,level)}).
-  // The caller owns SQL/JSON and returns only page geometry; PDF.js never
-  // sees PBS, table schemas, raw MinerU records, or filesystem paths.
+  // Public setOverlays({level,loadPage,blockGroups,onBlockSelect}) + focusBlock.
+  // The caller owns SQL/JSON; the viewer sees only geometry, public display
+  // labels and stable IDs, never a database schema, raw source or disk path.
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
+  let onBlockSelect=null,selectedBlockId=null,focusRequest=null;
   const overlayCache=new Map(),overlayPending=new Set();
   const clearOverlayNodes=()=>{
-    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer'))node.remove();
+    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer'))node.remove();
   };
+  const blockIdOf=item=>item?.blockId==null?null:String(item.blockId);
+  const matchesSelected=ids=>selectedBlockId!==null&&ids.has(selectedBlockId);
+  const updateSelectedNodes=()=>{
+    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids],.lab-ocr-pdf-pbs-tag[data-block-ids]')){
+      node.dataset.selected=String(selectedBlockId!==null&&node.dataset.blockIds.split(' ').includes(selectedBlockId));
+    }
+  };
+  function activateBlock(meta,notify){
+    if(!meta?.blockId)return;
+    selectedBlockId=String(meta.blockId);
+    focusRequest=null;
+    updateSelectedNodes();
+    if(notify)onBlockSelect?.({...meta,blockId:selectedBlockId});
+  }
   function paintPageBoxes(page,data){
     if(disposed||!pdf||overlayLevel==='off'||page>pdf.numPages)return;
     const pageView=viewer.getPageView(page-1);
     const host=pageView?.div;
     if(!host)return;
     host.querySelector('.lab-ocr-pdf-overlay-layer')?.remove();
+    host.querySelector('.lab-ocr-pdf-pbs-layer')?.remove();
     const size=data?.pageSize;
     if(!Array.isArray(size)||size.length!==2||!size.every(n=>Number.isFinite(n)&&n>0))return;
     if(data.page!==page||data.level!==overlayLevel||!Array.isArray(data.boxes))return;
-    // Refuse to draw misleading boxes when MinerU's coordinate system and
-    // this PDF page have incompatible aspect ratios.
+    // Refuse misleading labels when MinerU and PDF have incompatible axes.
     const viewport=pageView.viewport;
     if(viewport?.width&&viewport?.height){
       const ratio=size[0]/size[1],actual=viewport.width/viewport.height;
@@ -79,11 +96,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     layer.className='lab-ocr-pdf-overlay-layer';
     layer.dataset.level=overlayLevel;layer.dataset.page=String(page);
     const clamp=(value,max)=>Math.max(0,Math.min(value,max));
-    const seenIds=new Set(),seenRectangles=new Set(),visibleRects=[];
-    // `para_blocks` is the postprocessed reading structure. If different
-    // MinerU stages repeat the SAME visual region, prefer its authoritative
-    // para geometry over discarded/preproc (regardless of SQL row order).
-    // Legitimate nested and partially overlapping blocks must remain visible.
+    const seenIds=new Map(),seenRectangles=new Map(),visibleRects=[];
+    // Display a single representative for near-identical geometries across
+    // groups, but retain every alias Block ID for AG→PDF reverse navigation.
     const priority={para_blocks:0,discarded_blocks:1,preproc_blocks:2};
     const boxes=data.boxes.filter(item=>blockGroups===null||
       blockGroups.has(String(item?.blockGroup??''))).map((item,index)=>({item,index}));
@@ -97,34 +112,123 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       if(right<=left||bottom<=top)continue;
       const id=item.id==null?'':String(item.id);
       const rectKey=[left,top,right,bottom].map(n=>n.toFixed(4)).join(':');
-      // A multi-selection is a set UNION, not a new overlay per group.
-      // Identical rectangles from nested/duplicate blocks are painted once.
-      if((id&&seenIds.has(id))||seenRectangles.has(rectKey))continue;
       const group=String(item?.blockGroup??'');
       const area=(right-left)*(bottom-top);
-      // Almost identical boxes from DIFFERENT groups are still duplicates
-      // even if OCR stage rounding shifts an edge by a few pixels. This is
-      // not generic intersection suppression: preserve nested/partial boxes.
-      const duplicate=visibleRects.some(prior=>{
+      let duplicate=(id&&seenIds.get(id))||seenRectangles.get(rectKey);
+      if(!duplicate)duplicate=visibleRects.find(prior=>{
         if(prior.group===group)return false;
         const ix=Math.max(0,Math.min(right,prior.right)-Math.max(left,prior.left));
         const iy=Math.max(0,Math.min(bottom,prior.bottom)-Math.max(top,prior.top));
         const intersection=ix*iy;
-        const union=area+prior.area-intersection;
-        return union>0&&intersection/union>=0.94;
+        return area+prior.area-intersection>0&&
+          intersection/(area+prior.area-intersection)>=0.94;
       });
-      if(duplicate)continue;
-      if(id)seenIds.add(id);
-      seenRectangles.add(rectKey);
-      visibleRects.push({left,top,right,bottom,area,group});
+      const blockId=blockIdOf(item);
+      if(duplicate){
+        if(blockId)duplicate.blockIds.add(blockId);
+        if(id)seenIds.set(id,duplicate);
+        seenRectangles.set(rectKey,duplicate);
+        continue;
+      }
+      const entry={left,top,right,bottom,area,group,item,
+        blockIds:new Set(blockId?[blockId]:[]),element:null};
+      visibleRects.push(entry);
+      if(id)seenIds.set(id,entry);
+      seenRectangles.set(rectKey,entry);
       const box=document.createElement('div');box.className='lab-ocr-pdf-overlay-box';
       box.dataset.id=id;
       box.style.left=(left/size[0]*100)+'%';box.style.top=(top/size[1]*100)+'%';
       box.style.width=((right-left)/size[0]*100)+'%';
       box.style.height=((bottom-top)/size[1]*100)+'%';
-      layer.append(box);
+      entry.element=box;layer.append(box);
+    }
+    for(const entry of visibleRects){
+      entry.element.dataset.blockIds=[...entry.blockIds].join(' ');
+      entry.element.dataset.selected=String(matchesSelected(entry.blockIds));
     }
     host.append(layer);
+    if(overlayLevel==='block'){
+      // PBS tags live OUTSIDE the page paper in independent fixed-pixel rails.
+      // SVG leaders use the same page pixel coordinate frame as PDF.js.
+      const tagLayer=document.createElement('div');
+      tagLayer.className='lab-ocr-pdf-pbs-layer';tagLayer.dataset.page=String(page);
+      const width=viewport.width,height=viewport.height;
+      const labelInputs=visibleRects.filter(x=>x.item?.pbs&&blockIdOf(x.item)).map(x=>({
+        pbs:String(x.item.pbs),blockId:blockIdOf(x.item),group:x.group,
+        parentBlockId:x.item.parentBlockId,
+        blockIds:x.blockIds,
+        bbox:[x.left/size[0]*width,x.top/size[1]*height,
+          x.right/size[0]*width,x.bottom/size[1]*height],
+      }));
+      const placements=layoutPbsLabels(labelInputs,width,height);
+      const ns='http://www.w3.org/2000/svg';
+      const leaders=document.createElementNS(ns,'svg');
+      leaders.setAttribute('viewBox',`0 0 ${width} ${height}`);
+      leaders.setAttribute('preserveAspectRatio','none');
+      leaders.classList.add('lab-ocr-pdf-pbs-leaders');
+      for(const placement of placements){
+        const startX=placement.side==='left'?0:width;
+        const bendX=placement.side==='left'?Math.min(12,placement.anchorX):Math.max(width-12,placement.anchorX);
+        const fromY=placement.top+11.5;
+        const leader=document.createElementNS(ns,'polyline');
+        leader.setAttribute('points',`${startX},${fromY} ${bendX},${fromY} ${placement.anchorX},${placement.anchorY}`);
+        leaders.append(leader);
+      }
+      tagLayer.append(leaders);
+      for(const placement of placements){
+        const members=placement.items;
+        const head=members[0];
+        const button=document.createElement('button');button.type='button';
+        button.className='lab-ocr-pdf-pbs-tag';
+        button.dataset.side=placement.side;
+        button.dataset.child=String(head.parentBlockId!==null&&head.parentBlockId!==undefined);
+        button.dataset.blockId=head.blockId;
+        const ids=new Set(members.flatMap(member=>[...member.blockIds]));
+        button.dataset.blockIds=[...ids].join(' ');
+        button.dataset.selected=String(matchesSelected(ids));
+        button.style.top=placement.top+'px';
+        button.textContent=members.length===1?head.pbs:`${head.pbs} +${members.length-1}`;
+        button.title=members.length===1?`${head.pbs} · Block ID ${head.blockId} · ${head.group}`:
+          `${members.length} 个 PBS 标签，点击展开`;
+        button.setAttribute('aria-label',members.length===1?`定位 ${head.pbs}`:
+          `展开 ${members.length} 个 PBS 标签`);
+        button.addEventListener('click',()=>{
+          if(members.length===1){
+            activateBlock({blockId:head.blockId,pbs:head.pbs,page,blockGroup:head.group},true);
+            return;
+          }
+          const active=tagLayer.querySelector('.lab-ocr-pdf-pbs-picker');
+          if(active){const same=active.dataset.owner===head.blockId;active.remove();if(same)return;}
+          const picker=document.createElement('div');picker.className='lab-ocr-pdf-pbs-picker';
+          picker.dataset.owner=head.blockId;picker.dataset.side=placement.side;
+          const popupHeight=Math.min(194,Math.max(60,height-8));
+          picker.style.maxHeight=popupHeight+'px';
+          picker.style.top=Math.max(4,Math.min(placement.top,height-popupHeight-4))+'px';
+          for(const member of members){
+            const option=document.createElement('button');option.type='button';
+            option.textContent=member.pbs;
+            option.title=`${member.pbs} · Block ID ${member.blockId} · ${member.group}`;
+            option.addEventListener('click',()=>{activateBlock({blockId:member.blockId,
+              pbs:member.pbs,page,blockGroup:member.group},true);
+              picker.remove();});
+            picker.append(option);
+          }
+          picker.addEventListener('keydown',event=>{if(event.key==='Escape'){picker.remove();button.focus();}});
+          tagLayer.append(picker);
+          picker.querySelector('button')?.focus();
+        });
+        tagLayer.append(button);
+      }
+      host.append(tagLayer);
+    }
+    if(focusRequest?.page===page){
+      const found=visibleRects.find(entry=>entry.blockIds.has(focusRequest.id));
+      if(found){
+        focusRequest=null;
+        const target=found.element;
+        queueMicrotask(()=>{if(target.isConnected)target.scrollIntoView({block:'center',inline:'nearest'});});
+      }
+    }
   }
   function requestOverlayPage(page){
     if(disposed||!pdf||!ready||overlayLevel==='off'||!loadOverlayPage)return;
@@ -179,6 +283,11 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     // The same public method accepts a {blockGroups} patch from AG without
     // resetting a user's Block/Span dropdown or the cached page geometry.
     const nextLevel=Object.hasOwn(config,'level')?config.level:overlayLevel;
+    if(Object.hasOwn(config,'onBlockSelect')){
+      if(config.onBlockSelect!==null&&typeof config.onBlockSelect!=='function')
+        throw Error('PDF Block 选择回调必须是函数或 null');
+      onBlockSelect=config.onBlockSelect;
+    }
     const nextLoader=Object.hasOwn(config,'loadPage')?config.loadPage:loadOverlayPage;
     if(!['off','block','span'].includes(nextLevel))throw Error('覆盖框粒度无效');
     if(nextLevel!=='off'&&typeof nextLoader!=='function')
@@ -218,6 +327,19 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     }
     return true;
   }
+  function focusBlock({id,page}){
+    if(disposed)throw Error('PDF Viewer 已销毁');
+    if((typeof id!=='string'&&typeof id!=='number')||!String(id)||
+        !Number.isInteger(page)||page<1||page>200)throw Error('Block 定位身份或页码无效');
+    selectedBlockId=String(id);
+    focusRequest={id:selectedBlockId,page};
+    if(overlayLevel!=='block'&&loadOverlayPage)chooseOverlayLevel('block');
+    updateSelectedNodes();
+    if(!ready||!pdf||page>pdf.numPages)return false;
+    viewer.currentPageNumber=page;
+    requestOverlayPage(page);
+    return true;
+  }
   const emit=(message,kind='info')=>{if(!disposed)onStatus('PDF · '+message,kind);};
   const readyControls=()=>{pageInput.disabled=!ready;zoomSelect.disabled=!ready;};
   const updatePage=()=>{
@@ -240,15 +362,22 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   zoomSelect.addEventListener('change',()=>{
     if(!ready)return;
     const value=zoomSelect.value;
-    viewer.currentScaleValue=value==='page-width'?'page-width':String(Number(value)/100);
+    if(value==='page-width')relayout();
+    else viewer.currentScaleValue=String(Number(value)/100);
   });
   // Moving between split and single-pane layouts changes available width.
   // Preserve the chosen zoom mode instead of reloading the PDF.
   let lastWidth=0;
   const relayout=()=>{
     if(disposed||!ready)return;
-    if(zoomSelect.value==='page-width')viewer.currentScaleValue='page-width';
-    else viewer.update();
+    if(zoomSelect.value==='page-width'){
+      // PDF.js page-width fits paper edge-to-edge; leave 85px for each tag
+      // rail outside the paper rather than covering text or clipping tags.
+      viewer.currentScaleValue='page-width';
+      const full=viewer.currentScale;
+      const ratio=Math.max(.15,(scroller.clientWidth-184)/Math.max(1,scroller.clientWidth));
+      viewer.currentScaleValue=String(Number((full*ratio).toFixed(5)));
+    }else viewer.update();
   };
   const resizeObserver=new ResizeObserver(()=>{
     const width=scroller.clientWidth;
@@ -267,6 +396,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const oldTask=task;task=null;
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
+    focusRequest=null;selectedBlockId=null;
     pageObserver.disconnect();
     clearOverlayNodes();viewer.setDocument(null);
     pageInput.value='1';count.textContent='/ —';zoomSelect.value='page-width';readyControls();
@@ -312,7 +442,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,relayout,dispose(){
+  return Object.freeze({loadPdf,setOverlays,focusBlock,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
     pageObserver.disconnect();

@@ -66,6 +66,7 @@ async function request(op,params,post=false){
 
 export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,showModule}){
   let workspace='',tableReady=false,spanReady=false,blockReady=false,operation=0,loaded=0;
+  let currentSqlTable=null;
   const sqlReady=()=>tableReady;
   // The saved book root is the only user configuration. The server selects
   // the sole PDF beneath its pdf/ child and authorizes it per request.
@@ -87,8 +88,19 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     lastOverlayWorkspace=directory;
     frame.setPdfOverlays(directory?{
       level:'block',blockGroups:blockGroupSelection,
+      onBlockSelect:({blockId,pbs})=>{
+        const id=String(blockId);
+        // The Block ID, not PBS, is the stable identity across views.
+        if(currentSqlTable==='block'&&frame.selectSqlRowById({field:'block_id',id})){
+          onStatus(`PDF → AG · ${pbs} · BlockID ${id}`,'ok');
+        }else{
+          void openSql('block',{selectedId:id}).then(success=>{
+            if(success)onStatus(`PDF → AG · ${pbs} · BlockID ${id}`,'ok');
+          });
+        }
+      },
       loadPage:(page,level)=>request('overlays',{workspace:directory,page,level}),
-    }:{level:'off',loadPage:null,blockGroups:null});
+    }:{level:'off',loadPage:null,blockGroups:null,onBlockSelect:null});
   }
   function warmPdf(directory){
     if(directory===lastPdfWorkspace)return;
@@ -151,7 +163,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   async function inspectAndImport(nextWorkspace){
     const epoch=++operation;
     workspace=nextWorkspace;
-    tableReady=false;spanReady=false;blockReady=false;hideNavigation();frame.clearSqlRows();
+    tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();frame.clearSqlRows();
     applyBlockGroups(null);
     if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
@@ -190,14 +202,14 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   async function afterSave(){
     const saved=await savedWorkspace();
-    if(!saved){++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;hideNavigation();
+    if(!saved){++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();
       frame.clearSqlRows();prepareOverlays('');warmPdf('');await showModule('settings');
       onStatus('尚未绑定工作区，请在全局设置中选择书籍目录','warning');return;}
     const success=await inspectAndImport(saved);
     if(success){await showModule('frame');prepareOverlays(saved);warmPdf(saved);}
   }
-  async function openSql(table='minerujson'){
-    if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return;}
+  async function openSql(table='minerujson',{selectedId=null}={}){
+    if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return false;}
     if(!['minerujson','span','block'].includes(table))throw Error('未知的 SQLite 表');
     const id=++loaded;
     onStatus(`正在从 SQLite 加载 ${table} 表并交给 CM6…`,'info');
@@ -205,7 +217,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       const entries=[];let offset=0,total=0;
       do{
         const page=await request('rows',{workspace,table,offset,limit:200});
-        if(id!==loaded)return;
+        if(id!==loaded)return false;
         if(offset===0)total=page.total;
         if(total>10000)throw Error('当前 AG 单次显示上限为 10000 行，请缩小数据范围');
         if(!page.rows.length&&offset<total)throw Error('SQL 分页提前结束');
@@ -226,10 +238,19 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         applyBlockGroups(table==='block'?(model?.block_group?.values??null):null);
       },onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
-        if(table==='block')onStatus(`Block 定位：${row.pbs} · BlockID ${row.block_id} · ParentID ${row.parent_block_id??'NULL'} · bbox ${row.block_bbox_json}`,'info');
+        if(table==='block'){
+          frame.focusPdfBlock({id:row.block_id,page:Number(row.global_page)+1});
+          onStatus(`Block 定位：${row.pbs} · BlockID ${row.block_id} · ParentID ${row.parent_block_id??'NULL'} · AG → PDF`,'info');
+        }
       }});
+      currentSqlTable=table;
+      if(selectedId!==null&&table==='block'&&!frame.selectSqlRowById({field:'block_id',id:selectedId})){
+        onStatus(`PDF → AG · BlockID ${selectedId} 不在当前载入行中`,'warning');
+        return false;
+      }
       onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行，AG 作为分类定位视图`,'ok');
-    }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');}
+      return true;
+    }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');return false;}
   }
   return Object.freeze({savedWorkspace,initialize,afterSave,openSql,sqlReady,refreshNavigation:revealNavigation});
 }

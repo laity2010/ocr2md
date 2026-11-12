@@ -72,6 +72,7 @@ function mountEmptyGrid(host){
   ];
   let selectedListener=()=>{},filterListener=()=>{};
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
+    rowSelection:{mode:'singleRow',checkboxes:false,headerCheckbox:false,enableClickSelection:true},
     onRowClicked:event=>selectedListener(event.data),
     onFilterChanged:event=>filterListener(event.api.getFilterModel()),
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
@@ -96,6 +97,32 @@ function mountEmptyGrid(host){
       grid.ensureColumnVisible(first,'start');
       requestAnimationFrame(()=>grid.ensureColumnVisible(first,'start'));
     }
+  },selectById({field,id}){
+    if(typeof field!=='string'||!field||id==null)return null;
+    const wanted=String(id);
+    const lookup=()=>{
+      for(let index=0;index<grid.getDisplayedRowCount();index++){
+        const node=grid.getDisplayedRowAtIndex(index);
+        if(node?.data&&String(node.data[field])===wanted)return {node,index};
+      }
+      return null;
+    };
+    let selected=lookup();
+    if(!selected){
+      // A PDF-visible Block may be hidden by unrelated AG filters (e.g.
+      // block_type). Preserve the authoritative block_group filter.
+      const current=grid.getFilterModel()||{};
+      const remaining=Object.fromEntries(Object.entries(current).filter(([key])=>key==='block_group'));
+      if(Object.keys(current).length!==Object.keys(remaining).length){
+        grid.setFilterModel(remaining);selected=lookup();
+      }
+    }
+    if(!selected)return null;
+    grid.ensureIndexVisible(selected.index,'middle');
+    const column=grid.getColumn(field)?field:grid.getAllDisplayedColumns()[0]?.getColId();
+    if(column){grid.ensureColumnVisible(column);grid.setFocusedCell(selected.index,column);}
+    selected.node.setSelected(true,true);
+    return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
   return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
@@ -292,6 +319,16 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
         cm.select(row);
         onSelect?.(row);
       }});
+    },
+    // Semantic selection for external views. Only the AG port owns AG Grid;
+    // CM6 still receives the same row, without a second SQL/Markdown store.
+    selectSqlRowById({field='block_id',id}){
+      const row=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({field,id});
+      if(row)container.querySelector('.ocr-cm-source')?.ocrCmTable?.select(row);
+      return Boolean(row);
+    },
+    focusPdfBlock({id,page}){
+      return pdfSlot.current?.focusBlock?.({id,page})??false;
     },
     clearSqlRows(){
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.clear();
