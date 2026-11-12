@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as pause} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
+import {makeLabOcrPdf} from './helpers/lab-ocr-pdf-fixture.mjs';
 const port=5318,host=`http://127.0.0.1:${port}`,url=process.env.LAB_OCR_TEST_URL||host+'/labs/lab-ocr/';
 const BOOK='/demo/sample';
 const vite=process.env.LAB_OCR_TEST_URL?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr/vite.config.mjs',
@@ -27,6 +28,7 @@ try{
    await page.route('**/labs/lab-ocr/api/ocr/**',r=>{
     const path=new URL(r.request().url()).pathname;
     const operation=path.split('/').pop();
+    if(operation==='pdf')return r.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf()});
     if(operation==='inspect'){
      inspectCount++;
      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({

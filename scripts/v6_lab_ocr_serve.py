@@ -2,13 +2,14 @@
 """Lab OCR's isolated loopback API: delegates auth to Main, never owns Main data.
 
 Single Agent Link /labs/ gateway exposes /labs/lab-ocr/api/ocr/
-{inspect,import,rows,minerujson2span,minerujson2block}.
+{inspect,import,rows,minerujson2span,minerujson2block,pdf}.
 No second tunnel and no changes to Main V6 business routes.
 """
 from __future__ import annotations
 import http.client
 import json
 import os
+import stat
 import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +26,7 @@ PORT=int(os.environ.get('OCR2MD_LAB_OCR_PORT','4416'))
 MAIN_PORT=int(os.environ.get('OCR2MD_MAIN_PORT','4396'))
 PREFIX='/labs/lab-ocr/api/ocr/'
 MAX_BODY=32768
+MAX_PDF_BYTES=512 * 1024 * 1024
 PUBLIC_ORIGIN='https://ocr2md.laity.bid'
 LAN_ORIGIN=os.environ.get('OCR2MD_LAN_ORIGIN','')
 ALLOWED_ORIGINS=frozenset((PUBLIC_ORIGIN,'http://127.0.0.1:4414',
@@ -83,14 +85,45 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command!='HEAD':self.wfile.write(data)
 
+    def serve_pdf(self,book:Path):
+        # Never accept a PDF filename from the client. One authorized book ->
+        # exactly one regular PDF in its own pdf/ directory.
+        folder=book/'pdf'
+        if folder.is_symlink() or not folder.is_dir():
+            raise APIError(422,'工作区缺少有效 pdf/ 目录')
+        candidates=[p for p in folder.iterdir() if p.suffix.lower()=='.pdf' and
+                    not p.name.startswith('.') and p.is_file() and not p.is_symlink()]
+        if len(candidates)!=1:raise APIError(422,'pdf/ 需要且仅能有 1 个 PDF')
+        path=candidates[0]
+        try:
+            fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+            with os.fdopen(fd,'rb') as stream:
+                metadata=os.fstat(stream.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or not 5<=metadata.st_size<=MAX_PDF_BYTES:
+                    raise APIError(422,'PDF 文件大小无效')
+                if stream.read(5)!=b'%PDF-':raise APIError(422,'PDF 文件头无效')
+                stream.seek(0)
+                self.send_response(200)
+                self.send_header('Content-Type','application/pdf')
+                self.send_header('Content-Length',str(metadata.st_size))
+                self.send_header('Content-Disposition','inline')
+                self.send_header('Cache-Control','private, no-store')
+                self.send_header('X-Content-Type-Options','nosniff')
+                self.end_headers()
+                if self.command=='GET':
+                    while part:=stream.read(256*1024):self.wfile.write(part)
+        except (BrokenPipeError,ConnectionResetError):
+            # A viewer can cancel the old stream when a book changes.
+            return
+
     def execute(self):
         parsed=urlsplit(self.path)
         if parsed.path=='/healthz' and self.command=='GET':
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block'):raise APIError(404,'未知的 OCR API')
-        if (op in ('import','minerujson2span','minerujson2block'))!=(self.command=='POST') or self.command not in ('GET','POST'):
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf'):raise APIError(404,'未知的 OCR API')
+        if (op in ('import','minerujson2span','minerujson2block'))!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
             raise APIError(403,'请求来源无效')
@@ -109,6 +142,9 @@ class Handler(BaseHTTPRequestHandler):
         else:
             query={k:v[-1] for k,v in parse_qs(parsed.query,keep_blank_values=True).items()}
         book=_book(query.get('workspace',''),roots)
+        if op=='pdf':
+            if self.command not in ('GET','HEAD'):raise APIError(405,'PDF 仅允许读取')
+            return self.serve_pdf(book)
         # First milestone: one sub-200-page MinerU JSON plus one PDF only.
         # The store already supports independent multi-source preservation, but
         # multi-part ordering is deliberately NOT exposed to this Lab yet.

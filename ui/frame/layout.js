@@ -10,6 +10,14 @@ import '../ag-enum-filter-shared.css';
 import '../settings-module.css';
 import '../pdf-preview.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
+// Optional Frame pane extension: registered by an experimental entry BEFORE
+// bootstrapping the shared shell. The frame remains data-free without one.
+let pdfPaneMount=null;
+export function registerFramePdfPane(mount){
+  if(pdfPaneMount||typeof mount!=='function')throw Error('PDF pane mount already registered or invalid');
+  pdfPaneMount=mount;
+}
+
 const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f383e',
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
@@ -86,7 +94,7 @@ function mountEmptyGrid(host){
   },clear(){selectedListener=()=>{};grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
   return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
-function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
+function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlot=null,onStatus=()=>{}){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -159,8 +167,14 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
     const host=document.createElement('div');host.className='ocr-detached-pdf-host';
     const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
     host.append(surface);element.append(host);
+    if(pdfPaneMount)owned=()=>{
+      const viewer=pdfPaneMount({surface,toolbar:actions,onStatus});
+      pdfSlot.current=viewer;
+      if(pdfSlot.source)void viewer.loadPdf(pdfSlot.source).catch(()=>{});
+      return {dispose(){if(pdfSlot.current===viewer)pdfSlot.current=null;viewer.dispose();}};
+    };
   }else throw Error('Unknown Frame pane '+name);
-  return {element,init(){if(owned)this.resource=owned();},layout(){this.resource?.layout();},
+  return {element,init(){if(owned)this.resource=owned();},layout(){this.resource?.layout?.();},
     dispose(){this.resource?.dispose();}};
 }
 
@@ -172,8 +186,9 @@ function addPanel(dockview,id,component,title,position){
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
   moduleLabel='空白框架'}={}){
   let split=false;
+  const pdfSlot={current:null,source:null};
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel)});
+    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
@@ -186,7 +201,15 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     onStatus(split?'四窗布局已启用':'三窗布局已启用');
   }
   setSplit(true);
-  return Object.freeze({setSplit,activate(){if(container.clientWidth&&container.clientHeight)
+  return Object.freeze({setSplit,
+    // Semantic source port, independent of PDF.js and Dockview DOM internals.
+    loadPdf(url){
+      if(url!==null && typeof url!=='string')
+        return Promise.reject(Error('PDF 来源必须是 URL 字符串'));
+      pdfSlot.source=url;
+      return pdfSlot.current?.loadPdf(url)??Promise.resolve(false);
+    },
+    activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
     showSqlRows(rows,columns,{onSelect}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;

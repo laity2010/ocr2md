@@ -1,0 +1,20 @@
+/* Lab OCR PDF viewer: independent PDF.js view with dark chrome. */
+.lab-ocr-pdf-surface,.lab-ocr-pdf-root{background:#1c2429;color:#d3c6aa}
+.lab-ocr-pdf-root{position:absolute;inset:0;overflow:hidden}
+.lab-ocr-pdf-scroller{position:absolute;inset:0;overflow:auto;background:#1c2429}
+.lab-ocr-pdf-scroller .pdfViewer{padding:8px 0 16px}
+.lab-ocr-pdf-scroller .page{box-shadow:0 2px 12px #05090b90;margin:8px auto!important}
+.lab-ocr-pdf-placeholder{position:absolute;top:22%;left:8%;right:8%;text-align:center;
+  padding:12px;line-height:1.6;background:#263139;border:1px solid #53615e;
+  border-radius:6px;pointer-events:none;color:#d3c6aa;font-size:12px}
+.lab-ocr-pdf-placeholder[hidden]{display:none!important}
+.lab-ocr-pdf-controls{display:flex;align-items:center;gap:3px;min-width:0;width:100%;overflow-x:auto;
+  scrollbar-width:thin;white-space:nowrap;color:#d3c6aa;height:29px}
+.lab-ocr-pdf-controls button{flex:none;padding:2px 5px;min-width:24px;height:25px;border:1px solid #52615f;
+  border-radius:4px;color:#d3c6aa;background:#2e3b40;cursor:pointer}
+.lab-ocr-pdf-controls button:disabled{opacity:.4;cursor:default}
+.lab-ocr-pdf-controls button:not(:disabled):hover{background:#42544b}
+.lab-ocr-pdf-controls label{display:inline-flex;gap:3px;align-items:center;flex:none}
+.lab-ocr-pdf-controls .lab-ocr-pdf-page{width:39px;min-width:39px;height:25px;box-sizing:border-box;
+  padding:2px 3px;background:#202c32;border:1px solid #596963;color:#d3c6aa;border-radius:3px}
+.lab-ocr-pdf-count,.lab-ocr-pdf-zoom{font-variant-numeric:tabular-nums;font-size:11px;flex:none}

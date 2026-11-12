@@ -23,7 +23,10 @@ const io=createFrameSettingsIO(localStorage,labName,()=>publishedDirectory,
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
-const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule,
+// User navigation must win over asynchronous initial book inspection on reload.
+let manualNavigationRevision=0;
+function userShowModule(name){manualNavigationRevision++;return showModule(name);}
+const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:userShowModule,
   moduleLabel:labName==='lab-ocr'?'OCR 审阅':'空白框架'});
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
@@ -86,15 +89,15 @@ function mountSettingsNavigation(){
   const back=document.createElement('button');back.type='button';
   back.className='ocr-frame-back';back.textContent='←';
   back.title='返回空白框架';back.setAttribute('aria-label','返回空白框架');
-  back.addEventListener('click',()=>void showModule('frame'));
+  back.addEventListener('click',()=>void userShowModule('frame'));
   const select=document.createElement('select');select.className='ocr-source-file-select';
   select.setAttribute('aria-label','源码文件导航');
   // Clone only the underlying authoritative select/optgroup, never Tom's DOM.
   select.append(...[...frameFileSelect.children].map(child=>child.cloneNode(true)));
   select.value='settings';
   select.addEventListener('change',()=>{
-    if(select.value==='settings')void showModule('settings');
-    else if(select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')void showModule(select.value);
+    if(select.value==='settings')void userShowModule('settings');
+    else if(select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')void userShowModule(select.value);
   });
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
@@ -150,6 +153,7 @@ $('global-save').addEventListener('click',async()=>{
 // No engineering dialog or dirty-state confirmation intercepts navigation.
 startFrameAutoUpdate({version:build,name:labName,report:topStatus});
 if(labName==='lab-ocr'){
+  const bootNavigationRevision=manualNavigationRevision; // snapshot BEFORE async imports
   // The empty Frame stays independent. OCR activates only in its own Lab entry.
   void (async()=>{
     try{
@@ -157,9 +161,9 @@ if(labName==='lab-ocr'){
       ocrWorkflow=createLabOcrWorkflow({io,frame,navigation:frameFileSelect,
         settingsRoot:$('settings-workspace'),onStatus:topStatus,showModule});
       const saved=await ocrWorkflow.savedWorkspace();
-      if(!saved){await showModule('settings');
+      if(!saved){if(bootNavigationRevision===manualNavigationRevision)await showModule('settings');
         topStatus('尚未绑定书籍工作目录，请在全局设置中选择 sample/ 并保存','warning');}
-      else{await showModule('frame');await ocrWorkflow.initialize();}
+      else{if(bootNavigationRevision===manualNavigationRevision)await showModule('frame');await ocrWorkflow.initialize();}
     }catch(error){topStatus('Lab OCR 初始化失败：'+error.message,'error');}
   })();
 }else void showModule('frame');

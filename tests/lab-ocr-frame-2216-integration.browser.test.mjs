@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
+import {makeLabOcrPdf} from './helpers/lab-ocr-pdf-fixture.mjs';
 import {shouldReload} from '../ui/frame/refresh.js';
 
 const port=5307,url=`http://127.0.0.1:${port}/labs/lab-ocr/`;
@@ -44,6 +45,7 @@ try{
         const children=path==='/demo/ocr-review'?[{name:'review-book',path:'/demo/ocr-review/review-book'}]:[];
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
       });
+      await page.route('**/labs/lab-ocr/api/ocr/pdf?*',route=>route.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf()}));
       await page.route('**/labs/lab-ocr/api/ocr/inspect?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',blocks:1,pages:22})}));
       await page.route('**/labs/lab-ocr/api/ocr/minerujson2block',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',table:'block',blocks:0})}));
       await page.route('**/labs/lab-ocr/api/ocr/minerujson2span',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',table:'span',spans:0})}));

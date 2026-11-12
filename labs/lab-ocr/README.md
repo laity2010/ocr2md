@@ -1,7 +1,7 @@
 # lab-ocr · OCR 审阅实验起点
 
 本实验从 `frame/base` 派生，并合并 `lab-frame@a8406e1`（2216 版）。
-保持空白框架的 Dockview 四窗、AG Grid、CM6、设置和导航，复用 Frame 的授权目录树、整行选中、展开刷新、全局状态和文件保存。当前首阶段接入 1 份不足 200 页的 MinerU JSON + 1 份 PDF，首次导入 SQLite 单表 `minerujson`，AG 展示原始块；尚未接入 OCR 校正编辑、PDF 版面定位或多 JSON 拼接。
+保持空白框架的 Dockview 四窗、AG Grid、CM6、设置和导航，复用 Frame 的授权目录树、整行选中、展开刷新、全局状态和文件保存。当前首阶段接入 1 份不足 200 页的 MinerU JSON + 1 份 PDF，首次导入 SQLite 单表 `minerujson`，AG 展示原始块；已提供独立 PDF.js 预览加载（默认深色、首页预热、导航缩放旋转和下载），但尚未接入 OCR 校正编辑、PDF 块标定／定位或多 JSON 拼接。
 标牌为 `lab-ocr`，与 `lab-frame` 使用不同的发布路径和本地设置命名空间。
 新业务逻辑仅在本实验分支开发，禁止直接修改空白框架基线。
 
@@ -18,3 +18,10 @@
 - SQL 导入成功，导航下拉新增 `SQL → minerujson`；点击后 AG 表分页读取并显示原始行，原始块 JSON 另存列且默认隐藏。全局状态栏统一显示进度、失败和结果。
 - 本阶段不自动识别多 JSON 拼接；遇到多个 JSON 或 200 页及以上时停止并提示，留待后续人工排序验收。
 - API 服务是独立的 loopback `4416`，仅受统一 Agent Link `/labs/lab-ocr/api/ocr/*` 代理，**每个调用均由 Main 的编辑授权/允许根目录校验**；无新 Tunnel，不改 Main 的书籍数据。
+
+## PDF 预览加载 V1
+
+- 关联 PDF 取自已保存 `workspace.dataDirectory/pdf/` 中唯一一份 PDF；不增加重复 PDF 路径设置。
+- 新 Viewer 以 PDF.js 单请求流式加载，首页实际绘制后才标记就绪，提供常用工具栏、文字层、默认深色、切分后重建。
+- 后端新增已鉴权的只读 `/labs/lab-ocr/api/ocr/pdf?workspace=…`，不修改原始文件。
+- API、直接测试、暂不包含的块交互见 `docs/contracts/lab-ocr-pdf-loader.md`。
