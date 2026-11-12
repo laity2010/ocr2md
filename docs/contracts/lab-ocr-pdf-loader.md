@@ -14,7 +14,7 @@
 
 全局设置只保存 `workspace.dataDirectory`（书籍工作区根目录）。已有 OCR API 验证其下恰好有一个 `pdf/` 和一份 PDF；无需增加 `pdfDirectory` 平行设置。浏览器只构造 `GET /labs/lab-ocr/api/ocr/pdf?workspace=...`，绝不传文件名／绝对 PDF 路径。现有 loopback API 每次向 Main 校验会话授权及目录根，过滤 symlink，验证 PDF 头与大小，流式返回原始 PDF 字节；不会更改原 PDF 或 SQLite。
 
-复用 Main 已验证的 PDF.js `getDocument` + `PDFViewer`：单次 streaming 请求（禁用 64KB range 往返）、iPad canvas 内存上限、文字层，`pagesinit` 设置适宽，**只有首页 `pagerendered` 成功才报告就绪**。重新打开同一 source 幂等，更换书籍或销毁 Viewer 时释放加载任务及页面资源；切分模式变化仅重定位已有 PDF.js DOM，禁止隐式读取原文内容。菜单仅保留当前页输入／总页，以及缩放下拉（适宽、25%、50%、75%、100%、125%、150%、200%、300%、400%）；默认深色界面。Lab OCR 默认不切分、预览直接显示 PDF 原文；可在 MD/PDF 下拉切换。手动切分时 PDF 在独立窗，预览下拉只显示 MD，不会重复装配 Viewer。深色不仅用于工具栏，PDF 页面 canvas 也采用与 Main 相同的反相/色相校正过滤器，消除白底刺眼；该显示滤镜不改原 PDF 数据。Lab OCR 的全局顶栏接收状态消息。
+复用 Main 已验证的 PDF.js `getDocument` + `PDFViewer`：单次 streaming 请求（禁用 64KB range 往返）、iPad canvas 内存上限、文字层，`pagesinit` 设置适宽，**只有首页 `pagerendered` 成功才报告就绪**。重新打开同一 source 幂等，更换书籍或销毁 Viewer 时释放加载任务及页面资源；切分模式变化仅重定位已有 PDF.js DOM，禁止隐式读取原文内容。菜单仅保留当前页输入／总页，以及缩放下拉（适宽、25%、50%、75%、100%、125%、150%、200%、300%、400%）；默认深色界面。Lab OCR 默认不切分、预览直接显示 PDF 原文；可在 MD/PDF 下拉切换。手动切分时 PDF 在独立窗，预览下拉只显示 MD，不会重复装配 Viewer。深色不仅用于工具栏，PDF 页面 canvas 也采用与 Main 相同的反相/色相校正，额外使用 brightness(.82) 与 contrast(.84) 缓和黑底白字的极端对比（深灰纸面、柔和灰字）；该显示滤镜不改原 PDF 数据。Lab OCR 的全局顶栏接收状态消息。
 
 ## 验收
 

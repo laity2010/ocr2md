@@ -85,20 +85,25 @@ try{
      sample.width=picture.naturalWidth;sample.height=picture.naturalHeight;
      const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(picture,0,0);
      const pixel=(x,y)=>Array.from(ctx.getImageData(x,y,1,1).data).slice(0,3);
-     let bright=0;
+     let bright=0,peak=0;
      const span=Math.min(180,sample.height);
      for(let y=25;y<span;y+=2)for(let x=25;x<Math.min(sample.width,240);x+=2){
        const rgb=pixel(x,y);
-       if(Math.max(...rgb)>160)bright++;
+       const level=Math.max(...rgb);
+       if(level>160)bright++;
+       peak=Math.max(peak,level);
      }
      const canvas=document.querySelector('.lab-ocr-pdf-scroller .page canvas');
      const pageEl=document.querySelector('.lab-ocr-pdf-scroller .page');
-     return {paper:pixel(20,20),bright,filter:getComputedStyle(canvas).filter,
+     return {paper:pixel(20,20),peak,bright,filter:getComputedStyle(canvas).filter,
        pageBg:getComputedStyle(pageEl).backgroundColor};
    },screenshot.toString('base64'));
-   assert(visual.paper.every(channel=>channel<65),'Rendered PDF paper must be dark: '+JSON.stringify(visual));
-   assert(visual.bright>4,'Ink must stay visible on dark PDF: '+JSON.stringify(visual));
-   assert.match(visual.filter,/invert\(1\)/,'PDF canvas must be inverted, not just chrome');
+   assert(visual.paper.every(channel=>channel>=10&&channel<55),
+     'Paper should be charcoal, not pure black: '+JSON.stringify(visual));
+   assert(visual.bright>4&&visual.peak>=160&&visual.peak<220,
+     'Ink must stay legible, but no dazzling white: '+JSON.stringify(visual));
+   assert.match(visual.filter,/invert\(1\).*brightness\(0\.82\).*contrast\(0\.84\)/,
+     'PDF should use muted dark-paper filter, not just dark chrome');
    console.log('LAB_OCR_PDF_DARK_PAPER_PASS',name,JSON.stringify(visual));
    const originalRoot=await page.locator('.lab-ocr-pdf-root').evaluate(node=>{
      window.__labPdfRoot=node;return node.isConnected;

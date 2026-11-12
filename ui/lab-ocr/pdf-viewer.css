@@ -7,6 +7,7 @@
 /* Unlike dark toolbar chrome, this changes the ACTUAL PDF paper pixels.
  * Same canvas dark-mode principle as Main pdf-preview.css. Scope to Lab OCR
  * only: PDF.js normally paints a white canvas regardless of host theme.
+ * Muted brightness/contrast avoids pure black paper and dazzling white ink.
  * The paper fallback must also be dark while pages are still rendering. */
 .lab-ocr-pdf-surface[data-pdf-theme="dark"] .pdfViewer .page{
   --page-bg-color:#1c2429;
@@ -14,7 +15,7 @@
   --page-border:1px solid #4b565a;
 }
 .lab-ocr-pdf-surface[data-pdf-theme="dark"] .pdfViewer .page canvas{
-  filter:invert(1) hue-rotate(180deg);
+  filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.84);
 }
 .lab-ocr-pdf-placeholder{position:absolute;top:22%;left:8%;right:8%;text-align:center;
   padding:12px;line-height:1.6;background:#263139;border:1px solid #53615e;
