@@ -100,14 +100,11 @@ try{
        childBg:getComputedStyle(child).backgroundColor,
        childBorder:getComputedStyle(child).borderTopStyle};
    });
-   assert.notEqual(inactivePalette.parentBg,inactivePalette.childBg,
-     'Parent/child colors should differ subtly within the same green family');
-   assert.equal(inactivePalette.childBorder,'dashed');
-   for(const key of ['parentBg','childBg']){
-     const rgb=inactivePalette[key].match(/\d+/g).map(Number);
-     assert(rgb[1]>rgb[0]&&rgb[1]>rgb[2],
-       `Both parent and child should remain green-toned: ${JSON.stringify(inactivePalette)}`);
-   }
+   // Exact Main CSS palette (ui/pdf-preview.css): parent sage, child
+   // blue-gray; both are solid, independent of selection state.
+   assert.equal(inactivePalette.parentBg,'rgba(39, 63, 60, 0.94)');
+   assert.equal(inactivePalette.childBg,'rgba(34, 56, 70, 0.95)');
+   assert.equal(inactivePalette.childBorder,'solid');
    assert.deepEqual((await tags.allTextContents()).sort(),['p1b0','p1b0s0','p1b1'].sort());
    const geom=await tags.evaluateAll(nodes=>nodes.map(n=>{
      const r=n.getBoundingClientRect(),paper=n.closest('.page').getBoundingClientRect();
@@ -183,13 +180,18 @@ try{
    assert.equal(colors.familyOutline,'rgb(232, 170, 85)','Family Block uses softer orange');
    assert.match(colors.directFill,/231, 183, 83/);
    assert.match(colors.familyFill,/231, 183, 83/);
-   assert.notEqual(colors.parentLabel,colors.childLabel,'Parent and child PBS labels are green shades');
-   assert.notEqual(colors.parentLine,colors.childLine,'Leader colors distinguish parent from child');
-   for(const label of ['parentLine','childLine']){
-     const rgb=(colors[label].match(/\d+/g)||[]).map(Number);
-     assert(rgb[1]>rgb[0]&&rgb[1]>rgb[2],`PBS leader ${label} is green-toned ${JSON.stringify(colors)}`);
-   }
-   assert.match(colors.childLineStyle,/3/,'Child PBS leader is dashed');
+   assert.equal(colors.parentLabel,'rgba(39, 63, 60, 0.94)','Main parent background survives selection');
+   assert.equal(colors.childLabel,'rgba(34, 56, 70, 0.95)','Main child background survives selection');
+   assert.equal(colors.parentLine,'rgb(140, 182, 163)','Main parent leader color');
+   assert.equal(colors.childLine,'rgb(138, 181, 218)','Main child leader color');
+   assert.equal(colors.childLineStyle,'none','Main child leader is solid');
+   const selectedBorders=await page.evaluate(()=>[...document.querySelectorAll('.lab-ocr-pdf-pbs-tag')].map(el=>({
+     kind:el.dataset.child,selected:el.dataset.selected,family:el.dataset.familySelected,
+     border:getComputedStyle(el).borderTopStyle,
+     background:getComputedStyle(el).backgroundColor,
+   })));
+   assert(selectedBorders.every(x=>x.border==='solid'),
+     'All PBS labels must use solid borders, including selected descendants');
    // PDF → AG by ID must distinguish parent and child even when PBS is shared
    // across unrelated processing groups.
    await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').click();
@@ -349,8 +351,9 @@ try{
      return {parentBase:getComputedStyle(parent).backgroundColor,childBase:getComputedStyle(child).backgroundColor,
        childBorder:getComputedStyle(child).borderTopStyle};
    });
-   assert.notEqual(style.parentBase,style.childBase,'Parent/child within same green family must have distinguishable intensity');
-   assert.equal(style.childBorder,'dashed','Child border distinguishes its role');
+   assert.equal(style.parentBase,'rgba(39, 63, 60, 0.94)');
+   assert.equal(style.childBase,'rgba(34, 56, 70, 0.95)');
+   assert.equal(style.childBorder,'solid','Child border must match Main scheme without dashes');
    await badge(102).click();
    assert.equal(await badge(101).getAttribute('data-family-selected'),'false');
    assert.equal(await badge(101).getAttribute('data-selected'),'false');

@@ -63,36 +63,39 @@
   font-family:"OCR2MD Sarasa",monospace}
 .lab-ocr-pdf-pbs-leaders{position:absolute;inset:0;width:100%;height:100%;
   pointer-events:none;overflow:visible}
-.lab-ocr-pdf-pbs-leaders polyline{fill:none;stroke:#679f87;stroke-width:1;
+.lab-ocr-pdf-pbs-leaders polyline{fill:none;stroke:#8cb6a3;stroke-width:1;
   vector-effect:non-scaling-stroke}
 .lab-ocr-pdf-pbs-tag{position:absolute;box-sizing:border-box;width:max-content;max-width:none;height:23px;
-  padding:0 4px;border:1px solid #487563;border-radius:4px;background:#214538;color:#e7f3e6;
+  padding:0 4px;border:1px solid #76a497;border-radius:4px;
+  --pbs-chip-bg:rgba(39,63,60,.94);background:var(--pbs-chip-bg);color:#e4ebd6;
   text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font:11px "OCR2MD Sarasa",monospace;line-height:20px;cursor:pointer;
   pointer-events:auto;touch-action:manipulation;z-index:1}
 
-/* Family colors share one jade-green scale: parent = dark/solid,
- * child = lighter/desaturated/dashed. Text widths and 23px tap targets
- * stay unchanged. Selection marks one parent and every visible descendant. */
+/* Reuse Main ui/pdf-preview.css's exact PBS family palette.
+ * Parent: muted green; child: blue-gray. Both borders and both leaders
+ * are SOLID (do not encode the child type as a missing-text dashed label).
+ * The label is 23px tall and remains width-fitted to its own text. */
 .lab-ocr-pdf-pbs-tag[data-child="true"]{
-  background:#31594e;border-color:#82bd9e;border-style:dashed;color:#e3f4e8}
-.lab-ocr-pdf-pbs-leaders polyline[data-child="true"]{
-  stroke:#a2d3b4;stroke-dasharray:3 2}
+  --pbs-chip-bg:rgba(34,56,70,.95);border-color:#8ab5ca;
+  border-style:solid;color:#e4effa}
+/* Global button:hover would otherwise paint either chip #37465c.
+ * Keep Main's original parent/child color even under finger/mouse hover. */
+.lab-ocr-pdf-pbs-tag:hover{background:var(--pbs-chip-bg)}
+.lab-ocr-pdf-pbs-leaders polyline[data-child="true"]{stroke:#8ab5da;stroke-dasharray:none}
 .lab-ocr-pdf-overlay-box[data-child="true"]{
   box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #79c3a0;
   background:rgba(105,182,148,.09)}
-/* PBS tags remain jade green; direct versus descendant emphasis differs.
- * PDF block selection itself uses the original amber-orange palette below. */
+/* Selection does NOT recolor Main's parent/child chip palette. The
+ * outer ring indicates selection, without changing borders or text sizes. */
 .lab-ocr-pdf-pbs-tag[data-family-selected="true"]{
-  background:#4a9371;border-color:#c5efd2;color:#fff;
-  box-shadow:0 0 0 1px #92c8ab8c}
+  box-shadow:0 0 0 1px #d4c484a8}
 .lab-ocr-pdf-pbs-tag[data-selected="true"]{
-  background:#a6dfb2;border:1px solid #d6f8d2;color:#183a2d;
-  line-height:20px;box-shadow:0 0 0 2px #8bdda78a}
-.lab-ocr-pdf-pbs-tag[data-selected="true"][data-child="true"]{border-style:dashed}
+  border-width:1px;border-style:solid;line-height:20px;
+  box-shadow:0 0 0 2px #eec45b}
 /* Restore the established orange for PDF block selection. The chosen
  * Block has the strong solid outline; descendants use a lighter dashed
- * amber outline. The jade PBS badges/leader rails are a separate layer. */
+ * amber outline. The Main-colored PBS badges/leader rails are separate. */
 .lab-ocr-pdf-overlay-box[data-family-selected="true"]{
   outline:1.5px dashed #e8aa55;outline-offset:1px;background:rgba(231,183,83,.14)}
 .lab-ocr-pdf-overlay-box[data-selected="true"]{
