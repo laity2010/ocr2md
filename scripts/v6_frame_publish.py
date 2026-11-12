@@ -21,6 +21,13 @@ CARD='''      <article id="lab-frame"><div class="kind">06 · Frame Lab</div><h2
         <a class="open" href="/labs/lab-frame/">进入 Lab Frame</a></article>
 '''
 
+def add_lab_card(html,name,card):
+    # Each static Lab has its own card identity. The previous check was
+    # hardcoded to lab-frame and accidentally hid newly published Labs.
+    if f'id="{name}"' in html:return html
+    if '</section>' not in html:raise RuntimeError('Home cards closing tag missing')
+    return html.replace('    </section>',card+'    </section>',1)
+
 def sha(data):return hashlib.sha256(data).hexdigest()
 def fingerprints(folder):
     files={};total=0
@@ -58,10 +65,7 @@ def publish(release):
           files,_=fingerprints(folder)
           if files!=entry['files']:raise RuntimeError('Existing Lab module changed: '+name)
           otherHashes[name]=files
-      html=currentHome.decode('utf-8')
-      if 'id="lab-frame"' not in html:
-          if '</section>' not in html:raise RuntimeError('Home cards closing tag missing')
-          html=html.replace('    </section>',CARD+'    </section>',1)
+      html=add_lab_card(currentHome.decode('utf-8'),NAME,CARD)
       homeBytes=html.encode('utf-8')
       sourceFiles,_=fingerprints(source)
       dest=release/NAME
