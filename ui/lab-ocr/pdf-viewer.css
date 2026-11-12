@@ -4,6 +4,18 @@
 .lab-ocr-pdf-scroller{position:absolute;inset:0;overflow:auto;background:#1c2429}
 .lab-ocr-pdf-scroller .pdfViewer{padding:8px 0 16px}
 .lab-ocr-pdf-scroller .page{box-shadow:0 2px 12px #05090b90;margin:8px auto!important}
+/* Unlike dark toolbar chrome, this changes the ACTUAL PDF paper pixels.
+ * Same canvas dark-mode principle as Main pdf-preview.css. Scope to Lab OCR
+ * only: PDF.js normally paints a white canvas regardless of host theme.
+ * The paper fallback must also be dark while pages are still rendering. */
+.lab-ocr-pdf-surface[data-pdf-theme="dark"] .pdfViewer .page{
+  --page-bg-color:#1c2429;
+  background:#1c2429!important;
+  --page-border:1px solid #4b565a;
+}
+.lab-ocr-pdf-surface[data-pdf-theme="dark"] .pdfViewer .page canvas{
+  filter:invert(1) hue-rotate(180deg);
+}
 .lab-ocr-pdf-placeholder{position:absolute;top:22%;left:8%;right:8%;text-align:center;
   padding:12px;line-height:1.6;background:#263139;border:1px solid #53615e;
   border-radius:6px;pointer-events:none;color:#d3c6aa;font-size:12px}

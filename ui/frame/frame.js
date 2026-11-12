@@ -25,13 +25,21 @@ function setSize(size){document.documentElement.style.setProperty('--ocr-frame-f
 setSize(io.getInitialSize());
 // User navigation must win over asynchronous initial book inspection on reload.
 let manualNavigationRevision=0;
+let currentModule='frame';
 function userShowModule(name){manualNavigationRevision++;return showModule(name);}
-const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:userShowModule,
-  moduleLabel:labName==='lab-ocr'?'OCR 审阅':'空白框架'});
+function previewStatus(message,kind='info'){
+  // PDF warm-up runs asynchronously. It must not overwrite a more recent
+  // user-initiated SQLite table/row status; errors always remain visible.
+  if(message.startsWith('PDF ·')&&currentModule.startsWith('sql:')&&kind!=='error')return;
+  topStatus(message,kind);
+}
+const frame=createFrameWorkspace($('workspace'),{onStatus:previewStatus,onModuleChange:userShowModule,
+  moduleLabel:labName==='lab-ocr'?'OCR 审阅':'空白框架',
+  defaultPreview:labName==='lab-ocr'?'pdf':'split'});
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
-let settings=null,loadingSettings=null,currentModule='frame',ocrWorkflow=null;
+let settings=null,loadingSettings=null,ocrWorkflow=null;
 function refreshSettingsHistory(){
   const root=$('settings-workspace');
   const history=settings?.history||{undo:0,redo:0};

@@ -54,7 +54,10 @@ try{
       await page.locator('#settings-workspace').waitFor({state:'visible',timeout:16000});
       await page.locator('#settings-workspace .ocr-frame-back').click();
       await page.locator('#workspace .dv-content-container').first().waitFor({timeout:16000});
-      assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
+      assert.equal(await page.locator('#workspace .dv-content-container').count(),3,
+        'Lab OCR defaults to the single PDF preview; Frame Lab remains four-pane');
+      assert.equal(await page.locator('#workspace .ocr-preview-mode').inputValue(),'pdf');
+      assert.equal(await page.locator('#workspace .ocr-preview-split-toggle input').isChecked(),false);
       assert.match(await page.locator('#lab-ocr-home').innerText(),/lab-ocr/);
       assert.match(await page.locator('#status').innerText(),/lab-ocr/);
       const label=await page.locator('.ocr-ag-module-select').first().locator('option[value="frame"]').innerText();

@@ -152,7 +152,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     const pdfOption=mode.querySelector('option[value="pdf"]');
     pdfOption.disabled=!pdfPaneMount;
     const split=document.createElement('label');split.className='ocr-preview-split-toggle';
-    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=true;
+    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=false;
     checkbox.setAttribute('aria-label','切分 Markdown PDF 预览');
     checkbox.addEventListener('change',()=>onSplit?.(checkbox.checked));
     split.append(checkbox,document.createTextNode('切分'));
@@ -241,9 +241,9 @@ function addPanel(dockview,id,component,title,position){
   const panel=dockview.addPanel({id,component,title,...(position?{position}:{})});
   panel.group.header.hidden=true;panel.group.relayout();return panel;
 }
-/** Public F01: exactly Main's default three groups + detached PDF split. */
+/** Public F01: configurable preview default; Frame retains split, OCR uses PDF. */
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
-  moduleLabel='空白框架'}={}){
+  moduleLabel='空白框架',defaultPreview='split'}={}){
   let split=false;
   const pdfSlot={current:null,source:null,preview:null,detached:null};
   const dockview=createDockview(container,{theme:themeAbyss,
@@ -260,7 +260,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     pdfSlot.preview?.setSplit(split);
     onStatus(split?'四窗布局已启用':'三窗布局已启用');
   }
-  setSplit(true);
+  if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
+  else setSplit(true);
   return Object.freeze({setSplit,
     // Semantic source port, independent of PDF.js and Dockview DOM internals.
     loadPdf(url){

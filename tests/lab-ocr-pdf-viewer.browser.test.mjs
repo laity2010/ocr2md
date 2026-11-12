@@ -70,9 +70,36 @@ try{
    const detached=page.locator('.ocr-detached-pdf-host');
    const scale=page.locator('.lab-ocr-pdf-scale');
    const pageInput=page.locator('.lab-ocr-pdf-page');
-   assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),true,
-     'Split reserves PDF in detached pane');
-   assert.equal(await detached.locator('.lab-ocr-pdf-root').count(),1);
+   assert.equal(await split.isChecked(),false,'Lab OCR starts unsplit');
+   assert.equal(await previewMode.inputValue(),'pdf','Lab OCR defaults to PDF original');
+   assert.equal(await previewMode.locator('option[value="pdf"]').isEnabled(),true);
+   assert.equal(await detached.count(),0,'No detached pane on initial load');
+   assert.equal(await page.locator('.ocr-preview-pane>.ocr-preview-pdf-host .lab-ocr-pdf-root').count(),1);
+   assert.equal(await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-scale').isVisible(),true);
+   // Validate actual paper pixels rather than trusting the dark toolbar.
+   const screenshot=await page.locator('.lab-ocr-pdf-scroller .page canvas').first().screenshot();
+   const visual=await page.evaluate(async base64=>{
+     const picture=new Image();picture.src='data:image/png;base64,'+base64;
+     await picture.decode();
+     const sample=document.createElement('canvas');
+     sample.width=picture.naturalWidth;sample.height=picture.naturalHeight;
+     const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(picture,0,0);
+     const pixel=(x,y)=>Array.from(ctx.getImageData(x,y,1,1).data).slice(0,3);
+     let bright=0;
+     const span=Math.min(180,sample.height);
+     for(let y=25;y<span;y+=2)for(let x=25;x<Math.min(sample.width,240);x+=2){
+       const rgb=pixel(x,y);
+       if(Math.max(...rgb)>160)bright++;
+     }
+     const canvas=document.querySelector('.lab-ocr-pdf-scroller .page canvas');
+     const pageEl=document.querySelector('.lab-ocr-pdf-scroller .page');
+     return {paper:pixel(20,20),bright,filter:getComputedStyle(canvas).filter,
+       pageBg:getComputedStyle(pageEl).backgroundColor};
+   },screenshot.toString('base64'));
+   assert(visual.paper.every(channel=>channel<65),'Rendered PDF paper must be dark: '+JSON.stringify(visual));
+   assert(visual.bright>4,'Ink must stay visible on dark PDF: '+JSON.stringify(visual));
+   assert.match(visual.filter,/invert\(1\)/,'PDF canvas must be inverted, not just chrome');
+   console.log('LAB_OCR_PDF_DARK_PAPER_PASS',name,JSON.stringify(visual));
    const originalRoot=await page.locator('.lab-ocr-pdf-root').evaluate(node=>{
      window.__labPdfRoot=node;return node.isConnected;
    });
@@ -89,12 +116,8 @@ try{
    const widthAt100=await page.locator('.lab-ocr-pdf-scroller .page').first().evaluate(el=>el.getBoundingClientRect().width);
    await scale.selectOption('page-width');
    assert.equal(await scale.inputValue(),'page-width');
-   await split.uncheck();
-   await page.waitForFunction(()=>!document.querySelector('.ocr-detached-pdf-pane'));
-   assert.equal(await previewMode.locator('option[value="pdf"]').isEnabled(),true,
-     'PDF option MUST be enabled after canceling split');
+   await previewMode.selectOption('md');
    assert.equal(await previewMode.inputValue(),'md');
-   assert.equal(await page.locator('.ocr-preview-pane>.ocr-preview-pdf-host .lab-ocr-pdf-root').count(),1);
    await previewMode.selectOption('pdf');
    await page.waitForFunction(()=>document.querySelector('.ocr-preview-pane')?.dataset.previewMode==='pdf');
    assert.equal(await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-scale').isVisible(),true);

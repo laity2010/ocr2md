@@ -1,7 +1,7 @@
 # lab-ocr · OCR 审阅实验起点
 
 本实验从 `frame/base` 派生，并合并 `lab-frame@a8406e1`（2216 版）。
-保持空白框架的 Dockview 四窗、AG Grid、CM6、设置和导航，复用 Frame 的授权目录树、整行选中、展开刷新、全局状态和文件保存。当前首阶段接入 1 份不足 200 页的 MinerU JSON + 1 份 PDF，首次导入 SQLite 单表 `minerujson`，AG 展示原始块；已提供独立 PDF.js 预览加载（默认深色、首页预热、页码及缩放下拉菜单），但尚未接入 OCR 校正编辑、PDF 块标定／定位或多 JSON 拼接。
+保持空白框架的 Dockview 多窗（Lab OCR 默认单窗 PDF 预览、可选切分为四窗）、AG Grid、CM6、设置和导航，复用 Frame 的授权目录树、整行选中、展开刷新、全局状态和文件保存。当前首阶段接入 1 份不足 200 页的 MinerU JSON + 1 份 PDF，首次导入 SQLite 单表 `minerujson`，AG 展示原始块；已提供独立 PDF.js 预览加载（默认页面内容深色、首页预热、页码及缩放下拉菜单），但尚未接入 OCR 校正编辑、PDF 块标定／定位或多 JSON 拼接。
 标牌为 `lab-ocr`，与 `lab-frame` 使用不同的发布路径和本地设置命名空间。
 新业务逻辑仅在本实验分支开发，禁止直接修改空白框架基线。
 
