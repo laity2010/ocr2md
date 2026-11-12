@@ -70,8 +70,27 @@
   text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font:11px "OCR2MD Sarasa",monospace;line-height:20px;cursor:pointer;
   pointer-events:auto;touch-action:manipulation;z-index:1}
-.lab-ocr-pdf-pbs-tag[data-child="true"]{border-color:#a08b60;background:#57462b;color:#fff0ce}
-.lab-ocr-pdf-pbs-tag[data-selected="true"]{background:#e4b44c;border-color:#ffdf93;
-  color:#212a2c;box-shadow:0 0 0 2px #f8d88777}
-.lab-ocr-pdf-overlay-box[data-selected="true"]{outline:2px solid #ffd46c;
-  outline-offset:1px;background:rgba(231,183,83,.20)}
+
+/* Family colors share one jade-green scale: parent = dark/solid,
+ * child = lighter/desaturated/dashed. Text widths and 23px tap targets
+ * stay unchanged. Selection marks one parent and every visible descendant. */
+.lab-ocr-pdf-pbs-tag[data-child="true"]{
+  background:#31594e;border-color:#82bd9e;border-style:dashed;color:#e3f4e8}
+.lab-ocr-pdf-pbs-leaders polyline[data-child="true"]{
+  stroke:#8ac6a9;stroke-dasharray:3 2}
+.lab-ocr-pdf-overlay-box[data-child="true"]{
+  box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #79c3a0;
+  background:rgba(105,182,148,.09)}
+/* Direct selection distinguishes the selected Block from its descendants.
+ * Related highlights use the SAME green palette at different intensities. */
+.lab-ocr-pdf-pbs-tag[data-family-selected="true"]{
+  background:#4a9371;border-color:#c5efd2;color:#fff;
+  box-shadow:0 0 0 1px #92c8ab8c}
+.lab-ocr-pdf-pbs-tag[data-selected="true"]{
+  background:#a6dfb2;border:1px solid #d6f8d2;color:#183a2d;
+  line-height:20px;box-shadow:0 0 0 2px #8bdda78a}
+.lab-ocr-pdf-pbs-tag[data-selected="true"][data-child="true"]{border-style:dashed}
+.lab-ocr-pdf-overlay-box[data-family-selected="true"]{
+  outline:1.5px dashed #88d8a8;outline-offset:1px;background:rgba(105,200,140,.23)}
+.lab-ocr-pdf-overlay-box[data-selected="true"]{
+  outline:2px solid #b3edb6;outline-offset:1px;background:rgba(145,225,166,.30)}

@@ -35,3 +35,5 @@ PDF 覆盖框跟随 AG 的 SQLite → block 表 **块组（block_group）** 多�
 PBS 标签（只读）：PDF 的 Block 覆盖框显示来自 SQLite `block.pbs` 的页边标签（按 PBS 文字宽度紧包标签框、双侧避让、引线、子块色、密集区域逐标签横向多轨外移（无收纳，内轨空闲立即回归））；唯一定位键始终使用 `block.block_id`，同一几何框去重后保留不同块组的原始 Block ID 关联。PDF 点击标签 → AG 自动打开/选中对应 Block 行并送 CM6，AG 点击 Block 行 → PDF 自动跳页和高亮相应框/标签。Span 粒度不重复绘制 Block 标签。标签无拖动、编号编辑和数据回写。
 
 PBS 防重叠修复：标签初绘与实际字体度量发生变化时都重新计算多轨位置，以真实 DOM 矩形避免包括 `p11b0`/`p11b01` 在内的同页标签交叠。第 11 页模拟专项截图位于 `.runtime/pbs-overlap-evidence/`，不修改 PDF 或 SQLite。
+
+PBS 父子块显示/选中：父块深绿实线，子块同系浅绿虚线；选中父块后，同一可见块组内它的全部后代标签与 PDF 框同步高亮，后代高亮颜色较浅，选择子块不反向选择父块。关系按稳定 `block_id`→`parent_block_id`，PBS 仅为显示，不更改 SQL 或原文。

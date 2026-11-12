@@ -23,11 +23,12 @@ const blocks=[
 // source group (so the overlay dedup is not allowed to drop either ID).
 const page11=[
  {id:'p11-a',blockId:'101',pbs:'p11b0',group:'para_blocks',type:'text',bbox:[72,60,300,128]},
- {id:'p11-b',blockId:'102',pbs:'p11b01',group:'para_blocks',type:'text',bbox:[73,61,301,129]},
- {id:'p11-c',blockId:'103',pbs:'p11b02',group:'para_blocks',type:'text',bbox:[77,62,240,131]},
+ {id:'p11-b',blockId:'102',pbs:'p11b01',parentBlockId:'101',group:'para_blocks',type:'text',bbox:[73,61,301,129]},
+ {id:'p11-c',blockId:'103',pbs:'p11b02',parentBlockId:'102',group:'para_blocks',type:'text',bbox:[77,62,240,131]},
  {id:'p11-return',blockId:'104',pbs:'p11b3',group:'para_blocks',type:'title',bbox:[74,220,220,256]},
  {id:'p11-right',blockId:'105',pbs:'p11b4',group:'para_blocks',type:'table',bbox:[410,60,560,127]},
- {id:'p11-right2',blockId:'106',pbs:'p11b05',group:'para_blocks',type:'table',bbox:[411,61,561,129]},
+ {id:'p11-right2',blockId:'106',pbs:'p11b05',parentBlockId:'105',group:'para_blocks',type:'table',bbox:[411,61,561,129]},
+ {id:'p11-cross',blockId:'107',pbs:'p11b07s1',parentBlockId:'2',group:'para_blocks',type:'text',bbox:[72,332,240,390]},
 ];
 const dense=Array.from({length:62},(_,i)=>({
  id:'b-dense-'+i,blockId:String(i+5),pbs:i===25?'p2b25s123456789':'p2b'+i,group:'para_blocks',type:'text',
@@ -73,9 +74,9 @@ try{
       })});
     }
     if(op==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      status:'unchanged',blocks:72,pages:11,pdf:'book.pdf',sources:[{name:'source.json',pages:11}]})});
-    if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":72}'});
-    if(op==='minerujson2span')return route.fulfill({status:200,contentType:'application/json',body:'{"spans":72}'});
+      status:'unchanged',blocks:73,pages:11,pdf:'book.pdf',sources:[{name:'source.json',pages:11}]})});
+    if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":73}'});
+    if(op==='minerujson2span')return route.fulfill({status:200,contentType:'application/json',body:'{"spans":73}'});
     if(op==='rows'){
       rowsReads++;
       assert.equal(parsed.searchParams.get('table'),'block');
@@ -92,6 +93,21 @@ try{
      null,{timeout:17000}).catch(async e=>{console.error('PBS_INITIAL',name,await page.locator('#status').innerText(),await tags.count(),await boxes.count());throw e;});
    assert.deepEqual(await boxes.evaluateAll(nodes=>nodes.map(n=>n.dataset.id)),['b-para','b-child','b-right']);
    assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-child="true"]').count(),1);
+   const inactivePalette=await page.evaluate(()=>{
+     const parent=document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="2"]');
+     const child=document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="3"]');
+     return {parentBg:getComputedStyle(parent).backgroundColor,
+       childBg:getComputedStyle(child).backgroundColor,
+       childBorder:getComputedStyle(child).borderTopStyle};
+   });
+   assert.notEqual(inactivePalette.parentBg,inactivePalette.childBg,
+     'Parent/child colors should differ subtly within the same green family');
+   assert.equal(inactivePalette.childBorder,'dashed');
+   for(const key of ['parentBg','childBg']){
+     const rgb=inactivePalette[key].match(/\d+/g).map(Number);
+     assert(rgb[1]>rgb[0]&&rgb[1]>rgb[2],
+       `Both parent and child should remain green-toned: ${JSON.stringify(inactivePalette)}`);
+   }
    assert.deepEqual((await tags.allTextContents()).sort(),['p1b0','p1b0s0','p1b1'].sort());
    const geom=await tags.evaluateAll(nodes=>nodes.map(n=>{
      const r=n.getBoundingClientRect(),paper=n.closest('.page').getBoundingClientRect();
@@ -127,11 +143,27 @@ try{
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-box[data-id="b-para"]')?.dataset.selected==='true');
    assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').getAttribute('data-selected'),'true');
    assert.match(await page.locator('#status').innerText(),/Block 定位：p1b0 · BlockID 1/);
+   // The real representative para block (ID 2) is parent of ID 3.
+   // An unrelated dedup alias (ID 1) must NOT inherit ID 2's children.
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').getAttribute('data-family-selected'),'false');
+   await page.locator('#workspace .ag-row .ag-cell[col-id="block_id"]').filter({hasText:/^2$/}).click();
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="2"]')?.dataset.selected==='true'&&
+     document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="3"]')?.dataset.familySelected==='true');
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-box[data-id="b-child"]').getAttribute('data-family-selected'),'true');
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-box[data-id="b-right"]').getAttribute('data-family-selected'),'false');
    // PDF → AG by ID must distinguish parent and child even when PBS is shared
    // across unrelated processing groups.
    await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='3');
    assert.match(await page.locator('.ocr-cm-source .cm-content').innerText(),/"blockId": "3"/);
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').getAttribute('data-selected'),'false',
+     'Child selection must not directly select its parent');
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').getAttribute('data-family-selected'),'false');
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').getAttribute('data-selected'),'true');
+   // Re-select parent and verify a distant descendant lights when its page
+   // becomes visible, without querying another SQL relationship endpoint.
+   await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').click();
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').getAttribute('data-family-selected'),'true');
    // Zoom + split reuse one viewer and keep tags legible (fixed pixel size).
    await page.locator('.lab-ocr-pdf-scale').selectOption('100');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="3"]'));
@@ -227,10 +259,13 @@ try{
    assert.equal(pdfReads,1);
    // Page 11 concrete regression: p11b0/p11b01/p11b02 have almost the
    // same bbox, but each must remain a separate visible non-overlapping PBS.
+   await page.locator('.lab-ocr-pdf-page').fill('1');
+   await page.locator('.lab-ocr-pdf-page').press('Tab');
+   await page.locator('.lab-ocr-pdf-pbs-layer[data-page="1"] .lab-ocr-pdf-pbs-tag[data-block-id="2"]').click();
    await page.locator('.lab-ocr-pdf-page').fill('11');
    await page.locator('.lab-ocr-pdf-page').press('Tab');
    const p11=page.locator('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag');
-   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===6,
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===7,
      null,{timeout:19000});
    const verifyNoOverlap=async(label)=>{
      const rects=await p11.evaluateAll(nodes=>nodes.map(n=>{
@@ -241,11 +276,49 @@ try{
        const a=rects[i],b=rects[j];
        const ix=Math.min(a.right,b.right)-Math.max(a.left,b.left);
        const iy=Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top);
+       if(ix>0&&iy>0){
+         const detail=await p11.evaluateAll(nodes=>nodes.map(n=>({name:n.textContent,
+           left:n.style.left,right:n.style.right,cssWidth:n.getBoundingClientRect().width,
+           offsetWidth:n.offsetWidth,offsetTop:n.offsetTop,scale:n.closest('.page').getBoundingClientRect().width/n.closest('.page').offsetWidth})));
+         console.error('PBS_OVERLAP_DEBUG',name,label,JSON.stringify(detail));
+       }
        assert(!(ix>0&&iy>0),`${label}: PBS labels overlap: ${JSON.stringify([a,b])}`);
      }
      return rects;
    };
    const p11Original=await verifyNoOverlap('page 11 initial');
+   const badge=bid=>page.locator(`.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag[data-block-id="${bid}"]`);
+   const box11=bid=>page.locator(`.lab-ocr-pdf-overlay-layer[data-page="11"] .lab-ocr-pdf-overlay-box[data-block-ids~="${bid}"]`);
+   // A parent selected on page 1 already highlights its cross-page child.
+   assert.equal(await badge(107).getAttribute('data-family-selected'),'true');
+   assert.equal(await box11(107).getAttribute('data-family-selected'),'true');
+   await badge(101).click();
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="103"]')?.dataset.familySelected==='true');
+   for(const child of [102,103]){
+     assert.equal(await badge(child).getAttribute('data-family-selected'),'true');
+     assert.equal(await box11(child).getAttribute('data-family-selected'),'true');
+     assert.equal(await badge(child).getAttribute('data-selected'),'false');
+   }
+   for(const unrelated of [104,105,106,107]){
+     assert.equal(await badge(unrelated).getAttribute('data-family-selected'),'false');
+   }
+   assert.equal(await badge(101).getAttribute('data-selected'),'true');
+   assert.equal(await box11(101).getAttribute('data-selected'),'true');
+   const style=await page.evaluate(()=>{
+     const parent=document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="101"]');
+     const child=document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="102"]');
+     return {parentBase:getComputedStyle(parent).backgroundColor,childBase:getComputedStyle(child).backgroundColor,
+       childBorder:getComputedStyle(child).borderTopStyle};
+   });
+   assert.notEqual(style.parentBase,style.childBase,'Parent/child within same green family must have distinguishable intensity');
+   assert.equal(style.childBorder,'dashed','Child border distinguishes its role');
+   await badge(102).click();
+   assert.equal(await badge(101).getAttribute('data-family-selected'),'false');
+   assert.equal(await badge(101).getAttribute('data-selected'),'false');
+   assert.equal(await badge(102).getAttribute('data-selected'),'true');
+   assert.equal(await badge(103).getAttribute('data-family-selected'),'true','Child is parent of its grandchild');
+   assert.equal(await badge(106).getAttribute('data-family-selected'),'false');
+   await badge(101).click();
    assert.deepEqual(p11Original.map(x=>x.name).sort(),page11.map(x=>x.pbs).sort());
    await mkdir('.runtime/pbs-overlap-evidence',{recursive:true});
    await page.evaluate(()=>{
@@ -264,7 +337,7 @@ try{
    await page.waitForTimeout(250);
    const p11Resized=await verifyNoOverlap('page 11 after font change');
    await page.locator('.lab-ocr-pdf-scale').selectOption('150');
-   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===6);
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===7);
    await page.waitForTimeout(350);
    await verifyNoOverlap('page 11 at 150% zoom');
    await page.evaluate(()=>{

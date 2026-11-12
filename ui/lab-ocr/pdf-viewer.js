@@ -7,6 +7,7 @@ import {EventBus,PDFViewer} from 'pdfjs-dist/web/pdf_viewer.mjs';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {layoutPbsLabels} from './pbs-label-layout.js';
+import {indexBlockParents,blockHighlight} from './pbs-family.js';
 import './pdf-viewer.css';
 GlobalWorkerOptions.workerSrc=workerUrl;
 
@@ -58,7 +59,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // labels and stable IDs, never a database schema, raw source or disk path.
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
   let onBlockSelect=null,selectedBlockId=null,focusRequest=null;
-  const overlayCache=new Map(),overlayPending=new Set();
+  const overlayCache=new Map(),overlayPending=new Set(),blockParents=new Map();
   const railDepthByPage=new Map(),pbsLabelObservers=new Map();
   const labelGap=7; // actual button widths come from browser layout, not a fixed 78px chip
   function updateRailSpace(){
@@ -88,10 +89,12 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     resetRailSpace();
   };
   const blockIdOf=item=>item?.blockId==null?null:String(item.blockId);
-  const matchesSelected=ids=>selectedBlockId!==null&&ids.has(selectedBlockId);
+  const highlightKind=ids=>blockHighlight(ids,selectedBlockId,blockParents);
   const updateSelectedNodes=()=>{
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids],.lab-ocr-pdf-pbs-tag[data-block-ids]')){
-      node.dataset.selected=String(selectedBlockId!==null&&node.dataset.blockIds.split(' ').includes(selectedBlockId));
+      const state=highlightKind(node.dataset.blockIds.split(' '));
+      node.dataset.selected=String(state==='direct');
+      node.dataset.familySelected=String(state==='family');
     }
   };
   function activateBlock(meta,notify){
@@ -113,6 +116,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const size=data?.pageSize;
     if(!Array.isArray(size)||size.length!==2||!size.every(n=>Number.isFinite(n)&&n>0))return;
     if(data.page!==page||data.level!==overlayLevel||!Array.isArray(data.boxes))return;
+    // Read-only identity map includes every source Block, even invisible
+    // block groups and deduplicated aliases; PBS text is never a key.
+    indexBlockParents(blockParents,data.boxes);
     // Refuse misleading labels when MinerU and PDF have incompatible axes.
     const viewport=pageView.viewport;
     if(viewport?.width&&viewport?.height){
@@ -164,6 +170,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       seenRectangles.set(rectKey,entry);
       const box=document.createElement('div');box.className='lab-ocr-pdf-overlay-box';
       box.dataset.id=id;
+      box.dataset.child=String(item?.parentBlockId!==null&&item?.parentBlockId!==undefined);
       box.style.left=(left/size[0]*100)+'%';box.style.top=(top/size[1]*100)+'%';
       box.style.width=((right-left)/size[0]*100)+'%';
       box.style.height=((bottom-top)/size[1]*100)+'%';
@@ -171,7 +178,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     }
     for(const entry of visibleRects){
       entry.element.dataset.blockIds=[...entry.blockIds].join(' ');
-      entry.element.dataset.selected=String(matchesSelected(entry.blockIds));
+      const highlight=highlightKind(entry.blockIds);
+      entry.element.dataset.selected=String(highlight==='direct');
+      entry.element.dataset.familySelected=String(highlight==='family');
     }
     host.append(layer);
     if(overlayLevel==='block'){
@@ -202,7 +211,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         button.dataset.child=String(placement.parentBlockId!==null&&placement.parentBlockId!==undefined);
         button.dataset.blockId=placement.blockId;
         button.dataset.blockIds=[...placement.blockIds].join(' ');
-        button.dataset.selected=String(matchesSelected(placement.blockIds));
+        const highlight=highlightKind(placement.blockIds);
+        button.dataset.selected=String(highlight==='direct');
+        button.dataset.familySelected=String(highlight==='family');
         button.style.top=placement.top+'px';
         button.textContent=placement.pbs;
         button.title=`${placement.pbs} · Block ID ${placement.blockId} · ${placement.group}`;
@@ -223,12 +234,10 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         leaders.replaceChildren();
         for(const {placement,button} of badges){
           const side=placement.side;
-          const w=button.getBoundingClientRect().width;
-          const h=button.getBoundingClientRect().height;
-          const scale=host.getBoundingClientRect().width/Math.max(1,host.offsetWidth);
-          // Compare in layout pixels so page zoom / CSS transforms cannot
-          // cause a false clearance between otherwise touching labels.
-          const widthPx=w/Math.max(.01,scale),heightPx=h/Math.max(.01,scale);
+          // Offsets and inline positions are in the same layout-pixel frame;
+          // getBoundingClientRect() can have a different transform scale on
+          // WebKit PDF.js page re-render and must not be mixed with offsetTop.
+          const widthPx=button.offsetWidth,heightPx=button.offsetHeight;
           const top=button.offsetTop;
           let near=labelGap;
           const vertical=placed[side].filter(p=>top<p.top+p.height+3&&top+heightPx+3>p.top)
@@ -246,6 +255,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
           const edgeX=side==='left'?-2:width+2;
           const fromY=top+heightPx/2;
           const leader=document.createElementNS(ns,'polyline');
+          leader.dataset.child=String(placement.parentBlockId!==null&&placement.parentBlockId!==undefined);
           leader.setAttribute('points',`${startX},${fromY} ${edgeX},${fromY} ${edgeX},${placement.anchorY} ${placement.anchorX},${placement.anchorY}`);
           leaders.append(leader);
         }
@@ -261,6 +271,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       for(const {button} of badges)labelObserver.observe(button);
       pbsLabelObservers.set(page,labelObserver);
     }
+    updateSelectedNodes();
     if(focusRequest?.page===page){
       const found=visibleRects.find(entry=>entry.blockIds.has(focusRequest.id));
       if(found){
@@ -349,6 +360,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     blockGroups=normalized;
     if(levelChanged){chooseOverlayLevel(nextLevel);return true;}
     if(loaderChanged){
+      blockParents.clear();selectedBlockId=null;
       overlayRevision++;overlayCache.clear();overlayPending.clear();
       clearOverlayNodes();showOverlayPages();
     }else if(groupsChanged){
@@ -436,7 +448,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const oldTask=task;task=null;
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
-    focusRequest=null;selectedBlockId=null;
+    focusRequest=null;selectedBlockId=null;blockParents.clear();
     pageObserver.disconnect();
     clearOverlayNodes();viewer.setDocument(null);
     pageInput.value='1';count.textContent='/ —';zoomSelect.value='page-width';readyControls();
