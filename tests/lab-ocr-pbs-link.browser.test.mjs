@@ -160,6 +160,36 @@ try{
      document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="3"]')?.dataset.familySelected==='true');
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-box[data-id="b-child"]').getAttribute('data-family-selected'),'true');
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-box[data-id="b-right"]').getAttribute('data-family-selected'),'false');
+   // The PDF BOX highlight remains the established amber/orange, distinct
+   // from the family-colored PBS labels and their leader lines.
+   const colors=await page.evaluate(()=>{
+     const box=id=>document.querySelector(`.lab-ocr-pdf-overlay-box[data-id="${id}"]`);
+     const badge=id=>document.querySelector(`.lab-ocr-pdf-pbs-tag[data-block-id="${id}"]`);
+     const parentLine=document.querySelector('.lab-ocr-pdf-pbs-leaders polyline[data-child="false"]');
+     const childLine=document.querySelector('.lab-ocr-pdf-pbs-leaders polyline[data-child="true"]');
+     return {
+       directOutline:getComputedStyle(box('b-para')).outlineColor,
+       familyOutline:getComputedStyle(box('b-child')).outlineColor,
+       directFill:getComputedStyle(box('b-para')).backgroundColor,
+       familyFill:getComputedStyle(box('b-child')).backgroundColor,
+       parentLabel:getComputedStyle(badge('2')).backgroundColor,
+       childLabel:getComputedStyle(badge('3')).backgroundColor,
+       parentLine:getComputedStyle(parentLine).stroke,
+       childLine:getComputedStyle(childLine).stroke,
+       childLineStyle:getComputedStyle(childLine).strokeDasharray,
+     };
+   });
+   assert.equal(colors.directOutline,'rgb(255, 212, 108)','Direct Block restores original orange');
+   assert.equal(colors.familyOutline,'rgb(232, 170, 85)','Family Block uses softer orange');
+   assert.match(colors.directFill,/231, 183, 83/);
+   assert.match(colors.familyFill,/231, 183, 83/);
+   assert.notEqual(colors.parentLabel,colors.childLabel,'Parent and child PBS labels are green shades');
+   assert.notEqual(colors.parentLine,colors.childLine,'Leader colors distinguish parent from child');
+   for(const label of ['parentLine','childLine']){
+     const rgb=(colors[label].match(/\d+/g)||[]).map(Number);
+     assert(rgb[1]>rgb[0]&&rgb[1]>rgb[2],`PBS leader ${label} is green-toned ${JSON.stringify(colors)}`);
+   }
+   assert.match(colors.childLineStyle,/3/,'Child PBS leader is dashed');
    // PDF → AG by ID must distinguish parent and child even when PBS is shared
    // across unrelated processing groups.
    await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').click();

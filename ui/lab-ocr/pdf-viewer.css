@@ -63,7 +63,7 @@
   font-family:"OCR2MD Sarasa",monospace}
 .lab-ocr-pdf-pbs-leaders{position:absolute;inset:0;width:100%;height:100%;
   pointer-events:none;overflow:visible}
-.lab-ocr-pdf-pbs-leaders polyline{fill:none;stroke:#98b4aa;stroke-width:1;
+.lab-ocr-pdf-pbs-leaders polyline{fill:none;stroke:#679f87;stroke-width:1;
   vector-effect:non-scaling-stroke}
 .lab-ocr-pdf-pbs-tag{position:absolute;box-sizing:border-box;width:max-content;max-width:none;height:23px;
   padding:0 4px;border:1px solid #487563;border-radius:4px;background:#214538;color:#e7f3e6;
@@ -77,12 +77,12 @@
 .lab-ocr-pdf-pbs-tag[data-child="true"]{
   background:#31594e;border-color:#82bd9e;border-style:dashed;color:#e3f4e8}
 .lab-ocr-pdf-pbs-leaders polyline[data-child="true"]{
-  stroke:#8ac6a9;stroke-dasharray:3 2}
+  stroke:#a2d3b4;stroke-dasharray:3 2}
 .lab-ocr-pdf-overlay-box[data-child="true"]{
   box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #79c3a0;
   background:rgba(105,182,148,.09)}
-/* Direct selection distinguishes the selected Block from its descendants.
- * Related highlights use the SAME green palette at different intensities. */
+/* PBS tags remain jade green; direct versus descendant emphasis differs.
+ * PDF block selection itself uses the original amber-orange palette below. */
 .lab-ocr-pdf-pbs-tag[data-family-selected="true"]{
   background:#4a9371;border-color:#c5efd2;color:#fff;
   box-shadow:0 0 0 1px #92c8ab8c}
@@ -90,7 +90,10 @@
   background:#a6dfb2;border:1px solid #d6f8d2;color:#183a2d;
   line-height:20px;box-shadow:0 0 0 2px #8bdda78a}
 .lab-ocr-pdf-pbs-tag[data-selected="true"][data-child="true"]{border-style:dashed}
+/* Restore the established orange for PDF block selection. The chosen
+ * Block has the strong solid outline; descendants use a lighter dashed
+ * amber outline. The jade PBS badges/leader rails are a separate layer. */
 .lab-ocr-pdf-overlay-box[data-family-selected="true"]{
-  outline:1.5px dashed #88d8a8;outline-offset:1px;background:rgba(105,200,140,.23)}
+  outline:1.5px dashed #e8aa55;outline-offset:1px;background:rgba(231,183,83,.14)}
 .lab-ocr-pdf-overlay-box[data-selected="true"]{
-  outline:2px solid #b3edb6;outline-offset:1px;background:rgba(145,225,166,.30)}
+  outline:2px solid #ffd46c;outline-offset:1px;background:rgba(231,183,83,.20)}

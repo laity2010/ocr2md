@@ -61,6 +61,23 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let onBlockSelect=null,selectedBlockId=null,focusRequest=null;
   const overlayCache=new Map(),overlayPending=new Set(),blockParents=new Map();
   const railDepthByPage=new Map(),pbsLabelObservers=new Map();
+  const pbsRelayoutByPage=new Map();
+  // WebKit sometimes skips ResizeObserver notifications for max-content
+  // buttons when a late stylesheet changes font metrics. A single CSS-change
+  // observer also handles global font settings without polling or rereading SQL.
+  let styleRefitPending=false;
+  const scheduleStyleRefit=()=>{
+    if(disposed||styleRefitPending||!pbsRelayoutByPage.size)return;
+    styleRefitPending=true;
+    requestAnimationFrame(()=>{
+      styleRefitPending=false;
+      if(!disposed)for(const relayout of pbsRelayoutByPage.values())relayout();
+    });
+  };
+  const cssObserver=new MutationObserver(scheduleStyleRefit);
+  cssObserver.observe(document.head,{childList:true,subtree:true,attributes:true,
+    attributeFilter:['style','class','media']});
+  cssObserver.observe(document.documentElement,{attributes:true,attributeFilter:['style','class']});
   const labelGap=7; // actual button widths come from browser layout, not a fixed 78px chip
   function updateRailSpace(){
     let left=0,right=0;
@@ -84,7 +101,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   const resetRailSpace=()=>{railDepthByPage.clear();updateRailSpace();};
   const clearOverlayNodes=()=>{
     for(const observer of pbsLabelObservers.values())observer.disconnect();
-    pbsLabelObservers.clear();
+    pbsLabelObservers.clear();pbsRelayoutByPage.clear();
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer'))node.remove();
     resetRailSpace();
   };
@@ -111,6 +128,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(!host)return;
     host.querySelector('.lab-ocr-pdf-overlay-layer')?.remove();
     pbsLabelObservers.get(page)?.disconnect();pbsLabelObservers.delete(page);
+    pbsRelayoutByPage.delete(page);
     host.querySelector('.lab-ocr-pdf-pbs-layer')?.remove();
     if(overlayLevel!=='block'){railDepthByPage.delete(page);updateRailSpace();}
     const size=data?.pageSize;
@@ -270,6 +288,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       const labelObserver=new ResizeObserver(()=>positionBadges());
       for(const {button} of badges)labelObserver.observe(button);
       pbsLabelObservers.set(page,labelObserver);
+      pbsRelayoutByPage.set(page,positionBadges);
     }
     updateSelectedNodes();
     if(focusRequest?.page===page){
@@ -497,6 +516,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   return Object.freeze({loadPdf,setOverlays,focusBlock,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
+    cssObserver.disconnect();clearOverlayNodes();
     pageObserver.disconnect();
     const oldTask=task;task=null;
     if(resolvePaint){const finish=resolvePaint;resolvePaint=null;finish(false);}

@@ -92,3 +92,11 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - 初始 Block AG `block_group` 列的真实 `EnumCheckboxFilter` 模型为 `{block_group:{values:['para_blocks']}}`；复选菜单中只有 `para_blocks` 勾选、`all` 未勾。Frame 公共 `showSqlRows(rows,columns,{initialFilterModel})` 只在 AG 列/行初始化后调用 AG Grid 公开 `setFilterModel()`，由原始过滤器实际持有状态和触发既有 `onFilterChanged`，没有制作平行的过滤控件或直接操作 AG DOM。
 - PDF `setPdfOverlays({blockGroups:['para_blocks']})` 与 AG 同步，首次打开只绘制 `para_blocks` 的 Block/Span 几何；后续人工多选、空选、all、切换 Block/Span 与父子高亮保持可用。`openSql('block',{selectedId})` 从其它视图应 PDF 标签定位时，以被点选 Block 的来源组设置初始过滤，避免目标行被默认 para 隐藏。
 - SQLite、MinerU、PBS、Block ID 和原有用户数据完全不变；仅初始化及当前视图状态改变。`tests/lab-ocr-sample-flow.browser.test.mjs` 覆盖未绑定→保存→自动 Block／重载默认，`tests/lab-ocr-overlay-filter.browser.test.mjs` 覆盖 AG 初始勾选及 PDF 联动，`tests/lab-ocr-pbs-link.browser.test.mjs` 覆盖用户改 all 后的跨块组几何去重与双向定位。
+
+## PDF Block 橙色高亮与 PBS 父子标签颜色分离（2026-11-12）
+
+- 选中 **PDF 块覆盖框**恢复此前的橙色：直接选中的框 `#ffd46c` 实线 2px、橙色半透明内填充 `rgba(231,183,83,.20)`；同父族随动高亮的子／孙框采用稍浅的 `#e8aa55` 虚线 1.5px、同色系较淡填充 `.14`。全局覆盖框透明度机制仍然有效，普通非选中框的原始颜色不变。
+- **PBS 标签和引线**与 PDF 橙色选中框分层：父标签深绿、实线，引线使用相近的 `#679f87` 实线；子标签同系浅绿、虚线，引线用更亮的 `#a2d3b4` 虚线。标签选中态继续保留自己的绿系高亮；不把整套 PBS 标签或引线变成橙色。
+- 只修改 CSS 视觉样式。稳定 Block ID 父子递归选择、AG↔PDF、跨页、块组筛选、文本宽度紧包、避让算法、PDF 滚动与 SQL 均保持不变。专项真实浏览器断言读取 `getComputedStyle()`，验证原橙色框、随动橙色和父子标签/引线各自的相似色系差异。
+
+- WebKit 兼容补充：`width:max-content` 标签字体经新样式表替换时，某些 iPad WebKit 路径不派发 ResizeObserver；使用**单一、只监听 `head` 样式变动和根节点 `style/class` 的 MutationObserver**，下一帧重测现有 PBS 轨道，不改数据、不增加请求、不定时轮询。卸载 PDF 时清理观察器。确保字体变化不会使不同长度的相邻 PBS 再次重叠。
