@@ -76,7 +76,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return url.pathname+url.search;
   };
   let lastPdfWorkspace='',lastOverlayWorkspace='';
-  let blockGroupSelection=null;
+  const DEFAULT_BLOCK_GROUP='para_blocks';
+  let blockGroupSelection=[DEFAULT_BLOCK_GROUP];
   function applyBlockGroups(types){
     const selected=types===null?null:[...new Set(types.map(String))].sort();
     if(JSON.stringify(selected)===JSON.stringify(blockGroupSelection))return;
@@ -164,7 +165,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const epoch=++operation;
     workspace=nextWorkspace;
     tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();frame.clearSqlRows();
-    applyBlockGroups(null);
+    applyBlockGroups([DEFAULT_BLOCK_GROUP]);
     if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
     try{
@@ -204,9 +205,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const saved=await savedWorkspace();
     if(!saved){++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();
       frame.clearSqlRows();prepareOverlays('');warmPdf('');await showModule('settings');
-      onStatus('尚未绑定工作区，请在全局设置中选择书籍目录','warning');return;}
+      onStatus('尚未绑定工作区，请在全局设置中选择书籍目录','warning');return false;}
     const success=await inspectAndImport(saved);
-    if(success){await showModule('frame');prepareOverlays(saved);warmPdf(saved);}
+    if(success){prepareOverlays(saved);warmPdf(saved);}
+    return success;
   }
   async function openSql(table='minerujson',{selectedId=null}={}){
     if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return false;}
@@ -232,7 +234,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         filterValueGetter:params=>params.data?.[column.field]??'',
         suppressHeaderMenuButton:true,
         suppressHeaderFilterButton:false,
-      })),{onFilterChanged:model=>{
+      })),{initialFilterModel:table==='block'?{block_group:{values:[
+        selectedId===null?DEFAULT_BLOCK_GROUP:
+          (entries.find(row=>String(row.block_id)===String(selectedId))?.block_group??DEFAULT_BLOCK_GROUP),
+      ]}}:null,onFilterChanged:model=>{
         // AG Block group (block_group) is authoritative; Block Type is not.
         // Other column filters do not change PDF overlay visibility.
         applyBlockGroups(table==='block'?(model?.block_group?.values??null):null);
@@ -248,7 +253,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         onStatus(`PDF → AG · BlockID ${selectedId} 不在当前载入行中`,'warning');
         return false;
       }
-      onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行，AG 作为分类定位视图`,'ok');
+      onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行${table==='block'?'，块组默认 para_blocks':''}，AG 作为分类定位视图`,'ok');
       return true;
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');return false;}
   }

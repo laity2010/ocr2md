@@ -199,8 +199,12 @@ async function showModule(name){
 $('global-save').addEventListener('click',async()=>{
   if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}
   if(!settings.hasUnsaved()){topStatus('当前没有待保存的全局设置');return;}
-  try{const saved=await settings.save();topStatus(saved?'✓ 全局设置已保存':'● 保存期间设置有新修改',saved?'ok':'warning');
-    if(saved&&ocrWorkflow)await ocrWorkflow.afterSave();}
+  try{const revision=manualNavigationRevision;
+    const saved=await settings.save();topStatus(saved?'✓ 全局设置已保存':'● 保存期间设置有新修改',saved?'ok':'warning');
+    if(saved&&ocrWorkflow){
+      const ready=await ocrWorkflow.afterSave();
+      if(ready&&revision===manualNavigationRevision)await showModule('sql:block');
+    }}
   catch(error){topStatus('保存失败：'+error.message,'error');}
 });
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.
@@ -217,7 +221,13 @@ if(labName==='lab-ocr'){
       const saved=await ocrWorkflow.savedWorkspace();
       if(!saved){if(bootNavigationRevision===manualNavigationRevision)await showModule('settings');
         topStatus('尚未绑定书籍工作目录，请在全局设置中选择 sample/ 并保存','warning');}
-      else{if(bootNavigationRevision===manualNavigationRevision)await showModule('frame');await ocrWorkflow.initialize();}
+      else{
+        if(bootNavigationRevision===manualNavigationRevision)await showModule('frame');
+        const initialized=await ocrWorkflow.initialize();
+        // Async inspection must never override explicit user navigation.
+        if(initialized&&bootNavigationRevision===manualNavigationRevision)
+          await showModule('sql:block');
+      }
     }catch(error){topStatus('Lab OCR 初始化失败：'+error.message,'error');}
   })();
 }else void showModule('frame');

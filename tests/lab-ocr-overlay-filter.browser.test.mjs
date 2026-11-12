@@ -114,11 +114,10 @@ try{
      });
      assert.deepEqual(await ids(),expected);
    };
-   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-overlay-layer[data-level="block"][data-page="1"] .lab-ocr-pdf-overlay-box').length===5);
-   await expectIds(['b-para-text','b-para-table','b-para-inner','b-discard','b-preproc-only']); // all groups deduplicated
-   await page.locator('#workspace .ocr-navigation-files .ts-control').click();
-   await page.locator('.ocr-navigation-popup-files:visible .option').filter({hasText:'block'}).click();
-   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===7);
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-overlay-layer[data-level="block"][data-page="1"] .lab-ocr-pdf-overlay-box').length===3);
+   await expectIds(['b-para-text','b-para-table','b-para-inner']); // para only at startup
+   await page.waitForFunction(()=>document.querySelector('select.ocr-source-file-select')?.value==='sql:block'&&
+     document.querySelectorAll('#workspace .ag-row').length===3);
    assert.equal(rowRequests,1);
    // Block group comes near the start of the table: do not select Block Type.
    const header=page.locator('#workspace .ag-header-cell[col-id="block_group"]');
@@ -136,8 +135,12 @@ try{
    await panel.waitFor({state:'visible'});
    assert.equal(await panel.getAttribute('aria-label'),'块组 筛选');
    const checkbox=type=>panel.locator(`.ocr-enum-filter-option[data-filter-value="${type}"] input`);
+   assert.equal(await checkbox('all').isChecked(),false);
+   assert.equal(await checkbox('para_blocks').isChecked(),true);
+   assert.equal(await checkbox('preproc_blocks').isChecked(),false);
+   assert.equal(await checkbox('discarded_blocks').isChecked(),false);
    const stableRequests=overlayRequests.length;
-   await checkbox('all').uncheck();
+   await checkbox('para_blocks').uncheck();
    await expectIds([]);
    await checkbox('para_blocks').check();
    await expectIds(['b-para-text','b-para-table','b-para-inner']);

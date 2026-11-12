@@ -56,12 +56,21 @@ try{
           3:[{id:'span-3',bbox:[90,130,150,150]}]},
       };
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-        level,page:number,pageSize:[595,842],boxes:fixtures[level][number]||[]})});
+        level,page:number,pageSize:[595,842],boxes:(fixtures[level][number]||[]).map(box=>({...box,blockGroup:'para_blocks'}))})});
     }
     if(operation==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       status:'unchanged',blocks:2,pages:3,pdf:'original.pdf',sources:[{name:'mineru.json',pages:3}]})});
     if(operation==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":2}'});
     if(operation==='minerujson2span')return route.fulfill({status:200,contentType:'application/json',body:'{"spans":2}'});
+    if(operation==='rows'){
+      assert.equal(new URL(route.request().url()).searchParams.get('table'),'block');
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'block',total:2,rows:[
+        {block_id:1,global_page:0,block_group:'para_blocks',pbs:'p1b0',parent_block_id:null,block_type:'text',
+          block_bbox_json:'[72,60,360,155]',block_json:'{"type":"text"}'},
+        {block_id:2,global_page:0,block_group:'para_blocks',pbs:'p1b1',parent_block_id:null,block_type:'text',
+          block_bbox_json:'[30,180,400,260]',block_json:'{"type":"text"}'},
+      ]})});
+    }
     throw Error('Unexpected OCR API: '+operation);
    });
    const response=await page.goto(url,{waitUntil:'domcontentloaded'});

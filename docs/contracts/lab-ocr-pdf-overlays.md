@@ -85,3 +85,10 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - 身份使用 `blockId`/`parentBlockId` 建立只读 `Map`，`pbs` 仅用于显示，编号变化不会破坏关系。每次按页返回覆盖框数据时合并关系（包括来源块组未选中的 ID）；显示仍严格遵守块组筛选。几何去重时保留代表框全部原始 Block ID 别名，选中父块或别名后都能找到正确的可见子孙。跨页后代在相关页面被加载/渲染后高亮，不要求预取整本 SQLite。缺失、循环或自引用的父关系必须安全结束。
 - 新模块内部纯函数 `indexBlockParents(parentMap,boxes)` 与 `blockHighlight(ids,selectedId,parents)` 放在 `ui/lab-ocr/pbs-family.js`，由直接单元测试 `tests/lab-ocr-pbs-family.test.mjs` 覆盖递归、反向/兄弟隔离、去重别名、重命名 PBS 以及坏链路安全。`tests/lab-ocr-pbs-link.browser.test.mjs` 在 Chromium/iPad WebKit 使用真 PDF.js/AG 和模拟多页父子结构，验证父/子配色、PDF 标签与覆盖框全部后代高亮、跨页、子块单选、AG 反向定位、去重来源、字体调整与缩放。
 - 高亮时**维持 1px 边框宽**，不改变标签盒子大小（用描边外阴影表现醒目程度）；轨道布局使用 `offsetWidth/offsetHeight/offsetTop` 一致的页面布局像素系，规避 iPad WebKit PDF 变换尺度与 DOM 矩形混用造成的密集标签二次重叠。
+
+## lab-ocr 默认 AG Block 与 para 块组（2026-11-12）
+
+- 在保存过的资料目录成功初始化完 SQLite `block` 与 `span` 后，lab-ocr 默认打开 **SQLite → block**，而不是空 AG 或 `minerujson`；新绑定目录并保存也进入 Block。未绑定目录仍打开全局设置；加载中用户主动选择其他导航，则用户选择优先于自动入口。
+- 初始 Block AG `block_group` 列的真实 `EnumCheckboxFilter` 模型为 `{block_group:{values:['para_blocks']}}`；复选菜单中只有 `para_blocks` 勾选、`all` 未勾。Frame 公共 `showSqlRows(rows,columns,{initialFilterModel})` 只在 AG 列/行初始化后调用 AG Grid 公开 `setFilterModel()`，由原始过滤器实际持有状态和触发既有 `onFilterChanged`，没有制作平行的过滤控件或直接操作 AG DOM。
+- PDF `setPdfOverlays({blockGroups:['para_blocks']})` 与 AG 同步，首次打开只绘制 `para_blocks` 的 Block/Span 几何；后续人工多选、空选、all、切换 Block/Span 与父子高亮保持可用。`openSql('block',{selectedId})` 从其它视图应 PDF 标签定位时，以被点选 Block 的来源组设置初始过滤，避免目标行被默认 para 隐藏。
+- SQLite、MinerU、PBS、Block ID 和原有用户数据完全不变；仅初始化及当前视图状态改变。`tests/lab-ocr-sample-flow.browser.test.mjs` 覆盖未绑定→保存→自动 Block／重载默认，`tests/lab-ocr-overlay-filter.browser.test.mjs` 覆盖 AG 初始勾选及 PDF 联动，`tests/lab-ocr-pbs-link.browser.test.mjs` 覆盖用户改 all 后的跨块组几何去重与双向定位。

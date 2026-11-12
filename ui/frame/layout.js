@@ -80,7 +80,7 @@ function mountEmptyGrid(host){
     columnDefs,rowData:[]});
   // The AG pane owns the Grid API. Other modules may only update rows/columns
   // through this explicit, narrow component boundary; no private AG DOM access.
-  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected,onFilterChanged}){
+  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected,onFilterChanged,initialFilterModel=null}){
     selectedListener=onRowSelected??(()=>{});
     // Ignore transient filter-change events while replacing a whole SQL table.
     filterListener=()=>{};
@@ -88,6 +88,9 @@ function mountEmptyGrid(host){
     grid.setFilterModel(null);
     grid.setGridOption('columnDefs',columns);
     grid.setGridOption('rowData',rows);
+    // Apply the caller's startup selection through AG Grid's public filter
+    // model before subscribing to changes; the real checkbox UI stays owner.
+    if(initialFilterModel)grid.setFilterModel(initialFilterModel);
     filterListener=onFilterChanged??(()=>{});
     filterListener(grid.getFilterModel());
     // Avoid carrying horizontal scroll from the previous table into the new
@@ -310,12 +313,12 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
-    showSqlRows(rows,columns,{onSelect,onFilterChanged}={}){
+    showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
-      port.show({rows:cm.rows(),columns,onFilterChanged,onRowSelected:row=>{
+      port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,onRowSelected:row=>{
         cm.select(row);
         onSelect?.(row);
       }});

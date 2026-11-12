@@ -102,6 +102,19 @@ try{
      !!document.querySelector('select.ocr-source-file-select option[value="sql:minerujson"]'),null,{timeout:20000});
    assert.equal(await page.locator('#workspace').isVisible(),true);
    assert.equal(importCount,1,'First book should import just once');
+   await page.waitForFunction(()=>document.querySelector('#workspace select.ocr-source-file-select')?.value==='sql:block'&&
+     document.querySelectorAll('#workspace .ag-row').length===3,null,{timeout:19000});
+   assert.equal(rowsCount,1,'Newly bound book opens Block SQL once');
+   assert.equal(await page.locator('#workspace .ag-row').count(),3,'Only para_blocks rows are shown by default');
+   const startupFilterButton=page.locator('#workspace .ag-header-cell[col-id="block_group"] .ag-header-cell-filter-button');
+   await startupFilterButton.click();
+   const startupFilter=page.locator('.ocr-enum-filter:visible');
+   await startupFilter.waitFor({state:'visible'});
+   const startupChecked=async value=>startupFilter.locator(`.ocr-enum-filter-option[data-filter-value="${value}"] input`).isChecked();
+   assert.equal(await startupChecked('all'),false);
+   assert.equal(await startupChecked('para_blocks'),true);
+   assert.equal(await startupChecked('discarded_blocks'),false);
+   await startupFilterButton.click();
    const nav=page.locator('#workspace select.ocr-source-file-select');
    assert.deepEqual(await nav.locator('optgroup[label="SQLite"] option').allInnerTexts(),['minerujson','block','span']);
    // Exercise the real visible Tom Select dropdown, not only the hidden
@@ -139,7 +152,7 @@ try{
    await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===2);
    assert.equal(await box('all').isChecked(),true);
    // Filtering is entirely client-side and never writes to the SQL backend.
-   assert.equal(rowsCount,1,'Checkbox filtering must not reread or mutate SQLite');
+   assert.equal(rowsCount,2,'Checkbox filtering must not reread or mutate SQLite');
    // New SQL → span uses CM6 as the row-state owner, AG only as its projection.
    await page.locator('#workspace .ocr-navigation-files .ts-control').click();
    const spanDropdown=page.locator('.ocr-navigation-popup-files:visible');
@@ -160,7 +173,7 @@ try{
    await page.locator('#workspace .ocr-navigation-files .ts-control').click();
    const blockDropdown=page.locator('.ocr-navigation-popup-files:visible');
    await blockDropdown.locator('.option').filter({hasText:'block'}).click();
-   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===4);
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===3);
    assert.match(await page.locator('#status').innerText(),/block：CM6 已加载 4 行/);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="pbs"]').count(),1);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_id"]').count(),1);
@@ -171,6 +184,9 @@ try{
    const groupHeader=page.locator('#workspace .ag-header-cell[col-id="block_group"]');
    await groupHeader.locator('.ag-header-cell-filter-button').click();
    const blockFilter=page.locator('.ocr-enum-filter:visible');
+   assert.equal(await blockFilter.locator('.ocr-enum-filter-option[data-filter-value="para_blocks"] input').isChecked(),true);
+   await blockFilter.locator('.ocr-enum-filter-option[data-filter-value="all"] input').check();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===4);
    await blockFilter.locator('.ocr-enum-filter-option[data-filter-value="discarded_blocks"] input').uncheck();
    await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===3);
    await page.locator('#workspace .ag-row').first().click();
@@ -178,7 +194,7 @@ try{
    assert.match(await page.locator('#workspace .ocr-cm-source .cm-content').innerText(),/inline_equation/);
    assert.match(await page.locator('#status').innerText(),/Block 定位：p1b0 · BlockID 1 · ParentID NULL/);
    assert.equal(await page.evaluate(()=>document.querySelector('#workspace .ocr-cm-source').ocrCmTable.selected()),1);
-   assert.equal(rowsCount,3,'Block and Span filtering must not query SQL again');
+   assert.equal(rowsCount,4,'Block and Span filtering must not query SQL again');
    assert.equal(blockCreateCount,1,'Block table created once');
    assert.equal(spanCreateCount,1,'span generation must be idempotent at initialization');
 
@@ -186,6 +202,8 @@ try{
    await page.locator('#workspace .dv-content-container').first().waitFor({timeout:18000});
    await page.waitForFunction(()=>!!document.querySelector('select.ocr-source-file-select option[value="sql:minerujson"]')&&!!document.querySelector('select.ocr-source-file-select option[value="sql:block"]')&&!!document.querySelector('select.ocr-source-file-select option[value="sql:span"]'),null,{timeout:20000});
    assert.equal(importCount,1,'Reload must not re-import unchanged JSON');
+   await page.waitForFunction(()=>document.querySelector('#workspace select.ocr-source-file-select')?.value==='sql:block'&&
+     document.querySelectorAll('#workspace .ag-row').length===3,null,{timeout:20000});
    assert(importCount>0&&inspectCount>=2&&rowsCount>0&&spanCreateCount>=2&&blockCreateCount>=2);
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_SAMPLE_FLOW_PASS',name,JSON.stringify({inspectCount,importCount,spanCreateCount,blockCreateCount,rowsCount}));

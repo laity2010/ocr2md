@@ -137,6 +137,15 @@ try{
    assert.equal(rowsReads,1,'PDF selection should initialize AG block table once');
    assert.match(await page.locator('#status').innerText(),/PDF → AG · p1b1 · BlockID 4/);
    assert.match(await page.locator('.ocr-cm-source .cm-content').innerText(),/"blockId": "4"/);
+   // Default AG/PDF show only para_blocks. Explicitly include other groups
+   // before exercising the old cross-group deduplicated alias selection.
+   await page.locator('#workspace .ag-header-cell[col-id="block_group"] .ag-header-cell-filter-button').click();
+   const groupFilter=page.locator('.ocr-enum-filter:visible');
+   assert.equal(await groupFilter.locator('.ocr-enum-filter-option[data-filter-value="para_blocks"] input').isChecked(),true);
+   assert.equal(await groupFilter.locator('.ocr-enum-filter-option[data-filter-value="preproc_blocks"] input').isChecked(),false);
+   await groupFilter.locator('.ocr-enum-filter-option[data-filter-value="all"] input').check();
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-box[data-id="b-para"]')?.dataset.blockIds.split(' ').includes('1')); // AG virtualizes rows
+   await page.locator('#workspace .ag-header-cell[col-id="block_group"] .ag-header-cell-filter-button').click();
    // AG → PDF: select an alias Block ID whose geometry was merged into
    // representative b-para (same PBS as ID 2, different processing group).
    await page.locator('#workspace .ag-row .ag-cell[col-id="block_id"]').filter({hasText:/^1$/}).click();
