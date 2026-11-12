@@ -94,9 +94,9 @@
   border-width:1px;border-style:solid;line-height:20px;
   box-shadow:0 0 0 2px #eec45b}
 /* Restore the established orange for PDF block selection. The chosen
- * Block has the strong solid outline; descendants use a lighter dashed
- * amber outline. The Main-colored PBS badges/leader rails are separate. */
+ * Block and every highlighted descendant use SOLID outlines; descendants
+ * stay softer amber. The Main-colored PBS badges/leader rails are separate. */
 .lab-ocr-pdf-overlay-box[data-family-selected="true"]{
-  outline:1.5px dashed #e8aa55;outline-offset:1px;background:rgba(231,183,83,.14)}
+  outline:1.5px solid #e8aa55;outline-offset:1px;background:rgba(231,183,83,.14)}
 .lab-ocr-pdf-overlay-box[data-selected="true"]{
   outline:2px solid #ffd46c;outline-offset:1px;background:rgba(231,183,83,.20)}

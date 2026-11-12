@@ -23,8 +23,12 @@ const blocks=[
 // source group (so the overlay dedup is not allowed to drop either ID).
 const page11=[
  {id:'p11-a',blockId:'101',pbs:'p11b0',group:'para_blocks',type:'text',bbox:[72,60,300,128]},
+ // MinerU can give an s1 exactly its parent bbox. It must keep its own
+ // clickable PBS even while the identical geometry is rendered only once.
+ {id:'p11-a-s1',blockId:'108',pbs:'p11b0s1',parentBlockId:'101',group:'para_blocks',type:'text',bbox:[72,60,300,128]},
  {id:'p11-b',blockId:'102',pbs:'p11b01',parentBlockId:'101',group:'para_blocks',type:'text',bbox:[73,61,301,129]},
  {id:'p11-c',blockId:'103',pbs:'p11b02',parentBlockId:'102',group:'para_blocks',type:'text',bbox:[77,62,240,131]},
+ {id:'p11-c-s1',blockId:'109',pbs:'p11b01s1',parentBlockId:'102',group:'para_blocks',type:'text',bbox:[77,62,240,131]},
  {id:'p11-return',blockId:'104',pbs:'p11b3',group:'para_blocks',type:'title',bbox:[74,220,220,256]},
  {id:'p11-right',blockId:'105',pbs:'p11b4',group:'para_blocks',type:'table',bbox:[410,60,560,127]},
  {id:'p11-right2',blockId:'106',pbs:'p11b05',parentBlockId:'105',group:'para_blocks',type:'table',bbox:[411,61,561,129]},
@@ -74,9 +78,9 @@ try{
       })});
     }
     if(op==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      status:'unchanged',blocks:73,pages:11,pdf:'book.pdf',sources:[{name:'source.json',pages:11}]})});
-    if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":73}'});
-    if(op==='minerujson2span')return route.fulfill({status:200,contentType:'application/json',body:'{"spans":73}'});
+      status:'unchanged',blocks:75,pages:11,pdf:'book.pdf',sources:[{name:'source.json',pages:11}]})});
+    if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":75}'});
+    if(op==='minerujson2span')return route.fulfill({status:200,contentType:'application/json',body:'{"spans":75}'});
     if(op==='rows'){
       rowsReads++;
       assert.equal(parsed.searchParams.get('table'),'block');
@@ -167,6 +171,8 @@ try{
      return {
        directOutline:getComputedStyle(box('b-para')).outlineColor,
        familyOutline:getComputedStyle(box('b-child')).outlineColor,
+       directOutlineStyle:getComputedStyle(box('b-para')).outlineStyle,
+       familyOutlineStyle:getComputedStyle(box('b-child')).outlineStyle,
        directFill:getComputedStyle(box('b-para')).backgroundColor,
        familyFill:getComputedStyle(box('b-child')).backgroundColor,
        parentLabel:getComputedStyle(badge('2')).backgroundColor,
@@ -178,6 +184,8 @@ try{
    });
    assert.equal(colors.directOutline,'rgb(255, 212, 108)','Direct Block restores original orange');
    assert.equal(colors.familyOutline,'rgb(232, 170, 85)','Family Block uses softer orange');
+   assert.equal(colors.directOutlineStyle,'solid','Direct PDF block highlight stays solid');
+   assert.equal(colors.familyOutlineStyle,'solid','All PDF descendant highlights are solid, not dashed');
    assert.match(colors.directFill,/231, 183, 83/);
    assert.match(colors.familyFill,/231, 183, 83/);
    assert.equal(colors.parentLabel,'rgba(39, 63, 60, 0.94)','Main parent background survives selection');
@@ -306,8 +314,12 @@ try{
    await page.locator('.lab-ocr-pdf-page').fill('11');
    await page.locator('.lab-ocr-pdf-page').press('Tab');
    const p11=page.locator('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag');
-   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===7,
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===9,
      null,{timeout:19000});
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-page="11"] .lab-ocr-pdf-overlay-box').count(),7,
+     'Identical parent/s1 bboxes must still render only one coverage rectangle');
+   assert.deepEqual((await p11.allTextContents()).filter(x=>x.endsWith('s1')).sort(),
+     ['p11b0s1','p11b01s1','p11b07s1'].sort(),'Both exact-bbox s1 tags must remain visible alongside the existing s1');
    const verifyNoOverlap=async(label)=>{
      const rects=await p11.evaluateAll(nodes=>nodes.map(n=>{
        const b=n.getBoundingClientRect();return {name:n.textContent,side:n.dataset.side,
@@ -335,9 +347,16 @@ try{
    assert.equal(await box11(107).getAttribute('data-family-selected'),'true');
    await badge(101).click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="103"]')?.dataset.familySelected==='true');
-   for(const child of [102,103]){
+   for(const child of [102,103,108,109]){
      assert.equal(await badge(child).getAttribute('data-family-selected'),'true');
-     assert.equal(await box11(child).getAttribute('data-family-selected'),'true');
+     if(child===108){
+       // One physical rectangle represents both the directly selected
+       // parent 101 and child 108, so direct selection wins for that BOX;
+       // their two PBS labels still have independent family/direct states.
+       assert.equal(await box11(child).getAttribute('data-selected'),'true');
+     }else assert.equal(await box11(child).getAttribute('data-family-selected'),'true');
+     assert.equal(await box11(child).evaluate(el=>getComputedStyle(el).outlineStyle),'solid',
+       'Parent-selected PDF child and grandchild highlights must both be solid');
      assert.equal(await badge(child).getAttribute('data-selected'),'false');
    }
    for(const unrelated of [104,105,106,107]){
@@ -359,7 +378,15 @@ try{
    assert.equal(await badge(101).getAttribute('data-selected'),'false');
    assert.equal(await badge(102).getAttribute('data-selected'),'true');
    assert.equal(await badge(103).getAttribute('data-family-selected'),'true','Child is parent of its grandchild');
+   assert.equal(await badge(109).getAttribute('data-family-selected'),'true','Identical-box s1 grandchild inherits selection');
+   assert.equal(await badge(108).getAttribute('data-family-selected'),'false','Sibling s1 is not selected with its brother');
    assert.equal(await badge(106).getAttribute('data-family-selected'),'false');
+   await badge(101).click();
+   await badge(108).click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='108');
+   assert.equal(await badge(101).getAttribute('data-selected'),'false',
+     'Same-bbox s1 click must select only its own stable Block ID, not the parent tag');
+   assert.equal(await badge(108).getAttribute('data-selected'),'true');
    await badge(101).click();
    assert.deepEqual(p11Original.map(x=>x.name).sort(),page11.map(x=>x.pbs).sort());
    await mkdir('.runtime/pbs-overlap-evidence',{recursive:true});
@@ -379,7 +406,7 @@ try{
    await page.waitForTimeout(250);
    const p11Resized=await verifyNoOverlap('page 11 after font change');
    await page.locator('.lab-ocr-pdf-scale').selectOption('150');
-   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===7);
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="11"] .lab-ocr-pdf-pbs-tag').length===9);
    await page.waitForTimeout(350);
    await verifyNoOverlap('page 11 at 150% zoom');
    await page.evaluate(()=>{
@@ -388,7 +415,7 @@ try{
      if(button&&scroller)scroller.scrollLeft+=button.getBoundingClientRect().left-scroller.getBoundingClientRect().left-90;
    });
    await page.screenshot({path:`.runtime/pbs-overlap-evidence/page11-${name.replace(/[^a-z0-9-]/gi,'_')}-stress.png`});
-   await p11.filter({hasText:'p11b01'}).click();
+   await badge(102).click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='102');
    assert.match(await page.locator('.ocr-cm-source .cm-content').innerText(),/\"blockId\": \"102\"/); // status can be replaced by async version check
    assert.deepEqual(errors,[]);

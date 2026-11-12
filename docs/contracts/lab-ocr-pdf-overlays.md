@@ -53,7 +53,7 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 
 - **仅 Block 粒度显示 PBS 标签**。Block 的只读页面投影增加 `blockId`（`block.block_id`，字符串）、`pbs`（人类可读）、`parentBlockId`（父块数字 ID 的字符串或 null）；Span 通过 `span.block_id → block.source_block_key` 只读关联同一组身份，不显示逐 Span 的重复 PBS 标签。`id` 仍是该粒度原始矩形身份，不能拿 `pbs` 当唯一 ID。数据库字段、MinerU JSON、CMD 原文均不修改，API 不返回正文。
 - PDF 继续使用单一 `setOverlays(config)` 配置注入：可附加 `onBlockSelect({blockId,pbs,page,blockGroup})` 回调，通知调用方**用户点击**的 Block，其他内部重绘绝不触发选择回调。公共 `focusBlock({id,page})` 在 AG 发起定位时设定 selected Block ID、必要时切回 Block 粒度、跳页、定位已缓存或待加载的对应 bbox，不修改数据或重复载入 PDF。懒装配的 PDF 适配器转发这两个能力。
-- Block 页级去重后每一个视觉代表框持有**完整别名 `blockId` 集合**，包括跨块组完全相同或 IoU≥0.94 的略错位源矩形。仅绘制优先级最高的一份框和 PBS 标签，但 AG 点击任一对应原 Block ID 均高亮这份代表。框与标签共用选中状态，选择不会改变块组过滤，也不会触发 SQL 重查。
+- Block 页级去重后每一个视觉代表框持有**完整别名 `blockId` 集合**，包括跨块组完全相同或 IoU≥0.94 的略错位源矩形。几何覆盖框仍只绘制优先级最高的一份，AG 点击任一对应原 Block ID 均高亮这份代表；**PBS 标签独立于框去重**：同一页不同 PBS 即使 bbox 完全相同（常见父块与 `s1`、兄弟子块），也各有独立标签、引线和点击 Block ID；仅跨块组相同 PBS 的别名共用一个标签。选中不改变块组过滤，也不触发 SQL 重查。
 - PBS 是带引线的**独立不透明交互层**，覆盖框仍保持原有的透明度和 `pointer-events:none`；只读标签固定 23px 高，按离版面较近的左／右轨道放在纸页外的侧栏，页面适宽缩放会为侧栏预留空间。引线指向原框边缘。子块通过 `parentBlockId` 改用区别颜色。标签按原始纵向锚点放置；若内侧已有标签占据相同高度，则**只向外移一个或多个水平轨道，不改变标签纵坐标，也不合并为 `+N`**。后续标签只要内侧高度空闲就立刻回到原轨道。左右两侧独立计算，每个可见去重 Block 始终有自己可点击的 PBS 标签；引线随水平距离伸长。
 - Frame 暴露两个**受控语义端口**：`focusPdfBlock({id,page})` 代理 PDF 公共 `focusBlock`；`selectSqlRowById({field:'block_id',id})` 通过 AG 组件端口定位、聚焦/选中行并送 CM6 展示同一 SQL 行，不操作 AG 私有 DOM。AG 如有不相关列过滤挡住了目标，保留 `block_group` 筛选而清除其他隐藏目标的条件。Lab OCR 在 AG Block 行点击时调用前者；PDF 点击 PBS 时调用后者，如果 Block 表尚未打开则复用 `openSql('block')` 打开并选中目标。
 - 验收：Python `lab-ocr-overlays.test.py` / `lab-ocr-overlays-http.test.py` 核实原生身份、父子、Span 归属与授权；Node `lab-ocr-pbs-layout.test.mjs` 直接测试多轨避让、内轨回归及全部独立标签；`lab-ocr-pbs-link.browser.test.mjs` 在 Chromium 和 iPad WebKit 用真实 AG、PDF.js 测标签显示、纸页外定位、缩放、分栏、别名高亮、AG↔PDF 跨页和密集多轨可点击标签。原有 PDF/块组筛选/Frame/授权/OCR 回归保持通过。
@@ -95,10 +95,15 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 
 ## PDF Block 橙色高亮与 PBS 父子标签颜色分离（2026-11-12）
 
-- 选中 **PDF 块覆盖框**恢复此前的橙色：直接选中的框 `#ffd46c` 实线 2px、橙色半透明内填充 `rgba(231,183,83,.20)`；同父族随动高亮的子／孙框采用稍浅的 `#e8aa55` 虚线 1.5px、同色系较淡填充 `.14`。全局覆盖框透明度机制仍然有效，普通非选中框的原始颜色不变。
+- 选中 **PDF 块覆盖框**恢复此前的橙色：直接选中的框 `#ffd46c` 实线 2px、橙色半透明内填充 `rgba(231,183,83,.20)`；同父族随动高亮的子／孙框采用稍浅的 `#e8aa55` **实线** 1.5px、同色系较淡填充 `.14`，不再以虚线区别子孙。全局覆盖框透明度机制仍然有效，普通非选中框的原始颜色不变。
 - **PBS 标签和引线**与 PDF 橙色选中框分层：PBS 父标签完全采用 Main 灰绿色与实线边框，引线 `#8cb6a3` 实线；PBS 子标签采用 Main 蓝灰色与实线边框，引线 `#8ab5da` 实线。选中标签保持各自原背景与边框颜色，仅加 Main 类似的外侧金色高亮环，不把 PBS 标签和引线整体染橙。
 - 只修改 CSS 视觉样式。稳定 Block ID 父子递归选择、AG↔PDF、跨页、块组筛选、文本宽度紧包、避让算法、PDF 滚动与 SQL 均保持不变。专项真实浏览器断言读取 `getComputedStyle()`，验证原橙色框、随动橙色，以及父／子标签、引线与 Main 所用颜色逐项一致，且均无虚线边框。
 
 - WebKit 兼容补充：`width:max-content` 标签字体经新样式表替换时，某些 iPad WebKit 路径不派发 ResizeObserver；使用**单一、只监听 `head` 样式变动和根节点 `style/class` 的 MutationObserver**，立即同步重测现有 PBS 轨道并在下一帧补测，避免公网 iPad WebKit 延迟 requestAnimationFrame 时短暂交叠，不改数据、不增加请求、不定时轮询。卸载 PDF 时清理观察器。确保字体变化不会使不同长度的相邻 PBS 再次重叠。
+
+## 子块 PBS 漏标修复（2026-11-12）
+
+- 先前完全相同的 bbox 会被单个矩形代表去重，但 PBS 标签也错误地只从代表块生成，令父块／兄弟块相同 bbox 的 `s1` 消失。现在只合并**视觉覆盖框**；按不同 PBS 分别生成标签，各自持有稳定 Block ID 与真实原始 bbox 锚点、独立选择状态及引线，不能因为几何重叠漏掉 `s1`。
+- 精确相同 bbox 且 PBS 不同的 Block 在单页仍只画一份几何框、显示多个避让标签；跨块组**同名 PBS** 仍合并一个标签，保留全部别名 Block ID 的 AG 反向高亮。浏览器回归在第 11 页加入 `p11b0s1`、`p11b01s1` 两例完全重合几何，验收两个 `s1` 标签同时可见、标签互不重叠、点击 `s1` 只选中对应 ID，选父块递归高亮 `s1`，并测试 150% 缩放与字体变化；不需要修改 SQLite、MinerU JSON 或 PDF 本体。
 
 2026-11-12 最终颜色裁决：以当前 Main `ui/pdf-preview.css` 的 PBS 父（灰绿）／子（蓝灰）方案为唯一对照来源。不要再使用 Lab 先前深绿／浅绿和虚线区分的方案；只读 Lab 的 PBS 标签和引线都不设置虚线，PDF Block 被选中的橙色覆盖框保持独立。

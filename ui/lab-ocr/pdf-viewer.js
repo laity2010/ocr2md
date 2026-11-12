@@ -114,6 +114,19 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     resetRailSpace();
   };
   const blockIdOf=item=>item?.blockId==null?null:String(item.blockId);
+  // Geometry dedup must NOT dedup distinct logical PBS labels. A parent and
+  // its s1 (or two siblings) can have identical MinerU bboxes. Reuse one
+  // coverage rectangle, but retain one clickable tag per distinct PBS.
+  // Same-PBS aliases from overlapping processing groups share a single tag.
+  function includePbsLabel(entry,item,bbox){
+    if(overlayLevel!=='block')return;
+    const blockId=blockIdOf(item),pbs=item?.pbs==null?'':String(item.pbs);
+    if(!blockId||!pbs)return;
+    const existing=entry.labels.find(label=>label.pbs===pbs);
+    if(existing){existing.blockIds.add(blockId);return;}
+    entry.labels.push({pbs,blockId,group:String(item.blockGroup??''),
+      parentBlockId:item.parentBlockId,bbox,blockIds:new Set([blockId])});
+  }
   const highlightKind=ids=>blockHighlight(ids,selectedBlockId,blockParents);
   const updateSelectedNodes=()=>{
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids],.lab-ocr-pdf-pbs-tag[data-block-ids]')){
@@ -185,12 +198,14 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       const blockId=blockIdOf(item);
       if(duplicate){
         if(blockId)duplicate.blockIds.add(blockId);
+        includePbsLabel(duplicate,item,[left,top,right,bottom]);
         if(id)seenIds.set(id,duplicate);
         seenRectangles.set(rectKey,duplicate);
         continue;
       }
       const entry={left,top,right,bottom,area,group,item,
-        blockIds:new Set(blockId?[blockId]:[]),element:null};
+        blockIds:new Set(blockId?[blockId]:[]),labels:[],element:null};
+      includePbsLabel(entry,item,[left,top,right,bottom]);
       visibleRects.push(entry);
       if(id)seenIds.set(id,entry);
       seenRectangles.set(rectKey,entry);
@@ -215,13 +230,12 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       const tagLayer=document.createElement('div');
       tagLayer.className='lab-ocr-pdf-pbs-layer';tagLayer.dataset.page=String(page);
       const width=viewport.width,height=viewport.height;
-      const labelInputs=visibleRects.filter(x=>x.item?.pbs&&blockIdOf(x.item)).map(x=>({
-        pbs:String(x.item.pbs),blockId:blockIdOf(x.item),group:x.group,
-        parentBlockId:x.item.parentBlockId,
-        blockIds:x.blockIds,
-        bbox:[x.left/size[0]*width,x.top/size[1]*height,
-          x.right/size[0]*width,x.bottom/size[1]*height],
-      }));
+      const labelInputs=visibleRects.flatMap(entry=>entry.labels.map(label=>({
+        pbs:label.pbs,blockId:label.blockId,group:label.group,
+        parentBlockId:label.parentBlockId,blockIds:label.blockIds,
+        bbox:[label.bbox[0]/size[0]*width,label.bbox[1]/size[1]*height,
+          label.bbox[2]/size[0]*width,label.bbox[3]/size[1]*height],
+      })));
       const placements=layoutPbsLabels(labelInputs,width,height);
       const ns='http://www.w3.org/2000/svg';
       const leaders=document.createElementNS(ns,'svg');
