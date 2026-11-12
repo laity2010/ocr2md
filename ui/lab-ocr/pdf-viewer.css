@@ -70,20 +70,8 @@
   text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font:11px "OCR2MD Sarasa",monospace;line-height:20px;cursor:pointer;
   pointer-events:auto;touch-action:manipulation;z-index:1}
-.lab-ocr-pdf-pbs-tag[data-side="left"]{left:-85px}
-.lab-ocr-pdf-pbs-tag[data-side="right"]{right:-85px}
 .lab-ocr-pdf-pbs-tag[data-child="true"]{border-color:#a08b60;background:#57462b;color:#fff0ce}
 .lab-ocr-pdf-pbs-tag[data-selected="true"]{background:#e4b44c;border-color:#ffdf93;
   color:#212a2c;box-shadow:0 0 0 2px #f8d88777}
-.lab-ocr-pdf-pbs-picker{position:absolute;width:132px;max-height:194px;overflow-y:auto;
-  padding:3px;border:1px solid #a7b5a5;border-radius:5px;background:#263139;
-  box-shadow:0 4px 14px #000b;color:#f5f4ed;pointer-events:auto;z-index:3}
-.lab-ocr-pdf-pbs-picker[data-side="left"]{left:-138px}
-.lab-ocr-pdf-pbs-picker[data-side="right"]{right:-138px}
-.lab-ocr-pdf-pbs-picker button{width:100%;height:30px;display:block;text-align:left;
-  font:12px "OCR2MD Sarasa",monospace;color:inherit;background:transparent;
-  border:0;border-radius:3px;cursor:pointer;padding:2px 5px}
-.lab-ocr-pdf-pbs-picker button:hover,.lab-ocr-pdf-pbs-picker button:focus-visible{
-  background:#425b52}
 .lab-ocr-pdf-overlay-box[data-selected="true"]{outline:2px solid #ffd46c;
   outline-offset:1px;background:rgba(231,183,83,.20)}

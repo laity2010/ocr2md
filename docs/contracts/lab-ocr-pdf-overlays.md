@@ -54,6 +54,13 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - **仅 Block 粒度显示 PBS 标签**。Block 的只读页面投影增加 `blockId`（`block.block_id`，字符串）、`pbs`（人类可读）、`parentBlockId`（父块数字 ID 的字符串或 null）；Span 通过 `span.block_id → block.source_block_key` 只读关联同一组身份，不显示逐 Span 的重复 PBS 标签。`id` 仍是该粒度原始矩形身份，不能拿 `pbs` 当唯一 ID。数据库字段、MinerU JSON、CMD 原文均不修改，API 不返回正文。
 - PDF 继续使用单一 `setOverlays(config)` 配置注入：可附加 `onBlockSelect({blockId,pbs,page,blockGroup})` 回调，通知调用方**用户点击**的 Block，其他内部重绘绝不触发选择回调。公共 `focusBlock({id,page})` 在 AG 发起定位时设定 selected Block ID、必要时切回 Block 粒度、跳页、定位已缓存或待加载的对应 bbox，不修改数据或重复载入 PDF。懒装配的 PDF 适配器转发这两个能力。
 - Block 页级去重后每一个视觉代表框持有**完整别名 `blockId` 集合**，包括跨块组完全相同或 IoU≥0.94 的略错位源矩形。仅绘制优先级最高的一份框和 PBS 标签，但 AG 点击任一对应原 Block ID 均高亮这份代表。框与标签共用选中状态，选择不会改变块组过滤，也不会触发 SQL 重查。
-- PBS 是带引线的**独立不透明交互层**，覆盖框仍保持原有的透明度和 `pointer-events:none`；只读标签固定 23px 高，按离版面较近的左／右轨道放在纸页外的侧栏，页面适宽缩放会为侧栏预留空间。引线指向原框边缘。子块通过 `parentBlockId` 改用区别颜色。标签沿各侧轨道按原始纵向坐标排序、自动错位，绝不与同轨其他标签重叠；空间不足时按相邻顺序聚成 `PBS +N` 标签，点击展开可滚动的完整 PBS/Block ID 列表。
+- PBS 是带引线的**独立不透明交互层**，覆盖框仍保持原有的透明度和 `pointer-events:none`；只读标签固定 23px 高，按离版面较近的左／右轨道放在纸页外的侧栏，页面适宽缩放会为侧栏预留空间。引线指向原框边缘。子块通过 `parentBlockId` 改用区别颜色。标签按原始纵向锚点放置；若内侧已有标签占据相同高度，则**只向外移一个或多个水平轨道，不改变标签纵坐标，也不合并为 `+N`**。后续标签只要内侧高度空闲就立刻回到原轨道。左右两侧独立计算，每个可见去重 Block 始终有自己可点击的 PBS 标签；引线随水平距离伸长。
 - Frame 暴露两个**受控语义端口**：`focusPdfBlock({id,page})` 代理 PDF 公共 `focusBlock`；`selectSqlRowById({field:'block_id',id})` 通过 AG 组件端口定位、聚焦/选中行并送 CM6 展示同一 SQL 行，不操作 AG 私有 DOM。AG 如有不相关列过滤挡住了目标，保留 `block_group` 筛选而清除其他隐藏目标的条件。Lab OCR 在 AG Block 行点击时调用前者；PDF 点击 PBS 时调用后者，如果 Block 表尚未打开则复用 `openSql('block')` 打开并选中目标。
-- 验收：Python `lab-ocr-overlays.test.py` / `lab-ocr-overlays-http.test.py` 核实原生身份、父子、Span 归属与授权；Node `lab-ocr-pbs-layout.test.mjs` 直接测试排布和密集群组无丢失；`lab-ocr-pbs-link.browser.test.mjs` 在 Chromium 和 iPad WebKit 用真实 AG、PDF.js 测标签显示、纸页外定位、缩放、分栏、别名高亮、AG↔PDF 跨页和密集列表。原有 PDF/块组筛选/Frame/授权/OCR 回归保持通过。
+- 验收：Python `lab-ocr-overlays.test.py` / `lab-ocr-overlays-http.test.py` 核实原生身份、父子、Span 归属与授权；Node `lab-ocr-pbs-layout.test.mjs` 直接测试多轨避让、内轨回归及全部独立标签；`lab-ocr-pbs-link.browser.test.mjs` 在 Chromium 和 iPad WebKit 用真实 AG、PDF.js 测标签显示、纸页外定位、缩放、分栏、别名高亮、AG↔PDF 跨页和密集多轨可点击标签。原有 PDF/块组筛选/Frame/授权/OCR 回归保持通过。
+
+## PBS 多轨横向避让（2026-11-12，替代密集收纳）
+
+- `layoutPbsLabels()` 按页面分左／右两边，**每个可见 Block 单独计算**，不生成折叠标签或展开列表。各侧按 bbox 的原始中点 `anchorY` 自上而下排序；标签高度保持 23px，顶部位置取 `anchorY−11.5px`（页边做必要钳制），**绝不为消除相互碰撞而移动 Y**。
+- 每侧维护从页边向外的可用轨道：新标签总是选择当前纵向区间可容纳它的**最内层轨道**，不存在空位才新增最外层轨道。已拥挤期间第二、第三个标签逐轨向外，随后内轨恢复空位就立即回到靠近页面的位置，不会被之前外移的标签永久挤走。不同轨道水平不重合，同轨标签最小垂直间隔 3px。左右完全独立。
+- 对应标签的引线从外移后的标签内侧水平延伸至页边，再到覆盖框原始 bbox 端点；SVG 引线无需变更 SQLite 坐标。PDF.js 页外使用实际可横向滚动的左右留白，动态按最远轨道扩大 `pdfViewer` padding，避免远处标签被裁剪或挤进 PDF 正文。页面适宽时仍预留初始双侧 88px，超过屏幕时用户可横向滚动而不是丢弃标签。标签可在 iPad 上单击定位 AG。
+- `tests/lab-ocr-pbs-layout.test.mjs` 测试所有 94 个高密标签均保留、左右独立、同轨无碰撞、拥堵后的内轨回归；`tests/lab-ocr-pbs-link.browser.test.mjs` 在 Chromium/iPad WebKit 验证 62 个独立标签、水平外移、scrollWidth、点击最外侧标签的 AG 定位和旧 Block/Span/切分行为。

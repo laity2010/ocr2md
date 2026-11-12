@@ -129,17 +129,53 @@ try{
      document.querySelector('.lab-ocr-pdf-page')?.value==='2'&&
      document.querySelector('.lab-ocr-pdf-overlay-layer[data-page="2"] .lab-ocr-pdf-overlay-box[data-id="b-dense-0"]')?.dataset.selected==='true');
    assert.equal(pdfReads,1);
-   // A dense page is collapsed into non-overlapping disclosure stacks, with
-   // every underlying PBS available without overlaying the page text.
+   // All 62 dense PBS badges stay visible as independent clickable labels.
+   // Each side chooses the nearest free X rail, never moving original Y.
    await page.locator('.lab-ocr-pdf-page').fill('2');
    await page.locator('.lab-ocr-pdf-page').press('Tab');
    await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-overlay-layer[data-page="2"] .lab-ocr-pdf-overlay-box').length===62);
    const denseTags=page.locator('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag');
-   assert(await denseTags.count()<62,'Dense rail groups some labels instead of overlapping');
-   await denseTags.filter({hasText:'+'}).first().click();
-   const popup=page.locator('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-picker');
-   await popup.waitFor({state:'visible'});
-   assert(await popup.locator('button').count()>1);
+   await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag').length===62);
+   assert.equal(await denseTags.count(),62,'No PBS labels may be grouped or suppressed');
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-picker').count(),0,'No disclosure popup');
+   assert.equal(await denseTags.filter({hasText:/\+/}).count(),0,'No +N collapsed labels');
+   const layout=await denseTags.evaluateAll(nodes=>nodes.map(node=>{
+     const rect=node.getBoundingClientRect(),pageRect=node.closest('.page').getBoundingClientRect();
+     return {id:node.dataset.blockId,lane:Number(node.dataset.lane),side:node.dataset.side,
+       text:node.textContent,top:rect.top-pageRect.top,left:rect.left-pageRect.left,
+       right:rect.right-pageRect.left,height:rect.height};
+   }));
+   assert.equal(new Set(layout.map(x=>x.id)).size,62);
+   assert(layout.some(x=>x.lane>=1),'Crowding must produce at least one outward lane');
+   for(const side of ['left','right']){
+     const sideTags=layout.filter(x=>x.side===side);
+     for(const lane of new Set(sideTags.map(x=>x.lane))){
+       const track=sideTags.filter(x=>x.lane===lane).sort((a,b)=>a.top-b.top);
+       for(let i=1;i<track.length;i++)
+         assert(track[i].top>=track[i-1].top+23+2,
+           'Overlapping labels in '+side+' lane '+lane+': '+JSON.stringify([track[i-1],track[i]]));
+     }
+     for(const badge of sideTags){
+       const near=sideTags.find(other=>other.lane===0&&other.top<=badge.top&&other.top+26>badge.top);
+       if(badge.lane>0)assert(near||sideTags.some(other=>other.lane===badge.lane-1&&
+         other.top<=badge.top&&other.top+26>badge.top),
+         'Outer lane should have an occupied nearer lane: '+JSON.stringify(badge));
+     }
+   }
+   const originalLane0=layout.find(tag=>tag.id==='5');
+   const originalLane1=layout.find(tag=>tag.id==='6');
+   assert.equal(originalLane0.lane,0);
+   assert(originalLane1.lane>=1);
+   assert(originalLane1.right<originalLane0.right,
+     'Left tags must move left when blocked');
+   const scroller=await page.locator('.lab-ocr-pdf-scroller').evaluate(el=>({
+     scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}));
+   assert(scroller.scrollWidth>scroller.clientWidth,
+     'Long leader lines + outer labels must be horizontally scrollable '+JSON.stringify(scroller));
+   // A far-out badge remains accessible through horizontal touch/scroll.
+   await denseTags.filter({hasText:'p2b61'}).click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='66');
+   assert.match(await page.locator('#status').innerText(),/PDF → AG · p2b61 · BlockID 66/);
    assert.equal(pdfReads,1);
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_PBS_LINK_PASS',name,JSON.stringify({pdfReads,rowsReads,overlays:overlays.length,

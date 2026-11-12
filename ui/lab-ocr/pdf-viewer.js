@@ -59,8 +59,31 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
   let onBlockSelect=null,selectedBlockId=null,focusRequest=null;
   const overlayCache=new Map(),overlayPending=new Set();
+  const railDepthByPage=new Map();
+  const labelWidth=78,labelGap=7,labelStep=labelWidth+labelGap;
+  function updateRailSpace(){
+    let left=0,right=0;
+    if(overlayLevel==='block')for(const depth of railDepthByPage.values()){
+      left=Math.max(left,depth.left);right=Math.max(right,depth.right);
+    }
+    const requiredLeft=Math.max(88,3+(left?labelStep*(left-1)+labelWidth+labelGap:0));
+    const requiredRight=Math.max(88,3+(right?labelStep*(right-1)+labelWidth+labelGap:0));
+    const nextLeft=requiredLeft+'px',nextRight=requiredRight+'px';
+    if(pages.style.paddingLeft!==nextLeft||pages.style.paddingRight!==nextRight){
+      // Update scrollable paper gutters; never silently clip outer labels.
+      const oldPaper=viewer.getPageView(Math.max(0,viewer.currentPageNumber-1))?.div;
+      const oldX=oldPaper?.getBoundingClientRect().left;
+      pages.style.paddingLeft=nextLeft;pages.style.paddingRight=nextRight;
+      if(oldX!==undefined){
+        const delta=oldPaper.getBoundingClientRect().left-oldX;
+        if(Number.isFinite(delta))scroller.scrollLeft+=delta;
+      }
+    }
+  }
+  const resetRailSpace=()=>{railDepthByPage.clear();updateRailSpace();};
   const clearOverlayNodes=()=>{
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer'))node.remove();
+    resetRailSpace();
   };
   const blockIdOf=item=>item?.blockId==null?null:String(item.blockId);
   const matchesSelected=ids=>selectedBlockId!==null&&ids.has(selectedBlockId);
@@ -83,6 +106,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(!host)return;
     host.querySelector('.lab-ocr-pdf-overlay-layer')?.remove();
     host.querySelector('.lab-ocr-pdf-pbs-layer')?.remove();
+    if(overlayLevel!=='block'){railDepthByPage.delete(page);updateRailSpace();}
     const size=data?.pageSize;
     if(!Array.isArray(size)||size.length!==2||!size.every(n=>Number.isFinite(n)&&n>0))return;
     if(data.page!==page||data.level!==overlayLevel||!Array.isArray(data.boxes))return;
@@ -167,58 +191,41 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       leaders.setAttribute('preserveAspectRatio','none');
       leaders.classList.add('lab-ocr-pdf-pbs-leaders');
       for(const placement of placements){
-        const startX=placement.side==='left'?0:width;
-        const bendX=placement.side==='left'?Math.min(12,placement.anchorX):Math.max(width-12,placement.anchorX);
+        const startX=placement.side==='left'?-(labelGap+labelStep*placement.lane):
+          width+labelGap+labelStep*placement.lane;
+        const edgeX=placement.side==='left'?-2:width+2;
         const fromY=placement.top+11.5;
         const leader=document.createElementNS(ns,'polyline');
-        leader.setAttribute('points',`${startX},${fromY} ${bendX},${fromY} ${placement.anchorX},${placement.anchorY}`);
+        leader.setAttribute('points',`${startX},${fromY} ${edgeX},${fromY} ${edgeX},${placement.anchorY} ${placement.anchorX},${placement.anchorY}`);
         leaders.append(leader);
       }
       tagLayer.append(leaders);
       for(const placement of placements){
-        const members=placement.items;
-        const head=members[0];
         const button=document.createElement('button');button.type='button';
         button.className='lab-ocr-pdf-pbs-tag';
         button.dataset.side=placement.side;
-        button.dataset.child=String(head.parentBlockId!==null&&head.parentBlockId!==undefined);
-        button.dataset.blockId=head.blockId;
-        const ids=new Set(members.flatMap(member=>[...member.blockIds]));
-        button.dataset.blockIds=[...ids].join(' ');
-        button.dataset.selected=String(matchesSelected(ids));
+        button.dataset.lane=String(placement.lane);
+        button.dataset.child=String(placement.parentBlockId!==null&&placement.parentBlockId!==undefined);
+        button.dataset.blockId=placement.blockId;
+        button.dataset.blockIds=[...placement.blockIds].join(' ');
+        button.dataset.selected=String(matchesSelected(placement.blockIds));
         button.style.top=placement.top+'px';
-        button.textContent=members.length===1?head.pbs:`${head.pbs} +${members.length-1}`;
-        button.title=members.length===1?`${head.pbs} · Block ID ${head.blockId} · ${head.group}`:
-          `${members.length} 个 PBS 标签，点击展开`;
-        button.setAttribute('aria-label',members.length===1?`定位 ${head.pbs}`:
-          `展开 ${members.length} 个 PBS 标签`);
-        button.addEventListener('click',()=>{
-          if(members.length===1){
-            activateBlock({blockId:head.blockId,pbs:head.pbs,page,blockGroup:head.group},true);
-            return;
-          }
-          const active=tagLayer.querySelector('.lab-ocr-pdf-pbs-picker');
-          if(active){const same=active.dataset.owner===head.blockId;active.remove();if(same)return;}
-          const picker=document.createElement('div');picker.className='lab-ocr-pdf-pbs-picker';
-          picker.dataset.owner=head.blockId;picker.dataset.side=placement.side;
-          const popupHeight=Math.min(194,Math.max(60,height-8));
-          picker.style.maxHeight=popupHeight+'px';
-          picker.style.top=Math.max(4,Math.min(placement.top,height-popupHeight-4))+'px';
-          for(const member of members){
-            const option=document.createElement('button');option.type='button';
-            option.textContent=member.pbs;
-            option.title=`${member.pbs} · Block ID ${member.blockId} · ${member.group}`;
-            option.addEventListener('click',()=>{activateBlock({blockId:member.blockId,
-              pbs:member.pbs,page,blockGroup:member.group},true);
-              picker.remove();});
-            picker.append(option);
-          }
-          picker.addEventListener('keydown',event=>{if(event.key==='Escape'){picker.remove();button.focus();}});
-          tagLayer.append(picker);
-          picker.querySelector('button')?.focus();
-        });
+        const outward=labelStep*(placement.lane+1);
+        if(placement.side==='left')button.style.left=-outward+'px';
+        else button.style.right=-outward+'px';
+        button.textContent=placement.pbs;
+        button.title=`${placement.pbs} · Block ID ${placement.blockId} · ${placement.group}`;
+        button.setAttribute('aria-label',`定位 ${placement.pbs}`);
+        button.addEventListener('click',()=>activateBlock({blockId:placement.blockId,
+          pbs:placement.pbs,page,blockGroup:placement.group},true));
         tagLayer.append(button);
       }
+      // In each lane there is only one label per vertical slot; all labels
+      // remain individually clickable, including after zoom or group filters.
+      const depth={left:0,right:0};
+      for(const placement of placements)depth[placement.side]=Math.max(depth[placement.side],placement.lane+1);
+      railDepthByPage.set(page,depth);
+      updateRailSpace();
       host.append(tagLayer);
     }
     if(focusRequest?.page===page){

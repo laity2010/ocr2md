@@ -32,4 +32,4 @@ PDF 覆盖框：单一 `setOverlays({level,loadPage})` API 支持 Block／Span�
 
 PDF 覆盖框跟随 AG 的 SQLite → block 表 **块组（block_group）** 多选筛选：空选隐藏，all 全部显示，多选取并集；不同块组中相同或近乎重合的框不会叠画，真正嵌套的结构框保留。Block、Span 两种 PDF 粒度均遵循块组筛选；**块类型（block_type）不参与 PDF 过滤**。筛选不触发 PDF/SQL 重载。
 
-PBS 标签（只读）：PDF 的 Block 覆盖框显示来自 SQLite `block.pbs` 的页边标签（双侧避让、引线、子块色、密集组展开）；唯一定位键始终使用 `block.block_id`，同一几何框去重后保留不同块组的原始 Block ID 关联。PDF 点击标签 → AG 自动打开/选中对应 Block 行并送 CM6，AG 点击 Block 行 → PDF 自动跳页和高亮相应框/标签。Span 粒度不重复绘制 Block 标签。标签无拖动、编号编辑和数据回写。
+PBS 标签（只读）：PDF 的 Block 覆盖框显示来自 SQLite `block.pbs` 的页边标签（双侧避让、引线、子块色、密集区域逐标签横向多轨外移（无收纳，内轨空闲立即回归））；唯一定位键始终使用 `block.block_id`，同一几何框去重后保留不同块组的原始 Block ID 关联。PDF 点击标签 → AG 自动打开/选中对应 Block 行并送 CM6，AG 点击 Block 行 → PDF 自动跳页和高亮相应框/标签。Span 粒度不重复绘制 Block 标签。标签无拖动、编号编辑和数据回写。
