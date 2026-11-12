@@ -25,3 +25,5 @@
 - 新 Viewer 以 PDF.js 单请求流式加载，首页实际绘制后才标记就绪，提供页码与缩放下拉、文字层、默认深色、切分时同一 Viewer 的无重载转移与单窗 MD/PDF 下拉切换。
 - 后端新增已鉴权的只读 `/labs/lab-ocr/api/ocr/pdf?workspace=…`，不修改原始文件。
 - API、直接测试、暂不包含的块交互见 `docs/contracts/lab-ocr-pdf-loader.md`。
+
+PDF 覆盖框：单一 `setOverlays({level,loadPage})` API 支持 Block／Span／关闭。当前仅按 SQL bbox 显示只读覆盖层，原始页面几何经 `page_size_json` 归一化，无 PBS 标注、拖动、修改或回写。具体契约见 `docs/contracts/lab-ocr-pdf-overlays.md`。

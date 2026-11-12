@@ -21,7 +21,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1032,height:768},hasTouch:true,ignoreHTTPSErrors:true});
    page.setDefaultTimeout(18000);
-   const errors=[];let pdfRequests=0;
+   const errors=[];let pdfRequests=0;const overlayRequests=[];
    page.on('pageerror',error=>errors.push(error.message));
    page.on('console',message=>{if(message.type()==='error')console.error('BROWSER_ERROR',message.text());});
    await page.addInitScript(({book})=>{
@@ -36,6 +36,21 @@ try{
       pdfRequests++;
       assert.equal(new URL(route.request().url()).searchParams.get('workspace'),book);
       return route.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf()});
+    }
+    if(operation==='overlays'){
+      const params=new URL(route.request().url()).searchParams;
+      assert.equal(params.get('workspace'),book);
+      const level=params.get('level'),number=Number(params.get('page'));
+      assert(['span','block'].includes(level)&&number>=1&&number<=3);
+      overlayRequests.push(level+':'+number);
+      const fixtures={
+        block:{1:[{id:'block-1',bbox:[72,60,360,155]},{id:'block-2',bbox:[30,180,400,260]}],
+          3:[{id:'block-3',bbox:[90,130,240,200]}]},
+        span:{1:[{id:'span-1',bbox:[72,60,210,90]},{id:'span-2',bbox:[225,60,360,90]}],
+          3:[{id:'span-3',bbox:[90,130,150,150]}]},
+      };
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+        level,page:number,pageSize:[595,842],boxes:fixtures[level][number]||[]})});
     }
     if(operation==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       status:'unchanged',blocks:2,pages:3,pdf:'original.pdf',sources:[{name:'mineru.json',pages:3}]})});
@@ -64,7 +79,7 @@ try{
    assert.equal(await page.locator('.lab-ocr-pdf-surface').getAttribute('data-pdf-theme'),'dark');
    assert.equal(await page.locator('.lab-ocr-pdf-controls button').count(),0,'No extra PDF buttons');
    assert.equal(await page.locator('.lab-ocr-pdf-controls input').count(),1);
-   assert.equal(await page.locator('.lab-ocr-pdf-controls select').count(),1);
+   assert.equal(await page.locator('.lab-ocr-pdf-controls select').count(),2);
    const previewMode=page.locator('#workspace .ocr-preview-mode');
    const split=page.locator('.ocr-preview-split-toggle input');
    const detached=page.locator('.ocr-detached-pdf-host');
@@ -76,6 +91,22 @@ try{
    assert.equal(await detached.count(),0,'No detached pane on initial load');
    assert.equal(await page.locator('.ocr-preview-pane>.ocr-preview-pdf-host .lab-ocr-pdf-root').count(),1);
    assert.equal(await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-scale').isVisible(),true);
+   const overlaySelect=page.locator('.lab-ocr-pdf-overlay-level');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-level')?.value==='block'&&
+     document.querySelectorAll('.lab-ocr-pdf-overlay-layer[data-level="block"][data-page="1"] .lab-ocr-pdf-overlay-box').length===2);
+   assert.equal(await overlaySelect.isEnabled(),true);
+   assert.equal(await overlaySelect.inputValue(),'block');
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-page="1"][data-level="block"] .lab-ocr-pdf-overlay-box').count(),2);
+   const geometry=await page.locator('.lab-ocr-pdf-overlay-layer[data-page="1"] .lab-ocr-pdf-overlay-box').first().evaluate(el=>{
+     const b=el.getBoundingClientRect(),p=el.closest('.page').getBoundingClientRect();
+     return {left:(b.left-p.left)/p.width,top:(b.top-p.top)/p.height,
+       width:b.width/p.width,height:b.height/p.height,
+       pointer:getComputedStyle(el).pointerEvents};
+   });
+   assert(Math.abs(geometry.left-72/595)<.005&&Math.abs(geometry.top-60/842)<.005,
+     'Overlay must use MinerU pageSize coordinates: '+JSON.stringify(geometry));
+   assert(Math.abs(geometry.width-288/595)<.005&&Math.abs(geometry.height-95/842)<.005);
+   assert.equal(geometry.pointer,'none','Coverage overlay cannot block PDF text selection');
    // Validate actual paper pixels rather than trusting the dark toolbar.
    const screenshot=await page.locator('.lab-ocr-pdf-scroller .page canvas').first().screenshot();
    const visual=await page.evaluate(async base64=>{
@@ -115,6 +146,16 @@ try{
    await pageInput.fill('3');await pageInput.press('Tab');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-page')?.value==='3');
    assert.equal(await page.locator('.lab-ocr-pdf-count').innerText(),'/ 3');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-layer[data-page="3"] .lab-ocr-pdf-overlay-box'));
+   assert(overlayRequests.includes('block:3'),'Page navigation should lazily load page 3');
+   await overlaySelect.selectOption('span');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-layer[data-page="3"][data-level="span"] .lab-ocr-pdf-overlay-box'));
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-page="3"] .lab-ocr-pdf-overlay-box').count(),1);
+   assert(overlayRequests.includes('span:3'));
+   await overlaySelect.selectOption('off');
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer').count(),0,'Off removes all coverage');
+   await overlaySelect.selectOption('block');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-layer[data-page="3"][data-level="block"] .lab-ocr-pdf-overlay-box'));
    await scale.selectOption('100');
    assert.equal(await scale.inputValue(),'100');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-scroller .page')?.getBoundingClientRect().width>650);
@@ -144,12 +185,14 @@ try{
    assert.equal(await page.evaluate(()=>document.querySelector('.lab-ocr-pdf-root')===window.__labPdfRoot),true);
    assert.equal(await page.locator('.lab-ocr-pdf-scale').inputValue(),'75','Zoom selection must persist');
    assert.equal(pdfRequests,1,'Re-splitting must not re-request PDF');
+   assert.equal(await page.locator('.ocr-detached-pdf-pane .lab-ocr-pdf-overlay-level').inputValue(),'block');
    await split.uncheck();
    await previewMode.selectOption('pdf');
    assert.equal(await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-controls').count(),1);
    assert.equal(pdfRequests,1);
+   assert(overlayRequests.length<=12,'Coverage fetches should be page-scoped, not full-document: '+overlayRequests);
    assert.deepEqual(errors,[]);
-   console.log('LAB_OCR_PDF_API_PASS',name,JSON.stringify({pages:3,pdfRequests,previewMode:'pdf',singleViewer:true}));
+   console.log('LAB_OCR_PDF_API_PASS',name,JSON.stringify({pages:3,pdfRequests,overlayRequests,previewMode:'pdf',singleViewer:true}));
   }finally{await browser.close();}
  }
 }finally{dev?.kill('SIGTERM');}

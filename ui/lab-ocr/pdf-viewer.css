@@ -22,7 +22,7 @@
   border-radius:6px;pointer-events:none;color:#d3c6aa;font-size:12px}
 .lab-ocr-pdf-placeholder[hidden]{display:none!important}
 .lab-ocr-pdf-controls{display:flex;align-items:center;justify-content:flex-start;gap:8px;
-  min-width:0;width:100%;overflow:hidden;white-space:nowrap;color:#d3c6aa;height:29px}
+  min-width:0;width:100%;overflow-x:auto;scrollbar-width:thin;white-space:nowrap;color:#d3c6aa;height:29px}
 .lab-ocr-pdf-controls label{display:inline-flex;gap:4px;align-items:center;flex:none}
 .lab-ocr-pdf-controls .lab-ocr-pdf-page{box-sizing:border-box;width:42px;min-width:42px;height:26px;
   padding:2px 3px;background:#202c32;border:1px solid #596963;color:#d3c6aa;border-radius:3px}
@@ -36,3 +36,16 @@
 .ocr-preview-mode-tools[data-mode="pdf"] .lab-ocr-pdf-controls{gap:6px}
 .ocr-preview-pane[data-preview-mode="md"]>.ocr-preview-pdf-host{visibility:hidden;pointer-events:none}
 .ocr-preview-pane[data-preview-mode="pdf"]>.ocr-preview-pdf-host{visibility:visible;pointer-events:auto}
+
+/* Read-only geometry, never intercepts PDF text selection or scrolling. */
+.lab-ocr-pdf-controls .lab-ocr-pdf-overlay-control{border-left:1px solid #52615f;
+  padding-left:7px;gap:4px}
+.lab-ocr-pdf-controls .lab-ocr-pdf-overlay-level{height:26px;min-width:66px;
+  padding:2px 3px;border-radius:4px;border:1px solid #596963;
+  background:#202c32;color:#d3c6aa;font:12px "OCR2MD Sarasa",monospace}
+.lab-ocr-pdf-scroller .page>.lab-ocr-pdf-overlay-layer{
+  position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden}
+.lab-ocr-pdf-overlay-box{position:absolute;box-sizing:border-box;border:1.5px solid #95b989;
+  background:rgba(111,163,119,.12);pointer-events:none}
+.lab-ocr-pdf-overlay-layer[data-level="span"] .lab-ocr-pdf-overlay-box{
+  border:1px solid #e0b86a;background:rgba(215,166,80,.10)}

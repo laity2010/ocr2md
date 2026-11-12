@@ -28,6 +28,12 @@ try{
    await page.route('**/labs/lab-ocr/api/ocr/**',r=>{
     const path=new URL(r.request().url()).pathname;
     const operation=path.split('/').pop();
+    if(operation==='overlays'){
+     const u=new URL(r.request().url());
+     return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+       level:u.searchParams.get('level'),page:Number(u.searchParams.get('page')),
+       pageSize:[595,842],boxes:[]})});
+    }
     if(operation==='pdf')return r.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf()});
     if(operation==='inspect'){
      inspectCount++;

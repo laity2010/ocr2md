@@ -37,6 +37,12 @@ try{
        .map(name=>({name,path:path+'/'+name}));
      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
    });
+   await page.route('**/labs/lab-ocr/api/ocr/overlays?*',route=>{
+     const u=new URL(route.request().url());
+     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+       level:u.searchParams.get('level'),page:Number(u.searchParams.get('page')),
+       pageSize:[595,842],boxes:[]})});
+   });
    await page.route('**/labs/lab-ocr/api/ocr/inspect?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',blocks:1,pages:22})}));
    const response=await page.goto(url,{waitUntil:'domcontentloaded'});
    assert.equal(response?.status(),200);

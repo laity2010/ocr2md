@@ -196,6 +196,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
       if(pdfPaneMount){
         const viewer=pdfPaneMount({surface,toolbar:pdfTools,onStatus});
         pdfSlot.current=viewer;
+        if(pdfSlot.overlays)viewer.setOverlays(pdfSlot.overlays);
         if(pdfSlot.source)void viewer.loadPdf(pdfSlot.source).catch(()=>{});
       }
       return {dispose(){
@@ -245,7 +246,7 @@ function addPanel(dockview,id,component,title,position){
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
   moduleLabel='空白框架',defaultPreview='split'}={}){
   let split=false;
-  const pdfSlot={current:null,source:null,preview:null,detached:null};
+  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null};
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
@@ -269,6 +270,10 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
         return Promise.reject(Error('PDF 来源必须是 URL 字符串'));
       pdfSlot.source=url;
       return pdfSlot.current?.loadPdf(url)??Promise.resolve(false);
+    },
+    setPdfOverlays(config){
+      pdfSlot.overlays=config;
+      return pdfSlot.current?.setOverlays(config)??false;
     },
     activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},

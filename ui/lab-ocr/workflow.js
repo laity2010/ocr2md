@@ -74,7 +74,15 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     url.searchParams.set('workspace',directory);
     return url.pathname+url.search;
   };
-  let lastPdfWorkspace='';
+  let lastPdfWorkspace='',lastOverlayWorkspace='';
+  function prepareOverlays(directory){
+    if(directory===lastOverlayWorkspace)return;
+    lastOverlayWorkspace=directory;
+    frame.setPdfOverlays(directory?{
+      level:'block',
+      loadPage:(page,level)=>request('overlays',{workspace:directory,page,level}),
+    }:{level:'off'});
+  }
   function warmPdf(directory){
     if(directory===lastPdfWorkspace)return;
     lastPdfWorkspace=directory;
@@ -137,7 +145,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const epoch=++operation;
     workspace=nextWorkspace;
     tableReady=false;spanReady=false;blockReady=false;hideNavigation();frame.clearSqlRows();
-    if(!workspace){warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
+    if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
     try{
       const result=await request('inspect',{workspace});
@@ -168,17 +176,17 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   async function initialize(){
     const saved=await savedWorkspace();
     if(!saved){workspace='';tableReady=false;spanReady=false;blockReady=false;return false;}
-    await inspectAndImport(saved);
-    warmPdf(saved);
-    return true;
+    const imported=await inspectAndImport(saved);
+    prepareOverlays(imported?saved:'');warmPdf(saved);
+    return imported;
   }
   async function afterSave(){
     const saved=await savedWorkspace();
     if(!saved){++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;hideNavigation();
-      frame.clearSqlRows();warmPdf('');await showModule('settings');
+      frame.clearSqlRows();prepareOverlays('');warmPdf('');await showModule('settings');
       onStatus('尚未绑定工作区，请在全局设置中选择书籍目录','warning');return;}
     const success=await inspectAndImport(saved);
-    if(success){await showModule('frame');warmPdf(saved);}
+    if(success){await showModule('frame');prepareOverlays(saved);warmPdf(saved);}
   }
   async function openSql(table='minerujson'){
     if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return;}

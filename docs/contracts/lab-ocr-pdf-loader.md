@@ -8,7 +8,7 @@
 
 - `registerFramePdfPane(mount)`: 帧框架可选扩展注册，仅启动前允许一次；挂载时传 `{surface, toolbar, onStatus}`，返回 `loadPdf` 与 `dispose` 生命周期端口。
 - `frame.loadPdf(source)`: Lab 业务的 **唯一 PDF 加载操作 API**，`source` 为服务器生成的相对只读 URL；`null` 清空源。无需访问 Dockview DOM，同一个 Viewer 保留在 Markdown/PDF 预览窗口，由切分操作只迁移其 DOM 与菜单，无需重新读取 PDF。该 API 直接委托 Lab PDF Viewer 的 `loadPdf()`。
-- `mountLabOcrPdf({surface,toolbar,onStatus})`: 独立 Viewer 实例工厂，公开操作仅 `loadPdf(source)`、布局重排 `relayout()` 和生命周期 `dispose()`。无全局 Store、SQL、CMD 或编辑器写权限。
+- `mountLabOcrPdf({surface,toolbar,onStatus})`: 独立 Viewer 实例工厂，公开操作为 `loadPdf(source)`、新增 `setOverlays({level,loadPage})`、布局重排 `relayout()` 和生命周期 `dispose()`。覆盖框的数据与坐标契约见 `lab-ocr-pdf-overlays.md`。无全局 Store、SQL、CMD 或编辑器写权限。
 
 ## PDF 来源与性能
 

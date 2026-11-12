@@ -26,7 +26,16 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   zoomSelect.add(new Option('适宽','page-width'));
   for(const level of zoomLevels)zoomSelect.add(new Option(level+'%',String(level)));
   zoomSelect.value='page-width';
-  controls.append(pageLabel,zoomSelect);
+  const overlayLabel=document.createElement('label');
+  overlayLabel.className='lab-ocr-pdf-overlay-control';
+  overlayLabel.textContent='覆盖框';
+  const overlaySelect=document.createElement('select');
+  overlaySelect.className='lab-ocr-pdf-overlay-level';
+  overlaySelect.setAttribute('aria-label','PDF 覆盖框粒度');
+  overlaySelect.append(new Option('关闭','off'),new Option('Block','block'),new Option('Span','span'));
+  overlaySelect.value='off';overlaySelect.disabled=true;
+  overlayLabel.append(overlaySelect);
+  controls.append(pageLabel,zoomSelect,overlayLabel);
   toolbar.replaceChildren(controls);
   surface.dataset.pdfTheme='dark';surface.classList.add('lab-ocr-pdf-surface');
   const root=document.createElement('div');root.className='lab-ocr-pdf-root';
@@ -42,6 +51,109 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     textLayerMode:1,annotationMode:0});
   let disposed=false,ready=false,source=null,loading=null,task=null,pdf=null,revision=0;
   let resolvePaint=null;
+  // New public API: setOverlays({level:'off'|'block'|'span',loadPage(page,level)}).
+  // The caller owns SQL/JSON and returns only page geometry; PDF.js never
+  // sees PBS, table schemas, raw MinerU records, or filesystem paths.
+  let overlayLevel='off',loadOverlayPage=null,overlayRevision=0;
+  const overlayCache=new Map(),overlayPending=new Set();
+  const clearOverlayNodes=()=>{
+    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer'))node.remove();
+  };
+  function paintPageBoxes(page,data){
+    if(disposed||!pdf||overlayLevel==='off'||page>pdf.numPages)return;
+    const pageView=viewer.getPageView(page-1);
+    const host=pageView?.div;
+    if(!host)return;
+    host.querySelector('.lab-ocr-pdf-overlay-layer')?.remove();
+    const size=data?.pageSize;
+    if(!Array.isArray(size)||size.length!==2||!size.every(n=>Number.isFinite(n)&&n>0))return;
+    if(data.page!==page||data.level!==overlayLevel||!Array.isArray(data.boxes))return;
+    // Refuse to draw misleading boxes when MinerU's coordinate system and
+    // this PDF page have incompatible aspect ratios.
+    const viewport=pageView.viewport;
+    if(viewport?.width&&viewport?.height){
+      const ratio=size[0]/size[1],actual=viewport.width/viewport.height;
+      if(Math.abs(ratio-actual)>actual*.04)return;
+    }
+    const layer=document.createElement('div');
+    layer.className='lab-ocr-pdf-overlay-layer';
+    layer.dataset.level=overlayLevel;layer.dataset.page=String(page);
+    const clamp=(value,max)=>Math.max(0,Math.min(value,max));
+    for(const item of data.boxes){
+      const rect=item?.bbox;
+      if(!Array.isArray(rect)||rect.length!==4||!rect.every(Number.isFinite))continue;
+      const [x1,y1,x2,y2]=rect;
+      const left=clamp(x1,size[0]),top=clamp(y1,size[1]);
+      const right=clamp(x2,size[0]),bottom=clamp(y2,size[1]);
+      if(right<=left||bottom<=top)continue;
+      const box=document.createElement('div');box.className='lab-ocr-pdf-overlay-box';
+      box.dataset.id=String(item.id??'');
+      box.style.left=(left/size[0]*100)+'%';box.style.top=(top/size[1]*100)+'%';
+      box.style.width=((right-left)/size[0]*100)+'%';
+      box.style.height=((bottom-top)/size[1]*100)+'%';
+      layer.append(box);
+    }
+    host.append(layer);
+  }
+  function requestOverlayPage(page){
+    if(disposed||!pdf||!ready||overlayLevel==='off'||!loadOverlayPage)return;
+    if(!Number.isInteger(page)||page<1||page>pdf.numPages)return;
+    const key=overlayLevel+':'+page;
+    if(overlayCache.has(key)){
+      paintPageBoxes(page,overlayCache.get(key));return;
+    }
+    if(overlayPending.has(key))return;
+    overlayPending.add(key);
+    const stamp=overlayRevision,level=overlayLevel,loader=loadOverlayPage;
+    Promise.resolve().then(()=>loader(page,level)).then(result=>{
+      if(disposed||stamp!==overlayRevision||level!==overlayLevel)return;
+      if(result?.level!==level||result?.page!==page||!Array.isArray(result.boxes))
+        throw Error('覆盖框返回结构或页码不匹配');
+      overlayCache.set(key,result);
+      paintPageBoxes(page,result);
+    }).catch(error=>{
+      if(!disposed&&stamp===overlayRevision)emit('覆盖框读取失败：'+error.message,'error');
+    }).finally(()=>overlayPending.delete(key));
+  }
+  function showOverlayPages(){
+    if(!ready||!pdf||overlayLevel==='off')return;
+    const current=viewer.currentPageNumber;
+    for(const page of [current,current-1,current+1])requestOverlayPage(page);
+  }
+  // Include ALL visible pages at low zoom, where the viewport can show more
+  // than current +/- one. The observer does no SQL work, only asks the
+  // injected, page-scoped loader when a page approaches the viewport.
+  const pageObserver=new IntersectionObserver(entries=>{
+    for(const entry of entries){
+      if(entry.isIntersecting)requestOverlayPage(Number(entry.target.dataset.pageNumber));
+    }
+  },{root:scroller,rootMargin:'150px 0px'});
+  function observePages(){
+    pageObserver.disconnect();
+    if(!pdf)return;
+    for(let i=0;i<pdf.numPages;i++){
+      const node=viewer.getPageView(i)?.div;
+      if(node)pageObserver.observe(node);
+    }
+  }
+  function chooseOverlayLevel(level){
+    if(!['off','block','span'].includes(level))throw Error('覆盖框粒度无效');
+    overlayLevel=level;overlaySelect.value=level;overlayRevision++;
+    overlayCache.clear();overlayPending.clear();clearOverlayNodes();
+    showOverlayPages();
+  }
+  overlaySelect.addEventListener('change',()=>chooseOverlayLevel(overlaySelect.value));
+  function setOverlays({level='off',loadPage=null}={}){
+    if(disposed)throw Error('PDF Viewer 已销毁');
+    if(level!=='off'&&typeof loadPage!=='function')
+      throw Error('Block/Span 覆盖框必须提供按页读取回调');
+    if(loadPage!==null&&typeof loadPage!=='function')
+      throw Error('覆盖框回调无效');
+    loadOverlayPage=loadPage;
+    overlaySelect.disabled=loadPage===null;
+    chooseOverlayLevel(level);
+    return true;
+  }
   const emit=(message,kind='info')=>{if(!disposed)onStatus('PDF · '+message,kind);};
   const readyControls=()=>{pageInput.disabled=!ready;zoomSelect.disabled=!ready;};
   const updatePage=()=>{
@@ -50,9 +162,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     readyControls();
   };
   bus.on('pagesinit',()=>{
-    viewer.currentScaleValue='page-width';viewer.update();updatePage();
+    viewer.currentScaleValue='page-width';viewer.update();updatePage();observePages();showOverlayPages();
   });
-  bus.on('pagechanging',updatePage);
+  bus.on('pagechanging',()=>{updatePage();showOverlayPages();});
   bus.on('pagerendered',event=>{
     if(event.pageNumber!==1||!resolvePaint)return;
     const complete=resolvePaint;resolvePaint=null;complete(!event.error);
@@ -86,8 +198,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(resolvePaint){const done=resolvePaint;resolvePaint=null;done(false);}
     const oldTask=task;task=null;
     if(oldTask)await oldTask.destroy();
-    pdf=null;ready=false;
-    viewer.setDocument(null);
+    pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
+    pageObserver.disconnect();
+    clearOverlayNodes();viewer.setDocument(null);
     pageInput.value='1';count.textContent='/ —';zoomSelect.value='page-width';readyControls();
   };
   async function loadPdf(url){
@@ -117,7 +230,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         if(disposed||token!==revision)return false;
         if(!painted)throw Error('PDF 首页绘制失败');
         ready=true;placeholder.hidden=true;
-        updatePage();relayout();
+        updatePage();relayout();showOverlayPages();
         emit(`已就绪 · ${document.numPages} 页，首页已绘制`,'ok');
         return true;
       }catch(error){
@@ -131,9 +244,10 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,relayout,dispose(){
+  return Object.freeze({loadPdf,setOverlays,relayout,dispose(){
     if(disposed)return;
-    disposed=true;revision++;resizeObserver.disconnect();
+    disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
+    pageObserver.disconnect();
     const oldTask=task;task=null;
     if(resolvePaint){const finish=resolvePaint;resolvePaint=null;finish(false);}
     void oldTask?.destroy().catch(()=>{});

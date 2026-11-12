@@ -2,7 +2,7 @@
 """Lab OCR's isolated loopback API: delegates auth to Main, never owns Main data.
 
 Single Agent Link /labs/ gateway exposes /labs/lab-ocr/api/ocr/
-{inspect,import,rows,minerujson2span,minerujson2block,pdf}.
+{inspect,import,rows,minerujson2span,minerujson2block,pdf,overlays}.
 No second tunnel and no changes to Main V6 business routes.
 """
 from __future__ import annotations
@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from v6_lab_ocr_span import minerujson2span, span_rows
 from v6_lab_ocr_block import minerujson2block, block_rows
+from v6_lab_ocr_overlays import overlay_rows
 from v6_lab_ocr_store import (inspect_workspace, import_workspace, existing_info,
                               rows, fingerprint, OCRImportError)
 
@@ -122,7 +123,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf'):raise APIError(404,'未知的 OCR API')
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf','overlays'):raise APIError(404,'未知的 OCR API')
         if (op in ('import','minerujson2span','minerujson2block'))!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
@@ -145,6 +146,12 @@ class Handler(BaseHTTPRequestHandler):
         if op=='pdf':
             if self.command not in ('GET','HEAD'):raise APIError(405,'PDF 仅允许读取')
             return self.serve_pdf(book)
+        if op=='overlays':
+            try:
+                page=int(query.get('page',''))
+            except (TypeError, ValueError) as error:
+                raise APIError(422,'覆盖框页码必须是整数') from error
+            return self.respond(200,overlay_rows(book,query.get('level',''),page))
         # First milestone: one sub-200-page MinerU JSON plus one PDF only.
         # The store already supports independent multi-source preservation, but
         # multi-part ordering is deliberately NOT exposed to this Lab yet.

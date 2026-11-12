@@ -45,6 +45,12 @@ try{
         const children=path==='/demo/ocr-review'?[{name:'review-book',path:'/demo/ocr-review/review-book'}]:[];
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
       });
+      await page.route('**/labs/lab-ocr/api/ocr/overlays?*',route=>{
+        const u=new URL(route.request().url());
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+          level:u.searchParams.get('level'),page:Number(u.searchParams.get('page')),
+          pageSize:[595,842],boxes:[]})});
+      });
       await page.route('**/labs/lab-ocr/api/ocr/pdf?*',route=>route.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf()}));
       await page.route('**/labs/lab-ocr/api/ocr/inspect?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',blocks:1,pages:22})}));
       await page.route('**/labs/lab-ocr/api/ocr/minerujson2block',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',table:'block',blocks:0})}));
