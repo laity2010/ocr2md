@@ -54,7 +54,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // New public API: setOverlays({level:'off'|'block'|'span',loadPage(page,level)}).
   // The caller owns SQL/JSON and returns only page geometry; PDF.js never
   // sees PBS, table schemas, raw MinerU records, or filesystem paths.
-  let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockTypes=null;
+  let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
   const overlayCache=new Map(),overlayPending=new Set();
   const clearOverlayNodes=()=>{
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer'))node.remove();
@@ -79,11 +79,16 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     layer.className='lab-ocr-pdf-overlay-layer';
     layer.dataset.level=overlayLevel;layer.dataset.page=String(page);
     const clamp=(value,max)=>Math.max(0,Math.min(value,max));
-    const seenIds=new Set(),seenRectangles=new Set();
-    for(const item of data.boxes){
-      // The AG Block Type filter applies to Block AND Span geometries.
-      // Missing type metadata never bypasses an active selection.
-      if(blockTypes!==null&&!blockTypes.has(String(item?.blockType??'')))continue;
+    const seenIds=new Set(),seenRectangles=new Set(),visibleRects=[];
+    // `para_blocks` is the postprocessed reading structure. If different
+    // MinerU stages repeat the SAME visual region, prefer its authoritative
+    // para geometry over discarded/preproc (regardless of SQL row order).
+    // Legitimate nested and partially overlapping blocks must remain visible.
+    const priority={para_blocks:0,discarded_blocks:1,preproc_blocks:2};
+    const boxes=data.boxes.filter(item=>blockGroups===null||
+      blockGroups.has(String(item?.blockGroup??''))).map((item,index)=>({item,index}));
+    boxes.sort((a,b)=>(priority[a.item?.blockGroup]??3)-(priority[b.item?.blockGroup]??3)||a.index-b.index);
+    for(const {item} of boxes){
       const rect=item?.bbox;
       if(!Array.isArray(rect)||rect.length!==4||!rect.every(Number.isFinite))continue;
       const [x1,y1,x2,y2]=rect;
@@ -92,11 +97,26 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       if(right<=left||bottom<=top)continue;
       const id=item.id==null?'':String(item.id);
       const rectKey=[left,top,right,bottom].map(n=>n.toFixed(4)).join(':');
-      // A multi-selection is a set UNION, not a new overlay per type.
+      // A multi-selection is a set UNION, not a new overlay per group.
       // Identical rectangles from nested/duplicate blocks are painted once.
       if((id&&seenIds.has(id))||seenRectangles.has(rectKey))continue;
+      const group=String(item?.blockGroup??'');
+      const area=(right-left)*(bottom-top);
+      // Almost identical boxes from DIFFERENT groups are still duplicates
+      // even if OCR stage rounding shifts an edge by a few pixels. This is
+      // not generic intersection suppression: preserve nested/partial boxes.
+      const duplicate=visibleRects.some(prior=>{
+        if(prior.group===group)return false;
+        const ix=Math.max(0,Math.min(right,prior.right)-Math.max(left,prior.left));
+        const iy=Math.max(0,Math.min(bottom,prior.bottom)-Math.max(top,prior.top));
+        const intersection=ix*iy;
+        const union=area+prior.area-intersection;
+        return union>0&&intersection/union>=0.94;
+      });
+      if(duplicate)continue;
       if(id)seenIds.add(id);
       seenRectangles.add(rectKey);
+      visibleRects.push({left,top,right,bottom,area,group});
       const box=document.createElement('div');box.className='lab-ocr-pdf-overlay-box';
       box.dataset.id=id;
       box.style.left=(left/size[0]*100)+'%';box.style.top=(top/size[1]*100)+'%';
@@ -156,7 +176,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   overlaySelect.addEventListener('change',()=>chooseOverlayLevel(overlaySelect.value));
   function setOverlays(config={}){
     if(disposed)throw Error('PDF Viewer 已销毁');
-    // The same public method accepts a {blockTypes} patch from AG without
+    // The same public method accepts a {blockGroups} patch from AG without
     // resetting a user's Block/Span dropdown or the cached page geometry.
     const nextLevel=Object.hasOwn(config,'level')?config.level:overlayLevel;
     const nextLoader=Object.hasOwn(config,'loadPage')?config.loadPage:loadOverlayPage;
@@ -164,27 +184,27 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(nextLevel!=='off'&&typeof nextLoader!=='function')
       throw Error('Block/Span 覆盖框必须提供按页读取回调');
     if(nextLoader!==null&&typeof nextLoader!=='function')throw Error('覆盖框回调无效');
-    const nextTypes=Object.hasOwn(config,'blockTypes')?config.blockTypes:
-      (blockTypes===null?null:[...blockTypes]);
-    if(nextTypes!==null&&(!Array.isArray(nextTypes)||
-      !nextTypes.every(type=>typeof type==='string')))
-      throw Error('Block Type 过滤必须是字符串数组或 null');
-    const normalized=nextTypes===null?null:new Set(nextTypes);
-    const oldTypes=blockTypes===null?null:[...blockTypes].sort();
-    const newTypes=normalized===null?null:[...normalized].sort();
-    const typesChanged=JSON.stringify(oldTypes)!==JSON.stringify(newTypes);
+    const nextGroups=Object.hasOwn(config,'blockGroups')?config.blockGroups:
+      (blockGroups===null?null:[...blockGroups]);
+    if(nextGroups!==null&&(!Array.isArray(nextGroups)||
+      !nextGroups.every(type=>typeof type==='string')))
+      throw Error('块组筛选必须是字符串数组或 null');
+    const normalized=nextGroups===null?null:new Set(nextGroups);
+    const oldGroups=blockGroups===null?null:[...blockGroups].sort();
+    const newGroups=normalized===null?null:[...normalized].sort();
+    const groupsChanged=JSON.stringify(oldGroups)!==JSON.stringify(newGroups);
     const loaderChanged=nextLoader!==loadOverlayPage;
     const levelChanged=nextLevel!==overlayLevel;
     loadOverlayPage=nextLoader;
     overlaySelect.disabled=nextLoader===null;
-    blockTypes=normalized;
+    blockGroups=normalized;
     if(levelChanged){chooseOverlayLevel(nextLevel);return true;}
     if(loaderChanged){
       overlayRevision++;overlayCache.clear();overlayPending.clear();
       clearOverlayNodes();showOverlayPages();
-    }else if(typesChanged){
+    }else if(groupsChanged){
       // Paint from immutable cached geometry. No SQL query, PDF re-fetch,
-      // overlay append, zoom reset or page change for an AG checkbox click.
+      // overlay append, zoom reset or page change for an AG group checkbox click.
       for(const [key,data] of overlayCache){
         if(key.startsWith(overlayLevel+':'))paintPageBoxes(data.page,data);
       }

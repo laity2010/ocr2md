@@ -10,7 +10,7 @@ const COLUMNS=Object.freeze([
   {field:'global_page',headerName:'页（0起）',width:112,sortable:true},
   {field:'source_name',headerName:'源 JSON',width:170,sortable:true},
   {field:'local_page',headerName:'分段页',width:95,sortable:true},
-  {field:'block_group',headerName:'原始数组',width:145,sortable:true},
+  {field:'block_group',headerName:'块组',width:145,sortable:true},
   {field:'block_index',headerName:'块序号',width:102,sortable:true},
   {field:'block_type',headerName:'块类型',width:120,sortable:true},
   {field:'bbox_json',headerName:'覆盖框',width:158,sortable:false},
@@ -19,7 +19,7 @@ const COLUMNS=Object.freeze([
 ]);
 const SPAN_COLUMNS=Object.freeze([
   {field:'global_page',headerName:'Page（0起）',width:120,sortable:true},
-  {field:'block_group',headerName:'原始数组',width:135,sortable:true},
+  {field:'block_group',headerName:'块组',width:135,sortable:true},
   {field:'block_id',headerName:'Block',width:240,sortable:true},
   {field:'block_type',headerName:'Block Type',width:135,sortable:true},
   {field:'block_bbox_json',headerName:'Block BBox',width:148,sortable:false},
@@ -36,7 +36,7 @@ const SPAN_COLUMNS=Object.freeze([
 ]);
 const BLOCK_COLUMNS=Object.freeze([
   {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
-  {field:'block_group',headerName:'原始数组',width:135,sortable:true},
+  {field:'block_group',headerName:'块组',width:135,sortable:true},
   {field:'pbs',headerName:'PBS',width:125,sortable:true},
   {field:'block_id',headerName:'Block ID',width:105,sortable:true},
   {field:'parent_block_id',headerName:'ParentID',width:125,sortable:true},
@@ -75,20 +75,20 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return url.pathname+url.search;
   };
   let lastPdfWorkspace='',lastOverlayWorkspace='';
-  let blockTypeSelection=null;
-  function applyBlockTypes(types){
+  let blockGroupSelection=null;
+  function applyBlockGroups(types){
     const selected=types===null?null:[...new Set(types.map(String))].sort();
-    if(JSON.stringify(selected)===JSON.stringify(blockTypeSelection))return;
-    blockTypeSelection=selected;
-    frame.setPdfOverlays({blockTypes:selected});
+    if(JSON.stringify(selected)===JSON.stringify(blockGroupSelection))return;
+    blockGroupSelection=selected;
+    frame.setPdfOverlays({blockGroups:selected});
   }
   function prepareOverlays(directory){
     if(directory===lastOverlayWorkspace)return;
     lastOverlayWorkspace=directory;
     frame.setPdfOverlays(directory?{
-      level:'block',blockTypes:blockTypeSelection,
+      level:'block',blockGroups:blockGroupSelection,
       loadPage:(page,level)=>request('overlays',{workspace:directory,page,level}),
-    }:{level:'off',loadPage:null,blockTypes:null});
+    }:{level:'off',loadPage:null,blockGroups:null});
   }
   function warmPdf(directory){
     if(directory===lastPdfWorkspace)return;
@@ -152,7 +152,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const epoch=++operation;
     workspace=nextWorkspace;
     tableReady=false;spanReady=false;blockReady=false;hideNavigation();frame.clearSqlRows();
-    applyBlockTypes(null);
+    applyBlockGroups(null);
     if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
     try{
@@ -221,9 +221,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         suppressHeaderMenuButton:true,
         suppressHeaderFilterButton:false,
       })),{onFilterChanged:model=>{
-        // The AG Block Type categorical checkbox filter is authoritative.
-        // Other column filters do not alter PDF visibility.
-        applyBlockTypes(table==='block'?(model?.block_type?.values??null):null);
+        // AG Block group (block_group) is authoritative; Block Type is not.
+        // Other column filters do not change PDF overlay visibility.
+        applyBlockGroups(table==='block'?(model?.block_group?.values??null):null);
       },onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
         if(table==='block')onStatus(`Block 定位：${row.pbs} · BlockID ${row.block_id} · ParentID ${row.parent_block_id??'NULL'} · bbox ${row.block_bbox_json}`,'info');

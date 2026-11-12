@@ -30,4 +30,4 @@ PDF 覆盖框：单一 `setOverlays({level,loadPage})` API 支持 Block／Span�
 
 公网目录授权：在「全局设置 → 资料目录 → 浏览目录」遇到 Main 目录 API 403 时，工作台会弹出 Main 的 12 位编辑授权码输入框；通过 Main 的 `/api/unlock` 与 `/api/session` 验证后自动重试原目录请求。授权码不写入设置，取消或验证失败不读取目录。契约与测试见 `docs/contracts/lab-ocr-main-editor-authorization.md`。
 
-PDF 覆盖框跟随 AG 的 SQLite → block 表 **Block Type** 多选筛选：空选隐藏、全选显示全部，多选取并集；相同 ID 或相同坐标的框不重复绘制，筛选不触发 PDF/SQL 重载。Block 与 Span 两种 PDF 粒度均受该筛选约束。
+PDF 覆盖框跟随 AG 的 SQLite → block 表 **块组（block_group）** 多选筛选：空选隐藏，all 全部显示，多选取并集；不同块组中相同或近乎重合的框不会叠画，真正嵌套的结构框保留。Block、Span 两种 PDF 粒度均遵循块组筛选；**块类型（block_type）不参与 PDF 过滤**。筛选不触发 PDF/SQL 重载。
