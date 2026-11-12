@@ -147,32 +147,91 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     element.className='ocr-preview-pane';element.dataset.previewMode='md';
     const bar=document.createElement('div');bar.className='ocr-preview-switchbar';
     const mode=document.createElement('select');mode.className='ocr-preview-mode';
-    mode.setAttribute('aria-label','预览类型');mode.innerHTML='<option value="md">Markdown 预览</option><option value="pdf" disabled>PDF 原文</option>';
+    mode.setAttribute('aria-label','预览类型');
+    mode.append(new Option('Markdown 预览','md'),new Option('PDF 原文','pdf'));
+    const pdfOption=mode.querySelector('option[value="pdf"]');
+    pdfOption.disabled=!pdfPaneMount;
     const split=document.createElement('label');split.className='ocr-preview-split-toggle';
     const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=true;
     checkbox.setAttribute('aria-label','切分 Markdown PDF 预览');
     checkbox.addEventListener('change',()=>onSplit?.(checkbox.checked));
     split.append(checkbox,document.createTextNode('切分'));
-    bar.append(mode,split);element.append(bar);
+    const pdfTools=document.createElement('div');pdfTools.className='ocr-preview-mode-tools';
+    pdfTools.dataset.mode='pdf';pdfTools.hidden=true;
+    bar.append(mode,split,pdfTools);element.append(bar);
     const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';
-    element.append(area);
-    element.setAttribute('aria-label','Markdown 预览（空白）');
+    const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
+    surface.dataset.pdfTheme='dark';
+    element.append(area,surface);
+    element.setAttribute('aria-label','Markdown / PDF 预览');
+    function setMode(next){
+      // A detached PDF is already visible during split; prevent duplicates.
+      if(next==='pdf'&&(!pdfPaneMount||pdfSlot.detached)){
+        mode.value='md';return false;
+      }
+      if(next!=='md'&&next!=='pdf')return false;
+      element.dataset.previewMode=next;mode.value=next;
+      pdfTools.hidden=next!=='pdf';
+      surface.setAttribute('aria-hidden',String(next!=='pdf'&&!pdfSlot.detached));
+      pdfSlot.current?.relayout?.();
+      return true;
+    }
+    mode.addEventListener('change',()=>setMode(mode.value));
+    owned=()=>{
+      pdfSlot.preview=Object.freeze({surface,tools:pdfTools,
+        setMode,setSplit(enabled){
+          pdfOption.disabled=Boolean(enabled)||!pdfPaneMount;
+          if(enabled){
+            setMode('md');
+            if(pdfSlot.detached){
+              // The toolbar belongs to the detached PDF, even though the
+              // shared preview dropdown remains in Markdown mode.
+              pdfTools.hidden=false;
+              surface.setAttribute('aria-hidden','false');
+            }
+          }else setMode(mode.value);
+        },
+        restore(){element.append(surface);bar.append(pdfTools);},
+      });
+      if(pdfPaneMount){
+        const viewer=pdfPaneMount({surface,toolbar:pdfTools,onStatus});
+        pdfSlot.current=viewer;
+        if(pdfSlot.source)void viewer.loadPdf(pdfSlot.source).catch(()=>{});
+      }
+      return {dispose(){
+        pdfSlot.current?.dispose();pdfSlot.current=null;
+        pdfSlot.preview=null;
+      }};
+    };
   }else if(name==='pdf'){
     element.className='ocr-detached-pdf-pane';
     const bar=document.createElement('div');bar.className='ocr-detached-pdf-toolbar';
     const title=document.createElement('span');title.className='ocr-detached-pdf-title';title.textContent='PDF 原文';
     const actions=document.createElement('div');actions.className='ocr-detached-pdf-tools';
-    actions.innerHTML='<div class="ocr-pdf-tools"><button type="button" disabled>−</button><button type="button" disabled>适宽</button><button type="button" disabled>+</button><span class="ocr-pdf-zoom">—</span><button type="button" disabled>提取文本</button><label>页 <input type="number" disabled value="1" class="ocr-pdf-page" aria-label="PDF 页码"/></label><span class="ocr-pdf-count">/ —</span></div>';
+    if(!pdfPaneMount)actions.innerHTML='<div class="ocr-pdf-tools"><button type="button" disabled>−</button><button type="button" disabled>适宽</button><button type="button" disabled>+</button><span class="ocr-pdf-zoom">—</span><button type="button" disabled>提取文本</button><label>页 <input type="number" disabled value="1" class="ocr-pdf-page" aria-label="PDF 页码"/></label><span class="ocr-pdf-count">/ —</span></div>';
     bar.append(title,actions);element.append(bar);
     const host=document.createElement('div');host.className='ocr-detached-pdf-host';
-    const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
-    host.append(surface);element.append(host);
+    element.append(host);
     if(pdfPaneMount)owned=()=>{
-      const viewer=pdfPaneMount({surface,toolbar:actions,onStatus});
-      pdfSlot.current=viewer;
-      if(pdfSlot.source)void viewer.loadPdf(pdfSlot.source).catch(()=>{});
-      return {dispose(){if(pdfSlot.current===viewer)pdfSlot.current=null;viewer.dispose();}};
+      // Move the SAME PDF.js DOM and controls as Main's detachPdf/reattachPdf.
+      // Do not recreate a PDFViewer, refetch the PDF or discard the text layer.
+      const preview=pdfSlot.preview;
+      if(!preview||pdfSlot.detached)throw Error('PDF split owner unavailable');
+      host.append(preview.surface);actions.append(preview.tools);
+      pdfSlot.detached={host,actions};
+      preview.setSplit(true);
+      pdfSlot.current?.relayout?.();
+      return {dispose(){
+        if(pdfSlot.detached?.host!==host)return;
+        pdfSlot.detached=null;
+        preview.restore();preview.setSplit(false);
+        pdfSlot.current?.relayout?.();
+      }};
     };
+    else{
+      const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
+      host.append(surface);
+    }
   }else throw Error('Unknown Frame pane '+name);
   return {element,init(){if(owned)this.resource=owned();},layout(){this.resource?.layout?.();},
     dispose(){this.resource?.dispose();}};
@@ -186,7 +245,7 @@ function addPanel(dockview,id,component,title,position){
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
   moduleLabel='空白框架'}={}){
   let split=false;
-  const pdfSlot={current:null,source:null};
+  const pdfSlot={current:null,source:null,preview:null,detached:null};
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
@@ -194,10 +253,11 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
   function setSplit(enabled){
     if(Boolean(enabled)===split)return;
-    if(enabled){addPanel(dockview,'pdf','pdf','PDF 原文',{referencePanel:'preview',direction:'right'});split=true;}
+    if(enabled){pdfSlot.preview?.setMode('md');addPanel(dockview,'pdf','pdf','PDF 原文',{referencePanel:'preview',direction:'right'});split=true;}
     else{const panel=dockview.getPanel('pdf');if(panel)dockview.removePanel(panel);split=false;}
     const checkbox=container.querySelector('.ocr-preview-split-toggle input');
     if(checkbox)checkbox.checked=split;
+    pdfSlot.preview?.setSplit(split);
     onStatus(split?'四窗布局已启用':'三窗布局已启用');
   }
   setSplit(true);

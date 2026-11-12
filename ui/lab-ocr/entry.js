@@ -15,6 +15,7 @@ registerFramePdfPane(context=>{
       const mounted=await initialization;
       return mounted?.loadPdf(source)??false;
     },
+    relayout(){viewer?.relayout?.();},
     dispose(){disposed=true;viewer?.dispose();},
   });
 });

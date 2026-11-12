@@ -60,28 +60,68 @@ try{
      });
    assert.equal(await page.locator('.lab-ocr-pdf-scroller .page').count(),3);
    assert.ok(await page.locator('.lab-ocr-pdf-scroller .textLayer').count()>=1);
-   assert.equal(pdfRequests,1,'PDF requested once while warming the first page');
+   assert.equal(pdfRequests,1,'PDF must warm up via one authenticated request');
    assert.equal(await page.locator('.lab-ocr-pdf-surface').getAttribute('data-pdf-theme'),'dark');
+   assert.equal(await page.locator('.lab-ocr-pdf-controls button').count(),0,'No extra PDF buttons');
+   assert.equal(await page.locator('.lab-ocr-pdf-controls input').count(),1);
+   assert.equal(await page.locator('.lab-ocr-pdf-controls select').count(),1);
+   const previewMode=page.locator('#workspace .ocr-preview-mode');
+   const split=page.locator('.ocr-preview-split-toggle input');
+   const detached=page.locator('.ocr-detached-pdf-host');
+   const scale=page.locator('.lab-ocr-pdf-scale');
    const pageInput=page.locator('.lab-ocr-pdf-page');
+   assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),true,
+     'Split reserves PDF in detached pane');
+   assert.equal(await detached.locator('.lab-ocr-pdf-root').count(),1);
+   const originalRoot=await page.locator('.lab-ocr-pdf-root').evaluate(node=>{
+     window.__labPdfRoot=node;return node.isConnected;
+   });
+   assert.equal(originalRoot,true);
+   assert.deepEqual(await scale.locator('option').allTextContents(),
+     ['适宽','25%','50%','75%','100%','125%','150%','200%','300%','400%']);
+   assert.equal(await scale.inputValue(),'page-width');
    await pageInput.fill('3');await pageInput.press('Tab');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-page')?.value==='3');
-   await page.getByRole('button',{name:'上一页'}).click();
-   assert.equal(await pageInput.inputValue(),'2');
-   const before=await page.locator('.lab-ocr-pdf-zoom').innerText();
-   await page.getByRole('button',{name:'放大'}).click();
-   await page.waitForFunction(prior=>document.querySelector('.lab-ocr-pdf-zoom')?.textContent!==prior,before);
-   await page.getByRole('button',{name:'适宽'}).click();
-   await page.getByRole('button',{name:'整页'}).click();
-   await page.getByRole('button',{name:'顺时针旋转 90°'}).click();
-   assert.equal(await page.locator('.lab-ocr-pdf-scroller canvas').count()>0,true);
-   await page.locator('.ocr-preview-split-toggle input').uncheck();
-   await page.waitForFunction(()=>!document.querySelector('.lab-ocr-pdf-root'));
-   await page.locator('.ocr-preview-split-toggle input').check();
-   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-placeholder')?.hidden&&
-     document.querySelector('.lab-ocr-pdf-count')?.textContent==='/ 3',null,{timeout:60000});
-   assert.equal(pdfRequests,2,'Split reopens the bound PDF without changing settings');
+   assert.equal(await page.locator('.lab-ocr-pdf-count').innerText(),'/ 3');
+   await scale.selectOption('100');
+   assert.equal(await scale.inputValue(),'100');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-scroller .page')?.getBoundingClientRect().width>650);
+   const widthAt100=await page.locator('.lab-ocr-pdf-scroller .page').first().evaluate(el=>el.getBoundingClientRect().width);
+   await scale.selectOption('page-width');
+   assert.equal(await scale.inputValue(),'page-width');
+   await split.uncheck();
+   await page.waitForFunction(()=>!document.querySelector('.ocr-detached-pdf-pane'));
+   assert.equal(await previewMode.locator('option[value="pdf"]').isEnabled(),true,
+     'PDF option MUST be enabled after canceling split');
+   assert.equal(await previewMode.inputValue(),'md');
+   assert.equal(await page.locator('.ocr-preview-pane>.ocr-preview-pdf-host .lab-ocr-pdf-root').count(),1);
+   await previewMode.selectOption('pdf');
+   await page.waitForFunction(()=>document.querySelector('.ocr-preview-pane')?.dataset.previewMode==='pdf');
+   assert.equal(await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-scale').isVisible(),true);
+   assert.equal(await page.locator('.ocr-preview-pane>.ocr-preview-pdf-host canvas').count()>0,true);
+   assert.equal(await page.evaluate(()=>document.querySelector('.lab-ocr-pdf-root')===window.__labPdfRoot),true,
+     'Single preview must reuse the warmed PDFViewer, not rebuild it');
+   assert.equal(pdfRequests,1,'Unsplit PDF must NOT request bytes again');
+   await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-scale').selectOption('75');
+   await page.waitForFunction(width=>Math.abs(document.querySelector('.lab-ocr-pdf-scroller .page')?.getBoundingClientRect().width-width*.75)<5,widthAt100);
+   await previewMode.selectOption('md');
+   await page.waitForFunction(()=>document.querySelector('.ocr-preview-pane')?.dataset.previewMode==='md');
+   await previewMode.selectOption('pdf');
+   assert.equal(await page.locator('.ocr-preview-pane>.ocr-preview-pdf-host canvas').count()>0,true);
+   await split.check();
+   await page.waitForFunction(()=>!!document.querySelector('.ocr-detached-pdf-pane'));
+   assert.equal(await previewMode.inputValue(),'md');
+   assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),true);
+   assert.equal(await page.locator('.ocr-detached-pdf-host .lab-ocr-pdf-root').count(),1);
+   assert.equal(await page.evaluate(()=>document.querySelector('.lab-ocr-pdf-root')===window.__labPdfRoot),true);
+   assert.equal(await page.locator('.lab-ocr-pdf-scale').inputValue(),'75','Zoom selection must persist');
+   assert.equal(pdfRequests,1,'Re-splitting must not re-request PDF');
+   await split.uncheck();
+   await previewMode.selectOption('pdf');
+   assert.equal(await page.locator('.ocr-preview-mode-tools .lab-ocr-pdf-controls').count(),1);
+   assert.equal(pdfRequests,1);
    assert.deepEqual(errors,[]);
-   console.log('LAB_OCR_PDF_API_PASS',name,JSON.stringify({pages:3,pdfRequests,initialZoom:before}));
+   console.log('LAB_OCR_PDF_API_PASS',name,JSON.stringify({pages:3,pdfRequests,previewMode:'pdf',singleViewer:true}));
   }finally{await browser.close();}
  }
 }finally{dev?.kill('SIGTERM');}

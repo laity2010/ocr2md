@@ -1,7 +1,7 @@
 # lab-ocr · OCR 审阅实验起点
 
 本实验从 `frame/base` 派生，并合并 `lab-frame@a8406e1`（2216 版）。
-保持空白框架的 Dockview 四窗、AG Grid、CM6、设置和导航，复用 Frame 的授权目录树、整行选中、展开刷新、全局状态和文件保存。当前首阶段接入 1 份不足 200 页的 MinerU JSON + 1 份 PDF，首次导入 SQLite 单表 `minerujson`，AG 展示原始块；已提供独立 PDF.js 预览加载（默认深色、首页预热、导航缩放旋转和下载），但尚未接入 OCR 校正编辑、PDF 块标定／定位或多 JSON 拼接。
+保持空白框架的 Dockview 四窗、AG Grid、CM6、设置和导航，复用 Frame 的授权目录树、整行选中、展开刷新、全局状态和文件保存。当前首阶段接入 1 份不足 200 页的 MinerU JSON + 1 份 PDF，首次导入 SQLite 单表 `minerujson`，AG 展示原始块；已提供独立 PDF.js 预览加载（默认深色、首页预热、页码及缩放下拉菜单），但尚未接入 OCR 校正编辑、PDF 块标定／定位或多 JSON 拼接。
 标牌为 `lab-ocr`，与 `lab-frame` 使用不同的发布路径和本地设置命名空间。
 新业务逻辑仅在本实验分支开发，禁止直接修改空白框架基线。
 
@@ -22,6 +22,6 @@
 ## PDF 预览加载 V1
 
 - 关联 PDF 取自已保存 `workspace.dataDirectory/pdf/` 中唯一一份 PDF；不增加重复 PDF 路径设置。
-- 新 Viewer 以 PDF.js 单请求流式加载，首页实际绘制后才标记就绪，提供常用工具栏、文字层、默认深色、切分后重建。
+- 新 Viewer 以 PDF.js 单请求流式加载，首页实际绘制后才标记就绪，提供页码与缩放下拉、文字层、默认深色、切分时同一 Viewer 的无重载转移与单窗 MD/PDF 下拉切换。
 - 后端新增已鉴权的只读 `/labs/lab-ocr/api/ocr/pdf?workspace=…`，不修改原始文件。
 - API、直接测试、暂不包含的块交互见 `docs/contracts/lab-ocr-pdf-loader.md`。

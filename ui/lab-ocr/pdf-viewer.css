@@ -8,13 +8,18 @@
   padding:12px;line-height:1.6;background:#263139;border:1px solid #53615e;
   border-radius:6px;pointer-events:none;color:#d3c6aa;font-size:12px}
 .lab-ocr-pdf-placeholder[hidden]{display:none!important}
-.lab-ocr-pdf-controls{display:flex;align-items:center;gap:3px;min-width:0;width:100%;overflow-x:auto;
-  scrollbar-width:thin;white-space:nowrap;color:#d3c6aa;height:29px}
-.lab-ocr-pdf-controls button{flex:none;padding:2px 5px;min-width:24px;height:25px;border:1px solid #52615f;
-  border-radius:4px;color:#d3c6aa;background:#2e3b40;cursor:pointer}
-.lab-ocr-pdf-controls button:disabled{opacity:.4;cursor:default}
-.lab-ocr-pdf-controls button:not(:disabled):hover{background:#42544b}
-.lab-ocr-pdf-controls label{display:inline-flex;gap:3px;align-items:center;flex:none}
-.lab-ocr-pdf-controls .lab-ocr-pdf-page{width:39px;min-width:39px;height:25px;box-sizing:border-box;
+.lab-ocr-pdf-controls{display:flex;align-items:center;justify-content:flex-start;gap:8px;
+  min-width:0;width:100%;overflow:hidden;white-space:nowrap;color:#d3c6aa;height:29px}
+.lab-ocr-pdf-controls label{display:inline-flex;gap:4px;align-items:center;flex:none}
+.lab-ocr-pdf-controls .lab-ocr-pdf-page{box-sizing:border-box;width:42px;min-width:42px;height:26px;
   padding:2px 3px;background:#202c32;border:1px solid #596963;color:#d3c6aa;border-radius:3px}
-.lab-ocr-pdf-count,.lab-ocr-pdf-zoom{font-variant-numeric:tabular-nums;font-size:11px;flex:none}
+.lab-ocr-pdf-controls .lab-ocr-pdf-count{font-variant-numeric:tabular-nums;font-size:12px;flex:none}
+.lab-ocr-pdf-controls .lab-ocr-pdf-scale{box-sizing:border-box;flex:0 1 92px;min-width:64px;
+  height:26px;padding:2px 4px;border:1px solid #596963;color:#d3c6aa;
+  background:#202c32;border-radius:4px;font:12px "OCR2MD Sarasa",monospace}
+.lab-ocr-pdf-controls :disabled{opacity:.65}
+/* In single-pane mode the controls share the preview switchbar. */
+.ocr-preview-mode-tools[data-mode="pdf"]{flex:1 1 auto;min-width:0}
+.ocr-preview-mode-tools[data-mode="pdf"] .lab-ocr-pdf-controls{gap:6px}
+.ocr-preview-pane[data-preview-mode="md"]>.ocr-preview-pdf-host{visibility:hidden;pointer-events:none}
+.ocr-preview-pane[data-preview-mode="pdf"]>.ocr-preview-pdf-host{visibility:visible;pointer-events:auto}
