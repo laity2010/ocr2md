@@ -19,7 +19,6 @@ const COLUMNS=Object.freeze([
 ]);
 const SPAN_COLUMNS=Object.freeze([
   {field:'global_page',headerName:'Page（0起）',width:120,sortable:true},
-  {field:'block_group',headerName:'块组',width:135,sortable:true},
   {field:'block_id',headerName:'Block',width:240,sortable:true},
   {field:'block_type',headerName:'Block Type',width:135,sortable:true},
   {field:'block_bbox_json',headerName:'Block BBox',width:148,sortable:false},
@@ -36,7 +35,6 @@ const SPAN_COLUMNS=Object.freeze([
 ]);
 const BLOCK_COLUMNS=Object.freeze([
   {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
-  {field:'block_group',headerName:'块组',width:135,sortable:true},
   {field:'pbs',headerName:'PBS',width:125,sortable:true},
   {field:'block_id',headerName:'Block ID',width:105,sortable:true},
   {field:'parent_block_id',headerName:'ParentID',width:125,sortable:true},
@@ -76,19 +74,12 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return url.pathname+url.search;
   };
   let lastPdfWorkspace='',lastOverlayWorkspace='';
-  const DEFAULT_BLOCK_GROUP='para_blocks';
-  let blockGroupSelection=[DEFAULT_BLOCK_GROUP];
-  function applyBlockGroups(types){
-    const selected=types===null?null:[...new Set(types.map(String))].sort();
-    if(JSON.stringify(selected)===JSON.stringify(blockGroupSelection))return;
-    blockGroupSelection=selected;
-    frame.setPdfOverlays({blockGroups:selected});
-  }
+  const REVIEW_BLOCK_GROUP='para_blocks';
   function prepareOverlays(directory){
     if(directory===lastOverlayWorkspace)return;
     lastOverlayWorkspace=directory;
     frame.setPdfOverlays(directory?{
-      level:'block',blockGroups:blockGroupSelection,
+      level:'block',blockGroups:[REVIEW_BLOCK_GROUP],
       onBlockSelect:({blockId,pbs})=>{
         const id=String(blockId);
         // The Block ID, not PBS, is the stable identity across views.
@@ -165,7 +156,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const epoch=++operation;
     workspace=nextWorkspace;
     tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();frame.clearSqlRows();
-    applyBlockGroups([DEFAULT_BLOCK_GROUP]);
     if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
     try{
@@ -223,25 +213,23 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         if(offset===0)total=page.total;
         if(total>10000)throw Error('当前 AG 单次显示上限为 10000 行，请缩小数据范围');
         if(!page.rows.length&&offset<total)throw Error('SQL 分页提前结束');
-        entries.push(...page.rows);offset=entries.length;
+        // Defense-in-depth during rolling updates: an older API process
+        // might still return all three OCR stages. Never let non-para rows
+        // enter the Block/Span CM6 state or AG even before server restart.
+        const visible=(table==='block'||table==='span')?
+          page.rows.filter(row=>row.block_group===REVIEW_BLOCK_GROUP):page.rows;
+        entries.push(...visible);
+        offset+=page.rows.length;
       }while(offset<total);
-      // Reuse Main's audited AG Community categorical filter, including the
-      // `all` checkbox and multi-select of distinct values in each column.
-      // Only the AG row model changes: no SQLite queries or SQL mutations.
+      // Only the review tables are para-only. Other columns retain Main's
+      // categorical filters; none can change PDF block-group visibility.
       frame.showSqlRows(entries,(table==='span'?SPAN_COLUMNS:table==='block'?BLOCK_COLUMNS:COLUMNS).map(column=>({
         ...column,
         filter:EnumCheckboxFilter,
         filterValueGetter:params=>params.data?.[column.field]??'',
         suppressHeaderMenuButton:true,
         suppressHeaderFilterButton:false,
-      })),{initialFilterModel:table==='block'?{block_group:{values:[
-        selectedId===null?DEFAULT_BLOCK_GROUP:
-          (entries.find(row=>String(row.block_id)===String(selectedId))?.block_group??DEFAULT_BLOCK_GROUP),
-      ]}}:null,onFilterChanged:model=>{
-        // AG Block group (block_group) is authoritative; Block Type is not.
-        // Other column filters do not change PDF overlay visibility.
-        applyBlockGroups(table==='block'?(model?.block_group?.values??null):null);
-      },onSelect:row=>{
+      })),{onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
         if(table==='block'){
           frame.focusPdfBlock({id:row.block_id,page:Number(row.global_page)+1});
@@ -253,7 +241,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         onStatus(`PDF → AG · BlockID ${selectedId} 不在当前载入行中`,'warning');
         return false;
       }
-      onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行${table==='block'?'，块组默认 para_blocks':''}，AG 作为分类定位视图`,'ok');
+      onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行${table==='block'||table==='span'?'（只含 para_blocks）':''}，AG 作为分类定位视图`,'ok');
       return true;
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');return false;}
   }

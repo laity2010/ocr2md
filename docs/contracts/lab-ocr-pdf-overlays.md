@@ -7,7 +7,7 @@
 ```js
 viewer.setOverlays({
   level: 'block', // 'block' | 'span' | 'off'
-  blockGroups: null, // null=全部块组，[]=不画；['para_blocks','discarded_blocks']=多选并集
+  blockGroups: ['para_blocks'], // Lab OCR 固定；底层通用 PDF 组件仍支持其它配置
   loadPage: async (page, level) => ({
     level, page,             // PDF 页码，从 1 开始
     pageSize: [595, 842],  // MinerU JSON 对应页原始宽、高，左上角为 (0, 0)
@@ -40,14 +40,13 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 
 已复用现有设置组件注册 `pdf.overlay.borderWidth`（0.25–3 px，步进 0.25，默认 **0.75 px**）和 `pdf.overlay.transparency`（0–95%，步进 5，默认 **65%**，数值越高越透明）。二者对 Block、Span 均生效；原文、覆盖框 bbox、坐标、比例均不改变。只修改 PDF 视窗容器的 CSS 变量，变更实时更新已显示覆盖框，不触发 PDF 或 SQLite 重新读取。由现有 CMD 设置模块的 `settings.changed` 通知应用，现有全局保存按钮负责持久化。Lab Frame 和 Main 不注册这两项。
 
-## AG 块组 → PDF 显示过滤（2026-11-12）
+## Block/Span 只处理 para_blocks（WCP40，取代旧多块组过滤）
 
-- **勘误**：之前版本把 AG 的 `block_type` 当成 PDF 筛选依据，这是错误的。应使用 SQL 的 `block_group`，AG 中文列名为「块组」；`block_type`（块类型）仍是独立可过滤字段，**但不控制覆盖框**。三个 SQL 视图中的 `block_group` 列统一改名「块组」，仅 AG **SQLite → block** 的块组筛选向 PDF 发布选择。
-- AG Grid 复用原有 `EnumCheckboxFilter`（`all`、单选、空选、多选），通过其已注册的公共 `onFilterChanged` Port 将 `model.block_group.values` 通知 lab-ocr 业务层，后者调用 Frame 公共代理 `setPdfOverlays({blockGroups})`。`null` 代表 all，`[]` 代表空选；其他列筛选不改变 PDF，切换其他 SQL 表时重置。PDF 不访问 AG 私有状态／DOM 或 SQLite。
-- 每页只读 API 的 `boxes` 每项增加 `blockGroup`（取自对应 `block`/`span` 表的 `block_group`），保留先前的 `blockType` 供其他显示用途，不改任何表结构，不重写原始 JSON；Block 与 Span 绘制都采用相同块组筛选集。
-- **all / 多选＝所选块组的集合并集，并非逐组叠画**。每页、每粒度始终只存在一个覆盖层，筛选时从缓存几何重建并替换，去除重复 ID、完全相同坐标、以及不同块组之间 IoU≥0.94 的近乎相同矩形（处理预处理与正文块略微错位）。跨块组重复时按 `para_blocks` → `discarded_blocks` → `preproc_blocks` 优先保留正文版本。真实的嵌套、包含和部分相交块仍显示，不以任意交叉误判为重复。
-- 块组选项变化只重画浏览器缓存，不重新取 SQL 几何或 PDF 字节、不重置页码／缩放／Block-Span 粒度；换页仍按页查询，缩放后从缓存恢复。
-- 定向验收：`tests/lab-ocr-overlays.test.py` 和 `tests/lab-ocr-overlays-http.test.py` 验证组字段、来源与访问权限；`tests/lab-ocr-overlay-filter.browser.test.mjs` 在 Chromium 和 iPad WebKit 用**真实 AG 块组复选菜单**测全选、空选、单选、多选、跨组精准／近似重合去重、嵌套保留、块类型筛选独立、Block/Span、缩放、翻页、无重查。
+- 原始 MinerU JSON 及 `minerujson` 溯源表保留全部块组，保持原始字节、来源和恢复能力；新的 **SQLite `block`、`span` 派生表仅包含 `para_blocks`**，包括该组的全部嵌套子块。原有三组派生表在相同输入 SHA 下采用事务原位删除非 para 行，保留 para 的整数 BlockID、PBS 修改与 Span ID；重新生成时继续按原始全组顺序预留 BlockID 序号，只写入 para 行，避免旧 ID 漂移。
+- `GET rows?table=block|span` 与 `GET overlays?level=block|span` 均在 SQL 层使用 `block_group='para_blocks'`，即使旧三组表尚未迁移也不会泄漏其它组。Span 中的 `source_block_key` 仍按原值关联 para Block；不改变来源 JSON。
+- Lab OCR `workflow` 永远给现有 PDF 公共 API 注入 `setPdfOverlays({blockGroups:['para_blocks']})`；无多组/all/空组选择通路。AG 的 Block/Span 表移除冗余「块组」列/过滤菜单；其它列筛选只影响 AG，不修改 PDF。原始 minerujson 仍可检查组信息，但它不是 Block 操作对象。
+- 单个覆盖层、相同 bbox 去重、不同 PBS（含 s1）各自标签、橙色实线父子高亮、跨窗定位与缩放保留。用于复用的底层 PDF 组件依然允许外部调用方传入通用 `blockGroups` 过滤配置，**但 Lab OCR 业务层不再开放此能力**。
+- 验收：`tests/lab-ocr-para-only.test.py`、Block/Span/Overlay Python 测试、`tests/lab-ocr-overlay-filter.browser.test.mjs`（故意提供混合旧组夹具），以及 PBS、初始导航等 Chromium / iPad WebKit 回归。
 
 ## PBS 标签、去重身份与多窗定位（2026-11-12）
 
@@ -55,8 +54,8 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - PDF 继续使用单一 `setOverlays(config)` 配置注入：可附加 `onBlockSelect({blockId,pbs,page,blockGroup})` 回调，通知调用方**用户点击**的 Block，其他内部重绘绝不触发选择回调。公共 `focusBlock({id,page})` 在 AG 发起定位时设定 selected Block ID、必要时切回 Block 粒度、跳页、定位已缓存或待加载的对应 bbox，不修改数据或重复载入 PDF。懒装配的 PDF 适配器转发这两个能力。
 - Block 页级去重后每一个视觉代表框持有**完整别名 `blockId` 集合**，包括跨块组完全相同或 IoU≥0.94 的略错位源矩形。几何覆盖框仍只绘制优先级最高的一份，AG 点击任一对应原 Block ID 均高亮这份代表；**PBS 标签独立于框去重**：同一页不同 PBS 即使 bbox 完全相同（常见父块与 `s1`、兄弟子块），也各有独立标签、引线和点击 Block ID；仅跨块组相同 PBS 的别名共用一个标签。选中不改变块组过滤，也不触发 SQL 重查。
 - PBS 是带引线的**独立不透明交互层**，覆盖框仍保持原有的透明度和 `pointer-events:none`；只读标签固定 23px 高，按离版面较近的左／右轨道放在纸页外的侧栏，页面适宽缩放会为侧栏预留空间。引线指向原框边缘。子块通过 `parentBlockId` 改用区别颜色。标签按原始纵向锚点放置；若内侧已有标签占据相同高度，则**只向外移一个或多个水平轨道，不改变标签纵坐标，也不合并为 `+N`**。后续标签只要内侧高度空闲就立刻回到原轨道。左右两侧独立计算，每个可见去重 Block 始终有自己可点击的 PBS 标签；引线随水平距离伸长。
-- Frame 暴露两个**受控语义端口**：`focusPdfBlock({id,page})` 代理 PDF 公共 `focusBlock`；`selectSqlRowById({field:'block_id',id})` 通过 AG 组件端口定位、聚焦/选中行并送 CM6 展示同一 SQL 行，不操作 AG 私有 DOM。AG 如有不相关列过滤挡住了目标，保留 `block_group` 筛选而清除其他隐藏目标的条件。Lab OCR 在 AG Block 行点击时调用前者；PDF 点击 PBS 时调用后者，如果 Block 表尚未打开则复用 `openSql('block')` 打开并选中目标。
-- 验收：Python `lab-ocr-overlays.test.py` / `lab-ocr-overlays-http.test.py` 核实原生身份、父子、Span 归属与授权；Node `lab-ocr-pbs-layout.test.mjs` 直接测试多轨避让、内轨回归及全部独立标签；`lab-ocr-pbs-link.browser.test.mjs` 在 Chromium 和 iPad WebKit 用真实 AG、PDF.js 测标签显示、纸页外定位、缩放、分栏、别名高亮、AG↔PDF 跨页和密集多轨可点击标签。原有 PDF/块组筛选/Frame/授权/OCR 回归保持通过。
+- Frame 暴露两个**受控语义端口**：`focusPdfBlock({id,page})` 代理 PDF 公共 `focusBlock`；`selectSqlRowById({field:'block_id',id})` 通过 AG 组件端口定位、聚焦/选中行并送 CM6 展示同一 SQL 行，不操作 AG 私有 DOM。AG 如有不相关列筛选挡住目标，由 AG 公共选择端口处理；Block/Span 已不提供块组筛选。Lab OCR 在 AG Block 行点击时调用前者；PDF 点击 PBS 时调用后者，如果 Block 表尚未打开则复用 `openSql('block')` 打开并选中目标。
+- 验收：Python `lab-ocr-overlays.test.py` / `lab-ocr-overlays-http.test.py` 核实原生身份、父子、Span 归属与授权；Node `lab-ocr-pbs-layout.test.mjs` 直接测试多轨避让、内轨回归及全部独立标签；`lab-ocr-pbs-link.browser.test.mjs` 在 Chromium 和 iPad WebKit 用真实 AG、PDF.js 测标签显示、纸页外定位、缩放、分栏、别名高亮、AG↔PDF 跨页和密集多轨可点击标签。原有 PDF/固定 para/Frame/授权/OCR 回归保持通过。
 
 ## PBS 多轨横向避让（2026-11-12，替代密集收纳）
 
@@ -69,7 +68,7 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 
 - 标签不再固定 `78px` 宽，统一使用浏览器 `width:max-content` 与横向各 `4px` 的内边距、`1px` 边框；字体、23px 高、父子样式、选中高亮与可点击性不改变。短 PBS 收窄，超长 PBS 完整显示且不截断。
 - PBS 布局仍只根据纵向拥挤程度选择由内向外的轨道。页面层先放入 DOM 并测量各标签实际 `offsetWidth`，每条轨道按其**最长标签**预留横向空间，但每个标签自身框宽仍只包住自己的字；这样不依赖字体字数估算，避免不同长度交叉碰撞。左右分侧独立布局。
-- SVG 引线起点沿着标签**靠近 PDF 的真实边缘**重算；需要的页面侧栏宽度取各轨道最外标签的实际宽度而非固定步进，并继续允许水平滚动。既有 Block ID 双向定位、块组过滤、覆盖框去重与 Span 均不改变。
+- SVG 引线起点沿着标签**靠近 PDF 的真实边缘**重算；需要的页面侧栏宽度取各轨道最外标签的实际宽度而非固定步进，并继续允许水平滚动。既有 Block ID 双向定位、固定 para 过滤、覆盖框去重与 Span 均不改变。
 - `tests/lab-ocr-pbs-link.browser.test.mjs` 在 Chromium 与 iPad WebKit 用 Range 测量字形真实占宽，断言边框超出文字的宽度仅约 `8–10px`，长标签宽于短标签、超过原 `78px` 时不截字，密集不同宽度的标签在多轨道上无重叠，远侧标签可点击定位。
 
 ## PBS 同页相邻标签重叠防线（2026-11-12）
@@ -86,12 +85,12 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - 新模块内部纯函数 `indexBlockParents(parentMap,boxes)` 与 `blockHighlight(ids,selectedId,parents)` 放在 `ui/lab-ocr/pbs-family.js`，由直接单元测试 `tests/lab-ocr-pbs-family.test.mjs` 覆盖递归、反向/兄弟隔离、去重别名、重命名 PBS 以及坏链路安全。`tests/lab-ocr-pbs-link.browser.test.mjs` 在 Chromium/iPad WebKit 使用真 PDF.js/AG 和模拟多页父子结构，验证父/子配色、PDF 标签与覆盖框全部后代高亮、跨页、子块单选、AG 反向定位、去重来源、字体调整与缩放。
 - 高亮时**维持 1px 边框宽**，不改变标签盒子大小（用描边外阴影表现醒目程度）；轨道布局使用 `offsetWidth/offsetHeight/offsetTop` 一致的页面布局像素系，规避 iPad WebKit PDF 变换尺度与 DOM 矩形混用造成的密集标签二次重叠。
 
-## lab-ocr 默认 AG Block 与 para 块组（2026-11-12）
 
-- 在保存过的资料目录成功初始化完 SQLite `block` 与 `span` 后，lab-ocr 默认打开 **SQLite → block**，而不是空 AG 或 `minerujson`；新绑定目录并保存也进入 Block。未绑定目录仍打开全局设置；加载中用户主动选择其他导航，则用户选择优先于自动入口。
-- 初始 Block AG `block_group` 列的真实 `EnumCheckboxFilter` 模型为 `{block_group:{values:['para_blocks']}}`；复选菜单中只有 `para_blocks` 勾选、`all` 未勾。Frame 公共 `showSqlRows(rows,columns,{initialFilterModel})` 只在 AG 列/行初始化后调用 AG Grid 公开 `setFilterModel()`，由原始过滤器实际持有状态和触发既有 `onFilterChanged`，没有制作平行的过滤控件或直接操作 AG DOM。
-- PDF `setPdfOverlays({blockGroups:['para_blocks']})` 与 AG 同步，首次打开只绘制 `para_blocks` 的 Block/Span 几何；后续人工多选、空选、all、切换 Block/Span 与父子高亮保持可用。`openSql('block',{selectedId})` 从其它视图应 PDF 标签定位时，以被点选 Block 的来源组设置初始过滤，避免目标行被默认 para 隐藏。
-- SQLite、MinerU、PBS、Block ID 和原有用户数据完全不变；仅初始化及当前视图状态改变。`tests/lab-ocr-sample-flow.browser.test.mjs` 覆盖未绑定→保存→自动 Block／重载默认，`tests/lab-ocr-overlay-filter.browser.test.mjs` 覆盖 AG 初始勾选及 PDF 联动，`tests/lab-ocr-pbs-link.browser.test.mjs` 覆盖用户改 all 后的跨块组几何去重与双向定位。
+## lab-ocr 启动 Block 与固定 para（WCP40）
+
+- 有效资料目录完成 `minerujson` 导入、para-only Block 和 Span 派生后，默认打开 **SQLite → block**；新绑定目录保存后也自动进入 Block。未绑定目录仍显示全局设置，用户主动导航的选择不被后台检查覆盖。
+- Block / Span 的 AG 不提供块组列及筛选，且 PDF Block / Span 只能绘制 para 覆盖框。无需 `initialFilterModel`，也不订阅块组过滤变化；其它 AG 列仍有原有 EnumCheckboxFilter。PDF 标签选中时依稳定 BlockID 定位，不会调用跨组导航。
+- `tests/lab-ocr-sample-flow.browser.test.mjs` 覆盖未绑定→保存→Block 默认与重载，`tests/lab-ocr-overlay-filter.browser.test.mjs` 覆盖只含 para、不出现 group 过滤、Block/Span、缩放和跨页防泄漏。
 
 ## PDF Block 橙色高亮与 PBS 父子标签颜色分离（2026-11-12）
 

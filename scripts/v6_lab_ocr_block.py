@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from v6_lab_ocr_store import BLOCK_GROUPS, OCRImportError, _db, existing_info
+from v6_lab_ocr_store import BLOCK_GROUPS, REVIEW_BLOCK_GROUP, OCRImportError, _db, existing_info
 
 TABLE = 'block'
 LIMIT = 500000
@@ -25,7 +25,7 @@ SCHEMA = '''CREATE TABLE block (
  global_page INTEGER NOT NULL,
  local_page INTEGER NOT NULL,
  page_size_json TEXT NOT NULL,
- block_group TEXT NOT NULL,
+ block_group TEXT NOT NULL CHECK(block_group='para_blocks'),
  block_path TEXT NOT NULL,
  parent_block_id INTEGER REFERENCES block(block_id),
  sibling_order INTEGER NOT NULL,
@@ -120,8 +120,11 @@ def minerujson2block(book:Path)->dict:
             if modern:
                 state=con.execute('SELECT COUNT(*),MIN(import_fingerprint),MAX(import_fingerprint) FROM block').fetchone()
                 if state[0] and state[1]==state[2]==info['signature']:
+                    # Migrate old three-group projections in place. Keep the
+                    # original integer IDs and any reviewed para PBS labels.
+                    removed=con.execute('DELETE FROM block WHERE block_group<>?',(REVIEW_BLOCK_GROUP,)).rowcount
                     con.commit()
-                    return {'status':'unchanged','table':TABLE,'blocks':state[0]}
+                    return {'status':'filtered' if removed else 'unchanged','table':TABLE,'blocks':state[0]-removed}
         sources=con.execute("""SELECT source_order,source_name,source_sha256,source_page_count,
                       original_bytes,import_fingerprint FROM minerujson
                       WHERE row_kind='source' ORDER BY source_order""").fetchall()
@@ -131,7 +134,7 @@ def minerujson2block(book:Path)->dict:
         con.execute('DROP TABLE IF EXISTS block')
         con.execute(SCHEMA)
         query='INSERT INTO block VALUES ('+','.join('?' for _ in range(22))+')'
-        count=0;global_offset=0
+        count=0;inserted=0;global_offset=0
         for order,name,sha,page_count,raw,signature in sources:
             if raw is None or hashlib.sha256(raw).hexdigest()!=sha or signature!=info['signature']:
                 raise OCRImportError('MinerU 来源校验失败')
@@ -150,11 +153,15 @@ def minerujson2block(book:Path)->dict:
                         raise OCRImportError('Block 编号未递增')
                     count=record[0]
                     if count>LIMIT:raise OCRImportError('Block 数超出安全上限')
-                    con.execute(query,record)
+                    # Enumerate all original groups to keep existing para
+                    # Block IDs stable, but insert only the para review rows.
+                    if record[8]==REVIEW_BLOCK_GROUP:
+                        con.execute(query,record)
+                        inserted+=1
             global_offset+=page_count
         con.execute('CREATE INDEX idx_block_location ON block(global_page,block_group,block_path)')
         con.commit()
-        return {'status':'created','table':TABLE,'blocks':count}
+        return {'status':'created','table':TABLE,'blocks':inserted}
     except (sqlite3.DatabaseError,ValueError,TypeError,KeyError) as error:
         con.rollback()
         if isinstance(error,OCRImportError):raise
@@ -172,13 +179,13 @@ def block_rows(book:Path,offset:int=0,limit:int=200)->dict:
         conn.row_factory=sqlite3.Row
         if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='block'").fetchone()[0]!=1:
             raise OCRImportError('尚未生成 block 表')
-        total=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
+        total=conn.execute('SELECT COUNT(*) FROM block WHERE block_group=?',(REVIEW_BLOCK_GROUP,)).fetchone()[0]
         data=conn.execute('''SELECT child.block_id,child.pbs,
                   child.source_block_key,child.source_order,child.source_name,child.global_page,
                   child.local_page,child.page_size_json,child.block_group,child.block_path,
                   child.parent_block_id,child.sibling_order,child.block_index,
                   child.block_type,child.block_bbox_json,child.line_count,child.span_count,
                   child.span_types,child.content_preview,child.block_json,child.has_blocks_field
-                  FROM block AS child
-                  ORDER BY child.block_id LIMIT ? OFFSET ?''',(limit,offset)).fetchall()
+                  FROM block AS child WHERE child.block_group=?
+                  ORDER BY child.block_id LIMIT ? OFFSET ?''',(REVIEW_BLOCK_GROUP,limit,offset)).fetchall()
     return {'table':TABLE,'total':total,'offset':offset,'limit':limit,'rows':[dict(row) for row in data]}

@@ -11,7 +11,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from v6_lab_ocr_store import OCRImportError, _db, existing_info
+from v6_lab_ocr_store import OCRImportError, REVIEW_BLOCK_GROUP, _db, existing_info
 
 MAX_PAGE_BOXES = 5000
 
@@ -32,8 +32,8 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
             records = db.execute(
                 'SELECT block_id,page_size_json,block_bbox_json,block_type,block_group,'
                 'block_id,pbs,parent_block_id FROM block '
-                'WHERE global_page=? ORDER BY rowid LIMIT ?',
-                (page - 1, MAX_PAGE_BOXES + 1)).fetchall()
+                'WHERE global_page=? AND block_group=? ORDER BY rowid LIMIT ?',
+                (page - 1, REVIEW_BLOCK_GROUP,MAX_PAGE_BOXES + 1)).fetchall()
         else:
             # A Span is linked through the immutable source_block_key, never
             # through the mutable human PBS. Span works even without block.
@@ -44,13 +44,13 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
                     'SELECT s.span_id,s.page_size_json,s.span_bbox_json,s.block_type,'
                     's.block_group,b.block_id,b.pbs,b.parent_block_id FROM span AS s '
                     'LEFT JOIN block AS b ON b.source_block_key=s.block_id '
-                    'WHERE s.global_page=? ORDER BY s.rowid LIMIT ?',
-                    (page - 1, MAX_PAGE_BOXES + 1)).fetchall()
+                    'WHERE s.global_page=? AND s.block_group=? ORDER BY s.rowid LIMIT ?',
+                    (page - 1, REVIEW_BLOCK_GROUP,MAX_PAGE_BOXES + 1)).fetchall()
             else:
                 records = db.execute(
                     'SELECT span_id,page_size_json,span_bbox_json,block_type,block_group,'
-                    'NULL,NULL,NULL FROM span WHERE global_page=? ORDER BY rowid LIMIT ?',
-                    (page - 1, MAX_PAGE_BOXES + 1)).fetchall()
+                    'NULL,NULL,NULL FROM span WHERE global_page=? AND block_group=? ORDER BY rowid LIMIT ?',
+                    (page - 1, REVIEW_BLOCK_GROUP,MAX_PAGE_BOXES + 1)).fetchall()
     if len(records) > MAX_PAGE_BOXES:
         raise OCRImportError('单页覆盖框超过允许上限')
     size = None

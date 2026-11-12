@@ -43,3 +43,5 @@ PBS 父子块显示/选中：继承 Main 父块灰绿／子块蓝灰标签和引
 配色：PDF Block 选中框恢复橙色（直接选中和随动子孙一律实线，子孙略淡）；PBS 标签及引线采用 Main 父灰绿／子蓝灰及实线方案，选中只增加外圈提示，两者分层不相互染色。
 
 PBS 同框子块：相同 bbox 只绘制一个覆盖框，但不同 PBS 的父块、`s0`、`s1` 标签全部各自展开，按稳定 Block ID 分别点击定位；跨块组的同名 PBS 仍只显示一次。已在模拟第 11 页加入 `s1` 同框回归，不改 OCR 原始数据。
+
+WCP40 固定 para：SQLite Block/Span 仅保存和展示 `para_blocks` 与其子块；PDF Block/Span 及 PBS 操作也只处理 para。Block/Span AG 不再显示「块组」列和多组筛选。旧派生表核对来源指纹后原位删除非 para 行，保留 para BlockID/PBS/SpanID；原始 MinerU JSON 三组完整保留，不修改 Main。

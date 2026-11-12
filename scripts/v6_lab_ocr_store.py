@@ -20,6 +20,9 @@ MAX_BLOCKS = 500_000
 MAX_PAGE_ROWS = 250
 TABLE = 'minerujson'
 BLOCK_GROUPS = ('preproc_blocks', 'discarded_blocks', 'para_blocks')
+# Raw MinerU import keeps all groups. Derived review/operation tables only
+# expose the authoritative para block group.
+REVIEW_BLOCK_GROUP = 'para_blocks'
 
 class OCRImportError(ValueError):
     pass

@@ -84,7 +84,8 @@ try{
     if(op==='rows'){
       rowsReads++;
       assert.equal(parsed.searchParams.get('table'),'block');
-      const all=[...blocks.map(b=>rowOf(b,0)),...dense.map(b=>rowOf(b,1)),...page11.map(b=>rowOf(b,10))];
+      const all=[...blocks.map(b=>rowOf(b,0)),...dense.map(b=>rowOf(b,1)),...page11.map(b=>rowOf(b,10))]
+        .filter(row=>row.block_group==='para_blocks');
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
         table:'block',total:all.length,rows:all})});
     }
@@ -138,23 +139,13 @@ try{
    assert.equal(rowsReads,1,'PDF selection should initialize AG block table once');
    assert.match(await page.locator('#status').innerText(),/PDF → AG · p1b1 · BlockID 4/);
    assert.match(await page.locator('.ocr-cm-source .cm-content').innerText(),/"blockId": "4"/);
-   // Default AG/PDF show only para_blocks. Explicitly include other groups
-   // before exercising the old cross-group deduplicated alias selection.
-   await page.locator('#workspace .ag-header-cell[col-id="block_group"] .ag-header-cell-filter-button').click();
-   const groupFilter=page.locator('.ocr-enum-filter:visible');
-   assert.equal(await groupFilter.locator('.ocr-enum-filter-option[data-filter-value="para_blocks"] input').isChecked(),true);
-   assert.equal(await groupFilter.locator('.ocr-enum-filter-option[data-filter-value="preproc_blocks"] input').isChecked(),false);
-   await groupFilter.locator('.ocr-enum-filter-option[data-filter-value="all"] input').check();
-   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-box[data-id="b-para"]')?.dataset.blockIds.split(' ').includes('1')); // AG virtualizes rows
-   await page.locator('#workspace .ag-header-cell[col-id="block_group"] .ag-header-cell-filter-button').click();
-   // AG → PDF: select an alias Block ID whose geometry was merged into
-   // representative b-para (same PBS as ID 2, different processing group).
-   await page.locator('#workspace .ag-row .ag-cell[col-id="block_id"]').filter({hasText:/^1$/}).click();
-   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-box[data-id="b-para"]')?.dataset.selected==='true');
-   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').getAttribute('data-selected'),'true');
-   assert.match(await page.locator('#status').innerText(),/Block 定位：p1b0 · BlockID 1/);
-   // The real representative para block (ID 2) is parent of ID 3.
-   // An unrelated dedup alias (ID 1) must NOT inherit ID 2's children.
+   // Strict para-only: even mixed raw API fixtures cannot expose preproc
+   // through AG, PDF, PBS, or an old cross-group checkbox.
+   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_group"]').count(),0);
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-box[data-id="b-preproc"]').count(),0);
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="1"]').count(),0);
+   // Select the real para parent by its immutable ID; family highlighting
+   // continues to work without mixed-group deduplicated aliases.
    assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="3"]').getAttribute('data-family-selected'),'false');
    await page.locator('#workspace .ag-row .ag-cell[col-id="block_id"]').filter({hasText:/^2$/}).click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="2"]')?.dataset.selected==='true'&&

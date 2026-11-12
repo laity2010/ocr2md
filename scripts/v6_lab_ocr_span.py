@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from v6_lab_ocr_store import OCRImportError, _db, existing_info, BLOCK_GROUPS
+from v6_lab_ocr_store import OCRImportError, _db, existing_info, REVIEW_BLOCK_GROUP
 
 TABLE = 'span'
 SCHEMA = '''CREATE TABLE span (
@@ -20,7 +20,7 @@ SCHEMA = '''CREATE TABLE span (
  global_page INTEGER NOT NULL,
  local_page INTEGER NOT NULL,
  page_size_json TEXT NOT NULL,
- block_group TEXT NOT NULL,
+ block_group TEXT NOT NULL CHECK(block_group='para_blocks'),
  block_id TEXT NOT NULL,
  parent_block_id TEXT,
  block_path TEXT NOT NULL,
@@ -50,7 +50,7 @@ def _dump(value):
 def _rows(source_order: int, source_name: str, global_page: int, page: dict, signature: str):
     local_page = page['page_idx']
     page_size = _dump(page.get('page_size'))
-    for group in BLOCK_GROUPS:
+    for group in (REVIEW_BLOCK_GROUP,):
         def walk(block, path, parent):
             if not isinstance(block, dict):
                 raise OCRImportError('嵌套 Block 不是对象')
@@ -105,8 +105,11 @@ def minerujson2span(book: Path) -> dict:
                 raise OCRImportError('现有 span 表结构不兼容，拒绝覆盖')
             old = conn.execute('SELECT COUNT(*),MIN(import_fingerprint),MAX(import_fingerprint) FROM span').fetchone()
             if old[0] > 0 and old[1] == old[2] == info['signature']:
+                # Existing three-group snapshots migrate without renumbering
+                # Span identities or rewriting the original MinerU bytes.
+                removed=conn.execute('DELETE FROM span WHERE block_group<>?',(REVIEW_BLOCK_GROUP,)).rowcount
                 conn.commit()
-                return {'status':'unchanged','table':TABLE,'spans':old[0]}
+                return {'status':'filtered' if removed else 'unchanged','table':TABLE,'spans':old[0]-removed}
         sources = conn.execute("SELECT source_order,source_name,source_sha256,source_page_count,original_bytes,import_fingerprint FROM minerujson WHERE row_kind='source' ORDER BY source_order").fetchall()
         if not sources:
             raise OCRImportError('minerujson 表没有来源 JSON')
@@ -156,11 +159,12 @@ def span_rows(book: Path, offset: int=0, limit: int=200) -> dict:
         conn.row_factory = sqlite3.Row
         if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='span'").fetchone()[0] != 1:
             raise OCRImportError('尚未生成 span 表')
-        total = conn.execute('SELECT COUNT(*) FROM span').fetchone()[0]
+        total = conn.execute('SELECT COUNT(*) FROM span WHERE block_group=?',(REVIEW_BLOCK_GROUP,)).fetchone()[0]
         data = conn.execute('''SELECT span_id, source_order, source_name, global_page,local_page,
                 block_group,block_id,parent_block_id,block_path,block_index,block_type,
                 block_bbox_json,line_index,line_bbox_json,span_index,span_type,
                 span_bbox_json,content,html,image_path,content_preview,span_json,
                 block_attrs_json,line_attrs_json,page_size_json
-                FROM span ORDER BY rowid LIMIT ? OFFSET ?''', (limit,offset)).fetchall()
+                FROM span WHERE block_group=? ORDER BY rowid LIMIT ? OFFSET ?''',
+                (REVIEW_BLOCK_GROUP,limit,offset)).fetchall()
     return {'table':TABLE,'total':total,'offset':offset,'limit':limit,'rows':[dict(r) for r in data]}

@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from v6_lab_ocr_store import import_workspace, originals, OCRImportError
-from v6_lab_ocr_block import minerujson2block
-from v6_lab_ocr_span import minerujson2span
+from v6_lab_ocr_block import minerujson2block, block_rows
+from v6_lab_ocr_span import minerujson2span, span_rows
 from v6_lab_ocr_overlays import overlay_rows
 
 class OverlayContract(unittest.TestCase):
@@ -65,7 +65,7 @@ class OverlayContract(unittest.TestCase):
     self.assertEqual(connection.execute('SELECT COUNT(*) FROM block').fetchone()[0],5)
     self.assertEqual(connection.execute('SELECT COUNT(*) FROM span').fetchone()[0],5)
 
- def test_project_every_group_without_collapsing_source(self):
+ def test_para_only_projection_preserves_all_raw_mineru_groups(self):
   with tempfile.TemporaryDirectory() as directory:
    book=Path(directory)
    (book/'pdf').mkdir();(book/'mineru json').mkdir()
@@ -79,11 +79,14 @@ class OverlayContract(unittest.TestCase):
                      "lines":[{"spans":[{"type":"text","bbox":[22,32,51,40],"content":"para"}]}]}]}]}
    (book/'mineru json'/'source.json').write_text(json.dumps(source))
    import_workspace(book);minerujson2block(book);minerujson2span(book)
-   expected=['preproc_blocks','discarded_blocks','para_blocks']
+   expected=['para_blocks']
    self.assertEqual([row['blockGroup'] for row in overlay_rows(book,'block',1)['boxes']],expected)
-   self.assertEqual([row['pbs'] for row in overlay_rows(book,'block',1)['boxes']],['p1b0']*3)
-   self.assertEqual([row['blockId'] for row in overlay_rows(book,'block',1)['boxes']],['1','2','3'])
+   self.assertEqual([row['pbs'] for row in overlay_rows(book,'block',1)['boxes']],['p1b0'])
+   self.assertEqual([row['blockId'] for row in overlay_rows(book,'block',1)['boxes']],['3'])
    self.assertEqual([row['blockGroup'] for row in overlay_rows(book,'span',1)['boxes']],expected)
-   self.assertEqual([row['blockType'] for row in overlay_rows(book,'block',1)['boxes']],['text','page_number','text'])
+   self.assertEqual([row['blockType'] for row in overlay_rows(book,'block',1)['boxes']],['text'])
+   self.assertEqual(block_rows(book)['total'],1)
+   self.assertEqual(span_rows(book)['total'],1)
+   self.assertEqual(originals(book)[0][1],json.dumps(source).encode())
 
 if __name__=='__main__':unittest.main()

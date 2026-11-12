@@ -39,19 +39,19 @@ class BlockContract(unittest.TestCase):
    import_workspace(book)
    original=originals(book)
    res=minerujson2block(book)
-   self.assertEqual((res['status'],res['blocks']),('created',10))
+   self.assertEqual((res['status'],res['blocks']),('created',8))
    self.assertEqual(minerujson2block(book)['status'],'unchanged')
    rows=block_rows(book,0,100)['rows']
-   self.assertEqual(len(rows),10)
-   self.assertEqual(len({x['block_id'] for x in rows}),10)
-   self.assertEqual([x['block_id'] for x in rows],list(range(1,11)))
-   self.assertEqual(len({(r['source_order'],r['block_group'],r['pbs']) for r in rows}),10)
-   self.assertEqual(len({r['pbs'] for r in rows if r['block_group']=='para_blocks'}),8)
-   self.assertEqual(next(r for r in rows if r['block_group']=='preproc_blocks')['pbs'],'p1b0')
+   self.assertEqual(len(rows),8)
+   self.assertEqual(len({x['block_id'] for x in rows}),8)
+   self.assertEqual([x['block_id'] for x in rows],list(range(3,11))) # preserve original para IDs
+   self.assertEqual(len({(r['source_order'],r['block_group'],r['pbs']) for r in rows}),8)
+   self.assertEqual(len({r['pbs'] for r in rows}),8)
+   self.assertTrue(all(r['block_group']=='para_blocks' for r in rows))
    self.assertEqual(next(r for r in rows if r['block_group']=='para_blocks')['pbs'],'p1b0')
-   self.assertEqual(sum(r['span_count'] for r in rows),7)
+   self.assertEqual(sum(r['span_count'] for r in rows),5)
    self.assertEqual([r['block_group'] for r in rows if r['parent_block_id'] is None],
-     ['preproc_blocks','discarded_blocks','para_blocks','para_blocks','para_blocks','para_blocks'])
+     ['para_blocks','para_blocks','para_blocks','para_blocks'])
    inner=next(r for r in rows if r['block_type']=='table_body')
    self.assertIsInstance(inner['block_id'],int)
    self.assertEqual(inner['source_block_key'],'s0:p0:para_blocks:b1.1')
@@ -80,20 +80,20 @@ class BlockContract(unittest.TestCase):
     if row['has_blocks_field']:
      b['blocks']=[unpack(c) for c in sorted(by_parent.get(row['block_id'],[]),key=lambda x:x['sibling_order'])]
     return b
-   rebuilt={group:[unpack(r) for r in sorted((r for r in by_parent[None] if r['block_group']==group),key=lambda x:x['sibling_order'])] for group in ('preproc_blocks','discarded_blocks','para_blocks')}
-   self.assertEqual({k:doc['pdf_info'][0][k] for k in rebuilt},rebuilt)
+   rebuilt=[unpack(r) for r in sorted(by_parent[None],key=lambda x:x['sibling_order'])]
+   self.assertEqual(doc['pdf_info'][0]['para_blocks'],rebuilt)
    self.assertEqual(originals(book),original)
    self.assertEqual(file.read_bytes(),raw)
    # Existing span API must continue to work after block table creation.
    self.assertEqual(minerujson2span(book)['status'],'created')
    with sqlite3.connect(book/'ocr2md.sqlite') as db:
     self.assertEqual(db.execute('''SELECT COUNT(*) FROM span s JOIN block b
-      ON s.block_id=b.source_block_key''').fetchone()[0],7)
+      ON s.block_id=b.source_block_key''').fetchone()[0],5)
 
    self.assertEqual(minerujson2block(book)['status'],'unchanged')
    with sqlite3.connect(book/'ocr2md.sqlite') as db:
     self.assertEqual(db.execute("SELECT COUNT(*) FROM minerujson WHERE row_kind='block'").fetchone()[0],6)
-    self.assertEqual(db.execute('SELECT COUNT(*) FROM block').fetchone()[0],10)
+    self.assertEqual(db.execute('SELECT COUNT(*) FROM block').fetchone()[0],8)
     self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
     self.assertEqual(db.execute('SELECT COUNT(*) FROM block WHERE parent_block_id IS NOT NULL').fetchone()[0],4)
    # PBS may be re-numbered during OCR review; the parent FK must stay fixed.

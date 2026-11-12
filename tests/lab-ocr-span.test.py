@@ -47,12 +47,13 @@ class SpanContract(unittest.TestCase):
             before=originals(book)
             assert before==[('sample.json',payload)]
             first=minerujson2span(book)
-            self.assertEqual((first['status'],first['spans']),('created',7))
+            self.assertEqual((first['status'],first['spans']),('created',5))
             self.assertEqual(minerujson2span(book)['status'],'unchanged')
             result=span_rows(book,0,100)
-            self.assertEqual(result['total'],7)
+            self.assertEqual(result['total'],5)
             ids=[x['span_id'] for x in result['rows']]
-            self.assertEqual(len(set(ids)),7)
+            self.assertEqual(len(set(ids)),5)
+            self.assertTrue(all(row['block_group']=='para_blocks' for row in result['rows']))
             image=next(x for x in result['rows'] if x['span_type']=='image')
             self.assertEqual(image['block_type'],'image_body')
             self.assertEqual(image['parent_block_id'],'s0:p0:para_blocks:b1')
@@ -73,6 +74,6 @@ class SpanContract(unittest.TestCase):
             self.assertEqual(span_rows(book,2,2)['rows'],result['rows'][2:4])
             with sqlite3.connect(book/'ocr2md.sqlite') as conn:
                 self.assertEqual(conn.execute("SELECT count(*) FROM minerujson WHERE row_kind='block'").fetchone()[0],6)
-                self.assertEqual(conn.execute("SELECT count(*) FROM span").fetchone()[0],7)
+                self.assertEqual(conn.execute("SELECT count(*) FROM span").fetchone()[0],5)
 
 if __name__=='__main__':unittest.main()
