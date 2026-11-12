@@ -1,0 +1,86 @@
+%PDF-1.4
+%LABPDF
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 513 >>
+stream
+0.16 0.31 0.32 rg
+BT /F1 18 Tf 65 757 Td (OCR2MD PDF VIEWER LAB  /  PAGE 1) Tj ET
+0.18 0.27 0.29 rg
+BT /F1 12 Tf 70 686 Td (Public synthetic document - no private user material.) Tj ET
+BT /F1 12 Tf 75 650 Td (BlockID 12 anchors a paragraph of OCR evidence.) Tj ET
+BT /F1 12 Tf 75 627 Td (ParentID links child records, never PBS labels.) Tj ET
+BT /F1 12 Tf 75 600 Td (Zoom and select the text layer. Click the overlay labels.) Tj ET
+0.27 0.36 0.37 rg
+BT /F1 10 Tf 75 48 Td (PDF Viewer Lab fixture  |  1 / 3) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 480 >>
+stream
+0.16 0.31 0.32 rg
+BT /F1 18 Tf 65 757 Td (OCR2MD PDF VIEWER LAB  /  PAGE 2) Tj ET
+0.18 0.27 0.29 rg
+BT /F1 12 Tf 75 681 Td (Page 2: the PDF renderer owns the page and its text.) Tj ET
+BT /F1 12 Tf 75 650 Td (Block geometry comes from coordinates in page space.) Tj ET
+0.29 0.55 0.51 RG 1.3 w 70 490 445 80 re S
+BT /F1 12 Tf 80 526 Td (A reusable PDF viewer needs no CMD or SQLite dependency.) Tj ET
+0.27 0.36 0.37 rg
+BT /F1 10 Tf 75 48 Td (PDF Viewer Lab fixture  |  2 / 3) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 583 >>
+stream
+0.16 0.31 0.32 rg
+BT /F1 18 Tf 65 757 Td (OCR2MD PDF VIEWER LAB  /  PAGE 3) Tj ET
+0.18 0.27 0.29 rg
+BT /F1 14 Tf 75 687 Td (Page 3: vector table experiment) Tj ET
+0.29 0.55 0.51 RG 1 w 70 460 450 130 re S
+235 460 m 235 590 l S
+385 460 m 385 590 l S
+70 525 m 520 525 l S
+BT /F1 11 Tf 82 553 Td (Cell A) Tj ET
+BT /F1 11 Tf 247 553 Td (Cell B) Tj ET
+BT /F1 11 Tf 395 553 Td (Cell C) Tj ET
+BT /F1 11 Tf 82 482 Td (Cell D) Tj ET
+BT /F1 11 Tf 247 482 Td (Cell E) Tj ET
+BT /F1 11 Tf 395 482 Td (Cell F) Tj ET
+0.27 0.36 0.37 rg
+BT /F1 10 Tf 75 48 Td (PDF Viewer Lab fixture  |  3 / 3) Tj ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000017 00000 n 
+0000000066 00000 n 
+0000000135 00000 n 
+0000000205 00000 n 
+0000000331 00000 n 
+0000000894 00000 n 
+0000001020 00000 n 
+0000001550 00000 n 
+0000001676 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+2309
+%%EOF

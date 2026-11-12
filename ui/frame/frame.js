@@ -1,4 +1,5 @@
-/** Lab-frame composition root: no CMD, SQLite, document, media or settings backend. */
+/** Frame composition root: isolated Settings/CM6 shell; lab-pdf optionally
+ * mounts a public PDF Viewer demo. No Main CMD, SQL or document backend. */
 import '../styles.css';
 import '../obsidian-everforest.css';
 import './frame.css';
@@ -22,8 +23,17 @@ const io=createFrameSettingsIO(localStorage,labName,()=>publishedDirectory,
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
+const onPdfMount=labName==='lab-pdf'?(surface,pane)=>{
+  // Dynamic import keeps the public PDF.js bundle out of frame-only clients.
+  // Dockview alone owns mount/dispose on split-pane transitions.
+  let disposed=false,view=null;
+  void import('../lab-pdf/demo.js').then(({mountPdfDemo})=>{
+    if(!disposed)view=mountPdfDemo(surface,pane,topStatus);
+  }).catch(error=>{if(!disposed)topStatus('PDF 组件加载失败：'+error.message,'error');});
+  return {layout(){},dispose(){disposed=true;view?.dispose();}};
+}:null;
 const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule,
-  moduleLabel:labName==='lab-pdf'?'PDF 组件实验':'空白框架'});
+  onPdfMount});
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});

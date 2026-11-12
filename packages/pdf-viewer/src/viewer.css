@@ -1,0 +1,37 @@
+/* PDF UI is owned by this package, not by Main's CMD preview or Lab's frame. */
+.opdf-root{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;
+  width:100%;height:100%;background:#252d32;color:#d3c6aa;
+  font:12px/1.45 "OCR2MD Sarasa",sans-serif}
+.opdf-root *{box-sizing:border-box}
+.opdf-toolbar{position:absolute;z-index:10;top:0;left:0;right:0;height:34px;display:flex;align-items:center;gap:5px;padding:3px 5px;
+  background:#283238;border-bottom:1px solid #4d585d;white-space:nowrap;overflow-x:auto;scrollbar-width:thin}
+.opdf-toolbar button{height:26px;min-width:29px;border:1px solid #60716b;border-radius:4px;
+  background:#3c4e4b;color:#eee8d5;font:inherit;cursor:pointer;padding:2px 7px}
+.opdf-toolbar button:focus-visible,.opdf-chip:focus-visible{outline:2px solid #eac17b;outline-offset:2px}
+.opdf-scale,.opdf-count{font-variant-numeric:tabular-nums;color:#d1d9d2}
+.opdf-scale{min-width:38px;text-align:center}
+.opdf-page-label,.opdf-toggle{display:inline-flex;align-items:center;gap:4px}
+.opdf-page{width:48px;height:26px;border:1px solid #617077;border-radius:3px;
+  background:#1d272e;color:#d3c6aa;font:inherit;text-align:center}
+.opdf-toggle{margin-left:auto;cursor:pointer}
+.opdf-status{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.opdf-scroller{position:absolute;top:34px;left:0;right:0;bottom:0;min-height:0;min-width:0;overflow:auto;
+  direction:ltr;overscroll-behavior:contain;--scale-factor:1;scrollbar-color:#52605f #263136}
+.opdf-scroller .pdfViewer{padding:10px 0 18px}
+.opdf-scroller .pdfViewer .page{position:relative;margin:0 auto 12px;
+  --page-border:1px solid #435055;box-shadow:0 3px 9px #0007}
+.opdf-root .opdf-block{position:absolute;z-index:6;pointer-events:none;
+  border:1.5px solid rgba(137,202,159,.8);background:rgba(132,188,150,.13);
+  box-shadow:0 0 0 1px #243b2d55 inset;box-sizing:border-box}
+.opdf-root .opdf-block[data-kind="child"]{border-color:#8ab5ca;background:rgba(93,148,195,.12)}
+.opdf-root .opdf-block[data-status="empty"],
+.opdf-root .opdf-block[data-status="missing"]{border-style:dashed;background:rgba(139,164,169,.08)}
+.opdf-root .opdf-block.opdf-selected{border:2px solid #f2b94b;background:rgba(240,184,72,.22);z-index:7}
+.opdf-root .opdf-chip{position:absolute;z-index:3;left:0;top:0;transform:translateY(-55%);
+  display:block;max-width:110px;padding:1px 4px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;border:1px solid #83af9e;border-radius:4px;
+  color:#e3f3e9;background:#294b41;font:600 11px/16px "OCR2MD Sarasa",sans-serif;
+  pointer-events:auto;cursor:pointer;touch-action:manipulation}
+.opdf-root .opdf-block[data-kind="child"] .opdf-chip{background:#345575;border-color:#9dbbd5}
+.opdf-root .opdf-selected .opdf-chip{background:#b67a22;border-color:#f2c36d;color:#fff8e3}
+.opdf-root.opdf-overlays-hidden .opdf-block{display:none}

@@ -32,7 +32,7 @@ function mountEmptyGrid(host){
     columnDefs,rowData:[]});
   return {dispose(){grid.destroy();},layout:()=>{}};
 }
-function blankPane(name,onSplit,onModuleChange){
+function blankPane(name,onSplit,onModuleChange,onPdfMount){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -102,6 +102,7 @@ function blankPane(name,onSplit,onModuleChange){
     const host=document.createElement('div');host.className='ocr-detached-pdf-host';
     const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
     host.append(surface);element.append(host);
+    if(onPdfMount)owned=()=>onPdfMount(surface,element);
   }else throw Error('Unknown Frame pane '+name);
   return {element,init(){if(owned)this.resource=owned();},layout(){this.resource?.layout();},
     dispose(){this.resource?.dispose();}};
@@ -112,10 +113,10 @@ function addPanel(dockview,id,component,title,position){
   panel.group.header.hidden=true;panel.group.relayout();return panel;
 }
 /** Public F01: exactly Main's default three groups + detached PDF split. */
-export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
+export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},onPdfMount=null}={}){
   let split=false;
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,setSplit,onModuleChange)});
+    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,onPdfMount)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});

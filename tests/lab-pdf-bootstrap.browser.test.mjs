@@ -1,4 +1,4 @@
-/** Lab PDF first milestone: isolated frame-derived UI, without fake PDF rendering. */
+/** Lab PDF: isolated frame plus real reusable PDF.js viewer and public fixture. */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as pause} from 'node:timers/promises';
@@ -32,9 +32,11 @@ try{
    await page.locator('#workspace .dv-content-container').first().waitFor();
    assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
    assert.equal(await page.locator('#workspace .ag-row').count(),0);
-   assert.equal(await page.locator('#workspace .ocr-pdf-page').count(),1);
-   assert.equal(await page.locator('#workspace .ocr-pdf-page').isDisabled(),true,
-     'No PDF document is loaded yet; placeholder must not pretend to work');
+   await page.waitForFunction(()=>document.querySelector('.ocr-preview-pdf-host')?.ocrPdfViewer&&
+     document.querySelector('#status')?.textContent?.includes('PDF 已就绪'),null,{timeout:50000});
+   assert.equal(await page.locator('#workspace .opdf-page').count(),1);
+   assert.equal(await page.locator('#workspace .opdf-page').isEnabled(),true);
+   assert.equal(await page.locator('#workspace .opdf-root .page').count(),3);
    assert.equal(await page.locator('#global-save').isVisible(),true);
    const native=page.locator('#workspace .ocr-source-file-select');
    assert.equal(await native.locator('optgroup').count(),1);
@@ -68,7 +70,7 @@ try{
    assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--ocr-frame-font-size')),'18px');
    assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
    assert.deepEqual(errors,[]);
-   console.log('LAB_PDF_BOOTSTRAP_PASS',engineName,'four panes, own settings, navigation, no fake PDF');
+   console.log('LAB_PDF_BOOTSTRAP_PASS',engineName,'four panes, own settings, navigation, real PDF.js');
   }finally{await browser.close()}
  }
 }finally{server?.kill('SIGTERM')}
