@@ -60,14 +60,14 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let onBlockSelect=null,selectedBlockId=null,focusRequest=null;
   const overlayCache=new Map(),overlayPending=new Set();
   const railDepthByPage=new Map();
-  const labelWidth=78,labelGap=7,labelStep=labelWidth+labelGap;
+  const labelGap=7; // actual button widths come from browser layout, not a fixed 78px chip
   function updateRailSpace(){
     let left=0,right=0;
     if(overlayLevel==='block')for(const depth of railDepthByPage.values()){
       left=Math.max(left,depth.left);right=Math.max(right,depth.right);
     }
-    const requiredLeft=Math.max(88,3+(left?labelStep*(left-1)+labelWidth+labelGap:0));
-    const requiredRight=Math.max(88,3+(right?labelStep*(right-1)+labelWidth+labelGap:0));
+    const requiredLeft=Math.max(88,3+left);
+    const requiredRight=Math.max(88,3+right);
     const nextLeft=requiredLeft+'px',nextRight=requiredRight+'px';
     if(pages.style.paddingLeft!==nextLeft||pages.style.paddingRight!==nextRight){
       // Update scrollable paper gutters; never silently clip outer labels.
@@ -190,16 +190,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       leaders.setAttribute('viewBox',`0 0 ${width} ${height}`);
       leaders.setAttribute('preserveAspectRatio','none');
       leaders.classList.add('lab-ocr-pdf-pbs-leaders');
-      for(const placement of placements){
-        const startX=placement.side==='left'?-(labelGap+labelStep*placement.lane):
-          width+labelGap+labelStep*placement.lane;
-        const edgeX=placement.side==='left'?-2:width+2;
-        const fromY=placement.top+11.5;
-        const leader=document.createElementNS(ns,'polyline');
-        leader.setAttribute('points',`${startX},${fromY} ${edgeX},${fromY} ${edgeX},${placement.anchorY} ${placement.anchorX},${placement.anchorY}`);
-        leaders.append(leader);
-      }
-      tagLayer.append(leaders);
+      const badges=[];
       for(const placement of placements){
         const button=document.createElement('button');button.type='button';
         button.className='lab-ocr-pdf-pbs-tag';
@@ -210,23 +201,49 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         button.dataset.blockIds=[...placement.blockIds].join(' ');
         button.dataset.selected=String(matchesSelected(placement.blockIds));
         button.style.top=placement.top+'px';
-        const outward=labelStep*(placement.lane+1);
-        if(placement.side==='left')button.style.left=-outward+'px';
-        else button.style.right=-outward+'px';
         button.textContent=placement.pbs;
         button.title=`${placement.pbs} · Block ID ${placement.blockId} · ${placement.group}`;
         button.setAttribute('aria-label',`定位 ${placement.pbs}`);
         button.addEventListener('click',()=>activateBlock({blockId:placement.blockId,
           pbs:placement.pbs,page,blockGroup:placement.group},true));
+        badges.push({placement,button});
         tagLayer.append(button);
       }
-      // In each lane there is only one label per vertical slot; all labels
-      // remain individually clickable, including after zoom or group filters.
+      host.append(tagLayer);
+      // Measure each rendered PBS string, including Sarasa glyph widths and
+      // border/padding. Every rail reserves only the widest string on that
+      // rail; shorter labels remain tight to their own text, not 78px wide.
+      const laneWidths={left:[],right:[]};
+      for(const {placement,button} of badges){
+        const rails=laneWidths[placement.side];
+        rails[placement.lane]=Math.max(rails[placement.lane]||0,button.offsetWidth);
+      }
+      const offsets={left:[],right:[]};
+      for(const side of ['left','right']){
+        let offset=labelGap;
+        for(let lane=0;lane<laneWidths[side].length;lane++){
+          offsets[side][lane]=offset;
+          offset+=(laneWidths[side][lane]||0)+labelGap;
+        }
+      }
       const depth={left:0,right:0};
-      for(const placement of placements)depth[placement.side]=Math.max(depth[placement.side],placement.lane+1);
+      for(const {placement,button} of badges){
+        const side=placement.side;
+        const innerEdge=offsets[side][placement.lane];
+        const outward=innerEdge+button.offsetWidth;
+        if(side==='left')button.style.left=-outward+'px';
+        else button.style.right=-outward+'px';
+        depth[side]=Math.max(depth[side],outward);
+        const nearX=side==='left'?-innerEdge:width+innerEdge;
+        const edgeX=side==='left'?-2:width+2;
+        const fromY=placement.top+11.5;
+        const leader=document.createElementNS(ns,'polyline');
+        leader.setAttribute('points',`${nearX},${fromY} ${edgeX},${fromY} ${edgeX},${placement.anchorY} ${placement.anchorX},${placement.anchorY}`);
+        leaders.append(leader);
+      }
+      tagLayer.prepend(leaders);
       railDepthByPage.set(page,depth);
       updateRailSpace();
-      host.append(tagLayer);
     }
     if(focusRequest?.page===page){
       const found=visibleRects.find(entry=>entry.blockIds.has(focusRequest.id));

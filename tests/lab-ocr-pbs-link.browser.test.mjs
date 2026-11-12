@@ -19,7 +19,7 @@ const blocks=[
  {id:'b-right',blockId:'4',pbs:'p1b1',group:'para_blocks',type:'table',bbox:[420,310,540,382]},
 ];
 const dense=Array.from({length:62},(_,i)=>({
- id:'b-dense-'+i,blockId:String(i+5),pbs:'p2b'+i,group:'para_blocks',type:'text',
+ id:'b-dense-'+i,blockId:String(i+5),pbs:i===25?'p2b25s123456789':'p2b'+i,group:'para_blocks',type:'text',
  bbox:[70,40+i*11,190,48+i*11],
 }));
 const rowOf=(item,page)=>({block_id:Number(item.blockId),pbs:item.pbs,global_page:page,
@@ -91,6 +91,18 @@ try{
    assert(geom.every(x=>x.side==='left'?x.x2<=x.paperLeft+2:x.x1>=x.paperRight-2),
      'Tags must remain outside paper '+JSON.stringify(geom));
    assert(geom.every(x=>Math.abs(x.height-23)<1));
+   // The border hugs the actual rendered PBS glyphs, not a fixed 78px chip.
+   const fitted=await tags.evaluateAll(nodes=>nodes.map(node=>{
+     const text=document.createRange();text.selectNodeContents(node);
+     const outer=node.getBoundingClientRect(),ink=text.getBoundingClientRect();
+     return {pbs:node.textContent,width:outer.width,inkWidth:ink.width,
+       horizontalPadding:outer.width-ink.width,left:outer.left,right:outer.right};
+   }));
+   assert(fitted.every(x=>x.horizontalPadding>=7&&x.horizontalPadding<=13),
+     'PBS badges should have only a small text-fitting inset: '+JSON.stringify(fitted));
+   const short=fitted.find(x=>x.pbs==='p1b0'),long=fitted.find(x=>x.pbs==='p1b0s0');
+   assert(long.width>short.width+8,'Long PBS must get a wider badge: '+JSON.stringify(fitted));
+   assert(short.width<60,'Short PBS should no longer reserve the old 78px frame');
    // PDF → AG works even when SQL Block navigation has not yet been opened.
    await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="4"]').click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='4',
@@ -146,7 +158,31 @@ try{
        right:rect.right-pageRect.left,height:rect.height};
    }));
    assert.equal(new Set(layout.map(x=>x.id)).size,62);
+   const densePadding=await denseTags.evaluateAll(nodes=>nodes.map(node=>{
+     const range=document.createRange();range.selectNodeContents(node);
+     return node.getBoundingClientRect().width-range.getBoundingClientRect().width;
+   }));
+   assert(densePadding.every(value=>value>=7&&value<=13),
+     'Each dense tag must fit its own full text, including multi-digit PBS');
+   const superlong=await denseTags.filter({hasText:'p2b25s123456789'}).evaluate(node=>{
+     const range=document.createRange();range.selectNodeContents(node);
+     const b=node.getBoundingClientRect(),ink=range.getBoundingClientRect();
+     return {width:b.width,textWidth:ink.width,scrollWidth:node.scrollWidth,clientWidth:node.clientWidth};
+   });
+   assert(superlong.width>78&&superlong.width-superlong.textWidth<13,
+     'Long PBS must expand beyond the old fixed-width badge, without text truncation: '+JSON.stringify(superlong));
+   assert(superlong.scrollWidth<=superlong.clientWidth+1,'Long PBS content must fit in the chip');
    assert(layout.some(x=>x.lane>=1),'Crowding must produce at least one outward lane');
+   // Both sides must also avoid cross-lane horizontal collisions for
+   // labels of different lengths, not just vertically separated labels.
+   for(let i=0;i<layout.length;i++)for(let j=i+1;j<layout.length;j++){
+     const a=layout[i],b=layout[j];
+     if(a.side!==b.side||a.lane===b.lane)continue;
+     const verticalOverlap=a.top<b.top+b.height&&b.top<a.top+a.height;
+     const horizontalOverlap=a.left<b.right&&b.left<a.right;
+     assert(!(verticalOverlap&&horizontalOverlap),
+       'Cross-lane badges of differing widths overlap: '+JSON.stringify([a,b]));
+   }
    for(const side of ['left','right']){
      const sideTags=layout.filter(x=>x.side===side);
      for(const lane of new Set(sideTags.map(x=>x.lane))){
@@ -166,8 +202,8 @@ try{
    const originalLane1=layout.find(tag=>tag.id==='6');
    assert.equal(originalLane0.lane,0);
    assert(originalLane1.lane>=1);
-   assert(originalLane1.right<originalLane0.right,
-     'Left tags must move left when blocked');
+   assert(originalLane1.right<=originalLane0.left-6,
+     'Left tags of differing width must not overlap across outward rails');
    const scroller=await page.locator('.lab-ocr-pdf-scroller').evaluate(el=>({
      scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}));
    assert(scroller.scrollWidth>scroller.clientWidth,

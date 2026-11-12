@@ -65,8 +65,8 @@
   pointer-events:none;overflow:visible}
 .lab-ocr-pdf-pbs-leaders polyline{fill:none;stroke:#98b4aa;stroke-width:1;
   vector-effect:non-scaling-stroke}
-.lab-ocr-pdf-pbs-tag{position:absolute;box-sizing:border-box;width:78px;height:23px;
-  padding:0 3px;border:1px solid #487563;border-radius:4px;background:#214538;color:#e7f3e6;
+.lab-ocr-pdf-pbs-tag{position:absolute;box-sizing:border-box;width:max-content;max-width:none;height:23px;
+  padding:0 4px;border:1px solid #487563;border-radius:4px;background:#214538;color:#e7f3e6;
   text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   font:11px "OCR2MD Sarasa",monospace;line-height:20px;cursor:pointer;
   pointer-events:auto;touch-action:manipulation;z-index:1}
