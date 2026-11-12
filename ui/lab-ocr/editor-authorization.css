@@ -1,0 +1,19 @@
+/* A small Lab OCR adapter around the formal Main editor session. */
+.lab-ocr-main-authorization{width:min(420px,calc(100vw - 30px));max-width:100%;
+  border:1px solid #61756e;border-radius:9px;padding:18px 20px;
+  background:#27333a;color:#d3c6aa;font:14px/1.55 'OCR2MD Sarasa',monospace;
+  box-shadow:0 8px 50px #0009}
+.lab-ocr-main-authorization::backdrop{background:#05090bc0}
+.lab-ocr-main-authorization form{display:flex;flex-direction:column;gap:10px}
+.lab-ocr-main-authorization h2{font-size:17px;font-weight:600;margin:0}
+.lab-ocr-main-authorization p{margin:0}
+.lab-ocr-main-authorization label{display:flex;flex-direction:column;gap:5px}
+.lab-ocr-main-authorization input{height:34px;border-radius:5px;
+  border:1px solid #769083;background:#1c2429;color:#ece7dc;padding:6px 9px;
+  font:15px 'OCR2MD Sarasa',monospace}
+.lab-ocr-main-authorization #lab-ocr-auth-error{color:#f49b95;min-height:1.4em}
+.lab-ocr-main-authorization .lab-ocr-auth-actions{display:flex;justify-content:flex-end;gap:10px}
+.lab-ocr-main-authorization button{border-radius:5px;min-height:32px;padding:5px 11px;
+  border:1px solid #697b73;background:#34413f;color:#e0ded3;cursor:pointer}
+.lab-ocr-main-authorization button.primary{background:#49725e;border-color:#7caa8e}
+.lab-ocr-main-authorization button:disabled{opacity:.6;cursor:wait}

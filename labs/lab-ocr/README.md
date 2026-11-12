@@ -27,3 +27,5 @@
 - API、直接测试、暂不包含的块交互见 `docs/contracts/lab-ocr-pdf-loader.md`。
 
 PDF 覆盖框：单一 `setOverlays({level,loadPage})` API 支持 Block／Span／关闭。当前仅按 SQL bbox 显示只读覆盖层，原始页面几何经 `page_size_json` 归一化，无 PBS 标注、拖动、修改或回写。具体契约见 `docs/contracts/lab-ocr-pdf-overlays.md`。
+
+公网目录授权：在「全局设置 → 资料目录 → 浏览目录」遇到 Main 目录 API 403 时，工作台会弹出 Main 的 12 位编辑授权码输入框；通过 Main 的 `/api/unlock` 与 `/api/session` 验证后自动重试原目录请求。授权码不写入设置，取消或验证失败不读取目录。契约与测试见 `docs/contracts/lab-ocr-main-editor-authorization.md`。

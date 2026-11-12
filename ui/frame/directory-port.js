@@ -3,7 +3,11 @@
  * This adapter may later be replaced with a dedicated generic service. */
 async function request(path){
   const response=await fetch(path,{cache:'no-store',credentials:'same-origin'});
-  if(response.status===403)throw Error('目录访问需要 Main 的编辑授权');
+  if(response.status===403){
+    const error=Error('目录访问需要 Main 的编辑授权');
+    error.status=403;
+    throw error;
+  }
   if(response.status===404)throw Error('服务器目录服务尚未接通');
   if(!response.ok){
     // Main returns validation failures as plain text; preserve the reason.

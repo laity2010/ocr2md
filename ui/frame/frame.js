@@ -18,8 +18,27 @@ const build=__FRAME_BUILD_VERSION__;
 // release identity for auto-update checks, but show year/month/day-hour/minute.
 $('build-version').textContent=build.match(/(\d{8}-\d{4})\d{2}$/)?.[1]??build;
 let publishedDirectory='';
+let authorizationAdapter=null;
+async function withMainDirectoryAuthorization(operation){
+  try{return await operation();}
+  catch(error){
+    // The existing Main directory API determines eligibility. Never grant
+    // access or bypass a non-403 error in the Lab browser.
+    if(labName!=='lab-ocr'||error?.status!==403)throw error;
+    if(!authorizationAdapter){
+      const {createMainEditorAuthorization}=await import('../lab-ocr/editor-authorization.js');
+      authorizationAdapter=createMainEditorAuthorization({onStatus:topStatus});
+    }
+    if(!await authorizationAdapter.request())throw error;
+    return operation(); // Exactly one reattempt, authorized by Main itself.
+  }
+}
+const directoryPort=labName==='lab-ocr'?Object.freeze({
+  roots:()=>withMainDirectoryAuthorization(()=>frameDirectoryPort.roots()),
+  browse:path=>withMainDirectoryAuthorization(()=>frameDirectoryPort.browse(path)),
+}):frameDirectoryPort;
 const io=createFrameSettingsIO(localStorage,labName,()=>publishedDirectory,
-  path=>frameDirectoryPort.browse(path));
+  path=>directoryPort.browse(path));
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
@@ -81,7 +100,7 @@ async function getSettings(){
         publishedDirectory=metadata.publishDirectory;
     }catch{publishedDirectory='';}
     const {createSettingsModule}=await import('../settings-module.js');
-    const module=createSettingsModule($('settings-workspace'),settingsStatus,frameDirectoryPort,io);
+    const module=createSettingsModule($('settings-workspace'),settingsStatus,directoryPort,io);
     module.register({module:'F',key:'globalUi.font.family',category:['全局 UI','字体'],
       label:'字体 Sarasa（只读）',comment:'Sarasa Fixed SC；字体家族固定',
       type:'string',control:'readonly',defaultValue:'Sarasa',message:'settings.changed'});
