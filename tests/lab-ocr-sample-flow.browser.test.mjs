@@ -35,6 +35,8 @@ try{
        pageSize:[595,842],boxes:[]})});
     }
     if(operation==='pdf')return r.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf()});
+    if(operation==='block-edit-state')return r.fulfill({status:200,contentType:'application/json',
+      body:'{"revision":0,"canUndo":false,"canRedo":false}'});
     if(operation==='inspect'){
      inspectCount++;
      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({

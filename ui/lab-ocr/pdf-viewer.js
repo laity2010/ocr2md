@@ -8,6 +8,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {layoutPbsLabels} from './pbs-label-layout.js';
 import {indexBlockParents,blockHighlight} from './pbs-family.js';
+import {pickBlockDropTarget,blockDropZone} from './pdf-block-drop.js';
 import './pdf-viewer.css';
 GlobalWorkerOptions.workerSrc=workerUrl;
 
@@ -58,8 +59,11 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // The caller owns SQL/JSON; the viewer sees only geometry, public display
   // labels and stable IDs, never a database schema, raw source or disk path.
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
-  let onBlockSelect=null,selectedBlockId=null,focusRequest=null;
-  const overlayCache=new Map(),overlayPending=new Set(),blockParents=new Map();
+  let onBlockSelect=null,onBlockDragIntent=null,selectedBlockId=null,focusRequest=null;
+  const overlayCache=new Map(),overlayPending=new Map(),overlayEpoch=new Map(),
+    blockParents=new Map();
+  const dropCandidatesByPage=new Map();
+  let blockDrag=null,dragSuppressId=null,dragSuppressUntil=0;
   const railDepthByPage=new Map(),pbsLabelObservers=new Map();
   const pbsRelayoutByPage=new Map();
   // WebKit sometimes skips ResizeObserver notifications for max-content
@@ -108,12 +112,159 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   }
   const resetRailSpace=()=>{railDepthByPage.clear();updateRailSpace();};
   const clearOverlayNodes=()=>{
+    cancelBlockDrag(true);
     for(const observer of pbsLabelObservers.values())observer.disconnect();
     pbsLabelObservers.clear();pbsRelayoutByPage.clear();
+    dropCandidatesByPage.clear();
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer'))node.remove();
     resetRailSpace();
   };
   const blockIdOf=item=>item?.blockId==null?null:String(item.blockId);
+  const announceDrag=(message,kind='info')=>{if(!disposed)onStatus('Block 手势 · '+message,kind);};
+  function cancelBlockDrag(silent=false){
+    const drag=blockDrag;
+    if(!drag)return;
+    blockDrag=null;
+    clearTimeout(drag.timer);clearInterval(drag.scrollTimer);
+    document.removeEventListener('pointermove',drag.onMove,true);
+    document.removeEventListener('pointerup',drag.onUp,true);
+    document.removeEventListener('pointercancel',drag.onCancel,true);
+    drag.sourceButton.classList.remove('lab-ocr-pdf-drag-source');
+    drag.target?.element?.classList.remove('lab-ocr-pdf-drop-target');
+    drag.guide?.remove();drag.arrow?.remove();
+    if(drag.active){dragSuppressId=drag.source.blockId;dragSuppressUntil=performance.now()+650;}
+    try{if(drag.sourceButton.hasPointerCapture(drag.pointerId))
+      drag.sourceButton.releasePointerCapture(drag.pointerId);}catch{}
+    if(!silent)announceDrag('取消拖动，结构未修改');
+  }
+  function armBlockDrag(event,button,source){
+    if(!onBlockDragIntent||overlayLevel!=='block'||blockDrag||event.button!==0)return;
+    const drag={source,sourceButton:button,pointerId:event.pointerId,
+      pointerType:event.pointerType,startX:event.clientX,startY:event.clientY,
+      x:event.clientX,y:event.clientY,active:false,target:null,placement:null,
+      arrow:null,guide:null,timer:null,scrollTimer:null};
+    blockDrag=drag;
+    const moved=()=>Math.hypot(drag.x-drag.startX,drag.y-drag.startY);
+    const viewRect=()=>scroller.getBoundingClientRect();
+    const guideAt=(target)=>{
+      if(!drag.guide||drag.guide.dataset.blockId!==target.blockId){
+        drag.guide?.remove();
+        const guide=document.createElement('div');
+        guide.className='lab-ocr-pdf-drop-guide';guide.dataset.blockId=target.blockId;
+        for(const placement of target.slots){
+          const item=document.createElement('span');
+          item.dataset.placement=placement;
+          item.textContent=({before:'之前',child:'作为子块',after:'之后'})[placement];
+          guide.append(item);
+        }
+        document.body.append(guide);drag.guide=guide;
+      }
+      const box=target.button.getBoundingClientRect();
+      const clip=viewRect();
+      const width=drag.guide.offsetWidth,height=drag.guide.offsetHeight;
+      drag.guide.style.left=Math.max(clip.left+3,Math.min(box.left+(box.width-width)/2,
+        clip.right-width-3))+'px';
+      drag.guide.style.top=(box.bottom+height+8<=clip.bottom?box.bottom+4:
+        Math.max(clip.top+3,box.top-height-4))+'px';
+    };
+    const update=(x,y)=>{
+      if(blockDrag!==drag)return;
+      drag.x=x;drag.y=y;
+      if(!drag.active){
+        if(moved()>11)cancelBlockDrag(true); // Normal scroll or incidental swipe.
+        return;
+      }
+      const clip=viewRect();
+      const candidates=[...dropCandidatesByPage.values()].flat()
+        .filter(c=>c.button.isConnected&&c.element?.isConnected)
+        .map(c=>({...c,badgeRect:c.button.getBoundingClientRect(),
+          coverRect:c.element.getBoundingClientRect()}));
+      const sticky=drag.target&&drag.guide&&(()=>{
+        const r=drag.guide.getBoundingClientRect();
+        return x>=r.left-5&&x<=r.right+5&&y>=r.top-5&&y<=r.bottom+5;
+      })();
+      const hit=moved()>=12?(sticky?drag.target:
+        pickBlockDropTarget(candidates,{x,y,source,clip})):null;
+      if(drag.target?.blockId!==hit?.blockId){
+        drag.target?.element?.classList.remove('lab-ocr-pdf-drop-target');
+        drag.guide?.remove();drag.guide=null;
+      }
+      drag.target=hit||null;
+      drag.placement=null;
+      if(hit){
+        hit.element.classList.add('lab-ocr-pdf-drop-target');
+        guideAt(hit);
+        const rect=drag.guide.getBoundingClientRect();
+        const onGuide=x>=rect.left-5&&x<=rect.right+5&&y>=rect.top-5&&y<=rect.bottom+5;
+        if(onGuide)drag.placement=blockDropZone(x,rect,hit.slots);
+        else if(hit.slots.length===1)drag.placement=hit.slots[0];
+        else{
+          const cover=hit.coverRect,ratio=(y-cover.top)/Math.max(1,cover.height);
+          drag.placement=hit.slots[Math.max(0,Math.min(hit.slots.length-1,
+            Math.floor(ratio*hit.slots.length)))];
+        }
+        drag.guide.dataset.placement=drag.placement;
+        for(const node of drag.guide.children)
+          node.classList.toggle('active',node.dataset.placement===drag.placement);
+      }
+      announceDrag(hit?`${source.pbs} → ${hit.pbs} · ${({before:'之前',child:'作为子块',after:'之后'})[drag.placement]} · 松手应用`:
+        '箭头拖向目标覆盖框，选择落点（未命中不修改）');
+      const start=button.getBoundingClientRect(),head=drag.guide?.getBoundingClientRect();
+      const sx=(start.left+start.right)/2,sy=(start.top+start.bottom)/2;
+      const slot=head&&hit?hit.slots.indexOf(drag.placement):-1;
+      const ex=head&&slot>=0?head.left+(slot+.5)*head.width/hit.slots.length:x;
+      const ey=head?(head.top+head.bottom)/2:y;
+      const bend=(sx+ex)/2;
+      drag.arrow.querySelector('path').setAttribute('d',
+        `M ${sx} ${sy} Q ${bend} ${Math.min(sy,ey)-26} ${ex} ${ey}`);
+      drag.arrow.querySelector('circle').setAttribute('cx',String(ex));
+      drag.arrow.querySelector('circle').setAttribute('cy',String(ey));
+    };
+    const scroll=()=>{
+      if(!drag.active||blockDrag!==drag||moved()<12)return;
+      const rect=viewRect();
+      if(drag.x<rect.left||drag.x>rect.right||
+         drag.y<rect.top||drag.y>rect.bottom)return;
+      const edge=46,rate=19;
+      const towardBottom=Math.max(0,Math.min(1,(drag.y-(rect.bottom-edge))/edge));
+      const towardTop=Math.max(0,Math.min(1,((rect.top+edge)-drag.y)/edge));
+      const delta=towardBottom?rate*towardBottom:towardTop?-rate*towardTop:0;
+      if(delta){const prior=scroller.scrollTop;scroller.scrollTop+=delta;
+        if(prior!==scroller.scrollTop)update(drag.x,drag.y);}
+    };
+    drag.onMove=e=>{if(e.pointerId===drag.pointerId)update(e.clientX,e.clientY);};
+    drag.onUp=e=>{
+      if(e.pointerId!==drag.pointerId)return;
+      const active=drag.active,target=drag.target,placement=drag.placement;
+      cancelBlockDrag(true);
+      if(!active)return;
+      e.preventDefault();e.stopPropagation();
+      if(!target||!placement){announceDrag('未命中有效落点，结构不变');return;}
+      announceDrag(`申请 ${source.pbs} → ${target.pbs} · ${placement} …`);
+      Promise.resolve().then(()=>onBlockDragIntent?.({
+        sourceBlockId:Number(source.blockId),
+        targetBlockId:Number(target.blockId),placement,page:source.page
+      })).catch(error=>announceDrag('写入失败：'+error.message,'error'));
+    };
+    drag.onCancel=e=>{if(e.pointerId===drag.pointerId)cancelBlockDrag();};
+    document.addEventListener('pointermove',drag.onMove,true);
+    document.addEventListener('pointerup',drag.onUp,true);
+    document.addEventListener('pointercancel',drag.onCancel,true);
+    try{button.setPointerCapture(event.pointerId);}catch{}
+    drag.timer=setTimeout(()=>{
+      if(blockDrag!==drag)return;
+      drag.active=true;button.classList.add('lab-ocr-pdf-drag-source');
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.classList.add('lab-ocr-pdf-drag-arrow');
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circle.setAttribute('r','5');svg.append(path,circle);document.body.append(svg);
+      drag.arrow=svg;
+      drag.scrollTimer=setInterval(scroll,32);
+      announceDrag(`已抓住 ${source.pbs} · 指向覆盖框选择「之前／作为子块／之后」`);
+      update(drag.x,drag.y);
+    },370);
+  }
   // Geometry dedup must NOT dedup distinct logical PBS labels. A parent and
   // its s1 (or two siblings) can have identical MinerU bboxes. Reuse one
   // coverage rectangle, but retain one clickable tag per distinct PBS.
@@ -144,6 +295,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   }
   function paintPageBoxes(page,data){
     if(disposed||!pdf||overlayLevel==='off'||page>pdf.numPages)return;
+    if(blockDrag?.source.page===page)cancelBlockDrag(true);
+    dropCandidatesByPage.delete(page);
     const pageView=viewer.getPageView(page-1);
     const host=pageView?.div;
     if(!host)return;
@@ -242,7 +395,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       leaders.setAttribute('viewBox',`0 0 ${width} ${height}`);
       leaders.setAttribute('preserveAspectRatio','none');
       leaders.classList.add('lab-ocr-pdf-pbs-leaders');
-      const badges=[];
+      const badges=[],dropCandidates=[];
       for(const placement of placements){
         const button=document.createElement('button');button.type='button';
         button.className='lab-ocr-pdf-pbs-tag';
@@ -258,12 +411,23 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         button.textContent=placement.pbs;
         button.title=`${placement.pbs} · Block ID ${placement.blockId} · ${placement.group}`;
         button.setAttribute('aria-label',`定位 ${placement.pbs}`);
-        button.addEventListener('click',()=>activateBlock({blockId:placement.blockId,
-          pbs:placement.pbs,page,blockGroup:placement.group},true));
+        button.addEventListener('click',()=>{
+          if(dragSuppressId===placement.blockId&&performance.now()<dragSuppressUntil)return;
+          activateBlock({blockId:placement.blockId,
+            pbs:placement.pbs,page,blockGroup:placement.group},true);
+        });
+        const source={blockId:placement.blockId,pbs:placement.pbs,page,
+          parentBlockId:placement.parentBlockId==null?null:String(placement.parentBlockId)};
+        const entry=visibleRects.find(record=>record.blockIds.has(placement.blockId));
+        if(entry?.element){
+          dropCandidates.push({...source,button,element:entry.element});
+          button.addEventListener('pointerdown',event=>armBlockDrag(event,button,source));
+        }
         badges.push({placement,button});
         tagLayer.append(button);
       }
       host.append(tagLayer);
+      dropCandidatesByPage.set(page,dropCandidates);
       // Place by ACTUAL browser rectangles rather than assumed glyph widths.
       // The next tag moves outward only if its displayed vertical interval
       // would intersect a prior tag. This also handles late font loading,
@@ -330,17 +494,20 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       paintPageBoxes(page,overlayCache.get(key));return;
     }
     if(overlayPending.has(key))return;
-    overlayPending.add(key);
+    const ticket={};
+    overlayPending.set(key,ticket);
+    const epoch=overlayEpoch.get(key)||0;
     const stamp=overlayRevision,level=overlayLevel,loader=loadOverlayPage;
     Promise.resolve().then(()=>loader(page,level)).then(result=>{
-      if(disposed||stamp!==overlayRevision||level!==overlayLevel)return;
+      if(disposed||stamp!==overlayRevision||level!==overlayLevel||
+         (overlayEpoch.get(key)||0)!==epoch)return;
       if(result?.level!==level||result?.page!==page||!Array.isArray(result.boxes))
         throw Error('覆盖框返回结构或页码不匹配');
       overlayCache.set(key,result);
       paintPageBoxes(page,result);
     }).catch(error=>{
       if(!disposed&&stamp===overlayRevision)emit('覆盖框读取失败：'+error.message,'error');
-    }).finally(()=>overlayPending.delete(key));
+    }).finally(()=>{if(overlayPending.get(key)===ticket)overlayPending.delete(key);});
   }
   function showOverlayPages(){
     if(!ready||!pdf||overlayLevel==='off')return;
@@ -379,6 +546,11 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       if(config.onBlockSelect!==null&&typeof config.onBlockSelect!=='function')
         throw Error('PDF Block 选择回调必须是函数或 null');
       onBlockSelect=config.onBlockSelect;
+    }
+    if(Object.hasOwn(config,'onBlockDragIntent')){
+      if(config.onBlockDragIntent!==null&&typeof config.onBlockDragIntent!=='function')
+        throw Error('PDF Block 拖动回调必须是函数或 null');
+      onBlockDragIntent=config.onBlockDragIntent;
     }
     const nextLoader=Object.hasOwn(config,'loadPage')?config.loadPage:loadOverlayPage;
     if(!['off','block','span'].includes(nextLevel))throw Error('覆盖框粒度无效');
@@ -431,6 +603,21 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(!ready||!pdf||page>pdf.numPages)return false;
     viewer.currentPageNumber=page;
     requestOverlayPage(page);
+    return true;
+  }
+  function invalidateOverlayPage(page,changedRows=[]){
+    if(!Number.isInteger(page)||page<1||page>200)throw Error('失效 PDF 页码无效');
+    for(const row of changedRows){
+      if(row?.block_id!=null)blockParents.set(String(row.block_id),
+        row.parent_block_id==null?null:String(row.parent_block_id));
+    }
+    for(const level of ['block','span']){
+      const key=level+':'+page;
+      overlayCache.delete(key);
+      overlayEpoch.set(key,(overlayEpoch.get(key)||0)+1);
+      overlayPending.delete(key); // Stale in-flight response cannot overwrite new PBS.
+    }
+    if(ready&&pdf&&overlayLevel!=='off')requestOverlayPage(page);
     return true;
   }
   const emit=(message,kind='info')=>{if(!disposed)onStatus('PDF · '+message,kind);};
@@ -535,7 +722,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,focusBlock,relayout,dispose(){
+  return Object.freeze({loadPdf,setOverlays,focusBlock,invalidateOverlayPage,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
     cssObserver.disconnect();clearOverlayNodes();

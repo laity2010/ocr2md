@@ -96,7 +96,7 @@ def minerujson2span(book: Path) -> dict:
     try:
         conn.execute('BEGIN IMMEDIATE')
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if tables - {'minerujson', 'block', TABLE}:
+        if tables - {'minerujson', 'block', TABLE,'block_edit_meta','block_edit_history'}:
             raise OCRImportError('SQLite 中存在未知表，拒绝修改')
         old = None
         if TABLE in tables:

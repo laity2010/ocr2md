@@ -22,6 +22,9 @@ registerFramePdfPane(context=>{
     },
     setOverlays(config){overlayConfig={...overlayConfig,...config};return viewer?.setOverlays(config)??false;},
     focusBlock(target){pendingFocus=target;return viewer?.focusBlock(target)??false;},
+    invalidateOverlayPage(page,changedRows){
+      return viewer?.invalidateOverlayPage(page,changedRows)??false;
+    },
     relayout(){viewer?.relayout?.();},
     dispose(){disposed=true;viewer?.dispose();},
   });

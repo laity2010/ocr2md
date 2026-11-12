@@ -33,9 +33,20 @@ const SPAN_COLUMNS=Object.freeze([
   {field:'html',headerName:'HTML',width:260,hide:true},
   {field:'image_path',headerName:'媒体路径',width:260,hide:true},
 ]);
+const comparePBS=(left,right)=>{
+  const values=text=>{
+    const match=/^p(\d+)b(\d+)((?:s\d+)*)$/.exec(String(text||''));
+    return match?[Number(match[1]),Number(match[2]),
+      ...(match[3].match(/s\d+/g)||[]).map(n=>Number(n.slice(1)))]:null;
+  };
+  const a=values(left),b=values(right);
+  if(!a||!b)return String(left).localeCompare(String(right),'en',{numeric:true});
+  for(let i=0;i<Math.min(a.length,b.length);i++)if(a[i]!==b[i])return a[i]-b[i];
+  return a.length-b.length;
+};
 const BLOCK_COLUMNS=Object.freeze([
   {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
-  {field:'pbs',headerName:'PBS',width:125,sortable:true},
+  {field:'pbs',headerName:'PBS',width:125,sortable:true,sort:'asc',comparator:comparePBS},
   {field:'block_id',headerName:'Block ID',width:105,sortable:true},
   {field:'parent_block_id',headerName:'ParentID',width:125,sortable:true},
   {field:'block_type',headerName:'Block Type',width:145,sortable:true},
@@ -65,7 +76,81 @@ async function request(op,params,post=false){
 export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,showModule}){
   let workspace='',tableReady=false,spanReady=false,blockReady=false,operation=0,loaded=0;
   let currentSqlTable=null;
+  let blockRevision=null,editBusy=false,lastEditedId=null;
   const sqlReady=()=>tableReady;
+  function publishBlockHistory(flags){
+    if(!flags||!Number.isInteger(flags.revision))return;
+    blockRevision=flags.revision;
+    frame.setSqlEditHistory({canUndo:flags.canUndo,canRedo:flags.canRedo,
+      onUndo:()=>undoRedoBlock('undo'),onRedo:()=>undoRedoBlock('redo')});
+  }
+  async function loadBlockHistory(){
+    if(!workspace||!blockReady)return false;
+    const current=workspace;
+    try{
+      const state=await request('block-edit-state',{workspace:current});
+      if(workspace!==current)return false;
+      publishBlockHistory(state);
+      return true;
+    }catch(error){
+      onStatus('Block 历史读取失败：'+error.message,'warning');
+      return false;
+    }
+  }
+  function reflectBlockChange(result,sourceId){
+    publishBlockHistory(result);
+    if(!result.changed)return;
+    if(currentSqlTable==='block')frame.patchSqlBlockRows(result.changedRows);
+    frame.invalidatePdfBlockPage(result.page,result.changedRows);
+    if(sourceId!=null){
+      lastEditedId=sourceId;
+      frame.focusPdfBlock({id:sourceId,page:result.page});
+      if(currentSqlTable==='block')frame.selectSqlRowById({field:'block_id',id:sourceId});
+    }
+  }
+  async function executeBlockGesture({sourceBlockId,targetBlockId,placement,page}){
+    if(editBusy)throw Error('已有块操作正在执行');
+    if(!workspace||!blockReady)throw Error('尚未初始化 para Block 表');
+    editBusy=true;
+    try{
+      if(blockRevision===null&&!await loadBlockHistory())throw Error('Block 关系版本不可用');
+      const path=workspace;
+      const preview=await request('block-edit',{workspace:path,action:'plan',
+        sourceBlockId,targetBlockId,placement},true);
+      if(path!==workspace)throw Error('书籍已切换，取消块操作');
+      if(preview.revision!==blockRevision){
+        publishBlockHistory(preview);
+        throw Error('Block 关系已在其他窗口更新，请重试手势');
+      }
+      if(!preview.changed){onStatus('Block · 已是目标位置，关系不变','info');return;}
+      const result=await request('block-edit',{workspace:path,action:'apply',
+        sourceBlockId,targetBlockId,placement,expectedRevision:blockRevision},true);
+      if(path!==workspace)throw Error('书籍已切换，结果需重新加载');
+      reflectBlockChange(result,sourceBlockId);
+      onStatus(`✓ BlockID ${sourceBlockId} → ${targetBlockId} · ${placement} · 关系已保存至 SQLite（可 Undo）`,'ok');
+    }catch(error){
+      if(/版本冲突/.test(error.message))void loadBlockHistory();
+      onStatus('Block 拖动失败：'+error.message,'error');
+      throw error;
+    }finally{editBusy=false;}
+  }
+  async function undoRedoBlock(action){
+    if(editBusy)throw Error('已有块操作正在执行');
+    if(!workspace||blockRevision===null)throw Error('Block 历史尚未就绪');
+    editBusy=true;
+    try{
+      const current=workspace;
+      const result=await request('block-edit',{workspace:current,action,
+        expectedRevision:blockRevision},true);
+      if(workspace!==current)throw Error('书籍已切换，操作结果待重载');
+      reflectBlockChange(result,lastEditedId);
+      onStatus(`✓ Block ${action==='undo'?'撤销':'重做'}成功 · SQLite revision ${result.revision}`,'ok');
+      return result;
+    }catch(error){
+      if(/版本冲突/.test(error.message))void loadBlockHistory();
+      onStatus('Block 历史操作失败：'+error.message,'error');throw error;
+    }finally{editBusy=false;}
+  }
   // The saved book root is the only user configuration. The server selects
   // the sole PDF beneath its pdf/ child and authorizes it per request.
   const pdfUrl=directory=>{
@@ -91,8 +176,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
           });
         }
       },
+      onBlockDragIntent:intent=>executeBlockGesture(intent),
       loadPage:(page,level)=>request('overlays',{workspace:directory,page,level}),
-    }:{level:'off',loadPage:null,blockGroups:null,onBlockSelect:null});
+    }:{level:'off',loadPage:null,blockGroups:null,onBlockSelect:null,onBlockDragIntent:null});
   }
   function warmPdf(directory){
     if(directory===lastPdfWorkspace)return;
@@ -155,6 +241,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   async function inspectAndImport(nextWorkspace){
     const epoch=++operation;
     workspace=nextWorkspace;
+    blockRevision=null;lastEditedId=null;
+    frame.setSqlEditHistory();
     tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();frame.clearSqlRows();
     if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
@@ -177,7 +265,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       }else{
         onStatus(`工作区已绑定，SQL 共 ${result.blocks} 行；请选择导航 SQL → minerujson`,'ok');
       }
-      tableReady=true;revealNavigation();await createBlockTable(epoch);await createSpanTable(epoch);return true;
+      tableReady=true;revealNavigation();await createBlockTable(epoch);await createSpanTable(epoch);
+      if(epoch===operation)await loadBlockHistory();
+      return true;
     }catch(error){
       if(epoch===operation){tableReady=false;hideNavigation();
         onStatus('工作区检查或 SQL 导入失败：'+error.message,'error');}

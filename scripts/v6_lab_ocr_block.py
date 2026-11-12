@@ -109,7 +109,7 @@ def minerujson2block(book:Path)->dict:
         con.execute('PRAGMA foreign_keys=ON')
         con.execute('BEGIN IMMEDIATE')
         tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if tables-{'minerujson','span',TABLE}:
+        if tables-{'minerujson','span',TABLE,'block_edit_meta','block_edit_history'}:
             raise OCRImportError('SQLite 中存在未知表，拒绝修改')
         if TABLE in tables:
             columns={row[1]:row[2].upper() for row in con.execute('PRAGMA table_info(block)')}
@@ -129,8 +129,14 @@ def minerujson2block(book:Path)->dict:
                       original_bytes,import_fingerprint FROM minerujson
                       WHERE row_kind='source' ORDER BY source_order""").fetchall()
         if not sources:raise OCRImportError('minerujson 表没有来源 JSON')
-        # The previous table was a read-only derived projection, never an editor.
-        # Full reconstruction from the preserved original_bytes is lossless.
+        # Once the review structure is edited, rebuilding from MinerU would
+        # silently discard human-reviewed parent/PBS state. Reject it.
+        if 'block_edit_meta' in tables:
+            revision=con.execute('SELECT revision FROM block_edit_meta WHERE id=1').fetchone()
+            if revision and revision[0]>0:
+                raise OCRImportError('Block 已有人工作业历史，不允许从 MinerU 静默重建')
+            con.execute('DROP TABLE IF EXISTS block_edit_history')
+            con.execute('DROP TABLE IF EXISTS block_edit_meta')
         con.execute('DROP TABLE IF EXISTS block')
         con.execute(SCHEMA)
         query='INSERT INTO block VALUES ('+','.join('?' for _ in range(22))+')'

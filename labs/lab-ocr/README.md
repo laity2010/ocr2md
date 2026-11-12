@@ -45,3 +45,5 @@ PBS 父子块显示/选中：继承 Main 父块灰绿／子块蓝灰标签和引
 PBS 同框子块：相同 bbox 只绘制一个覆盖框，但不同 PBS 的父块、`s0`、`s1` 标签全部各自展开，按稳定 Block ID 分别点击定位；跨块组的同名 PBS 仍只显示一次。已在模拟第 11 页加入 `s1` 同框回归，不改 OCR 原始数据。
 
 WCP40 固定 para：SQLite Block/Span 仅保存和展示 `para_blocks` 与其子块；PDF Block/Span 及 PBS 操作也只处理 para。Block/Span AG 不再显示「块组」列和多组筛选。旧派生表核对来源指纹后原位删除非 para 行，保留 para BlockID/PBS/SpanID；原始 MinerU JSON 三组完整保留，不修改 Main。
+
+WCP41 · WP1–WP5：复用 Main 已验证的 PBS 长按 370ms 箭头／PDF bbox 落点交互，Lab OCR 可在**同页**对 para 父块执行「之前／作为子块／之后」，对子块仅执行同父「之前／之后」。结构由稳定 BlockID 驱动、事务内更新 ParentID／SiblingOrder／PBS，原始 MinerU JSON/PDF/Span/BlockKey/bbox 不改。新增服务端 revision 版本门禁、持久化 Undo/Redo、AG/CM6 BlockID 增量补丁与 PDF 页级刷新。详细接口、禁用操作、回归见 `docs/contracts/lab-ocr-block-edit.md`。实际 iPad 手感仍需用户验收。

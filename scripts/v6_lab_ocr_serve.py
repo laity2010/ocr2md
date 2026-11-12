@@ -18,6 +18,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from v6_lab_ocr_span import minerujson2span, span_rows
 from v6_lab_ocr_block import minerujson2block, block_rows
+from v6_lab_ocr_block_edit import (block_move_state,preview_block_move,
+    apply_block_move,undo_block_move)
 from v6_lab_ocr_overlays import overlay_rows
 from v6_lab_ocr_store import (inspect_workspace, import_workspace, existing_info,
                               rows, fingerprint, OCRImportError)
@@ -123,8 +125,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf','overlays'):raise APIError(404,'未知的 OCR API')
-        if (op in ('import','minerujson2span','minerujson2block'))!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf','overlays','block-edit','block-edit-state'):raise APIError(404,'未知的 OCR API')
+        post_ops=('import','minerujson2span','minerujson2block','block-edit')
+        if (op in post_ops)!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
             raise APIError(403,'请求来源无效')
@@ -143,6 +146,22 @@ class Handler(BaseHTTPRequestHandler):
         else:
             query={k:v[-1] for k,v in parse_qs(parsed.query,keep_blank_values=True).items()}
         book=_book(query.get('workspace',''),roots)
+        if op=='block-edit-state':
+            return self.respond(200,block_move_state(book))
+        if op=='block-edit':
+            action=query.get('action')
+            if action=='plan':
+                result=preview_block_move(book,query.get('sourceBlockId'),
+                    query.get('targetBlockId'),query.get('placement'))
+            elif action=='apply':
+                result=apply_block_move(book,query.get('sourceBlockId'),
+                    query.get('targetBlockId'),query.get('placement'),
+                    query.get('expectedRevision'))
+            elif action in ('undo','redo'):
+                result=undo_block_move(book,query.get('expectedRevision'),
+                    redo=action=='redo')
+            else:raise APIError(422,'Block 操作类型不支持')
+            return self.respond(200,result)
         if op=='pdf':
             if self.command not in ('GET','HEAD'):raise APIError(405,'PDF 仅允许读取')
             return self.serve_pdf(book)

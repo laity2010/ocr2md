@@ -67,6 +67,8 @@ try{
       level,page:number,pageSize:[595,842],boxes,
      })});
     }
+    if(op==='block-edit-state')return route.fulfill({status:200,contentType:'application/json',
+      body:'{"revision":0,"canUndo":false,"canRedo":false}'});
     if(op==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       status:'unchanged',blocks:7,pages:3,pdf:'sample.pdf',sources:[{name:'source.json',pages:3}]})});
     if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":3}'});

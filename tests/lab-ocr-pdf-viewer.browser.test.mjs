@@ -58,6 +58,8 @@ try{
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
         level,page:number,pageSize:[595,842],boxes:(fixtures[level][number]||[]).map(box=>({...box,blockGroup:'para_blocks'}))})});
     }
+    if(operation==='block-edit-state')return route.fulfill({status:200,contentType:'application/json',
+      body:'{"revision":0,"canUndo":false,"canRedo":false}'});
     if(operation==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       status:'unchanged',blocks:2,pages:3,pdf:'original.pdf',sources:[{name:'mineru.json',pages:3}]})});
     if(operation==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":2}'});

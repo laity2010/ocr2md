@@ -77,6 +77,8 @@ try{
           blockGroup:row.group,blockType:row.type,bbox:row.bbox})),
       })});
     }
+    if(op==='block-edit-state')return route.fulfill({status:200,contentType:'application/json',
+      body:'{"revision":0,"canUndo":false,"canRedo":false}'});
     if(op==='inspect')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       status:'unchanged',blocks:75,pages:11,pdf:'book.pdf',sources:[{name:'source.json',pages:11}]})});
     if(op==='minerujson2block')return route.fulfill({status:200,contentType:'application/json',body:'{"blocks":75}'});

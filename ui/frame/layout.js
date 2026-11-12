@@ -26,12 +26,18 @@ const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f
 // state, never becoming the mutable authority for Span content or selection.
 const loadTableRows=StateEffect.define();
 const selectTableRow=StateEffect.define();
+const patchTableRows=StateEffect.define();
 const tableStateField=StateField.define({
   create:()=>({rows:[],selectedId:null}),
   update(value,transaction){
     for(const effect of transaction.effects){
       if(effect.is(loadTableRows))value={rows:effect.value,selectedId:null};
       if(effect.is(selectTableRow))value={...value,selectedId:effect.value};
+      if(effect.is(patchTableRows)){
+        const updated=new Map(effect.value.map(row=>[String(row.block_id),row]));
+        value={...value,rows:value.rows.map(row=>updated.has(String(row.block_id))?
+          {...row,...updated.get(String(row.block_id))}:row)};
+      }
     }
     return value;
   },
@@ -42,6 +48,7 @@ function mountEmptySource(host){
   ]}),parent:host});
   host.ocrCmTable=Object.freeze({
     load(rows){editor.dispatch({effects:loadTableRows.of(rows)});},
+    patchBlockRows(changedRows){editor.dispatch({effects:patchTableRows.of(changedRows)});},
     rows(){return editor.state.field(tableStateField).rows;},
     select(row){
       if(!row)return;
@@ -100,6 +107,13 @@ function mountEmptyGrid(host){
       grid.ensureColumnVisible(first,'start');
       requestAnimationFrame(()=>grid.ensureColumnVisible(first,'start'));
     }
+  },patchBlockRows(changedRows){
+    const changed=new Map(changedRows.map(r=>[String(r.block_id),r]));
+    grid.forEachNode(node=>{
+      const patch=changed.get(String(node.data?.block_id));
+      if(patch)node.updateData({...node.data,...patch});
+    });
+    grid.refreshClientSideRowModel?.('sort');
   },selectById({field,id}){
     if(typeof field!=='string'||!field||id==null)return null;
     const wanted=String(id);
@@ -310,6 +324,23 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       // Merge patches so the lazy-mounted viewer retains its original loader.
       pdfSlot.overlays={...pdfSlot.overlays,...config};
       return pdfSlot.current?.setOverlays(config)??false;
+    },
+    invalidatePdfBlockPage(page,changedRows=[]){
+      return pdfSlot.current?.invalidateOverlayPage?.(page,changedRows)??false;
+    },
+    setSqlEditHistory({canUndo=false,canRedo=false,onUndo=null,onRedo=null}={}){
+      const undo=container.querySelector('#undo'),redo=container.querySelector('#redo');
+      for(const [button,enabled,callback] of [[undo,canUndo,onUndo],[redo,canRedo,onRedo]]){
+        if(!button)continue;
+        button.disabled=!enabled;button.title=enabled?'撤销／重做 SQLite Block 结构':'没有对应的块操作';
+        button.onclick=enabled&&typeof callback==='function'?()=>void Promise.resolve()
+          .then(callback).catch(error=>onStatus('Block 历史操作失败：'+error.message,'error')):null;
+      }
+    },
+    patchSqlBlockRows(changedRows){
+      if(!Array.isArray(changedRows)||!changedRows.length)return;
+      container.querySelector('.ocr-cm-source')?.ocrCmTable?.patchBlockRows(changedRows);
+      container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchBlockRows(changedRows);
     },
     activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
