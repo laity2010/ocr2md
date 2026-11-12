@@ -45,6 +45,7 @@ try{
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
       });
       await page.route('**/labs/lab-ocr/api/ocr/inspect?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',blocks:1,pages:22})}));
+      await page.route('**/labs/lab-ocr/api/ocr/minerujson2block',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',table:'block',blocks:0})}));
       await page.route('**/labs/lab-ocr/api/ocr/minerujson2span',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'unchanged',table:'span',spans:0})}));
       const response=await page.goto(url,{waitUntil:'domcontentloaded'});
       assert.equal(response.status(),200);

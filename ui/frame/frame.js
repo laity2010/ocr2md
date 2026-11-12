@@ -94,7 +94,7 @@ function mountSettingsNavigation(){
   select.value='settings';
   select.addEventListener('change',()=>{
     if(select.value==='settings')void showModule('settings');
-    else if(select.value==='sql:minerujson'||select.value==='sql:span')void showModule(select.value);
+    else if(select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')void showModule(select.value);
   });
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
@@ -112,7 +112,7 @@ function mountSettingsNavigation(){
   refreshSettingsHistory();
 }
 async function showModule(name){
-  currentModule=name==='settings'?'settings':name==='sql:minerujson'||name==='sql:span'?name:'frame';
+  currentModule=name==='settings'?'settings':name==='sql:minerujson'||name==='sql:span'||name==='sql:block'?name:'frame';
   const inSettings=currentModule==='settings';
   $('workspace').hidden=inSettings;
   $('settings-workspace').hidden=!inSettings;

@@ -1,6 +1,6 @@
 # Lab OCR · CMD Span API（实验契约）
 
-当前实验仅登记 **一个新增 CMD 生成 API**，不代表 Main 已实现。
+本文件只登记 Span 生成 API；新增的 Block 生成 API 另见 `docs/contracts/lab-ocr-block.md`。两者均为 Lab 实验，不代表 Main 已实现。
 
 | API | 实现 | 调用方 | 直接测试 |
 |---|---|---|---|

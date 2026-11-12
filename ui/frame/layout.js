@@ -37,8 +37,13 @@ function mountEmptySource(host){
     rows(){return editor.state.field(tableStateField).rows;},
     select(row){
       if(!row)return;
-      const raw=row.content ?? row.html ?? row.image_path ?? row.text_preview ?? '';
-      const value=typeof raw==='string'?raw:'';
+      // Block selection shows the complete original per-block structure,
+      // including every Line and Span. Child blocks live in their own rows.
+      const raw=row.block_json ?? row.content ?? row.html ?? row.image_path ?? row.text_preview ?? '';
+      let value=typeof raw==='string'?raw:'';
+      if(row.block_json){
+        try{value=JSON.stringify(JSON.parse(row.block_json),null,2);}catch{}
+      }
       editor.dispatch({
         changes:{from:0,to:editor.state.doc.length,insert:value},
         effects:selectTableRow.of(row.span_id??row.id??null),
@@ -67,8 +72,17 @@ function mountEmptyGrid(host){
   // through this explicit, narrow component boundary; no private AG DOM access.
   host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected}){
     selectedListener=onRowSelected??(()=>{});
+    // Different SQLite tables must not inherit one another's AG filters.
+    grid.setFilterModel(null);
     grid.setGridOption('columnDefs',columns);
     grid.setGridOption('rowData',rows);
+    // Avoid carrying horizontal scroll from the previous table into the new
+    // schema (AG virtualizes columns left outside the visible range).
+    if(columns[0]?.field){
+      const first=columns[0].field;
+      grid.ensureColumnVisible(first,'start');
+      requestAnimationFrame(()=>grid.ensureColumnVisible(first,'start'));
+    }
   },clear(){selectedListener=()=>{};grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
   return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
@@ -108,7 +122,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架'){
     select.value='';
     select.addEventListener('change',()=>{
       if(select.value==='settings')onModuleChange?.('settings');
-      else if(select.value==='sql:minerujson'||select.value==='sql:span')onModuleChange?.(select.value);
+      else if(select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')onModuleChange?.(select.value);
     });
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');

@@ -5,6 +5,7 @@ import {EnumCheckboxFilter} from '../enum-checkbox-filter.js';
 const ENDPOINT='/labs/lab-ocr/api/ocr/';
 const NAV_VALUE='sql:minerujson';
 const SPAN_VALUE='sql:span';
+const BLOCK_VALUE='sql:block';
 const COLUMNS=Object.freeze([
   {field:'global_page',headerName:'页（0起）',width:112,sortable:true},
   {field:'source_name',headerName:'源 JSON',width:170,sortable:true},
@@ -33,6 +34,20 @@ const SPAN_COLUMNS=Object.freeze([
   {field:'html',headerName:'HTML',width:260,hide:true},
   {field:'image_path',headerName:'媒体路径',width:260,hide:true},
 ]);
+const BLOCK_COLUMNS=Object.freeze([
+  {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
+  {field:'block_group',headerName:'原始数组',width:135,sortable:true},
+  {field:'block_id',headerName:'Block ID',minWidth:230,sortable:true},
+  {field:'parent_block_id',headerName:'父 Block',width:230,sortable:true},
+  {field:'block_type',headerName:'Block Type',width:145,sortable:true},
+  {field:'block_bbox_json',headerName:'Block BBox',width:145,sortable:false},
+  {field:'line_count',headerName:'Lines',width:85,sortable:true},
+  {field:'span_count',headerName:'Spans',width:85,sortable:true},
+  {field:'span_types',headerName:'Span Types',width:170,sortable:false},
+  {field:'content_preview',headerName:'内容摘要',minWidth:210,flex:1,sortable:false},
+  {field:'block_path',headerName:'原始层级路径',width:175,hide:true},
+  {field:'block_json',headerName:'原始 Lines / Spans',width:260,hide:true},
+]);
 async function request(op,params,post=false){
   const url=new URL(ENDPOINT+op,location.origin);
   if(!post)for(const [key,value] of Object.entries(params))url.searchParams.set(key,String(value));
@@ -48,7 +63,7 @@ async function request(op,params,post=false){
 }
 
 export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,showModule}){
-  let workspace='',tableReady=false,spanReady=false,operation=0,loaded=0;
+  let workspace='',tableReady=false,spanReady=false,blockReady=false,operation=0,loaded=0;
   const sqlReady=()=>tableReady;
   async function savedWorkspace(){
     const snapshot=await io.readSnapshot();
@@ -63,6 +78,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       if(!group){group=document.createElement('optgroup');group.label='SQLite';select.append(group);}
       if(tableReady&&!group.querySelector(`option[value="${NAV_VALUE}"]`))
         group.append(new Option('minerujson',NAV_VALUE));
+      if(blockReady&&!group.querySelector(`option[value="${BLOCK_VALUE}"]`))
+        group.append(new Option('block',BLOCK_VALUE));
       if(spanReady&&!group.querySelector(`option[value="${SPAN_VALUE}"]`))
         group.append(new Option('span',SPAN_VALUE));
     }
@@ -86,10 +103,23 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       return false;
     }
   }
+  async function createBlockTable(epoch){
+    try{
+      const result=await request('minerujson2block',{workspace},true);
+      if(epoch!==operation)return false;
+      blockReady=true;revealNavigation();
+      onStatus(`SQLite · block：${result.blocks} 行已就绪，请从导航选择 block`,'ok');
+      return true;
+    }catch(error){
+      if(epoch===operation){blockReady=false;revealNavigation();
+        onStatus('block 表生成失败，其他数据仍可用：'+error.message,'error');}
+      return false;
+    }
+  }
   async function inspectAndImport(nextWorkspace){
     const epoch=++operation;
     workspace=nextWorkspace;
-    tableReady=false;spanReady=false;hideNavigation();frame.clearSqlRows();
+    tableReady=false;spanReady=false;blockReady=false;hideNavigation();frame.clearSqlRows();
     if(!workspace){onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
     try{
@@ -98,7 +128,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       if(result.status==='changed'){
         // Do not auto-overwrite reviewed/imported source material.
         tableReady=result.blocks>0;
-        if(tableReady){revealNavigation();await createSpanTable(epoch);}
+        if(tableReady){revealNavigation();await createBlockTable(epoch);await createSpanTable(epoch);}
         onStatus('源 JSON 已变化：保留旧 SQL，不自动覆盖；请人工确认重新导入','warning');
         return tableReady;
       }
@@ -111,7 +141,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       }else{
         onStatus(`工作区已绑定，SQL 共 ${result.blocks} 行；请选择导航 SQL → minerujson`,'ok');
       }
-      tableReady=true;revealNavigation();await createSpanTable(epoch);return true;
+      tableReady=true;revealNavigation();await createBlockTable(epoch);await createSpanTable(epoch);return true;
     }catch(error){
       if(epoch===operation){tableReady=false;hideNavigation();
         onStatus('工作区检查或 SQL 导入失败：'+error.message,'error');}
@@ -120,21 +150,21 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   async function initialize(){
     const saved=await savedWorkspace();
-    if(!saved){workspace='';tableReady=false;spanReady=false;return false;}
+    if(!saved){workspace='';tableReady=false;spanReady=false;blockReady=false;return false;}
     await inspectAndImport(saved);
     return true;
   }
   async function afterSave(){
     const saved=await savedWorkspace();
-    if(!saved){++operation;workspace='';tableReady=false;spanReady=false;hideNavigation();
+    if(!saved){++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;hideNavigation();
       frame.clearSqlRows();await showModule('settings');
       onStatus('尚未绑定工作区，请在全局设置中选择书籍目录','warning');return;}
     const success=await inspectAndImport(saved);
     if(success)await showModule('frame');
   }
   async function openSql(table='minerujson'){
-    if(!tableReady||!workspace||(table==='span'&&!spanReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return;}
-    if(!['minerujson','span'].includes(table))throw Error('未知的 SQLite 表');
+    if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return;}
+    if(!['minerujson','span','block'].includes(table))throw Error('未知的 SQLite 表');
     const id=++loaded;
     onStatus(`正在从 SQLite 加载 ${table} 表并交给 CM6…`,'info');
     try{
@@ -150,7 +180,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       // Reuse Main's audited AG Community categorical filter, including the
       // `all` checkbox and multi-select of distinct values in each column.
       // Only the AG row model changes: no SQLite queries or SQL mutations.
-      frame.showSqlRows(entries,(table==='span'?SPAN_COLUMNS:COLUMNS).map(column=>({
+      frame.showSqlRows(entries,(table==='span'?SPAN_COLUMNS:table==='block'?BLOCK_COLUMNS:COLUMNS).map(column=>({
         ...column,
         filter:EnumCheckboxFilter,
         filterValueGetter:params=>params.data?.[column.field]??'',
@@ -158,6 +188,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         suppressHeaderFilterButton:false,
       })),{onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
+        if(table==='block')onStatus(`Block 定位：P${row.global_page} · ${row.block_id} · 父块 ${row.parent_block_id??'无'} · bbox ${row.block_bbox_json}`,'info');
       }});
       onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行，AG 作为分类定位视图`,'ok');
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');}

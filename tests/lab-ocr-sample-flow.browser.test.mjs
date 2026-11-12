@@ -1,4 +1,4 @@
-/** End-to-end Lab: 1 MinerU JSON (<200 pages) + 1 PDF -> minerujson + span. */
+/** End-to-end Lab: 1 MinerU JSON (<200 pages) + 1 PDF -> minerujson + block + span. */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as pause} from 'node:timers/promises';
@@ -17,7 +17,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1032,height:768},hasTouch:true,ignoreHTTPSErrors:true});
    page.setDefaultTimeout(6500);
-   let inspectCount=0,importCount=0,rowsCount=0,spanCreateCount=0,hasDb=false;
+   let inspectCount=0,importCount=0,rowsCount=0,spanCreateCount=0,blockCreateCount=0,hasDb=false;
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/api/workspace/roots',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({allowedRoots:['/demo']})}));
    await page.route('**/api/workspace/browse?*',r=>{
@@ -37,12 +37,25 @@ try{
      importCount++;hasDb=true;
      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'imported',pages:22,blocks:539})});
     }
+    if(operation==='minerujson2block'){
+     blockCreateCount++;
+     return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'block',blocks:4,status:blockCreateCount===1?'created':'unchanged'})});
+    }
     if(operation==='minerujson2span'){
      spanCreateCount++;
      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'span',spans:3,status:spanCreateCount===1?'created':'unchanged'})});
     }
     if(operation==='rows'){
      const table=new URL(r.request().url()).searchParams.get('table');
+     if(table==='block'){
+      rowsCount++;
+      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'block',total:4,rows:[
+        {block_id:'s0:p0:para_blocks:b0',source_name:'source.json',global_page:0,local_page:0,block_group:'para_blocks',parent_block_id:null,block_path:'0',block_type:'text',block_bbox_json:'[1,2,3,4]',line_count:1,span_count:2,span_types:'text,inline_equation',content_preview:'Block text x^2',has_blocks_field:0,block_json:JSON.stringify({type:'text',bbox:[1,2,3,4],lines:[{spans:[{type:'text',content:'Block text '},{type:'inline_equation',content:'x^2'}]}]})},
+        {block_id:'s0:p1:para_blocks:b1',source_name:'source.json',global_page:1,local_page:1,block_group:'para_blocks',parent_block_id:null,block_path:'1',block_type:'table',block_bbox_json:'[5,6,7,8]',line_count:0,span_count:0,span_types:'',content_preview:'',has_blocks_field:1,block_json:'{"type":"table","bbox":[5,6,7,8]}'},
+        {block_id:'s0:p1:para_blocks:b1.0',source_name:'source.json',global_page:1,local_page:1,block_group:'para_blocks',parent_block_id:'s0:p1:para_blocks:b1',block_path:'1.0',block_type:'table_body',block_bbox_json:'[5,6,7,8]',line_count:1,span_count:1,span_types:'table',content_preview:'<table>...',has_blocks_field:0,block_json:JSON.stringify({type:'table_body',lines:[{spans:[{type:'table',html:'<table><tr><td>Cell</td></tr></table>',image_path:'image.jpg'}]}]})},
+        {block_id:'s0:p1:discarded_blocks:b0',source_name:'source.json',global_page:1,local_page:1,block_group:'discarded_blocks',parent_block_id:null,block_path:'0',block_type:'page_number',block_bbox_json:'[1,1,2,2]',line_count:1,span_count:1,span_types:'text',content_preview:'35',has_blocks_field:0,block_json:'{"type":"page_number","lines":[{"spans":[{"type":"text","content":"35"}]}]}'},
+      ]})});
+     }
      if(table==='span'){
       rowsCount++;
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'span',total:3,
@@ -82,7 +95,7 @@ try{
    assert.equal(await page.locator('#workspace').isVisible(),true);
    assert.equal(importCount,1,'First book should import just once');
    const nav=page.locator('#workspace select.ocr-source-file-select');
-   assert.deepEqual(await nav.locator('optgroup[label="SQLite"] option').allInnerTexts(),['minerujson','span']);
+   assert.deepEqual(await nav.locator('optgroup[label="SQLite"] option').allInnerTexts(),['minerujson','block','span']);
    // Exercise the real visible Tom Select dropdown, not only the hidden
    // HTMLSelectElement business port.
    await page.locator('#workspace .ocr-navigation-files .ts-control').click();
@@ -135,15 +148,33 @@ try{
    await page.locator('#workspace .ag-row').first().click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-cm-source .cm-content')?.textContent?.includes('Span heading'));
    assert.match(await page.locator('#status').innerText(),/Span 定位：P0/);
+   // Block has one SQL/AG row per Block, while Line/Span remain in block_json.
+   await page.locator('#workspace .ocr-navigation-files .ts-control').click();
+   const blockDropdown=page.locator('.ocr-navigation-popup-files:visible');
+   await blockDropdown.locator('.option').filter({hasText:'block'}).click();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===4);
+   assert.match(await page.locator('#status').innerText(),/block：CM6 已加载 4 行/);
+   await page.waitForTimeout(450); // WebKit: let AG finish virtualizing headers after the table switch.
+   const groupHeader=page.locator('#workspace .ag-header-cell[col-id="block_group"]');
+   await groupHeader.locator('.ag-header-cell-filter-button').click();
+   const blockFilter=page.locator('.ocr-enum-filter:visible');
+   await blockFilter.locator('.ocr-enum-filter-option[data-filter-value="discarded_blocks"] input').uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===3);
+   await page.locator('#workspace .ag-row').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-cm-source .cm-content')?.textContent?.includes('Block text'));
+   assert.match(await page.locator('#workspace .ocr-cm-source .cm-content').innerText(),/inline_equation/);
+   assert.match(await page.locator('#status').innerText(),/Block 定位：P0/);
+   assert.equal(rowsCount,3,'Block and Span filtering must not query SQL again');
+   assert.equal(blockCreateCount,1,'Block table created once');
    assert.equal(spanCreateCount,1,'span generation must be idempotent at initialization');
 
    await page.reload({waitUntil:'domcontentloaded'});
    await page.locator('#workspace .dv-content-container').first().waitFor({timeout:18000});
-   await page.waitForFunction(()=>!!document.querySelector('select.ocr-source-file-select option[value="sql:minerujson"]'),null,{timeout:20000});
+   await page.waitForFunction(()=>!!document.querySelector('select.ocr-source-file-select option[value="sql:minerujson"]')&&!!document.querySelector('select.ocr-source-file-select option[value="sql:block"]')&&!!document.querySelector('select.ocr-source-file-select option[value="sql:span"]'),null,{timeout:20000});
    assert.equal(importCount,1,'Reload must not re-import unchanged JSON');
-   assert(importCount>0&&inspectCount>=2&&rowsCount>0&&spanCreateCount>=2);
+   assert(importCount>0&&inspectCount>=2&&rowsCount>0&&spanCreateCount>=2&&blockCreateCount>=2);
    assert.deepEqual(errors,[]);
-   console.log('LAB_OCR_SAMPLE_FLOW_PASS',name,JSON.stringify({inspectCount,importCount,spanCreateCount,rowsCount}));
+   console.log('LAB_OCR_SAMPLE_FLOW_PASS',name,JSON.stringify({inspectCount,importCount,spanCreateCount,blockCreateCount,rowsCount}));
   }finally{await browser.close()}
  }
 }finally{vite?.kill('SIGTERM')}
