@@ -387,7 +387,7 @@ try{
    await page.screenshot({path:`.runtime/pbs-overlap-evidence/page11-${name.replace(/[^a-z0-9-]/gi,'_')}-stress.png`});
    await p11.filter({hasText:'p11b01'}).click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected .ag-cell[col-id="block_id"]')?.textContent.trim()==='102');
-   assert.match(await page.locator('#status').innerText(),/PDF → AG · p11b01 · BlockID 102/);
+   assert.match(await page.locator('.ocr-cm-source .cm-content').innerText(),/\"blockId\": \"102\"/); // status can be replaced by async version check
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_PBS_PAGE11_NON_OVERLAP_PASS',name,JSON.stringify({initial:p11Original.length,
      resized:p11Resized.length,secondLabelX:p11Resized.find(x=>x.name==='p11b01').left}));
