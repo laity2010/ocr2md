@@ -66,12 +66,20 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // buttons when a late stylesheet changes font metrics. A single CSS-change
   // observer also handles global font settings without polling or rereading SQL.
   let styleRefitPending=false;
+  const refitAllPbsLabels=()=>{
+    if(!disposed)for(const relayout of pbsRelayoutByPage.values())relayout();
+  };
   const scheduleStyleRefit=()=>{
-    if(disposed||styleRefitPending||!pbsRelayoutByPage.size)return;
+    if(disposed||!pbsRelayoutByPage.size)return;
+    // WebKit may defer requestAnimationFrame while the PDF is off-screen.
+    // Force a synchronous layout read right after CSS mutation so tags don't
+    // temporarily occupy old rails, then correct again in the next frame.
+    refitAllPbsLabels();
+    if(styleRefitPending)return;
     styleRefitPending=true;
     requestAnimationFrame(()=>{
       styleRefitPending=false;
-      if(!disposed)for(const relayout of pbsRelayoutByPage.values())relayout();
+      refitAllPbsLabels();
     });
   };
   const cssObserver=new MutationObserver(scheduleStyleRefit);

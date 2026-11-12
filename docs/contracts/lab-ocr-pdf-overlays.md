@@ -99,4 +99,4 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - **PBS 标签和引线**与 PDF 橙色选中框分层：父标签深绿、实线，引线使用相近的 `#679f87` 实线；子标签同系浅绿、虚线，引线用更亮的 `#a2d3b4` 虚线。标签选中态继续保留自己的绿系高亮；不把整套 PBS 标签或引线变成橙色。
 - 只修改 CSS 视觉样式。稳定 Block ID 父子递归选择、AG↔PDF、跨页、块组筛选、文本宽度紧包、避让算法、PDF 滚动与 SQL 均保持不变。专项真实浏览器断言读取 `getComputedStyle()`，验证原橙色框、随动橙色和父子标签/引线各自的相似色系差异。
 
-- WebKit 兼容补充：`width:max-content` 标签字体经新样式表替换时，某些 iPad WebKit 路径不派发 ResizeObserver；使用**单一、只监听 `head` 样式变动和根节点 `style/class` 的 MutationObserver**，下一帧重测现有 PBS 轨道，不改数据、不增加请求、不定时轮询。卸载 PDF 时清理观察器。确保字体变化不会使不同长度的相邻 PBS 再次重叠。
+- WebKit 兼容补充：`width:max-content` 标签字体经新样式表替换时，某些 iPad WebKit 路径不派发 ResizeObserver；使用**单一、只监听 `head` 样式变动和根节点 `style/class` 的 MutationObserver**，立即同步重测现有 PBS 轨道并在下一帧补测，避免公网 iPad WebKit 延迟 requestAnimationFrame 时短暂交叠，不改数据、不增加请求、不定时轮询。卸载 PDF 时清理观察器。确保字体变化不会使不同长度的相邻 PBS 再次重叠。
