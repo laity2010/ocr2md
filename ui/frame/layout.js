@@ -46,7 +46,7 @@ function mountEmptySource(host){
       }
       editor.dispatch({
         changes:{from:0,to:editor.state.doc.length,insert:value},
-        effects:selectTableRow.of(row.span_id??row.id??null),
+        effects:selectTableRow.of(row.span_id??row.block_id??row.id??null),
       });
     },
     clear(){editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:''},

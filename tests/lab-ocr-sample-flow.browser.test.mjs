@@ -50,10 +50,10 @@ try{
      if(table==='block'){
       rowsCount++;
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({table:'block',total:4,rows:[
-        {block_id:'s0:p0:para_blocks:b0',source_name:'source.json',global_page:0,local_page:0,block_group:'para_blocks',parent_block_id:null,block_path:'0',block_type:'text',block_bbox_json:'[1,2,3,4]',line_count:1,span_count:2,span_types:'text,inline_equation',content_preview:'Block text x^2',has_blocks_field:0,block_json:JSON.stringify({type:'text',bbox:[1,2,3,4],lines:[{spans:[{type:'text',content:'Block text '},{type:'inline_equation',content:'x^2'}]}]})},
-        {block_id:'s0:p1:para_blocks:b1',source_name:'source.json',global_page:1,local_page:1,block_group:'para_blocks',parent_block_id:null,block_path:'1',block_type:'table',block_bbox_json:'[5,6,7,8]',line_count:0,span_count:0,span_types:'',content_preview:'',has_blocks_field:1,block_json:'{"type":"table","bbox":[5,6,7,8]}'},
-        {block_id:'s0:p1:para_blocks:b1.0',source_name:'source.json',global_page:1,local_page:1,block_group:'para_blocks',parent_block_id:'s0:p1:para_blocks:b1',block_path:'1.0',block_type:'table_body',block_bbox_json:'[5,6,7,8]',line_count:1,span_count:1,span_types:'table',content_preview:'<table>...',has_blocks_field:0,block_json:JSON.stringify({type:'table_body',lines:[{spans:[{type:'table',html:'<table><tr><td>Cell</td></tr></table>',image_path:'image.jpg'}]}]})},
-        {block_id:'s0:p1:discarded_blocks:b0',source_name:'source.json',global_page:1,local_page:1,block_group:'discarded_blocks',parent_block_id:null,block_path:'0',block_type:'page_number',block_bbox_json:'[1,1,2,2]',line_count:1,span_count:1,span_types:'text',content_preview:'35',has_blocks_field:0,block_json:'{"type":"page_number","lines":[{"spans":[{"type":"text","content":"35"}]}]}'},
+        {block_id:1,pbs:'p1b0',parent_pbs:null,source_block_key:'s0:p0:para_blocks:b0',source_name:'source.json',global_page:0,local_page:0,block_group:'para_blocks',parent_block_id:null,block_path:'0',block_type:'text',block_bbox_json:'[1,2,3,4]',line_count:1,span_count:2,span_types:'text,inline_equation',content_preview:'Block text x^2',has_blocks_field:0,block_json:JSON.stringify({type:'text',bbox:[1,2,3,4],lines:[{spans:[{type:'text',content:'Block text '},{type:'inline_equation',content:'x^2'}]}]})},
+        {block_id:2,pbs:'p2b1',parent_pbs:null,source_block_key:'s0:p1:para_blocks:b1',source_name:'source.json',global_page:1,local_page:1,block_group:'para_blocks',parent_block_id:null,block_path:'1',block_type:'table',block_bbox_json:'[5,6,7,8]',line_count:0,span_count:0,span_types:'',content_preview:'',has_blocks_field:1,block_json:'{"type":"table","bbox":[5,6,7,8]}'},
+        {block_id:3,pbs:'p2b1s0',parent_pbs:'p2b1',source_block_key:'s0:p1:para_blocks:b1.0',source_name:'source.json',global_page:1,local_page:1,block_group:'para_blocks',parent_block_id:2,block_path:'1.0',block_type:'table_body',block_bbox_json:'[5,6,7,8]',line_count:1,span_count:1,span_types:'table',content_preview:'<table>...',has_blocks_field:0,block_json:JSON.stringify({type:'table_body',lines:[{spans:[{type:'table',html:'<table><tr><td>Cell</td></tr></table>',image_path:'image.jpg'}]}]})},
+        {block_id:4,pbs:'p2b0',parent_pbs:null,source_block_key:'s0:p1:discarded_blocks:b0',source_name:'source.json',global_page:1,local_page:1,block_group:'discarded_blocks',parent_block_id:null,block_path:'0',block_type:'page_number',block_bbox_json:'[1,1,2,2]',line_count:1,span_count:1,span_types:'text',content_preview:'35',has_blocks_field:0,block_json:'{"type":"page_number","lines":[{"spans":[{"type":"text","content":"35"}]}]}'},
       ]})});
      }
      if(table==='span'){
@@ -154,6 +154,9 @@ try{
    await blockDropdown.locator('.option').filter({hasText:'block'}).click();
    await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===4);
    assert.match(await page.locator('#status').innerText(),/block：CM6 已加载 4 行/);
+   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="pbs"]').count(),1);
+   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_id"]').count(),1);
+   assert.match(await page.locator('#workspace .ag-row').first().innerText(),/p1b0/);
    await page.waitForTimeout(450); // WebKit: let AG finish virtualizing headers after the table switch.
    const groupHeader=page.locator('#workspace .ag-header-cell[col-id="block_group"]');
    await groupHeader.locator('.ag-header-cell-filter-button').click();
@@ -163,7 +166,8 @@ try{
    await page.locator('#workspace .ag-row').first().click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-cm-source .cm-content')?.textContent?.includes('Block text'));
    assert.match(await page.locator('#workspace .ocr-cm-source .cm-content').innerText(),/inline_equation/);
-   assert.match(await page.locator('#status').innerText(),/Block 定位：P0/);
+   assert.match(await page.locator('#status').innerText(),/Block 定位：p1b0 · ID 1/);
+   assert.equal(await page.evaluate(()=>document.querySelector('#workspace .ocr-cm-source').ocrCmTable.selected()),1);
    assert.equal(rowsCount,3,'Block and Span filtering must not query SQL again');
    assert.equal(blockCreateCount,1,'Block table created once');
    assert.equal(spanCreateCount,1,'span generation must be idempotent at initialization');

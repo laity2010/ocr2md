@@ -1,9 +1,9 @@
-"""CMD API: minerujson2block — one row per MinerU Block, with intact Lines/Spans.
+"""CMD API: minerujson2block — one row per Block, complete Lines and Spans.
 
-Nested Block children become separate rows linked by parent_block_id and
-path/order. Every block_json retains all original Block fields except its child
-`blocks` array, whose presence and order are separately preserved. The
-original source JSON stays untouched in minerujson.source.original_bytes.
+A compact SQL integer block_id is the immutable row identity. PBS is a separate
+human-readable structural label, scoped by source and MinerU processing group.
+source_block_key preserves the original full structural key so `span` remains
+joinable. Child Blocks get distinct rows rather than duplicated nested content.
 """
 from __future__ import annotations
 import hashlib
@@ -17,7 +17,9 @@ from v6_lab_ocr_store import BLOCK_GROUPS, OCRImportError, _db, existing_info
 TABLE = 'block'
 LIMIT = 500000
 SCHEMA = '''CREATE TABLE block (
- block_id TEXT PRIMARY KEY,
+ block_id INTEGER PRIMARY KEY,
+ pbs TEXT NOT NULL,
+ source_block_key TEXT NOT NULL UNIQUE,
  source_order INTEGER NOT NULL,
  source_name TEXT NOT NULL,
  global_page INTEGER NOT NULL,
@@ -25,7 +27,7 @@ SCHEMA = '''CREATE TABLE block (
  page_size_json TEXT NOT NULL,
  block_group TEXT NOT NULL,
  block_path TEXT NOT NULL,
- parent_block_id TEXT,
+ parent_block_id INTEGER REFERENCES block(block_id),
  sibling_order INTEGER NOT NULL,
  block_index INTEGER,
  block_type TEXT NOT NULL,
@@ -37,84 +39,99 @@ SCHEMA = '''CREATE TABLE block (
  block_json TEXT NOT NULL,
  has_blocks_field INTEGER NOT NULL CHECK(has_blocks_field IN (0,1)),
  import_fingerprint TEXT NOT NULL,
- UNIQUE (source_order,global_page,block_group,block_path)
+ UNIQUE (source_order,global_page,block_group,block_path),
+ UNIQUE (source_order,block_group,pbs)
 )'''
+REQUIRED = {'block_id','pbs','source_block_key','parent_block_id','block_json','import_fingerprint','has_blocks_field'}
+LEGACY = {'block_id','parent_block_id','block_path','block_json','import_fingerprint','has_blocks_field'}
 
 def _dump(value):
     return json.dumps(value, ensure_ascii=False, separators=(',',':'))
 
-def _records(source_order:int, source_name:str, global_page:int, page:dict, signature:str):
-    local_page = page['page_idx']
-    page_size_json = _dump(page.get('page_size'))
+def _pbs(page:int, path:tuple[int,...])->str:
+    # CMD: page is 1-based; block and nested-subblock indices are 0-based.
+    return f'p{page+1}b{path[0]}' + ''.join(f's{index}' for index in path[1:])
+
+def _records(source_order:int,source_name:str,global_page:int,page:dict,signature:str,start_id:int):
+    local_page=page['page_idx']
+    page_size_json=_dump(page.get('page_size'))
+    next_id=start_id
     for group in BLOCK_GROUPS:
-        for bi, root in enumerate(page.get(group, [])):
-            def walk(block:dict, path:tuple[int,...], parent:str|None):
+        for bi,root in enumerate(page.get(group, [])):
+            def walk(block:dict,path:tuple[int,...],parent:int|None):
+                nonlocal next_id
                 if not isinstance(block,dict):
                     raise OCRImportError('嵌套 Block 不是对象')
-                children = block.get('blocks', [])
-                if not isinstance(children, list):
+                children=block.get('blocks', [])
+                if not isinstance(children,list):
                     raise OCRImportError('嵌套 blocks 不是数组')
-                lines = block.get('lines', [])
-                if not isinstance(lines, list):
+                lines=block.get('lines', [])
+                if not isinstance(lines,list):
                     raise OCRImportError('Block.lines 不是数组')
-                types=[]
-                preview=[]
-                count=0
+                types=[];preview=[];count=0
                 for line in lines:
                     if not isinstance(line,dict) or not isinstance(line.get('spans'),list):
                         raise OCRImportError('Line.spans 不是数组')
                     for span in line['spans']:
                         if not isinstance(span,dict):
                             raise OCRImportError('Span 不是对象')
-                        count+=1
-                        types.append(str(span.get('type','')))
-                        if len(' '.join(preview)) < 260:
+                        count+=1;types.append(str(span.get('type','')))
+                        if len(' '.join(preview))<260:
                             for key in ('content','html','image_path'):
                                 value=span.get(key)
                                 if isinstance(value,str):
                                     preview.append(value[:260]);break
                 path_str='.'.join(map(str,path))
-                bid=f's{source_order}:p{global_page}:{group}:b{path_str}'
+                source_key=f's{source_order}:p{global_page}:{group}:b{path_str}'
                 own={k:v for k,v in block.items() if k!='blocks'}
-                # Block JSON contains original Lines/Spans verbatim, not a lossy
-                # text projection. Child Blocks are distinct rows, never copies.
-                yield (bid,source_order,source_name,global_page,local_page,
-                       page_size_json,group,path_str,parent,path[-1],
+                next_id+=1
+                numeric_id=next_id
+                # Preorder emits the parent before children so integer FKs are
+                # stable for this source snapshot and need no second pass.
+                yield (numeric_id,_pbs(global_page,path),source_key,source_order,
+                       source_name,global_page,local_page,page_size_json,group,
+                       path_str,parent,path[-1],
                        block.get('index') if type(block.get('index')) is int else None,
                        str(block.get('type','')),_dump(block.get('bbox')),
                        len(lines),count,','.join(dict.fromkeys(types)),
                        ' '.join(preview)[:260],_dump(own),int('blocks' in block),signature)
                 for ci,child in enumerate(children):
-                    yield from walk(child, (*path,ci),bid)
+                    yield from walk(child,(*path,ci),numeric_id)
             yield from walk(root,(bi,),None)
+    # Global counter is maintained by the generator's start_id/return record.
 
 def minerujson2block(book:Path)->dict:
-    """Create an idempotent, transactional Block projection from saved source bytes."""
+    """Create a transactional Block projection; safely upgrade the legacy derived table."""
     info=existing_info(book)
     if info is None:raise OCRImportError('请先导入 minerujson 表')
-    con=sqlite3.connect(_db(book), timeout=20)
+    con=sqlite3.connect(_db(book),timeout=20)
     try:
+        con.execute('PRAGMA foreign_keys=ON')
         con.execute('BEGIN IMMEDIATE')
-        tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+        tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
         if tables-{'minerujson','span',TABLE}:
             raise OCRImportError('SQLite 中存在未知表，拒绝修改')
         if TABLE in tables:
-            columns={r[1] for r in con.execute('PRAGMA table_info(block)')}
-            if not {'block_id','parent_block_id','block_json','import_fingerprint','has_blocks_field'}.issubset(columns):
-                raise OCRImportError('现有 block 表结构不兼容，拒绝覆盖')
-            old=con.execute('SELECT COUNT(*),MIN(import_fingerprint),MAX(import_fingerprint) FROM block').fetchone()
-            if old[0] and old[1]==old[2]==info['signature']:
-                con.commit()
-                return {'status':'unchanged','table':TABLE,'blocks':old[0]}
+            columns={row[1]:row[2].upper() for row in con.execute('PRAGMA table_info(block)')}
+            modern=REQUIRED.issubset(columns) and columns['block_id']=='INTEGER'
+            old=LEGACY.issubset(columns) and 'pbs' not in columns and columns['block_id']=='TEXT'
+            if not modern and not old:
+                raise OCRImportError('现有 block 表结构未知，拒绝覆盖')
+            if modern:
+                state=con.execute('SELECT COUNT(*),MIN(import_fingerprint),MAX(import_fingerprint) FROM block').fetchone()
+                if state[0] and state[1]==state[2]==info['signature']:
+                    con.commit()
+                    return {'status':'unchanged','table':TABLE,'blocks':state[0]}
         sources=con.execute("""SELECT source_order,source_name,source_sha256,source_page_count,
-                       original_bytes,import_fingerprint FROM minerujson
-                       WHERE row_kind='source' ORDER BY source_order""").fetchall()
+                      original_bytes,import_fingerprint FROM minerujson
+                      WHERE row_kind='source' ORDER BY source_order""").fetchall()
         if not sources:raise OCRImportError('minerujson 表没有来源 JSON')
+        # The previous table was a read-only derived projection, never an editor.
+        # Full reconstruction from the preserved original_bytes is lossless.
         con.execute('DROP TABLE IF EXISTS block')
         con.execute(SCHEMA)
-        query='INSERT INTO block VALUES ('+','.join('?' for _ in range(20))+')'
-        count=0
-        global_offset=0
+        query='INSERT INTO block VALUES ('+','.join('?' for _ in range(22))+')'
+        count=0;global_offset=0
         for order,name,sha,page_count,raw,signature in sources:
             if raw is None or hashlib.sha256(raw).hexdigest()!=sha or signature!=info['signature']:
                 raise OCRImportError('MinerU 来源校验失败')
@@ -126,10 +143,12 @@ def minerujson2block(book:Path)->dict:
                 if not isinstance(page,dict) or type(page.get('page_idx')) is not int:
                     raise OCRImportError('MinerU 页码无效')
                 for group in BLOCK_GROUPS:
-                    if not isinstance(page.get(group, []),list):
+                    if not isinstance(page.get(group,[]),list):
                         raise OCRImportError('MinerU 内容组不是数组')
-                for record in _records(order,name,global_offset+page_offset,page,signature):
-                    count+=1
+                for record in _records(order,name,global_offset+page_offset,page,signature,count):
+                    if record[0]<=count:
+                        raise OCRImportError('Block 编号未递增')
+                    count=record[0]
                     if count>LIMIT:raise OCRImportError('Block 数超出安全上限')
                     con.execute(query,record)
             global_offset+=page_count
@@ -145,7 +164,7 @@ def minerujson2block(book:Path)->dict:
         raise
     finally:con.close()
 
-def block_rows(book:Path, offset:int=0,limit:int=200)->dict:
+def block_rows(book:Path,offset:int=0,limit:int=200)->dict:
     if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=500:
         raise OCRImportError('分页参数无效')
     if existing_info(book) is None:raise OCRImportError('请先导入 minerujson')
@@ -154,9 +173,13 @@ def block_rows(book:Path, offset:int=0,limit:int=200)->dict:
         if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='block'").fetchone()[0]!=1:
             raise OCRImportError('尚未生成 block 表')
         total=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
-        data=conn.execute('''SELECT block_id,source_order,source_name,global_page,local_page,
-                page_size_json,block_group,block_path,parent_block_id,sibling_order,
-                block_index,block_type,block_bbox_json,line_count,span_count,
-                span_types,content_preview,block_json,has_blocks_field
-                FROM block ORDER BY rowid LIMIT ? OFFSET ?''',(limit,offset)).fetchall()
-    return {'table':TABLE,'total':total,'offset':offset,'limit':limit,'rows':[dict(r) for r in data]}
+        data=conn.execute('''SELECT child.block_id,child.pbs,parent.pbs AS parent_pbs,
+                  child.source_block_key,child.source_order,child.source_name,child.global_page,
+                  child.local_page,child.page_size_json,child.block_group,child.block_path,
+                  child.parent_block_id,child.sibling_order,child.block_index,
+                  child.block_type,child.block_bbox_json,child.line_count,child.span_count,
+                  child.span_types,child.content_preview,child.block_json,child.has_blocks_field
+                  FROM block AS child LEFT JOIN block AS parent
+                    ON child.parent_block_id=parent.block_id
+                  ORDER BY child.block_id LIMIT ? OFFSET ?''',(limit,offset)).fetchall()
+    return {'table':TABLE,'total':total,'offset':offset,'limit':limit,'rows':[dict(row) for row in data]}

@@ -37,8 +37,10 @@ const SPAN_COLUMNS=Object.freeze([
 const BLOCK_COLUMNS=Object.freeze([
   {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
   {field:'block_group',headerName:'原始数组',width:135,sortable:true},
-  {field:'block_id',headerName:'Block ID',minWidth:230,sortable:true},
-  {field:'parent_block_id',headerName:'父 Block',width:230,sortable:true},
+  {field:'pbs',headerName:'PBS',width:125,sortable:true},
+  {field:'block_id',headerName:'Block ID',width:105,sortable:true},
+  {field:'parent_pbs',headerName:'父 PBS',width:125,sortable:true},
+  {field:'parent_block_id',headerName:'父 Block ID',width:120,hide:true,sortable:true},
   {field:'block_type',headerName:'Block Type',width:145,sortable:true},
   {field:'block_bbox_json',headerName:'Block BBox',width:145,sortable:false},
   {field:'line_count',headerName:'Lines',width:85,sortable:true},
@@ -46,6 +48,7 @@ const BLOCK_COLUMNS=Object.freeze([
   {field:'span_types',headerName:'Span Types',width:170,sortable:false},
   {field:'content_preview',headerName:'内容摘要',minWidth:210,flex:1,sortable:false},
   {field:'block_path',headerName:'原始层级路径',width:175,hide:true},
+  {field:'source_block_key',headerName:'来源 Block Key',width:280,hide:true},
   {field:'block_json',headerName:'原始 Lines / Spans',width:260,hide:true},
 ]);
 async function request(op,params,post=false){
@@ -188,7 +191,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         suppressHeaderFilterButton:false,
       })),{onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
-        if(table==='block')onStatus(`Block 定位：P${row.global_page} · ${row.block_id} · 父块 ${row.parent_block_id??'无'} · bbox ${row.block_bbox_json}`,'info');
+        if(table==='block')onStatus(`Block 定位：${row.pbs} · ID ${row.block_id} · 父块 ${row.parent_pbs??'无'} · bbox ${row.block_bbox_json}`,'info');
       }});
       onStatus(`SQLite · ${table}：CM6 已加载 ${entries.length} 行，AG 作为分类定位视图`,'ok');
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');}

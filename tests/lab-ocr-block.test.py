@@ -44,14 +44,25 @@ class BlockContract(unittest.TestCase):
    rows=block_rows(book,0,100)['rows']
    self.assertEqual(len(rows),10)
    self.assertEqual(len({x['block_id'] for x in rows}),10)
+   self.assertEqual([x['block_id'] for x in rows],list(range(1,11)))
+   self.assertEqual(len({(r['source_order'],r['block_group'],r['pbs']) for r in rows}),10)
+   self.assertEqual(len({r['pbs'] for r in rows if r['block_group']=='para_blocks'}),8)
+   self.assertEqual(next(r for r in rows if r['block_group']=='preproc_blocks')['pbs'],'p1b0')
+   self.assertEqual(next(r for r in rows if r['block_group']=='para_blocks')['pbs'],'p1b0')
    self.assertEqual(sum(r['span_count'] for r in rows),7)
    self.assertEqual([r['block_group'] for r in rows if r['parent_block_id'] is None],
      ['preproc_blocks','discarded_blocks','para_blocks','para_blocks','para_blocks','para_blocks'])
    inner=next(r for r in rows if r['block_type']=='table_body')
-   self.assertEqual(inner['block_id'],'s0:p0:para_blocks:b1.1')
-   self.assertEqual(inner['parent_block_id'],'s0:p0:para_blocks:b1')
-   self.assertEqual(json.loads(inner['block_json'])['lines'][0]['spans'][0], nested['blocks'][1]['lines'][0]['spans'][0])
+   self.assertIsInstance(inner['block_id'],int)
+   self.assertEqual(inner['source_block_key'],'s0:p0:para_blocks:b1.1')
+   self.assertEqual(inner['pbs'],'p1b1s1')
+   self.assertEqual(inner['parent_pbs'],'p1b1')
    parent=next(r for r in rows if r['block_type']=='table')
+   self.assertEqual(inner['parent_block_id'],parent['block_id'])
+   self.assertEqual(parent['pbs'],'p1b1')
+   self.assertIsNone(parent['parent_pbs'])
+   self.assertIsNone(parent['parent_block_id'])
+   self.assertEqual(json.loads(inner['block_json'])['lines'][0]['spans'][0], nested['blocks'][1]['lines'][0]['spans'][0])
    self.assertNotIn('blocks',json.loads(parent['block_json']))
    self.assertEqual(parent['has_blocks_field'],1)
    self.assertEqual(parent['span_count'],0)
@@ -59,6 +70,7 @@ class BlockContract(unittest.TestCase):
    self.assertEqual(json.loads(text['block_json']),para[0])
    empty=next(r for r in rows if r['block_type']=='empty')
    self.assertEqual(json.loads(empty['block_json'])['lines'],[])
+   self.assertEqual(empty['pbs'],'p1b3')
    self.assertEqual(empty['has_blocks_field'],1)
    self.assertEqual(block_rows(book,3,2)['rows'],rows[3:5])
    by_parent={}
@@ -74,9 +86,38 @@ class BlockContract(unittest.TestCase):
    self.assertEqual(file.read_bytes(),raw)
    # Existing span API must continue to work after block table creation.
    self.assertEqual(minerujson2span(book)['status'],'created')
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:
+    self.assertEqual(db.execute('''SELECT COUNT(*) FROM span s JOIN block b
+      ON s.block_id=b.source_block_key''').fetchone()[0],7)
+
    self.assertEqual(minerujson2block(book)['status'],'unchanged')
    with sqlite3.connect(book/'ocr2md.sqlite') as db:
     self.assertEqual(db.execute("SELECT COUNT(*) FROM minerujson WHERE row_kind='block'").fetchone()[0],6)
     self.assertEqual(db.execute('SELECT COUNT(*) FROM block').fetchone()[0],10)
+    self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+    self.assertEqual(db.execute('SELECT COUNT(*) FROM block WHERE parent_block_id IS NOT NULL').fetchone()[0],4)
+
+ def test_upgrade_legacy_derived_table(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   book=Path(tmp);(book/'mineru json').mkdir();(book/'pdf').mkdir()
+   (book/'pdf'/'file.pdf').write_bytes(b'%PDF-1.4\n')
+   document={'pdf_info':[{'page_idx':0,'page_size':[100,100],
+     'para_blocks':[{'type':'text','index':0,'bbox':[0,0,100,100],
+       'lines':[{'bbox':[1,2,3,4],'spans':[{'type':'text','content':'source'}]}]}],
+     'preproc_blocks':[],'discarded_blocks':[]}]}
+   (book/'mineru json'/'a.json').write_text(json.dumps(document))
+   import_workspace(book)
+   # Only the old generated, read-only schema is eligible for migration.
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:
+    db.execute('''CREATE TABLE block (block_id TEXT PRIMARY KEY,
+      parent_block_id TEXT,block_path TEXT,block_json TEXT,
+      import_fingerprint TEXT,has_blocks_field INTEGER)''')
+    db.execute("INSERT INTO block(block_id,block_path,block_json,import_fingerprint,has_blocks_field) VALUES ('legacy','0','{}','legacy',0)")
+   self.assertEqual(minerujson2block(book),{'status':'created','table':'block','blocks':1})
+   result=block_rows(book)['rows'][0]
+   self.assertEqual((result['block_id'],result['pbs'],result['source_block_key']),
+     (1,'p1b0','s0:p0:para_blocks:b0'))
+   self.assertEqual(json.loads(result['block_json'])['lines'][0]['spans'][0]['content'],'source')
+   self.assertEqual(minerujson2block(book)['status'],'unchanged')
 
 if __name__=='__main__':unittest.main()
