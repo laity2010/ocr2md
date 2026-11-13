@@ -26,6 +26,10 @@ def fingerprints(folder):
     files={};total=0
     for p in sorted(folder.rglob('*')):
         if p.is_file():
+            # Finder may create .DS_Store when visiting a published folder.
+            # It is an OS directory-view cache, never a shipped Lab asset.
+            # Preserve the file on disk, but never count it as source drift.
+            if p.name=='.DS_Store':continue
             if p.is_symlink():raise RuntimeError('Symlink file forbidden in release')
             data=p.read_bytes();files[p.relative_to(folder).as_posix()]=sha(data);total+=len(data)
     return files,total
