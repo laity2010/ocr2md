@@ -203,7 +203,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     select.value='';
     select.addEventListener('change',()=>{
       if(select.value==='settings')onModuleChange?.('settings');
-      else if(select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')onModuleChange?.(select.value);
+      else if(select.value==='sql:initialize'||select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')onModuleChange?.(select.value);
     });
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');

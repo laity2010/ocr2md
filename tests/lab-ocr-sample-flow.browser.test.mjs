@@ -108,7 +108,8 @@ try{
    assert.equal(await page.locator('#workspace .ag-row').count(),3,'Only para_blocks rows are shown by default');
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_group"]').count(),0);
    const nav=page.locator('#workspace select.ocr-source-file-select');
-   assert.deepEqual(await nav.locator('optgroup[label="SQLite"] option').allInnerTexts(),['minerujson','block','span']);
+   assert.deepEqual(await nav.locator('optgroup[label="SQLite"] option').allInnerTexts(),
+     ['数据库管理 · 初始化 SQL（重建扩展）','minerujson','block','span']);
    // Exercise the real visible Tom Select dropdown, not only the hidden
    // HTMLSelectElement business port.
    await page.locator('#workspace .ocr-navigation-files .ts-control').click();

@@ -59,7 +59,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // Public setOverlays({level,loadPage,blockGroups,onBlockSelect}) + focusBlock.
   // The caller owns SQL/JSON; the viewer sees only geometry, public display
   // labels and stable IDs, never a database schema, raw source or disk path.
-  let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
+  let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
   let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,
     selectedBlockId=null,focusRequest=null;
   const overlayCache=new Map(),overlayPending=new Map(),overlayEpoch=new Map(),
@@ -554,6 +554,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   }
   function chooseOverlayLevel(level){
     if(!['off','block','span'].includes(level))throw Error('覆盖框粒度无效');
+    if(level==='span'&&!allowSpan)throw Error('当前只有 para Block VIEW，尚未启用 Span 视图');
     overlayLevel=level;overlaySelect.value=level;overlayRevision++;
     overlayCache.clear();overlayPending.clear();clearOverlayNodes();
     showOverlayPages();
@@ -561,6 +562,12 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   overlaySelect.addEventListener('change',()=>chooseOverlayLevel(overlaySelect.value));
   function setOverlays(config={}){
     if(disposed)throw Error('PDF Viewer 已销毁');
+    if(Object.hasOwn(config,'allowSpan')){
+      allowSpan=Boolean(config.allowSpan);
+      const spanOption=overlaySelect.querySelector('option[value="span"]');
+      if(spanOption)spanOption.disabled=!allowSpan;
+      if(!allowSpan&&overlayLevel==='span')chooseOverlayLevel('block');
+    }
     // The same public method accepts a {blockGroups} patch from AG without
     // resetting a user's Block/Span dropdown or the cached page geometry.
     const nextLevel=Object.hasOwn(config,'level')?config.level:overlayLevel;

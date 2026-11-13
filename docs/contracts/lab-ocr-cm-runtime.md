@@ -1,5 +1,7 @@
 # Lab OCR · CM6 唯一运行态 / SQLite 异步持久化（WCP42）
 
+> **WCP46 存储更改**：CM6 仍是唯一的 Block 可写运行态；后台 SQLite 落盘不再更新物化 `block` 表，而是更新 `block_review` 的 ParentID、PBS、SiblingOrder。SQL `block` 是无损来源+审阅扩展组合的真正 VIEW。历史技术表继续提供 CAS/Undo/Redo。详见 `lab-ocr-schema-v2.md`。
+
 > WCP44 补充：CM6 在初次载入旧 Block 关系时按页识别并自动提升已有孙块为一级子块，生成审计可查的 `flatten` before/after 快照和同一 CM pending queue；SQLite 在 CAS 批次内执行相同扁平化，并阻止普通 Undo 恢复三级层级。正常块关系不能超过两级，新的父块归入操作会将被归入父块的原子块与其旧子块依次铺平成目标父块的同级子块。参见 `lab-ocr-block-edit.md`。
 
 > 覆盖 WCP41 即时 SQLite 结构写入路径。Lab OCR 是框架型隔离实验：**Main 不变**。

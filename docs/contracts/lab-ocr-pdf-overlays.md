@@ -1,5 +1,7 @@
 # Lab OCR PDF 覆盖框与 PBS 标签 API · V2（Block / Span）
 
+> **WCP46 当前 Lab OCR 配置**：SQLite 只启用 para `block` VIEW 覆盖框，Span 表/视图暂不建设；通用 PDF 组件仍保留 Span API，但 Lab OCR 将 `allowSpan:false` 注入并禁用 Span 下拉。Block 几何通过 VIEW 从 MinerU 基础表读取，ParentID/PBS 从审阅扩展投影；实际矩形不因人工关系改变。最新数据库契约见 `lab-ocr-schema-v2.md`。
+
 ## 边界与唯一公开接口
 
 在已有 `mountLabOcrPdf` 返回对象上复用配置 API `setOverlays()`，新增独立定位 API `focusBlock()`：

@@ -79,9 +79,11 @@ async function request(op,params,post=false,options={}){
 
 export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,showModule}){
   let workspace='',tableReady=false,spanReady=false,blockReady=false,operation=0,loaded=0;
+  let blockProjectionKind=null;
   let currentSqlTable=null;
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   const sqlReady=()=>tableReady;
+  const readyBlock=()=>blockReady;
   const cm=()=>frame.readStructuredRuntime();
   const status=()=>runtimeStatus(cm());
   function refreshBlockUndoRedo(){
@@ -222,7 +224,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(directory===lastOverlayWorkspace)return;
     lastOverlayWorkspace=directory;
     frame.setPdfOverlays(directory?{
-      level:'block',blockGroups:[REVIEW_BLOCK_GROUP],
+      level:'block',blockGroups:[REVIEW_BLOCK_GROUP],allowSpan:spanReady,
       onBlockSelect:({blockId,pbs})=>{
         const id=String(blockId);
         // The Block ID, not PBS, is the stable identity across views.
@@ -258,12 +260,15 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       if(!select)continue;
       let group=[...select.querySelectorAll('optgroup')].find(e=>e.label==='SQLite');
       if(!group){group=document.createElement('optgroup');group.label='SQLite';select.append(group);}
+      if(workspace&&!group.querySelector('option[value="sql:initialize"]'))
+        group.append(new Option('数据库管理 · 初始化 SQL（重建扩展）','sql:initialize'));
       if(tableReady&&!group.querySelector(`option[value="${NAV_VALUE}"]`))
         group.append(new Option('minerujson',NAV_VALUE));
       if(blockReady&&!group.querySelector(`option[value="${BLOCK_VALUE}"]`))
         group.append(new Option('block',BLOCK_VALUE));
       if(spanReady&&!group.querySelector(`option[value="${SPAN_VALUE}"]`))
         group.append(new Option('span',SPAN_VALUE));
+      if(!spanReady)group.querySelector(`option[value="${SPAN_VALUE}"]`)?.remove();
     }
   }
   function hideNavigation(){
@@ -289,8 +294,17 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     try{
       const result=await request('minerujson2block',{workspace},true);
       if(epoch!==operation)return false;
-      blockReady=true;revealNavigation();
-      onStatus(`SQLite · block：${result.blocks} 行已就绪，请从导航选择 block`,'ok');
+      blockReady=result.status!=='missing';
+      blockProjectionKind=result.kind??'table';
+      revealNavigation();
+      if(!blockReady){
+        onStatus('MinerU 无损源表已就绪；请在 SQLite → 数据库管理中手动初始化 para Block VIEW','warning');
+        return false;
+      }
+      onStatus(result.kind==='table'
+        ?'检测到旧版 Block 实体表；点击 SQLite → 数据库管理才会重建为 VIEW（清空旧审阅）'
+        :`SQLite · para Block VIEW：${result.blocks} 行已就绪`,
+        result.kind==='table'?'warning':'ok');
       return true;
     }catch(error){
       if(epoch===operation){blockReady=false;revealNavigation();
@@ -315,7 +329,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       if(result.status==='changed'){
         // Do not auto-overwrite reviewed/imported source material.
         tableReady=result.blocks>0;
-        if(tableReady){revealNavigation();await createBlockTable(epoch);await createSpanTable(epoch);}
+        if(tableReady){
+          revealNavigation();
+          if(await createBlockTable(epoch)&&blockProjectionKind==='table')await createSpanTable(epoch);
+        }
         onStatus('源 JSON 已变化：保留旧 SQL，不自动覆盖；请人工确认重新导入','warning');
         return tableReady;
       }
@@ -328,7 +345,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       }else{
         onStatus(`工作区已绑定，SQL 共 ${result.blocks} 行；请选择导航 SQL → minerujson`,'ok');
       }
-      tableReady=true;revealNavigation();await createBlockTable(epoch);await createSpanTable(epoch);
+      tableReady=true;revealNavigation();
+      if(await createBlockTable(epoch)&&blockProjectionKind==='table')await createSpanTable(epoch);
       return true;
     }catch(error){
       if(epoch===operation){tableReady=false;hideNavigation();
@@ -340,7 +358,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const saved=await savedWorkspace();
     if(!saved){workspace='';tableReady=false;spanReady=false;blockReady=false;return false;}
     const imported=await inspectAndImport(saved);
-    prepareOverlays(imported?saved:'');warmPdf(saved);
+    prepareOverlays(imported&&blockReady?saved:'');warmPdf(saved);
     return imported;
   }
   async function afterSave(){
@@ -407,6 +425,31 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       return true;
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');return false;}
   }
+  async function initializeSql(){
+    if(!workspace||!tableReady){
+      onStatus('请先在全局设置绑定并导入 MinerU JSON 基础表','warning');return false;
+    }
+    if(!window.confirm('初始化 SQL 将重建 para Block VIEW 和 block_review 扩展表，并清空现有人工关系、Undo/Redo 历史及旧 Span 表。原始 MinerU JSON 和 PDF 不变。确定继续吗？'))
+      return false;
+    if(cm()?.queue.length)await flushBlockChanges();
+    const active=workspace;
+    onStatus('正在事务内重建 para Block VIEW 与扩展表（原始 MinerU 不变）…','info');
+    const result=await request('initialize-sql',{workspace:active,confirmReset:true},true);
+    if(workspace!==active)throw Error('书籍已切换，必须重新检查初始化结果');
+    ++loaded;
+    persistence?.dispose();persistence=null;loadingRuntime=null;
+    frame.replaceStructuredRuntime(null);
+    frame.setSqlEditHistory();
+    frame.clearSqlRows();
+    currentSqlTable=null;
+    blockReady=true;spanReady=false;blockProjectionKind='view';
+    hideNavigation();revealNavigation();
+    lastOverlayWorkspace='';
+    frame.setPdfOverlays({level:'off'});
+    prepareOverlays(active);
+    onStatus(`✓ 已重新初始化 SQLite：${result.blocks} 个 para Block，block=VIEW、block_review=扩展表；旧审阅历史已清空`,'ok');
+    return true;
+  }
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden'&&cm()?.queue.length)
       void flushBlockChanges().catch(()=>{});
@@ -416,6 +459,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   window.addEventListener('pagehide',()=>{
     if(cm()?.queue.length)void flushBlockChanges().catch(()=>{});
   });
-  return Object.freeze({savedWorkspace,initialize,afterSave,openSql,sqlReady,
-    flushBlockChanges,refreshNavigation:revealNavigation});
+  return Object.freeze({savedWorkspace,initialize,initializeSql,afterSave,openSql,
+    sqlReady,blockReady:readyBlock,flushBlockChanges,refreshNavigation:revealNavigation});
 }

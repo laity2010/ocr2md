@@ -184,8 +184,8 @@ def block_rows(book:Path,offset:int=0,limit:int=200)->dict:
     if existing_info(book) is None:raise OCRImportError('请先导入 minerujson')
     with closing(sqlite3.connect(f'file:{_db(book)}?mode=ro',uri=True,timeout=5)) as conn:
         conn.row_factory=sqlite3.Row
-        if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='block'").fetchone()[0]!=1:
-            raise OCRImportError('尚未生成 block 表')
+        if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name='block'").fetchone()[0]!=1:
+            raise OCRImportError('尚未生成 block VIEW')
         total=conn.execute('SELECT COUNT(*) FROM block WHERE block_group=?',(REVIEW_BLOCK_GROUP,)).fetchone()[0]
         data=conn.execute('''SELECT child.block_id,child.pbs,
                   child.source_block_key,child.source_order,child.source_name,child.global_page,

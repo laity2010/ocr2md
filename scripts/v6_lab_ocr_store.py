@@ -162,7 +162,7 @@ def existing_info(book:Path)->dict | None:
     if not db.is_file():raise OCRImportError('SQLite 数据库路径不是文件')
     with closing(sqlite3.connect(f'file:{db}?mode=ro',uri=True,timeout=5)) as connection:
         tables={row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if TABLE not in tables or tables-{TABLE,'span','block','block_edit_meta','block_edit_history','block_edit_receipt'}:raise OCRImportError('现有数据库不是预期的 MinerU/Span/BlockEdit 表结构，拒绝覆盖')
+        if TABLE not in tables or tables-{TABLE,'span','block','block_review','block_edit_meta','block_edit_history','block_edit_receipt'}:raise OCRImportError('现有数据库不是预期的 MinerU/BlockReview 表结构，拒绝覆盖')
         cols={row[1] for row in connection.execute(f'PRAGMA table_info({TABLE})')}
         if not {'row_kind','original_bytes','import_fingerprint','source_order'}.issubset(cols):
             raise OCRImportError('现有 MinerU 表结构不兼容，拒绝覆盖')
@@ -197,7 +197,12 @@ def import_workspace(book:Path, explicit:list[str] | None=None, replace:bool=Fal
         con.execute('PRAGMA journal_mode=DELETE')
         con.execute('BEGIN IMMEDIATE')
         tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if tables and (TABLE not in tables or tables-{TABLE,'span','block','block_edit_meta','block_edit_history','block_edit_receipt'}):raise OCRImportError('数据库中存在其他表，拒绝覆盖')
+        if tables and (TABLE not in tables or tables-{TABLE,'span','block','block_review','block_edit_meta','block_edit_history','block_edit_receipt'}):raise OCRImportError('数据库中存在其他表，拒绝覆盖')
+        if 'block_review' in tables:
+            # Changing the raw source identity while maintaining a review
+            # extension would orphan stable BlockIDs. Explicit review reset
+            # is required before importing a different source snapshot.
+            raise OCRImportError('存在 block_review 扩展表，不能覆盖 MinerU 来源；请先备份并显式初始化')
         if 'block_edit_meta' in tables:
             revision=con.execute('SELECT revision FROM block_edit_meta WHERE id=1').fetchone()
             if revision and revision[0]>0:
@@ -206,7 +211,9 @@ def import_workspace(book:Path, explicit:list[str] | None=None, replace:bool=Fal
         con.execute('DROP TABLE IF EXISTS block_edit_meta')
         con.execute('DROP TABLE IF EXISTS block_edit_receipt')
         con.execute('DROP TABLE IF EXISTS span')  # Derived rows are rebuilt explicitly
-        con.execute('DROP TABLE IF EXISTS block')
+        kind=con.execute("SELECT type FROM sqlite_master WHERE name='block'").fetchone()
+        if kind and kind[0]=='view':con.execute('DROP VIEW block')
+        else:con.execute('DROP TABLE IF EXISTS block')
         con.execute(SCHEMA)
         con.execute(f'DELETE FROM {TABLE}')
         count=0;global_start=0

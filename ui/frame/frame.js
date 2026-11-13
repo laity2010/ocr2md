@@ -58,7 +58,23 @@ if(labName==='lab-ocr'){
 // User navigation must win over asynchronous initial book inspection on reload.
 let manualNavigationRevision=0;
 let currentModule='frame';
-function userShowModule(name){manualNavigationRevision++;return showModule(name);}
+function userShowModule(name){
+  manualNavigationRevision++;
+  if(name==='sql:initialize'){
+    if(!ocrWorkflow)return Promise.resolve(false);
+    return ocrWorkflow.initializeSql().then(async result=>{
+      if(result)await showModule('sql:block');
+      else{
+        // A canceled destructive initialization must not leave Tom Select
+        // stranded on the same command, or the user cannot invoke it again.
+        frameFileSelect.value=currentModule.startsWith('sql:')?currentModule:'';
+        frameFileSelect.ocrNavigationSelect?.refresh();
+      }
+      return result;
+    }).catch(error=>{topStatus('SQL 初始化失败：'+error.message,'error');return false;});
+  }
+  return showModule(name);
+}
 function previewStatus(message,kind='info'){
   // PDF warm-up runs asynchronously. It must not overwrite a more recent
   // user-initiated SQLite table/row status; errors always remain visible.
@@ -151,7 +167,7 @@ function mountSettingsNavigation(){
   select.value='settings';
   select.addEventListener('change',()=>{
     if(select.value==='settings')void userShowModule('settings');
-    else if(select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')void userShowModule(select.value);
+    else if(select.value==='sql:initialize'||select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')void userShowModule(select.value);
   });
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
@@ -165,7 +181,7 @@ function mountSettingsNavigation(){
   }
   bar.append(back,select,actions);source.prepend(bar);
   enhanceNavigationSelect(select,{search:true,kind:'files'});
-  if(ocrWorkflow?.sqlReady())ocrWorkflow.refreshNavigation?.();
+  ocrWorkflow?.refreshNavigation?.();
   refreshSettingsHistory();
 }
 async function showModule(name){
@@ -235,7 +251,7 @@ if(labName==='lab-ocr'){
         if(bootNavigationRevision===manualNavigationRevision)await showModule('frame');
         const initialized=await ocrWorkflow.initialize();
         // Async inspection must never override explicit user navigation.
-        if(initialized&&bootNavigationRevision===manualNavigationRevision)
+        if(initialized&&ocrWorkflow.blockReady()&&bootNavigationRevision===manualNavigationRevision)
           await showModule('sql:block');
       }
     }catch(error){topStatus('Lab OCR 初始化失败：'+error.message,'error');}

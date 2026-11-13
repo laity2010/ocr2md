@@ -1,5 +1,7 @@
 # Lab OCR · CMD Block API（实验契约）
 
+> **WCP46 当前架构已改为 VIEW**：此文件下文关于“生成 block 实体表”和 `minerujson2span` 的说明是 WCP38–WCP44 历史实现，不再代表新初始化行为。最新的唯一有效基础结构参见 `lab-ocr-schema-v2.md`：`minerujson` 无损基础表 + `block_review` 扩展表 + para `block` SQL VIEW；初始化由用户在 SQLite 导航显式确认，清空旧审阅扩展，不自动创建独立 Span 实体表。
+
 新增公开 API `minerujson2block(book)`，实现 `scripts/v6_lab_ocr_block.py`；HTTP 路径 `POST /labs/lab-ocr/api/ocr/minerujson2block`，直接契约测试 `python3 tests/lab-ocr-block.test.py`。
 
 从已导入 `minerujson` 的只读 `source.original_bytes` 解析所有页面，但**只将 `para_blocks` 及其嵌套 `blocks[]` 派生为 SQLite `block` 行**。原始 `preproc_blocks` / `discarded_blocks` 仍保存在 MinerU 来源 BLOB 与溯源表；SHA-256 验证通过后事务生成派生表，绝不改原始 JSON/PDF。

@@ -25,14 +25,14 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
         raise OCRImportError('请先导入 MinerU JSON')
     table = level  # Restrict SQL identifiers to the validated allowlist above.
     with closing(sqlite3.connect(f'file:{_db(book)}?mode=ro', uri=True, timeout=5)) as db:
-        if db.execute('SELECT COUNT(*) FROM sqlite_master WHERE type=\'table\' AND name=?',
+        if db.execute('SELECT COUNT(*) FROM sqlite_master WHERE type IN (\'table\',\'view\') AND name=?',
                       (table,)).fetchone()[0] != 1:
-            raise OCRImportError(f'尚未生成 {table} 表')
+            raise OCRImportError(f'尚未初始化 {table} VIEW')
         if level == 'block':
             records = db.execute(
                 'SELECT block_id,page_size_json,block_bbox_json,block_type,block_group,'
                 'block_id,pbs,parent_block_id FROM block '
-                'WHERE global_page=? AND block_group=? ORDER BY rowid LIMIT ?',
+                'WHERE global_page=? AND block_group=? ORDER BY block_id LIMIT ?',
                 (page - 1, REVIEW_BLOCK_GROUP,MAX_PAGE_BOXES + 1)).fetchall()
         else:
             # A Span is linked through the immutable source_block_key, never

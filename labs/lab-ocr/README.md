@@ -51,3 +51,5 @@ WCP41 · WP1–WP5：复用 Main 已验证的 PBS 长按 370ms 箭头／PDF bbox
 WCP42：WCP41 即时写 SQLite 改为 **CM6 单一 Block 运行态**（完整行、ParentID、PBS、排序、Undo/Redo 和待持久操作队列）；拖动、撤销时 AG/PDF 从 CM 即时投影更新，落点块高亮与点击选中完全一致的橙色。空闲约 1 秒或点击全局保存时，以有序幂等批次异步写入 SQLite，CAS 防并发、失败保留 CM 待保存队列与重试入口；跨 SQL 标签保持未落盘状态。详见 `docs/contracts/lab-ocr-cm-runtime.md`。实际 iPad 触摸体验仍待人工验收。
 
 WCP44：Block 只允许父块和一级子块两级；父块连同原子块内容归入另一父块时，原子块全部展开到同一个新父块下（不出现 `p6b4s2s0`）。CM6 初次加载时修正旧三级关系，保留原 BlockID、源 Key、原始 OCR/PDF/Span，修正时保存原先 `before` 结构快照供审计；批次异步落 SQLite 并拒绝普通 Undo 复原非法孙块。详见 `docs/contracts/lab-ocr-block-edit.md`。
+
+**WCP46 · 当前 SQLite 架构（替代上方早期 Block/Span 实体表说明）**：一个 `minerujson` 无损事实基础表、一个 `block_review` 人工扩展表、一个仅 para 的 `block` SQL VIEW；不再新建 Span 实体表。扩展表只保留稳定来源 JSON 指针、BlockID、ParentID、PBS、排序，无 OCR 正文副本。SQLite 导航新增「数据库管理 · 初始化 SQL（重建扩展）」；只有明确确认才在事务中删除旧派生 Block/Span、重建 VIEW 与扩展表，并清空旧审阅修改及历史，原始 JSON/PDF/SQL original_bytes 不动。正常打开书籍仅检查，不自动重建。CM6 仍独占编辑运行态、闲时异步写扩展表。详见 `docs/contracts/lab-ocr-schema-v2.md`。

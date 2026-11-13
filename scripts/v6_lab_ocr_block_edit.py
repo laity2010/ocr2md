@@ -64,8 +64,10 @@ def _source_signature(book):
 
 
 def _ensure_block(connection):
-    if not _has_table(connection, 'block'):
-        raise OCRImportError('请先生成 para Block 表')
+    if not connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE name='block' AND type IN ('table','view')"
+    ).fetchone():
+        raise OCRImportError('请先初始化 para Block VIEW')
 
 
 def _fetch_page(connection, page):
@@ -265,19 +267,28 @@ def _write_snapshot(connection, snapshot):
     if len(set(ids))!=len(ids): raise OCRImportError('重复 BlockID')
     # PBS is UNIQUE; stage each label before assigning final labels to
     # prevent a valid renumber from transiently colliding with an old label.
+    # Legacy editable Block entity is still readable until the user runs
+    # explicit initialization. The new SQL VIEW writes only its extension.
+    table='block_review' if _has_table(connection,'block_review') else 'block'
     for bid in ids:
-        connection.execute('UPDATE block SET pbs=? WHERE block_id=?',
+        connection.execute(f'UPDATE {table} SET pbs=? WHERE block_id=?',
                            (f'__lab_ocr_pending_{bid}__',bid))
     for bid,parent,order,pbs in snapshot:
-        connection.execute("""UPDATE block SET parent_block_id=?,sibling_order=?,pbs=?
-                              WHERE block_id=? AND block_group=?""",
-                           (parent,order,pbs,bid,REVIEW_BLOCK_GROUP))
+        if table=='block_review':
+            connection.execute("""UPDATE block_review
+                SET parent_block_id=?,sibling_order=?,pbs=? WHERE block_id=?""",
+                (parent,order,pbs,bid))
+        else:
+            connection.execute("""UPDATE block SET parent_block_id=?,sibling_order=?,pbs=?
+                WHERE block_id=? AND block_group=?""",
+                (parent,order,pbs,bid,REVIEW_BLOCK_GROUP))
 
 
 def _check_signature(connection, signature):
     _ensure_block(connection)
     fingerprints={row[0] for row in connection.execute(
-        'SELECT DISTINCT import_fingerprint FROM block')}
+        'SELECT DISTINCT import_fingerprint FROM '+
+        ('block_review' if _has_table(connection,'block_review') else 'block'))}
     if fingerprints!={signature}:
         raise OCRImportError('派生 Block 来源指纹不一致，拒绝结构写入')
 

@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from v6_lab_ocr_span import minerujson2span, span_rows
 from v6_lab_ocr_block import minerujson2block, block_rows
+from v6_lab_ocr_block_view import inspect_block_projection,initialize_block_projection
 from v6_lab_ocr_block_edit import (block_move_state,preview_block_move,
     apply_block_move,undo_block_move,persist_block_edit_batch)
 from v6_lab_ocr_overlays import overlay_rows
@@ -125,8 +126,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf','overlays','block-edit','block-edit-state','block-edit-batch'):raise APIError(404,'未知的 OCR API')
-        post_ops=('import','minerujson2span','minerujson2block','block-edit','block-edit-batch')
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','initialize-sql','pdf','overlays','block-edit','block-edit-state','block-edit-batch'):raise APIError(404,'未知的 OCR API')
+        post_ops=('import','minerujson2span','minerujson2block','initialize-sql','block-edit','block-edit-batch')
         if (op in post_ops)!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
@@ -146,6 +147,10 @@ class Handler(BaseHTTPRequestHandler):
         else:
             query={k:v[-1] for k,v in parse_qs(parsed.query,keep_blank_values=True).items()}
         book=_book(query.get('workspace',''),roots)
+        if op=='initialize-sql':
+            if query.get('confirmReset') is not True:
+                raise APIError(422,'必须明确确认重建扩展表将清空旧审阅结果')
+            return self.respond(200,initialize_block_projection(book))
         if op=='block-edit-state':
             return self.respond(200,block_move_state(book,
                 include_history=query.get('history')=='1'))
@@ -195,9 +200,18 @@ class Handler(BaseHTTPRequestHandler):
             if len(info['parts'])!=1 or info['total_pages']>=200:
                 raise APIError(422,'当前阶段仅支持 1 个不足 200 页的 MinerU JSON + 1 个 PDF')
             if op=='minerujson2block':
-                result=minerujson2block(book)
+                # Historical operation name remains read-only for older UI
+                # clients. Rebuild may ONLY use initialize-sql with consent.
+                result=inspect_block_projection(book)
             elif op=='minerujson2span':
-                result=minerujson2span(book)
+                # Never create Span now. Legacy already-present tables remain
+                # readable until the user explicitly resets SQL.
+                with sqlite3.connect(book/'ocr2md.sqlite') as db:
+                    has_span=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='span'").fetchone()
+                    if not has_span:raise APIError(422,'当前阶段不再创建 Span 实体表')
+                    result={'status':'legacy','table':'span',
+                            'spans':db.execute('SELECT COUNT(*) FROM span WHERE block_group=?',
+                                              ('para_blocks',)).fetchone()[0]}
             elif op=='import':
                 if query.get('replace',False) not in (True,False):
                     raise APIError(422,'覆盖标志必须为布尔值')
