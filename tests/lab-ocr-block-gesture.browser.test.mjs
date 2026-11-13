@@ -132,6 +132,14 @@ try{
       document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="1"] .lab-ocr-pdf-pbs-tag').length===5);
    assert.equal(await page.locator('#workspace .ag-row').count(),5);
    assert.equal(await tag(102).innerText(),'p1b1s0','Identical parent and child bbox preserve both tags');
+   // Safari pinch-zoom can shift/scale fixed overlay coordinates relative
+   // to the PDF label's client rectangle. Deterministically emulate that
+   // mismatch in iPad WebKit; a correct arrow must start on the label still.
+   if(name==='iPad-WebKit')await page.addStyleTag({content:`
+     .lab-ocr-pdf-drag-arrow,.lab-ocr-pdf-drop-guide{
+       transform:translate(131px,79px) scale(1.18);
+       transform-origin:top left;
+     }`});
    const src=await source.boundingBox(),dst=await target.boundingBox();
    assert(src&&dst,'Visible source and target');
    const pointer={pointerId:65,pointerType:'touch',isPrimary:true,button:0,bubbles:true};
@@ -143,10 +151,70 @@ try{
    await source.dispatchEvent('pointerdown',{...pointer,clientX:start.x,clientY:start.y});
    await page.locator('.lab-ocr-pdf-drag-source').waitFor({state:'attached',timeout:2100});
    assert.equal(await page.locator('.lab-ocr-pdf-drag-arrow').count(),1);
+   const arrowOrigin=await page.locator('.lab-ocr-pdf-drag-arrow').evaluate(svg=>{
+     const path=svg.querySelector('path')?.getAttribute('d')||'';
+     const match=/^M\s+([-\d.]+)\s+([-\d.]+)/.exec(path);
+     if(!match)return null;
+     const r=svg.getBoundingClientRect();
+     return {x:r.left+Number(match[1])*r.width/svg.clientWidth,
+       y:r.top+Number(match[2])*r.height/svg.clientHeight};
+   });
+   assert(arrowOrigin,'Drag arrow must have a valid source path');
+   assert(Math.hypot(arrowOrigin.x-start.x,arrowOrigin.y-start.y)<2,
+     'Arrow source must align to the actual PBS badge after Safari zoom and pan: '+JSON.stringify({arrowOrigin,start}));
+   if(name==='iPad-WebKit'){
+     await page.evaluate(()=>{
+       // Safari can move the visual viewport *during* a long press. The
+       // visualViewport scroll event must repaint from the live tag rect.
+       const sheet=document.createElement('style');
+       sheet.textContent='.lab-ocr-pdf-drag-arrow{transform:translate(72px,108px) scale(.91)!important}';
+       document.head.append(sheet);
+       window.visualViewport?.dispatchEvent(new Event('scroll'));
+     });
+     const shifted=await page.locator('.lab-ocr-pdf-drag-arrow').evaluate(svg=>{
+       const m=/^M\s+([-\d.]+)\s+([-\d.]+)/.exec(svg.querySelector('path').getAttribute('d'));
+       const rect=svg.getBoundingClientRect();
+       return {x:rect.left+Number(m[1])*rect.width/svg.clientWidth,
+         y:rect.top+Number(m[2])*rect.height/svg.clientHeight};
+     });
+     assert(Math.hypot(shifted.x-start.x,shifted.y-start.y)<2,
+       'Visual viewport scroll must keep the source pinned to the fingered PBS label');
+   }
    await page.locator('body').dispatchEvent('pointermove',{...pointer,clientX:end.x,clientY:end.y});
    await page.locator('.lab-ocr-pdf-drop-guide').waitFor({state:'attached',timeout:3000});
    assert.equal(await page.locator('.lab-ocr-pdf-drop-guide').getAttribute('data-block-id'),'101');
    assert.equal(await page.locator('.lab-ocr-pdf-drop-guide').getAttribute('data-placement'),'child');
+   const overlayGeometry=await page.evaluate(()=>{
+     const svg=document.querySelector('.lab-ocr-pdf-drag-arrow');
+     const guide=document.querySelector('.lab-ocr-pdf-drop-guide');
+     const target=document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="101"]');
+     const clip=target.closest('.lab-ocr-pdf-scroller').getBoundingClientRect();
+     const badge=target.getBoundingClientRect(),menu=guide.getBoundingClientRect();
+     const expectedLeft=Math.max(clip.left+3,Math.min(badge.left+(badge.width-menu.width)/2,
+       clip.right-menu.width-3));
+     const expectedTop=badge.bottom+menu.height+8<=clip.bottom?
+       badge.bottom+4:Math.max(clip.top+3,badge.top-menu.height-4);
+     const circle=svg.querySelector('circle'),rect=svg.getBoundingClientRect();
+     const endpoint={x:rect.left+Number(circle.getAttribute('cx'))*rect.width/svg.clientWidth,
+       y:rect.top+Number(circle.getAttribute('cy'))*rect.height/svg.clientHeight};
+     const slot=[...guide.children].findIndex(item=>item.classList.contains('active'));
+     return {menu:{left:menu.left,top:menu.top},expectedLeft,expectedTop,
+       badge:{left:badge.left,top:badge.top,bottom:badge.bottom,width:badge.width},
+       clip:{left:clip.left,top:clip.top,right:clip.right,bottom:clip.bottom},
+       scrollers:[...document.querySelectorAll('.lab-ocr-pdf-scroller')].map(s=>{
+         const r=s.getBoundingClientRect();return [r.left,r.right,r.top,r.bottom];}),
+       fixedStyle:{left:guide.style.left,top:guide.style.top},
+       endpoint,expectedEndpoint:{x:menu.left+(slot+.5)*menu.width/guide.children.length,
+         y:(menu.top+menu.bottom)/2}};
+   });
+   assert(Math.hypot(overlayGeometry.menu.left-overlayGeometry.expectedLeft,
+     overlayGeometry.menu.top-overlayGeometry.expectedTop)<2,
+     'Drop guide must be placed in the target badge client coordinate frame: '+
+      JSON.stringify(overlayGeometry));
+   assert(Math.hypot(overlayGeometry.endpoint.x-overlayGeometry.expectedEndpoint.x,
+     overlayGeometry.endpoint.y-overlayGeometry.expectedEndpoint.y)<2,
+     'SVG arrow head must terminate at the actual, shifted drop guide: '+
+      JSON.stringify(overlayGeometry));
    assert.equal(await target.evaluate(el=>el.classList.contains('lab-ocr-pdf-drop-target')),true);
    const dropColor=await target.evaluate(el=>{
      const css=getComputedStyle(el);

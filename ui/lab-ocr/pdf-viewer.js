@@ -9,6 +9,7 @@ import 'pdfjs-dist/web/pdf_viewer.css';
 import {layoutPbsLabels} from './pbs-label-layout.js';
 import {indexBlockParents,blockHighlight} from './pbs-family.js';
 import {pickBlockDropTarget,blockDropZone} from './pdf-block-drop.js';
+import {clientToOverlayPoint,positionFixedOverlayAt} from './pdf-gesture-viewport.js';
 import './pdf-viewer.css';
 GlobalWorkerOptions.workerSrc=workerUrl;
 
@@ -130,6 +131,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     document.removeEventListener('pointermove',drag.onMove,true);
     document.removeEventListener('pointerup',drag.onUp,true);
     document.removeEventListener('pointercancel',drag.onCancel,true);
+    scroller.removeEventListener('scroll',drag.onViewportShift);
+    window.visualViewport?.removeEventListener('scroll',drag.onViewportShift);
+    window.visualViewport?.removeEventListener('resize',drag.onViewportShift);
     drag.sourceButton.classList.remove('lab-ocr-pdf-drag-source');
     drag.target?.element?.classList.remove('lab-ocr-pdf-drop-target');
     drag.guide?.remove();drag.arrow?.remove();
@@ -162,11 +166,16 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       }
       const box=target.button.getBoundingClientRect();
       const clip=viewRect();
-      const width=drag.guide.offsetWidth,height=drag.guide.offsetHeight;
-      drag.guide.style.left=Math.max(clip.left+3,Math.min(box.left+(box.width-width)/2,
-        clip.right-width-3))+'px';
-      drag.guide.style.top=(box.bottom+height+8<=clip.bottom?box.bottom+4:
-        Math.max(clip.top+3,box.top-height-4))+'px';
+      const guideRect=drag.guide.getBoundingClientRect();
+      const width=guideRect.width,height=guideRect.height;
+      const desiredLeft=Math.max(clip.left+3,Math.min(box.left+(box.width-width)/2,
+        clip.right-width-3));
+      const desiredTop=box.bottom+height+8<=clip.bottom?box.bottom+4:
+        Math.max(clip.top+3,box.top-height-4);
+      // iPad pinch-zoom shifts fixed overlays into the visual viewport.
+      // Convert the label's client coordinates into this guide's own
+      // fixed CSS frame; raw style.left=box.left is NOT equivalent.
+      positionFixedOverlayAt(drag.guide,desiredLeft,desiredTop);
     };
     const update=(x,y)=>{
       if(blockDrag!==drag)return;
@@ -215,11 +224,16 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       const slot=head&&hit?hit.slots.indexOf(drag.placement):-1;
       const ex=head&&slot>=0?head.left+(slot+.5)*head.width/hit.slots.length:x;
       const ey=head?(head.top+head.bottom)/2:y;
-      const bend=(sx+ex)/2;
+      // All of the above are *client* coordinates. SVG paths and circles
+      // must use the SVG's own coordinates, whose fixed origin/scale can
+      // differ from client 0,0 on zoomed iPad Safari.
+      const origin=clientToOverlayPoint(drag.arrow,sx,sy);
+      const end=clientToOverlayPoint(drag.arrow,ex,ey);
+      const bend=(origin.x+end.x)/2;
       drag.arrow.querySelector('path').setAttribute('d',
-        `M ${sx} ${sy} Q ${bend} ${Math.min(sy,ey)-26} ${ex} ${ey}`);
-      drag.arrow.querySelector('circle').setAttribute('cx',String(ex));
-      drag.arrow.querySelector('circle').setAttribute('cy',String(ey));
+        `M ${origin.x} ${origin.y} Q ${bend} ${Math.min(origin.y,end.y)-26} ${end.x} ${end.y}`);
+      drag.arrow.querySelector('circle').setAttribute('cx',String(end.x));
+      drag.arrow.querySelector('circle').setAttribute('cy',String(end.y));
     };
     const scroll=()=>{
       if(!drag.active||blockDrag!==drag||moved()<12)return;
@@ -248,9 +262,13 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       })).catch(error=>announceDrag('写入失败：'+error.message,'error'));
     };
     drag.onCancel=e=>{if(e.pointerId===drag.pointerId)cancelBlockDrag();};
+    drag.onViewportShift=()=>{if(blockDrag===drag&&drag.active)update(drag.x,drag.y);};
     document.addEventListener('pointermove',drag.onMove,true);
     document.addEventListener('pointerup',drag.onUp,true);
     document.addEventListener('pointercancel',drag.onCancel,true);
+    scroller.addEventListener('scroll',drag.onViewportShift,{passive:true});
+    window.visualViewport?.addEventListener('scroll',drag.onViewportShift,{passive:true});
+    window.visualViewport?.addEventListener('resize',drag.onViewportShift,{passive:true});
     try{button.setPointerCapture(event.pointerId);}catch{}
     drag.timer=setTimeout(()=>{
       if(blockDrag!==drag)return;

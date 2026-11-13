@@ -102,6 +102,8 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 
 ## 子块 PBS 漏标修复（2026-11-12）
 
+> **WCP43 · iPad Safari 页面放大后的拖动坐标修复（2026-11-13）**：此前 PDF 标签的 `getBoundingClientRect()` 返回 client 视口坐标，却直接作为 `position:fixed;inset:0` SVG 的路径坐标和落点菜单 `style.left/top`，在 iPad Safari 视觉视口放大／平移后会产生偏移。现在通过独立 `pdf-gesture-viewport.js` 将标签中心、指针与目标菜单的屏幕坐标转换为 SVG 自身坐标；fixed 菜单左上角通过实际 DOM 几何偏差定位（不以被 CSS transform 缩放后的宽度误推左上角位移），并监听视觉视口滚动／缩放及 PDF 滚动重新锚定。只改变浮层坐标，不修改 BlockID、PBS、OCR、SQL 或原始 PDF。直接测试 `tests/lab-ocr-ipad-gesture-coordinates.test.mjs`、Chromium 与 iPad WebKit 的 `tests/lab-ocr-block-gesture.browser.test.mjs` 验证源标签中心、箭头终点、目标菜单与目标 BlockID。浏览器模拟使用缩放／平移 CSS 变换与视觉视口事件，**真实 iPad Safari 双指缩放手感仍需用户验收**。
+
 - 先前完全相同的 bbox 会被单个矩形代表去重，但 PBS 标签也错误地只从代表块生成，令父块／兄弟块相同 bbox 的 `s1` 消失。现在只合并**视觉覆盖框**；按不同 PBS 分别生成标签，各自持有稳定 Block ID 与真实原始 bbox 锚点、独立选择状态及引线，不能因为几何重叠漏掉 `s1`。
 - 精确相同 bbox 且 PBS 不同的 Block 在单页仍只画一份几何框、显示多个避让标签；跨块组**同名 PBS** 仍合并一个标签，保留全部别名 Block ID 的 AG 反向高亮。浏览器回归在第 11 页加入 `p11b0s1`、`p11b01s1` 两例完全重合几何，验收两个 `s1` 标签同时可见、标签互不重叠、点击 `s1` 只选中对应 ID，选父块递归高亮 `s1`，并测试 150% 缩放与字体变化；不需要修改 SQLite、MinerU JSON 或 PDF 本体。
 
