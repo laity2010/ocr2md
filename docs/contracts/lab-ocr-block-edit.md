@@ -1,5 +1,7 @@
 # Lab OCR · Block 拖动改变关系 WP1–WP5（WCP41）
 
+> **WCP45 · 拖动后 PDF 版面不得漂移（2026-11-13）**：成功松手后仅 CM6 改关系，AG 按 BlockID 行补丁，PDF 缓存页重画 PBS/覆盖框并更新橙色高亮；**禁止触发 AG→PDF 的跳页/居中定位**。原因：WCP44 以前的 `reflectCmBlockChange` 使用 `focusPdfBlock({id,page})` 默认跳转，在 PDF.js 中先 `currentPageNumber=page` 重置滚动，再 `scrollIntoView` 将源块居中。现通过 `focusPdfBlock({id,page,reveal:false})` 传递至公共 `focusBlock`，原位选中，不移动 `scrollTop`/`scrollLeft`，不修改 PDF zoom、页码或纸页视觉原点。显式用户从 AG 点击 Block 仍保留 `reveal:true` 定位。浏览器红测记录缩放前 PDF `scrollTop=40`，旧版松手后变为 `0`；修复后 Chromium/iPad WebKit 对拖动、125% PDF 缩放后的 Undo 断言位置稳定，仍沿用既有 SQL 异步保存/历史。
+
 > **WCP44 · 父子两级硬约束（2026-11-13）**：仅允许父块 `p6b4` 与一级子块 `p6b4s0`、`p6b4s1`、`p6b4s2`……；**不允许孙块** `p6b4s2s0`。此前将自带子块的父块归入另一个父块时，旧子块跟随源父块产生第三层。现在 CM6 `planBlockMoveInMemory` 与 SQLite `plan_block_move` 都在计划结果中深度优先展开至同一顶层父块。来源 `block_id`、`source_block_key`、`block_path`、`block_json`、bbox、Span、MinerU JSON 与 PDF 全部不变；只修改审阅关系 `parent_block_id`、兄弟顺序和展示 PBS。
 >
 > **旧数据修正**：首次从 SQL 载入 Block 时，检测跨级 ParentID 或 PBS 中连续两个 `sN` 的页面；先在 CM6 中按原逻辑阅读顺序将孙块提升为一级子块（如已有 `p6b4s0`、`s1`、`s2` 时，`p6b4s2s0` 升为 `p6b4s3`），AG/PDF 立即投影，再追加 `{action:'flatten',page}` 进入现有空闲或全局保存的 SQLite CAS/幂等批次。每次只改涉及页面，不改原始内容；原始关系和新关系完整保留在历史 `before/after` 快照。保护性修正不得通过普通 Undo 恢复违反两级约束的旧孙块；之后的正常拖动仍可 Undo/Redo。历史审计仍能检查旧关系。

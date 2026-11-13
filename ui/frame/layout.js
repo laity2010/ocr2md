@@ -401,8 +401,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       if(row)container.querySelector('.ocr-cm-source')?.ocrCmTable?.select(row);
       return Boolean(row);
     },
-    focusPdfBlock({id,page}){
-      return pdfSlot.current?.focusBlock?.({id,page})??false;
+    focusPdfBlock({id,page,reveal=true}){
+      return pdfSlot.current?.focusBlock?.({id,page,reveal})??false;
     },
     clearSqlRows(){
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.clear();

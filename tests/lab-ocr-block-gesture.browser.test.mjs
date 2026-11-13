@@ -140,14 +140,36 @@ try{
        transform:translate(131px,79px) scale(1.18);
        transform-origin:top left;
      }`});
-   const src=await source.boundingBox(),dst=await target.boundingBox();
-   assert(src&&dst,'Visible source and target');
+   const readPdfViewport=()=>page.evaluate(()=>{
+     const scroller=document.querySelector('.lab-ocr-pdf-scroller');
+     const paper=scroller.querySelector('.page');
+     const r=paper?.getBoundingClientRect();
+     return {top:scroller.scrollTop,left:scroller.scrollLeft,
+       maxTop:scroller.scrollHeight-scroller.clientHeight,
+       maxLeft:scroller.scrollWidth-scroller.clientWidth,
+       pageRect:r?{left:r.left,top:r.top,width:r.width,height:r.height}:null,
+       zoom:document.querySelector('.lab-ocr-pdf-scale')?.value??null,
+       page:document.querySelector('.lab-ocr-pdf-page')?.value??null};
+   });
    const pointer={pointerId:65,pointerType:'touch',isPrimary:true,button:0,bubbles:true};
-   const start={x:src.x+src.width/2,y:src.y+src.height/2};
-   const end={x:dst.x+dst.width*.4,y:dst.y+dst.height*.52};
    // WP1: simple click selects, does not start a transaction.
    await source.click();
    assert.equal(applies,0);
+   // Reproduce a user who has scrolled/zoomed within PDF before dropping.
+   // The edit must not request another PDF 'focus' scroll or reset PDF.js.
+   await page.evaluate(()=>{
+     const s=document.querySelector('.lab-ocr-pdf-scroller');
+     s.scrollTop=Math.min(40,Math.max(0,s.scrollHeight-s.clientHeight));
+     s.scrollLeft=Math.min(65,Math.max(0,s.scrollWidth-s.clientWidth));
+   });
+   await sleep(120);
+   const beforeDropViewport=await readPdfViewport();
+   assert(beforeDropViewport.maxTop>70,'PDF viewport fixture must actually be scrollable');
+   assert(beforeDropViewport.top>15,'The viewport must be offset before dragging');
+   const src=await source.boundingBox(),dst=await target.boundingBox();
+   assert(src&&dst,'Visible source and target');
+   const start={x:src.x+src.width/2,y:src.y+src.height/2};
+   const end={x:dst.x+dst.width*.4,y:dst.y+dst.height*.52};
    await source.dispatchEvent('pointerdown',{...pointer,clientX:start.x,clientY:start.y});
    await page.locator('.lab-ocr-pdf-drag-source').waitFor({state:'attached',timeout:2100});
    assert.equal(await page.locator('.lab-ocr-pdf-drag-arrow').count(),1);
@@ -239,6 +261,21 @@ try{
      }));
      throw error;
    });
+   await sleep(280);
+   const afterDropViewport=await readPdfViewport();
+   assert(Math.abs(afterDropViewport.top-beforeDropViewport.top)<2&&
+     Math.abs(afterDropViewport.left-beforeDropViewport.left)<2,
+     'Moving a Block into a child must not auto-scroll the PDF: '+
+     JSON.stringify({beforeDropViewport,afterDropViewport}));
+   assert.deepEqual([afterDropViewport.zoom,afterDropViewport.page],
+     [beforeDropViewport.zoom,beforeDropViewport.page],
+     'Moving a Block must not change PDF zoom or page');
+   if(beforeDropViewport.pageRect&&afterDropViewport.pageRect){
+     const p=beforeDropViewport.pageRect,q=afterDropViewport.pageRect;
+     assert(Math.hypot(q.left-p.left,q.top-p.top)<2,
+       'The PDF paper should stay at the same screen coordinates after a local edit: '+
+       JSON.stringify({p,q}));
+   }
    assert.equal(applies,0,'CM6 applies the edit before any SQL batch exists');
    assert.equal(records[0].pbs,'p1b0','SQL still contains the original PBS before idle flush');
    assert.equal(await tag(100).getAttribute('data-child'),'true');
@@ -254,8 +291,28 @@ try{
      null,{timeout:9500});
    assert.deepEqual([batches,applies,revision],[1,1,1],
      'The idle batch persists CM changes in the background');
+   // At explicit PDF.js zoom (not just CSS pinch zoom), Undo/Redo are still
+   // structural changes and must NOT navigate or re-center the PDF.
+   await page.locator('.lab-ocr-pdf-scale').selectOption('125');
+   await sleep(400);
+   await page.evaluate(()=>{
+     const s=document.querySelector('.lab-ocr-pdf-scroller');
+     s.scrollTop=Math.min(110,Math.max(0,s.scrollHeight-s.clientHeight));
+     s.scrollLeft=Math.min(78,Math.max(0,s.scrollWidth-s.clientWidth));
+   });
+   await sleep(130);
+   const beforeUndoViewport=await readPdfViewport();
+   assert.equal(beforeUndoViewport.zoom,'125');
+   assert(beforeUndoViewport.top>15);
    await page.locator('#undo').click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="100"]')?.textContent==='p1b0');
+   await sleep(280);
+   const afterUndoViewport=await readPdfViewport();
+   assert(Math.abs(afterUndoViewport.top-beforeUndoViewport.top)<2&&
+     Math.abs(afterUndoViewport.left-beforeUndoViewport.left)<2,
+     'Undo after 125% zoom must preserve PDF scroll and pan: '+
+     JSON.stringify({beforeUndoViewport,afterUndoViewport}));
+   assert.equal(afterUndoViewport.zoom,beforeUndoViewport.zoom);
    assert.equal(undos,0,'Undo is immediately applied in CM, not via SQL');
    assert.equal(await page.locator('#redo').isEnabled(),true);
    // Switch SQL tables while CM has an unapplied undo. A re-opened Block

@@ -619,14 +619,19 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     }
     return true;
   }
-  function focusBlock({id,page}){
+  function focusBlock({id,page,reveal=true}){
     if(disposed)throw Error('PDF Viewer 已销毁');
     if((typeof id!=='string'&&typeof id!=='number')||!String(id)||
         !Number.isInteger(page)||page<1||page>200)throw Error('Block 定位身份或页码无效');
+    if(typeof reveal!=='boolean')throw Error('PDF Block 定位模式必须是布尔值');
     selectedBlockId=String(id);
-    focusRequest={id:selectedBlockId,page};
+    // Drag/Undo/Redo are structural edits, NOT a navigation request. Keep
+    // current PDF.js page, scale and visual scroll exactly where the user
+    // left them. Explicit AG -> PDF navigation continues to reveal/scroll.
+    focusRequest=reveal?{id:selectedBlockId,page}:null;
     if(overlayLevel!=='block'&&loadOverlayPage)chooseOverlayLevel('block');
     updateSelectedNodes();
+    if(!reveal)return true;
     if(!ready||!pdf||page>pdf.numPages)return false;
     viewer.currentPageNumber=page;
     requestOverlayPage(page);
