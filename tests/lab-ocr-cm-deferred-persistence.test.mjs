@@ -41,4 +41,28 @@ assert.equal(cm.revision,2);
 assert.equal(reports[0].kind,'warning');
 assert.equal(reports.at(-1).kind,'ok');
 transport.dispose();
+
+// A save click concurrent with an idle flush must report successful
+// persistence (rather than the old false-while-already-running bug).
+let secondCm=createBlockRuntime({workspace:'/fixture',rows});
+secondCm=editBlockRuntime(secondCm,{action:'apply',
+  sourceBlockId:1,targetBlockId:2,placement:'child'}).state;
+let release;
+const gate=new Promise(resolve=>{release=resolve;});
+const overlap=createBlockPersistence({
+ read:()=>secondCm,
+ ack:(ids,revision)=>{secondCm=acknowledgeBlockPersistence(secondCm,ids,revision);},
+ post:async batch=>{await gate;return {revision:batch.expectedRevision+batch.ids.length,
+   appliedCount:batch.ids.length};},
+ makeBatchId:()=> 'concurrent_save_001',
+ idleMs:60000,
+});
+const background=overlap.flush();
+const explicitSave=overlap.flush();
+release();
+assert.equal(await background,true);
+assert.equal(await explicitSave,true,
+  'Manual Save joining an idle flush must return successful persistence');
+assert.equal(secondCm.queue.length,0);
+overlap.dispose();
 console.log('LAB_OCR_CM_DEFERRED_SQL_PASS');

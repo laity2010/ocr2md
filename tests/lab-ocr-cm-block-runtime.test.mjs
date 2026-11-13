@@ -1,6 +1,6 @@
 /** Independent CM runtime state tests. No AG/PDF/SQLite. */
 import assert from 'node:assert/strict';
-import {createBlockRuntime,editBlockRuntime,planBlockMoveInMemory,
+import {createBlockRuntime,editBlockRuntime,planBlockMoveInMemory,planFlattenPageInMemory,
   acknowledgeBlockPersistence,runtimeStatus,projectBlockOverlays} from '../ui/lab-ocr/block-runtime.js';
 
 const data=[
@@ -55,5 +55,57 @@ assert.throws(()=>planBlockMoveInMemory(orphan,100,101,'before'),/父 BlockID/);
 assert.throws(()=>planBlockMoveInMemory(data,101,102,'child'),/自身的后代/);
 assert.throws(()=>planBlockMoveInMemory(data,100,105,'after'),/同页/);
 assert.throws(()=>planBlockMoveInMemory(data,102,103,'after'),/同级/);
+
+// Reported real-world shape: p6b4s2s0 must NOT exist after a full page
+// load, moving a parent with children or restoring from SQLite.
+const nested=[
+  [20,null,4,'p6b4',0],
+  [21,20,0,'p6b4s0',0],
+  [22,20,1,'p6b4s1',0],
+  [23,20,2,'p6b4s2',0],
+  [24,23,0,'p6b4s2s0',0],
+  [25,null,5,'p6b5',0],
+].map(([block_id,parent_block_id,sibling_order,pbs])=>({
+  block_id,parent_block_id,sibling_order,pbs,global_page:5,
+  block_group:'para_blocks',block_json:'source_'+block_id,source_block_key:'src_'+block_id,
+}));
+const beforeNested=JSON.stringify(nested);
+const normalized=planFlattenPageInMemory(nested,6);
+assert.equal(normalized.changed,true);
+const promoted=normalized.changedRows.find(r=>r.block_id===24);
+assert.deepEqual([promoted.parent_block_id,promoted.pbs],
+  [20,'p6b0s3'],'A grandson is promoted beneath the original top parent');
+assert.equal(JSON.stringify(nested),beforeNested,'Pure canonicalization must not mutate source');
+let migrate=createBlockRuntime({workspace:'/isolated',rows:nested});
+let flattened=editBlockRuntime(migrate,{action:'flatten',page:6});
+migrate=flattened.state;
+assert.equal(migrate.rows.find(r=>r.block_id===24).parent_block_id,20);
+assert.equal(migrate.rows.find(r=>r.block_id===24).pbs,'p6b0s3');
+assert.equal(migrate.queue[0].action,'flatten');
+assert.equal(runtimeStatus(migrate).canUndo,false,'Protective migration cannot be undone into invalid depth');
+assert.throws(()=>editBlockRuntime(migrate,{action:'undo'}),/保护性迁移/);
+assert.equal(migrate.history[0].before.find(row=>row[0]===24)[3],
+  'p6b4s2s0','Original nested relationship survives in the audit snapshot');
+const later=editBlockRuntime(migrate,{action:'apply',
+  sourceBlockId:25,targetBlockId:20,placement:'child'});
+migrate=later.state;
+assert.equal(runtimeStatus(migrate).canUndo,true,'Subsequent user moves remain undoable');
+const undoLater=editBlockRuntime(migrate,{action:'undo'}).state;
+assert.equal(undoLater.rows.find(r=>r.block_id===24).parent_block_id,20);
+assert.equal(runtimeStatus(undoLater).canUndo,false,'Undo stops at the system migration barrier');
+// Parent absorbs child parents as a flat family. No third-level PBS survives.
+const flatBase=[
+ [10,null,0,'p1b0'],[11,10,0,'p1b0s0'],
+ [12,null,1,'p1b1'],[13,12,0,'p1b1s0'],
+].map(([block_id,parent_block_id,sibling_order,pbs])=>({
+ block_id,parent_block_id,sibling_order,pbs,global_page:0,block_group:'para_blocks',
+}));
+const absorbed=planBlockMoveInMemory(flatBase,10,12,'child');
+const absorbedById=new Map(absorbed.after.map(row=>[row[0],row]));
+assert.equal(absorbedById.get(10)[1],12);
+assert.equal(absorbedById.get(11)[1],12);
+assert.equal(absorbedById.get(10)[3],'p1b0s1');
+assert.equal(absorbedById.get(11)[3],'p1b0s2');
+assert(absorbed.after.every(r=>r[3].split('s').length<=2));
 console.log('LAB_OCR_CM_BLOCK_RUNTIME_PASS',JSON.stringify({history:cm.history.length,
   queued:cm.queue.length,partialAck:saved.queue.length}));

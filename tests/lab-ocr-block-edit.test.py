@@ -14,7 +14,8 @@ from v6_lab_ocr_store import (OCRImportError, import_workspace, originals)
 from v6_lab_ocr_block import minerujson2block,block_rows
 from v6_lab_ocr_span import minerujson2span,span_rows
 from v6_lab_ocr_block_edit import (block_move_state,preview_block_move,apply_block_move,
-                                   undo_block_move,plan_block_move,persist_block_edit_batch)
+                                   undo_block_move,plan_block_move,plan_flatten_page,
+                                   persist_block_edit_batch)
 
 
 def make_book(book):
@@ -42,6 +43,85 @@ def make_book(book):
 
 
 class BlockEditContract(unittest.TestCase):
+ def test_two_level_migration_preserves_originals_and_blocks_undo_barrier(self):
+    with tempfile.TemporaryDirectory() as td:
+        book=Path(td)
+        source,pdf=make_book(book)
+        originals_before=originals(book)
+        span_before=span_rows(book)['rows']
+        original_rows=block_rows(book)['rows']
+        labels={r['pbs']:r for r in original_rows}
+        root=labels['p1b1']['block_id']
+        child=labels['p1b1s0']['block_id']
+        grandchild=labels['p1b1s1']['block_id']
+        # Simulate the existing p6b4s2s0 bug using an isolated test DB.
+        with sqlite3.connect(book/'ocr2md.sqlite') as conn:
+            conn.execute('''UPDATE block SET parent_block_id=?,pbs=?,sibling_order=?
+                            WHERE block_id=?''',
+                         (child,'p1b1s0s0',0,grandchild))
+        nested=block_rows(book)['rows']
+        plan=plan_flatten_page([r for r in nested if r['global_page']==0])
+        renamed={r['block_id']:r for r in plan['changedRows']}
+        self.assertEqual(renamed[grandchild]['parent_block_id'],root)
+        self.assertEqual(renamed[grandchild]['pbs'],'p1b1s1')
+        self.assertEqual(block_move_state(book)['revision'],0)
+        command={'action':'flatten','page':1}
+        result=persist_block_edit_batch(book,0,'cm-protective-flatten-001',[command])
+        self.assertEqual(result['revision'],1)
+        self.assertEqual(persist_block_edit_batch(
+            book,0,'cm-protective-flatten-001',[command]),result,
+            'idempotent retry must not flatten twice')
+        final={r['block_id']:r for r in block_rows(book)['rows']}
+        self.assertEqual(final[grandchild]['pbs'],'p1b1s1')
+        self.assertEqual(final[grandchild]['parent_block_id'],root)
+        self.assertEqual(final[grandchild]['source_block_key'],
+                         labels['p1b1s1']['source_block_key'])
+        self.assertEqual(final[grandchild]['block_json'],
+                         labels['p1b1s1']['block_json'])
+        history=block_move_state(book,include_history=True)
+        self.assertEqual(history['history'][0]['before'][
+            next(i for i,v in enumerate(history['history'][0]['before']) if v[0]==grandchild)][3],
+            'p1b1s0s0','Before-snapshot remains auditable')
+        self.assertEqual(history['history'][0]['operation'],
+                         {'action':'flatten','page':1})
+        self.assertFalse(history['canUndo'],'Undo cannot recreate forbidden grandchildren')
+        with self.assertRaises(OCRImportError):
+            persist_block_edit_batch(book,1,'cm-invalid-undo-00001',[{'action':'undo'}])
+        self.assertEqual(block_move_state(book)['revision'],1)
+        self.assertEqual(originals(book),originals_before)
+        self.assertEqual(span_rows(book)['rows'],span_before)
+        self.assertEqual((book/'mineru json'/'source.json').read_bytes(),source)
+        self.assertEqual((book/'pdf'/'original.pdf').read_bytes(),pdf)
+
+ def test_absorb_existing_parent_subtree_without_grandchildren(self):
+    with tempfile.TemporaryDirectory() as td:
+        book=Path(td);make_book(book)
+        labels={r['pbs']:r for r in block_rows(book)['rows']}
+        root,child0,child1,target=[
+            labels[x]['block_id'] for x in ('p1b1','p1b1s0','p1b1s1','p1b2')]
+        before={r['block_id']:r for r in block_rows(book)['rows']}
+        plan=plan_block_move([r for r in before.values() if r['global_page']==0],
+                             root,target,'child')
+        mapped={v[0]:v for v in plan['after']}
+        self.assertEqual((mapped[root][1],mapped[root][3]),(target,'p1b1s0'))
+        self.assertEqual((mapped[child0][1],mapped[child0][3]),(target,'p1b1s1'))
+        self.assertEqual((mapped[child1][1],mapped[child1][3]),(target,'p1b1s2'))
+        self.assertTrue(all(r[3].count('s')<=1 for r in mapped.values()))
+        persist_block_edit_batch(book,0,'cm-absorb-parent-00001',
+          [{'action':'apply','sourceBlockId':root,
+            'targetBlockId':target,'placement':'child'}])
+        rows={r['block_id']:r for r in block_rows(book)['rows']}
+        for block_id in (root,child0,child1):
+            self.assertEqual(rows[block_id]['parent_block_id'],target)
+            self.assertEqual(rows[block_id]['source_block_key'],
+                             before[block_id]['source_block_key'])
+        persist_block_edit_batch(book,1,'cm-absorb-undo-00002',[{'action':'undo'}])
+        restored={r['block_id']:r for r in block_rows(book)['rows']}
+        self.assertEqual(restored[child0]['parent_block_id'],root)
+        self.assertEqual(restored[child1]['parent_block_id'],root)
+        self.assertEqual(restored[root]['parent_block_id'],None)
+        self.assertTrue(all(r['pbs'].count('s')<=1 for r in restored.values()))
+
  def test_deferred_cm_batch_idempotent_and_atomic_rollback(self):
     with tempfile.TemporaryDirectory() as td:
         book=Path(td);source,pdf=make_book(book)
@@ -189,8 +269,10 @@ class BlockEditContract(unittest.TestCase):
     result={row[0]:row for row in plan['after']}
     self.assertEqual(result[10][1],12)
     self.assertEqual(result[10][3],'p1b0s1')
-    self.assertEqual(result[11][3],'p1b0s1s0','Descendant identity preserved')
+    self.assertEqual(result[11][3],'p1b0s2','Grandchild promoted into one-level sibling')
+    self.assertEqual(result[11][1],12,'Promoted BlockID keeps its identity under the target')
     self.assertEqual(result[13][3],'p1b0s0')
+    self.assertTrue(all('s' not in row[3] or row[3].count('s')==1 for row in plan['after']))
     self.assertEqual(json.dumps(rows,sort_keys=True),frozen,'Pure plan cannot modify input')
     self.assertEqual(plan_block_move(rows,10,12,'after')['changed'],True)
     self.assertFalse(plan_block_move(rows,10,12,'before')['changed'])

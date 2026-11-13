@@ -49,3 +49,5 @@ WCP40 固定 para：SQLite Block/Span 仅保存和展示 `para_blocks` 与其子
 WCP41 · WP1–WP5：复用 Main 已验证的 PBS 长按 370ms 箭头／PDF bbox 落点交互，Lab OCR 可在**同页**对 para 父块执行「之前／作为子块／之后」，对子块仅执行同父「之前／之后」。结构由稳定 BlockID 驱动、事务内更新 ParentID／SiblingOrder／PBS，原始 MinerU JSON/PDF/Span/BlockKey/bbox 不改。新增服务端 revision 版本门禁、持久化 Undo/Redo、AG/CM6 BlockID 增量补丁与 PDF 页级刷新。详细接口、禁用操作、回归见 `docs/contracts/lab-ocr-block-edit.md`。实际 iPad 手感仍需用户验收。
 
 WCP42：WCP41 即时写 SQLite 改为 **CM6 单一 Block 运行态**（完整行、ParentID、PBS、排序、Undo/Redo 和待持久操作队列）；拖动、撤销时 AG/PDF 从 CM 即时投影更新，落点块高亮与点击选中完全一致的橙色。空闲约 1 秒或点击全局保存时，以有序幂等批次异步写入 SQLite，CAS 防并发、失败保留 CM 待保存队列与重试入口；跨 SQL 标签保持未落盘状态。详见 `docs/contracts/lab-ocr-cm-runtime.md`。实际 iPad 触摸体验仍待人工验收。
+
+WCP44：Block 只允许父块和一级子块两级；父块连同原子块内容归入另一父块时，原子块全部展开到同一个新父块下（不出现 `p6b4s2s0`）。CM6 初次加载时修正旧三级关系，保留原 BlockID、源 Key、原始 OCR/PDF/Span，修正时保存原先 `before` 结构快照供审计；批次异步落 SQLite 并拒绝普通 Undo 复原非法孙块。详见 `docs/contracts/lab-ocr-block-edit.md`。

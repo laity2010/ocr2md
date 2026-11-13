@@ -133,10 +133,31 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       frame.replaceStructuredRuntime(createBlockRuntime({
         workspace:current,rows,revision:history.revision,
         history:history.history??[],cursor:history.cursor??0}));
+      // WCP44: legacy MinerU JSON or an earlier edit may contain p6b4s2s0.
+      // Immediately canonicalize those affected pages in the ONLY writable
+      // CM StateField, then enqueue the identical SQL migration. No source
+      // BlockID, bbox, content or original JSON changes. The next page render
+      // projects the new PBS from CM, even before SQL is persisted.
+      const byId=new Map(cm().rows.map(row=>[row.block_id,row]));
+      const nestedPages=new Set(cm().rows.filter(row=>{
+        const parent=byId.get(row.parent_block_id);
+        return (parent&&parent.parent_block_id!==null)||
+          /s\d+s\d+/.test(String(row.pbs));
+      }).map(row=>row.global_page+1));
+      let repaired=0;
+      for(const page of [...nestedPages].sort((a,b)=>a-b)){
+        const result=frame.reduceStructuredRuntime(state=>
+          editBlockRuntime(state,{action:'flatten',page}));
+        if(result.changed){
+          reflectCmBlockChange(result,null);
+          repaired+=result.changedRows.length;
+        }
+      }
       if(history.historyTruncated)
         onStatus('Block 历史较长：CM 本次只加载最近 128 次可撤销记录','warning');
       bindPersistence();
       refreshBlockUndoRedo();
+      if(repaired)onStatus(`已在 CM6 整理 ${nestedPages.size} 页的 ${repaired} 个关系／编号：仅保留父块和一级子块，后台保存 SQLite`,'ok');
       return cm();
     })();
     try{return await loadingRuntime;}

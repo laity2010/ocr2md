@@ -16,6 +16,57 @@ function validateRows(rows){
     ids.add(row.block_id);
   }
 }
+/** Flatten one page to [root, direct child...] in DFS reading order.
+ * PBS is display-only; parentBlockId and stable BlockID carry identity.
+ */
+export function planFlattenPageInMemory(rows,page){
+  if(!Number.isInteger(page)||page<1)fail('两级整理页码无效');
+  const group=rows.filter(row=>row.global_page===page-1);
+  if(!group.length||group.length>5000)fail('需要完整的 para 页面才能整理 Block');
+  const nodes=new Map(group.map(r=>[r.block_id,{...r}]));
+  if(nodes.size!==group.length||group.some(r=>r.block_group!=='para_blocks'))
+    fail('只能整理当前页面的 para Block');
+  const children=new Map();
+  for(const row of group){
+    const parent=row.parent_block_id;
+    if(parent!==null&&!nodes.has(parent))fail('父块缺失，无法自动修正');
+    if(!children.has(parent))children.set(parent,[]);
+    children.get(parent).push(row.block_id);
+  }
+  for(const items of children.values())
+    items.sort((a,b)=>nodes.get(a).sibling_order-nodes.get(b).sibling_order||a-b);
+  const seen=new Set(),output=[];
+  function visit(id,visiting){
+    if(visiting.has(id))fail('块关系存在循环');
+    if(seen.has(id))fail('Block 被重复关联');
+    seen.add(id);visiting.add(id);
+    const ids=[id];
+    for(const child of children.get(id)||[])ids.push(...visit(child,visiting));
+    visiting.delete(id);
+    return ids;
+  }
+  for(const [rootIndex,rootId] of (children.get(null)||[]).entries()){
+    const root=nodes.get(rootId);
+    root.parent_block_id=null;root.sibling_order=rootIndex;root.pbs=`p${page}b${rootIndex}`;
+    output.push(root);seen.add(rootId);
+    const direct=(children.get(rootId)||[]).flatMap(id=>visit(id,new Set([rootId])));
+    for(const [index,id] of direct.entries()){
+      const item=nodes.get(id);
+      item.parent_block_id=rootId;
+      item.sibling_order=index;
+      item.pbs=`p${page}b${rootIndex}s${index}`;
+      output.push(item);
+    }
+  }
+  if(seen.size!==group.length||output.length!==group.length)
+    fail('无法确定全部 Block 的有效顶层父块');
+  const before=snapshot(group),after=snapshot(output);
+  const changedRows=after.flatMap((row,i)=>same(before[i],row)?[]:[{
+    block_id:row[0],parent_block_id:row[1],sibling_order:row[2],pbs:row[3],
+  }]);
+  return {page,changed:changedRows.length>0,changedRows,before,after};
+}
+
 export function createBlockRuntime({workspace,rows,revision=0,history=[],cursor=0}){
   if(typeof workspace!=='string'||!workspace||!Array.isArray(rows)||
      !Number.isSafeInteger(revision)||revision<0)fail('CM Block 初始化参数无效');
@@ -98,7 +149,10 @@ export function planBlockMoveInMemory(rows,sourceBlockId,targetBlockId,placement
   if(ordered.length!==group.length||
      new Set(ordered.map(row=>row.pbs)).size!==ordered.length)
     fail('CM 块编号或层级不完整');
-  const before=snapshot(group),after=snapshot(ordered);
+  const before=snapshot(group);
+  // Absorbing a parent plus its children into another parent must yield
+  // siblings under that parent, never a nested 's2s0' label.
+  const after=planFlattenPageInMemory(ordered,page+1).after;
   const updates=after.flatMap((row,i)=>same(before[i],row)?[]:[{
     block_id:row[0],parent_block_id:row[1],sibling_order:row[2],pbs:row[3],
   }]);
@@ -126,6 +180,18 @@ function patchForSnapshot(current,restore){
 }
 export function editBlockRuntime(state,command){
   if(!state?.workspace)fail('CM Block 未绑定');
+  if(command.action==='flatten'){
+    const plan=planFlattenPageInMemory(state.rows,command.page);
+    if(!plan.changed)return {state,changed:false,changedRows:[],page:plan.page};
+    const history=state.history.slice(0,state.cursor);
+    history.push({page:plan.page,before:plan.before,after:plan.after,
+      operation:{action:'flatten',page:plan.page}});
+    const rows=patchRows(state,plan.changedRows);
+    return {state:{...rows,history,cursor:history.length,
+      queue:[...state.queue,{id:state.nextId,action:'flatten',page:plan.page}],
+      nextId:state.nextId+1,dirty:true},
+      changed:true,changedRows:plan.changedRows,page:plan.page};
+  }
   if(command.action==='apply'){
     const plan=planBlockMoveInMemory(state.rows,
       command.sourceBlockId,command.targetBlockId,command.placement);
@@ -145,10 +211,14 @@ export function editBlockRuntime(state,command){
   const index=command.action==='undo'?state.cursor-1:state.cursor;
   if(index<0||index>=state.history.length)fail('没有可用的 CM 撤销/重做历史');
   const entry=state.history[index];
+  if(command.action==='undo'&&entry.operation?.action==='flatten')
+    fail('两级结构修正是保护性迁移，不能用普通 Undo 恢复孙块');
   const restore={page:entry.page-1,
     snapshot:command.action==='undo'?entry.before:entry.after};
   const changes=patchForSnapshot(state.rows,restore);
   const rows=patchRows(state,changes);
+  if(planFlattenPageInMemory(rows.rows,entry.page).changed)
+    fail('该历史操作会恢复第三层子块，已阻止');
   return {state:{...rows,cursor:state.cursor+(command.action==='undo'?-1:1),
     queue:[...state.queue,{id:state.nextId,action:command.action}],
     nextId:state.nextId+1,dirty:true},
@@ -164,7 +234,9 @@ export function acknowledgeBlockPersistence(state,ids,revision){
 export function runtimeStatus(state){
   return {initialized:!!state,workspace:state?.workspace??null,
     revision:state?.revision??null,pending:state?.queue.length??0,
-    canUndo:!!state&&state.cursor>0,canRedo:!!state&&state.cursor<state.history.length};
+    canUndo:!!state&&state.cursor>0&&
+      state.history[state.cursor-1]?.operation?.action!=='flatten',
+    canRedo:!!state&&state.cursor<state.history.length};
 }
 export function projectBlockOverlays(state,data){
   if(!state||!data||data.level!=='block'||!Array.isArray(data.boxes))return data;

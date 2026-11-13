@@ -84,10 +84,77 @@ def _snapshot(rows):
             for r in sorted(rows,key=lambda r:r['block_id'])]
 
 
+def _assert_two_levels(snapshot):
+    parents={bid:parent for bid,parent,order,pbs in snapshot}
+    for bid,parent,order,pbs in snapshot:
+        if parent is None:continue
+        if parent not in parents or parents[parent] is not None or re.search(r's\d+s\d+',pbs):
+            raise OCRImportError('该操作会恢复第三层子块；请先执行两级关系整理')
+
+
 def _parse_id(value):
     if type(value) is not int or value <= 0 or value > 500000:
         raise OCRImportError('BlockID 必须是已存在的正整数')
     return value
+
+
+def plan_flatten_page(rows):
+    """Canonical two-level hierarchy: parent and direct children only.
+
+    Existing grandchildren are promoted to their top-level ancestor in
+    depth-first order. All Block IDs, source keys, original contents, bbox
+    and page identities remain unchanged. The original snapshot survives
+    in the same SQL history as other review operations.
+    """
+    if not rows:raise OCRImportError('无法整理空页面')
+    page=rows[0]['global_page']
+    nodes={r['block_id']:dict(r) for r in rows}
+    if len(nodes)!=len(rows) or any(
+        r['global_page']!=page or r['block_group']!=REVIEW_BLOCK_GROUP for r in rows
+    ):raise OCRImportError('两级扁平化不能跨页或跨块组')
+    children={}
+    for r in rows:
+        parent=r['parent_block_id']
+        if parent is not None and parent not in nodes:
+            raise OCRImportError('父块缺失，不能自动修正关系')
+        children.setdefault(parent,[]).append(r['block_id'])
+    for ids in children.values():
+        ids.sort(key=lambda bid:(nodes[bid]['sibling_order'],bid))
+    seen=set()
+    def descend(bid,visiting):
+        if bid in visiting:raise OCRImportError('块关系存在循环')
+        if bid in seen:raise OCRImportError('块被重复关联')
+        visiting.add(bid);seen.add(bid)
+        result=[bid]
+        for child in children.get(bid,[]):
+            result.extend(descend(child,visiting))
+        visiting.remove(bid)
+        return result
+    output=[]
+    for root_index,root_id in enumerate(children.get(None,[])):
+        root=nodes[root_id]
+        root['parent_block_id']=None
+        root['sibling_order']=root_index
+        root['pbs']=f'p{page+1}b{root_index}'
+        output.append(root)
+        direct=[]
+        for child in children.get(root_id,[]):
+            direct.extend(descend(child,{root_id}))
+        seen.add(root_id)
+        for index,bid in enumerate(direct):
+            item=nodes[bid]
+            item['parent_block_id']=root_id
+            item['sibling_order']=index
+            item['pbs']=f'p{page+1}b{root_index}s{index}'
+            output.append(item)
+    if len(seen)!=len(rows) or len(output)!=len(rows):
+        raise OCRImportError('未能确定所有 Block 的合法顶层父块')
+    before=_snapshot(rows)
+    after=_snapshot(output)
+    changed=[dict(block_id=a[0],parent_block_id=a[1],sibling_order=a[2],pbs=a[3])
+             for b,a in zip(before,after) if a!=b]
+    return dict(page=page+1,changed=bool(changed),changedRows=changed,
+                before=before,after=after)
 
 
 def plan_block_move(rows, source_id, target_id, placement):
@@ -182,7 +249,10 @@ def plan_block_move(rows, source_id, target_id, placement):
     if len(output)!=len(rows) or len({r['pbs'] for r in output})!=len(rows):
         raise OCRImportError('块编号重建失败')
     before=_snapshot(rows)
-    after=_snapshot(output)
+    # A parent can already own children. When absorbed by another parent,
+    # those become siblings of the absorbed block, NEVER grandchildren.
+    # Also normalize any legacy nested blocks on this page.
+    after=plan_flatten_page(output)['after']
     changed=[dict(block_id=a[0],parent_block_id=a[1],sibling_order=a[2],pbs=a[3])
              for b,a in zip(before,after) if b!=a]
     return dict(changed=bool(changed),sourceBlockId=source_id,targetBlockId=target_id,
@@ -240,7 +310,10 @@ def _finish(connection, revision, cursor):
 
 
 def _history_flags(conn,cursor):
-    return dict(canUndo=cursor>0,canRedo=bool(conn.execute(
+    previous=conn.execute('SELECT operation_json FROM block_edit_history WHERE seq=?',
+                          (cursor,)).fetchone() if cursor else None
+    barrier=bool(previous and json.loads(previous[0]).get('action')=='flatten')
+    return dict(canUndo=cursor>0 and not barrier,canRedo=bool(conn.execute(
         'SELECT 1 FROM block_edit_history WHERE seq>? LIMIT 1',(cursor,)
     ).fetchone()))
 
@@ -277,8 +350,11 @@ def persist_block_edit_batch(book,expected_revision,batch_id,operations):
         raise OCRImportError('Block 待持久批次结构不合法')
     for command in operations:
         action=command.get('action')
-        if action not in ('apply','undo','redo'):
+        if action not in ('apply','undo','redo','flatten'):
             raise OCRImportError('Block 批量写入动作无效')
+        if action=='flatten' and (type(command.get('page')) is not int or
+             command['page']<1 or command['page']>2000):
+            raise OCRImportError('Block 两级整理页码无效')
         if action=='apply' and (type(command.get('sourceBlockId')) is not int or
             type(command.get('targetBlockId')) is not int or
             command.get('placement') not in ('before','child','after')):
@@ -307,28 +383,41 @@ def persist_block_edit_batch(book,expected_revision,batch_id,operations):
                (id,revision,cursor,import_fingerprint) VALUES(1,0,0,?)''',(signature,))
         for command in operations:
             action=command['action']
-            if action=='apply':
-                source,target=command['sourceBlockId'],command['targetBlockId']
-                pair=conn.execute('''SELECT block_id,global_page FROM block
-                    WHERE block_id IN (?,?) AND block_group=?''',
-                    (source,target,REVIEW_BLOCK_GROUP)).fetchall()
-                if len(pair)!=2 or pair[0][1]!=pair[1][1]:
-                    raise OCRImportError('批次包含非同页 para Block')
-                plan=plan_block_move(_fetch_page(conn,pair[0][1]),
-                    source,target,command['placement'])
-                if not plan['changed']:
-                    raise OCRImportError('CM 与 SQLite 移动结果不一致（意外空操作）')
+            if action in ('apply','flatten'):
+                if action=='flatten':
+                    plan=plan_flatten_page(_fetch_page(conn,command['page']-1))
+                    if not plan['changed']:
+                        raise OCRImportError('CM 与 SQLite 两级整理不一致')
+                    operation=json.dumps({'action':'flatten','page':plan['page']},
+                                         sort_keys=True)
+                else:
+                    source,target=command['sourceBlockId'],command['targetBlockId']
+                    pair=conn.execute('''SELECT block_id,global_page FROM block
+                        WHERE block_id IN (?,?) AND block_group=?''',
+                        (source,target,REVIEW_BLOCK_GROUP)).fetchall()
+                    if len(pair)!=2 or pair[0][1]!=pair[1][1]:
+                        raise OCRImportError('批次包含非同页 para Block')
+                    plan=plan_block_move(_fetch_page(conn,pair[0][1]),
+                        source,target,command['placement'])
+                    if not plan['changed']:
+                        raise OCRImportError('CM 与 SQLite 移动结果不一致（意外空操作）')
+                    _assert_two_levels(plan['before'])
+                    operation=json.dumps({key:plan[key] for key in
+                        ('sourceBlockId','targetBlockId','placement')},sort_keys=True)
+                _assert_two_levels(plan['after'])
                 _write_snapshot(conn,plan['after'])
                 conn.execute('DELETE FROM block_edit_history WHERE seq>?',(cursor,))
-                op=json.dumps({key:plan[key] for key in
-                    ('sourceBlockId','targetBlockId','placement')},sort_keys=True)
                 cursor=conn.execute('''INSERT INTO block_edit_history
                     (operation_json,before_json,after_json,global_page,import_fingerprint)
-                    VALUES(?,?,?,?,?)''',(op,json.dumps(plan['before']),
+                    VALUES(?,?,?,?,?)''',(operation,json.dumps(plan['before']),
                         json.dumps(plan['after']),plan['page']-1,signature)).lastrowid
             else:
                 if action=='undo':
                     if not cursor:raise OCRImportError('SQLite 无可撤销 Block 历史')
+                    previous=conn.execute('''SELECT operation_json
+                        FROM block_edit_history WHERE seq=?''',(cursor,)).fetchone()
+                    if previous and json.loads(previous[0]).get('action')=='flatten':
+                        raise OCRImportError('两级结构修正为保护性迁移，不能用普通 Undo 恢复孙块')
                     entry=conn.execute('''SELECT seq,before_json,after_json,global_page
                         FROM block_edit_history WHERE seq=?''',(cursor,)).fetchone()
                     if not entry:raise OCRImportError('SQLite 撤销指针失效')
@@ -344,6 +433,7 @@ def persist_block_edit_batch(book,expected_revision,batch_id,operations):
                     old=json.loads(entry[1]);new=json.loads(entry[2])
                 if _snapshot(_fetch_page(conn,entry[3]))!=old:
                     raise OCRImportError('SQLite 关系与 CM 预期历史不符，整批回滚')
+                _assert_two_levels(new)
                 _write_snapshot(conn,new)
                 cursor=next_cursor
             revision+=1
@@ -388,6 +478,8 @@ def apply_block_move(book, source_id, target_id, placement, expected_revision):
         if len(pair)!=2 or pair[0][1]!=pair[1][1]:
             raise OCRImportError('只能操作同页 para Block')
         plan=plan_block_move(_fetch_page(conn,pair[0][1]),source_id,target_id,placement)
+        _assert_two_levels(plan['before'])
+        _assert_two_levels(plan['after'])
         if not plan['changed']:
             conn.rollback()
             return dict(revision=rev,canUndo=cursor>0,
@@ -424,12 +516,17 @@ def undo_block_move(book, expected_revision, redo=False):
             row=conn.execute("""SELECT seq,before_json,after_json,global_page
                 FROM block_edit_history WHERE seq=?""",(cursor,)).fetchone()
             if not row:raise OCRImportError('块撤销历史不完整')
+            operation=conn.execute('SELECT operation_json FROM block_edit_history WHERE seq=?',
+                                   (cursor,)).fetchone()
+            if operation and json.loads(operation[0]).get('action')=='flatten':
+                raise OCRImportError('保护性两级整理不可使用普通 Undo 回退为孙块')
             preceding=conn.execute('SELECT COALESCE(MAX(seq),0) FROM block_edit_history WHERE seq<?',(cursor,)).fetchone()
             new_cursor=preceding[0]
             restore=json.loads(row[1])
         current=_snapshot(_fetch_page(conn,row[3]))
         if [x[0] for x in current]!=[x[0] for x in restore]:
             raise OCRImportError('块集合在撤销期间变化，拒绝覆盖')
+        _assert_two_levels(restore)
         _write_snapshot(conn,restore)
         _finish(conn,rev+1,new_cursor)
         changes=[dict(block_id=a[0],parent_block_id=a[1],sibling_order=a[2],pbs=a[3])

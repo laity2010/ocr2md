@@ -1,5 +1,7 @@
 # Lab OCR · CM6 唯一运行态 / SQLite 异步持久化（WCP42）
 
+> WCP44 补充：CM6 在初次载入旧 Block 关系时按页识别并自动提升已有孙块为一级子块，生成审计可查的 `flatten` before/after 快照和同一 CM pending queue；SQLite 在 CAS 批次内执行相同扁平化，并阻止普通 Undo 恢复三级层级。正常块关系不能超过两级，新的父块归入操作会将被归入父块的原子块与其旧子块依次铺平成目标父块的同级子块。参见 `lab-ocr-block-edit.md`。
+
 > 覆盖 WCP41 即时 SQLite 结构写入路径。Lab OCR 是框架型隔离实验：**Main 不变**。
 > 只操作 para Block 关系，不编辑原始 MinerU JSON/PDF/Span 或 OCR Block 的 source key、bbox、lines/content。
 

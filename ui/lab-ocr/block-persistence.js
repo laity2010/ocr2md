@@ -16,7 +16,14 @@ export function createBlockPersistence({
     if(disposed)throw Error('Block 持久化已销毁');
     if(blocked)throw Error('Block 版本冲突；CM 内存状态仍保留，请先解决冲突');
     if(timer!==null){clearTimeout(timer);timer=null;}
-    if(running){await running; if(read()?.queue?.length)return flush();return false;}
+    if(running){
+      // Explicit Save may join an in-flight idle flush. Return the actual
+      // successful write result, not 'false' merely because the idle worker
+      // already drained the queue before Save resumed.
+      const saved=await running;
+      if(read()?.queue?.length)return Boolean(await flush())||saved;
+      return saved;
+    }
     const process=async()=>{
       let wrote=false;
       while(!disposed){

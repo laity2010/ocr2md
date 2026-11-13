@@ -1,5 +1,11 @@
 # Lab OCR · Block 拖动改变关系 WP1–WP5（WCP41）
 
+> **WCP44 · 父子两级硬约束（2026-11-13）**：仅允许父块 `p6b4` 与一级子块 `p6b4s0`、`p6b4s1`、`p6b4s2`……；**不允许孙块** `p6b4s2s0`。此前将自带子块的父块归入另一个父块时，旧子块跟随源父块产生第三层。现在 CM6 `planBlockMoveInMemory` 与 SQLite `plan_block_move` 都在计划结果中深度优先展开至同一顶层父块。来源 `block_id`、`source_block_key`、`block_path`、`block_json`、bbox、Span、MinerU JSON 与 PDF 全部不变；只修改审阅关系 `parent_block_id`、兄弟顺序和展示 PBS。
+>
+> **旧数据修正**：首次从 SQL 载入 Block 时，检测跨级 ParentID 或 PBS 中连续两个 `sN` 的页面；先在 CM6 中按原逻辑阅读顺序将孙块提升为一级子块（如已有 `p6b4s0`、`s1`、`s2` 时，`p6b4s2s0` 升为 `p6b4s3`），AG/PDF 立即投影，再追加 `{action:'flatten',page}` 进入现有空闲或全局保存的 SQLite CAS/幂等批次。每次只改涉及页面，不改原始内容；原始关系和新关系完整保留在历史 `before/after` 快照。保护性修正不得通过普通 Undo 恢复违反两级约束的旧孙块；之后的正常拖动仍可 Undo/Redo。历史审计仍能检查旧关系。
+>
+> 直接回归：`tests/lab-ocr-cm-block-runtime.test.mjs`、`tests/lab-ocr-block-edit.test.py`、`tests/lab-ocr-cm-deferred-persistence.test.mjs`；Chromium+iPad WebKit 实际 PDF.js/AG/CM6/SQL mock：`tests/lab-ocr-two-level.browser.test.mjs`。与 WCP42 异步保存、Main 风格长按拖动、iPad 放大后坐标修正兼容。
+
 > **WCP42 更新**：本契约仍定义拖动规则和 BlockID/SQLite 事务的关系约束，但 WCP41「松手后立即写 SQL」流程已经被 **CM6 单一内存运行态 → 空闲／全局保存异步批量落盘** 替代。最新写入/Undo/Redo/冲突语义以 `lab-ocr-cm-runtime.md` 为准。
 
 本模块只在 Lab OCR 实验分支使用；Main 不修改。
