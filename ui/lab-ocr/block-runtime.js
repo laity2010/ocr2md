@@ -2,6 +2,7 @@
  * The Editor StateField is the sole writable runtime owner of these values.
  * SQL is an eventual, revision-checked replica. AG/PDF see projections only.
  */
+import {planLinkedBlockMove} from './block-linked.js';
 const fail=message=>{throw Error(message);};
 const idOf=value=>Number.isSafeInteger(Number(value))?Number(value):NaN;
 const snapshot=rows=>rows.map(r=>[r.block_id,r.parent_block_id,r.sibling_order,r.pbs])
@@ -24,12 +25,23 @@ export function planFlattenPageInMemory(rows,page){
   const group=rows.filter(row=>row.global_page===page-1);
   if(!group.length||group.length>5000)fail('需要完整的 para 页面才能整理 Block');
   const nodes=new Map(group.map(r=>[r.block_id,{...r}]));
+  const all=new Map(rows.map(r=>[r.block_id,r]));
   if(nodes.size!==group.length||group.some(r=>r.block_group!=='para_blocks'))
     fail('只能整理当前页面的 para Block');
-  const children=new Map();
+  const children=new Map(),foreign=[];
   for(const row of group){
     const parent=row.parent_block_id;
-    if(parent!==null&&!nodes.has(parent))fail('父块缺失，无法自动修正');
+    if(parent!==null&&!nodes.has(parent)){
+      const owner=all.get(parent);
+      if(owner&&owner.global_page!==page-1&&owner.parent_block_id===null){
+        // Already linked to a root on a different physical page. Keep this
+        // legitimate cross-page atom unchanged while flattening local
+        // grandchildren; its own physical source page must remain stable.
+        foreign.push(nodes.get(row.block_id));
+        continue;
+      }
+      fail('父块缺失，无法自动修正');
+    }
     if(!children.has(parent))children.set(parent,[]);
     children.get(parent).push(row.block_id);
   }
@@ -58,7 +70,8 @@ export function planFlattenPageInMemory(rows,page){
       output.push(item);
     }
   }
-  if(seen.size!==group.length||output.length!==group.length)
+  output.push(...foreign);
+  if(seen.size+foreign.length!==group.length||output.length!==group.length)
     fail('无法确定全部 Block 的有效顶层父块');
   const before=snapshot(group),after=snapshot(output);
   const changedRows=after.flatMap((row,i)=>same(before[i],row)?[]:[{
@@ -77,6 +90,7 @@ export function createBlockRuntime({workspace,rows,revision=0,history=[],cursor=
   const replay=history.map(entry=>({
     seq:entry.seq??null,
     page:entry.page,
+    pages:entry.operation?.pages??[entry.page],
     before:entry.before,
     after:entry.after,
     operation:entry.operation??null,
@@ -93,7 +107,13 @@ export function planBlockMoveInMemory(rows,sourceBlockId,targetBlockId,placement
   const all=new Map(rows.map(row=>[row.block_id,row]));
   const source=all.get(sourceId),target=all.get(targetId);
   if(!source||!target)fail('CM 没有源/目标 BlockID');
-  if(source.global_page!==target.global_page)fail('第一版仅允许同页 para Block');
+  if(source.global_page!==target.global_page||
+      rows.some(row=>{
+        const parent=all.get(row.parent_block_id);
+        return parent&&row.global_page!==parent.global_page&&
+          (row.global_page===source.global_page||parent.global_page===source.global_page);
+      }))
+    return planLinkedBlockMove(rows,sourceId,targetId,placement);
   const page=source.global_page;
   const group=rows.filter(row=>row.global_page===page);
   if(group.length>5000)fail('单页 para Block 超出 5000 个');
@@ -166,6 +186,15 @@ function patchRows(state,patch){
   return {...state,rows};
 }
 function patchForSnapshot(current,restore){
+  if(restore.scope==='delta'){
+    const byId=new Map(current.map(row=>[row.block_id,row]));
+    return restore.snapshot.flatMap(([id,parent,order,pbs])=>{
+      const row=byId.get(id);
+      if(!row)fail('CM 跨页历史的 BlockID 不存在');
+      return row.parent_block_id===parent&&row.sibling_order===order&&row.pbs===pbs?[]:
+        [{block_id:id,parent_block_id:parent,sibling_order:order,pbs}];
+    });
+  }
   const before=new Map(current.filter(r=>r.global_page===restore.page)
     .map(row=>[row.block_id,row]));
   const changes=[];
@@ -197,15 +226,18 @@ export function editBlockRuntime(state,command){
       command.sourceBlockId,command.targetBlockId,command.placement);
     if(!plan.changed)return {state,changed:false,changedRows:[],page:plan.page};
     const history=state.history.slice(0,state.cursor);
-    history.push({page:plan.page,before:plan.before,after:plan.after,
+    history.push({page:plan.page,pages:plan.pages??[plan.page],
+      before:plan.before,after:plan.after,
       operation:{sourceBlockId:command.sourceBlockId,targetBlockId:command.targetBlockId,
-        placement:command.placement}});
+        placement:command.placement,
+        ...(plan.scope?{scope:plan.scope,pages:plan.pages}:{})}});
     const rows=patchRows(state,plan.changedRows);
     return {state:{...rows,history,cursor:history.length,
       queue:[...state.queue,{id:state.nextId,action:'apply',
         sourceBlockId:command.sourceBlockId,targetBlockId:command.targetBlockId,
         placement:command.placement}],nextId:state.nextId+1,dirty:true},
-      changed:true,changedRows:plan.changedRows,page:plan.page};
+      changed:true,changedRows:plan.changedRows,page:plan.page,
+      pages:plan.pages??[plan.page]};
   }
   if(!['undo','redo'].includes(command.action))fail('CM 未知的块操作');
   const index=command.action==='undo'?state.cursor-1:state.cursor;
@@ -214,15 +246,25 @@ export function editBlockRuntime(state,command){
   if(command.action==='undo'&&entry.operation?.action==='flatten')
     fail('两级结构修正是保护性迁移，不能用普通 Undo 恢复孙块');
   const restore={page:entry.page-1,
+    scope:entry.operation?.scope,
     snapshot:command.action==='undo'?entry.before:entry.after};
   const changes=patchForSnapshot(state.rows,restore);
   const rows=patchRows(state,changes);
-  if(planFlattenPageInMemory(rows.rows,entry.page).changed)
+  if(entry.operation?.scope==='delta'){
+    const current=new Map(rows.rows.map(row=>[row.block_id,row]));
+    for(const row of current.values()){
+      if(row.parent_block_id===null)continue;
+      const parent=current.get(row.parent_block_id);
+      if(!parent||parent.parent_block_id!==null||/s\d+s\d+/.test(row.pbs))
+        fail('跨页历史会恢复非法第三层关系');
+    }
+  }else if(planFlattenPageInMemory(rows.rows,entry.page).changed)
     fail('该历史操作会恢复第三层子块，已阻止');
   return {state:{...rows,cursor:state.cursor+(command.action==='undo'?-1:1),
     queue:[...state.queue,{id:state.nextId,action:command.action}],
     nextId:state.nextId+1,dirty:true},
-    changed:true,changedRows:changes,page:entry.page};
+    changed:true,changedRows:changes,page:entry.page,
+    pages:entry.pages??entry.operation?.pages??[entry.page]};
 }
 export function acknowledgeBlockPersistence(state,ids,revision){
   if(!state||!Array.isArray(ids)||!Number.isSafeInteger(revision)||revision<state.revision||

@@ -1,5 +1,9 @@
 # Lab OCR · Block 拖动改变关系 WP1–WP5（WCP41）
 
+> **WCP47 · 相邻页 Block 续接（2026-11-13）**：在既有单页操作之外，允许后一个**物理 PDF 页**的 para 根块，通过拖动标签并命中前一页的 Block 覆盖框，以 `child` 归入前页父块。命中前页原有子块时采用该子块的顶层父块（不产生孙块）。源根块的原有子块随同提升到新父块的一级子块，PBS 使用**逻辑父块页码**（例如物理第 2 页的块显示为 `p1b1s1`）；`global_page`、`block_id`、原始 `source_block_key`、bbox、MinerU JSON/PDF 均不变。源页剩余根块会正常重编为 `p2b0` 等，落点自动滚页仅发生在手势期间；提交后仅重画受影响的两页，滚动与缩放不跳。暂不开放跨页「之前／之后」、倒序归入或相隔两页以上的归入。
+
+> CM6 仍拥有唯一可写运行态。跨页或已存在跨页关系的后续同页操作采用全局父关系图规划，但**只保存变化的 BlockID 差量**；操作历史用 `scope:'delta'` 和 `pages:[物理页码…]` 标识，原单页历史不变。SQLite 使用 `block_review` 扩展表写回（旧 Block 表兼容），CAS/idempotent 事务及 Undo/Redo 对同一差量原子校验/回放。失效父块、第三层、循环与跨页反向操作一律拒绝；PDF、AG、CM6 用固定 BlockID 更新。独立验收 `lab-ocr-cross-page.test.py`、`lab-ocr-cross-page-runtime.test.mjs`、`lab-ocr-cross-page.browser.test.mjs`，Chromium/iPad WebKit 检查两页标签、撤销重做、保留物理页与无视口漂移。真实 iPad 长距离自动滚页拖动仍须手动验收。
+
 > **WCP45 · 拖动后 PDF 版面不得漂移（2026-11-13）**：成功松手后仅 CM6 改关系，AG 按 BlockID 行补丁，PDF 缓存页重画 PBS/覆盖框并更新橙色高亮；**禁止触发 AG→PDF 的跳页/居中定位**。原因：WCP44 以前的 `reflectCmBlockChange` 使用 `focusPdfBlock({id,page})` 默认跳转，在 PDF.js 中先 `currentPageNumber=page` 重置滚动，再 `scrollIntoView` 将源块居中。现通过 `focusPdfBlock({id,page,reveal:false})` 传递至公共 `focusBlock`，原位选中，不移动 `scrollTop`/`scrollLeft`，不修改 PDF zoom、页码或纸页视觉原点。显式用户从 AG 点击 Block 仍保留 `reveal:true` 定位。浏览器红测记录缩放前 PDF `scrollTop=40`，旧版松手后变为 `0`；修复后 Chromium/iPad WebKit 对拖动、125% PDF 缩放后的 Undo 断言位置稳定，仍沿用既有 SQL 异步保存/历史。
 
 > **WCP44 · 父子两级硬约束（2026-11-13）**：仅允许父块 `p6b4` 与一级子块 `p6b4s0`、`p6b4s1`、`p6b4s2`……；**不允许孙块** `p6b4s2s0`。此前将自带子块的父块归入另一个父块时，旧子块跟随源父块产生第三层。现在 CM6 `planBlockMoveInMemory` 与 SQLite `plan_block_move` 都在计划结果中深度优先展开至同一顶层父块。来源 `block_id`、`source_block_key`、`block_path`、`block_json`、bbox、Span、MinerU JSON 与 PDF 全部不变；只修改审阅关系 `parent_block_id`、兄弟顺序和展示 PBS。

@@ -9,7 +9,11 @@ export function blockDropPlacements(source,target){
   if(!source||!target||String(source.blockId)===String(target.blockId))return [];
   const a=source.parentBlockId==null?null:String(source.parentBlockId);
   const b=target.parentBlockId==null?null:String(target.parentBlockId);
-  if(source.page!==target.page)return []; // WP1–WP5: no cross-page writes
+  if(source.page!==target.page){
+    // WCP47: physical pages remain immutable. Only a root from the next
+    // PDF page can be appended to the prior page's logical parent.
+    return a===null&&source.page===target.page+1?['child']:[];
+  }
   if(a===null)return b===null?['before','child','after']:['child'];
   if(a!==null&&a===b)return ['before','after'];
   return [];
@@ -18,7 +22,7 @@ export function blockDropPlacements(source,target){
 export function pickBlockDropTarget(candidates,{x,y,source,clip}){
   if(!inside(clip,x,y))return null;
   const possibles=candidates.filter(target=>
-    target.page===source?.page && String(target.blockId)!==String(source.blockId))
+    String(target.blockId)!==String(source?.blockId))
     .map(target=>({...target,
       slots:blockDropPlacements(source,target),
       insideBadge:inside(target.badgeRect,x,y),

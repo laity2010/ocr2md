@@ -15,6 +15,7 @@ from contextlib import closing
 from pathlib import Path
 
 from v6_lab_ocr_store import OCRImportError, REVIEW_BLOCK_GROUP, _db, existing_info
+from v6_lab_ocr_block_linked import plan_linked_move
 
 META = """CREATE TABLE IF NOT EXISTS block_edit_meta(
     id INTEGER PRIMARY KEY CHECK(id=1),
@@ -79,6 +80,49 @@ def _fetch_page(connection, page):
     if not rows or len(rows) > MAX_PAGE_BLOCKS:
         raise OCRImportError('页内无 para Block，或单页块数超过安全上限')
     return [dict(r) for r in rows]
+
+def _fetch_all(connection):
+    connection.row_factory=sqlite3.Row
+    rows=connection.execute("""SELECT block_id,global_page,parent_block_id,
+       sibling_order,pbs,block_group,source_order FROM block
+       WHERE block_group=? ORDER BY block_id LIMIT 10001""",
+       (REVIEW_BLOCK_GROUP,)).fetchall()
+    if not rows or len(rows)>10000:
+        raise OCRImportError('跨页关系需要完整且不超过 10000 个 para Block')
+    return [dict(r) for r in rows]
+
+def _move_plan(connection,source,target,placement):
+    pair=connection.execute('''SELECT block_id,global_page FROM block
+         WHERE block_id IN (?,?) AND block_group=?''',
+         (source,target,REVIEW_BLOCK_GROUP)).fetchall()
+    if len(pair)!=2:raise OCRImportError('源或目标 Block 不存在')
+    pages={bid:p for bid,p in pair}
+    source_page=pages[source];target_page=pages[target]
+    linked=source_page!=target_page or bool(connection.execute('''
+       SELECT 1 FROM block AS child JOIN block AS parent
+         ON parent.block_id=child.parent_block_id
+       WHERE child.global_page<>parent.global_page
+         AND (child.global_page=? OR parent.global_page=?) LIMIT 1''',
+       (source_page,source_page)).fetchone())
+    return (plan_linked_move(_fetch_all(connection),source,target,placement)
+            if linked else plan_block_move(_fetch_page(connection,source_page),
+                                           source,target,placement))
+
+def _delta_snapshot(connection,stored):
+    ids=[r[0] for r in stored]
+    if not ids:return []
+    markers=','.join('?' for _ in ids)
+    return [list(row) for row in connection.execute(
+        'SELECT block_id,parent_block_id,sibling_order,pbs FROM block '
+        f'WHERE block_id IN ({markers}) ORDER BY block_id',ids)]
+
+def _assert_db_two_levels(connection):
+    for bid,pbs,parent,ppbs,grandparent in connection.execute('''
+       SELECT c.block_id,c.pbs,c.parent_block_id,p.pbs,p.parent_block_id
+       FROM block c LEFT JOIN block p ON p.block_id=c.parent_block_id
+       WHERE c.parent_block_id IS NOT NULL'''):
+        if ppbs is None or grandparent is not None or not pbs.startswith(ppbs+'s') or pbs.count('s')!=1:
+            raise OCRImportError(f'非法第三层或孤立跨页关系 BlockID {bid}')
 
 
 def _snapshot(rows):
@@ -342,7 +386,8 @@ def block_move_state(book, include_history=False):
                  (MAX_LOADED_HISTORY+1,)).fetchall() if _has_table(conn,'block_edit_history') else []
             result['historyTruncated']=len(records)>MAX_LOADED_HISTORY
             result['history']=[dict(seq=seq,operation=json.loads(op),
-                 before=json.loads(before),after=json.loads(after),page=page+1)
+                 before=json.loads(before),after=json.loads(after),page=page+1,
+                 pages=json.loads(op).get('pages',[page+1]))
                  for seq,op,before,after,page in reversed(records[:MAX_LOADED_HISTORY])]
             result['cursor']=cursor
     return result
@@ -403,20 +448,15 @@ def persist_block_edit_batch(book,expected_revision,batch_id,operations):
                                          sort_keys=True)
                 else:
                     source,target=command['sourceBlockId'],command['targetBlockId']
-                    pair=conn.execute('''SELECT block_id,global_page FROM block
-                        WHERE block_id IN (?,?) AND block_group=?''',
-                        (source,target,REVIEW_BLOCK_GROUP)).fetchall()
-                    if len(pair)!=2 or pair[0][1]!=pair[1][1]:
-                        raise OCRImportError('批次包含非同页 para Block')
-                    plan=plan_block_move(_fetch_page(conn,pair[0][1]),
-                        source,target,command['placement'])
+                    plan=_move_plan(conn,source,target,command['placement'])
                     if not plan['changed']:
                         raise OCRImportError('CM 与 SQLite 移动结果不一致（意外空操作）')
-                    _assert_two_levels(plan['before'])
+                    if plan.get('scope')!='delta':_assert_two_levels(plan['before'])
                     operation=json.dumps({key:plan[key] for key in
-                        ('sourceBlockId','targetBlockId','placement')},sort_keys=True)
-                _assert_two_levels(plan['after'])
+                        ('sourceBlockId','targetBlockId','placement','scope','pages') if key in plan},sort_keys=True)
+                if plan.get('scope')!='delta':_assert_two_levels(plan['after'])
                 _write_snapshot(conn,plan['after'])
+                if plan.get('scope')=='delta':_assert_db_two_levels(conn)
                 conn.execute('DELETE FROM block_edit_history WHERE seq>?',(cursor,))
                 cursor=conn.execute('''INSERT INTO block_edit_history
                     (operation_json,before_json,after_json,global_page,import_fingerprint)
@@ -442,10 +482,15 @@ def persist_block_edit_batch(book,expected_revision,batch_id,operations):
                     if not entry:raise OCRImportError('SQLite 无可重做 Block 历史')
                     next_cursor=entry[0]
                     old=json.loads(entry[1]);new=json.loads(entry[2])
-                if _snapshot(_fetch_page(conn,entry[3]))!=old:
+                op_data=json.loads(conn.execute('SELECT operation_json FROM block_edit_history WHERE seq=?',
+                    (entry[0],)).fetchone()[0])
+                delta=op_data.get('scope')=='delta'
+                current=_delta_snapshot(conn,old) if delta else _snapshot(_fetch_page(conn,entry[3]))
+                if current!=old:
                     raise OCRImportError('SQLite 关系与 CM 预期历史不符，整批回滚')
-                _assert_two_levels(new)
+                if not delta:_assert_two_levels(new)
                 _write_snapshot(conn,new)
+                if delta:_assert_db_two_levels(conn)
                 cursor=next_cursor
             revision+=1
         conn.execute('UPDATE block_edit_meta SET revision=?,cursor=? WHERE id=1',
@@ -470,35 +515,27 @@ def preview_block_move(book, source_id, target_id, placement):
     state=block_move_state(book)
     with closing(sqlite3.connect(f'file:{_db(book)}?mode=ro',uri=True)) as conn:
         _check_signature(conn,_source_signature(book))
-        pair=conn.execute(
-            'SELECT block_id,global_page FROM block WHERE block_id IN (?,?) AND block_group=?',
-            (source_id,target_id,REVIEW_BLOCK_GROUP)).fetchall()
-        if len(pair)!=2: raise OCRImportError('源或目标 BlockID 不在 para 表')
-        if pair[0][1]!=pair[1][1]:
-            raise OCRImportError('第一版不支持跨页改变块关系')
-        plan=plan_block_move(_fetch_page(conn,pair[0][1]),source_id,target_id,placement)
+        plan=_move_plan(conn,source_id,target_id,placement)
     return {key:value for key,value in plan.items() if key not in ('before','after')}|state
 
 
 def apply_block_move(book, source_id, target_id, placement, expected_revision):
     conn,sig,rev,cursor=_start_write(book,expected_revision)
     try:
-        pair=conn.execute(
-            'SELECT block_id,global_page FROM block WHERE block_id IN (?,?) AND block_group=?',
-            (source_id,target_id,REVIEW_BLOCK_GROUP)).fetchall()
-        if len(pair)!=2 or pair[0][1]!=pair[1][1]:
-            raise OCRImportError('只能操作同页 para Block')
-        plan=plan_block_move(_fetch_page(conn,pair[0][1]),source_id,target_id,placement)
-        _assert_two_levels(plan['before'])
-        _assert_two_levels(plan['after'])
+        plan=_move_plan(conn,source_id,target_id,placement)
+        if plan.get('scope')!='delta':
+            _assert_two_levels(plan['before'])
+            _assert_two_levels(plan['after'])
         if not plan['changed']:
             conn.rollback()
             return dict(revision=rev,canUndo=cursor>0,
                         canRedo=bool(conn.execute('SELECT 1 FROM block_edit_history WHERE seq>? LIMIT 1',(cursor,)).fetchone()),
                         changed=False,changedRows=[],page=plan['page'])
         _write_snapshot(conn,plan['after'])
+        if plan.get('scope')=='delta':_assert_db_two_levels(conn)
         conn.execute('DELETE FROM block_edit_history WHERE seq>?',(cursor,))
-        operation=json.dumps({k:plan[k] for k in ('sourceBlockId','targetBlockId','placement')})
+        operation=json.dumps({k:plan[k] for k in
+            ('sourceBlockId','targetBlockId','placement','scope','pages') if k in plan})
         new=conn.execute("""INSERT INTO block_edit_history
              (operation_json,before_json,after_json,global_page,import_fingerprint)
              VALUES (?,?,?,?,?)""",(operation,json.dumps(plan['before']),
@@ -506,7 +543,8 @@ def apply_block_move(book, source_id, target_id, placement, expected_revision):
         cursor=new.lastrowid
         _finish(conn,rev+1,cursor)
         return dict(revision=rev+1,changed=True,changedRows=plan['changedRows'],
-                    page=plan['page'],**_history_flags(conn,cursor))
+                    page=plan['page'],pages=plan.get('pages',[plan['page']]),
+                    **_history_flags(conn,cursor))
     except Exception:
         conn.rollback();raise
     finally: conn.close()
@@ -534,16 +572,22 @@ def undo_block_move(book, expected_revision, redo=False):
             preceding=conn.execute('SELECT COALESCE(MAX(seq),0) FROM block_edit_history WHERE seq<?',(cursor,)).fetchone()
             new_cursor=preceding[0]
             restore=json.loads(row[1])
-        current=_snapshot(_fetch_page(conn,row[3]))
+        operation=json.loads(conn.execute(
+            'SELECT operation_json FROM block_edit_history WHERE seq=?',
+            (row[0],)).fetchone()[0])
+        is_delta=operation.get('scope')=='delta'
+        current=_delta_snapshot(conn,restore) if is_delta else _snapshot(_fetch_page(conn,row[3]))
         if [x[0] for x in current]!=[x[0] for x in restore]:
             raise OCRImportError('块集合在撤销期间变化，拒绝覆盖')
-        _assert_two_levels(restore)
+        if not is_delta:_assert_two_levels(restore)
         _write_snapshot(conn,restore)
+        if is_delta:_assert_db_two_levels(conn)
         _finish(conn,rev+1,new_cursor)
         changes=[dict(block_id=a[0],parent_block_id=a[1],sibling_order=a[2],pbs=a[3])
                  for b,a in zip(current,restore) if b!=a]
         return dict(revision=rev+1,changed=True,changedRows=changes,
-                    page=row[3]+1,**_history_flags(conn,new_cursor))
+                    page=row[3]+1,pages=operation.get('pages',[row[3]+1]),
+                    **_history_flags(conn,new_cursor))
     except Exception:
         conn.rollback();raise
     finally:conn.close()

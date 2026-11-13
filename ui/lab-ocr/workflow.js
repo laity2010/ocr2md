@@ -148,6 +148,20 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       }).map(row=>row.global_page+1));
       let repaired=0;
       for(const page of [...nestedPages].sort((a,b)=>a-b)){
+        const ambiguous=cm().rows.some(row=>{
+          if(row.global_page+1!==page||row.parent_block_id===null)return false;
+          const parent=byId.get(row.parent_block_id);
+          return parent&&parent.global_page!==row.global_page&&
+            (parent.parent_block_id!==null||
+             !String(row.pbs).startsWith(String(parent.pbs)+'s'));
+        });
+        if(ambiguous){
+          // Never silently renumber a legacy cross-page link whose display
+          // PBS contradicts its immutable ParentID. Keep the original CM
+          // state for manual review instead of overwriting it on load.
+          onStatus(`第 ${page} 页存在跨页旧关系/PBS 冲突，跳过自动两级整理以保护人工结果`,'warning');
+          continue;
+        }
         const result=frame.reduceStructuredRuntime(state=>
           editBlockRuntime(state,{action:'flatten',page}));
         if(result.changed){
@@ -168,7 +182,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   function reflectCmBlockChange(result,selectedId){
     if(!result.changed)return;
     if(currentSqlTable==='block')frame.patchSqlBlockRows(result.changedRows);
-    frame.repaintPdfBlockPage(result.page);
+    for(const page of result.pages??[result.page])
+      frame.repaintPdfBlockPage(page);
     if(selectedId!=null){
       lastEditedId=selectedId;
       // The user just dropped a label at the intended location. Update only
