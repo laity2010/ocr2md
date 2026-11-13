@@ -197,8 +197,18 @@ async function showModule(name){
   }
 }
 $('global-save').addEventListener('click',async()=>{
-  if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}
-  if(!settings.hasUnsaved()){topStatus('当前没有待保存的全局设置');return;}
+  // The global Save command is also an explicit async CM6 -> SQLite flush.
+  // It must work while the settings component has never been opened.
+  let blockSaved=false;
+  try{if(ocrWorkflow)blockSaved=await ocrWorkflow.flushBlockChanges();}
+  catch(error){
+    topStatus('Block SQLite 保存失败；CM6 内存修改仍保留：'+error.message,'error');
+    return;
+  }
+  if(!settings){topStatus(blockSaved?'✓ CM6 Block 已持久化至 SQLite':
+    '当前无待保存数据；全局设置可以通过 settings.json 修改',blockSaved?'ok':'info');return;}
+  if(!settings.hasUnsaved()){topStatus(blockSaved?'✓ CM6 Block 已持久化至 SQLite':
+    '当前没有待保存的全局设置或 Block 关系',blockSaved?'ok':'info');return;}
   try{const revision=manualNavigationRevision;
     const saved=await settings.save();topStatus(saved?'✓ 全局设置已保存':'● 保存期间设置有新修改',saved?'ok':'warning');
     if(saved&&ocrWorkflow){

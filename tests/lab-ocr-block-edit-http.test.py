@@ -84,6 +84,23 @@ class BlockHttpContract(unittest.TestCase):
      redo=send('block-edit',{'action':'redo','expectedRevision':2},method='POST')[1]
      self.assertEqual(redo['revision'],3)
      self.assertEqual(next(r for r in block_rows(book)['rows'] if r['block_id']==1)['parent_block_id'],2)
+     deferred={'batchId':'http-cm-deferred-00001','expectedRevision':3,
+         'operations':[{'action':'undo'},{'action':'redo'}]}
+     with self.assertRaises(HTTPError) as bad_origin:
+      send('block-edit-batch',deferred,method='POST',origin='https://attacker.invalid')
+     self.assertEqual(bad_origin.exception.code,403)
+     first=send('block-edit-batch',deferred,method='POST')[1]
+     self.assertEqual((first['revision'],first['appliedCount']),(5,2))
+     # A lost HTTP acknowledgement is safe to replay with the same batchId.
+     self.assertEqual(send('block-edit-batch',deferred,method='POST')[1],first)
+     self.assertEqual(send('block-edit-state')[1]['revision'],5)
+     history=send('block-edit-state',{'history':1})[1]
+     self.assertEqual(history['cursor'],history['history'][0]['seq'])
+     self.assertEqual(history['history'][0]['operation']['placement'],'child')
+     with self.assertRaises(HTTPError) as stale_batch:
+      send('block-edit-batch',{'batchId':'http-cm-stale-000002',
+          'expectedRevision':3,'operations':[{'action':'undo'}]},method='POST')
+     self.assertEqual(stale_batch.exception.code,422)
      self.assertEqual(originals(book),original)
      self.assertEqual((book/'mineru json'/'source.json').read_bytes(),raw)
     finally:

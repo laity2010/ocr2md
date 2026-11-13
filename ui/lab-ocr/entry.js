@@ -25,6 +25,7 @@ registerFramePdfPane(context=>{
     invalidateOverlayPage(page,changedRows){
       return viewer?.invalidateOverlayPage(page,changedRows)??false;
     },
+    repaintOverlayPage(page){return viewer?.repaintOverlayPage(page)??false;},
     relayout(){viewer?.relayout?.();},
     dispose(){disposed=true;viewer?.dispose();},
   });

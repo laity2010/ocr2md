@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 from v6_lab_ocr_span import minerujson2span, span_rows
 from v6_lab_ocr_block import minerujson2block, block_rows
 from v6_lab_ocr_block_edit import (block_move_state,preview_block_move,
-    apply_block_move,undo_block_move)
+    apply_block_move,undo_block_move,persist_block_edit_batch)
 from v6_lab_ocr_overlays import overlay_rows
 from v6_lab_ocr_store import (inspect_workspace, import_workspace, existing_info,
                               rows, fingerprint, OCRImportError)
@@ -125,8 +125,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf','overlays','block-edit','block-edit-state'):raise APIError(404,'未知的 OCR API')
-        post_ops=('import','minerujson2span','minerujson2block','block-edit')
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','pdf','overlays','block-edit','block-edit-state','block-edit-batch'):raise APIError(404,'未知的 OCR API')
+        post_ops=('import','minerujson2span','minerujson2block','block-edit','block-edit-batch')
         if (op in post_ops)!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
@@ -147,7 +147,12 @@ class Handler(BaseHTTPRequestHandler):
             query={k:v[-1] for k,v in parse_qs(parsed.query,keep_blank_values=True).items()}
         book=_book(query.get('workspace',''),roots)
         if op=='block-edit-state':
-            return self.respond(200,block_move_state(book))
+            return self.respond(200,block_move_state(book,
+                include_history=query.get('history')=='1'))
+        if op=='block-edit-batch':
+            return self.respond(200,persist_block_edit_batch(book,
+                query.get('expectedRevision'),query.get('batchId'),
+                query.get('operations')))
         if op=='block-edit':
             action=query.get('action')
             if action=='plan':

@@ -1,5 +1,7 @@
 # Lab OCR · Block 拖动改变关系 WP1–WP5（WCP41）
 
+> **WCP42 更新**：本契约仍定义拖动规则和 BlockID/SQLite 事务的关系约束，但 WCP41「松手后立即写 SQL」流程已经被 **CM6 单一内存运行态 → 空闲／全局保存异步批量落盘** 替代。最新写入/Undo/Redo/冲突语义以 `lab-ocr-cm-runtime.md` 为准。
+
 本模块只在 Lab OCR 实验分支使用；Main 不修改。
 
 ## 适用范围与保留原则

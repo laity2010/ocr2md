@@ -109,7 +109,7 @@ def minerujson2block(book:Path)->dict:
         con.execute('PRAGMA foreign_keys=ON')
         con.execute('BEGIN IMMEDIATE')
         tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if tables-{'minerujson','span',TABLE,'block_edit_meta','block_edit_history'}:
+        if tables-{'minerujson','span',TABLE,'block_edit_meta','block_edit_history','block_edit_receipt'}:
             raise OCRImportError('SQLite 中存在未知表，拒绝修改')
         if TABLE in tables:
             columns={row[1]:row[2].upper() for row in con.execute('PRAGMA table_info(block)')}
@@ -137,6 +137,7 @@ def minerujson2block(book:Path)->dict:
                 raise OCRImportError('Block 已有人工作业历史，不允许从 MinerU 静默重建')
             con.execute('DROP TABLE IF EXISTS block_edit_history')
             con.execute('DROP TABLE IF EXISTS block_edit_meta')
+            con.execute('DROP TABLE IF EXISTS block_edit_receipt')
         con.execute('DROP TABLE IF EXISTS block')
         con.execute(SCHEMA)
         query='INSERT INTO block VALUES ('+','.join('?' for _ in range(22))+')'

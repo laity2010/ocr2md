@@ -59,7 +59,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // The caller owns SQL/JSON; the viewer sees only geometry, public display
   // labels and stable IDs, never a database schema, raw source or disk path.
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null;
-  let onBlockSelect=null,onBlockDragIntent=null,selectedBlockId=null,focusRequest=null;
+  let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,
+    selectedBlockId=null,focusRequest=null;
   const overlayCache=new Map(),overlayPending=new Map(),overlayEpoch=new Map(),
     blockParents=new Map();
   const dropCandidatesByPage=new Map();
@@ -295,6 +296,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   }
   function paintPageBoxes(page,data){
     if(disposed||!pdf||overlayLevel==='off'||page>pdf.numPages)return;
+    // Keep geometry cached as supplied by SQL, but always paint identifiers
+    // and family relations projected from the current CM6 runtime.
+    if(overlayLevel==='block'&&projectPage)data=projectPage(data);
     if(blockDrag?.source.page===page)cancelBlockDrag(true);
     dropCandidatesByPage.delete(page);
     const pageView=viewer.getPageView(page-1);
@@ -552,6 +556,11 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         throw Error('PDF Block 拖动回调必须是函数或 null');
       onBlockDragIntent=config.onBlockDragIntent;
     }
+    if(Object.hasOwn(config,'projectPage')){
+      if(config.projectPage!==null&&typeof config.projectPage!=='function')
+        throw Error('PDF Block 运行态投影回调必须是函数或 null');
+      projectPage=config.projectPage;
+    }
     const nextLoader=Object.hasOwn(config,'loadPage')?config.loadPage:loadOverlayPage;
     if(!['off','block','span'].includes(nextLevel))throw Error('覆盖框粒度无效');
     if(nextLevel!=='off'&&typeof nextLoader!=='function')
@@ -619,6 +628,15 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     }
     if(ready&&pdf&&overlayLevel!=='off')requestOverlayPage(page);
     return true;
+  }
+  function repaintOverlayPage(page){
+    if(!Number.isInteger(page)||page<1||page>200)throw Error('PDF Block 页码无效');
+    const cached=overlayCache.get('block:'+page);
+    if(ready&&pdf&&cached&&overlayLevel==='block'){
+      paintPageBoxes(page,cached);return true;
+    }
+    if(ready&&pdf&&overlayLevel==='block')requestOverlayPage(page);
+    return false;
   }
   const emit=(message,kind='info')=>{if(!disposed)onStatus('PDF · '+message,kind);};
   const readyControls=()=>{pageInput.disabled=!ready;zoomSelect.disabled=!ready;};
@@ -722,7 +740,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,focusBlock,invalidateOverlayPage,relayout,dispose(){
+  return Object.freeze({loadPdf,setOverlays,focusBlock,invalidateOverlayPage,
+    repaintOverlayPage,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
     cssObserver.disconnect();clearOverlayNodes();

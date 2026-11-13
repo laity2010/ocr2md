@@ -57,7 +57,9 @@ try{
    page.setDefaultTimeout(19000);
    const errors=[];
    page.on('pageerror',error=>errors.push(error.message));
-   let pdfReads=0,rowsReads=0,overlayReads=0,plans=0,applies=0,undos=0,redos=0,revision=0,cursor=0;
+   let pdfReads=0,rowsReads=0,overlayReads=0,batches=0,postAttempts=0,
+     applies=0,undos=0,redos=0,revision=0,cursor=0,lostOnce=false;
+   const receipts=new Map();
    const records=fixture.map(x=>({...x}));
    await page.addInitScript(({book})=>{
     localStorage.setItem('ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
@@ -75,27 +77,42 @@ try{
     if(op==='minerujson2block')return reply({status:'unchanged',blocks:5});
     if(op==='minerujson2span')return reply({status:'unchanged',spans:0});
     if(op==='rows'){rowsReads++;
-      return reply({table:'block',total:5,rows:makeRows(records)});
+      const table=u.searchParams.get('table');
+      return reply(table==='block'?{table:'block',total:5,rows:makeRows(records)}:
+        {table,total:0,rows:[]});
     }
-    if(op==='block-edit-state')return reply({revision,canUndo:cursor===1,canRedo:cursor===0&&revision>0});
-    if(op==='block-edit'){
+    if(op==='block-edit-state')return reply({revision,canUndo:cursor===1,
+      canRedo:cursor===0&&revision>0,cursor,
+      history:revision?[{seq:1,page:1,before,after:changed,
+        operation:{sourceBlockId:100,targetBlockId:101,placement:'child'}}]:[]});
+    if(op==='block-edit-batch'){
+      postAttempts++;
       assert.equal(body.workspace,book,'Authorization remains scoped to the current book');
-      if(body.action==='plan'){plans++;
-        assert.deepEqual([body.sourceBlockId,body.targetBlockId,body.placement],[100,101,'child']);
-        return reply({revision,changed:true,sourceBlockId:100,targetBlockId:101,placement:'child',page:1});
+      if(receipts.has(body.batchId))return reply(receipts.get(body.batchId));
+      assert.equal(body.expectedRevision,revision,'Every batch uses the latest SQL revision');
+      batches++;
+      for(const command of body.operations){
+        if(command.action==='apply'){
+          assert.deepEqual([command.sourceBlockId,command.targetBlockId,command.placement],
+            [100,101,'child']);
+          applies++;cursor=1;setSnapshot(records,changed);
+        }else if(command.action==='undo'){
+          undos++;cursor=0;setSnapshot(records,before);
+        }else if(command.action==='redo'){
+          redos++;cursor=1;setSnapshot(records,changed);
+        }else throw Error('unexpected deferred action '+command.action);
+        revision++;
       }
-      assert.equal(body.expectedRevision,revision,'Every mutation must use the latest CAS revision');
-      if(body.action==='apply'){
-        applies++;revision++;cursor=1;setSnapshot(records,changed);
-      }else if(body.action==='undo'){
-        undos++;revision++;cursor=0;setSnapshot(records,before);
-      }else if(body.action==='redo'){
-        redos++;revision++;cursor=1;setSnapshot(records,changed);
-      }else throw Error('unexpected block action '+body.action);
-      return reply({revision,changed:true,changedRows:makeRows(records).map(row=>({
-        block_id:row.block_id,parent_block_id:row.parent_block_id,
-        sibling_order:row.sibling_order,pbs:row.pbs
-      })),page:1,canUndo:cursor===1,canRedo:cursor===0});
+      const response={revision,appliedCount:body.operations.length,canUndo:cursor===1,canRedo:cursor===0};
+      receipts.set(body.batchId,response);
+      // Simulate a lost HTTP response AFTER SQLite has durably committed.
+      // Retrying with the same batch ID must not perform Undo/Redo twice.
+      if(batches===2&&!lostOnce){
+        lostOnce=true;
+        return route.fulfill({status:503,contentType:'application/json',
+          body:JSON.stringify({error:'connection lost after commit'})});
+      }
+      return reply(response);
     }
     if(op==='overlays'){
       overlayReads++;
@@ -131,11 +148,22 @@ try{
    assert.equal(await page.locator('.lab-ocr-pdf-drop-guide').getAttribute('data-block-id'),'101');
    assert.equal(await page.locator('.lab-ocr-pdf-drop-guide').getAttribute('data-placement'),'child');
    assert.equal(await target.evaluate(el=>el.classList.contains('lab-ocr-pdf-drop-target')),true);
+   const dropColor=await target.evaluate(el=>{
+     const css=getComputedStyle(el);
+     return {color:css.outlineColor,width:css.outlineWidth,offset:css.outlineOffset,bg:css.backgroundColor};
+   });
+   const selectedColor=await paper.locator('.lab-ocr-pdf-overlay-box[data-block-ids~="100"]')
+     .evaluate(el=>{
+       const css=getComputedStyle(el);
+       return {color:css.outlineColor,width:css.outlineWidth,offset:css.outlineOffset,bg:css.backgroundColor};
+     });
+   assert.deepEqual(dropColor,selectedColor,
+     'Drag target bbox uses exactly the same selected orange outline/background as clicked bbox');
    await page.locator('body').dispatchEvent('pointerup',{...pointer,clientX:end.x,clientY:end.y});
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="100"]')?.textContent==='p1b0s1',
       null,{timeout:14000}).catch(async error=>{
      console.error('BLOCK_GESTURE_DIAG',name,JSON.stringify({
-       plans,applies,undos,redos,revision,rowsReads,overlayReads,
+       batches,applies,undos,redos,revision,rowsReads,overlayReads,
        status:await page.locator('#status').innerText(),
        badges:await page.locator('.lab-ocr-pdf-pbs-tag').evaluateAll(nodes=>
          nodes.map(node=>({pbs:node.textContent,id:node.dataset.blockId,selected:node.dataset.selected}))),
@@ -143,7 +171,8 @@ try{
      }));
      throw error;
    });
-   assert.deepEqual([plans,applies],[1,1]);
+   assert.equal(applies,0,'CM6 applies the edit before any SQL batch exists');
+   assert.equal(records[0].pbs,'p1b0','SQL still contains the original PBS before idle flush');
    assert.equal(await tag(100).getAttribute('data-child'),'true');
    assert.equal(await tag(100).getAttribute('data-family-selected'),'false');
    assert.equal(await tag(101).innerText(),'p1b0');
@@ -153,17 +182,63 @@ try{
    assert.equal(rowsReads,1,'AG/CM6 must patch rows, not reload all SQL');
    assert.equal(pdfReads,1,'PDF bytes must remain loaded throughout drag');
    assert.equal(await page.locator('#workspace .ag-row-selected .ag-cell[col-id="block_id"]').innerText(),'100');
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('SQLite 已异步保存'),
+     null,{timeout:9500});
+   assert.deepEqual([batches,applies,revision],[1,1,1],
+     'The idle batch persists CM changes in the background');
    await page.locator('#undo').click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="100"]')?.textContent==='p1b0');
-   assert.equal(undos,1);
+   assert.equal(undos,0,'Undo is immediately applied in CM, not via SQL');
    assert.equal(await page.locator('#redo').isEnabled(),true);
+   // Switch SQL tables while CM has an unapplied undo. A re-opened Block
+   // projection must NOT fetch stale SQL and erase the in-memory change.
+   const changeTab=value=>page.evaluate(next=>{
+     // Tom Select owns the visible picker. Its native <select> is intentionally
+     // hidden, so dispatch the documented native change event directly.
+     const element=document.querySelector('#workspace select.ocr-source-file-select');
+     element.value=next;element.dispatchEvent(new Event('change',{bubbles:true}));
+   },value);
+   await changeTab('sql:span');
+   await page.waitForFunction(()=>document.querySelector('select.ocr-source-file-select')?.value==='sql:span'&&
+     document.querySelector('#status')?.textContent?.includes('CM6 · span'));
+   await changeTab('sql:block');
+   await page.waitForFunction(()=>document.querySelector('select.ocr-source-file-select')?.value==='sql:block'&&
+     document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="100"]')?.textContent==='p1b0');
+   assert.equal(rowsReads,2,'Switching Span then Block reads Span but reuses the CM Block state');
    await page.locator('#redo').click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="100"]')?.textContent==='p1b0s1');
-   assert.equal(redos,1);
-   assert.equal(rowsReads,1);
+   assert.equal(redos,0);
+   await page.locator('#global-save').click();
+   // The 1050ms idle flush is allowed to race with navigation. In the slow
+   // WebKit run, its second batch may fail before Save is clicked; in the
+   // fast run the first Save initiates that failing request. Both must retry
+   // with the same receipt and preserve CM's current relationship.
+   for(let i=0;i<30&&postAttempts<2;i++)await sleep(100);
+   await sleep(250);
+   assert.equal(await tag(100).innerText(),'p1b0s1',
+     'A failed response must not roll back valid CM in-memory edits');
+   assert.equal(lostOnce,true,'A server-committed batch lost its HTTP response once');
+   if(postAttempts===2)await page.locator('#global-save').click();
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('已持久化至 SQLite'),
+      null,{timeout:9000});
+   assert(batches>=2&&batches<=3,
+     'Idle may flush Undo before Redo; both schedules must preserve command ordering');
+   assert.equal(postAttempts,batches+1,
+     'Exactly one lost HTTP response is retried using an existing receipt');
+   assert.deepEqual([undos,redos,revision],[1,1,3],
+     'No Undo or Redo may be replayed twice, regardless of idle/manual batch boundaries');
+   assert.equal(receipts.size,batches,
+     'Retry must NOT allocate an additional batch ID for an already committed operation');
+   assert.equal(rowsReads,2);
    assert.equal(pdfReads,1);
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.waitForFunction(()=>document.querySelector('select.ocr-source-file-select')?.value==='sql:block'&&
+     document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="100"]')?.textContent==='p1b0s1');
+   assert.equal(await page.locator('#undo').isEnabled(),true,
+     'A new CM session hydrates persisted SQLite history once on reload');
+   assert.equal(rowsReads,3,'Reload initializes a fresh CM session from persisted SQL');
    assert.deepEqual(errors,[]);
-   console.log('LAB_OCR_BLOCK_GESTURE_E2E_PASS',name,JSON.stringify({plans,applies,undos,redos,
+   console.log('LAB_OCR_CM_DEFERRED_GESTURE_E2E_PASS',name,JSON.stringify({batches,postAttempts,applies,undos,redos,
      pdfReads,rowsReads,overlayReads,revision,pbs100:await tag(100).innerText()}));
   }finally{await browser.close();}
  }

@@ -8,6 +8,8 @@ Original MinerU bytes, source_block_key, block_path, bbox and spans are untouche
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -28,7 +30,15 @@ HISTORY = """CREATE TABLE IF NOT EXISTS block_edit_history(
     global_page INTEGER NOT NULL,
     import_fingerprint TEXT NOT NULL
 )"""
+RECEIPTS = """CREATE TABLE IF NOT EXISTS block_edit_receipt(
+    batch_id TEXT PRIMARY KEY,
+    payload_sha256 TEXT NOT NULL,
+    response_json TEXT NOT NULL,
+    import_fingerprint TEXT NOT NULL
+)"""
 MAX_PAGE_BLOCKS = 5000
+MAX_BATCH = 32
+MAX_LOADED_HISTORY = 128
 
 
 def _revision(connection, signature):
@@ -235,13 +245,124 @@ def _history_flags(conn,cursor):
     ).fetchone()))
 
 
-def block_move_state(book):
+def block_move_state(book, include_history=False):
     signature=_source_signature(book)
     with closing(sqlite3.connect(f'file:{_db(book)}?mode=ro',uri=True)) as conn:
         _ensure_block(conn)
         rev,cursor=_revision(conn,signature)
         flags=_history_flags(conn,cursor) if _has_table(conn,'block_edit_history') else dict(canUndo=False,canRedo=False)
-    return dict(revision=rev,**flags)
+        result=dict(revision=rev,**flags)
+        if include_history:
+            records=conn.execute('''SELECT seq,operation_json,before_json,after_json,global_page
+                 FROM block_edit_history ORDER BY seq DESC LIMIT ?''',
+                 (MAX_LOADED_HISTORY+1,)).fetchall() if _has_table(conn,'block_edit_history') else []
+            result['historyTruncated']=len(records)>MAX_LOADED_HISTORY
+            result['history']=[dict(seq=seq,operation=json.loads(op),
+                 before=json.loads(before),after=json.loads(after),page=page+1)
+                 for seq,op,before,after,page in reversed(records[:MAX_LOADED_HISTORY])]
+            result['cursor']=cursor
+    return result
+
+
+def persist_block_edit_batch(book,expected_revision,batch_id,operations):
+    """CAS + idempotent receipt + ordered commands in ONE SQLite transaction.
+
+    The browser already applied these edits in CM6 memory. A lost HTTP reply
+    may resend the *same* batch ID safely; no operation executes twice.
+    """
+    if (type(batch_id) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{8,100}',batch_id)
+        or type(expected_revision) is not int or expected_revision<0
+        or type(operations) is not list or not 1<=len(operations)<=MAX_BATCH
+        or any(type(op) is not dict for op in operations)):
+        raise OCRImportError('Block 待持久批次结构不合法')
+    for command in operations:
+        action=command.get('action')
+        if action not in ('apply','undo','redo'):
+            raise OCRImportError('Block 批量写入动作无效')
+        if action=='apply' and (type(command.get('sourceBlockId')) is not int or
+            type(command.get('targetBlockId')) is not int or
+            command.get('placement') not in ('before','child','after')):
+            raise OCRImportError('Block 批量移动参数非法')
+    payload_sha=hashlib.sha256(json.dumps(operations,sort_keys=True,
+        separators=(',',':')).encode('utf8')).hexdigest()
+    signature=_source_signature(book)
+    conn=sqlite3.connect(_db(book),timeout=15)
+    conn.execute('PRAGMA foreign_keys=ON')
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        _check_signature(conn,signature)
+        conn.execute(RECEIPTS)
+        previous=conn.execute('''SELECT payload_sha256,response_json,import_fingerprint
+                 FROM block_edit_receipt WHERE batch_id=?''',(batch_id,)).fetchone()
+        if previous:
+            if previous[0]!=payload_sha or previous[2]!=signature:
+                raise OCRImportError('Block 批次编号已被其他内容占用')
+            conn.rollback()
+            return json.loads(previous[1])
+        revision,cursor=_revision(conn,signature)
+        if revision!=expected_revision:
+            raise OCRImportError(f'块关系版本冲突：服务器已是 {revision}，未修改 CM 内存数据')
+        conn.execute(META);conn.execute(HISTORY)
+        conn.execute('''INSERT OR IGNORE INTO block_edit_meta
+               (id,revision,cursor,import_fingerprint) VALUES(1,0,0,?)''',(signature,))
+        for command in operations:
+            action=command['action']
+            if action=='apply':
+                source,target=command['sourceBlockId'],command['targetBlockId']
+                pair=conn.execute('''SELECT block_id,global_page FROM block
+                    WHERE block_id IN (?,?) AND block_group=?''',
+                    (source,target,REVIEW_BLOCK_GROUP)).fetchall()
+                if len(pair)!=2 or pair[0][1]!=pair[1][1]:
+                    raise OCRImportError('批次包含非同页 para Block')
+                plan=plan_block_move(_fetch_page(conn,pair[0][1]),
+                    source,target,command['placement'])
+                if not plan['changed']:
+                    raise OCRImportError('CM 与 SQLite 移动结果不一致（意外空操作）')
+                _write_snapshot(conn,plan['after'])
+                conn.execute('DELETE FROM block_edit_history WHERE seq>?',(cursor,))
+                op=json.dumps({key:plan[key] for key in
+                    ('sourceBlockId','targetBlockId','placement')},sort_keys=True)
+                cursor=conn.execute('''INSERT INTO block_edit_history
+                    (operation_json,before_json,after_json,global_page,import_fingerprint)
+                    VALUES(?,?,?,?,?)''',(op,json.dumps(plan['before']),
+                        json.dumps(plan['after']),plan['page']-1,signature)).lastrowid
+            else:
+                if action=='undo':
+                    if not cursor:raise OCRImportError('SQLite 无可撤销 Block 历史')
+                    entry=conn.execute('''SELECT seq,before_json,after_json,global_page
+                        FROM block_edit_history WHERE seq=?''',(cursor,)).fetchone()
+                    if not entry:raise OCRImportError('SQLite 撤销指针失效')
+                    next_cursor=conn.execute('''SELECT COALESCE(MAX(seq),0)
+                        FROM block_edit_history WHERE seq<?''',(cursor,)).fetchone()[0]
+                    old=json.loads(entry[2]);new=json.loads(entry[1])
+                else:
+                    entry=conn.execute('''SELECT seq,before_json,after_json,global_page
+                        FROM block_edit_history WHERE seq>? ORDER BY seq LIMIT 1''',
+                        (cursor,)).fetchone()
+                    if not entry:raise OCRImportError('SQLite 无可重做 Block 历史')
+                    next_cursor=entry[0]
+                    old=json.loads(entry[1]);new=json.loads(entry[2])
+                if _snapshot(_fetch_page(conn,entry[3]))!=old:
+                    raise OCRImportError('SQLite 关系与 CM 预期历史不符，整批回滚')
+                _write_snapshot(conn,new)
+                cursor=next_cursor
+            revision+=1
+        conn.execute('UPDATE block_edit_meta SET revision=?,cursor=? WHERE id=1',
+                     (revision,cursor))
+        response=dict(revision=revision,appliedCount=len(operations),
+            **_history_flags(conn,cursor))
+        conn.execute('''INSERT INTO block_edit_receipt
+             (batch_id,payload_sha256,response_json,import_fingerprint)
+             VALUES(?,?,?,?)''',(batch_id,payload_sha,json.dumps(response),signature))
+        if conn.execute('PRAGMA foreign_key_check').fetchall():
+            raise OCRImportError('Block 批次产生无效外键，整批回滚')
+        conn.commit()
+        return response
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def preview_block_move(book, source_id, target_id, placement):

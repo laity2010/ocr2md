@@ -14,3 +14,5 @@
 验收：合成源包含全部三个原始组但只派生 para、嵌套表格/图片/空块、span 多值、额外属性、幂等、逐块重组一致、原始文件哈希不变，且已有 `minerujson2span` 继续可用；真实 sample 校验所有 Block 数量、Span 总数与父路径有效性；Chromium/iPad-WebKit 复用现有 Frame 和导航浏览器测试。
 
 **WCP40 迁移**：同源 SHA 的旧三组 `block` 表仅在事务内删除非 para 行；保留 para 的原整数 BlockID、ParentID、PBS 及已有修改。重新构建时仍按历史三组深度优先序预留编号，但不插入其它组，因此 BlockID 可以不连续。`rows?table=block` 始终限定 para，且不再显示块组筛选。`tests/lab-ocr-para-only.test.py` 验证旧表迁移、原文件哈希与 ID 不变。
+
+**WCP42**：Block 完整行、ParentID、PBS、排序、Undo/Redo 和待保存操作队列由同一个 CM6 `structuredRuntimeField` 维护；AG/PDF 仅投影、不独立写。松手先即时更新 CM+AG+PDF，闲时约 1050ms 或顶部保存触发带 revision 与幂等 batchId 的异步 SQLite 落盘。完整新契约见 `lab-ocr-cm-runtime.md`。

@@ -14,7 +14,7 @@ from v6_lab_ocr_store import (OCRImportError, import_workspace, originals)
 from v6_lab_ocr_block import minerujson2block,block_rows
 from v6_lab_ocr_span import minerujson2span,span_rows
 from v6_lab_ocr_block_edit import (block_move_state,preview_block_move,apply_block_move,
-                                   undo_block_move,plan_block_move)
+                                   undo_block_move,plan_block_move,persist_block_edit_batch)
 
 
 def make_book(book):
@@ -42,6 +42,58 @@ def make_book(book):
 
 
 class BlockEditContract(unittest.TestCase):
+ def test_deferred_cm_batch_idempotent_and_atomic_rollback(self):
+    with tempfile.TemporaryDirectory() as td:
+        book=Path(td);source,pdf=make_book(book)
+        original=originals(book);spans=span_rows(book)['rows']
+        by_pbs={row['pbs']:row['block_id'] for row in block_rows(book)['rows']}
+        a,b,c=by_pbs['p1b0'],by_pbs['p1b1'],by_pbs['p1b2']
+        commands=[
+            {'action':'apply','sourceBlockId':a,'targetBlockId':b,'placement':'child'},
+            {'action':'apply','sourceBlockId':c,'targetBlockId':b,'placement':'before'},
+            {'action':'undo'},{'action':'redo'},
+        ]
+        self.assertEqual(block_move_state(book)['revision'],0,'CM editing should not call SQL until flush')
+        batch_id='cm-firstbatch-00000001'
+        result=persist_block_edit_batch(book,0,batch_id,commands)
+        self.assertEqual((result['revision'],result['appliedCount']),(4,4))
+        self.assertEqual(persist_block_edit_batch(book,0,batch_id,commands),result,
+            'Retried lost response uses receipt and must NOT duplicate edit')
+        with self.assertRaisesRegex(OCRImportError,'批次编号'):
+            persist_block_edit_batch(book,4,batch_id,[{'action':'undo'}])
+        self.assertEqual(block_move_state(book)['revision'],4)
+        latest={r['block_id']:r for r in block_rows(book)['rows']}
+        self.assertEqual(latest[a]['parent_block_id'],b)
+        self.assertEqual(latest[a]['pbs'],'p1b1s2')
+        self.assertEqual(latest[c]['pbs'],'p1b0')
+        historical=block_move_state(book,include_history=True)
+        self.assertEqual(len(historical['history']),2)
+        self.assertEqual(historical['cursor'],historical['history'][1]['seq'])
+        self.assertEqual(historical['history'][0]['page'],1)
+        self.assertEqual(historical['history'][0]['operation']['placement'],'child')
+        before_failure=block_rows(book)['rows']
+        with self.assertRaises(OCRImportError):
+            persist_block_edit_batch(book,4,'cm-failure-00000001',[
+                {'action':'undo'},
+                {'action':'apply','sourceBlockId':a,'targetBlockId':a,'placement':'child'},
+            ])
+        self.assertEqual(block_rows(book)['rows'],before_failure,
+            'Failure on the second command must roll back the whole first command')
+        self.assertEqual(block_move_state(book)['revision'],4)
+        undo=persist_block_edit_batch(book,4,'cm-secondbatch-00000002',[{'action':'undo'}])
+        self.assertEqual(undo['revision'],5)
+        self.assertTrue(undo['canRedo'])
+        branch=persist_block_edit_batch(book,5,'cm-thirdbatch-00000003',[
+            {'action':'apply','sourceBlockId':c,'targetBlockId':b,'placement':'before'}])
+        self.assertEqual(branch['revision'],6)
+        self.assertFalse(branch['canRedo'])
+        self.assertEqual(minerujson2block(book)['status'],'unchanged')
+        self.assertEqual(minerujson2span(book)['status'],'unchanged')
+        self.assertEqual(originals(book),original)
+        self.assertEqual(span_rows(book)['rows'],spans)
+        self.assertEqual((book/'mineru json'/'source.json').read_bytes(),source)
+        self.assertEqual((book/'pdf'/'original.pdf').read_bytes(),pdf)
+
  def test_transactional_reparent_undo_redo_and_sealed_data(self):
     with tempfile.TemporaryDirectory() as td:
         book=Path(td)

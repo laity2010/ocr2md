@@ -151,9 +151,9 @@ try{
    const spanDropdown=page.locator('.ocr-navigation-popup-files:visible');
    await spanDropdown.locator('.option').filter({hasText:'span'}).click();
    await page.waitForFunction(()=>document.querySelector('select.ocr-source-file-select')?.value==='sql:span'&&
-     /span：CM6 已加载 2 行/.test(document.querySelector('#status')?.textContent||'')&&
+     /CM6 · span：2 行/.test(document.querySelector('#status')?.textContent||'')&&
      document.querySelectorAll('#workspace .ag-row').length===2);
-   assert.match(await page.locator('#status').innerText(),/span：CM6 已加载 2 行/);
+   assert.match(await page.locator('#status').innerText(),/CM6 · span：2 行/);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_group"]').count(),0);
    await page.locator('#workspace .ag-row').first().click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-cm-source .cm-content')?.textContent?.includes('Span heading'));
@@ -163,9 +163,9 @@ try{
    const blockDropdown=page.locator('.ocr-navigation-popup-files:visible');
    await blockDropdown.locator('.option').filter({hasText:'block'}).click();
    await page.waitForFunction(()=>document.querySelector('select.ocr-source-file-select')?.value==='sql:block'&&
-     /block：CM6 已加载 3 行/.test(document.querySelector('#status')?.textContent||'')&&
+     /CM6 · block：3 行/.test(document.querySelector('#status')?.textContent||'')&&
      document.querySelectorAll('#workspace .ag-row').length===3);
-   assert.match(await page.locator('#status').innerText(),/block：CM6 已加载 3 行/);
+   assert.match(await page.locator('#status').innerText(),/CM6 · block：3 行/);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="pbs"]').count(),1);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_id"]').count(),1);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="parent_block_id"]').count(),1);
@@ -178,7 +178,7 @@ try{
    assert.match(await page.locator('#workspace .ocr-cm-source .cm-content').innerText(),/inline_equation/);
    assert.match(await page.locator('#status').innerText(),/Block 定位：p1b0 · BlockID 1 · ParentID NULL/);
    assert.equal(await page.evaluate(()=>document.querySelector('#workspace .ocr-cm-source').ocrCmTable.selected()),1);
-   assert.equal(rowsCount,4,'Block and Span filtering must not query SQL again');
+   assert.equal(rowsCount,3,'Returning to Block projects CM6 state; no extra SQLite Block rows request');
    assert.equal(blockCreateCount,1,'Block table created once');
    assert.equal(spanCreateCount,1,'span generation must be idempotent at initialization');
 

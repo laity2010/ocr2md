@@ -17,7 +17,7 @@ viewer.setOverlays({
 });
 ```
 
-- PDF 组件只读绘制由调用方提供的页级几何数据；**不直接依赖或访问** MinerU、SQLite、PBS、CMD、工作区路径或用户原文。`loadPage` 是注入回调，不属于 PDF 组件公开 API。WCP41 新增只输出 `onBlockDragIntent` 的拖动预演回调与 `invalidateOverlayPage` 单页局部刷新；PDF 组件本身仍不执行结构写入或修改原始覆盖框。SQLite 事务及 Undo 由业务 API 负责，详见 `lab-ocr-block-edit.md`。
+- PDF 组件只读绘制由调用方提供的页级几何数据；**不直接依赖或访问** MinerU、SQLite、PBS、CMD、工作区路径或用户原文。`loadPage` 是注入回调，不属于 PDF 组件公开 API。WCP41 新增只输出 `onBlockDragIntent` 的拖动预演回调；WCP42 新增 `projectPage` CM6 关系投影和 `repaintOverlayPage(page)`：重画缓存页而不读取 SQL 或 PDF。旧 `invalidateOverlayPage` 仍保留供真实几何失效时使用。落点框与点击选中均使用金橙色 `#ffd46c`、2px 实线外圈。数据库与 Undo 由业务层负责，详见 `lab-ocr-cm-runtime.md`。
 - `viewer.setOverlays({blockGroups: ['para_blocks','discarded_blocks']})` 是同一 API 的轻量补丁：不重置用户已选的 Block/Span 粒度，不清空当前页的覆盖框几何缓存。`blockGroups: null` 显示所有块组，空数组隐藏所有框。
 - `off` 关闭覆盖框。PDF 工具条中另有独立的“覆盖框”粒度下拉（关闭／Block／Span），与既有页码、缩放功能互不影响。初次有效书籍绑定后默认 Block，切换 Span 不重新加载 PDF。
 - Frame 的 `setPdfOverlays(config)` 只是上述接口的生命周期代理；PDF 尚未懒加载时记录配置，实例挂载后应用，不创建第二个查看器。

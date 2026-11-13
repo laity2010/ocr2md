@@ -27,6 +27,18 @@ const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f
 const loadTableRows=StateEffect.define();
 const selectTableRow=StateEffect.define();
 const patchTableRows=StateEffect.define();
+// The generic Frame knows only that a structured runtime value exists.
+// Lab OCR supplies the reducer; CM6 owns the single current state. No
+// OCR/SQLite business import is permitted in this shared Frame module.
+const setStructuredRuntime=StateEffect.define();
+const structuredRuntimeField=StateField.define({
+  create:()=>null,
+  update(value,transaction){
+    for(const effect of transaction.effects)
+      if(effect.is(setStructuredRuntime))value=effect.value;
+    return value;
+  },
+});
 const tableStateField=StateField.define({
   create:()=>({rows:[],selectedId:null}),
   update(value,transaction){
@@ -44,10 +56,22 @@ const tableStateField=StateField.define({
 });
 function mountEmptySource(host){
   const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
-    EditorState.readOnly.of(true),EditorView.editable.of(false),tableStateField,lineNumbers(),EditorView.lineWrapping,
+    EditorState.readOnly.of(true),EditorView.editable.of(false),tableStateField,
+    structuredRuntimeField,lineNumbers(),EditorView.lineWrapping,
   ]}),parent:host});
   host.ocrCmTable=Object.freeze({
     load(rows){editor.dispatch({effects:loadTableRows.of(rows)});},
+    runtime(){return editor.state.field(structuredRuntimeField);},
+    replaceRuntime(next){editor.dispatch({effects:setStructuredRuntime.of(next)});},
+    reduceRuntime(reducer){
+      if(typeof reducer!=='function')throw Error('CM6 结构状态变更器必须是纯函数');
+      const prior=editor.state.field(structuredRuntimeField);
+      const result=reducer(prior);
+      if(!result||!Object.hasOwn(result,'state'))
+        throw Error('CM6 结构状态变更结果无效');
+      if(result.state!==prior)editor.dispatch({effects:setStructuredRuntime.of(result.state)});
+      return result;
+    },
     patchBlockRows(changedRows){editor.dispatch({effects:patchTableRows.of(changedRows)});},
     rows(){return editor.state.field(tableStateField).rows;},
     select(row){
@@ -313,6 +337,19 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
+    readStructuredRuntime(){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.runtime()??null;
+    },
+    replaceStructuredRuntime(next){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 尚未初始化');
+      cm.replaceRuntime(next);
+    },
+    reduceStructuredRuntime(reducer){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 尚未初始化');
+      return cm.reduceRuntime(reducer);
+    },
     // Semantic source port, independent of PDF.js and Dockview DOM internals.
     loadPdf(url){
       if(url!==null && typeof url!=='string')
@@ -327,6 +364,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     invalidatePdfBlockPage(page,changedRows=[]){
       return pdfSlot.current?.invalidateOverlayPage?.(page,changedRows)??false;
+    },
+    repaintPdfBlockPage(page){
+      return pdfSlot.current?.repaintOverlayPage?.(page)??false;
     },
     setSqlEditHistory({canUndo=false,canRedo=false,onUndo=null,onRedo=null}={}){
       const undo=container.querySelector('#undo'),redo=container.querySelector('#redo');

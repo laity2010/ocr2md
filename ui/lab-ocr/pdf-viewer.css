@@ -86,7 +86,8 @@
 .lab-ocr-pdf-pbs-tag.lab-ocr-pdf-drag-source{
   box-shadow:0 0 0 2px #eec45b,0 0 9px 3px #eec45b9a;z-index:20}
 .lab-ocr-pdf-overlay-box.lab-ocr-pdf-drop-target{
-  outline:2px solid #8bd5dd;outline-offset:2px;background:rgba(80,189,199,.17)}
+  /* Drag hover uses the same direct-selection orange as a normal click. */
+  outline:2px solid #ffd46c;outline-offset:1px;background:rgba(231,183,83,.20)}
 .lab-ocr-pdf-drag-arrow{position:fixed;inset:0;width:100vw;height:100vh;
   z-index:20001;pointer-events:none;overflow:visible}
 .lab-ocr-pdf-drag-arrow path{stroke:#eec45b;stroke-width:2.5;fill:none;stroke-linecap:round}
