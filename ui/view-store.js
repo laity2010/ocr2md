@@ -12,6 +12,8 @@ export const viewStore = createStore(() => ({
   scrollTarget: null,
   // Explicit cross-pane navigation; ephemeral location, not document data.
   focusTarget: null,
+  // Lab OCR semantic location event. No document bytes, editor instance or DOM.
+  labFocusTarget: null,
   outlineCount: null,
 }));
 
@@ -58,4 +60,19 @@ export function publishOutlineCount(count){
 export function publishActivePanel(panelId){
   if(panelId!==null&&typeof panelId!=='string')throw Error('Invalid active panel');
   if(viewStore.getState().activePanel!==panelId)viewStore.setState({activePanel:panelId});
+}
+
+/** Four-pane Lab OCR location notification; readers map stable IDs locally.
+ * Increment sequence even on repeated clicks so navigation may re-center.
+ */
+export function publishLabFocus({origin,intent='click',lineId=null,blockId=null,
+  lineNo=null,page=null,pbs=null}){
+  if(!['ag','cm6','preview','pdf'].includes(origin))throw Error('Invalid review origin');
+  if(lineId!==null&&(typeof lineId!=='string'||!lineId))throw Error('Invalid LineID');
+  if(blockId!==null&&(!Number.isSafeInteger(blockId)||blockId<1))throw Error('Invalid BlockID');
+  if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1))throw Error('Invalid line number');
+  if(page!==null&&(!Number.isInteger(page)||page<1))throw Error('Invalid PDF page');
+  if(!['click','edit'].includes(intent))throw Error('Invalid review intent');
+  viewStore.setState(state=>({labFocusTarget:Object.freeze({origin,intent,lineId,blockId,
+    lineNo,page,pbs,sequence:(state.labFocusTarget?.sequence||0)+1})}));
 }

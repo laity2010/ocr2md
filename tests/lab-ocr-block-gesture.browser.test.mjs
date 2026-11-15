@@ -132,6 +132,12 @@ try{
       document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="1"] .lab-ocr-pdf-pbs-tag').length===5);
    assert.equal(await page.locator('#workspace .ag-row').count(),5);
    assert.equal(await tag(102).innerText(),'p1b1s0','Identical parent and child bbox preserve both tags');
+   // Four-pane review is the default. For the legacy long-distance PDF drag
+   // regression, use the existing user switch to give PDF the full preview
+   // width; test the same viewer/overlays, not a recreated PDF component.
+   await page.locator('.ocr-preview-split-toggle input').uncheck();
+   await page.locator('.ocr-preview-mode').selectOption('pdf');
+   await tag(100).waitFor({state:'visible'});
    // Safari pinch-zoom can shift/scale fixed overlay coordinates relative
    // to the PDF label's client rectangle. Deterministically emulate that
    // mismatch in iPad WebKit; a correct arrow must start on the label still.

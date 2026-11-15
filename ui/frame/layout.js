@@ -1,7 +1,8 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateField,StateEffect,Compartment,Transaction} from '@codemirror/state';
-import {EditorView} from '@codemirror/view';
+import {EditorView,Decoration} from '@codemirror/view';
+import {documentChanged} from '../view-store.js';
 import {basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
@@ -70,6 +71,24 @@ function mountEmptySource(host){
   const nativeIOSSelection=isIOSWebKit();
   host.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   const setMdRuntime=StateEffect.define();
+  const setMdFocusLine=StateEffect.define();
+  const mdFocusField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      value=value.map(tr.changes);
+      for(const effect of tr.effects){
+        if(effect.is(setMdFocusLine)){
+          const line=effect.value;
+          value=Number.isInteger(line)&&line>=1&&line<=tr.newDoc.lines?
+            Decoration.set([Decoration.line({class:'ocr-four-pane-source-active'})
+              .range(tr.newDoc.line(line).from)]):Decoration.none;
+        }
+      }
+      return value;
+    },
+    provide:field=>EditorView.decorations.from(field),
+  });
+  let programmaticMdSelection=false;
   const mdEditable=new Compartment();
   let mdReducer=null,mdOnChange=null,mdOnSelection=null;
   const mdField=StateField.define({
@@ -82,7 +101,7 @@ function mountEmptySource(host){
   });
   const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
-    tableStateField,structuredRuntimeField,mdField,
+    tableStateField,structuredRuntimeField,mdField,mdFocusField,
     ...(nativeIOSSelection?nativeIOSBasicSetup:basicSetup),
     EditorView.lineWrapping,EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),mineruCommentFolding,
@@ -96,7 +115,11 @@ function mountEmptySource(host){
         mdOnChange?.(md);
       if(update.selectionSet||update.docChanged){
         const line=update.state.doc.lineAt(update.state.selection.main.head).number;
-        mdOnSelection?.(line);
+        // Only a user gesture starts a new navigation event. CM6 updates
+        // triggered by AG/PDF, undo replay and async SQL reload are followers.
+        const userEvent=update.transactions.some(tr=>tr.annotation(Transaction.userEvent));
+        if(!programmaticMdSelection&&userEvent)
+          mdOnSelection?.(line,{docChanged:update.docChanged});
       }
     }),
   ]}),parent:host});
@@ -115,7 +138,9 @@ function mountEmptySource(host){
     },
     patchBlockRows(changedRows){editor.dispatch({effects:patchTableRows.of(changedRows)});},
     rows(){return editor.state.field(tableStateField).rows;},
+    clearTableSelection(){editor.dispatch({effects:selectTableRow.of(null)});},
     mdRuntime(){return editor.state.field(mdField);},
+    editorView(){return editor;},
     loadMarkdown(runtime,{reconcile,onChange,onSelection}={}){
       if(!runtime?.rows?.length||typeof reconcile!=='function')throw Error('MD 初始化无效');
       mdReducer=reconcile;mdOnChange=onChange??null;mdOnSelection=onSelection??null;
@@ -143,17 +168,29 @@ function mountEmptySource(host){
     clearMarkdown(){
       mdReducer=null;mdOnChange=null;mdOnSelection=null;
       editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:''},
-        effects:[setMdRuntime.of(null),mdEditable.reconfigure([
+        effects:[setMdRuntime.of(null),setMdFocusLine.of(null),mdEditable.reconfigure([
           EditorState.readOnly.of(true),EditorView.editable.of(false)])],
         annotations:Transaction.addToHistory.of(false)});
     },
-    focusMdLine(lineNo){
+    focusMdLine(lineNo,{focus=true}={}){
       if(!editor.state.field(mdField)||!Number.isInteger(lineNo)||
          lineNo<1||lineNo>editor.state.doc.lines)return false;
       const position=editor.state.doc.line(lineNo).from;
-      editor.dispatch({selection:{anchor:position},
-        effects:EditorView.scrollIntoView(position,{y:'center'})});
-      editor.focus();return true;
+      programmaticMdSelection=true;
+      try{editor.dispatch({selection:{anchor:position},
+        effects:EditorView.scrollIntoView(position,{y:'center'})});}
+      finally{programmaticMdSelection=false;}
+      if(focus)editor.focus();return true;
+    },
+    markMdLine(lineNo,{reveal=false}={}){
+      if(!editor.state.field(mdField))return false;
+      if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1||
+          lineNo>editor.state.doc.lines))return false;
+      const effects=[setMdFocusLine.of(lineNo)];
+      if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
+        editor.state.doc.line(lineNo).from,{y:'center'}));
+      editor.dispatch({effects});
+      return true;
     },
     editMdLine(lineId,text){
       const md=editor.state.field(mdField);
@@ -169,7 +206,7 @@ function mountEmptySource(host){
     undoMarkdown(){return undo(editor);},
     redoMarkdown(){return redo(editor);},
     markdownHistory(){return {undo:undoDepth(editor.state),redo:redoDepth(editor.state)};},
-    select(row){
+    select(row,{focus=true}={}){
       if(!row)return;
       const md=editor.state.field(mdField);
       if(md){
@@ -177,7 +214,7 @@ function mountEmptySource(host){
           md.rows.find(r=>r.line_id===row.line_id)?.line_no:
           row.block_id!=null?
             md.rows.find(r=>r.block_id===Number(row.block_id))?.line_no:null;
-        if(line)this.focusMdLine(line);
+        if(line&&focus)this.focusMdLine(line);
         editor.dispatch({effects:selectTableRow.of(
           row.line_id??row.span_id??row.block_id??row.id??null)});
         return;
@@ -246,6 +283,7 @@ function mountEmptyGrid(host){
   // The AG pane owns the Grid API. Other modules may only update rows/columns
   // through this explicit, narrow component boundary; no private AG DOM access.
   host.ocrSqlGrid=Object.freeze({
+    clearSelection(){grid.deselectAll();},
     // Read-only column contract: includes AG's horizontally virtualized columns.
     columnFields(){return grid.getColumnDefs()?.map(column=>column.field)??[];},
     show({rows,columns,onRowSelected,onFilterChanged,
@@ -528,6 +566,51 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus)});
   let previewToken=0,previewTimer=null;
+  let previewClickCallback=null,previewSelectedLine=null,previewSync=null,previewClickArea=null;
+  const mdArea=()=>pdfSlot.preview?.mdArea??null;
+  const previewAnchors=()=>[...mdArea()?.querySelectorAll('[data-source-start][data-source-end]')??[]];
+  function highlightPreviewLine(lineNo,{reveal=false}={}){
+    previewSelectedLine=lineNo;
+    const anchors=previewAnchors();
+    for(const node of anchors)delete node.dataset.ocrSyncSelected;
+    if(!Number.isInteger(lineNo)||!anchors.length)return false;
+    const scored=anchors.map(node=>{
+      const a=Number(node.dataset.sourceStart),b=Number(node.dataset.sourceEnd);
+      return {node,a,b,distance:lineNo<a?a-lineNo:lineNo>=b?lineNo-b+1:0};
+    }).filter(item=>Number.isFinite(item.distance));
+    const exact=scored.filter(item=>item.distance===0)
+      .sort((a,b)=>(a.b-a.a)-(b.b-b.a));
+    // A Markdown source blank/evidence comment has no rendered element.
+    // Do not falsely mark the adjacent paragraph as the exact target.
+    const target=exact[0]?.node??null;
+    if(target){target.dataset.ocrSyncSelected='true';
+      if(reveal)target.scrollIntoView({block:'center',inline:'nearest'});}
+    return Boolean(target);
+  }
+  function previewClick(event){
+    const node=event.target instanceof Element?
+      event.target.closest('[data-source-start][data-source-end]'):null;
+    if(!node||!mdArea()?.contains(node))return;
+    const line=Number(node.dataset.sourceStart);
+    if(Number.isSafeInteger(line)&&line>0)previewClickCallback?.(line);
+  }
+  function bindPreviewClick(){
+    const current=mdArea();
+    if(current===previewClickArea)return;
+    previewClickArea?.removeEventListener('click',previewClick);
+    previewClickArea=current;
+    previewClickArea?.addEventListener('click',previewClick);
+  }
+  async function ensurePreviewScrollSync(){
+    if(previewSync)return previewSync;
+    const module=await import('../scroll-sync.js');
+    const area=mdArea();
+    if(!area)return null;
+    previewSync=module.createScrollSync(
+      ()=>container.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView()??null,
+      area,area);
+    return previewSync;
+  }
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
@@ -543,17 +626,34 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
+    setMdPreviewNavigation(callback){
+      if(callback!==null&&typeof callback!=='function')throw Error('MD 预览定位回调无效');
+      previewClickCallback=callback;bindPreviewClick();
+    },
+    highlightMdPreview(lineNo,{reveal=false}={}){
+      return highlightPreviewLine(lineNo,{reveal});
+    },
+    highlightMdSource(lineNo,{reveal=false}={}){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.markMdLine(lineNo,{reveal})??false;
+    },
     setMarkdownPreview(source){
       if(typeof source!=='string')throw Error('MD 预览源码必须是字符串');
+      bindPreviewClick();
       const token=++previewToken;
       if(previewTimer!==null)clearTimeout(previewTimer);
       previewTimer=setTimeout(()=>{
         previewTimer=null;
-        void import('../markdown-preview.js').then(module=>{
+        void import('../markdown-preview.js').then(async module=>{
           if(token!==previewToken||!pdfSlot.preview?.mdArea)return;
           // Reuse Main's mature Markdown/Obsidian renderer + DOMPurify.
           // This is strictly a derived HTML projection; it never owns MD.
+          const sync=await ensurePreviewScrollSync();
+          if(token!==previewToken||!pdfSlot.preview?.mdArea)return;
+          const preserved=sync?.beforeRender();
+          documentChanged();
           pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source);
+          sync?.afterRender(preserved);
+          highlightPreviewLine(previewSelectedLine);
         }).catch(error=>onStatus('MD 预览渲染失败：'+error.message,'warning'));
       },240);
     },
@@ -581,9 +681,20 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       ++previewToken;
       if(previewTimer!==null){clearTimeout(previewTimer);previewTimer=null;}
       if(pdfSlot.preview?.mdArea)pdfSlot.preview.mdArea.textContent='';
+      previewSelectedLine=null;
     },
     focusMdLine(lineNo){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo)??false;
+    },
+    markMdLine(lineNo,{reveal=false}={}){
+      if(!editor.state.field(mdField))return false;
+      if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1||
+          lineNo>editor.state.doc.lines))return false;
+      const effects=[setMdFocusLine.of(lineNo)];
+      if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
+        editor.state.doc.line(lineNo).from,{y:'center'}));
+      editor.dispatch({effects});
+      return true;
     },
     editMdLine(lineId,text){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.editMdLine(lineId,text)??false;
@@ -591,9 +702,15 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     patchMdRows(rows){
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchMdRows(rows);
     },
+    clearMdAgSelection(){
+      container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clearSelection();
+      container.querySelector('.ocr-cm-source')?.ocrCmTable?.clearTableSelection();
+    },
     selectMdLine(lineId){
-      return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({
+      const row=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({
         field:'line_id',id:lineId,focusColumn:'line_no',focus:false,preserveFilters:true});
+      if(row)container.querySelector('.ocr-cm-source')?.ocrCmTable?.select(row,{focus:false});
+      return row;
     },
     undoMd(){return container.querySelector('.ocr-cm-source')?.ocrCmTable?.undoMarkdown()??false;},
     redoMd(){return container.querySelector('.ocr-cm-source')?.ocrCmTable?.redoMarkdown()??false;},
@@ -670,18 +787,21 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     // Semantic selection for external views. Only the AG port owns AG Grid;
     // CM6 still receives the same row, without a second SQL/Markdown store.
-    selectSqlRowById({field='block_id',id,preserveFilters=false}){
+    selectSqlRowById({field='block_id',id,preserveFilters=false,focusSource=true}){
       const row=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({field,id,preserveFilters});
-      if(row)container.querySelector('.ocr-cm-source')?.ocrCmTable?.select(row);
+      if(row)container.querySelector('.ocr-cm-source')?.ocrCmTable?.select(row,{focus:focusSource});
       return Boolean(row);
     },
     focusPdfBlock({id,page,reveal=true}){
       return pdfSlot.current?.focusBlock?.({id,page,reveal})??false;
     },
+    clearPdfFocus(){return pdfSlot.current?.clearFocus?.()??false;},
     clearSqlRows(){
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.clear();
       container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clear();
     },
     dispose(){++previewToken;if(previewTimer!==null)clearTimeout(previewTimer);
+      previewClickArea?.removeEventListener('click',previewClick);previewClickArea=null;
+      previewSync?.dispose();previewSync=null;
       dockview.dispose();},get split(){return split;}});
 }

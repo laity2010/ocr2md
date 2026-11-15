@@ -7,6 +7,8 @@ import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
   mdSplice,reorderMdByBlocks} from './md-runtime.js';
 import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
+import {resolveReviewLocation} from './four-pane-location.js';
+import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
  * UI never reads disk or SQLite; those belong to the isolated OCR API.
  */
@@ -109,6 +111,41 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   const cm=()=>frame.readStructuredRuntime();
   const md=()=>frame.readMdRuntime();
   const status=()=>runtimeStatus(cm());
+  // One semantic event, four independent projections. Never store Markdown in
+  // the shared View Store, and never let one pane call another pane's private DOM.
+  function locateReview({origin,intent='click',lineId=null,blockId=null,lineNo=null}){
+    if(currentSqlTable!=='md'||!md())return null;
+    const target=resolveReviewLocation({lineId,blockId,lineNo},md().rows,cm()?.rows??[]);
+    if(target)publishLabFocus({origin,intent,...target});
+    return target;
+  }
+  const unsubscribeLocation=viewStore.subscribe((state,previous)=>{
+    const target=state.labFocusTarget;
+    if(!target||target===previous.labFocusTarget||currentSqlTable!=='md'||!md())return;
+    // PDF page must be updated BEFORE AG attempts to select its filtered row.
+    if(target.page)frame.setSqlPdfPage(target.page);
+    if(target.origin!=='ag'){
+      const found=target.lineId?frame.selectMdLine(target.lineId):null;
+      const fallback=!found&&target.blockId!=null?
+        frame.selectSqlRowById({field:'block_id',id:target.blockId,
+          preserveFilters:true,focusSource:false}):false;
+      // A hidden/absent row is not the previously selected AG row. Keep all
+      // filters, but clear the stale highlight instead of implying a match.
+      if(!found&&!fallback)frame.clearMdAgSelection();
+    }
+    if(target.lineNo){
+      frame.highlightMdSource(target.lineNo,{reveal:target.origin!=='cm6'&&target.intent==='click'});
+      frame.highlightMdPreview(target.lineNo,{reveal:target.origin!=='preview'&&target.intent==='click'});
+    }else{
+      frame.highlightMdSource(null);
+      frame.highlightMdPreview(null);
+    }
+    if(target.blockId!=null&&target.page&&target.origin!=='pdf')
+      frame.focusPdfBlock({id:target.blockId,page:target.page,
+        reveal:target.intent==='click'});
+    else if(target.blockId==null||!target.page)frame.clearPdfFocus();
+  });
+  frame.setMdPreviewNavigation(lineNo=>locateReview({origin:'preview',lineNo}));
   function refreshBlockUndoRedo(){
     const state=status();
     frame.setSqlEditHistory({canUndo:state.canUndo,canRedo:state.canRedo,
@@ -135,14 +172,11 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     frame.setMarkdownPreview(next.rows.map(r=>r.text).join('\n'));
     if(mdPersistence&&next.dirty)mdPersistence.changed();
   }
-  function mdCursorChanged(lineNo){
+  function mdCursorChanged(lineNo,{docChanged=false}={}){
     if(currentSqlTable!=='md')return;
     const row=md()?.rows[lineNo-1];
-    if(row){
-      frame.selectMdLine(row.line_id);
-      const owner=cm()?.rows.find(r=>r.block_id===row.block_id);
-      if(owner)frame.focusPdfBlock({id:owner.block_id,page:owner.global_page+1,reveal:false});
-    }
+    if(row)locateReview({origin:'cm6',lineId:row.line_id,
+      intent:docChanged?'edit':'click'});
   }
   function bindMdPersistence(){
     if(mdPersistence)return mdPersistence;
@@ -358,10 +392,13 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         if(currentSqlTable==='block'||currentSqlTable==='md')frame.setSqlPdfPage(page);
       },
       onBlockSelect:({blockId,pbs})=>{
-        const id=String(blockId);
-        // The Block ID, not PBS, is the stable identity across views.
-        if(currentSqlTable==='md'&&frame.selectSqlRowById({field:'block_id',id,preserveFilters:true})){
-          onStatus(`PDF → MD 行表 · ${pbs} · BlockID ${id}`,'ok');
+        const id=Number(blockId);
+        // PDF must not switch out of the full Markdown four-pane review when
+        // the target MD line happens to be filtered out of AG.
+        if(currentSqlTable==='md'){
+          const target=locateReview({origin:'pdf',blockId:id});
+          onStatus(target?.lineNo?`PDF → 四窗 · ${pbs} · BlockID ${id}`:
+            `PDF BlockID ${id} 暂无可定位的 MD 行`,target?.lineNo?'ok':'warning');
         }else if(currentSqlTable==='block'&&frame.selectSqlRowById({field:'block_id',id})){
           onStatus(`PDF → AG · ${pbs} · BlockID ${id}`,'ok');
         }else{
@@ -555,8 +592,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
           // Empty lines remain in CM6/SQLite; only the AG view starts filtered.
           initialFilterModel:{line_no:{values:['非空行']}},
           onSelect:row=>{
-            frame.focusMdLine(row.line_no);
-            onStatus('MD 行定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
+            locateReview({origin:'ag',lineId:row.line_id});
+            onStatus('MD 四窗定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
           },
         });
         currentSqlTable='md';
@@ -667,5 +704,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   });
   return Object.freeze({savedWorkspace,initialize,initializeSql,afterSave,openSql,
     sqlReady,blockReady:readyBlock,mdReady:()=>mdReady,
-    flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation});
+    flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation,
+    dispose(){unsubscribeLocation();frame.setMdPreviewNavigation(null);}});
 }

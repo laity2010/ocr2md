@@ -96,3 +96,16 @@
 .ocr-source-file-toolbar>.ocr-frame-back{flex:none;min-width:30px;width:30px;
   height:27px;padding:0;font-size:18px;line-height:1}
 .ocr-source-file-toolbar>.ts-wrapper.ocr-navigation-files{flex:1 1 0;min-width:0}
+
+/* Four-pane semantic location: visibility persists when CM6 loses focus.
+   MD source/preview are projections; no text changes or extra overlays. */
+#workspace .cm-line.ocr-four-pane-source-active{
+  background:rgba(230,155,61,.17);
+  box-shadow:inset 3px 0 0 #e6a04b;
+}
+#workspace .ocr-preview-md-scroll [data-ocr-sync-selected="true"]{
+  background:rgba(230,155,61,.14);
+  outline:2px solid rgba(230,155,61,.75);
+  outline-offset:2px;
+  border-radius:3px;
+}

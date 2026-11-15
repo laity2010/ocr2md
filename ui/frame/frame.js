@@ -83,7 +83,8 @@ function previewStatus(message,kind='info'){
 }
 const frame=createFrameWorkspace($('workspace'),{onStatus:previewStatus,onModuleChange:userShowModule,
   moduleLabel:labName==='lab-ocr'?'OCR 审阅':'空白框架',
-  defaultPreview:labName==='lab-ocr'?'pdf':'split'});
+  // Four visible panes: AG, CM6, Markdown and PDF.
+  defaultPreview:'split'});
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});

@@ -674,6 +674,10 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     requestOverlayPage(page);
     return true;
   }
+  function clearFocus(){
+    selectedBlockId=null;focusRequest=null;
+    updateSelectedNodes();return true;
+  }
   function invalidateOverlayPage(page,changedRows=[]){
     if(!Number.isInteger(page)||page<1||page>200)throw Error('失效 PDF 页码无效');
     for(const row of changedRows){
@@ -726,7 +730,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   });
   // Moving between split and single-pane layouts changes available width.
   // Preserve the chosen zoom mode instead of reloading the PDF.
-  let lastWidth=0;
+  let lastWidth=0,resizeFrame=0;
   const relayout=()=>{
     if(disposed||!ready)return;
     if(zoomSelect.value==='page-width'){
@@ -740,7 +744,15 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   };
   const resizeObserver=new ResizeObserver(()=>{
     const width=scroller.clientWidth;
-    if(width&&width!==lastWidth){lastWidth=width;relayout();}
+    if(width&&width!==lastWidth){
+      lastWidth=width;
+      // PDF.js scale changes layout. Never perform them synchronously inside
+      // ResizeObserver delivery, which can loop on iPad when Dockview moves
+      // the same PDF surface between the split and single-pane containers.
+      if(!resizeFrame)resizeFrame=requestAnimationFrame(()=>{
+        resizeFrame=0;relayout();
+      });
+    }
   });
   resizeObserver.observe(scroller);
   pageInput.addEventListener('change',()=>{
@@ -802,10 +814,11 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,focusBlock,invalidateOverlayPage,
+  return Object.freeze({loadPdf,setOverlays,focusBlock,clearFocus,invalidateOverlayPage,
     repaintOverlayPage,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
+    if(resizeFrame)cancelAnimationFrame(resizeFrame);
     cssObserver.disconnect();clearOverlayNodes();
     pageObserver.disconnect();
     const oldTask=task;task=null;

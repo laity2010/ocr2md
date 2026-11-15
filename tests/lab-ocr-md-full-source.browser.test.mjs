@@ -144,6 +144,49 @@ try{
    const editorTheme=await page.locator('.ocr-cm-source .cm-editor').evaluate(el=>
      getComputedStyle(el).backgroundColor);
    assert.equal(editorTheme,'rgb(47, 56, 62)','Main Everforest dark background');
+   // Four-pane semantic navigation: each user origin drives the other three
+   // through one stable ID event. Selection, page and persistent orange marks.
+   const synchronized=async(blockId,lineId,sourceLine)=>{
+     await page.waitForFunction(({blockId,lineId,sourceLine})=>{
+       const picked=document.querySelector('.ocr-cm-source')?.ocrCmTable?.selected();
+       const source=[...document.querySelectorAll('.ocr-cm-source .cm-line.ocr-four-pane-source-active')]
+         .some(el=>el.textContent.includes(sourceLine));
+       const preview=[...document.querySelectorAll('.ocr-preview-md-scroll [data-ocr-sync-selected="true"]')]
+         .some(el=>el.textContent.includes(sourceLine.replace(/^#{1,6}\s+/,'')));
+       const pdf=[...document.querySelectorAll('.lab-ocr-pdf-pbs-tag[data-selected="true"]')]
+         .some(el=>el.dataset.blockId===String(blockId));
+       return picked===lineId&&source&&preview&&pdf;
+     },{blockId,lineId,sourceLine},{timeout:12000}).catch(async error=>{
+       console.error('FOUR_PANE_SYNC_DIAG',name,JSON.stringify(await page.evaluate(()=>({
+         selected:document.querySelector('.ocr-cm-source')?.ocrCmTable?.selected(),
+         source:[...document.querySelectorAll('.ocr-cm-source .cm-line.ocr-four-pane-source-active')].map(n=>n.textContent),
+         preview:[...document.querySelectorAll('.ocr-preview-md-scroll [data-ocr-sync-selected="true"]')].map(n=>n.textContent),
+         pdf:[...document.querySelectorAll('.lab-ocr-pdf-pbs-tag[data-selected="true"]')].map(n=>n.dataset.blockId),
+         pdfPages:[...document.querySelectorAll('.lab-ocr-pdf-pbs-tag')].map(n=>n.dataset.blockId),
+         ag:[...document.querySelectorAll('.ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]')].map(n=>n.textContent),
+         previewMode:document.querySelector('.ocr-preview-pane')?.dataset.previewMode,
+         status:document.querySelector('#status')?.textContent,
+       }))));throw error;
+     });
+   };
+   // PDF -> AG / CM6 / rendered Markdown.
+   await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').click();
+   await synchronized(2,'md-c','Original paragraph');
+   // Markdown preview -> other three, including a different PDF page.
+   await page.locator('.ocr-preview-md-scroll p[data-source-start="5"]').click();
+   await synchronized(3,'md-e','Last paragraph');
+   assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),false);
+   // AG -> CM6 / preview / PDF, returning to page 1 without clearing filters.
+   await page.locator('.ocr-preview-md-scroll p[data-source-start="3"]').click();
+   await synchronized(2,'md-c','Original paragraph');
+   await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
+     .filter({hasText:/^Original paragraph$/}).click();
+   await synchronized(2,'md-c','Original paragraph');
+   // CM6 user click -> the remaining three panels, not a programmatic echo.
+   await page.locator('.ocr-cm-source .cm-line').filter({hasText:'## Heading'}).click();
+   await synchronized(1,'md-a','## Heading');
+   await page.locator('.ocr-preview-md-scroll p[data-source-start="3"]').click();
+   await synchronized(2,'md-c','Original paragraph');
    // Review AG must keep its prior Block columns, toolbar and default filters.
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_type"]').count(),1,
      'Original Block Type column must remain in the MD row view');
