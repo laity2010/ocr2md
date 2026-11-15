@@ -1,9 +1,17 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateField,StateEffect,Compartment,Transaction} from '@codemirror/state';
-import {EditorView,lineNumbers,keymap} from '@codemirror/view';
-import {history,historyKeymap,undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
-import {markdown} from '@codemirror/lang-markdown';
+import {EditorView} from '@codemirror/view';
+import {basicSetup} from 'codemirror';
+import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
+import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
+import {syntaxHighlighting} from '@codemirror/language';
+import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
+import {nativeIOSBasicSetup,isIOSWebKit} from '../ios-native-selection.js';
+import {mineruCommentFolding,foldInitialMineruComments} from '../mineru-comment-folding.js';
+import {obsidianMarkdown} from '../obsidian-markdown.js';
+import {obsidianSourceSyntax} from '../obsidian-source-syntax.js';
+import {obsidianHeadingMarkers} from '../obsidian-heading-markers.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
@@ -57,6 +65,10 @@ const tableStateField=StateField.define({
   },
 });
 function mountEmptySource(host){
+  // Main's existing CM6 editor setup, palette, decorations and native iOS
+  // selection. Lab-specific StateFields remain the sole document authority.
+  const nativeIOSSelection=isIOSWebKit();
+  host.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   const setMdRuntime=StateEffect.define();
   const mdEditable=new Compartment();
   let mdReducer=null,mdOnChange=null,mdOnSelection=null;
@@ -70,8 +82,12 @@ function mountEmptySource(host){
   });
   const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
-    tableStateField,structuredRuntimeField,mdField,lineNumbers(),
-    EditorView.lineWrapping,history(),keymap.of(historyKeymap),markdown(),
+    tableStateField,structuredRuntimeField,mdField,
+    ...(nativeIOSSelection?nativeIOSBasicSetup:basicSetup),
+    EditorView.lineWrapping,EditorView.contentAttributes.of({spellcheck:'false'}),
+    markdown({base:markdownLanguage}),mineruCommentFolding,
+    obsidianMarkdown,syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
+    obsidianSourceSyntax,obsidianHeadingMarkers,
     EditorView.updateListener.of(update=>{
       const md=update.state.field(mdField);
       if(!md)return;
@@ -108,6 +124,7 @@ function mountEmptySource(host){
         effects:[setMdRuntime.of(runtime),mdEditable.reconfigure([
           EditorState.readOnly.of(false),EditorView.editable.of(true)])],
         annotations:Transaction.addToHistory.of(false)});
+      foldInitialMineruComments(editor);
     },
     setMarkdownRuntime(next){
       if(!next?.rows?.length)throw Error('MD 替换运行态无效');
@@ -274,13 +291,17 @@ function mountEmptyGrid(host){
       if(!current)remove.push(node.data);
       else if(node.data?.text!==current.text||
           node.data?.line_no!==current.line_no||
-          node.data?.block_id!==current.block_id)
+          node.data?.block_id!==current.block_id||
+          node.data?.pbs!==current.pbs)
         node.updateData({...node.data,...current});
     });
     for(const [id,row] of next)if(!mdData.has(id))add.push(row);
     mdData=next;
     if(remove.length||add.length)grid.applyTransaction({remove,add});
-    grid.refreshClientSideRowModel?.('sort');
+    // Only an active filter needs recomputing after text becomes blank/nonblank.
+    // Do not replace rowData or reset the user's filter selection.
+    if(Object.keys(grid.getFilterModel()??{}).length)grid.onFilterChanged();
+    else grid.refreshClientSideRowModel?.('sort');
   },patchBlockRows(changedRows){
     const changed=new Map(changedRows.map(r=>[String(r.block_id),r]));
     const remove=[],add=[];
@@ -308,7 +329,7 @@ function mountEmptyGrid(host){
     // intact. Reapply the existing PBS filter, not a second page predicate.
     if(pageScope)grid.onFilterChanged();
     else grid.refreshClientSideRowModel?.('sort');
-  },selectById({field,id,focusColumn=field,focus=true}){
+  },selectById({field,id,focusColumn=field,focus=true,preserveFilters=false}){
     if(typeof field!=='string'||!field||id==null)return null;
     const wanted=String(id);
     const lookup=()=>{
@@ -319,7 +340,7 @@ function mountEmptyGrid(host){
       return null;
     };
     let selected=lookup();
-    if(!selected){
+    if(!selected&&!preserveFilters){
       // A PDF-visible Block may be hidden by unrelated AG filters (e.g.
       // block_type). Preserve the authoritative block_group filter.
       const current=grid.getFilterModel()||{};
@@ -572,7 +593,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     selectMdLine(lineId){
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({
-        field:'line_id',id:lineId,focusColumn:'line_no',focus:false});
+        field:'line_id',id:lineId,focusColumn:'line_no',focus:false,preserveFilters:true});
     },
     undoMd(){return container.querySelector('.ocr-cm-source')?.ocrCmTable?.undoMarkdown()??false;},
     redoMd(){return container.querySelector('.ocr-cm-source')?.ocrCmTable?.redoMarkdown()??false;},

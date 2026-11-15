@@ -126,6 +126,31 @@ try{
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="line_no"]').count(),1);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_id"]').count(),1);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="text"]').count(),1);
+   assert.equal(await page.locator('#workspace .ag-grid-container-wrapper .ag-header-cell[col-id="line_no"]').count(),1,
+     'Line number must be a pinned left index column');
+   assert.equal(await page.locator('#workspace .ag-grid-container-wrapper .ag-header-cell[col-id="pbs"]').count(),1,
+     'PBS must be a pinned left index column');
+   assert.equal(await page.locator('.ocr-cm-source .cm-foldGutter').count(),1,
+     'Main folding gutter must be present');
+   assert.equal(await page.locator('.ocr-cm-source .cm-ob-heading-line-2').count(),1,
+     'Main Obsidian heading decoration must be active');
+   const editorTheme=await page.locator('.ocr-cm-source .cm-editor').evaluate(el=>
+     getComputedStyle(el).backgroundColor);
+   assert.equal(editorTheme,'rgb(47, 56, 62)','Main Everforest dark background');
+   const filterButton=page.locator('#workspace .ag-header-cell[col-id="line_no"] .ag-header-cell-filter-button');
+   await filterButton.click();
+   const blankOption=page.locator('.ocr-enum-filter-option[data-filter-value="空行"] input');
+   await blankOption.waitFor();
+   await blankOption.uncheck(); // leave only nonblank lines visible
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===3);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),
+     ['1','3','5'],'Filtering never renumbers real MD source lines');
+   assert.equal((await page.locator('.ocr-cm-source .cm-content').innerText()).includes('Original paragraph'),true);
+   await page.locator('.ocr-enum-filter-option[data-filter-value="all"] input').check();
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===6);
+
    assert.equal(await page.locator('.ocr-ag-all-pages').isVisible(),false,
      'Current-PDF-page toolbar filter belongs to Block AG, not MD rows');
    const view=()=>page.evaluate(()=>{

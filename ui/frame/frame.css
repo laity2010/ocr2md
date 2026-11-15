@@ -11,7 +11,7 @@
   font-style:normal;font-weight:700;font-display:swap}
 :root{--laity-ui-font:"OCR2MD Sarasa","Sarasa Fixed SC",monospace}
 .frame-editor{flex:1 1 0;min-height:0;width:100%;overflow:hidden}
-.frame-editor .cm-editor{height:100%;background:#111827}
+.frame-editor .cm-editor{height:100%;background:var(--ob-bg,#111827)}
 .frame-editor .cm-scroller{height:100%;overflow:auto}
 #settings-workspace{width:100%;height:100%}
 #settings-workspace[hidden]{display:none!important}
@@ -63,7 +63,7 @@
   font-family:"OCR2MD Sarasa",monospace;
 }
 .app .frame-editor .cm-editor,.app .frame-editor .cm-scroller{
-  font-size:var(--ocr-frame-font-size);font-family:"OCR2MD Sarasa",monospace;
+  font-size:var(--ocr-frame-font-size);font-family:"OCR2MD Sarasa",monospace;line-height:1.5;
 }
 .app .ag-root-wrapper,.app .ag-cell,.app .ag-header-cell-text{
   font-size:calc(13px * var(--ocr-frame-scale));font-family:"OCR2MD Sarasa",monospace;

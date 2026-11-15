@@ -6,6 +6,7 @@ import {pbsPageKey} from './pbs-page-filter.js';
 import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
   mdSplice,reorderMdByBlocks} from './md-runtime.js';
 import {createMdPersistence} from './md-persistence.js';
+import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
  * UI never reads disk or SQLite; those belong to the isolated OCR API.
  */
@@ -69,7 +70,10 @@ const BLOCK_COLUMNS=Object.freeze([
   {field:'block_json',headerName:'原始 Lines / Spans',width:260,hide:true},
 ]);
 const MD_COLUMNS=Object.freeze([
-  {field:'line_no',headerName:'行号',width:88,sortable:true,sort:'asc'},
+  {field:'line_no',headerName:'行号',width:88,sortable:true,sort:'asc',
+    pinned:'left',lockPinned:true,lockPosition:'left'},
+  {field:'pbs',headerName:'PBS',width:125,sortable:false,
+    pinned:'left',lockPinned:true,lockPosition:'left'},
   {field:'block_id',headerName:'BlockID',width:115,sortable:true},
   {field:'text',headerName:'Markdown 源码',flex:1,minWidth:280,sortable:false},
   {field:'line_id',headerName:'LineID',width:230,hide:true,sortable:false},
@@ -123,7 +127,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return persistence;
   }
   function mdContentChanged(next){
-    if(currentSqlTable==='md')frame.patchMdRows(next.rows);
+    if(currentSqlTable==='md')frame.patchMdRows(projectMdAgRows(next.rows,cm()?.rows??[]));
     if(currentSqlTable==='md')frame.setMdEditHistory();
     frame.setMarkdownPreview(next.rows.map(r=>r.text).join('\n'));
     if(mdPersistence&&next.dirty)mdPersistence.changed();
@@ -279,6 +283,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
           dirty:Boolean(mdSplice(prior.savedRows,nextRows))};
         frame.replaceMdRuntime(updated);
         mdContentChanged(updated);
+      }else if(currentSqlTable==='md'){
+        // A Block's PBS may change without changing its MD text/order.
+        frame.patchMdRows(projectMdAgRows(md().rows,cm().rows));
       }
     }
     for(const page of result.pages??[result.page])
@@ -520,7 +527,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       try{
         await ensureMdRuntime();
         const rows=md().rows;
-        frame.showSqlRows(rows,MD_COLUMNS.map(column=>({
+        frame.showSqlRows(projectMdAgRows(rows,cm()?.rows??[]),MD_COLUMNS.map(column=>({
           ...column,
           ...(column.field==='text'?{editable:true,valueSetter:params=>{
             if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
@@ -534,7 +541,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
             return false;
           }}:{}),
           filter:EnumCheckboxFilter,
-          filterValueGetter:params=>params.data?.[column.field]??'',
+          filterValueGetter:params=>column.field==='line_no'?
+            mdLineKind(params.data?.text):column.field==='pbs'?
+              pbsPageKey(params.data?.pbs):params.data?.[column.field]??'',
           suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
         })),{onSelect:row=>{
           frame.focusMdLine(row.line_no);
