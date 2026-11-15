@@ -156,6 +156,10 @@ try{
      null,{timeout:15000});
    assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),
      ['1','3'],'Default MD AG view is current page, nonblank lines only');
+   // A PDF selection must never silently clear the default nonblank filter.
+   await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').click();
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),
+     ['1','3'],'PDF navigation must preserve MD blank-line filter');
    const filterButton=page.locator('#workspace .ag-header-cell[col-id="line_no"] .ag-header-cell-filter-button');
    await filterButton.click();
    const blankOption=page.locator('.ocr-enum-filter-option[data-filter-value="空行"] input');
@@ -256,8 +260,10 @@ try{
    // Reopening the MD view resets the existing AG toolbar to current page.
    assert.equal(await allPages.isChecked(),false);
    await allPages.check();
-   const agCell=page.locator('#workspace .ag-cell[col-id="text"]')
-     .filter({hasText:/^Last paragraph$/});
+   // AG Grid retains opacity-zero recycling rows during filtering. Only
+   // interact with the rendered row, never a stale virtual DOM duplicate.
+   const agCell=page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
+     .filter({hasText:/^Last paragraph$/}).first();
    await agCell.dblclick();
    const agInput=page.locator('#workspace .ag-cell-inline-editing input');
    await agInput.waitFor();

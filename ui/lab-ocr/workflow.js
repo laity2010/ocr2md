@@ -360,7 +360,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       onBlockSelect:({blockId,pbs})=>{
         const id=String(blockId);
         // The Block ID, not PBS, is the stable identity across views.
-        if(currentSqlTable==='md'&&frame.selectSqlRowById({field:'block_id',id})){
+        if(currentSqlTable==='md'&&frame.selectSqlRowById({field:'block_id',id,preserveFilters:true})){
           onStatus(`PDF → MD 行表 · ${pbs} · BlockID ${id}`,'ok');
         }else if(currentSqlTable==='block'&&frame.selectSqlRowById({field:'block_id',id})){
           onStatus(`PDF → AG · ${pbs} · BlockID ${id}`,'ok');
@@ -562,7 +562,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         currentSqlTable='md';
         frame.setMdEditHistory();
         if(selectedId!=null){
-          const selected=frame.selectSqlRowById({field:'block_id',id:selectedId});
+          const selected=frame.selectSqlRowById({field:'block_id',id:selectedId,preserveFilters:true});
           if(!selected)onStatus('BlockID '+selectedId+' 暂无 MD 行','warning');
         }
         onStatus('CM6 Markdown · '+rows.length+' 行（含空行）· AG 是同一份 MD 的行视图','ok');

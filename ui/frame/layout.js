@@ -670,8 +670,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     // Semantic selection for external views. Only the AG port owns AG Grid;
     // CM6 still receives the same row, without a second SQL/Markdown store.
-    selectSqlRowById({field='block_id',id}){
-      const row=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({field,id});
+    selectSqlRowById({field='block_id',id,preserveFilters=false}){
+      const row=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({field,id,preserveFilters});
       if(row)container.querySelector('.ocr-cm-source')?.ocrCmTable?.select(row);
       return Boolean(row);
     },
