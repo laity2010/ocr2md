@@ -22,6 +22,7 @@ from v6_lab_ocr_block_view import inspect_block_projection,initialize_block_proj
 from v6_lab_ocr_block_edit import (block_move_state,preview_block_move,
     apply_block_move,undo_block_move,persist_block_edit_batch)
 from v6_lab_ocr_overlays import overlay_rows
+from v6_lab_ocr_md import read_md, initialize_md, persist_md_splice
 from v6_lab_ocr_store import (inspect_workspace, import_workspace, existing_info,
                               rows, fingerprint, OCRImportError)
 
@@ -30,6 +31,7 @@ PORT=int(os.environ.get('OCR2MD_LAB_OCR_PORT','4416'))
 MAIN_PORT=int(os.environ.get('OCR2MD_MAIN_PORT','4396'))
 PREFIX='/labs/lab-ocr/api/ocr/'
 MAX_BODY=32768
+MAX_MD_BODY=2 * 1024 * 1024
 MAX_PDF_BYTES=512 * 1024 * 1024
 PUBLIC_ORIGIN='https://ocr2md.laity.bid'
 LAN_ORIGIN=os.environ.get('OCR2MD_LAN_ORIGIN','')
@@ -126,8 +128,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','initialize-sql','pdf','overlays','block-edit','block-edit-state','block-edit-batch'):raise APIError(404,'未知的 OCR API')
-        post_ops=('import','minerujson2span','minerujson2block','initialize-sql','block-edit','block-edit-batch')
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','initialize-sql','pdf','overlays','block-edit','block-edit-state','block-edit-batch','md-state','md-initialize','md-save'):raise APIError(404,'未知的 OCR API')
+        post_ops=('import','minerujson2span','minerujson2block','initialize-sql','block-edit','block-edit-batch','md-initialize','md-save')
         if (op in post_ops)!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
@@ -137,7 +139,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 n=int(self.headers.get('Content-Length','-1'))
             except ValueError:n=-1
-            if not 1<=n<=MAX_BODY:raise APIError(413,'请求体超出允许范围')
+            if not 1<=n<=(MAX_MD_BODY if op=='md-save' else MAX_BODY):
+                raise APIError(413,'请求体超出允许范围')
             try:
                 body=json.loads(self.rfile.read(n))
             except (ValueError,UnicodeError) as error:
@@ -147,6 +150,17 @@ class Handler(BaseHTTPRequestHandler):
         else:
             query={k:v[-1] for k,v in parse_qs(parsed.query,keep_blank_values=True).items()}
         book=_book(query.get('workspace',''),roots)
+        if op=='md-state':
+            return self.respond(200,read_md(book))
+        if op=='md-initialize':
+            return self.respond(200,initialize_md(book))
+        if op=='md-save':
+            if type(query.get('blockRevision')) is not int:
+                raise APIError(422,'MD 保存必须提供当前 CM Block revision')
+            return self.respond(200,persist_md_splice(book,
+                query.get('expectedRevision'),query.get('requestId'),
+                query.get('start'),query.get('deleteCount'),query.get('insert'),
+                query.get('blockRevision')))
         if op=='initialize-sql':
             if query.get('confirmReset') is not True:
                 raise APIError(422,'必须明确确认重建扩展表将清空旧审阅结果')
@@ -221,6 +235,8 @@ class Handler(BaseHTTPRequestHandler):
                 result={'status':'ready' if not old else 'unchanged' if old['signature']==sig else 'changed',
                         'sources':info['sources'],'pdf':info['pdf'].name,'pages':info['total_pages'],
                         'ordering':info['ordering'],'blocks':old['count'] if old else 0}
+            if op=='inspect':
+                result['mdSupported']=True
             return self.respond(200,result)
         except OCRImportError as error:
             return self.respond(422,{'error':str(error)})

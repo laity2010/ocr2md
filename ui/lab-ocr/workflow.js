@@ -3,6 +3,9 @@ import {createBlockRuntime,editBlockRuntime,acknowledgeBlockPersistence,
   runtimeStatus,projectBlockOverlays} from './block-runtime.js';
 import {createBlockPersistence} from './block-persistence.js';
 import {pbsPageKey} from './pbs-page-filter.js';
+import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
+  mdSplice,reorderMdByBlocks} from './md-runtime.js';
+import {createMdPersistence} from './md-persistence.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
  * UI never reads disk or SQLite; those belong to the isolated OCR API.
  */
@@ -10,6 +13,7 @@ const ENDPOINT='/labs/lab-ocr/api/ocr/';
 const NAV_VALUE='sql:minerujson';
 const SPAN_VALUE='sql:span';
 const BLOCK_VALUE='sql:block';
+const MD_VALUE='sql:md';
 const COLUMNS=Object.freeze([
   {field:'global_page',headerName:'页（0起）',width:112,sortable:true},
   {field:'source_name',headerName:'源 JSON',width:170,sortable:true},
@@ -64,6 +68,12 @@ const BLOCK_COLUMNS=Object.freeze([
   {field:'source_block_key',headerName:'来源 Block Key',width:280,hide:true},
   {field:'block_json',headerName:'原始 Lines / Spans',width:260,hide:true},
 ]);
+const MD_COLUMNS=Object.freeze([
+  {field:'line_no',headerName:'行号',width:88,sortable:true,sort:'asc'},
+  {field:'block_id',headerName:'BlockID',width:115,sortable:true},
+  {field:'text',headerName:'Markdown 源码',flex:1,minWidth:280,sortable:false},
+  {field:'line_id',headerName:'LineID',width:230,hide:true,sortable:false},
+]);
 async function request(op,params,post=false,options={}){
   const url=new URL(ENDPOINT+op,location.origin);
   if(!post)for(const [key,value] of Object.entries(params))url.searchParams.set(key,String(value));
@@ -80,14 +90,17 @@ async function request(op,params,post=false,options={}){
 }
 
 export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,showModule}){
-  let workspace='',tableReady=false,spanReady=false,blockReady=false,operation=0,loaded=0;
+  let workspace='',tableReady=false,spanReady=false,blockReady=false,mdReady=false,
+    mdSupported=false,operation=0,loaded=0;
   let blockProjectionKind=null;
   let currentSqlTable=null;
   let pdfPage=1;
   let persistence=null,loadingRuntime=null,lastEditedId=null;
+  let mdPersistence=null,mdLoading=null;
   const sqlReady=()=>tableReady;
   const readyBlock=()=>blockReady;
   const cm=()=>frame.readStructuredRuntime();
+  const md=()=>frame.readMdRuntime();
   const status=()=>runtimeStatus(cm());
   function refreshBlockUndoRedo(){
     const state=status();
@@ -108,6 +121,79 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       onStatus,
     });
     return persistence;
+  }
+  function mdContentChanged(next){
+    if(currentSqlTable==='md')frame.patchMdRows(next.rows);
+    if(currentSqlTable==='md')frame.setMdEditHistory();
+    frame.setMarkdownPreview(next.rows.map(r=>r.text).join('\n'));
+    if(mdPersistence&&next.dirty)mdPersistence.changed();
+  }
+  function mdCursorChanged(lineNo){
+    if(currentSqlTable!=='md')return;
+    const row=md()?.rows[lineNo-1];
+    if(row){
+      frame.selectMdLine(row.line_id);
+      const owner=cm()?.rows.find(r=>r.block_id===row.block_id);
+      if(owner)frame.focusPdfBlock({id:owner.block_id,page:owner.global_page+1,reveal:false});
+    }
+  }
+  function bindMdPersistence(){
+    if(mdPersistence)return mdPersistence;
+    const book=workspace;
+    mdPersistence=createMdPersistence({
+      read:md,
+      ack:(rows,revision)=>{
+        frame.replaceMdRuntime(acknowledgeMdRuntime(md(),rows,revision));
+      },
+      post:async batch=>{
+        if(cm()?.queue.length)await flushBlockChanges();
+        // Browser keepalive bodies are capped near 64 KiB. A large pasted MD
+        // splice must be sent as a normal request, never silently rejected.
+        return request('md-save',{workspace:book,blockRevision:cm()?.revision??0,
+          ...batch},true,{keepalive:false});
+      },
+      onStatus,
+    });
+    return mdPersistence;
+  }
+  async function ensureMdRuntime(){
+    if(md())return md();
+    if(mdLoading)return mdLoading;
+    if(!workspace||!blockReady||!mdSupported)return null;
+    const book=workspace,epoch=operation;
+    mdLoading=(async()=>{
+      await ensureBlockRuntime();
+      let result=await request('md-state',{workspace:book});
+      if(result.status==='missing'){
+        if(cm()?.queue.length)await flushBlockChanges();
+        result=await request('md-initialize',{workspace:book},true);
+      }
+      if(book!==workspace||epoch!==operation)
+        throw Error('工作区已切换，拒绝载入旧书籍 MD');
+      if(!Array.isArray(result.rows)||!result.rows.length)
+        throw Error('MD 行表为空，拒绝显示不完整文稿');
+      frame.loadMdRuntime(createMdRuntime(result.rows,result.revision),{
+        reconcile:(state,text)=>editedMdRuntime(state,text,()=>'md-'+crypto.randomUUID()),
+        onChange:mdContentChanged,
+        onSelection:mdCursorChanged,
+      });
+      frame.setMarkdownPreview(result.rows.map(r=>r.text).join('\n'));
+      mdReady=true;
+      bindMdPersistence();
+      revealNavigation();
+      onStatus('MD 行表已就绪 · '+result.rows.length+' 行，CM6 已加载完整 Markdown','ok');
+      return md();
+    })();
+    try{return await mdLoading;}
+    finally{mdLoading=null;}
+  }
+  async function flushMdChanges(){
+    return md()?.dirty?bindMdPersistence().flush():false;
+  }
+  async function flushAllChanges(){
+    const block=await flushBlockChanges();
+    const document=await flushMdChanges();
+    return block||document;
   }
   async function fetchBlockRows(){
     const rows=[];let offset=0,total=0;
@@ -185,6 +271,16 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   function reflectCmBlockChange(result,selectedId){
     if(!result.changed)return;
     if(currentSqlTable==='block')frame.patchSqlBlockRows(result.changedRows);
+    if(md()){
+      const nextRows=reorderMdByBlocks(md().rows,cm().rows);
+      if(mdSplice(md().rows,nextRows)){
+        const prior=md();
+        const updated={...prior,rows:nextRows,version:prior.version+1,
+          dirty:Boolean(mdSplice(prior.savedRows,nextRows))};
+        frame.replaceMdRuntime(updated);
+        mdContentChanged(updated);
+      }
+    }
     for(const page of result.pages??[result.page])
       frame.repaintPdfBlockPage(page);
     if(selectedId!=null){
@@ -254,7 +350,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       onBlockSelect:({blockId,pbs})=>{
         const id=String(blockId);
         // The Block ID, not PBS, is the stable identity across views.
-        if(currentSqlTable==='block'&&frame.selectSqlRowById({field:'block_id',id})){
+        if(currentSqlTable==='md'&&frame.selectSqlRowById({field:'block_id',id})){
+          onStatus(`PDF → MD 行表 · ${pbs} · BlockID ${id}`,'ok');
+        }else if(currentSqlTable==='block'&&frame.selectSqlRowById({field:'block_id',id})){
           onStatus(`PDF → AG · ${pbs} · BlockID ${id}`,'ok');
         }else{
           void openSql('block',{selectedId:id}).then(success=>{
@@ -286,10 +384,13 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       if(!select)continue;
       let group=[...select.querySelectorAll('optgroup')].find(e=>e.label==='SQLite');
       if(!group){group=document.createElement('optgroup');group.label='SQLite';select.append(group);}
-      if(workspace&&!group.querySelector('option[value="sql:initialize"]'))
+      if(workspace&&!mdReady&&!group.querySelector('option[value="sql:initialize"]'))
         group.append(new Option('数据库管理 · 初始化 SQL（重建扩展）','sql:initialize'));
+      if(mdReady)group.querySelector('option[value="sql:initialize"]')?.remove();
       if(tableReady&&!group.querySelector(`option[value="${NAV_VALUE}"]`))
         group.append(new Option('minerujson',NAV_VALUE));
+      if(mdReady&&!group.querySelector(`option[value="${MD_VALUE}"]`))
+        group.append(new Option('md',MD_VALUE));
       if(blockReady&&!group.querySelector(`option[value="${BLOCK_VALUE}"]`))
         group.append(new Option('block',BLOCK_VALUE));
       if(spanReady&&!group.querySelector(`option[value="${SPAN_VALUE}"]`))
@@ -340,19 +441,24 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   async function inspectAndImport(nextWorkspace){
     const epoch=++operation;
-    if(cm()?.queue.length)throw Error('CM Block 尚有待持久操作，必须先保存，拒绝切换/重建');
+    if(cm()?.queue.length||md()?.dirty)
+      throw Error('CM Block/MD 尚有待持久操作，必须先保存，拒绝切换/重建');
     persistence?.dispose();persistence=null;loadingRuntime=null;
+    mdPersistence?.dispose();mdPersistence=null;mdLoading=null;
     frame.replaceStructuredRuntime(null);
+    frame.clearMdRuntime();
     pdfPage=1;
     workspace=nextWorkspace;
     lastEditedId=null;
     frame.setSqlEditHistory();
-    tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();frame.clearSqlRows();
+    tableReady=false;spanReady=false;blockReady=false;mdReady=false;mdSupported=false;
+    currentSqlTable=null;hideNavigation();frame.clearSqlRows();
     if(!workspace){prepareOverlays('');warmPdf('');onStatus('请在全局设置中绑定书籍工作目录','warning');return false;}
     onStatus('检查工作区：MinerU JSON 与 PDF…','info');
     try{
       const result=await request('inspect',{workspace});
       if(epoch!==operation)return false;
+      mdSupported=result.mdSupported===true;
       if(result.status==='changed'){
         // Do not auto-overwrite reviewed/imported source material.
         tableReady=result.blocks>0;
@@ -386,11 +492,17 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(!saved){workspace='';tableReady=false;spanReady=false;blockReady=false;return false;}
     const imported=await inspectAndImport(saved);
     prepareOverlays(imported&&blockReady?saved:'');warmPdf(saved);
+    if(imported&&blockReady&&mdSupported){
+      try{await ensureMdRuntime();}
+      catch(error){onStatus('MD 行表加载失败；旧 Block 审阅仍可用：'+error.message,'error');}
+    }
     return imported;
   }
   async function afterSave(){
     const saved=await savedWorkspace();
-    if(saved!==workspace&&cm()?.queue.length)await flushBlockChanges();
+    if(saved!==workspace){
+      await flushAllChanges();
+    }
     if(saved===workspace&&tableReady)return true; // never reload CM from an old SQL snapshot
     if(!saved){++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();
       frame.clearSqlRows();prepareOverlays('');warmPdf('');await showModule('settings');
@@ -400,6 +512,44 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return success;
   }
   async function openSql(table='minerujson',{selectedId=null}={}){
+    if(table==='md'){
+      if(!blockReady||!mdSupported){
+        onStatus('MD 行表需要已初始化的 Block 和支持 MD 的 Lab 后端','warning');
+        return false;
+      }
+      try{
+        await ensureMdRuntime();
+        const rows=md().rows;
+        frame.showSqlRows(rows,MD_COLUMNS.map(column=>({
+          ...column,
+          ...(column.field==='text'?{editable:true,valueSetter:params=>{
+            if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
+              onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
+              return false;
+            }
+            try{frame.editMdLine(params.data.line_id,params.newValue);}
+            catch(error){onStatus('MD 行编辑失败：'+error.message,'error');}
+            // AG never writes to its own row model; CM6 will project the
+            // authoritative document change back through patchMdRows.
+            return false;
+          }}:{}),
+          filter:EnumCheckboxFilter,
+          filterValueGetter:params=>params.data?.[column.field]??'',
+          suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
+        })),{onSelect:row=>{
+          frame.focusMdLine(row.line_no);
+          onStatus('MD 行定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
+        }});
+        currentSqlTable='md';
+        frame.setMdEditHistory();
+        if(selectedId!=null){
+          const selected=frame.selectSqlRowById({field:'block_id',id:selectedId});
+          if(!selected)onStatus('BlockID '+selectedId+' 暂无 MD 行','warning');
+        }
+        onStatus('CM6 Markdown · '+rows.length+' 行（含空行）· AG 是同一份 MD 的行视图','ok');
+        return true;
+      }catch(error){onStatus('MD 行表打开失败：'+error.message,'error');return false;}
+    }
     if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return false;}
     if(!['minerujson','span','block'].includes(table))throw Error('未知的 SQLite 表');
     const id=++loaded;
@@ -446,6 +596,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         }
       }});
       currentSqlTable=table;
+      if(table==='block')refreshBlockUndoRedo();
       if(selectedId!==null&&table==='block'&&!frame.selectSqlRowById({field:'block_id',id:selectedId})){
         onStatus(`PDF → AG · BlockID ${selectedId} 不在当前载入行中`,'warning');
         return false;
@@ -455,6 +606,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     }catch(error){onStatus('SQL 行读取失败：'+error.message,'error');return false;}
   }
   async function initializeSql(){
+    if(mdReady||md()){
+      onStatus('已有 MD 行表，禁止清空 Block 审阅及映射；请先独立备份并规划迁移','error');
+      return false;
+    }
     if(!workspace||!tableReady){
       onStatus('请先在全局设置绑定并导入 MinerU JSON 基础表','warning');return false;
     }
@@ -482,12 +637,16 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden'&&cm()?.queue.length)
       void flushBlockChanges().catch(()=>{});
+    if(document.visibilityState==='hidden'&&md()?.dirty)
+      void flushMdChanges().catch(()=>{});
   });
   // Normal navigation/page termination gets a best-effort keepalive batch.
   // This cannot guarantee persistence through a browser crash or power loss.
   window.addEventListener('pagehide',()=>{
     if(cm()?.queue.length)void flushBlockChanges().catch(()=>{});
+    if(md()?.dirty)void flushMdChanges().catch(()=>{});
   });
   return Object.freeze({savedWorkspace,initialize,initializeSql,afterSave,openSql,
-    sqlReady,blockReady:readyBlock,flushBlockChanges,refreshNavigation:revealNavigation});
+    sqlReady,blockReady:readyBlock,mdReady:()=>mdReady,
+    flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation});
 }

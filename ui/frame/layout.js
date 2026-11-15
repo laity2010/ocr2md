@@ -1,7 +1,9 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
-import {EditorState,StateField,StateEffect} from '@codemirror/state';
-import {EditorView,lineNumbers} from '@codemirror/view';
+import {EditorState,StateField,StateEffect,Compartment,Transaction} from '@codemirror/state';
+import {EditorView,lineNumbers,keymap} from '@codemirror/view';
+import {history,historyKeymap,undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
+import {markdown} from '@codemirror/lang-markdown';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
@@ -55,9 +57,32 @@ const tableStateField=StateField.define({
   },
 });
 function mountEmptySource(host){
+  const setMdRuntime=StateEffect.define();
+  const mdEditable=new Compartment();
+  let mdReducer=null,mdOnChange=null,mdOnSelection=null;
+  const mdField=StateField.define({
+    create:()=>null,
+    update(value,tr){
+      for(const effect of tr.effects)if(effect.is(setMdRuntime))return effect.value;
+      return value&&tr.docChanged&&mdReducer?
+        mdReducer(value,tr.newDoc.toString()):value;
+    },
+  });
   const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
-    EditorState.readOnly.of(true),EditorView.editable.of(false),tableStateField,
-    structuredRuntimeField,lineNumbers(),EditorView.lineWrapping,
+    mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
+    tableStateField,structuredRuntimeField,mdField,lineNumbers(),
+    EditorView.lineWrapping,history(),keymap.of(historyKeymap),markdown(),
+    EditorView.updateListener.of(update=>{
+      const md=update.state.field(mdField);
+      if(!md)return;
+      if(update.docChanged&&!update.transactions.some(tr=>
+        tr.effects.some(e=>e.is(setMdRuntime))))
+        mdOnChange?.(md);
+      if(update.selectionSet||update.docChanged){
+        const line=update.state.doc.lineAt(update.state.selection.main.head).number;
+        mdOnSelection?.(line);
+      }
+    }),
   ]}),parent:host});
   host.ocrCmTable=Object.freeze({
     load(rows){editor.dispatch({effects:loadTableRows.of(rows)});},
@@ -74,8 +99,72 @@ function mountEmptySource(host){
     },
     patchBlockRows(changedRows){editor.dispatch({effects:patchTableRows.of(changedRows)});},
     rows(){return editor.state.field(tableStateField).rows;},
+    mdRuntime(){return editor.state.field(mdField);},
+    loadMarkdown(runtime,{reconcile,onChange,onSelection}={}){
+      if(!runtime?.rows?.length||typeof reconcile!=='function')throw Error('MD 初始化无效');
+      mdReducer=reconcile;mdOnChange=onChange??null;mdOnSelection=onSelection??null;
+      const text=runtime.rows.map(r=>r.text).join('\n');
+      editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:text},
+        effects:[setMdRuntime.of(runtime),mdEditable.reconfigure([
+          EditorState.readOnly.of(false),EditorView.editable.of(true)])],
+        annotations:Transaction.addToHistory.of(false)});
+    },
+    setMarkdownRuntime(next){
+      if(!next?.rows?.length)throw Error('MD 替换运行态无效');
+      const text=next.rows.map(r=>r.text).join('\n');
+      const old=editor.state.doc.toString();
+      let prefix=0;
+      while(prefix<old.length&&prefix<text.length&&old[prefix]===text[prefix])prefix++;
+      let suffix=0;
+      while(suffix<old.length-prefix&&suffix<text.length-prefix&&
+        old[old.length-suffix-1]===text[text.length-suffix-1])suffix++;
+      editor.dispatch({changes:{from:prefix,to:old.length-suffix,
+        insert:text.slice(prefix,text.length-suffix)},
+        effects:setMdRuntime.of(next),
+        annotations:Transaction.addToHistory.of(false)});
+    },
+    clearMarkdown(){
+      mdReducer=null;mdOnChange=null;mdOnSelection=null;
+      editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:''},
+        effects:[setMdRuntime.of(null),mdEditable.reconfigure([
+          EditorState.readOnly.of(true),EditorView.editable.of(false)])],
+        annotations:Transaction.addToHistory.of(false)});
+    },
+    focusMdLine(lineNo){
+      if(!editor.state.field(mdField)||!Number.isInteger(lineNo)||
+         lineNo<1||lineNo>editor.state.doc.lines)return false;
+      const position=editor.state.doc.line(lineNo).from;
+      editor.dispatch({selection:{anchor:position},
+        effects:EditorView.scrollIntoView(position,{y:'center'})});
+      editor.focus();return true;
+    },
+    editMdLine(lineId,text){
+      const md=editor.state.field(mdField);
+      const row=md?.rows.find(r=>r.line_id===lineId);
+      if(!row||typeof text!=='string'||/[\r\n]/.test(text))
+        throw Error('MD 行内容或 LineID 无效');
+      if(row.text===text)return false;
+      const line=editor.state.doc.line(row.line_no);
+      editor.dispatch({changes:{from:line.from,to:line.to,insert:text}});
+      return true;
+    },
+    mdDocument(){return editor.state.doc.toString();},
+    undoMarkdown(){return undo(editor);},
+    redoMarkdown(){return redo(editor);},
+    markdownHistory(){return {undo:undoDepth(editor.state),redo:redoDepth(editor.state)};},
     select(row){
       if(!row)return;
+      const md=editor.state.field(mdField);
+      if(md){
+        const line=row.line_id!=null?
+          md.rows.find(r=>r.line_id===row.line_id)?.line_no:
+          row.block_id!=null?
+            md.rows.find(r=>r.block_id===Number(row.block_id))?.line_no:null;
+        if(line)this.focusMdLine(line);
+        editor.dispatch({effects:selectTableRow.of(
+          row.line_id??row.span_id??row.block_id??row.id??null)});
+        return;
+      }
       // Block selection shows the complete original per-block structure,
       // including every Line and Span. Child blocks live in their own rows.
       const raw=row.block_json ?? row.content ?? row.html ?? row.image_path ?? row.text_preview ?? '';
@@ -88,7 +177,8 @@ function mountEmptySource(host){
         effects:selectTableRow.of(row.span_id??row.block_id??row.id??null),
       });
     },
-    clear(){editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:''},
+    clear(){editor.dispatch({
+      ...(editor.state.field(mdField)?{}:{changes:{from:0,to:editor.state.doc.length,insert:''}}),
       effects:loadTableRows.of([])});},
     selected(){return editor.state.field(tableStateField).selectedId;},
   });
@@ -103,6 +193,7 @@ function mountEmptyGrid(host){
   ];
   let selectedListener=()=>{},filterListener=()=>{};
   let blockData=new Map();
+  let mdData=new Map();
   // The switch belongs to the AG toolbar, not to the AG Grid column model.
   const allPagesControl=host.closest('.ocr-outline-pane')?.querySelector('.ocr-ag-all-pages');
   const allPagesInput=allPagesControl?.querySelector('input')??null;
@@ -147,6 +238,8 @@ function mountEmptyGrid(host){
     // non-absorbed blocks. Parent wrappers are retained for undo/audit.
     blockData=new Map(rows.filter(r=>r?.block_id!=null)
       .map(r=>[String(r.block_id),r]));
+    mdData=new Map(rows.filter(r=>r?.line_id!=null)
+      .map(r=>[String(r.line_id),r]));
     // Ignore transient filter-change events while replacing a whole SQL table.
     filterListener=()=>{};
     // Different SQLite tables must not inherit one another's AG filters.
@@ -171,6 +264,23 @@ function mountEmptyGrid(host){
     pdfPage=page;
     if(pageScope&&!showAllPages)updatePbsModel(false);
     return true;
+  },patchMdRows(rows){
+    const next=new Map(rows.map(r=>[String(r.line_id),r]));
+    const remove=[],add=[];
+    grid.forEachNode(node=>{
+      const id=String(node.data?.line_id??'');
+      if(!id)return;
+      const current=next.get(id);
+      if(!current)remove.push(node.data);
+      else if(node.data?.text!==current.text||
+          node.data?.line_no!==current.line_no||
+          node.data?.block_id!==current.block_id)
+        node.updateData({...node.data,...current});
+    });
+    for(const [id,row] of next)if(!mdData.has(id))add.push(row);
+    mdData=next;
+    if(remove.length||add.length)grid.applyTransaction({remove,add});
+    grid.refreshClientSideRowModel?.('sort');
   },patchBlockRows(changedRows){
     const changed=new Map(changedRows.map(r=>[String(r.block_id),r]));
     const remove=[],add=[];
@@ -198,7 +308,7 @@ function mountEmptyGrid(host){
     // intact. Reapply the existing PBS filter, not a second page predicate.
     if(pageScope)grid.onFilterChanged();
     else grid.refreshClientSideRowModel?.('sort');
-  },selectById({field,id}){
+  },selectById({field,id,focusColumn=field,focus=true}){
     if(typeof field!=='string'||!field||id==null)return null;
     const wanted=String(id);
     const lookup=()=>{
@@ -221,11 +331,14 @@ function mountEmptyGrid(host){
     }
     if(!selected)return null;
     grid.ensureIndexVisible(selected.index,'middle');
-    const column=grid.getColumn(field)?field:grid.getAllDisplayedColumns()[0]?.getColId();
-    if(column){grid.ensureColumnVisible(column);grid.setFocusedCell(selected.index,column);}
+    const column=grid.getColumn(focusColumn)?focusColumn:grid.getAllDisplayedColumns()[0]?.getColId();
+    if(focus&&column){
+      grid.ensureColumnVisible(column);grid.setFocusedCell(selected.index,column);
+    }
     selected.node.setSelected(true,true);
     return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
+    mdData.clear();blockData.clear();
     if(allPagesControl)allPagesControl.hidden=true;
     if(allPagesInput)allPagesInput.checked=false;
     grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
@@ -273,7 +386,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     select.value='';
     select.addEventListener('change',()=>{
       if(select.value==='settings')onModuleChange?.('settings');
-      else if(select.value==='sql:initialize'||select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block')onModuleChange?.(select.value);
+      else if(select.value==='sql:initialize'||select.value==='sql:minerujson'||select.value==='sql:span'||select.value==='sql:block'||select.value==='sql:md')onModuleChange?.(select.value);
     });
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
@@ -322,6 +435,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     mode.addEventListener('change',()=>setMode(mode.value));
     owned=()=>{
       pdfSlot.preview=Object.freeze({surface,tools:pdfTools,
+        mdArea:area,
         setMode,setSplit(enabled){
           pdfOption.disabled=Boolean(enabled)||!pdfPaneMount;
           if(enabled){
@@ -392,6 +506,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null};
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus)});
+  let previewToken=0,previewTimer=null;
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
@@ -407,9 +522,61 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
+    setMarkdownPreview(source){
+      if(typeof source!=='string')throw Error('MD 预览源码必须是字符串');
+      const token=++previewToken;
+      if(previewTimer!==null)clearTimeout(previewTimer);
+      previewTimer=setTimeout(()=>{
+        previewTimer=null;
+        void import('../markdown-preview.js').then(module=>{
+          if(token!==previewToken||!pdfSlot.preview?.mdArea)return;
+          // Reuse Main's mature Markdown/Obsidian renderer + DOMPurify.
+          // This is strictly a derived HTML projection; it never owns MD.
+          pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source);
+        }).catch(error=>onStatus('MD 预览渲染失败：'+error.message,'warning'));
+      },240);
+    },
     readStructuredRuntime(){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.runtime()??null;
     },
+    readMdRuntime(){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.mdRuntime()??null;
+    },
+    mdDocument(){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.mdDocument()??'';
+    },
+    loadMdRuntime(runtime,callbacks){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 尚未初始化');
+      cm.loadMarkdown(runtime,callbacks);
+    },
+    replaceMdRuntime(next){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 尚未初始化');
+      cm.setMarkdownRuntime(next);
+    },
+    clearMdRuntime(){
+      container.querySelector('.ocr-cm-source')?.ocrCmTable?.clearMarkdown();
+      ++previewToken;
+      if(previewTimer!==null){clearTimeout(previewTimer);previewTimer=null;}
+      if(pdfSlot.preview?.mdArea)pdfSlot.preview.mdArea.textContent='';
+    },
+    focusMdLine(lineNo){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo)??false;
+    },
+    editMdLine(lineId,text){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.editMdLine(lineId,text)??false;
+    },
+    patchMdRows(rows){
+      return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchMdRows(rows);
+    },
+    selectMdLine(lineId){
+      return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.selectById({
+        field:'line_id',id:lineId,focusColumn:'line_no',focus:false});
+    },
+    undoMd(){return container.querySelector('.ocr-cm-source')?.ocrCmTable?.undoMarkdown()??false;},
+    redoMd(){return container.querySelector('.ocr-cm-source')?.ocrCmTable?.redoMarkdown()??false;},
+    mdHistory(){return container.querySelector('.ocr-cm-source')?.ocrCmTable?.markdownHistory()??{undo:0,redo:0};},
     replaceStructuredRuntime(next){
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!cm)throw Error('CM6 尚未初始化');
@@ -447,6 +614,19 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
           .then(callback).catch(error=>onStatus('Block 历史操作失败：'+error.message,'error')):null;
       }
     },
+    setMdEditHistory(){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      const state=cm?.markdownHistory()??{undo:0,redo:0};
+      for(const [id,enabled,action] of [
+        ['undo',state.undo>0,()=>cm?.undoMarkdown()],
+        ['redo',state.redo>0,()=>cm?.redoMarkdown()]]) {
+        const button=container.querySelector('#'+id);
+        if(!button)continue;
+        button.disabled=!enabled;
+        button.title=enabled?'Markdown 编辑撤销／重做':'无 Markdown 编辑历史';
+        button.onclick=enabled?action:null;
+      }
+    },
     patchSqlBlockRows(changedRows){
       if(!Array.isArray(changedRows)||!changedRows.length)return;
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.patchBlockRows(changedRows);
@@ -481,5 +661,6 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.clear();
       container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clear();
     },
-    dispose(){dockview.dispose();},get split(){return split;}});
+    dispose(){++previewToken;if(previewTimer!==null)clearTimeout(previewTimer);
+      dockview.dispose();},get split(){return split;}});
 }

@@ -185,7 +185,7 @@ function mountSettingsNavigation(){
   refreshSettingsHistory();
 }
 async function showModule(name){
-  currentModule=name==='settings'?'settings':name==='sql:minerujson'||name==='sql:span'||name==='sql:block'?name:'frame';
+  currentModule=name==='settings'?'settings':name==='sql:minerujson'||name==='sql:span'||name==='sql:block'||name==='sql:md'?name:'frame';
   const inSettings=currentModule==='settings';
   $('workspace').hidden=inSettings;
   $('settings-workspace').hidden=!inSettings;
@@ -216,7 +216,7 @@ $('global-save').addEventListener('click',async()=>{
   // The global Save command is also an explicit async CM6 -> SQLite flush.
   // It must work while the settings component has never been opened.
   let blockSaved=false;
-  try{if(ocrWorkflow)blockSaved=await ocrWorkflow.flushBlockChanges();}
+  try{if(ocrWorkflow)blockSaved=await ocrWorkflow.flushAllChanges();}
   catch(error){
     topStatus('Block SQLite 保存失败；CM6 内存修改仍保留：'+error.message,'error');
     return;
@@ -229,7 +229,8 @@ $('global-save').addEventListener('click',async()=>{
     const saved=await settings.save();topStatus(saved?'✓ 全局设置已保存':'● 保存期间设置有新修改',saved?'ok':'warning');
     if(saved&&ocrWorkflow){
       const ready=await ocrWorkflow.afterSave();
-      if(ready&&revision===manualNavigationRevision)await showModule('sql:block');
+      if(ready&&revision===manualNavigationRevision)
+        await showModule(ocrWorkflow.mdReady()?'sql:md':'sql:block');
     }}
   catch(error){topStatus('保存失败：'+error.message,'error');}
 });
@@ -252,7 +253,7 @@ if(labName==='lab-ocr'){
         const initialized=await ocrWorkflow.initialize();
         // Async inspection must never override explicit user navigation.
         if(initialized&&ocrWorkflow.blockReady()&&bootNavigationRevision===manualNavigationRevision)
-          await showModule('sql:block');
+          await showModule(ocrWorkflow.mdReady()?'sql:md':'sql:block');
       }
     }catch(error){topStatus('Lab OCR 初始化失败：'+error.message,'error');}
   })();
