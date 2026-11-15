@@ -30,6 +30,7 @@ REVIEW_SCHEMA = """CREATE TABLE block_review (
  parent_block_id INTEGER REFERENCES block_review(block_id),
  sibling_order INTEGER NOT NULL,
  pbs TEXT NOT NULL,
+ absorbed_into_block_id INTEGER REFERENCES block_review(block_id),
  import_fingerprint TEXT NOT NULL,
  UNIQUE(source_order,global_page,pbs)
 )"""
@@ -40,7 +41,7 @@ REVIEW_SCHEMA = """CREATE TABLE block_review (
 VIEW_SCHEMA = """CREATE VIEW block AS
 WITH nodes AS (
  SELECT r.block_id,r.pbs,r.source_block_key,r.source_order,r.global_page,
-        r.parent_block_id,r.sibling_order,r.block_path,
+        r.parent_block_id,r.sibling_order,r.block_path,r.absorbed_into_block_id,
         m.source_name,m.local_page,m.page_size_json,m.import_fingerprint,
         json_extract(m.block_json,r.source_json_path) AS node_json
  FROM block_review AS r
@@ -56,6 +57,7 @@ SELECT
  n.page_size_json AS page_size_json,
  'para_blocks' AS block_group,n.block_path AS block_path,
  n.parent_block_id AS parent_block_id,n.sibling_order AS sibling_order,
+ n.absorbed_into_block_id AS absorbed_into_block_id,
  CASE WHEN json_type(n.node_json,'$.index')='integer'
       THEN json_extract(n.node_json,'$.index') ELSE NULL END AS block_index,
  COALESCE(CAST(json_extract(n.node_json,'$.type') AS TEXT),'') AS block_type,

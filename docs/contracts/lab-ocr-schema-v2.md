@@ -1,5 +1,7 @@
 # Lab OCR WCP46 · MinerU 原始表 + para Block SQL VIEW + 审阅扩展表
 
+> **WCP48 扩展**：`block_review` 新增可空 `absorbed_into_block_id`（吸收该逻辑父容器的幸存父 BlockID）。该行的原始来源路径、BlockID、内容在无损 `minerujson` 与 SQL VIEW 中保持；仅 AG/PDF 的**活跃投影**不再显示其父容器标签，子块直接归入幸存父块。初次使用旧 schema 时在合并事务内只增补字段和安全重建 VIEW，不会触发「初始化 SQL」也不会清空旧审阅。被吸收行的 `pbs` 用 `~merged:{id}` 作为内部不可见标识，不占用 `sN` 名额；Undo/Redo 历史含五字段差量（旧四字段兼容）。PDF overlay API 保留源 bbox 并附带 `absorbedIntoBlockId`，由 CM 投影决定渲染可见性。
+
 ## 确定的当前结构
 
 ```text

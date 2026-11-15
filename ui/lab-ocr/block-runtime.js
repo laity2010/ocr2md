@@ -107,7 +107,12 @@ export function planBlockMoveInMemory(rows,sourceBlockId,targetBlockId,placement
   const all=new Map(rows.map(row=>[row.block_id,row]));
   const source=all.get(sourceId),target=all.get(targetId);
   if(!source||!target)fail('CM 没有源/目标 BlockID');
+  const sourceHasChildren=placement==='child'&&rows.some(row=>
+    row.parent_block_id===sourceId&&row.absorbed_into_block_id==null);
   if(source.global_page!==target.global_page||
+      sourceHasChildren||
+      rows.some(row=>row.absorbed_into_block_id!=null&&
+        row.global_page===source.global_page)||
       rows.some(row=>{
         const parent=all.get(row.parent_block_id);
         return parent&&row.global_page!==parent.global_page&&
@@ -188,11 +193,13 @@ function patchRows(state,patch){
 function patchForSnapshot(current,restore){
   if(restore.scope==='delta'){
     const byId=new Map(current.map(row=>[row.block_id,row]));
-    return restore.snapshot.flatMap(([id,parent,order,pbs])=>{
+    return restore.snapshot.flatMap(([id,parent,order,pbs,absorbed])=>{
       const row=byId.get(id);
       if(!row)fail('CM 跨页历史的 BlockID 不存在');
-      return row.parent_block_id===parent&&row.sibling_order===order&&row.pbs===pbs?[]:
-        [{block_id:id,parent_block_id:parent,sibling_order:order,pbs}];
+      const matches=row.parent_block_id===parent&&row.sibling_order===order&&row.pbs===pbs&&
+        (absorbed===undefined||(row.absorbed_into_block_id??null)===(absorbed??null));
+      return matches?[]:[{block_id:id,parent_block_id:parent,sibling_order:order,pbs,
+        ...(absorbed!==undefined?{absorbed_into_block_id:absorbed}:{} )}];
     });
   }
   const before=new Map(current.filter(r=>r.global_page===restore.page)
@@ -230,7 +237,8 @@ export function editBlockRuntime(state,command){
       before:plan.before,after:plan.after,
       operation:{sourceBlockId:command.sourceBlockId,targetBlockId:command.targetBlockId,
         placement:command.placement,
-        ...(plan.scope?{scope:plan.scope,pages:plan.pages}:{})}});
+        ...(plan.scope?{scope:plan.scope,pages:plan.pages,
+          ...(plan.absorbsParent?{absorbsParent:true}:{})}:{})}});
     const rows=patchRows(state,plan.changedRows);
     return {state:{...rows,history,cursor:history.length,
       queue:[...state.queue,{id:state.nextId,action:'apply',
@@ -253,6 +261,7 @@ export function editBlockRuntime(state,command){
   if(entry.operation?.scope==='delta'){
     const current=new Map(rows.rows.map(row=>[row.block_id,row]));
     for(const row of current.values()){
+      if(row.absorbed_into_block_id!=null)continue;
       if(row.parent_block_id===null)continue;
       const parent=current.get(row.parent_block_id);
       if(!parent||parent.parent_block_id!==null||/s\d+s\d+/.test(row.pbs))
@@ -283,9 +292,13 @@ export function runtimeStatus(state){
 export function projectBlockOverlays(state,data){
   if(!state||!data||data.level!=='block'||!Array.isArray(data.boxes))return data;
   const byId=new Map(state.rows.map(row=>[String(row.block_id),row]));
-  return {...data,boxes:data.boxes.map(item=>{
+  return {...data,boxes:data.boxes.filter(item=>{
+    const row=byId.get(String(item.blockId));
+    return row?row.absorbed_into_block_id==null:item.absorbedIntoBlockId==null;
+  }).map(item=>{
     const row=byId.get(String(item.blockId));
     return row?{...item,pbs:row.pbs,
-      parentBlockId:row.parent_block_id==null?null:String(row.parent_block_id)}:item;
+      parentBlockId:row.parent_block_id==null?null:String(row.parent_block_id),
+      absorbedIntoBlockId:row.absorbed_into_block_id==null?null:String(row.absorbed_into_block_id)}:item;
   })};
 }

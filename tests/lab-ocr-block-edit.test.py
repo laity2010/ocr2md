@@ -103,16 +103,20 @@ class BlockEditContract(unittest.TestCase):
         plan=plan_block_move([r for r in before.values() if r['global_page']==0],
                              root,target,'child')
         mapped={v[0]:v for v in plan['after']}
-        self.assertEqual((mapped[root][1],mapped[root][3]),(target,'p1b1s0'))
-        self.assertEqual((mapped[child0][1],mapped[child0][3]),(target,'p1b1s1'))
-        self.assertEqual((mapped[child1][1],mapped[child1][3]),(target,'p1b1s2'))
-        self.assertTrue(all(r[3].count('s')<=1 for r in mapped.values()))
+        self.assertEqual((mapped[root][1],mapped[root][3],mapped[root][4]),
+                         (None,f'~merged:{root}',target))
+        self.assertEqual((mapped[child0][1],mapped[child0][3]),(target,'p1b1s0'))
+        self.assertEqual((mapped[child1][1],mapped[child1][3]),(target,'p1b1s1'))
+        self.assertTrue(all(r[4] is not None or r[3].count('s')<=1 for r in mapped.values()))
         persist_block_edit_batch(book,0,'cm-absorb-parent-00001',
           [{'action':'apply','sourceBlockId':root,
             'targetBlockId':target,'placement':'child'}])
         rows={r['block_id']:r for r in block_rows(book)['rows']}
-        for block_id in (root,child0,child1):
+        self.assertEqual(rows[root]['absorbed_into_block_id'],target)
+        self.assertIsNone(rows[root]['parent_block_id'])
+        for block_id in (child0,child1):
             self.assertEqual(rows[block_id]['parent_block_id'],target)
+        for block_id in (root,child0,child1):
             self.assertEqual(rows[block_id]['source_block_key'],
                              before[block_id]['source_block_key'])
         persist_block_edit_batch(book,1,'cm-absorb-undo-00002',[{'action':'undo'}])
@@ -120,6 +124,7 @@ class BlockEditContract(unittest.TestCase):
         self.assertEqual(restored[child0]['parent_block_id'],root)
         self.assertEqual(restored[child1]['parent_block_id'],root)
         self.assertEqual(restored[root]['parent_block_id'],None)
+        self.assertIsNone(restored[root]['absorbed_into_block_id'])
         self.assertTrue(all(r['pbs'].count('s')<=1 for r in restored.values()))
 
  def test_deferred_cm_batch_idempotent_and_atomic_rollback(self):
@@ -267,9 +272,10 @@ class BlockEditContract(unittest.TestCase):
     frozen=json.dumps(rows,sort_keys=True)
     plan=plan_block_move(rows,10,13,'child')
     result={row[0]:row for row in plan['after']}
-    self.assertEqual(result[10][1],12)
-    self.assertEqual(result[10][3],'p1b0s1')
-    self.assertEqual(result[11][3],'p1b0s2','Grandchild promoted into one-level sibling')
+    self.assertEqual(result[10][1],None)
+    self.assertEqual(result[10][4],12)
+    self.assertEqual(result[10][3],'~merged:10')
+    self.assertEqual(result[11][3],'p1b0s1','Source child promoted, wrapper not counted')
     self.assertEqual(result[11][1],12,'Promoted BlockID keeps its identity under the target')
     self.assertEqual(result[13][3],'p1b0s0')
     self.assertTrue(all('s' not in row[3] or row[3].count('s')==1 for row in plan['after']))

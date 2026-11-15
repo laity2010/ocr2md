@@ -347,8 +347,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     // Display a single representative for near-identical geometries across
     // groups, but retain every alias Block ID for AG→PDF reverse navigation.
     const priority={para_blocks:0,discarded_blocks:1,preproc_blocks:2};
-    const boxes=data.boxes.filter(item=>blockGroups===null||
-      blockGroups.has(String(item?.blockGroup??''))).map((item,index)=>({item,index}));
+    const boxes=data.boxes.filter(item=>item?.absorbedIntoBlockId==null&&
+      (blockGroups===null||blockGroups.has(String(item?.blockGroup??''))))
+      .map((item,index)=>({item,index}));
     boxes.sort((a,b)=>(priority[a.item?.blockGroup]??3)-(priority[b.item?.blockGroup]??3)||a.index-b.index);
     for(const {item} of boxes){
       const rect=item?.bbox;

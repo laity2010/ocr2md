@@ -52,7 +52,7 @@ assert.equal(acknowledgeBlockPersistence(saved,[3,4],9).dirty,false);
 assert.equal(acknowledgeBlockPersistence(saved,[3,4],9).queue.length,0);
 const orphan=data.map(r=>({...r}));orphan[2].parent_block_id=999;
 assert.throws(()=>planBlockMoveInMemory(orphan,100,101,'before'),/父 BlockID/);
-assert.throws(()=>planBlockMoveInMemory(data,101,102,'child'),/自身的后代/);
+assert.throws(()=>planBlockMoveInMemory(data,101,102,'child'),/自身子孙/);
 assert.throws(()=>planBlockMoveInMemory(data,100,105,'after'),/同页/);
 assert.throws(()=>planBlockMoveInMemory(data,102,103,'after'),/同级/);
 
@@ -102,10 +102,11 @@ const flatBase=[
 }));
 const absorbed=planBlockMoveInMemory(flatBase,10,12,'child');
 const absorbedById=new Map(absorbed.after.map(row=>[row[0],row]));
-assert.equal(absorbedById.get(10)[1],12);
+assert.equal(absorbedById.get(10)[1],null);
+assert.equal(absorbedById.get(10)[4],12,'The source parent is archived, not another child');
 assert.equal(absorbedById.get(11)[1],12);
-assert.equal(absorbedById.get(10)[3],'p1b0s1');
-assert.equal(absorbedById.get(11)[3],'p1b0s2');
-assert(absorbed.after.every(r=>r[3].split('s').length<=2));
+assert.equal(absorbedById.get(10)[3],'~merged:10');
+assert.equal(absorbedById.get(11)[3],'p1b0s1');
+assert(absorbed.after.every(r=>r[4]!=null||r[3].split('s').length<=2));
 console.log('LAB_OCR_CM_BLOCK_RUNTIME_PASS',JSON.stringify({history:cm.history.length,
   queued:cm.queue.length,partialAck:saved.queue.length}));

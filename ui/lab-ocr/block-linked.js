@@ -8,6 +8,8 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
   const nodes=new Map(rows.map(r=>[r.block_id,{...r}]));
   const source=nodes.get(sourceId),target=nodes.get(targetId);
   if(!source||!target||sourceId===targetId)throw Error('Block 源/目标无效');
+  if(source.absorbed_into_block_id!=null||target.absorbed_into_block_id!=null)
+    throw Error('已合并的父容器不能再次作为拖动源或目标');
   if(!['child','before','after'].includes(placement))throw Error('Block 落点无效');
   if(rows.length>10000||nodes.size!==rows.length)throw Error('跨页 Block 关系数量异常');
   const cross=source.global_page!==target.global_page;
@@ -18,6 +20,7 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
   const keyFor=(parent,page)=>parent===null?'root:'+page:'child:'+parent;
   for(const row of nodes.values()){
     if(row.block_group!=='para_blocks')throw Error('Block 只能处理 para');
+    if(row.absorbed_into_block_id!=null)continue;
     const parent=row.parent_block_id;
     if(parent!==null&&!nodes.has(parent))throw Error('CM 父 BlockID 缺失');
     const key=keyFor(parent,row.global_page);
@@ -28,6 +31,7 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
     nodes.get(a).sibling_order-nodes.get(b).sibling_order||a-b);
   for(const row of nodes.values()){
     const seen=new Set();let cur=row.block_id;
+    if(row.absorbed_into_block_id!=null)continue;
     while(cur!==null){
       if(seen.has(cur))throw Error('块关系存在循环');
       seen.add(cur);cur=nodes.get(cur).parent_block_id;
@@ -38,6 +42,7 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
   if(cross&&nodes.get(targetRoot)?.global_page!==target.global_page)
     throw Error('跨页不能越过相邻的逻辑父页');
   const start=rows.map(r=>r);
+  let absorbsParent=false;
   if(placement==='child'){
     if(sourceParent!==null)throw Error('只能将顶层父块归入另一父块');
     if(targetRoot===sourceId)throw Error('不能归入自身子孙');
@@ -54,12 +59,23 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
       }
     };
     visit(sourceId);
-    for(const id of [sourceId,...promoted])nodes.get(id).parent_block_id=targetRoot;
+    // A parent with children is only a logical container. Retain its OCR
+    // identity but absorb it, rather than manufacturing a fifth visible child.
+    absorbsParent=promoted.length>0;
+    const moving=absorbsParent?promoted:[sourceId];
+    if(absorbsParent){
+      const container=nodes.get(sourceId);
+      container.absorbed_into_block_id=targetRoot;
+      container.sibling_order=-1;
+      container.pbs=`~merged:${sourceId}`;
+      container.parent_block_id=null;
+    }
+    for(const id of moving)nodes.get(id).parent_block_id=targetRoot;
     byParent.delete('child:'+sourceId);
     for(const id of promoted)byParent.delete('child:'+id);
     const destKey='child:'+targetRoot;
     if(!byParent.has(destKey))byParent.set(destKey,[]);
-    byParent.get(destKey).push(sourceId,...promoted);
+    byParent.get(destKey).push(...moving);
   }else{
     if(cross||sourceParent!==target.parent_block_id)
       throw Error('之前／之后只允许同页且同级 Block');
@@ -84,6 +100,7 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
   // If a moved root is no longer a root, its new parent belongs to the
   // destination page, already renumbered above.
   for(const row of nodes.values()){
+    if(row.absorbed_into_block_id!=null)continue;
     if(row.parent_block_id!==null){
       const p=nodes.get(row.parent_block_id);
       if(!p||p.parent_block_id!==null)throw Error('不能生成第三层 Block');
@@ -94,11 +111,19 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
   for(const row of start){
     const newRow=nodes.get(row.block_id);
     if(row.parent_block_id!==newRow.parent_block_id||
-       row.sibling_order!==newRow.sibling_order||row.pbs!==newRow.pbs){
-      before.push([row.block_id,row.parent_block_id,row.sibling_order,row.pbs]);
-      after.push([newRow.block_id,newRow.parent_block_id,newRow.sibling_order,newRow.pbs]);
+       row.sibling_order!==newRow.sibling_order||row.pbs!==newRow.pbs||
+       (row.absorbed_into_block_id??null)!==(newRow.absorbed_into_block_id??null)){
+      const oldSnap=[row.block_id,row.parent_block_id,row.sibling_order,row.pbs];
+      const nextSnap=[newRow.block_id,newRow.parent_block_id,newRow.sibling_order,newRow.pbs];
+      if(absorbsParent){
+        oldSnap.push(row.absorbed_into_block_id??null);
+        nextSnap.push(newRow.absorbed_into_block_id??null);
+      }
+      before.push(oldSnap);
+      after.push(nextSnap);
       updates.push({block_id:newRow.block_id,parent_block_id:newRow.parent_block_id,
-        sibling_order:newRow.sibling_order,pbs:newRow.pbs});
+        sibling_order:newRow.sibling_order,pbs:newRow.pbs,
+        ...(absorbsParent?{absorbed_into_block_id:newRow.absorbed_into_block_id??null}:{})});
       pages.add(row.global_page);
     }
   }
@@ -106,5 +131,5 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
   return {changed:!!updates.length,changedRows:updates,
     sourceBlockId:sourceId,targetBlockId:targetId,placement,
     page:source.global_page+1,pages:[...pages].sort((a,b)=>a-b).map(p=>p+1),
-    scope:'delta',before,after};
+    scope:'delta',absorbsParent,before,after};
 }

@@ -70,21 +70,38 @@ def _ensure_block(connection):
     ).fetchone():
         raise OCRImportError('请先初始化 para Block VIEW')
 
+def _has_absorbed(connection):
+    return bool(connection.execute(
+        "SELECT 1 FROM pragma_table_info('block') WHERE name='absorbed_into_block_id'"
+    ).fetchone())
+
+def _ensure_absorbed_schema(connection):
+    """Additive, transactional schema change; neither OCR nor review resets."""
+    table='block_review' if _has_table(connection,'block_review') else 'block'
+    if not connection.execute(f"SELECT 1 FROM pragma_table_info('{table}') WHERE name='absorbed_into_block_id'").fetchone():
+        connection.execute(f'ALTER TABLE {table} ADD COLUMN absorbed_into_block_id INTEGER')
+    if table=='block_review' and not _has_absorbed(connection):
+        from v6_lab_ocr_block_view import VIEW_SCHEMA
+        connection.execute('DROP VIEW block')
+        connection.execute(VIEW_SCHEMA)
+
 
 def _fetch_page(connection, page):
     connection.row_factory = sqlite3.Row
+    extra=',absorbed_into_block_id' if _has_absorbed(connection) else ',NULL AS absorbed_into_block_id'
     rows = connection.execute("""SELECT block_id,global_page,parent_block_id,
-       sibling_order,pbs,block_group,source_order FROM block
+       sibling_order,pbs,block_group,source_order"""+extra+""" FROM block
        WHERE global_page=? AND block_group=? ORDER BY block_id""",
        (page, REVIEW_BLOCK_GROUP)).fetchall()
     if not rows or len(rows) > MAX_PAGE_BLOCKS:
         raise OCRImportError('页内无 para Block，或单页块数超过安全上限')
-    return [dict(r) for r in rows]
+    return [dict(r) for r in rows if r['absorbed_into_block_id'] is None]
 
 def _fetch_all(connection):
     connection.row_factory=sqlite3.Row
+    extra=',absorbed_into_block_id' if _has_absorbed(connection) else ',NULL AS absorbed_into_block_id'
     rows=connection.execute("""SELECT block_id,global_page,parent_block_id,
-       sibling_order,pbs,block_group,source_order FROM block
+       sibling_order,pbs,block_group,source_order"""+extra+""" FROM block
        WHERE block_group=? ORDER BY block_id LIMIT 10001""",
        (REVIEW_BLOCK_GROUP,)).fetchall()
     if not rows or len(rows)>10000:
@@ -98,7 +115,12 @@ def _move_plan(connection,source,target,placement):
     if len(pair)!=2:raise OCRImportError('源或目标 Block 不存在')
     pages={bid:p for bid,p in pair}
     source_page=pages[source];target_page=pages[target]
-    linked=source_page!=target_page or bool(connection.execute('''
+    has_children=placement=='child' and bool(connection.execute(
+        'SELECT 1 FROM block WHERE parent_block_id=? LIMIT 1',(source,)).fetchone())
+    absorbed_on_page=_has_absorbed(connection) and bool(connection.execute(
+        'SELECT 1 FROM block WHERE global_page=? AND absorbed_into_block_id IS NOT NULL LIMIT 1',
+        (source_page,)).fetchone())
+    linked=has_children or absorbed_on_page or source_page!=target_page or bool(connection.execute('''
        SELECT 1 FROM block AS child JOIN block AS parent
          ON parent.block_id=child.parent_block_id
        WHERE child.global_page<>parent.global_page
@@ -112,15 +134,19 @@ def _delta_snapshot(connection,stored):
     ids=[r[0] for r in stored]
     if not ids:return []
     markers=','.join('?' for _ in ids)
+    extra=',absorbed_into_block_id' if stored[0] and len(stored[0])==5 else ''
+    if extra and not _has_absorbed(connection):
+        raise OCRImportError('数据库缺少已合并父容器扩展字段')
     return [list(row) for row in connection.execute(
-        'SELECT block_id,parent_block_id,sibling_order,pbs FROM block '
+        'SELECT block_id,parent_block_id,sibling_order,pbs'+extra+' FROM block '
         f'WHERE block_id IN ({markers}) ORDER BY block_id',ids)]
 
 def _assert_db_two_levels(connection):
+    hidden_filter=' AND c.absorbed_into_block_id IS NULL' if _has_absorbed(connection) else ''
     for bid,pbs,parent,ppbs,grandparent in connection.execute('''
        SELECT c.block_id,c.pbs,c.parent_block_id,p.pbs,p.parent_block_id
        FROM block c LEFT JOIN block p ON p.block_id=c.parent_block_id
-       WHERE c.parent_block_id IS NOT NULL'''):
+       WHERE c.parent_block_id IS NOT NULL'''+hidden_filter):
         if ppbs is None or grandparent is not None or not pbs.startswith(ppbs+'s') or pbs.count('s')!=1:
             raise OCRImportError(f'非法第三层或孤立跨页关系 BlockID {bid}')
 
@@ -220,6 +246,9 @@ def plan_block_move(rows, source_id, target_id, placement):
     if any(row['global_page'] != page or row['block_group'] != REVIEW_BLOCK_GROUP
            for row in rows):
         raise OCRImportError('关系计划中含跨页或非 para Block')
+    if placement=='child' and any(row['parent_block_id']==source_id
+                                  for row in rows):
+        return plan_linked_move(rows,source_id,target_id,placement)
 
     siblings = {}
     for row in rows:
@@ -314,18 +343,31 @@ def _write_snapshot(connection, snapshot):
     # Legacy editable Block entity is still readable until the user runs
     # explicit initialization. The new SQL VIEW writes only its extension.
     table='block_review' if _has_table(connection,'block_review') else 'block'
+    if any(len(row)==5 for row in snapshot):_ensure_absorbed_schema(connection)
     for bid in ids:
         connection.execute(f'UPDATE {table} SET pbs=? WHERE block_id=?',
                            (f'__lab_ocr_pending_{bid}__',bid))
-    for bid,parent,order,pbs in snapshot:
+    for record in snapshot:
+        bid,parent,order,pbs=record[:4]
+        absorbed=record[4] if len(record)==5 else None
         if table=='block_review':
-            connection.execute("""UPDATE block_review
-                SET parent_block_id=?,sibling_order=?,pbs=? WHERE block_id=?""",
-                (parent,order,pbs,bid))
+            if len(record)==5:
+                connection.execute("""UPDATE block_review
+                  SET parent_block_id=?,sibling_order=?,pbs=?,absorbed_into_block_id=?
+                  WHERE block_id=?""",(parent,order,pbs,absorbed,bid))
+            else:
+                connection.execute("""UPDATE block_review
+                  SET parent_block_id=?,sibling_order=?,pbs=? WHERE block_id=?""",
+                  (parent,order,pbs,bid))
         else:
-            connection.execute("""UPDATE block SET parent_block_id=?,sibling_order=?,pbs=?
-                WHERE block_id=? AND block_group=?""",
-                (parent,order,pbs,bid,REVIEW_BLOCK_GROUP))
+            if len(record)==5:
+                connection.execute("""UPDATE block SET parent_block_id=?,sibling_order=?,
+                   pbs=?,absorbed_into_block_id=? WHERE block_id=? AND block_group=?""",
+                   (parent,order,pbs,absorbed,bid,REVIEW_BLOCK_GROUP))
+            else:
+                connection.execute("""UPDATE block SET parent_block_id=?,sibling_order=?,pbs=?
+                    WHERE block_id=? AND block_group=?""",
+                    (parent,order,pbs,bid,REVIEW_BLOCK_GROUP))
 
 
 def _check_signature(connection, signature):
@@ -453,7 +495,7 @@ def persist_block_edit_batch(book,expected_revision,batch_id,operations):
                         raise OCRImportError('CM 与 SQLite 移动结果不一致（意外空操作）')
                     if plan.get('scope')!='delta':_assert_two_levels(plan['before'])
                     operation=json.dumps({key:plan[key] for key in
-                        ('sourceBlockId','targetBlockId','placement','scope','pages') if key in plan},sort_keys=True)
+                        ('sourceBlockId','targetBlockId','placement','scope','pages','absorbsParent') if key in plan},sort_keys=True)
                 if plan.get('scope')!='delta':_assert_two_levels(plan['after'])
                 _write_snapshot(conn,plan['after'])
                 if plan.get('scope')=='delta':_assert_db_two_levels(conn)
@@ -535,7 +577,7 @@ def apply_block_move(book, source_id, target_id, placement, expected_revision):
         if plan.get('scope')=='delta':_assert_db_two_levels(conn)
         conn.execute('DELETE FROM block_edit_history WHERE seq>?',(cursor,))
         operation=json.dumps({k:plan[k] for k in
-            ('sourceBlockId','targetBlockId','placement','scope','pages') if k in plan})
+            ('sourceBlockId','targetBlockId','placement','scope','pages','absorbsParent') if k in plan})
         new=conn.execute("""INSERT INTO block_edit_history
              (operation_json,before_json,after_json,global_page,import_fingerprint)
              VALUES (?,?,?,?,?)""",(operation,json.dumps(plan['before']),
@@ -583,7 +625,8 @@ def undo_block_move(book, expected_revision, redo=False):
         _write_snapshot(conn,restore)
         if is_delta:_assert_db_two_levels(conn)
         _finish(conn,rev+1,new_cursor)
-        changes=[dict(block_id=a[0],parent_block_id=a[1],sibling_order=a[2],pbs=a[3])
+        changes=[dict(block_id=a[0],parent_block_id=a[1],sibling_order=a[2],pbs=a[3],
+                      **({'absorbed_into_block_id':a[4]} if len(a)==5 else {}))
                  for b,a in zip(current,restore) if b!=a]
         return dict(revision=rev+1,changed=True,changedRows=changes,
                     page=row[3]+1,pages=operation.get('pages',[row[3]+1]),

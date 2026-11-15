@@ -1,5 +1,9 @@
 # Lab OCR · Block 拖动改变关系 WP1–WP5（WCP41）
 
+> **WCP48 · 父容器与父容器合并规则（2026-11-15）**：当来源父块已有一级子块，拖动它归入另一父块或该父块的子块时，**只合并两组原子子块**，来源父容器不额外变成第五个子块。例如 `p4b0` 及 `s0,s1`，和 `p4b1` 及 `s0,s1` 合并后仅展示 `p4b0` + `p4b0s0…s3`（1 父 + 4 子）。来源父容器的稳定 BlockID 和无损原始 JSON **仍保留**，审阅扩展的 `absorbed_into_block_id` 指向幸存父块、不可见哨兵 PBS 为 `~merged:{BlockID}`；其记录作为可审计/可撤销的容器保留，但 AG/PDF 不再呈现它的标签或覆盖框。Block SQL VIEW 本身仍列出这一原始记录以供 CM6/历史恢复，AG 与 PDF 只显示活跃投影。若来源没有子块，它仍是一个独立原子，可以作为正常子块归入（不会意外消失）。
+>
+> 新旧 SQLite 审阅表在第一次实际父父合并写事务中**仅增补** `absorbed_into_block_id` 字段；若为 `block_review`，同一事务重新建立可读出该字段的 `block VIEW`，不重建/清空任何来源及审阅历史。新初始化直接包含该字段。CM6 立即修改完整原子行、隐藏标志与父子排序；AG 通过公共 Grid 事务对源父行移除、Undo 时恢复，原始 Line/Span 与 BlockID 不动。PDF 缓存始终保留全部原始 bbox，只在 CM 视图投影时隐藏已吸收父块，避免 Undo 时覆盖框找不到。SQLite CAS/幂等操作历史使用含第五字段的 delta 快照记录归并/Undo/Redo，旧四字段快照仍受支持。相邻跨页续接的**来源父块带子块**时应用相同规则；无子块仍按 WCP47 的原子归入。参见 `tests/lab-ocr-parent-merge.test.py`、`tests/lab-ocr-parent-merge-runtime.test.mjs`、`tests/lab-ocr-parent-merge.browser.test.mjs`。
+
 > **WCP47 · 相邻页 Block 续接（2026-11-13）**：在既有单页操作之外，允许后一个**物理 PDF 页**的 para 根块，通过拖动标签并命中前一页的 Block 覆盖框，以 `child` 归入前页父块。命中前页原有子块时采用该子块的顶层父块（不产生孙块）。源根块的原有子块随同提升到新父块的一级子块，PBS 使用**逻辑父块页码**（例如物理第 2 页的块显示为 `p1b1s1`）；`global_page`、`block_id`、原始 `source_block_key`、bbox、MinerU JSON/PDF 均不变。源页剩余根块会正常重编为 `p2b0` 等，落点自动滚页仅发生在手势期间；提交后仅重画受影响的两页，滚动与缩放不跳。暂不开放跨页「之前／之后」、倒序归入或相隔两页以上的归入。
 
 > CM6 仍拥有唯一可写运行态。跨页或已存在跨页关系的后续同页操作采用全局父关系图规划，但**只保存变化的 BlockID 差量**；操作历史用 `scope:'delta'` 和 `pages:[物理页码…]` 标识，原单页历史不变。SQLite 使用 `block_review` 扩展表写回（旧 Block 表兼容），CAS/idempotent 事务及 Undo/Redo 对同一差量原子校验/回放。失效父块、第三层、循环与跨页反向操作一律拒绝；PDF、AG、CM6 用固定 BlockID 更新。独立验收 `lab-ocr-cross-page.test.py`、`lab-ocr-cross-page-runtime.test.mjs`、`lab-ocr-cross-page.browser.test.mjs`，Chromium/iPad WebKit 检查两页标签、撤销重做、保留物理页与无视口漂移。真实 iPad 长距离自动滚页拖动仍须手动验收。

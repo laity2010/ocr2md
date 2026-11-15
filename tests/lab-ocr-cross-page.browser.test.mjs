@@ -24,19 +24,21 @@ const originals=[
  block_bbox_json:JSON.stringify(bbox),block_type:'text',line_count:1,span_count:1,
  span_types:'text',content_preview:'Block '+block_id,
  block_json:JSON.stringify({type:'text',lines:[{spans:[{type:'text',content:'Block '+block_id}]}]}),
+ absorbed_into_block_id:null,
 }));
-const snapshot=rows=>rows.map(row=>[row.block_id,row.parent_block_id,row.sibling_order,row.pbs]);
+const snapshot=rows=>rows.map(row=>[row.block_id,row.parent_block_id,row.sibling_order,row.pbs,
+  row.absorbed_into_block_id]);
 function applySnapshot(rows,snap){
- const map=new Map(snap.map(([id,parent,order,pbs])=>[id,{parent,order,pbs}]));
+ const map=new Map(snap.map(([id,parent,order,pbs,absorbed])=>[id,{parent,order,pbs,absorbed}]));
  for(const row of rows){
   const info=map.get(row.block_id);if(!info)continue;
   row.parent_block_id=info.parent;row.sibling_order=info.order;row.pbs=info.pbs;
+  if(info.absorbed!==undefined)row.absorbed_into_block_id=info.absorbed;
  }
 }
 const prior=snapshot(originals);
 const after=[
- [10,null,0,'p1b0'],[11,null,1,'p1b1'],[12,11,0,'p1b1s0'],
- [20,11,1,'p1b1s1'],[21,null,0,'p2b0'],
+ [20,11,1,'p1b1s1',null],[21,null,0,'p2b0',null],
 ];
 try{
  let ready=false;
@@ -54,8 +56,9 @@ try{
    let revision=0,cursor=0,applies=0,undos=0,redos=0,overlayReads=0;
    const history={seq:1,page:2,pages:[1,2],
      before:prior.filter(x=>[20,21].includes(x[0])),
-     after:after.filter(x=>[20,21].includes(x[0])),
-     operation:{sourceBlockId:20,targetBlockId:11,placement:'child',scope:'delta',pages:[1,2]}};
+     after,
+     operation:{sourceBlockId:20,targetBlockId:11,placement:'child',scope:'delta',
+       pages:[1,2]}};
    await page.addInitScript(({book})=>{
     localStorage.setItem('ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
      'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',category2:'目录',
@@ -82,6 +85,7 @@ try{
         boxes:rows.filter(r=>r.global_page===p-1).map(r=>({
           id:'b'+r.block_id,blockId:String(r.block_id),pbs:r.pbs,
           parentBlockId:r.parent_block_id==null?null:String(r.parent_block_id),
+          absorbedIntoBlockId:r.absorbed_into_block_id==null?null:String(r.absorbed_into_block_id),
           blockGroup:'para_blocks',blockType:'text',bbox:r.bbox,
         }))});
     }
@@ -124,7 +128,16 @@ try{
      nodes.map(node=>node.dataset.placement)),['child']);
    await page.mouse.up();
    await page.waitForFunction(()=>document.querySelector(
-     '.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag[data-block-id="20"]')?.textContent==='p1b1s1');
+     '.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag[data-block-id="20"]')?.textContent==='p1b1s1').catch(async e=>{
+       console.error('CROSS_PARENT_MERGE_DIAG',name,JSON.stringify({
+         status:await page.locator('#status').innerText(),
+         tags:await page.locator('.lab-ocr-pdf-pbs-tag').allInnerTexts(),
+         cm:await page.evaluate(()=>{const s=document.querySelector('.ocr-cm-source')?.ocrCmTable?.runtime();
+           return s?.rows.map(r=>[r.block_id,r.pbs,r.parent_block_id,r.absorbed_into_block_id]);}),
+         errors,
+       }));
+       throw e;
+     });
    assert.equal(await page.locator('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag[data-block-id="20"]').getAttribute('data-child'),'true');
    assert.equal(await page.locator('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag[data-block-id="21"]').textContent(),'p2b0');
    const afterViewport=await page.locator('.lab-ocr-pdf-scroller').evaluate(e=>({

@@ -36,10 +36,12 @@ const initial=base.map(r=>[r.block_id,r.parent_block_id,r.sibling_order,r.pbs]);
 const snapshot=rows=>rows.map(r=>[r.block_id,r.parent_block_id,r.sibling_order,r.pbs])
   .sort((a,b)=>a[0]-b[0]);
 const applySnapshot=(rows,after)=>{
- const byId=new Map(after.map(([id,parent,order,pbs])=>[id,{parent,order,pbs}]));
+ const byId=new Map(after.map(([id,parent,order,pbs,absorbed])=>[id,{parent,order,pbs,absorbed}]));
  for(const row of rows){
   const next=byId.get(row.block_id);
+  if(!next)continue;
   row.parent_block_id=next.parent;row.sibling_order=next.order;row.pbs=next.pbs;
+  if(next.absorbed!==undefined)row.absorbed_into_block_id=next.absorbed;
  }
 };
 try{
@@ -87,6 +89,7 @@ try{
       return reply({page:p,level,pageSize:[595,842],boxes:level==='block'&&p===1?
         sqlRows.map(r=>({id:String(r.block_id),blockId:String(r.block_id),
           parentBlockId:r.parent_block_id==null?null:String(r.parent_block_id),
+          absorbedIntoBlockId:r.absorbed_into_block_id==null?null:String(r.absorbed_into_block_id),
           pbs:r.pbs,blockGroup:'para_blocks',blockType:r.block_type,bbox:r.bbox})):[]});
     }
     if(op==='block-edit-batch'){
@@ -113,9 +116,10 @@ try{
           assert(planned.changed);
           applySnapshot(sqlRows,planned.after);
           history=history.slice(0,cursor);
-          history.push({page:1,before,after:snapshot(sqlRows),
+          history.push({page:1,before:planned.before,after:planned.after,
             operation:{sourceBlockId:command.sourceBlockId,
-              targetBlockId:command.targetBlockId,placement:command.placement}});
+              targetBlockId:command.targetBlockId,placement:command.placement,
+              scope:planned.scope,pages:planned.pages,absorbsParent:planned.absorbsParent}});
           cursor=history.length;applies++;
         }else if(command.action==='undo'){
           assert(cursor>0);
@@ -157,8 +161,8 @@ try{
    assert.equal(await page.locator('#undo').isEnabled(),false);
    assert.equal(JSON.stringify(base),origin,'Original untouched fixture preserved');
    assert.equal(await tag(102).innerText(),'p1b0s1');
-   // A root with existing children moves into another root; every original
-   // child remains a FIRST-LEVEL sibling under the new root.
+   // A root with children is an absorbed container; only its original
+   // children become first-level siblings under the surviving parent.
    const source=tag(100),target=page.locator(
      '.lab-ocr-pdf-overlay-layer[data-page="1"] .lab-ocr-pdf-overlay-box[data-block-ids~="103"]');
    const src=await source.boundingBox(),dest=await target.boundingBox();
@@ -171,11 +175,17 @@ try{
    await page.locator('.lab-ocr-pdf-drop-guide').waitFor({state:'visible'});
    assert.equal(await page.locator('.lab-ocr-pdf-drop-guide').getAttribute('data-placement'),'child');
    await page.locator('body').dispatchEvent('pointerup',{...pointer,clientX:end.x,clientY:end.y});
-   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="102"]')?.textContent==='p1b0s3');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="102"]')?.textContent==='p1b0s2');
    const rowsAfter=await page.evaluate(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable?.runtime()?.rows);
    const byId=new Map(rowsAfter.map(r=>[r.block_id,r]));
-   for(const id of [100,101,102])assert.equal(byId.get(id).parent_block_id,103);
-   assert.equal(byId.get(102).pbs,'p1b0s3');
+   assert.equal(byId.get(100).absorbed_into_block_id,103);
+   assert.equal(byId.get(100).parent_block_id,null);
+   for(const id of [101,102])assert.equal(byId.get(id).parent_block_id,103);
+   assert.equal(byId.get(102).pbs,'p1b0s2');
+   assert.equal(await tag(100).count(),0);
+   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag').count(),4);
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row').length===4);
+   assert.equal(await page.locator('#workspace .ag-row').count(),4);
    assert.equal(await page.locator('#undo').isEnabled(),true);
    await page.locator('#global-save').click();
    await page.waitForFunction(()=>{
@@ -184,10 +194,10 @@ try{
    });
    assert.equal(applies,1);
    assert.equal(sqlRows.find(r=>r.block_id===102).parent_block_id,103);
-   assert.equal(sqlRows.find(r=>r.block_id===102).pbs,'p1b0s3');
+   assert.equal(sqlRows.find(r=>r.block_id===102).pbs,'p1b0s2');
    assert(sqlRows.every(r=>r.pbs.split('s').length<=2));
    await page.reload({waitUntil:'domcontentloaded'});
-   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="102"]')?.textContent==='p1b0s3');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="102"]')?.textContent==='p1b0s2');
    assert.equal(flattened,1,'Reload must not re-run migration');
    assert.equal(await page.locator('#undo').isEnabled(),true);
    assert.deepEqual(errors,[]);

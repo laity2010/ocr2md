@@ -55,3 +55,5 @@ WCP44：Block 只允许父块和一级子块两级；父块连同原子块内容
 **WCP46 · 当前 SQLite 架构（替代上方早期 Block/Span 实体表说明）**：一个 `minerujson` 无损事实基础表、一个 `block_review` 人工扩展表、一个仅 para 的 `block` SQL VIEW；不再新建 Span 实体表。扩展表只保留稳定来源 JSON 指针、BlockID、ParentID、PBS、排序，无 OCR 正文副本。SQLite 导航新增「数据库管理 · 初始化 SQL（重建扩展）」；只有明确确认才在事务中删除旧派生 Block/Span、重建 VIEW 与扩展表，并清空旧审阅修改及历史，原始 JSON/PDF/SQL original_bytes 不动。正常打开书籍仅检查，不自动重建。CM6 仍独占编辑运行态、闲时异步写扩展表。详见 `docs/contracts/lab-ocr-schema-v2.md`。
 
 **WCP47 · 相邻页续接**：支持后一页根块通过 PBS 拖动归入前一页父块，源 PDF 页/bbox/BlockID 永久不变；其 PBS 采用逻辑父块页码，前页父块子块与后页已归入子块同级排列，不产生第三层。后页剩余根块重排正常。CM6 即时、AG 和双页 PDF 局部更新、SQLite 扩展表空闲异步 CAS 保存及跨页 Undo/Redo 已接通。只允许相邻页后→前的「作为子块」，不允许跨页 before/after 或跨多页；详细契约及验证见 `docs/contracts/lab-ocr-block-edit.md`。
+
+**WCP48 · 父父合并的节点数**：两个已拥有子块的父容器合并时只保留一个可见父容器，原有双方的子块按序变成幸存父的一级子块（如 2+2→4，**不是 5**）。被归并的父容器不再显示，也不额外成为子块，但原始 OCR/BlockID 和数据库审阅归并标志全部保留，可 Undo/Redo 完整恢复。SQL VIEW 保留无损原子供 CM6，AG/PDF 仅投影活跃节点；不重新初始化书籍。详见 `docs/contracts/lab-ocr-block-edit.md`。

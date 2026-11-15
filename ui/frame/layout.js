@@ -102,6 +102,8 @@ function mountEmptyGrid(host){
     {field:'content',headerName:'文本块',flex:1},
   ];
   let selectedListener=()=>{},filterListener=()=>{};
+  let blockData=new Map();
+  const isVisible=row=>row?.absorbed_into_block_id==null;
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     rowSelection:{mode:'singleRow',checkboxes:false,headerCheckbox:false,enableClickSelection:true},
     onRowClicked:event=>selectedListener(event.data),
@@ -113,12 +115,16 @@ function mountEmptyGrid(host){
   // through this explicit, narrow component boundary; no private AG DOM access.
   host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected,onFilterChanged,initialFilterModel=null}){
     selectedListener=onRowSelected??(()=>{});
+    // The full source atoms remain owned by CM6; the Grid shows only
+    // non-absorbed blocks. Parent wrappers are retained for undo/audit.
+    blockData=new Map(rows.filter(r=>r?.block_id!=null)
+      .map(r=>[String(r.block_id),r]));
     // Ignore transient filter-change events while replacing a whole SQL table.
     filterListener=()=>{};
     // Different SQLite tables must not inherit one another's AG filters.
     grid.setFilterModel(null);
     grid.setGridOption('columnDefs',columns);
-    grid.setGridOption('rowData',rows);
+    grid.setGridOption('rowData',rows.filter(isVisible));
     // Apply the caller's startup selection through AG Grid's public filter
     // model before subscribing to changes; the real checkbox UI stays owner.
     if(initialFilterModel)grid.setFilterModel(initialFilterModel);
@@ -133,9 +139,26 @@ function mountEmptyGrid(host){
     }
   },patchBlockRows(changedRows){
     const changed=new Map(changedRows.map(r=>[String(r.block_id),r]));
+    const remove=[],add=[];
+    for(const [key,patch] of changed){
+      const old=blockData.get(key);
+      if(!old)continue;
+      const next={...old,...patch};
+      blockData.set(key,next);
+      if(isVisible(old)&&!isVisible(next)){
+        // AG node.updateData replaces the row object identity. Remove via
+        // the CURRENT AG-owned row, not a stale CM projection reference.
+        grid.forEachNode(node=>{
+          if(String(node.data?.block_id)===key)remove.push(node.data);
+        });
+      }
+      if(!isVisible(old)&&isVisible(next))add.push(next);
+    }
+    if(remove.length||add.length)grid.applyTransaction({remove,add});
     grid.forEachNode(node=>{
       const patch=changed.get(String(node.data?.block_id));
-      if(patch)node.updateData({...node.data,...patch});
+      if(patch&&isVisible(blockData.get(String(node.data?.block_id))))
+        node.updateData({...node.data,...patch});
     });
     grid.refreshClientSideRowModel?.('sort');
   },selectById({field,id}){

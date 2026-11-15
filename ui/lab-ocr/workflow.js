@@ -185,12 +185,15 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     for(const page of result.pages??[result.page])
       frame.repaintPdfBlockPage(page);
     if(selectedId!=null){
-      lastEditedId=selectedId;
+      const selectedRow=cm()?.rows.find(row=>row.block_id===selectedId);
+      const displayId=selectedRow?.absorbed_into_block_id??selectedId;
+      lastEditedId=displayId;
       // The user just dropped a label at the intended location. Update only
       // its selection, never re-center the PDF as if AG requested navigation.
-      frame.focusPdfBlock({id:selectedId,page:result.page,reveal:false});
+      const displayPage=cm()?.rows.find(row=>row.block_id===displayId)?.global_page+1||result.page;
+      frame.focusPdfBlock({id:displayId,page:displayPage,reveal:false});
       if(currentSqlTable==='block')
-        frame.selectSqlRowById({field:'block_id',id:selectedId});
+        frame.selectSqlRowById({field:'block_id',id:displayId});
     }
     refreshBlockUndoRedo();
     bindPersistence().changed();

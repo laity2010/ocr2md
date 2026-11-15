@@ -32,13 +32,14 @@ class CrossPage(unittest.TestCase):
    book=Path(tmp);make_book(book)
    result=apply_block_move(book,4,2,'child',0)
    self.assertEqual(result['pages'],[1,2])
-   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[4],'p1b1s1')
+   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[4],'~merged:4')
+   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[5],'p1b1s1')
    restored=undo_block_move(book,1)
    self.assertEqual(restored['pages'],[1,2])
    self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[4],'p2b0')
    redone=undo_block_move(book,2,redo=True)
    self.assertEqual(redone['pages'],[1,2])
-   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[4],'p1b1s1')
+   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[4],'~merged:4')
 
  def test_adjacent_child_async_cas_undo_redo_and_source_seals(self):
   with tempfile.TemporaryDirectory() as tmp:
@@ -54,8 +55,8 @@ class CrossPage(unittest.TestCase):
    self.assertEqual(result['revision'],1)
    self.assertEqual(persist_block_edit_batch(book,0,'cross-page-cas-0001',[expected]),result)
    post={r['block_id']:r for r in block_rows(book)['rows']}
-   self.assertEqual((post[4]['parent_block_id'],post[4]['pbs']),(2,'p1b1s1'))
-   self.assertEqual((post[5]['parent_block_id'],post[5]['pbs']),(2,'p1b1s2'))
+   self.assertEqual((post[4]['absorbed_into_block_id'],post[4]['pbs']),(2,'~merged:4'))
+   self.assertEqual((post[5]['parent_block_id'],post[5]['pbs']),(2,'p1b1s1'))
    self.assertEqual((post[6]['pbs'],post[7]['pbs']),('p2b0','p2b1'))
    self.assertTrue(all(post[i]['global_page']==base[i]['global_page'] for i in post))
    self.assertTrue(all(post[i]['block_json']==base[i]['block_json'] for i in post))
@@ -66,7 +67,7 @@ class CrossPage(unittest.TestCase):
    self.assertEqual(result['revision'],2)
    post={r['block_id']:r for r in block_rows(book)['rows']}
    self.assertEqual((post[7]['pbs'],post[6]['pbs']),('p2b0','p2b1'))
-   self.assertEqual(post[4]['pbs'],'p1b1s1')
+   self.assertEqual(post[4]['pbs'],'~merged:4')
    persist_block_edit_batch(book,2,'cross-page-undo-003',[{'action':'undo'}])
    self.assertEqual(block_rows(book)['rows'][-1]['pbs'],'p2b1')
    persist_block_edit_batch(book,3,'cross-page-undo-004',[{'action':'undo'}])
@@ -74,7 +75,7 @@ class CrossPage(unittest.TestCase):
    self.assertEqual([restored[x]['pbs'] for x in range(1,8)],
        [base[x]['pbs'] for x in range(1,8)])
    persist_block_edit_batch(book,4,'cross-page-redo-005',[{'action':'redo'}])
-   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[4],'p1b1s1')
+   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[4],'~merged:4')
    self.assertEqual(originals(book),sealed)
    self.assertEqual((book/'mineru json'/'book.json').read_bytes(),raw)
    with sqlite3.connect(book/'ocr2md.sqlite') as conn:
@@ -82,7 +83,7 @@ class CrossPage(unittest.TestCase):
     self.assertEqual(conn.execute("SELECT type FROM sqlite_master WHERE name='block'").fetchone()[0],'view')
    # Invalid direction or cross-page rank must be rejected before writing SQL.
    with self.assertRaisesRegex(OCRImportError,'跨页'):
-    preview_block_move(book,1,4,'child')
+    preview_block_move(book,1,5,'child')
    with self.assertRaisesRegex(OCRImportError,'同页'):
     preview_block_move(book,6,2,'after')
    self.assertEqual(block_move_state(book)['revision'],5)

@@ -186,13 +186,17 @@ def block_rows(book:Path,offset:int=0,limit:int=200)->dict:
         conn.row_factory=sqlite3.Row
         if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name='block'").fetchone()[0]!=1:
             raise OCRImportError('尚未生成 block VIEW')
+        absorbed_expr=('child.absorbed_into_block_id'
+                       if conn.execute("SELECT 1 FROM pragma_table_info('block') WHERE name='absorbed_into_block_id'").fetchone()
+                       else 'NULL')
         total=conn.execute('SELECT COUNT(*) FROM block WHERE block_group=?',(REVIEW_BLOCK_GROUP,)).fetchone()[0]
         data=conn.execute('''SELECT child.block_id,child.pbs,
                   child.source_block_key,child.source_order,child.source_name,child.global_page,
                   child.local_page,child.page_size_json,child.block_group,child.block_path,
                   child.parent_block_id,child.sibling_order,child.block_index,
                   child.block_type,child.block_bbox_json,child.line_count,child.span_count,
-                  child.span_types,child.content_preview,child.block_json,child.has_blocks_field
+                  child.span_types,child.content_preview,child.block_json,child.has_blocks_field,
+                  '''+absorbed_expr+''' AS absorbed_into_block_id
                   FROM block AS child WHERE child.block_group=?
                   ORDER BY child.block_id LIMIT ? OFFSET ?''',(REVIEW_BLOCK_GROUP,limit,offset)).fetchall()
     return {'table':TABLE,'total':total,'offset':offset,'limit':limit,'rows':[dict(row) for row in data]}

@@ -14,6 +14,8 @@ def plan_linked_move(rows,source_id,target_id,placement):
         raise OCRImportError('Block 源/目标不存在或重复')
     if placement not in ('child','before','after'):raise OCRImportError('落点无效')
     source=nodes[source_id];target=nodes[target_id]
+    if source.get('absorbed_into_block_id') is not None or target.get('absorbed_into_block_id') is not None:
+        raise OCRImportError('已合并父容器不能再次作为拖动源或目标')
     cross=source['global_page']!=target['global_page']
     if cross and (source['global_page']!=target['global_page']+1 or placement!='child' or
                   source['parent_block_id'] is not None):
@@ -24,6 +26,7 @@ def plan_linked_move(rows,source_id,target_id,placement):
         return ('root',page) if parent is None else ('child',parent)
     for r in nodes.values():
         if r['block_group']!=REVIEW_BLOCK_GROUP:raise OCRImportError('跨页仅允许 para')
+        if r.get('absorbed_into_block_id') is not None:continue
         parent=r['parent_block_id']
         if parent is not None and parent not in nodes:
             raise OCRImportError('已有 Block 父关系缺失')
@@ -31,6 +34,7 @@ def plan_linked_move(rows,source_id,target_id,placement):
     for members in siblings.values():
         members.sort(key=lambda i:(nodes[i]['sibling_order'],i))
     for r in nodes.values():
+        if r.get('absorbed_into_block_id') is not None:continue
         visited=set();cursor=r['block_id']
         while cursor is not None:
             if cursor in visited:raise OCRImportError('块关系存在循环')
@@ -40,6 +44,7 @@ def plan_linked_move(rows,source_id,target_id,placement):
                  else target['parent_block_id'])
     if cross and nodes[target_root]['global_page']!=target['global_page']:
         raise OCRImportError('跨页不能越过相邻的逻辑父页')
+    absorbs_parent=False
     if placement=='child':
         if source_parent is not None:raise OCRImportError('只能归入顶层块')
         if source_id==target_root or nodes[target_root]['parent_block_id'] is not None:
@@ -54,11 +59,19 @@ def plan_linked_move(rows,source_id,target_id,placement):
                 descendants.append(child)
                 visit(child)
         visit(source_id)
-        for i in [source_id,*descendants]:
+        absorbs_parent=bool(descendants)
+        moving=descendants if absorbs_parent else [source_id]
+        if absorbs_parent:
+            wrapper=nodes[source_id]
+            wrapper['absorbed_into_block_id']=target_root
+            wrapper['sibling_order']=-1
+            wrapper['pbs']=f'~merged:{source_id}'
+            wrapper['parent_block_id']=None
+        for i in moving:
             nodes[i]['parent_block_id']=target_root
         for i in [source_id,*descendants]:
             siblings.pop(('child',i),None)
-        siblings[('child',target_root)].extend([source_id,*descendants])
+        siblings[('child',target_root)].extend(moving)
     else:
         if cross or source_parent!=target['parent_block_id']:
             raise OCRImportError('之前／之后只允许同页同级')
@@ -77,6 +90,7 @@ def plan_linked_move(rows,source_id,target_id,placement):
                 child['sibling_order']=index
                 child['pbs']=f"{root['pbs']}s{index}"
     for node in nodes.values():
+        if node.get('absorbed_into_block_id') is not None:continue
         parent=node['parent_block_id']
         if parent is None:continue
         p=nodes.get(parent)
@@ -88,16 +102,24 @@ def plan_linked_move(rows,source_id,target_id,placement):
     for original in rows:
         changed=nodes[original['block_id']]
         keys=('parent_block_id','sibling_order','pbs')
-        if any(original[k]!=changed[k] for k in keys):
-            before.append([original['block_id'],original['parent_block_id'],
-                           original['sibling_order'],original['pbs']])
-            after.append([changed['block_id'],changed['parent_block_id'],
-                          changed['sibling_order'],changed['pbs']])
-            changes.append({k:changed[k] for k in ('block_id',*keys)})
+        if (any(original[k]!=changed[k] for k in keys) or
+            original.get('absorbed_into_block_id')!=changed.get('absorbed_into_block_id')):
+            prior=[original['block_id'],original['parent_block_id'],
+                   original['sibling_order'],original['pbs']]
+            final=[changed['block_id'],changed['parent_block_id'],
+                   changed['sibling_order'],changed['pbs']]
+            if absorbs_parent:
+                prior.append(original.get('absorbed_into_block_id'))
+                final.append(changed.get('absorbed_into_block_id'))
+            before.append(prior)
+            after.append(final)
+            patch={k:changed[k] for k in ('block_id',*keys)}
+            if absorbs_parent:patch['absorbed_into_block_id']=changed.get('absorbed_into_block_id')
+            changes.append(patch)
             physical_pages.add(original['global_page'])
     before.sort();after.sort()
     return {'changed':bool(changes),'changedRows':changes,
             'sourceBlockId':source_id,'targetBlockId':target_id,
             'placement':placement,'page':source['global_page']+1,
             'pages':[p+1 for p in sorted(physical_pages)],
-            'scope':'delta','before':before,'after':after}
+            'scope':'delta','absorbsParent':absorbs_parent,'before':before,'after':after}
