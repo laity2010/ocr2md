@@ -7,7 +7,7 @@ import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
   mdSplice,reorderMdByBlocks} from './md-runtime.js';
 import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
-import {projectTitleMdRows,renderTitleMdCell} from './title-view.js';
+import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {resolveReviewLocation} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -119,7 +119,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let pdfPage=1;
   const projectedMdRows=()=>activeAgView==='title'?
     projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
-    projectMdAgRows(md()?.rows??[],cm()?.rows??[]);
+    projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   let mdPersistence=null,mdLoading=null;
   const sqlReady=()=>tableReady;

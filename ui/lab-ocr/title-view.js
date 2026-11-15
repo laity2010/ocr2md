@@ -3,8 +3,22 @@
  */
 import {projectMdAgRows} from './md-ag-projection.js';
 
+/** Effective Markdown line semantics, not immutable MinerU Block metadata.
+ * Persisted OCR block_type/level remain available in the Block reference view.
+ * A removed '# ' turns this MD row into normal text immediately, while a
+ * newly added heading is recognized regardless of original OCR block type.
+ * No new mutable document state or SQL schema is created.
+ */
+export function projectLiveMdRows(mdRows,blockRows){
+  return projectMdAgRows(mdRows,blockRows).map(row=>{
+    const {level}=titleSourceParts(row.text);
+    if(level!==null)return {...row,block_type:'title',level};
+    if(row.block_type==='title')return {...row,block_type:'text',level:null};
+    return row;
+  });
+}
 export function projectTitleMdRows(mdRows,blockRows){
-  return projectMdAgRows(mdRows,blockRows).filter(row=>row.block_type==='title');
+  return projectLiveMdRows(mdRows,blockRows).filter(row=>row.block_type==='title');
 }
 
 /** Use exactly the CM6 source ATX recognition rule, not MinerU Level guessing. */

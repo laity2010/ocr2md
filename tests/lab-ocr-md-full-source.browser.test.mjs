@@ -375,7 +375,7 @@ try{
    assert.equal(mdInit,1);
    assert.equal(mdLoads,3);
    // WCP55 AG toolbar uses its EXISTING dropdown, not a second control.
-   // Title is a full-document projection of only block_type=title MD lines.
+   // Outline is computed from current Markdown ATX headings, not OCR Block type.
    const agView=page.locator('#workspace .ocr-outline-pane .ocr-ag-module-select');
    assert.equal(await agView.getAttribute('aria-label'),'选择 AG 过滤视图');
    assert.deepEqual(await agView.locator('option').allTextContents(),['MD 行','标题']);
@@ -395,9 +395,9 @@ try{
    assert.equal(await allPages.isChecked(),true,
      'Title view shows every page of the document by default');
    await page.waitForFunction(()=>document.querySelectorAll(
-     '#workspace .ag-row:not(.ag-opacity-zero)').length===2);
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===1);
    assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),
-     ['1','5'],'Only nonblank title MD rows on both pages are visible');
+     ['1'],'Plain MD line stays out even if its original OCR Block is title');
    assert.equal(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
      .filter({hasText:'Corrected paragraph'}).count(),0,'Non-title blocks must be absent');
    await page.waitForFunction(()=>[...document.querySelectorAll(
@@ -449,24 +449,14 @@ try{
      assert.equal(agSize,titleStyles.regularFont,
        'H'+level+' outline text keeps default AG font size');
    }
-   await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
-     .filter({hasText:'Revised from AG'}).click();
-   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.selected()==='md-e',null,{timeout:3500}).catch(async err=>{
-       console.error('TITLE_ROW_CLICK_DIAG',name,JSON.stringify(await page.evaluate(()=>({
-         selected:document.querySelector('.ocr-cm-source')?.ocrCmTable?.selected(),
-         status:document.querySelector('#status')?.textContent,
-         gridRow:[...document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)')].map(node=>
-           ({text:node.textContent.slice(0,130),selected:node.classList.contains('ag-row-selected')})),
-         active:document.activeElement?.outerHTML?.slice(0,260),
-         view:document.querySelector('.ocr-ag-module-select')?.value,
-       }))));throw err;
-     });
+   // An OCR title lacking MD # does not appear, even when viewing all pages.
+   // Switching the existing page checkbox back to the current PDF page only
+   // narrows the outline; it does not change Block metadata or create a row.
    await allPages.uncheck();
    await page.waitForFunction(()=>document.querySelectorAll(
      '#workspace .ag-row:not(.ag-opacity-zero)').length===1);
-   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),['5'],
-     'The page checkbox follows the PDF page reached by selecting the title');
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]')
+     .allTextContents(),['1']);
    // Returning to the original view must restore ALL original columns and
    // its default current-page/nonblank filters, with no SQL/CM6 reload.
    await agView.selectOption('md');
@@ -477,14 +467,73 @@ try{
      'Returning to normal MD must restore its original left-pinned indexes');
    assert.equal(await allPages.isChecked(),false);
    await page.waitForFunction(()=>document.querySelectorAll(
-     '#workspace .ag-row:not(.ag-opacity-zero)').length===1);
-   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),['5'],
-     'Normal AG view restores the current PDF page and its nonblank filter');
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===2);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]')
+     .allTextContents(),['1','3'],
+     'Normal AG view restores current-page nonblank rows, including demoted OCR title');
    assert.equal(mdLoads,3,'AG view switching must not read MD from SQLite');
    assert.equal(mdInit,1,'AG view switching cannot reinitialize the document');
    assert.equal(saves,2,'AG view switching is read-only');
    assert((await view()).text.includes('Revised from AG'),
      'AG title view switching must not alter the authoritative Markdown');
+   // Live semantic edit regression: removing title syntax must remove it
+   // immediately from the existing AG outline and reset its effective Level.
+   // The title's OCR Block type/Level remain untouched as audit evidence.
+   const replaceMarkdown=async text=>{
+     await source.click();
+     await page.keyboard.press('ControlOrMeta+A');
+     await page.keyboard.insertText(text);
+     await page.waitForFunction(expected=>document.querySelector('.ocr-cm-source')
+       ?.ocrCmTable?.mdDocument()===expected,text);
+   };
+   await agView.selectOption('title');
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===1);
+   await replaceMarkdown('Heading\n\nCorrected paragraph\n\nRevised from AG\n');
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===0,null,{timeout:8000});
+   assert.equal(await agView.inputValue(),'title');
+   // The non-title row is still in the full MD view, with ordinary type/Level.
+   await agView.selectOption('md');
+   await allPages.check();
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===3);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="block_type"]')
+     .allTextContents(),['text','text','text'],
+     'Removing # reclassifies an OCR title as ordinary MD text');
+   await agView.selectOption('title');
+   await replaceMarkdown('#### Heading\n\nCorrected paragraph\n\nRevised from AG\n');
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===1);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="level"]')
+     .allTextContents(),['4'],'Heading Level comes from edited ####, not OCR Level 2');
+   await replaceMarkdown('#### Heading\n\n### Corrected paragraph\n\nRevised from AG\n');
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===2);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]')
+     .allTextContents(),['1','3'],'Adding # to OCR plain text promotes that MD row into outline');
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="level"]')
+     .allTextContents(),['4','3']);
+   assert.equal(mdInit,1,'Live outline changes cannot reinitialize the document');
+   assert.equal(mdLoads,3,'Live outline changes cannot query SQLite');
+   await page.locator('#global-save').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdRuntime()?.dirty===false,null,{timeout:12000});
+   assert.equal(mdRows[0].text,'#### Heading');
+   assert.equal(mdRows[2].text,'### Corrected paragraph');
+   assert.equal(blockRows[0].block_type,'title','OCR block provenance remains immutable');
+   assert.equal(blockRows[0].level,2,'OCR Level remains original evidence');
+   assert.equal(blockRows[1].block_type,'text');
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.waitForFunction(()=>document.querySelector(
+     '#workspace select.ocr-source-file-select')?.value==='sql:md');
+   await agView.selectOption('title');
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===2);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="level"]')
+     .allTextContents(),['4','3'],'Saved title changes persist after browser reload');
+   assert.equal(mdInit,1);
+   assert.equal(mdLoads,4);
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_MD_FULL_SOURCE_E2E_PASS',name,
      JSON.stringify({mdInit,mdLoads,saves,blocks,pdfs,revision,visits}));
