@@ -103,9 +103,10 @@ try{
    assert.equal(await page.locator('#workspace').isVisible(),true);
    assert.equal(importCount,1,'First book should import just once');
    await page.waitForFunction(()=>document.querySelector('#workspace select.ocr-source-file-select')?.value==='sql:block'&&
-     document.querySelectorAll('#workspace .ag-row').length===3,null,{timeout:19000});
+     document.querySelectorAll('#workspace .ag-row').length===1,null,{timeout:19000});
    assert.equal(rowsCount,1,'Newly bound book opens Block SQL once');
-   assert.equal(await page.locator('#workspace .ag-row').count(),3,'Only para_blocks rows are shown by default');
+   assert.equal(await page.locator('#workspace .ag-row').count(),1,
+     'AG defaults to the current PDF page; CM6 still owns all 3 para rows');
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_group"]').count(),0);
    const nav=page.locator('#workspace select.ocr-source-file-select');
    assert.deepEqual(await nav.locator('optgroup[label="SQLite"] option').allInnerTexts(),

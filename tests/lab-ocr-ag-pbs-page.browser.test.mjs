@@ -25,6 +25,7 @@ const source=[
  [6,'p1b1s0',1,3,0,'text'],
 ].map(([block_id,pbs,global_page,parent_block_id,sibling_order,block_type])=>({
  block_id,pbs,global_page,parent_block_id,sibling_order,block_type,
+ level:block_id===3?2:null,
  block_group:'para_blocks',source_name:'source.json',
  source_block_key:'immutable:'+block_id,block_path:'original:'+block_id,
  block_bbox_json:'[40,60,180,125]',block_json:JSON.stringify({originalBlockId:block_id}),
@@ -103,6 +104,18 @@ try{
    assert.equal(await page.locator('.ocr-ag-toolbar > :first-child').getAttribute('class'),'ocr-ag-all-pages');
    assert.equal(await page.locator('.ocr-ag-toolbar > .ocr-ag-all-pages').isVisible(),true);
    assert.equal(await page.locator('.ag-header-cell[col-id="pbs"]').count(),1);
+   assert.deepEqual(await page.locator('.ag-header-cell').evaluateAll(nodes=>
+     nodes.map(node=>node.getAttribute('col-id')).filter(Boolean).slice(0,4)),
+     ['pbs','block_type','level','content_preview'],
+     'Title Level must be a visible column directly beside Block Type');
+   const titleLevels=await page.locator('#workspace .ag-row').evaluateAll(nodes=>
+     nodes.map(node=>({
+       pbs:node.querySelector('.ag-cell[col-id="pbs"]')?.textContent?.trim(),
+       level:node.querySelector('.ag-cell[col-id="level"]')?.textContent?.trim(),
+     })));
+   assert.equal(titleLevels.find(row=>row.pbs==='p1b1')?.level,'2');
+   assert.equal(titleLevels.find(row=>row.pbs==='p1b0')?.level,'',
+     'Text blocks without a title Level must remain blank');
    // The default current-page rule must be the actual PBS column filter,
    // not a second hidden external predicate that contradicts its checkboxes.
    const pbsHeader=page.locator('.ag-header-cell[col-id="pbs"]');

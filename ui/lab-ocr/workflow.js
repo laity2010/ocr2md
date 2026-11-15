@@ -51,6 +51,7 @@ const comparePBS=(left,right)=>{
 const BLOCK_COLUMNS=Object.freeze([
   {field:'pbs',headerName:'PBS',width:125,sortable:true,sort:'asc',comparator:comparePBS},
   {field:'block_type',headerName:'Block Type',width:145,sortable:true},
+  {field:'level',headerName:'Level',width:85,sortable:true},
   {field:'content_preview',headerName:'摘要',minWidth:210,flex:1,sortable:false},
   {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
   {field:'block_id',headerName:'Block ID',width:105,sortable:true},

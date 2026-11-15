@@ -196,6 +196,15 @@ def block_rows(book:Path,offset:int=0,limit:int=200)->dict:
                   child.parent_block_id,child.sibling_order,child.block_index,
                   child.block_type,child.block_bbox_json,child.line_count,child.span_count,
                   child.span_types,child.content_preview,child.block_json,child.has_blocks_field,
+                  CASE WHEN child.block_type='title' THEN
+                    CASE
+                      WHEN json_type(child.block_json,'$.level')='integer'
+                        THEN json_extract(child.block_json,'$.level')
+                      WHEN json_type(child.block_json,'$.text_level')='integer'
+                        THEN json_extract(child.block_json,'$.text_level')
+                      ELSE NULL
+                    END
+                  ELSE NULL END AS level,
                   '''+absorbed_expr+''' AS absorbed_into_block_id
                   FROM block AS child WHERE child.block_group=?
                   ORDER BY child.block_id LIMIT ? OFFSET ?''',(REVIEW_BLOCK_GROUP,limit,offset)).fetchall()
