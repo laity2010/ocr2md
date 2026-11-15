@@ -124,8 +124,15 @@ try{
    await source.waitFor();
    assert.equal(await source.getAttribute('contenteditable'),'true');
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="line_no"]').count(),1);
-   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_id"]').count(),1);
-   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="text"]').count(),1);
+   const agFields=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields());
+   assert.deepEqual(agFields.slice(0,4),['line_no','pbs','block_type','text']);
+   for(const original of ['pbs','block_type','level','content_preview','global_page',
+     'block_id','parent_block_id','block_bbox_json','line_count','span_count',
+     'span_types','block_path','source_block_key','block_json']){
+     assert(agFields.includes(original),'Prior Block AG column missing: '+original);
+   }
+   assert(agFields.includes('line_id'),'MD LineID must remain available');
    assert.equal(await page.locator('#workspace .ag-grid-container-wrapper .ag-header-cell[col-id="line_no"]').count(),1,
      'Line number must be a pinned left index column');
    assert.equal(await page.locator('#workspace .ag-grid-container-wrapper .ag-header-cell[col-id="pbs"]').count(),1,
@@ -137,22 +144,40 @@ try{
    const editorTheme=await page.locator('.ocr-cm-source .cm-editor').evaluate(el=>
      getComputedStyle(el).backgroundColor);
    assert.equal(editorTheme,'rgb(47, 56, 62)','Main Everforest dark background');
+   // Review AG must keep its prior Block columns, toolbar and default filters.
+   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_type"]').count(),1,
+     'Original Block Type column must remain in the MD row view');
+   assert.equal(await page.locator('.ocr-ag-all-pages').isVisible(),true,
+     'The original AG toolbar 全部 switch must not disappear in MD mode');
+   const allPages=page.locator('.ocr-ag-all-pages input');
+   assert.equal(await allPages.isChecked(),false,'全部 defaults to unchecked');
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===2,
+     null,{timeout:15000});
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),
+     ['1','3'],'Default MD AG view is current page, nonblank lines only');
    const filterButton=page.locator('#workspace .ag-header-cell[col-id="line_no"] .ag-header-cell-filter-button');
    await filterButton.click();
    const blankOption=page.locator('.ocr-enum-filter-option[data-filter-value="空行"] input');
+   const nonblankOption=page.locator('.ocr-enum-filter-option[data-filter-value="非空行"] input');
    await blankOption.waitFor();
-   await blankOption.uncheck(); // leave only nonblank lines visible
+   assert.equal(await blankOption.isChecked(),false,'Blank lines must be filtered automatically');
+   assert.equal(await nonblankOption.isChecked(),true);
+   await allPages.check();
    await page.waitForFunction(()=>document.querySelectorAll(
      '#workspace .ag-row:not(.ag-opacity-zero)').length===3);
    assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),
-     ['1','3','5'],'Filtering never renumbers real MD source lines');
-   assert.equal((await page.locator('.ocr-cm-source .cm-content').innerText()).includes('Original paragraph'),true);
+     ['1','3','5'],'全部 changes only the page filter; blank filter survives');
+   // Restore blank lines using the existing row-number checkbox filter.
+   if(!await page.locator('.ocr-enum-filter-option[data-filter-value="all"] input').isVisible())
+     await filterButton.click();
    await page.locator('.ocr-enum-filter-option[data-filter-value="all"] input').check();
    await page.waitForFunction(()=>document.querySelectorAll(
      '#workspace .ag-row:not(.ag-opacity-zero)').length===6);
+   assert.deepEqual((await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents()).sort((a,b)=>Number(a)-Number(b)),
+     ['1','2','3','4','5','6'],'Restoring blanks must retain original MD line positions');
+   assert.equal(await allPages.isChecked(),true);
 
-   assert.equal(await page.locator('.ocr-ag-all-pages').isVisible(),false,
-     'Current-PDF-page toolbar filter belongs to Block AG, not MD rows');
    const view=()=>page.evaluate(()=>{
      const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable;
      return {text:cm?.mdDocument(),md:cm?.mdRuntime(),
@@ -228,8 +253,11 @@ try{
    assert.equal(mdLoads,2);
    // AG text editor cannot become a second writer: it calls the CM6 port,
    // then the same CM state projects the corrected text back to AG.
-   const agCell=page.locator('#workspace .ag-row').filter({hasText:'Last paragraph'})
-     .locator('.ag-cell[col-id="text"]');
+   // Reopening the MD view resets the existing AG toolbar to current page.
+   assert.equal(await allPages.isChecked(),false);
+   await allPages.check();
+   const agCell=page.locator('#workspace .ag-cell[col-id="text"]')
+     .filter({hasText:/^Last paragraph$/});
    await agCell.dblclick();
    const agInput=page.locator('#workspace .ag-cell-inline-editing input');
    await agInput.waitFor();

@@ -7,13 +7,22 @@ const original=[
  {line_id:'c',line_no:3,block_id:2,text:'Body'},
  {line_id:'d',line_no:4,block_id:null,text:'   '},
 ];
-const blocks=[{block_id:1,pbs:'p1b0'}, {block_id:2,pbs:'p3b5s1'}];
+const blocks=[{block_id:1,pbs:'p1b0',block_type:'title',level:2,global_page:0,content_preview:'原始标题',block_json:'{}',parent_block_id:null,absorbed_into_block_id:99},
+ {block_id:2,pbs:'p3b5s1',block_type:'text',global_page:2,parent_block_id:1,content_preview:'原始段落'}];
 const projected=projectMdAgRows(original,blocks);
 assert.deepEqual(projected.map(r=>r.pbs),['p1b0','p1b0','p3b5s1','']);
 assert.deepEqual(projected.map(r=>r.line_no),[1,2,3,4]);
+assert.equal(projected[0].block_type,'title');
+assert.equal(projected[0].level,2);
+assert.equal(projected[0].content_preview,'原始标题');
+assert.equal(projected[0].block_json,'{}');
+assert.equal(projected[2].parent_block_id,1);
+assert.equal(projected[0].absorbed_into_block_id,undefined,
+  'Block wrapper archive state must not hide genuine MD lines');
 assert.deepEqual(projected.map(r=>mdLineKind(r.text)),['非空行','空行','非空行','空行']);
 assert.deepEqual(projected.map(r=>pbsPageKey(r.pbs)),['p1','p1','p3','']);
 assert.equal(original[0].pbs,undefined,'PBS must never be written to MD rows');
+assert.equal(original[0].block_type,undefined,'Block display fields are not persisted in MD');
 const renamed=projectMdAgRows(original,[{block_id:1,pbs:'p4b1'},blocks[1]]);
 assert.equal(renamed[0].pbs,'p4b1');
 assert.equal(renamed[0].line_id,'a');

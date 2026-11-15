@@ -69,13 +69,16 @@ const BLOCK_COLUMNS=Object.freeze([
   {field:'source_block_key',headerName:'来源 Block Key',width:280,hide:true},
   {field:'block_json',headerName:'原始 Lines / Spans',width:260,hide:true},
 ]);
+// MD is a LINE view of the existing reviewed Block table, not a replacement
+// with fewer columns. Keep every original Block column after the fixed indexes.
 const MD_COLUMNS=Object.freeze([
   {field:'line_no',headerName:'行号',width:88,sortable:true,sort:'asc',
     pinned:'left',lockPinned:true,lockPosition:'left'},
   {field:'pbs',headerName:'PBS',width:125,sortable:false,
     pinned:'left',lockPinned:true,lockPosition:'left'},
-  {field:'block_id',headerName:'BlockID',width:115,sortable:true},
-  {field:'text',headerName:'Markdown 源码',flex:1,minWidth:280,sortable:false},
+  {field:'block_type',headerName:'Block Type',width:145,sortable:true},
+  {field:'text',headerName:'摘要 · MD 行',flex:1,minWidth:210,sortable:false},
+  ...BLOCK_COLUMNS.filter(column=>!['pbs','block_type'].includes(column.field)),
   {field:'line_id',headerName:'LineID',width:230,hide:true,sortable:false},
 ]);
 async function request(op,params,post=false,options={}){
@@ -352,7 +355,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       onPageChange:page=>{
         if(!Number.isSafeInteger(page)||page<1)return;
         pdfPage=page;
-        if(currentSqlTable==='block')frame.setSqlPdfPage(page);
+        if(currentSqlTable==='block'||currentSqlTable==='md')frame.setSqlPdfPage(page);
       },
       onBlockSelect:({blockId,pbs})=>{
         const id=String(blockId);
@@ -545,10 +548,17 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
             mdLineKind(params.data?.text):column.field==='pbs'?
               pbsPageKey(params.data?.pbs):params.data?.[column.field]??'',
           suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
-        })),{onSelect:row=>{
-          frame.focusMdLine(row.line_no);
-          onStatus('MD 行定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
-        }});
+        })),{
+          // Existing AG toolbar page switch remains active for MD, just as
+          // for the reviewed Block table. "全部" defaults to unchecked.
+          pageScope:{page:pdfPage},
+          // Empty lines remain in CM6/SQLite; only the AG view starts filtered.
+          initialFilterModel:{line_no:{values:['非空行']}},
+          onSelect:row=>{
+            frame.focusMdLine(row.line_no);
+            onStatus('MD 行定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
+          },
+        });
         currentSqlTable='md';
         frame.setMdEditHistory();
         if(selectedId!=null){

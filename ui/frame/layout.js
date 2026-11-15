@@ -245,7 +245,10 @@ function mountEmptyGrid(host){
     columnDefs,rowData:[]});
   // The AG pane owns the Grid API. Other modules may only update rows/columns
   // through this explicit, narrow component boundary; no private AG DOM access.
-  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected,onFilterChanged,
+  host.ocrSqlGrid=Object.freeze({
+    // Read-only column contract: includes AG's horizontally virtualized columns.
+    columnFields(){return grid.getColumnDefs()?.map(column=>column.field)??[];},
+    show({rows,columns,onRowSelected,onFilterChanged,
     initialFilterModel=null,pageScope:scope=null}){
     selectedListener=onRowSelected??(()=>{});
     pageScope=scope;pdfPage=scope?.page??1;showAllPages=false;
@@ -289,10 +292,7 @@ function mountEmptyGrid(host){
       if(!id)return;
       const current=next.get(id);
       if(!current)remove.push(node.data);
-      else if(node.data?.text!==current.text||
-          node.data?.line_no!==current.line_no||
-          node.data?.block_id!==current.block_id||
-          node.data?.pbs!==current.pbs)
+      else if(Object.entries(current).some(([field,value])=>node.data?.[field]!==value))
         node.updateData({...node.data,...current});
     });
     for(const [id,row] of next)if(!mdData.has(id))add.push(row);
